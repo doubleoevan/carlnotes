@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          { "type": "command", "command": "bash scripts/check-comment-groups.sh" },
+          { "type": "command", "command": "bash scripts/check-structure.sh" }
+        ]
+      }
+    ]
+  }
+}

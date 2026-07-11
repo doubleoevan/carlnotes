@@ -1,0 +1,40 @@
+model_list:
+  # plan-model: whole-repo planning, big context
+  - model_name: plan-model
+    litellm_params:
+      model: fireworks_ai/accounts/fireworks/models/minimax-m3
+    model_info:
+      friendly_name: "MiniMax M3"
+      supports_function_calling: true   
+      supports_vision: true             
+      supports_prompt_caching: true
+      max_input_tokens: 524288          
+      max_output_tokens: 16384
+
+  # apply-model: long-horizon spec implementation
+  - model_name: apply-model
+    litellm_params:
+      model: fireworks_ai/accounts/fireworks/models/kimi-k2p7-code
+    model_info:
+      friendly_name: "Kimi K2.7 Code"
+      supports_function_calling: true
+      supports_vision: true
+      supports_prompt_caching: true
+      max_input_tokens: 262144
+      max_output_tokens: 16384
+
+  # aside-model: cheap side conversations and plan-agent reads
+  - model_name: aside-model
+    litellm_params:
+      model: fireworks_ai/accounts/fireworks/models/minimax-m3
+    model_info:
+      friendly_name: "MiniMax M3 (aside)"
+      supports_function_calling: true
+      supports_vision: true
+      supports_prompt_caching: true
+      max_input_tokens: 524288
+      max_output_tokens: 8192
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  database_url: os.environ/DATABASE_URL

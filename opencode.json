@@ -1,0 +1,45 @@
+{
+	"$schema": "https://opencode.ai/config.json",
+	"model": "litellm/apply-model",
+	"provider": {
+		"litellm": {
+			"npm": "@ai-sdk/openai-compatible",
+			"name": "LiteLLM",
+			"options": {
+				"baseURL": "http://localhost:4000/v1",
+				"apiKey": "{env:LITELLM_DEV_KEY}"
+			},
+			"models": {
+				"plan-model": {
+					"name": "Plan (MiniMax M3)",
+					"attachment": true,
+					"reasoning": true,
+					"limit": { "context": 524288, "output": 16384 }
+				},
+				"apply-model": {
+					"name": "Apply (Kimi K2.7 Code)",
+					"attachment": true,
+					"reasoning": true,
+					"limit": { "context": 262144, "output": 16384 }
+				},
+				"aside-model": {
+					"name": "Aside (MiniMax M3)",
+					"attachment": true,
+					"reasoning": true,
+					"limit": { "context": 524288, "output": 8192 }
+				}
+			}
+		}
+	},
+	"agent": {
+		"plan": { "model": "litellm/aside-model" }
+	},
+	"mcp": {
+		"notion": {
+			"type": "local",
+			"command": ["npx", "-y", "@notionhq/notion-mcp-server"],
+			"enabled": true,
+			"environment": { "NOTION_TOKEN": "{env:NOTION_TOKEN}" }
+		}
+	}
+}
