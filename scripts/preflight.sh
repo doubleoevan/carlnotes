@@ -10,8 +10,8 @@ fi
 # lint and format check
 bunx biome check .
 
-# type check (biome does not check types)
-bunx tsc --noEmit
+# type-check the whole project via the solution file
+bunx tsc -b
 
 # run the test suite
 bun test

@@ -44,8 +44,11 @@ Check for:
    - `bun-plugin-tailwind`, `Bun.serve` HTML imports (removed Bun full-stack
      scaffold)
    - `use-ai-sdk` (skill renamed upstream to `ai-sdk`)
-   - `"preset": "recommended"` in Biome config (invalid key; correct form is
-     `"recommended": true`)
+    - `"preset": "recommended"` in Biome config (invalid key; correct form is
+      `"recommended": true`)
+    - `bunx tsc --noEmit` (now `bunx tsc -b`; the old form silently checks nothing
+      against a solution-style root)
+
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
    same scripts. Compare the tool/event coverage of each adapter against the
