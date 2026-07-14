@@ -35,6 +35,18 @@ model_list:
       max_input_tokens: 524288
       max_output_tokens: 8192
 
+  # cheap-model: high-volume app inference (search query generation, scoring) — the cheap tier
+  - model_name: cheap-model
+    litellm_params:
+      model: fireworks_ai/accounts/fireworks/models/minimax-m3
+    model_info:
+      friendly_name: "MiniMax M3 (app cheap tier)"
+      supports_function_calling: true
+      supports_vision: true
+      supports_prompt_caching: true
+      max_input_tokens: 524288
+      max_output_tokens: 8192
+
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY
   database_url: os.environ/DATABASE_URL
