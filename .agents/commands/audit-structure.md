@@ -44,8 +44,8 @@ Check for:
    - `bun-plugin-tailwind`, `Bun.serve` HTML imports (removed Bun full-stack
      scaffold)
    - `use-ai-sdk` (skill renamed upstream to `ai-sdk`)
-    - `"preset": "recommended"` in Biome config (invalid key; correct form is
-      `"recommended": true`)
+    - `"recommended": true` in Biome config (deprecated in Biome 2.5+; the current form is
+      `"preset": "recommended"`)
     - `bunx tsc --noEmit` (now `bunx tsc -b`; the old form silently checks nothing
       against a solution-style root)
 

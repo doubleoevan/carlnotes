@@ -5,8 +5,8 @@ description: >
   editing, reviewing, or refactoring ANY TypeScript, JavaScript, or JSX code:
   every new function, every fix, every generated file, even one-line changes.
   Covers mandatory comment groups, top-down file order, file-count discipline,
-  naming, early returns, and type modeling. If code is being produced or
-  changed, this skill applies.
+  naming, import paths, early returns, and type modeling. If code is being
+  produced or changed, this skill applies.
 ---
 
 # Code Style
@@ -199,3 +199,16 @@ naturally.
 Good candidates: entity IDs, validated emails, tokens. Poor candidates:
 strings used immediately in one place and never mixed with other string
 types.
+
+### 13. Alias imports over deep relatives
+
+Use the project's path alias (`@/` unless the project defines otherwise) for
+any import that climbs two or more parent directories. Same-folder `./` and a
+single `../` are fine. Never include `.ts`/`.tsx` extensions in import
+specifiers.
+
+    // wrong — the reader counts dots to locate the file
+    import { cn } from "../../lib/utils.ts"
+
+    // right — the alias reads as an absolute address
+    import { cn } from "@/lib/utils"

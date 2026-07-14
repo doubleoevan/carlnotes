@@ -35,6 +35,13 @@ bun run dev:ui       # Vite dev server
 bun run build:ui     # production build
 ```
 
+Database — generate a migration from the Drizzle schema, then apply it (migrate needs `DATABASE_URL`, so run it under `doppler run`):
+
+```bash
+bun run db:generate                 # write a migration from db/schema.ts
+doppler run -- bun run db:migrate   # apply pending migrations
+```
+
 Checks — run the full gate with one command (enforced on push by `scripts/preflight.sh`):
 
 ```bash
@@ -45,7 +52,7 @@ Or run them individually:
 
 ```bash
 bunx biome check .
-bunx tsc --noEmit
+bunx tsc -b
 bun test
 ```
 

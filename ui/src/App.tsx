@@ -1,4 +1,4 @@
-import { Card, CardContent } from "@/components/ui/card.tsx";
+import { Card, CardContent } from "@/components/ui/card"
 
 /**
  * The root component of the application
@@ -11,5 +11,5 @@ export function App() {
 				<CardContent>Hello!</CardContent>
 			</Card>
 		</div>
-	);
+	)
 }

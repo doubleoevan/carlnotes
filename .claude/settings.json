@@ -9,5 +9,45 @@
         ]
       }
     ]
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Bash(cd:*)",
+      "Bash(echo:*)",
+      "Bash(ls:*)",
+      "Bash(grep:*)",
+      "Bash(head:*)",
+      "Bash(tail:*)",
+      "Bash(wc:*)",
+      "Bash(tr:*)",
+      "Bash(cat:*)",
+      "Bash(cut:*)",
+      "Bash(sort:*)",
+      "Bash(uniq:*)",
+      "Bash(sed:*)",
+      "Bash(awk:*)",
+      "Bash(test:*)",
+      "Bash(git show:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(bun test:*)",
+      "Bash(bun run:*)",
+      "Bash(bun add:*)",
+      "Bash(bunx tsc:*)",
+      "Bash(bunx biome:*)",
+      "Bash(bash scripts/preflight.sh:*)",
+      "Bash(bash scripts/check-comment-groups.sh:*)",
+      "Bash(bash scripts/check-structure.sh:*)",
+      "Bash(openspec:*)",
+      "Bash(coderabbit:*)",
+      "Bash(gemini:*)",
+      "Bash(timeout 30 gemini:*)",
+      "Bash(doppler run:*)",
+      "Skill(opsx:*)"
+    ]
   }
 }

@@ -4,18 +4,21 @@
  * Referenced by `ui/index.html`.
  */
 
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { App } from "./App.tsx";
-import "./globals.css";
+// react + app bootstrap deps
+import { StrictMode } from "react"
+import { createRoot } from "react-dom/client"
+import { App } from "./App"
+import "./globals.css"
 
-const container = document.getElementById("root");
+// find the mount point
+const container = document.getElementById("root")
 if (!container) {
-	throw new Error("Root element #root not found");
+	throw new Error("Root element #root not found")
 }
 
+// mount the app
 createRoot(container).render(
 	<StrictMode>
 		<App />
 	</StrictMode>,
-);
+)

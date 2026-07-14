@@ -7,18 +7,12 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": [
-			"**",
-			"!.agents",
-			"!.claude",
-			"!.opencode",
-			"!openspec",
-			"!skills-lock.json"
-		]
+		"includes": ["**", "!.agents", "!.claude", "!.opencode", "!openspec", "!skills-lock.json", "!db/migrations"]
 	},
 	"formatter": {
 		"enabled": true,
-		"indentStyle": "tab"
+		"indentStyle": "tab",
+		"lineWidth": 120
 	},
 	"linter": {
 		"enabled": true,
@@ -34,7 +28,8 @@
 	},
 	"javascript": {
 		"formatter": {
-			"quoteStyle": "double"
+			"quoteStyle": "double",
+			"semicolons": "asNeeded"
 		}
 	},
 	"css": {
