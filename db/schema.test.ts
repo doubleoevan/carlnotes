@@ -48,7 +48,7 @@ test("the initial migration enables pgvector before the vector column", () => {
 })
 
 // the single 0000_*.sql migration file name
-function firstMigrationFile() {
+function firstMigrationFile(): string {
 	const sqlFiles = readdirSync(migrationsDirectory).filter((file) => file.endsWith(".sql"))
 	return sqlFiles.sort()[0] ?? ""
 }

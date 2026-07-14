@@ -58,8 +58,8 @@ the code.
 
 ## 6. Commit
 
-The changelist should already be fully staged per the staging rule; confirm
-`git status --short` shows no unstaged modifications before suggesting a
-message. Suggest a commit message following the git-discipline skill
-(Conventional Commits). Ask before running `git commit` unless commits were
-pre-approved at session start. NEVER push; pushing is always manual and human.
+Confirm `git status --short` shows no unstaged modifications. Always show
+the suggested commit message first (git-discipline skill, Conventional
+Commits) — this never skips. Then ask before running `git commit`, unless
+commits were pre-approved at session start; pre-approval skips the ask, not
+the message. NEVER push unless explicitly asked to.

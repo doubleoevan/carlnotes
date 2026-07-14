@@ -212,3 +212,16 @@ specifiers.
 
     // right — the alias reads as an absolute address
     import { cn } from "@/lib/utils"
+
+### 14. Explicit return types
+
+Every named function declares its return type. The annotation is the
+contract: a body edit can't silently change what callers receive, and the
+reader never has to infer. Inline callbacks (event handlers, `.map`
+lambdas) may stay inferred.
+
+    // wrong — the contract lives in the body
+    export async function runScan(scan: Scan) { ... }
+
+    // right — the contract lives in the signature
+    export async function runScan(scan: Scan): Promise<ScanResult> { ... }

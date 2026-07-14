@@ -23,6 +23,9 @@
 			},
 			"complexity": {
 				"noExcessiveCognitiveComplexity": "error"
+			},
+			"nursery": {
+				"useExplicitReturnType": "warn"
 			}
 		}
 	},
@@ -44,5 +47,11 @@
 				"organizeImports": "on"
 			}
 		}
-	}
+	},
+	"overrides": [
+		{
+			"includes": ["ui/src/components/ui/**", "db/schema.ts"],
+			"linter": { "rules": { "nursery": { "useExplicitReturnType": "off" } } }
+		}
+	]
 }

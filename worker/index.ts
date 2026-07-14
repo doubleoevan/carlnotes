@@ -1,2 +1,2 @@
-// worker module placeholder: gives the project a compilation input until real code lands
-export {}
+// worker module entry: exposes the scan orchestration the API and scheduler call to ingest a topic's Sources
+export { runTopicScan } from "./scan"

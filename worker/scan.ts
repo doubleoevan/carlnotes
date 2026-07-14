@@ -1,0 +1,93 @@
+// scan orchestration: run a topic's Sources through their adapters, upsert deduped Resources, record the Scan
+import { eq } from "drizzle-orm"
+import { db } from "../db"
+import { resources, scans, sources } from "../db/schema"
+import { sourceAdapters } from "./adapters"
+import type { AdapterResult, NewResource, Source } from "./adapters/adapter"
+
+// what one Source produced: emitted Resources, an isolated failure, or a skip (no adapter for that kind)
+type SourceOutcome = ({ status: "ok" } & AdapterResult) | { status: "failed" } | { status: "skipped" }
+
+// a persisted Scan row, and the summary toScanSummary computes for it
+type Scan = typeof scans.$inferSelect
+type ScanSummary = { resources: NewResource[]; foundCount: number; cost: number; status: Scan["status"] }
+
+// create a Scan, ingest every Source (failures isolated), then write found_count, cost, and status
+export async function runTopicScan(topicId: string): Promise<Scan | undefined> {
+	// open the Scan as "running" so an interrupted ingestion is visible as an unfinished row
+	const [scan] = await db.insert(scans).values({ topicId }).returning()
+	if (!scan) {
+		throw new Error(`could not create scan for topic ${topicId}`)
+	}
+	// an infra failure after this point must finalize the Scan as failed, never leave it stuck "running"
+	try {
+		// run every Source through its adapter with per-Source failures isolated, then tally the outcomes
+		const topicSources = await db.select().from(sources).where(eq(sources.topicId, topicId))
+		const summary = toScanSummary(await Promise.all(topicSources.map(ingestSource)))
+
+		// upsert the deduped Resources, skipping urls already stored so existing rows and embeddings stay intact
+		if (summary.resources.length > 0) {
+			await db.insert(resources).values(summary.resources).onConflictDoNothing({ target: resources.url })
+		}
+		// close the Scan with what it found, what it cost, and whether it succeeded
+		const { foundCount, cost, status } = summary
+		const [finished] = await db
+			.update(scans)
+			.set({ status, foundCount, cost: cost.toString(), finishedAt: new Date() })
+			.where(eq(scans.id, scan.id))
+			.returning()
+		return finished
+	} catch (error) {
+		// record the failure on the Scan row, then rethrow so the caller sees the original error
+		const message = error instanceof Error ? error.message : String(error)
+		await db
+			.update(scans)
+			.set({ status: "failed", error: message, finishedAt: new Date() })
+			.where(eq(scans.id, scan.id))
+		throw error
+	}
+}
+
+// pure aggregation over Source outcomes: dedupe Resources across Sources, sum cost, decide the status
+export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
+	// dedupe emitted Resources across Sources by url and sum the cost of the Sources that ran
+	const resourceByUrl = new Map<string, NewResource>()
+	let cost = 0
+	for (const outcome of outcomes) {
+		// skips and failures contribute no Resources and no cost
+		if (outcome.status !== "ok") {
+			continue
+		}
+		cost += outcome.cost
+		for (const resource of outcome.resources) {
+			// keep the first Resource seen for a url
+			if (!resourceByUrl.has(resource.url)) {
+				resourceByUrl.set(resource.url, resource)
+			}
+		}
+	}
+	// a Scan failed only when a Source errored and none succeeded; skips and an empty topic stay succeeded
+	const hasFailures =
+		outcomes.some((outcome) => outcome.status === "failed") && !outcomes.some((outcome) => outcome.status === "ok")
+
+	// annotate status with the column's enum type so it does not widen to string
+	const resources = [...resourceByUrl.values()]
+	const status: (typeof scans.$inferSelect)["status"] = hasFailures ? "failed" : "succeeded"
+	return { resources, foundCount: resources.length, cost, status }
+}
+
+// run one Source through its registered adapter, turning any failure into an isolated outcome
+async function ingestSource(source: Source): Promise<SourceOutcome> {
+	// a kind with no registered adapter is a no-op skip, not a Scan failure
+	const adapter = sourceAdapters[source.kind]
+	if (!adapter) {
+		return { status: "skipped" }
+	}
+	// a thrown adapter degrades only this Source: log it and report failure to the tally
+	try {
+		return { status: "ok", ...(await adapter(source)) }
+	} catch (error) {
+		console.error(`source ${source.id} (${source.kind}) failed`, error)
+		return { status: "failed" }
+	}
+}
