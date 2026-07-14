@@ -1,6 +1,6 @@
 // parseFeed self-checks: RSS and Atom both map to deduped read Resources, verified without a network
 import { expect, test } from "bun:test"
-import { parseFeed } from "./rss"
+import { parseFeed } from "./feed"
 
 // a minimal RSS 2.0 feed whose third item repeats the first link, to exercise within-feed dedupe
 const RSS_FEED = `<?xml version="1.0"?><rss version="2.0"><channel>

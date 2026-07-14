@@ -1,0 +1,1 @@
+ALTER TABLE "scans" ADD COLUMN "degraded_sources" jsonb DEFAULT '[]'::jsonb NOT NULL;

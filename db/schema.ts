@@ -95,6 +95,11 @@ export const scans = pgTable("scans", {
 	filteredCount: integer("filtered_count").notNull().default(0),
 	// llm-written recap of what the scan did, shown in topic history
 	aiSummary: text("ai_summary"),
+	// sources that ran a keyless fallback this scan, so degraded provenance stays traceable (empty when none did)
+	degradedSources: jsonb("degraded_sources")
+		.$type<{ sourceId: string; fallbackMode: string }[]>()
+		.notNull()
+		.default([]),
 })
 
 // a canonical external artifact, deduped globally by url; the embedding is filled later by the pipeline

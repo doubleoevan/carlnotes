@@ -28,6 +28,9 @@
       "Bash(sed:*)",
       "Bash(awk:*)",
       "Bash(test:*)",
+      "Bash(jq:*)",
+      "Bash(python3 -c:*)",
+      "Bash(python3 -m json.tool:*)",
       "Bash(git show:*)",
       "Bash(git status:*)",
       "Bash(git diff:*)",
@@ -46,8 +49,37 @@
       "Bash(coderabbit:*)",
       "Bash(gemini:*)",
       "Bash(timeout 30 gemini:*)",
-      "Bash(doppler run:*)",
+      "Bash(doppler run -- bun run:*)",
+      "Bash(doppler run -- bun test:*)",
+      "Bash(doppler run -- bunx drizzle-kit:*)",
       "Skill(opsx:*)"
+    ],
+    "ask": [
+      "Bash(git commit:*)",
+      "Bash(git push:*)"
+    ],
+    "deny": [
+      "Bash(sudo:*)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~*)",
+      "Bash(rm -rf ./*)",
+      "Bash(rm -rf ../*)",
+      "Bash(rm -rf .)",
+      "Bash(rm -rf ~)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean:*)",
+      "Bash(git checkout -- *)",
+      "Bash(sed -i:*)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/**)",
+      "Read(~/.gnupg/**)",
+      "Read(~/.config/gh/**)",
+      "Read(~/.netrc)",
+      "Edit(~/.ssh/**)",
+      "Edit(~/.aws/**)",
+      "Edit(~/.zshrc)",
+      "Edit(~/.bashrc)",
+      "Edit(~/.gitconfig)"
     ]
   }
 }

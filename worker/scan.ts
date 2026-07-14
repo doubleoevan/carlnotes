@@ -5,12 +5,20 @@ import { resources, scans, sources } from "../db/schema"
 import { sourceAdapters } from "./adapters"
 import type { AdapterResult, NewResource, Source } from "./adapters/adapter"
 
-// what one Source produced: emitted Resources, an isolated failure, or a skip (no adapter for that kind)
-type SourceOutcome = ({ status: "ok" } & AdapterResult) | { status: "failed" } | { status: "skipped" }
+// what one Source produced: emitted Resources (with its id, for tracing), an isolated failure, or a skip
+type SourceOutcome = ({ status: "ok"; sourceId: string } & AdapterResult) | { status: "failed" } | { status: "skipped" }
 
-// a persisted Scan row, and the summary toScanSummary computes for it
+// a persisted Scan row, its per-Source fallback trace, and the summary toScanSummary computes for it
 type Scan = typeof scans.$inferSelect
-type ScanSummary = { resources: NewResource[]; foundCount: number; cost: number; status: Scan["status"] }
+type DegradedSource = Scan["degradedSources"][number]
+// the summary shape toScanSummary returns for runTopicScan to persist
+type ScanSummary = {
+	resources: NewResource[]
+	foundCount: number
+	cost: number
+	status: Scan["status"]
+	degradedSources: DegradedSource[]
+}
 
 // create a Scan, ingest every Source (failures isolated), then write found_count, cost, and status
 export async function runTopicScan(topicId: string): Promise<Scan | undefined> {
@@ -29,11 +37,11 @@ export async function runTopicScan(topicId: string): Promise<Scan | undefined> {
 		if (summary.resources.length > 0) {
 			await db.insert(resources).values(summary.resources).onConflictDoNothing({ target: resources.url })
 		}
-		// close the Scan with what it found, what it cost, and whether it succeeded
-		const { foundCount, cost, status } = summary
+		// close the Scan with what it found, cost, whether it succeeded, and which Sources ran degraded
+		const { foundCount, cost, status, degradedSources } = summary
 		const [finished] = await db
 			.update(scans)
-			.set({ status, foundCount, cost: cost.toString(), finishedAt: new Date() })
+			.set({ status, foundCount, cost: cost.toString(), degradedSources, finishedAt: new Date() })
 			.where(eq(scans.id, scan.id))
 			.returning()
 		return finished
@@ -50,17 +58,22 @@ export async function runTopicScan(topicId: string): Promise<Scan | undefined> {
 
 // pure aggregation over Source outcomes: dedupe Resources across Sources, sum cost, decide the status
 export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
-	// dedupe emitted Resources across Sources by url and sum the cost of the Sources that ran
+	// dedupe emitted Resources across Sources by url, sum cost, and collect Sources that ran a keyless fallback
 	const resourceByUrl = new Map<string, NewResource>()
+	const degradedSources: DegradedSource[] = []
 	let cost = 0
 	for (const outcome of outcomes) {
-		// skips and failures contribute no Resources and no cost
+		// skips and failures contribute no Resources, cost, or degradation
 		if (outcome.status !== "ok") {
 			continue
 		}
+		// a keyless fallback still succeeds, but is recorded so the Scan traces the degradation
+		if (outcome.fallbackMode) {
+			degradedSources.push({ sourceId: outcome.sourceId, fallbackMode: outcome.fallbackMode })
+		}
+		// sum this Source's cost and merge its Resources, keeping the first seen per url
 		cost += outcome.cost
 		for (const resource of outcome.resources) {
-			// keep the first Resource seen for a url
 			if (!resourceByUrl.has(resource.url)) {
 				resourceByUrl.set(resource.url, resource)
 			}
@@ -73,7 +86,7 @@ export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
 	// annotate status with the column's enum type so it does not widen to string
 	const resources = [...resourceByUrl.values()]
 	const status: (typeof scans.$inferSelect)["status"] = hasFailures ? "failed" : "succeeded"
-	return { resources, foundCount: resources.length, cost, status }
+	return { resources, foundCount: resources.length, cost, status, degradedSources }
 }
 
 // run one Source through its registered adapter, turning any failure into an isolated outcome
@@ -85,7 +98,7 @@ async function ingestSource(source: Source): Promise<SourceOutcome> {
 	}
 	// a thrown adapter degrades only this Source: log it and report failure to the tally
 	try {
-		return { status: "ok", ...(await adapter(source)) }
+		return { status: "ok", sourceId: source.id, ...(await adapter(source)) }
 	} catch (error) {
 		console.error(`source ${source.id} (${source.kind}) failed`, error)
 		return { status: "failed" }
