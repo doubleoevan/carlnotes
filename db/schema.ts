@@ -89,6 +89,8 @@ export const attachments = pgTable("attachments", {
 	byteSize: integer("byte_size").notNull(),
 	// the context extracted from the file, filled once at upload so a scan never re-processes the file
 	context: text("context").notNull().default(""),
+	// origin URL for a URL-ingested attachment; null for file uploads
+	sourceUrl: text("source_url"),
 	// created/updated timestamps
 	...timestamps(),
 })
