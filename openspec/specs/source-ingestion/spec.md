@@ -166,16 +166,16 @@ A failing Source SHALL degrade only that Source's contribution. `runTopicScan` S
 
 ### Requirement: Search adapter emits Resources from LLM-generated Exa queries
 
-`searchAdapter` SHALL handle Sources of kind `search`. It SHALL read the Source's topic `context_doc` (via `source.topic_id`), generate a bounded list of search queries from it with an LLM through the LiteLLM proxy (AI SDK structured output with a Zod schema), run each query through Exa's search API using `EXA_API_KEY`, and emit one Resource per result with a canonical URL (the result URL), a title, and `kind` `read`. Results SHALL be deduped by canonical URL within the adapter run. It SHALL require no Integration (`integration_id` may be null; `EXA_API_KEY` and the proxy credential are read from the environment). It SHALL leave `fallbackMode` unset — search has no keyless fallback. It SHALL leave `embedding` and `embedding_model` unset for the curation pipeline.
+`searchAdapter` SHALL handle Sources of kind `search`. It SHALL read the Source's topic **effective context** (via `source.topic_id`) — the topic's own `context` together with the `context` of each of the topic's attachments — generate a bounded list of search queries from it with an LLM through the LiteLLM proxy (AI SDK structured output with a Zod schema), run each query through Exa's search API using `EXA_API_KEY`, and emit one Resource per result with a canonical URL (the result URL), a title, and `kind` `read`. Results SHALL be deduped by canonical URL within the adapter run. It SHALL require no Integration (`integration_id` may be null; `EXA_API_KEY` and the proxy credential are read from the environment). It SHALL leave `fallbackMode` unset — search has no keyless fallback. It SHALL leave `embedding` and `embedding_model` unset for the curation pipeline.
 
 #### Scenario: Context doc drives queries and Exa results become Resources
 
-- **WHEN** a Source of kind `search` whose topic has a non-empty `context_doc` is scanned
-- **THEN** `searchAdapter` generates queries from the `context_doc`, searches Exa for each, and emits one `read` Resource per result, each keyed by its canonical URL
+- **WHEN** a Source of kind `search` whose topic has a non-empty effective context (its own `context`, an attachment `context`, or both) is scanned
+- **THEN** `searchAdapter` generates queries from that effective context, searches Exa for each, and emits one `read` Resource per result, each keyed by its canonical URL
 
 #### Scenario: Empty context doc falls back to the topic name
 
-- **WHEN** the topic's `context_doc` is empty
+- **WHEN** the topic's own `context` is empty and it has no attachment contexts
 - **THEN** query generation falls back to the topic `name` rather than sending an empty prompt
 
 #### Scenario: Results dedupe across queries

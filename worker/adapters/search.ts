@@ -1,9 +1,7 @@
 // the search adapter: the scout — an LLM turns a topic's context doc into queries, Exa runs them, results land as read Resources
 import { generateText, Output } from "ai"
-import { eq } from "drizzle-orm"
 import { z } from "zod"
-import { db } from "../../db"
-import { topics } from "../../db/schema"
+import { topicScanContext } from "../attachments"
 import { cheapModel } from "../llm"
 import type { NewResource, Source, SourceAdapter } from "./adapter"
 
@@ -16,18 +14,12 @@ const FETCH_TIMEOUT_MS = 10_000
 // Exa is the current search provider (swappable per the tech-stack decision log); EXA_ENDPOINT + EXA_API_KEY are the only Exa-specific names
 const EXA_ENDPOINT = "https://api.exa.ai/search"
 
-// read the topic's context doc, generate queries from it, search Exa per query, and merge the deduped read Resources
+// read the topic's effective context, generate queries from it, search Exa per query, and merge the deduped read Resources
 export const searchAdapter: SourceAdapter = async (source: Source) => {
-	// the scout reads its own topic (unlike the other adapters) for the context doc and name that seed query generation
-	const [topic] = await db
-		.select({ contextDoc: topics.contextDoc, name: topics.name })
-		.from(topics)
-		.where(eq(topics.id, source.topicId))
-	if (!topic) {
-		throw new Error(`search source ${source.id} has no topic ${source.topicId}`)
-	}
-	// generate queries from the context doc, then run each search in parallel
-	const queries = await generateQueries(topic.contextDoc, topic.name)
+	// the scout reads its own topic's effective context (its context plus attachment contexts) and name to seed generation
+	const { name, context } = await topicScanContext(source.topicId)
+	// generate queries from the effective context, then run each search in parallel
+	const queries = await generateQueries(context, name)
 	const responses = await Promise.all(queries.map(runSearch))
 
 	// merge every query's results: sum the per-search Exa cost and collect the Resources
@@ -50,20 +42,20 @@ export const searchAdapter: SourceAdapter = async (source: Source) => {
 // the fields parseResults reads from the search provider's response (Exa's shape today); the JSON is unvalidated, so url is optional at runtime
 type SearchResponse = { results: { url?: string; title?: string | null }[]; costDollars?: { total?: number } }
 
-// build the query-generation prompt; an empty context doc falls back to the topic name so the model always has a seed
-export function buildQueryPrompt(contextDoc: string, name: string): string {
-	// an empty context doc gives the model nothing to scout from — fall back to the topic name; cap length to bound tokens/spend
-	const context = (contextDoc.trim() || name).slice(0, MAX_CONTEXT_CHARS)
-	return `You are a research scout. Given the topic below, write up to ${MAX_QUERIES} diverse web search queries that would surface fresh, high-quality articles worth reading. Return only the queries.\n\nTopic:\n${context}`
+// build the query-generation prompt; an empty context falls back to the topic name so the model always has a seed
+export function buildQueryPrompt(context: string, name: string): string {
+	// an empty context gives the model nothing to scout from — fall back to the topic name; cap length to bound tokens/spend
+	const capped = (context.trim() || name).slice(0, MAX_CONTEXT_CHARS)
+	return `You are a research scout. Given the topic below, write up to ${MAX_QUERIES} diverse web search queries that would surface fresh, high-quality articles worth reading. Return only the queries.\n\nTopic:\n${capped}`
 }
 
-// generate a bounded list of search queries from the context doc via the LiteLLM-routed model, validated by Zod
-async function generateQueries(contextDoc: string, name: string): Promise<string[]> {
+// generate a bounded list of search queries from the effective context via the LiteLLM-routed model, validated by Zod
+async function generateQueries(context: string, name: string): Promise<string[]> {
 	// structured output via generateText's output setting (generateObject is deprecated in ai@7); the schema forces a string array
 	const { output } = await generateText({
 		model: cheapModel(),
 		output: Output.object({ schema: z.object({ queries: z.array(z.string()) }) }),
-		prompt: buildQueryPrompt(contextDoc, name),
+		prompt: buildQueryPrompt(context, name),
 	})
 	// sanitize model output — trim, drop blanks, dedupe — then cap so a chatty model can't inflate the Exa call count
 	const queries = [...new Set(output.queries.map((query) => query.trim()).filter(Boolean))]

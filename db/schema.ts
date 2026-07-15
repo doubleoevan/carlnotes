@@ -51,7 +51,7 @@ export const topics = pgTable("topics", {
 		.references(() => users.id, { onDelete: "cascade" }),
 	// what the pipeline scores against
 	name: text("name").notNull(),
-	contextDoc: text("context_doc").notNull().default(""),
+	context: text("context").notNull().default(""),
 	// how often to scan, and who may see the feed
 	cadence: cadence("cadence").notNull().default("daily"),
 	privacy: privacy("privacy").notNull().default("private"),
@@ -71,6 +71,24 @@ export const sources = pgTable("sources", {
 	config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
 	// credentials resolve through the referenced Integration when present (nullable: RSS needs none)
 	integrationId: text("integration_id").references(() => integrations.id, { onDelete: "set null" }),
+	// created/updated timestamps
+	...timestamps(),
+})
+
+// a file a user attaches to a Topic for context: the raw file lives in object storage, its extracted context is what scans read
+export const attachments = pgTable("attachments", {
+	id: primaryId(),
+	// the topic this attachment gives context to
+	topicId: text("topic_id")
+		.notNull()
+		.references(() => topics.id, { onDelete: "cascade" }),
+	// where the raw file lives in object storage (the S3/R2 key), plus its original name, type, and size
+	objectKey: text("object_key").notNull(),
+	filename: text("filename").notNull(),
+	contentType: text("content_type").notNull(),
+	byteSize: integer("byte_size").notNull(),
+	// the context extracted from the file, filled once at upload so a scan never re-processes the file
+	context: text("context").notNull().default(""),
 	// created/updated timestamps
 	...timestamps(),
 })
