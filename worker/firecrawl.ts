@@ -21,7 +21,11 @@ export async function fetchContent(url: string): Promise<string> {
 	if (!response.ok) {
 		throw new Error(`firecrawl scrape ${url} returned ${response.status}`)
 	}
-	// Firecrawl wraps the page under data.markdown; missing content is an empty string, not an error
+	// Firecrawl wraps the page under data.markdown; an empty/whitespace body is a failed scrape, so throw to fall back to the snippet
 	const payload = (await response.json()) as { data?: { markdown?: string } }
-	return payload.data?.markdown ?? ""
+	const markdown = payload.data?.markdown ?? ""
+	if (!markdown.trim()) {
+		throw new Error(`firecrawl scrape ${url} returned no content`)
+	}
+	return markdown
 }
