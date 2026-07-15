@@ -8,7 +8,11 @@ export async function putAttachment(key: string, bytes: Uint8Array, contentType:
 
 // the object key for an attachment: namespaced by topic and attachment id so keys never collide
 export function attachmentKey(topicId: string, attachmentId: string, filename: string): string {
-	return `topics/${topicId}/attachments/${attachmentId}/${filename}`
+	// sanitize the caller-supplied filename into a safe key segment: no path separators, bounded length, never a bare dot run
+	// runs of non-[alnum/dot] collapse to a dash, the result is capped, and "."/".."/"" fall back to a literal name
+	const cleaned = filename.replace(/[^a-z0-9.]+/gi, "-").slice(0, 200)
+	const safe = /^\.*$/.test(cleaned) ? "file" : cleaned
+	return `topics/${topicId}/attachments/${attachmentId}/${safe}`
 }
 
 // delete a stored object; best-effort cleanup of an orphan when ingestion fails after the upload

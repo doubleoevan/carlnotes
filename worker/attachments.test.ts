@@ -1,6 +1,7 @@
 // attachment pipeline self-check: the pure extractor and prompt builder plus the pre-network size guard, all offline
 import { expect, test } from "bun:test"
 import { buildContextPrompt, extractText, ingestAttachment, ingestUrlAttachment } from "./attachments"
+import { attachmentKey } from "./storage"
 
 // a fetcher that fails if reached — proves URL validation rejects before any Firecrawl call
 const failIfFetched = async (): Promise<string> => {
@@ -43,3 +44,21 @@ test("ingestUrlAttachment rejects a non-http(s) URL before fetching", async () =
 })
 
 // the empty-fetch guard needs a real topic to reach (the topic check precedes the fetch), so it is exercised in the live smoke, not here
+
+// a normal filename passes through untouched, producing a well-formed key
+test("attachmentKey keeps a normal filename intact", () => {
+	expect(attachmentKey("t1", "a1", "resume.pdf")).toBe("topics/t1/attachments/a1/resume.pdf")
+})
+
+// a path-traversal filename is flattened to one safe key segment — no separators leak into the object key
+test("attachmentKey sanitizes a traversal-y filename", () => {
+	const key = attachmentKey("t1", "a1", "../../etc/passwd")
+	// only the four fixed prefix slashes remain; a leaked separator would add more segments
+	expect(key.split("/")).toHaveLength(5)
+	expect(key).toContain("topics/t1/attachments/a1/")
+})
+
+// a dot-only filename can't leave a "." or ".." segment for a downstream filesystem sync to resolve — it falls back
+test("attachmentKey rejects a dot-only filename", () => {
+	expect(attachmentKey("t1", "a1", "..")).toBe("topics/t1/attachments/a1/file")
+})
