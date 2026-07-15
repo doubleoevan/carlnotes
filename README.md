@@ -2,11 +2,11 @@
 
 **He already read it. All of it.**
 
-You met him at a party once. Talked for twenty minutes about who owns the moon, legally. You forgot his name twice. He never forgot yours. Carl doesn't forget. Carl knows everything. He doesn't sleep, he reads, and whenever you drop by, he has notes for you.
+The first time you met him, you talked for twenty minutes about who owns the moon, legally. Carl doesn't sleep. He reads. And when you drop by, he has notes for you.
 
 Give Carl three topics. You know the ones.
 
-Carl stays up. You stay informed.
+Carl stays up. You stay up to date.
 
 > **Status: early development.** The scaffold is real; the product is being built change-by-change via [OpenSpec](https://github.com/Fission-AI/OpenSpec) — see `openspec/`.
 
