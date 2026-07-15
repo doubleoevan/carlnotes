@@ -16,6 +16,11 @@ export async function deleteAttachment(key: string): Promise<void> {
 	await bucket().delete(key)
 }
 
+// whether a stored object exists — the attachment smoke asserts the raw file actually landed in the bucket
+export async function attachmentExists(key: string): Promise<boolean> {
+	return bucket().exists(key)
+}
+
 // build the S3 client from env, throwing if any value is unset so a misconfigured upload never writes to a wrong/default endpoint
 function bucket(): Bun.S3Client {
 	// every S3_* value is required — a missing one must fail loudly, mirroring the LLM seam's fail-fast

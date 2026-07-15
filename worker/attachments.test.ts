@@ -1,6 +1,11 @@
 // attachment pipeline self-check: the pure extractor and prompt builder plus the pre-network size guard, all offline
 import { expect, test } from "bun:test"
-import { buildContextPrompt, extractText, ingestAttachment } from "./attachments"
+import { buildContextPrompt, extractText, ingestAttachment, ingestUrlAttachment } from "./attachments"
+
+// a fetcher that fails if reached — proves URL validation rejects before any Firecrawl call
+const failIfFetched = async (): Promise<string> => {
+	throw new Error("fetcher should not be called")
+}
 
 // text and markdown decode straight through the extractor
 test("extractText decodes text and markdown to a string", async () => {
@@ -26,3 +31,15 @@ test("ingestAttachment rejects an oversized file before touching storage or the 
 test("buildContextPrompt includes the document text", () => {
 	expect(buildContextPrompt("a novel about the moon")).toContain("a novel about the moon")
 })
+
+// a malformed URL is rejected before Firecrawl is ever called
+test("ingestUrlAttachment rejects a malformed URL before fetching", async () => {
+	await expect(ingestUrlAttachment("t1", "not a url", failIfFetched)).rejects.toThrow(/invalid attachment URL/)
+})
+
+// a non-http(s) scheme parses as a URL but is rejected before fetching
+test("ingestUrlAttachment rejects a non-http(s) URL before fetching", async () => {
+	await expect(ingestUrlAttachment("t1", "file:///etc/passwd", failIfFetched)).rejects.toThrow(/http/)
+})
+
+// the empty-fetch guard needs a real topic to reach (the topic check precedes the fetch), so it is exercised in the live smoke, not here

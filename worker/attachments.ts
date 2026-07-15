@@ -4,12 +4,19 @@ import { eq } from "drizzle-orm"
 import { extractText as extractPdfText } from "unpdf"
 import { db } from "../db"
 import { attachments, topics } from "../db/schema"
+import { fetchContent } from "./firecrawl"
 import { cheapModel } from "./llm"
 import { attachmentKey, deleteAttachment, putAttachment } from "./storage"
 
 // a persisted attachment row, and the upload ingestAttachment accepts
 type Attachment = typeof attachments.$inferSelect
-type AttachmentUpload = { topicId: string; filename: string; contentType: string; bytes: Uint8Array }
+type AttachmentUpload = {
+	topicId: string
+	filename: string
+	contentType: string
+	bytes: Uint8Array
+	sourceUrl?: string
+}
 
 // reject uploads larger than this before any storage/LLM work, bounding storage and inference spend at the trust boundary
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
@@ -18,16 +25,13 @@ const MAX_EXTRACT_CHARS = 8000
 
 // store the file, generate its context once, and persist the attachment; validation runs first so a bad upload does no work
 export async function ingestAttachment(upload: AttachmentUpload): Promise<Attachment> {
-	const { topicId, filename, contentType, bytes } = upload
+	const { topicId, filename, contentType, bytes, sourceUrl = null } = upload
 	// validate size at the trust boundary before touching storage or the model
 	if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
 		throw new Error(`attachment exceeds ${MAX_ATTACHMENT_BYTES} bytes`)
 	}
 	// reject a nonexistent topic before spending storage or inference (the FK would only catch it at insert, after the upload)
-	const [topic] = await db.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId))
-	if (!topic) {
-		throw new Error(`topic ${topicId} not found`)
-	}
+	await requireTopic(topicId)
 	// extract first (local, no network) so an unsupported type is rejected before anything is stored
 	const text = await extractText(contentType, bytes)
 	// store the raw bytes under a topic/attachment key; the id is generated up front to embed in the key
@@ -38,8 +42,8 @@ export async function ingestAttachment(upload: AttachmentUpload): Promise<Attach
 	// from here the object exists, so any failure must delete it to avoid an orphan
 	try {
 		const context = await generateContext(text)
-		const values = { id, topicId, objectKey, filename, contentType, byteSize, context }
-		const [attachment] = await db.insert(attachments).values(values).returning()
+		const row = { id, topicId, objectKey, filename, contentType, byteSize, context, sourceUrl }
+		const [attachment] = await db.insert(attachments).values(row).returning()
 		// surface an empty insert result instead of returning undefined
 		if (!attachment) {
 			throw new Error(`failed to persist attachment for topic ${topicId}`)
@@ -49,6 +53,42 @@ export async function ingestAttachment(upload: AttachmentUpload): Promise<Attach
 		// best-effort delete of the stored object, then rethrow the original failure
 		await deleteAttachment(objectKey).catch(() => {})
 		throw error
+	}
+}
+
+// ingest an attachment from a URL: validate the topic, fetch the page as markdown via Firecrawl, then run the exact file-ingestion path (fetcher injectable for the smoke)
+export async function ingestUrlAttachment(topicId: string, url: string, fetcher = fetchContent): Promise<Attachment> {
+	// validate the URL at the trust boundary before any fetch — reject anything but a well-formed http(s) URL
+	let pageUrl: URL
+	try {
+		pageUrl = new URL(url)
+	} catch {
+		throw new Error(`invalid attachment URL: ${url}`)
+	}
+	// only http(s) is fetchable — reject file:, data:, and other schemes
+	if (pageUrl.protocol !== "http:" && pageUrl.protocol !== "https:") {
+		throw new Error(`attachment URL must be http(s): ${url}`)
+	}
+	// reject a nonexistent topic before the paid fetch, mirroring ingestAttachment's trust-boundary check
+	await requireTopic(topicId)
+	// fetch the page to markdown; empty content means nothing usable, so reject before storing a contextless attachment
+	const markdown = await fetcher(url)
+	if (!markdown.trim()) {
+		throw new Error(`attachment URL fetched no content: ${url}`)
+	}
+	// a safe filename from the host — the object key interpolates it raw, and its UUID already makes the key unique
+	const filename = `${pageUrl.hostname.replace(/[^a-z0-9.]+/gi, "-")}.md`
+	// wrap the markdown as a text/markdown upload and run the shared file-ingestion path, recording the origin URL
+	const bytes = new TextEncoder().encode(markdown)
+	return ingestAttachment({ topicId, filename, contentType: "text/markdown", bytes, sourceUrl: url })
+}
+
+// throw if the topic doesn't exist, so both ingestion paths reject a misaddressed upload before spending storage, inference, or a fetch
+async function requireTopic(topicId: string): Promise<void> {
+	// the FK would only catch a bad topic at insert, after the work — so check up front
+	const [topic] = await db.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId))
+	if (!topic) {
+		throw new Error(`topic ${topicId} not found`)
 	}
 }
 
