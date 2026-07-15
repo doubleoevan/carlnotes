@@ -24,6 +24,17 @@ test("parseVideos maps youtube videos to deduped watch Resources", () => {
 	expect(resources[1]?.snippet).toBeNull()
 })
 
+// an incomplete payload never throws: a missing items array and videos with no videoId (deleted/private) are skipped
+test("parseVideos skips a missing items array and videos with no videoId", () => {
+	// no items key at all yields no Resources instead of a TypeError
+	expect(parseVideos({})).toEqual([])
+	// a video missing its resourceId/videoId is dropped; a well-formed sibling still maps
+	const resources = parseVideos({
+		items: [{ snippet: { title: "Deleted" } }, { snippet: { title: "Live", resourceId: { videoId: "ccc" } } }],
+	})
+	expect(resources.map((resource) => resource.url)).toEqual(["https://www.youtube.com/watch?v=ccc"])
+})
+
 // playlistIdFromUrl self-check: youtube /playlist urls yield the list id, everything else yields null
 test("playlistIdFromUrl extracts the id from playlist urls and rejects the rest", () => {
 	// the /playlist page on any accepted youtube host, with or without extra params, yields the list id
