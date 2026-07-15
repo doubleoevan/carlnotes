@@ -5,7 +5,7 @@ import { buildQueryPrompt, parseResults } from "./search"
 // two distinct results plus a third repeating the first url, to exercise in-payload dedupe
 const SEARCH_RESPONSE = {
 	results: [
-		{ url: "https://a.com/1", title: "One" },
+		{ url: "https://a.com/1", title: "One", highlights: ["hi one", "hi two"] },
 		{ url: "https://b.com/2", title: "Two" },
 		{ url: "https://a.com/1", title: "One again" },
 	],
@@ -19,6 +19,9 @@ test("parseResults maps search results to deduped read Resources and reports cos
 	// every Resource is a read and the first result's title comes through
 	expect(resources.every((resource) => resource.kind === "read")).toBe(true)
 	expect(resources[0]?.title).toBe("One")
+	// the native snippet is Exa's result highlights joined; a result without any leaves snippet null (never the title)
+	expect(resources[0]?.snippet).toBe("hi one hi two")
+	expect(resources[1]?.snippet).toBeNull()
 	expect(cost).toBe(0.005)
 })
 

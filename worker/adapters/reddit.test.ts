@@ -4,7 +4,7 @@ import { parsePosts } from "./reddit"
 
 // two distinct posts plus a third repeating the first permalink, to exercise in-payload dedupe
 const CHILDREN = [
-	{ data: { permalink: "/r/x/comments/a/first/", title: "First" } },
+	{ data: { permalink: "/r/x/comments/a/first/", title: "First", selftext: "First self" } },
 	{ data: { permalink: "/r/x/comments/b/second/", title: "Second" } },
 	{ data: { permalink: "/r/x/comments/a/first/", title: "Dup" } },
 ]
@@ -19,4 +19,7 @@ test("parsePosts maps reddit posts to deduped read Resources", () => {
 	// every Resource is a read, and the first post's title comes through
 	expect(resources.every((resource) => resource.kind === "read")).toBe(true)
 	expect(resources[0]?.title).toBe("First")
+	// the native snippet is the post selftext; a post without one leaves snippet null (never the title)
+	expect(resources[0]?.snippet).toBe("First self")
+	expect(resources[1]?.snippet).toBeNull()
 })

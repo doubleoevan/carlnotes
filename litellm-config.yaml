@@ -35,7 +35,7 @@ model_list:
       max_input_tokens: 524288
       max_output_tokens: 8192
 
-  # cheap-model: high-volume app inference (search query generation, scoring) — the cheap tier
+  # cheap-model: high-volume app inference (search query generation, first-pass scoring) — the cheap tier
   - model_name: cheap-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/minimax-m3
@@ -46,6 +46,30 @@ model_list:
       supports_prompt_caching: true
       max_input_tokens: 524288
       max_output_tokens: 8192
+
+  # score-model: the curation premium tier — re-scores promoted Resources and writes why-summaries (tunable: pick best relevance-per-dollar on eval)
+  - model_name: score-model
+    litellm_params:
+      model: fireworks_ai/accounts/fireworks/models/glm-5p2
+    model_info:
+      friendly_name: "GLM 5.2"
+      supports_function_calling: true
+      supports_prompt_caching: true
+      max_input_tokens: 1048576
+      max_output_tokens: 8192
+
+  # embed-model: the curation embedding tier — output_vector_size MUST equal the schema's resources.embedding dimension (768)
+  - model_name: embed-model
+    litellm_params:
+      model: fireworks_ai/nomic-ai/nomic-embed-text-v1.5
+    model_info:
+      friendly_name: "Nomic Embed Text v1.5 (768-dim)"
+      mode: embedding
+      output_vector_size: 768
+
+# drop provider-unsupported params instead of erroring (Fireworks embeddings reject encoding_format the AI SDK sends)
+litellm_settings:
+  drop_params: true
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

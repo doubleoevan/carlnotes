@@ -111,6 +111,8 @@ export const scans = pgTable("scans", {
 	foundCount: integer("found_count").notNull().default(0),
 	keptCount: integer("kept_count").notNull().default(0),
 	filteredCount: integer("filtered_count").notNull().default(0),
+	// per-stage dollar breakdown of `cost` (embedding, fetch, cheap/premium scoring); `cost` stays the total
+	stageCosts: jsonb("stage_costs").$type<Record<string, number>>().notNull().default({}),
 	// llm-written recap of what the scan did, shown in topic history
 	aiSummary: text("ai_summary"),
 	// sources that ran a keyless fallback this scan, so degraded provenance stays traceable (empty when none did)
@@ -129,6 +131,9 @@ export const resources = pgTable("resources", {
 	// how the resource is consumed, and its display title
 	kind: resourceKind("kind").notNull(),
 	title: text("title"),
+	// pipeline-filled text: the adapter-native snippet (description/selftext/highlights), and the full content curation fetches
+	snippet: text("snippet"),
+	content: text("content"),
 	// nullable until the pipeline embeds it; embedding_model records which model produced the vector
 	embedding: vector("embedding", { dimensions: 768 }),
 	embeddingModel: text("embedding_model"),

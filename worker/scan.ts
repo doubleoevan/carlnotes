@@ -4,6 +4,7 @@ import { db } from "../db"
 import { resources, scans, sources } from "../db/schema"
 import { sourceAdapters } from "./adapters"
 import type { AdapterResult, NewResource, Source } from "./adapters/adapter"
+import { curateScan } from "./curation"
 
 // what one Source produced: emitted Resources (with its id, for tracing), an isolated failure, or a skip
 type SourceOutcome = ({ status: "ok"; sourceId: string } & AdapterResult) | { status: "failed" } | { status: "skipped" }
@@ -37,11 +38,25 @@ export async function runTopicScan(topicId: string): Promise<Scan | undefined> {
 		if (summary.resources.length > 0) {
 			await db.insert(resources).values(summary.resources).onConflictDoNothing({ target: resources.url })
 		}
-		// close the Scan with what it found, cost, whether it succeeded, and which Sources ran degraded
+		// curate the discovered Resources into Findings (dedupe → filter → fetch → score), then close the Scan once
+		const curation = await curateScan(scan, summary.resources)
 		const { foundCount, cost, status, degradedSources } = summary
 		const [finished] = await db
 			.update(scans)
-			.set({ status, foundCount, cost: cost.toString(), degradedSources, finishedAt: new Date() })
+			.set({
+				// ingestion outcomes
+				status,
+				foundCount,
+				degradedSources,
+				// curation outcomes, folded into the same Scan close
+				keptCount: curation.keptCount,
+				filteredCount: curation.filteredCount,
+				stageCosts: curation.stageCosts,
+				aiSummary: curation.aiSummary,
+				// totals: ingestion cost plus every curation stage cost
+				cost: (cost + curation.cost).toString(),
+				finishedAt: new Date(),
+			})
 			.where(eq(scans.id, scan.id))
 			.returning()
 		return finished

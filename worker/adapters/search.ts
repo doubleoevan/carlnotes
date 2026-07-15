@@ -40,7 +40,10 @@ export const searchAdapter: SourceAdapter = async (source: Source) => {
 }
 
 // the fields parseResults reads from the search provider's response (Exa's shape today); the JSON is unvalidated, so url is optional at runtime
-type SearchResponse = { results: { url?: string; title?: string | null }[]; costDollars?: { total?: number } }
+type SearchResponse = {
+	results: { url?: string; title?: string | null; highlights?: string[] }[]
+	costDollars?: { total?: number }
+}
 
 // build the query-generation prompt; an empty context falls back to the topic name so the model always has a seed
 export function buildQueryPrompt(context: string, name: string): string {
@@ -71,8 +74,14 @@ export function parseResults(response: SearchResponse): { resources: NewResource
 		if (typeof result.url !== "string" || resourceByUrl.has(result.url)) {
 			continue
 		}
-		// map to a read Resource; contentHash and embedding stay null for the curation pipeline to fill later
-		resourceByUrl.set(result.url, { url: result.url, title: result.title ?? null, kind: "read", contentHash: null })
+		// map to a read Resource; the native snippet is Exa's result highlights, contentHash/content stay null for curation to fill
+		resourceByUrl.set(result.url, {
+			url: result.url,
+			title: result.title ?? null,
+			kind: "read",
+			snippet: result.highlights?.join(" ") || null,
+			contentHash: null,
+		})
 	}
 	// Exa reports the search's dollar cost in costDollars.total; absent → 0, so Scan.cost is best-effort (LiteLLM meters authoritative spend)
 	return { resources: [...resourceByUrl.values()], cost: response.costDollars?.total ?? 0 }
@@ -89,7 +98,7 @@ async function runSearch(query: string): Promise<SearchResponse> {
 	const response = await fetch(EXA_ENDPOINT, {
 		method: "POST",
 		headers: { "x-api-key": apiKey, "content-type": "application/json" },
-		body: JSON.stringify({ query, numResults: RESULTS_PER_QUERY, type: "auto" }),
+		body: JSON.stringify({ query, numResults: RESULTS_PER_QUERY, type: "auto", contents: { highlights: true } }),
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	})
 	// a non-ok response degrades only this Source (isolated by runTopicScan)

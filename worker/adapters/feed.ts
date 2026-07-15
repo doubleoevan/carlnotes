@@ -41,12 +41,13 @@ export async function parseFeed(xml: string, kind: NewResource["kind"] = "read")
 		if (!url || resourceByUrl.has(url)) {
 			continue
 		}
-		// map the entry to a Resource; embedding stays null for the curation pipeline to fill later
+		// map the entry to a Resource; the native snippet is the entry description, contentHash/content stay null for curation to fill
 		resourceByUrl.set(url, {
 			url,
 			title: feedItem.title ?? null,
 			kind,
-			contentHash: hashContent(feedItem.title, feedItem.content ?? feedItem.contentSnippet),
+			snippet: feedItem.contentSnippet || feedItem.content || feedItem.summary || null,
+			contentHash: null,
 		})
 	}
 	// the deduped Resources, in feed order
@@ -62,10 +63,4 @@ function feedItemToUrl(feedItem: { link?: string; guid?: string }): string | und
 	}
 	const guid = feedItem.guid?.trim()
 	return guid?.startsWith("http") ? guid : undefined
-}
-
-// stable sha256 over title+body so content-level duplicates can be caught later (url stays the live dedupe key)
-function hashContent(title: string | undefined, body: string | undefined): string {
-	// hash the concatenated text; empty parts are fine, this only needs to be deterministic
-	return new Bun.CryptoHasher("sha256").update(`${title ?? ""}\n${body ?? ""}`).digest("hex")
 }

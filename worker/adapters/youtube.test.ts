@@ -4,7 +4,7 @@ import { parseVideos } from "./youtube"
 
 // two distinct videos plus a third repeating the first videoId, to exercise in-payload dedupe
 const VIDEOS = [
-	{ snippet: { title: "First", resourceId: { videoId: "aaa" } } },
+	{ snippet: { title: "First", description: "First desc", resourceId: { videoId: "aaa" } } },
 	{ snippet: { title: "Second", resourceId: { videoId: "bbb" } } },
 	{ snippet: { title: "Dup", resourceId: { videoId: "aaa" } } },
 ]
@@ -19,4 +19,7 @@ test("parseVideos maps youtube videos to deduped watch Resources", () => {
 	// every Resource is a watch, and the first video's title comes through
 	expect(resources.every((resource) => resource.kind === "watch")).toBe(true)
 	expect(resources[0]?.title).toBe("First")
+	// the native snippet is the video description; a video without one leaves snippet null (never the title)
+	expect(resources[0]?.snippet).toBe("First desc")
+	expect(resources[1]?.snippet).toBeNull()
 })

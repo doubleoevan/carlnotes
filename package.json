@@ -9,7 +9,9 @@
 		"check": "bash scripts/preflight.sh",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
-		"test": "bun test"
+		"test": "bun test",
+		"smoke": "bun run smoke:scan",
+		"smoke:scan": "bun worker/scan.smoke.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/openai": "^4.0.14",

@@ -19,7 +19,9 @@ export const youtubeAdapter: SourceAdapter = async (source: Source) => {
 }
 
 // the fields parseVideos reads from a playlistItems response
-type YoutubePlaylist = { items: { snippet: { title?: string; resourceId: { videoId: string } } }[] }
+type YoutubePlaylist = {
+	items: { snippet: { title?: string; description?: string; resourceId: { videoId: string } } }[]
+}
 
 // pure playlist→Resources: each video becomes a watch Resource keyed by its watch?v= url, deduped in-payload
 export function parseVideos(playlist: YoutubePlaylist): NewResource[] {
@@ -31,8 +33,14 @@ export function parseVideos(playlist: YoutubePlaylist): NewResource[] {
 		if (resourceByUrl.has(url)) {
 			continue
 		}
-		// map to a watch Resource; contentHash and embedding stay null for the curation pipeline to fill later
-		resourceByUrl.set(url, { url, title: video.snippet.title ?? null, kind: "watch", contentHash: null })
+		// map to a watch Resource; the native snippet is the video description, contentHash/content stay null for curation to fill
+		resourceByUrl.set(url, {
+			url,
+			title: video.snippet.title ?? null,
+			kind: "watch",
+			snippet: video.snippet.description || null,
+			contentHash: null,
+		})
 	}
 	return [...resourceByUrl.values()]
 }

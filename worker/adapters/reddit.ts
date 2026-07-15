@@ -30,7 +30,7 @@ export const redditAdapter: SourceAdapter = async (source: Source) => {
 }
 
 // the fields parsePosts reads from a reddit listing response
-type RedditListing = { data: { children: { data: { permalink: string; title?: string } }[] } }
+type RedditListing = { data: { children: { data: { permalink: string; title?: string; selftext?: string } }[] } }
 
 // pure listing→Resources: each post becomes a read Resource keyed by its comments permalink, deduped in-payload
 export function parsePosts(json: RedditListing): NewResource[] {
@@ -42,8 +42,14 @@ export function parsePosts(json: RedditListing): NewResource[] {
 		if (resourceByUrl.has(url)) {
 			continue
 		}
-		// map to a read Resource; contentHash and embedding stay null for the curation pipeline to fill later
-		resourceByUrl.set(url, { url, title: child.data.title ?? null, kind: "read", contentHash: null })
+		// map to a read Resource; the native snippet is the post selftext, contentHash/content stay null for curation to fill
+		resourceByUrl.set(url, {
+			url,
+			title: child.data.title ?? null,
+			kind: "read",
+			snippet: child.data.selftext || null,
+			contentHash: null,
+		})
 	}
 	return [...resourceByUrl.values()]
 }

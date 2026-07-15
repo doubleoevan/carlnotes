@@ -56,6 +56,13 @@ bunx tsc -b
 bun test
 ```
 
+Live smokes (owner-run) — exercise real flows against live services (LiteLLM proxy, Firecrawl), so they make paid calls and are **not** part of `bun run check`. Need the LiteLLM proxy up (`docker compose up -d litellm`), the latest migration applied, and Doppler configured:
+
+```bash
+doppler run -- bun run smoke         # run every live smoke
+doppler run -- bun run smoke:scan    # just the topic-scan smoke (ingestion + curation, end-to-end)
+```
+
 ## License
 
 MIT

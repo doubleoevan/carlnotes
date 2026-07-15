@@ -46,7 +46,8 @@ continue; never fail the ritual on a missing reviewer.
 ## 4. Manual review handoff
 
 Summarize the full diff for human review: each file, what changed, and why.
-Then STOP and wait for explicit approval. Do not proceed without it.
+Then STOP, show the suggested commit message, and wait for explicit approval. 
+Do not proceed without it.
 
 ## 5. Archive the change
 
