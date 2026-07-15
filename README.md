@@ -62,6 +62,7 @@ Live smokes (owner-run) — exercise real flows against live services (LiteLLM p
 doppler run -- bun run smoke              # run every live smoke
 doppler run -- bun run smoke:scan         # just the topic-scan smoke (ingestion + curation, end-to-end)
 doppler run -- bun run smoke:attachments  # just the URL-attachment smoke (Firecrawl fetch → context → object storage)
+doppler run -- bun run smoke:search       # just the search-scout smoke (context → LLM queries → Exa → Resources)
 ```
 
 ## License

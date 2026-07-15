@@ -4,6 +4,7 @@ import { z } from "zod"
 import { topicScanContext } from "../attachments"
 import { cheapModel } from "../llm"
 import type { NewResource, Source, SourceAdapter } from "./adapter"
+import { fetchVideos, playlistIdFromUrl } from "./youtube"
 
 // generation/fetch knobs kept at the top per adapter-authoring
 const MAX_QUERIES = 5
@@ -35,8 +36,10 @@ export const searchAdapter: SourceAdapter = async (source: Source) => {
 			}
 		}
 	}
+	// expand any youtube playlist result into its member videos (playlistItems is quota-metered, so cost is unchanged)
+	const resources = await expandPlaylists([...resourceByUrl.values()])
 	// search has no keyless mode, so fallbackMode stays unset; cost is the best-effort paid-Exa spend, unlike the keyless adapters' 0
-	return { resources: [...resourceByUrl.values()], cost }
+	return { resources, cost }
 }
 
 // the fields parseResults reads from the search provider's response (Exa's shape today); the JSON is unvalidated, so url is optional at runtime
@@ -106,4 +109,39 @@ async function runSearch(query: string): Promise<SearchResponse> {
 		throw new Error(`exa search returned ${response.status}`)
 	}
 	return (await response.json()) as SearchResponse
+}
+
+// expand any youtube playlist result into its member videos; non-playlist Resources pass through unchanged
+async function expandPlaylists(resources: NewResource[]): Promise<NewResource[]> {
+	// playlist expansion needs the Data API key; without it every playlist keeps its opaque read link
+	const apiKey = Bun.env.YOUTUBE_API_KEY
+	if (!apiKey) {
+		return resources
+	}
+	// expand every playlist in parallel (non-playlists pass through untouched)
+	const playlistResources = (await Promise.all(resources.map((resource) => expandPlaylist(resource, apiKey)))).flat()
+	// re-dedupe the flattened Resources by url: expanded watch?v= urls collapse against each other (and, at scan level, against youtube Sources)
+	const resourceByUrl = new Map<string, NewResource>()
+	for (const resource of playlistResources) {
+		if (!resourceByUrl.has(resource.url)) {
+			resourceByUrl.set(resource.url, resource)
+		}
+	}
+	return [...resourceByUrl.values()]
+}
+
+// one Resource → its playlist's videos when its url is a youtube playlist, else the Resource unchanged; a failed expansion keeps the link
+async function expandPlaylist(resource: NewResource, apiKey: string): Promise<NewResource[]> {
+	// a non-playlist url has nothing to expand
+	const playlistId = playlistIdFromUrl(resource.url)
+	if (!playlistId) {
+		return [resource]
+	}
+	// one playlist failing (private/404/timeout) degrades to its read link, never the whole search batch
+	try {
+		return await fetchVideos(playlistId, apiKey)
+	} catch (error) {
+		console.error(`search playlist ${playlistId} expansion failed`, error)
+		return [resource]
+	}
 }

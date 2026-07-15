@@ -10,9 +10,10 @@
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "drizzle-kit migrate",
 		"test": "bun test",
-		"smoke": "bun run smoke:scan && bun run smoke:attachments",
+		"smoke": "bun run smoke:scan && bun run smoke:attachments && bun run smoke:search",
 		"smoke:scan": "bun worker/scan.smoke.ts",
-		"smoke:attachments": "bun worker/attachments.smoke.ts"
+		"smoke:attachments": "bun worker/attachments.smoke.ts",
+		"smoke:search": "bun worker/search.smoke.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/openai": "^4.0.14",

@@ -1,6 +1,6 @@
 // parseVideos self-check: a playlistItems response maps to deduped watch Resources, verified offline
 import { expect, test } from "bun:test"
-import { parseVideos } from "./youtube"
+import { parseVideos, playlistIdFromUrl } from "./youtube"
 
 // two distinct videos plus a third repeating the first videoId, to exercise in-payload dedupe
 const VIDEOS = [
@@ -22,4 +22,17 @@ test("parseVideos maps youtube videos to deduped watch Resources", () => {
 	// the native snippet is the video description; a video without one leaves snippet null (never the title)
 	expect(resources[0]?.snippet).toBe("First desc")
 	expect(resources[1]?.snippet).toBeNull()
+})
+
+// playlistIdFromUrl self-check: youtube /playlist urls yield the list id, everything else yields null
+test("playlistIdFromUrl extracts the id from playlist urls and rejects the rest", () => {
+	// the /playlist page on any accepted youtube host, with or without extra params, yields the list id
+	expect(playlistIdFromUrl("https://www.youtube.com/playlist?list=PL123")).toBe("PL123")
+	expect(playlistIdFromUrl("https://youtube.com/playlist?list=PL123")).toBe("PL123")
+	expect(playlistIdFromUrl("https://m.youtube.com/playlist?list=PL123&si=abc")).toBe("PL123")
+	// a watch url (even carrying list=), a non-youtube host, a /playlist with no list, and junk all yield null
+	expect(playlistIdFromUrl("https://www.youtube.com/watch?v=abc&list=PL123")).toBeNull()
+	expect(playlistIdFromUrl("https://example.com/playlist?list=PL123")).toBeNull()
+	expect(playlistIdFromUrl("https://www.youtube.com/playlist")).toBeNull()
+	expect(playlistIdFromUrl("not a url")).toBeNull()
 })

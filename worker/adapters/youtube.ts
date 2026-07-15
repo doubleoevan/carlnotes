@@ -5,6 +5,8 @@ import { fetchFeed } from "./feed"
 // fetch knobs kept at the top per adapter-authoring
 const MAX_RESULTS = 25
 const FETCH_TIMEOUT_MS = 10_000
+// the youtube hosts whose /playlist page playlistIdFromUrl expands (search reuses this)
+const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"])
 
 // fetch a channel or playlist's recent videos as watch Resources: Data API when a key is set, else Atom
 export const youtubeAdapter: SourceAdapter = async (source: Source) => {
@@ -42,7 +44,19 @@ export function parseVideos(playlist: YoutubePlaylist): NewResource[] {
 			contentHash: null,
 		})
 	}
+	// hand back the deduped Resources, first-seen order preserved
 	return [...resourceByUrl.values()]
+}
+
+// a youtube.com/playlist?list=<id> url → its playlist id; any other url (watch, non-youtube, no list) → null
+export function playlistIdFromUrl(url: string): string | null {
+	// only the /playlist page on a youtube host expands; an unparseable url or a /watch?…&list= (already one video) is not a match
+	const playlistUrl = URL.parse(url)
+	if (!playlistUrl || !YOUTUBE_HOSTS.has(playlistUrl.hostname) || playlistUrl.pathname !== "/playlist") {
+		return null
+	}
+	// the list query param carries the playlist id; a /playlist with none has nothing to expand
+	return playlistUrl.searchParams.get("list")
 }
 
 // map the config's channelId/playlistId to the API playlist and the Atom feed url; throws if neither is set
@@ -71,7 +85,7 @@ function uploadsFromChannel(channelId: string): string {
 }
 
 // fetch a playlist's recent items via the Data API and map them to watch Resources
-async function fetchVideos(playlistId: string, apiKey: string): Promise<NewResource[]> {
+export async function fetchVideos(playlistId: string, apiKey: string): Promise<NewResource[]> {
 	// playlistItems costs 1 quota unit and returns uploads completely (cheaper and more complete than search.list)
 	const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=${MAX_RESULTS}&playlistId=${playlistId}&key=${apiKey}`
 	const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
