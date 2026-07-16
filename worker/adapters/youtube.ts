@@ -20,27 +20,32 @@ export const youtubeAdapter: SourceAdapter = async (source: Source) => {
 	return { resources: await fetchFeed(atomUrl, { kind: "watch" }), cost: 0, fallbackMode: "youtube-atom" }
 }
 
-// the fields parseVideos reads from a playlistItems response
+// the fields parseVideos reads from a playlistItems response; all optional because the payload is cast from untyped JSON and deleted/private videos arrive without a videoId
 type YoutubePlaylist = {
-	items: { snippet: { title?: string; description?: string; resourceId: { videoId: string } } }[]
+	items?: { snippet?: { title?: string; description?: string; resourceId?: { videoId?: string } } }[]
 }
 
 // pure playlist→Resources: each video becomes a watch Resource keyed by its watch?v= url, deduped in-payload
 export function parseVideos(playlist: YoutubePlaylist): NewResource[] {
 	// keep the first Resource per video url so a repeated video collapses to one
 	const resourceByUrl = new Map<string, NewResource>()
-	for (const video of playlist.items) {
+	for (const video of playlist.items ?? []) {
+		// skip a deleted/private video or any malformed item that carries no video id, so one bad item never throws
+		const videoId = video.snippet?.resourceId?.videoId
+		if (!videoId) {
+			continue
+		}
 		// this canonical watch url matches what the Atom fallback emits, so modes dedupe to the same Resource
-		const url = `https://www.youtube.com/watch?v=${video.snippet.resourceId.videoId}`
+		const url = `https://www.youtube.com/watch?v=${videoId}`
 		if (resourceByUrl.has(url)) {
 			continue
 		}
 		// map to a watch Resource; the native snippet is the video description, contentHash/content stay null for curation to fill
 		resourceByUrl.set(url, {
 			url,
-			title: video.snippet.title ?? null,
+			title: video.snippet?.title ?? null,
 			kind: "watch",
-			snippet: video.snippet.description || null,
+			snippet: video.snippet?.description || null,
 			contentHash: null,
 		})
 	}

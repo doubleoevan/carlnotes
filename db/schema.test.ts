@@ -4,7 +4,7 @@ import { expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import * as schema from "./schema"
-import { resources, sources, subscriptions } from "./schema"
+import { findings, resources, sources, subscriptions, topics } from "./schema"
 
 // read the generated initial migration once for SQL-level assertions
 const migrationsDirectory = join(import.meta.dir, "migrations")
@@ -25,6 +25,20 @@ test("the embedding column is a 768-dim vector", () => {
 test("no feeds table or export exists", () => {
 	expect("feeds" in schema).toBe(false)
 	expect(initialSql).not.toContain('CREATE TABLE "feeds"')
+})
+
+// tags are Topic metadata with an empty default (so existing rows need no backfill), never a separate entity, and Resources/Findings stay untagged
+test("topics.tags is a non-null, empty-default column and tags is not an entity", () => {
+	expect(topics.tags.notNull).toBe(true)
+	expect(allMigrationsSql()).toContain(`"tags" text[] DEFAULT '{}' NOT NULL`)
+	expect("tags" in schema).toBe(false)
+	expect("tags" in resources).toBe(false)
+	expect("tags" in findings).toBe(false)
+})
+
+// tag containment/overlap filters must be index-backed, so the named GIN index covers topics.tags
+test("a GIN index covers topics.tags", () => {
+	expect(allMigrationsSql()).toContain(`CREATE INDEX "topics_tags_gin" ON "topics" USING gin ("tags")`)
 })
 
 // a keyless Source (RSS) needs no Integration, so integration_id must be nullable
@@ -51,4 +65,10 @@ test("the initial migration enables pgvector before the vector column", () => {
 function firstMigrationFile(): string {
 	const sqlFiles = readdirSync(migrationsDirectory).filter((file) => file.endsWith(".sql"))
 	return sqlFiles.sort()[0] ?? ""
+}
+
+// every migration's SQL concatenated, for asserting on statements added after the initial migration
+function allMigrationsSql(): string {
+	const sqlFiles = readdirSync(migrationsDirectory).filter((file) => file.endsWith(".sql"))
+	return sqlFiles.map((file) => readFileSync(join(migrationsDirectory, file), "utf8")).join("\n")
 }

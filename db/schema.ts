@@ -1,7 +1,7 @@
 // the carlnotes domain model: the canonical entities as postgres tables (Feed is a route, not a table)
 import { sql } from "drizzle-orm"
 // biome-ignore format: one line keeps the comment-group hook seeing a single import statement
-import { boolean, check, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, real, text, timestamp, unique, vector } from "drizzle-orm/pg-core"
+import { boolean, check, index, integer, jsonb, numeric, pgEnum, pgTable, primaryKey, real, text, timestamp, unique, vector } from "drizzle-orm/pg-core"
 
 // enum value sets shared across tables (these const arrays move to shared/ with the Feed UI change)
 export const sourceKind = pgEnum("source_kind", ["rss", "reddit", "youtube", "search", "composio", "plugin"])
@@ -43,21 +43,28 @@ export const integrations = pgTable("integrations", {
 })
 
 // the configuration a user tunes; owner_id is the only authority (no role enum)
-export const topics = pgTable("topics", {
-	id: primaryId(),
-	// the owner; the only authority for the topic
-	ownerId: text("owner_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	// what the pipeline scores against
-	name: text("name").notNull(),
-	context: text("context").notNull().default(""),
-	// how often to scan, and who may see the feed
-	cadence: cadence("cadence").notNull().default("daily"),
-	privacy: privacy("privacy").notNull().default("private"),
-	// created/updated timestamps
-	...timestamps(),
-})
+export const topics = pgTable(
+	"topics",
+	{
+		id: primaryId(),
+		// the owner; the only authority for the topic
+		ownerId: text("owner_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// what the pipeline scores against
+		name: text("name").notNull(),
+		context: text("context").notNull().default(""),
+		// how often to scan, and who may see the feed
+		cadence: cadence("cadence").notNull().default("daily"),
+		privacy: privacy("privacy").notNull().default("private"),
+		// free-form labels: Topic metadata for feed filtering and directory categories (empty by default)
+		tags: text("tags").array().notNull().default([]),
+		// created/updated timestamps
+		...timestamps(),
+	},
+	// GIN index so tag containment/overlap filters (@>, &&) stay index-backed
+	(table) => [index("topics_tags_gin").using("gin", table.tags)],
+)
 
 // a topic input ("pull from X"); integration_id is nullable so keyless sources (RSS) need no credential
 export const sources = pgTable("sources", {
