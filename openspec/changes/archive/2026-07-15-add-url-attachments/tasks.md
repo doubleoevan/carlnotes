@@ -7,7 +7,7 @@
 
 - [x] 2.1 Add an optional `sourceUrl?: string` field to the `AttachmentUpload` type in `worker/attachments.ts`.
 - [x] 2.2 Thread `sourceUrl` through `ingestAttachment` into the insert values as `upload.sourceUrl ?? null` (file uploads keep passing null).
-- [x] 2.3 Add a URL entry point (e.g. `ingestUrlAttachment(topicId, url)`) that validates the URL is well-formed `http`/`https` via `new URL()` before any fetch, calls `fetchContent(url)` from `worker/firecrawl.ts`, rejects an empty result, derives a filename from the URL, and calls `ingestAttachment` with `contentType: "text/markdown"`, the encoded markdown bytes, and `sourceUrl: url`.
+- [x] 2.3 Add a URL entry point (e.g. `ingestUrlAttachment(topicId, url)`) that validates the URL is well-formed `http`/`https` via `new URL()` before any fetch, calls `fetchContent(url)` from `worker/scrape.ts`, rejects an empty result, derives a filename from the URL, and calls `ingestAttachment` with `contentType: "text/markdown"`, the encoded markdown bytes, and `sourceUrl: url`.
 
 ## 3. Tests & verification
 

@@ -1,10 +1,8 @@
 /**
- * Entry point for the React app: mounts the App component to the DOM.
+ * Entry point for the React app. Mounts the App component to the DOM.
  *
  * Referenced by `ui/index.html`.
  */
-
-// react + app bootstrap deps
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import { App } from "./App"
@@ -16,7 +14,7 @@ if (!container) {
 	throw new Error("Root element #root not found")
 }
 
-// mount the app
+// mount the app to the DOM
 createRoot(container).render(
 	<StrictMode>
 		<App />

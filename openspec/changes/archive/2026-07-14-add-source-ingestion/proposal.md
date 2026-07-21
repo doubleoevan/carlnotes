@@ -22,5 +22,5 @@
 
 - **New dependency:** one feed parser (`rss-parser` or the leaner `fast-xml-parser` — decided in design).
 - **Code:** `worker/adapters/adapter.ts` (interface), `worker/adapters/rss.ts` + `.test.ts`, `worker/adapters/index.ts` (registry), `worker/scan.ts` + `.test.ts`, `worker/index.ts` (exports `runTopicScan`). `worker` imports `db` (allowed by the boundary rules).
-- **Contract:** `SourceAdapter` becomes the shape every future adapter (`reddit`, `youtube`, `search`, `composio`, `plugin`) implements, resolving the `adapter-authoring` skill's forward reference. The registry is the single dispatch point new kinds register in.
+- **Contract:** `SourceAdapter` becomes the shape every future adapter (`reddit`, `youtube`, `search`, `composio`, `plugin`) implements, resolving the `adapter-authoring` skill's forward reference. The registry is the single dispatch point new resourceKinds register in.
 - **Deferred:** embedding, scoring, Findings, `kept`/`filtered` counts, `ai_summary` (curation change); Temporal activity wrapping and cadence scheduling (worker-process change); Integration-backed keyed adapters; Resource `kind` detection beyond `read` (podcast/video enclosures); per-Source rate-limit tuning.

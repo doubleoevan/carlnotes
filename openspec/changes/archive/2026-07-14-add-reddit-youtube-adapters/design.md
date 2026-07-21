@@ -1,6 +1,6 @@
 ## Context
 
-`source-ingestion` already ships the seam: `SourceAdapter = (source: Source) => Promise<{ resources, cost }>`, a `Partial<Record<kind, SourceAdapter>>` registry, `runTopicScan` with per-Source failure isolation, and global upsert deduped on `resources.url`. `rssAdapter` is the one keyless adapter; its `parseFeed(xml)` already turns RSS **and** Atom into deduped Resources via `rss-parser`. The `source_kind` enum lists `reddit` and `youtube`, so Sources of those kinds can already exist — they just hit the registry miss and get skipped.
+`source-ingestion` already ships the seam: `SourceAdapter = (source: Source) => Promise<{ resources, cost }>`, a `Partial<Record<kind, SourceAdapter>>` registry, `runTopicScan` with per-Source failure isolation, and global upsert deduped on `resources.url`. `rssAdapter` is the one keyless adapter; its `parseFeed(xml)` already turns RSS **and** Atom into deduped Resources via `rss-parser`. The `source_kind` enum lists `reddit` and `youtube`, so Sources of those resourceKinds can already exist — they just hit the registry miss and get skipped.
 
 Both new Sources have the same shape: a keyed API with richer data, and a keyless public feed that is *already parseable by `parseFeed`* (Reddit `.rss` is Atom; YouTube `videos.xml` is Atom). So the keyless fallback is nearly free — the work is the keyed path, the mode selection, and making a degraded Scan traceable.
 

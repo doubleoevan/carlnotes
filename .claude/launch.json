@@ -7,6 +7,12 @@
       "runtimeArgs": ["run", "dev:ui"],
       "port": 5173,
       "autoPort": true
+    },
+    {
+      "name": "api",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev:api"],
+      "port": 3000
     }
   ]
 }

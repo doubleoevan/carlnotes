@@ -7,7 +7,16 @@
 	},
 	"files": {
 		"ignoreUnknown": false,
-		"includes": ["**", "!.agents", "!.claude", "!.opencode", "!openspec", "!skills-lock.json", "!db/migrations"]
+		"includes": [
+			"**",
+			"!.agents",
+			"!.claude",
+			"!.opencode",
+			"!openspec",
+			"!skills-lock.json",
+			"!db/migrations",
+			"!docs/design"
+		]
 	},
 	"formatter": {
 		"enabled": true,
@@ -50,7 +59,7 @@
 	},
 	"overrides": [
 		{
-			"includes": ["ui/src/components/ui/**", "db/schema.ts"],
+			"includes": ["ui/src/components/primitives/**", "db/schema.ts"],
 			"linter": { "rules": { "nursery": { "useExplicitReturnType": "off" } } }
 		}
 	]

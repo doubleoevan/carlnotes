@@ -1,2 +1,2 @@
-// worker module entry: exposes the scan orchestration the API and scheduler call to ingest a topic's Sources
+// the worker module entry. it exposes the scan orchestration that runs a topic's pipeline
 export { runTopicScan } from "./scan"

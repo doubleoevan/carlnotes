@@ -1,4 +1,6 @@
 {
 	"extends": "../tsconfig.base.json",
+	"compilerOptions": { "paths": { "@shared/*": ["../shared/*"] } },
+	"references": [{ "path": "../shared" }],
 	"include": ["**/*.ts"]
 }

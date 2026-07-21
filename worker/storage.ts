@@ -1,14 +1,17 @@
-// the object-storage seam: a Bun-native S3 client for topic attachments, pointed at R2/MinIO/S3 by the S3_* env alone
+// object storage for topic attachments through Bun's built-in S3 client
+// the S3_* env values alone pick the target, whether R2, MinIO, or AWS S3
 
 // upload an attachment's bytes to object storage under the given key, tagged with its content type
 export async function putAttachment(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
-	// write to the configured bucket; the client is built per call so a missing config fails the upload, not the process
 	await bucket().write(key, bytes, { type: contentType })
 }
 
-// the object key for an attachment: namespaced by topic and attachment id so keys never collide
+// the object key for an attachment, namespaced by topic and attachment id so keys never collide
 export function attachmentKey(topicId: string, attachmentId: string, filename: string): string {
-	// sanitize the untrusted filename into one safe key segment: non-[alnum/dot] runs → dash, capped at 200, all-dots/empty → "file"
+	// sanitize the untrusted filename into one safe key segment
+	// anything but letters, digits, and dots becomes a dash,
+	// length caps at 200,
+	// and an empty or all-dots name becomes "file"
 	const safeFilename = filename
 		.replace(/[^a-z0-9.]+/gi, "-")
 		.slice(0, 200)
@@ -16,26 +19,26 @@ export function attachmentKey(topicId: string, attachmentId: string, filename: s
 	return `topics/${topicId}/attachments/${attachmentId}/${safeFilename}`
 }
 
-// delete a stored object; best-effort cleanup of an orphan when ingestion fails after the upload
-export async function deleteAttachment(key: string): Promise<void> {
-	await bucket().delete(key)
+// delete a stored object. used as best-effort cleanup when ingestion fails after the upload
+export async function deleteAttachment(attachmentKey: string): Promise<void> {
+	await bucket().delete(attachmentKey)
 }
 
-// whether a stored object exists — the attachment smoke asserts the raw file actually landed in the bucket
-export async function attachmentExists(key: string): Promise<boolean> {
-	return bucket().exists(key)
+// whether a stored object exists
+export async function attachmentExists(attachmentKey: string): Promise<boolean> {
+	return bucket().exists(attachmentKey)
 }
 
-// build the S3 client from env, throwing if any value is unset so a misconfigured upload never writes to a wrong/default endpoint
+// build the S3 client from env, throwing if any value is unset so a misconfigured upload never writes to a wrong or default endpoint
 function bucket(): Bun.S3Client {
-	// every S3_* value is required — a missing one must fail loudly, mirroring the LLM seam's fail-fast
+	// every S3_* value is required. a missing one fails loudly
 	const { S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY } = Bun.env
 	if (!S3_ENDPOINT || !S3_REGION || !S3_BUCKET || !S3_ACCESS_KEY_ID || !S3_SECRET_ACCESS_KEY) {
 		throw new Error(
 			"S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID, and S3_SECRET_ACCESS_KEY must be set to store attachments",
 		)
 	}
-	// endpoint is configuration, so the same code targets Cloudflare R2, MinIO, or AWS S3
+	// the endpoint is a configuration, so the same code can target Cloudflare R2, MinIO, or AWS S3
 	return new Bun.S3Client({
 		endpoint: S3_ENDPOINT,
 		region: S3_REGION,

@@ -1,6 +1,6 @@
-// search adapter self-check: the pure result parser and prompt builder, verified offline (no network, no LLM)
+// search adapter tests for the pure result parser and prompt builder
 import { expect, test } from "bun:test"
-import { buildQueryPrompt, parseResults } from "./search"
+import { buildSearchPrompt, parseResults } from "./search"
 
 // two distinct results plus a third repeating the first url, to exercise in-payload dedupe
 const SEARCH_RESPONSE = {
@@ -12,25 +12,27 @@ const SEARCH_RESPONSE = {
 	costDollars: { total: 0.005 },
 }
 
-// each result becomes one read Resource keyed by its url, deduped within the payload, and the provider's cost is surfaced
+// each result becomes one "read" Resource mapped to its url, deduped within the payload. the provider's cost is also returned
 test("parseResults maps search results to deduped read Resources and reports cost", () => {
 	const { resources, cost } = parseResults(SEARCH_RESPONSE)
 	expect(resources.map((resource) => resource.url)).toEqual(["https://a.com/1", "https://b.com/2"])
-	// every Resource is a read and the first result's title comes through
+
+	// every Resource is a "read" kind, and the first result's title comes through
 	expect(resources.every((resource) => resource.kind === "read")).toBe(true)
 	expect(resources[0]?.title).toBe("One")
-	// the native snippet is Exa's result highlights joined; a result without any leaves snippet null (never the title)
+
+	// the native snippet is Exa's result highlights joined. a result without it leaves the snippet null
 	expect(resources[0]?.snippet).toBe("hi one hi two")
 	expect(resources[1]?.snippet).toBeNull()
 	expect(cost).toBe(0.005)
 })
 
-// a response without costDollars still parses, defaulting cost to 0
+// a response without cost still parses, default cost is 0
 test("parseResults defaults cost to 0 when the provider omits costDollars", () => {
 	expect(parseResults({ results: [] }).cost).toBe(0)
 })
 
-// an empty context doc falls back to the topic name so the model always has a seed
-test("buildQueryPrompt falls back to the topic name when the context doc is empty", () => {
-	expect(buildQueryPrompt("   ", "Agent infra weekly")).toContain("Agent infra weekly")
+// an empty context falls back to the topic name, so the search always gets a prompt
+test("buildSearchPrompt falls back to the topic name when the context is empty", () => {
+	expect(buildSearchPrompt("   ", "Agent infra weekly")).toContain("Agent infra weekly")
 })

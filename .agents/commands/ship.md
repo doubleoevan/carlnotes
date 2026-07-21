@@ -27,14 +27,21 @@ This runs Biome, the type check, and the test suite. All three must be green.
 
 ## 3. AI review: CodeRabbit + Gemini, both by default
 
-Run both, in the background where possible:
+If `$CODERABBIT_API_KEY` is set, authenticate and run CodeRabbit in the
+background:
+- coderabbit auth login --api-key "$CODERABBIT_API_KEY"
 - coderabbit review --agent --type all --base main
+  If the key is not set, report that CodeRabbit was skipped and continue —
+  never fail the ritual on a missing key.
+
+Always run Gemini:
 - gemini /code-review (reviews the current branch; if non-interactive
   invocation fails, say so and run it interactively before continuing)
 
-Fix every critical and major finding from either reviewer. Where the two
-agree, fix without debate. Re-run until clean or only dismissible nits
-remain, and list any findings you dismissed and why.
+Fix every critical and major finding from every reviewer that ran. Where
+CodeRabbit and Gemini both ran and agree, fix without debate. Re-run until
+clean or only dismissible nits remain, and list any findings you dismissed
+and why.
 
 ## 3b. Ponytail pass, default on
 
@@ -46,7 +53,7 @@ continue; never fail the ritual on a missing reviewer.
 ## 4. Manual review handoff
 
 Summarize the full diff for human review: each file, what changed, and why.
-Then STOP, show the suggested commit message, and wait for explicit approval. 
+Then STOP, show the suggested commit message, and wait for explicit approval.
 Do not proceed without it.
 
 ## 5. Archive the change

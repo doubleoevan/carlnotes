@@ -1,0 +1,206 @@
+/* keyframes + animation utility classes, @import-ed by globals.css. inlined at build time */
+
+/* visibility "hydrate": elements fade + rise + un-blur, staggered via inline animation-delay */
+@keyframes hydrate-in {
+	from {
+		opacity: 0;
+		transform: translateY(10px);
+		filter: blur(6px);
+	}
+	to {
+		opacity: 1;
+		transform: translateY(0);
+		filter: blur(0);
+	}
+}
+
+/* steam rising from the coffee mug */
+@keyframes coffee-mug-steam {
+	0% {
+		opacity: 0;
+		transform: translateY(1px) scaleX(1);
+	}
+	35% {
+		opacity: 0.5;
+	}
+	100% {
+		opacity: 0;
+		transform: translateY(-9px) scaleX(1.5);
+	}
+}
+
+/* radix accordion open and close height transitions */
+@keyframes accordion-down {
+	from {
+		height: 0;
+	}
+	to {
+		height: var(--radix-accordion-content-height);
+	}
+}
+
+@keyframes accordion-up {
+	from {
+		height: var(--radix-accordion-content-height);
+	}
+	to {
+		height: 0;
+	}
+}
+
+/* ambient coffee rings that expand out of the hero and fade away */
+@keyframes coffee-ring {
+	0% {
+		transform: translate(-50%, -50%) scale(0.3);
+		opacity: 0;
+	}
+	18% {
+		opacity: 0.22;
+	}
+	100% {
+		transform: translate(-50%, -50%) scale(2);
+		opacity: 0;
+	}
+}
+
+.coffee-ring {
+	position: absolute;
+	left: 50%;
+	top: 50%;
+	height: 16rem;
+	width: 16rem;
+	border-radius: 9999px;
+	border: 1px solid var(--hero-muted);
+	opacity: 0;
+	animation: coffee-ring 10s ease-out infinite;
+}
+
+.animate-hydrate {
+	animation: hydrate-in 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.coffee-mug-steam {
+	transform-origin: bottom center;
+	animation: coffee-mug-steam 2.4s ease-in-out infinite;
+}
+
+.animate-accordion-down {
+	animation: accordion-down 0.2s ease-out;
+}
+
+.animate-accordion-up {
+	animation: accordion-up 0.2s ease-out;
+}
+
+/* large steam rings that expand and fade behind the feed (light mode uses more contrast — see --ring-line) */
+@keyframes coffee-steam {
+	0% {
+		transform: translate(-50%, -50%) scale(0.08);
+		opacity: 0;
+	}
+	20% {
+		opacity: 1;
+	}
+	100% {
+		transform: translate(-50%, -50%) scale(1.4);
+		opacity: 0;
+	}
+}
+
+/* base steam ring: a non-interactive circle outline, centered on its anchor, that grows outward as it fades */
+.coffee-steam {
+	position: absolute;
+	pointer-events: none;
+	border-radius: 9999px;
+	border: 30px solid var(--ring-line);
+	opacity: 0;
+	filter: blur(12px);
+	animation: coffee-steam 17s ease-out infinite;
+}
+
+/* nested steam rings: two more outlines inside each ring, offset so they billow like steam instead of perfectly concentric */
+.coffee-steam::before,
+.coffee-steam::after {
+	content: "";
+	position: absolute;
+	border-radius: 9999px;
+	border: 22px solid var(--ring-line);
+}
+
+.coffee-steam::before {
+	inset: 16%;
+	transform: translate(-7%, -5%);
+}
+
+.coffee-steam::after {
+	inset: 34%;
+	border-width: 14px;
+	transform: translate(9%, 8%);
+}
+
+/* each ring's center point, base size, and stagger — spread down the feed */
+.coffee-steam-1 {
+	left: 10%;
+	top: 6%;
+	width: 34rem;
+	height: 34rem;
+}
+
+.coffee-steam-2 {
+	left: 88%;
+	top: 22%;
+	width: 42rem;
+	height: 42rem;
+	animation-delay: 5s;
+}
+
+.coffee-steam-3 {
+	left: 16%;
+	top: 41%;
+	width: 30rem;
+	height: 30rem;
+	animation-delay: 10s;
+}
+
+.coffee-steam-4 {
+	left: 84%;
+	top: 58%;
+	width: 40rem;
+	height: 40rem;
+	animation-delay: 3s;
+}
+
+.coffee-steam-5 {
+	left: 12%;
+	top: 76%;
+	width: 34rem;
+	height: 34rem;
+	animation-delay: 13s;
+}
+
+.coffee-steam-6 {
+	left: 80%;
+	top: 92%;
+	width: 32rem;
+	height: 32rem;
+	animation-delay: 8s;
+}
+
+/* honor a user's reduced-motion preference: no hydrate animation, no steam, no rings */
+@media (prefers-reduced-motion: reduce) {
+	.animate-hydrate {
+		animation: none;
+		opacity: 1;
+		filter: none;
+		transform: none;
+	}
+	.coffee-mug-steam,
+	.coffee-ring {
+		animation: none;
+		opacity: 0;
+	}
+	.coffee-steam {
+		animation: none;
+		opacity: 0;
+	}
+}
