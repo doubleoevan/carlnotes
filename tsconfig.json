@@ -1,4 +1,11 @@
 {
 	"files": [],
-	"references": [{ "path": "./db" }, { "path": "./api" }, { "path": "./worker" }, { "path": "./ui" }]
+	"compilerOptions": { "baseUrl": ".", "paths": { "@shared/*": ["shared/*"] } },
+	"references": [
+		{ "path": "./shared" },
+		{ "path": "./db" },
+		{ "path": "./api" },
+		{ "path": "./worker" },
+		{ "path": "./ui" }
+	]
 }

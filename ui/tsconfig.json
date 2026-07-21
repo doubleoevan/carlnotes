@@ -1,7 +1,8 @@
 {
 	"extends": "../tsconfig.base.json",
 	"compilerOptions": {
-		"paths": { "@/*": ["./src/*"] }
+		"paths": { "@/*": ["./src/*"], "@shared/*": ["../shared/*"] }
 	},
+	"references": [{ "path": "../api" }, { "path": "../shared" }],
 	"include": ["src", "vite.config.ts", "../bun-env.d.ts"]
 }

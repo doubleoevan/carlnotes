@@ -11,7 +11,7 @@
       "source": "doubleoevan/skills",
       "sourceType": "github",
       "skillPath": "skills/code-style/SKILL.md",
-      "computedHash": "3fa841312ece980c9defb1d059b1e7a83a59db12ce4590b0467510137d1940ea"
+      "computedHash": "d100a17e36a53f72ad9294b3169822ff82cee8262cebe98da951ccb211b063df"
     },
     "git-discipline": {
       "source": "doubleoevan/skills",
@@ -23,7 +23,7 @@
       "source": "pbakaus/impeccable",
       "sourceType": "github",
       "skillPath": ".agents/skills/impeccable/SKILL.md",
-      "computedHash": "e07098370ad7fd4605b67d305d8c06623a5c7d7737d2364e30932294ef880ff6"
+      "computedHash": "9dcaecb6106e8bec775ae7651e8e989693b0467d21509794cfb94a08d30af4b7"
     },
     "jsx-conventions": {
       "source": "doubleoevan/skills",

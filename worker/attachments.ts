@@ -1,14 +1,14 @@
-// topic attachments: store a file in object storage, generate its context once at upload, and expose the context scans read
+// topic attachments. a file is stored in object storage, its context is generated once at upload, and scans read it into the context
 import { generateText } from "ai"
 import { eq } from "drizzle-orm"
 import { extractText as extractPdfText } from "unpdf"
 import { db } from "../db"
 import { attachments, topics } from "../db/schema"
-import { fetchContent } from "./firecrawl"
-import { cheapModel } from "./llm"
+import { cheapModel } from "./models.ts"
+import { fetchContent } from "./scrape.ts"
 import { attachmentKey, deleteAttachment, putAttachment } from "./storage"
 
-// a persisted attachment row, and the upload ingestAttachment accepts
+// a persisted attachment row, and the upload ingestAttachment input
 type Attachment = typeof attachments.$inferSelect
 type AttachmentUpload = {
 	topicId: string
@@ -18,27 +18,31 @@ type AttachmentUpload = {
 	sourceUrl?: string
 }
 
-// reject uploads larger than this before any storage/LLM work, bounding storage and inference spend at the trust boundary
+// reject uploads larger than this before any storage or model work. this bounds storage and inference cost at the trust boundary
 const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
-// cap the extracted text fed to the model, mirroring the search adapter's context cap
+// cap the extracted text fed to the model
 const MAX_EXTRACT_CHARS = 8000
 
-// store the file, generate its context once, and persist the attachment; validation runs first so a bad upload does no work
+// store the file, generate its context once, and persist the attachment. validation runs first, so a bad upload does no work
 export async function ingestAttachment(upload: AttachmentUpload): Promise<Attachment> {
 	const { topicId, filename, contentType, bytes, sourceUrl = null } = upload
-	// validate size at the trust boundary before touching storage or the model
+	// validate the size before touching storage or the model
 	if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
 		throw new Error(`attachment exceeds ${MAX_ATTACHMENT_BYTES} bytes`)
 	}
-	// reject a nonexistent topic before spending storage or inference (the FK would only catch it at insert, after the upload)
+
+	// reject a nonexistent topic before spending storage or inference
+	// the foreign key would only catch it at insert, after the upload
 	await requireTopic(topicId)
-	// extract first (local, no network) so an unsupported type is rejected before anything is stored
+
+	// first extract so an unsupported type is rejected before anything is stored
 	const text = await extractText(contentType, bytes)
-	// store the raw bytes under a topic/attachment key; the id is generated up front to embed in the key
+	// store the raw bytes under a key namespaced by topic and attachment
 	const id = crypto.randomUUID()
 	const byteSize = bytes.byteLength
 	const objectKey = attachmentKey(topicId, id, filename)
 	await putAttachment(objectKey, bytes, contentType)
+
 	// from here the object exists, so any failure must delete it to avoid an orphan
 	try {
 		const context = await generateContext(text)
@@ -50,94 +54,103 @@ export async function ingestAttachment(upload: AttachmentUpload): Promise<Attach
 		}
 		return attachment
 	} catch (error) {
-		// best-effort delete of the stored object, then rethrow the original failure
+		// delete of the stored object best-effort, then rethrow the original failure
 		await deleteAttachment(objectKey).catch(() => {})
 		throw error
 	}
 }
 
-// ingest an attachment from a URL: validate the topic, fetch the page as markdown via Firecrawl, then run the exact file-ingestion path (fetcher injectable for the smoke)
+// ingest an attachment from a URL by fetching the page as Markdown via Firecrawl and running the shared file-ingestion path. the fetcher parameter lets the smoke test stub the network call
 export async function ingestUrlAttachment(topicId: string, url: string, fetcher = fetchContent): Promise<Attachment> {
-	// validate the URL at the trust boundary before any fetch — reject anything but a well-formed http(s) URL
+	// reject a malformed URL before any fetch
 	let pageUrl: URL
 	try {
 		pageUrl = new URL(url)
 	} catch {
 		throw new Error(`invalid attachment URL: ${url}`)
 	}
-	// only http(s) is fetchable — reject file:, data:, and other schemes
+
+	// only http and https are fetchable. reject file, data, and any other scheme
 	if (pageUrl.protocol !== "http:" && pageUrl.protocol !== "https:") {
 		throw new Error(`attachment URL must be http(s): ${url}`)
 	}
-	// reject a nonexistent topic before the paid fetch, mirroring ingestAttachment's trust-boundary check
+
+	// reject a nonexistent topic before the paid fetch
 	await requireTopic(topicId)
-	// fetch the page to markdown; empty content means nothing usable, so reject before storing a contextless attachment
+
+	// fetch the page to Markdown. empty content means nothing usable, so reject instead of storing a contextless attachment
 	const markdown = await fetcher(url)
 	if (!markdown.trim()) {
 		throw new Error(`attachment URL fetched no content: ${url}`)
 	}
-	// a safe filename from the host — the object key interpolates it raw, and its UUID already makes the key unique
+
+	// build a readable filename from the page host. attachmentKey sanitizes it again before it lands in the object key
 	const filename = `${pageUrl.hostname.replace(/[^a-z0-9.]+/gi, "-")}.md`
-	// wrap the markdown as a text/markdown upload and run the shared file-ingestion path, recording the origin URL
+
+	// wrap the Markdown as a text/markdown upload and run the shared file-ingestion path, recording the origin URL
 	const bytes = new TextEncoder().encode(markdown)
 	return ingestAttachment({ topicId, filename, contentType: "text/markdown", bytes, sourceUrl: url })
 }
 
 // throw if the topic doesn't exist, so both ingestion paths reject a misaddressed upload before spending storage, inference, or a fetch
 async function requireTopic(topicId: string): Promise<void> {
-	// the FK would only catch a bad topic at insert, after the work — so check up front
+	// the foreign key would only catch a bad topic at insert, after the work is done. check up front instead
 	const [topic] = await db.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId))
 	if (!topic) {
 		throw new Error(`topic ${topicId} not found`)
 	}
 }
 
-// extract text from an uploaded file by content type: text/markdown decoded directly, PDF via unpdf, anything else rejected
+// extract text from an uploaded file. text types decode directly, PDF parses via unpdf, and anything else is rejected
 export async function extractText(contentType: string, bytes: Uint8Array): Promise<string> {
-	// text and markdown are already text — decode straight to a string
+	// any text type is already text, so decode straight to a string
 	if (contentType.startsWith("text/")) {
 		return new TextDecoder().decode(bytes)
 	}
-	// PDF: parse with unpdf, merging every page into one string
+
+	// parse a PDF with unpdf, merging every page into one string
 	if (contentType === "application/pdf") {
 		const { text } = await extractPdfText(bytes, { mergePages: true })
 		return text
 	}
-	// any other type has no extractor — reject so the caller stores nothing
+
+	// any other type has no extractor. reject so the caller stores nothing
 	throw new Error(`unsupported attachment content type: ${contentType}`)
 }
 
 // build the context-generation prompt over the file's text, capped so a huge document can't blow the token budget
 export function buildContextPrompt(text: string): string {
-	// cap length to bound tokens/spend, mirroring the search adapter's context cap
-	const capped = text.slice(0, MAX_EXTRACT_CHARS)
-	return `Extract concise notes capturing what the document below is about — its subject, key facts, and themes — as context for curating related media. Return only the notes.\n\nDocument:\n${capped}`
+	// cap the document length to bound the token spend
+	const document = text.slice(0, MAX_EXTRACT_CHARS)
+	return `Extract concise notes capturing what the document below is about — its subject, key facts, and themes — as context for curating related media. Return only the notes.\n\nDocument:\n${document}`
 }
 
-// generate a context string from the file's text with the cheap-tier model through LiteLLM (one call, no tools)
+// generate a context string from the file's text with the cheap-tier model through LiteLLM. one call, no tools
 async function generateContext(text: string): Promise<string> {
-	// a single generateText — text in, plain-text context out; no schema, the output is just context
+	// a single generateText call with no schema. text goes in and a plain-text context comes out
 	const { text: context } = await generateText({ model: cheapModel(), prompt: buildContextPrompt(text) })
 	return context.trim()
 }
 
-// a topic's effective scan context: its own context merged with its attachments' contexts — what a scan reads
-export async function topicScanContext(topicId: string): Promise<{ name: string; context: string }> {
-	// read the topic's name and context; the topic must exist (its Sources reference it)
+// the context a scan reads for a topic. the topic's prompt merged with every attachment's context
+export async function buildTopicScanContext(topicId: string): Promise<{ name: string; context: string }> {
+	// read the topic's name and prompt. throw if the topic does not exist
 	const [topic] = await db
-		.select({ name: topics.name, context: topics.context })
+		.select({ name: topics.name, prompt: topics.prompt })
 		.from(topics)
 		.where(eq(topics.id, topicId))
 	if (!topic) {
 		throw new Error(`topic ${topicId} not found`)
 	}
+
 	// read every attachment's context for the topic
 	const attachmentContexts = await db
 		.select({ context: attachments.context })
 		.from(attachments)
 		.where(eq(attachments.topicId, topicId))
-	// merge the topic context and attachment contexts, dropping empties, into one context string
-	const context = [topic.context, ...attachmentContexts.map((row) => row.context)]
+
+	// merge the topic prompt and attachment contexts, dropping empties, into one context string
+	const context = [topic.prompt, ...attachmentContexts.map((row) => row.context)]
 		.map((part) => part.trim())
 		.filter(Boolean)
 		.join("\n\n")

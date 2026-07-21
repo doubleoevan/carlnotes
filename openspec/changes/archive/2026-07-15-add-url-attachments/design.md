@@ -3,7 +3,7 @@
 Topic attachments today ingest uploaded file bytes: `ingestAttachment({ topicId, filename, contentType, bytes })` in `worker/attachments.ts` validates size, checks the topic exists, extracts text, stores the bytes, generates a context string once, and persists a row (with best-effort orphan cleanup on failure). `extractText` already decodes any `text/*` content type — including `text/markdown` — straight to a string.
 
 Two seams the codebase already has make a URL path nearly free:
-- `fetchContent(url)` in `worker/firecrawl.ts` scrapes a page to main-content markdown (used by curation). It throws on a missing key / non-ok response and returns `""` on empty markdown.
+- `fetchContent(url)` in `worker/scrape.ts` scrapes a page to main-content markdown (used by curation). It throws on a missing key / non-ok response and returns `""` on empty markdown.
 - `FIRECRAWL_API_KEY` is already configured.
 
 There is no API or UI caller for attachments yet — `ingestAttachment` is worker-level. This change stays at that level: a URL entry point in the same module.

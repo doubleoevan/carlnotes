@@ -1,13 +1,13 @@
-// the shared adapter interface every source kind implements: the seam the adapter-authoring skill defers to
+// schema tables the adapter types are inferred from
 import type { resources, sources } from "../../db/schema"
 
-// a Source row is an adapter's input; a Resource insert is its output — both inferred from the domain schema
+// a Source row is an adapter's input, and Resource inserts are its output. both types are inferred from the database schema
 export type Source = typeof sources.$inferSelect
 export type NewResource = typeof resources.$inferInsert
 
-// one kind's adapter: given a Source, fetch and return the Resources it emitted plus the cost it incurred
+// the adapter for one source kind. it takes a Source and returns the Resources it fetched plus the cost it incurred
 export type SourceAdapter = (source: Source) => Promise<AdapterResult>
 
-// adapters return Resources only (never Findings) plus the cost of producing them (0 when keyless);
-// fallbackMode is set only when the adapter ran a keyless fallback path, so a degraded Scan stays traceable
+// adapters return Resources and the cost spent or 0 for fetches that don't use an API key.
+// fallbackMode is only set when the adapter fell back to a missing API key or free path so the Scan can record the degradation
 export type AdapterResult = { resources: NewResource[]; cost: number; fallbackMode?: string }

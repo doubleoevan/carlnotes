@@ -23,7 +23,12 @@ Every logical group of lines gets a comment on the line above it: a single line 
 
 - One comment per group. Prefer one line; when one line genuinely can't carry it, stack `//` lines rather than using `/* */` blocks. Never inline at the end of a line.
 - No blank line between the comment and its group; one blank line before the next group starts.
-- Short and lowercase. Describe what the group does, not how.
+- Write short plain sentences, lowercase, for a reader who did not write the code. Two short sentences separated by a period beat one clause-chained line.
+- Never use a semicolon in a comment. Use a colon only right before a short list of literal values ("the source kind: rss, reddit, youtube").
+- No dense parentheticals and no unexplained shorthand. Spell it out: "without time zone", never "(no tz)".
+- Keep the why when it is not obvious from the code. Cut detail, not clarity — one line preferred, never more than two.
+- A comment must be true. Verify it against the code it describes before writing it, and fix it when the code changes.
+- Describe what the group does, not how.
 - A reader must be able to skim only the comments and understand the full flow of the file.
 - JSX section comments use `{/* section name */}`.
 
@@ -46,6 +51,14 @@ statements without a comment above it fails this rule.
     }
 
     return Response.json({ success: true })
+
+Wording example:
+
+    // wrong — clause-chained, the reader has to decode it
+    // lifecycle status; running until it succeeds or fails, with the failure reason if it fails
+
+    // right — two plain sentences
+    // the scan status. running until it succeeds or fails, and error holds the failure reason
 
 ### 2. Top-down file order
 

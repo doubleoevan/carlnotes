@@ -9,7 +9,7 @@ description: Canonical CarlNotes domain vocabulary. Use whenever naming types, t
 
 | Entity | Is | Notes |
 |---|---|---|
-| Topic | the configuration | name, context doc, attachments (file in R2 + distilled context, processed once at upload), cadence, privacy (public / invite / private), owner_id |
+| Topic | the configuration | name, context doc, attachments (file in R2 + distilled context, processed once at upload), frequency, visibility (public / invite / private), owner_id |
 | Source | topic input: "pull from X" | kind: rss, reddit, youtube, search, composio, plugin; `integration_id` nullable (RSS needs none) |
 | Scan | one execution of a topic's pipeline | domain word; Temporal keeps "run" at the infra layer only |
 | Resource | canonical external artifact, deduped globally | url, content hash, embedding, kind (read / watch / listen) |

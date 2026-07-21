@@ -2,11 +2,11 @@
 
 **He already read it. All of it.**
 
-The first time you met him, you talked for twenty minutes about who owns the moon, legally. Carl doesn't sleep. He reads. And when you drop by, he has notes for you.
+Carl keeps track of everything. He just needs you to ask. Carl doesn't sleep. He reads and drinks coffee. And when you drop by, he has updates for you.
 
 Give Carl three topics. You know the ones.
 
-Carl stays up. You stay up to date.
+Carl stays up. You stay informed.
 
 > **Status: early development.** The scaffold is real; the product is being built change-by-change via [OpenSpec](https://github.com/Fission-AI/OpenSpec) — see `openspec/`.
 
@@ -31,15 +31,19 @@ How the AI guardrails work: [docs/ai-scaffolding.md](docs/ai-scaffolding.md).
 
 ```bash
 bun install
-bun run dev:ui       # Vite dev server
-bun run build:ui     # production build
+bun run dev:ui       # Vite dev server (UI); wraps itself in doppler run
+bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; the Vite dev server proxies /api here
+bun run build:ui     # production build (no doppler, so it runs in CI and deploys)
 ```
 
-Database — generate a migration from the Drizzle schema, then apply it (migrate needs `DATABASE_URL`, so run it under `doppler run`):
+The homepage needs both `dev:ui` and `dev:api` running, plus a seeded dev database (below). The dev, db, and smoke scripts wrap themselves in `doppler run`, so they need a Doppler-configured machine.
+
+Database — generate a migration from the Drizzle schema, then apply it:
 
 ```bash
-bun run db:generate                 # write a migration from db/schema.ts
-doppler run -- bun run db:migrate   # apply pending migrations
+bun run db:generate   # write a migration from db/schema.ts (offline, no doppler)
+bun run db:migrate    # apply pending migrations
+bun run db:seed       # load idempotent dev-only stub data (refuses to run outside the dev config)
 ```
 
 Checks — run the full gate with one command (enforced on push by `scripts/preflight.sh`):
@@ -56,13 +60,13 @@ bunx tsc -b
 bun test
 ```
 
-Live smokes (owner-run) — exercise real flows against live services (LiteLLM proxy, Firecrawl, object storage), so they make paid calls and are **not** part of `bun run check`. Need the LiteLLM proxy up (`docker compose up -d litellm`), the latest migration applied, and Doppler configured:
+Live smoke tests (owner-run) — exercise real flows against live services (LiteLLM proxy, Firecrawl, object storage), so they make paid calls and are **not** part of `bun run check`. Need the LiteLLM proxy up (`docker compose up -d litellm`) and the latest migration applied:
 
 ```bash
-doppler run -- bun run smoke              # run every live smoke
-doppler run -- bun run smoke:scan         # just the topic-scan smoke (ingestion + curation, end-to-end)
-doppler run -- bun run smoke:attachments  # just the URL-attachment smoke (Firecrawl fetch → context → object storage)
-doppler run -- bun run smoke:search       # just the search-scout smoke (context → LLM queries → Exa → Resources)
+bun run smoke              # run every live smoke
+bun run smoke:scan         # just the topic-scan smoke (ingestion + curation, end-to-end)
+bun run smoke:attachments  # just the URL-attachment smoke (Firecrawl fetch → context → object storage)
+bun run smoke:search       # just the search-scout smoke (context → LLM queries → Exa → Resources)
 ```
 
 ## License

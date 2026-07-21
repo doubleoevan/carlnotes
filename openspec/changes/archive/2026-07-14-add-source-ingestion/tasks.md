@@ -14,7 +14,7 @@
 
 - [x] 3.1 Create `worker/adapters/index.ts`: export `sourceAdapters: Record<SourceKind, SourceAdapter>` = `{ rss: rssAdapter }`
 - [x] 3.2 In `worker/scan.ts`, add a pure `toScanSummary(results)` helper computing `found_count` (deduped across Sources), summed `cost`, and the `succeeded`/`failed` rule (failed only when ≥1 Source ran and every one threw)
-- [x] 3.3 In `worker/scan.ts`, add `runTopicScan(topicId)`: create a Scan (`running`), load the topic's Sources, dispatch each through `sourceAdapters[kind]` inside a per-Source `try/catch` (skip unregistered kinds), upsert the deduped Resources with `onConflictDoNothing({ target: resources.url })`, then write `found_count`/`cost`/`finished_at` and the status from `toScanSummary`
+- [x] 3.3 In `worker/scan.ts`, add `runTopicScan(topicId)`: create a Scan (`running`), load the topic's Sources, dispatch each through `sourceAdapters[kind]` inside a per-Source `try/catch` (skip unregistered resourceKinds), upsert the deduped Resources with `onConflictDoNothing({ target: resources.url })`, then write `found_count`/`cost`/`finished_at` and the status from `toScanSummary`
 - [x] 3.4 Create `worker/scan.test.ts`: feed `toScanSummary` fake adapter results including a thrown Source; assert counts, summed cost, and both the succeeded and all-failed outcomes
 - [x] 3.5 Update `worker/index.ts` to export `runTopicScan`
 

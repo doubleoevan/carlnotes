@@ -1,11 +1,11 @@
-// the adapter registry: maps a source kind to its adapter; new kinds add one line here
+// the adapter registry maps each source kind to its adapter. a new source kind adds one line here
 import type { Source, SourceAdapter } from "./adapter"
 import { redditAdapter } from "./reddit"
 import { rssAdapter } from "./rss"
 import { searchAdapter } from "./search"
 import { youtubeAdapter } from "./youtube"
 
-// rss/reddit/youtube/search are wired; composio/plugin stay absent until their adapters land (Partial → optional lookups)
+// rss, reddit, YouTube, and search are wired. composio and plugin have no adapters yet, so the record is Partial, and lookups can miss
 export const sourceAdapters: Partial<Record<Source["kind"], SourceAdapter>> = {
 	rss: rssAdapter,
 	reddit: redditAdapter,

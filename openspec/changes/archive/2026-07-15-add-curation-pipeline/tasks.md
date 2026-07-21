@@ -9,7 +9,7 @@
 
 - [x] 2.1 Extended `worker/llm.ts` with `embedModel(): EmbeddingModel` returning `proxy().textEmbeddingModel("embed-model")`, reusing the existing fail-fast `LITELLM_BASE_URL`/`LITELLM_MASTER_KEY` guard (refactored into a shared `proxy()` builder)
 - [x] 2.2 Extended `worker/llm.ts` with `scoreModel(): LanguageModel` returning `proxy().chat("score-model")` behind the same guard, beside `cheapModel()`
-- [x] 2.3 Created `worker/firecrawl.ts`: `fetchContent(url): Promise<string>` via raw `fetch` to the Firecrawl scrape endpoint with `FIRECRAWL_API_KEY`, bounded by `AbortSignal.timeout`, returning the page markdown or throwing on a missing key / non-ok response (mirrors the Exa call in `search.ts`); no SDK dependency
+- [x] 2.3 Created `worker/scrape.ts`: `fetchContent(url): Promise<string>` via raw `fetch` to the Firecrawl scrape endpoint with `FIRECRAWL_API_KEY`, bounded by `AbortSignal.timeout`, returning the page markdown or throwing on a missing key / non-ok response (mirrors the Exa call in `search.ts`); no SDK dependency
 
 ## 3. Adapters emit native snippet (source-ingestion)
 

@@ -2,7 +2,7 @@
 
 `worker/` is a placeholder (`export {}`); `db/` already ships the domain schema. Every column this change needs exists: `sources.config` (jsonb — holds the RSS url), `sources.integration_id` (nullable — RSS is keyless), `resources.url` (unique — the global dedupe key), `resources.content_hash`/`title`/`kind`, `scans.status`/`found_count`/`cost`/`finished_at`/`error`. So this is code-only: no migration.
 
-The `adapter-authoring` skill mandates the conventions (`worker/adapters/<kind>.ts`, `<kind>Adapter`, Resources-only, keyless-first, idempotent on canonical URL, one Source's failure never aborts a batch) and forward-references *this* change for the shared interface. Six kinds are coming (`rss`, `reddit`, `youtube`, `search`, `composio`, `plugin` — keys already provisioned in `.env.example`), so the interface is a real seam, not speculation. Runtime is Bun; `worker` may import `db`. There is no Temporal yet, and tests are structural (no live DB — see `db/schema.test.ts`).
+The `adapter-authoring` skill mandates the conventions (`worker/adapters/<kind>.ts`, `<kind>Adapter`, Resources-only, keyless-first, idempotent on canonical URL, one Source's failure never aborts a batch) and forward-references *this* change for the shared interface. Six resourceKinds are coming (`rss`, `reddit`, `youtube`, `search`, `composio`, `plugin` — keys already provisioned in `.env.example`), so the interface is a real seam, not speculation. Runtime is Bun; `worker` may import `db`. There is no Temporal yet, and tests are structural (no live DB — see `db/schema.test.ts`).
 
 ## Goals / Non-Goals
 
@@ -27,7 +27,7 @@ type AdapterResult = { resources: NewResource[]; cost: number }
 `NewResource` is Drizzle's insert type for `resources`; the adapter fills `url`, `title`, `kind`, `content_hash` and leaves `embedding` null. One stateless method → a plain async function is the whole seam. Over a class with `.kind` + `.scan()` (ceremony for no state) or a richer `(source, ctx)` with a credential context (RSS needs none — add the param when the first keyed adapter does). `cost` rides in the result because `scans.cost` is a first-class column and paid adapters (search, LLM scoring) will report real spend; RSS reports `0`.
 
 **Registry: a plain `Record<SourceKind, SourceAdapter>` in `worker/adapters/index.ts`.**
-`{ rss: rssAdapter }` today; new kinds add a line. `runTopicScan` looks up `sourceAdapters[source.kind]` and skips a miss. Over a plugin/discovery mechanism — a static map is the dispatch, nothing more.
+`{ rss: rssAdapter }` today; new resourceKinds add a line. `runTopicScan` looks up `sourceAdapters[source.kind]` and skips a miss. Over a plugin/discovery mechanism — a static map is the dispatch, nothing more.
 
 **Feed parser: add `rss-parser`.**
 It parses RSS 2.0 **and** Atom, decodes entities/CDATA, and normalizes dates — the least of *our* code. Hand-rolling with the zero-dep `fast-xml-parser` means owning the RSS-vs-Atom field mapping and date formats, exactly the flimsy-parser trap. `rss-parser` pulls `xml2js` (pure JS, fine on Bun; no external-entity/DTD resolution, so no XXE). Trade-off is footprint, isolated to one file — swapping parsers later touches only `rss.ts`.

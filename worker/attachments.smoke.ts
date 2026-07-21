@@ -1,23 +1,23 @@
-// owner-run live smoke for URL attachment ingestion: seed a topic, ingest a real URL via Firecrawl, and assert the context + stored object
-// NOT a bun test (it makes real proxy/Firecrawl/S3 calls, so the offline gate ignores this filename); run with: bun run smoke:attachments
-// prereqs: the LiteLLM proxy reachable at LITELLM_BASE_URL, FIRECRAWL_API_KEY and the S3_* bucket config set, the latest migration applied, and Doppler secrets injected
+// a live smoke test the owner runs by hand for URL attachment ingestion. it seeds a topic, ingests a real URL through Firecrawl, and checks the generated context and the stored object.
+// it makes real proxy, Firecrawl, and S3 calls, so the smoke filename keeps it out of the offline bun test run.
+// run it with: bun run smoke:attachments. it needs the LiteLLM proxy reachable at LITELLM_BASE_URL, FIRECRAWL_API_KEY and the S3_* bucket config set, the latest migration applied, and Doppler secrets injected
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { topics, users } from "../db/schema"
-import { ingestUrlAttachment, topicScanContext } from "./attachments"
+import { buildTopicScanContext, ingestUrlAttachment } from "./attachments"
 import { attachmentExists, deleteAttachment } from "./storage"
 
-// the persisted attachment row ingestUrlAttachment returns
+// the persisted attachment row that ingestUrlAttachment returns
 type Attachment = Awaited<ReturnType<typeof ingestUrlAttachment>>
 
-// a real, reliably-up, content-rich page (the same host the scan smoke already depends on) that Firecrawl scrapes to non-empty markdown
+// a real page with plenty of content that Firecrawl scrapes to non-empty Markdown. the scan smoke already depends on the same host, so it is a safe bet to be up
 const ATTACHMENT_URL = "https://simonwillison.net/"
-// a non-empty topic context so the merged scan context proves the attachment's context is appended alongside the topic's own
+// a non-empty topic context, so the merged scan context holds both the topic's own context and the attachment's
 const TOPIC_CONTEXT = "Smoke-test topic for URL attachment ingestion."
 
-// seed a throwaway owner and a topic to attach the URL to
-async function seed(): Promise<{ topicId: string; userId: string }> {
-	// a throwaway owner — the topic and its attachments cascade from it on cleanup
+// seed a fake owner and a topic to attach the URL to
+async function seedTestData(): Promise<{ topicId: string; userId: string }> {
+	// a fake owner. deleting it on cleanup cascades to the topic and its attachments
 	const [user] = await db
 		.insert(users)
 		.values({ name: "attachment-smoke", email: `attachment-smoke+${Date.now()}@example.test` })
@@ -25,25 +25,28 @@ async function seed(): Promise<{ topicId: string; userId: string }> {
 	if (!user) {
 		throw new Error("failed to seed user")
 	}
+
 	// a topic with its own context, so the merged scan context carries both the topic's and the attachment's context
 	const [topic] = await db
 		.insert(topics)
-		.values({ ownerId: user.id, name: "URL attachment smoke", context: TOPIC_CONTEXT })
+		.values({ ownerId: user.id, name: "URL attachment smoke", prompt: TOPIC_CONTEXT })
 		.returning()
 	if (!topic) {
 		throw new Error("failed to seed topic")
 	}
-	// hand back the ids the smoke ingests against and cleans up
+
+	// return the ids the smoke ingests against and cleans up
 	return { topicId: topic.id, userId: user.id }
 }
 
-// run the smoke assertions over the ingested attachment, printing a report; returns true when all pass
+// run the smoke assertions over the ingested attachment and print a report. returns true if every check passes
 async function check(topicId: string, attachment: Attachment): Promise<boolean> {
-	// the merged context a scan would read for this topic, plus whether the raw markdown object landed in the bucket
-	const { context: scanContext } = await topicScanContext(topicId)
+	// the merged context a scan would read for this topic, plus whether the raw Markdown object landed in the bucket
+	const { context: scanContext } = await buildTopicScanContext(topicId)
 	const objectStored = await attachmentExists(attachment.objectKey)
 
-	// the empty-fetch guard rejects rather than storing a contextless attachment — real topic (passes the topic check), injected empty fetcher (no Firecrawl call)
+	// prove the empty-fetch guard rejects instead of storing an attachment with no context.
+	// the topic is real and the injected fetcher skips Firecrawl and returns nothing, so only the empty fetch can cause the rejection
 	let emptyRejected = false
 	try {
 		await ingestUrlAttachment(topicId, ATTACHMENT_URL, async () => "")
@@ -51,7 +54,7 @@ async function check(topicId: string, attachment: Attachment): Promise<boolean> 
 		emptyRejected = true
 	}
 
-	// the smoke assertions: ingestion produced a non-empty context, it feeds the scan context, the object was stored, provenance was recorded, and an empty fetch is rejected
+	// the smoke assertions. ingestion produced a non-empty context that feeds the scan context, the object was stored, the origin URL was recorded, and an empty fetch is rejected
 	const contextText = attachment.context.trim()
 	const results: [string, boolean][] = [
 		["attachment context is non-empty", contextText.length > 0],
@@ -69,18 +72,19 @@ async function check(topicId: string, attachment: Attachment): Promise<boolean> 
 	console.log(`context_head  : ${contextText.slice(0, 200)}`)
 
 	// print each check and compute the overall result
-	let allPass = true
+	let allPassed = true
 	for (const [label, pass] of results) {
 		console.log(`${pass ? "PASS" : "FAIL"}  ${label}`)
-		allPass = allPass && pass
+		allPassed = allPassed && pass
 	}
-	return allPass
+	return allPassed
 }
 
-// orchestrate: seed, ingest, check, then always clean up the stored object and the throwaway owner (which cascades the attachment row)
-async function main(): Promise<number> {
-	const { topicId, userId } = await seed()
-	// ingest up front so its stored object is tracked for cleanup even if an assertion later throws
+// seed, ingest, and check, then clean up the stored object and the fake owner.
+// deleting the owner cascades to the attachment row
+async function smokeTest(): Promise<number> {
+	const { topicId, userId } = await seedTestData()
+	// ingest up front so that the stored object has a reference for cleanup even if an assertion later throws
 	let objectKey: string | null = null
 	try {
 		const attachment = await ingestUrlAttachment(topicId, ATTACHMENT_URL)
@@ -89,7 +93,7 @@ async function main(): Promise<number> {
 		console.log(`\n=== smoke ${pass ? "PASSED" : "FAILED"} ===`)
 		return pass ? 0 : 1
 	} finally {
-		// the owner cascade drops DB rows but not the R2 object, so delete the object explicitly, then the owner
+		// the owner cascade drops the database rows but not the object in the bucket, so delete the object explicitly, then the owner
 		if (objectKey) {
 			await deleteAttachment(objectKey).catch(() => {})
 		}
@@ -97,10 +101,11 @@ async function main(): Promise<number> {
 	}
 }
 
-// run it, then exit (the Neon pool would otherwise keep the process alive); a thrown error is a failure
-main()
-	.then((code) => process.exit(code))
-	.catch((error) => {
-		console.error(error)
-		process.exit(1)
-	})
+// run the smoke test, then exit because the Neon pool would otherwise keep the process alive. a thrown error is a failure
+try {
+	const exitCode = await smokeTest()
+	process.exit(exitCode)
+} catch (error) {
+	console.error(error)
+	process.exit(1)
+}
