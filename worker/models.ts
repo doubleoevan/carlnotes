@@ -14,7 +14,7 @@ export function scoreModel(): LanguageModel {
 	return proxy().chat("score-model")
 }
 
-// the embedding model produces the 768-dimension vectors curation stores on a Resource
+// the embedding model produces the 768-dimension vectors that review stores on a Resource,
 // the dimension must match the schema
 export function embedModel(): EmbeddingModel {
 	return proxy().embeddingModel("embed-model")

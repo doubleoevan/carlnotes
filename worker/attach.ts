@@ -6,7 +6,7 @@ import { db } from "../db"
 import { attachments, topics } from "../db/schema"
 import { cheapModel } from "./models.ts"
 import { fetchContent } from "./scrape.ts"
-import { attachmentKey, deleteAttachment, putAttachment } from "./storage"
+import { attachmentKey, deleteAttachment, putAttachment } from "./store"
 
 // a persisted attachment row, and the upload ingestAttachment input
 type Attachment = typeof attachments.$inferSelect

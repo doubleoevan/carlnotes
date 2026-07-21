@@ -1,7 +1,7 @@
 // the search adapter. a model converts the topic's context into search queries, Exa runs them, and the results become "read" Resources
 import { generateText, Output } from "ai"
 import { z } from "zod"
-import { buildTopicScanContext } from "../attachments"
+import { buildTopicScanContext } from "../attach"
 import { cheapModel } from "../models.ts"
 import type { NewResource, Source, SourceAdapter } from "./adapter"
 import { fetchVideos, playlistIdFromUrl } from "./youtube"
@@ -82,7 +82,7 @@ export function parseResults(response: SearchResponse): { resources: NewResource
 			continue
 		}
 
-		// map to a "read" Resource. the snippet joins Exa's highlights together. the contentHash stays null for curation to fill
+		// map a url to a "read" Resource. the snippet joins Exa's highlights together. the contentHash stays null for review to fill
 		resourceByUrl.set(result.url, {
 			url: result.url,
 			title: result.title ?? null,

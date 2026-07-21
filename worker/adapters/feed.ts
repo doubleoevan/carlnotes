@@ -43,7 +43,8 @@ export async function parseFeed(xml: string, resourceKind: NewResource["kind"] =
 		if (!url || resourceByUrl.has(url)) {
 			continue
 		}
-		// map the url to a Resource. the snippet is the entry's own summary text. contentHash stays null for curation to fill
+
+		// map the url to a Resource. the snippet is the entry's own summary text. contentHash stays null for review to fill
 		resourceByUrl.set(url, {
 			url,
 			title: feedItem.title ?? null,

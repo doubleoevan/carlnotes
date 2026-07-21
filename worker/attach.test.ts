@@ -1,7 +1,7 @@
 // attachment tests for the pure extractor, the prompt builder, the ingestion guards, and the object key sanitizer
 import { expect, test } from "bun:test"
-import { buildContextPrompt, extractText, ingestAttachment, ingestUrlAttachment } from "./attachments"
-import { attachmentKey } from "./storage"
+import { buildContextPrompt, extractText, ingestAttachment, ingestUrlAttachment } from "./attach"
+import { attachmentKey } from "./store"
 
 // a fetcher that fails if reached. it proves URL validation rejects before any Firecrawl call
 const failIfFetched = async (): Promise<string> => {

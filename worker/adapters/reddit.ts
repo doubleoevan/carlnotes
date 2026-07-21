@@ -44,7 +44,8 @@ export function parsePosts(json: RedditListing): NewResource[] {
 		if (resourceByUrl.has(url)) {
 			continue
 		}
-		// map to a url to a "read" Resource. the snippet is the post selftext. contentHash stays null for curation to fill
+
+		// map to a url to a "read" Resource. the snippet is the post selftext. contentHash stays null for review to fill
 		resourceByUrl.set(url, {
 			url,
 			title: child.data.title ?? null,

@@ -12,9 +12,9 @@
 		"db:migrate": "doppler run -- drizzle-kit migrate",
 		"db:seed": "doppler run -- bun db/seed.ts",
 		"test": "bun test",
-		"smoke": "bun run smoke:scan && bun run smoke:attachments && bun run smoke:search",
+		"smoke": "bun run smoke:scan && bun run smoke:attach && bun run smoke:search",
 		"smoke:scan": "doppler run -- bun worker/scan.smoke.ts",
-		"smoke:attachments": "doppler run -- bun worker/attachments.smoke.ts",
+		"smoke:attach": "doppler run -- bun worker/attach.smoke.ts",
 		"smoke:search": "doppler run -- bun worker/search.smoke.ts"
 	},
 	"dependencies": {
