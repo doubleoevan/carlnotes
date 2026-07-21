@@ -10,7 +10,7 @@ An adapter turns one kind of Source into Resources. One adapter per source kind,
 ## Conventions
 - Location: `worker/adapters/<kind>.ts` with `worker/adapters/<kind>.test.ts`.
 - Naming: `<kind>Adapter` (e.g. `rssAdapter`, `redditAdapter`, `composioAdapter`).
-- Output: Resources only. Adapters never score, rank, or touch Findings — that's the curation pipeline's job.
+- Output: Resources only. Adapters never score, rank, or touch Findings — that's the review pipeline's job.
 - One `composioAdapter` covers all Composio toolkits: toolkit variety lives in Source config, not in adapter code.
 - Credentials come from the Source's referenced Integration, resolved through the established config path. Never read keys inline; never assume an Integration exists (`integration_id` is nullable — RSS needs none).
 - Keyless first: prefer credential-free access (RSS) as the baseline; Integration-backed variants layer on top, never replace the fallback.

@@ -96,7 +96,7 @@ export function parseVideos(playlist: YoutubePlaylist): NewResource[] {
 			continue
 		}
 
-		// map to a watch Resource. its snippet is the video description. contentHash stays null for curation to fill
+		// map to a watch Resource. its snippet is the video description. contentHash stays null for review to fill
 		resourceByUrl.set(url, {
 			url,
 			title: video.snippet?.title ?? null,

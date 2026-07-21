@@ -4,8 +4,8 @@
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { topics, users } from "../db/schema"
-import { buildTopicScanContext, ingestUrlAttachment } from "./attachments"
-import { attachmentExists, deleteAttachment } from "./storage"
+import { buildTopicScanContext, ingestUrlAttachment } from "./attach"
+import { attachmentExists, deleteAttachment } from "./store"
 
 // the persisted attachment row that ingestUrlAttachment returns
 type Attachment = Awaited<ReturnType<typeof ingestUrlAttachment>>

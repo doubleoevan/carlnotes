@@ -3,9 +3,9 @@ const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v1/scrape"
 // scraping a live page is slower than a feed fetch, so allow a longer timeout
 const FETCH_TIMEOUT_MS = 30_000
 
-// scrape one url to Markdown via Firecrawl. a missing key or failed scrape throws, and curation falls back to the Resource's native snippet
+// scrape one url to Markdown via Firecrawl. a missing key or failed scrape throws, and review falls back to the Resource's native snippet
 export async function fetchContent(url: string): Promise<string> {
-	// Firecrawl requires a key. throw when it isn't set so curation can fall back to the snippet
+	// Firecrawl requires a key. throw when it isn't set so the review can fall back to the snippet
 	const apiKey = Bun.env.FIRECRAWL_API_KEY
 	if (!apiKey) {
 		throw new Error("FIRECRAWL_API_KEY is not set")
@@ -19,7 +19,7 @@ export async function fetchContent(url: string): Promise<string> {
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	})
 
-	// a failed scrape throws an error. curation catches it and scores the snippet instead
+	// a failed scrape throws an error. review catches the error and scores the snippet instead
 	if (!response.ok) {
 		throw new Error(`firecrawl scrape ${url} returned ${response.status}`)
 	}

@@ -1,4 +1,4 @@
-// curation tests for the pure dedupe, threshold, spend, and prompt helpers
+// review tests for the pure dedupe, threshold, spend, and prompt helpers
 import { expect, test } from "bun:test"
 import {
 	buildScorePrompt,
@@ -11,7 +11,7 @@ import {
 	isRelevant,
 	normalizeText,
 	tokenCost,
-} from "./curation"
+} from "./review"
 
 // normalizeText lowercases and collapses whitespace, so that formatting noise doesn't change the hash
 test("normalizeText lowercases and collapses whitespace", () => {

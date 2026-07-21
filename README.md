@@ -63,10 +63,10 @@ bun test
 Live smoke tests (owner-run) — exercise real flows against live services (LiteLLM proxy, Firecrawl, object storage), so they make paid calls and are **not** part of `bun run check`. Need the LiteLLM proxy up (`docker compose up -d litellm`) and the latest migration applied:
 
 ```bash
-bun run smoke              # run every live smoke
-bun run smoke:scan         # just the topic-scan smoke (ingestion + curation, end-to-end)
-bun run smoke:attachments  # just the URL-attachment smoke (Firecrawl fetch → context → object storage)
-bun run smoke:search       # just the search-scout smoke (context → LLM queries → Exa → Resources)
+bun run smoke              # run all smoke tests
+bun run smoke:scan         # just the topic-scan smoke test (ingestion + review, end-to-end)
+bun run smoke:attach       # just the URL-attachment smoke test (Firecrawl fetch → context → object storage)
+bun run smoke:search       # just the search-scout smoke test (context → LLM queries → Exa → Resources)
 ```
 
 ## License

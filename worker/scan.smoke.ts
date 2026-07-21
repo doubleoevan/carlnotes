@@ -1,4 +1,4 @@
-// a live smoke test the owner runs by hand for a full topic Scan, ingestion then curation. it seeds a topic and an RSS source, runs runTopicScan, and checks the outputs
+// a live smoke test the owner runs by hand for a full topic Scan, ingestion then review. it seeds a topic and an RSS source, runs runTopicScan, and checks the outputs
 // run it with: bun run smoke:scan. it needs the LiteLLM proxy reachable at LITELLM_BASE_URL, the latest migration applied, and Doppler secrets injected
 import { eq, isNotNull } from "drizzle-orm"
 import { db } from "../db"
@@ -40,9 +40,9 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 	return { topicId: topic.id, userId: user.id }
 }
 
-// run the pipeline, check the smoke assertions, and print a report. returns true when every check passes
+// run the topic scan pipeline, check the smoke assertions, and print a report. returns true when every check passes
 async function check(topicId: string): Promise<boolean> {
-	// run the full pipeline for the topic, ingestion then curation
+	// run the full pipeline for the topic, ingestion then review
 	const topicScan = await runTopicScan(topicId)
 	if (!topicScan) {
 		throw new Error("runTopicScan returned no scan")
@@ -56,7 +56,7 @@ async function check(topicId: string): Promise<boolean> {
 		.where(isNotNull(resources.embedding))
 		.limit(1)
 
-	// for an RSS-only scan, ingestion cost is 0, so the total cost should equal the sum of the curation stage costs
+	// for an RSS-only scan, ingestion cost is 0, so the total cost should equal the sum of the review stage costs
 	const totalCost = Number(topicScan.cost)
 	const summedStages = Object.values(topicScan.stageCosts).reduce((sum, value) => sum + value, 0)
 	const withWhy = topicFindings.filter((finding) => finding.relevanceExplanation.trim().length > 0)

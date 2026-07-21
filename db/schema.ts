@@ -174,7 +174,7 @@ export const resources = pgTable("resources", {
 	// a vector embedding for semantic search and its model
 	embedding: vector("embedding", { dimensions: 768 }),
 	embeddingModel: text("embedding_model"),
-	// when curation last fetched this resource's content. defaults to the resource row creation
+	// when review last fetched this resource's content. defaults to the resource row creation
 	fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
 	// created and updated timestamps
 	...timestamps(),

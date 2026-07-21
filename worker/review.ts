@@ -1,4 +1,4 @@
-// curation turns a Scan's discovered Resources into topic findings.
+// review turns a Scan's discovered Resources into topic findings.
 // free dedupe and relevance stages run first, then paid fetch and scoring stages run under a per-Scan spend cap
 import { cosineSimilarity, embed, generateText, type LanguageModel, Output } from "ai"
 import { and, cosineDistance, eq, inArray, isNotNull, ne, notInArray } from "drizzle-orm"
@@ -6,7 +6,7 @@ import { z } from "zod"
 import { db } from "../db"
 import { findings, resources, type scans } from "../db/schema"
 import type { NewResource } from "./adapters/adapter"
-import { buildTopicScanContext } from "./attachments"
+import { buildTopicScanContext } from "./attach"
 import { cheapModel, embedModel, scoreModel } from "./models.ts"
 import { fetchContent } from "./scrape.ts"
 
@@ -15,10 +15,10 @@ const NEAR_DUPLICATE_DISTANCE = 0.05
 const RELEVANCE_THRESHOLD = 0.35
 
 // the cheap-tier model score that earns a premium model re-score and a why-summary. the environment can override it
-const CURATION_PROMOTION_THRESHOLD = Number(Bun.env.CURATION_PROMOTION_THRESHOLD ?? "0.6")
+const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? "0.6")
 
 // the per-Scan spend ceiling. only the paid fetch and scoring stages are gated by it
-const CURATION_SCAN_BUDGET_USD = Number(Bun.env.CURATION_SCAN_BUDGET_USD ?? "0.5")
+const REVIEW_SCAN_BUDGET_USD = Number(Bun.env.REVIEW_SCAN_BUDGET_USD ?? "0.5")
 
 // text caps that bound tokens and spend
 const MAX_EMBED_CHARS = 8000
@@ -54,8 +54,8 @@ type ResourceOutcome =
 	| { status: "deferred" }
 	| { status: "failed" }
 
-// the scan curation summary with resource counts, costs and scan summary
-type CurationSummary = {
+// the scan review summary with resource counts, costs and scan summary
+type ReviewSummary = {
 	keptCount: number
 	filteredCount: number
 	cost: number
@@ -63,8 +63,8 @@ type CurationSummary = {
 	scanSummary: string
 }
 
-// curate a Scan's discovered Resources into Findings, returning the counts, cost, and recap the Scan records
-export async function curateScan(scan: Scan, discoveredResources: NewResource[]): Promise<CurationSummary> {
+// review a Scan's discovered Resources, writing Findings and returning the counts, cost, and recap the Scan records
+export async function reviewScan(scan: Scan, discoveredResources: NewResource[]): Promise<ReviewSummary> {
 	// load the unscored list of discovered Resources for this Topic
 	const unscoredResources = await loadUnscoredResources(scan.topicId, discoveredResources)
 	if (unscoredResources.length === 0) {
@@ -72,7 +72,7 @@ export async function curateScan(scan: Scan, discoveredResources: NewResource[])
 	}
 
 	// running tallies. the spend budget with its per-stage breakdown, the in-scan hash set, and the outcome counts
-	const budget: Budget = { spent: 0, cap: CURATION_SCAN_BUDGET_USD, stageCosts: emptyStageCosts() }
+	const budget: Budget = { spent: 0, cap: REVIEW_SCAN_BUDGET_USD, stageCosts: emptyStageCosts() }
 	const seenHashes = new Set<string>()
 	const whySummaries: string[] = []
 	let keptCount = 0
@@ -81,9 +81,9 @@ export async function curateScan(scan: Scan, discoveredResources: NewResource[])
 	// embed the topic's effective context once for the relevance gate, keeping its text for the scorer
 	const topicContext = await loadTopicContext(scan.topicId, budget)
 
-	// curate each Resource. curateResource never throws, so one bad Resource only degrades itself
+	// review each Resource. reviewResource never throws, so one bad Resource only degrades itself
 	for (const resource of unscoredResources) {
-		const resourceOutcome = await curateResource(resource, scan, topicContext, seenHashes, budget)
+		const resourceOutcome = await reviewResource(resource, scan, topicContext, seenHashes, budget)
 		// tally the outcome. a kept Resource contributes its why-summary to the recap
 		if (resourceOutcome.status === "kept") {
 			keptCount++
@@ -129,7 +129,7 @@ async function loadTopicContext(topicId: string, budget: Budget): Promise<{ text
 }
 
 // run a Resource through the pipeline, isolating any failure so it only degrades itself
-async function curateResource(
+async function reviewResource(
 	resource: Resource,
 	scan: Scan,
 	topicContext: { text: string; embedding: number[] },
@@ -140,7 +140,7 @@ async function curateResource(
 	try {
 		return await runResourcePipeline(resource, scan, topicContext, seenHashes, budget)
 	} catch (error) {
-		console.error(`curation failed for resource ${resource.id}`, error)
+		console.error(`review failed for resource ${resource.id}`, error)
 		return { status: "failed" }
 	}
 }
@@ -151,7 +151,8 @@ async function curateResource(
 // 3. dedupe embedding
 // 4. check relevance
 // 5. fetch the full content
-// 6. score the resource
+// 6. score the resource content against the topic context
+// 7. write the finding record
 async function runResourcePipeline(
 	resource: Resource,
 	scan: Scan,
@@ -306,9 +307,10 @@ async function scoreResourceContent(
 
 // upsert one finding per topic and resource. re-scoring updates the existing row instead of adding another
 async function upsertFinding(scan: Scan, resource: Resource, score: number, why: string): Promise<void> {
-	// insert the topic finding, or update it in place on the topic and resource unique constraint
+	// insert the topic finding
 	await db
 		.insert(findings)
+		// the finding carries the score and why-summary, plus the scan that produced them
 		.values({
 			topicId: scan.topicId,
 			resourceId: resource.id,
@@ -316,6 +318,7 @@ async function upsertFinding(scan: Scan, resource: Resource, score: number, why:
 			relevanceScore: score,
 			relevanceExplanation: why,
 		})
+		// a re-score hits the topic and resource unique constraint, so update that row in place
 		.onConflictDoUpdate({
 			target: [findings.topicId, findings.resourceId],
 			set: { scanId: scan.id, relevanceScore: score, relevanceExplanation: why },
@@ -345,7 +348,7 @@ function hasNativeText(resource: Resource): boolean {
 	return Boolean(resource.title?.trim() || resource.snippet?.trim())
 }
 
-// the native text curation embeds the capped title and snippet, falling back to the url when both are empty
+// the native text review embeds the capped title and snippet and falls back to the url when both are empty
 function embedText(resource: Resource): string {
 	// join title and snippet, then cap the text to bound token limits
 	const text = `${resource.title ?? ""}\n${resource.snippet ?? ""}`.trim()
@@ -406,7 +409,7 @@ export function isRelevant(similarity: number): boolean {
 
 // a cheap model score at or above the threshold earns a premium model re-score
 export function isPromoted(score: number): boolean {
-	return score >= CURATION_PROMOTION_THRESHOLD
+	return score >= REVIEW_PROMOTION_THRESHOLD
 }
 
 // paid tasks may run only while the Scan is under its spend ceiling
@@ -424,7 +427,7 @@ function emptyStageCosts(): StageCosts {
 	return { embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 }
 }
 
-// the empty summary for a Scan with nothing to curate. no findings, no cost, an empty breakdown
-function emptySummary(): CurationSummary {
+// the empty summary for a Scan with nothing to review. no findings, no cost, an empty breakdown
+function emptySummary(): ReviewSummary {
 	return { keptCount: 0, filteredCount: 0, cost: 0, stageCosts: {}, scanSummary: "" }
 }

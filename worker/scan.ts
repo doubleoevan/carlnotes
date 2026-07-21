@@ -4,7 +4,7 @@ import { db } from "../db"
 import { resources, scans, sources } from "../db/schema"
 import { sourceAdapters } from "./adapters"
 import type { AdapterResult, NewResource, Source } from "./adapters/adapter"
-import { curateScan } from "./curation"
+import { reviewScan } from "./review"
 
 // the outcome of running one Source. a successful one carries its emitted Resources and the source id for tracing
 type SourceOutcome = ({ status: "ok"; sourceId: string } & AdapterResult) | { status: "failed" } | { status: "skipped" }
@@ -23,7 +23,7 @@ type ScanSummary = {
 }
 
 // create a Scan and ingest every Source with failures isolated,
-// then curate the results and close the Scan with its counts and cost
+// then review the results and end the Scan with its counts and cost
 export async function runTopicScan(topicId: string): Promise<Scan | undefined> {
 	// open the Scan as "running" so that interrupted ingestion is visible as an unfinished row
 	const [scan] = await db.insert(scans).values({ topicId }).returning()
@@ -43,8 +43,8 @@ export async function runTopicScan(topicId: string): Promise<Scan | undefined> {
 			await db.insert(resources).values(summary.resources).onConflictDoNothing({ target: resources.url })
 		}
 
-		// curate the discovered Resources into topic findings, then close the Scan with one database write
-		const curation = await curateScan(scan, summary.resources)
+		// review the discovered Resources for topic findings, then end the Scan with one database write
+		const review = await reviewScan(scan, summary.resources)
 		const { foundCount, cost, status, degradedSources } = summary
 		const [finishedScan] = await db
 			.update(scans)
@@ -53,13 +53,13 @@ export async function runTopicScan(topicId: string): Promise<Scan | undefined> {
 				status,
 				foundCount,
 				degradedSources,
-				// curation outcomes, folded into the Scan record
-				keptCount: curation.keptCount,
-				filteredCount: curation.filteredCount,
-				stageCosts: curation.stageCosts,
-				scanSummary: curation.scanSummary,
-				// the total cost is the ingestion cost plus every curation stage cost
-				cost: (cost + curation.cost).toString(),
+				// review outcomes, folded into the Scan record
+				keptCount: review.keptCount,
+				filteredCount: review.filteredCount,
+				stageCosts: review.stageCosts,
+				scanSummary: review.scanSummary,
+				// the total cost is the ingestion cost plus every review stage cost
+				cost: (cost + review.cost).toString(),
 				finishedAt: new Date(),
 			})
 			.where(eq(scans.id, scan.id))
