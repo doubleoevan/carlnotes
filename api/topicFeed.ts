@@ -21,18 +21,32 @@ const MAX_POPULAR_TOPICS = 5
  */
 export async function buildTopicFeeds(userId: string, includeConsumedResources: boolean): Promise<TopicFeedResponse> {
 	// split topics into the user's own and other users' public topics
-	const ownersTopics = await db.select().from(topics).where(eq(topics.ownerId, userId))
-	const othersTopics = await db
-		.select()
-		.from(topics)
-		.where(and(ne(topics.ownerId, userId), eq(topics.visibility, "public")))
+	const [ownersTopics, othersTopics] = await Promise.all([
+		db.select().from(topics).where(eq(topics.ownerId, userId)),
+		db
+			.select()
+			.from(topics)
+			.where(and(ne(topics.ownerId, userId), eq(topics.visibility, "public"))),
+	])
 
-	// load the topic feed for each topic
-	const ownerTopicFeeds = await Promise.all(
-		ownersTopics.map((topic) => loadTopicFeed(topic, userId, includeConsumedResources)),
+	// fetch every topic's feed data in one batch keyed by topic id, then build each feed in memory
+	const combinedTopics = [...ownersTopics, ...othersTopics]
+	const topicFeedData = await loadTopicFeedData(
+		combinedTopics.map((topic) => topic.id),
+		userId,
 	)
+
+	// build the topic feed for each of the user's own topics
+	const ownerTopicFeeds = await Promise.all(
+		ownersTopics.map((topic) => buildTopicFeed(topic, userId, includeConsumedResources, topicFeedData)),
+	)
+
+	// build each public topic's feed, keeping its topic row for the featured and popular sorts
 	const othersTopicFeeds = await Promise.all(
-		othersTopics.map(async (topic) => ({ topic, feed: await loadTopicFeed(topic, userId, includeConsumedResources) })),
+		othersTopics.map(async (topic) => ({
+			topic,
+			feed: await buildTopicFeed(topic, userId, includeConsumedResources, topicFeedData),
+		})),
 	)
 
 	// sort featured topics by featureOrder ascending
@@ -60,40 +74,106 @@ export async function buildTopicFeeds(userId: string, includeConsumedResources: 
 	}
 }
 
-// load one topic's feed. that includes its topic findings, sources, attachments, last scan, and subscriber count
-async function loadTopicFeed(
+// fetch every dataset the topic feeds need across all topic ids at once, each grouped by topic id.
+// an empty id list makes each inArray where clause match nothing, so the maps come back empty
+async function loadTopicFeedData(topicIds: string[], userId: string) {
+	// run the five topic-batched queries together
+	const [findingRows, sourceRows, attachmentRows, scanRows, subscriberRows] = await Promise.all([
+		// join each topic finding with its resource. a left join adds the user's consumed date when one exists
+		db
+			.select({
+				// the owning topic's id groups the rows
+				topicId: findings.topicId,
+				// the topic finding's identity and its resource metadata
+				findingId: findings.id,
+				resourceId: resources.id,
+				url: resources.url,
+				resourceKind: resources.kind,
+				title: resources.title,
+				resourceCreatedAt: resources.createdAt,
+				fetchedAt: resources.fetchedAt,
+				// the topic finding's metadata and the user's consumed date
+				relevanceScore: findings.relevanceScore,
+				relevanceExplanation: findings.relevanceExplanation,
+				viewCount: findings.viewCount,
+				rating: findings.rating,
+				consumedAt: consumptions.consumedAt,
+			})
+			// join the resource and the user's consumed row. sort by relevance score descending
+			.from(findings)
+			.innerJoin(resources, eq(findings.resourceId, resources.id))
+			.leftJoin(consumptions, and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId)))
+			.where(inArray(findings.topicId, topicIds))
+			.orderBy(desc(findings.relevanceScore)),
+
+		// select every topic's sources, carrying the topic id to group by
+		db
+			.select({ topicId: sources.topicId, id: sources.id, kind: sources.kind })
+			.from(sources)
+			.where(inArray(sources.topicId, topicIds)),
+
+		// select every topic's attachments, carrying the topic id to group by
+		db
+			.select({ topicId: attachments.topicId, id: attachments.id, filename: attachments.filename })
+			.from(attachments)
+			.where(inArray(attachments.topicId, topicIds)),
+
+		// select the most recent succeeded scan per topic. the distinct-on keeps the summary from that same latest row
+		db
+			.selectDistinctOn([scans.topicId], {
+				topicId: scans.topicId,
+				startedAt: scans.startedAt,
+				scanSummary: scans.scanSummary,
+			})
+			// sort so that the latest succeeded scan is the distinct row kept per topic
+			.from(scans)
+			.where(and(inArray(scans.topicId, topicIds), eq(scans.status, "succeeded")))
+			.orderBy(scans.topicId, desc(scans.startedAt)),
+
+		// select the subscriber count per topic
+		db
+			.select({ topicId: subscriptions.topicId, count: count() })
+			.from(subscriptions)
+			.where(inArray(subscriptions.topicId, topicIds))
+			.groupBy(subscriptions.topicId),
+	])
+
+	// group each dataset by topic id so that a feed can read its slice in memory
+	return {
+		findingRowsByTopic: Map.groupBy(findingRows, (row) => row.topicId),
+		sourcesByTopic: Map.groupBy(sourceRows, (row) => row.topicId),
+		attachmentsByTopic: Map.groupBy(attachmentRows, (row) => row.topicId),
+		lastScanByTopic: new Map(scanRows.map((row) => [row.topicId, row])),
+		subscriberCountByTopic: new Map(subscriberRows.map((row) => [row.topicId, row.count])),
+	}
+}
+
+// build a topic's feed from the batched data. that includes its topic findings, sources, attachments, last scan, and subscriber count
+async function buildTopicFeed(
 	topic: typeof topics.$inferSelect,
 	userId: string,
 	includeConsumedResources: boolean,
+	feedData: Awaited<ReturnType<typeof loadTopicFeedData>>,
 ): Promise<TopicFeed> {
-	// join each topic finding to its resource. a left join adds the user's consumed date when one exists
-	const rows = await db
-		.select({
-			// load the finding identity and its resource metadata
-			findingId: findings.id,
-			resourceId: resources.id,
-			url: resources.url,
-			resourceKind: resources.kind,
-			title: resources.title,
-			resourceCreatedAt: resources.createdAt,
-			fetchedAt: resources.fetchedAt,
+	// read this topic's findings, last scan, and subscriber count from the batched data
+	const findingRows = feedData.findingRowsByTopic.get(topic.id) ?? []
+	const lastScan = feedData.lastScanByTopic.get(topic.id)
+	const subscriberCount = feedData.subscriberCountByTopic.get(topic.id) ?? 0
 
-			// load the finding metadata and the user's consumed date
-			relevanceScore: findings.relevanceScore,
-			relevanceExplanation: findings.relevanceExplanation,
-			viewCount: findings.viewCount,
-			rating: findings.rating,
-			consumedAt: consumptions.consumedAt,
-		})
-		// join the resource and the user's consumed row. sort by relevance score descending
-		.from(findings)
-		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.leftJoin(consumptions, and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId)))
-		.where(eq(findings.topicId, topic.id))
-		.orderBy(desc(findings.relevanceScore))
+	// read the sources, dropping the grouping key from each row
+	const topicSources = (feedData.sourcesByTopic.get(topic.id) ?? []).map((source) => ({
+		id: source.id,
+		kind: source.kind,
+	}))
+
+	// read the attachments, dropping the grouping key from each row
+	const topicAttachments = (feedData.attachmentsByTopic.get(topic.id) ?? []).map((attachment) => ({
+		id: attachment.id,
+		filename: attachment.filename,
+	}))
 
 	// shape each row into a topic finding and set its isConsumed flag
-	const cards: TopicFinding[] = rows.map((row) => ({
+	const topicFindings: TopicFinding[] = findingRows.map((row) => ({
 		findingId: row.findingId,
 		resourceId: row.resourceId,
 		url: row.url,
@@ -111,30 +191,6 @@ async function loadTopicFeed(
 		isConsumed: row.consumedAt !== null,
 	}))
 
-	// select the topic's sources and attachments
-	const topicSources = await db
-		.select({ id: sources.id, kind: sources.kind })
-		.from(sources)
-		.where(eq(sources.topicId, topic.id))
-	const topicAttachments = await db
-		.select({ id: attachments.id, filename: attachments.filename })
-		.from(attachments)
-		.where(eq(attachments.topicId, topic.id))
-
-	// select the most recent succeeded scan with its start time and summary
-	const lastScan = await db
-		.select({ startedAt: scans.startedAt, scanSummary: scans.scanSummary })
-		.from(scans)
-		.where(and(eq(scans.topicId, topic.id), eq(scans.status, "succeeded")))
-		.orderBy(desc(scans.startedAt))
-		.limit(1)
-
-	// select the topic's subscriber count
-	const subscriberRows = await db
-		.select({ count: count() })
-		.from(subscriptions)
-		.where(eq(subscriptions.topicId, topic.id))
-
 	// return the topic feed with its metadata
 	return {
 		id: topic.id,
@@ -145,16 +201,16 @@ async function loadTopicFeed(
 		// what this user may do with the topic, plus their unconsumed count
 		isOwner: topic.ownerId === userId,
 		canRate: await canRateTopic(userId, topic),
-		newCount: newTopicFindingCount(cards),
-		// set how many subscribers this topic has
-		subscriberCount: subscriberRows[0]?.count ?? 0,
-		// set the created time, last scan details, attachments, sources, and topic findings
+		newCount: newTopicFindingCount(topicFindings),
+		// how many subscribers this topic has
+		subscriberCount,
+		// the created time, last scan details, attachments, sources, and topic findings
 		createdAt: topic.createdAt.toISOString(),
-		lastScanAt: lastScan[0]?.startedAt?.toISOString() ?? null,
-		scanSummary: lastScan[0]?.scanSummary ?? null,
+		lastScanAt: lastScan?.startedAt.toISOString() ?? null,
+		scanSummary: lastScan?.scanSummary ?? null,
 		attachments: topicAttachments,
 		sources: topicSources,
-		findings: filteredTopicFindings(cards, includeConsumedResources),
+		findings: filteredTopicFindings(topicFindings, includeConsumedResources),
 	}
 }
 
@@ -169,7 +225,7 @@ export async function setRating(userId: string, findingId: string, value: "up" |
 
 // mark or unmark a topic finding consumed. returns false when the user may not act on it
 export async function setConsumed(userId: string, findingId: string, isConsumed: boolean): Promise<boolean> {
-	if (!(await canSeeFinding(userId, findingId))) {
+	if (!(await isFindingTopicVisible(userId, findingId))) {
 		return false
 	}
 	await writeConsumed(userId, findingId, isConsumed)
@@ -178,9 +234,10 @@ export async function setConsumed(userId: string, findingId: string, isConsumed:
 
 // increment the topic finding's view count and mark it consumed. returns false when the user may not act on it
 export async function recordView(userId: string, findingId: string): Promise<boolean> {
-	if (!(await canSeeFinding(userId, findingId))) {
+	if (!(await isFindingTopicVisible(userId, findingId))) {
 		return false
 	}
+
 	// increment the view count with a raw SQL expression, then mark the finding consumed
 	await db
 		.update(findings)
@@ -197,6 +254,7 @@ async function writeConsumed(userId: string, findingId: string, isConsumed: bool
 		await db.delete(consumptions).where(and(eq(consumptions.userId, userId), eq(consumptions.findingId, findingId)))
 		return
 	}
+
 	// to mark isConsumed, insert the topic finding's consumed row. a duplicate insert does nothing
 	await db.insert(consumptions).values({ userId, findingId }).onConflictDoNothing()
 }
@@ -204,7 +262,7 @@ async function writeConsumed(userId: string, findingId: string, isConsumed: bool
 // a rating is written on the shared topic finding, so it takes the topic's owner or one of its
 // subscribers. a private topic has no subscribers, so it stays owner-only
 async function canRateFinding(userId: string, findingId: string): Promise<boolean> {
-	const topic = await findingTopic(findingId)
+	const topic = await loadFindingTopic(findingId)
 	return topic ? canRateTopic(userId, topic) : false
 }
 
@@ -213,36 +271,53 @@ export async function canRateTopic(
 	userId: string,
 	topic: Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility">,
 ): Promise<boolean> {
-	// the owner may always rate, and a private topic offers no other way in
+	// the owner may always rate
 	if (topic.ownerId === userId) {
 		return true
 	}
-	if (topic.visibility === "private") {
-		return false
+	// a non-owner may rate only as a subscriber, and a private topic never has one
+	switch (topic.visibility) {
+		case "public":
+		case "invite":
+			return hasSubscription(userId, topic.id)
+		case "private":
+			return false
+		// a new visibility value fails to compile here
+		default:
+			return assertNever(topic.visibility)
 	}
-	return hasSubscription(userId, topic.id)
 }
 
-// consumed state and view counts are the user's own reading history, so merely seeing the topic is
-// enough. a public topic is visible to everyone and an invite topic only to its subscribers
-async function canSeeFinding(userId: string, findingId: string): Promise<boolean> {
-	const topic = await findingTopic(findingId)
+// consumed state and view counts are the user's own reading history, so merely seeing the topic is enough.
+// a "public" topic is visible to everyone
+// a "private" topic is only visible to the owner
+// an "invite" topic is only visible to its owner and its subscribers
+async function isFindingTopicVisible(userId: string, findingId: string): Promise<boolean> {
+	const topic = await loadFindingTopic(findingId)
 	if (!topic) {
 		return false
 	}
 
-	// the owner and any public topic are visible outright
-	if (topic.ownerId === userId || topic.visibility === "public") {
+	// the owner always sees their own topic
+	if (topic.ownerId === userId) {
 		return true
 	}
-	if (topic.visibility === "private") {
-		return false
+	// a non-owner sees a public topic outright and an invite topic only as a subscriber, never a private one
+	switch (topic.visibility) {
+		case "public":
+			return true
+		case "invite":
+			return hasSubscription(userId, topic.id)
+		case "private":
+			return false
+		// a new visibility value fails to compile here
+		default:
+			return assertNever(topic.visibility)
 	}
-	return hasSubscription(userId, topic.id)
 }
 
-// the owner and visibility of a topic finding's topic, or undefined when the finding does not exist
-async function findingTopic(findingId: string) {
+// the id, owner, and visibility of a topic finding's topic, or undefined when the finding does not exist
+async function loadFindingTopic(findingId: string) {
 	const [topic] = await db
 		.select({ id: topics.id, ownerId: topics.ownerId, visibility: topics.visibility })
 		.from(findings)
@@ -293,4 +368,9 @@ export function toUrlHost(url: string): string | null {
 	} catch {
 		return null
 	}
+}
+
+// exhaustiveness guard. a compile error here means a topic visibility case went unhandled above
+function assertNever(value: never): never {
+	throw new Error(`unhandled case: ${value}`)
 }
