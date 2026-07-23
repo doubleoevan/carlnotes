@@ -13,7 +13,7 @@ description: Canonical CarlNotes domain vocabulary. Use whenever naming types, t
 | Source | topic input: "pull from X" | kind: rss, reddit, youtube, search, composio, plugin; `integration_id` nullable (RSS needs none) |
 | Scan | one execution of a topic's pipeline | domain word; Temporal keeps "run" at the infra layer only |
 | Resource | canonical external artifact, deduped globally | url, content hash, embedding, kind (read / watch / listen) |
-| Finding | topic-scoped judgment about a Resource | signal score, why-summary; one Resource → many Findings |
+| Finding | topic-scoped judgment about a Resource | relevance score, relevance explanation; one Resource → many Findings |
 | Feed | a topic's stream of Findings | the output side; "channel" is UI copy only |
 | Subscription | subscriber ↔ topic join | subscriber is a user **or** an Audience; delivery prefs live here; owners hold ordinary rows |
 | Audience | a named set of users that subscribes as one | `audience_members` joins users; members inherit the audience's Subscription; a personal Subscription to the same topic shadows the inherited one |

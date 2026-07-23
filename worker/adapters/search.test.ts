@@ -33,6 +33,9 @@ test("parseResults defaults cost to 0 when the provider omits costDollars", () =
 })
 
 // an empty context falls back to the topic name, so the search always gets a prompt
-test("buildSearchPrompt falls back to the topic name when the context is empty", () => {
-	expect(buildSearchPrompt("   ", "Agent infra weekly")).toContain("Agent infra weekly")
+test("buildSearchPrompt falls back to the topic name when the context is empty", async () => {
+	// the prompt written from search-topic.md carries the fallback name and no unfilled placeholders
+	const { prompt: searchPrompt } = await buildSearchPrompt("   ", "Agent infra weekly")
+	expect(searchPrompt).toContain("Agent infra weekly")
+	expect(searchPrompt).not.toContain("{{")
 })

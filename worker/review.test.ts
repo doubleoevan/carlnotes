@@ -1,15 +1,17 @@
 // review tests for the pure dedupe, threshold, spend, and prompt helpers
 import { expect, test } from "bun:test"
 import {
+	buildScanReportPrompt,
 	buildScorePrompt,
-	buildSummaryPrompt,
 	canSpend,
 	charge,
-	contentHash,
 	isNearDuplicate,
 	isPromoted,
 	isRelevant,
 	normalizeText,
+	// the scan report prompt input reuses the source outcome shape the scan hands over
+	type ScannedSource,
+	toContentHash,
 	tokenCost,
 } from "./review"
 
@@ -21,9 +23,9 @@ test("normalizeText lowercases and collapses whitespace", () => {
 // contentHash is stable across whitespace and case. only the same content hashes alike
 test("contentHash normalizes before hashing and differs for different content", () => {
 	// the same content formatted differently hashes alike
-	expect(contentHash("Hello", "World")).toBe(contentHash("hello", "  world "))
+	expect(toContentHash("Hello", "World")).toBe(toContentHash("hello", "  world "))
 	// different content hashes differently
-	expect(contentHash("Hello", "World")).not.toBe(contentHash("Hello", "Mars"))
+	expect(toContentHash("Hello", "World")).not.toBe(toContentHash("Hello", "Mars"))
 })
 
 // the three gate predicates fire on the right side of their thresholds
@@ -64,22 +66,65 @@ test("tokenCost estimates dollars from token usage", () => {
 	expect(tokenCost(0, 0.5)).toBe(0)
 })
 
-// buildScorePrompt carries the content and context. it asks for a relevance summary only if promoted to the premium model
-test("buildScorePrompt includes content and context and gates the relevance summary", () => {
+// buildScorePrompt writes the prompt from summarize-resource.md. only the premium tier asks for the relevance explanation
+test("buildScorePrompt includes content and context and gates the relevance explanation", async () => {
 	// the cheap model only asks for a score
-	const cheapModelPrompt = buildScorePrompt("article body", "topic context", false)
-	expect(cheapModelPrompt).toContain("article body")
-	expect(cheapModelPrompt).toContain("topic context")
-	expect(cheapModelPrompt).not.toContain("why-summary")
+	const cheapModelResult = await buildScorePrompt("article body", "topic context", false)
+	expect(cheapModelResult.prompt).toContain("article body")
+	expect(cheapModelResult.prompt).toContain("topic context")
+	expect(cheapModelResult.prompt).not.toContain("relevanceExplanation")
 
-	// the premium model also asks for the why-summary
-	expect(buildScorePrompt("body", "ctx", true)).toContain("why-summary")
+	// the premium model also asks for the relevance explanation, with no markers or placeholders leaking through
+	const premiumModelResult = await buildScorePrompt("body", "ctx", true)
+	expect(premiumModelResult.prompt).toContain("relevanceExplanation")
+	expect(premiumModelResult.prompt).not.toContain("premium-tier")
+	expect(premiumModelResult.prompt).not.toContain("{{")
+
+	// without Langfuse keys, no registry prompt is attached
+	expect(cheapModelResult.registryPrompt).toBeUndefined()
 })
 
-// buildSummaryPrompt reports the kept and filtered resource result counts in the recap prompt
-test("buildSummaryPrompt reports the scan result counts", () => {
-	const prompt = buildSummaryPrompt(3, 7, ["relevant to the topic"])
-	expect(prompt).toContain("3")
-	expect(prompt).toContain("7")
-	expect(prompt).toContain("relevant to the topic")
+// buildScanReportPrompt writes the report prompt from summarize-topic-scan.md over the scan's tallies, sources, and costs
+test("buildScanReportPrompt grounds the report prompt in the scan's data", async () => {
+	// one kept finding with its reader-facing note
+	const keptFinding = { title: "One", url: "https://a.com/1", relevanceScore: 0.91, relevanceExplanation: "agent news" }
+
+	// per-cause drop counts plus the deferred and failed counts
+	const tally = {
+		keptFindings: [keptFinding],
+		filteredCounts: { "duplicate content": 2, "near-duplicate": 1, "below relevance threshold": 4 },
+		deferredCount: 1,
+		failedCount: 0,
+	}
+
+	// the spend breakdown the cost line renders, and two sources with different outcomes
+	const stageCosts = { embedding: 0.01, fetch: 0.02, scoringCheap: 0.03, scoringPremium: 0.0634 }
+	const budget = { spent: 0.1234, cap: 0.5, stageCosts }
+	const scannedSources: ScannedSource[] = [
+		{ sourceKind: "rss", status: "ok" },
+		{ sourceKind: "search", status: "failed" },
+	]
+
+	// render the report prompt over the sample scan
+	const { prompt: reportPrompt } = await buildScanReportPrompt({
+		topicName: "LLM tooling",
+		topicContext: "agents and prompt engineering",
+		date: "July 21, 2026",
+		// the grounded data blocks
+		reviewOutcome: tally,
+		scannedSources,
+		budget,
+	})
+
+	// the date, kept finding, drop causes, and source outcomes all land in the prompt
+	expect(reportPrompt).toContain("July 21, 2026")
+	expect(reportPrompt).toContain("https://a.com/1")
+	expect(reportPrompt).toContain("agent news")
+	expect(reportPrompt).toContain("duplicate content: 2")
+	expect(reportPrompt).toContain("rss: ok")
+	expect(reportPrompt).toContain("search: failed")
+
+	// the report beats survive rendering and no placeholder is left unfilled
+	expect(reportPrompt).toContain("worth flagging")
+	expect(reportPrompt).not.toContain("{{")
 })

@@ -9,7 +9,7 @@ export function cheapModel(): LanguageModel {
 	return proxy().chat("cheap-model")
 }
 
-// the premium model re-scores promoted Resources and writes a why-summary
+// the premium model re-scores promoted Resources and writes the relevance explanation
 export function scoreModel(): LanguageModel {
 	return proxy().chat("score-model")
 }

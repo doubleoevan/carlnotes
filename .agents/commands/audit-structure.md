@@ -48,6 +48,10 @@ Check for:
       `"preset": "recommended"`)
     - `bunx tsc --noEmit` (now `bunx tsc -b`; the old form silently checks nothing
       against a solution-style root)
+    - `score.md` (now `summarize-resource.md`), `scan-report.md` (now
+      `summarize-topic-scan.md`), `attachment-context.md` (now `attach-context.md`),
+      `search-query.md` (now `search-topic.md`)
+    - `render.ts`/`fill.ts` (merged into `write.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

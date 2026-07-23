@@ -29,8 +29,11 @@ test("ingestAttachment rejects an oversized file before touching storage or the 
 })
 
 // the context prompt carries the document text
-test("buildContextPrompt includes the document text", () => {
-	expect(buildContextPrompt("a novel about the moon")).toContain("a novel about the moon")
+test("buildContextPrompt includes the document text", async () => {
+	// the prompt written from attach-context.md carries the document and no unfilled placeholders
+	const { prompt: contextPrompt } = await buildContextPrompt("a novel about the moon")
+	expect(contextPrompt).toContain("a novel about the moon")
+	expect(contextPrompt).not.toContain("{{")
 })
 
 // a malformed URL is rejected before Firecrawl is ever called

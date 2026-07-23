@@ -6,6 +6,7 @@ import { db } from "../db"
 import { topics, users } from "../db/schema"
 import { buildTopicScanContext, ingestUrlAttachment } from "./attach"
 import { attachmentExists, deleteAttachment } from "./store"
+import { shutdownTelemetry, startTelemetry } from "./telemetry"
 
 // the persisted attachment row that ingestUrlAttachment returns
 type Attachment = Awaited<ReturnType<typeof ingestUrlAttachment>>
@@ -101,11 +102,16 @@ async function smokeTest(): Promise<number> {
 	}
 }
 
-// run the smoke test, then exit because the Neon pool would otherwise keep the process alive. a thrown error is a failure
+// run the smoke test, computing the exit code rather than exiting early so telemetry can flush first
+startTelemetry()
+let exitCode: number
 try {
-	const exitCode = await smokeTest()
-	process.exit(exitCode)
+	exitCode = await smokeTest()
 } catch (error) {
 	console.error(error)
-	process.exit(1)
+	exitCode = 1
 }
+
+// flush telemetry before exit, then exit because the Neon pool would otherwise keep the process alive
+await shutdownTelemetry()
+process.exit(exitCode)

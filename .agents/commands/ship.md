@@ -27,12 +27,19 @@ This runs Biome, the type check, and the test suite. All three must be green.
 
 ## 3. AI review: CodeRabbit + Gemini, both by default
 
-If `$CODERABBIT_API_KEY` is set, authenticate and run CodeRabbit in the
-background:
-- coderabbit auth login --api-key "$CODERABBIT_API_KEY"
-- coderabbit review --agent --type all --base main
-  If the key is not set, report that CodeRabbit was skipped and continue —
-  never fail the ritual on a missing key.
+The agent shell has no Doppler-injected secrets, so check for the key without
+printing it: doppler run -- bash -c 'test -n "$CODERABBIT_API_KEY"'.
+
+If present, authenticate and run CodeRabbit under Doppler in the background.
+Defer variable expansion into the Doppler-injected subshell (a bare
+`--api-key "$CODERABBIT_API_KEY"` expands empty in the outer shell before
+doppler run starts):
+- doppler run -- bash -c 'coderabbit auth login --api-key "$CODERABBIT_API_KEY"'
+- doppler run -- bash -c 'coderabbit review --agent --type all --base main'
+  If the key is not set (in Doppler or the shell), or CodeRabbit rejects it
+  (e.g. a user key where the CLI needs an agentic key), report that CodeRabbit
+  was skipped and why, and continue — never fail the ritual on a missing or
+  invalid key.
 
 Always run Gemini:
 - gemini /code-review (reviews the current branch; if non-interactive

@@ -3,6 +3,9 @@ import { generateText, Output } from "ai"
 import { z } from "zod"
 import { buildTopicScanContext } from "../attach"
 import { cheapModel } from "../models.ts"
+// the prompt loader fetches the registry version first, falling back to the bundled markdown
+import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch.ts"
+import { writePrompt } from "../prompts/write.ts"
 import type { NewResource, Source, SourceAdapter } from "./adapter"
 import { fetchVideos, playlistIdFromUrl } from "./youtube"
 
@@ -51,20 +54,26 @@ type SearchResponse = {
 	costDollars?: { total?: number }
 }
 
-// build the search prompt from the context. an empty context falls back to the topic name
-export function buildSearchPrompt(context: string, name: string): string {
+// build the search prompt from search-topic.md. an empty context falls back to the topic name
+export async function buildSearchPrompt(context: string, name: string): Promise<BuiltPrompt> {
 	// fall back to the topic name when the context is empty and cap the context length to bound token spend
 	const topicContext = (context.trim() || name).slice(0, MAX_CONTEXT_CHARS)
-	return `You are a research scout. Given the topic below, write up to ${MAX_QUERIES} diverse web search queries that would surface fresh, high-quality articles worth reading and YouTube playlists worth watching. Return only the queries.\n\nTopic:\n${topicContext}`
+	const { template, name: promptName, registryPrompt } = await fetchPromptTemplate("search-topic")
+	const prompt = writePrompt(template, { maxQueries: String(MAX_QUERIES), topicContext })
+	return { prompt, name: promptName, registryPrompt }
 }
 
 // generate a capped list of search queries from the topic context using the cheap model
 async function generateSearchQueries(context: string, name: string): Promise<string[]> {
-	// generateText's output setting returns structured output
+	// fetch and write the prompt
+	const searchPrompt = await buildSearchPrompt(context, name)
+
+	// generateText's output setting returns structured output, linking the registry version to the trace
 	const { output } = await generateText({
 		model: cheapModel(),
 		output: Output.object({ schema: z.object({ queries: z.array(z.string()) }) }),
-		prompt: buildSearchPrompt(context, name),
+		prompt: searchPrompt.prompt,
+		...promptTelemetry(searchPrompt),
 	})
 
 	// trim, drop blanks, and dedupe the model output, then cap it so a chatty model doesn't inflate the search call count

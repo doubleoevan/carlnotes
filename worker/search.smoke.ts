@@ -5,6 +5,7 @@ import { db } from "../db"
 import { sources, topics, users } from "../db/schema"
 import type { Source } from "./adapters/adapter"
 import { searchAdapter } from "./adapters/search"
+import { shutdownTelemetry, startTelemetry } from "./telemetry"
 
 // a coherent topic context so that query generation has a real seed and Exa returns on-topic results
 const TOPIC_CONTEXT =
@@ -95,11 +96,16 @@ async function smokeTest(): Promise<number> {
 	}
 }
 
-// run the smoke test, then exit because the Neon pool would otherwise keep the process alive. a thrown error is a failure
+// run the smoke test, computing the exit code rather than exiting early so telemetry can flush first
+startTelemetry()
+let exitCode: number
 try {
-	const exitCode = await smokeTest()
-	process.exit(exitCode)
+	exitCode = await smokeTest()
 } catch (error) {
 	console.error(error)
-	process.exit(1)
+	exitCode = 1
 }
+
+// flush telemetry before exit, then exit because the Neon pool would otherwise keep the process alive
+await shutdownTelemetry()
+process.exit(exitCode)

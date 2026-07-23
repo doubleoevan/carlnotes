@@ -69,6 +69,12 @@ bun run smoke:attach       # just the URL-attachment smoke test (Firecrawl fetch
 bun run smoke:search       # just the search-scout smoke test (context → LLM queries → Exa → Resources)
 ```
 
+Prompt registry (owner-run) — git is canonical for prompt wording (`worker/prompts/*.md`); this pushes it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set:
+
+```bash
+bun run prompts:sync
+```
+
 ## License
 
 MIT

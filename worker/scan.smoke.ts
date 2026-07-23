@@ -3,7 +3,12 @@
 import { eq, isNotNull } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, sources, topics, users } from "../db/schema"
+// the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
+import { buildSearchPrompt } from "./adapters/search"
+import { buildContextPrompt } from "./attach"
+import { buildScanReportPrompt, buildScorePrompt } from "./review"
 import { runTopicScan } from "./scan"
+import { shutdownTelemetry, startTelemetry } from "./telemetry"
 
 // a real feed that is reliably up, plus a topic context that matches it so relevant resources pass the relevance gate
 const FEED_URL = "https://simonwillison.net/atom/everything/"
@@ -58,24 +63,31 @@ async function check(topicId: string): Promise<boolean> {
 
 	// for an RSS-only scan, ingestion cost is 0, so the total cost should equal the sum of the review stage costs
 	const totalCost = Number(topicScan.cost)
-	const summedStages = Object.values(topicScan.stageCosts).reduce((sum, value) => sum + value, 0)
-	const withWhy = topicFindings.filter((finding) => finding.relevanceExplanation.trim().length > 0)
+	const totalStageCosts = Object.values(topicScan.stageCosts).reduce((sum, value) => sum + value, 0)
+	const findingsWithExplanations = topicFindings.filter((finding) => finding.relevanceExplanation.trim().length > 0)
 	const embeddingLength = vectorLength(embedded?.embedding)
+
+	// the longest relevance explanation must be substantive, well beyond one line
+	const explanationLengths = topicFindings.map((finding) => finding.relevanceExplanation.trim().length)
+	const longestExplanationLength = Math.max(0, ...explanationLengths)
 
 	// print the topic scan report
 	console.log("\n=== topic scan smoke report ===")
 	console.log(`scan.status        : ${topicScan.status}`)
 	console.log(`found/kept/filtered: ${topicScan.foundCount} / ${topicScan.keptCount} / ${topicScan.filteredCount}`)
 	console.log(`cost               : ${totalCost}`)
-	console.log(`stage_costs        : ${JSON.stringify(topicScan.stageCosts)} (sum ${summedStages.toFixed(6)})`)
+	console.log(`stage_costs        : ${JSON.stringify(topicScan.stageCosts)} (sum ${totalStageCosts.toFixed(6)})`)
 	// print the findings and embedding report
-	console.log(`findings           : ${topicFindings.length} (with why-summary: ${withWhy.length})`)
+	console.log(`findings           : ${topicFindings.length} (with explanations: ${findingsWithExplanations.length})`)
 	console.log(`embedding length   : ${embeddingLength} (model ${embedded?.model})`)
-	if (withWhy[0]) {
-		console.log(`sample why-summary : ${withWhy[0].relevanceExplanation}`)
+	if (findingsWithExplanations[0]) {
+		console.log(`sample explanation : ${findingsWithExplanations[0].relevanceExplanation}`)
 	}
 
-	// the smoke assertions. a real scan produced embeddings, findings, why-summaries, and per-stage costs that sum to the total
+	// print the scan report itself so the owner can judge its quality by reading it
+	console.log(`scan summary:\n${topicScan.scanSummary}`)
+
+	// the smoke assertions. a real scan produced embeddings, findings, relevance explanations, summed stage costs, and the report
 	const results: [string, boolean][] = [
 		// topic scan checks
 		["scan succeeded", topicScan.status === "succeeded"],
@@ -84,9 +96,14 @@ async function check(topicId: string): Promise<boolean> {
 
 		// topic findings checks
 		["kept_count matches findings", topicScan.keptCount === topicFindings.length],
-		["stage_costs sum to cost", Math.abs(totalCost - summedStages) < 1e-6],
+		["stage_costs sum to cost", Math.abs(totalCost - totalStageCosts) < 1e-6],
 		["at least one finding", topicFindings.length > 0],
-		["a finding has a why-summary", withWhy.length > 0],
+		["a finding has a relevance explanation", findingsWithExplanations.length > 0],
+
+		// scan report and prompt rendering checks
+		["scan summary is non-empty", (topicScan.scanSummary ?? "").trim().length > 0],
+		["a relevance explanation is substantive", longestExplanationLength > 200],
+		...(await writeSamplePrompts()),
 	]
 
 	// print each check and return the overall result
@@ -96,6 +113,47 @@ async function check(topicId: string): Promise<boolean> {
 		allPass = allPass && pass
 	}
 	return allPass
+}
+
+// write each extracted prompt with sample inputs and report whether the registry served them.
+// a non-empty result proves that the Markdown loaded and interpolated
+async function writeSamplePrompts(): Promise<[string, boolean][]> {
+	// the three single-purpose prompts
+	const scoreResult = await buildScorePrompt("sample content", "sample topic context", true)
+	const searchResult = await buildSearchPrompt("sample topic context", "sample topic")
+	const contextResult = await buildContextPrompt("sample document text")
+
+	// the report prompt renders over a minimal sample scan
+	const sampleFinding = { title: "Sample", url: "https://a.test", relevanceScore: 0.9, relevanceExplanation: "note" }
+	const reportResult = await buildScanReportPrompt({
+		topicName: "sample topic",
+		topicContext: "sample topic context",
+		date: "January 1, 2026",
+		// a single kept finding with zeroed drop tallies
+		reviewOutcome: {
+			keptFindings: [sampleFinding],
+			filteredCounts: { "duplicate content": 0, "near-duplicate": 0, "below relevance threshold": 0 },
+			deferredCount: 0,
+			failedCount: 0,
+		},
+		// one healthy source and an untouched budget
+		scannedSources: [{ sourceKind: "rss", status: "ok" }],
+		budget: { spent: 0, cap: 0.5, stageCosts: { embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 } },
+	})
+
+	// report whether the registry actually served this run's prompts, or the worker ran on the bundled Markdown alone
+	const servedFromRegistry = [scoreResult, searchResult, contextResult, reportResult].some(
+		(result) => result.registryPrompt && !result.registryPrompt.isFallback,
+	)
+	console.log(`registry serving  : ${servedFromRegistry ? "prompts served from Langfuse" : "bundled markdown only"}`)
+
+	// each prompt renders to a non-empty string
+	return [
+		["score prompt renders", scoreResult.prompt.length > 0],
+		["search prompt renders", searchResult.prompt.length > 0],
+		["attachment context prompt renders", contextResult.prompt.length > 0],
+		["scan report prompt renders", reportResult.prompt.length > 0],
+	]
 }
 
 // seed the test data and run the checks, then always delete the fake owner
@@ -112,11 +170,16 @@ async function smokeTest(): Promise<number> {
 	}
 }
 
-// run the smoke test, then exit because the Neon pool would otherwise keep the process alive. a thrown error is a failure
+// run the smoke test, computing the exit code rather than exiting early so telemetry can flush first
+startTelemetry()
+let exitCode: number
 try {
-	const exitCode = await smokeTest()
-	process.exit(exitCode)
+	exitCode = await smokeTest()
 } catch (error) {
 	console.error(error)
-	process.exit(1)
+	exitCode = 1
 }
+
+// flush telemetry before exit, then exit because the Neon pool would otherwise keep the process alive
+await shutdownTelemetry()
+process.exit(exitCode)

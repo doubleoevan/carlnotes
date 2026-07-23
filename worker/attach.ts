@@ -5,6 +5,9 @@ import { extractText as extractPdfText } from "unpdf"
 import { db } from "../db"
 import { attachments, topics } from "../db/schema"
 import { cheapModel } from "./models.ts"
+// the prompt loader fetches the registry version first, falling back to the bundled markdown
+import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "./prompts/fetch.ts"
+import { writePrompt } from "./prompts/write.ts"
 import { fetchContent } from "./scrape.ts"
 import { attachmentKey, deleteAttachment, putAttachment } from "./store"
 
@@ -118,17 +121,25 @@ export async function extractText(contentType: string, bytes: Uint8Array): Promi
 	throw new Error(`unsupported attachment content type: ${contentType}`)
 }
 
-// build the context-generation prompt over the file's text, capped so a huge document can't blow the token budget
-export function buildContextPrompt(text: string): string {
-	// cap the document length to bound the token spend
-	const document = text.slice(0, MAX_EXTRACT_CHARS)
-	return `Extract concise notes capturing what the document below is about — its subject, key facts, and themes — as context for curating related media. Return only the notes.\n\nDocument:\n${document}`
+// build the context-generation prompt over attach-context.md, capped so a huge document can't blow the token budget
+export async function buildContextPrompt(text: string): Promise<BuiltPrompt> {
+	// fetch the registry version first, then cap the document length to bound the token spend
+	const { template, name, registryPrompt } = await fetchPromptTemplate("attach-context")
+	const prompt = writePrompt(template, { document: text.slice(0, MAX_EXTRACT_CHARS) })
+	return { prompt, name, registryPrompt }
 }
 
-// generate a context string from the file's text with the cheap-tier model through LiteLLM. one call, no tools
+// generate a context string from the file's text with the cheap model through LiteLLM. one call, no tools
 async function generateContext(text: string): Promise<string> {
-	// a single generateText call with no schema. text goes in and a plain-text context comes out
-	const { text: context } = await generateText({ model: cheapModel(), prompt: buildContextPrompt(text) })
+	// fetch and write the prompt
+	const contextPrompt = await buildContextPrompt(text)
+
+	// link the registry version to the trace when one served the prompt
+	const { text: context } = await generateText({
+		model: cheapModel(),
+		prompt: contextPrompt.prompt,
+		...promptTelemetry(contextPrompt),
+	})
 	return context.trim()
 }
 
