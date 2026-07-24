@@ -85,6 +85,20 @@
       "when": 1784600000000,
       "tag": "0011_drop_digest_rename_prompt",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1784814286721,
+      "tag": "0012_far_deadpool",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1784829234532,
+      "tag": "0013_fancy_natasha_romanoff",
+      "breakpoints": true
     }
   ]
 }

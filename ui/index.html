@@ -5,6 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕️</text></svg>" />
     <title>CarlNotes</title>
+    <!-- apply the saved theme before first paint, so the page never flashes the wrong theme on load -->
+    <script>
+      if (localStorage.getItem("theme") === "dark") {
+        document.documentElement.classList.add("dark")
+      }
+    </script>
     <script type="module" src="src/main.tsx"></script>
   </head>
   <body>

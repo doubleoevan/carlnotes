@@ -1,6 +1,7 @@
 import type { TopicFeedResponse } from "@shared/contracts"
 import { resourceKinds as allResourceKinds } from "@shared/enums"
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { authClient } from "@/lib/authClient"
 import {
 	fetchTopicFeed,
 	sendTopicFindingConsumed,
@@ -48,6 +49,9 @@ function useTopicFeedState() {
 	// like Gmail, shows everything by default with consumed topic finding resources muted. the toggle narrows to unread
 	const [showAll, setShowAll] = useState(true)
 	const [resourceKinds, setResourceKinds] = useState<Set<ResourceKind>>(new Set(allResourceKinds))
+	// the feed watches the session itself — no route guard unmounts it, so "yours" would otherwise go stale on sign-out
+	const { data: session } = authClient.useSession()
+	const isSignedIn = Boolean(session)
 
 	// always fetch everything. the "All" "Unread" toggle and resource kind filters are applied client-side
 	const reload = useCallback(async () => {
@@ -59,10 +63,11 @@ function useTopicFeedState() {
 		}
 	}, [])
 
-	// load the initial topic feed data once on mount
+	// load the topic feed on mount, and again whenever sign-in state flips
+	// biome-ignore lint/correctness/useExhaustiveDependencies: isSignedIn isn't read in the body, it's a deliberate re-fetch trigger
 	useEffect(() => {
 		void reload()
-	}, [reload])
+	}, [reload, isSignedIn])
 
 	// mark a topic finding consumed or unread with the isConsumed flag
 	const consume = useCallback(

@@ -2,7 +2,7 @@
 import { propagateAttributes, startActiveObservation } from "@langfuse/tracing"
 import { eq } from "drizzle-orm"
 import { db } from "../db"
-import { resources, scans, sources } from "../db/schema"
+import { resources, scans, sources, topics, users } from "../db/schema"
 import { sourceAdapters } from "./adapters"
 import type { AdapterResult, NewResource, Source } from "./adapters/adapter"
 import { reviewScan } from "./review"
@@ -50,14 +50,26 @@ export async function runTopicScan(topicId: string): Promise<Scan | undefined> {
 				const sourceOutcomes = await Promise.all(topicSources.map(ingestSource))
 				const summary = toScanSummary(sourceOutcomes)
 
-				// insert the deduped Resources, skipping urls already stored so existing resources leaving embeddings intact
+				// insert the deduped Resources, skipping urls already stored so existing Resources keep their embeddings
 				if (summary.resources.length > 0) {
 					await db.insert(resources).values(summary.resources).onConflictDoNothing({ target: resources.url })
 				}
 
+				// bill this scan's llm calls to the topic owner's litellm virtual key, not the shared master key
+				const [topicOwner] = await db
+					.select({ litellmVirtualKey: users.litellmVirtualKey })
+					.from(topics)
+					.innerJoin(users, eq(topics.ownerId, users.id))
+					.where(eq(topics.id, topicId))
+
 				// review the discovered Resources for topic findings, then end the Scan with one database write
 				// sourceOutcomes rides along so the report can describe each Source's outcome
-				const review = await reviewScan(scan, summary.resources, sourceOutcomes)
+				const review = await reviewScan(
+					scan,
+					summary.resources,
+					sourceOutcomes,
+					topicOwner?.litellmVirtualKey ?? undefined,
+				)
 				const { foundCount, cost, status, degradedSources } = summary
 				const [finishedScan] = await db
 					.update(scans)

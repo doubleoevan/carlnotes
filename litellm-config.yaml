@@ -68,8 +68,12 @@ model_list:
       output_vector_size: 768
 
 # drop provider-unsupported params instead of erroring (Fireworks embeddings reject encoding_format the AI SDK sends)
+# max_budget is the proxy-wide backstop behind the per-user virtual key budgets: a lifetime hard cap, no reset
+# duration, so raising it is a deliberate operator action alongside topping up the Fireworks prepaid balance.
+# PLACEHOLDER: this number is an operator decision, not a default to trust as-is
 litellm_settings:
   drop_params: true
+  max_budget: os.environ/LITELLM_MAX_BUDGET_USD
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

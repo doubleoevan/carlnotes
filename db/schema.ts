@@ -37,7 +37,7 @@ export const scanStatus = pgEnum("scan_status", scanStatuses)
 export const sourceVisibility = pgEnum("source_visibility", sourceVisibilities)
 export const rating = pgEnum("rating", ratings)
 
-// the users table. its columns match Better Auth's user schema.
+// the users table. its columns match Better Auth's user schema, plus one app-specific field.
 // the plural name comes from Better Auth's usePlural option.
 export const users = pgTable("users", {
 	id: primaryId(),
@@ -45,6 +45,8 @@ export const users = pgTable("users", {
 	email: text("email").notNull().unique(),
 	emailVerified: boolean("email_verified").default(false).notNull(),
 	image: text("image"),
+	// this user's litellm virtual key, provisioned with a spend budget at signup. null only before signup completes
+	litellmVirtualKey: text("litellm_virtual_key"),
 	// plain timestamps without time zone to mirror Better Auth's own schema exactly
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 	updatedAt: timestamp("updated_at")
@@ -52,6 +54,81 @@ export const users = pgTable("users", {
 		.$onUpdate(() => new Date())
 		.notNull(),
 })
+
+// the sessions table. Better Auth's record of one signed-in session for a user
+export const sessions = pgTable(
+	"sessions",
+	{
+		id: primaryId(),
+		// the owning user
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// the session token and its expiry
+		token: text("token").notNull().unique(),
+		expiresAt: timestamp("expires_at").notNull(),
+		// client metadata captured at session creation
+		ipAddress: text("ip_address"),
+		userAgent: text("user_agent"),
+		// plain timestamps without time zone to mirror Better Auth's own schema exactly
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		updatedAt: timestamp("updated_at")
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(table) => [index("sessions_user_id_idx").on(table.userId)],
+)
+
+// the accounts table. a sign-in identity: a password credential or an oauth grant used to authenticate.
+// never a connected external account used for sourcing or delivery. that stays Integration
+export const accounts = pgTable(
+	"accounts",
+	{
+		id: primaryId(),
+		// the owning user
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// which provider this identity lives at, and the user's account id there
+		accountId: text("account_id").notNull(),
+		providerId: text("provider_id").notNull(),
+		// oauth grant. null for the password credential provider
+		accessToken: text("access_token"),
+		refreshToken: text("refresh_token"),
+		idToken: text("id_token"),
+		accessTokenExpiresAt: timestamp("access_token_expires_at"),
+		refreshTokenExpiresAt: timestamp("refresh_token_expires_at"),
+		scope: text("scope"),
+		// the hashed password. only set for the password credential provider
+		password: text("password"),
+		// plain timestamps without time zone to mirror Better Auth's own schema exactly
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		updatedAt: timestamp("updated_at")
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(table) => [index("accounts_user_id_idx").on(table.userId)],
+)
+
+// the verifications table. Better Auth's one-time tokens for email verification and similar flows
+export const verifications = pgTable(
+	"verifications",
+	{
+		id: primaryId(),
+		identifier: text("identifier").notNull(),
+		value: text("value").notNull(),
+		expiresAt: timestamp("expires_at").notNull(),
+		// plain timestamps without time zone to mirror Better Auth's own schema exactly
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		updatedAt: timestamp("updated_at")
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(table) => [index("verifications_identifier_idx").on(table.identifier)],
+)
 
 // an integration is a user's connected external account. sources pull with it and deliveries send with it
 export const integrations = pgTable("integrations", {

@@ -17,16 +17,20 @@ import {
 const MAX_POPULAR_TOPICS = 5
 
 /**
- * build a user's topic feed sections: yours, featured, and popular
+ * build a topic feed's sections: yours, featured, and popular. the app isn't gated by auth, so userId may be
+ * null for a signed-out visitor — they still get featured and popular, just no "yours" section
  */
-export async function buildTopicFeeds(userId: string, includeConsumedResources: boolean): Promise<TopicFeedResponse> {
-	// split topics into the user's own and other users' public topics
+export async function buildTopicFeeds(
+	userId: string | null,
+	includeConsumedResources: boolean,
+): Promise<TopicFeedResponse> {
+	// a signed-out visitor owns nothing, and every public topic counts as "other" since there's no "mine" to exclude
+	const othersFilter = userId
+		? and(ne(topics.ownerId, userId), eq(topics.visibility, "public"))
+		: eq(topics.visibility, "public")
 	const [ownersTopics, othersTopics] = await Promise.all([
-		db.select().from(topics).where(eq(topics.ownerId, userId)),
-		db
-			.select()
-			.from(topics)
-			.where(and(ne(topics.ownerId, userId), eq(topics.visibility, "public"))),
+		userId ? db.select().from(topics).where(eq(topics.ownerId, userId)) : Promise.resolve([]),
+		db.select().from(topics).where(othersFilter),
 	])
 
 	// fetch every topic's feed data in one batch keyed by topic id, then build each feed in memory
@@ -64,19 +68,20 @@ export async function buildTopicFeeds(userId: string, includeConsumedResources: 
 		.sort((firstTopicFeed, secondTopicFeed) => secondTopicFeed.subscriberCount - firstTopicFeed.subscriberCount)
 		.slice(0, MAX_POPULAR_TOPICS)
 
-	// return the topic sections
-	return {
-		sections: [
-			{ key: "yours", topics: ownerTopicFeeds },
-			{ key: "featured", topics: featuredTopicFeeds },
-			{ key: "popular", topics: popularTopicFeeds },
-		],
-	}
+	// "Your Topics" only makes sense for a signed-in visitor. featured and popular are public regardless of session
+	const sections: TopicFeedResponse["sections"] = userId ? [{ key: "yours", topics: ownerTopicFeeds }] : []
+	sections.push({ key: "featured", topics: featuredTopicFeeds }, { key: "popular", topics: popularTopicFeeds })
+	return { sections }
 }
 
 // fetch every dataset the topic feeds need across all topic ids at once, each grouped by topic id.
 // an empty id list makes each inArray where clause match nothing, so the maps come back empty
-async function loadTopicFeedData(topicIds: string[], userId: string) {
+async function loadTopicFeedData(topicIds: string[], userId: string | null) {
+	// a signed-out visitor has no consumption history. sql`false` forces the left join to never match,
+	// rather than comparing consumptions.user_id against null, which drizzle's column typing rejects
+	const consumptionJoinCondition = userId
+		? and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
+		: sql`false`
 	// run the five topic-batched queries together
 	const [findingRows, sourceRows, attachmentRows, scanRows, subscriberRows] = await Promise.all([
 		// join each topic finding with its resource. a left join adds the user's consumed date when one exists
@@ -102,7 +107,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string) {
 			// join the resource and the user's consumed row. sort by relevance score descending
 			.from(findings)
 			.innerJoin(resources, eq(findings.resourceId, resources.id))
-			.leftJoin(consumptions, and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId)))
+			.leftJoin(consumptions, consumptionJoinCondition)
 			.where(inArray(findings.topicId, topicIds))
 			.orderBy(desc(findings.relevanceScore)),
 
@@ -151,7 +156,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string) {
 // build a topic's feed from the batched data. that includes its topic findings, sources, attachments, last scan, and subscriber count
 async function buildTopicFeed(
 	topic: typeof topics.$inferSelect,
-	userId: string,
+	userId: string | null,
 	includeConsumedResources: boolean,
 	feedData: Awaited<ReturnType<typeof loadTopicFeedData>>,
 ): Promise<TopicFeed> {
@@ -268,13 +273,19 @@ async function canRateFinding(userId: string, findingId: string): Promise<boolea
 
 // the same rule against a topic row the caller already loaded, so the feed can flag each topic once
 export async function canRateTopic(
-	userId: string,
+	userId: string | null,
 	topic: Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility">,
 ): Promise<boolean> {
+	// a signed-out visitor has no account to rate as
+	if (!userId) {
+		return false
+	}
+
 	// the owner may always rate
 	if (topic.ownerId === userId) {
 		return true
 	}
+
 	// a non-owner may rate only as a subscriber, and a private topic never has one
 	switch (topic.visibility) {
 		case "public":

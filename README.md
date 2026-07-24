@@ -43,8 +43,10 @@ Database — generate a migration from the Drizzle schema, then apply it:
 ```bash
 bun run db:generate   # write a migration from db/schema.ts (offline, no doppler)
 bun run db:migrate    # apply pending migrations
-bun run db:seed       # load idempotent dev-only stub data (refuses to run outside the dev config)
+bun run db:seed       # creates the dev demo user via a real signup, then loads idempotent stub data (refuses to run outside the dev config)
 ```
+
+`db:seed` signs up a real dev account (`DEV_USER_EMAIL` / `DEV_USER_PASSWORD` in `.env.example`) through Better Auth, so log in with those credentials locally to see the seeded demo topics. Auth needs a few more Doppler variables locally: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`, and `RESEND_API_KEY`/`RESEND_FROM_EMAIL` — see `.env.example` for what each is for. Signup itself is open: no invite code, Google/GitHub are one-click, and email/password sits behind a "Continue with email" toggle.
 
 Checks — run the full gate with one command (enforced on push by `scripts/preflight.sh`):
 

@@ -25,6 +25,9 @@ description: Canonical CarlNotes domain vocabulary. Use whenever naming types, t
 - Authority is only ever `topic.owner_id`. Access is only ever "a Subscription path exists." No role enums.
 - A Resource is raw and global; a Finding is scored and topic-scoped. Don't blur them.
 
+## Auth infrastructure is not domain vocabulary
+Better Auth manages `users`, `sessions`, `accounts`, `verifications` — identity/access plumbing, the same tier as `users` itself, never content-domain nouns. `accounts` is sign-in identity only (a password credential or an OAuth grant used to authenticate) and is never referenced by a Source or a Subscription. **Integration** stays the sole representation of a connected external account used for sourcing or delivery (e.g. Composio-managed Gmail) — never conflate the two, and never resolve Source/delivery credentials through `accounts`.
+
 ## Rejected terms — never introduce
 - "Channel", "Follow" (UI copy only, never schema)
 - "Item" (use Resource or Finding)

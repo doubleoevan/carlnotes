@@ -105,11 +105,13 @@ type ReviewSummary = {
 	scanSummary: string
 }
 
-// reviews a Scan's discovered Resources, writes Findings and returns the counts, cost, outcome, and summary
+// reviews a Scan's discovered Resources, writes Findings and returns the counts, cost, outcome, and summary.
+// litellmApiKey bills its LLM calls to the topic owner's virtual key, falling back to the master key when absent
 export async function reviewScan(
 	scan: Scan,
 	discoveredResources: NewResource[],
 	scannedSources: ScannedSource[],
+	litellmApiKey?: string,
 ): Promise<ReviewSummary> {
 	// load the unscored list of discovered Resources for this Topic
 	const unscoredResources = await loadUnscoredResources(scan.topicId, discoveredResources)
@@ -123,16 +125,16 @@ export async function reviewScan(
 	const reviewOutcome = emptyReviewOutcome()
 
 	// embed the topic's effective context once for the relevance gate, keeping its name and text for the scorer and the report
-	const topicContext = await loadTopicContext(scan.topicId, budget)
+	const topicContext = await loadTopicContext(scan.topicId, budget, litellmApiKey)
 
 	// review each Resource. reviewResource never throws, so one bad Resource only degrades itself
 	for (const resource of unscoredResources) {
-		const resourceOutcome = await reviewResource(resource, scan, topicContext, seenHashes, budget)
+		const resourceOutcome = await reviewResource(resource, scan, topicContext, seenHashes, budget, litellmApiKey)
 		trackOutcomes(reviewOutcome, resourceOutcome)
 	}
 
 	// summarize the scan over what actually happened
-	const scanSummary = await summarizeScan(topicContext, reviewOutcome, scannedSources, budget)
+	const scanSummary = await summarizeScan(topicContext, reviewOutcome, scannedSources, budget, litellmApiKey)
 
 	// fold the totals into the summary that the Scan records
 	return {
@@ -164,13 +166,13 @@ async function loadUnscoredResources(topicId: string, discoveredResources: NewRe
 
 // embed the topic's context for the relevance gate
 // that is the topic prompt plus its attachments' contexts, with the topic name as a fallback
-async function loadTopicContext(topicId: string, budget: Budget): Promise<TopicContext> {
+async function loadTopicContext(topicId: string, budget: Budget, litellmApiKey?: string): Promise<TopicContext> {
 	// the context text, falling back to the topic name so that the relevance scoring always has a seed
 	const { name, context } = await buildTopicScanContext(topicId)
 	const text = (context.trim() || name).slice(0, MAX_EMBED_CHARS)
 
 	// embed the context once and tally the embedding cost
-	const { embedding, usage } = await embed({ model: embedModel(), value: text })
+	const { embedding, usage } = await embed({ model: embedModel(litellmApiKey), value: text })
 	charge(budget, "embedding", tokenCost(usage.tokens, EMBED_COST_PER_MILLION_TOKENS))
 	return { name, text, embedding }
 }
@@ -182,10 +184,11 @@ async function reviewResource(
 	topicContext: TopicContext,
 	seenHashes: Set<string>,
 	budget: Budget,
+	litellmApiKey?: string,
 ): Promise<ResourceOutcome> {
 	// use the models to score the resource in stages
 	try {
-		return await runResourcePipeline(resource, scan, topicContext, seenHashes, budget)
+		return await runResourcePipeline(resource, scan, topicContext, seenHashes, budget, litellmApiKey)
 	} catch (error) {
 		console.error(`review failed for resource ${resource.id}`, error)
 		return { status: "failed" }
@@ -206,6 +209,7 @@ async function runResourcePipeline(
 	topicContext: TopicContext,
 	seenContentHashes: Set<string>,
 	budget: Budget,
+	litellmApiKey?: string,
 ): Promise<ResourceOutcome> {
 	// stage 1 — content-hash dedupe over the native text, only when the Resource has content. empty rows must not collapse to one hash
 	if (hasNativeText(resource)) {
@@ -221,7 +225,7 @@ async function runResourcePipeline(
 	}
 
 	// stage 2 — embed the native text, reusing a Resource's existing global embedding
-	const embedding = resource.embedding ?? (await embedResource(resource, budget))
+	const embedding = resource.embedding ?? (await embedResource(resource, budget, litellmApiKey))
 
 	// stage 3 — drop a near-duplicate of an already-stored Resource
 	if (await hasNearDuplicate(embedding, resource.id)) {
@@ -242,7 +246,7 @@ async function runResourcePipeline(
 	// score it against the topic context with tiered models,
 	// then write the topic finding
 	const resourceContent = await fetchResourceContent(resource, budget)
-	const scoredResource = await scoreResource(resourceContent, topicContext.text, budget)
+	const scoredResource = await scoreResource(resourceContent, topicContext.text, budget, litellmApiKey)
 	await upsertFinding(scan, resource, scoredResource.score, scoredResource.relevanceExplanation)
 
 	// the kept outcome carries the feed-facing details that the report cites
@@ -268,9 +272,9 @@ async function hasStoredHash(hash: string, excludeId: string): Promise<boolean> 
 }
 
 // embed a Resource's native text through with a model, storing the vector and the model that produced it
-async function embedResource(resource: Resource, budget: Budget): Promise<number[]> {
+async function embedResource(resource: Resource, budget: Budget, litellmApiKey?: string): Promise<number[]> {
 	// embed the title and snippet, falling back to the url when both are empty, then track the cost
-	const { embedding, usage } = await embed({ model: embedModel(), value: embedText(resource) })
+	const { embedding, usage } = await embed({ model: embedModel(litellmApiKey), value: embedText(resource) })
 	charge(budget, "embedding", tokenCost(usage.tokens, EMBED_COST_PER_MILLION_TOKENS))
 	// stamp the model so a later embedding-model change is a backfill, not a schema change
 	await db.update(resources).set({ embedding, embeddingModel: EMBED_MODEL_NAME }).where(eq(resources.id, resource.id))
@@ -315,10 +319,11 @@ async function scoreResource(
 	resourceContent: string,
 	topicContext: string,
 	budget: Budget,
+	litellmApiKey?: string,
 ): Promise<{ score: number; relevanceExplanation: string }> {
 	// the cheap model scores everything fetched first
 	const cheapTier: ScoreTier = {
-		model: cheapModel(),
+		model: cheapModel(litellmApiKey),
 		stage: "scoringCheap",
 		ratePerMillion: CHEAP_COST_PER_MILLION_TOKENS,
 		shouldWriteRelevanceExplanation: false,
@@ -333,7 +338,7 @@ async function scoreResource(
 
 	// the premium model writes the final score and adds the relevance explanation
 	const premiumTier: ScoreTier = {
-		model: scoreModel(),
+		model: scoreModel(litellmApiKey),
 		stage: "scoringPremium",
 		ratePerMillion: PREMIUM_COST_PER_MILLION_TOKENS,
 		// the reader-facing note comes only from this tier
@@ -397,6 +402,7 @@ async function summarizeScan(
 	reviewOutcome: ReviewOutcome,
 	scannedSources: ScannedSource[],
 	budget: Budget,
+	litellmApiKey?: string,
 ): Promise<string> {
 	// date the report for its headline
 	const date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
@@ -414,7 +420,7 @@ async function summarizeScan(
 
 	// the output is the report text and model usage tokens, linking the registry version to the trace
 	const { text, usage } = await generateText({
-		model: cheapModel(),
+		model: cheapModel(litellmApiKey),
 		prompt: reportPrompt.prompt,
 		...promptTelemetry(reportPrompt),
 	})

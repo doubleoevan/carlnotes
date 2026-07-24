@@ -22,8 +22,8 @@ export function CoffeeMug({ className }: { className?: string }) {
 					/>
 				))}
 			</g>
-			{/* the cup body with a flat rim and a rounded bottom. the same path is drawn twice, once as a faint fill and once as the outline */}
-			<path d="M8 13 L8 17 A7 7 0 0 0 22 17 L22 13 Z" fill="currentColor" className="opacity-20" />
+			{/* the cup body with a flat rim and a rounded bottom. the same path is drawn twice, once as a translucent fill and once as the outline */}
+			<path d="M8 13 L8 17 A7 7 0 0 0 22 17 L22 13 Z" fill="currentColor" className="opacity-40" />
 			<path d="M8 13 L8 17 A7 7 0 0 0 22 17 L22 13 Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
 			{/* mug handle */}
 			<path d="M22 15 h2.5 a3 3 0 0 1 0 6 H22" stroke="currentColor" strokeWidth="1.8" />

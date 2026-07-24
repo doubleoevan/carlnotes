@@ -1,5 +1,4 @@
 // dev-only seed with idempotent stub data so the homepage renders before real scans run. it only runs against the dev Doppler environment
-import { DEV_USER_ID } from "./devUser"
 import { db } from "./index"
 import { findings, resources, scans, sources, subscriptions, topics, users } from "./schema"
 
@@ -25,12 +24,13 @@ type SeedTopic = {
 }
 
 // the seeded topics. the two dev-owned ones fill Your topics and the public community ones fill Featured and Popular
-// biome-ignore format: keep each finding on one line so the comment-group hook counts one row per resource
-const SEED_TOPICS: SeedTopic[] = [
+// biome-ignore format: keep each finding on one line
+function buildSeedTopics(devUserId: string): SeedTopic[] {
+	return [
 	// Agent infrastructure weekly, dev-owned. it has seven findings to exercise the "+N more" expander
 	{
 		id: "top_agent_infra",
-		owner: DEV_USER_ID,
+		owner: devUserId,
 		name: "Agent infrastructure weekly",
 		prompt: "New tools, patterns, and failure modes in shipping production LLM agents. Bias toward receipts over hype.",
 		tags: ["AI & Engineering", "Infrastructure", "Research"],
@@ -56,7 +56,7 @@ const SEED_TOPICS: SeedTopic[] = [
 	// Literary agents open to queries for adult science fiction, dev-owned
 	{
 		id: "top_litagents",
-		owner: DEV_USER_ID,
+		owner: devUserId,
 		name: "Literary agents open to queries (adult SF)",
 		prompt: "Adult science-fiction literary agents opening to queries. Match against a voice-forward space-opera synopsis.",
 		tags: ["Books & Writing"],
@@ -150,7 +150,9 @@ const SEED_TOPICS: SeedTopic[] = [
 			{ resourceKind: "read", title: "Most VO2max supplements do nothing", url: "https://example.com/longevity/vo2-supplements", why: "A meta-analysis that will save you money.", score: 0.74 },
 		],
 	},
-]
+	// SUBSCRIBER_COUNTS and FEATURE_ORDER below key off these topic ids
+	]
+}
 
 // no real subscribers exist before auth, so seed a pool of stub members whose Subscriptions give topics real counts
 const MEMBER_COUNT = 48
@@ -170,13 +172,9 @@ const FEATURE_ORDER: Record<string, number> = {
 	top_mcp_watch: 3,
 }
 
-// run only when invoked directly with bun db/seed.ts. the seed itself refuses to run outside the dev Doppler environment
-if (import.meta.main) {
-	await seed()
-}
-
-// seed the dev branch. it inserts the users, each topic with a succeeded scan, its sources, resources, and findings, then the stub subscriptions
-export async function seed(): Promise<void> {
+// seeds the dev branch with demo topics, stub members, and subscriptions under the given dev user.
+// the dev user already exists — api/seed.ts creates it through a real signup before calling this
+export async function seed(devUserId: string): Promise<void> {
 	// refuse outside the dev Doppler environment so the seed can never touch staging or production
 	if (process.env.DOPPLER_ENVIRONMENT !== "dev") {
 		const seen = process.env.DOPPLER_ENVIRONMENT ?? "unset"
@@ -184,27 +182,24 @@ export async function seed(): Promise<void> {
 			`db:seed refuses to run: DOPPLER_ENVIRONMENT is "${seen}", expected "dev" (run via \`doppler run -- bun run db:seed\`)`,
 		)
 	}
+	const seedTopics = buildSeedTopics(devUserId)
 	// a pool of stub members that gives topics real subscriber counts
 	const memberUsers = Array.from({ length: MEMBER_COUNT }, (_, i) => ({
 		id: `usr_member_${i}`,
 		name: `Member ${i + 1}`,
 		email: `member${i}@carlnotes.dev`,
 	}))
-	// insert the dev user, the community owner, and every stub member. the members make subscriber counts real before auth lands
+	// insert the community owner and every stub member. the dev user already exists, created via a real signup
 	await db
 		.insert(users)
-		.values([
-			{ id: DEV_USER_ID, name: "Evan", email: "evan@carlnotes.dev" },
-			{ id: COMMUNITY_USER_ID, name: "CarlNotes Community", email: "community@carlnotes.dev" },
-			...memberUsers,
-		])
+		.values([{ id: COMMUNITY_USER_ID, name: "CarlNotes Community", email: "community@carlnotes.dev" }, ...memberUsers])
 		.onConflictDoNothing()
 	// each topic and everything hanging off it
-	for (const topic of SEED_TOPICS) {
+	for (const topic of seedTopics) {
 		await seedTopic(topic)
 	}
 	// subscribe the first N members to each topic so every topic has a real, countable subscriber count
-	const subs = SEED_TOPICS.flatMap((topic) =>
+	const subscriptionRows = seedTopics.flatMap((topic) =>
 		Array.from({ length: SUBSCRIBER_COUNTS[topic.id] ?? 0 }, (_, i) => ({
 			id: `sub_${topic.id}_${i}`,
 			topicId: topic.id,
@@ -212,10 +207,10 @@ export async function seed(): Promise<void> {
 		})),
 	)
 	// idempotent by stable id. guard the empty case because .values with an empty array throws
-	if (subs.length > 0) {
-		await db.insert(subscriptions).values(subs).onConflictDoNothing()
+	if (subscriptionRows.length > 0) {
+		await db.insert(subscriptions).values(subscriptionRows).onConflictDoNothing()
 	}
-	console.log(`seeded ${SEED_TOPICS.length} topics and ${subs.length} subscriptions for ${DEV_USER_ID}`)
+	console.log(`seeded ${seedTopics.length} topics and ${subscriptionRows.length} subscriptions for ${devUserId}`)
 }
 
 // insert one topic and its scan, sources, resources, and findings. all of it is idempotent by stable id or unique url

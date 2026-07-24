@@ -13,14 +13,24 @@ fi
 [[ "$file" == *.ts ]] || exit 0
 [[ -f "$file" ]] || exit 0
 
-# measure the longest run of code lines with no comment, blank line, or import between them
-# a multi-line import is one statement, so its wrapped specifier lines are not counted
+# measure the longest run of statement lines with no comment between them. a statement line is one that
+# stands on its own, not a continuation of a multi-line thing:
+# - a line ending in a comma is a property, element, or argument inside a multi-line literal or call, not a statement
+# - a wrapped import's specifier lines are one statement, so they are not counted
+# - a block comment or jsdoc is documentation, so none of its lines are counted either
 run=0
 max_run=0
 in_import=0
+in_block_comment=0
 while IFS= read -r line; do
   trimmed="${line#"${line%%[![:space:]]*}"}"
-  # inside a wrapped import: skip its specifier lines; it ends at the closing `} from ...`
+  # inside a block comment or jsdoc. skip its body lines until the closing */
+  if (( in_block_comment )); then
+    run=0
+    case "$trimmed" in *"*/"*) in_block_comment=0 ;; esac
+    continue
+  fi
+  # inside a wrapped import. skip its specifier lines until the closing `} from ...`
   if (( in_import )); then
     run=0
     case "$trimmed" in *"} from "*) in_import=0 ;; esac
@@ -28,6 +38,13 @@ while IFS= read -r line; do
   fi
   case "$trimmed" in
     ""|//*|"{/*"*) run=0 ;;
+    # a trailing comma means this line continues a multi-line literal or call, so it is not a statement
+    *,) run=0 ;;
+    /\**)
+      # a block comment or jsdoc opener. a one-line /* ... */ closes here, otherwise the block continues
+      run=0
+      case "$trimmed" in *"*/"*) ;; *) in_block_comment=1 ;; esac
+      ;;
     import\ *)
       run=0
       # an opening brace with no `from` yet starts a multi-line import

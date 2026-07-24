@@ -10,6 +10,10 @@ export type RatingPayload = z.infer<typeof ratingPayload>
 export const consumedPayload = z.object({ isConsumed: z.boolean() })
 export type ConsumedPayload = z.infer<typeof consumedPayload>
 
+// the signup-gate body. oauth never calls this endpoint at all — only the password path needs turnstile
+export const signupGatePayload = z.object({ turnstileToken: z.string() })
+export type SignupGatePayload = z.infer<typeof signupGatePayload>
+
 // a topic finding. the judgment about one Resource under a Topic, plus the user's isConsumed state
 export const topicFinding = z.object({
 	findingId: z.string(),

@@ -1,7 +1,14 @@
-// the single place that resolves the current user until Better Auth lands. every per-user query goes through here
-import { DEV_USER_ID } from "../db/devUser"
+// the single place that resolves the current user. every per-user query goes through here
+import type { Context } from "hono"
+import type { SessionUser } from "./auth"
 
-// returns a fixed dev user for now. swapping the body for the Better Auth session lookup leaves callers unchanged
-export function currentUser(): string {
-	return DEV_USER_ID
+// the hono environment every route shares. Variables holds the session user the auth middleware set, or null
+export type AppEnv = { Variables: { user: SessionUser | null } }
+
+// a request context under that environment
+export type AppContext = Context<AppEnv>
+
+// resolves the signed-in user's id from the session set on the request context. null when unauthenticated
+export function currentUser(context: AppContext): string | null {
+	return context.get("user")?.id ?? null
 }
