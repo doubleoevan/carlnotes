@@ -1,13 +1,13 @@
 // review turns a Scan's discovered Resources into topic findings.
 // free dedupe and relevance stages run first, then paid fetch and scoring stages run under a per-Scan spend cap
-import { cosineSimilarity, embed, generateText, type LanguageModel, Output } from "ai"
+import { cosineSimilarity, generateText, type LanguageModel, Output } from "ai"
 import { and, cosineDistance, eq, inArray, isNotNull, ne, notInArray } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "../db"
-import { findings, resources, type scans } from "../db/schema"
+import { EMBED_DIMENSIONS, findings, resources, type scans } from "../db/schema"
 import type { NewResource } from "./adapters/adapter"
 import { buildTopicScanContext } from "./attach"
-import { cheapModel, embedModel, scoreModel } from "./models.ts"
+import { cheapModel, embedVector, scoreModel } from "./models.ts"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "./prompts/fetch.ts"
 import { filterPremiumPrompt, writePrompt } from "./prompts/write.ts"
@@ -30,11 +30,16 @@ const MAX_SCORE_CHARS = 8000
 // the most kept findings the scan report prompt lists in full. the overflow is named in the block, never silently cut
 const MAX_TOPIC_SCAN_REPORT_FINDINGS = 20
 
-// the LiteLLM model name stamped onto a Resource's embedding_model column so that a later model change is just a backfill
-const EMBED_MODEL_NAME = "embed-model"
+// the curation embedding's vector space, stamped onto embedding_model so a row names its model and dimension, not the
+// routing alias, making a later change a detectable backfill. EMBED_DIMENSIONS keeps the stamp and the schema in step
+const EMBED_MODEL_NAME = `qwen3-embedding-8b/${EMBED_DIMENSIONS}`
+
+// qwen3 is instruction-aware, so the query side is wrapped with this task instruction while documents stay plain.
+// omitting the query instruction costs a few percent of retrieval quality
+const EMBED_QUERY_INSTRUCTION = "Given a topic's interest description, retrieve web resources relevant to it"
 
 // best-effort dollar rates for the soft cap and the per-stage breakdown. LiteLLM meters the authoritative spend
-const EMBED_COST_PER_MILLION_TOKENS = 0.008
+const EMBED_COST_PER_MILLION_TOKENS = 0.1
 const CHEAP_COST_PER_MILLION_TOKENS = 0.2
 const PREMIUM_COST_PER_MILLION_TOKENS = 0.6
 const FIRECRAWL_COST_PER_FETCH = 0.001
@@ -171,9 +176,9 @@ async function loadTopicContext(topicId: string, budget: Budget, litellmApiKey?:
 	const { name, context } = await buildTopicScanContext(topicId)
 	const text = (context.trim() || name).slice(0, MAX_EMBED_CHARS)
 
-	// embed the context once and tally the embedding cost
-	const { embedding, usage } = await embed({ model: embedModel(litellmApiKey), value: text })
-	charge(budget, "embedding", tokenCost(usage.tokens, EMBED_COST_PER_MILLION_TOKENS))
+	// embed the context as the query side once and tally the estimated embedding cost
+	const embedding = await embedQuery(text, litellmApiKey)
+	charge(budget, "embedding", tokenCost(estimateEmbedTokens(text), EMBED_COST_PER_MILLION_TOKENS))
 	return { name, text, embedding }
 }
 
@@ -195,7 +200,7 @@ async function reviewResource(
 	}
 }
 
-// the six stages in order:
+// the seven stages in order:
 // 1. dedupe content hash
 // 2. embed
 // 3. dedupe embedding
@@ -271,12 +276,13 @@ async function hasStoredHash(hash: string, excludeId: string): Promise<boolean> 
 	return duplicate !== undefined
 }
 
-// embed a Resource's native text through with a model, storing the vector and the model that produced it
+// embed a Resource's native text with the embedding model, storing the vector and the model name that produced it
 async function embedResource(resource: Resource, budget: Budget, litellmApiKey?: string): Promise<number[]> {
-	// embed the title and snippet, falling back to the url when both are empty, then track the cost
-	const { embedding, usage } = await embed({ model: embedModel(litellmApiKey), value: embedText(resource) })
-	charge(budget, "embedding", tokenCost(usage.tokens, EMBED_COST_PER_MILLION_TOKENS))
-	// stamp the model so a later embedding-model change is a backfill, not a schema change
+	// embed the title and snippet as a document, falling back to the url when both are empty, then track the estimated cost
+	const documentText = embedText(resource)
+	const embedding = await embedVector(documentText, litellmApiKey)
+	charge(budget, "embedding", tokenCost(estimateEmbedTokens(documentText), EMBED_COST_PER_MILLION_TOKENS))
+	// stamp the vector space so a later model or dimension change is a detectable backfill
 	await db.update(resources).set({ embedding, embeddingModel: EMBED_MODEL_NAME }).where(eq(resources.id, resource.id))
 	return embedding
 }
@@ -435,11 +441,21 @@ function hasNativeText(resource: Resource): boolean {
 	return Boolean(resource.title?.trim() || resource.snippet?.trim())
 }
 
-// the native text review embeds the capped title and snippet and falls back to the url when both are empty
-function embedText(resource: Resource): string {
+// the document text to embed: the capped title and snippet, falling back to the url when both are empty
+function embedText(resource: Pick<Resource, "title" | "snippet" | "url">): string {
 	// join title and snippet, then cap the text to bound token limits
 	const text = `${resource.title ?? ""}\n${resource.snippet ?? ""}`.trim()
 	return (text || resource.url).slice(0, MAX_EMBED_CHARS)
+}
+
+// embed a query — the topic context — wrapped in qwen3's Instruct and Query template, through the truncating helper
+async function embedQuery(text: string, litellmApiKey?: string): Promise<number[]> {
+	return embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${text}`, litellmApiKey)
+}
+
+// a rough token estimate for the embedding cost, since the truncating helper returns only the vector. about four chars per token
+function estimateEmbedTokens(text: string): number {
+	return Math.ceil(text.length / 4)
 }
 
 // stable sha256 over the normalized native text so content-level duplicates hash alike across sources

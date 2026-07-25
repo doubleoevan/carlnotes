@@ -2,14 +2,19 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>☕️</text></svg>" />
     <title>CarlNotes</title>
-    <!-- apply the saved theme before first paint, so the page never flashes the wrong theme on load -->
     <script>
-      if (localStorage.getItem("theme") === "dark") {
-        document.documentElement.classList.add("dark")
-      }
+      // resolve the theme before first-paint so the page doesn't flash the wrong theme.
+      // an explicit choice saved in localStorage wins, otherwise falls back to the OS setting
+      (() => {
+        try {
+          const saved = localStorage.getItem("theme")
+          const isDark = saved ? saved === "dark" : matchMedia("(prefers-color-scheme: dark)").matches
+          document.documentElement.classList.toggle("dark", isDark)
+        } catch {}
+      })()
     </script>
     <script type="module" src="src/main.tsx"></script>
   </head>

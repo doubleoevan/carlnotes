@@ -9,7 +9,10 @@ import { cheapModel } from "./models.ts"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "./prompts/fetch.ts"
 import { writePrompt } from "./prompts/write.ts"
 import { fetchContent } from "./scrape.ts"
-import { attachmentKey, deleteAttachment, putAttachment } from "./store"
+import { deleteAttachment, putAttachment, toAttachmentKey } from "./store"
+
+// a rejection safe to show the user verbatim: their file or url, not an infra failure like a misconfigured llm proxy
+export class AttachmentValidationError extends Error {}
 
 // a persisted attachment row, and the upload ingestAttachment input
 type Attachment = typeof attachments.$inferSelect
@@ -22,7 +25,7 @@ type AttachmentUpload = {
 }
 
 // reject uploads larger than this before any storage or model work. this bounds storage and inference cost at the trust boundary
-const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
+export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 // cap the extracted text fed to the model
 const MAX_EXTRACT_CHARS = 8000
 
@@ -31,7 +34,7 @@ export async function ingestAttachment(upload: AttachmentUpload): Promise<Attach
 	const { topicId, filename, contentType, bytes, sourceUrl = null } = upload
 	// validate the size before touching storage or the model
 	if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
-		throw new Error(`attachment exceeds ${MAX_ATTACHMENT_BYTES} bytes`)
+		throw new AttachmentValidationError(`attachment exceeds ${MAX_ATTACHMENT_BYTES} bytes`)
 	}
 
 	// reject a nonexistent topic before spending storage or inference
@@ -43,7 +46,7 @@ export async function ingestAttachment(upload: AttachmentUpload): Promise<Attach
 	// store the raw bytes under a key namespaced by topic and attachment
 	const id = crypto.randomUUID()
 	const byteSize = bytes.byteLength
-	const objectKey = attachmentKey(topicId, id, filename)
+	const objectKey = toAttachmentKey(topicId, id, filename)
 	await putAttachment(objectKey, bytes, contentType)
 
 	// from here the object exists, so any failure must delete it to avoid an orphan
@@ -70,12 +73,12 @@ export async function ingestUrlAttachment(topicId: string, url: string, fetcher 
 	try {
 		pageUrl = new URL(url)
 	} catch {
-		throw new Error(`invalid attachment URL: ${url}`)
+		throw new AttachmentValidationError(`invalid attachment URL: ${url}`)
 	}
 
 	// only http and https are fetchable. reject file, data, and any other scheme
 	if (pageUrl.protocol !== "http:" && pageUrl.protocol !== "https:") {
-		throw new Error(`attachment URL must be http(s): ${url}`)
+		throw new AttachmentValidationError(`attachment URL must be http(s): ${url}`)
 	}
 
 	// reject a nonexistent topic before the paid fetch
@@ -84,10 +87,10 @@ export async function ingestUrlAttachment(topicId: string, url: string, fetcher 
 	// fetch the page to Markdown. empty content means nothing usable, so reject instead of storing a contextless attachment
 	const markdown = await fetcher(url)
 	if (!markdown.trim()) {
-		throw new Error(`attachment URL fetched no content: ${url}`)
+		throw new AttachmentValidationError(`attachment URL fetched no content: ${url}`)
 	}
 
-	// build a readable filename from the page host. attachmentKey sanitizes it again before it lands in the object key
+	// build a readable filename from the page host. toAttachmentKey sanitizes it again before it lands in the object key
 	const filename = `${pageUrl.hostname.replace(/[^a-z0-9.]+/gi, "-")}.md`
 
 	// wrap the Markdown as a text/markdown upload and run the shared file-ingestion path, recording the origin URL
@@ -118,7 +121,7 @@ export async function extractText(contentType: string, bytes: Uint8Array): Promi
 	}
 
 	// any other type has no extractor. reject so the caller stores nothing
-	throw new Error(`unsupported attachment content type: ${contentType}`)
+	throw new AttachmentValidationError(`unsupported attachment content type: ${contentType}`)
 }
 
 // build the context-generation prompt over attach-context.md, capped so a huge document can't blow the token budget

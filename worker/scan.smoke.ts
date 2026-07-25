@@ -1,6 +1,6 @@
 // a live smoke test the owner runs by hand for a full topic Scan, ingestion then review. it seeds a topic and an RSS source, runs runTopicScan, and checks the outputs
 // run it with: bun run smoke:scan. it needs the LiteLLM proxy reachable at LITELLM_BASE_URL, the latest migration applied, and Doppler secrets injected
-import { eq, isNotNull } from "drizzle-orm"
+import { and, eq, isNotNull } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, sources, topics, users } from "../db/schema"
 // the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
@@ -53,12 +53,14 @@ async function check(topicId: string): Promise<boolean> {
 		throw new Error("runTopicScan returned no scan")
 	}
 
-	// read this topic's findings and a sample embedded resource
+	// read this topic's findings and one embedded resource from this scan, joined through the findings
+	// so the length assertion can't pass on an unrelated topic's vector left in the shared resources table
 	const topicFindings = await db.select().from(findings).where(eq(findings.topicId, topicId))
 	const [embedded] = await db
 		.select({ embedding: resources.embedding, model: resources.embeddingModel })
-		.from(resources)
-		.where(isNotNull(resources.embedding))
+		.from(findings)
+		.innerJoin(resources, eq(findings.resourceId, resources.id))
+		.where(and(eq(findings.topicId, topicId), isNotNull(resources.embedding)))
 		.limit(1)
 
 	// for an RSS-only scan, ingestion cost is 0, so the total cost should equal the sum of the review stage costs
@@ -92,7 +94,7 @@ async function check(topicId: string): Promise<boolean> {
 		// topic scan checks
 		["scan succeeded", topicScan.status === "succeeded"],
 		["found resources", topicScan.foundCount > 0],
-		["embedding is 768-dim", embeddingLength === 768],
+		["embedding is 1024-dim", embeddingLength === 1024],
 
 		// topic findings checks
 		["kept_count matches findings", topicScan.keptCount === topicFindings.length],

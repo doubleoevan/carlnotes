@@ -3,6 +3,7 @@
 // enum value sets that live in @shared so that db pgEnums, api validation, and ui rendering can read one source
 import {
 	frequencies,
+	plans,
 	ratings,
 	resourceKinds,
 	scanStatuses,
@@ -36,6 +37,10 @@ export const frequency = pgEnum("frequency", frequencies)
 export const scanStatus = pgEnum("scan_status", scanStatuses)
 export const sourceVisibility = pgEnum("source_visibility", sourceVisibilities)
 export const rating = pgEnum("rating", ratings)
+export const plan = pgEnum("plan", plans)
+
+// the curation embedding's vector width. the resources.embedding column and the worker's embed helper share this one constant
+export const EMBED_DIMENSIONS = 1024
 
 // the users table. its columns match Better Auth's user schema, plus one app-specific field.
 // the plural name comes from Better Auth's usePlural option.
@@ -47,6 +52,10 @@ export const users = pgTable("users", {
 	image: text("image"),
 	// this user's litellm virtual key, provisioned with a spend budget at signup. null only before signup completes
 	litellmVirtualKey: text("litellm_virtual_key"),
+	// the platform role: "admin" or "user". plain text to match Better Auth's admin plugin shape
+	role: text("role").notNull().default("user"),
+	// the billing plan. every new user starts on free
+	plan: plan("plan").notNull().default("free"),
 	// plain timestamps without time zone to mirror Better Auth's own schema exactly
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 	updatedAt: timestamp("updated_at")
@@ -220,6 +229,8 @@ export const scans = pgTable("scans", {
 	// when the scan pipeline ran
 	startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
 	finishedAt: timestamp("finished_at", { withTimezone: true }),
+	// true when the owner triggered this scan by hand with "Run now". scheduled and seeded scans stay false
+	isManual: boolean("is_manual").notNull().default(false),
 	// what it cost and how many resources the scan found, kept, and filtered
 	cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
 	foundCount: integer("found_count").notNull().default(0),
@@ -248,8 +259,8 @@ export const resources = pgTable("resources", {
 	// a short excerpt provided by the source, and the full content the pipeline fetches later
 	snippet: text("snippet"),
 	content: text("content"),
-	// a vector embedding for semantic search and its model
-	embedding: vector("embedding", { dimensions: 768 }),
+	// the curation embedding and its model, EMBED_DIMENSIONS wide for qwen3-embedding-8b
+	embedding: vector("embedding", { dimensions: EMBED_DIMENSIONS }),
 	embeddingModel: text("embedding_model"),
 	// when review last fetched this resource's content. defaults to the resource row creation
 	fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
@@ -277,11 +288,11 @@ export const findings = pgTable(
 		// the model's relevance score and its explanation
 		relevanceScore: real("relevance_score").notNull(),
 		relevanceExplanation: text("relevance_explanation").notNull().default(""),
-		// the visibility of the source that produced this finding. the pipeline does not set this yet
+		// the visibility of the source that produced this finding. the pipeline doesn't populate this, so it defaults to public
 		sourceVisibility: sourceVisibility("source_visibility").notNull().default("public"),
 		// the owner's optional rating
 		rating: rating("rating"),
-		//the number of times this resource has been opened
+		// the number of times this finding's resource has been opened
 		viewCount: integer("view_count").notNull().default(0),
 		// created and updated timestamps
 		...timestamps(),
@@ -308,6 +319,23 @@ export const consumptions = pgTable(
 	},
 	// one consumed marker per user and finding. marking twice is a no-op and unmarking deletes the row
 	(table) => [unique("consumptions_user_finding_unique").on(table.userId, table.findingId)],
+)
+
+// a topic invite grants an email address view and subscribe access to an "invite" topic.
+// it references an email, not a user row, so a topic can be shared before the invitee has an account
+export const topicInvites = pgTable(
+	"topic_invites",
+	{
+		// the topic the invite opens
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		// the invited email address and when it was invited
+		email: text("email").notNull(),
+		invitedAt: timestamp("invited_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// one invite per topic and email, so re-inviting is a no-op
+	(table) => [primaryKey({ columns: [table.topicId, table.email] })],
 )
 
 // an audience is a named set of users that subscribes to topics as one

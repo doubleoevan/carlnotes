@@ -2,7 +2,8 @@
 // each client is built lazily so a missing proxy config throws when a model is used
 // instead of silently falling back to OpenAI
 import { createOpenAI } from "@ai-sdk/openai"
-import type { EmbeddingModel, LanguageModel } from "ai"
+import { type EmbeddingModel, embed, type LanguageModel } from "ai"
+import { EMBED_DIMENSIONS } from "../db/schema"
 
 // litellmApiKey bills a scan to its topic owner's key. callers with no user context use the master key
 
@@ -16,10 +17,32 @@ export function scoreModel(litellmApiKey?: string): LanguageModel {
 	return proxy(litellmApiKey).chat("score-model")
 }
 
-// the embedding model produces the 768-dimension vectors that review stores on a Resource,
-// the dimension must match the schema
+// the embedding model routes through LiteLLM's embed-model alias (qwen3-embedding-8b).
+// callers go through embedVector, which truncates the proxy's full-width vector to the schema dimension
 export function embedModel(litellmApiKey?: string): EmbeddingModel {
 	return proxy(litellmApiKey).embeddingModel("embed-model")
+}
+
+// the single place raw embeddings are produced, so no caller can skip truncation. the proxy drops the dimensions param and
+// returns qwen3's full 4096-wide vector, so keep the first EMBED_DIMENSIONS (MRL front-loads the important dims) and re-normalize, or cosine distance breaks
+export async function embedVector(text: string, litellmApiKey?: string): Promise<number[]> {
+	// embed through the proxy, then reduce to the schema's width
+	const { embedding } = await embed({ model: embedModel(litellmApiKey), value: text })
+	// a shorter vector than the target means a model or config change. fail loud instead of silently padding
+	if (embedding.length < EMBED_DIMENSIONS) {
+		throw new Error(`embedding model returned ${embedding.length} dimensions, need at least ${EMBED_DIMENSIONS}`)
+	}
+	return toUnitVector(embedding.slice(0, EMBED_DIMENSIONS))
+}
+
+// scale a vector to unit length so cosine distance stays correct after truncation
+function toUnitVector(vector: number[]): number[] {
+	// calculate the magnitude, then scale each component by it. a zero vector has no direction to normalize
+	const magnitude = Math.sqrt(vector.reduce((sum, value) => sum + value * value, 0))
+	if (magnitude === 0) {
+		return vector
+	}
+	return vector.map((value) => value / magnitude)
 }
 
 // build the OpenAI-compatible client on demand

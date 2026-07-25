@@ -31,10 +31,12 @@ type ScanSummary = {
 const TOPIC_SCAN_TRACE_NAME = "topic-scan"
 
 // create a Scan and ingest every Source with failures isolated,
-// then review the results and end the Scan with its counts and cost
-export async function runTopicScan(topicId: string): Promise<Scan | undefined> {
+// then review the results and end the Scan with its counts and cost.
+// isManual records that an owner triggered this Scan, not the scheduler.
+// that is for bookkeeping only. the daily scan quota counts scheduled and manual runs alike
+export async function runTopicScan(topicId: string, isManual = false): Promise<Scan | undefined> {
 	// open the Scan as "running" so that interrupted ingestion is visible as an unfinished row
-	const [scan] = await db.insert(scans).values({ topicId }).returning()
+	const [scan] = await db.insert(scans).values({ topicId, isManual }).returning()
 	if (!scan) {
 		throw new Error(`could not create scan for topic ${topicId}`)
 	}

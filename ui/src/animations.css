@@ -79,6 +79,98 @@
 	animation: hydrate-in 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
+/* a bright band sweeps across muted text, like Claude's "thinking" shimmer, for "Carl is reading" while a scan runs */
+@keyframes shimmer-sweep {
+	from {
+		background-position: 200% center;
+	}
+	to {
+		background-position: -200% center;
+	}
+}
+
+.shimmer-text {
+	background-image: linear-gradient(
+		100deg,
+		var(--muted-foreground) 35%,
+		var(--foreground) 50%,
+		var(--muted-foreground) 65%
+	);
+	background-size: 200% auto;
+	background-clip: text;
+	-webkit-background-clip: text;
+	color: transparent;
+	animation: shimmer-sweep 2.2s linear infinite;
+}
+
+/*
+   the "He already read it. All of it." reveal in the hero.
+   the dimmed heading brightens to full color as a light wipes across it once, then rests.
+   three stacked copies — the muted h1, a full-color copy masked to wipe in from the left,
+   and a white glint riding the reveal edge. keying the wrapper by route remounts it, so it replays on every navigation
+*/
+@keyframes shimmer-glint-sweep {
+	from {
+		background-position: 100% center;
+	}
+	to {
+		background-position: 0% center;
+	}
+}
+
+@keyframes shimmer-reveal-sweep {
+	from {
+		-webkit-mask-position: 100% center;
+		mask-position: 100% center;
+	}
+	to {
+		-webkit-mask-position: 0% center;
+		mask-position: 0% center;
+	}
+}
+
+.shimmer-reveal {
+	position: relative;
+}
+
+/* the full-color copy and the glint stack exactly over the in-flow muted heading */
+.shimmer-reveal-top,
+.shimmer-reveal-glint {
+	position: absolute;
+	inset: 0;
+	pointer-events: none;
+}
+
+/* the muted heading shows until the light passes */
+.shimmer-reveal-base {
+	opacity: 0.28;
+}
+
+/* the full-color copy is hidden until the mask wipes it in from the left */
+.shimmer-reveal-top {
+	-webkit-mask-image: linear-gradient(100deg, #000 40%, transparent 56%);
+	mask-image: linear-gradient(100deg, #000 40%, transparent 56%);
+	-webkit-mask-size: 260% 100%;
+	mask-size: 260% 100%;
+	-webkit-mask-repeat: no-repeat;
+	mask-repeat: no-repeat;
+	-webkit-mask-position: 100% center;
+	mask-position: 100% center;
+	animation: shimmer-reveal-sweep 2s ease-in-out 0.5s forwards;
+}
+
+/* a soft white band clipped to the letters, sweeping with the reveal edge */
+.shimmer-reveal-glint {
+	background-image: linear-gradient(100deg, transparent 42%, #fff 50%, transparent 58%);
+	background-size: 260% 100%;
+	background-repeat: no-repeat;
+	background-position: 100% center;
+	background-clip: text;
+	-webkit-background-clip: text;
+	color: transparent;
+	animation: shimmer-glint-sweep 2s ease-in-out 0.5s forwards;
+}
+
 .coffee-mug-steam {
 	transform-origin: bottom center;
 	animation: coffee-mug-steam 2.4s ease-in-out infinite;
@@ -186,7 +278,31 @@
 	animation-delay: 8s;
 }
 
-/* honor a user's reduced-motion preference: no hydrate animation, no steam, no rings */
+.coffee-steam-7 {
+	left: 14%;
+	top: 32%;
+	width: 36rem;
+	height: 36rem;
+	animation-delay: 1s;
+}
+
+.coffee-steam-8 {
+	left: 86%;
+	top: 50%;
+	width: 38rem;
+	height: 38rem;
+	animation-delay: 15s;
+}
+
+.coffee-steam-9 {
+	left: 18%;
+	top: 67%;
+	width: 28rem;
+	height: 28rem;
+	animation-delay: 6s;
+}
+
+/* honor a user's reduced-motion preference: no hydrate animation, no steam, no rings, no shimmer */
 @media (prefers-reduced-motion: reduce) {
 	.animate-hydrate {
 		animation: none;
@@ -202,5 +318,19 @@
 	.coffee-steam {
 		animation: none;
 		opacity: 0;
+	}
+	/* drop the sweep and show plain muted text, since the gradient needs the animation to read right */
+	.shimmer-text {
+		animation: none;
+		background-image: none;
+		color: var(--muted-foreground);
+	}
+	/* no sweep for the headline: show its full-color heading with no dim start */
+	.shimmer-reveal-base {
+		opacity: 1;
+	}
+	.shimmer-reveal-top,
+	.shimmer-reveal-glint {
+		display: none;
 	}
 }

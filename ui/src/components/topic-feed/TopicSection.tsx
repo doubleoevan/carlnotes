@@ -16,7 +16,10 @@ export function TopicSection({ section }: TopicSectionProps) {
 		<AccordionItem value={section.key}>
 			<AccordionTrigger>
 				<span className="font-display flex-1 text-xl">{SECTION_TITLE[section.key]}</span>
-				<span className="text-muted-foreground text-sm">{section.topics.length}</span>
+				{/* the topic count */}
+				<span className="text-muted-foreground text-sm">
+					{section.topics.length} {section.topics.length === 1 ? "topic" : "topics"}
+				</span>
 			</AccordionTrigger>
 			<AccordionContent>
 				{/* the section topics, or Carl's empty line */}

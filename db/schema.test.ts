@@ -15,9 +15,9 @@ test("embedding and embedding_model are nullable", () => {
 	expect(resources.embeddingModel.notNull).toBe(false)
 })
 
-// the embedding vector is fixed at 768 dimensions to match the planned embedding models. swapping models is a backfill, not a schema change
-test("the embedding column is a 768-dim vector", () => {
-	expect(initialSql).toContain('"embedding" vector(768)')
+// the embedding vector is migrated to 1024 dimensions for qwen3-embedding-8b. a dimension change is a schema migration plus a re-embed backfill
+test("the embedding column is migrated to a 1024-dim vector", () => {
+	expect(allMigrationsSql()).toContain("vector(1024)")
 })
 
 // a topic feed has no table. it gets built from a topic's findings at runtime.
@@ -58,6 +58,31 @@ test("a subscription exposes both subscriber columns with a mutual exclusion che
 test("the initial migration enables pgvector before the vector column", () => {
 	expect(initialSql).toContain("CREATE EXTENSION IF NOT EXISTS vector")
 	expect(initialSql.indexOf("CREATE EXTENSION IF NOT EXISTS vector")).toBeLessThan(initialSql.indexOf("vector(768)"))
+})
+
+// an invite is unique per topic and email through the composite primary key and gets deleted with its topic
+test("topic_invites is keyed by topic and email and cascades from its topic", () => {
+	expect(allMigrationsSql()).toContain(`CONSTRAINT "topic_invites_topic_id_email_pk" PRIMARY KEY("topic_id","email")`)
+	expect(allMigrationsSql()).toMatch(/topic_invites_topic_id_topics_id_fk.*ON DELETE cascade/)
+})
+
+// only manual scans count against the daily quota, so the marker must exist and default to false
+test("scans.is_manual is non-null and defaults to false", () => {
+	expect(schema.scans.isManual.notNull).toBe(true)
+	expect(allMigrationsSql()).toContain(`"is_manual" boolean DEFAULT false NOT NULL`)
+})
+
+// platform authority is a users.role column with a safe default, text-shaped for Better Auth's admin plugin
+test("users.role is non-null and defaults to user", () => {
+	expect(schema.users.role.notNull).toBe(true)
+	expect(allMigrationsSql()).toContain(`"role" text DEFAULT 'user' NOT NULL`)
+})
+
+// the billing plan is a proper pgEnum, unlike role, since it carries no external-library constraint
+test("users.plan is a free/plus/premium enum, non-null, and defaults to free", () => {
+	expect(schema.users.plan.notNull).toBe(true)
+	expect(allMigrationsSql()).toContain(`CREATE TYPE "public"."plan" AS ENUM('free', 'plus', 'premium')`)
+	expect(allMigrationsSql()).toContain(`"plan" "plan" DEFAULT 'free' NOT NULL`)
 })
 
 // the consumed state is a per-user row, never a findings column, so it lives in the consumptions table only

@@ -47,7 +47,7 @@ model_list:
       max_input_tokens: 524288
       max_output_tokens: 8192
 
-  # score-model: the curation premium tier — re-scores promoted Resources and writes why-summaries (tunable: pick best relevance-per-dollar on eval)
+  # score-model: the review premium tier — re-scores promoted Resources and writes why-summaries (tunable: pick best relevance-per-dollar on eval)
   - model_name: score-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/glm-5p2
@@ -58,14 +58,15 @@ model_list:
       max_input_tokens: 1048576
       max_output_tokens: 8192
 
-  # embed-model: the curation embedding tier — output_vector_size MUST equal the schema's resources.embedding dimension (768)
+  # embed-model: the review embedding tier. output_vector_size MUST equal the schema's resources.embedding dimension (1024)
   - model_name: embed-model
     litellm_params:
-      model: fireworks_ai/nomic-ai/nomic-embed-text-v1.5
+      model: fireworks_ai/accounts/fireworks/models/qwen3-embedding-8b
+      dimensions: 1024
     model_info:
-      friendly_name: "Nomic Embed Text v1.5 (768-dim)"
+      friendly_name: "Qwen3 Embedding 8B"
       mode: embedding
-      output_vector_size: 768
+      output_vector_size: 1024
 
 # drop provider-unsupported params instead of erroring (Fireworks embeddings reject encoding_format the AI SDK sends)
 # max_budget is the proxy-wide backstop behind the per-user virtual key budgets: a lifetime hard cap, no reset

@@ -1,6 +1,9 @@
-import { Outlet } from "react-router-dom"
+import { useEffect } from "react"
+import { Outlet, useLocation } from "react-router-dom"
+import { CoffeeSteam } from "@/components/branding/CoffeeSteam"
 import { Footer } from "@/components/Footer"
 import { Header } from "@/components/Header"
+import { Toaster } from "@/components/primitives/sonner"
 import { SearchBar } from "@/components/SearchBar"
 
 /**
@@ -9,14 +12,35 @@ import { SearchBar } from "@/components/SearchBar"
 export function Layout() {
 	return (
 		<div className="min-h-screen">
+			<ScrollToTop />
 			<Header />
-			{/* the search bar overlaps the hero's bottom edge. z-20 keeps it above the hero */}
-			<div className="relative z-20 mx-auto -mt-6 max-w-5xl px-4">
-				<SearchBar />
+			{/* everything below the hero shares one ambient steam backdrop that restarts fresh on each route change.
+			    flow-root pins the backdrop's top edge to the hero's bottom edge, so rings clip there instead of leaving a bare strip */}
+			<div className="relative flow-root">
+				<CoffeeSteam />
+				{/* the search bar overlaps the hero's bottom edge. z-20 keeps it above the hero */}
+				<div className="relative z-20 mx-auto -mt-6 max-w-5xl px-safe">
+					<SearchBar />
+				</div>
+				{/* the routed page above the steam */}
+				<div className="relative z-10 min-h-screen">
+					<Outlet />
+				</div>
 			</div>
-			{/* the routed page: the home topic feed, a single topic, or the topic editor */}
-			<Outlet />
 			<Footer />
+			{/* the toast host for transient notices like a rejected source removal */}
+			<Toaster />
 		</div>
 	)
+}
+
+// scroll back to the top whenever the route changes
+// so that opening a topic from low on the homepage does not land mid-page
+function ScrollToTop() {
+	const { pathname } = useLocation()
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the pathname is the effect's trigger, not an input
+	useEffect(() => {
+		window.scrollTo(0, 0)
+	}, [pathname])
+	return null
 }

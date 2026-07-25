@@ -55,7 +55,7 @@
 	--secondary: #f4eee2;
 	--secondary-foreground: #75604a;
 	--muted: #efe6d8;
-	--muted-foreground: #a68d6e;
+	--muted-foreground: #7a6449;
 	--accent: #e9dcc8;
 	--accent-foreground: #75604a;
 	--destructive: #b5433a;
@@ -81,10 +81,10 @@
 	--popover-foreground: #f0e6d6;
 	--primary: #f09050;
 	--primary-foreground: #1a1511;
-	--secondary: #382a1b;
+	--secondary: #5d4a35;
 	--secondary-foreground: #c9ba99;
 	--muted: #54422f;
-	--muted-foreground: #8a7c66;
+	--muted-foreground: #c2b494;
 	--accent: #5d4a35;
 	--accent-foreground: #c9ba99;
 	--destructive: #e0674f;
@@ -98,6 +98,12 @@
 	--link: #f09050;
 	--separator: #614e39;
 	--ring-line: rgba(201, 186, 153, 0.18);
+}
+
+/* add extra horizontal padding to handle safe-area insets on landscape mobile, falling back to the standard 1rem gutter */
+@utility px-safe {
+	padding-left: max(1rem, env(safe-area-inset-left, 0px));
+	padding-right: max(1rem, env(safe-area-inset-right, 0px));
 }
 
 @layer base {

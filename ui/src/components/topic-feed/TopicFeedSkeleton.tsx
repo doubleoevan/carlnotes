@@ -10,18 +10,18 @@ const RESOURCE_SKELETONS = ["r1", "r2", "r3", "r4", "r5"]
 /**
  * A loading state for the topic sections. It mirrors the real layout so that content doesn't shift when the data arrives.
  */
-export function PageSkeleton() {
+export function TopicFeedSkeleton() {
 	return (
 		<div aria-hidden="true">
 			{SECTION_SKELETONS.map((section) => (
-				<SectionSkeleton key={section.key} topics={section.topics} />
+				<TopicSectionSkeleton key={section.key} topics={section.topics} />
 			))}
 		</div>
 	)
 }
 
 // one section skeleton mirroring TopicSection. a chevron and title header, then the topic placeholders
-function SectionSkeleton({ topics }: { topics: string[] }) {
+function TopicSectionSkeleton({ topics }: { topics: string[] }) {
 	return (
 		<div className="border-b last:border-b-0">
 			{/* header: chevron, title, and the topic count on the right */}

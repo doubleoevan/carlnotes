@@ -1,18 +1,19 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 
 /**
  * A hook to sync the theme to its class on the HTML element and to localStorage.
- * returns the current theme and a toggle function
+ * returns the current theme and a toggle handler
  */
 export function useTheme(): { isDark: boolean; toggleTheme: () => void } {
-	// read the saved theme here in the initializer, not in a load effect. in dev React mounts twice,
-	// so a load effect could run after the effect below already saved the default, wiping out the saved theme
-	const [isDark, setIsDark] = useState(() => localStorage.getItem("theme") === "dark")
+	// the head script set the dark class from localStorage or the OS setting before paint, so read that back
+	const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"))
 
-	// apply the theme to the HTML element and persist it on every change
-	useEffect(() => {
-		document.documentElement.classList.toggle("dark", isDark)
-		localStorage.setItem("theme", isDark ? "dark" : "light")
-	}, [isDark])
-	return { isDark, toggleTheme: () => setIsDark((previousIsDark) => !previousIsDark) }
+	// a toggle is an explicit choice: flip the class and persist it so it wins over the OS setting next time
+	const toggleTheme = (): void => {
+		const nextIsDark = !isDark
+		document.documentElement.classList.toggle("dark", nextIsDark)
+		localStorage.setItem("theme", nextIsDark ? "dark" : "light")
+		setIsDark(nextIsDark)
+	}
+	return { isDark, toggleTheme }
 }

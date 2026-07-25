@@ -1,10 +1,10 @@
 import { BrowserRouter, Route, Routes } from "react-router-dom"
 import { Layout } from "@/components/Layout"
-import { useTheme } from "@/hooks/useTheme"
-import { EditTopicPage } from "@/pages/EditTopicPage"
 import { HomePage } from "@/pages/HomePage"
 import { LoginPage } from "@/pages/LoginPage"
+import { PrivacyPage } from "@/pages/PrivacyPage"
 import { SignupPage } from "@/pages/SignupPage"
+import { TermsPage } from "@/pages/TermsPage"
 import { TopicPage } from "@/pages/TopicPage"
 import { TopicFeedProvider } from "@/providers/TopicFeedProvider"
 
@@ -13,9 +13,6 @@ import { TopicFeedProvider } from "@/providers/TopicFeedProvider"
  * one topic feed context. no route is gated behind a session — only individual features are
  */
 export function App() {
-	// syncs the saved theme to the HTML element up front — login and signup render outside Header, the only
-	// other place this hook runs, so without this they'd always show light regardless of the saved theme
-	useTheme()
 	return (
 		<BrowserRouter>
 			<Routes>
@@ -31,8 +28,11 @@ export function App() {
 					}
 				>
 					<Route index element={<HomePage />} />
+					{/* the topic pate which contains a modal to edit the topic */}
 					<Route path="topics/:id" element={<TopicPage />} />
-					<Route path="topics/:id/edit" element={<EditTopicPage />} />
+					{/* legal pages, linked from the footer */}
+					<Route path="privacy" element={<PrivacyPage />} />
+					<Route path="terms" element={<TermsPage />} />
 				</Route>
 			</Routes>
 		</BrowserRouter>

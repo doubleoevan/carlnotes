@@ -1,12 +1,16 @@
 # CarlNotes
 
+<img src="ui/public/carl-hero.png" alt="Carl, holding a raccoon and a machine learning textbook" width="200" align="left" />
+
 **He already read it. All of it.**
 
-Carl keeps track of everything. He just needs you to ask. Carl doesn't sleep. He reads and drinks coffee. And when you drop by, he has updates for you.
+Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes.
 
-Give Carl three topics. You know the ones.
+**Give Carl three topics. You know the ones. He'll brew a hot cup of what you just missed.**
 
 Carl stays up. You stay informed.
+
+<br clear="left" />
 
 > **Status: early development.** The scaffold is real; the product is being built change-by-change via [OpenSpec](https://github.com/Fission-AI/OpenSpec) — see `openspec/`.
 
@@ -76,6 +80,10 @@ Prompt registry (owner-run) — git is canonical for prompt wording (`worker/pro
 ```bash
 bun run prompts:sync
 ```
+
+## Attribution
+
+The persona for CarlNotes was inspired by [Jake Van Clief](https://www.linkedin.com/in/jake-van-clief-74b66915a/). The real Jake runs [Eduba](https://eduba.io), an AI training and consulting company, makes excellent videos on [YouTube](https://www.youtube.com/@JEVanClief), and teaches AI systems over at [Clief Notes](https://www.skool.com/cliefnotes). Go learn from him. Carl would.
 
 ## License
 

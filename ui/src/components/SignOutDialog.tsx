@@ -32,7 +32,15 @@ export function SignOutDialog({ className, children }: { className: string; chil
 					<AlertDialogCancel className={cn(buttonVariants({ variant: "secondary" }), "dark:bg-secondary border-0")}>
 						Cancel
 					</AlertDialogCancel>
-					<AlertDialogAction onClick={() => authClient.signOut()}>Sign out</AlertDialogAction>
+					<AlertDialogAction
+						onClick={async () => {
+							// reload the current page so that signed-in controls disappear without leaving the page
+							await authClient.signOut()
+							window.location.reload()
+						}}
+					>
+						Sign out
+					</AlertDialogAction>
 				</AlertDialogFooter>
 			</AlertDialogContent>
 		</AlertDialog>

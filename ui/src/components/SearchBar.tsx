@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom"
 import { AnchorLink } from "@/components/AnchorLink"
 import { Input } from "@/components/primitives/input"
 import { SearchFilters } from "@/components/SearchFilters.tsx"
-import { sendTopicFindingOpened } from "@/lib/topicFeedClient"
+import { sendTopicFindingOpened } from "@/lib/topicClient"
 import { cn, RESOURCE_KIND_ICON } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 
@@ -82,9 +82,9 @@ export function SearchBar() {
 			setSuggestionIndex((index) => clampSuggestionIndex(index + step, suggestions.length))
 			return
 		}
-		// enter opens the highlighted suggestion, falling back to the only one when nothing is highlighted
+		// enter opens the highlighted suggestion, falling back to the only one if nothing is highlighted
 		if (event.key === "Enter") {
-			const target = suggestions[suggestionIndex] ?? onlySuggestion(suggestions)
+			const target = suggestions[suggestionIndex] ?? findOnlySuggestion(suggestions)
 			if (target) {
 				event.preventDefault()
 				openSuggestion(target)
@@ -158,7 +158,7 @@ function clampSuggestionIndex(index: number, suggestionCount: number): number {
 }
 
 // the lone suggestion when the list has exactly one, so enter can open it without arrowing to it first
-function onlySuggestion(suggestions: Suggestion[]): Suggestion | undefined {
+function findOnlySuggestion(suggestions: Suggestion[]): Suggestion | undefined {
 	return suggestions.length === 1 ? suggestions[0] : undefined
 }
 

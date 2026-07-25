@@ -8,3 +8,7 @@ export const sourceVisibilities = ["public", "private"] as const
 export const ratings = ["up", "down"] as const
 // the keys for the homepage's three topic feed sections
 export const topicSectionKeys = ["yours", "featured", "popular"] as const
+// the source kinds a user can add from the topic editor. composio and plugin sources will be custom instead of default
+export const editableSourceKinds = ["rss", "reddit", "youtube", "search"] as const
+// the billing plans. every user starts on free
+export const plans = ["free", "plus", "premium"] as const

@@ -1,6 +1,6 @@
 // tests for utils methods and dependencies
 import { afterEach, expect, setSystemTime, test } from "bun:test"
-import { cn, toAgeLabel } from "./utils"
+import { cn, toAgeLabel, toDurationLabel } from "./utils"
 
 // twMerge makes later tailwind classes win over earlier conflicting ones
 test("cn merges conflicting tailwind classes", () => {
@@ -30,4 +30,15 @@ test("toAgeLabel buckets elapsed time into the coarsest unit", () => {
 	expect(toAgeLabel(ago(364))).toBe("12mo")
 	expect(toAgeLabel(ago(365))).toBe("1y")
 	expect(toAgeLabel(ago(900))).toBe("2y")
+})
+
+test("toDurationLabel reads seconds under a minute and minutes above", () => {
+	// null and negative spans render as nothing
+	expect(toDurationLabel(null)).toBe("")
+	expect(toDurationLabel(-1000)).toBe("")
+	// whole seconds under a minute
+	expect(toDurationLabel(45_000)).toBe("45s")
+	// whole minutes drop the trailing decimal, fractional minutes keep one
+	expect(toDurationLabel(180_000)).toBe("3 min")
+	expect(toDurationLabel(264_000)).toBe("4.4 min")
 })

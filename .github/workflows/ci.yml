@@ -1,0 +1,40 @@
+name: CI
+
+# run the quality gate on pushes to main and on PRs into main.
+# no deploy here — Northflank deploys on its own git trigger. no secrets, database, or LiteLLM: the gate is offline
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# one run per ref: a newer push cancels an in-flight run for the same branch or PR
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# the gate only reads the repo
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      # persist-credentials false keeps the checkout token out of .git/config, so bun install and the gate can't read it
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # pin Bun to the repo's local major (1.x). there is no packageManager, .tool-versions, or Dockerfile pin to read
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1"
+      # cache Bun's global install cache, keyed by the lockfile
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+      - run: bun install --frozen-lockfile
+      # the exact gate the .githooks/pre-push hook runs, so local and CI cannot diverge
+      - run: bash scripts/preflight.sh

@@ -1,7 +1,7 @@
-// topic feed tests for filter, new count, and url host extraction
+// topic findings tests for filter, new count, and url host extraction
 import { expect, test } from "bun:test"
 import type { TopicFinding } from "@shared/contracts"
-import { filteredTopicFindings, newTopicFindingCount, toUrlHost } from "./topicFeed.ts"
+import { filteredTopicFindings, newTopicFindingCount, toUrlHost } from "./findings"
 
 // a topic finding with placeholder fields. the tests only care about isConsumed
 function topicFinding(isConsumed: boolean): TopicFinding {
@@ -28,8 +28,12 @@ function topicFinding(isConsumed: boolean): TopicFinding {
 test("filteredTopicFindings hides consumed by default and shows them for the 'All' view", () => {
 	// three topic findings, one consumed
 	const topicFindings = [topicFinding(false), topicFinding(true), topicFinding(false)]
-	expect(filteredTopicFindings(topicFindings, false)).toHaveLength(2)
-	expect(filteredTopicFindings(topicFindings, true)).toHaveLength(3)
+	// the default view keeps the two unconsumed findings, in order, and drops the consumed one
+	const unconsumedTopicFindings = filteredTopicFindings(topicFindings, false)
+	expect(unconsumedTopicFindings[0]).toBe(topicFindings[0])
+	expect(unconsumedTopicFindings[1]).toBe(topicFindings[2])
+	// the "All" view keeps all three in their original order
+	expect(filteredTopicFindings(topicFindings, true)).toEqual(topicFindings)
 })
 
 // "# new" counts unconsumed topic findings

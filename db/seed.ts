@@ -1,6 +1,7 @@
 // dev-only seed with idempotent stub data so the homepage renders before real scans run. it only runs against the dev Doppler environment
+import { eq } from "drizzle-orm"
 import { db } from "./index"
-import { findings, resources, scans, sources, subscriptions, topics, users } from "./schema"
+import { findings, resources, scans, sources, subscriptions, topicInvites, topics, users } from "./schema"
 
 // the community owner whose public topics fill the Featured and Popular sections
 const COMMUNITY_USER_ID = "usr_community"
@@ -17,7 +18,9 @@ type SeedTopic = {
 	prompt: string
 	tags: string[]
 	frequency: "daily" | "weekly"
-	visibility: "public" | "private"
+	visibility: "public" | "private" | "invite"
+	// the invited emails for an invite topic
+	invitees?: string[]
 	// the topic's sources, then Carl's findings about the resources they surfaced
 	sources: { kind: SeedSourceKind; config: Record<string, unknown> }[]
 	findings: { resourceKind: SeedResourceKind; title: string; url: string; why: string; score: number }[]
@@ -35,7 +38,9 @@ function buildSeedTopics(devUserId: string): SeedTopic[] {
 		prompt: "New tools, patterns, and failure modes in shipping production LLM agents. Bias toward receipts over hype.",
 		tags: ["AI & Engineering", "Infrastructure", "Research"],
 		frequency: "weekly",
-		visibility: "private",
+		// an invite topic so the invitee editor and ✉ visibility render against real dev data
+		visibility: "invite",
+		invitees: ["maya@example.com", "theo@example.com"],
 		// the sources this topic pulls from
 		sources: [
 			{ kind: "rss", config: { url: "https://blog.langchain.dev/rss/" } },
@@ -194,6 +199,8 @@ export async function seed(devUserId: string): Promise<void> {
 		.insert(users)
 		.values([{ id: COMMUNITY_USER_ID, name: "CarlNotes Community", email: "community@carlnotes.dev" }, ...memberUsers])
 		.onConflictDoNothing()
+	// the dev user operates the instance, so they hold the admin role. the update keeps re-seeding idempotent
+	await db.update(users).set({ role: "admin" }).where(eq(users.id, devUserId))
 	// each topic and everything hanging off it
 	for (const topic of seedTopics) {
 		await seedTopic(topic)
@@ -229,20 +236,32 @@ async function seedTopic(topic: SeedTopic): Promise<void> {
 			tags: topic.tags,
 			featureOrder: FEATURE_ORDER[topic.id] ?? null,
 		})
-		// upsert featureOrder and tags so re-seeding refreshes both on already-seeded rows
+		// upsert featureOrder, tags, and visibility so that re-seeding refreshes them on already-seeded rows
 		.onConflictDoUpdate({
 			target: topics.id,
-			set: { featureOrder: FEATURE_ORDER[topic.id] ?? null, tags: topic.tags },
+			set: { featureOrder: FEATURE_ORDER[topic.id] ?? null, tags: topic.tags, visibility: topic.visibility },
 		})
-	// one succeeded scan gives the topic a last-scan time and an ai summary
+	// the invited emails for an "invite" topic, idempotent by the (topic, email) primary key
+	const invitees = topic.invitees ?? []
+	if (invitees.length > 0) {
+		await db
+			.insert(topicInvites)
+			.values(invitees.map((email) => ({ topicId: topic.id, email })))
+			.onConflictDoNothing()
+	}
+	// one succeeded scan gives the topic a last-scan time, an illustrative duration, and an ai summary
 	const scanId = `scan_${topic.id}`
+	// an illustrative few-minute run, a little longer for topics that find more
+	const finishedAt = new Date()
+	const startedAt = new Date(finishedAt.getTime() - (90 + topic.findings.length * 20) * 1000)
 	await db
 		.insert(scans)
 		.values({
 			id: scanId,
 			topicId: topic.id,
 			status: "succeeded",
-			finishedAt: new Date(),
+			startedAt,
+			finishedAt,
 			// the counts are illustrative. Carl read about four times what he kept
 			foundCount: topic.findings.length * 4,
 			keptCount: topic.findings.length,

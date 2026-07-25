@@ -1,29 +1,24 @@
-// the topic feed logic behind the api routes. it builds a user's topic feeds and records ratings, views, and consumed state
+// the topic feed logic behind the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
-import { and, count, desc, eq, inArray, ne, or, sql } from "drizzle-orm"
-import { db } from "../db"
-import {
-	attachments,
-	audienceMembers,
-	consumptions,
-	findings,
-	resources,
-	scans,
-	sources,
-	subscriptions,
-	topics,
-} from "../db/schema"
+import { and, count, desc, eq, gte, inArray, ne, sql } from "drizzle-orm"
+import { db } from "../../db"
+import { attachments, consumptions, findings, resources, scans, sources, subscriptions, topics } from "../../db/schema"
+import { filteredTopicFindings, newTopicFindingCount, toUrlHost } from "./findings"
+import { canRateTopic } from "./permissions"
+import { startOfUtcMonth } from "./quotas"
 
+// the most topics the Popular section shows
 const MAX_POPULAR_TOPICS = 5
 
 /**
  * build a topic feed's sections: yours, featured, and popular. the app isn't gated by auth, so userId may be
- * null for a signed-out visitor — they still get featured and popular, just no "yours" section
+ * null for a signed-out visitor — they still get featured and popular, just no "yours" section.
+ * the route merges the topic-creation quota in, so this returns the sections alone
  */
 export async function buildTopicFeeds(
 	userId: string | null,
 	includeConsumedResources: boolean,
-): Promise<TopicFeedResponse> {
+): Promise<Pick<TopicFeedResponse, "sections">> {
 	// a signed-out visitor owns nothing, and every public topic counts as "other" since there's no "mine" to exclude
 	const othersFilter = userId
 		? and(ne(topics.ownerId, userId), eq(topics.visibility, "public"))
@@ -83,7 +78,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 		? and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
 		: sql`false`
 	// run the five topic-batched queries together
-	const [findingRows, sourceRows, attachmentRows, scanRows, subscriberRows] = await Promise.all([
+	const [findingRows, sourceRows, attachmentRows, scanRows, subscriberRows, monthCostRows] = await Promise.all([
 		// join each topic finding with its resource. a left join adds the user's consumed date when one exists
 		db
 			.select({
@@ -119,7 +114,12 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 
 		// select every topic's attachments, carrying the topic id to group by
 		db
-			.select({ topicId: attachments.topicId, id: attachments.id, filename: attachments.filename })
+			.select({
+				topicId: attachments.topicId,
+				id: attachments.id,
+				filename: attachments.filename,
+				sourceUrl: attachments.sourceUrl,
+			})
 			.from(attachments)
 			.where(inArray(attachments.topicId, topicIds)),
 
@@ -128,7 +128,9 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 			.selectDistinctOn([scans.topicId], {
 				topicId: scans.topicId,
 				startedAt: scans.startedAt,
+				finishedAt: scans.finishedAt,
 				scanSummary: scans.scanSummary,
+				cost: scans.cost,
 			})
 			// sort so that the latest succeeded scan is the distinct row kept per topic
 			.from(scans)
@@ -141,6 +143,13 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 			.from(subscriptions)
 			.where(inArray(subscriptions.topicId, topicIds))
 			.groupBy(subscriptions.topicId),
+
+		// sum this month's scan spend per topic for the owner-gated cost line
+		db
+			.select({ topicId: scans.topicId, monthCost: sql<string>`coalesce(sum(${scans.cost}), 0)` })
+			.from(scans)
+			.where(and(inArray(scans.topicId, topicIds), gte(scans.startedAt, startOfUtcMonth(new Date()))))
+			.groupBy(scans.topicId),
 	])
 
 	// group each dataset by topic id so that a feed can read its slice in memory
@@ -150,6 +159,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 		attachmentsByTopic: Map.groupBy(attachmentRows, (row) => row.topicId),
 		lastScanByTopic: new Map(scanRows.map((row) => [row.topicId, row])),
 		subscriberCountByTopic: new Map(subscriberRows.map((row) => [row.topicId, row.count])),
+		monthCostByTopic: new Map(monthCostRows.map((row) => [row.topicId, row.monthCost])),
 	}
 }
 
@@ -164,6 +174,8 @@ async function buildTopicFeed(
 	const findingRows = feedData.findingRowsByTopic.get(topic.id) ?? []
 	const lastScan = feedData.lastScanByTopic.get(topic.id)
 	const subscriberCount = feedData.subscriberCountByTopic.get(topic.id) ?? 0
+	// the owner sees their topic's scan spend. others never do
+	const isOwner = topic.ownerId === userId
 
 	// read the sources, dropping the grouping key from each row
 	const topicSources = (feedData.sourcesByTopic.get(topic.id) ?? []).map((source) => ({
@@ -175,6 +187,7 @@ async function buildTopicFeed(
 	const topicAttachments = (feedData.attachmentsByTopic.get(topic.id) ?? []).map((attachment) => ({
 		id: attachment.id,
 		filename: attachment.filename,
+		sourceUrl: attachment.sourceUrl,
 	}))
 
 	// shape each row into a topic finding and set its isConsumed flag
@@ -204,7 +217,7 @@ async function buildTopicFeed(
 		tags: topic.tags,
 		frequency: topic.frequency,
 		// what this user may do with the topic, plus their unconsumed count
-		isOwner: topic.ownerId === userId,
+		isOwner,
 		canRate: await canRateTopic(userId, topic),
 		newCount: newTopicFindingCount(topicFindings),
 		// how many subscribers this topic has
@@ -212,176 +225,12 @@ async function buildTopicFeed(
 		// the created time, last scan details, attachments, sources, and topic findings
 		createdAt: topic.createdAt.toISOString(),
 		lastScanAt: lastScan?.startedAt.toISOString() ?? null,
+		lastScanDurationMs:
+			lastScan?.finishedAt != null ? lastScan.finishedAt.getTime() - lastScan.startedAt.getTime() : null,
+		monthCost: isOwner ? Number(feedData.monthCostByTopic.get(topic.id) ?? 0) : null,
 		scanSummary: lastScan?.scanSummary ?? null,
 		attachments: topicAttachments,
 		sources: topicSources,
 		findings: filteredTopicFindings(topicFindings, includeConsumedResources),
 	}
-}
-
-// set a topic finding's rating to thumbs up or down, or clear it. returns false when the user may not act on it
-export async function setRating(userId: string, findingId: string, value: "up" | "down" | null): Promise<boolean> {
-	if (!(await canRateFinding(userId, findingId))) {
-		return false
-	}
-	await db.update(findings).set({ rating: value }).where(eq(findings.id, findingId))
-	return true
-}
-
-// mark or unmark a topic finding consumed. returns false when the user may not act on it
-export async function setConsumed(userId: string, findingId: string, isConsumed: boolean): Promise<boolean> {
-	if (!(await isFindingTopicVisible(userId, findingId))) {
-		return false
-	}
-	await writeConsumed(userId, findingId, isConsumed)
-	return true
-}
-
-// increment the topic finding's view count and mark it consumed. returns false when the user may not act on it
-export async function recordView(userId: string, findingId: string): Promise<boolean> {
-	if (!(await isFindingTopicVisible(userId, findingId))) {
-		return false
-	}
-
-	// increment the view count with a raw SQL expression, then mark the finding consumed
-	await db
-		.update(findings)
-		.set({ viewCount: sql`${findings.viewCount} + 1` })
-		.where(eq(findings.id, findingId))
-	await writeConsumed(userId, findingId, true)
-	return true
-}
-
-// insert or delete the consumed row. the exported callers run the access check first, so this one does not
-async function writeConsumed(userId: string, findingId: string, isConsumed: boolean): Promise<void> {
-	// to unmark isConsumed, delete the topic finding's consumed row
-	if (!isConsumed) {
-		await db.delete(consumptions).where(and(eq(consumptions.userId, userId), eq(consumptions.findingId, findingId)))
-		return
-	}
-
-	// to mark isConsumed, insert the topic finding's consumed row. a duplicate insert does nothing
-	await db.insert(consumptions).values({ userId, findingId }).onConflictDoNothing()
-}
-
-// a rating is written on the shared topic finding, so it takes the topic's owner or one of its
-// subscribers. a private topic has no subscribers, so it stays owner-only
-async function canRateFinding(userId: string, findingId: string): Promise<boolean> {
-	const topic = await loadFindingTopic(findingId)
-	return topic ? canRateTopic(userId, topic) : false
-}
-
-// the same rule against a topic row the caller already loaded, so the feed can flag each topic once
-export async function canRateTopic(
-	userId: string | null,
-	topic: Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility">,
-): Promise<boolean> {
-	// a signed-out visitor has no account to rate as
-	if (!userId) {
-		return false
-	}
-
-	// the owner may always rate
-	if (topic.ownerId === userId) {
-		return true
-	}
-
-	// a non-owner may rate only as a subscriber, and a private topic never has one
-	switch (topic.visibility) {
-		case "public":
-		case "invite":
-			return hasSubscription(userId, topic.id)
-		case "private":
-			return false
-		// a new visibility value fails to compile here
-		default:
-			return assertNever(topic.visibility)
-	}
-}
-
-// consumed state and view counts are the user's own reading history, so merely seeing the topic is enough.
-// a "public" topic is visible to everyone
-// a "private" topic is only visible to the owner
-// an "invite" topic is only visible to its owner and its subscribers
-async function isFindingTopicVisible(userId: string, findingId: string): Promise<boolean> {
-	const topic = await loadFindingTopic(findingId)
-	if (!topic) {
-		return false
-	}
-
-	// the owner always sees their own topic
-	if (topic.ownerId === userId) {
-		return true
-	}
-	// a non-owner sees a public topic outright and an invite topic only as a subscriber, never a private one
-	switch (topic.visibility) {
-		case "public":
-			return true
-		case "invite":
-			return hasSubscription(userId, topic.id)
-		case "private":
-			return false
-		// a new visibility value fails to compile here
-		default:
-			return assertNever(topic.visibility)
-	}
-}
-
-// the id, owner, and visibility of a topic finding's topic, or undefined when the finding does not exist
-async function loadFindingTopic(findingId: string) {
-	const [topic] = await db
-		.select({ id: topics.id, ownerId: topics.ownerId, visibility: topics.visibility })
-		.from(findings)
-		.innerJoin(topics, eq(findings.topicId, topics.id))
-		.where(eq(findings.id, findingId))
-		.limit(1)
-	// undefined when the finding id matches nothing
-	return topic
-}
-
-// a subscription reaches a topic through the user directly or through an audience they belong to
-async function hasSubscription(userId: string, topicId: string): Promise<boolean> {
-	// collect the audiences the user belongs to for the audience path
-	const memberAudiences = db
-		.select({ audienceId: audienceMembers.audienceId })
-		.from(audienceMembers)
-		.where(eq(audienceMembers.userId, userId))
-
-	// the subscriber is either the user directly or one of those audiences
-	const subscriberMatches = or(
-		eq(subscriptions.subscriberUserId, userId),
-		inArray(subscriptions.subscriberAudienceId, memberAudiences),
-	)
-
-	// a matching subscription row on this topic is the grant
-	const [subscription] = await db
-		.select({ id: subscriptions.id })
-		.from(subscriptions)
-		.where(and(eq(subscriptions.topicId, topicId), subscriberMatches))
-		.limit(1)
-	return subscription !== undefined
-}
-
-// the default topic feed hides consumed topic findings. the "All" view keeps them
-export function filteredTopicFindings(topicFindings: TopicFinding[], includeConsumed: boolean): TopicFinding[] {
-	return includeConsumed ? topicFindings : topicFindings.filter((finding) => !finding.isConsumed)
-}
-
-// "# new" is the count of topic findings that the user has not consumed
-export function newTopicFindingCount(topicFindings: TopicFinding[]): number {
-	return topicFindings.filter((finding) => !finding.isConsumed).length
-}
-
-// return the host for the url or null if the url is invalid
-export function toUrlHost(url: string): string | null {
-	try {
-		return new URL(url).host
-	} catch {
-		return null
-	}
-}
-
-// exhaustiveness guard. a compile error here means a topic visibility case went unhandled above
-function assertNever(value: never): never {
-	throw new Error(`unhandled case: ${value}`)
 }
