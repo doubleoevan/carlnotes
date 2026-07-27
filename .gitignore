@@ -15,6 +15,9 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
+# react-email preview server build output
+.react-email/
+
 # Environment (Doppler is primary; local .env fallback stays out of git)
 .env
 .env.*

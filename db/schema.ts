@@ -2,6 +2,7 @@
 
 // enum value sets that live in @shared so that db pgEnums, api validation, and ui rendering can read one source
 import {
+	attachmentStatuses,
 	frequencies,
 	plans,
 	ratings,
@@ -38,6 +39,8 @@ export const scanStatus = pgEnum("scan_status", scanStatuses)
 export const sourceVisibility = pgEnum("source_visibility", sourceVisibilities)
 export const rating = pgEnum("rating", ratings)
 export const plan = pgEnum("plan", plans)
+// the attachment async-processing status enum
+export const attachmentStatus = pgEnum("attachment_status", attachmentStatuses)
 
 // the curation embedding's vector width. the resources.embedding column and the worker's embed helper share this one constant
 export const EMBED_DIMENSIONS = 1024
@@ -208,8 +211,13 @@ export const attachments = pgTable("attachments", {
 	filename: text("filename").notNull(),
 	contentType: text("content_type").notNull(),
 	byteSize: integer("byte_size").notNull(),
-	// the context extracted from the file, filled once on upload
+	// the context the processing workflow fills once the attachment is ready. empty until then
 	context: text("context").notNull().default(""),
+	// the async processing status, its failure reason, and the extracted length and chunk fan-out
+	status: attachmentStatus("status").notNull().default("pending"),
+	error: text("error"),
+	charCount: integer("char_count"),
+	chunkCount: integer("chunk_count"),
 	// origin URL for a URL-ingested attachment. null for file uploads
 	sourceUrl: text("source_url"),
 	// created and updated timestamps
@@ -236,6 +244,10 @@ export const scans = pgTable("scans", {
 	foundCount: integer("found_count").notNull().default(0),
 	keptCount: integer("kept_count").notNull().default(0),
 	filteredCount: integer("filtered_count").notNull().default(0),
+	// how many of the scan's resources had their content reused within the ttl, revalidated via a 304, or freshly fetched
+	reused: integer("reused").notNull().default(0),
+	revalidated: integer("revalidated").notNull().default(0),
+	fetched: integer("fetched").notNull().default(0),
 	// per-stage breakdown of costs: embedding, fetch, cheap/premium scoring. `cost` holds the total
 	stageCosts: jsonb("stage_costs").$type<Record<string, number>>().notNull().default({}),
 	// an ai written recap of what the scan did
@@ -256,14 +268,22 @@ export const resources = pgTable("resources", {
 	// the type of resource ("read", "watch", "listen"), and its display title
 	kind: resourceKind("kind").notNull(),
 	title: text("title"),
-	// a short excerpt provided by the source, and the full content the pipeline fetches later
+	// a short excerpt provided by the source, small enough to stay in postgres since every list path reads it
 	snippet: text("snippet"),
+	// the page's full markdown, now in object storage. content_key references it and content_bytes sizes it
+	// content is the legacy inline column, superseded by content_key
 	content: text("content"),
+	contentKey: text("content_key"),
+	contentBytes: integer("content_bytes"),
 	// the curation embedding and its model, EMBED_DIMENSIONS wide for qwen3-embedding-8b
 	embedding: vector("embedding", { dimensions: EMBED_DIMENSIONS }),
 	embeddingModel: text("embedding_model"),
 	// when review last fetched this resource's content. defaults to the resource row creation
 	fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+	// the etag and last-modified returned by the last fetch, used to check whether the content changed before refetching.
+	// null until a fetch provides them
+	etag: text("etag"),
+	lastModified: text("last_modified"),
 	// created and updated timestamps
 	...timestamps(),
 })

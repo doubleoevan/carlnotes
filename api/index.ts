@@ -34,6 +34,7 @@ import {
 	setTopicSubscription,
 	updateTopic,
 } from "./topic/topics"
+import { invalidUnsubscribePage, unsubscribe, unsubscribedPage } from "./unsubscribe"
 
 // the "All" vs. "Unread" topic finding toggle
 const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional() })
@@ -62,6 +63,18 @@ const route = new Hono<AppEnv>()
 			path: "/",
 		})
 		return context.json({ ok: true })
+	})
+	// public one-click unsubscribe from a topic-scan email. the signed token in the link is the auth, so no session is needed
+	.get("/unsubscribe", async (context) => {
+		// verify the token, drop the direct subscription, and show the result page
+		const topic = await unsubscribe(context.req.query("token"))
+		const appUrl = Bun.env.BETTER_AUTH_URL
+		return topic ? context.html(unsubscribedPage(topic, appUrl)) : context.html(invalidUnsubscribePage(appUrl), 400)
+	})
+	.post("/unsubscribe", async (context) => {
+		// inbox providers post here to comply with RFC 8058 one-click unsubscribe. act on the token and return 200 with no body
+		await unsubscribe(context.req.query("token"))
+		return context.body(null, 200)
 	})
 	// public: a signed-out visitor gets featured and popular, just no "yours". every route below requires a session
 	.get("/topic-feed", zValidator("query", topicFeedQuery), async (context) => {
@@ -197,7 +210,8 @@ const route = new Hono<AppEnv>()
 				return context.json({ error: "file field required" }, 400)
 			}
 
-			// run the real ingestion: size and type validation, object storage, and context generation
+			// run the synchronous part of attachment ingestion:
+			// size and type validation, object storage, a pending row, and starting the processing workflow
 			try {
 				const bytes = new Uint8Array(await file.arrayBuffer())
 				const attachment = await ingestAttachment({
@@ -211,7 +225,7 @@ const route = new Hono<AppEnv>()
 				return context.json({ id: attachment.id, filename: attachment.filename })
 			} catch (error) {
 				// a validation error names the user's own mistake, safe to show verbatim.
-				// anything else (a misconfigured llm proxy, a network failure) is an operator problem —
+				// anything else (object storage, the database, the Temporal client) is an internal problem:
 				// log the real cause and keep it out of the response
 				if (error instanceof AttachmentValidationError) {
 					return context.json({ error: error.message }, 400)
@@ -233,7 +247,9 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "forbidden" }, 403)
 		}
 
-		// run the real ingestion: url validation, the page fetch, and context generation
+		// validate the url and fetch the page to Markdown,
+		// then run the synchronous part of attachment ingestion:
+		// object storage, a pending row, and starting the processing workflow
 		try {
 			const attachment = await ingestUrlAttachment(context.req.param("id"), context.req.valid("json").url)
 			return context.json({ id: attachment.id, filename: attachment.filename })

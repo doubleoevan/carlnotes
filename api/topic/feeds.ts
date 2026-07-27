@@ -119,6 +119,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 				id: attachments.id,
 				filename: attachments.filename,
 				sourceUrl: attachments.sourceUrl,
+				status: attachments.status,
 			})
 			.from(attachments)
 			.where(inArray(attachments.topicId, topicIds)),
@@ -188,6 +189,7 @@ async function buildTopicFeed(
 		id: attachment.id,
 		filename: attachment.filename,
 		sourceUrl: attachment.sourceUrl,
+		status: attachment.status,
 	}))
 
 	// shape each row into a topic finding and set its isConsumed flag

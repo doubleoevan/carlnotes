@@ -3,6 +3,7 @@ import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { db } from "../db"
 import * as schema from "../db/schema"
+import { sendEmail } from "../worker/email"
 
 // how long a signup-gate token stays valid
 const GATE_TOKEN_LIFETIME_MS = 15 * 60 * 1000
@@ -130,24 +131,14 @@ async function provisionLiteLLMKey(email: string): Promise<string> {
 	return key
 }
 
-// sends the signup email-verification link via resend's api. never throws: a delivery failure is logged, not fatal
+// sends the signup email-verification link. a delivery failure is logged, not fatal
 async function sendVerificationEmail(email: string, url: string): Promise<void> {
-	const apiKey = Bun.env.RESEND_API_KEY
-	const from = Bun.env.RESEND_FROM_EMAIL
-	if (!apiKey || !from) {
-		console.error("RESEND_API_KEY and RESEND_FROM_EMAIL must be set to send the signup verification email")
-		return
-	}
-	// resend's plain send-email endpoint
-	const response = await fetch("https://api.resend.com/emails", {
-		method: "POST",
-		headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
-		body: JSON.stringify({ from, to: email, subject: "Confirm your email", text: `Confirm your email: ${url}` }),
+	// the verification link as minimal HTML
+	await sendEmail({
+		to: email,
+		subject: "Confirm your email",
+		content: `Confirm your email: <a href="${url}">${url}</a>`,
 	})
-	// log rather than throw
-	if (!response.ok) {
-		console.error(`resend verification email failed for ${email}: ${response.status} ${await response.text()}`)
-	}
 }
 
 // the value's signature, keyed on the app's auth secret so a tampered token can't verify. HMAC-SHA256, base64url-encoded

@@ -1,6 +1,6 @@
-// topic attachments. a file is stored in object storage, its context is generated once at upload, and scans read it into the context
+// topic attachments. the upload stores the file and inserts a pending row, a durable workflow extracts its text and generates its context, and scans read every ready attachment's context
 import { generateText } from "ai"
-import { eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { extractText as extractPdfText } from "unpdf"
 import { db } from "../db"
 import { attachments, topics } from "../db/schema"
@@ -10,6 +10,7 @@ import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "./prompt
 import { writePrompt } from "./prompts/write.ts"
 import { fetchContent } from "./scrape.ts"
 import { deleteAttachment, putAttachment, toAttachmentKey } from "./store"
+import { startAttachmentWorkflow } from "./temporal-client"
 
 // a rejection safe to show the user verbatim: their file or url, not an infra failure like a misconfigured llm proxy
 export class AttachmentValidationError extends Error {}
@@ -29,41 +30,58 @@ export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 // cap the extracted text fed to the model
 const MAX_EXTRACT_CHARS = 8000
 
-// store the file, generate its context once, and persist the attachment. validation runs first, so a bad upload does no work
-export async function ingestAttachment(upload: AttachmentUpload): Promise<Attachment> {
-	const { topicId, filename, contentType, bytes, sourceUrl = null } = upload
-	// validate the size before touching storage or the model
+// the synchronous half of ingestion: validate, store the bytes, insert a pending row, and start the processing workflow.
+// extraction and context generation run later in the durable workflow, so a long document does not block the upload
+export async function ingestAttachment(attachmentUpload: AttachmentUpload): Promise<Attachment> {
+	const { topicId, filename, contentType, bytes, sourceUrl = null } = attachmentUpload
+	// validate the size and type of the payload before touching storage. an unsupported type never extracts, so reject it up front
 	if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
 		throw new AttachmentValidationError(`attachment exceeds ${MAX_ATTACHMENT_BYTES} bytes`)
 	}
+	if (!isSupportedAttachmentType(contentType)) {
+		throw new AttachmentValidationError(`unsupported attachment content type: ${contentType}`)
+	}
 
-	// reject a nonexistent topic before spending storage or inference
-	// the foreign key would only catch it at insert, after the upload
-	await requireTopic(topicId)
+	// reject a nonexistent topic before spending storage. the foreign key would only catch it at insert
+	await isExistingTopic(topicId)
 
-	// first extract so an unsupported type is rejected before anything is stored
-	const text = await extractText(contentType, bytes)
-	// store the raw bytes under a key namespaced by topic and attachment
-	const id = crypto.randomUUID()
-	const byteSize = bytes.byteLength
-	const objectKey = toAttachmentKey(topicId, id, filename)
+	// store the raw bytes under a key that is namespaced by topic and attachment
+	const attachmentId = crypto.randomUUID()
+	const objectKey = toAttachmentKey(topicId, attachmentId, filename)
 	await putAttachment(objectKey, bytes, contentType)
 
-	// from here the object exists, so any failure must delete it to avoid an orphan
+	// from here the object exists, so any failure must delete both the object and its row to avoid persisting an invalid attachment
 	try {
-		const context = await generateContext(text)
-		const row = { id, topicId, objectKey, filename, contentType, byteSize, context, sourceUrl }
-		const [attachment] = await db.insert(attachments).values(row).returning()
-		// surface an empty insert result instead of returning undefined
+		const attachmentRow = {
+			id: attachmentId,
+			topicId,
+			objectKey,
+			filename,
+			contentType,
+			byteSize: bytes.byteLength,
+			sourceUrl,
+		}
+		const [attachment] = await db.insert(attachments).values(attachmentRow).returning()
 		if (!attachment) {
 			throw new Error(`failed to persist attachment for topic ${topicId}`)
 		}
+		// start the durable workflow that extracts, summarizes, and marks the attachment ready
+		await startAttachmentWorkflow(attachmentId)
 		return attachment
 	} catch (error) {
-		// delete of the stored object best-effort, then rethrow the original failure
+		// best-effort clean up for an invalid attachment row and the object, then rethrow the original failure
+		await db
+			.delete(attachments)
+			.where(eq(attachments.id, attachmentId))
+			.catch(() => {})
 		await deleteAttachment(objectKey).catch(() => {})
 		throw error
 	}
+}
+
+// whether an attachment's content type has an extractor (text or PDF), checked synchronously so a bad type is rejected at upload
+export function isSupportedAttachmentType(contentType: string): boolean {
+	return contentType.startsWith("text/") || contentType === "application/pdf"
 }
 
 // ingest an attachment from a URL by fetching the page as Markdown via Firecrawl and running the shared file-ingestion path. the fetcher parameter lets the smoke test stub the network call
@@ -82,10 +100,10 @@ export async function ingestUrlAttachment(topicId: string, url: string, fetcher 
 	}
 
 	// reject a nonexistent topic before the paid fetch
-	await requireTopic(topicId)
+	await isExistingTopic(topicId)
 
-	// fetch the page to Markdown. empty content means nothing usable, so reject instead of storing a contextless attachment
-	const markdown = await fetcher(url)
+	// fetch the page as Markdown. empty content means nothing usable, so reject instead of storing a contextless attachment
+	const { markdown } = await fetcher(url)
 	if (!markdown.trim()) {
 		throw new AttachmentValidationError(`attachment URL fetched no content: ${url}`)
 	}
@@ -99,7 +117,7 @@ export async function ingestUrlAttachment(topicId: string, url: string, fetcher 
 }
 
 // throw if the topic doesn't exist, so both ingestion paths reject a misaddressed upload before spending storage, inference, or a fetch
-async function requireTopic(topicId: string): Promise<void> {
+async function isExistingTopic(topicId: string): Promise<void> {
 	// the foreign key would only catch a bad topic at insert, after the work is done. check up front instead
 	const [topic] = await db.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId))
 	if (!topic) {
@@ -133,7 +151,7 @@ export async function buildContextPrompt(text: string): Promise<BuiltPrompt> {
 }
 
 // generate a context string from the file's text with the cheap model through LiteLLM. one call, no tools
-async function generateContext(text: string): Promise<string> {
+export async function generateContext(text: string): Promise<string> {
 	// fetch and write the prompt
 	const contextPrompt = await buildContextPrompt(text)
 
@@ -157,11 +175,11 @@ export async function buildTopicScanContext(topicId: string): Promise<{ name: st
 		throw new Error(`topic ${topicId} not found`)
 	}
 
-	// read every attachment's context for the topic
+	// read every ready attachment's context for the topic. a pending or failed attachment has no settled context to read
 	const attachmentContexts = await db
 		.select({ context: attachments.context })
 		.from(attachments)
-		.where(eq(attachments.topicId, topicId))
+		.where(and(eq(attachments.topicId, topicId), eq(attachments.status, "ready")))
 
 	// merge the topic prompt and attachment contexts, dropping empties, into one context string
 	const context = [topic.prompt, ...attachmentContexts.map((row) => row.context)]

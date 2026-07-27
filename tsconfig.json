@@ -4,6 +4,7 @@
 	"references": [
 		{ "path": "./shared" },
 		{ "path": "./db" },
+		{ "path": "./emails" },
 		{ "path": "./api" },
 		{ "path": "./worker" },
 		{ "path": "./ui" }

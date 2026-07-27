@@ -129,7 +129,7 @@ The change SHALL include a generated initial migration that creates every domain
 
 ### Requirement: Attachment is topic-scoped context material
 
-The schema SHALL define an `attachments` table: a topic-scoped entity that references `topics.id` and cascades on Topic delete. Each row SHALL store the object-storage key of the uploaded file, its original filename, content type, and byte size, and a `context` text column holding the context generated from the file that scans read. `context` SHALL be non-null (defaulting to empty). Each row SHALL also have a nullable `sourceUrl` text column recording the URL an attachment was fetched from: null for file uploads, the origin URL for URL-ingested attachments. The entity name SHALL be singular (`Attachment`) in code and plural (`attachments`) as the table, and SHALL NOT be any rejected domain noun.
+The schema SHALL define an `attachments` table: a topic-scoped entity that references `topics.id` and cascades on Topic delete. Each row SHALL store the object-storage key of the uploaded file, its original filename, content type, and byte size, and a `context` text column holding the context generated from the file that scans read. `context` SHALL be non-null (defaulting to empty) and is filled by the processing workflow when the attachment becomes `ready`. Each row SHALL carry a `status` from {pending, ready, failed}, a nullable `error` recording a processing failure, and nullable `char_count` and `chunk_count` integers recording the extracted length and fan-out. Each row SHALL also have a nullable `sourceUrl` text column recording the URL an attachment was fetched from: null for file uploads, the origin URL for URL-ingested attachments. The entity name SHALL be singular (`Attachment`) in code and plural (`attachments`) as the table, and SHALL NOT be any rejected domain noun.
 
 #### Scenario: Attachment references its topic and cascades
 
@@ -141,6 +141,11 @@ The schema SHALL define an `attachments` table: a topic-scoped entity that refer
 - **WHEN** an attachment is persisted after upload
 - **THEN** its row holds the object-storage key, the original filename, content type, and byte size, and a non-null `context`
 
+#### Scenario: Attachment carries a processing status
+
+- **WHEN** an attachment is first ingested
+- **THEN** its row is valid with `status` = `pending`, `error` null, and `context` empty until the workflow fills it and sets `status` = `ready`
+
 #### Scenario: Attachment records its origin URL when fetched from one
 
 - **WHEN** an attachment is ingested from a URL rather than uploaded bytes
@@ -148,17 +153,17 @@ The schema SHALL define an `attachments` table: a topic-scoped entity that refer
 
 ### Requirement: Resource carries a native snippet and fetched content
 
-A Resource SHALL have a nullable `snippet` column holding the adapter-native text (the description/selftext/highlights the Source's own API returns) and a nullable `content` column holding the full page content fetched during curation. Both are pipeline-filled and MAY be null at ingestion: an adapter populates `snippet` and leaves `content` unset; curation fills `content` when it fetches a survivor. Neither column is required for a Resource row to be valid.
+A Resource SHALL have a nullable `snippet` column holding the adapter-native text (the description/selftext/highlights the Source's own API returns), which stays in Postgres because every list path reads it. The full page content fetched during curation SHALL live in object storage rather than in a Postgres column, referenced by a nullable `content_key` text column and sized by a nullable `content_bytes` integer. All three are pipeline-filled and MAY be null: an adapter populates `snippet` and leaves the content columns unset; curation writes the fetched markdown to object storage and sets `content_key` and `content_bytes`. None of the three is required for a Resource row to be valid. Until a follow-up migration drops it, a legacy `content` column MAY remain present but unread and unwritten.
 
 #### Scenario: Ingestion inserts with a snippet and no content
 
 - **WHEN** an adapter emits a Resource
-- **THEN** the row is valid with `snippet` set to the adapter-native text and `content` null
+- **THEN** the row is valid with `snippet` set to the adapter-native text and `content_key`/`content_bytes` null
 
 #### Scenario: Curation stores fetched content
 
 - **WHEN** curation fetches a survivor's page
-- **THEN** the row stores the fetched full content in `content`, leaving `snippet` intact
+- **THEN** the fetched markdown is written to object storage and the row stores its `content_key` and `content_bytes`, leaving `snippet` intact
 
 ### Requirement: Scan records a per-stage cost breakdown
 
@@ -270,4 +275,60 @@ The change SHALL include generated Drizzle migrations that create `topic_invites
 #### Scenario: The migrations are additive
 - **WHEN** the generated migrations are applied to a database at the current schema
 - **THEN** only `topic_invites`, the `scans.is_manual` column, and the `users.role` and `users.plan` columns are added
+
+### Requirement: Resource records content freshness and revalidation validators
+
+A Resource SHALL record when its content was last fetched in a non-null `fetched_at` timestamp (defaulting to row creation) that drives content-reuse decisions, and SHALL carry two nullable text columns, `etag` and `last_modified`, holding the origin validators captured at fetch time for conditional revalidation. Both validator columns MAY be null — at ingestion, and whenever a fetch does not expose them — and a null validator SHALL simply mean revalidation is skipped for that Resource. Neither validator column is required for a Resource row to be valid.
+
+#### Scenario: Ingestion leaves validators null and fetched_at at creation
+
+- **WHEN** an adapter first ingests a Resource
+- **THEN** the row is valid with `etag` and `last_modified` null and `fetched_at` defaulted to the row's creation time
+
+#### Scenario: A fetch that exposes validators stores them
+
+- **WHEN** curation fetches a Resource and the response exposes an `etag` or `last_modified`
+- **THEN** the row stores those validators and refreshes `fetched_at`
+
+#### Scenario: Null validators are valid and skip revalidation
+
+- **WHEN** a Resource has `content` but neither `etag` nor `last_modified`
+- **THEN** the row is valid and curation performs no conditional GET for it
+
+### Requirement: Scan records fetch-outcome counts
+
+A Scan SHALL carry three non-null integer columns — `reused`, `revalidated`, and `fetched` — each defaulting to 0, recording how many of the Scan's Resources had their content reused within the TTL, revalidated via a `304`, or freshly fetched. Their sum SHALL equal the number of Resources the Scan sent through the paid fetch-and-scoring section. The columns are additive to the existing Scan counts and do not replace `kept_count` or `filtered_count`.
+
+#### Scenario: An ingestion-only Scan has zero fetch-outcome counts
+
+- **WHEN** a Scan finds no Resources to send through the paid section
+- **THEN** `reused`, `revalidated`, and `fetched` are all 0
+
+#### Scenario: The counts default to zero
+
+- **WHEN** a Scan row is inserted without specifying the fetch-outcome counts
+- **THEN** `reused`, `revalidated`, and `fetched` are each 0
+
+### Requirement: The change includes the fetch-reuse migration
+
+The change SHALL include a generated Drizzle migration that adds nullable `etag` and `last_modified` to `resources` and the non-null-defaulted `reused`, `revalidated`, and `fetched` integer columns to `scans`. Applying it to a database at the current schema MUST succeed without altering any other table, and MUST require no backfill — existing `resources` read as null validators and existing `scans` as zero counts.
+
+#### Scenario: The migration is additive and backfill-free
+
+- **WHEN** the generated migration is applied to a database at the current schema
+- **THEN** only `resources.etag`, `resources.last_modified`, and the `scans.reused`/`scans.revalidated`/`scans.fetched` columns are added, no other table is altered, and no data backfill is needed
+
+### Requirement: The change includes the content-offload migration and backfill
+
+The change SHALL include a generated Drizzle migration that adds nullable `content_key` and `content_bytes` to `resources`, adds `status` (from {pending, ready, failed}), nullable `error`, and nullable `char_count` and `chunk_count` to `attachments`, and sets existing `attachments` rows to `ready` (they already carry a generated context). It SHALL include a backfill that, for each Resource that has `content` and no `content_key`, uploads that content to object storage and writes its `content_key` and `content_bytes`; the backfill SHALL be idempotent, skipping any Resource that already has a `content_key`, so it can be re-run. The migration SHALL NOT drop `resources.content`; a follow-up migration removes it once the backfill is verified in production.
+
+#### Scenario: The migration is additive and marks existing attachments ready
+
+- **WHEN** the migration is applied to a database at the current schema
+- **THEN** `resources` gains `content_key` and `content_bytes`, `attachments` gains `status`/`error`/`char_count`/`chunk_count`, existing attachments are `ready`, and `resources.content` is not dropped
+
+#### Scenario: The backfill uploads content and is idempotent
+
+- **WHEN** the backfill runs and then is re-run
+- **THEN** each Resource with `content` and no key has its content uploaded and `content_key`/`content_bytes` set on the first run, and Resources that already have a `content_key` are skipped on the re-run
 

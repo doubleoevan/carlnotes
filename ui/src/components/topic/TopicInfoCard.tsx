@@ -22,8 +22,20 @@ export function TopicInfoCard({ topic }: { topic: TopicResponse }) {
 	const customSources = topic.sources.filter((source) => source.kind !== "search")
 	// how long the last scan took, shown under the last scan age
 	const lastScanDuration = toDurationLabel(topic.lastScanDurationMs)
+	// the newest scan whatever its outcome, so a failed one can be called out. the sections below still describe the last succeeded scan
+	const latestScan = topic.scans[0]
 	return (
 		<div className="divide-separator border-separator bg-card mt-2 h-fit divide-y divide-dashed rounded-lg border p-5 text-sm shadow-sm">
+			{/* a failed newest scan is stated plainly, so a topic whose sources are dead doesn't read as one that found nothing */}
+			{latestScan?.status === "failed" && (
+				<InfoSection label="Last brew failed">
+					<p className="text-destructive">{latestScan.error ?? "The pot was empty."}</p>
+					<p className="text-muted-foreground mt-1 text-xs">
+						Carl will keep trying. Check this topic's sources if it keeps failing.
+					</p>
+				</InfoSection>
+			)}
+
 			{/* recap of the latest scan as rendered Markdown, clipped with a Read more toggle when long */}
 			{topic.scanSummary && (
 				<InfoSection label="Carl's Notes">
@@ -91,6 +103,15 @@ function AttachmentPill({
 	attachment: TopicResponse["attachments"][number]
 	isOwner: boolean
 }) {
+	// a failed attachment's object was cleaned up, so there is nothing to link to. show a plain failed marker
+	if (attachment.status === "failed") {
+		return <span className="text-muted-foreground truncate text-xs">{attachment.filename} · failed</span>
+	}
+
+	// a muted suffix while the processing workflow is still running, so the reader knows its context isn't ready yet
+	const processing =
+		attachment.status === "pending" ? <span className="text-muted-foreground shrink-0"> · processing</span> : null
+
 	// a url attachment links out to its origin page. its truncates and underlines on hover
 	if (attachment.sourceUrl) {
 		return (
@@ -100,6 +121,7 @@ function AttachmentPill({
 			>
 				<span className="min-w-0 truncate group-hover:underline">{attachment.sourceUrl}</span>
 				<ExternalLink aria-hidden="true" className="size-3 shrink-0" />
+				{processing}
 			</AnchorLink>
 		)
 	}
@@ -114,12 +136,18 @@ function AttachmentPill({
 			>
 				<span className="min-w-0 truncate group-hover:underline">{attachment.filename}</span>
 				<Download aria-hidden="true" className="size-3 shrink-0" />
+				{processing}
 			</a>
 		)
 	}
 
 	// a non-owner sees a plain, non-downloadable file name
-	return <span className="text-secondary-foreground truncate text-xs">{attachment.filename}</span>
+	return (
+		<span className="text-secondary-foreground flex items-center truncate text-xs">
+			{attachment.filename}
+			{processing}
+		</span>
+	)
 }
 
 // one line in the sources section: the source icon, the source kind, and its config summary

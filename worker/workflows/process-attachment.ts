@@ -1,0 +1,25 @@
+// the attachment processing workflow. deterministic orchestration only: it calls activities and never does I/O itself.
+// extract and chunk, summarize the chunks in parallel, then finalize and mark ready. a failure marks the attachment failed
+import { proxyActivities } from "@temporalio/workflow"
+import type * as activities from "./process-attachment-activities"
+
+// activity proxies with a generous timeout for extraction and the per-chunk model calls
+const { extractAttachmentText, summarizeChunk, finalizeAttachment, failAttachment } = proxyActivities<
+	typeof activities
+>({
+	startToCloseTimeout: "5 minutes",
+})
+
+// attempt to process an attachment end to end, compensating with a failed status and object cleanup on error
+export async function processAttachment(attachmentId: string): Promise<void> {
+	try {
+		// extract and chunk, summarize each chunk in parallel, then merge and mark ready
+		const { chunks, charCount } = await extractAttachmentText(attachmentId)
+		const summaries = await Promise.all(chunks.map((chunkText) => summarizeChunk(chunkText)))
+		await finalizeAttachment(attachmentId, summaries, charCount, chunks.length)
+	} catch (error) {
+		// on error mark failed and delete the stored object, then fail the workflow
+		await failAttachment(attachmentId, error instanceof Error ? error.message : String(error))
+		throw error
+	}
+}

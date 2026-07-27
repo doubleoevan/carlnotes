@@ -14,13 +14,13 @@ model_list:
   # apply-model: long-horizon spec implementation
   - model_name: apply-model
     litellm_params:
-      model: fireworks_ai/accounts/fireworks/models/kimi-k2p7-code
+      model: fireworks_ai/accounts/fireworks/models/kimi-k3
     model_info:
-      friendly_name: "Kimi K2.7 Code"
+      friendly_name: "Kimi K3"
       supports_function_calling: true
       supports_vision: true
       supports_prompt_caching: true
-      max_input_tokens: 262144
+      max_input_tokens: 1048576
       max_output_tokens: 16384
 
   # aside-model: cheap side conversations and plan-agent reads
@@ -68,13 +68,11 @@ model_list:
       mode: embedding
       output_vector_size: 1024
 
-# drop provider-unsupported params instead of erroring (Fireworks embeddings reject encoding_format the AI SDK sends)
-# max_budget is the proxy-wide backstop behind the per-user virtual key budgets: a lifetime hard cap, no reset
-# duration, so raising it is a deliberate operator action alongside topping up the Fireworks prepaid balance.
-# PLACEHOLDER: this number is an operator decision, not a default to trust as-is
+# drop provider-unsupported params instead of erroring (Fireworks embeddings reject encoding_format the AI SDK sends).
+# no proxy-wide max_budget: spend is capped per virtual key, minted per user at signup and managed in litellm itself.
+# the Fireworks prepaid balance is the real ceiling behind those keys
 litellm_settings:
   drop_params: true
-  max_budget: os.environ/LITELLM_MAX_BUDGET_USD
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

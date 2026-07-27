@@ -45,6 +45,38 @@ test("sources.integration_id is nullable", () => {
 	expect(sources.integrationId.notNull).toBe(false)
 })
 
+// the conditional-refetch validators are captured only when a fetch exposes them, so both must be nullable
+test("resources.etag and last_modified are nullable", () => {
+	expect(resources.etag.notNull).toBe(false)
+	expect(resources.lastModified.notNull).toBe(false)
+	expect(allMigrationsSql()).toContain(`"etag" text`)
+	expect(allMigrationsSql()).toContain(`"last_modified" text`)
+})
+
+// the fetch-outcome counts are additive scan bookkeeping, so each is non-null and defaults to zero, needing no backfill
+test("scans reused/revalidated/fetched are non-null and default to zero", () => {
+	expect(schema.scans.reused.notNull).toBe(true)
+	expect(schema.scans.revalidated.notNull).toBe(true)
+	expect(schema.scans.fetched.notNull).toBe(true)
+	expect(allMigrationsSql()).toContain(`"reused" integer DEFAULT 0 NOT NULL`)
+})
+
+// attachment processing is async, so a new attachment starts pending with its outcome columns nullable
+test("attachments.status defaults to pending and its outcome columns are nullable", () => {
+	expect(schema.attachments.status.notNull).toBe(true)
+	expect(schema.attachments.error.notNull).toBe(false)
+	expect(schema.attachments.charCount.notNull).toBe(false)
+	expect(allMigrationsSql()).toContain(`"status" "attachment_status" DEFAULT 'pending' NOT NULL`)
+})
+
+// resource content moves to object storage behind a key. the legacy content column is not dropped in this change
+test("resources content_key and content_bytes are nullable and content is not dropped", () => {
+	expect(resources.contentKey.notNull).toBe(false)
+	expect(resources.contentBytes.notNull).toBe(false)
+	expect("content" in resources).toBe(true)
+	expect(allMigrationsSql()).toContain(`ADD COLUMN "content_key" text`)
+})
+
 // a Subscription's subscriber is a user or an audience, so both columns exist and are mutually exclusive
 test("a subscription exposes both subscriber columns with a mutual exclusion check", () => {
 	expect(subscriptions.subscriberUserId).toBeDefined()

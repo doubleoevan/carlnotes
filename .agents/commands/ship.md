@@ -57,6 +57,25 @@ handoff. Skip only when the command arguments ($ARGUMENTS) include
 "no-ponytail". If the ponytail plugin is not installed, report that and
 continue; never fail the ritual on a missing reviewer.
 
+## 3c. Naming and comment audit
+
+Read the diff as a stranger with no project context would. Every folder, file,
+function, and variable name must say what the thing is without a comment
+explaining it. Review the codebase and match the conventions already in it. 
+The `code-style` skill is the reference for naming rules, not this file. Where the diff
+introduces a term that already exists under another name, adopt the existing
+one.
+
+Every comment earns its place or gets deleted:
+- Keep: a short sentence explaining why a non-obvious choice was made.
+- Delete: restatements of the code, decision history, "NOT X" notes, migration
+  narrative, and anything a reader would skip.
+
+Comments are current documentation, not a record of how the code got here.
+They should be clear, concise, human-readable sentences that are genuinely helpful.
+Rename and rewrite in this pass rather than filing follow-up work. Report what
+you changed and why.
+
 ## 4. Manual review handoff
 
 Summarize the full diff for human review: each file, what changed, and why.

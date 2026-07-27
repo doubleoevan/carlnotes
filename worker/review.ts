@@ -11,7 +11,8 @@ import { cheapModel, embedVector, scoreModel } from "./models.ts"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "./prompts/fetch.ts"
 import { filterPremiumPrompt, writePrompt } from "./prompts/write.ts"
-import { fetchContent } from "./scrape.ts"
+import { fetchContent, revalidateContent } from "./scrape.ts"
+import { deleteResourceContent, getResourceContent, toResourceContentKey, uploadResourceContent } from "./store"
 
 // stage thresholds for deduping and measuring relevance
 const NEAR_DUPLICATE_DISTANCE = 0.05
@@ -22,6 +23,12 @@ const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? 
 
 // the per-Scan spend ceiling. only the paid fetch and scoring stages are gated by it
 const REVIEW_SCAN_BUDGET_USD = Number(Bun.env.REVIEW_SCAN_BUDGET_USD ?? "0.5")
+
+// stored resource content stays reusable for this long before a scan revalidates or refetches it. the environment can override it
+const CONTENT_TTL_MS = Number(Bun.env.CONTENT_TTL_MS ?? String(24 * 60 * 60 * 1000))
+
+// the hard cap on how many resources one Scan scores, bounding the paid fetch-and-scoring section. the environment can override it
+const MAX_SCORED_RESOURCES_PER_SCAN = Number(Bun.env.MAX_SCORED_RESOURCES_PER_SCAN ?? "30")
 
 // text caps that bound tokens and spend
 const MAX_EMBED_CHARS = 8000
@@ -52,8 +59,19 @@ type Scan = typeof scans.$inferSelect
 type Resource = typeof resources.$inferSelect
 type StageCosts = { embedding: number; fetch: number; scoringCheap: number; scoringPremium: number }
 
-// the running spend state threaded through the stages. it holds the total, its cap, and the per-stage breakdown
-type Budget = { spent: number; cap: number; stageCosts: StageCosts }
+// the fetch outcome for one Resource: content reused within the ttl, revalidated by a 304, or freshly fetched
+type FetchOutcome = "reused" | "revalidated" | "fetched"
+type FetchOutcomeCounts = { reusedCount: number; revalidatedCount: number; fetchedCount: number }
+
+// the running budget threaded through the paid stages: dollars spent and the dollar ceiling, the per-stage cost breakdown,
+// the limit on how many resources may be scored, and the reused/revalidated/fetched counts
+type Budget = {
+	spent: number
+	cap: number
+	stageCosts: StageCosts
+	maxScoredResources: number
+	fetchCounts: FetchOutcomeCounts
+}
 
 // a scoring tier holds its model, its cost bucket and rate, and whether it writes the relevance explanation
 type ScoreTier = {
@@ -101,13 +119,17 @@ type ScanPromptData = {
 	budget: Budget
 }
 
-// the scan review summary with resource counts, costs and scan summary
+// the scan review summary with resource counts, costs, fetch-outcome counts, and scan summary
 type ReviewSummary = {
 	keptCount: number
 	filteredCount: number
 	cost: number
 	stageCosts: Record<string, number>
 	scanSummary: string
+	// the reused, revalidated, and fetched counts the Scan records
+	reusedCount: number
+	revalidatedCount: number
+	fetchedCount: number
 }
 
 // reviews a Scan's discovered Resources, writes Findings and returns the counts, cost, outcome, and summary.
@@ -121,11 +143,17 @@ export async function reviewScan(
 	// load the unscored list of discovered Resources for this Topic
 	const unscoredResources = await loadUnscoredResources(scan.topicId, discoveredResources)
 	if (unscoredResources.length === 0) {
-		return emptySummary()
+		return emptyReviewSummary()
 	}
 
-	// running state. the spend budget with its per-stage breakdown, the in-scan hash set, and the per-outcome tally
-	const budget: Budget = { spent: 0, cap: REVIEW_SCAN_BUDGET_USD, stageCosts: emptyStageCosts() }
+	// running state of the budget: the content hashes seen this scan, and the per-outcome review totals
+	const budget: Budget = {
+		spent: 0,
+		cap: REVIEW_SCAN_BUDGET_USD,
+		stageCosts: emptyStageCosts(),
+		maxScoredResources: MAX_SCORED_RESOURCES_PER_SCAN,
+		fetchCounts: emptyFetchCounts(),
+	}
 	const seenHashes = new Set<string>()
 	const reviewOutcome = emptyReviewOutcome()
 
@@ -149,6 +177,10 @@ export async function reviewScan(
 		cost: budget.spent,
 		stageCosts: budget.stageCosts,
 		scanSummary,
+		// the reused, revalidated, and fetched counts
+		reusedCount: budget.fetchCounts.reusedCount,
+		revalidatedCount: budget.fetchCounts.revalidatedCount,
+		fetchedCount: budget.fetchCounts.fetchedCount,
 	}
 }
 
@@ -176,7 +208,7 @@ async function loadTopicContext(topicId: string, budget: Budget, litellmApiKey?:
 	const { name, context } = await buildTopicScanContext(topicId)
 	const text = (context.trim() || name).slice(0, MAX_EMBED_CHARS)
 
-	// embed the context as the query side once and tally the estimated embedding cost
+	// embed the context as the query side once and update the estimated embedding cost
 	const embedding = await embedQuery(text, litellmApiKey)
 	charge(budget, "embedding", tokenCost(estimateEmbedTokens(text), EMBED_COST_PER_MILLION_TOKENS))
 	return { name, text, embedding }
@@ -242,16 +274,17 @@ async function runResourcePipeline(
 		return { status: "filtered", reason: "below relevance threshold" }
 	}
 
-	// stages 5 and 6 are paid. defer the Resource once the Scan hits its spend ceiling
-	if (!canSpend(budget)) {
+	// stages 5 and 6 are paid. defer the Resource once the Scan hits its dollar ceiling or its scored-resource limit
+	if (!canPay(budget)) {
 		return { status: "deferred" }
 	}
 
-	// fetch the full content with a snippet fallback on failure,
-	// score it against the topic context with tiered models,
-	// then write the topic finding
-	const resourceContent = await fetchResourceContent(resource, budget)
-	const scoredResource = await scoreResource(resourceContent, topicContext.text, budget, litellmApiKey)
+	// get the content by reuse, revalidation, or a paid fetch, then increment the FetchOutcome, which advances the scored-resource count
+	const { content, fetchOutcome } = await fetchResourceContent(resource, budget)
+	budget.fetchCounts[toFetchCountKey(fetchOutcome)]++
+
+	// score the content against the topic context with tiered models, then write the topic finding
+	const scoredResource = await scoreResource(content, topicContext.text, budget, litellmApiKey)
 	await upsertFinding(scan, resource, scoredResource.score, scoredResource.relevanceExplanation)
 
 	// the kept outcome carries the feed-facing details that the report cites
@@ -304,19 +337,84 @@ async function hasNearDuplicate(embedding: number[], excludeId: string): Promise
 	return isNearDuplicate(Number(nearest.distance))
 }
 
-// fetch the Resource's full content into the content column. on failure fall back to the native snippet, never the bare title
-async function fetchResourceContent(resource: Resource, budget: Budget): Promise<string> {
-	// fetch, store, and track the fetch cost. a failure degrades to the snippet without charging
+// get the survivor's content: reuse it if fresh, revalidate stale content with a cheap conditional GET, else fetch from Firecrawl.
+// reuse and a 304 cost no fetch credit. only the Firecrawl fetch is billed, and a failed fetch falls back to the snippet
+async function fetchResourceContent(
+	resource: Resource,
+	budget: Budget,
+): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
+	// reuse fresh stored content scores as-is, read back from object storage, with no fetch
+	if (resource.contentKey && !isContentStale(resource.fetchedAt, new Date(), CONTENT_TTL_MS)) {
+		const storedContent = await readStoredContent(resource.contentKey, resource.id)
+		if (storedContent !== null) {
+			return { content: storedContent, fetchOutcome: "reused" }
+		}
+	}
+
+	// revalidate stale content with a cheap conditional GET. 304 reuses it and refreshes the fetched_at timestamp
+	if (resource.contentKey && (resource.etag || resource.lastModified)) {
+		const outcome = await revalidateContent(resource.url, { etag: resource.etag, lastModified: resource.lastModified })
+		const storedContent = outcome === "not-modified" ? await readStoredContent(resource.contentKey, resource.id) : null
+		if (storedContent !== null) {
+			await db.update(resources).set({ fetchedAt: new Date() }).where(eq(resources.id, resource.id))
+			return { content: storedContent, fetchOutcome: "revalidated" }
+		}
+	}
+
+	// fetch with a billed Firecrawl, storing fresh content and the etag and last-modified
+	return fetchViaFirecrawl(resource, budget)
+}
+
+// read a Resource's stored Markdown or null when the object is gone or unreadable.
+// a missing object is a cache miss, not a Resource failure, so the caller falls through and fetches the page again
+async function readStoredContent(contentKey: string, resourceId: string): Promise<string | null> {
 	try {
-		const content = await fetchContent(resource.url)
-		await db.update(resources).set({ content }).where(eq(resources.id, resource.id))
+		return await getResourceContent(contentKey)
+	} catch (error) {
+		console.error(`object-storage read failed for resource ${resourceId}`, error)
+		return null
+	}
+}
+
+// fetch the content from Firecrawl, write it to object storage, and record its key, size, and validators on the row.
+// a failed scrape or a failed object-storage write falls back to the native snippet, never failing the Resource or the Scan
+async function fetchViaFirecrawl(
+	resource: Resource,
+	budget: Budget,
+): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
+	try {
+		// fetch the page Markdown, charge the scrape, then write the body to object storage
+		const { markdown, etag, lastModified } = await fetchContent(resource.url)
 		charge(budget, "fetch", FIRECRAWL_COST_PER_FETCH)
-		// a scrape can succeed with no main content. that is no better than the snippet, so score the snippet instead
-		return content || (resource.snippet ?? "")
+		const stored = markdown ? await storeResourceContent(resource.id, markdown) : null
+
+		// decide the text to score and the key to store, then record the validators and key on the row
+		const { scoringText, contentKey, contentBytes } = toFetchedContentFields(stored, markdown, resource.snippet)
+		await db
+			.update(resources)
+			.set({ contentKey, contentBytes, etag, lastModified, fetchedAt: new Date() })
+			.where(eq(resources.id, resource.id))
+		return { content: scoringText, fetchOutcome: "fetched" }
 	} catch (error) {
 		// fetch failed — score against the native snippet, never the bare title
 		console.error(`firecrawl fetch failed for ${resource.url}`, error)
-		return resource.snippet ?? ""
+		return { content: resource.snippet ?? "", fetchOutcome: "fetched" }
+	}
+}
+
+// write the fetched Markdown to object storage, returning its key and size, or null when the write fails.
+// a failed write best-effort deletes the object so it leaves no orphan, and curation falls back to the snippet
+async function storeResourceContent(
+	resourceId: string,
+	markdown: string,
+): Promise<{ contentKey: string; bytes: number } | null> {
+	try {
+		return await uploadResourceContent(resourceId, markdown)
+	} catch (error) {
+		// the write failed. best-effort delete any partial object, then report null so scoring uses the snippet
+		console.error(`object-storage write failed for resource ${resourceId}`, error)
+		await deleteResourceContent(toResourceContentKey(resourceId)).catch(() => {})
+		return null
 	}
 }
 
@@ -561,7 +659,7 @@ function toCostLine(budget: Budget): string {
 	return `total $${budget.spent.toFixed(4)} — embedding $${embedding.toFixed(4)}, fetch $${fetch.toFixed(4)}, cheap scoring $${scoringCheap.toFixed(4)}, premium scoring $${scoringPremium.toFixed(4)}`
 }
 
-// fold one Resource's outcome into the running tally
+// fold one Resource's outcome into the running totals
 function trackOutcomes(reviewOutcome: ReviewOutcome, resourceOutcome: ResourceOutcome): void {
 	// a kept outcome stores its feed-facing finding
 	if (resourceOutcome.status === "kept") {
@@ -619,6 +717,47 @@ export function canSpend(budget: Budget): boolean {
 	return budget.spent < budget.cap
 }
 
+// a resource may be scored only while the topic scan is under both its dollar ceiling and its scored-resource limit
+export function canPay(budget: Budget): boolean {
+	return budget.spent < budget.cap && scoredCount(budget) < budget.maxScoredResources
+}
+
+// how many resources the topic scan has scored so far
+// the count a fetch outcome increments. the two are named apart so an outcome reads as what happened, not as a tally
+export function toFetchCountKey(fetchOutcome: FetchOutcome): keyof FetchOutcomeCounts {
+	// each outcome has exactly one count, so a new outcome fails to compile until its count exists
+	const countKeys: Record<FetchOutcome, keyof FetchOutcomeCounts> = {
+		reused: "reusedCount",
+		revalidated: "revalidatedCount",
+		fetched: "fetchedCount",
+	}
+	return countKeys[fetchOutcome]
+}
+
+export function scoredCount(budget: Budget): number {
+	return budget.fetchCounts.reusedCount + budget.fetchCounts.revalidatedCount + budget.fetchCounts.fetchedCount
+}
+
+// whether stored content has outlived the ttl window and needs revalidating or refetching before it is scored again
+export function isContentStale(fetchedAt: Date, now: Date, ttlMs: number): boolean {
+	return now.getTime() - fetchedAt.getTime() >= ttlMs
+}
+
+// the fields that a fetch writes to the Resource row, plus the text it scores.
+// a body written to object storage is scored in memory and keeps its key.
+// an empty scrape or a failed write scores the snippet instead and keeps no key
+export function toFetchedContentFields(
+	stored: { contentKey: string; bytes: number } | null,
+	markdown: string,
+	snippet: string | null,
+): { scoringText: string; contentKey: string | null; contentBytes: number | null } {
+	return {
+		scoringText: stored ? markdown : (snippet ?? ""),
+		contentKey: stored?.contentKey ?? null,
+		contentBytes: stored?.bytes ?? null,
+	}
+}
+
 // keep the model's score within the 0 to 1 range that the topic feed expects
 function clampScore(score: number): number {
 	return Math.max(0, Math.min(1, score))
@@ -640,7 +779,21 @@ function emptyStageCosts(): StageCosts {
 	return { embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 }
 }
 
-// the empty summary for a Scan with nothing to review. no findings, no cost, an empty breakdown
-function emptySummary(): ReviewSummary {
-	return { keptCount: 0, filteredCount: 0, cost: 0, stageCosts: {}, scanSummary: "" }
+// a new zeroed reused/revalidated/fetched count outcome to hydrate
+function emptyFetchCounts(): FetchOutcomeCounts {
+	return { reusedCount: 0, revalidatedCount: 0, fetchedCount: 0 }
+}
+
+// the empty summary for a topic scan to hydrate
+function emptyReviewSummary(): ReviewSummary {
+	return {
+		keptCount: 0,
+		filteredCount: 0,
+		cost: 0,
+		stageCosts: {},
+		scanSummary: "",
+		reusedCount: 0,
+		revalidatedCount: 0,
+		fetchedCount: 0,
+	}
 }

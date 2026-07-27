@@ -1,6 +1,7 @@
 // zod wired contracts for the topic feed payload and its mutations. the api validates with them and the ui parses with them
 import { z } from "zod"
 import {
+	attachmentStatuses,
 	editableSourceKinds,
 	frequencies,
 	ratings,
@@ -71,7 +72,14 @@ export const topicFeed = z.object({
 	// an AI generated recap of the latest scan. null until a scan has succeeded
 	scanSummary: z.string().nullable(),
 	// the attachments and sources shown in the info popover. a file attachment downloads for the owner, a url attachment links out to its page
-	attachments: z.array(z.object({ id: z.string(), filename: z.string(), sourceUrl: z.string().nullable() })),
+	attachments: z.array(
+		z.object({
+			id: z.string(),
+			filename: z.string(),
+			sourceUrl: z.string().nullable(),
+			status: z.enum(attachmentStatuses),
+		}),
+	),
 	sources: z.array(z.object({ id: z.string(), kind: z.enum(sourceKinds) })),
 	findings: z.array(topicFinding),
 })
@@ -92,6 +100,8 @@ export const topicScan = z.object({
 	cost: z.number().nullable(),
 	// an AI written recap of the scan. null until the review has run
 	scanSummary: z.string().nullable(),
+	// why the scan failed, so a topic whose sources all fail does not read as one that simply found nothing
+	error: z.string().nullable(),
 })
 export type TopicScan = z.infer<typeof topicScan>
 

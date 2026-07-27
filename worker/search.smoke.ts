@@ -53,7 +53,7 @@ async function check(source: Source): Promise<boolean> {
 		(resourceKind) => resourceKind === "read" || resourceKind === "watch",
 	)
 
-	// print the report header and counts
+	// print the smoke test report
 	console.log("\n=== search smoke report ===")
 	console.log(`resources     : ${resources.length}`)
 	console.log(`kinds         : ${[...resourceKinds].join(", ")}`)

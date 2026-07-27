@@ -52,15 +52,17 @@ fi
 # route git hooks through the repo so the pre-push gates are always armed
 git config core.hooksPath .githooks
 
-# first run: teach the shell the carl commands (idempotent, keyed on the marker line)
+# first run: teach the shell the carl commands (idempotent, keyed on the marker line).
+# the aliases resolve their repo at call time, so running them inside a git worktree acts on that worktree
+# the repo root path is only the fallback
 SHELL_RC="$HOME/.zshrc"
 REPO_ROOT="$(pwd)"
 if ! grep -q "# carlnotes aliases" "$SHELL_RC" 2>/dev/null; then
   {
     echo ""
     echo "# carlnotes aliases (added by scripts/carl-up.sh)"
-    echo "alias carl-up='bash \"$REPO_ROOT/scripts/carl-up.sh\"'"
-    echo "alias carl-down='bash \"$REPO_ROOT/scripts/carl-down.sh\"'"
+    echo "alias carl-up='bash \"\$(git rev-parse --show-toplevel 2>/dev/null || echo \"$REPO_ROOT\")/scripts/carl-up.sh\"'"
+    echo "alias carl-down='bash \"\$(git rev-parse --show-toplevel 2>/dev/null || echo \"$REPO_ROOT\")/scripts/carl-down.sh\"'"
   } >> "$SHELL_RC"
   echo "installed carl-up / carl-down as shell commands (new terminals from now on)"
 fi
@@ -73,10 +75,15 @@ if ! docker info >/dev/null 2>&1; then
   docker info >/dev/null 2>&1 || { echo "docker did not start within 60s: open Docker Desktop and retry" >&2; exit 1; }
 fi
 
-# bring up the litellm proxy with secrets injected
+# bring up the compose services (litellm proxy and temporal dev server) with secrets injected
 $COMPOSE up -d
 
-# first boot: mint the capped dev key so agents never hold the master key (both paths)
+# wait for temporal to accept connections: compose returns once the container is created, well before the server binds 7233
+# without this, the worker started right after carl-up races the server and dies on a refused connection
+for _ in $(seq 30); do nc -z localhost 7233 >/dev/null 2>&1 && break; sleep 1; done
+nc -z localhost 7233 >/dev/null 2>&1 || { echo "temporal did not bind 7233 within 30s: check 'docker compose logs temporal'" >&2; exit 1; }
+
+# first boot: mint the capped litellm dev key so that agents never hold the master key
 if [[ -z "$(get_secret LITELLM_DEV_KEY)" ]]; then
   # announce, since the health-check wait can take a few seconds on a cold proxy
   echo "no LITELLM_DEV_KEY found: minting a capped dev key (waiting for the proxy)..."
@@ -120,4 +127,4 @@ if command -v launchctl >/dev/null 2>&1; then
   done
 fi
 
-echo "carl is up: http://localhost:4000/ui"
+echo "carl is up: litellm http://localhost:4000/ui · temporal ui http://localhost:8233"

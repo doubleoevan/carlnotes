@@ -1,6 +1,6 @@
 // the topic logic behind the api routes. it loads one topic's full payload and applies the owner's edits, deletes, subscriptions, and manual scans
 import type { TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contracts"
-import { ADMIN_QUOTA, PLANS, type Plan } from "@shared/plans"
+import { ADMIN_QUOTA, PLANS } from "@shared/plans"
 import { and, count, desc, eq, notInArray } from "drizzle-orm"
 import { db } from "../../db"
 import { attachments, scans, sources, subscriptions, topicInvites, topics } from "../../db/schema"
@@ -14,7 +14,7 @@ type ManualScanResult = { status: "started"; remaining: number } | { status: "fo
 type CreateTopicResult = { status: "created"; id: string } | { status: "quota" }
 
 /**
- * Load one topic's full payload, or null when the topic is missing or not visible to this user.
+ * Load one topic's full payload or null when the topic is missing or not visible to this user.
  * A signed-out visitor may view a public topic, with no consumed state and no owner extras.
  */
 export async function loadTopicPayload(userId: string | null, topicId: string): Promise<TopicResponse | null> {
@@ -34,12 +34,17 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 	}))
 
 	// the owner and admins see spend. a signed-out visitor is a plain free viewer who never owns the topic
-	const { isAdmin, plan } = userId ? await loadUserAccess(userId) : { isAdmin: false, plan: "free" as const }
+	const { isAdmin } = userId ? await loadUserAccess(userId) : { isAdmin: false }
 	const isOwner = topic.ownerId === userId
 
 	// the attachments and the scan history, newest scan first
 	const attachmentRows = await db
-		.select({ id: attachments.id, filename: attachments.filename, sourceUrl: attachments.sourceUrl })
+		.select({
+			id: attachments.id,
+			filename: attachments.filename,
+			sourceUrl: attachments.sourceUrl,
+			status: attachments.status,
+		})
 		.from(attachments)
 		.where(eq(attachments.topicId, topic.id))
 	const scanRows = await db.select().from(scans).where(eq(scans.topicId, topic.id)).orderBy(desc(scans.startedAt))
@@ -55,6 +60,7 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 		filteredCount: scan.filteredCount,
 		cost: isAdmin || isOwner ? Number(scan.cost) : null,
 		scanSummary: scan.scanSummary,
+		error: scan.error,
 	}))
 
 	// the subscriber count and this user's own subscription state
@@ -68,10 +74,10 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 	const inviteRows = isOwner
 		? await db.select({ email: topicInvites.email }).from(topicInvites).where(eq(topicInvites.topicId, topic.id))
 		: []
-	const manualScansRemaining = userId ? await scansRemaining(userId, isOwner, isAdmin, plan) : null
+	const manualScansRemaining = userId ? await scansRemaining(userId, isOwner) : null
 
 	// the latest succeeded scan feeds the schedule section, mirroring the homepage feed
-	const lastSucceededScan = scanHistory.find((scan) => scan.status === "succeeded")
+	const lastSucceededScan = toLastSucceededScan(scanHistory)
 	// how long that scan took, from its start and finish times
 	const lastScanDurationMs =
 		lastSucceededScan?.finishedAt != null
@@ -112,6 +118,13 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 		invitees: inviteRows.map((invite) => invite.email),
 		manualScansRemaining,
 	}
+}
+
+/**
+ * The most recent succeeded scan in a newest-first history. A later failed scan never replaces the last successful result.
+ */
+export function toLastSucceededScan(scanHistory: TopicScan[]): TopicScan | undefined {
+	return scanHistory.find((scan) => scan.status === "succeeded")
 }
 
 /**
@@ -281,7 +294,7 @@ export async function runManualScan(userId: string, topicId: string): Promise<Ma
 	}
 
 	// start the scan without awaiting it. history shows the running row until it finishes.
-	// ponytail: check-then-start is not atomic, so concurrent requests can slip a few scans past the daily count.
+	// check-then-start is not atomic, so concurrent requests can slip a few scans past the daily count.
 	// the real spend ceiling is the owner's per-user litellm key budget, which litellm enforces atomically, so an
 	// over-count never becomes over-spend. a per-user advisory lock around the count and insert would close the count gap
 	runTopicScan(topicId, true).catch((error) => console.error(`manual scan failed for topic ${topicId}`, error))

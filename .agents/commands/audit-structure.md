@@ -52,6 +52,7 @@ Check for:
       `summarize-topic-scan.md`), `attachment-context.md` (now `attach-context.md`),
       `search-query.md` (now `search-topic.md`)
     - `render.ts`/`fill.ts` (merged into `write.ts`)
+    - `worker/llm.ts` (now `worker/models.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -1,20 +1,21 @@
-// a live smoke test the owner runs by hand for URL attachment ingestion. it seeds a topic, ingests a real URL through Firecrawl, and checks the generated context and the stored object.
-// it makes real proxy, Firecrawl, and S3 calls, so the smoke filename keeps it out of the offline bun test run.
-// run it with: bun run smoke:attachments. it needs the LiteLLM proxy reachable at LITELLM_BASE_URL, FIRECRAWL_API_KEY and the S3_* bucket config set, the latest migration applied, and Doppler secrets injected
+// a live smoke test the owner runs by hand for URL attachment ingestion and its processing workflow.
+// it seeds a topic, ingests a real URL, waits for the workflow to mark the attachment ready, and checks the context, counts, and stored object
+// run it with: bun run smoke:attach. it needs the LiteLLM proxy, FIRECRAWL_API_KEY, the S3_* bucket, a Temporal server with its worker running (bun run dev:temporal), the latest migration applied, and Doppler secrets injected
 import { eq } from "drizzle-orm"
 import { db } from "../db"
-import { topics, users } from "../db/schema"
+import { attachments, topics, users } from "../db/schema"
 import { buildTopicScanContext, ingestUrlAttachment } from "./attach"
 import { attachmentExists, deleteAttachment } from "./store"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 
-// the persisted attachment row that ingestUrlAttachment returns
-type Attachment = Awaited<ReturnType<typeof ingestUrlAttachment>>
+// a persisted attachment row
+type Attachment = typeof attachments.$inferSelect
 
-// a real page with plenty of content that Firecrawl scrapes to non-empty Markdown. the scan smoke already depends on the same host, so it is a safe bet to be up
+// a real page with plenty of content that Firecrawl scrapes to non-empty Markdown, and a non-empty topic context to merge with
 const ATTACHMENT_URL = "https://simonwillison.net/"
-// a non-empty topic context, so the merged scan context holds both the topic's own context and the attachment's
 const TOPIC_CONTEXT = "Smoke-test topic for URL attachment ingestion."
+// how long to wait for the workflow to finish before giving up. the worker (bun run dev:temporal) must be running
+const PROCESSING_TIMEOUT_MS = 90_000
 
 // seed a fake owner and a topic to attach the URL to
 async function seedTestData(): Promise<{ topicId: string; userId: string }> {
@@ -40,39 +41,60 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 	return { topicId: topic.id, userId: user.id }
 }
 
-// run the smoke assertions over the ingested attachment and print a report. returns true if every check passes
-async function check(topicId: string, attachment: Attachment): Promise<boolean> {
-	// the merged context a scan would read for this topic, plus whether the raw Markdown object landed in the bucket
-	const { context: scanContext } = await buildTopicScanContext(topicId)
-	const objectStored = await attachmentExists(attachment.objectKey)
-
-	// prove the empty-fetch guard rejects instead of storing an attachment with no context.
-	// the topic is real and the injected fetcher skips Firecrawl and returns nothing, so only the empty fetch can cause the rejection
-	let emptyRejected = false
-	try {
-		await ingestUrlAttachment(topicId, ATTACHMENT_URL, async () => "")
-	} catch {
-		emptyRejected = true
+// poll the attachment row until the workflow marks it ready or failed, or the timeout elapses
+async function waitForAttachment(attachmentId: string): Promise<Attachment> {
+	// poll once a second until the status leaves pending, then return the finished row
+	const processingDeadline = Date.now() + PROCESSING_TIMEOUT_MS
+	while (Date.now() < processingDeadline) {
+		const [attachment] = await db.select().from(attachments).where(eq(attachments.id, attachmentId))
+		if (attachment && attachment.status !== "pending") {
+			return attachment
+		}
+		await Bun.sleep(1000)
 	}
 
-	// the smoke assertions. ingestion produced a non-empty context that feeds the scan context, the object was stored, the origin URL was recorded, and an empty fetch is rejected
-	const contextText = attachment.context.trim()
+	// the workflow never finished in time — most likely the worker isn't running
+	throw new Error(
+		`attachment still pending after ${PROCESSING_TIMEOUT_MS}ms — is the temporal worker (bun run dev:temporal) running?`,
+	)
+}
+
+// run the smoke assertions over the pending attachment row and the finished row, and print a report. returns true if every check passes
+async function check(topicId: string, pendingAttachment: Attachment, readyAttachment: Attachment): Promise<boolean> {
+	// the merged context a scan would read, plus whether the stored object is still in the bucket
+	const { context: scanContext } = await buildTopicScanContext(topicId)
+	const isObjectStored = await attachmentExists(readyAttachment.objectKey)
+
+	// prove the empty-fetch guard rejects ingesting before storing anything so that no contextless attachment is ever persisted
+	let isEmptyAttachmentRejected = false
+	try {
+		await ingestUrlAttachment(topicId, ATTACHMENT_URL, async () => ({ markdown: "", etag: null, lastModified: null }))
+	} catch {
+		isEmptyAttachmentRejected = true
+	}
+
+	// verify a pending upload, a workflow that finished ready with a context and counts, the object stored, and the guards
+	const contextText = readyAttachment.context.trim()
 	const results: [string, boolean][] = [
-		["attachment context is non-empty", contextText.length > 0],
+		["upload returns a pending attachment", pendingAttachment.status === "pending"],
+		["workflow marks the attachment ready", readyAttachment.status === "ready"],
+		["context is non-empty", contextText.length > 0],
 		["context appears in topicScanContext", scanContext.includes(contextText)],
-		["stored object exists", objectStored],
-		["sourceUrl records the origin URL", attachment.sourceUrl === ATTACHMENT_URL],
-		["empty fetch is rejected", emptyRejected],
+		["char_count is recorded", (readyAttachment.charCount ?? 0) > 0],
+		["chunk_count is at least one", (readyAttachment.chunkCount ?? 0) >= 1],
+		["stored object exists", isObjectStored],
+		["sourceUrl records the origin URL", readyAttachment.sourceUrl === ATTACHMENT_URL],
+		["empty fetch is rejected", isEmptyAttachmentRejected],
 	]
 
-	// print the report
+	// print the smoke test report
 	console.log("\n=== attachment smoke report ===")
-	console.log(`object_key    : ${attachment.objectKey}`)
-	console.log(`source_url    : ${attachment.sourceUrl}`)
-	console.log(`context_chars : ${contextText.length}`)
+	console.log(`status        : ${pendingAttachment.status} -> ${readyAttachment.status}`)
+	console.log(`object_key    : ${readyAttachment.objectKey}`)
+	console.log(`char/chunk    : ${readyAttachment.charCount} / ${readyAttachment.chunkCount}`)
 	console.log(`context_head  : ${contextText.slice(0, 200)}`)
 
-	// print each check and compute the overall result
+	// print each check and return the overall result
 	let allPassed = true
 	for (const [label, pass] of results) {
 		console.log(`${pass ? "PASS" : "FAIL"}  ${label}`)
@@ -81,20 +103,21 @@ async function check(topicId: string, attachment: Attachment): Promise<boolean> 
 	return allPassed
 }
 
-// seed, ingest, and check, then clean up the stored object and the fake owner.
-// deleting the owner cascades to the attachment row
+// seed, ingest, wait for the workflow, and check, then clean up the stored object and the fake owner
 async function smokeTest(): Promise<number> {
 	const { topicId, userId } = await seedTestData()
-	// ingest up front so that the stored object has a reference for cleanup even if an assertion later throws
+	// ingest up front so the stored object has a reference for cleanup even if a later step throws
 	let objectKey: string | null = null
 	try {
-		const attachment = await ingestUrlAttachment(topicId, ATTACHMENT_URL)
-		objectKey = attachment.objectKey
-		const pass = await check(topicId, attachment)
-		console.log(`\n=== smoke ${pass ? "PASSED" : "FAILED"} ===`)
-		return pass ? 0 : 1
+		const pendingAttachment = await ingestUrlAttachment(topicId, ATTACHMENT_URL)
+		objectKey = pendingAttachment.objectKey
+		// wait for the workflow to finish, then run assertions over the result
+		const readyAttachment = await waitForAttachment(pendingAttachment.id)
+		const isPassed = await check(topicId, pendingAttachment, readyAttachment)
+		console.log(`\n=== smoke ${isPassed ? "PASSED" : "FAILED"} ===`)
+		return isPassed ? 0 : 1
 	} finally {
-		// the owner cascade drops the database rows but not the object in the bucket, so delete the object explicitly, then the owner
+		// the owner cascade drops the rows but not the bucket object, so delete the object explicitly, then the owner
 		if (objectKey) {
 			await deleteAttachment(objectKey).catch(() => {})
 		}

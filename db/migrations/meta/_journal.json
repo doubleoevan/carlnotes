@@ -134,6 +134,20 @@
       "when": 1784920708500,
       "tag": "0018_faithful_shinobi_shaw",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784944406286,
+      "tag": "0019_green_sage",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784993489317,
+      "tag": "0020_last_reavers",
+      "breakpoints": true
     }
   ]
 }

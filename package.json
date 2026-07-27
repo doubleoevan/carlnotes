@@ -4,16 +4,22 @@
 	"private": true,
 	"type": "module",
 	"scripts": {
+		"dev": "concurrently -k -n api,ui,temporal,worker,email -c blue,magenta,yellow,green,cyan \"bun run dev:api\" \"bun run dev:ui\" \"bun run dev:temporal\" \"bun run dev:worker\" \"bun run dev:email\"",
 		"dev:ui": "doppler run --command \"cd ui && vite\"",
 		"dev:api": "doppler run -- bun --watch api/index.ts",
+		"dev:worker": "SCHEDULE_INTERVAL_MS=60000 doppler run -- bun worker/schedule.ts",
+		"dev:temporal": "doppler run -- bun worker/temporal.ts",
+		"dev:email": "email dev --dir emails --port 3011",
 		"build:ui": "cd ui && vite build",
+		"schedule": "doppler run -- bun worker/schedule.ts",
 		"check": "bash scripts/preflight.sh",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "doppler run -- drizzle-kit migrate",
 		"db:seed": "doppler run -- bun api/seed.ts",
 		"test": "bun test",
-		"smoke": "bun run smoke:scan && bun run smoke:attach && bun run smoke:search",
+		"smoke": "bun run smoke:scan && bun run smoke:store && bun run smoke:attach && bun run smoke:search",
 		"smoke:scan": "doppler run -- bun worker/scan.smoke.ts",
+		"smoke:store": "doppler run -- bun worker/store.smoke.ts",
 		"smoke:attach": "doppler run -- bun worker/attach.smoke.ts",
 		"smoke:search": "doppler run -- bun worker/search.smoke.ts",
 		"prompts:sync": "doppler run -- bun worker/prompts/sync.ts"
@@ -34,6 +40,13 @@
 		"@radix-ui/react-select": "^2.3.3",
 		"@radix-ui/react-slot": "^1.3.0",
 		"@radix-ui/react-tooltip": "^1.2.12",
+		"@react-email/components": "^1.0.12",
+		"@react-email/render": "^2.1.0",
+		"@react-email/ui": "^6.9.1",
+		"@temporalio/activity": "^1.21.1",
+		"@temporalio/client": "^1.21.1",
+		"@temporalio/worker": "^1.21.1",
+		"@temporalio/workflow": "^1.21.1",
 		"ai": "^7.0.28",
 		"better-auth": "^1.6.24",
 		"class-variance-authority": "^0.7.1",
@@ -60,9 +73,15 @@
 		"@types/react": "^19.2.17",
 		"@types/react-dom": "^19.2.3",
 		"@vitejs/plugin-react": "^6.0.3",
+		"concurrently": "^10.0.4",
 		"drizzle-kit": "^0.31.10",
+		"react-email": "^6.9.1",
 		"tailwindcss": "^4.3.2",
 		"typescript": "^5.9.3",
 		"vite": "^8.1.4"
-	}
+	},
+	"trustedDependencies": [
+		"@swc/core",
+		"protobufjs"
+	]
 }

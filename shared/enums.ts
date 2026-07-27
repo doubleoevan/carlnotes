@@ -4,6 +4,8 @@ export const resourceKinds = ["read", "watch", "listen"] as const
 export const visibilities = ["public", "invite", "private"] as const
 export const frequencies = ["daily", "weekly"] as const
 export const scanStatuses = ["running", "succeeded", "failed"] as const
+// an attachment's async processing status: pending === stored and queued, ready === processed, or failed
+export const attachmentStatuses = ["pending", "ready", "failed"] as const
 export const sourceVisibilities = ["public", "private"] as const
 export const ratings = ["up", "down"] as const
 // the keys for the homepage's three topic feed sections

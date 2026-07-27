@@ -86,6 +86,14 @@ function ScanInfo({ scan }: { scan: TopicScan }) {
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-[calc(100vw-2rem)] max-w-lg text-sm">
 				<PopoverCloseButton />
+				{/* why a failed scan failed, above the recap, since a failed scan has no recap to show */}
+				{scan.status === "failed" && (
+					<>
+						<div className="text-muted-foreground font-display mb-1 text-xs tracking-wide uppercase">Failed</div>
+						<p className="text-destructive mb-3">{scan.error ?? "This one didn't brew."}</p>
+					</>
+				)}
+
 				{/* Carl's recap of the whole scan, rendered Markdown inside a scrollable bordered box */}
 				<div className="text-muted-foreground font-display mb-1 text-xs tracking-wide uppercase">{"Carl's Notes"}</div>
 				{scan.scanSummary ? <ScanScroll markdown={scan.scanSummary} /> : <p>No summary yet.</p>}

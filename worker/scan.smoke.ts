@@ -73,7 +73,7 @@ async function check(topicId: string): Promise<boolean> {
 	const explanationLengths = topicFindings.map((finding) => finding.relevanceExplanation.trim().length)
 	const longestExplanationLength = Math.max(0, ...explanationLengths)
 
-	// print the topic scan report
+	// print the smoke test report
 	console.log("\n=== topic scan smoke report ===")
 	console.log(`scan.status        : ${topicScan.status}`)
 	console.log(`found/kept/filtered: ${topicScan.foundCount} / ${topicScan.keptCount} / ${topicScan.filteredCount}`)
@@ -140,7 +140,13 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		},
 		// one healthy source and an untouched budget
 		scannedSources: [{ sourceKind: "rss", status: "ok" }],
-		budget: { spent: 0, cap: 0.5, stageCosts: { embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 } },
+		budget: {
+			spent: 0,
+			cap: 0.5,
+			stageCosts: { embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 },
+			maxScoredResources: 25,
+			fetchCounts: { reusedCount: 0, revalidatedCount: 0, fetchedCount: 0 },
+		},
 	})
 
 	// report whether the registry actually served this run's prompts, or the worker ran on the bundled Markdown alone

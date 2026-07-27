@@ -34,6 +34,38 @@ export function attachmentStream(attachmentKey: string): ReadableStream {
 	return bucket().file(attachmentKey).stream()
 }
 
+// read a stored attachment's raw bytes, used by the processing workflow to extract its text
+export async function getAttachmentBytes(attachmentKey: string): Promise<Uint8Array> {
+	return new Uint8Array(await bucket().file(attachmentKey).arrayBuffer())
+}
+
+// the object key for a Resource's fetched content, namespaced by resource id, mirroring toAttachmentKey
+export function toResourceContentKey(resourceId: string): string {
+	return `resources/${resourceId}/content.md`
+}
+
+// upload a Resource's fetched Markdown to object storage, returning its key and byte size for the resource row
+export async function uploadResourceContent(
+	resourceId: string,
+	markdown: string,
+): Promise<{ contentKey: string; bytes: number }> {
+	// write the Markdown under the resource's content key, then report the content key and size to store on the row
+	const contentKey = toResourceContentKey(resourceId)
+	const body = new TextEncoder().encode(markdown)
+	await bucket().write(contentKey, body, { type: "text/markdown" })
+	return { contentKey, bytes: body.byteLength }
+}
+
+// read a Resource's stored Markdown back to score a reused or revalidated Resource
+export async function getResourceContent(contentKey: string): Promise<string> {
+	return bucket().file(contentKey).text()
+}
+
+// delete a Resource's stored content object. best-effort cleanup on a resource delete or a storage-write failure
+export async function deleteResourceContent(contentKey: string): Promise<void> {
+	await bucket().delete(contentKey)
+}
+
 // build the S3 client from env, throwing if any value is unset so a misconfigured upload never writes to a wrong or default endpoint
 function bucket(): Bun.S3Client {
 	// every S3_* value is required. a missing one fails loudly

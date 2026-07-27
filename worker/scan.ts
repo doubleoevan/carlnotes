@@ -85,6 +85,10 @@ export async function runTopicScan(topicId: string, isManual = false): Promise<S
 						filteredCount: review.filteredCount,
 						stageCosts: review.stageCosts,
 						scanSummary: review.scanSummary,
+						// the per-outcome fetch tallies
+						reused: review.reusedCount,
+						revalidated: review.revalidatedCount,
+						fetched: review.fetchedCount,
 						// the total cost is the ingestion cost plus every review stage cost
 						cost: (cost + review.cost).toString(),
 						finishedAt: new Date(),
