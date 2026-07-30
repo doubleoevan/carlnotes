@@ -1,12 +1,13 @@
-// a live smoke test the owner runs by hand for a full topic Scan, ingestion then review. it seeds a topic and an RSS source, runs runTopicScan, and checks the outputs
-// run it with: bun run smoke:scan. it needs the LiteLLM proxy reachable at LITELLM_BASE_URL, the latest migration applied, and Doppler secrets injected
+// a live smoke test for a full topic Scan, ingestion then review: seed a topic and an RSS source, scan, check the outputs.
+// run it with: bun run smoke:scan. needs the LiteLLM proxy at LITELLM_BASE_URL, the latest migration, and Doppler secrets
 import { and, eq, isNotNull } from "drizzle-orm"
 import { db } from "../db"
-import { findings, resources, sources, topics, users } from "../db/schema"
+import { findings, resources, scans, sources, topics, users } from "../db/schema"
 // the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
 import { buildSearchPrompt } from "./adapters/search"
 import { buildContextPrompt } from "./attach"
-import { buildScanReportPrompt, buildScorePrompt } from "./review"
+import { buildScorePrompt } from "./review/score"
+import { buildScanReportPrompt } from "./review/summarize"
 import { runTopicScan } from "./scan"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 
@@ -42,13 +43,16 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 
 	// an RSS source with no API key pointing at the feed
 	await db.insert(sources).values({ topicId: topic.id, kind: "rss", config: { url: FEED_URL } })
+
+	// a completed Scan dated now, so that a schedule sweep doesn't race this smoke on the same topic
+	await db.insert(scans).values({ topicId: topic.id, ownerId: user.id, status: "succeeded", finishedAt: new Date() })
 	return { topicId: topic.id, userId: user.id }
 }
 
 // run the topic scan pipeline, check the smoke assertions, and print a report. returns true when every check passes
-async function check(topicId: string): Promise<boolean> {
+async function check(topicId: string, ownerId: string): Promise<boolean> {
 	// run the full pipeline for the topic, ingestion then review
-	const topicScan = await runTopicScan(topicId)
+	const topicScan = await runTopicScan(topicId, ownerId)
 	if (!topicScan) {
 		throw new Error("runTopicScan returned no scan")
 	}
@@ -56,6 +60,11 @@ async function check(topicId: string): Promise<boolean> {
 	// read this topic's findings and one embedded resource from this scan, joined through the findings
 	// so the length assertion can't pass on an unrelated topic's vector left in the shared resources table
 	const topicFindings = await db.select().from(findings).where(eq(findings.topicId, topicId))
+	const [topic] = await db.select({ maxResults: topics.maxResults }).from(topics).where(eq(topics.id, topicId))
+
+	// the scan's kept_count is what review wrote, and the topic is then trimmed to its max_results,
+	// so the rows that survive must be the smaller of the two
+	const expectedFindingCount = Math.min(topicScan.keptCount, topic?.maxResults ?? 0)
 	const [embedded] = await db
 		.select({ embedding: resources.embedding, model: resources.embeddingModel })
 		.from(findings)
@@ -80,7 +89,9 @@ async function check(topicId: string): Promise<boolean> {
 	console.log(`cost               : ${totalCost}`)
 	console.log(`stage_costs        : ${JSON.stringify(topicScan.stageCosts)} (sum ${totalStageCosts.toFixed(6)})`)
 	// print the findings and embedding report
-	console.log(`findings           : ${topicFindings.length} (with explanations: ${findingsWithExplanations.length})`)
+	console.log(
+		`findings           : ${topicFindings.length} of ${expectedFindingCount} expected (with explanations: ${findingsWithExplanations.length})`,
+	)
 	console.log(`embedding length   : ${embeddingLength} (model ${embedded?.model})`)
 	if (findingsWithExplanations[0]) {
 		console.log(`sample explanation : ${findingsWithExplanations[0].relevanceExplanation}`)
@@ -97,7 +108,7 @@ async function check(topicId: string): Promise<boolean> {
 		["embedding is 1024-dim", embeddingLength === 1024],
 
 		// topic findings checks
-		["kept_count matches findings", topicScan.keptCount === topicFindings.length],
+		["findings match kept_count capped by max_results", topicFindings.length === expectedFindingCount],
 		["stage_costs sum to cost", Math.abs(totalCost - totalStageCosts) < 1e-6],
 		["at least one finding", topicFindings.length > 0],
 		["a finding has a relevance explanation", findingsWithExplanations.length > 0],
@@ -165,14 +176,13 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 }
 
 // seed the test data and run the checks, then always delete the fake owner
-// the delete cascades to the topic, source, scan, and findings
 async function smokeTest(): Promise<number> {
 	const { topicId, userId } = await seedTestData()
 	// run the checks, then delete the owner regardless of outcome
 	try {
-		const pass = await check(topicId)
-		console.log(`\n=== smoke ${pass ? "PASSED" : "FAILED"} ===`)
-		return pass ? 0 : 1
+		const isPassed = await check(topicId, userId)
+		console.log(`\n=== smoke ${isPassed ? "PASSED" : "FAILED"} ===`)
+		return isPassed ? 0 : 1
 	} finally {
 		await db.delete(users).where(eq(users.id, userId))
 	}

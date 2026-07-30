@@ -1,11 +1,10 @@
 // a live smoke test for the resource-content object-storage round-trip: upload Markdown, read it back, verify, then delete.
-// it makes real S3 calls, so the smoke filename keeps it out of the offline bun test run.
-// run it with: bun run smoke:store. it needs the S3_* bucket config set and Doppler secrets injected
+// run it with: bun run smoke:store. needs the S3_* bucket config and Doppler secrets
 import { deleteResourceContent, getResourceContent, toResourceContentKey, uploadResourceContent } from "./store"
 
-// upload content for a throwaway resource id, read it back, and check the key, size, and body all round-trip
+// upload content for a fake resource id, read it back, and check the key, size, and body all round-trip
 async function smokeTest(): Promise<number> {
-	// a throwaway resource id and some Markdown to round-trip through object storage
+	// a fake resource id and some Markdown to round-trip through object storage
 	const resourceId = `smoke-${Date.now()}`
 	const markdown = `# resource content smoke\n\nround-tripped at ${new Date().toISOString()}`
 

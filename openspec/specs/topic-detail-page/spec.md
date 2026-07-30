@@ -37,18 +37,26 @@ Beside the History list (top-aligned with it, not with Findings), a single info 
 - **THEN** the Sources section still leads with the web scout line, muted and marked off
 
 ### Requirement: Access to the page follows Topic visibility
-The topic page payload SHALL be served to the owner always, to anyone for public Topics, and for invite Topics only to users whose account email is invited or who already subscribe. Private Topics SHALL be served only to the owner. Any other request SHALL get not-found, and the ui SHALL render a not-found message rather than an empty page.
+The topic page payload SHALL be served to the owner always, to an admin for any Topic (the single platform override, so an admin can open any Topic to edit or delete it), to anyone for public Topics, and for invite Topics only to users whose account email is invited or who already subscribe. Private Topics SHALL be served only to the owner or an admin. Any other request SHALL get not-found, and the ui SHALL render a not-found message rather than an empty page. Access SHALL be decided through `isAllowed(user, "topic:view", topic)`.
 
 #### Scenario: An uninvited user cannot open an invite topic
 - **WHEN** a signed-in user who is neither invited nor subscribed requests an invite Topic
 - **THEN** the api responds not-found and the page shows the not-found message
 
+#### Scenario: An admin can open any topic
+- **WHEN** an admin requests a private Topic they do not own
+- **THEN** the api serves the payload so the admin can edit or delete it
+
 ### Requirement: The bell toggles this user's Subscription
-The 🔔 bell SHALL toggle a Subscription for the current user through the api, rendering filled when subscribed and outline when not. Subscribing SHALL be permitted on public Topics for anyone and on invite Topics for invited users; the api SHALL reject subscription writes on private Topics.
+The 🔔 bell SHALL toggle a Subscription for the current user through the api, rendering filled when subscribed and outline when not. Subscribing SHALL be permitted on public Topics for anyone and on invite Topics for invited users — where subscribing IS accepting the invite, activating the subscription from that moment and carrying the same next-scan disclaimer as the Activity page's accept control. The api SHALL reject subscription writes on private Topics.
 
 #### Scenario: Subscribing persists
 - **WHEN** a non-owner activates the bell on a public Topic and reloads
 - **THEN** the bell renders filled and a Subscription row exists for that user
+
+#### Scenario: The bell accepts an invite
+- **WHEN** an invited user activates the bell on an invite Topic
+- **THEN** their pending invite becomes an active subscription, and the next-scan expectation is shown
 
 ### Requirement: A failed last Scan is surfaced on the topic page
 
@@ -68,4 +76,18 @@ When a Topic's most recent Scan ended `failed`, the topic page SHALL say so and 
 
 - **WHEN** a Topic's most recent Scan `succeeded` but kept nothing
 - **THEN** no failure notice is shown
+
+### Requirement: The info card shows the Max results row
+The topic info card SHALL show a "Max results" row rendering "Carl's top {max_results}" through the same shared info component its other rows use, with wording identical to the edit-topic modal's select.
+
+#### Scenario: The row reflects the stored value
+- **WHEN** a topic with `max_results` 15 renders its info card
+- **THEN** a "Max results" row reads "Carl's top 15"
+
+### Requirement: The topic page carries the same filter and sort as the feed
+The topic page SHALL honor the same All / Unread / Bookmarked view — set through the shared search bar's Filters menu — and offer the same "Sort" menu (relevant / newest / trending) as the homepage feed, with the pinned bookmark group above the auto-kept Findings in every mode.
+
+#### Scenario: The topic page sorts and filters like the feed
+- **WHEN** a user switches the sort or filter on a topic page
+- **THEN** the findings section behaves exactly as the homepage feed does for that mode
 

@@ -259,6 +259,7 @@ async function seedTopic(topic: SeedTopic): Promise<void> {
 		.values({
 			id: scanId,
 			topicId: topic.id,
+			ownerId: topic.owner,
 			status: "succeeded",
 			startedAt,
 			finishedAt,

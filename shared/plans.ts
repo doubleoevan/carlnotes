@@ -1,8 +1,10 @@
-// each billing plan's topic cap, daily scan cap, monthly spend backstop, and price. scheduled and manual scans share one scan pool
+// each billing plan's topic cap, daily scan cap, monthly spend backstop, and price. scheduled and manual scans share one daily scan pool
 import type { plans } from "./enums"
 
 export type Plan = (typeof plans)[number]
 type PlanConfig = {
+	// a higher rank inherits every capability of the plans below it. free is 0, premium is highest
+	rank: number
 	topicLimit: number
 	dailyScanLimit: number
 	// the monthly spend backstop in cents. a ceiling on our cost to serve the user, not the user's price
@@ -15,6 +17,10 @@ type PlanConfig = {
 // well above any real plan's limits, so a genuine remaining count never reaches it
 export const ADMIN_QUOTA = 999
 
+// an admin's monthly spend backstop in cents. admins bypass the topic and scan caps,
+// but it stays a real number, since this bills a real card and a runaway scan loop should still hit a wall
+export const ADMIN_BUDGET_CENTS = 100_000
+
 // yearly is a flat 10x monthly on every plan — two months free,
 // computed here, so the discount can never drift out of sync if a monthly price changes later
 const YEARLY_MONTHS = 10
@@ -24,6 +30,7 @@ const MONTHLY_PRICE_CENTS = { free: 0, plus: 1500, premium: 2900 } as const sati
 export const PLANS = {
 	// $0 — capped low since there's no revenue to offset the cost
 	free: {
+		rank: 0,
 		topicLimit: 3,
 		dailyScanLimit: 5,
 		monthlyBudgetCents: 300,
@@ -32,6 +39,7 @@ export const PLANS = {
 	},
 	// $15/mo, $150/yr
 	plus: {
+		rank: 1,
 		topicLimit: 10,
 		dailyScanLimit: 20,
 		monthlyBudgetCents: 1000,
@@ -40,6 +48,7 @@ export const PLANS = {
 	},
 	// $29/mo, $290/yr
 	premium: {
+		rank: 2,
 		topicLimit: 25,
 		dailyScanLimit: 50,
 		monthlyBudgetCents: 2000,

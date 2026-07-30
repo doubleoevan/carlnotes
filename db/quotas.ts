@@ -2,7 +2,7 @@
 import { ADMIN_QUOTA, PLANS, type Plan } from "@shared/plans"
 import { and, count, eq, gte, ne } from "drizzle-orm"
 import { db } from "."
-import { scans, topics, users } from "./schema"
+import { scans, users } from "./schema"
 
 // this user's admin status and billing plan, read together since every quota check needs both
 export async function loadUserAccess(userId: string): Promise<{ isAdmin: boolean; plan: Plan }> {
@@ -11,14 +11,14 @@ export async function loadUserAccess(userId: string): Promise<{ isAdmin: boolean
 	return { isAdmin: user?.role === "admin", plan: user?.plan ?? "free" }
 }
 
-// how many scans ran on the user's topics since utc midnight, scheduled and manual combined
+// how many scans ran for the user since utc midnight, scheduled and manual combined.
+// a scan carries its own owner, so deleting a topic can't remove the count its scans already used up
 export async function scansToday(userId: string): Promise<number> {
-	// count every non-failed scan across the user's topics inside the utc day. a failed scan gives its slot back
+	// count every non-failed scan inside the utc day. a failed scan gives its slot back
 	const [scanCountRow] = await db
 		.select({ count: count() })
 		.from(scans)
-		.innerJoin(topics, eq(scans.topicId, topics.id))
-		.where(and(eq(topics.ownerId, userId), ne(scans.status, "failed"), gte(scans.startedAt, startOfUtcDay(new Date()))))
+		.where(and(eq(scans.ownerId, userId), ne(scans.status, "failed"), gte(scans.startedAt, startOfUtcDay(new Date()))))
 	return scanCountRow?.count ?? 0
 }
 

@@ -32,7 +32,9 @@ export const redditAdapter: SourceAdapter = async (source: Source) => {
 }
 
 // the fields parsePosts reads from a reddit listing response
-type RedditListing = { data: { children: { data: { permalink: string; title?: string; selftext?: string } }[] } }
+type RedditListing = {
+	data: { children: { data: { permalink: string; title?: string; selftext?: string; score?: number } }[] }
+}
 
 // map a reddit listing to "read" Resources. each post is keyed by its comments permalink and deduped within the payload
 export function parsePosts(json: RedditListing): NewResource[] {
@@ -45,13 +47,15 @@ export function parsePosts(json: RedditListing): NewResource[] {
 			continue
 		}
 
-		// map to a url to a "read" Resource. the snippet is the post selftext. contentHash stays null for review to fill
+		// map the url to a "read" Resource. the snippet is the post selftext and the score is the engagement field.
+		// contentHash stays null for review to fill
 		resourceByUrl.set(url, {
 			url,
 			title: child.data.title ?? null,
 			kind: "read",
 			snippet: child.data.selftext || null,
 			contentHash: null,
+			engagement: child.data.score ?? null,
 		})
 	}
 	// the deduped "read" Resources, in listing order

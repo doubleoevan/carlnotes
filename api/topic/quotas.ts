@@ -1,28 +1,8 @@
-// the plan quotas the api reads: topics remaining, scans remaining today, and the monthly budget window
-import { ADMIN_QUOTA, PLANS } from "@shared/plans"
-import { count, eq } from "drizzle-orm"
-import { db } from "../../db"
-import { loadUserAccess, scansRemainingToday } from "../../db/quotas"
-import { topics } from "../../db/schema"
+// the scan quota reads the api routes use, and the utc month boundary the spend windows roll over on
+import { scansRemainingToday } from "../../db/quotas"
 
-// the per-user scan-quota checks live in db/quotas, next to the tables they read
-export { loadUserAccess, scansToday, startOfUtcDay } from "../../db/quotas"
-
-/**
- * How many more topics the user may create under the topic cap, floored at zero.
- * The cap counts the topics they hold, so deleting one frees a slot.
- */
-export async function topicsRemaining(userId: string): Promise<number> {
-	// admins bypass the topic cap so they can test freely
-	const { isAdmin, plan } = await loadUserAccess(userId)
-	if (isAdmin) {
-		return ADMIN_QUOTA
-	}
-
-	// count every topic that the user owns against their plan's cap
-	const [topicCountRow] = await db.select({ count: count() }).from(topics).where(eq(topics.ownerId, userId))
-	return Math.max(0, PLANS[plan].topicLimit - (topicCountRow?.count ?? 0))
-}
+// the per-user scan-quota checks live in db/quotas, next to the tables they read, so the worker shares them
+export { scansToday, startOfUtcDay } from "../../db/quotas"
 
 /**
  * Scans left today for the plan. Null for a non-owner, unlimited for an admin.

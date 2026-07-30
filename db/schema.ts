@@ -3,7 +3,9 @@
 // enum value sets that live in @shared so that db pgEnums, api validation, and ui rendering can read one source
 import {
 	attachmentStatuses,
+	daysOfWeek,
 	frequencies,
+	maxResultsOptions,
 	plans,
 	ratings,
 	resourceKinds,
@@ -25,6 +27,7 @@ import {
 	primaryKey,
 	real,
 	text,
+	time,
 	timestamp,
 	unique,
 	vector,
@@ -35,6 +38,8 @@ export const sourceKind = pgEnum("source_kind", sourceKinds)
 export const resourceKind = pgEnum("resource_kind", resourceKinds)
 export const visibility = pgEnum("visibility", visibilities)
 export const frequency = pgEnum("frequency", frequencies)
+export const dayOfWeek = pgEnum("day_of_week", daysOfWeek)
+// the enums for a scan's outcome, a finding, and a user's account
 export const scanStatus = pgEnum("scan_status", scanStatuses)
 export const sourceVisibility = pgEnum("source_visibility", sourceVisibilities)
 export const rating = pgEnum("rating", ratings)
@@ -42,7 +47,7 @@ export const plan = pgEnum("plan", plans)
 // the attachment async-processing status enum
 export const attachmentStatus = pgEnum("attachment_status", attachmentStatuses)
 
-// the curation embedding's vector width. the resources.embedding column and the worker's embed helper share this one constant
+// the review embedding's vector width. the resources.embedding column and the worker's embed helper share this one constant
 export const EMBED_DIMENSIONS = 1024
 
 // the users table. its columns match Better Auth's user schema, plus one app-specific field.
@@ -57,8 +62,10 @@ export const users = pgTable("users", {
 	litellmVirtualKey: text("litellm_virtual_key"),
 	// the platform role: "admin" or "user". plain text to match Better Auth's admin plugin shape
 	role: text("role").notNull().default("user"),
-	// the billing plan. every new user starts on free
+	// the billing plan. the Stripe webhook projects it from the user's active billing subscription, and free means there is none
 	plan: plan("plan").notNull().default("free"),
+	// a per-user monthly spend override in cents. an admin can raise or lower it, and null falls back to the plan's backstop
+	budgetOverrideCents: integer("budget_override_cents"),
 	// plain timestamps without time zone to mirror Better Auth's own schema exactly
 	createdAt: timestamp("created_at").defaultNow().notNull(),
 	updatedAt: timestamp("updated_at")
@@ -171,16 +178,25 @@ export const topics = pgTable(
 		prompt: text("prompt").notNull().default(""),
 		// how often to scan, and who may see the topic feed
 		frequency: frequency("frequency").notNull().default("daily"),
+		// the time of day a scan runs. stored as HH:MM:SS, the format drizzle's time column returns
+		scheduledTime: time("scheduled_time").notNull().default("09:00:00"),
+		// the day a weekly scan runs on. ignored for every other frequency
+		scheduledDayOfWeek: dayOfWeek("scheduled_day_of_week").notNull().default("monday"),
 		visibility: visibility("visibility").notNull().default("private"),
 		// free-form category labels, empty by default
 		tags: text("tags").array().notNull().default([]),
 		// an admin can feature this topic and set its order
 		featureOrder: integer("feature_order"),
+		// how many findings a scan keeps for this topic, one of the shared allowed sizes
+		maxResults: integer("max_results").notNull().default(10),
 		// created and updated timestamps
 		...timestamps(),
 	},
-	// the generalized inverted index for topic tag filtering
-	(table) => [index("topics_tags_gin").using("gin", table.tags)],
+	// the generalized inverted index for topic tag filtering, and the allowed kept-set sizes
+	(table) => [
+		index("topics_tags_gin").using("gin", table.tags),
+		check("topics_max_results_allowed", sql.raw(`max_results in (${maxResultsOptions.join(", ")})`)),
+	],
 )
 
 // a source is a topic input that scans pull resources from
@@ -227,10 +243,13 @@ export const attachments = pgTable("attachments", {
 // a scan is the record for a single execution of the topic's pipeline
 export const scans = pgTable("scans", {
 	id: primaryId(),
-	// the topic scanned
-	topicId: text("topic_id")
+	// the topic scanned, cleared rather than cascaded so a deleted topic's scans keep their spend history
+	topicId: text("topic_id").references(() => topics.id, { onDelete: "set null" }),
+	// who the scan bills and counts against. it is set at creation and never cleared,
+	// so the spend and the daily count survive a topic being deleted
+	ownerId: text("owner_id")
 		.notNull()
-		.references(() => topics.id, { onDelete: "cascade" }),
+		.references(() => users.id, { onDelete: "cascade" }),
 	// the scan status. running until it succeeds or fails. error holds a failure reason
 	status: scanStatus("status").notNull().default("running"),
 	error: text("error"),
@@ -270,14 +289,16 @@ export const resources = pgTable("resources", {
 	title: text("title"),
 	// a short excerpt provided by the source, small enough to stay in postgres since every list path reads it
 	snippet: text("snippet"),
-	// the page's full markdown, now in object storage. content_key references it and content_bytes sizes it
+	// the page's full Markdown, now in object storage. content_key references it and content_bytes sizes it
 	// content is the legacy inline column, superseded by content_key
 	content: text("content"),
 	contentKey: text("content_key"),
 	contentBytes: integer("content_bytes"),
-	// the curation embedding and its model, EMBED_DIMENSIONS wide for qwen3-embedding-8b
+	// the review embedding and its model, EMBED_DIMENSIONS wide for qwen3-embedding-8b
 	embedding: vector("embedding", { dimensions: EMBED_DIMENSIONS }),
 	embeddingModel: text("embedding_model"),
+	// the source's engagement count where the adapter captured one, like a reddit post score. null means no signal
+	engagement: integer("engagement"),
 	// when review last fetched this resource's content. defaults to the resource row creation
 	fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
 	// the etag and last-modified returned by the last fetch, used to check whether the content changed before refetching.
@@ -341,6 +362,26 @@ export const consumptions = pgTable(
 	(table) => [unique("consumptions_user_finding_unique").on(table.userId, table.findingId)],
 )
 
+// a bookmark is the record of a user keeping a topic finding regardless of the max-results filter
+export const bookmarks = pgTable(
+	"bookmarks",
+	{
+		id: primaryId(),
+		// the user who bookmarked the topic finding
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// the topic finding kept
+		findingId: text("finding_id")
+			.notNull()
+			.references(() => findings.id, { onDelete: "cascade" }),
+		// when the topic finding was bookmarked
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// one bookmark per user and finding. bookmarking twice is a no-op and unbookmarking deletes the row
+	(table) => [unique("bookmarks_user_finding_unique").on(table.userId, table.findingId)],
+)
+
 // a topic invite grants an email address view and subscribe access to an "invite" topic.
 // it references an email, not a user row, so a topic can be shared before the invitee has an account
 export const topicInvites = pgTable(
@@ -402,6 +443,10 @@ export const subscriptions = pgTable(
 		// exactly one subscriber: a user or an audience, never both and never neither
 		subscriberUserId: text("subscriber_user_id").references(() => users.id, { onDelete: "cascade" }),
 		subscriberAudienceId: text("subscriber_audience_id").references(() => audiences.id, { onDelete: "cascade" }),
+		// unsubscribing toggles is_active off and keeps the row. only an explicit delete removes it
+		isActive: boolean("is_active").notNull().default(true),
+		// email cascades off whenever active turns off. it does not cascade back on when active does
+		isEmailEnabled: boolean("is_email_enabled").notNull().default(true),
 		// delivery preference for this subscriber
 		frequency: frequency("frequency").notNull().default("daily"),
 		// created and updated timestamps
@@ -415,6 +460,27 @@ export const subscriptions = pgTable(
 		),
 	],
 )
+
+// a billing subscription is a user's active paid Stripe subscription.
+export const billingSubscriptions = pgTable("billing_subscriptions", {
+	id: primaryId(),
+	// the subscriber. one active billing subscription per user, so the user id is unique and cascades with the user
+	userId: text("user_id")
+		.notNull()
+		.unique()
+		.references(() => users.id, { onDelete: "cascade" }),
+	// the Stripe customer and subscription this row mirrors
+	stripeCustomerId: text("stripe_customer_id").notNull(),
+	stripeSubscriptionId: text("stripe_subscription_id").notNull(),
+	// the plan this subscription grants, the Stripe status it mirrors, and when the current period ends
+	plan: plan("plan").notNull(),
+	status: text("status").notNull(),
+	currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+	// whether Stripe has a payment method to charge. with one the daily scan limit bills overage, without one the scan is refused
+	hasPaymentMethod: boolean("has_payment_method").notNull().default(false),
+	// created and updated timestamps
+	...timestamps(),
+})
 
 // every table's text primary key. our code defaults it. Better Auth overrides it on its own inserts
 function primaryId() {

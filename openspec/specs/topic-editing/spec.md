@@ -21,23 +21,16 @@ The api SHALL create a topic owned by the current user from the same validated p
 - **WHEN** a user already holding as many topics as their plan allows submits another
 - **THEN** the api rejects it and no topic is created
 
-### Requirement: Save applies the whole edit through the owner-only api
-Save SHALL apply the edit as desired state: one update call carrying the fields, the full invitee list, and the full source list (the api reconciles stored rows — kept by id, inserted without id, deleted when missing), then staged attachment uploads, then staged attachment removals. The api SHALL validate the payload (non-empty name, enum frequency/visibility, well-formed invitee emails, source kinds limited to rss/reddit/youtube/search) and reject writes from anyone but the owner. These steps SHALL run in sequence and are not one transaction: the field, invitee, and source update commits first, then staged uploads and removals apply independently, so a failure partway leaves the committed update in place with some attachments not yet uploaded or removed. The modal SHALL surface the error rather than roll back; because the update and reconciled lists are desired-state, re-saving reconverges them, and Cancel always discards staged-but-unsaved attachment changes.
-
-#### Scenario: A field and source edit round-trips
-- **WHEN** the owner renames the Topic, removes a source, adds an rss source, and saves
-- **THEN** the reloaded page shows the new name and the reconciled source list
-
-#### Scenario: A non-owner cannot update
-- **WHEN** a non-owner sends an update for the Topic
-- **THEN** the api rejects it as forbidden
-
 ### Requirement: Invitees are editable only for invite visibility
-The Invitees field SHALL render only while the modal's visibility is invite: email pills with ✕, an "add by email…" input with an Invite button, and the helper line explaining invitees can view and subscribe. Saved invitees SHALL be stored in `topic_invites`, and an invited user's email SHALL grant view and subscribe access to that Topic.
+The Invitees field SHALL render only while the modal's visibility is invite: email pills with ✕, an "add by email…" input with an Invite button, and a helper line explaining that invitees are asked to subscribe and choose for themselves. Saved invitees SHALL be stored in `topic_invites`. An invited email SHALL grant topic-page view access and a pending invite the invitee must accept before any subscription exists — saving an invitee SHALL never subscribe them or place the Topic in their view.
 
 #### Scenario: Switching visibility reveals the invitee editor
 - **WHEN** the owner switches visibility from private to invite
 - **THEN** the invitee editor appears, and saved emails persist to the invite list
+
+#### Scenario: Saving an invitee does not subscribe them
+- **WHEN** the owner saves a new invitee email
+- **THEN** the invite is pending for that email's user, and no subscription row exists until they accept
 
 ### Requirement: Attachments are managed from the modal and downloadable from the page
 The modal SHALL list the Topic's attachments each on its own row with a ✕ remove control, and offer controls to upload a file or add a url; uploads and url ingestion run the real pipeline (size/type validation, object storage, context generation — a url is fetched to markdown first) and removals delete the row plus best-effort the stored object. On the topic page, the info card SHALL offer attachment downloads only to the owner, streaming the stored object with its original filename.
@@ -47,9 +40,39 @@ The modal SHALL list the Topic's attachments each on its own row with a ✕ remo
 - **THEN** the new attachment appears on the page, the removed one is gone, and its object is deleted from storage
 
 ### Requirement: Deletion is its own confirmation dialog
-The 🗑 icon SHALL open a small confirmation dialog separate from the edit modal, with the copy "Delete this topic? '{name}' and its {N} findings and {M} scans go with it." and Keep it / Delete topic (destructive) buttons. Confirming SHALL delete the Topic through the owner-only api (rows cascade, stored attachment objects best-effort deleted) and return the user to the homepage.
+The 🗑 icon SHALL open a small confirmation dialog separate from the edit modal, with the copy "Delete this topic? '{name}' and its {N} findings and {M} scans go with it." and Keep it / Delete topic (destructive) buttons. Confirming SHALL delete the Topic through the api authorized by `isAllowed(user, "topic:delete", topic)` — the owner or an admin (rows cascade, stored attachment objects best-effort deleted) — and return the user to the homepage.
 
 #### Scenario: Delete confirms and navigates home
 - **WHEN** the owner confirms the delete dialog
 - **THEN** the Topic and its dependents are gone and the app navigates to the homepage
+
+#### Scenario: An admin can delete any Topic
+- **WHEN** an admin confirms deletion of a Topic they do not own
+- **THEN** the gate allows it and the Topic and its dependents are gone
+
+### Requirement: Max results is chosen in the edit modal
+The edit-topic modal SHALL offer a "Max results" select with the options Carl's top 5, Carl's top 10, Carl's top 15, and Carl's top 20 — wording identical to the info card's row. A new topic defaults to Carl's top 10, an existing topic shows its stored value, and the api SHALL validate the saved value against the allowed set.
+
+#### Scenario: The select round-trips
+- **WHEN** the owner picks Carl's top 15 and saves
+- **THEN** the reloaded topic stores `max_results` 15 and the modal and info card both show it
+
+#### Scenario: An invalid value is rejected
+- **WHEN** a save carries a max-results value outside 5, 10, 15, or 20
+- **THEN** the api rejects the payload
+
+### Requirement: Save applies the whole edit through the gate
+Save SHALL apply the edit as desired state: one update call carrying the fields, the full invitee list, and the full source list (the api reconciles stored rows — kept by id, inserted without id, deleted when missing), then staged attachment uploads, then staged attachment removals. The api SHALL validate the payload (non-empty name, enum frequency/visibility, well-formed invitee emails, source kinds limited to rss/reddit/youtube/search) and SHALL authorize the write through `isAllowed(user, "topic:edit", topic)`, which allows the owner or an admin and rejects everyone else. These steps SHALL run in sequence and are not one transaction: the field, invitee, and source update commits first, then staged uploads and removals apply independently, so a failure partway leaves the committed update in place with some attachments not yet uploaded or removed. The modal SHALL surface the error rather than roll back; because the update and reconciled lists are desired-state, re-saving reconverges them, and Cancel always discards staged-but-unsaved attachment changes.
+
+#### Scenario: A field and source edit round-trips
+- **WHEN** the owner renames the Topic, removes a source, adds an rss source, and saves
+- **THEN** the reloaded page shows the new name and the reconciled source list
+
+#### Scenario: An admin can update any Topic
+- **WHEN** an admin saves an edit to a Topic they do not own
+- **THEN** the gate allows it and the edit applies
+
+#### Scenario: A non-owner cannot update
+- **WHEN** a user who is neither the owner nor an admin sends an update for the Topic
+- **THEN** the api rejects it as forbidden
 

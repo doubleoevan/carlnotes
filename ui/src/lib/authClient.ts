@@ -1,10 +1,16 @@
 // the Better Auth client, and the signup-gate call the password path makes before it.
 // same-origin: in dev vite forwards /api to the Hono server, and in prod one service serves both the ui and the api
+import { inferAdditionalFields } from "better-auth/client/plugins"
 import { createAuthClient } from "better-auth/react"
 import { hc } from "hono/client"
 import type { AppType } from "../../../api"
+import type { auth } from "../../../api/auth"
 
-export const authClient = createAuthClient({ baseURL: window.location.origin })
+// the types-only server import adds the role and plan columns to the session user's type
+export const authClient = createAuthClient({
+	baseURL: window.location.origin,
+	plugins: [inferAdditionalFields<typeof auth>()],
+})
 
 const client = hc<AppType>(window.location.origin)
 

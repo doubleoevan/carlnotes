@@ -1,13 +1,16 @@
 import type { TopicFeedResponse } from "@shared/contracts"
 import { resourceKinds as allResourceKinds } from "@shared/enums"
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { useLocation } from "react-router-dom"
 import { authClient } from "@/lib/authClient"
 import {
 	fetchTopicFeed,
+	sendTopicFindingBookmark,
 	sendTopicFindingConsumed,
 	sendTopicFindingOpened,
 	sendTopicFindingRating,
 } from "@/lib/topicClient"
+import { type FeedView, type FindingSort, matchesFeedView, toFilteredFindings } from "@/lib/utils"
 
 // the resource kinds that the Filters menu toggles
 export type ResourceKind = (typeof allResourceKinds)[number]
@@ -21,6 +24,7 @@ export type TopicFeedHandlers = {
 	open: (findingId: string) => void
 	consume: (findingId: string, isConsumed: boolean) => void
 	rate: (findingId: string, rating: "up" | "down" | null) => void
+	bookmark: (findingId: string, isBookmarked: boolean) => void
 }
 
 // shape of the topic feed context derived from the hook's return type
@@ -52,11 +56,13 @@ export function useIsSignedIn(): boolean {
 	return useTopicFeed().isSignedIn
 }
 
-// the topic feed state the provider owns: data, the "All" "Unread" toggle, the resource kind filters, the tag filters, and the topic finding handlers
+// the topic feed state the provider owns: data, the view and sort toggles, the resource kind filters, the tag filters, and the topic finding handlers
 function useTopicFeedState() {
 	const [topicFeed, setTopicFeed] = useState<TopicFeedResponse | null>(null)
-	// like Gmail, shows everything by default with consumed topic finding resources muted. the toggle narrows to unread
-	const [showAll, setShowAll] = useState(true)
+	// like Gmail, shows everything by default with consumed rows muted. Unread narrows to unconsumed, Bookmarked to bookmarks
+	const [view, setView] = useState<FeedView>("all")
+	// how findings order within the pinned and unbookmarked groups. read-side only, never persisted
+	const [sort, setSort] = useState<FindingSort>("relevant")
 	const [resourceKinds, setResourceKinds] = useState<Set<ResourceKind>>(new Set(allResourceKinds))
 	// the feed watches the session itself — no route guard unmounts it, so "yours" would otherwise go stale on sign-out
 	const { data: session } = authClient.useSession()
@@ -65,7 +71,7 @@ function useTopicFeedState() {
 	const [tagFilters, setTagFilters] = useState<string[]>([])
 	const [tagMatchMode, setTagMatchMode] = useState<TagMatchMode>("any")
 
-	// always fetch everything. the "All" "Unread" toggle and resource kind filters are applied client-side
+	// always fetch everything. the view, sort, and resource kind filters are applied client-side
 	const reload = useCallback(async () => {
 		try {
 			const loadedTopicFeed = await fetchTopicFeed(true)
@@ -80,6 +86,17 @@ function useTopicFeedState() {
 	useEffect(() => {
 		void reload()
 	}, [reload, isSignedIn])
+
+	// clear filters on route navigation
+	const { pathname } = useLocation()
+	// biome-ignore lint/correctness/useExhaustiveDependencies: pathname isn't read in the body, it's the reset trigger
+	useEffect(() => {
+		setView("all")
+		setSort("relevant")
+		setResourceKinds(new Set(allResourceKinds))
+		setTagFilters([])
+		setTagMatchMode("any")
+	}, [pathname])
 
 	// mark a topic finding consumed or unread with the isConsumed flag
 	const consume = useCallback(
@@ -120,6 +137,19 @@ function useTopicFeedState() {
 		[reload],
 	)
 
+	// bookmark or unbookmark a topic finding, keeping it past the max-results filter
+	const bookmark = useCallback(
+		async (findingId: string, isBookmarked: boolean) => {
+			try {
+				await sendTopicFindingBookmark(findingId, isBookmarked)
+				await reload()
+			} catch (error) {
+				console.error("bookmark failed", error)
+			}
+		},
+		[reload],
+	)
+
 	// toggle a resource kind in or out of the filtered set. reset to all resource kinds if empty
 	const toggleResourceKind = useCallback((resourceKind: ResourceKind) => {
 		setResourceKinds((currentResourceKinds) => {
@@ -140,17 +170,22 @@ function useTopicFeedState() {
 		return [...new Set(feedTopics.flatMap((feedTopic) => feedTopic.tags))].sort()
 	}, [topicFeed])
 
-	// bundle the handlers, then apply the tag, resource kind, and "All" or "Unread" views of the topic feed
-	const handlers: TopicFeedHandlers = useMemo(() => ({ open, consume, rate }), [open, consume, rate])
+	// bundle the handlers, then apply the filters and sort for the topic feed
+	const handlers: TopicFeedHandlers = useMemo(
+		() => ({ open, consume, rate, bookmark }),
+		[open, consume, rate, bookmark],
+	)
 	const filteredTopicFeed = useMemo(
-		() => filterTopicFeed(topicFeed, resourceKinds, showAll, tagFilters, tagMatchMode),
-		[topicFeed, resourceKinds, showAll, tagFilters, tagMatchMode],
+		() => filterTopicFeed(topicFeed, resourceKinds, view, sort, tagFilters, tagMatchMode),
+		[topicFeed, resourceKinds, view, sort, tagFilters, tagMatchMode],
 	)
 	return {
-		// the filtered feed and the view state behind it
+		// the filtered feed and the view and sort state behind it
 		topicFeed: filteredTopicFeed,
-		showAll,
-		setShowAll,
+		view,
+		setView,
+		sort,
+		setSort,
 		resourceKinds,
 		toggleResourceKind,
 		// the tag filters, their match mode, and the tags the pickers can offer
@@ -166,12 +201,12 @@ function useTopicFeedState() {
 	}
 }
 
-// filter topics by selected tags, and topic findings by selected resource kinds
-// the "Unread" filter also drops consumed topic findings
+// filter and sort the topic feed
 function filterTopicFeed(
 	topicFeed: TopicFeedResponse | null,
 	resourceKinds: Set<ResourceKind>,
-	showAll: boolean,
+	view: FeedView,
+	sort: FindingSort,
 	tagFilters: string[],
 	tagMatchMode: TagMatchMode,
 ): TopicFeedResponse | null {
@@ -180,7 +215,7 @@ function filterTopicFeed(
 	}
 
 	// rebuild the topic feed sections, dropping topics that miss the tag filters,
-	// then filtering each topic's findings by resource kind and, in the "Unread" view, by not isConsumed
+	// and replacing each topic's findings with the filtered and sorted set
 	return {
 		...topicFeed,
 		sections: topicFeed.sections.map((section) => ({
@@ -190,15 +225,19 @@ function filterTopicFeed(
 				.filter((topic) => matchesTagFilters(topic.tags, tagFilters, tagMatchMode))
 				.map((topic) => ({
 					...topic,
-					findings: topic.findings.filter(
-						(finding) => resourceKinds.has(finding.resourceKind) && (showAll || !finding.isConsumed),
+					findings: toFilteredFindings(
+						topic.findings.filter(
+							(finding) => resourceKinds.has(finding.resourceKind) && matchesFeedView(finding, view),
+						),
+						sort,
 					),
 				})),
 		})),
 	}
 }
 
-// whether a topic's tags satisfy the selected filters based on the tag match mode. off and an empty selection match everything
+// whether a topic's tags satisfy the selected filters based on the tag match mode.
+// "off" or an empty selection matches everything
 function matchesTagFilters(topicTags: string[], tagFilters: string[], tagMatchMode: TagMatchMode): boolean {
 	if (tagMatchMode === "off" || tagFilters.length === 0) {
 		return true

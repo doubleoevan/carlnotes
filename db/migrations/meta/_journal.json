@@ -148,6 +148,48 @@
       "when": 1784993489317,
       "tag": "0020_last_reavers",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784944014480,
+      "tag": "0021_plain_wallflower",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1785040421925,
+      "tag": "0022_round_scrambler",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1785120062250,
+      "tag": "0023_quick_hammerhead",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1785125730609,
+      "tag": "0024_wide_beyonder",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1785132884571,
+      "tag": "0025_mature_talisman",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1785132914997,
+      "tag": "0026_redundant_baron_strucker",
+      "breakpoints": true
     }
   ]
 }

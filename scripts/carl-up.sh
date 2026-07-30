@@ -127,4 +127,16 @@ if command -v launchctl >/dev/null 2>&1; then
   done
 fi
 
+# forward stripe webhook events to the local api
+# skipped when the stripe cli is absent
+# carl-down script stops it
+if command -v stripe >/dev/null 2>&1; then
+  if ! pgrep -f "stripe listen --forward-to localhost:3000/api/webhooks/stripe" >/dev/null 2>&1; then
+    stripe_listen_log=$(mktemp)
+    (stripe listen --forward-to localhost:3000/api/webhooks/stripe >"$stripe_listen_log" 2>&1 &)
+    echo "stripe listen is forwarding webhooks to localhost:3000/api/webhooks/stripe (log: $stripe_listen_log)"
+    echo "set STRIPE_WEBHOOK_SECRET to the whsec_... value the log prints, if you haven't yet"
+  fi
+fi
+
 echo "carl is up: litellm http://localhost:4000/ui · temporal ui http://localhost:8233"

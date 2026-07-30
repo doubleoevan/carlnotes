@@ -1,12 +1,12 @@
 // the one-click unsubscribe target for the topic-scan email. the token in the link is the auth: it is verified, the
-// recipient's direct subscription is deleted, and the topic is looked up so the confirmation page can name it and link to it
+// recipient's direct subscription is deactivated, and the topic is looked up so the confirmation page can name it and link to it
 import { and, eq } from "drizzle-orm"
 import { db } from "../db"
 import { subscriptions, topics } from "../db/schema"
 import { verifyUnsubscribeToken } from "../worker"
 
 /**
- * Verifies the token, deletes the recipient's direct subscription, and returns the unsubscribed topic (null when the token is bad).
+ * Verifies the token, deactivates the recipient's direct subscription, and returns the unsubscribed topic (null when the token is bad).
  */
 export async function unsubscribe(unsubscribeToken: string | undefined): Promise<{ id: string; name: string } | null> {
 	// a missing or forged token unsubscribes nothing
@@ -15,9 +15,11 @@ export async function unsubscribe(unsubscribeToken: string | undefined): Promise
 		return null
 	}
 
-	// delete the user's direct subscription. an audience-only subscriber has no direct row, so this doesn't reach them
+	// deactivate the user's direct subscription and turn its emails off, keeping the row.
+	// an audience-only subscriber has no direct row, so this does not reach them
 	await db
-		.delete(subscriptions)
+		.update(subscriptions)
+		.set({ isActive: false, isEmailEnabled: false })
 		.where(
 			and(
 				eq(subscriptions.topicId, unsubscribePayload.topicId),

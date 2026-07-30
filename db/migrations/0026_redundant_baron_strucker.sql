@@ -1,0 +1,1 @@
+ALTER TABLE "scans" ALTER COLUMN "owner_id" SET NOT NULL;

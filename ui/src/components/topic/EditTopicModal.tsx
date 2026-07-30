@@ -1,14 +1,16 @@
 import type { TopicResponse, UpdateTopicPayload } from "@shared/contracts"
-import { frequencies, visibilities } from "@shared/enums"
+import { daysOfWeek, frequencies, maxResultsOptions, visibilities } from "@shared/enums"
 import type * as React from "react"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
+import { AnchorLink } from "@/components/layout/AnchorLink"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Textarea } from "@/components/primitives/textarea"
-import { TagPicker, TagPill } from "@/components/TagPicker"
+import { TagPicker, TagPill } from "@/components/topic/TagPicker"
+import { TimePicker } from "@/components/topic/TimePicker"
 import {
 	sendAttachmentDelete,
 	sendAttachmentUrl,
@@ -16,12 +18,14 @@ import {
 	sendTopicUpdate,
 	uploadTopicAttachment,
 } from "@/lib/topicClient"
+import { capitalize } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
-import { AttachmentEditor } from "./AttachmentEditor"
-import { type EditableSourceKind, SourceEditor } from "./SourceEditor"
+import { TopicAttachmentEditor } from "./TopicAttachmentEditor"
+import { type EditableSourceKind, TopicSourceEditor } from "./TopicSourceEditor"
 
-// the field unions that the frequency and visibility selects offer
+// the field unions that the frequency, day-of-week, and visibility selects offer
 type Frequency = (typeof frequencies)[number]
+type DayOfWeek = (typeof daysOfWeek)[number]
 type Visibility = (typeof visibilities)[number]
 
 // the topic and its callbacks
@@ -30,6 +34,9 @@ type EditTopicModalProps = {
 	onClose: () => void
 	onTopicSaved: (topicId: string) => Promise<void>
 }
+
+// the emoji shown for each visibility option
+const VISIBILITY_EMOJI: Record<Visibility, string> = { private: "🔒", public: "🌐", invite: "✉️" }
 
 /**
  * The edit topic modal for editing or creating a new topic.
@@ -44,7 +51,10 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 	const [prompt, setPrompt] = useState(topic?.prompt ?? "")
 	const [tags, setTags] = useState(topic?.tags ?? [])
 	const [frequency, setFrequency] = useState<Frequency>(topic?.frequency ?? "daily")
+	const [scheduledTime, setScheduledTime] = useState(topic?.scheduledTime ?? "09:00")
+	const [scheduledDayOfWeek, setScheduledDayOfWeek] = useState<DayOfWeek>(topic?.scheduledDayOfWeek ?? "monday")
 	const [visibility, setVisibility] = useState<Visibility>(topic?.visibility ?? "private")
+	const [maxResults, setMaxResults] = useState(topic?.maxResults ?? 10)
 	const [invitees, setInvitees] = useState(topic?.invitees ?? [])
 	// the kept and added source and attachment lists. a new topic starts with the default web source on
 	const [keptSources, setKeptSources] = useState(topic?.sources ?? [])
@@ -54,11 +64,10 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 	const [keptAttachments, setKeptAttachments] = useState(topic?.attachments ?? [])
 	const [pendingFiles, setPendingFiles] = useState<File[]>([])
 	const [pendingUrls, setPendingUrls] = useState<string[]>([])
-	// the saving topic state
 	const [isSaving, setIsSaving] = useState(false)
 
 	// handleSave creates or updates the topic first, then stages uploads, then stages removals
-	const handleSave = async () => {
+	const handleSave = async (): Promise<void> => {
 		setIsSaving(true)
 		try {
 			// an existing topic updates in place. a new one is created and yields its id
@@ -108,7 +117,10 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 		prompt,
 		tags,
 		frequency,
+		scheduledTime,
+		scheduledDayOfWeek,
 		visibility,
+		maxResults,
 		invitees: visibility === "invite" ? invitees : [],
 		sources: [
 			...keptSources.map((source) => ({ id: source.id })),
@@ -117,7 +129,7 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 	})
 
 	// use the dialog's autofocus to select the title input when the modal opens
-	const handleOpenAutoFocus = (event: Event) => {
+	const handleOpenAutoFocus = (event: Event): void => {
 		event.preventDefault()
 		titleInputRef.current?.focus()
 	}
@@ -146,18 +158,28 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 					<TagPicker tags={tags} knownTags={knownTags} canCreate onTagsChange={setTags} />
 				</div>
 
-				{/* frequency and visibility side by side */}
+				{/* topic scan frequency, its scheduled time, and the day (weekly only) */}
+				<ScheduleFields
+					frequency={frequency}
+					onFrequencyChange={setFrequency}
+					scheduledTime={scheduledTime}
+					onScheduledTimeChange={setScheduledTime}
+					scheduledDayOfWeek={scheduledDayOfWeek}
+					onScheduledDayOfWeekChange={setScheduledDayOfWeek}
+				/>
+
+				{/* max results and visibility side by side */}
 				<div className="grid grid-cols-2 gap-3">
 					<div>
-						<FieldLabel>Frequency</FieldLabel>
-						<Select value={frequency} onValueChange={(value) => setFrequency(value as Frequency)}>
-							<SelectTrigger className="w-full">
+						<FieldLabel>Max results</FieldLabel>
+						<Select value={String(maxResults)} onValueChange={(value) => setMaxResults(Number(value))}>
+							<SelectTrigger className="w-full" aria-label="Max results">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{frequencies.map((frequencyOption) => (
-									<SelectItem key={frequencyOption} value={frequencyOption}>
-										{frequencyOption}
+								{maxResultsOptions.map((maxResultsOption) => (
+									<SelectItem key={maxResultsOption} value={String(maxResultsOption)}>
+										{`Carl's top ${maxResultsOption}`}
 									</SelectItem>
 								))}
 							</SelectContent>
@@ -166,13 +188,13 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 					<div>
 						<FieldLabel>Visibility</FieldLabel>
 						<Select value={visibility} onValueChange={(value) => setVisibility(value as Visibility)}>
-							<SelectTrigger className="w-full">
+							<SelectTrigger className="w-full" aria-label="Visibility">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
 								{visibilities.map((visibilityOption) => (
 									<SelectItem key={visibilityOption} value={visibilityOption}>
-										{VISIBILITY_GLYPH[visibilityOption]} {visibilityOption}
+										{VISIBILITY_EMOJI[visibilityOption]} {visibilityOption}
 									</SelectItem>
 								))}
 							</SelectContent>
@@ -183,10 +205,10 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 				{/* invitees only shown while visibility is invite */}
 				{visibility === "invite" && <InviteeEditor invitees={invitees} onChange={setInvitees} />}
 
-				{/* topic sources: kept rows, added rows, and the add picker */}
+				{/* topic sources: kept rows, added rows, and the add source picker */}
 				<div>
 					<FieldLabel>Sources</FieldLabel>
-					<SourceEditor
+					<TopicSourceEditor
 						keptSources={keptSources}
 						addedSources={addedSources}
 						onKeptChange={setKeptSources}
@@ -194,10 +216,10 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 					/>
 				</div>
 
-				{/* attachments: kept pills, staged uploads and urls, and the add attachments controls */}
+				{/* attachments: kept attachments, staged uploads and urls, and the add attachments controls */}
 				<div>
 					<FieldLabel>Attachments</FieldLabel>
-					<AttachmentEditor
+					<TopicAttachmentEditor
 						keptAttachments={keptAttachments}
 						pendingFiles={pendingFiles}
 						pendingUrls={pendingUrls}
@@ -221,8 +243,58 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 	)
 }
 
-// the glyph shown beside each visibility option
-const VISIBILITY_GLYPH: Record<Visibility, string> = { private: "🔒", public: "🌐", invite: "✉️" }
+// the frequency select, the scheduled-time picker, and the day select (weekly only)
+function ScheduleFields({
+	frequency,
+	onFrequencyChange,
+	scheduledTime,
+	onScheduledTimeChange,
+	scheduledDayOfWeek,
+	onScheduledDayOfWeekChange,
+}: {
+	frequency: Frequency
+	onFrequencyChange: (frequency: Frequency) => void
+	scheduledTime: string
+	onScheduledTimeChange: (scheduledTime: string) => void
+	scheduledDayOfWeek: DayOfWeek
+	onScheduledDayOfWeekChange: (dayOfWeek: DayOfWeek) => void
+}) {
+	return (
+		<div>
+			<FieldLabel>Frequency</FieldLabel>
+			<div className="flex flex-wrap gap-2">
+				<Select value={frequency} onValueChange={(value) => onFrequencyChange(value as Frequency)}>
+					<SelectTrigger className="w-32" aria-label="Scan frequency">
+						<SelectValue />
+					</SelectTrigger>
+					<SelectContent>
+						{frequencies.map((frequencyOption) => (
+							<SelectItem key={frequencyOption} value={frequencyOption}>
+								{capitalize(frequencyOption)}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+				<TimePicker scheduledTime={scheduledTime} onChange={onScheduledTimeChange} />
+				{/* the day only matters for a weekly scan, so it's hidden otherwise */}
+				{frequency === "weekly" && (
+					<Select value={scheduledDayOfWeek} onValueChange={(day) => onScheduledDayOfWeekChange(day as DayOfWeek)}>
+						<SelectTrigger className="w-32" aria-label="Scheduled day of week">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{daysOfWeek.map((dayOption) => (
+								<SelectItem key={dayOption} value={dayOption}>
+									{capitalize(dayOption)}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				)}
+			</div>
+		</div>
+	)
+}
 
 // the uppercase display-font label above each field. isRequired marks the field with a trailing asterisk
 function FieldLabel({ children, isRequired }: { children: React.ReactNode; isRequired?: boolean }) {
@@ -239,7 +311,7 @@ function InviteeEditor({ invitees, onChange }: { invitees: string[]; onChange: (
 	const [emailInput, setEmailInput] = useState("")
 
 	// validate the email, lowercased and deduped. the api enforces real validation on save
-	const handleInvite = () => {
+	const handleInvite = (): void => {
 		const email = emailInput.trim().toLowerCase()
 		if (email.includes("@") && !invitees.includes(email)) {
 			onChange([...invitees, email])
@@ -271,7 +343,10 @@ function InviteeEditor({ invitees, onChange }: { invitees: string[]; onChange: (
 				</Button>
 			</div>
 			<p className="text-muted-foreground mt-1.5 text-xs italic">
-				shown only when visibility is invite — invitees can view and subscribe
+				{`A fresh subscription to pour will be waiting on their `}
+				<AnchorLink href="/activity" className="text-link hover:underline">
+					Activity page
+				</AnchorLink>
 			</p>
 		</div>
 	)

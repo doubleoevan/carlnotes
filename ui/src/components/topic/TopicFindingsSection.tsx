@@ -1,9 +1,9 @@
 import type { TopicFinding } from "@shared/contracts"
 import { useState } from "react"
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
-import { TopicResource } from "@/components/topic-feed/TopicResource"
+import { TopicResource } from "@/components/topic/TopicResource"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
-import { ExpanderButton } from "./ExpanderButton"
+import { CollapsibleSection } from "./CollapsibleSection"
+import { MoreButton } from "./MoreButton"
 
 // the max topic finding rows shown before the expander
 const MAX_TOPIC_FINDINGS = 5
@@ -27,40 +27,36 @@ export function TopicFindingsSection({
 	// cap the rows unless expanded
 	const topicFindingsShown = isExpanded ? topicFindings : topicFindings.slice(0, MAX_TOPIC_FINDINGS)
 	const moreTopicFindingsCount = topicFindings.length - MAX_TOPIC_FINDINGS
+	// bookmarked rows sort first, so remove them from the numbering shown
+	const pinnedShownCount = topicFindingsShown.filter((finding) => finding.isBookmarked).length
 	return (
-		<Accordion type="multiple" defaultValue={["findings"]} className="mt-4">
-			<AccordionItem value="findings">
-				<AccordionTrigger className="py-2">
-					<span className="font-display text-lg">Findings</span>
-				</AccordionTrigger>
-				<AccordionContent>
-					{/* topic finding rows with dashed separators */}
-					<div className="divide-separator divide-y divide-dashed">
-						{topicFindingsShown.map((finding) => (
-							<TopicResource
-								key={finding.findingId}
-								resource={finding}
-								isRatable={isRatable}
-								resourceHandlers={handlers}
-							/>
-						))}
-						{topicFindingsShown.length === 0 && (
-							<p className="text-muted-foreground py-3 text-sm">
-								{hasAnyFindings
-									? "Nothing new worth your time. Carl checked. Twice."
-									: "Carl hasn't kept anything here yet."}
-							</p>
-						)}
-					</div>
-					{moreTopicFindingsCount > 0 && (
-						<ExpanderButton
-							isExpanded={isExpanded}
-							moreLabel={`+ ${moreTopicFindingsCount} more `}
-							onToggle={() => setIsExpanded(!isExpanded)}
-						/>
-					)}
-				</AccordionContent>
-			</AccordionItem>
-		</Accordion>
+		<CollapsibleSection value="findings" title="Topic findings" className="mt-4">
+			{/* topic finding rows with dashed separators */}
+			<div className="divide-separator divide-y divide-dashed">
+				{topicFindingsShown.map((finding, index) => (
+					<TopicResource
+						key={finding.findingId}
+						resource={finding}
+						rank={finding.isBookmarked ? null : index - pinnedShownCount + 1}
+						isRatable={isRatable}
+						resourceHandlers={handlers}
+					/>
+				))}
+				{topicFindingsShown.length === 0 && (
+					<p className="text-muted-foreground py-3 pl-9 text-sm">
+						{hasAnyFindings
+							? "Nothing new worth your time yet. Carl has standards."
+							: "Just getting started. The raccoon put a pot on..."}
+					</p>
+				)}
+			</div>
+			{moreTopicFindingsCount > 0 && (
+				<MoreButton
+					isExpanded={isExpanded}
+					moreLabel={`+ ${moreTopicFindingsCount} more `}
+					onToggle={() => setIsExpanded(!isExpanded)}
+				/>
+			)}
+		</CollapsibleSection>
 	)
 }

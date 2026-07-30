@@ -242,11 +242,15 @@ The `users` table SHALL carry a nullable column recording the user's provisioned
 - **THEN** the session is established through Better Auth's `users`/`accounts`/`sessions` tables, and no `integrations` row is read or written
 
 ### Requirement: Topic invites are rows keyed by topic and email
-The schema SHALL record invite-visibility access in a `topic_invites` table: `topic_id` referencing `topics` with cascade delete, the invited `email`, and an `invited_at` timestamp. `(topic_id, email)` SHALL be the composite primary key so re-inviting the same email is a no-op. Invites reference emails, not user rows, so a Topic can be shared with someone before they have an account.
+The schema SHALL record invite-visibility access in a `topic_invites` table: `topic_id` referencing `topics` with cascade delete, the invited `email`, and an `invited_at` timestamp. `(topic_id, email)` SHALL be the composite primary key so re-inviting the same email is a no-op. Invites reference emails, not user rows, so a Topic can be shared with someone before they have an account. An invite row SHALL grant topic-page view access and stand as a pending subscription offer: a matching-email user with no subscription row on the Topic holds a pending invite, and no subscription exists until they accept. A Subscription row's `created_at` SHALL be its activation time — rows are created at self-subscribe or invite acceptance — and the invite-topic Finding visibility gate compares Scan start times against it.
 
 #### Scenario: An invite is unique per topic and email and follows its topic
 - **WHEN** the same email is invited to a Topic twice and the Topic is later deleted
 - **THEN** exactly one invite row existed for that pair, and deleting the Topic removed it
+
+#### Scenario: Pending needs no schema of its own
+- **WHEN** an invited email's user has no subscription row on the Topic
+- **THEN** that state is the pending invite, and accepting creates the subscription row whose `created_at` is the activation time
 
 ### Requirement: Scans carry a manual marker
 The `scans` table SHALL carry an `is_manual` boolean, not null, default false. Manually triggered Scans set it true, and scheduled and seeded Scans keep the default. The marker is bookkeeping that records which Scans an owner triggered. It is not a quota input: the per-user daily scan quota counts scheduled and manual runs alike.
@@ -256,18 +260,26 @@ The `scans` table SHALL carry an `is_manual` boolean, not null, default false. M
 - **THEN** `is_manual` is false
 
 ### Requirement: Users carry a platform role
-The `users` table SHALL carry a `role` column, not null, defaulting to `user`, with `admin` marking platform operators — the authority axis from the roles-and-plans decision. The column SHALL be plain text (not an enum) to match Better Auth's admin plugin shape. Operator-only data, such as Scan spend, SHALL be gated on this role.
+The `users` table SHALL carry a `role` column, not null, defaulting to `user`, with `admin` marking platform operators — the authority axis from the roles-and-plans decision. The column SHALL be plain text (not an enum) to match Better Auth's admin plugin shape. This role SHALL be the authority input to the `isAllowed` gate: an `admin` bypasses entitlement checks and may act on any Topic, while a non-admin's Topic authority stays its `owner_id`. Operator-only data, such as Scan spend and the admin console, SHALL be gated on this role through the gate.
 
 #### Scenario: The role defaults to user
 - **WHEN** a user row is inserted without a role
 - **THEN** `role` is `user`
 
+#### Scenario: The role drives the gate
+- **WHEN** the `isAllowed` gate evaluates authority or an entitlement for a user
+- **THEN** it reads this `role`, allowing an `admin` to bypass entitlement checks and override Topic authority
+
 ### Requirement: Users carry a billing plan
-The `users` table SHALL carry a `plan` column, not null, defaulting to `free`, backed by a `plan` enum of `free`, `plus`, and `premium` — the entitlement axis from the roles-and-plans decision. The plan SHALL drive the per-user topic cap and daily scan quota.
+The `users` table SHALL carry a `plan` column, not null, defaulting to `free`, backed by a `plan` enum of `free`, `plus`, and `premium` — the entitlement axis from the roles-and-plans decision. The plan SHALL drive the per-user entitlements resolved by the gate. The column SHALL be a projection of the user's active Billing Subscription, kept in sync from Stripe webhooks: a user with no active billing subscription SHALL read `free`.
 
 #### Scenario: The plan defaults to free
 - **WHEN** a user row is inserted without a plan
 - **THEN** `plan` is `free`
+
+#### Scenario: The plan projects the active billing subscription
+- **WHEN** a user's active Billing Subscription changes or is cleared
+- **THEN** the webhook updates `users.plan` to the derived plan, `free` when no active row remains
 
 ### Requirement: The change includes its migrations
 The change SHALL include generated Drizzle migrations that create `topic_invites` with its composite primary key and cascade, add `is_manual` to `scans` with its default, add `role` to `users` with its default, and add the `plan` enum and `plan` column to `users` with its default. Applying them to a database at the current schema MUST succeed without altering any other table.
@@ -331,4 +343,65 @@ The change SHALL include a generated Drizzle migration that adds nullable `conte
 
 - **WHEN** the backfill runs and then is re-run
 - **THEN** each Resource with `content` and no key has its content uploaded and `content_key`/`content_bytes` set on the first run, and Resources that already have a `content_key` are skipped on the re-run
+
+### Requirement: Topic carries a constrained max-results count
+The `topics` table SHALL carry a `max_results` integer, not null, defaulting to 10, constrained by a database check to one of 5, 10, 15, or 20. It is the size of the topic's auto-kept Finding set.
+
+#### Scenario: The default is ten
+- **WHEN** a topic row is inserted without a max-results value
+- **THEN** `max_results` is 10
+
+#### Scenario: An out-of-range value is refused
+- **WHEN** a write attempts a `max_results` outside 5, 10, 15, or 20
+- **THEN** the database rejects it
+
+### Requirement: Bookmarks are per-user rows mirroring consumptions
+The schema SHALL define a `bookmarks` table: the user (cascade delete), the finding (cascade delete), and a created timestamp, unique per user and finding. Bookmark state SHALL never be a `findings` column.
+
+#### Scenario: The schema exposes bookmarks
+- **WHEN** `bunx tsc -b` runs against the repository
+- **THEN** `db/schema.ts` compiles and exports a `bookmarks` table with the user and finding references, their cascades, and the per-pair uniqueness
+
+### Requirement: Resource carries an optional engagement signal
+The `resources` table SHALL carry a nullable `engagement` integer holding the source's engagement count where an adapter captured one, such as a reddit post score. Null means no signal was captured.
+
+#### Scenario: Engagement defaults to null
+- **WHEN** a Resource is inserted by an adapter that captures no signal
+- **THEN** `engagement` is null
+
+### Requirement: The change includes the max-results, bookmarks, and engagement migrations
+The change SHALL include generated Drizzle migrations that add `topics.max_results` with its default and check, backfill existing topics to 10, create `bookmarks`, and add `resources.engagement`. Applying them to a database at the current schema MUST succeed without altering any other table.
+
+#### Scenario: Existing topics backfill to ten
+- **WHEN** the migrations run against a database with existing topics
+- **THEN** every existing topic's `max_results` is 10 and no other table changes
+
+### Requirement: Billing Subscription is a Stripe-backed row distinct from the topic Subscription
+The schema SHALL define a `billing_subscriptions` table carrying the owning user (cascade on delete), the Stripe customer id, the Stripe subscription id, the plan, the subscription status, and the current period end, with timestamps. It SHALL model at most one active row per user and SHALL be distinct from the topic `subscriptions` table (subscriber ↔ Topic): the two SHALL never be conflated in schema or code.
+
+#### Scenario: The schema exposes billing_subscriptions
+- **WHEN** `bunx tsc -b` runs against the repository
+- **THEN** `db/schema.ts` compiles and exports a `billing_subscriptions` Drizzle table with the user, Stripe customer id, Stripe subscription id, plan, status, and current period end
+
+#### Scenario: Billing Subscription is not the topic Subscription
+- **WHEN** the two tables are inspected
+- **THEN** `billing_subscriptions` carries Stripe billing state while `subscriptions` carries the topic subscriber join, and neither references the other
+
+### Requirement: Users carry a per-user budget override
+The `users` table SHALL carry a nullable `budget_override_cents` column. When null, the user's effective monthly budget SHALL be their plan's monthly backstop; when set, the override SHALL take precedence in both directions. The effective budget SHALL be what the user's LiteLLM key budget is provisioned and resized to.
+
+#### Scenario: A null override means the plan value
+- **WHEN** `budget_override_cents` is null
+- **THEN** the effective budget is the plan's monthly backstop
+
+#### Scenario: A set override takes precedence
+- **WHEN** `budget_override_cents` holds a value
+- **THEN** the effective budget is that value, whether above or below the plan backstop
+
+### Requirement: The change includes the authorization and billing migrations
+The change SHALL include generated Drizzle migrations that create `billing_subscriptions` with its user cascade and add `budget_override_cents` to `users`. Applying them to a database at the current schema MUST succeed without altering any other table.
+
+#### Scenario: The migrations are additive
+- **WHEN** the generated migrations are applied to a database at the current schema
+- **THEN** only the `billing_subscriptions` table and the `users.budget_override_cents` column are added
 

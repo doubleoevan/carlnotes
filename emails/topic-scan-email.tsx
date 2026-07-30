@@ -1,6 +1,18 @@
 // the topic-scan email: a designed, deliverable summary of a scheduled Scan's new Findings.
 // authored as a react-email template, so it can be previewed with `bun run dev:email` and rendered to html at send time
-import { Body, Container, Head, Heading, Hr, Html, Link, Preview, Section, Text } from "@react-email/components"
+import {
+	Body,
+	Container,
+	Head,
+	Heading,
+	Hr,
+	Html,
+	Link,
+	Markdown,
+	Preview,
+	Section,
+	Text,
+} from "@react-email/components"
 import { render } from "@react-email/render"
 import type { CSSProperties, ReactElement, ReactNode } from "react"
 
@@ -11,6 +23,8 @@ export type TopicScanEmailProps = {
 	// how many new Findings this scan surfaced. the summary line and the inbox preheader are both written from it
 	findingCount: number
 	findings: TopicScanEmailFinding[]
+	// Carl's recap of this scan as Markdown, omitted when the scan never wrote one
+	scanSummary?: string
 	// the app's home and this topic's page. both omitted when the app base url isn't configured, and the labels render as plain text
 	appUrl?: string
 	topicUrl?: string
@@ -23,15 +37,59 @@ export default function TopicScanEmail({
 	topicName,
 	findingCount,
 	findings,
+	scanSummary,
 	appUrl,
 	topicUrl,
 	unsubscribeUrl,
 }: TopicScanEmailProps): ReactElement {
 	return (
+		// the inbox preheader is the same sentence as the summary line, without the link
+		<EmailShell preview={`${summaryLead(findingCount)}${topicName}.${closingNote(findingCount)}`} appUrl={appUrl}>
+			{/* the topic heading, then Carl's one-line summary with the topic name linking to its page */}
+			<EmailIntro heading={`Notes on ${topicName}`}>
+				{summaryLead(findingCount)}
+				<LinkOrText href={topicUrl} style={summaryLink}>
+					{topicName}
+				</LinkOrText>
+				.{closingNote(findingCount)}
+			</EmailIntro>
+
+			<ScanSummaryCard scanSummary={scanSummary} />
+			<FindingCards findings={findings} />
+
+			{/* the footer with the one-click unsubscribe link */}
+			<EmailFooter unsubscribeUrl={unsubscribeUrl}>
+				You're receiving this because you subscribe to emails for{" "}
+				<LinkOrText href={topicUrl} style={footerBrandLink}>
+					{topicName}
+				</LinkOrText>{" "}
+				on{" "}
+				<LinkOrText href={appUrl} style={footerBrandLink}>
+					CarlNotes
+				</LinkOrText>
+				.
+			</EmailFooter>
+		</EmailShell>
+	)
+}
+
+/**
+ * The shared page chrome every CarlNotes email renders inside: the inbox preheader, the tinted body, and the
+ * brand header linking home.
+ */
+export function EmailShell({
+	preview,
+	appUrl,
+	children,
+}: {
+	preview: string
+	appUrl?: string
+	children: ReactNode
+}): ReactElement {
+	return (
 		<Html>
 			<Head />
-			{/* the inbox preheader is the same sentence as the summary line, without the link */}
-			<Preview>{`${summaryLead(findingCount)}${topicName}.`}</Preview>
+			<Preview>{preview}</Preview>
 			<Body style={main}>
 				<Container style={container}>
 					{/* the CarlNotes brand header, linking home */}
@@ -43,56 +101,85 @@ export default function TopicScanEmail({
 							</LinkOrText>
 						</Text>
 					</Section>
-
-					{/* the topic heading, then Carl's one-line summary with the topic name linking to its page */}
-					<Section style={intro}>
-						<Heading style={h1}>Notes on {topicName}</Heading>
-						<Text style={summaryText}>
-							{summaryLead(findingCount)}
-							<LinkOrText href={topicUrl} style={summaryLink}>
-								{topicName}
-							</LinkOrText>
-							.
-						</Text>
-					</Section>
-
-					{/* one card per new Finding: title, host, and why it matters */}
-					<Section>
-						{findings.map((finding) => (
-							<Section key={finding.url} style={card}>
-								<Link href={finding.url} style={cardTitle}>
-									{finding.title ?? finding.url}
-								</Link>
-								<Text style={cardHost}>{hostOf(finding.url)}</Text>
-								{finding.relevanceExplanation ? <Text style={cardNote}>{finding.relevanceExplanation}</Text> : null}
-							</Section>
-						))}
-					</Section>
-
-					<Hr style={hr} />
-
-					{/* the footer with the one-click unsubscribe link */}
-					<Section>
-						<Text style={footerText}>
-							You're receiving this because you subscribe to emails for{" "}
-							<LinkOrText href={topicUrl} style={footerBrandLink}>
-								{topicName}
-							</LinkOrText>{" "}
-							on{" "}
-							<LinkOrText href={appUrl} style={footerBrandLink}>
-								CarlNotes
-							</LinkOrText>
-							.
-						</Text>
-						{unsubscribeUrl ? (
-							<Link href={unsubscribeUrl} style={footerLink}>
-								Unsubscribe
-							</Link>
-						) : null}
-					</Section>
+					{children}
 				</Container>
 			</Body>
 		</Html>
+	)
+}
+
+/**
+ * An email's heading and the lead sentence under it.
+ */
+export function EmailIntro({ heading, children }: { heading: string; children: ReactNode }): ReactElement {
+	return (
+		<Section style={intro}>
+			<Heading style={h1}>{heading}</Heading>
+			<Text style={summaryText}>{children}</Text>
+		</Section>
+	)
+}
+
+/**
+ * Carl's recap of a whole scan, rendered above the findings so the reader gets the takeaway before the links.
+ */
+export function ScanSummaryCard({ scanSummary }: { scanSummary?: string }): ReactElement | null {
+	// a scan that failed to summarize sends without the block rather than with an empty one
+	if (!scanSummary) {
+		return null
+	}
+	return (
+		<Section style={summaryCard}>
+			<Text style={summaryLabel}>{"Carl's notes"}</Text>
+			<Markdown markdownContainerStyles={summaryBody} markdownCustomStyles={SUMMARY_MARKDOWN_STYLES}>
+				{scanSummary}
+			</Markdown>
+		</Section>
+	)
+}
+
+/**
+ * One card per new Finding, numbered by the rank the caller's query already sorted them in.
+ */
+export function FindingCards({ findings }: { findings: TopicScanEmailFinding[] }): ReactElement {
+	return (
+		<Section>
+			{findings.map((finding, index) => (
+				<Section key={finding.url} style={card}>
+					<Link href={finding.url} style={cardTitle}>
+						<span style={cardNumber}>{index + 1}. </span>
+						{finding.title ?? finding.url}
+					</Link>
+					<Text style={cardHost}>{hostOf(finding.url)}</Text>
+					{finding.relevanceExplanation ? <Text style={cardNote}>{finding.relevanceExplanation}</Text> : null}
+				</Section>
+			))}
+		</Section>
+	)
+}
+
+/**
+ * The rule and small print that close an email, with the unsubscribe link only when the caller has one.
+ */
+export function EmailFooter({
+	unsubscribeUrl,
+	children,
+}: {
+	unsubscribeUrl?: string
+	children: ReactNode
+}): ReactElement {
+	return (
+		<>
+			<Hr style={hr} />
+			<Section>
+				<Text style={footerText}>{children}</Text>
+				{unsubscribeUrl ? (
+					<Link href={unsubscribeUrl} style={footerLink}>
+						Unsubscribe
+					</Link>
+				) : null}
+			</Section>
+		</>
 	)
 }
 
@@ -119,6 +206,8 @@ TopicScanEmail.PreviewProps = {
 			relevanceExplanation: "A deep dive on embedding models and the dimensionality trade-offs behind them.",
 		},
 	],
+	scanSummary:
+		"Structured output finally landed, and the eval tooling caught up with it.\n\n**The numbers:** $0.04 spent, 1 near-duplicate filtered, 20 read and 3 kept.\n\n**What earned their spots.** Simon's retrospective is the practical one — prompt versioning and cost controls you can copy today. The structured-output benchmarks matter because they close the loop on schema adherence, which is what made the old parsing workarounds necessary.\n\n**Skim.** Two worth reading now, one to bookmark.",
 	appUrl: "https://carlnotes.example.com",
 	topicUrl: "https://carlnotes.example.com/topics/preview-topic",
 	unsubscribeUrl: "https://carlnotes.example.com/api/unsubscribe?token=preview",
@@ -131,17 +220,37 @@ export function renderTopicScanEmail(props: TopicScanEmailProps): Promise<string
 
 // summary line up to the topic name that closes it. the visible line links that name, the preheader does not
 function summaryLead(findingCount: number): string {
-	const noun = findingCount === 1 ? "thing" : "things"
+	if (findingCount === 0) {
+		return "Carl brewed a fresh pot and found nothing new worth your time on "
+	}
+	const noun = findingCount === 1 ? "finding" : "findings"
 	return `Carl brewed a fresh cup of ${findingCount} new ${noun} worth your time on `
 }
 
-// a label as a link when its url is known, and as plain text when it is not, so the email still reads without an app base url configured
-function LinkOrText({ href, style, children }: { href?: string; style: CSSProperties; children: ReactNode }) {
+// a scan that came up empty gets Carl's aside in his own voice, so an empty digest still reads as intentional
+function closingNote(findingCount: number): string {
+	return findingCount === 0 ? " Carl has high standards." : ""
+}
+
+/**
+ * A label as a link when its url is known, and as plain text when it is not,
+ * so the email still reads without an app base url configured.
+ */
+export function LinkOrText({
+	href,
+	style,
+	children,
+}: {
+	href?: string
+	style: CSSProperties
+	children: ReactNode
+}): ReactElement {
 	return href ? (
 		<Link href={href} style={style}>
 			{children}
 		</Link>
 	) : (
+		// biome-ignore lint/complexity/noUselessFragments: children is a ReactNode, not assignable to the declared ReactElement return type on its own
 		<>{children}</>
 	)
 }
@@ -174,12 +283,40 @@ const header: CSSProperties = { paddingTop: "20px" }
 const brand: CSSProperties = { color: "#7c4a1e", fontSize: "18px", fontWeight: 700, margin: "0" }
 // the brand, heading, and footer links all carry the coffee tones, underlined only in the small footer text
 const brandLink: CSSProperties = { color: "#7c4a1e", textDecoration: "none" }
-const summaryLink: CSSProperties = { color: "#7c4a1e", textDecoration: "none", fontWeight: 600 }
-const footerBrandLink: CSSProperties = { color: "#7c4a1e", textDecoration: "underline" }
+export const summaryLink: CSSProperties = { color: "#7c4a1e", textDecoration: "none", fontWeight: 600 }
+export const footerBrandLink: CSSProperties = { color: "#7c4a1e", textDecoration: "underline" }
 const cup: CSSProperties = { fontSize: "22px" }
 const intro: CSSProperties = { paddingTop: "8px" }
 const h1: CSSProperties = { color: "#2b2b2b", fontSize: "22px", fontWeight: 700, margin: "8px 0 4px" }
 const summaryText: CSSProperties = { color: "#5b5b5b", fontSize: "15px", lineHeight: "1.5", margin: "0" }
+// the recap block, tinted a shade warmer than the finding cards so it reads as Carl's voice rather than another link
+const summaryCard: CSSProperties = {
+	backgroundColor: "#f7f2e9",
+	border: "1px solid #ece2d2",
+	borderRadius: "10px",
+	marginTop: "16px",
+	padding: "14px 16px",
+}
+const summaryLabel: CSSProperties = {
+	color: "#a79c8c",
+	fontSize: "11px",
+	letterSpacing: "0.06em",
+	margin: "0 0 6px",
+	textTransform: "uppercase",
+}
+const summaryBody: CSSProperties = { color: "#4b4b4b", fontSize: "14px", lineHeight: "1.5" }
+// the model picks its own heading levels and list shapes, so every one is pinned to the same compact scale
+const SUMMARY_MARKDOWN_STYLES = {
+	h1: { color: "#2b2b2b", fontSize: "15px", fontWeight: 700, margin: "10px 0 4px" },
+	h2: { color: "#2b2b2b", fontSize: "15px", fontWeight: 700, margin: "10px 0 4px" },
+	h3: { color: "#2b2b2b", fontSize: "15px", fontWeight: 700, margin: "10px 0 4px" },
+	p: { margin: "6px 0" },
+	ul: { margin: "6px 0", paddingLeft: "18px" },
+	ol: { margin: "6px 0", paddingLeft: "18px" },
+	li: { margin: "2px 0" },
+	link: { color: "#7c4a1e" },
+	bold: { color: "#2b2b2b", fontWeight: 600 },
+}
 const card: CSSProperties = {
 	backgroundColor: "#faf8f4",
 	border: "1px solid #efeae0",
@@ -188,6 +325,8 @@ const card: CSSProperties = {
 	padding: "14px 16px",
 }
 const cardTitle: CSSProperties = { color: "#7c4a1e", fontSize: "16px", fontWeight: 600, textDecoration: "none" }
+// the same muted tone as cardHost, so the rank reads as a label rather than part of the link itself
+const cardNumber: CSSProperties = { color: "#a79c8c", fontWeight: 400 }
 const cardHost: CSSProperties = { color: "#a79c8c", fontSize: "12px", margin: "2px 0 0" }
 const cardNote: CSSProperties = { color: "#4b4b4b", fontSize: "14px", lineHeight: "1.5", margin: "8px 0 0" }
 const hr: CSSProperties = { borderColor: "#ece7de", margin: "24px 0 16px" }

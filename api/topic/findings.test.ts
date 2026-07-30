@@ -20,7 +20,9 @@ function topicFinding(isConsumed: boolean): TopicFinding {
 		relevanceScore: 0,
 		relevanceExplanation: "",
 		rating: null,
+		engagement: null,
 		isConsumed,
+		isBookmarked: false,
 	}
 }
 

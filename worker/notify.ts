@@ -1,7 +1,10 @@
-// after a scheduled Scan succeeds, email its new Findings to the Topic's subscribers
-import { and, eq } from "drizzle-orm"
+// after a scheduled Scan succeeds, email its new Findings to the Topic's subscribers. a manual Scan instead
+// emails whoever started it, however it ended, since a brew you kicked off by hand runs for minutes
+import { toScanFailureLabel } from "@shared/scanFailure"
+import { and, desc, eq } from "drizzle-orm"
 import { db } from "../db"
 import { audienceMembers, findings, resources, type scans, subscriptions, type topics, users } from "../db/schema"
+import { type ManualScanEmailProps, renderManualScanEmail, toManualScanSubject } from "../emails/manual-scan-email"
 import { renderTopicScanEmail, type TopicScanEmailFinding } from "../emails/topic-scan-email"
 import { sendEmail } from "./email"
 import { signUnsubscribeToken } from "./unsubscribe"
@@ -11,80 +14,126 @@ type Topic = typeof topics.$inferSelect
 type Scan = typeof scans.$inferSelect
 type Recipient = { userId: string; email: string }
 
-// email a scheduled Scan's new Findings to the Topic's matched subscribers. best-effort: anything missing sends nothing
+// email a scheduled topic Scan's outcome to the Topic's email subscribers
 export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void> {
-	// only a "succeeded" Scan emails. a failed or still-running one has no settled Findings to send
+	// only a "succeeded" Scan emails. a failed or still-running one has no settled outcome to send
 	if (scan.status !== "succeeded") {
 		return
 	}
 
-	// nothing new surfaced, so there is nothing to email
-	const newFindings = await newFindingsForScan(scan)
-	if (newFindings.length === 0) {
-		return
-	}
-
-	// no matched subscriber, so there is no one to email
-	const recipients = await loadTopicSubscribers(topic.id, topic.frequency)
+	// return if there is no one to email
+	const recipients = await loadTopicEmailSubscribers(topic.id, topic.frequency)
 	if (recipients.length === 0) {
 		return
 	}
 
-	// the links back into the app, both undefined when no app base url is configured
+	// the Scan's new Findings. an empty scan still sends the email with Carl's aside instead of a list
+	const newFindings = await newFindingsForScan(scan)
+
+	// the links back into the app for the email, both undefined when no app base url is configured
 	const appUrl = toAppUrl()
 	const topicUrl = appUrl ? `${appUrl}/topics/${topic.id}` : undefined
 
 	// send one email per recipient, each with its own signed unsubscribe link and one-click header
-	const subject = `Notes on ${topic.name}: ${newFindings.length} finding${newFindings.length === 1 ? "" : "s"}`
+	const subject =
+		newFindings.length === 0
+			? `Notes on ${topic.name}: nothing new`
+			: `Notes on ${topic.name}: ${newFindings.length} finding${newFindings.length === 1 ? "" : "s"}`
 	for (const recipient of recipients) {
 		const unsubscribeUrl = await toUnsubscribeUrl(recipient.userId, topic.id)
-		const content = await renderTopicScanEmail({
+		const emailContent = await renderTopicScanEmail({
 			topicName: topic.name,
 			findingCount: newFindings.length,
 			findings: newFindings,
+			// the recap reads above the list. a scan that failed to summarize leaves it out instead of sending an empty block
+			scanSummary: scan.scanSummary ?? undefined,
 			// the header, heading, and footer link back to the app and to this topic
 			appUrl,
 			topicUrl,
 			unsubscribeUrl,
 		})
-		await sendEmail({ to: recipient.email, subject, content, headers: toUnsubscribeHeaders(unsubscribeUrl) })
+		await sendEmail({ to: recipient.email, subject, emailContent, headers: toUnsubscribeHeaders(unsubscribeUrl) })
 	}
 }
 
+// email whoever started a manual Scan once it ends, whether it found something, found nothing, or failed.
+// the recipient is the person who fired it, not the Topic's subscribers, since an admin may scan another user's Topic
+export async function sendManualScanEmail(userId: string, topic: Topic, scan: Scan): Promise<void> {
+	// a running Scan has no outcome to report yet, and a missing user has no address
+	if (scan.status === "running") {
+		return
+	}
+	const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId))
+	if (!user) {
+		return
+	}
+
+	// the links back into the app for the email, both undefined when no app base url is configured
+	const appUrl = toAppUrl()
+	const topicUrl = appUrl ? `${appUrl}/topics/${topic.id}` : undefined
+
+	// a failed Scan reports why it stopped. a succeeded one reports its new Findings and Carl's recap of them
+	const emailProps: ManualScanEmailProps =
+		scan.status === "failed"
+			? { status: "failed", topicName: topic.name, failureReason: toScanFailureLabel(scan.error), appUrl, topicUrl }
+			: {
+					status: "succeeded",
+					topicName: topic.name,
+					findings: await newFindingsForScan(scan),
+					scanSummary: scan.scanSummary ?? undefined,
+					appUrl,
+					topicUrl,
+				}
+
+	// send one email, with the subject built from the same props the body renders from
+	const emailContent = await renderManualScanEmail(emailProps)
+	await sendEmail({ to: user.email, subject: toManualScanSubject(emailProps), emailContent })
+}
+
 // the Findings a Scan first surfaced: those carrying its scan_id, joined to their Resource for the email fields.
-// curation only scores Resources without a Finding yet, so a topic scan's Findings are exactly its new ones since the last succeeded Scan
+// review only scores Resources without a Finding yet, so a topic scan's Findings are exactly its new ones since the last succeeded Scan
 export async function newFindingsForScan(scan: Scan): Promise<TopicScanEmailFinding[]> {
-	// this topic scan's Findings joined to their Resource for the title, link, and relevance explanation for the email
+	// this topic scan's Findings joined to their Resource for the title, link, and relevance explanation for the email.
+	// ranked by relevance, the same ordering the as app's own default sort.
 	return db
 		.select({ title: resources.title, url: resources.url, relevanceExplanation: findings.relevanceExplanation })
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
 		.where(eq(findings.scanId, scan.id))
+		.orderBy(desc(findings.relevanceScore))
 }
 
 // the Topic's subscribers to email: users at the matching frequency, direct plus audience members, deduped by address
-export async function loadTopicSubscribers(topicId: string, frequency: Topic["frequency"]): Promise<Recipient[]> {
-	// direct user subscribers at the matching frequency
+export async function loadTopicEmailSubscribers(topicId: string, frequency: Topic["frequency"]): Promise<Recipient[]> {
+	// only an active subscription with email on gets mail, unsubscribing deactivates the row rather than deleting it
+	const canEmailSubscription = and(
+		eq(subscriptions.topicId, topicId),
+		eq(subscriptions.frequency, frequency),
+		eq(subscriptions.isActive, true),
+		eq(subscriptions.isEmailEnabled, true),
+	)
+
+	// direct user email subscribers
 	const subscriberRows = await db
 		.select({ userId: users.id, email: users.email })
 		.from(subscriptions)
 		.innerJoin(users, eq(subscriptions.subscriberUserId, users.id))
-		.where(and(eq(subscriptions.topicId, topicId), eq(subscriptions.frequency, frequency)))
+		.where(canEmailSubscription)
 
-	// members of audiences subscribed at the matching frequency
+	// audience member email subscribers
 	const audienceRows = await db
 		.select({ userId: users.id, email: users.email })
 		.from(subscriptions)
 		.innerJoin(audienceMembers, eq(subscriptions.subscriberAudienceId, audienceMembers.audienceId))
 		.innerJoin(users, eq(audienceMembers.userId, users.id))
-		.where(and(eq(subscriptions.topicId, topicId), eq(subscriptions.frequency, frequency)))
+		.where(canEmailSubscription)
 
-	// collapse duplicates so a subscriber reached by both paths is emailed once
-	const byEmail = new Map<string, Recipient>()
+	// collapse duplicate emails so a subscriber reached by both paths is emailed once
+	const subscriberByEmail = new Map<string, Recipient>()
 	for (const row of [...subscriberRows, ...audienceRows]) {
-		byEmail.set(row.email, row)
+		subscriberByEmail.set(row.email, row)
 	}
-	return [...byEmail.values()]
+	return [...subscriberByEmail.values()]
 }
 
 // the app's base url without a trailing slash, or undefined if it isn't configured. every link in the email builds on it

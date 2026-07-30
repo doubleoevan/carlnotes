@@ -3,7 +3,7 @@
 export async function sendEmail(message: {
 	to: string
 	subject: string
-	content: string
+	emailContent: string
 	headers?: Record<string, string>
 }): Promise<void> {
 	// without a key and a verified from-address, log and skip rather than send
@@ -23,7 +23,7 @@ export async function sendEmail(message: {
 				from: fromEmail,
 				to: message.to,
 				subject: message.subject,
-				html: message.content,
+				html: message.emailContent,
 				headers: message.headers,
 			}),
 		})

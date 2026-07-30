@@ -1,19 +1,37 @@
 // the topic finding logic behind the api routes. it loads a topic's findings and records ratings, views, and consumed state
 import type { TopicFinding } from "@shared/contracts"
-import { and, desc, eq, sql } from "drizzle-orm"
+import { and, desc, eq, gt, sql } from "drizzle-orm"
 import { db } from "../../db"
-import { consumptions, findings, resources } from "../../db/schema"
+import { bookmarks, consumptions, findings, resources, scans } from "../../db/schema"
 import { canRateFinding, isTopicFindingVisible } from "./permissions"
 
 /**
  * Load a topic's findings joined to their resources with the user's consumed state, most relevant first.
+ * An "invite" visibility topic requires a subscription activation date to load findings.
  */
-export async function loadTopicFindings(topicId: string, userId: string | null): Promise<TopicFinding[]> {
-	// a signed-out visitor has no consumption history. sql`false` forces the left join to never match,
-	// rather than comparing consumptions.user_id against null, which drizzle's column typing rejects
+export async function loadTopicFindings(
+	topicId: string,
+	userId: string | null,
+	subscriberActivatedAt?: Date | null,
+): Promise<TopicFinding[]> {
+	// no active subscription on an invite topic means no findings at all
+	if (subscriberActivatedAt === null) {
+		return []
+	}
+
+	// a signed-out visitor has no consumption or bookmark history. sql`false` forces each left join to never
+	// match, rather than comparing a user_id column against null, which drizzle's column typing rejects
 	const consumptionJoinCondition = userId
 		? and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
 		: sql`false`
+	const bookmarkJoinCondition = userId
+		? and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId))
+		: sql`false`
+
+	// the activation gate keeps only findings whose scan started after the viewer's subscription activated
+	const findingFilter = subscriberActivatedAt
+		? and(eq(findings.topicId, topicId), gt(scans.startedAt, subscriberActivatedAt))
+		: eq(findings.topicId, topicId)
 
 	// join each topic finding with its resource. a left join adds the user's consumed date when one exists
 	const findingRows = await db
@@ -27,18 +45,22 @@ export async function loadTopicFindings(topicId: string, userId: string | null):
 			resourceCreatedAt: resources.createdAt,
 			fetchedAt: resources.fetchedAt,
 
-			// load the finding metadata and the user's consumed date
+			// load the finding metadata, the engagement score for trending, and the user's consumed and bookmarked dates
 			relevanceScore: findings.relevanceScore,
 			relevanceExplanation: findings.relevanceExplanation,
 			viewCount: findings.viewCount,
 			rating: findings.rating,
+			engagement: resources.engagement,
 			consumedAt: consumptions.consumedAt,
+			bookmarkedAt: bookmarks.createdAt,
 		})
-		// join the resource and the user's consumed row. sort by relevance score descending
+		// join the resource, the finding's scan for the activation gate, and the user's consumed and bookmark rows
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
+		.innerJoin(scans, eq(findings.scanId, scans.id))
 		.leftJoin(consumptions, consumptionJoinCondition)
-		.where(eq(findings.topicId, topicId))
+		.leftJoin(bookmarks, bookmarkJoinCondition)
+		.where(findingFilter)
 		.orderBy(desc(findings.relevanceScore))
 
 	// shape each row into a topic finding and set its isConsumed flag
@@ -52,16 +74,20 @@ export async function loadTopicFindings(topicId: string, userId: string | null):
 		source: toUrlHost(row.url),
 		publishedAt: row.resourceCreatedAt.toISOString(),
 		fetchedAt: row.fetchedAt.toISOString(),
-		// the relevance judgment, view count, rating, and the user's consumed state
+		// the relevance judgment, view count, rating, engagement, and the user's consumed and bookmarked states
 		relevanceScore: row.relevanceScore,
 		relevanceExplanation: row.relevanceExplanation,
 		viewCount: row.viewCount,
 		rating: row.rating,
+		engagement: row.engagement,
 		isConsumed: row.consumedAt !== null,
+		isBookmarked: row.bookmarkedAt !== null,
 	}))
 }
 
-// set a topic finding's rating to thumbs up or down, or clear it. returns false when the user may not act on it
+/**
+ * Set a topic finding's rating to thumbs up or down, or clear it. Returns false when the user may not rate.
+ */
 export async function setRating(userId: string, findingId: string, rating: "up" | "down" | null): Promise<boolean> {
 	if (!(await canRateFinding(userId, findingId))) {
 		return false
@@ -70,7 +96,28 @@ export async function setRating(userId: string, findingId: string, rating: "up" 
 	return true
 }
 
-// mark or unmark a topic finding consumed. returns false when the user may not act on it
+/**
+ * Bookmark or unbookmark a topic finding for the user. Bookmarking returns false when the finding isn't visible to the user.
+ * Unbookmarking always succeeds.
+ */
+export async function setBookmarked(userId: string, findingId: string, isBookmarked: boolean): Promise<boolean> {
+	// unbookmarking always removes this user's own row
+	if (!isBookmarked) {
+		await db.delete(bookmarks).where(and(eq(bookmarks.userId, userId), eq(bookmarks.findingId, findingId)))
+		return true
+	}
+
+	// bookmarking requires the finding to be visible to this user. a duplicate insert does nothing
+	if (!(await isTopicFindingVisible(userId, findingId))) {
+		return false
+	}
+	await db.insert(bookmarks).values({ userId, findingId }).onConflictDoNothing()
+	return true
+}
+
+/**
+ * Mark or unmark a topic finding consumed. Returns false when the user may not see it.
+ */
 export async function setConsumed(userId: string, findingId: string, isConsumed: boolean): Promise<boolean> {
 	if (!(await isTopicFindingVisible(userId, findingId))) {
 		return false
@@ -79,7 +126,9 @@ export async function setConsumed(userId: string, findingId: string, isConsumed:
 	return true
 }
 
-// increment the topic finding's view count and mark it consumed. returns false when the user may not act on it
+/**
+ * Increment the topic finding's view count and mark it consumed. Returns false when the user may not see it.
+ */
 export async function recordView(userId: string, findingId: string): Promise<boolean> {
 	if (!(await isTopicFindingVisible(userId, findingId))) {
 		return false
@@ -106,17 +155,23 @@ async function writeConsumed(userId: string, findingId: string, isConsumed: bool
 	await db.insert(consumptions).values({ userId, findingId }).onConflictDoNothing()
 }
 
-// the default topic feed hides consumed topic findings. the "All" view keeps them
+/**
+ * The default topic feed hides consumed topic findings. The "All" view keeps them.
+ */
 export function filteredTopicFindings(topicFindings: TopicFinding[], includeConsumed: boolean): TopicFinding[] {
 	return includeConsumed ? topicFindings : topicFindings.filter((finding) => !finding.isConsumed)
 }
 
-// "# new" is the count of topic findings that the user has not consumed
+/**
+ * "# new" is the count of topic findings that the user has not consumed.
+ */
 export function newTopicFindingCount(topicFindings: TopicFinding[]): number {
 	return topicFindings.filter((finding) => !finding.isConsumed).length
 }
 
-// return the host for the url or null if the url is invalid
+/**
+ * Return the host for the url or null if the url is invalid.
+ */
 export function toUrlHost(url: string): string | null {
 	try {
 		return new URL(url).host

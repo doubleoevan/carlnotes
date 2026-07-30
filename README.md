@@ -50,7 +50,7 @@ Database — generate a migration from the Drizzle schema, then apply it:
 
 ```bash
 bun run db:generate   # write a migration from db/schema.ts (offline, no doppler)
-bun run db:migrate    # apply pending migrations
+bun run db:migrate    # apply pending migrations (db/migrate.ts, the same one-shot script the deploy job runs)
 bun run db:seed       # creates the dev demo user via a real signup, then loads idempotent stub data (refuses to run outside the dev config)
 ```
 
@@ -61,6 +61,8 @@ Backfills (owner-run) — one-time data migrations that pair with a schema chang
 ```bash
 doppler run -- bun scripts/backfill-resource-content.ts   # upload existing resources.content to object storage, set content_key/content_bytes
 ```
+
+Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium plans and a Stripe webhook derives the active plan. It needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the per-plan `STRIPE_PRICE_*` ids, and a metered `STRIPE_PRICE_MANUAL_SCAN_OVERAGE` (see `.env.example`). Until they're set, checkout, the Customer Portal, metered overage, and the admin console's Stripe net-revenue line stay inert — the gate, plans, and quotas all work without Stripe.
 
 Checks — run the full gate with one command (enforced on push by `scripts/preflight.sh`):
 
@@ -84,6 +86,13 @@ bun run smoke:scan         # just the topic-scan smoke test (ingestion + review,
 bun run smoke:store        # just the resource-content object-storage round-trip (put → read → delete)
 bun run smoke:attach       # just the URL-attachment smoke test (Firecrawl → store → Temporal workflow → ready)
 bun run smoke:search       # just the search-scout smoke test (context → LLM queries → Exa → Resources)
+bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its ceiling
+```
+
+The review smoke reads `REVIEW_CONCURRENCY` and `MAX_SCORED_RESOURCES_PER_SCAN`, so it doubles as an A/B for the concurrency limit. Each run resets its feed's Resources cold first, so two runs differ only by their settings:
+
+```bash
+REVIEW_CONCURRENCY=1 MAX_SCORED_RESOURCES_PER_SCAN=8 bun run smoke:review
 ```
 
 Prompt registry (owner-run) — git is canonical for prompt wording (`worker/prompts/*.md`); this pushes it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set:
@@ -92,10 +101,26 @@ Prompt registry (owner-run) — git is canonical for prompt wording (`worker/pro
 bun run prompts:sync
 ```
 
+Container image — the app service is the Hono API plus the built UI bundle it serves. It builds from the repo-root `Dockerfile` and starts under `doppler run`. The LiteLLM proxy is a separate service with its own image in `infra/litellm/`:
+
+```bash
+docker build --platform=linux/amd64 --build-arg VITE_TURNSTILE_SITE_KEY=<site-key> -t carlnotes-app .
+```
+
+`VITE_TURNSTILE_SITE_KEY` is the one setting that cannot wait for `doppler run`: Vite inlines it into the bundle at build time, so it has to be present during the build. It is a public key that ships to every visitor, so it comes in as a build argument rather than through a build-stage Doppler token, which would hand the build read access to every real secret to inject a public one. 
+
+`--platform=linux/amd64` matters on Apple Silicon. The Doppler CLI is copied from `dopplerhq/cli:3`, which publishes amd64 only.
+
+Migrations are a deploy job, not a start-up step. Run the same one-shot script the local `db:migrate` runs, as a job on the deployed image, before the new service rolls out:
+
+```bash
+doppler run -- bun db/migrate.ts
+```
+
 ## Attribution
 
 The persona for CarlNotes was inspired by [Jake Van Clief](https://www.linkedin.com/in/jake-van-clief-74b66915a/). The real Jake runs [Eduba](https://eduba.io), an AI training and consulting company, makes excellent videos on [YouTube](https://www.youtube.com/@JEVanClief), and teaches AI systems over at [Clief Notes](https://www.skool.com/cliefnotes). Go learn from him. Carl would.
 
 ## License
 
-MIT
+AGPL-3.0-only

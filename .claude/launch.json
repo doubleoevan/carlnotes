@@ -13,6 +13,12 @@
       "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "dev:api"],
       "port": 3000
+    },
+    {
+      "name": "email",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev:email"],
+      "port": 3011
     }
   ]
 }

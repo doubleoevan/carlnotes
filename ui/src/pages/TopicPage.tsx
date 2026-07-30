@@ -1,36 +1,39 @@
 import type { TopicResponse } from "@shared/contracts"
-import { ADMIN_QUOTA } from "@shared/plans"
-import { Bell, Pencil, Play, Trash2 } from "lucide-react"
+import { Bell, Pencil, Trash2 } from "lucide-react"
 import type * as React from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
-import { AnchorLink } from "@/components/AnchorLink"
+import { toast } from "sonner"
+import { AnchorLink } from "@/components/layout/AnchorLink"
 import { Badge } from "@/components/primitives/badge"
-import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { ScanHistory } from "@/components/topic/ScanHistory"
+import { NewCountInfo } from "@/components/topic/Topic"
+import { TopicFeedSort } from "@/components/topic/TopicFeedSort"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
+import { TopicScanButton } from "@/components/topic/TopicScanButton"
+import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
+import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
 import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
-import { NewCountInfo } from "@/components/topic-feed/Topic"
-import { UnreadToggle } from "@/components/UnreadToggle"
 import { useIsVisible } from "@/hooks/useIsVisible"
+import { authClient } from "@/lib/authClient"
 import {
 	fetchTopicPage,
 	sendManualScan,
+	sendTopicFindingBookmark,
 	sendTopicFindingConsumed,
 	sendTopicFindingOpened,
 	sendTopicFindingRating,
 	sendTopicSubscription,
 } from "@/lib/topicClient"
-import { cn } from "@/lib/utils"
+import { cn, matchesFeedView, NEXT_SCAN_DISCLAIMER, toFilteredFindings, toSubscribeTooltip } from "@/lib/utils"
 import { type TopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
 
-// how often to re-fetch the page while a scan is running, so history and the run-now button follow it live
+// how often to re-fetch the page while a scan is running, so history and the manual scan button follow it live
 const SCAN_POLL_MS = 3000
-// a scan still running past this age is treated as stalled, so a crash-orphaned scan never polls or disables run-now forever
+// a scan still running past this age is treated as stalled, so a crash-orphaned scan never polls or disables the button forever
 const SCAN_STALE_MS = 5 * 60 * 1000
 
 /**
@@ -39,17 +42,19 @@ const SCAN_STALE_MS = 5 * 60 * 1000
 export function TopicPage() {
 	const { id = "" } = useParams()
 	const navigate = useNavigate()
-	// the shared feed state carries the homepage reload plus the "All" "Unread" and resource kind filters this page honors
-	const { reload: reloadHomepageFeed, showAll, setShowAll, resourceKinds } = useTopicFeed()
+	// the session gates the subscribe bell: a visitor is sent to signup instead
+	const { data: session } = authClient.useSession()
+	// the shared feed state carries the homepage reload plus the view, sort, and resource kind filters this page honors
+	const { reload: reloadHomePage, view, sort, setSort, resourceKinds } = useTopicFeed()
 	// the topic page payload. undefined while loading, null when missing or not visible
 	const [topicResponse, setTopicResponse] = useState<TopicResponse | null | undefined>(undefined)
 	// which dialog is open, and whether a manual scan request is in-flight
 	const [isEditOpen, setIsEditOpen] = useState(false)
 	const [isDeleteOpen, setIsDeleteOpen] = useState(false)
-	const [isRunningScan, setIsRunningScan] = useState(false)
+	const { isScanning, isRunningScan, startScan, stopScan } = useManualScanProgress(topicResponse?.scans)
 
 	// reload the page payload when the topic id changes
-	const reload = useCallback(async () => {
+	const reloadTopicPage = useCallback(async () => {
 		try {
 			setTopicResponse(await fetchTopicPage(id))
 		} catch (error) {
@@ -58,81 +63,103 @@ export function TopicPage() {
 		}
 	}, [id])
 	useEffect(() => {
-		void reload()
-	}, [reload])
+		void reloadTopicPage()
+	}, [reloadTopicPage])
 
 	// reload the page after running a topic feed handler
 	const runThenReload = useCallback(
 		async (handler: () => Promise<void>) => {
 			try {
 				await handler()
-				await reload()
+				await reloadTopicPage()
 			} catch (error) {
 				console.error("topic action failed", error)
 			}
 		},
-		[reload],
+		[reloadTopicPage],
 	)
 	const handlers: TopicFeedHandlers = useMemo(
 		() => ({
 			open: (findingId) => runThenReload(() => sendTopicFindingOpened(findingId)),
 			consume: (findingId, isConsumed) => runThenReload(() => sendTopicFindingConsumed(findingId, isConsumed)),
 			rate: (findingId, rating) => runThenReload(() => sendTopicFindingRating(findingId, rating)),
+			bookmark: (findingId, isBookmarked) => runThenReload(() => sendTopicFindingBookmark(findingId, isBookmarked)),
 		}),
 		[runThenReload],
 	)
 
-	// toggle this user's subscription
-	const handleSubscriptionToggle = async () => {
+	// toggle this user's subscription. show a toast to notify a user that they will see "invite" findings only after the next scan.
+	const handleSubscriptionToggle = async (): Promise<void> => {
 		if (!topicResponse) {
 			return
 		}
-		await runThenReload(() => sendTopicSubscription(topicResponse.id, !topicResponse.isSubscribed))
+		// a visitor has to sign up before subscribing
+		if (!session) {
+			navigate("/signup")
+			return
+		}
+		const isJoining = !topicResponse.isSubscribed
+		await runThenReload(() => sendTopicSubscription(topicResponse.id, isJoining))
+		if (isJoining && topicResponse.visibility === "invite") {
+			toast(`You are subscribed.\n${NEXT_SCAN_DISCLAIMER}`)
+		}
 	}
 
-	// trigger a manual scan, then reload the page so the quota line and the running scan show
-	const handleRunNow = async () => {
+	// trigger a manual scan. isRunningScan shows the state until the new scan row appears in a reload.
+	const handleManualScan = async (): Promise<void> => {
 		if (!topicResponse) {
 			return
 		}
-		setIsRunningScan(true)
-		await runThenReload(() => sendManualScan(topicResponse.id).then(() => {}))
-		setIsRunningScan(false)
+		startScan()
+		try {
+			const manualScansRemaining = await sendManualScan(topicResponse.id)
+			if (manualScansRemaining === null) {
+				// the request was rejected outright, so no scan ever started
+				stopScan()
+				return
+			}
+			await reloadTopicPage()
+		} catch (error) {
+			console.error("manual scan failed", error)
+			stopScan()
+		}
 	}
 
 	// a saved edit reloads this page and the homepage feed behind it
-	const handleSaved = async () => {
+	const handleTopicSaved = async (): Promise<void> => {
 		setIsEditOpen(false)
-		await reload()
-		await reloadHomepageFeed()
+		await reloadTopicPage()
+		await reloadHomePage()
 	}
 
-	// the findings filtered by the selected resource kinds
-	const filteredFindings = (topicResponse?.findings ?? []).filter(
-		(finding) => resourceKinds.has(finding.resourceKind) && (showAll || !finding.isConsumed),
+	// the findings filtered by resource kind and the active view, with bookmarked rows pinned first
+	const filteredFindings = toFilteredFindings(
+		(topicResponse?.findings ?? []).filter(
+			(finding) => resourceKinds.has(finding.resourceKind) && matchesFeedView(finding, view),
+		),
+		sort,
 	)
 	// a filter change remounts the findings section so its hydrate entrance replays using a view key
-	const viewKey = `${showAll}-${[...resourceKinds].sort().join()}`
+	const viewKey = `${view}-${sort}-${[...resourceKinds].sort().join()}`
 
-	// a scan is live when a recent history row is still running which triggers the page reload polling
-	const isScanning =
-		topicResponse?.scans.some((scan) => scan.status === "running" && isRecentScan(scan.startedAt)) ?? false
-	usePollWhileScanning(isScanning, reload)
+	// poll starts on the click itself, not just once the row is visible, so a reload that misses the
+	// brand-new row still gets a retry a few seconds later instead of going quiet
+	usePollWhileScanning(isScanning || isRunningScan, reloadTopicPage)
 
-	// the run-now block shows optimistically while loading before checking ownership
-	const isRunNowShown =
-		topicResponse === undefined ||
-		(topicResponse !== null && topicResponse.isOwner && topicResponse.manualScansRemaining !== null)
+	// the manual scan block shows optimistically while loading before checking ownership
+	const isManualScanShown =
+		topicResponse === undefined || (topicResponse?.isOwner && topicResponse.manualScansRemaining !== null)
 	return (
-		<main className="mx-auto max-w-5xl px-safe py-8">
-			{/* the static control row: it renders before the payload, so the chrome never jumps or animates in */}
-			<div className="mb-3 flex items-start justify-between gap-3">
-				<UnreadToggle showAll={showAll} onChange={setShowAll} />
-				{isRunNowShown && (
-					<RunNowBlock
+		<main className="mx-auto max-w-5xl px-safe pt-3 pb-8">
+			{/* the static control row: it renders before the payload, so the chrome never jumps or animates in. wraps when the screen is too narrow */}
+			<div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+				<TopicFeedSort sort={sort} onChange={setSort} />
+				{isManualScanShown && (
+					<TopicScanButton
 						remainingScans={topicResponse?.manualScansRemaining ?? null}
+						isSpendExhausted={topicResponse?.isSpendExhausted ?? false}
 						isRunning={isRunningScan || isScanning}
-						onRunNow={handleRunNow}
+						onManualScan={handleManualScan}
 					/>
 				)}
 			</div>
@@ -145,6 +172,7 @@ export function TopicPage() {
 				{topicResponse && (
 					<HeaderActions
 						topic={topicResponse}
+						isSignedIn={Boolean(session)}
 						onEdit={() => setIsEditOpen(true)}
 						onDelete={() => setIsDeleteOpen(true)}
 						onSubscriptionToggle={handleSubscriptionToggle}
@@ -174,24 +202,33 @@ export function TopicPage() {
 						/>
 					</HydrateSection>
 
-					{/* history left, the info card right */}
+					{/* scan history over the blend on the left, the topic info card right */}
 					<HydrateSection index={2}>
 						<div className="grid gap-x-8 lg:grid-cols-[minmax(0,1fr)_32rem]">
-							<ScanHistory scans={topicResponse.scans} />
+							{/* a grid item sizes to its widest content unless told not to, so long urls inside these cards
+							    would push the column past the viewport instead of truncating */}
+							<div className="min-w-0">
+								<TopicScanHistory scans={topicResponse.scans} />
+								<TopicSettingsCard topic={topicResponse} />
+							</div>
 							<TopicInfoCard topic={topicResponse} />
 						</div>
 					</HydrateSection>
 
 					{/* the owner dialogs, mounted only while open so their state resets each time */}
 					{isEditOpen && (
-						<EditTopicModal topic={topicResponse} onClose={() => setIsEditOpen(false)} onTopicSaved={handleSaved} />
+						<EditTopicModal
+							topic={topicResponse}
+							onClose={() => setIsEditOpen(false)}
+							onTopicSaved={handleTopicSaved}
+						/>
 					)}
 					{isDeleteOpen && (
 						<DeleteTopicDialog
 							topic={topicResponse}
 							onClose={() => setIsDeleteOpen(false)}
 							onTopicDeleted={async () => {
-								await reloadHomepageFeed()
+								await reloadHomePage()
 								navigate("/")
 							}}
 						/>
@@ -203,7 +240,7 @@ export function TopicPage() {
 }
 
 // re-fetch the topic page on an interval while any of its scans are running,
-// so the history status row and the "Run now" button follow a scan to completion without a manual reload.
+// so the history status row and the "Brew now" button follow a scan to completion without a manual reload.
 function usePollWhileScanning(isScanning: boolean, reload: () => Promise<void>): void {
 	useEffect(() => {
 		if (!isScanning) {
@@ -240,92 +277,36 @@ function TopicHeader({ page }: { page: TopicResponse }) {
 	)
 }
 
-// the "Run now" button and remaining scans or its running animation
-function RunNowBlock({
-	remainingScans,
-	isRunning,
-	onRunNow,
-}: {
-	remainingScans: number | null
-	isRunning: boolean
-	onRunNow: () => void
-}) {
-	return (
-		<div className="flex shrink-0 flex-col items-end gap-0.5">
-			{/* while a scan runs the trigger becomes a bigger shimmering "Carl is reading", held at the button's height so the row never jumps */}
-			{isRunning ? (
-				<div className="flex min-h-11 items-center sm:min-h-9">
-					<span className="shimmer-text text-base font-semibold sm:text-lg">Carl is reading…</span>
-				</div>
-			) : (
-				<Button
-					variant="secondary"
-					size="sm"
-					onClick={onRunNow}
-					disabled={remainingScans === null || remainingScans <= 0}
-					className="min-h-11 gap-1.5 rounded-lg sm:min-h-9"
-				>
-					<Play className="size-4 fill-none" />
-					Run now
-				</Button>
-			)}
-			{/* the quota line hydrates in once the payload lands, right-indented to end at the button text above */}
-			<RemainingScans remainingScans={remainingScans} />
-		</div>
-	)
-}
-
-// the remaining scans
-function RemainingScans({ remainingScans }: { remainingScans: number | null }) {
-	if (remainingScans === null) {
-		return <div aria-hidden="true" className="bg-muted mr-2.5 h-4 w-16 animate-pulse rounded" />
-	}
-	if (remainingScans >= ADMIN_QUOTA) {
-		return <span className="text-muted-foreground animate-hydrate mr-2.5 text-xs">Unlimited</span>
-	}
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<AnchorLink href="/pricing" className="text-link animate-hydrate mr-2.5 text-xs hover:underline">
-					{remainingScans} left today
-				</AnchorLink>
-			</TooltipTrigger>
-			<TooltipContent side="bottom">Upgrade for more</TooltipContent>
-		</Tooltip>
-	)
-}
-
 // the edit delete and subscribe actions
 function HeaderActions({
 	topic,
+	isSignedIn,
 	onEdit,
 	onDelete,
 	onSubscriptionToggle,
 }: {
 	topic: TopicResponse
+	isSignedIn: boolean
 	onEdit: () => void
 	onDelete: () => void
 	onSubscriptionToggle: () => void
 }) {
+	const subscribeTooltip = toSubscribeTooltip(isSignedIn, topic.isSubscribed, topic.visibility === "invite")
 	return (
 		<div className="flex items-center gap-0.5">
 			{topic.isOwner && (
-				<IconButton label="Edit topic" onClick={onEdit}>
+				<IconButton tooltip="Edit this topic" onClick={onEdit}>
 					<Pencil className="size-3.75" />
 				</IconButton>
 			)}
 			{topic.isOwner && (
-				<IconButton label="Delete topic" onClick={onDelete}>
+				<IconButton tooltip="Delete this topic" onClick={onDelete}>
 					<Trash2 className="size-3.75" />
 				</IconButton>
 			)}
 			{!topic.isOwner && topic.visibility !== "private" && (
-				<IconButton
-					label={topic.isSubscribed ? "Unsubscribe" : "Subscribe"}
-					isPressed={topic.isSubscribed}
-					onClick={onSubscriptionToggle}
-				>
-					<Bell className={cn("size-3.75", topic.isSubscribed && "fill-current")} />
+				<IconButton tooltip={subscribeTooltip} isPressed={topic.isSubscribed} onClick={onSubscriptionToggle}>
+					<Bell className={cn("size-3.75", topic.isSubscribed && "text-primary fill-current")} />
 				</IconButton>
 			)}
 		</div>
@@ -348,12 +329,12 @@ function HydrateSection({ index, children }: { index: number; children: React.Re
 
 // an icon with an action tooltip
 function IconButton({
-	label,
+	tooltip,
 	isPressed,
 	onClick,
 	children,
 }: {
-	label: string
+	tooltip: string
 	isPressed?: boolean
 	onClick: () => void
 	children: React.ReactNode
@@ -363,7 +344,7 @@ function IconButton({
 			<TooltipTrigger asChild>
 				<button
 					type="button"
-					aria-label={label}
+					aria-label={tooltip}
 					aria-pressed={isPressed}
 					onClick={onClick}
 					className="text-muted-foreground hover:text-foreground grid size-11 place-items-center sm:size-7"
@@ -371,7 +352,7 @@ function IconButton({
 					{children}
 				</button>
 			</TooltipTrigger>
-			<TooltipContent>{label}</TooltipContent>
+			<TooltipContent>{tooltip}</TooltipContent>
 		</Tooltip>
 	)
 }
@@ -379,4 +360,37 @@ function IconButton({
 // whether a scan started recently enough to still be genuinely running, versus stalled by a crash
 function isRecentScan(startedAt: string): boolean {
 	return Date.now() - new Date(startedAt).getTime() < SCAN_STALE_MS
+}
+
+// the manual scan button's live state. isScanning is a recent running row, and isRunningScan is optimistic from
+// the click until a row started after it appears in any status, so a fast failure never leaves the button stuck
+function useManualScanProgress(scans: TopicResponse["scans"] | undefined): {
+	isScanning: boolean
+	isRunningScan: boolean
+	startScan: () => void
+	stopScan: () => void
+} {
+	const [isRunningScan, setIsRunningScan] = useState(false)
+	const [scanTriggeredAt, setScanTriggeredAt] = useState<number | null>(null)
+
+	const isScanning = scans?.some((scan) => scan.status === "running" && isRecentScan(scan.startedAt)) ?? false
+	const hasScanSinceTrigger =
+		scanTriggeredAt !== null && (scans?.some((scan) => new Date(scan.startedAt).getTime() >= scanTriggeredAt) ?? false)
+
+	// hand the button over from the optimistic flag to the visible row
+	useEffect(() => {
+		if (isScanning || hasScanSinceTrigger) {
+			setIsRunningScan(false)
+		}
+	}, [isScanning, hasScanSinceTrigger])
+
+	return {
+		isScanning,
+		isRunningScan,
+		startScan: () => {
+			setIsRunningScan(true)
+			setScanTriggeredAt(Date.now())
+		},
+		stopScan: () => setIsRunningScan(false),
+	}
 }

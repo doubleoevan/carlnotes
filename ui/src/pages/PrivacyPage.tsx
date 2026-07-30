@@ -1,18 +1,21 @@
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
-import { AnchorLink } from "@/components/AnchorLink"
+import { AnchorLink } from "@/components/layout/AnchorLink"
+import { cn, TABLE_CARD_CLASS } from "@/lib/utils"
 
-// the providers table, wrapped so it scrolls instead of cramping on a narrow screen
+// the providers table on the shared table card, scrolling instead of cramping on a narrow screen
 function ScrollableTable({ children }: { children?: React.ReactNode }) {
 	return (
-		<div className="mt-4 overflow-x-auto">
-			<table className="w-full min-w-[34rem] border-collapse text-left text-sm">{children}</table>
+		<div className={cn(TABLE_CARD_CLASS, "mt-4")}>
+			<table className="w-full min-w-[34rem] border-collapse text-left text-sm [&_tbody_tr:last-child_td]:border-b-0">
+				{children}
+			</table>
 		</div>
 	)
 }
 
 // map the privacy markdown to the same legal-page typography as the terms page, plus bold labels and the table.
-// auto-linking stays off so bare domains stay plain text; the contact emails are explicit mailto links via AnchorLink
+// auto-linking stays off so bare domains stay plain text. the contact emails are explicit mailto links via AnchorLink
 const PRIVACY_MARKDOWN_OPTIONS = {
 	disableAutoLink: true,
 	overrides: {
@@ -33,7 +36,7 @@ const PRIVACY_BODY = `## Who this covers
 
 This policy covers **carlnotes.com**, the hosted version of CarlNotes ("we", "us").
 
-CarlNotes is also open source under the MIT license. If you run your own copy, **this policy does not apply to you**. You operate that instance, you choose its providers, and you are responsible for the data on it. Self-hosted instances ship with zero telemetry: they send us nothing.
+CarlNotes is also open source under the AGPL-3.0 license. If you run your own copy, **this policy does not apply to you**. You operate that instance, you choose its providers, and you are responsible for the data on it. Self-hosted instances ship with zero telemetry: they send us nothing.
 
 Contact: [support@carlnotes.com](mailto:support@carlnotes.com)
 

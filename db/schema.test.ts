@@ -98,7 +98,7 @@ test("topic_invites is keyed by topic and email and cascades from its topic", ()
 	expect(allMigrationsSql()).toMatch(/topic_invites_topic_id_topics_id_fk.*ON DELETE cascade/)
 })
 
-// only manual scans count against the daily quota, so the marker must exist and default to false
+// a scan records whether the owner triggered it by hand, so the marker must exist and default to false
 test("scans.is_manual is non-null and defaults to false", () => {
 	expect(schema.scans.isManual.notNull).toBe(true)
 	expect(allMigrationsSql()).toContain(`"is_manual" boolean DEFAULT false NOT NULL`)
@@ -115,6 +115,42 @@ test("users.plan is a free/plus/premium enum, non-null, and defaults to free", (
 	expect(schema.users.plan.notNull).toBe(true)
 	expect(allMigrationsSql()).toContain(`CREATE TYPE "public"."plan" AS ENUM('free', 'plus', 'premium')`)
 	expect(allMigrationsSql()).toContain(`"plan" "plan" DEFAULT 'free' NOT NULL`)
+})
+
+// a billing subscription mirrors a user's active Stripe subscription and derives their plan. one active row per user, cascading with the user
+test("billing_subscriptions is one-per-user, cascades, and carries the Stripe, plan, and card columns", () => {
+	expect("billingSubscriptions" in schema).toBe(true)
+	expect(schema.billingSubscriptions.hasPaymentMethod.notNull).toBe(true)
+	expect(allMigrationsSql()).toContain(`CONSTRAINT "billing_subscriptions_user_id_unique" UNIQUE("user_id")`)
+	expect(allMigrationsSql()).toMatch(/billing_subscriptions_user_id_users_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toContain(`"has_payment_method" boolean DEFAULT false NOT NULL`)
+})
+
+// the per-user budget override is nullable, since a null means the plan's own monthly backstop applies
+test("users.budget_override_cents is a nullable integer", () => {
+	expect(schema.users.budgetOverrideCents.notNull).toBe(false)
+	expect(allMigrationsSql()).toContain(`ADD COLUMN "budget_override_cents" integer`)
+})
+
+// the kept-set size is constrained to the shared allowed values, and the default doubles as the migration backfill
+test("topics.max_results defaults to ten and is checked against the allowed sizes", () => {
+	expect(schema.topics.maxResults.notNull).toBe(true)
+	expect(allMigrationsSql()).toContain(`"max_results" integer DEFAULT 10 NOT NULL`)
+	expect(allMigrationsSql()).toContain(`CHECK (max_results in (5, 10, 15, 20))`)
+})
+
+// a bookmark is a per-user row like consumption, never a findings column
+test("bookmarks is unique per user and finding and cascades from both parents", () => {
+	expect("bookmarks" in schema).toBe(true)
+	expect("bookmarked" in findings).toBe(false)
+	expect(allMigrationsSql()).toContain(`CONSTRAINT "bookmarks_user_finding_unique" UNIQUE("user_id","finding_id")`)
+	expect(allMigrationsSql()).toMatch(/bookmarks_user_id_users_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/bookmarks_finding_id_findings_id_fk.*ON DELETE cascade/)
+})
+
+// an adapter that captures no engagement score leaves the column null
+test("resources.engagement is nullable", () => {
+	expect(resources.engagement.notNull).toBe(false)
 })
 
 // the consumed state is a per-user row, never a findings column, so it lives in the consumptions table only

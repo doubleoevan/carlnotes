@@ -23,14 +23,22 @@ A `▾ History` accordion (default expanded) SHALL list the Topic's Scans newest
 - **THEN** the payload carries no cost value and the popover shows the summary and how long the Scan took, but no cost
 
 ### Requirement: The owner can trigger a manual Scan
-A `▶ Run now` control SHALL render for the owner only, above the title row, and SHALL trigger a real Scan of the Topic through the api. The Scan SHALL be recorded as manual, run without blocking the request, and appear in History (as running until it finishes). Requests from non-owners SHALL be rejected.
+A `▶ Run now` control SHALL render for the owner only, above the title row, and SHALL trigger a real Scan of the Topic through the api. The Scan SHALL be recorded as manual, run without blocking the request, and appear in History (as running until it finishes). The api SHALL authorize the trigger through `isAllowed(user, "scan:manual", topic)`, which allows the owner or an admin and enforces the plan's daily scan limit; requests it refuses SHALL be rejected.
 
 #### Scenario: Run now starts a scan
 - **WHEN** the owner activates Run now within quota
 - **THEN** the api accepts, a manual Scan row is created, and History shows it
 
+#### Scenario: An admin can run a manual Scan on any Topic
+- **WHEN** an admin triggers a manual Scan on a Topic they do not own
+- **THEN** the gate allows it and a manual Scan row is created
+
+#### Scenario: A non-owner who is not an admin is rejected
+- **WHEN** a user who is neither the owner nor an admin triggers a manual Scan
+- **THEN** the api rejects it
+
 ### Requirement: Scans are quota-limited per user per day, by billing plan
-Scans SHALL be limited per user per UTC day to the daily limit of the user's billing plan (Free, Plus, or Pro), counted across every Scan on the user's Topics regardless of origin — scheduled and manual Scans share one pool. Only running and succeeded Scans SHALL count — a failed Scan gives its slot back. Admins SHALL bypass this quota entirely. The Run-now block SHALL show "N left today" as a link to the pricing page whose tooltip reads "Upgrade for more"; at zero remaining the trigger SHALL be disabled and the api SHALL reject further manual Scans.
+Scans SHALL be limited per user per UTC day to the daily limit of the user's billing plan (free, plus, or premium), counted across every Scan on the user's Topics regardless of origin — scheduled and manual Scans share one pool. Only running and succeeded Scans SHALL count — a failed Scan gives its slot back. With a card on file the daily ceiling is soft: manual Scans beyond the daily limit SHALL be allowed and billed as metered overage (see `subscription-billing`); with no card it is a hard cap. Admins SHALL bypass the limit entirely. The Run-now block SHALL show "N left today" as a link to the pricing page whose tooltip reads "Upgrade for more"; at zero remaining the trigger SHALL be disabled and the api SHALL reject further manual Scans unless metered overage applies.
 
 #### Scenario: Quota exhausts and rejects
 - **WHEN** the owner has run as many Scans today as their plan allows and tries one more
@@ -39,6 +47,14 @@ Scans SHALL be limited per user per UTC day to the daily limit of the user's bil
 #### Scenario: A failed scan does not consume quota
 - **WHEN** an owner's manual Scan finishes as failed
 - **THEN** the remaining count no longer charges for it and the freed slot can be used again today
+
+#### Scenario: The daily limit gates manual Scans without a card
+- **WHEN** a non-admin owner with no card on file has reached their plan's daily scan limit and triggers another manual Scan
+- **THEN** the api rejects it as over the daily limit
+
+#### Scenario: A card on file makes the daily ceiling soft
+- **WHEN** a non-admin owner with a card on file has reached their plan's daily scan limit and triggers another manual Scan
+- **THEN** the api starts it and bills the extra Scan as metered overage
 
 #### Scenario: An admin bypasses the quota
 - **WHEN** a platform admin triggers a manual Scan regardless of how many Scans ran today

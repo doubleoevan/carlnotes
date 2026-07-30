@@ -88,9 +88,9 @@ async function smokeTest(): Promise<number> {
 	const { source, userId } = await seedTestData()
 	// run the checks, then delete the owner regardless of outcome
 	try {
-		const pass = await check(source)
-		console.log(`\n=== smoke ${pass ? "PASSED" : "FAILED"} ===`)
-		return pass ? 0 : 1
+		const isPassed = await check(source)
+		console.log(`\n=== smoke ${isPassed ? "PASSED" : "FAILED"} ===`)
+		return isPassed ? 0 : 1
 	} finally {
 		await db.delete(users).where(eq(users.id, userId))
 	}

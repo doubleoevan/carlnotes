@@ -1,8 +1,8 @@
 import Markdown from "markdown-to-jsx"
-import { AnchorLink } from "@/components/AnchorLink"
+import { AnchorLink } from "@/components/layout/AnchorLink"
 
 // map the terms markdown to a readable legal-page typography: display-font section headings, foreground body.
-// auto-linking stays off so bare domains stay plain text; the contact emails are explicit mailto links via AnchorLink
+// auto-linking stays off so bare domains stay plain text. the contact emails are explicit mailto links via AnchorLink
 const TERMS_MARKDOWN_OPTIONS = {
 	disableAutoLink: true,
 	overrides: {
@@ -21,9 +21,9 @@ These terms are a contract between you and CarlNotes ("we", "us") covering carln
 
 ## 2. Open source and self-hosting
 
-The CarlNotes source code is released under the MIT license. The MIT license governs the code. These terms govern only the hosted service at carlnotes.com.
+The CarlNotes source code is released under the AGPL-3.0 license. The AGPL-3.0 license governs the code. These terms govern only the hosted service at carlnotes.com.
 
-If you run your own instance, you may do anything the MIT license permits. You operate that instance and you are responsible for it. We provide no support, no warranty, and no liability for self-hosted deployments.
+If you run your own instance, you may do anything the AGPL-3.0 license permits. You operate that instance and you are responsible for it. We provide no support, no warranty, and no liability for self-hosted deployments.
 
 ## 3. Eligibility and accounts
 

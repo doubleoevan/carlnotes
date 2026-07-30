@@ -11,4 +11,7 @@ else
   docker compose down
 fi
 
+# stop the stripe webhook forwarder carl-up started, if it is running
+pkill -f "stripe listen" 2>/dev/null || true
+
 echo "carl is down"

@@ -15,6 +15,15 @@ import type { AppType } from "../../../api"
 // and in prod one service serves both the ui and the api
 const client = hc<AppType>(window.location.origin)
 
+// logs a rejected write. these mutations update the ui optimistically, so a silent failure leaves a change on screen the server never made
+// TODO: report these to Sentry once it lands
+async function reportFailedWrite(request: Promise<Response>, action: string): Promise<void> {
+	const response = await request
+	if (!response.ok) {
+		console.error(`${action} failed: ${response.status} ${await response.text()}`)
+	}
+}
+
 // fetch the topic feed. includeConsumed adds already consumed topic findings
 export async function fetchTopicFeed(includeConsumed: boolean): Promise<TopicFeedResponse> {
 	const response = await client.api["topic-feed"].$get({ query: includeConsumed ? { all: "true" } : {} })
@@ -23,17 +32,34 @@ export async function fetchTopicFeed(includeConsumed: boolean): Promise<TopicFee
 
 // set or clear a topic finding's thumbs up or thumbs down rating
 export async function sendTopicFindingRating(findingId: string, rating: "up" | "down" | null): Promise<void> {
-	await client.api["topic-findings"][":id"].rating.$post({ param: { id: findingId }, json: { rating } })
+	await reportFailedWrite(
+		client.api["topic-findings"][":id"].rating.$post({ param: { id: findingId }, json: { rating } }),
+		"rate topic finding",
+	)
 }
 
 // mark or unmark a topic finding consumed for the current user
 export async function sendTopicFindingConsumed(findingId: string, isConsumed: boolean): Promise<void> {
-	await client.api["topic-findings"][":id"].consume.$post({ param: { id: findingId }, json: { isConsumed } })
+	await reportFailedWrite(
+		client.api["topic-findings"][":id"].consume.$post({ param: { id: findingId }, json: { isConsumed } }),
+		"mark topic finding consumed",
+	)
+}
+
+// bookmark or unbookmark a topic finding for the current user, keeping it past the max-results filter
+export async function sendTopicFindingBookmark(findingId: string, isBookmarked: boolean): Promise<void> {
+	await reportFailedWrite(
+		client.api["topic-findings"][":id"].bookmark.$post({ param: { id: findingId }, json: { isBookmarked } }),
+		"bookmark topic finding",
+	)
 }
 
 // record that the user opened a topic finding resource. marks it consumed and increments its view count
 export async function sendTopicFindingOpened(findingId: string): Promise<void> {
-	await client.api["topic-findings"][":id"].view.$post({ param: { id: findingId } })
+	await reportFailedWrite(
+		client.api["topic-findings"][":id"].view.$post({ param: { id: findingId } }),
+		"record topic finding view",
+	)
 }
 
 // fetch one topic's page payload. null when the topic is missing or not visible to this user
@@ -70,9 +96,28 @@ export async function sendTopicDelete(topicId: string): Promise<void> {
 	}
 }
 
-// subscribe or unsubscribe the current user on a topic
+// activate, reactivate or deactivate the current user's subscription on a topic. deactivating keeps the row
 export async function sendTopicSubscription(topicId: string, isSubscribed: boolean): Promise<void> {
-	await client.api.topics[":id"].subscription.$post({ param: { id: topicId }, json: { isSubscribed } })
+	await reportFailedWrite(
+		client.api.topics[":id"].subscription.$post({ param: { id: topicId }, json: { isSubscribed } }),
+		"update topic subscription",
+	)
+}
+
+// permanently remove the current user's subscription row on a topic, distinct from deactivating it
+export async function sendSubscriptionDelete(topicId: string): Promise<void> {
+	await reportFailedWrite(
+		client.api.topics[":id"].subscription.$delete({ param: { id: topicId } }),
+		"delete topic subscription",
+	)
+}
+
+// turn the current user's email preference for a topic subscription on or off
+export async function sendSubscriptionEmail(topicId: string, isEmailEnabled: boolean): Promise<void> {
+	await reportFailedWrite(
+		client.api.topics[":id"]["subscription-email"].$post({ param: { id: topicId }, json: { isEmailEnabled } }),
+		"update subscription email preference",
+	)
 }
 
 // trigger a manual scan. returns the manual scans left today, or null when the api rejected the request

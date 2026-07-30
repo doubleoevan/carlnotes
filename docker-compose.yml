@@ -3,7 +3,7 @@ name: carlnotes
 
 services:
   litellm:
-    image: ghcr.io/berriai/litellm:main-stable
+    image: ghcr.io/berriai/litellm-database:v1.94.0
     ports:
       - "4000:4000"
     volumes:
@@ -12,7 +12,7 @@ services:
     environment:
       - DATABASE_URL=${LITELLM_DATABASE_URL}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
-      - FIREWORKS_AI_API_KEY=${FIREWORKS_API_KEY}
+      - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
   # temporal dev server for local attachment-workflow development: a single-binary, in-memory server on 7233 (ui on 8233).
   temporal:
     image: temporalio/admin-tools:1.31

@@ -32,6 +32,7 @@
 	--color-hero: var(--hero);
 	--color-hero-foreground: var(--hero-foreground);
 	--color-hero-muted: var(--hero-muted);
+	--color-hero-accent: var(--hero-accent);
 	--color-badge: var(--badge);
 	--color-link: var(--link);
 	--color-separator: var(--separator);
@@ -65,6 +66,8 @@
 	--hero: #3b2a1d;
 	--hero-foreground: #f3e9db;
 	--hero-muted: #b59c81;
+	/* the hero band stays dark in both themes, so its highlight text stays this same bright orange in both too */
+	--hero-accent: #f09050;
 	--badge: #b5773a;
 	--link: #a35f2d;
 	--separator: #dcccb6;
@@ -81,8 +84,9 @@
 	--popover-foreground: #f0e6d6;
 	--primary: #f09050;
 	--primary-foreground: #1a1511;
-	--secondary: #5d4a35;
-	--secondary-foreground: #c9ba99;
+	/* the pair carries small badge text, so it clears the 4.5:1 body-text ratio rather than the 3:1 large-text one */
+	--secondary: #75593e;
+	--secondary-foreground: #eadfc6;
 	--muted: #54422f;
 	--muted-foreground: #c2b494;
 	--accent: #5d4a35;
@@ -94,6 +98,7 @@
 	--hero: #0f0c09;
 	--hero-foreground: #f4ebdc;
 	--hero-muted: #b3a48c;
+	--hero-accent: #f09050;
 	--badge: #f09050;
 	--link: #f09050;
 	--separator: #614e39;

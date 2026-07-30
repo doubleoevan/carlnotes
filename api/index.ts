@@ -2,14 +2,21 @@
 import { zValidator } from "@hono/zod-validator"
 import {
 	attachmentUrlPayload,
+	bookmarkPayload,
+	budgetOverridePayload,
+	checkoutPayload,
 	consumedPayload,
+	inviteRevokePayload,
 	ratingPayload,
+	setRolePayload,
 	signupGatePayload,
+	subscriptionEmailPayload,
 	subscriptionPayload,
 	updateTopicPayload,
 } from "@shared/contracts"
-import { Hono } from "hono"
+import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
+import { serveStatic } from "hono/bun"
 import { setCookie } from "hono/cookie"
 import { z } from "zod"
 import {
@@ -19,25 +26,31 @@ import {
 	ingestUrlAttachment,
 	MAX_ATTACHMENT_BYTES,
 } from "../worker"
+import { loadActivity } from "./activity"
+import { loadAdminTotals, loadAdminUsers, setUserBudgetOverride, setUserRole } from "./admin"
 import { auth, GATE_COOKIE_MAX_AGE_SECONDS, GATE_COOKIE_NAME, signGateToken, verifyTurnstileToken } from "./auth"
+import { isAllowed, topicsRemaining } from "./authorization"
+import { createCheckoutSession, createPortalSession, handleStripeWebhook, loadBillingState } from "./billing"
 import { type AppEnv, currentUser } from "./currentUser"
 import { deleteTopicAttachment, loadDownloadableAttachment } from "./topic/attachments"
 import { buildTopicFeeds } from "./topic/feeds"
-import { recordView, setConsumed, setRating } from "./topic/findings"
+import { recordView, setBookmarked, setConsumed, setRating } from "./topic/findings"
 import { loadOwnedTopic } from "./topic/permissions"
-import { topicsRemaining } from "./topic/quotas"
+import { runManualScan } from "./topic/scans"
 import {
-	createTopic,
-	deleteTopic,
-	loadTopicPayload,
-	runManualScan,
+	deleteTopicInvite,
+	deleteTopicSubscription,
+	setSubscriptionEmailEnabled,
 	setTopicSubscription,
-	updateTopic,
-} from "./topic/topics"
+} from "./topic/subscriptions"
+import { createTopic, deleteTopic, loadTopicPayload, updateTopic } from "./topic/topics"
 import { invalidUnsubscribePage, unsubscribe, unsubscribedPage } from "./unsubscribe"
 
 // the "All" vs. "Unread" topic finding toggle
 const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional() })
+
+// where build:ui writes the bundle, relative to the repo root the server runs from
+const UI_BUNDLE_ROOT = "./ui/dist"
 
 // the topic feed and topic page routes under /api. AppEnv carries the session user every route resolves through currentUser
 const route = new Hono<AppEnv>()
@@ -120,6 +133,16 @@ const route = new Hono<AppEnv>()
 		const isConsumed = await setConsumed(userId, context.req.param("id"), context.req.valid("json").isConsumed)
 		return isConsumed ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
+	.post("/topic-findings/:id/bookmark", zValidator("json", bookmarkPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// bookmark or unbookmark this topic finding for the current user, keeping the count below the max results
+		const isBookmarkSet = await setBookmarked(userId, context.req.param("id"), context.req.valid("json").isBookmarked)
+		return isBookmarkSet ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
 	.post("/topic-findings/:id/view", async (context) => {
 		// reject a signed-out caller
 		const userId = currentUser(context)
@@ -141,7 +164,7 @@ const route = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// save the edit topic's fields and reconcile the invitee and source lists. owner only
+		// save the edit topic's fields and reconcile the invitee and source lists. owner or admin only.
 		const isUpdated = await updateTopic(userId, context.req.param("id"), context.req.valid("json"))
 		return isUpdated ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
@@ -151,7 +174,7 @@ const route = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// delete the topic and everything attached to it. owner only
+		// delete the topic and everything attached to it. owner or admin only.
 		const isDeleted = await deleteTopic(userId, context.req.param("id"))
 		return isDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
@@ -161,13 +184,18 @@ const route = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// trigger a manual scan within the daily quota. owner only
+		// trigger a manual scan, billed as overage past the daily quota when a card is on file. owner or admin only.
 		const scanResult = await runManualScan(userId, context.req.param("id"))
 		if (scanResult.status === "started") {
 			return context.json({ remaining: scanResult.remaining })
 		}
 
-		// an exhausted quota and a non-owner fail differently so the ui shuold tell them apart
+		// a scan already in flight is a conflict, not a quota or authorization failure
+		if (scanResult.status === "running") {
+			return context.json({ error: "a scan is already running" }, 409)
+		}
+
+		// an exhausted quota and a non-owner topic scan fail differently, so the ui should tell them apart
 		return scanResult.status === "quota"
 			? context.json({ error: "quota exhausted" }, 429)
 			: context.json({ error: "forbidden" }, 403)
@@ -178,10 +206,49 @@ const route = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// subscribe or unsubscribe the current user from a public or invite topic
+		// subscribe, reactivate, or deactivate the current user's subscription to a public or invite topic
 		const { isSubscribed } = context.req.valid("json")
-		const isSet = await setTopicSubscription(userId, context.req.param("id"), isSubscribed)
-		return isSet ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+		const isSubscriptionSet = await setTopicSubscription(userId, context.req.param("id"), isSubscribed)
+		return isSubscriptionSet ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
+	.delete("/topics/:id/subscription", async (context) => {
+		// reject a signed-out caller
+		const user = context.get("user")
+		if (!user) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// permanently remove the caller's own subscription row and their invite, distinct from deactivating it.
+		await deleteTopicSubscription(user.id, user.email, context.req.param("id"))
+		return context.json({ ok: true })
+	})
+	.delete("/topics/:id/invite", zValidator("json", inviteRevokePayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// withdraw an invitation on the caller's own topic, dropping that invitee's subscription with it. owner only
+		const isRevoked = await deleteTopicInvite(userId, context.req.param("id"), context.req.valid("json").email)
+		return isRevoked ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
+	.post("/topics/:id/subscription-email", zValidator("json", subscriptionEmailPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// turn the caller's email preference for this subscription on or off
+		await setSubscriptionEmailEnabled(userId, context.req.param("id"), context.req.valid("json").isEmailEnabled)
+		return context.json({ ok: true })
+	})
+	.get("/activity", async (context) => {
+		// reject a signed-out caller
+		const user = context.get("user")
+		if (!user) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// return the caller's own spend, topics, subscriptions, and invites
+		return context.json(await loadActivity({ id: user.id, email: user.email }))
 	})
 	.post(
 		"/topics/:id/attachments",
@@ -224,9 +291,8 @@ const route = new Hono<AppEnv>()
 				// hand the persisted attachment identity back to the modal
 				return context.json({ id: attachment.id, filename: attachment.filename })
 			} catch (error) {
-				// a validation error names the user's own mistake, safe to show verbatim.
-				// anything else (object storage, the database, the Temporal client) is an internal problem:
-				// log the real cause and keep it out of the response
+				// a validation error names the user's own mistake, so it shows verbatim.
+				// anything else is internal: log the real cause and keep it out of the response
 				if (error instanceof AttachmentValidationError) {
 					return context.json({ error: error.message }, 400)
 				}
@@ -247,9 +313,7 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "forbidden" }, 403)
 		}
 
-		// validate the url and fetch the page to Markdown,
-		// then run the synchronous part of attachment ingestion:
-		// object storage, a pending row, and starting the processing workflow
+		// validate the url and fetch the page to Markdown, then store it, write a pending row, and start the workflow
 		try {
 			const attachment = await ingestUrlAttachment(context.req.param("id"), context.req.valid("json").url)
 			return context.json({ id: attachment.id, filename: attachment.filename })
@@ -294,9 +358,111 @@ const route = new Hono<AppEnv>()
 			"X-Content-Type-Options": "nosniff",
 		})
 	})
+	.post("/billing/checkout", zValidator("json", checkoutPayload), async (context) => {
+		// reject a signed-out caller
+		const user = context.get("user")
+		if (!user) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// open a stripe checkout session for the chosen plan and interval, and hand its url back to redirect to
+		const { plan, interval } = context.req.valid("json")
+		const url = await createCheckoutSession(user.id, user.email, plan, interval)
+		return context.json({ url })
+	})
+	.post("/billing/portal", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// open the stripe customer portal, or 404 when the user has no active subscription to manage
+		const url = await createPortalSession(userId)
+		return url ? context.json({ url }) : context.json({ error: "no subscription" }, 404)
+	})
+	.get("/billing/state", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// the account page's plan, daily scan usage, card-on-file, and payment status
+		return context.json(await loadBillingState(userId))
+	})
+	.post("/webhooks/stripe", async (context) => {
+		// verify and apply the stripe event from the raw body. a bad signature answers 400 so stripe retries
+		try {
+			await handleStripeWebhook(await context.req.text(), context.req.header("stripe-signature"))
+			return context.json({ received: true })
+		} catch (error) {
+			console.error("stripe webhook rejected", error)
+			return context.json({ error: "invalid webhook" }, 400)
+		}
+	})
+	// the admin console routes
+	.get("/admin/console", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// the users table and the totals summary. admin only, through the gate
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const users = await loadAdminUsers()
+		const totals = await loadAdminTotals(users)
+		return context.json({ users, totals })
+	})
+	.post("/admin/users/:id/role", zValidator("json", setRolePayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// change a user's role, refusing an admin's own self-demotion. admin only, through the gate
+		if (!(await isAllowed(userId, "admin:setRole"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const isRoleSet = await setUserRole(userId, context.req.param("id"), context.req.valid("json").role)
+		return isRoleSet ? context.json({ ok: true }) : context.json({ error: "cannot remove your own admin role" }, 409)
+	})
+	.post("/admin/users/:id/budget", zValidator("json", budgetOverridePayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// set or clear a user's budget override and resize their key to the new effective budget. admin only, through the gate
+		if (!(await isAllowed(userId, "admin:setBudget"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		await setUserBudgetOverride(context.req.param("id"), context.req.valid("json").budgetOverrideCents)
+		return context.json({ ok: true })
+	})
 
 // the ui builds its typed client from this definition
 export type AppType = typeof route
 
+// one origin serves the api and the built ui. order matters here: the api tree is mounted first,
+// and the /api catch-all below it ends every remaining /api path as JSON, so the app shell can never answer for a missing endpoint
+const app = new Hono()
+	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
+	.get("/api/health", (context) => context.json({ status: "ok" }))
+	.route("/", route)
+	// an unmatched /api path is an api failure. a fetch client must read a 404, not fail parsing an HTML page
+	.all("/api/*", (context) => context.json({ error: "not found" }, 404))
+	// the bundle itself: hashed assets, the app shell, and whatever vite copied from the public folder
+	.on(["GET", "HEAD"], "*", serveStatic({ root: UI_BUNDLE_ROOT, onFound: setBundleCacheControl }))
+	// a client-routed path is not a file, so it gets the app shell, and the router resolves it.
+	// without a bundle built, this finds nothing and falls through to a 404, which is the normal state in dev
+	.on(["GET", "HEAD"], "*", serveStatic({ path: `${UI_BUNDLE_ROOT}/index.html`, onFound: setBundleCacheControl }))
+
+// a hashed asset filename never changes contents, so it caches for a year and is never revalidated.
+// everything else keeps its name across deployments and must revalidate to pick up a new bundle
+function setBundleCacheControl(_path: string, context: Context): void {
+	const isHashedAsset = context.req.path.startsWith("/assets/")
+	context.header("Cache-Control", isHashedAsset ? "public, max-age=31536000, immutable" : "no-cache")
+}
+
 // in dev this runs on port 3000 and vite forwards /api to it. in prod, one service serves both the ui and the api.
-export default { port: 3000, fetch: route.fetch }
+export default { port: 3000, fetch: app.fetch }

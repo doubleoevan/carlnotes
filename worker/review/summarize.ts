@@ -1,0 +1,156 @@
+// the scan report: a short write-up of what one Scan found, filtered, and spent
+import { generateText } from "ai"
+import { cheapModel } from "../models"
+import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
+import { writePrompt } from "../prompts/write"
+import type { TopicContext } from "./filter"
+import {
+	type Budget,
+	CHEAP_COST_PER_MILLION_TOKENS,
+	charge,
+	type KeptFinding,
+	type ReviewOutcome,
+	tokenCost,
+} from "./track"
+
+// how many kept findings the report lists in full before it just counts the rest
+const MAX_TOPIC_SCAN_REPORT_FINDINGS = 20
+
+// how many times the report call retries before it gives up
+const REPORT_MAX_RETRIES = 4
+
+// one Source's ingestion outcome, as the report's sources section lists it
+export type ScannedSource = { sourceKind: string; status: "ok" | "failed" | "skipped"; fallbackMode?: string }
+
+// the values the scan report prompt is rendered with
+type ScanPromptData = {
+	topicName: string
+	topicContext: string
+	date: string
+	// the Scan's tallies, its Sources' outcomes, and what it spent
+	reviewOutcome: ReviewOutcome
+	scannedSources: ScannedSource[]
+	budget: Budget
+}
+
+/**
+ * Runs the given summarize callback, returning an empty summary if it throws.
+ */
+export async function toTopicScanSummary(scanId: string, summarize: () => Promise<string>): Promise<string> {
+	try {
+		return await summarize()
+	} catch (error) {
+		console.error(`scan report failed for scan ${scanId}, leaving the summary empty`, error)
+		return ""
+	}
+}
+
+/**
+ * Writes the scan report for one Scan. Throws when the model answers with nothing.
+ */
+export async function summarizeTopicScan(
+	topicContext: TopicContext,
+	reviewOutcome: ReviewOutcome,
+	scannedSources: ScannedSource[],
+	budget: Budget,
+	litellmApiKey?: string,
+): Promise<string> {
+	// render the prompt over this Scan's own numbers
+	const date = new Date().toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })
+	const reportPrompt = await buildScanReportPrompt({
+		topicName: topicContext.name,
+		topicContext: topicContext.text,
+		date,
+		reviewOutcome,
+		scannedSources,
+		budget,
+	})
+
+	// ask the cheap model for the write-up, then charge what it cost
+	const { text, usage } = await generateText({
+		model: cheapModel(litellmApiKey),
+		prompt: reportPrompt.prompt,
+		maxRetries: REPORT_MAX_RETRIES,
+		...promptTelemetry(reportPrompt),
+	})
+	charge(budget, "scoringCheap", tokenCost(usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS))
+
+	// a blank answer is a failed call, so it throws instead of returning an empty report
+	const reportText = text.trim()
+	if (reportText.length === 0) {
+		throw new Error(`scan report came back empty after ${usage.totalTokens ?? 0} tokens`)
+	}
+	return reportText
+}
+
+/**
+ * Builds the scan report prompt from summarize-topic-scan.md.
+ */
+export async function buildScanReportPrompt(promptData: ScanPromptData): Promise<BuiltPrompt> {
+	const { template, name, registryPrompt } = await fetchPromptTemplate("summarize-topic-scan")
+
+	// fill the template, building each list section from the Scan's outcomes
+	const prompt = writePrompt(template, {
+		topicName: promptData.topicName,
+		topicContext: promptData.topicContext,
+		date: promptData.date,
+		keptResourcesBlock: toKeptResourcesBlock(promptData.reviewOutcome.keptFindings),
+		filteredBreakdown: toFilteredResourcesReport(promptData.reviewOutcome),
+		sourcesBlock: toSourcesBlock(promptData.scannedSources),
+		costLine: toCostLine(promptData.budget),
+	})
+	return { prompt, name, registryPrompt }
+}
+
+// lists each kept finding with its title, url, relevance score, and note
+function toKeptResourcesBlock(keptFindings: KeptFinding[]): string {
+	if (keptFindings.length === 0) {
+		return "none"
+	}
+
+	// one bullet per finding, up to the listing limit
+	const findingLines = keptFindings.slice(0, MAX_TOPIC_SCAN_REPORT_FINDINGS).map((finding) => {
+		const relevanceNote = finding.relevanceExplanation || "no note"
+		return `- ${finding.title ?? finding.url} — ${finding.url} — score ${finding.relevanceScore.toFixed(2)}\n  note: ${relevanceNote}`
+	})
+
+	// count whatever the limit left off
+	const unlistedCount = keptFindings.length - MAX_TOPIC_SCAN_REPORT_FINDINGS
+	if (unlistedCount > 0) {
+		findingLines.push(`…and ${unlistedCount} more kept findings not listed`)
+	}
+	return findingLines.join("\n")
+}
+
+// counts the filtered resources by reason, then the deferred and failed totals
+function toFilteredResourcesReport(reviewOutcome: ReviewOutcome): string {
+	const filterReasonLines = Object.entries(reviewOutcome.filteredCounts).map(
+		([filterReason, filteredCount]) => `- ${filterReason}: ${filteredCount}`,
+	)
+	return [
+		...filterReasonLines,
+		`- deferred by the spend cap: ${reviewOutcome.deferredCount}`,
+		`- failed during review: ${reviewOutcome.failedCount}`,
+	].join("\n")
+}
+
+// lists each Source with its kind, how it ended, and any fallback it used
+function toSourcesBlock(scannedSources: ScannedSource[]): string {
+	if (scannedSources.length === 0) {
+		return "none recorded"
+	}
+
+	// one bullet per Source
+	return scannedSources
+		.map((scannedSource) => {
+			const fallbackNote = scannedSource.fallbackMode ? ` — fell back to ${scannedSource.fallbackMode}` : ""
+			return `- ${scannedSource.sourceKind}: ${scannedSource.status}${fallbackNote}`
+		})
+		.join("\n")
+}
+
+// the Scan's total spend with its per-stage breakdown
+function toCostLine(budget: Budget): string {
+	const { embedding, fetch, scoringCheap, scoringPremium } = budget.stageCosts
+	return `total $${budget.spent.toFixed(4)} — embedding $${embedding.toFixed(4)}, fetch $${fetch.toFixed(4)}, cheap scoring $${scoringCheap.toFixed(4)}, premium scoring $${scoringPremium.toFixed(4)}`
+}

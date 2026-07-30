@@ -1,7 +1,7 @@
 // the shared access checks for topics and topic findings. one place answers who may see, subscribe, and rate
-import { and, eq, inArray, or } from "drizzle-orm"
+import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"
-import { audienceMembers, findings, subscriptions, topicInvites, topics, users } from "../../db/schema"
+import { audienceMembers, findings, scans, subscriptions, topicInvites, topics, users } from "../../db/schema"
 
 // a topic row, shared by every check below
 type Topic = typeof topics.$inferSelect
@@ -20,9 +20,12 @@ export async function loadOwnedTopic(userId: string, topicId: string): Promise<T
 
 /**
  * Whether the user may see the topic at all. The owner and public topics always can see,
- * invite topics only for invited emails or existing subscribers, private topics never.
+ * invite topics only for invited emails or active subscribers, private topics never.
  */
-export async function canSeeTopic(userId: string | null, topic: Topic): Promise<boolean> {
+export async function canSeeTopic(
+	userId: string | null,
+	topic: Pick<Topic, "id" | "ownerId" | "visibility">,
+): Promise<boolean> {
 	// the owner and any public topic are visible outright
 	if (topic.ownerId === userId || topic.visibility === "public") {
 		return true
@@ -32,7 +35,7 @@ export async function canSeeTopic(userId: string | null, topic: Topic): Promise<
 		return false
 	}
 
-	// an invite topic opens to invited emails and existing subscribers
+	// an invite topic can only be seen by invited emails and active subscribers
 	return (await isInvited(userId, topic.id)) || (await hasSubscription(userId, topic.id))
 }
 
@@ -48,7 +51,8 @@ async function isInvited(userId: string, topicId: string): Promise<boolean> {
 	return invite !== undefined
 }
 
-// a subscription reaches a topic through the user directly or through an audience they belong to
+// a subscription reaches a topic through the user directly or through an audience they belong to.
+// it must be active. deactivating a subscription withdraws these grants without losing the row itself
 async function hasSubscription(userId: string, topicId: string): Promise<boolean> {
 	// collect the audiences the user belongs to for the audience path
 	const memberAudiences = db
@@ -62,22 +66,56 @@ async function hasSubscription(userId: string, topicId: string): Promise<boolean
 		inArray(subscriptions.subscriberAudienceId, memberAudiences),
 	)
 
-	// a matching subscription row on this topic is the grant
+	// a matching, active subscription row on this topic is the grant
 	const [subscription] = await db
 		.select({ id: subscriptions.id })
 		.from(subscriptions)
-		.where(and(eq(subscriptions.topicId, topicId), subscriberMatches))
+		.where(and(eq(subscriptions.topicId, topicId), subscriberMatches, eq(subscriptions.isActive, true)))
 		.limit(1)
 	return subscription !== undefined
 }
 
 /**
- * The user's own direct subscription row on the topic, ignoring audience paths, or undefined.
+ * When the user's subscription to the topic became active, or null with no active subscription.
  */
-export async function loadDirectSubscription(userId: string, topicId: string): Promise<{ id: string } | undefined> {
+export async function subscriptionActivatedAt(userId: string, topicId: string): Promise<Date | null> {
+	// the audiences the user belongs to, for the audience subscription path
+	const memberAudiences = db
+		.select({ audienceId: audienceMembers.audienceId })
+		.from(audienceMembers)
+		.where(eq(audienceMembers.userId, userId))
+
+	// the earliest activation wins
+	const [activationRow] = await db
+		.select({ activatedAt: sql<Date | string | null>`min(${subscriptions.createdAt})` })
+		.from(subscriptions)
+		.where(
+			and(
+				eq(subscriptions.topicId, topicId),
+				or(eq(subscriptions.subscriberUserId, userId), inArray(subscriptions.subscriberAudienceId, memberAudiences)),
+				eq(subscriptions.isActive, true),
+			),
+		)
+	return activationRow?.activatedAt ? new Date(activationRow.activatedAt) : null
+}
+
+/**
+ * A topic is only visible after the first scan after its activation.
+ */
+export function isVisibleAfterActivation(scanStartedAt: Date, activatedAt: Date | null): boolean {
+	return activatedAt !== null && scanStartedAt > activatedAt
+}
+
+/**
+ * The user's direct subscription row on a topic, ignoring audience member paths.
+ */
+export async function loadDirectSubscription(
+	userId: string,
+	topicId: string,
+): Promise<{ id: string; isActive: boolean } | undefined> {
 	// the topic and this user's id together identify at most one row
 	const [subscription] = await db
-		.select({ id: subscriptions.id })
+		.select({ id: subscriptions.id, isActive: subscriptions.isActive })
 		.from(subscriptions)
 		.where(and(eq(subscriptions.topicId, topicId), eq(subscriptions.subscriberUserId, userId)))
 		.limit(1)
@@ -85,7 +123,7 @@ export async function loadDirectSubscription(userId: string, topicId: string): P
 }
 
 /**
- * Whether the user may rate on the topic. The owner always may, and a non-owner only as a subscriber.
+ * Whether the user may rate a topic. The owner always may, and a non-owner only as a subscriber.
  */
 export async function canRateTopic(
 	userId: string | null,
@@ -137,12 +175,13 @@ export async function isTopicFindingVisible(userId: string, findingId: string): 
 		return true
 	}
 
-	// a non-owner sees a public topic outright and an invite topic as an invited email or subscriber, never a private one
+	// a non-owner sees a public topic outright, never a private one. an invite topic opens a finding only to a
+	// subscriber whose activation predates the finding's scan, so an unaccepted invite grants no findings
 	switch (topic.visibility) {
 		case "public":
 			return true
 		case "invite":
-			return (await isInvited(userId, topic.id)) || (await hasSubscription(userId, topic.id))
+			return isVisibleAfterActivation(topic.scanStartedAt, await subscriptionActivatedAt(userId, topic.id))
 		case "private":
 			return false
 		// a new visibility value fails to compile here
@@ -151,12 +190,18 @@ export async function isTopicFindingVisible(userId: string, findingId: string): 
 	}
 }
 
-// the id, owner, and visibility of a topic finding's topic, or undefined when the finding does not exist
-async function loadFindingTopic(findingId: string) {
+// the id, owner, and visibility of a topic finding's topic plus its scan's start time, or undefined when the finding does not exist
+async function loadFindingTopic(findingId: string): Promise<
+	| (Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility"> & {
+			scanStartedAt: (typeof scans.$inferSelect)["startedAt"]
+	  })
+	| undefined
+> {
 	const [topic] = await db
-		.select({ id: topics.id, ownerId: topics.ownerId, visibility: topics.visibility })
+		.select({ id: topics.id, ownerId: topics.ownerId, visibility: topics.visibility, scanStartedAt: scans.startedAt })
 		.from(findings)
 		.innerJoin(topics, eq(findings.topicId, topics.id))
+		.innerJoin(scans, eq(findings.scanId, scans.id))
 		.where(eq(findings.id, findingId))
 		.limit(1)
 	// undefined when the finding id matches nothing

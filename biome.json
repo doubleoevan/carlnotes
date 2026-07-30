@@ -34,7 +34,13 @@
 				"noExcessiveCognitiveComplexity": "error"
 			},
 			"nursery": {
-				"useExplicitReturnType": "warn"
+				"useExplicitReturnType": {
+					"level": "warn",
+					"options": {
+						"allowExpressions": true,
+						"allowedNames": ["activeSubscriptionTopicIdQuery", "loadTopicFeedData"]
+					}
+				}
 			}
 		}
 	},
@@ -59,7 +65,7 @@
 	},
 	"overrides": [
 		{
-			"includes": ["ui/src/components/primitives/**", "db/schema.ts"],
+			"includes": ["**/*.tsx", "db/schema.ts"],
 			"linter": { "rules": { "nursery": { "useExplicitReturnType": "off" } } }
 		}
 	]

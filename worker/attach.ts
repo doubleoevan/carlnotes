@@ -38,6 +38,10 @@ export async function ingestAttachment(attachmentUpload: AttachmentUpload): Prom
 	if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
 		throw new AttachmentValidationError(`attachment exceeds ${MAX_ATTACHMENT_BYTES} bytes`)
 	}
+	// an empty upload would store fine and read back as a ready attachment that downloads to nothing, so prevent it here
+	if (bytes.byteLength === 0) {
+		throw new AttachmentValidationError("attachment is empty")
+	}
 	if (!isSupportedAttachmentType(contentType)) {
 		throw new AttachmentValidationError(`unsupported attachment content type: ${contentType}`)
 	}

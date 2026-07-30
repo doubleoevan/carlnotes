@@ -1,6 +1,6 @@
 // scans every Topic scheduled by its frequency and emails its new Findings to subscribers.
 // whether a Topic is scheduled is computed from its frequency and its Scans, so a sweep is safe to repeat
-import { and, eq, lt, sql } from "drizzle-orm"
+import { and, eq, lt, ne, sql } from "drizzle-orm"
 import { db } from "../db"
 import { scansRemainingToday } from "../db/quotas"
 import { scans, topics } from "../db/schema"
@@ -17,10 +17,11 @@ const STALE_SCAN_MS = Number(Bun.env.STALE_SCAN_MS ?? String(30 * 60 * 1000))
 // a persisted Topic and Scan, and what one topic sweep did: how many Topics were scheduled, scanned, skipped over quota, or failed
 type Topic = typeof topics.$inferSelect
 type Scan = typeof scans.$inferSelect
-type TopicSweepSummary = { scheduled: number; scanned: number; skippedOverQuota: number; failed: number }
+export type TopicSweepSummary = { scheduled: number; scanned: number; skippedOverQuota: number; failed: number }
 
-// a scheduled topic sweep: scan every scheduled Topic under its owner's daily quota, then email its new Findings, isolating failures
-export async function runScheduledTopicScans(): Promise<TopicSweepSummary> {
+// a scheduled topic sweep: scan every scheduled Topic under its owner's daily quota, then email its new Findings, isolating failures.
+// wrapped so an overlapping tick is skipped rather than duplicating and reviewing the same Topic's still-running Scan a second time
+export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSweepSummary> => {
 	// close out any hung topic scans first, so a Topic stuck mid-scan shows its failure and stops blocking its own next scan
 	await failStaleScans()
 
@@ -43,7 +44,7 @@ export async function runScheduledTopicScans(): Promise<TopicSweepSummary> {
 
 		// scan the Topic, then email the finished Scan's new Findings. only a succeeded Scan gets emailed
 		try {
-			const topicScan = await runTopicScan(topic.id)
+			const topicScan = await runTopicScan(topic.id, topic.ownerId)
 			if (topicScan) {
 				await sendTopicScanEmail(topic, topicScan)
 			}
@@ -61,6 +62,29 @@ export async function runScheduledTopicScans(): Promise<TopicSweepSummary> {
 		`scheduled scan sweep: ${scanned} scanned, ${skippedOverQuota} over quota, ${failed} failed, of ${scheduledTopics.length} scheduled`,
 	)
 	return topicSweepSummary
+})
+
+/**
+ * Wraps an async task so that a call made while the previous call is still running skips it and resolves to null,
+ * instead of starting a second, overlapping run. The guard is in-memory, so it excludes only calls made within this process.
+ */
+export function toExclusiveTask<Result>(task: () => Promise<Result>): () => Promise<Result | null> {
+	// shared by every call the wrapper returns, so calls from different callers still exclude each other
+	let isRunning = false
+	return async () => {
+		// a call made while the task is already running does nothing, rather than overlapping it
+		if (isRunning) {
+			return null
+		}
+
+		// claim the run, and release it however the task ends
+		isRunning = true
+		try {
+			return await task()
+		} finally {
+			isRunning = false
+		}
+	}
 }
 
 // mark every topic scan that has been running past the stale window as failed, and report how many were closed out.
@@ -93,35 +117,57 @@ export function trackSweepOutcome(summary: TopicSweepSummary, scan: Pick<Scan, "
 
 // return the Topics scheduled for a scan with this sweep, computed from each Topic's frequency and its most recent Scan
 export async function loadScheduledTopics(now = new Date()): Promise<Topic[]> {
-	// the start of each Topic's most recent Scan, whatever its outcome. a failed Scan means the window was spent,
-	// not that the Topic is owed another Scan attempt. counting only succeeded topic scans would schedule a failing Topic forever
+	// the start of each Topic's most recent finished Scan, counting failed ones. a new Topic has none, so it is due
 	const latestScans = await db
 		.select({ topicId: scans.topicId, lastStartedAt: sql<string>`max(${scans.startedAt})` })
 		.from(scans)
+		.where(ne(scans.status, "running"))
 		.groupBy(scans.topicId)
 	const lastStartByTopic = new Map(latestScans.map((row) => [row.topicId, new Date(row.lastStartedAt)]))
 
-	// only keep Topics whose most recent Scan is older than their frequency window
+	// a Topic whose manual Scan is still in flight is not scheduled.
+	// the pending row a new Topic writes at creation is not manual, so it can be scheduled
+	const runningManualScans = await db
+		.select({ topicId: scans.topicId })
+		.from(scans)
+		.where(and(eq(scans.status, "running"), eq(scans.isManual, true)))
+	const manualScanTopicIds = new Set(runningManualScans.map((row) => row.topicId))
+
+	// only keep Topics whose most recent completed Scan is older than their frequency window
 	const topicRows = await db.select().from(topics)
-	return topicRows.filter((topicRow) => isTopicScheduled(topicRow, lastStartByTopic.get(topicRow.id), now))
+	return topicRows.filter(
+		(topicRow) =>
+			!manualScanTopicIds.has(topicRow.id) && isTopicScheduled(topicRow, lastStartByTopic.get(topicRow.id), now),
+	)
 }
 
-// a Topic is scheduled when it has never been scanned or its last Scan (succeeded or failed) is past its frequency window
+// a Topic is scheduled when it has no completed Scan, or its last completed Scan is past its frequency window
 export function isTopicScheduled(
 	topic: Pick<Topic, "frequency">,
-	lastScanStartedAt: Date | undefined,
+	lastCompletedStartedAt: Date | undefined,
 	now: Date,
 ): boolean {
-	// a Topic that has never scanned is always scheduled
-	if (!lastScanStartedAt) {
+	// a Topic with no completed Scan is always scheduled
+	if (!lastCompletedStartedAt) {
 		return true
 	}
-	return now.getTime() - lastScanStartedAt.getTime() >= frequencyWindowMs(topic.frequency)
+
+	// a weekdays Topic shares the daily topic's window, but once it has been scanned it skips the weekend
+	if (topic.frequency === "weekdays" && isWeekend(now)) {
+		return false
+	}
+	return now.getTime() - lastCompletedStartedAt.getTime() >= frequencyWindowMs(topic.frequency)
 }
 
-// how long a Topic's frequency keeps it from re-scanning. daily rescans after a day, weekly after a week
+// how long a Topic's frequency keeps it from re-scanning. daily and weekdays rescan after a day, weekly after a week
 export function frequencyWindowMs(frequency: Topic["frequency"]): number {
 	return frequency === "weekly" ? 7 * DAY_MS : DAY_MS
+}
+
+// Saturday or Sunday, UTC. the app has no per-user timezone yet, so the sweep judges the weekend against the server's own clock
+function isWeekend(now: Date): boolean {
+	const utcDay = now.getUTCDay()
+	return utcDay === 0 || utcDay === 6
 }
 
 // run one sweep and exit, so a platform cron can invoke this file on a schedule.

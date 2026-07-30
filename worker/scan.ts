@@ -1,8 +1,8 @@
 // scan orchestration. runs a topic's Sources through their adapters, stores the deduped Resources, and records the Scan
 import { propagateAttributes, startActiveObservation } from "@langfuse/tracing"
-import { eq } from "drizzle-orm"
+import { desc, eq, sql } from "drizzle-orm"
 import { db } from "../db"
-import { resources, scans, sources, topics, users } from "../db/schema"
+import { resources, scans, sources, users } from "../db/schema"
 import { sourceAdapters } from "./adapters"
 import type { AdapterResult, NewResource, Source } from "./adapters/adapter"
 import { reviewScan } from "./review"
@@ -30,47 +30,72 @@ type ScanSummary = {
 // shared so that propagateAttributes and startActiveObservation always agree on the trace name
 const TOPIC_SCAN_TRACE_NAME = "topic-scan"
 
-// create a Scan and ingest every Source with failures isolated,
-// then review the results and end the Scan with its counts and cost.
-// isManual records that an owner triggered this Scan, not the scheduler.
-// that is for bookkeeping only. the daily scan quota counts scheduled and manual runs alike
-export async function runTopicScan(topicId: string, isManual = false): Promise<Scan | undefined> {
-	// open the Scan as "running" so that interrupted ingestion is visible as an unfinished row
-	const [scan] = await db.insert(scans).values({ topicId, isManual }).returning()
+/**
+ * Create a Scan, ingest every Source with failures isolated, then review the results, and end the Scan with its counts and cost.
+ * isManual is for bookkeeping only, since the daily quota counts scheduled and manual Scans alike.
+ * ownerId is stamped on the Scan so its spend and quota attribution survive the topic being deleted.
+ */
+export async function runTopicScan(topicId: string, ownerId: string, isManual = false): Promise<Scan | undefined> {
+	// get the topic's newest Scan to check if it's still running
+	const [newestScan] = await db
+		.select({ id: scans.id, status: scans.status })
+		.from(scans)
+		.where(eq(scans.topicId, topicId))
+		.orderBy(desc(scans.startedAt))
+		.limit(1)
+
+	// update the start time for a currently running Scan or add a new Scan
+	const isScanRunning = newestScan?.status === "running"
+	const [scan] = isScanRunning
+		? await db.update(scans).set({ startedAt: new Date() }).where(eq(scans.id, newestScan.id)).returning()
+		: await db.insert(scans).values({ topicId, ownerId, isManual }).returning()
 	if (!scan) {
 		throw new Error(`could not create scan for topic ${topicId}`)
 	}
+	return processTopicScan(scan, topicId, ownerId)
+}
 
+/**
+ * Ingest and review an already-running Scan row, ending it with its counts and cost.
+ * createTopic stages the topic's first Scan itself so the page lands mid-brew, then returns the open row here rather than starting a second one.
+ */
+export async function processTopicScan(scan: Scan, topicId: string, ownerId: string): Promise<Scan | undefined> {
 	// every model call made while this Scan runs nests under one shared Langfuse trace span
 	return propagateAttributes({ traceName: TOPIC_SCAN_TRACE_NAME, metadata: { topicId, scanId: scan.id } }, () =>
 		startActiveObservation(TOPIC_SCAN_TRACE_NAME, async () => {
-			// an infra failure after this point must finalize the Scan as failed
-			// never leave it stuck as "running"
+			// an infra failure after this point must finalize the Scan as failed. never leave it stuck as "running"
 			try {
 				// run every Source through its adapter with per-Source failures isolated, then aggregate the outcomes
 				const topicSources = await db.select().from(sources).where(eq(sources.topicId, topicId))
 				const sourceOutcomes = await Promise.all(topicSources.map(ingestSource))
 				const summary = toScanSummary(sourceOutcomes)
 
-				// insert the deduped Resources, skipping urls already stored so existing Resources keep their embeddings
+				// insert the deduped Resources. an already-stored url keeps its embedding and content.
+				// only engagement refreshes, and coalesce keeps the stored score when a re-discovery carries no signal
 				if (summary.resources.length > 0) {
-					await db.insert(resources).values(summary.resources).onConflictDoNothing({ target: resources.url })
+					await db
+						.insert(resources)
+						.values(summary.resources)
+						.onConflictDoUpdate({
+							target: resources.url,
+							set: { engagement: sql`coalesce(excluded.engagement, ${resources.engagement})` },
+						})
 				}
 
-				// bill this scan's llm calls to the topic owner's litellm virtual key, not the shared master key
-				const [topicOwner] = await db
+				// bill this scan's llm calls to the owner's litellm virtual key, not the shared master key
+				const [owner] = await db
 					.select({ litellmVirtualKey: users.litellmVirtualKey })
-					.from(topics)
-					.innerJoin(users, eq(topics.ownerId, users.id))
-					.where(eq(topics.id, topicId))
+					.from(users)
+					.where(eq(users.id, ownerId))
 
 				// review the discovered Resources for topic findings, then end the Scan with one database write
 				// sourceOutcomes rides along so the report can describe each Source's outcome
 				const review = await reviewScan(
 					scan,
+					topicId,
 					summary.resources,
 					sourceOutcomes,
-					topicOwner?.litellmVirtualKey ?? undefined,
+					owner?.litellmVirtualKey ?? undefined,
 				)
 				const { foundCount, cost, status, degradedSources } = summary
 				const [finishedScan] = await db

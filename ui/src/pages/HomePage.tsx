@@ -1,19 +1,19 @@
-import { topicSectionKeys } from "@shared/enums"
 import { ADMIN_QUOTA, PLANS } from "@shared/plans"
 import { Check, Plus, RotateCw, SlidersHorizontal } from "lucide-react"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { AnchorLink } from "@/components/AnchorLink"
+import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { Accordion } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TagPicker } from "@/components/TagPicker"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { TopicFeedSkeleton } from "@/components/topic-feed/TopicFeedSkeleton"
-import { TopicSection } from "@/components/topic-feed/TopicSection"
-import { UnreadToggle } from "@/components/UnreadToggle"
+import { QuotaLink } from "@/components/topic/QuotaLink"
+import { TagPicker } from "@/components/topic/TagPicker"
+import { TopicFeedSkeleton } from "@/components/topic/TopicFeedSkeleton"
+import { TopicFeedSort } from "@/components/topic/TopicFeedSort"
+import { TopicSection } from "@/components/topic/TopicSection"
 import { authClient } from "@/lib/authClient"
+import { cn, MENU_BUTTON_CLASS } from "@/lib/utils"
 import { type TagMatchMode, tagMatchModes, useTopicFeed } from "@/providers/TopicFeedProvider"
 
 // the display label per tag match mode
@@ -29,14 +29,15 @@ const TAG_MATCH_LABEL: Record<TagMatchMode, string> = {
  */
 export function HomePage() {
 	const navigate = useNavigate()
-	// gates the add-topic flow: signed out, Add Topic sends the visitor to sign up instead of opening the modal
+	// + New Topic sends a non-authenticated visitor to sign up instead of opening the modal
 	const { data: session } = authClient.useSession()
 	const isSignedIn = Boolean(session)
 	// the shared feed state: the sections, the view filters, and the topic-creation quota
 	const {
 		topicFeed,
-		showAll,
-		setShowAll,
+		view,
+		sort,
+		setSort,
 		resourceKinds,
 		tagFilters,
 		setTagFilters,
@@ -47,88 +48,112 @@ export function HomePage() {
 	} = useTopicFeed()
 	// increment when the refresh button is pressed to remount the sections so their hydrate animation replays
 	const [refreshKey, setRefreshKey] = useState(0)
-	// whether the add-topic modal is open
-	const [isAddTopicOpen, setIsAddTopicOpen] = useState(false)
+	// disables the Reheat button for the length of its own request, so a second click can't stack another reload
+	const [isRefreshing, setIsRefreshing] = useState(false)
+	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
+	// the section the reader opened, or null while none has been opened and the default still applies. an empty string closes every section
+	const [openedSection, setopenedSection] = useState<string | null>(null)
 
-	// refresh refetches the topic feed and replays the load animation
-	const handleRefresh = async () => {
-		// wait for the refreshed topic feed so the entrance animation replays over the new content, not the old
-		await reload()
-		setRefreshKey((previousKey) => previousKey + 1)
+	// refresh reloads the topic feed and replays the load animation.
+	const handleRefresh = async (): Promise<void> => {
+		setIsRefreshing(true)
+		try {
+			// wait for the refreshed topic feed so the load animation replays over the new content
+			await reload()
+			setRefreshKey((previousKey) => previousKey + 1)
+		} finally {
+			setIsRefreshing(false)
+		}
 	}
 
 	// a created topic refreshes the feed behind the navigation to its new page
-	const handleTopicCreated = async (topicId: string) => {
-		setIsAddTopicOpen(false)
-		await reload()
-		navigate(`/topics/${topicId}`)
+	const handleTopicCreated = async (topicId: string): Promise<void> => {
+		setIsNewTopicOpen(false)
+		try {
+			await reload()
+		} finally {
+			navigate(`/topics/${topicId}`)
+		}
 	}
 
-	// "Add Topic" button opens the modal when signed in, otherwise it sends the visitor to sign up first
-	const handleAddTopic = () => {
+	// "+ New Topic" button opens the modal when signed in, otherwise it sends the visitor to sign up first
+	const handleNewTopic = (): void => {
 		if (isSignedIn) {
-			setIsAddTopicOpen(true)
+			setIsNewTopicOpen(true)
 		} else {
 			navigate("/signup")
 		}
 	}
 
 	// the remount key changes on refresh or any filter change so that updated content animates in
-	const viewKey = `${refreshKey}-${showAll}-${[...resourceKinds].sort().join()}-${tagMatchMode}-${[...tagFilters].sort().join("|")}`
+	const viewKey = `${refreshKey}-${view}-${sort}-${[...resourceKinds].sort().join()}-${tagMatchMode}-${[...tagFilters].sort().join("|")}-${isSignedIn}`
+	// signed in opens your topics section, signed out opens the featured topics section
+	const defaultOpenSection = isSignedIn ? "yours" : "featured"
+	const openSection = openedSection ?? defaultOpenSection
 	return (
-		<main className="mx-auto max-w-5xl px-safe py-8">
-			{/* the "All" "Unread" toggle to the left, the "Refresh" button and the "Add Topic" block to the right */}
-			<div className="mb-3 flex items-start justify-between gap-3">
-				<UnreadToggle showAll={showAll} onChange={setShowAll} />
-				<div className="flex items-start gap-2">
-					<Button
-						variant="secondary"
-						size="sm"
-						onClick={handleRefresh}
-						className="min-h-11 gap-1.5 rounded-lg sm:min-h-9"
-					>
-						<RotateCw className="size-4" />
-						Refresh
-					</Button>
-					<AddTopicBlock
-						remaining={topicFeed?.topicsRemaining ?? null}
-						isSignedIn={isSignedIn}
-						onAdd={handleAddTopic}
-					/>
-				</div>
-			</div>
-
+		<main className="mx-auto max-w-5xl px-safe pt-3 pb-8">
 			{/* tag filters: the Tags link with its pills and "+" to the left, the Tag Filters menu to the right */}
 			<div className="mb-3 flex flex-wrap items-center justify-between gap-1.5">
 				<div className="flex min-w-0 flex-wrap items-center gap-1.5">
 					<TagPicker tags={tagFilters} knownTags={knownTags} openPickerLabel="Tags:" onTagsChange={setTagFilters} />
 				</div>
-				<TagFiltersMenu mode={tagMatchMode} onModeChange={setTagMatchMode} />
+				<TagFiltersMenu mode={tagMatchMode} onTagModeChange={setTagMatchMode} />
+			</div>
+
+			{/* the Sort menu and the "Reheat" button to the left, the "+ New Topic" block to the right, wrapping onto a second line when the screen is too narrow */}
+			<div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+				<div className="flex items-start gap-2">
+					<TopicFeedSort sort={sort} onChange={setSort} />
+					<button
+						type="button"
+						onClick={handleRefresh}
+						disabled={isRefreshing}
+						className={cn(MENU_BUTTON_CLASS, "disabled:pointer-events-none disabled:opacity-50")}
+					>
+						{isRefreshing ? <CoffeeMug className="size-4" /> : <RotateCw className="size-4" />}
+						{isRefreshing ? "Reheating…" : "Reheat"}
+					</button>
+				</div>
+				<NewTopicBlock
+					remaining={topicFeed?.topicsRemaining ?? null}
+					isSignedIn={isSignedIn}
+					onNewTopic={handleNewTopic}
+				/>
 			</div>
 
 			{/* skeleton animation while loading */}
 			{topicFeed === null && <TopicFeedSkeleton />}
 
-			{/* the topic sections with a viewKey prop so that any change replays the hydrate animation */}
+			{/*
+				the topic sections with a viewKey prop so that any change replays the hydrate animation.
+				opening one section closes whichever was open. the collapsible prop lets the current open one close too
+			*/}
 			{topicFeed && (
-				<Accordion key={viewKey} type="multiple" defaultValue={[...topicSectionKeys]}>
+				<Accordion key={viewKey} type="single" collapsible value={openSection} onValueChange={setopenedSection}>
 					{topicFeed.sections.map((section) => (
 						<TopicSection key={section.key} section={section} />
 					))}
 				</Accordion>
 			)}
 
-			{/* the add-topic modal is mounted only while it's open so that its state resets each time */}
-			{isAddTopicOpen && <EditTopicModal onClose={() => setIsAddTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
+			{/* the new-topic modal is only mounted while it's open so that its state resets each time */}
+			{isNewTopicOpen && <EditTopicModal onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
 		</main>
 	)
 }
 
-// the Tag Filters menu: a button matching the search bar's Filters control, opening the tag match mode options
-function TagFiltersMenu({ mode, onModeChange }: { mode: TagMatchMode; onModeChange: (mode: TagMatchMode) => void }) {
+// the Tag Filters menu: a button matching the search bar's Filters control. picking a mode closes the menu
+function TagFiltersMenu({
+	mode,
+	onTagModeChange,
+}: {
+	mode: TagMatchMode
+	onTagModeChange: (mode: TagMatchMode) => void
+}) {
+	const [isOpen, setIsOpen] = useState(false)
 	return (
-		<Popover>
-			<PopoverTrigger className="bg-card text-muted-foreground hover:text-foreground inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm shadow-sm sm:min-h-9">
+		<Popover open={isOpen} onOpenChange={setIsOpen}>
+			<PopoverTrigger className={MENU_BUTTON_CLASS}>
 				<SlidersHorizontal className="size-4" />
 				Tag Filters
 			</PopoverTrigger>
@@ -138,7 +163,10 @@ function TagFiltersMenu({ mode, onModeChange }: { mode: TagMatchMode; onModeChan
 					<button
 						key={matchMode}
 						type="button"
-						onClick={() => onModeChange(matchMode)}
+						onClick={() => {
+							onTagModeChange(matchMode)
+							setIsOpen(false)
+						}}
 						aria-pressed={matchMode === mode}
 						className="hover:bg-accent flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-sm sm:min-h-9"
 					>
@@ -151,26 +179,26 @@ function TagFiltersMenu({ mode, onModeChange }: { mode: TagMatchMode; onModeChan
 	)
 }
 
-// the "Add Topic" button and remaining topic quota
-function AddTopicBlock({
+// the "+ New Topic" button and remaining topic quota
+function NewTopicBlock({
 	remaining,
 	isSignedIn,
-	onAdd,
+	onNewTopic,
 }: {
 	remaining: number | null
 	isSignedIn: boolean
-	onAdd: () => void
+	onNewTopic: () => void
 }) {
 	return (
 		<div className="flex shrink-0 flex-col items-end gap-0.5">
 			<Button
 				size="sm"
-				onClick={onAdd}
+				onClick={onNewTopic}
 				disabled={isSignedIn && (remaining === null || remaining <= 0)}
 				className="min-h-11 gap-1.5 rounded-lg sm:min-h-9"
 			>
 				<Plus className="size-4" />
-				Add Topic
+				New Topic
 			</Button>
 			{/* the cap line hydrates in once the feed lands */}
 			<TopicsRemaining remaining={remaining} isSignedIn={isSignedIn} />
@@ -178,39 +206,27 @@ function AddTopicBlock({
 	)
 }
 
-// the topics remaining showing the free cap with a link to sign up when logged out or the current count with a link to the pricing page
+// the topics remaining showing the free cap with a link to sign up when a visitor is logged out or the current count with a link to the pricing page
 function TopicsRemaining({ remaining, isSignedIn }: { remaining: number | null; isSignedIn: boolean }) {
+	// a visitor sees the free plan's cap
 	if (!isSignedIn) {
 		return (
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<AnchorLink href="/signup" className="text-link animate-hydrate mr-2.5 text-xs hover:underline">
-						{PLANS.free.topicLimit} left
-					</AnchorLink>
-				</TooltipTrigger>
-				<TooltipContent side="bottom">Sign up to add</TooltipContent>
-			</Tooltip>
+			<QuotaLink
+				isLoading={false}
+				isUnlimited={false}
+				label={`${PLANS.free.topicLimit} left`}
+				href="/signup"
+				tooltip="Sign up to add"
+			/>
 		)
 	}
-
-	// animate while loading
-	if (remaining === null) {
-		return <div aria-hidden="true" className="bg-muted mr-2.5 h-4 w-16 animate-pulse rounded" />
-	}
-
-	// an admin has unlimited topics
-	if (remaining >= ADMIN_QUOTA) {
-		return <span className="text-muted-foreground animate-hydrate mr-2.5 text-xs">Unlimited</span>
-	}
-
 	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<AnchorLink href="/pricing" className="text-link animate-hydrate mr-2.5 text-xs hover:underline">
-					{remaining} left
-				</AnchorLink>
-			</TooltipTrigger>
-			<TooltipContent side="bottom">Upgrade for more</TooltipContent>
-		</Tooltip>
+		<QuotaLink
+			isLoading={remaining === null}
+			isUnlimited={remaining !== null && remaining >= ADMIN_QUOTA}
+			label={`${remaining} left`}
+			href="/pricing"
+			tooltip="Upgrade for more"
+		/>
 	)
 }

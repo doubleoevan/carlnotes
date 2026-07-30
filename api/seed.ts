@@ -5,6 +5,7 @@ import { db } from "../db"
 import { users } from "../db/schema"
 import { seed as seedTopics } from "../db/seed"
 import { auth, GATE_COOKIE_NAME, signGateToken } from "./auth"
+import { isAdminRole, replaceUserLiteLLMKey } from "./authorization"
 
 // fixed local credentials so the seeded demo topics are always reachable by logging in as the same account
 const DEV_USER_EMAIL = Bun.env.DEV_USER_EMAIL ?? "evan@carlnotes.dev"
@@ -21,8 +22,18 @@ export async function seed(): Promise<void> {
 		const seen = process.env.DOPPLER_ENVIRONMENT ?? "unset"
 		throw new Error(`db:seed refuses to run: DOPPLER_ENVIRONMENT is "${seen}", expected "dev"`)
 	}
+
+	// capture the role before seeding, since the seed promotes the dev user to admin with a plain row update
 	const devUserId = await ensureDevUser()
+	const [devUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, devUserId))
+	const wasAdminBeforeSeed = isAdminRole(devUser?.role)
 	await seedTopics(devUserId)
+
+	// a signup-minted key carries the free budget, so a fresh promotion reissues it at the admin ceiling.
+	// an already-admin dev user keeps their key, so re-seeding never rotates it or resets its spend
+	if (!wasAdminBeforeSeed) {
+		await replaceUserLiteLLMKey(devUserId)
+	}
 }
 
 // looks up the dev user by email, signing up for real if it doesn't exist yet.

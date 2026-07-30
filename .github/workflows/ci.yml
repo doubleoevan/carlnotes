@@ -25,10 +25,10 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      # pin Bun to the repo's local major (1.x). there is no packageManager, .tool-versions, or Dockerfile pin to read
+      # the exact Bun the Dockerfile pins, so the gate runs on the version that ships
       - uses: oven-sh/setup-bun@v2
         with:
-          bun-version: "1"
+          bun-version: "1.3.14"
       # cache Bun's global install cache, keyed by the lockfile
       - uses: actions/cache@v4
         with:

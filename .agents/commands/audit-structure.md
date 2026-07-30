@@ -43,16 +43,25 @@ Check for:
      `index.css`, `styles/globals.css`, `build.ts`
    - `bun-plugin-tailwind`, `Bun.serve` HTML imports (removed Bun full-stack
      scaffold)
-   - `use-ai-sdk` (skill renamed upstream to `ai-sdk`)
-    - `"recommended": true` in Biome config (deprecated in Biome 2.5+; the current form is
-      `"preset": "recommended"`)
-    - `bunx tsc --noEmit` (now `bunx tsc -b`; the old form silently checks nothing
-      against a solution-style root)
-    - `score.md` (now `summarize-resource.md`), `scan-report.md` (now
-      `summarize-topic-scan.md`), `attachment-context.md` (now `attach-context.md`),
-      `search-query.md` (now `search-topic.md`)
-    - `render.ts`/`fill.ts` (merged into `write.ts`)
-    - `worker/llm.ts` (now `worker/models.ts`)
+   - `use-ai-sdk` as a local skill name (we vendor it as `ai-sdk`). upstream still publishes it at
+     `skills/use-ai-sdk/`, so the `skillPath` in `skills-lock.json` keeps the old name on purpose
+   - `"recommended": true` in Biome config (deprecated in Biome 2.5+; the current form is
+     `"preset": "recommended"`)
+   - `bunx tsc --noEmit` (now `bunx tsc -b`; the old form silently checks nothing
+     against a solution-style root)
+   - `score.md` (now `summarize-resource.md`), `scan-report.md` (now
+     `summarize-topic-scan.md`), `attachment-context.md` (now `attach-context.md`),
+     `search-query.md` (now `search-topic.md`)
+   - `render.ts`/`fill.ts` (merged into `write.ts`)
+   - `worker/llm.ts` (now `worker/models.ts`)
+   - `worker/review.ts` (now the `worker/review/` folder: `index.ts`, `filter.ts`,
+     `score.ts`, `summarize.ts`, `track.ts`)
+   - `ui/src/components/topic-feed/` (merged into `ui/src/components/topic/`)
+   - `ui/src/components/auth/` (now `session/`), `AuthIcons.tsx` (now
+     `OAuthProviderIcons.tsx`), `AuthPageShell.tsx` (now `SessionLayout.tsx`)
+   - `PageLoading.tsx` (now `branding/CoffeeLoading.tsx`), `ScanNote.tsx` (now
+     `topic/TopicScanRecap.tsx`), `SearchFilters.tsx` (folded into `layout/SearchBar.tsx`)
+   - `ui/src/components/search/` (proposed then abandoned; SearchBar lives in `layout/`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

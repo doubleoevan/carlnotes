@@ -10,7 +10,7 @@ import {
 import { toAttachmentKey } from "./store"
 
 // a fetcher that fails if reached. it proves URL validation rejects before any Firecrawl call
-const failIfFetched = async () => {
+const failIfFetched = async (): Promise<never> => {
 	throw new Error("fetcher should not be called")
 }
 
@@ -33,6 +33,13 @@ test("ingestAttachment rejects an oversized file before touching storage or the 
 	const bytes = new Uint8Array(10 * 1024 * 1024 + 1)
 	await expect(
 		ingestAttachment({ topicId: "t1", filename: "big.pdf", contentType: "application/pdf", bytes }),
+	).rejects.toThrow(AttachmentValidationError)
+})
+
+// an empty upload is rejected, since it would otherwise store as a ready attachment that downloads to nothing
+test("ingestAttachment rejects an empty file before touching storage or the model", async () => {
+	await expect(
+		ingestAttachment({ topicId: "t1", filename: "empty.pdf", contentType: "application/pdf", bytes: new Uint8Array() }),
 	).rejects.toThrow(AttachmentValidationError)
 })
 

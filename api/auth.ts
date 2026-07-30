@@ -4,6 +4,8 @@ import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { db } from "../db"
 import * as schema from "../db/schema"
 import { sendEmail } from "../worker/email"
+import { effectiveBudgetCents } from "./authorization"
+import { provisionLiteLLMKey } from "./litellm"
 
 // how long a signup-gate token stays valid
 const GATE_TOKEN_LIFETIME_MS = 15 * 60 * 1000
@@ -19,10 +21,6 @@ const PASSWORD_SIGNUP_PATH = "/sign-up/email"
 
 // the signed-in user Hono's session that middleware sets on the request context
 export type SessionUser = typeof auth.$Infer.Session.user
-
-// the free tier's monthly litellm budget, provisioned at signup and reset every 30 days
-// TODO: source from PLANS.free.llmBudgetUsdMonthly and bump the key via /key/update on upgrade, once the plans file merges
-const FREE_TIER_MONTHLY_BUDGET_USD = 10
 
 export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: "pg", schema, usePlural: true }),
@@ -42,13 +40,16 @@ export const auth = betterAuth({
 		},
 		sendOnSignUp: true,
 	},
-	// the litellm virtual key, server-only and never exposed to the client
+	// the litellm virtual key stays server-only. role and plan ride on the session so the ui can render the
+	// admin link and the account page. all three are app-managed columns, never client input
 	user: {
 		additionalFields: {
 			litellmVirtualKey: { type: "string", required: false, input: false, returned: false },
+			role: { type: "string", required: false, input: false, returned: true },
+			plan: { type: "string", required: false, input: false, returned: true },
 		},
 	},
-	// provision the key for every new user; the password path also requires a passing turnstile check
+	// provision the key for every new user. the password path also requires a passing turnstile check
 	databaseHooks: {
 		user: {
 			create: {
@@ -62,8 +63,12 @@ export const auth = betterAuth({
 						}
 					}
 
-					// keyed on email, not id. the oauth signup path never has a final user id at this point
-					const litellmVirtualKey = await provisionLiteLLMKey(user.email)
+					// mint a new litellm key for a new user based on email
+					// every new user starts on the free plan
+					const litellmVirtualKey = await provisionLiteLLMKey(
+						user.email,
+						effectiveBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: null }),
+					)
 					return { data: { ...user, litellmVirtualKey } }
 				},
 			},
@@ -105,39 +110,13 @@ async function verifyGateToken(token: string): Promise<boolean> {
 	return Date.now() < expiresAt
 }
 
-// provisions a litellm virtual key with a spend budget for a new user. worker/models.ts bills scans to it
-async function provisionLiteLLMKey(email: string): Promise<string> {
-	const baseURL = Bun.env.LITELLM_BASE_URL
-	const masterKey = Bun.env.LITELLM_MASTER_KEY
-	if (!baseURL || !masterKey) {
-		throw new Error("LITELLM_BASE_URL and LITELLM_MASTER_KEY must be set to provision a user's virtual key")
-	}
-	// ask the proxy to mint a budgeted litellm key
-	const response = await fetch(`${baseURL}/key/generate`, {
-		method: "POST",
-		headers: { Authorization: `Bearer ${masterKey}`, "Content-Type": "application/json" },
-		body: JSON.stringify({
-			user_id: email,
-			key_alias: `user:${email}`,
-			max_budget: FREE_TIER_MONTHLY_BUDGET_USD,
-			budget_duration: "30d",
-		}),
-	})
-	// surface a specific failure rather than an opaque parse error downstream
-	if (!response.ok) {
-		throw new Error(`litellm key/generate failed: ${response.status} ${await response.text()}`)
-	}
-	const { key } = (await response.json()) as { key: string }
-	return key
-}
-
 // sends the signup email-verification link. a delivery failure is logged, not fatal
 async function sendVerificationEmail(email: string, url: string): Promise<void> {
 	// the verification link as minimal HTML
 	await sendEmail({
 		to: email,
 		subject: "Confirm your email",
-		content: `Confirm your email: <a href="${url}">${url}</a>`,
+		emailContent: `Confirm your email: <a href="${url}">${url}</a>`,
 	})
 }
 

@@ -1,8 +1,11 @@
+# every model names its api key explicitly. left off, litellm derives the variable from the provider prefix and
+# looks for FIREWORKS_AI_API_KEY, which nothing sets. FIREWORKS_API_KEY is the one name Doppler and the app use
 model_list:
   # plan-model: whole-repo planning, big context
   - model_name: plan-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/minimax-m3
+      api_key: os.environ/FIREWORKS_API_KEY
     model_info:
       friendly_name: "MiniMax M3"
       supports_function_calling: true   
@@ -15,6 +18,7 @@ model_list:
   - model_name: apply-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/kimi-k3
+      api_key: os.environ/FIREWORKS_API_KEY
     model_info:
       friendly_name: "Kimi K3"
       supports_function_calling: true
@@ -27,6 +31,7 @@ model_list:
   - model_name: aside-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/minimax-m3
+      api_key: os.environ/FIREWORKS_API_KEY
     model_info:
       friendly_name: "MiniMax M3 (aside)"
       supports_function_calling: true
@@ -39,6 +44,7 @@ model_list:
   - model_name: cheap-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/minimax-m3
+      api_key: os.environ/FIREWORKS_API_KEY
     model_info:
       friendly_name: "MiniMax M3 (app cheap tier)"
       supports_function_calling: true
@@ -51,6 +57,7 @@ model_list:
   - model_name: score-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/glm-5p2
+      api_key: os.environ/FIREWORKS_API_KEY
     model_info:
       friendly_name: "GLM 5.2"
       supports_function_calling: true
@@ -62,11 +69,25 @@ model_list:
   - model_name: embed-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/qwen3-embedding-8b
+      api_key: os.environ/FIREWORKS_API_KEY
       dimensions: 1024
     model_info:
       friendly_name: "Qwen3 Embedding 8B"
       mode: embedding
       output_vector_size: 1024
+
+  # chat-model: topic rag chat over findings, accepts image attachments
+  - model_name: chat-model
+    litellm_params:
+      model: fireworks_ai/accounts/fireworks/models/qwen3p7-plus
+      api_key: os.environ/FIREWORKS_API_KEY
+    model_info:
+      friendly_name: "Qwen3.7 Plus"
+      supports_function_calling: true
+      supports_vision: true
+      supports_prompt_caching: true
+      max_input_tokens: 262144
+      max_output_tokens: 8192
 
 # drop provider-unsupported params instead of erroring (Fireworks embeddings reject encoding_format the AI SDK sends).
 # no proxy-wide max_budget: spend is capped per virtual key, minted per user at signup and managed in litellm itself.
