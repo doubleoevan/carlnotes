@@ -4,15 +4,16 @@ import { useState } from "react"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
-import { TopicScanRecap } from "@/components/topic/TopicScanRecap"
+import { type AllowedNoteUrls, TopicScanRecap } from "@/components/topic/TopicScanRecap"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { MoreButton } from "./MoreButton"
 
 // the most scan rows shown before the "+ # older" expander
 const MAX_HISTORY_SCANS = 5
 
-// the collapsible scan history, newest first, capped until expanded
-export function TopicScanHistory({ scans }: { scans: TopicScan[] }) {
+// the collapsible scan history, newest first, capped until expanded.
+// allowedUrls lets a recap cite the topic's still-kept findings as real links. a dropped finding's link renders as plain text
+export function TopicScanHistory({ scans, allowedUrls }: { scans: TopicScan[]; allowedUrls?: AllowedNoteUrls }) {
 	const [isExpanded, setIsExpanded] = useState(false)
 	// cap the rows unless expanded
 	const scansShown = isExpanded ? scans : scans.slice(0, MAX_HISTORY_SCANS)
@@ -22,7 +23,7 @@ export function TopicScanHistory({ scans }: { scans: TopicScan[] }) {
 			{/* one row per scan with dashed separators */}
 			<div className="divide-separator divide-y divide-dashed">
 				{scansShown.map((scan) => (
-					<ScanRow key={scan.id} scan={scan} />
+					<ScanRow key={scan.id} scan={scan} allowedUrls={allowedUrls} />
 				))}
 				{scansShown.length === 0 && (
 					<p className="text-muted-foreground py-3 pl-9 text-sm">{"Carl hasn't scanned this topic yet."}</p>
@@ -41,12 +42,12 @@ export function TopicScanHistory({ scans }: { scans: TopicScan[] }) {
 
 // one scan row: the timestamp and a one-line stat, and the ⓘ popover.
 // the left padding matches the expander below the rows, so the diary reads as one column
-function ScanRow({ scan }: { scan: TopicScan }) {
+function ScanRow({ scan, allowedUrls }: { scan: TopicScan; allowedUrls?: AllowedNoteUrls }) {
 	return (
 		<div className="flex items-center gap-3 py-2.5 pl-9">
 			<span className="shrink-0 text-sm">{toScanTimestamp(scan)}</span>
 			<ScanStat scan={scan} />
-			<ScanInfo scan={scan} />
+			<ScanInfo scan={scan} allowedUrls={allowedUrls} />
 		</div>
 	)
 }
@@ -67,7 +68,7 @@ function ScanStat({ scan }: { scan: TopicScan }) {
 }
 
 // the scan note popover trigger: an icon that opens the shared recap content
-function ScanInfo({ scan }: { scan: TopicScan }) {
+function ScanInfo({ scan, allowedUrls }: { scan: TopicScan; allowedUrls?: AllowedNoteUrls }) {
 	return (
 		<Popover>
 			<Tooltip>
@@ -90,7 +91,7 @@ function ScanInfo({ scan }: { scan: TopicScan }) {
 						<TopicScanFailure error={scan.error} />
 					</div>
 				)}
-				<TopicScanRecap scan={scan} />
+				<TopicScanRecap scan={scan} allowedUrls={allowedUrls} />
 			</PopoverContent>
 		</Popover>
 	)

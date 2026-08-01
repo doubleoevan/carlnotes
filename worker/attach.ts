@@ -8,7 +8,7 @@ import { cheapModel } from "./models.ts"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "./prompts/fetch.ts"
 import { writePrompt } from "./prompts/write.ts"
-import { fetchContent } from "./scrape.ts"
+import { fetchContent, toFetchableUrl } from "./scrape.ts"
 import { deleteAttachment, putAttachment, toAttachmentKey } from "./store"
 import { startAttachmentWorkflow } from "./temporal-client"
 
@@ -84,23 +84,19 @@ export async function ingestAttachment(attachmentUpload: AttachmentUpload): Prom
 }
 
 // whether an attachment's content type has an extractor (text or PDF), checked synchronously so a bad type is rejected at upload
-export function isSupportedAttachmentType(contentType: string): boolean {
+function isSupportedAttachmentType(contentType: string): boolean {
 	return contentType.startsWith("text/") || contentType === "application/pdf"
 }
 
 // ingest an attachment from a URL by fetching the page as Markdown via Firecrawl and running the shared file-ingestion path. the fetcher parameter lets the smoke test stub the network call
 export async function ingestUrlAttachment(topicId: string, url: string, fetcher = fetchContent): Promise<Attachment> {
-	// reject a malformed URL before any fetch
+	// reject a malformed, non-http, or privately routable URL before any fetch
 	let pageUrl: URL
 	try {
-		pageUrl = new URL(url)
-	} catch {
-		throw new AttachmentValidationError(`invalid attachment URL: ${url}`)
-	}
-
-	// only http and https are fetchable. reject file, data, and any other scheme
-	if (pageUrl.protocol !== "http:" && pageUrl.protocol !== "https:") {
-		throw new AttachmentValidationError(`attachment URL must be http(s): ${url}`)
+		pageUrl = toFetchableUrl(url)
+	} catch (error) {
+		const reason = error instanceof Error ? error.message : String(error)
+		throw new AttachmentValidationError(`invalid attachment URL, ${reason}`)
 	}
 
 	// reject a nonexistent topic before the paid fetch
@@ -148,7 +144,8 @@ export async function extractText(contentType: string, bytes: Uint8Array): Promi
 
 // build the context-generation prompt over attach-context.md, capped so a huge document can't blow the token budget
 export async function buildContextPrompt(text: string): Promise<BuiltPrompt> {
-	// fetch the registry version first, then cap the document length to bound the token spend
+	// fetch the registry version first, then cap the document length to bound the token spend.
+	// the document is user-supplied text, not app-generated, so it gets fenced in the prompt as untrusted
 	const { template, name, registryPrompt } = await fetchPromptTemplate("attach-context")
 	const prompt = writePrompt(template, { document: text.slice(0, MAX_EXTRACT_CHARS) })
 	return { prompt, name, registryPrompt }

@@ -1,10 +1,10 @@
-// a live smoke test the owner runs by hand for the search adapter. it seeds a topic and a search source, runs searchAdapter, and checks that it discovered Resources
+// a live smoke test the owner runs by hand for the search ingester. it seeds a topic and a search source, runs searchIngester, and checks that it discovered Resources
 // run it with: bun run smoke:search. it needs EXA_API_KEY set, the LiteLLM proxy reachable at LITELLM_BASE_URL, the latest migration applied, and Doppler secrets injected
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { sources, topics, users } from "../db/schema"
-import type { Source } from "./adapters/adapter"
-import { searchAdapter } from "./adapters/search"
+import type { Source } from "./ingest/ingester"
+import { searchIngester } from "./ingest/search"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 
 // a coherent topic context so that query generation has a real seed and Exa returns on-topic results
@@ -32,7 +32,7 @@ async function seedTestData(): Promise<{ source: Source; userId: string }> {
 		throw new Error("failed to seed topic")
 	}
 
-	// a search source with no config. the topic context drives the search adapter
+	// a search source with no config. the topic context drives the search ingester
 	const [source] = await db.insert(sources).values({ topicId: topic.id, kind: "search", config: {} }).returning()
 	if (!source) {
 		throw new Error("failed to seed source")
@@ -40,10 +40,11 @@ async function seedTestData(): Promise<{ source: Source; userId: string }> {
 	return { source, userId: user.id }
 }
 
-// run the search adapter, check the smoke assertions, and print a report. returns true when every check passes
+// run the search ingester, check the smoke assertions, and print a report. returns true when every check passes
 async function check(source: Source): Promise<boolean> {
-	// run the search adapter. it turns the topic context into queries, searches with the queries, and returns Resources, with playlists expanded into "watch" Resources
-	const { resources, cost } = await searchAdapter(source)
+	// run the search ingester. it turns the topic context into queries, searches with the queries,
+	// and returns Resources, with playlists expanded into "watch" Resources
+	const { resources, cost } = await searchIngester(source)
 
 	// summarize the discovered Resources: their resource kinds, titles, and whether they all have a url
 	const resourceKinds = new Set(resources.map((resource) => resource.kind))

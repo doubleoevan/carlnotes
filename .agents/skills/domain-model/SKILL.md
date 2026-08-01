@@ -23,12 +23,13 @@ description: Canonical CarlNotes domain vocabulary. Use whenever naming types, t
 
 ## Layering rules
 - Integration = the credential; Source = an input use of it; delivery = an output use of it. Connected once, reused everywhere.
-- Adapter = worker code turning a Source into Resources (see adapter-authoring). One composio adapter; toolkit variety lives in Source config, not code.
+- Ingester = worker code turning a Source into Resources (see ingester-authoring). One composio ingester; toolkit variety lives in Source config, not code.
 - Topic authority is `topic.owner_id`; the single platform override is an `admin` (`users.role`). Every authority **and** entitlement check routes through one `isAllowed(user, capability, resource)` gate — never a scattered `role ===` or `tier ===`. Topic access is still "a Subscription path exists."
 - Entitlements come from the user's **plan** (`free`/`plus`/`premium`), derived from the active Billing Subscription (free = no row) and resolved by the gate.
 - Invites are consent-based: a `topic_invites` row grants topic-page view and stands as a pending offer, and nothing is subscribed until the invitee accepts. On invite Topics a subscriber sees only Findings from Scans started after their activation; the owner always sees full history. One Scan serves every subscriber — the amortization the pricing model assumes.
 - A Resource is raw and global; a Finding is scored and topic-scoped. Don't blur them. A Resource may carry a captured `engagement` count (like a reddit score) that read-side ranking uses.
 - A Scan closes by pruning the Topic to its `max_results` best Findings by relevance; bookmarked Findings are never pruned.
+- A Scan carries **one Budget**, created before ingestion. Every stage charges into it — `ingestion` (the Sources' own spend, Exa today), `embedding`, `fetch`, `scoringCheap`, `scoringPremium` — so `Scan.cost` is that Budget's total and `stage_costs` is its breakdown, and the one spend ceiling sees everything the Scan charges. Never sum a separately tracked ingestion number alongside it.
 
 ## Auth infrastructure is not domain vocabulary
 Better Auth manages `users`, `sessions`, `accounts`, `verifications` — identity/access plumbing, the same tier as `users` itself, never content-domain nouns. `accounts` is sign-in identity only (a password credential or an OAuth grant used to authenticate) and is never referenced by a Source or a Subscription. **Integration** stays the sole representation of a connected external account used for sourcing or delivery (e.g. Composio-managed Gmail) — never conflate the two, and never resolve Source/delivery credentials through `accounts`.

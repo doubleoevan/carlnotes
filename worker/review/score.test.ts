@@ -1,7 +1,7 @@
 // score tests for the promotion threshold, the content ttl, bounded concurrency, and the score prompt
 import { expect, test } from "bun:test"
+import { canScoreResource, newBudget } from "../budget"
 import { buildScorePrompt, isContentStale, isPromoted, runWithConcurrency, toFetchedContentFields } from "./score"
-import { canPay } from "./track"
 
 // a high cheap-model score earns promotion to the premium score-model's re-score
 test("isPromoted gates on the promotion threshold", () => {
@@ -40,17 +40,11 @@ test("mapWithConcurrency never exceeds its limit and returns results in order", 
 // the plan limit is checked before each dispatch, so once it trips the rest are deferred rather than bought
 test("the plan limit check halts dispatch once either ceiling is reached", async () => {
 	// a budget that admits two resources before its scored-resource ceiling trips
-	const budget = {
-		spent: 0,
-		cap: 0.5,
-		stageCosts: { embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 },
-		maxScoredResources: 2,
-		fetchCounts: { reusedCount: 0, revalidatedCount: 0, fetchedCount: 0 },
-	}
+	const budget = { ...newBudget(), cap: 0.5, maxScoredResources: 2 }
 
 	// dispatch five resources the way the ranked pass does, checking the ceiling before paying for each
 	const outcomes = await runWithConcurrency([1, 2, 3, 4, 5], 1, async (item) => {
-		if (!canPay(budget)) {
+		if (!canScoreResource(budget)) {
 			return "deferred"
 		}
 		budget.fetchCounts.fetchedCount++

@@ -1,9 +1,11 @@
-// starts and stops LLM call tracing to Langfuse. a no-op without both Langfuse keys set,
-// so the worker behaves identically with or without observability configured
+// starts and stops LLM call tracing to Langfuse, and wraps each pipeline stage in its own span on the Scan's trace.
+// a no-op without both Langfuse keys set, so the worker behaves identically with or without observability configured
 import { LangfuseSpanProcessor } from "@langfuse/otel"
+import { startActiveObservation } from "@langfuse/tracing"
 import { LangfuseVercelAiSdkIntegration } from "@langfuse/vercel-ai-sdk"
 import { NodeSDK } from "@opentelemetry/sdk-node"
 import { registerTelemetry } from "ai"
+import type { Budget } from "./budget"
 
 // the running SDK instance, held so shutdown can flush it. null means telemetry never started
 let telemetrySDK: NodeSDK | null = null
@@ -26,6 +28,32 @@ export function startTelemetry(): void {
 	telemetrySDK = new NodeSDK({ spanProcessors: [new LangfuseSpanProcessor()] })
 	telemetrySDK.start()
 	registerTelemetry(new LangfuseVercelAiSdkIntegration())
+}
+
+/**
+ * Runs one pipeline stage inside its own Langfuse span on the Scan's trace, recording what it cost and what it decided.
+ * Token counts are not added here, since the model calls that the stage makes already report their own.
+ * Without Langfuse keys, the stage still runs, just untraced.
+ */
+export async function traceStage<Result>(
+	name: string,
+	budget: Budget,
+	runStage: () => Promise<Result>,
+	describeStage?: (result: Result) => Record<string, unknown>,
+): Promise<Result> {
+	return startActiveObservation(name, async (span) => {
+		// what the stage spends is the difference across it, so record the total going in
+		const spentBefore = budget.spent
+		try {
+			const result = await runStage()
+			span.update({ metadata: { costUsd: budget.spent - spentBefore, ...describeStage?.(result) } })
+			return result
+		} catch (error) {
+			// a stage that failed still spent, which is when the number matters most. record it, then rethrow
+			span.update({ metadata: { costUsd: budget.spent - spentBefore, isFailed: true } })
+			throw error
+		}
+	})
 }
 
 /**

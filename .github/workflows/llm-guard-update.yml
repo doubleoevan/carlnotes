@@ -1,0 +1,84 @@
+name: LLM Guard update check
+
+# a weekly look at Docker Hub for a newer llm-guard-api release than docker-compose.yml pins. when one exists,
+# the candidate image is booted right here on the runner and measured against the eval corpus,
+# both directions: false positives on benign prose and the catch rate on known attacks
+# the github issue arrives with the test result numbers already in it. the deploy tag lives in Northflank's ui,
+# so the upgrade itself stays a human act. guard-only measurement makes no model calls,
+# so no secrets are needed, and the ci stays offline; the issue token is github's own
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+# reading the repo and filing the issue are the permissions this needs
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      # persist-credentials false keeps the checkout token out of .git/config, matching ci.yml's posture
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # detection: writes update/pinned/latest to the step outputs. every later step keys off the update script's results
+      - id: check
+        run: bash scripts/check-llm-guard-update.sh
+
+      # the same bun version the app pins, only fetched when there is something to measure
+      - if: steps.check.outputs.update == 'true'
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - if: steps.check.outputs.update == 'true'
+        run: bun install --frozen-lockfile
+
+      # boot the candidate and measure it. continue-on-error, because a failed measurement must still notify
+      # the readiness poll hits the same endpoint the scan calls use, and model download makes the first answer slow
+      - id: measure
+        if: steps.check.outputs.update == 'true'
+        continue-on-error: true
+        run: |
+          docker run -d --name llm-guard -p 8001:8000 "laiyer/llm-guard-api:${{ steps.check.outputs.latest }}"
+          for attempt in $(seq 1 60); do
+            if curl -fsS -X POST http://localhost:8001/analyze/prompt -H 'Content-Type: application/json' -d '{"prompt":"warmup"}' >/dev/null 2>&1; then
+              break
+            fi
+            if [[ "$attempt" == "60" ]]; then
+              echo "candidate scanner never became ready" >&2
+              docker logs llm-guard 2>&1 | tail -30
+              exit 1
+            fi
+            sleep 10
+          done
+          LLM_GUARD_URL=http://localhost:8001 bun scripts/eval-pipeline.ts --guard-only | tee measurement.txt
+
+      # one open issue per version pair, carrying the measurement so the decision arrives pre-made
+      - if: steps.check.outputs.update == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED: ${{ steps.check.outputs.pinned }}
+          LATEST: ${{ steps.check.outputs.latest }}
+        run: |
+          title="Upgrade LLM Guard: $PINNED -> $LATEST"
+          if gh issue list --state open --json title --jq '.[].title' | grep -Fxq "$title"; then
+            echo "issue already open: $title"
+            exit 0
+          fi
+          if [[ -f measurement.txt ]]; then
+            measurement="Measured on this runner against the eval corpus:"$'\n\n```\n'"$(cat measurement.txt)"$'\n```'
+          else
+            measurement="Measurement failed in ci — run locally: bump the compose tag, \`docker compose up -d llm-guard\`, then \`bun run eval --guard-only\`."
+          fi
+          gh issue create --title "$title" --body "A newer \`llm-guard-api\` image is on Docker Hub: **$LATEST** (pinned: \`$PINNED\`).
+
+          $measurement
+
+          Upgrade ritual:
+          1. Bump the tag in \`docker-compose.yml\` and on the Northflank llm-guard service.
+          2. Read both rates together — a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate. If either moved from the README's published numbers, retune \`LLM_GUARD_INJECTION_THRESHOLD\` before deploying.
+
+          Filed automatically by \`.github/workflows/llm-guard-update.yml\`."

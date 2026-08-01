@@ -1,21 +1,15 @@
 // the unpaid stages that decide which discovered Resources are worth paying to score: embed each candidate,
 // measure it against the topic's context, drop the irrelevant and duplicate resources, and rank the survivors best-first
+import { reportError } from "@shared/monitoring"
 import { cosineSimilarity } from "ai"
-import { and, cosineDistance, eq, inArray, isNotNull, notInArray } from "drizzle-orm"
+import { and, cosineDistance, eq, inArray, isNotNull, lt, notInArray } from "drizzle-orm"
 import { db } from "../../db"
 import { EMBED_DIMENSIONS, findings, resources } from "../../db/schema"
-import type { NewResource } from "../adapters/adapter"
 import { buildTopicScanContext } from "../attach"
+import { type Budget, canSpend, charge, EMBED_COST_PER_MILLION_TOKENS, tokenCost } from "../budget"
+import type { NewResource } from "../ingest/ingester"
 import { embedVector } from "../models"
-import {
-	type Budget,
-	charge,
-	EMBED_COST_PER_MILLION_TOKENS,
-	type ResourceOutcome,
-	type ReviewOutcome,
-	tokenCost,
-	trackOutcomes,
-} from "./track"
+import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
 // stage thresholds for deduping and measuring relevance
 const NEAR_DUPLICATE_DISTANCE = 0.05
@@ -41,9 +35,7 @@ export type TopicContext = { name: string; text: string; embedding: number[] }
 // a Resource that cleared the relevance gate, carrying the embedding and the similarity score that ranks it
 export type SurvivingResource = { resource: Resource; embedding: number[]; similarity: number }
 
-// the dedupe keys of the Resources that this Scan has admitted so far.
-// they are held in memory rather than read back from the rows,
-// because the first pass persists an embedding for every candidate, including the ones it drops
+// the dedupe keys for what this Scan has admitted. kept in memory because the rows also hold embeddings for candidates it dropped
 export type AdmittedResources = { contentHashes: Set<string>; embeddings: number[][] }
 
 // what the relevance gate makes of one Resource: a survivor for the ranked pass, or an outcome to record now
@@ -85,7 +77,7 @@ export async function loadTopicContext(topicId: string, budget: Budget, litellmA
 
 /**
  * Embed every candidate and keep the ones relevant to the topic, recording the outcome of the ones dropped.
- * Only the embedding is metered here, so no per-Scan ceiling truncates this pass.
+ * Embedding is the only metered work here, so a candidate past the Scan's ceiling is deferred rather than embedded.
  */
 export async function gateResources(
 	unscoredResources: Resource[],
@@ -152,6 +144,11 @@ async function gateResource(
 	litellmApiKey?: string,
 ): Promise<RelevanceGateOutcome> {
 	try {
+		// embedding costs money, so check the ceiling first. a deferred candidate stays eligible for the next Scan
+		if (!resource.embedding && !canSpend(budget)) {
+			return { status: "deferred" }
+		}
+
 		// reuse a Resource's existing global embedding. a candidate the ceiling later defers keeps its vector,
 		// so the next Scan never re-embeds it
 		const embedding = resource.embedding ?? (await embedResource(resource, budget, litellmApiKey))
@@ -165,7 +162,9 @@ async function gateResource(
 		// the survivor carries its vector too, since the ranked pass dedupes against it
 		return { status: "survived", survivor: { resource, embedding, similarity } }
 	} catch (error) {
+		// a candidate that never got measured is a Finding the reader silently never sees
 		console.error(`relevance gate failed for resource ${resource.id}`, error)
+		reportError(error, "embed-filter", { resourceId: resource.id, url: resource.url })
 		return { status: "failed" }
 	}
 }
@@ -226,22 +225,20 @@ async function embedResource(resource: Resource, budget: Budget, litellmApiKey?:
 	return embedding
 }
 
-// find the nearest Resource from an earlier Scan by cosine distance and decide whether it is a near-duplicate.
-// this Scan's own candidates are excluded, so two siblings never find each other and drop them both
-async function hasNearDuplicate(embedding: number[], candidateIds: string[]): Promise<boolean> {
-	// the nearest embedded Resource outside this Scan, by cosine distance
+// whether this embedding has a resource outside of these resource ids close enough to be considered a duplicate
+async function hasNearDuplicate(embedding: number[], resourceIds: string[]): Promise<boolean> {
+	// get resource neighbors within the embedding's duplicate range
 	const distanceExpression = cosineDistance(resources.embedding, embedding)
-	const [nearest] = await db
-		.select({ distance: distanceExpression })
+	const nearestResourceNeighbors = await db
+		.select({ id: resources.id })
 		.from(resources)
-		.where(and(notInArray(resources.id, candidateIds), isNotNull(resources.embedding)))
+		.where(and(isNotNull(resources.embedding), lt(distanceExpression, NEAR_DUPLICATE_DISTANCE)))
 		.orderBy(distanceExpression)
-		.limit(1)
-	// no stored neighbor means nothing to duplicate
-	if (!nearest) {
-		return false
-	}
-	return isNearDuplicate(Number(nearest.distance))
+		.limit(resourceIds.length + 1)
+
+	// return true if any of the resource neighbors is not already in the set of passed in resource ids
+	const resourceIdSet = new Set(resourceIds)
+	return nearestResourceNeighbors.some((nearestNeighbor) => !resourceIdSet.has(nearestNeighbor.id))
 }
 
 /**
@@ -254,7 +251,7 @@ export function hasAdmittedNearDuplicate(admitted: AdmittedResources, embedding:
 	)
 }
 
-// whether a Resource carries any adapter-native text to hash and embed like a title or a snippet
+// whether a Resource carries any ingester-native text to hash and embed like a title or a snippet
 function hasNativeText(resource: Resource): boolean {
 	return Boolean(resource.title?.trim() || resource.snippet?.trim())
 }
@@ -266,8 +263,10 @@ function embedText(resource: Pick<Resource, "title" | "snippet" | "url">): strin
 	return (text || resource.url).slice(0, MAX_EMBED_CHARS)
 }
 
-// embed a query: the topic context wrapped in qwen3's Instruct and Query template, through the truncating helper
-async function embedQuery(text: string, litellmApiKey?: string): Promise<number[]> {
+/**
+ * Embed a query: the topic context wrapped in qwen3's Instruct and Query template, through the truncating helper.
+ */
+export async function embedQuery(text: string, litellmApiKey?: string): Promise<number[]> {
 	return embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${text}`, litellmApiKey)
 }
 

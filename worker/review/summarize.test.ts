@@ -1,5 +1,6 @@
 // summarize tests for the report's failure isolation and the prompt it grounds in the scan's own totals
 import { expect, test } from "bun:test"
+import { newBudget } from "../budget"
 // the scan report prompt input reuses the source outcome shape the scan hands over
 import { buildScanReportPrompt, type ScannedSource, toTopicScanSummary } from "./summarize"
 
@@ -20,20 +21,19 @@ test("buildScanReportPrompt grounds the report prompt in the scan's data", async
 	// per-cause drop counts plus the deferred and failed counts
 	const reviewOutcome = {
 		keptFindings: [keptFinding],
-		filteredCounts: { "duplicate content": 2, "near-duplicate": 1, "below relevance threshold": 4 },
+		filteredCounts: {
+			"duplicate content": 2,
+			"near-duplicate": 1,
+			"below relevance threshold": 4,
+			"flagged by scanner": 1,
+		},
 		deferredCount: 1,
 		failedCount: 0,
 	}
 
-	// the spend breakdown the cost line renders, and two sources with different outcomes
-	const stageCosts = { embedding: 0.01, fetch: 0.02, scoringCheap: 0.03, scoringPremium: 0.0634 }
-	const budget = {
-		spent: 0.1234,
-		cap: 0.5,
-		stageCosts,
-		maxScoredResources: 25,
-		fetchCounts: { reusedCount: 0, revalidatedCount: 0, fetchedCount: 0 },
-	}
+	// the spend breakdown the cost line renders, ingestion included, and two sources with different outcomes
+	const stageCosts = { ingestion: 0.005, embedding: 0.01, fetch: 0.02, scoringCheap: 0.03, scoringPremium: 0.0634 }
+	const budget = { ...newBudget(), spent: 0.1284, stageCosts }
 	const scannedSources: ScannedSource[] = [
 		{ sourceKind: "rss", status: "ok" },
 		{ sourceKind: "search", status: "failed" },

@@ -99,8 +99,7 @@ export const sessions = pgTable(
 	(table) => [index("sessions_user_id_idx").on(table.userId)],
 )
 
-// the accounts table. a sign-in identity: a password credential or an oauth grant used to authenticate.
-// never a connected external account used for sourcing or delivery. that stays Integration
+// the accounts table. a sign-in identity, either a password credential or an oauth grant. a connected external account is an Integration
 export const accounts = pgTable(
 	"accounts",
 	{
@@ -272,42 +271,50 @@ export const scans = pgTable("scans", {
 	// an ai written recap of what the scan did
 	scanSummary: text("scan_summary"),
 	// sources that had no API key for this scan and fell back to a public feed instead. empty means none did.
-	degradedSources: jsonb("degraded_sources")
+	fallbackSources: jsonb("fallback_sources")
 		.$type<{ sourceId: string; fallbackMode: string }[]>()
 		.notNull()
 		.default([]),
 })
 
 // a resource is an external artifact discovered by a scan, shared globally across topics
-export const resources = pgTable("resources", {
-	id: primaryId(),
-	// the canonical url is the global dedupe key. the content hash catches content-level duplicates
-	url: text("url").notNull().unique(),
-	contentHash: text("content_hash"),
-	// the type of resource ("read", "watch", "listen"), and its display title
-	kind: resourceKind("kind").notNull(),
-	title: text("title"),
-	// a short excerpt provided by the source, small enough to stay in postgres since every list path reads it
-	snippet: text("snippet"),
-	// the page's full Markdown, now in object storage. content_key references it and content_bytes sizes it
-	// content is the legacy inline column, superseded by content_key
-	content: text("content"),
-	contentKey: text("content_key"),
-	contentBytes: integer("content_bytes"),
-	// the review embedding and its model, EMBED_DIMENSIONS wide for qwen3-embedding-8b
-	embedding: vector("embedding", { dimensions: EMBED_DIMENSIONS }),
-	embeddingModel: text("embedding_model"),
-	// the source's engagement count where the adapter captured one, like a reddit post score. null means no signal
-	engagement: integer("engagement"),
-	// when review last fetched this resource's content. defaults to the resource row creation
-	fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
-	// the etag and last-modified returned by the last fetch, used to check whether the content changed before refetching.
-	// null until a fetch provides them
-	etag: text("etag"),
-	lastModified: text("last_modified"),
-	// created and updated timestamps
-	...timestamps(),
-})
+export const resources = pgTable(
+	"resources",
+	{
+		id: primaryId(),
+		// the canonical url is the global dedupe key. the content hash catches content-level duplicates
+		url: text("url").notNull().unique(),
+		contentHash: text("content_hash"),
+		// the type of resource ("read", "watch", "listen"), and its display title
+		kind: resourceKind("kind").notNull(),
+		title: text("title"),
+		// a short excerpt provided by the source, small enough to stay in postgres since every list path reads it
+		snippet: text("snippet"),
+		// the page's full Markdown, now in object storage. content_key references it and content_bytes sizes it
+		// content is the legacy inline column, superseded by content_key
+		content: text("content"),
+		contentKey: text("content_key"),
+		contentBytes: integer("content_bytes"),
+		// the review embedding and its model, EMBED_DIMENSIONS wide for qwen3-embedding-8b
+		embedding: vector("embedding", { dimensions: EMBED_DIMENSIONS }),
+		embeddingModel: text("embedding_model"),
+		// the source's engagement count where the ingester captured one, like a reddit post score. null means no engagement value
+		engagement: integer("engagement"),
+		// when review last fetched this resource's content. defaults to the resource row creation
+		fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+		// the etag and last-modified returned by the last fetch, used to check whether the content changed before refetching.
+		// null until a fetch provides them
+		etag: text("etag"),
+		lastModified: text("last_modified"),
+		// created and updated timestamps
+		...timestamps(),
+	},
+	(table) => [
+		// speeds up the duplicate check, which otherwise reads and sorts every stored resource. cosine matches the
+		// distance the check measures. the lookup is approximate, so it can occasionally let a duplicate through
+		index("resources_embedding_hnsw").using("hnsw", table.embedding.op("vector_cosine_ops")),
+	],
+)
 
 // a finding is a topic-scoped record holding a relevance judgment about a discovered resource
 export const findings = pgTable(

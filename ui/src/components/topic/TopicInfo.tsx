@@ -3,7 +3,7 @@ import { Download, ExternalLink, Globe, Lock, Mail } from "lucide-react"
 import type * as React from "react"
 import { AnchorLink } from "@/components/layout/AnchorLink"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
-import { ScrollNote, TopicScanNote } from "@/components/topic/TopicScanRecap"
+import { type AllowedNoteUrls, ScrollNote, TopicScanNote } from "@/components/topic/TopicScanRecap"
 import { cn, POPOVER_HEADING_CLASS } from "@/lib/utils"
 
 // the card variant carries the full topic response for its scan history
@@ -34,13 +34,13 @@ export function TopicInfo(props: TopicInfoProps) {
 				{/* the topic prompt */}
 				<InfoSection label="Carl's Prompt">{topic.prompt || "—"}</InfoSection>
 
-				{/* recap of the latest scan as rendered Markdown. the card clips with Read more, the popover scrolls */}
+				{/* recap of the latest scan through the hardened subset, citing only the kept findings' own urls. the card clips with Read more, the popover scrolls */}
 				{topic.scanSummary && (
 					<InfoSection label="Carl's Notes">
 						{props.isCard ? (
-							<TopicScanNote markdown={topic.scanSummary} />
+							<TopicScanNote note={topic.scanSummary} allowedUrls={toFindingUrls(topic)} />
 						) : (
-							<ScrollNote markdown={topic.scanSummary} />
+							<ScrollNote note={topic.scanSummary} allowedUrls={toFindingUrls(topic)} />
 						)}
 					</InfoSection>
 				)}
@@ -81,6 +81,11 @@ function FailedBrewSection({ scans }: { scans: TopicResponse["scans"] }) {
 			</p>
 		</InfoSection>
 	)
+}
+
+// the urls a recap may cite and render as real links other urls can not be injected
+function toFindingUrls(topic: TopicFeed | TopicResponse): AllowedNoteUrls {
+	return new Set(topic.findings.map((finding) => finding.url))
 }
 
 // one attachment row. a url links out to its page, a file downloads for the owner. the label truncates and underlines on hover

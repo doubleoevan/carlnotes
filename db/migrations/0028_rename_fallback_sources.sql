@@ -1,0 +1,1 @@
+ALTER TABLE "scans" RENAME COLUMN "degraded_sources" TO "fallback_sources";

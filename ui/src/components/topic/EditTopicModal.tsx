@@ -12,6 +12,7 @@ import { Textarea } from "@/components/primitives/textarea"
 import { TagPicker, TagPill } from "@/components/topic/TagPicker"
 import { TimePicker } from "@/components/topic/TimePicker"
 import {
+	sendAttachmentContext,
 	sendAttachmentDelete,
 	sendAttachmentUrl,
 	sendTopicCreate,
@@ -91,6 +92,12 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 				setPendingUrls((current) => current.filter((pending) => pending !== url))
 			}
 
+			// update every attachment that the owner edited for the next topic scan
+			const editedAttachments = keptAttachments.filter((attachment) => isAttachmentContextEdited(attachment))
+			for (const attachment of editedAttachments) {
+				await sendAttachmentContext(attachment.id, attachment.context ?? "")
+			}
+
 			// best-effort attachment removals. the reloaded page shows whatever truly remains
 			const keptAttachmentIds = new Set(keptAttachments.map((attachment) => attachment.id))
 			const removedAttachments = (topic?.attachments ?? []).filter(
@@ -109,6 +116,12 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 		} finally {
 			setIsSaving(false)
 		}
+	}
+
+	// whether this attachment's context differs from the one the page loaded, so an untouched attachment does not get updated
+	const isAttachmentContextEdited = (attachment: TopicResponse["attachments"][number]): boolean => {
+		const loadedAttachment = topic?.attachments.find((loaded) => loaded.id === attachment.id)
+		return loadedAttachment !== undefined && attachment.context !== loadedAttachment.context
 	}
 
 	// the update payload: the topic fields plus the desired invitee and source lists
@@ -358,7 +371,7 @@ function toSourceConfig(sourceKind: EditableSourceKind, value: string): Record<s
 		return { url: value }
 	}
 
-	// the web scout needs no config. its adapter derives queries from the topic prompt
+	// the web scout needs no config. its ingester derives queries from the topic prompt
 	if (sourceKind === "search") {
 		return {}
 	}

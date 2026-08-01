@@ -44,7 +44,9 @@ Check for:
    - `bun-plugin-tailwind`, `Bun.serve` HTML imports (removed Bun full-stack
      scaffold)
    - `use-ai-sdk` as a local skill name (we vendor it as `ai-sdk`). upstream still publishes it at
-     `skills/use-ai-sdk/`, so the `skillPath` in `skills-lock.json` keeps the old name on purpose
+     `skills/use-ai-sdk/`, so the `skillPath` in `skills-lock.json` keeps the old name on purpose.
+     `react-best-practices` is the same case: upstream publishes it there, we vendor it as
+     `vercel-react-best-practices`, and the lock keeps the upstream path
    - `"recommended": true` in Biome config (deprecated in Biome 2.5+; the current form is
      `"preset": "recommended"`)
    - `bunx tsc --noEmit` (now `bunx tsc -b`; the old form silently checks nothing
@@ -62,6 +64,20 @@ Check for:
    - `PageLoading.tsx` (now `branding/CoffeeLoading.tsx`), `ScanNote.tsx` (now
      `topic/TopicScanRecap.tsx`), `SearchFilters.tsx` (folded into `layout/SearchBar.tsx`)
    - `ui/src/components/search/` (proposed then abandoned; SearchBar lives in `layout/`)
+   - `worker/adapters/` and the short-lived `worker/ingesters/` (both now `worker/ingest/`),
+     `adapter.ts` (now `ingester.ts`),
+     `SourceAdapter`/`AdapterResult`/`sourceAdapters` (now `SourceIngester`/`IngestResult`/`sourceIngesters`,
+     with `AdapterResult` passing through a short-lived `IngesterResult`),
+     `<kind>Adapter` (now `<kind>Ingester`). "adapter" now means only a third-party interface shim,
+     as in Better Auth's `drizzleAdapter` and Hono's `serveStatic`, which keep the word
+   - `adapter-authoring` skill (now `ingester-authoring`)
+   - `worker/review/track.ts` held both the Scan's money and the review's tallies. The money moved out to
+     `worker/budget.ts` (`Budget`/`StageCosts`/`charge`/`canSpend` and the cost constants), since ingest and
+     telemetry need it too. `track.ts` keeps the review-only outcome types and `trackOutcomes`, and keeps its
+     name: every file in `review/` is named for its primary export's verb. A short-lived `outcomes.ts` rename
+     broke that pattern and was reverted
+   - `REVIEW_SCAN_BUDGET_USD` (now `SCAN_BUDGET_USD`; the ceiling covers ingestion too, so the
+     `REVIEW_` prefix named the wrong scope)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

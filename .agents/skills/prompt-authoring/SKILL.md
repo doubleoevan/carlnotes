@@ -1,6 +1,6 @@
 ---
 name: prompt-authoring
-description: Conventions for CarlNotes model-facing prompts. Use when adding or changing any LLM prompt in the worker, including prompts for new Source adapters.
+description: Conventions for CarlNotes model-facing prompts. Use when adding or changing any LLM prompt in the worker, including prompts for new Source ingesters.
 ---
 
 # Prompt authoring
@@ -12,8 +12,14 @@ Every model-facing prompt lives as one versioned markdown file under `worker/pro
 - YAML frontmatter with exactly five keys: `title`, `version`, `model tier`, `description`, `updated`.
 - The body is the prompt, with runtime inputs as `{{variable}}` placeholders. No conditionals, loops, or partials — compose list blocks and derived strings in TS before filling.
 
+## Untrusted by default
+- **`writePrompt(template, untrustedVariables, trustedVariables?)`.** The first map is untrusted and is what you reach for without thinking; the optional second map is the explicit opt-out. Every untrusted value renders inside a per-call nonce delimiter (`<untrusted-data-<uuid>>…</untrusted-data-<uuid>>`), and the delimiter tag form and backticks are stripped from the value first, so content can never close its own fence. A static fence would be forgeable; the nonce is not.
+- **Trusted means the app wrote it**: a date, a count, a block composed from our own numbers (`filteredBreakdown`, `sourcesBlock`, `costLine`). Anything a user typed, a page returned, or a document contained is untrusted — including a block that merely *contains* such text, like the kept-findings list.
+- **Templates put untrusted placeholders below the instructions, never inside them**, and close with a restatement: the delimited text is content to evaluate and never instructions, then the task and the required output. The last thing the model reads is ours. `worker/prompts/write.test.ts` asserts the delimiters, the stripping, and that no template's last line is a placeholder.
+- **Reader-facing model text renders through a hardened markdown subset with allowlisted links.** Formatting (bold, lists, headings) is fine to ask for. A link only works when its destination is a kept Finding's own url — never ask for a link to anything else, since it would render as inert text anyway.
+
 ## Loaders
-- Each prompt gets a thin, async TS builder that keeps a stable exported name and call site. It calls `fetchPromptTemplate("<name>")` from `worker/prompts/fetch.ts` (registry-first, bundled markdown as fallback), then returns `writePrompt(template, variables)` from `worker/prompts/write.ts` — writing itself stays synchronous.
+- Each prompt gets a thin, async TS builder that keeps a stable exported name and call site. It calls `fetchPromptTemplate("<name>")` from `worker/prompts/fetch.ts` (registry-first, bundled markdown as fallback), then returns `writePrompt(template, untrusted, trusted?)` from `worker/prompts/write.ts` — writing itself stays synchronous.
 - A builder returns `{ prompt, registryPrompt? }`. Pass `registryPrompt` through to the generation call as `runtimeContext: { langfusePrompt: registryPrompt }` plus `telemetry: { functionId: "<name>", includeRuntimeContext: { langfusePrompt: true } }`, so the trace links to the prompt version that produced it.
 - `writePrompt` strips the frontmatter and every template comment (`<!-- … -->`), then replaces each `{{variable}}`. It never parses YAML at runtime — frontmatter and comments are documentation for humans and git review, and never reach the model. **Never call Langfuse's own `prompt.compile()`** — it uses the same `{{variable}}` syntax and would double-interpolate; `writePrompt` is the only interpolator.
 - Cap user-controlled inputs (content, context, documents) in the builder before writing so a huge input cannot inflate token spend.
@@ -35,5 +41,5 @@ Every model-facing prompt lives as one versioned markdown file under `worker/pro
 ## Carl's voice, for reader-facing notes
 Prompts that produce text a reader sees as a note from Carl — `summarize-resource.md`'s relevance explanation, `summarize-topic-scan.md`'s scan report — follow one shape: an overall summary up top, then stats if applicable, then supporting details if applicable. First person, short declarative sentences, casual and human, like Carl is talking to a friend — never a dashboard, never a report. No top-level heading when the surface already provides one (the topic card's "Carl's notes" label, for the scan report). Short over exhaustive: if a beat has nothing to say, skip it silently rather than padding. The fuller persona and voice guide lives in the team's Notion (Persona & Voice page), not in this repo.
 
-## New adapters
-A new Source adapter that needs a model prompt ships it under `worker/prompts/` with a thin loader from the start, following this skill and `adapter-authoring`.
+## New ingesters
+A new Source ingester that needs a model prompt ships it under `worker/prompts/` with a thin loader from the start, following this skill and `ingester-authoring`. Its inputs go through the untrusted map.

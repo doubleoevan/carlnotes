@@ -1,31 +1,15 @@
-// scan orchestration. runs a topic's Sources through their adapters, stores the deduped Resources, and records the Scan
+// scan orchestration. opens the Scan row, runs the ingest and review stages against one Budget, and records the result
 import { propagateAttributes, startActiveObservation } from "@langfuse/tracing"
-import { desc, eq, sql } from "drizzle-orm"
+import { trackEvent } from "@shared/analytics"
+import { and, count, desc, eq } from "drizzle-orm"
 import { db } from "../db"
-import { resources, scans, sources, users } from "../db/schema"
-import { sourceAdapters } from "./adapters"
-import type { AdapterResult, NewResource, Source } from "./adapters/adapter"
+import { scans, users } from "../db/schema"
+import { type Budget, newBudget } from "./budget"
+import { ingestFromTopicSources, type ScanSummary } from "./ingest"
 import { reviewScan } from "./review"
 
-// the outcome of running one Source. every variant carries the Source kind so the scan report can name it
-// a successful outcome adds its emitted Resources and the source id for tracing
-type SourceOutcome =
-	| ({ status: "ok"; sourceId: string; sourceKind: string } & AdapterResult)
-	| { status: "failed"; sourceKind: string }
-	| { status: "skipped"; sourceKind: string }
-
-// a persisted Scan row and one entry of its per-Source fallback trace
+// a persisted Scan row
 type Scan = typeof scans.$inferSelect
-type DegradedSource = Scan["degradedSources"][number]
-
-// the summary shape toScanSummary returns for runTopicScan to persist
-type ScanSummary = {
-	resources: NewResource[]
-	foundCount: number
-	cost: number
-	status: Scan["status"]
-	degradedSources: DegradedSource[]
-}
 
 // shared so that propagateAttributes and startActiveObservation always agree on the trace name
 const TOPIC_SCAN_TRACE_NAME = "topic-scan"
@@ -52,6 +36,8 @@ export async function runTopicScan(topicId: string, ownerId: string, isManual = 
 	if (!scan) {
 		throw new Error(`could not create scan for topic ${topicId}`)
 	}
+
+	// the row exists either way from here, so ingestion and review run against it
 	return processTopicScan(scan, topicId, ownerId)
 }
 
@@ -63,70 +49,24 @@ export async function processTopicScan(scan: Scan, topicId: string, ownerId: str
 	// every model call made while this Scan runs nests under one shared Langfuse trace span
 	return propagateAttributes({ traceName: TOPIC_SCAN_TRACE_NAME, metadata: { topicId, scanId: scan.id } }, () =>
 		startActiveObservation(TOPIC_SCAN_TRACE_NAME, async () => {
-			// an infra failure after this point must finalize the Scan as failed. never leave it stuck as "running"
+			// the budget is created out here so a failure can still record what the Scan spent before it broke
+			const budget = newBudget()
+
+			// a failure after this point must finalize the Scan as failed. never leave it stuck as "running"
 			try {
-				// run every Source through its adapter with per-Source failures isolated, then aggregate the outcomes
-				const topicSources = await db.select().from(sources).where(eq(sources.topicId, topicId))
-				const sourceOutcomes = await Promise.all(topicSources.map(ingestSource))
-				const summary = toScanSummary(sourceOutcomes)
-
-				// insert the deduped Resources. an already-stored url keeps its embedding and content.
-				// only engagement refreshes, and coalesce keeps the stored score when a re-discovery carries no signal
-				if (summary.resources.length > 0) {
-					await db
-						.insert(resources)
-						.values(summary.resources)
-						.onConflictDoUpdate({
-							target: resources.url,
-							set: { engagement: sql`coalesce(excluded.engagement, ${resources.engagement})` },
-						})
-				}
-
-				// bill this scan's llm calls to the owner's litellm virtual key, not the shared master key
-				const [owner] = await db
-					.select({ litellmVirtualKey: users.litellmVirtualKey })
-					.from(users)
-					.where(eq(users.id, ownerId))
-
-				// review the discovered Resources for topic findings, then end the Scan with one database write
-				// sourceOutcomes rides along so the report can describe each Source's outcome
-				const review = await reviewScan(
-					scan,
-					topicId,
-					summary.resources,
-					sourceOutcomes,
-					owner?.litellmVirtualKey ?? undefined,
-				)
-				const { foundCount, cost, status, degradedSources } = summary
-				const [finishedScan] = await db
-					.update(scans)
-					.set({
-						// ingestion outcomes
-						status,
-						foundCount,
-						degradedSources,
-						// review outcomes, folded into the Scan record
-						keptCount: review.keptCount,
-						filteredCount: review.filteredCount,
-						stageCosts: review.stageCosts,
-						scanSummary: review.scanSummary,
-						// the per-outcome fetch tallies
-						reused: review.reusedCount,
-						revalidated: review.revalidatedCount,
-						fetched: review.fetchedCount,
-						// the total cost is the ingestion cost plus every review stage cost
-						cost: (cost + review.cost).toString(),
-						finishedAt: new Date(),
-					})
-					.where(eq(scans.id, scan.id))
-					.returning()
-				return finishedScan
+				return await runScanPipeline(scan, topicId, ownerId, budget)
 			} catch (error) {
-				// record a failure on the Scan row
+				// record a failure on the Scan row, keeping the spend it already incurred
 				const message = error instanceof Error ? error.message : String(error)
 				await db
 					.update(scans)
-					.set({ status: "failed", error: message, finishedAt: new Date() })
+					.set({
+						status: "failed",
+						error: message,
+						finishedAt: new Date(),
+						stageCosts: budget.stageCosts,
+						cost: budget.spent.toString(),
+					})
 					.where(eq(scans.id, scan.id))
 
 				// rethrow so the caller sees the original error
@@ -136,57 +76,76 @@ export async function processTopicScan(scan: Scan, topicId: string, ownerId: str
 	)
 }
 
-// pure aggregation over Source outcomes. dedupes Resources across Sources, sums cost, and decides the status
-export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
-	// dedupe emitted Resources across Sources by url
-	// sum the cost, and collect the Sources that ran a missing API key fallback
-	const resourceByUrl = new Map<string, NewResource>()
-	const degradedSources: DegradedSource[] = []
-	let cost = 0
-	for (const outcome of outcomes) {
-		// skips and failures do not add Resources, cost, or degradations
-		if (outcome.status !== "ok") {
-			continue
-		}
+// the Scan pipeline: ingest, review, and save, all charging into the Budget its caller made
+async function runScanPipeline(
+	scan: Scan,
+	topicId: string,
+	ownerId: string,
+	budget: Budget,
+): Promise<Scan | undefined> {
+	// ingest every Source and store what they turned up
+	const { sourceOutcomes, summary } = await ingestFromTopicSources(topicId, budget)
 
-		// a missing API key fallback still succeeds, but it's recorded to the Scan
-		if (outcome.fallbackMode) {
-			degradedSources.push({ sourceId: outcome.sourceId, fallbackMode: outcome.fallbackMode })
-		}
+	// bill this scan's llm calls to the owner's litellm virtual key
+	const [owner] = await db
+		.select({ litellmVirtualKey: users.litellmVirtualKey, plan: users.plan })
+		.from(users)
+		.where(eq(users.id, ownerId))
 
-		// sum this Source's cost and merge its Resources, keeping the first resource seen per url
-		cost += outcome.cost
-		for (const resource of outcome.resources) {
-			if (!resourceByUrl.has(resource.url)) {
-				resourceByUrl.set(resource.url, resource)
-			}
-		}
+	// review the discovered scan Resources for relevance
+	const review = await reviewScan(
+		scan,
+		topicId,
+		summary.resources,
+		sourceOutcomes,
+		budget,
+		owner?.litellmVirtualKey ?? undefined,
+	)
+
+	// track the scan event if it is the owner's first Scan to succeed
+	const topicScan = await saveTopicScan(scan, summary, review, budget)
+	if (summary.status === "succeeded" && (await isFirstSucceededScan(ownerId))) {
+		trackEvent("first_scan_completed", ownerId, { plan: owner?.plan ?? "free", topicId })
 	}
-
-	// a Scan fails only when a Source errored and none succeeded. skips and an empty topic stay succeeded
-	const hasFailures =
-		outcomes.some((outcome) => outcome.status === "failed") && !outcomes.some((outcome) => outcome.status === "ok")
-
-	// annotate the status with the column's enum type
-	const resources = [...resourceByUrl.values()]
-	const status: (typeof scans.$inferSelect)["status"] = hasFailures ? "failed" : "succeeded"
-	return { resources, foundCount: resources.length, cost, status, degradedSources }
+	return topicScan
 }
 
-// run a Source through its registered adapter, turning any failure into an isolated outcome
-async function ingestSource(source: Source): Promise<SourceOutcome> {
-	// a source kind with no registered adapter is a no-op skip, not a Scan failure
-	const adapter = sourceAdapters[source.kind]
-	if (!adapter) {
-		return { status: "skipped", sourceKind: source.kind }
-	}
+// write the scan to the database: the ingestion outcomes, the review outcomes, and the Budget's spend and totals
+async function saveTopicScan(
+	scan: Scan,
+	summary: ScanSummary,
+	review: Awaited<ReturnType<typeof reviewScan>>,
+	budget: ReturnType<typeof newBudget>,
+): Promise<Scan | undefined> {
+	const [topicScan] = await db
+		.update(scans)
+		.set({
+			// ingestion outcomes
+			status: summary.status,
+			foundCount: summary.foundCount,
+			fallbackSources: summary.fallbackSources,
+			// review outcomes, folded into the Scan record
+			keptCount: review.keptCount,
+			filteredCount: review.filteredCount,
+			scanSummary: review.scanSummary,
+			// the spend and the totals that the Budget carried through the Scan
+			stageCosts: budget.stageCosts,
+			cost: budget.spent.toString(),
+			reused: budget.fetchCounts.reusedCount,
+			revalidated: budget.fetchCounts.revalidatedCount,
+			fetched: budget.fetchCounts.fetchedCount,
+			finishedAt: new Date(),
+		})
+		.where(eq(scans.id, scan.id))
+		.returning()
+	return topicScan
+}
 
-	// a thrown adapter degrades only this Source. log it and add a failure to the outcome
-	try {
-		const adapterResult = await adapter(source)
-		return { status: "ok", sourceId: source.id, sourceKind: source.kind, ...adapterResult }
-	} catch (error) {
-		console.error(`source ${source.id} (${source.kind}) failed`, error)
-		return { status: "failed", sourceKind: source.kind }
-	}
+// whether the Scan that just finished is this owner's first to succeed
+async function isFirstSucceededScan(ownerId: string): Promise<boolean> {
+	const [scanCountRow] = await db
+		.select({ count: count() })
+		.from(scans)
+		.where(and(eq(scans.ownerId, ownerId), eq(scans.status, "succeeded")))
+	return scanCountRow?.count === 1
 }

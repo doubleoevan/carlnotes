@@ -120,8 +120,7 @@ export async function buildTopicFeeds(
 // fetch every dataset the topic feeds need across all topic ids at once, each grouped by topic id.
 // an empty id list makes each inArray where clause match nothing, so the maps come back empty
 async function loadTopicFeedData(topicIds: string[], userId: string | null) {
-	// a signed-out visitor has no consumption or bookmark history. sql`false` forces each left join to never
-	// match, rather than comparing a user_id column against null, which drizzle's column typing rejects
+	// a signed-out visitor has no history. sql`false` never matches, since drizzle's typing rejects comparing user_id to null
 	const consumptionJoinCondition = userId
 		? and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
 		: sql`false`
@@ -253,12 +252,14 @@ function buildTopicFeed(
 		kind: source.kind,
 	}))
 
-	// read the attachments, dropping the grouping key from each row
+	// read the attachments, dropping the grouping key from each row.
+	// the feed never edits an attachment's context, so it isn't loaded or sent here
 	const topicAttachments = (feedData.attachmentsByTopic.get(topic.id) ?? []).map((attachment) => ({
 		id: attachment.id,
 		filename: attachment.filename,
 		sourceUrl: attachment.sourceUrl,
 		status: attachment.status,
+		context: null,
 	}))
 
 	// shape each row into a topic finding and set its isConsumed flag

@@ -1,4 +1,5 @@
-import { useState } from "react"
+import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
+import { useEffect, useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { Button } from "@/components/primitives/button"
 import { SessionLayout } from "@/components/session/SessionLayout"
@@ -15,6 +16,15 @@ export function SignupPage() {
 	const [isSubmitting, setSubmitting] = useState(false)
 	// the address a succeeded password signup was sent to, which swaps the form for a non-blocking notice
 	const [verifyingEmail, setVerifyingEmail] = useState<string | null>(null)
+
+	// remember which button brought this visitor here, so signup_completed can track what converted
+	useEffect(() => {
+		const ctaTag = toCtaTag(new URLSearchParams(window.location.search).get("cta"))
+		if (ctaTag) {
+			// biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API it prefers is missing in Safari
+			document.cookie = `${SIGNUP_CTA_COOKIE_NAME}=${ctaTag}; max-age=1800; path=/`
+		}
+	}, [])
 
 	// validates the turnstile token, then creates the account with a password
 	const handlePasswordSignup = async (email: string, password: string): Promise<void> => {

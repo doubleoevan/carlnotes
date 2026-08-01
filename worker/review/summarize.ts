@@ -1,17 +1,12 @@
 // the scan report: a short write-up of what one Scan found, filtered, and spent
+import { reportError } from "@shared/monitoring"
 import { generateText } from "ai"
+import { type Budget, CHEAP_COST_PER_MILLION_TOKENS, charge, tokenCost } from "../budget"
 import { cheapModel } from "../models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
 import { writePrompt } from "../prompts/write"
 import type { TopicContext } from "./filter"
-import {
-	type Budget,
-	CHEAP_COST_PER_MILLION_TOKENS,
-	charge,
-	type KeptFinding,
-	type ReviewOutcome,
-	tokenCost,
-} from "./track"
+import type { KeptFinding, ReviewOutcome } from "./track"
 
 // how many kept findings the report lists in full before it just counts the rest
 const MAX_TOPIC_SCAN_REPORT_FINDINGS = 20
@@ -40,7 +35,9 @@ export async function toTopicScanSummary(scanId: string, summarize: () => Promis
 	try {
 		return await summarize()
 	} catch (error) {
+		// the Scan still succeeds with real Findings, so an empty recap is the only thing the reader sees from a summary error
 		console.error(`scan report failed for scan ${scanId}, leaving the summary empty`, error)
+		reportError(error, "scan-report", { scanId })
 		return ""
 	}
 }
@@ -89,21 +86,26 @@ export async function summarizeTopicScan(
 export async function buildScanReportPrompt(promptData: ScanPromptData): Promise<BuiltPrompt> {
 	const { template, name, registryPrompt } = await fetchPromptTemplate("summarize-topic-scan")
 
-	// fill the template, building each list section from the Scan's outcomes
-	const prompt = writePrompt(template, {
-		topicName: promptData.topicName,
-		topicContext: promptData.topicContext,
-		date: promptData.date,
-		keptResourcesBlock: toKeptResourcesBlock(promptData.reviewOutcome.keptFindings),
-		filteredBreakdown: toFilteredResourcesReport(promptData.reviewOutcome),
-		sourcesBlock: toSourcesBlock(promptData.scannedSources),
-		costLine: toCostLine(promptData.budget),
-	})
+	// fill the template. the topic text and kept block are reachable by an attacker, so they get fenced as untrusted
+	const prompt = writePrompt(
+		template,
+		{
+			topicName: promptData.topicName,
+			topicContext: promptData.topicContext,
+			keptFindingsBlock: toKeptFindingsBlock(promptData.reviewOutcome.keptFindings),
+		},
+		{
+			date: promptData.date,
+			filteredBreakdown: toFilteredResourcesReport(promptData.reviewOutcome),
+			sourcesBlock: toSourcesBlock(promptData.scannedSources),
+			costLine: toCostLine(promptData.budget),
+		},
+	)
 	return { prompt, name, registryPrompt }
 }
 
 // lists each kept finding with its title, url, relevance score, and note
-function toKeptResourcesBlock(keptFindings: KeptFinding[]): string {
+function toKeptFindingsBlock(keptFindings: KeptFinding[]): string {
 	if (keptFindings.length === 0) {
 		return "none"
 	}
@@ -149,8 +151,8 @@ function toSourcesBlock(scannedSources: ScannedSource[]): string {
 		.join("\n")
 }
 
-// the Scan's total spend with its per-stage breakdown
+// the Scan's total spend with its per-stage breakdown, ingestion first since it is charged first
 function toCostLine(budget: Budget): string {
-	const { embedding, fetch, scoringCheap, scoringPremium } = budget.stageCosts
-	return `total $${budget.spent.toFixed(4)} — embedding $${embedding.toFixed(4)}, fetch $${fetch.toFixed(4)}, cheap scoring $${scoringCheap.toFixed(4)}, premium scoring $${scoringPremium.toFixed(4)}`
+	const { ingestion, embedding, fetch, scoringCheap, scoringPremium } = budget.stageCosts
+	return `total $${budget.spent.toFixed(4)} — ingestion $${ingestion.toFixed(4)}, embedding $${embedding.toFixed(4)}, fetch $${fetch.toFixed(4)}, cheap scoring $${scoringCheap.toFixed(4)}, premium scoring $${scoringPremium.toFixed(4)}`
 }

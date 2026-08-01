@@ -190,6 +190,20 @@
       "when": 1785132914997,
       "tag": "0026_redundant_baron_strucker",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1785410277950,
+      "tag": "0027_flashy_ted_forrester",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1785544515188,
+      "tag": "0028_rename_fallback_sources",
+      "breakpoints": true
     }
   ]
 }

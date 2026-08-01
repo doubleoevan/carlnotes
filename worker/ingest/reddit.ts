@@ -1,32 +1,41 @@
-// the Reddit adapter. it uses the app-only OAuth API when credentials are set, else the keyless public subreddit rss feed
-import type { NewResource, Source, SourceAdapter } from "./adapter"
+// the Reddit ingester. it uses the app-only OAuth API when credentials are set, else the keyless public subreddit rss feed
+
 import { fetchFeed } from "./feed"
+import type { NewResource, Source, SourceIngester } from "./ingester"
 
 // fetch limits
 const MAX_POSTS = 25
 const DEFAULT_SORT = "hot"
+
+// reddit's own name and sort charsets. both land in a url path, so anything else is refused rather than encoded
+const SUBREDDIT_PATTERN = /^[A-Za-z0-9_]{1,21}$/
+const SUBREDDIT_SORTS = ["hot", "new", "top", "rising"]
 const FETCH_TIMEOUT_MS = 10_000
 
 // reddit rejects generic or missing User-Agents. send a descriptive one on every request, both OAuth and rss
 const REDDIT_USER_AGENT = "carlnotes/0.1 (source-ingestion; +https://carlnotes.com)"
 
 // fetch a subreddit's posts as "read" Resources. use the OAuth API if credentials are set, else the keyless public rss feed
-export const redditAdapter: SourceAdapter = async (source: Source) => {
+export const redditIngester: SourceIngester = async (source: Source) => {
 	// the subreddit is required. sort is optional and only steers the OAuth path
 	const subreddit = source.config.subreddit
-	if (typeof subreddit !== "string") {
-		throw new Error(`reddit source ${source.id} has no string config.subreddit`)
+	if (typeof subreddit !== "string" || !SUBREDDIT_PATTERN.test(subreddit)) {
+		throw new Error(`reddit source ${source.id} has no valid config.subreddit`)
 	}
-	const sort = typeof source.config.sort === "string" ? source.config.sort : DEFAULT_SORT
 
-	// use the app-only OAuth API only when both credentials are present. otherwise degrade to public rss
+	// an unrecognized sort falls back rather than throwing, since it only steers ordering
+	const configuredSort = source.config.sort
+	const sort =
+		typeof configuredSort === "string" && SUBREDDIT_SORTS.includes(configuredSort) ? configuredSort : DEFAULT_SORT
+
+	// use the app-only OAuth API only when both credentials are present. otherwise fall back to public rss
 	const clientId = Bun.env.REDDIT_CLIENT_ID
 	const clientSecret = Bun.env.REDDIT_CLIENT_SECRET
 	if (clientId && clientSecret) {
 		return { resources: await fetchPosts(subreddit, sort, clientId, clientSecret), cost: 0 }
 	}
 
-	// fall back to the public subreddit .rss feed, tagged so the Scan records the degradation
+	// fall back to the public subreddit .rss feed, tagged so the Scan records the fallback
 	const rssUrl = `https://www.reddit.com/r/${subreddit}/.rss`
 	return { resources: await fetchFeed(rssUrl, { userAgent: REDDIT_USER_AGENT }), cost: 0, fallbackMode: "reddit-rss" }
 }

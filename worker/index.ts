@@ -4,4 +4,6 @@ export { sendManualScanEmail } from "./notify"
 export { processTopicScan, runTopicScan } from "./scan"
 export { failStaleScans, runScheduledTopicScans } from "./schedule"
 export { attachmentStream, deleteAttachment } from "./store"
+// trace the model-calls that the scheduled worker does
+export { shutdownTelemetry, startTelemetry } from "./telemetry"
 export { verifyUnsubscribeToken } from "./unsubscribe"

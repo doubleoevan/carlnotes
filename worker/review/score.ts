@@ -1,10 +1,25 @@
 // the paid stages: fetch each admitted Resource's content, score it against the topic context with tiered
 // models, and write the Finding. every Resource checks the Scan's ceilings before it starts
+import { reportError } from "@shared/monitoring"
 import { generateText, type LanguageModel, Output } from "ai"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "../../db"
 import { findings, resources, type scans } from "../../db/schema"
+import {
+	type Budget,
+	CHEAP_COST_PER_MILLION_TOKENS,
+	canScoreResource,
+	canSpend,
+	charge,
+	type FetchOutcome,
+	FIRECRAWL_COST_PER_FETCH,
+	PREMIUM_COST_PER_MILLION_TOKENS,
+	type StageCosts,
+	toFetchCountField,
+	tokenCost,
+} from "../budget"
+import { screenText, toFlaggedReason } from "../guard"
 import { cheapModel, scoreModel } from "../models"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
@@ -12,22 +27,7 @@ import { filterPremiumPrompt, writePrompt } from "../prompts/write"
 import { fetchContent, revalidateContent } from "../scrape"
 import { deleteResourceContent, getResourceContent, toResourceContentKey, uploadResourceContent } from "../store"
 import type { Resource, TopicContext } from "./filter"
-import {
-	type Budget,
-	CHEAP_COST_PER_MILLION_TOKENS,
-	canPay,
-	canSpend,
-	charge,
-	type FetchOutcome,
-	FIRECRAWL_COST_PER_FETCH,
-	PREMIUM_COST_PER_MILLION_TOKENS,
-	type ResourceOutcome,
-	type ReviewOutcome,
-	type StageCosts,
-	toFetchCountKey,
-	tokenCost,
-	trackOutcomes,
-} from "./track"
+import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
 // the cheap model score that earns a premium model re-score and a relevance explanation. the environment can override it
 const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? "0.6")
@@ -36,7 +36,7 @@ const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? 
 const CONTENT_TTL_MS = Number(Bun.env.CONTENT_TTL_MS ?? String(24 * 60 * 60 * 1000))
 
 // how many resources the paid fetch-and-scoring section works on at once. it stays bounded because Firecrawl
-// enforces a per-plan concurrency and answers a burst with 429s, which degrade to the snippet fallback and
+// enforces a per-plan concurrency and answers a burst with 429s, which fall back to the snippet and
 // quietly produce worse Findings. the environment can override it, and 1 restores the old serial behavior
 const REVIEW_CONCURRENCY = Number(Bun.env.REVIEW_CONCURRENCY ?? "4")
 
@@ -116,17 +116,24 @@ async function fetchAndScoreResource(
 	litellmApiKey?: string,
 ): Promise<ResourceOutcome> {
 	// defer the Resource once the Scan hits its dollar ceiling or its scored-resource ceiling
-	if (!canPay(budget)) {
+	if (!canScoreResource(budget)) {
 		return { status: "deferred" }
 	}
 
 	try {
 		// get the content by reuse, revalidation, or a paid fetch, then increment the FetchOutcome, which advances the scored-resource count
 		const { content, fetchOutcome } = await fetchResourceContent(resource, budget)
-		budget.fetchCounts[toFetchCountKey(fetchOutcome)]++
+		budget.fetchCounts[toFetchCountField(fetchOutcome)]++
 
-		// score the content against the topic context with tiered models, then write the topic finding
-		const scoredResource = await scoreResource(content, topicContext.text, budget, litellmApiKey)
+		// screen the fetched page before any model reads it. a flagged page is dropped under its own cause and never scored
+		const verdict = await screenText(content, "page")
+		if (verdict.isFlagged) {
+			console.error(`resource ${resource.id} ${toFlaggedReason(verdict)}`)
+			return { status: "filtered", reason: "flagged by scanner" }
+		}
+
+		// score the scanner's text, not the original, so any personal details it redacted never reach a model
+		const scoredResource = await scoreResource(verdict.text, topicContext.text, budget, litellmApiKey)
 		await upsertFinding(scan, topicId, resource, scoredResource.score, scoredResource.relevanceExplanation)
 
 		// the kept outcome carries the feed-facing details that the report cites
@@ -139,7 +146,9 @@ async function fetchAndScoreResource(
 		}
 		return { status: "kept", finding: keptFinding }
 	} catch (error) {
+		// this Resource was paid for and produced nothing, so it is worth alerting on
 		console.error(`review failed for resource ${resource.id}`, error)
+		reportError(error, "score", { resourceId: resource.id, url: resource.url })
 		return { status: "failed" }
 	}
 }
@@ -178,7 +187,9 @@ async function readStoredContent(contentKey: string, resourceId: string): Promis
 	try {
 		return await getResourceContent(contentKey)
 	} catch (error) {
+		// a read that fails turns into a paid refetch, so a rising rate here costs money
 		console.error(`object-storage read failed for resource ${resourceId}`, error)
+		reportError(error, "object-storage", { resourceId, contentKey, operation: "read" })
 		return null
 	}
 }
@@ -203,8 +214,9 @@ async function fetchViaFirecrawl(
 			.where(eq(resources.id, resource.id))
 		return { content: scoringText, fetchOutcome: "fetched" }
 	} catch (error) {
-		// fetch failed — score against the native snippet, never the bare title
+		// the fetch failed, so fall back to the snippet. the Finding is still written, with less to go on
 		console.error(`firecrawl fetch failed for ${resource.url}`, error)
+		reportError(error, "fetch", { resourceId: resource.id, url: resource.url })
 		return { content: resource.snippet ?? "", fetchOutcome: "fetched" }
 	}
 }
@@ -218,15 +230,19 @@ async function storeResourceContent(
 	try {
 		return await uploadResourceContent(resourceId, markdown)
 	} catch (error) {
-		// the write failed. best-effort delete any partial object, then report null so scoring uses the snippet
+		// the write failed. delete any partial object, then return null so scoring falls back to the snippet.
+		// nothing is stored, so a later Scan refetches this page
 		console.error(`object-storage write failed for resource ${resourceId}`, error)
+		reportError(error, "object-storage", { resourceId, operation: "write" })
 		await deleteResourceContent(toResourceContentKey(resourceId)).catch(() => {})
 		return null
 	}
 }
 
-// score the resource content with the cheap model first, promoting only the best to the premium model for the final score and relevance explanation
-async function scoreResource(
+/**
+ * Score resource content with the cheap model first, promoting only the best to the premium model for the final score and relevance explanation.
+ */
+export async function scoreResource(
 	resourceContent: string,
 	topicContext: string,
 	budget: Budget,
@@ -293,7 +309,8 @@ export async function buildScorePrompt(
 	// fetch the registry version first
 	const { template, name, registryPrompt } = await fetchPromptTemplate("summarize-resource")
 
-	// the cheap tier drops the premium-tier wording, then the content is capped to bound tokens and spend
+	// the cheap tier drops the premium-tier wording, then the content is capped to bound tokens and spend.
+	// both are user-supplied text, not app-generated, so they get fenced in the prompt as untrusted
 	const scoreTemplate = shouldWriteRelevanceExplanation ? template : filterPremiumPrompt(template)
 	const prompt = writePrompt(scoreTemplate, {
 		topicContext,

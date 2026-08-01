@@ -1,17 +1,18 @@
-// the YouTube adapter. it uses the Data API when a key is set, otherwise it falls back to the public channel or a playlist Atom feed
-import type { NewResource, Source, SourceAdapter } from "./adapter"
+// the YouTube ingester. it uses the Data API when a key is set, otherwise it falls back to the public channel or a playlist Atom feed
+
 import { fetchFeed } from "./feed"
+import type { NewResource, Source, SourceIngester } from "./ingester"
 
 // fetch limits used to bound slow feeds and reject oversized bodies
 const MAX_RESULTS = 25
 const FETCH_TIMEOUT_MS = 10_000
 
-// the YouTube hosts whose playlist pages can be expanded. the search adapter reuses this
+// the YouTube hosts whose playlist pages can be expanded. the search ingester reuses this
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"])
 
 // fetch a channel or playlist's recent videos as "watch" Resources.
 // use the Data API when an API key is set, otherwise use the Atom feed
-export const youtubeAdapter: SourceAdapter = async (source: Source) => {
+export const youtubeIngester: SourceIngester = async (source: Source) => {
 	// resolve what to pull from config, then pick the keyed API or the keyless Atom fallback
 	const { apiPlaylistId, atomUrl } = toPlaylistIdAndAtomUrl(source)
 	const apiKey = Bun.env.YOUTUBE_API_KEY
@@ -19,7 +20,7 @@ export const youtubeAdapter: SourceAdapter = async (source: Source) => {
 		return { resources: await fetchVideos(apiPlaylistId, apiKey), cost: 0 }
 	}
 
-	// fall back to the keyless Atom feed, tagged so the Scan records the degradation
+	// fall back to the keyless Atom feed, tagged so the Scan records the fallback
 	return { resources: await fetchFeed(atomUrl, { resourceKind: "watch" }), cost: 0, fallbackMode: "youtube-atom" }
 }
 
@@ -48,14 +49,16 @@ function toPlaylistIdAndAtomUrl(source: Source): { apiPlaylistId: string; atomUr
 
 	// a playlist id is read directly by both modes
 	if (playlistId) {
-		return { apiPlaylistId: playlistId, atomUrl: `https://www.youtube.com/feeds/videos.xml?playlist_id=${playlistId}` }
+		const atomQuery = new URLSearchParams({ playlist_id: playlistId })
+		return { apiPlaylistId: playlistId, atomUrl: `https://www.youtube.com/feeds/videos.xml?${atomQuery}` }
 	}
 
 	// a channel id maps to its uploads playlist for the API and its channel feed for Atom
 	if (channelId) {
+		const atomQuery = new URLSearchParams({ channel_id: channelId })
 		return {
 			apiPlaylistId: uploadsFromChannel(channelId),
-			atomUrl: `https://www.youtube.com/feeds/videos.xml?channel_id=${channelId}`,
+			atomUrl: `https://www.youtube.com/feeds/videos.xml?${atomQuery}`,
 		}
 	}
 	throw new Error(`youtube source ${source.id} has no channelId or playlistId in config`)

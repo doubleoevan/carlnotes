@@ -4,6 +4,10 @@ import type * as React from "react"
 import { useRef, useState } from "react"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
+import { Textarea } from "@/components/primitives/textarea"
+
+// one stored attachment, whose context the owner can read and correct
+type KeptAttachment = TopicResponse["attachments"][number]
 
 // the stored attachments, the staged files and urls, and their change callbacks
 type AttachmentEditorProps = {
@@ -67,7 +71,14 @@ export function TopicAttachmentEditor({
 							key={attachment.id}
 							label={attachment.sourceUrl ?? attachment.filename}
 							onRemove={() => onKeptChange(keptAttachments.filter((kept) => kept.id !== attachment.id))}
-						/>
+						>
+							<AttachmentContext
+								attachment={attachment}
+								onContextChange={(context) =>
+									onKeptChange(keptAttachments.map((kept) => (kept.id === attachment.id ? { ...kept, context } : kept)))
+								}
+							/>
+						</AttachmentRow>
 					))}
 					{pendingFiles.map((file) => (
 						<AttachmentRow
@@ -134,20 +145,64 @@ export function TopicAttachmentEditor({
 	)
 }
 
-// an attachment row with a ✕ remove control on the left, aligned with the + add controls below
-function AttachmentRow({ label, onRemove }: { label: string; onRemove: () => void }) {
+// an attachment row with a ✕ remove control on the left, aligned with the + add controls below.
+// children hold whatever belongs under the row, which for a stored attachment is its context
+function AttachmentRow({
+	label,
+	onRemove,
+	children,
+}: {
+	label: string
+	onRemove: () => void
+	children?: React.ReactNode
+}) {
 	return (
-		<div className="flex min-w-0 -ml-1 items-center gap-1.5 text-sm">
-			<button
-				type="button"
-				aria-label={`Remove ${label}`}
-				onClick={onRemove}
-				className="text-muted-foreground hover:text-foreground shrink-0"
-			>
-				<X className="size-3.5" />
-			</button>
-			<span className="min-w-0 flex-1 truncate">{label}</span>
+		<div className="min-w-0 -ml-1 text-sm">
+			<div className="flex min-w-0 items-center gap-1.5">
+				<button
+					type="button"
+					aria-label={`Remove ${label}`}
+					onClick={onRemove}
+					className="text-muted-foreground hover:text-foreground shrink-0"
+				>
+					<X className="size-3.5" />
+				</button>
+				<span className="min-w-0 flex-1 truncate">{label}</span>
+			</div>
+			{children}
 		</div>
+	)
+}
+
+// a stored attachment's context. it is editable because every later scan for the topic reads it, so this is where
+// the owner corrects what the model made of the file. a native <details> hides a long one with no state to track
+function AttachmentContext({
+	attachment,
+	onContextChange,
+}: {
+	attachment: KeptAttachment
+	onContextChange: (context: string) => void
+}) {
+	// only a ready attachment has a settled context. anything else reports its status instead
+	if (attachment.status !== "ready" || attachment.context === null) {
+		const statusLabel =
+			attachment.status === "pending" ? "Carl is still reading this one…" : "Carl couldn't read this one."
+		return <div className="text-muted-foreground pl-5 text-xs italic">{statusLabel}</div>
+	}
+
+	return (
+		<details className="pl-5">
+			<summary className="text-link cursor-pointer text-xs hover:underline">context</summary>
+			<Textarea
+				value={attachment.context}
+				onChange={(event) => onContextChange(event.target.value)}
+				aria-label={`Context for ${attachment.sourceUrl ?? attachment.filename}`}
+				className="mt-1 min-h-20 text-xs"
+			/>
+			<p className="text-muted-foreground mt-1 text-xs italic">
+				What Carl made of this file. Every later scan reads it, so edits stick.
+			</p>
+		</details>
 	)
 }
 

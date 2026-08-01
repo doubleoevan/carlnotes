@@ -44,9 +44,12 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 		.from(topics)
 		.where(eq(topics.ownerId, user.id))
 
+	// the ids every query below filters on
+	const ownedTopicIds = ownedTopics.map((topic) => topic.id)
+
 	// every owned topic's scans this month in one query, sorted newest first
 	const monthScanRows =
-		ownedTopics.length > 0
+		ownedTopicIds.length > 0
 			? await db
 					.select({
 						id: scans.id,
@@ -63,15 +66,7 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 						scanSummary: scans.scanSummary,
 					})
 					.from(scans)
-					.where(
-						and(
-							inArray(
-								scans.topicId,
-								ownedTopics.map((topic) => topic.id),
-							),
-							gte(scans.startedAt, startOfUtcMonth(new Date())),
-						),
-					)
+					.where(and(inArray(scans.topicId, ownedTopicIds), gte(scans.startedAt, startOfUtcMonth(new Date()))))
 					.orderBy(desc(scans.startedAt))
 			: []
 	// the topic-id filter above already guarantees a live, owned topic. this narrows the column's nullable type to match
@@ -80,17 +75,14 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 	// the active subscriber count per owned topic. unsubscribing deactivates the row rather than deleting it, so only active rows count
 	// the join to the topic is what drops the owner's own row out
 	const subscriberRows =
-		ownedTopics.length > 0
+		ownedTopicIds.length > 0
 			? await db
 					.select({ topicId: subscriptions.topicId, count: count() })
 					.from(subscriptions)
 					.innerJoin(topics, eq(subscriptions.topicId, topics.id))
 					.where(
 						and(
-							inArray(
-								subscriptions.topicId,
-								ownedTopics.map((topic) => topic.id),
-							),
+							inArray(subscriptions.topicId, ownedTopicIds),
 							eq(subscriptions.isActive, true),
 							sql`${subscriptions.subscriberUserId} is distinct from ${topics.ownerId}`,
 						),
@@ -98,6 +90,17 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 					.groupBy(subscriptions.topicId)
 			: []
 	const subscriberCountByTopic = new Map(subscriberRows.map((row) => [row.topicId, row.count]))
+
+	// the owner's own subscription row on each topic they own, which is what the Emails column toggles.
+	// a topic with no row for the owner reads as on below, matching the column default
+	const ownerEmailRows =
+		ownedTopicIds.length > 0
+			? await db
+					.select({ topicId: subscriptions.topicId, isEmailEnabled: subscriptions.isEmailEnabled })
+					.from(subscriptions)
+					.where(and(inArray(subscriptions.topicId, ownedTopicIds), eq(subscriptions.subscriberUserId, user.id)))
+			: []
+	const emailEnabledByTopic = new Map(ownerEmailRows.map((row) => [row.topicId, row.isEmailEnabled]))
 
 	// the observed llm spend. null when the proxy has no record to read
 	const spendDollars = userRow?.litellmVirtualKey ? await readLiteLLMKeySpend(userRow.litellmVirtualKey) : null
@@ -157,7 +160,7 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 			plan: userRow?.plan ?? "free",
 			budgetOverrideCents: userRow?.budgetOverrideCents ?? null,
 		}),
-		topics: toActivityTopics(ownedTopics, monthScans, subscriberCountByTopic),
+		topics: toActivityTopics(ownedTopics, monthScans, subscriberCountByTopic, emailEnabledByTopic),
 		subscriptions: toSubscriptionRows(subscriptionRows),
 		invites: inviteRows.map((row) => ({
 			...row,
@@ -185,6 +188,7 @@ export function toSubscriptionRows(
 			subscriptionRowsByTopic.set(subscriptionRow.topicId, subscriptionRow)
 		}
 	}
+	// one row per topic now, with the date encoded for the wire
 	return [...subscriptionRowsByTopic.values()].map((subscriptionRow) => ({
 		...subscriptionRow,
 		subscribedAt: subscriptionRow.subscribedAt.toISOString(),
@@ -198,6 +202,7 @@ export function toActivityTopics(
 	topicRows: TopicRow[],
 	scanRows: ScanRow[],
 	subscriberCountByTopic: Map<string, number>,
+	emailEnabledByTopic: Map<string, boolean> = new Map(),
 ): ActivityTopic[] {
 	// group each topic's scans once, then build every row
 	const scansByTopic = Map.groupBy(scanRows, (scan) => scan.topicId)
@@ -213,6 +218,8 @@ export function toActivityTopics(
 			createdAt: topic.createdAt.toISOString(),
 			updatedAt: topic.updatedAt.toISOString(),
 			monthCostCents: topicScans.reduce((sum, scan) => sum + toCents(scan.cost), 0),
+			// the owner holds a subscription to their own topic, and a missing row reads as on, matching the column default
+			isEmailEnabled: emailEnabledByTopic.get(topic.id) ?? true,
 			scans: topicScans.map((scan) => ({
 				id: scan.id,
 				status: scan.status,

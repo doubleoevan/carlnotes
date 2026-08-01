@@ -1,0 +1,39 @@
+# the scanner set the llm-guard container runs. one pass reports every scanner's score, and the app reads only
+# the detectors that belong to the layer it is screening (worker/guard.ts owns that mapping).
+#
+# thresholds here stay permissive on purpose: the app decides what counts as a hit from LLM_GUARD_INJECTION_THRESHOLD,
+# whose value comes from the eval harness's measured false-positive rate on articles that discuss prompt injection in benign prose.
+# a threshold set twice is a threshold that drifts.
+
+app:
+  name: CarlNotes scanner
+  # the app fences untrusted text structurally and screens it here, so the scanner never rewrites content
+  scan_fail_fast: false
+
+input_scanners:
+  # injected instructions in an uploaded document or a fetched page
+  - type: PromptInjection
+    params:
+      threshold: 0.5
+      match_type: truncate_head_tail
+  # characters a human reader cannot see, including bidi overrides
+  - type: InvisibleText
+    params: {}
+  # credentials pasted into an uploaded document
+  - type: Secrets
+    params:
+      redact_mode: all
+  # personal details in an uploaded document, replaced in place rather than rejecting the whole file.
+  # PERSON is deliberately absent from the entity list: detecting them would flag nearly every attachment.
+  # only flag entities that are damaging to store
+  - type: Anonymize
+    params:
+      entity_types:
+        - US_SSN
+        - CREDIT_CARD
+        - PHONE_NUMBER
+        - EMAIL_ADDRESS
+        - IBAN_CODE
+        - US_BANK_NUMBER
+
+output_scanners: []

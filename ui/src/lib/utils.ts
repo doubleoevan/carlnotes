@@ -37,21 +37,21 @@ export function toFilteredFindings(findings: TopicFinding[], sort: FindingSort):
 // one group's ordering under the active sort mode
 function sortFindings(findings: TopicFinding[], sort: FindingSort): TopicFinding[] {
 	if (sort === "relevant") {
-		return [...findings].sort((a, b) => b.relevanceScore - a.relevanceScore)
+		return [...findings].sort((first, second) => second.relevanceScore - first.relevanceScore)
 	}
 	if (sort === "newest") {
 		return [...findings].sort(byRecency)
 	}
-	// trending ranks captured engagement first, and signal-less findings fall in behind by recency
-	return [...findings].sort((a, b) => {
-		if (a.engagement !== null && b.engagement !== null) {
-			return b.engagement - a.engagement
+	// trending ranks captured engagement value first, and value-less findings fallback to recency
+	return [...findings].sort((first, second) => {
+		if (first.engagement !== null && second.engagement !== null) {
+			return second.engagement - first.engagement
 		}
 		// a finding with a signal outranks one without, and two signal-less findings fall back to recency
-		if (a.engagement !== null || b.engagement !== null) {
-			return a.engagement !== null ? -1 : 1
+		if (first.engagement !== null || second.engagement !== null) {
+			return first.engagement !== null ? -1 : 1
 		}
-		return byRecency(a, b)
+		return byRecency(first, second)
 	})
 }
 

@@ -1,4 +1,4 @@
-// registry-first prompt loading. each prompt is fetched from Langfuse by name and degrades to the fallback template
+// registry-first prompt loading. each prompt is fetched from Langfuse by name and falls back to the bundled template
 // when Langfuse is unreachable, times out, or keys are not set
 // a topic scan can never fail or hang on the registry
 import { LangfuseClient } from "@langfuse/client"
@@ -58,7 +58,7 @@ const CACHE_TTL_SECONDS = 300
 let client: LangfuseClient | null = null
 
 /**
- * Fetches a prompt's production template from Langfuse and degrades to the fallback template.
+ * Fetches a prompt's production template from Langfuse, falling back to the bundled template.
  */
 export async function fetchPromptTemplate(
 	name: PromptName,
@@ -71,7 +71,7 @@ export async function fetchPromptTemplate(
 
 	try {
 		// fetch the production prompt version, capped by a short timeout and a five-minute cache.
-		// a cache miss with Langfuse unreachable degrades to the fallback template without throwing
+		// a cache miss with Langfuse unreachable falls back to the bundled template without throwing
 		const prompt = await promptClient().prompt.get(name, {
 			cacheTtlSeconds: CACHE_TTL_SECONDS,
 			fallback: fallbackPromptTemplate,
@@ -85,7 +85,7 @@ export async function fetchPromptTemplate(
 			registryPrompt: { name: prompt.name, version: prompt.version, isFallback: prompt.isFallback },
 		}
 	} catch (error) {
-		// any other failure — network, bad keys, an SDK bug — degrades to the fallback prompt template, never throws
+		// any other failure, whether network, bad keys, or an SDK bug, falls back to the bundled template and never throws
 		console.error(`langfuse prompt fetch failed for ${name}`, error)
 		return { template: fallbackPromptTemplate, name }
 	}

@@ -1,7 +1,7 @@
-// toScanSummary self-checks. counts dedupe across Sources, cost sums only the successful Sources, and the status and degradation rules hold
+// toScanSummary self-checks. counts dedupe across Sources, cost sums only the successful Sources, and the status and fallback rules hold
 import { expect, test } from "bun:test"
-import type { NewResource } from "./adapters/adapter"
-import { toScanSummary } from "./scan"
+import { toScanSummary } from "./ingest"
+import type { NewResource } from "./ingest/ingester"
 
 // a fake Resource with just the url and resource kind
 function resource(url: string): NewResource {
@@ -26,9 +26,9 @@ test("toScanSummary aggregates deduped counts, summed cost, and a succeeded stat
 	expect(summary.foundCount).toBe(2)
 	expect(summary.cost).toBe(0.75)
 
-	// no Source fell back, so the degraded trace stays empty
+	// no Source fell back, so the fallback trace stays empty
 	expect(summary.status).toBe("succeeded")
-	expect(summary.degradedSources).toEqual([])
+	expect(summary.fallbackSources).toEqual([])
 })
 
 // a Scan fails only when a Source errored and none succeeded
@@ -46,14 +46,14 @@ test("toScanSummary treats skipped Sources as non-failures", () => {
 	expect(toScanSummary([{ status: "skipped", sourceKind: "composio" }]).status).toBe("succeeded")
 })
 
-// only the Source that reports a fallbackMode is traced as degraded. the Scan still succeeds
-test("toScanSummary records only the degraded Source and still succeeds", () => {
+// only the Source that reports a fallbackMode is traced. the Scan still succeeds
+test("toScanSummary records only the Source that fell back and still succeeds", () => {
 	const summary = toScanSummary([
 		{ status: "ok", sourceId: "keyed", sourceKind: "youtube", resources: [resource("https://a")], cost: 0 },
 		{ status: "ok", sourceId: "fell-back", sourceKind: "reddit", resources: [], cost: 0, fallbackMode: "reddit-rss" },
 	])
 
-	// only the fallback Source is traced, and the degradation does not cause the Scan the fail
-	expect(summary.degradedSources).toEqual([{ sourceId: "fell-back", fallbackMode: "reddit-rss" }])
+	// only the Source that fell back is traced, and falling back does not fail the Scan
+	expect(summary.fallbackSources).toEqual([{ sourceId: "fell-back", fallbackMode: "reddit-rss" }])
 	expect(summary.status).toBe("succeeded")
 })

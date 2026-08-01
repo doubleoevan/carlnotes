@@ -14,7 +14,13 @@ const { extractAttachmentText, summarizeChunk, finalizeAttachment, failAttachmen
 export async function processAttachment(attachmentId: string): Promise<void> {
 	try {
 		// extract and chunk, summarize each chunk in parallel, then merge and mark ready
-		const { chunks, charCount } = await extractAttachmentText(attachmentId)
+		const { chunks, charCount, flaggedReason } = await extractAttachmentText(attachmentId)
+
+		// fail the attachment if it was flagged by the scanner so it doesn't get retried
+		if (flaggedReason) {
+			await failAttachment(attachmentId, flaggedReason)
+			return
+		}
 		const summaries = await Promise.all(chunks.map((chunkText) => summarizeChunk(chunkText)))
 		await finalizeAttachment(attachmentId, summaries, charCount, chunks.length)
 	} catch (error) {

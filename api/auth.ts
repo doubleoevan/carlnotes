@@ -1,4 +1,6 @@
 // the app's Better Auth instance: email/password and Google/GitHub sign-in, sessions in Neon via the Drizzle adapter
+import { toPlatform, trackEvent } from "@shared/analytics"
+import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
 import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { db } from "../db"
@@ -63,13 +65,18 @@ export const auth = betterAuth({
 						}
 					}
 
-					// mint a new litellm key for a new user based on email
-					// every new user starts on the free plan
+					// mint a litellm key for the new user, budgeted at the free plan they start on
 					const litellmVirtualKey = await provisionLiteLLMKey(
 						user.email,
 						effectiveBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: null }),
 					)
 					return { data: { ...user, litellmVirtualKey } }
+				},
+				// track the signup funnel's terminal event
+				after: async (user, context) => {
+					const ctaTag = toCtaTag(context?.getCookie(SIGNUP_CTA_COOKIE_NAME) ?? null)
+					const platform = toPlatform(context?.headers?.get("user-agent"))
+					trackEvent("signup_completed", user.id, { plan: "free", platform, ...(ctaTag ? { cta: ctaTag } : {}) })
 				},
 			},
 		},
@@ -117,6 +124,7 @@ async function sendVerificationEmail(email: string, url: string): Promise<void> 
 		to: email,
 		subject: "Confirm your email",
 		emailContent: `Confirm your email: <a href="${url}">${url}</a>`,
+		emailKind: "verification",
 	})
 }
 

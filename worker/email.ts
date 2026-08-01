@@ -1,12 +1,17 @@
-// send an email through Resend's HTTP API. a missing key or a failed send is logged, never thrown,
-// so a bad address never fails the caller. headers carries extras like List-Unsubscribe when the caller sets them
+// send an email through Resend's HTTP API. a failure is logged and reported rather than thrown, so a bad address never fails the caller
+import { reportError } from "@shared/monitoring"
+
+// which email is being sent, so a blocked signup reports apart from a missed digest
+export type EmailKind = "verification" | "topic-scan" | "manual-scan"
+
 export async function sendEmail(message: {
 	to: string
 	subject: string
 	emailContent: string
+	emailKind: EmailKind
 	headers?: Record<string, string>
 }): Promise<void> {
-	// without a key and a verified from-address, log and skip rather than send
+	// log and skip without a key and a verified from-address
 	const apiKey = Bun.env.RESEND_API_KEY
 	const fromEmail = Bun.env.RESEND_FROM_EMAIL
 	if (!apiKey || !fromEmail) {
@@ -14,7 +19,8 @@ export async function sendEmail(message: {
 		return
 	}
 
-	// post the email to Resend. a non-2xx response or a network error is logged, never thrown
+	// post the email to Resend. a failure is logged rather than thrown, and names the domain instead of the address
+	const recipientDomain = message.to.split("@")[1] ?? "an unknown domain"
 	try {
 		const response = await fetch("https://api.resend.com/emails", {
 			method: "POST",
@@ -28,14 +34,44 @@ export async function sendEmail(message: {
 			}),
 		})
 		if (!response.ok) {
-			console.error(`resend email to ${message.to} failed: ${response.status} ${await response.text()}`)
+			// a subscriber silently not receiving their digest looks identical to a quiet scan, so it is reported.
+			const errorBody = await response.text()
+			console.error(`resend ${message.emailKind} to ${recipientDomain} failed: ${response.status} ${errorBody}`)
+			reportError(new Error(`resend rejected the send with ${response.status}`), "email", {
+				status: String(response.status),
+				emailKind: message.emailKind,
+				recipientDomain,
+				resendError: toResendErrorName(errorBody),
+			})
 			return
 		}
 
-		// log the accepted message id, so a send that never lands can be traced in resend rather than guessed at
-		const { id } = (await response.json()) as { id?: string }
-		console.log(`resend accepted email to ${message.to} as ${id ?? "an unknown id"}`)
+		// log the message id, so a send that never lands can be traced in resend
+		console.log(`resend accepted ${message.emailKind} to ${recipientDomain} as ${await toResendMessageId(response)}`)
 	} catch (error) {
-		console.error(`resend email to ${message.to} threw`, error)
+		console.error(`resend ${message.emailKind} to ${recipientDomain} threw`, error)
+		reportError(error, "email", { emailKind: message.emailKind, recipientDomain })
+	}
+}
+
+/**
+ * The error name out of Resend's JSON body
+ */
+export function toResendErrorName(errorBody: string): string {
+	try {
+		const { name } = JSON.parse(errorBody) as { name?: string }
+		return name ?? "an unnamed error"
+	} catch {
+		return "an unparsed error"
+	}
+}
+
+// the message id out of Resend's JSON body
+async function toResendMessageId(response: Response): Promise<string> {
+	try {
+		const { id } = (await response.json()) as { id?: string }
+		return id ?? "an unknown id"
+	} catch {
+		return "an unreadable id"
 	}
 }

@@ -1,4 +1,4 @@
-// search adapter tests for the result parser and prompt builder
+// search ingester tests for the result parser and prompt builder
 import { expect, test } from "bun:test"
 import { buildSearchPrompt, parseResults } from "./search"
 

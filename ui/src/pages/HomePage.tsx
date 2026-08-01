@@ -81,7 +81,7 @@ export function HomePage() {
 		if (isSignedIn) {
 			setIsNewTopicOpen(true)
 		} else {
-			navigate("/signup")
+			navigate("/signup?cta=new-topic")
 		}
 	}
 
@@ -215,7 +215,7 @@ function TopicsRemaining({ remaining, isSignedIn }: { remaining: number | null; 
 				isLoading={false}
 				isUnlimited={false}
 				label={`${PLANS.free.topicLimit} left`}
-				href="/signup"
+				href="/signup?cta=topic-quota"
 				tooltip="Sign up to add"
 			/>
 		)

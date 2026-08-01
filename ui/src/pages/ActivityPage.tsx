@@ -47,7 +47,7 @@ function ActivitySections({ activity, onReload }: { activity: ActivityResponse; 
 				<AccordionItem value="topics" className="border-b-0">
 					<AccordionTrigger className="font-semibold">Your topics</AccordionTrigger>
 					<AccordionContent>
-						<TopicsTable topics={activity.topics} />
+						<TopicsTable topics={activity.topics} onReloadPage={onReload} />
 					</AccordionContent>
 				</AccordionItem>
 

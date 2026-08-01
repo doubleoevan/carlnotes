@@ -1,11 +1,14 @@
 // scans every Topic scheduled by its frequency and emails its new Findings to subscribers.
 // whether a Topic is scheduled is computed from its frequency and its Scans, so a sweep is safe to repeat
+import { shutdownAnalytics } from "@shared/analytics"
+import { reportError, shutdownMonitoring, startMonitoring } from "@shared/monitoring"
 import { and, eq, lt, ne, sql } from "drizzle-orm"
 import { db } from "../db"
 import { scansRemainingToday } from "../db/quotas"
 import { scans, topics } from "../db/schema"
 import { sendTopicScanEmail } from "./notify"
 import { runTopicScan } from "./scan"
+import { shutdownTelemetry, startTelemetry } from "./telemetry"
 
 // one day in milliseconds, the daily frequency window and the base that the weekly window multiplies
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -20,7 +23,7 @@ type Scan = typeof scans.$inferSelect
 export type TopicSweepSummary = { scheduled: number; scanned: number; skippedOverQuota: number; failed: number }
 
 // a scheduled topic sweep: scan every scheduled Topic under its owner's daily quota, then email its new Findings, isolating failures.
-// wrapped so an overlapping tick is skipped rather than duplicating and reviewing the same Topic's still-running Scan a second time
+// wrapped with `toExclusiveTask` so an overlapping run is skipped rather than overlapping
 export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSweepSummary> => {
 	// close out any hung topic scans first, so a Topic stuck mid-scan shows its failure and stops blocking its own next scan
 	await failStaleScans()
@@ -50,8 +53,9 @@ export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSwe
 			}
 			trackSweepOutcome(topicSweepSummary, topicScan)
 		} catch (error) {
-			// the topic scan threw, so no Scan row came back to inspect. log it, count it, and move on to the next scheduled Topic
+			// the topic scan threw, so no Scan row came back to inspect. log it, report it, count it, and move on
 			console.error(`scheduled scan failed for topic ${topic.id}`, error)
+			reportError(error, "scheduled-scan", { topicId: topic.id, ownerId: topic.ownerId })
 			topicSweepSummary.failed++
 		}
 	}
@@ -116,7 +120,7 @@ export function trackSweepOutcome(summary: TopicSweepSummary, scan: Pick<Scan, "
 }
 
 // return the Topics scheduled for a scan with this sweep, computed from each Topic's frequency and its most recent Scan
-export async function loadScheduledTopics(now = new Date()): Promise<Topic[]> {
+async function loadScheduledTopics(now = new Date()): Promise<Topic[]> {
 	// the start of each Topic's most recent finished Scan, counting failed ones. a new Topic has none, so it is due
 	const latestScans = await db
 		.select({ topicId: scans.topicId, lastStartedAt: sql<string>`max(${scans.startedAt})` })
@@ -173,6 +177,10 @@ function isWeekend(now: Date): boolean {
 // run one sweep and exit, so a platform cron can invoke this file on a schedule.
 // locally, set SCHEDULE_INTERVAL_MS to keep sweeping on an interval instead of exiting
 if (import.meta.main) {
+	// trace and monitor the scan path. both no-op without their keys
+	startTelemetry()
+	startMonitoring()
+
 	// run one sweep now, then keep on looping only if an interval is set
 	const intervalMs = Number(Bun.env.SCHEDULE_INTERVAL_MS ?? "0")
 	await runScheduledTopicScans()
@@ -180,5 +188,10 @@ if (import.meta.main) {
 		setInterval(() => {
 			runScheduledTopicScans().catch((error) => console.error("scheduled scan sweep failed", error))
 		}, intervalMs)
+	} else {
+		// the cron invocation exits here, so its spans, events, and reports have to be flushed first
+		await shutdownTelemetry()
+		await shutdownAnalytics()
+		await shutdownMonitoring()
 	}
 }

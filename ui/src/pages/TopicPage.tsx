@@ -95,7 +95,7 @@ export function TopicPage() {
 		}
 		// a visitor has to sign up before subscribing
 		if (!session) {
-			navigate("/signup")
+			navigate("/signup?cta=subscribe")
 			return
 		}
 		const isJoining = !topicResponse.isSubscribed
@@ -208,7 +208,10 @@ export function TopicPage() {
 							{/* a grid item sizes to its widest content unless told not to, so long urls inside these cards
 							    would push the column past the viewport instead of truncating */}
 							<div className="min-w-0">
-								<TopicScanHistory scans={topicResponse.scans} />
+								<TopicScanHistory
+									scans={topicResponse.scans}
+									allowedUrls={new Set(topicResponse.findings.map((finding) => finding.url))}
+								/>
 								<TopicSettingsCard topic={topicResponse} />
 							</div>
 							<TopicInfoCard topic={topicResponse} />

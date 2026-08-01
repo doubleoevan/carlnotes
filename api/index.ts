@@ -1,6 +1,7 @@
 // the api server for the topic feed and topic pages. the ui calls these routes through a fully typed client.
 import { zValidator } from "@hono/zod-validator"
 import {
+	attachmentContextPayload,
 	attachmentUrlPayload,
 	bookmarkPayload,
 	budgetOverridePayload,
@@ -14,6 +15,7 @@ import {
 	subscriptionPayload,
 	updateTopicPayload,
 } from "@shared/contracts"
+import { startMonitoring } from "@shared/monitoring"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { serveStatic } from "hono/bun"
@@ -25,14 +27,15 @@ import {
 	ingestAttachment,
 	ingestUrlAttachment,
 	MAX_ATTACHMENT_BYTES,
+	startTelemetry,
 } from "../worker"
 import { loadActivity } from "./activity"
 import { loadAdminTotals, loadAdminUsers, setUserBudgetOverride, setUserRole } from "./admin"
 import { auth, GATE_COOKIE_MAX_AGE_SECONDS, GATE_COOKIE_NAME, signGateToken, verifyTurnstileToken } from "./auth"
 import { isAllowed, topicsRemaining } from "./authorization"
 import { createCheckoutSession, createPortalSession, handleStripeWebhook, loadBillingState } from "./billing"
-import { type AppEnv, currentUser } from "./currentUser"
-import { deleteTopicAttachment, loadDownloadableAttachment } from "./topic/attachments"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
+import { deleteTopicAttachment, loadDownloadableAttachment, updateTopicAttachmentContext } from "./topic/attachments"
 import { buildTopicFeeds } from "./topic/feeds"
 import { recordView, setBookmarked, setConsumed, setRating } from "./topic/findings"
 import { loadOwnedTopic } from "./topic/permissions"
@@ -108,7 +111,7 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// create a topic for the current user within the topic cap
-		const createTopicResult = await createTopic(userId, context.req.valid("json"))
+		const createTopicResult = await createTopic(userId, context.req.valid("json"), toAnalyticsProperties(context))
 		return createTopicResult.status === "created"
 			? context.json({ id: createTopicResult.id })
 			: context.json({ error: "quota exhausted" }, 429)
@@ -119,8 +122,9 @@ const route = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// rate this topic finding up, down, or clear the rating. only its topic's owner or a subscriber may
-		const isRated = await setRating(userId, context.req.param("id"), context.req.valid("json").rating)
+		// rate this topic finding up, down, or clear the rating
+		const rating = context.req.valid("json").rating
+		const isRated = await setRating(userId, context.req.param("id"), rating, toAnalyticsProperties(context))
 		return isRated ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.post("/topic-findings/:id/consume", zValidator("json", consumedPayload), async (context) => {
@@ -130,7 +134,13 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// mark this topic finding consumed or unread for the current user
-		const isConsumed = await setConsumed(userId, context.req.param("id"), context.req.valid("json").isConsumed)
+		const { isConsumed: isMarkedConsumed } = context.req.valid("json")
+		const isConsumed = await setConsumed(
+			userId,
+			context.req.param("id"),
+			isMarkedConsumed,
+			toAnalyticsProperties(context),
+		)
 		return isConsumed ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.post("/topic-findings/:id/bookmark", zValidator("json", bookmarkPayload), async (context) => {
@@ -140,7 +150,13 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// bookmark or unbookmark this topic finding for the current user, keeping the count below the max results
-		const isBookmarkSet = await setBookmarked(userId, context.req.param("id"), context.req.valid("json").isBookmarked)
+		const { isBookmarked } = context.req.valid("json")
+		const isBookmarkSet = await setBookmarked(
+			userId,
+			context.req.param("id"),
+			isBookmarked,
+			toAnalyticsProperties(context),
+		)
 		return isBookmarkSet ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.post("/topic-findings/:id/view", async (context) => {
@@ -150,7 +166,7 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// opening a resource records a view on its topic finding and marks the finding consumed
-		const isViewed = await recordView(userId, context.req.param("id"))
+		const isViewed = await recordView(userId, context.req.param("id"), toAnalyticsProperties(context))
 		return isViewed ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.get("/topics/:id", async (context) => {
@@ -185,7 +201,7 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// trigger a manual scan, billed as overage past the daily quota when a card is on file. owner or admin only.
-		const scanResult = await runManualScan(userId, context.req.param("id"))
+		const scanResult = await runManualScan(userId, context.req.param("id"), toAnalyticsProperties(context))
 		if (scanResult.status === "started") {
 			return context.json({ remaining: scanResult.remaining })
 		}
@@ -326,6 +342,21 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "Carl couldn't process that link. Try again in a moment." }, 502)
 		}
 	})
+	.patch("/attachments/:id/context", zValidator("json", attachmentContextPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+
+		// replace the previously saved attachment context
+		const isContextUpdated = await updateTopicAttachmentContext(
+			userId,
+			context.req.param("id"),
+			context.req.valid("json").context,
+		)
+		return isContextUpdated ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
 	.delete("/attachments/:id", async (context) => {
 		// reject a signed-out caller
 		const userId = currentUser(context)
@@ -443,8 +474,12 @@ const route = new Hono<AppEnv>()
 // the ui builds its typed client from this definition
 export type AppType = typeof route
 
-// one origin serves the api and the built ui. order matters here: the api tree is mounted first,
-// and the /api catch-all below it ends every remaining /api path as JSON, so the app shell can never answer for a missing endpoint
+// start error monitoring, analytics tracking, and model-call tracing before the api starts serving
+// all are no-op without their keys set as environment variables
+startMonitoring()
+startTelemetry()
+
+// one origin serves the api and the built ui. the /api catch-all is mounted before the app shell, so a missing endpoint answers JSON not html
 const app = new Hono()
 	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
 	.get("/api/health", (context) => context.json({ status: "ok" }))
@@ -457,8 +492,7 @@ const app = new Hono()
 	// without a bundle built, this finds nothing and falls through to a 404, which is the normal state in dev
 	.on(["GET", "HEAD"], "*", serveStatic({ path: `${UI_BUNDLE_ROOT}/index.html`, onFound: setBundleCacheControl }))
 
-// a hashed asset filename never changes contents, so it caches for a year and is never revalidated.
-// everything else keeps its name across deployments and must revalidate to pick up a new bundle
+// a hashed filename never changes contents, so it caches for a year. everything else must revalidate to pick up a new bundle
 function setBundleCacheControl(_path: string, context: Context): void {
 	const isHashedAsset = context.req.path.startsWith("/assets/")
 	context.header("Cache-Control", isHashedAsset ? "public, max-age=31536000, immutable" : "no-cache")

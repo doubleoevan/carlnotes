@@ -6,6 +6,7 @@ import { Switch } from "@/components/primitives/switch"
 import { SortableHeader, useRowSort } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { TopicScanRecap } from "@/components/topic/TopicScanRecap"
+import { sendSubscriptionEmail } from "@/lib/topicClient"
 import { durationMsBetween, TABLE_CARD_CLASS, toCentsLabel, toDurationLabel } from "@/lib/utils"
 
 // the sort accessors for the owned-topics table columns
@@ -22,18 +23,22 @@ const topicSortValues = {
  * The Activity page's owned-topics table: sortable columns, cost last, a totals line, and a cost-cell click
  * opening that topic's scan drill-down.
  */
-export function TopicsTable({ topics }: { topics: ActivityTopic[] }) {
+export function TopicsTable({ topics, onReloadPage }: { topics: ActivityTopic[]; onReloadPage: () => void }) {
 	const [expandedTopicIds, setExpandedTopicIds] = useState<Set<string>>(new Set())
-	// the email preference is not persisted yet, so it resets on reload
-	const [emailsOffTopicIds, setEmailsOffTopicIds] = useState<Set<string>>(new Set())
-	// the Emails column sorts on local toggle state, so its accessor is built here instead of in topicSortValues
-	const sortValues = { ...topicSortValues, emails: (topic: ActivityTopic) => (emailsOffTopicIds.has(topic.id) ? 0 : 1) }
+	// the Emails column sorts on the owner's stored preference, so its accessor is built here instead of in topicSortValues
+	const sortValues = { ...topicSortValues, emails: (topic: ActivityTopic) => (topic.isEmailEnabled ? 1 : 0) }
 	// sort feeds pagination, so a sorted column reorders across every page
 	const { pageRows, sort, pagination } = usePaginatedRowSort(topics, sortValues)
 
 	// toggle one topic's scan history open or closed
 	function handleCostCellClick(topicId: string): void {
 		setExpandedTopicIds((previous) => withTopicId(previous, topicId, !previous.has(topicId)))
+	}
+
+	// the owner holds a subscription to their own topic, so this writes the same preference the subscriptions table does
+	async function handleEmailChange(topicId: string, isEmailEnabled: boolean): Promise<void> {
+		await sendSubscriptionEmail(topicId, isEmailEnabled)
+		onReloadPage()
 	}
 
 	if (topics.length === 0) {
@@ -101,10 +106,8 @@ export function TopicsTable({ topics }: { topics: ActivityTopic[] }) {
 								<td className="py-2 pr-4">{new Date(topic.updatedAt).toLocaleDateString()}</td>
 								<td className="py-2 pr-4">
 									<Switch
-										checked={!emailsOffTopicIds.has(topic.id)}
-										onCheckedChange={(isOn) =>
-											setEmailsOffTopicIds((previous) => withTopicId(previous, topic.id, !isOn))
-										}
+										checked={topic.isEmailEnabled}
+										onCheckedChange={(isOn) => handleEmailChange(topic.id, isOn)}
 										aria-label={`${topic.name} emails`}
 									/>
 								</td>

@@ -3,9 +3,9 @@
 import { and, eq, isNotNull } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, scans, sources, topics, users } from "../db/schema"
-// the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
-import { buildSearchPrompt } from "./adapters/search"
 import { buildContextPrompt } from "./attach"
+// the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
+import { buildSearchPrompt } from "./ingest/search"
 import { buildScorePrompt } from "./review/score"
 import { buildScanReportPrompt } from "./review/summarize"
 import { runTopicScan } from "./scan"
@@ -145,7 +145,12 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		// a single kept finding with zeroed drop tallies
 		reviewOutcome: {
 			keptFindings: [sampleFinding],
-			filteredCounts: { "duplicate content": 0, "near-duplicate": 0, "below relevance threshold": 0 },
+			filteredCounts: {
+				"duplicate content": 0,
+				"near-duplicate": 0,
+				"below relevance threshold": 0,
+				"flagged by scanner": 0,
+			},
 			deferredCount: 0,
 			failedCount: 0,
 		},
@@ -154,7 +159,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		budget: {
 			spent: 0,
 			cap: 0.5,
-			stageCosts: { embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 },
+			stageCosts: { ingestion: 0, embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 },
 			maxScoredResources: 25,
 			fetchCounts: { reusedCount: 0, revalidatedCount: 0, fetchedCount: 0 },
 		},
@@ -166,13 +171,27 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	)
 	console.log(`registry serving  : ${servedFromRegistry ? "prompts served from Langfuse" : "bundled markdown only"}`)
 
-	// each prompt renders to a non-empty string
-	return [
-		["score prompt renders", scoreResult.prompt.length > 0],
-		["search prompt renders", searchResult.prompt.length > 0],
-		["attachment context prompt renders", contextResult.prompt.length > 0],
-		["scan report prompt renders", reportResult.prompt.length > 0],
+	// each prompt renders to a non-empty string, and each one fences its untrusted inputs and closes with our own words.
+	// the registry serves these bodies too, so this is what catches a prompt edited in the Langfuse ui without the fence
+	const builtPrompts: [string, string][] = [
+		["score prompt", scoreResult.prompt],
+		["search prompt", searchResult.prompt],
+		["attachment context prompt", contextResult.prompt],
+		["scan report prompt", reportResult.prompt],
 	]
+	return builtPrompts.flatMap(([label, prompt]) => [
+		[`${label} renders`, prompt.length > 0],
+		[`${label} fences its untrusted inputs`, isFenced(prompt)],
+		// the fence closes above the final line, so a prompt ending on a closing tag ends on a value
+		[`${label} restates the task last`, !prompt.trimEnd().endsWith(">")],
+	])
+}
+
+// whether a written prompt wraps its untrusted values in a matched nonce delimiter
+function isFenced(prompt: string): boolean {
+	// requires an open tag with a nonce, and a close tag carrying the same nonce
+	const openTag = prompt.match(/<untrusted-data-([0-9a-f-]{36})>/)
+	return Boolean(openTag && prompt.includes(`</untrusted-data-${openTag[1]}>`))
 }
 
 // seed the test data and run the checks, then always delete the fake owner

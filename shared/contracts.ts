@@ -72,11 +72,12 @@ export type ActivityTopic = {
 	createdAt: string
 	updatedAt: string
 	monthCostCents: number
+	// the owner's own subscription decides whether this topic emails them
+	isEmailEnabled: boolean
 	scans: ActivityScan[]
 }
 
-// one row of the Activity page's subscriptions table: kept until manually deleted
-// invite subscriptions need to be manually set to active by the recipient
+// one row of the Activity page's subscriptions table, kept until manually deleted. an invite stays inactive until the recipient activates it
 export type SubscriptionRow = {
 	topicId: string
 	name: string
@@ -180,7 +181,7 @@ export const topicFinding = z.object({
 	rating: z.enum(ratings).nullable(),
 	isConsumed: z.boolean(),
 	isBookmarked: z.boolean(),
-	// the resource's captured engagement score, like a reddit score. null when no adapter recorded one
+	// the resource's captured engagement score, like a reddit score. null when no ingester recorded one
 	engagement: z.number().nullable(),
 })
 export type TopicFinding = z.infer<typeof topicFinding>
@@ -223,6 +224,8 @@ export const topicFeed = z.object({
 			filename: z.string(),
 			sourceUrl: z.string().nullable(),
 			status: z.enum(attachmentStatuses),
+			// the generated context that steers every later scan, for the owner and admins to edit. null for anyone else
+			context: z.string().nullable(),
 		}),
 	),
 	sources: z.array(z.object({ id: z.string(), kind: z.enum(sourceKinds) })),
@@ -298,6 +301,24 @@ export type SubscriptionPayload = z.infer<typeof subscriptionPayload>
 // the add-attachment-by-url body. ingestUrlAttachment owns the actual url validation, so this just requires it to be non-empty
 export const attachmentUrlPayload = z.object({ url: z.string().trim().min(1) })
 export type AttachmentUrlPayload = z.infer<typeof attachmentUrlPayload>
+
+// which signup button converted, kept in a cookie so it survives the oauth round-trip. the ui writes it, so it cannot live in shared/analytics
+export const SIGNUP_CTA_COOKIE_NAME = "signup_cta"
+
+// the allowed shape of a cta tag: a short slug, so nothing user-typed or tampered ever becomes an event property
+const CTA_TAG_PATTERN = /^[a-z0-9-]{1,40}$/
+
+/**
+ * The cta value when it is a well-formed tag, else null, so a garbled cookie never reaches analytics.
+ */
+export function toCtaTag(value: string | null | undefined): string | null {
+	return value && CTA_TAG_PATTERN.test(value) ? value : null
+}
+
+// the edited attachment context body. the same cap the worker applies to a generated context, so an edit can't inflate scan tokens
+export const MAX_ATTACHMENT_CONTEXT_CHARS = 8000
+export const attachmentContextPayload = z.object({ context: z.string().trim().max(MAX_ATTACHMENT_CONTEXT_CHARS) })
+export type AttachmentContextPayload = z.infer<typeof attachmentContextPayload>
 
 // the manual scan response which is how many manual scans the user has left today
 export const manualScanResponse = z.object({ remaining: z.number() })

@@ -26,7 +26,9 @@ A `▾ Findings` accordion (default expanded) SHALL list the Topic's Findings wi
 - **THEN** only unread Findings show, and selecting All restores the full list with read rows muted
 
 ### Requirement: A right-rail info card summarizes the Topic
-Beside the History list (top-aligned with it, not with Findings), a single info card SHALL show, separated by thin dashed rules: Carl's Notes (the latest succeeded Scan's recap, when one exists); Carl's Prompt; Sources; Attachments as links where a url opens its page and a file downloads for the owner only; Schedule as the frequency, a muted "last scan" age, and how long that scan took; Visibility with its glyph (🔒 private, 🌐 public, ✉ invite); and, for the owner or an admin, this calendar month's total scan spend. The Sources section SHALL lead with the default source — Carl's built-in web scout (the search Source, whose adapter derives queries from the topic prompt), labeled `web` and shown as on or muted off — followed by one line per custom Source with a type glyph, its kind, and a config summary (feed host, subreddit, or channel/playlist id).
+Beside the History list (top-aligned with it, not with Findings), a single info card SHALL show, separated by thin dashed rules: Carl's Notes (the latest succeeded Scan's recap, when one exists); Carl's Prompt; Sources; Attachments as links where a url opens its page and a file downloads for the owner only; Schedule as the frequency, a muted "last scan" age, and how long that scan took; Visibility with its glyph (🔒 private, 🌐 public, ✉ invite); and, for the owner or an admin, this calendar month's total scan spend. The Sources section SHALL lead with the default source — Carl's built-in web scout (the search Source, whose ingester derives queries from the topic prompt), labeled `web` and shown as on or muted off — followed by one line per custom Source with a type glyph, its kind, and a config summary (feed host, subreddit, or channel/playlist id).
+
+Carl's Notes, and the same recap wherever the scan-history and activity drill-downs render it, SHALL render through the hardened markdown subset `injection-defense` requires: bold, lists, and headings render, a citation of a kept Finding's stored url renders as a real link, and every other link, image, or piece of raw HTML is neutralized into inert text — because a model wrote it from attacker-reachable content. A recap citing an item pruned since (or shown on a surface without the findings in hand, like the Activity drill-down) renders that citation inert rather than guessing.
 
 #### Scenario: The info card renders every section
 - **WHEN** the owner views a Topic with sources and a finished Scan
@@ -35,6 +37,10 @@ Beside the History list (top-aligned with it, not with Findings), a single info 
 #### Scenario: A topic without a search source shows the scout as off
 - **WHEN** the user views a Topic that has no search Source
 - **THEN** the Sources section still leads with the web scout line, muted and marked off
+
+#### Scenario: Carl's notes link only to kept findings
+- **WHEN** the latest Scan's recap cites a kept Finding's url and also contains a link elsewhere or HTML syntax
+- **THEN** the kept citation renders as a real link, everything else shows as inert text with no clickable link and no embedded markup, and the recap's bold and lists still render
 
 ### Requirement: Access to the page follows Topic visibility
 The topic page payload SHALL be served to the owner always, to an admin for any Topic (the single platform override, so an admin can open any Topic to edit or delete it), to anyone for public Topics, and for invite Topics only to users whose account email is invited or who already subscribe. Private Topics SHALL be served only to the owner or an admin. Any other request SHALL get not-found, and the ui SHALL render a not-found message rather than an empty page. Access SHALL be decided through `isAllowed(user, "topic:view", topic)`.

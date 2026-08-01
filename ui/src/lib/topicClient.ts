@@ -9,18 +9,42 @@ import {
 	type UpdateTopicPayload,
 } from "@shared/contracts"
 import { hc } from "hono/client"
+import { toast } from "sonner"
 import type { AppType } from "../../../api"
 
 // same-origin client. in dev vite forwards /api to the Hono server,
 // and in prod one service serves both the ui and the api
 const client = hc<AppType>(window.location.origin)
 
-// logs a rejected write. these mutations update the ui optimistically, so a silent failure leaves a change on screen the server never made
-// TODO: report these to Sentry once it lands
-async function reportFailedWrite(request: Promise<Response>, action: string): Promise<void> {
-	const response = await request
-	if (!response.ok) {
-		console.error(`${action} failed: ${response.status} ${await response.text()}`)
+// tells the reader a write was rejected. every caller reloads the page afterward, so the screen shows the
+// unchanged truth and the click just looks ignored. isBackground skips the toast for a write the reader
+// never asked for by itself.
+// TODO: report these once the ui has its own Sentry client, since shared/monitoring is server-only
+async function reportFailedWrite(request: Promise<Response>, action: string, isBackground = false): Promise<void> {
+	// a rejected request never reaches a Response at all, so an offline reader is told the same as a refused write
+	let response: Response
+	try {
+		response = await request
+	} catch (error) {
+		console.error(`${action} failed to reach the server`, error)
+		reportRejectedWrite(isBackground)
+		return
+	}
+
+	// the server answered, so only a rejected status is a failure from here
+	if (response.ok) {
+		return
+	}
+
+	// the log carries the detail, the toast only tells the reader it did not stick
+	console.error(`${action} failed: ${response.status} ${await response.text()}`)
+	reportRejectedWrite(isBackground)
+}
+
+// the one message a failed write shows, skipped for a write the reader never asked for by itself
+function reportRejectedWrite(isBackground: boolean): void {
+	if (!isBackground) {
+		toast.error("That didn't save. Carl suggests trying again.")
 	}
 }
 
@@ -54,11 +78,13 @@ export async function sendTopicFindingBookmark(findingId: string, isBookmarked: 
 	)
 }
 
-// record that the user opened a topic finding resource. marks it consumed and increments its view count
+// record that the user opened a topic finding resource. marks it consumed and increments its view count.
+// it rides along with opening the link, so a failure stays silent rather than toasting at someone already reading
 export async function sendTopicFindingOpened(findingId: string): Promise<void> {
 	await reportFailedWrite(
 		client.api["topic-findings"][":id"].view.$post({ param: { id: findingId } }),
 		"record topic finding view",
+		true,
 	)
 }
 
@@ -149,6 +175,17 @@ export async function sendAttachmentUrl(topicId: string, url: string): Promise<v
 	if (!response.ok) {
 		const body = (await response.json().catch(() => null)) as { error?: string } | null
 		throw new Error(body?.error ?? `attachment url failed: ${response.status}`)
+	}
+}
+
+// replace an attachment's generated context, the text that steers every later scan. throws on a rejected edit
+export async function sendAttachmentContext(attachmentId: string, context: string): Promise<void> {
+	const response = await client.api.attachments[":id"].context.$patch({
+		param: { id: attachmentId },
+		json: { context },
+	})
+	if (!response.ok) {
+		throw new Error(`attachment context update failed: ${response.status}`)
 	}
 }
 

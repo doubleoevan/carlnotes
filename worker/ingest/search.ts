@@ -1,4 +1,4 @@
-// the search adapter. a model converts the topic's context into search queries, Exa runs them, and the results become "read" Resources
+// the search ingester. a model converts the topic's context into search queries, Exa runs them, and the results become "read" Resources
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { buildTopicScanContext } from "../attach"
@@ -6,7 +6,7 @@ import { cheapModel } from "../models.ts"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch.ts"
 import { writePrompt } from "../prompts/write.ts"
-import type { NewResource, Source, SourceAdapter } from "./adapter"
+import type { NewResource, Source, SourceIngester } from "./ingester"
 import { fetchVideos, playlistIdFromUrl } from "./youtube"
 
 // query and fetch limits
@@ -19,7 +19,7 @@ const FETCH_TIMEOUT_MS = 10_000
 const EXA_ENDPOINT = "https://api.exa.ai/search"
 
 // read the topic's context, generate queries from it, search per query, and merge the deduped "read" Resources
-export const searchAdapter: SourceAdapter = async (source: Source) => {
+export const searchIngester: SourceIngester = async (source: Source) => {
 	// the context combines the topic's prompt with its attachments along with the topic name to be used for query generation
 	const { name, context } = await buildTopicScanContext(source.topicId)
 
@@ -59,7 +59,9 @@ export async function buildSearchPrompt(context: string, name: string): Promise<
 	// fall back to the topic name when the context is empty and cap the context length to bound token spend
 	const topicContext = (context.trim() || name).slice(0, MAX_CONTEXT_CHARS)
 	const { template, name: promptName, registryPrompt } = await fetchPromptTemplate("search-topic")
-	const prompt = writePrompt(template, { maxQueries: String(MAX_QUERIES), topicContext })
+
+	// the topic's context is user-supplied text, not app-generated, so it gets fenced in the prompt as untrusted
+	const prompt = writePrompt(template, { topicContext }, { maxQueries: String(MAX_QUERIES) })
 	return { prompt, name: promptName, registryPrompt }
 }
 
@@ -180,7 +182,7 @@ async function expandYouTubePlaylist(resource: NewResource, apiKey: string): Pro
 		return [resource]
 	}
 
-	// a private, deleted, or slow playlist degrades to its "read" link instead of failing the whole search batch
+	// a private, deleted, or slow playlist falls back to its "read" link instead of failing the whole search batch
 	try {
 		return await fetchVideos(playlistId, apiKey)
 	} catch (error) {

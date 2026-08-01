@@ -1,10 +1,11 @@
 // the shared helper for feeds that don't require an API key. it fetches an RSS or Atom url and parses it into deduped Resources
 import Parser from "rss-parser"
-import type { NewResource } from "./adapter"
+import { toFetchableUrl } from "../scrape"
+import type { NewResource } from "./ingester"
 
 // fetch limits used to bound slow feeds and reject oversized bodies
 const FETCH_TIMEOUT_MS = 10_000
-// cap the buffered body after reading. a streaming cap that aborts mid-download only if it matters
+// the cap applied while reading, so an oversized feed never lands in memory
 const MAX_FEED_BYTES = 5_000_000
 
 // one reusable parser handles both RSS 2.0 and Atom
@@ -17,19 +18,48 @@ export async function fetchFeed(
 ): Promise<NewResource[]> {
 	// send a descriptive User-Agent when the caller provides one. reddit rejects generic or missing agents
 	const headers = options.userAgent ? { "user-agent": options.userAgent } : undefined
-	const response = await fetch(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+	const response = await fetch(toFetchableUrl(url), { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 
 	// reject error responses before reading the body
 	if (!response.ok) {
 		throw new Error(`feed ${url} returned ${response.status}`)
 	}
+	return parseFeed(await readCappedBody(response, url), options.resourceKind)
+}
 
-	// content-length is often absent on feeds, so cap the actual body once read, then parse it
-	const body = await response.text()
-	if (body.length > MAX_FEED_BYTES) {
-		throw new Error(`feed ${url} exceeds ${MAX_FEED_BYTES} bytes`)
+// read the body a chunk at a time and stop at the cap, so an endless response is dropped instead of buffered whole
+async function readCappedBody(response: Response, url: string): Promise<string> {
+	const reader = response.body?.getReader()
+	if (!reader) {
+		return ""
 	}
-	return parseFeed(body, options.resourceKind)
+
+	// chunks are collected rather than decoded as they arrive, since a character can straddle two of them
+	const chunks: Uint8Array[] = []
+	let byteCount = 0
+	while (true) {
+		const { done, value } = await reader.read()
+		if (done) {
+			break
+		}
+
+		// cancelling closes the connection, so an endless response stops costing us bandwidth
+		byteCount += value.length
+		if (byteCount > MAX_FEED_BYTES) {
+			await reader.cancel()
+			throw new Error(`feed ${url} exceeds ${MAX_FEED_BYTES} bytes`)
+		}
+		chunks.push(value)
+	}
+
+	// join the chunks once, since a decoder cannot span them safely
+	const body = new Uint8Array(byteCount)
+	let offset = 0
+	for (const chunk of chunks) {
+		body.set(chunk, offset)
+		offset += chunk.length
+	}
+	return new TextDecoder().decode(body)
 }
 
 // parsing is separate from fetching so it can be tested without a network. entries are deduped within the feed by canonical url

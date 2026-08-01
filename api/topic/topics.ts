@@ -1,10 +1,12 @@
 // the topic logic behind the api routes. it loads one topic's full payload and applies the owner's creates, edits, and deletes
+import { trackEvent } from "@shared/analytics"
 import type { TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contracts"
 import { and, count, desc, eq, notInArray, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { attachments, scans, sources, subscriptions, topicInvites, topics } from "../../db/schema"
 import { deleteAttachment } from "../../worker"
 import { isAllowed, isMonthlySpendExhausted, loadUserAccess } from "../authorization"
+import type { AnalyticsProperties } from "../currentUser"
 import { loadTopicFindings, newTopicFindingCount, toUrlHost } from "./findings"
 import { loadDirectSubscription, subscriptionActivatedAt } from "./permissions"
 import { scansRemaining, startOfUtcMonth } from "./quotas"
@@ -40,16 +42,20 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 		summary: toSourceSummary(source.kind, source.config),
 	}))
 
-	// the attachments and the scan history, newest scan first
-	const attachmentRows = await db
-		.select({
-			id: attachments.id,
-			filename: attachments.filename,
-			sourceUrl: attachments.sourceUrl,
-			status: attachments.status,
-		})
-		.from(attachments)
-		.where(eq(attachments.topicId, topic.id))
+	// the attachments and the scan history, newest scan first.
+	// the generated context steers every later scan, so the owner and admins see it to edit it, and nobody else does
+	const attachmentRows = (
+		await db
+			.select({
+				id: attachments.id,
+				filename: attachments.filename,
+				sourceUrl: attachments.sourceUrl,
+				status: attachments.status,
+				context: attachments.context,
+			})
+			.from(attachments)
+			.where(eq(attachments.topicId, topic.id))
+	).map((attachment) => ({ ...attachment, context: isAdmin || isOwner ? attachment.context : null }))
 	const scanRows = await db.select().from(scans).where(eq(scans.topicId, topic.id)).orderBy(desc(scans.startedAt))
 	const scanHistory: TopicScan[] = scanRows.map((scan) => ({
 		id: scan.id,
@@ -168,7 +174,7 @@ export function toSourceSummary(kind: string, config: Record<string, unknown>): 
 		return toUrlHost(url) ?? url
 	}
 
-	// a search source is the built-in web scout. its adapter ignores the config, so the ui supplies the copy
+	// a search source is the built-in web search. its ingester ignores the config, so the ui supplies the copy
 	if (kind === "search") {
 		return ""
 	}
@@ -194,7 +200,11 @@ export function toScheduledTimeLabel(scheduledTime: string): string {
 /**
  * Create a topic for the user with its invitees and sources, enforcing the topic cap.
  */
-export async function createTopic(userId: string, payload: UpdateTopicPayload): Promise<CreateTopicResult> {
+export async function createTopic(
+	userId: string,
+	payload: UpdateTopicPayload,
+	analyticsProperties: AnalyticsProperties,
+): Promise<CreateTopicResult> {
 	// enforce the topic cap and user role before writing anything.
 	if (!(await isAllowed(userId, "topic:create"))) {
 		return { status: "quota" }
@@ -241,11 +251,13 @@ export async function createTopic(userId: string, payload: UpdateTopicPayload): 
 				.values(newSources.map((source) => ({ topicId: topic.id, kind: source.kind, config: source.config })))
 		}
 
-		// open the first scan as running, so the topic page shows that Carl already reading.
-		// the api doesn't run it: the topic has no completed scan, so the scheduled sweep finds it and uses this row
+		// open the first scan as running, so the topic page shows Carl already reading. the scheduled sweep picks up this row and runs it
 		await transaction.insert(scans).values({ topicId: topic.id, ownerId: userId })
 		return topic.id
 	})
+
+	// track the topic creation event
+	trackEvent("topic_created", userId, { ...analyticsProperties, topicId })
 	return { status: "created", id: topicId }
 }
 

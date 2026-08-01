@@ -4,18 +4,21 @@
 import { eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
 import { bookmarks, findings, type scans, topics } from "../../db/schema"
-import type { NewResource } from "../adapters/adapter"
+import type { Budget } from "../budget"
+import type { NewResource } from "../ingest/ingester"
+import { traceStage } from "../telemetry"
 import { admitResources, gateResources, loadTopicContext, loadUnscoredResources, rankBySimilarity } from "./filter"
 import { fetchAndScoreResources } from "./score"
 import { type ScannedSource, summarizeTopicScan, toTopicScanSummary } from "./summarize"
-import { countFilteredResources, emptyReviewOutcome, emptyReviewSummary, newBudget, type ReviewSummary } from "./track"
+import { countFilteredResources, emptyReviewOutcome, emptyReviewSummary, type ReviewSummary } from "./track"
 
 // a persisted Scan record
 type Scan = typeof scans.$inferSelect
 
 /**
- * Reviews a Scan's discovered Resources, writes Findings and returns the counts, cost, outcome, and summary.
+ * Reviews a Scan's discovered Resources, writes Findings and returns the counts, outcome, and summary.
  * topicId is a parameter because a deleted topic clears the Scan row's own topic id.
+ * The Budget arrives already carrying what ingestion spent, so review's ceilings read the Scan's whole spend.
  * litellmApiKey bills its LLM calls to the topic owner's virtual key, falling back to the master key when absent.
  */
 export async function reviewScan(
@@ -23,6 +26,7 @@ export async function reviewScan(
 	topicId: string,
 	discoveredResources: NewResource[],
 	scannedSources: ScannedSource[],
+	budget: Budget,
 	litellmApiKey?: string,
 ): Promise<ReviewSummary> {
 	// load the unscored list of discovered Resources for this Topic
@@ -33,41 +37,56 @@ export async function reviewScan(
 		return emptyReviewSummary()
 	}
 
-	// running state of the budget, and the per-outcome review totals
-	const budget = newBudget()
+	// the running totals for this review. each stage below traces as its own span carrying what it spent
 	const reviewOutcome = emptyReviewOutcome()
 
 	// embed the topic's effective context once for the relevance gate, keeping its name and text for the scorer and the report
 	const topicContext = await loadTopicContext(topicId, budget, litellmApiKey)
 
 	// the first pass embeds every candidate and keeps the ones relevant to the topic
-	const survivingResources = await gateResources(unscoredResources, topicContext, reviewOutcome, budget, litellmApiKey)
+	const survivingResources = await traceStage(
+		"embed-filter",
+		budget,
+		() => gateResources(unscoredResources, topicContext, reviewOutcome, budget, litellmApiKey),
+		(survivors) => ({ candidateCount: unscoredResources.length, survivorCount: survivors.length }),
+	)
 
 	// the second pass dedupes the surviving resources best-first, so a limit defers the least relevant resources
 	const candidateIds = unscoredResources.map((resource) => resource.id)
-	const admittedResources = await admitResources(rankBySimilarity(survivingResources), candidateIds, reviewOutcome)
-	await fetchAndScoreResources(admittedResources, scan, topicId, topicContext, reviewOutcome, budget, litellmApiKey)
+	const admittedResources = await traceStage(
+		"dedupe",
+		budget,
+		() => admitResources(rankBySimilarity(survivingResources), candidateIds, reviewOutcome),
+		(admitted) => ({ survivorCount: survivingResources.length, admittedCount: admitted.length }),
+	)
+
+	// the paid stage: fetch each admitted Resource and score it under the Scan's ceilings
+	await traceStage(
+		"score",
+		budget,
+		() => fetchAndScoreResources(admittedResources, scan, topicId, topicContext, reviewOutcome, budget, litellmApiKey),
+		() => ({ admittedCount: admittedResources.length, keptCount: reviewOutcome.keptFindings.length }),
+	)
 
 	// keep only the topic's top max_results findings now that this scan's findings are written
 	await filterTopicFindings(topicId)
 
 	// summarize the scan
-	const scanSummary = await toTopicScanSummary(scan.id, () =>
-		summarizeTopicScan(topicContext, reviewOutcome, scannedSources, budget, litellmApiKey),
+	const scanSummary = await traceStage(
+		"scan-report",
+		budget,
+		() =>
+			toTopicScanSummary(scan.id, () =>
+				summarizeTopicScan(topicContext, reviewOutcome, scannedSources, budget, litellmApiKey),
+			),
+		(report) => ({ isReportWritten: report.length > 0 }),
 	)
 
-	// fold the totals into the summary that the Scan records
+	// fold the totals into the summary that the Scan records. the caller reads spend and fetch counts off the Budget
 	return {
 		keptCount: reviewOutcome.keptFindings.length,
 		filteredCount: countFilteredResources(reviewOutcome),
-		// spend and the report round out what the Scan stores
-		cost: budget.spent,
-		stageCosts: budget.stageCosts,
 		scanSummary,
-		// the reused, revalidated, and fetched counts
-		reusedCount: budget.fetchCounts.reusedCount,
-		revalidatedCount: budget.fetchCounts.revalidatedCount,
-		fetchedCount: budget.fetchCounts.fetchedCount,
 	}
 }
 
@@ -92,7 +111,7 @@ async function filterTopicFindings(topicId: string): Promise<void> {
 		.innerJoin(findings, eq(bookmarks.findingId, findings.id))
 		.where(eq(findings.topicId, topicId))
 
-	// decide the prune set, then delete it in one statement
+	// decide which findings fall outside the cap, then delete them in one statement
 	const bookmarkedIds = new Set(bookmarkedRows.map((row) => row.findingId))
 	const filteredIds = findingIdsToFilter(
 		findingRows.map((findingRow) => ({ ...findingRow, isBookmarked: bookmarkedIds.has(findingRow.id) })),

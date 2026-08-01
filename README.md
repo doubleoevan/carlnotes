@@ -14,7 +14,7 @@ Carl stays up. You stay informed.
 
 ## Stack
 
-Bun + TypeScript · React SPA (Vite + Tailwind + shadcn) · Hono · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl · Langfuse
+Bun + TypeScript · React SPA (Vite + Tailwind + shadcn) · Hono · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl · Langfuse · LLM Guard · Sentry + PostHog
 
 ## Layout
 
@@ -22,7 +22,7 @@ Modular monolith — one `package.json`, one deploy:
 
 - `ui/` — React SPA
 - `api/` — Hono HTTP layer
-- `worker/` — Temporal workflows and source adapters
+- `worker/` — Temporal workflows and source ingesters
 - `db/` — Drizzle schema and migrations
 
 Domain vocabulary is load-bearing and lives in `.agents/skills/domain-model/`.
@@ -62,6 +62,8 @@ Backfills (owner-run) — one-time data migrations that pair with a schema chang
 doppler run -- bun scripts/backfill-resource-content.ts   # upload existing resources.content to object storage, set content_key/content_bytes
 ```
 
+The content scanner (LLM Guard) is optional too: `docker compose up -d llm-guard` and set `LLM_GUARD_URL`. It screens an uploaded document before its context is generated, and a fetched page before it is scored, looking for injected instructions, secrets, and invisible characters, and redacting personal details in place. The prompt loader's untrusted-data fence is unconditional and does not depend on it. Error monitoring and product analytics are the same: when `SENTRY_DSN` and `POSTHOG_API_KEY` are not set then monitoring and analytics are off but the app behaves the same.
+
 Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium plans and a Stripe webhook derives the active plan. It needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the per-plan `STRIPE_PRICE_*` ids, and a metered `STRIPE_PRICE_MANUAL_SCAN_OVERAGE` (see `.env.example`). Until they're set, checkout, the Customer Portal, metered overage, and the admin console's Stripe net-revenue line stay inert — the gate, plans, and quotas all work without Stripe.
 
 Checks — run the full gate with one command (enforced on push by `scripts/preflight.sh`):
@@ -87,6 +89,7 @@ bun run smoke:store        # just the resource-content object-storage round-trip
 bun run smoke:attach       # just the URL-attachment smoke test (Firecrawl → store → Temporal workflow → ready)
 bun run smoke:search       # just the search-scout smoke test (context → LLM queries → Exa → Resources)
 bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its ceiling
+bun run smoke:eval         # just the eval-harness smoke: one tiny labeled fixture through the real gate and scoring
 ```
 
 The review smoke reads `REVIEW_CONCURRENCY` and `MAX_SCORED_RESOURCES_PER_SCAN`, so it doubles as an A/B for the concurrency limit. Each run resets its feed's Resources cold first, so two runs differ only by their settings:
@@ -94,6 +97,16 @@ The review smoke reads `REVIEW_CONCURRENCY` and `MAX_SCORED_RESOURCES_PER_SCAN`,
 ```bash
 REVIEW_CONCURRENCY=1 MAX_SCORED_RESOURCES_PER_SCAN=8 bun run smoke:review
 ```
+
+Evals (owner-run) — measures the review pipeline against a labeled corpus. It runs the real embed-filter and tiered scoring, so it spends money and is **not** part of `bun run check`. Fixtures and the labeling workflow live in [evals/README.md](evals/README.md):
+
+```bash
+bun run eval                      # measure every fixture: precision, recall, cost per topic, and scanner false positives
+bun run eval --export <topicId>   # write an unlabeled fixture from a real Topic's Resources, ready to label
+bun run eval --guard-only         # only LLM Guard's false-positive and attack-catch rates; no model spend
+```
+
+A weekly GitHub Action (`.github/workflows/llm-guard-update.yml`) watches Docker Hub for new LLM Guard releases, boots the candidate on the runner, runs the guard-only eval against it, and files an issue carrying both measured rates — so a scanner upgrade arrives as a pre-measured decision, never an unchecked version bump. Read the two rates together: a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate.
 
 Prompt registry (owner-run) — git is canonical for prompt wording (`worker/prompts/*.md`); this pushes it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set:
 

@@ -70,7 +70,7 @@ A Resource SHALL be canonical and global, keyed for dedupe on its canonical URL,
 A Resource SHALL have a nullable pgvector `embedding` column of 1024 dimensions and a nullable `embedding_model` column recording the vector space — the model and its dimension — that produced it. Both are null at ingestion and populated when the pipeline embeds the Resource. A model swap at the same dimension SHALL remain a backfill; a change to the embedding dimension SHALL be a schema migration that nulls the column before the `ALTER`, plus a re-embed backfill, since stored vectors of the old width cannot cast in place.
 
 #### Scenario: Ingestion inserts before embedding
-- **WHEN** a resource is first ingested by an adapter
+- **WHEN** a resource is first ingested by an ingester
 - **THEN** the row is valid with `embedding` and `embedding_model` null
 
 #### Scenario: Embedding and its provenance are stored
@@ -153,12 +153,12 @@ The schema SHALL define an `attachments` table: a topic-scoped entity that refer
 
 ### Requirement: Resource carries a native snippet and fetched content
 
-A Resource SHALL have a nullable `snippet` column holding the adapter-native text (the description/selftext/highlights the Source's own API returns), which stays in Postgres because every list path reads it. The full page content fetched during curation SHALL live in object storage rather than in a Postgres column, referenced by a nullable `content_key` text column and sized by a nullable `content_bytes` integer. All three are pipeline-filled and MAY be null: an adapter populates `snippet` and leaves the content columns unset; curation writes the fetched markdown to object storage and sets `content_key` and `content_bytes`. None of the three is required for a Resource row to be valid. Until a follow-up migration drops it, a legacy `content` column MAY remain present but unread and unwritten.
+A Resource SHALL have a nullable `snippet` column holding the ingester-native text (the description/selftext/highlights the Source's own API returns), which stays in Postgres because every list path reads it. The full page content fetched during curation SHALL live in object storage rather than in a Postgres column, referenced by a nullable `content_key` text column and sized by a nullable `content_bytes` integer. All three are pipeline-filled and MAY be null: an ingester populates `snippet` and leaves the content columns unset; curation writes the fetched markdown to object storage and sets `content_key` and `content_bytes`. None of the three is required for a Resource row to be valid. Until a follow-up migration drops it, a legacy `content` column MAY remain present but unread and unwritten.
 
 #### Scenario: Ingestion inserts with a snippet and no content
 
-- **WHEN** an adapter emits a Resource
-- **THEN** the row is valid with `snippet` set to the adapter-native text and `content_key`/`content_bytes` null
+- **WHEN** an ingester emits a Resource
+- **THEN** the row is valid with `snippet` set to the ingester-native text and `content_key`/`content_bytes` null
 
 #### Scenario: Curation stores fetched content
 
@@ -167,17 +167,17 @@ A Resource SHALL have a nullable `snippet` column holding the adapter-native tex
 
 ### Requirement: Scan records a per-stage cost breakdown
 
-A Scan SHALL have a `stage_costs` jsonb column recording the dollar cost of each pipeline stage (at least embedding, fetch, cheap scoring, and premium scoring). The existing `cost` column SHALL remain the total across every stage, so `stage_costs` is a breakdown of `cost`, not a replacement. `stage_costs` SHALL default to an empty object and be non-null.
+A Scan SHALL have a `stage_costs` jsonb column recording the dollar cost of each pipeline stage (at least ingestion, embedding, fetch, cheap scoring, and premium scoring). The existing `cost` column SHALL remain the total across every stage, so `stage_costs` is a breakdown of `cost`, not a replacement, and `cost` SHALL equal the sum of the buckets — ingestion included, since ingestion charges into the same Budget. `stage_costs` SHALL default to an empty object and be non-null. Because the column is `jsonb`, adding the ingestion bucket needs no migration.
 
 #### Scenario: A scan records per-stage costs summing to its total
 
 - **WHEN** a scan completes curation
-- **THEN** its `stage_costs` holds each stage's dollar cost and its `cost` equals the sum of those stage costs plus ingestion cost
+- **THEN** its `stage_costs` holds each stage's dollar cost including `ingestion`, and its `cost` equals the sum of those buckets
 
-#### Scenario: An ingestion-only scan has an empty breakdown
+#### Scenario: An ingestion-only scan records its ingestion bucket
 
-- **WHEN** a scan finds no Resources to curate
-- **THEN** `stage_costs` is an empty object and `cost` is the ingestion cost
+- **WHEN** a scan finds no Resources to curate but its Sources charged for their searches
+- **THEN** `stage_costs` holds the `ingestion` bucket and `cost` equals it
 
 ### Requirement: Topic carries filter tags
 
@@ -294,7 +294,7 @@ A Resource SHALL record when its content was last fetched in a non-null `fetched
 
 #### Scenario: Ingestion leaves validators null and fetched_at at creation
 
-- **WHEN** an adapter first ingests a Resource
+- **WHEN** an ingester first ingests a Resource
 - **THEN** the row is valid with `etag` and `last_modified` null and `fetched_at` defaulted to the row's creation time
 
 #### Scenario: A fetch that exposes validators stores them
@@ -363,10 +363,10 @@ The schema SHALL define a `bookmarks` table: the user (cascade delete), the find
 - **THEN** `db/schema.ts` compiles and exports a `bookmarks` table with the user and finding references, their cascades, and the per-pair uniqueness
 
 ### Requirement: Resource carries an optional engagement signal
-The `resources` table SHALL carry a nullable `engagement` integer holding the source's engagement count where an adapter captured one, such as a reddit post score. Null means no signal was captured.
+The `resources` table SHALL carry a nullable `engagement` integer holding the source's engagement count where an ingester captured one, such as a reddit post score. Null means no signal was captured.
 
 #### Scenario: Engagement defaults to null
-- **WHEN** a Resource is inserted by an adapter that captures no signal
+- **WHEN** a Resource is inserted by an ingester that captures no signal
 - **THEN** `engagement` is null
 
 ### Requirement: The change includes the max-results, bookmarks, and engagement migrations
@@ -404,4 +404,18 @@ The change SHALL include generated Drizzle migrations that create `billing_subsc
 #### Scenario: The migrations are additive
 - **WHEN** the generated migrations are applied to a database at the current schema
 - **THEN** only the `billing_subscriptions` table and the `users.budget_override_cents` column are added
+
+### Requirement: The Resource embedding column carries an HNSW cosine index
+
+`resources.embedding` SHALL carry an HNSW index using the `vector_cosine_ops` operator class, so the near-duplicate lookup is an index walk rather than a sequential scan plus a full sort over the globally-scoped Resource table. pgvector supports HNSW up to 2000 dimensions and the column is 1024, so the column indexes without a width change. The index SHALL be created by a migration run after the embedding backfill has populated the column, since an index over a mostly-null column measures nothing.
+
+#### Scenario: The nearest-neighbour lookup uses the index
+
+- **WHEN** the near-duplicate query runs against a populated Resource table
+- **THEN** its plan uses the HNSW index rather than a sequential scan and sort
+
+#### Scenario: The index is created after the backfill
+
+- **WHEN** the change's migrations are applied
+- **THEN** the index migration runs after embeddings are populated, and creating it does not require altering the column's dimension
 

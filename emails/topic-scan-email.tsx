@@ -1,20 +1,12 @@
 // the topic-scan email: a designed, deliverable summary of a scheduled Scan's new Findings.
 // authored as a react-email template, so it can be previewed with `bun run dev:email` and rendered to html at send time
-import {
-	Body,
-	Container,
-	Head,
-	Heading,
-	Hr,
-	Html,
-	Link,
-	Markdown,
-	Preview,
-	Section,
-	Text,
-} from "@react-email/components"
+import { Body, Container, Head, Heading, Hr, Html, Link, Preview, Section, Text } from "@react-email/components"
 import { render } from "@react-email/render"
+import Markdown from "markdown-to-jsx"
 import type { CSSProperties, ReactElement, ReactNode } from "react"
+
+// the urls a recap may link to: this email's own Finding urls
+export type AllowedNoteUrls = ReadonlySet<string>
 
 // a new Finding as the email lists it, and the full set of props that the template renders from
 export type TopicScanEmailFinding = { title: string | null; url: string; relevanceExplanation: string }
@@ -23,7 +15,7 @@ export type TopicScanEmailProps = {
 	// how many new Findings this scan surfaced. the summary line and the inbox preheader are both written from it
 	findingCount: number
 	findings: TopicScanEmailFinding[]
-	// Carl's recap of this scan as Markdown, omitted when the scan never wrote one
+	// Carl's recap of this scan as plain text, omitted when the scan never wrote one
 	scanSummary?: string
 	// the app's home and this topic's page. both omitted when the app base url isn't configured, and the labels render as plain text
 	appUrl?: string
@@ -54,7 +46,7 @@ export default function TopicScanEmail({
 				.{closingNote(findingCount)}
 			</EmailIntro>
 
-			<ScanSummaryCard scanSummary={scanSummary} />
+			<ScanSummarySection scanSummary={scanSummary} allowedUrls={new Set(findings.map((finding) => finding.url))} />
 			<FindingCards findings={findings} />
 
 			{/* the footer with the one-click unsubscribe link */}
@@ -121,20 +113,59 @@ export function EmailIntro({ heading, children }: { heading: string; children: R
 }
 
 /**
- * Carl's recap of a whole scan, rendered above the findings so the reader gets the takeaway before the links.
+ * AI recap of a scan, rendered above the findings.
+ * It renders through the hardened Markdown subset: formatting survives, but a link only works when it cites
+ * one of this email's own Finding urls — everything else renders as inert text.
  */
-export function ScanSummaryCard({ scanSummary }: { scanSummary?: string }): ReactElement | null {
-	// a scan that failed to summarize sends without the block rather than with an empty one
+export function ScanSummarySection({
+	scanSummary,
+	allowedUrls,
+}: {
+	scanSummary?: string
+	allowedUrls?: AllowedNoteUrls
+}): ReactElement | null {
+	// a scan that failed to summarize is sent without the block instead of an empty one
 	if (!scanSummary) {
 		return null
 	}
 	return (
 		<Section style={summaryCard}>
 			<Text style={summaryLabel}>{"Carl's notes"}</Text>
-			<Markdown markdownContainerStyles={summaryBody} markdownCustomStyles={SUMMARY_MARKDOWN_STYLES}>
-				{scanSummary}
-			</Markdown>
+			<Markdown options={toSummaryMarkdownOptions(allowedUrls)}>{scanSummary}</Markdown>
 		</Section>
+	)
+}
+
+// a finding link in a note. it renders as an anchor only for this email's own Finding urls,
+// and otherwise prints its label and destination as plain text
+function FindingLink({
+	children,
+	href,
+	allowedUrls,
+}: {
+	children?: ReactNode
+	href?: string
+	allowedUrls?: AllowedNoteUrls
+}): ReactElement {
+	// an allowed url renders as a link
+	if (href && allowedUrls?.has(href)) {
+		return (
+			<Link href={href} style={summaryLink}>
+				{children}
+			</Link>
+		)
+	}
+
+	// anything else prints its label and destination as plain text
+	// markdown-to-jsx hands the label over as a one-string array, but a bare string reads the same way here
+	// TODO: update this for Streamdown after the merge
+	const [firstChild] = Array.isArray(children) ? children : [children]
+	const label = typeof firstChild === "string" ? firstChild : null
+	return (
+		<span>
+			{children}
+			{href && href !== label ? ` (${href})` : ""}
+		</span>
 	)
 }
 
@@ -207,7 +238,7 @@ TopicScanEmail.PreviewProps = {
 		},
 	],
 	scanSummary:
-		"Structured output finally landed, and the eval tooling caught up with it.\n\n**The numbers:** $0.04 spent, 1 near-duplicate filtered, 20 read and 3 kept.\n\n**What earned their spots.** Simon's retrospective is the practical one — prompt versioning and cost controls you can copy today. The structured-output benchmarks matter because they close the loop on schema adherence, which is what made the old parsing workarounds necessary.\n\n**Skim.** Two worth reading now, one to bookmark.",
+		"Structured output finally landed, and the eval tooling caught up with it.\n\n**The numbers:** $0.04 spent, 1 near-duplicate filtered, 20 read and 3 kept.\n\nWhat earned their spots: Simon's retrospective is the practical one — prompt versioning and cost controls you can copy today. The structured-output benchmarks matter because they close the loop on schema adherence, which is what made the old parsing workarounds necessary.\n\nSources: https://simonwillison.net/2026/Jan/12/building-with-llms/",
 	appUrl: "https://carlnotes.example.com",
 	topicUrl: "https://carlnotes.example.com/topics/preview-topic",
 	unsubscribeUrl: "https://carlnotes.example.com/api/unsubscribe?token=preview",
@@ -304,18 +335,26 @@ const summaryLabel: CSSProperties = {
 	margin: "0 0 6px",
 	textTransform: "uppercase",
 }
-const summaryBody: CSSProperties = { color: "#4b4b4b", fontSize: "14px", lineHeight: "1.5" }
-// the model picks its own heading levels and list shapes, so every one is pinned to the same compact scale
-const SUMMARY_MARKDOWN_STYLES = {
-	h1: { color: "#2b2b2b", fontSize: "15px", fontWeight: 700, margin: "10px 0 4px" },
-	h2: { color: "#2b2b2b", fontSize: "15px", fontWeight: 700, margin: "10px 0 4px" },
-	h3: { color: "#2b2b2b", fontSize: "15px", fontWeight: 700, margin: "10px 0 4px" },
-	p: { margin: "6px 0" },
-	ul: { margin: "6px 0", paddingLeft: "18px" },
-	ol: { margin: "6px 0", paddingLeft: "18px" },
-	li: { margin: "2px 0" },
-	link: { color: "#7c4a1e" },
-	bold: { color: "#2b2b2b", fontWeight: 600 },
+const summaryBody: CSSProperties = { color: "#4b4b4b", fontSize: "14px", lineHeight: "1.5", margin: "6px 0" }
+// the model picks its own heading levels, so every one is pinned to the same compact inline-styled scale
+const summaryHeading: CSSProperties = { color: "#2b2b2b", fontSize: "15px", fontWeight: 700, margin: "10px 0 4px" }
+function toSummaryMarkdownOptions(allowedUrls?: AllowedNoteUrls) {
+	return {
+		disableParsingRawHTML: true,
+		overrides: {
+			h1: { props: { style: summaryHeading } },
+			h2: { props: { style: summaryHeading } },
+			h3: { props: { style: summaryHeading } },
+			h4: { props: { style: summaryHeading } },
+			p: { props: { style: summaryBody } },
+			ul: { props: { style: { ...summaryBody, paddingLeft: "18px" } } },
+			ol: { props: { style: { ...summaryBody, paddingLeft: "18px" } } },
+			li: { props: { style: { margin: "2px 0" } } },
+			strong: { props: { style: { color: "#2b2b2b", fontWeight: 600 } } },
+			a: { component: FindingLink, props: { allowedUrls } },
+			img: { component: (): null => null },
+		},
+	}
 }
 const card: CSSProperties = {
 	backgroundColor: "#faf8f4",

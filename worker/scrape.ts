@@ -7,6 +7,34 @@ const FETCH_TIMEOUT_MS = 30_000
 // how long the revalidation request may run before it aborts, so a slow origin never holds up curation
 const REVALIDATE_TIMEOUT_MS = Number(Bun.env.REVALIDATE_TIMEOUT_MS ?? "5000")
 
+// hosts that resolve inside our own network. a Source or attachment url is owner-supplied, so fetching one of
+// these would let a Topic reach the cloud metadata service or anything else not exposed to the internet
+const PRIVATE_HOST_PATTERN =
+	/^(?:localhost|0\.0\.0\.0|\[?::1\]?|10\.\d+\.\d+\.\d+|127\.\d+\.\d+\.\d+|169\.254\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|.+\.(?:local|internal))$/i
+
+/**
+ * The url as a fetchable target. Throws when it is malformed, not http(s), or points inside our own network.
+ * Every rejection names the url and its reason, so a caller can surface the message as it is.
+ */
+export function toFetchableUrl(url: string): URL {
+	let target: URL
+	try {
+		target = new URL(url)
+	} catch {
+		throw new Error(`malformed url: ${url}`)
+	}
+
+	if (target.protocol !== "http:" && target.protocol !== "https:") {
+		throw new Error(`url must be http or https: ${url}`)
+	}
+
+	// a hostname that still resolves privately through DNS gets refused by the network, not here
+	if (PRIVATE_HOST_PATTERN.test(target.hostname)) {
+		throw new Error(`url is not publicly routable: ${url}`)
+	}
+	return target
+}
+
 // a scrape's Markdown plus the etag and last-modified for a later conditional GET. either may be absent
 export type FetchResult = { markdown: string; etag: string | null; lastModified: string | null }
 

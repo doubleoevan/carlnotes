@@ -117,13 +117,13 @@ test("toSortedFindings pins bookmarks and sorts each group", () => {
 	expect(relevantOrder.map((finding) => finding.findingId)).toEqual(["pinned-low", "kept-high", "kept-low"])
 })
 
-// trending ranks captured engagement first and score-less findings fall back to recency
-test("toSortedFindings trending degrades to newest without a signal", () => {
+// trending ranks sort by engagement value first, and value-less findings fall back to recency
+test("toSortedFindings trending falls back to newest without an engagement value", () => {
 	const hot = topicFinding({ findingId: "hot", engagement: 500, publishedAt: "2026-07-01T00:00:00.000Z" })
 	const mild = topicFinding({ findingId: "mild", engagement: 20, publishedAt: "2026-07-10T00:00:00.000Z" })
 	const newer = topicFinding({ findingId: "newer", publishedAt: "2026-07-20T00:00:00.000Z" })
 	const older = topicFinding({ findingId: "older", publishedAt: "2026-07-05T00:00:00.000Z" })
-	// signals rank first by size, then the signal-less order by recency
+	// engagement values rank first by size, then the value-less order by recency
 	const trendingOrder = toFilteredFindings([older, newer, mild, hot], "trending")
 	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["hot", "mild", "newer", "older"])
 })

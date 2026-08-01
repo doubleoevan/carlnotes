@@ -90,8 +90,8 @@ export function Header() {
 								>
 									Log in
 								</AnchorLink>
-								{/* use the "default" variant's primary color as a call to action */}
-								<AnchorLink href="/signup" className={cn(buttonVariants({ variant: "default" }), "min-h-9")}>
+								{/* use the "default" variant's primary color as a call to action. cta names the button for analytics */}
+								<AnchorLink href="/signup?cta=header" className={cn(buttonVariants({ variant: "default" }), "min-h-9")}>
 									Sign up
 								</AnchorLink>
 							</>
@@ -214,9 +214,9 @@ function HeaderMenu({
 							<LogIn className="size-4" />
 							Log in
 						</AnchorLink>
-						{/* use the primary color as a call to action */}
+						{/* use the primary color as a call to action. cta names the button for analytics */}
 						<AnchorLink
-							href="/signup"
+							href="/signup?cta=menu"
 							onClick={closeMenu}
 							className={cn(itemClassName, "bg-primary text-primary-foreground hover:bg-primary/90")}
 						>

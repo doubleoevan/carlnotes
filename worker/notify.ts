@@ -52,7 +52,13 @@ export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void
 			topicUrl,
 			unsubscribeUrl,
 		})
-		await sendEmail({ to: recipient.email, subject, emailContent, headers: toUnsubscribeHeaders(unsubscribeUrl) })
+		await sendEmail({
+			to: recipient.email,
+			subject,
+			emailContent,
+			emailKind: "topic-scan",
+			headers: toUnsubscribeHeaders(unsubscribeUrl),
+		})
 	}
 }
 
@@ -87,12 +93,16 @@ export async function sendManualScanEmail(userId: string, topic: Topic, scan: Sc
 
 	// send one email, with the subject built from the same props the body renders from
 	const emailContent = await renderManualScanEmail(emailProps)
-	await sendEmail({ to: user.email, subject: toManualScanSubject(emailProps), emailContent })
+	await sendEmail({
+		to: user.email,
+		subject: toManualScanSubject(emailProps),
+		emailContent,
+		emailKind: "manual-scan",
+	})
 }
 
-// the Findings a Scan first surfaced: those carrying its scan_id, joined to their Resource for the email fields.
-// review only scores Resources without a Finding yet, so a topic scan's Findings are exactly its new ones since the last succeeded Scan
-export async function newFindingsForScan(scan: Scan): Promise<TopicScanEmailFinding[]> {
+// the Findings this Scan surfaced, joined to their Resources for the email. review only scores Resources with no Finding yet, so these are exactly the new ones
+async function newFindingsForScan(scan: Scan): Promise<TopicScanEmailFinding[]> {
 	// this topic scan's Findings joined to their Resource for the title, link, and relevance explanation for the email.
 	// ranked by relevance, the same ordering the as app's own default sort.
 	return db
@@ -104,7 +114,7 @@ export async function newFindingsForScan(scan: Scan): Promise<TopicScanEmailFind
 }
 
 // the Topic's subscribers to email: users at the matching frequency, direct plus audience members, deduped by address
-export async function loadTopicEmailSubscribers(topicId: string, frequency: Topic["frequency"]): Promise<Recipient[]> {
+async function loadTopicEmailSubscribers(topicId: string, frequency: Topic["frequency"]): Promise<Recipient[]> {
 	// only an active subscription with email on gets mail, unsubscribing deactivates the row rather than deleting it
 	const canEmailSubscription = and(
 		eq(subscriptions.topicId, topicId),

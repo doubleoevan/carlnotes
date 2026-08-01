@@ -10,7 +10,7 @@ import {
 	FindingCards,
 	footerBrandLink,
 	LinkOrText,
-	ScanSummaryCard,
+	ScanSummarySection,
 	summaryLink,
 	type TopicScanEmailFinding,
 } from "./topic-scan-email"
@@ -43,7 +43,10 @@ export default function ManualScanEmail(props: ManualScanEmailProps): ReactEleme
 			{/* a succeeded scan shows the AI recap summary and its findings. a failed one says what stopped it */}
 			{props.status === "succeeded" ? (
 				<>
-					<ScanSummaryCard scanSummary={props.scanSummary} />
+					<ScanSummarySection
+						scanSummary={props.scanSummary}
+						allowedUrls={new Set(props.findings.map((finding) => finding.url))}
+					/>
 					<FindingCards findings={props.findings} />
 				</>
 			) : (

@@ -100,13 +100,13 @@ Below the control row and above the sections, the homepage SHALL show a tag filt
 - **THEN** no Create row is offered
 
 ### Requirement: The feed bar offers three sort modes
-The feed bar SHALL offer a "Sort"-labelled menu with three modes: relevant (the default, by relevance score), newest (by resource recency), and trending (by the Resource's captured engagement signal, degrading to newest where the signal is null). Sorting SHALL be pure read-side ranking over the delivered Findings, and the chosen mode SHALL be a UI concern, never persisted.
+The feed bar SHALL offer a "Sort"-labelled menu with three modes: relevant (the default, by relevance score), newest (by resource recency), and trending (by the Resource's captured engagement signal, falling back to newest where the signal is null). Sorting SHALL be pure read-side ranking over the delivered Findings, and the chosen mode SHALL be a UI concern, never persisted.
 
 #### Scenario: Newest reorders by recency
 - **WHEN** the user switches the sort to newest
 - **THEN** Findings order by resource recency without any new data being fetched
 
-#### Scenario: Trending degrades to newest without a signal
+#### Scenario: Trending falls back to newest without a signal
 - **WHEN** the user switches to trending on a feed where some Findings carry no engagement signal
 - **THEN** Findings with a signal rank by it and the rest fall back to recency order behind them
 

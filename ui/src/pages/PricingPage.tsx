@@ -194,7 +194,7 @@ function PlanAction({
 	// a visitor starts at signup whichever card they pick
 	if (signedInPlan === null) {
 		return (
-			<AnchorLink href="/signup" className={cn(buttonVariants({ variant: "default" }), "mt-6 w-full")}>
+			<AnchorLink href="/signup?cta=pricing" className={cn(buttonVariants({ variant: "default" }), "mt-6 w-full")}>
 				Get started
 			</AnchorLink>
 		)

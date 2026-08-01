@@ -103,7 +103,7 @@ function SubscribeBell({ topic }: { topic: TopicFeed }) {
 	// a visitor is sent to signup, a signed-in user toggles their topic subscription and reloads the topic feed
 	async function handleClick(): Promise<void> {
 		if (!session) {
-			navigate("/signup")
+			navigate("/signup?cta=subscribe")
 			return
 		}
 		await sendTopicSubscription(topic.id, !topic.isSubscribed)

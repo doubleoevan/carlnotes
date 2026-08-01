@@ -7,6 +7,7 @@
 		{ "path": "./emails" },
 		{ "path": "./api" },
 		{ "path": "./worker" },
-		{ "path": "./ui" }
+		{ "path": "./ui" },
+		{ "path": "./scripts" }
 	]
 }

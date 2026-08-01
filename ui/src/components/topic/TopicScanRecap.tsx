@@ -1,3 +1,5 @@
+// a scan recap is model-written from pages we don't control, so it renders through a limited Markdown subset.
+// formatting is allowed, but a link only works when it points at a kept Finding's url. everything else is plain text
 import type { scanStatuses } from "@shared/enums"
 import { isBudgetError } from "@shared/scanFailure"
 import Markdown from "markdown-to-jsx"
@@ -39,32 +41,70 @@ export function toScanRecapPlaceholder(scan: Pick<ScanRecapFields, "status" | "e
 // clip a long note to this many pixels when collapsed, measured against the rendered output
 const COLLAPSED_MAX_HEIGHT = 132
 
+// the destinations a note may actually link to: the kept Findings' stored urls, pages the feed already links to
+export type AllowedNoteUrls = ReadonlySet<string>
+
+// a finding link in a note. it renders as an anchor only for the Scan's own kept Finding urls,
+// and otherwise prints its label and destination as plain text
+function FindingLink({
+	children,
+	href,
+	allowedUrls,
+}: {
+	children?: React.ReactNode
+	href?: string
+	allowedUrls?: AllowedNoteUrls
+}) {
+	// an allowed url renders as a link
+	if (href && allowedUrls?.has(href)) {
+		return (
+			<AnchorLink href={href} className="text-link hover:underline">
+				{children}
+			</AnchorLink>
+		)
+	}
+
+	// anything else prints its label and destination as plain text
+	const [firstChild] = Array.isArray(children) ? children : [children]
+	const label = typeof firstChild === "string" ? firstChild : null
+	return (
+		<span>
+			{children}
+			{href && href !== label ? ` (${href})` : ""}
+		</span>
+	)
+}
+
 // a heading at any level renders as one compact display-font line, since a model's chosen level is arbitrary here
-function NoteHeading({ children }: { children: React.ReactNode }) {
+function NoteHeading({ children }: { children?: React.ReactNode }) {
 	return <div className="font-display text-foreground mt-2.5 mb-1 text-[13px] font-semibold first:mt-0">{children}</div>
 }
 
-// map each Markdown element to the compact card typography, so a model's headings and lists stay
-// tight inside the narrow panels they render in. links route through AnchorLink like everywhere else
-const MARKDOWN_OPTIONS = {
-	overrides: {
-		h1: { component: NoteHeading },
-		h2: { component: NoteHeading },
-		h3: { component: NoteHeading },
-		h4: { component: NoteHeading },
-		p: { props: { className: "my-1.5 leading-relaxed first:mt-0 last:mb-0" } },
-		ul: { props: { className: "my-1.5 list-disc space-y-1 pl-4" } },
-		ol: { props: { className: "my-1.5 list-decimal space-y-1 pl-4" } },
-		li: { props: { className: "leading-relaxed" } },
-		strong: { props: { className: "text-foreground font-semibold" } },
-		hr: { props: { className: "border-separator my-2.5" } },
-		a: { component: AnchorLink, props: { className: "text-link hover:underline" } },
-	},
-} as const
+// the Markdown subset a note may use. headings and lists get compact typography, anchors go through NoteLink
+// with the kept urls, images render nothing, and disableParsingRawHTML leaves any embedded html as plain characters
+function toSafeNoteOptions(allowedUrls?: AllowedNoteUrls) {
+	return {
+		disableParsingRawHTML: true,
+		overrides: {
+			h1: { component: NoteHeading },
+			h2: { component: NoteHeading },
+			h3: { component: NoteHeading },
+			h4: { component: NoteHeading },
+			p: { props: { className: "my-1.5 leading-relaxed first:mt-0 last:mb-0" } },
+			ul: { props: { className: "my-1.5 list-disc space-y-1 pl-4" } },
+			ol: { props: { className: "my-1.5 list-decimal space-y-1 pl-4" } },
+			li: { props: { className: "leading-relaxed" } },
+			strong: { props: { className: "text-foreground font-semibold" } },
+			hr: { props: { className: "border-separator my-2.5" } },
+			a: { component: FindingLink, props: { allowedUrls } },
+			img: { component: () => null },
+		},
+	}
+}
 
-// render a scan recap's Markdown with the compact card typography
-function ScanMarkdown({ markdown }: { markdown: string }) {
-	return <Markdown options={MARKDOWN_OPTIONS}>{markdown}</Markdown>
+// render a scan recap's Markdown with allowed urls only
+function ScanNoteText({ note, allowedUrls }: { note: string; allowedUrls?: AllowedNoteUrls }) {
+	return <Markdown options={toSafeNoteOptions(allowedUrls)}>{note}</Markdown>
 }
 
 /**
@@ -79,12 +119,12 @@ export function ScrollBox({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Markdown inside the scroll box for notes that can be long
+ * A scan note inside the scroll box
  */
-export function ScrollNote({ markdown }: { markdown: string }) {
+export function ScrollNote({ note, allowedUrls }: { note: string; allowedUrls?: AllowedNoteUrls }) {
 	return (
 		<ScrollBox>
-			<ScanMarkdown markdown={markdown} />
+			<ScanNoteText note={note} allowedUrls={allowedUrls} />
 		</ScrollBox>
 	)
 }
@@ -93,13 +133,13 @@ export function ScrollNote({ markdown }: { markdown: string }) {
  * A scan recap popover's body: Carl's full summary, then how long the scan took and its cost. Reused by
  * the topic page's scan history and the Activity page's per-scan drill-down.
  */
-export function TopicScanRecap({ scan }: { scan: ScanRecapFields }) {
+export function TopicScanRecap({ scan, allowedUrls }: { scan: ScanRecapFields; allowedUrls?: AllowedNoteUrls }) {
 	const duration = toDurationLabel(durationMsBetween(scan.startedAt, scan.finishedAt))
 	return (
 		<>
 			<h2 className={POPOVER_HEADING_CLASS}>Dear Diary</h2>
 			{scan.scanSummary ? (
-				<ScrollNote markdown={scan.scanSummary} />
+				<ScrollNote note={scan.scanSummary} allowedUrls={allowedUrls} />
 			) : (
 				<p className="whitespace-pre-line">{toScanRecapPlaceholder(scan)}</p>
 			)}
@@ -115,19 +155,19 @@ export function TopicScanRecap({ scan }: { scan: ScanRecapFields }) {
 }
 
 /**
- * Scan recap Markdown, clipped with a Read more / Read less toggle once it grows past the collapsed height.
+ * A scan recap note, clipped with a Read more / Read less toggle once it grows past the collapsed height.
  */
-export function TopicScanNote({ markdown }: { markdown: string }) {
+export function TopicScanNote({ note, allowedUrls }: { note: string; allowedUrls?: AllowedNoteUrls }) {
 	const contentRef = useRef<HTMLDivElement>(null)
 	const [isOverflowing, setIsOverflowing] = useState(false)
 	const [isExpanded, setIsExpanded] = useState(false)
 
 	// measure the rendered output against the collapsed height. overflow-hidden keeps scrollHeight at the full height
-	// biome-ignore lint/correctness/useExhaustiveDependencies: Markdown drives the rendered height we re-measure, not a value read here
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the note drives the rendered height we re-measure, not a value read here
 	useLayoutEffect(() => {
 		const element = contentRef.current
 		setIsOverflowing(element !== null && element.scrollHeight > COLLAPSED_MAX_HEIGHT + 4)
-	}, [markdown])
+	}, [note])
 
 	// only clip when the note actually overflows and the reader hasn't expanded it
 	const isClipped = isOverflowing && !isExpanded
@@ -140,7 +180,7 @@ export function TopicScanNote({ markdown }: { markdown: string }) {
 					className={cn(isClipped && "overflow-hidden")}
 					style={isClipped ? { maxHeight: COLLAPSED_MAX_HEIGHT } : undefined}
 				>
-					<ScanMarkdown markdown={markdown} />
+					<ScanNoteText note={note} allowedUrls={allowedUrls} />
 				</div>
 				{/* a soft fade tells the reader the note continues below the clip */}
 				{isClipped && (

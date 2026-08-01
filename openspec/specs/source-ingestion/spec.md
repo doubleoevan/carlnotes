@@ -3,57 +3,57 @@
 ## Purpose
 TBD - created by archiving change add-source-ingestion. Update Purpose after archive.
 ## Requirements
-### Requirement: Shared adapter interface
+### Requirement: Shared ingester interface
 
-The system SHALL define a single `SourceAdapter` interface that every source kind implements: given a Source, it returns the Resources it emitted, the cost it incurred, and OPTIONALLY the fallback mode it ran in. Adapters SHALL emit Resources only — never Findings, scores, or embeddings — and SHALL leave `embedding` and `embedding_model` unset so the curation pipeline fills them later. An adapter SHALL set `fallbackMode` only when it ran a keyless fallback path, and SHALL leave it unset when it ran its keyed path or has no fallback.
+The system SHALL define a single `SourceIngester` interface that every source kind implements: given a Source, it returns the Resources it emitted, the cost it incurred, and OPTIONALLY the fallback mode it ran in. Ingesters SHALL emit Resources only — never Findings, scores, or embeddings — and SHALL leave `embedding` and `embedding_model` unset so the curation pipeline fills them later. An ingester SHALL set `fallbackMode` only when it ran a keyless fallback path, and SHALL leave it unset when it ran its keyed path or has no fallback.
 
-#### Scenario: Adapter returns Resources and cost
+#### Scenario: Ingester returns Resources and cost
 
-- **WHEN** an adapter runs against a Source
+- **WHEN** an ingester runs against a Source
 - **THEN** it returns a list of Resources and a numeric cost, and produces no Findings
 
-#### Scenario: Adapter leaves embedding unset
+#### Scenario: Ingester leaves embedding unset
 
-- **WHEN** an adapter emits a Resource
+- **WHEN** an ingester emits a Resource
 - **THEN** the Resource has no `embedding` and no `embedding_model` set
 
-#### Scenario: Adapter reports its fallback mode when it degrades
+#### Scenario: Ingester reports its fallback mode when it falls back
 
-- **WHEN** an adapter runs its keyless fallback path
+- **WHEN** an ingester runs its keyless fallback path
 - **THEN** it sets `fallbackMode` to a value identifying that path
 
-#### Scenario: Keyed or modeless adapter omits the fallback mode
+#### Scenario: Keyed or modeless ingester omits the fallback mode
 
-- **WHEN** an adapter runs its keyed path, or has no fallback (such as RSS)
+- **WHEN** an ingester runs its keyed path, or has no fallback (such as RSS)
 - **THEN** `fallbackMode` is unset
 
-### Requirement: Kind-dispatched adapter registry
+### Requirement: Kind-dispatched ingester registry
 
-`runTopicScan` SHALL dispatch each Source to the adapter registered for its `kind`. A Source whose `kind` has no registered adapter SHALL be skipped without aborting the Scan.
+`runTopicScan` SHALL dispatch each Source to the ingester registered for its `kind`. A Source whose `kind` has no registered ingester SHALL be skipped without aborting the Scan.
 
-#### Scenario: RSS Source is dispatched to the RSS adapter
+#### Scenario: RSS Source is dispatched to the RSS ingester
 
 - **WHEN** a Source of kind `rss` is scanned
-- **THEN** it is handled by `rssAdapter`
+- **THEN** it is handled by `rssIngester`
 
 #### Scenario: Unregistered kind is skipped
 
-- **WHEN** a Source whose `kind` has no registered adapter is scanned
+- **WHEN** a Source whose `kind` has no registered ingester is scanned
 - **THEN** that Source is skipped and the Scan continues with the remaining Sources
 
-### Requirement: RSS adapter emits canonical Resources
+### Requirement: RSS ingester emits canonical Resources
 
-`rssAdapter` SHALL fetch the feed URL from the Source's `config`, parse RSS or Atom, and emit one Resource per entry with a canonical URL, a title, `kind` `read`, and cost `0`. It SHALL require no Integration (keyless). Entries sharing a canonical URL within one feed SHALL collapse to a single Resource.
+`rssIngester` SHALL fetch the feed URL from the Source's `config`, parse RSS or Atom, and emit one Resource per entry with a canonical URL, a title, `kind` `read`, and cost `0`. It SHALL require no Integration (keyless). Entries sharing a canonical URL within one feed SHALL collapse to a single Resource.
 
 #### Scenario: Feed entries become Resources
 
 - **WHEN** a Source of kind `rss` with a valid feed URL is scanned
-- **THEN** `rssAdapter` emits one Resource per feed entry, each with its canonical URL, its title, and `kind` `read`
+- **THEN** `rssIngester` emits one Resource per feed entry, each with its canonical URL, its title, and `kind` `read`
 
 #### Scenario: Keyless operation
 
 - **WHEN** the RSS Source has no `integration_id`
-- **THEN** the adapter still runs and emits Resources
+- **THEN** the ingester still runs and emits Resources
 
 #### Scenario: Duplicate entries within a feed collapse
 
@@ -76,12 +76,24 @@ Upserting emitted Resources SHALL dedupe globally on canonical URL. Re-scanning 
 
 ### Requirement: Scan records found count and cost
 
-`runTopicScan` SHALL create a Scan in status `running`, and on completion record `found_count` (the number of deduped Resources discovered across all Sources) and `cost` (the sum of the Sources' adapter costs), set `finished_at`, and mark the Scan `succeeded`. Ingestion SHALL NOT set `kept_count`, `filtered_count`, or `ai_summary` — those belong to curation.
+`runTopicScan` SHALL create a Scan in status `running`, and on completion record `found_count` (the number of deduped Resources discovered across all Sources), set `finished_at`, and mark the Scan `succeeded`. Ingestion SHALL NOT set `kept_count`, `filtered_count`, or `ai_summary` — those belong to curation.
+
+The Scan's Budget SHALL be created before ingestion runs, and each Source's ingester cost SHALL charge into that Budget's `ingestion` bucket — zero for the ingesters that use no paid API. `scans.cost` SHALL be the Budget's total, so ingestion spend is inside the same object and the same ceiling the paid curation stages read, rather than a number summed alongside them at close.
 
 #### Scenario: Counts and cost are recorded on success
 
 - **WHEN** a scan completes with its Sources having emitted Resources
-- **THEN** the Scan's `found_count` equals the count of deduped Resources discovered, its `cost` equals the summed adapter cost, `finished_at` is set, and its status is `succeeded`
+- **THEN** the Scan's `found_count` equals the count of deduped Resources discovered, its `cost` equals the Budget total including the ingestion bucket, `finished_at` is set, and its status is `succeeded`
+
+#### Scenario: Paid ingestion charges into the Budget
+
+- **WHEN** a search Source's ingester returns a non-zero cost
+- **THEN** that cost is charged into the Budget's `ingestion` bucket and is visible to the spend ceiling the curation stages check
+
+#### Scenario: Keyless ingesters charge nothing
+
+- **WHEN** an RSS, Reddit, or YouTube Source runs
+- **THEN** its returned cost is zero and the ingestion bucket is unchanged by it
 
 #### Scenario: Curation counts are left untouched
 
@@ -94,27 +106,27 @@ A failing Source SHALL degrade only that Source's contribution. `runTopicScan` S
 
 #### Scenario: One Source fails, another succeeds
 
-- **WHEN** one Source's adapter throws and another Source's adapter succeeds
+- **WHEN** one Source's ingester throws and another Source's ingester succeeds
 - **THEN** the succeeding Source's Resources are upserted and the Scan is marked `succeeded`
 
 #### Scenario: All Sources fail
 
-- **WHEN** every Source's adapter throws
+- **WHEN** every Source's ingester throws
 - **THEN** the Scan is marked `failed` and the error is recorded
 
-### Requirement: Reddit adapter emits canonical Resources
+### Requirement: Reddit ingester emits canonical Resources
 
-`redditAdapter` SHALL read the subreddit (and an optional sort mode) from the Source's `config` and emit one Resource per post, `kind` `read`, cost `0`, deduped by canonical URL, using the post's comments permalink (`https://www.reddit.com<permalink>`) as the canonical URL. When `REDDIT_CLIENT_ID` **and** `REDDIT_CLIENT_SECRET` are set, it SHALL fetch via the app-only OAuth API — honoring the configured sort mode — with a descriptive `User-Agent`, and leave `fallbackMode` unset. When either credential is absent, it SHALL fall back to the keyless public subreddit `.rss` feed with the same descriptive `User-Agent` and set `fallbackMode` to `reddit-rss`. Both modes SHALL emit the same canonical URL for the same post. It SHALL require no Integration (`integration_id` may be null).
+`redditIngester` SHALL read the subreddit (and an optional sort mode) from the Source's `config` and emit one Resource per post, `kind` `read`, cost `0`, deduped by canonical URL, using the post's comments permalink (`https://www.reddit.com<permalink>`) as the canonical URL. When `REDDIT_CLIENT_ID` **and** `REDDIT_CLIENT_SECRET` are set, it SHALL fetch via the app-only OAuth API — honoring the configured sort mode — with a descriptive `User-Agent`, and leave `fallbackMode` unset. When either credential is absent, it SHALL fall back to the keyless public subreddit `.rss` feed with the same descriptive `User-Agent` and set `fallbackMode` to `reddit-rss`. Both modes SHALL emit the same canonical URL for the same post. It SHALL require no Integration (`integration_id` may be null).
 
 #### Scenario: OAuth mode when credentials are present
 
 - **WHEN** `REDDIT_CLIENT_ID` and `REDDIT_CLIENT_SECRET` are set and a Source of kind `reddit` is scanned
-- **THEN** `redditAdapter` fetches the subreddit listing via the OAuth API honoring the configured sort, emits one `read` Resource per post keyed by its comments permalink, and leaves `fallbackMode` unset
+- **THEN** `redditIngester` fetches the subreddit listing via the OAuth API honoring the configured sort, emits one `read` Resource per post keyed by its comments permalink, and leaves `fallbackMode` unset
 
 #### Scenario: Keyless RSS fallback when credentials are absent
 
 - **WHEN** `REDDIT_CLIENT_ID` or `REDDIT_CLIENT_SECRET` is missing and a Source of kind `reddit` is scanned
-- **THEN** `redditAdapter` fetches the public subreddit `.rss` feed with a descriptive `User-Agent`, emits `read` Resources, and sets `fallbackMode` to `reddit-rss`
+- **THEN** `redditIngester` fetches the public subreddit `.rss` feed with a descriptive `User-Agent`, emits `read` Resources, and sets `fallbackMode` to `reddit-rss`
 
 #### Scenario: Canonical URL is stable across modes
 
@@ -126,19 +138,19 @@ A failing Source SHALL degrade only that Source's contribution. `runTopicScan` S
 - **WHEN** a fetch returns two posts that resolve to the same comments permalink
 - **THEN** only one Resource is emitted for that URL
 
-### Requirement: YouTube adapter emits canonical Resources
+### Requirement: YouTube ingester emits canonical Resources
 
-`youtubeAdapter` SHALL read a channel id or playlist id from the Source's `config` and emit one Resource per video, `kind` `watch`, cost `0`, deduped by canonical URL, using `https://www.youtube.com/watch?v=<videoId>` as the canonical URL. When `YOUTUBE_API_KEY` is set, it SHALL fetch recent videos via the Data API v3 (the channel's uploads playlist) and leave `fallbackMode` unset. When the key is absent, it SHALL fall back to the keyless channel/playlist Atom feed and set `fallbackMode` to `youtube-atom`. Both modes SHALL emit the same canonical URL for the same video. It SHALL require no Integration (`integration_id` may be null).
+`youtubeIngester` SHALL read a channel id or playlist id from the Source's `config` and emit one Resource per video, `kind` `watch`, cost `0`, deduped by canonical URL, using `https://www.youtube.com/watch?v=<videoId>` as the canonical URL. When `YOUTUBE_API_KEY` is set, it SHALL fetch recent videos via the Data API v3 (the channel's uploads playlist) and leave `fallbackMode` unset. When the key is absent, it SHALL fall back to the keyless channel/playlist Atom feed and set `fallbackMode` to `youtube-atom`. Both modes SHALL emit the same canonical URL for the same video. It SHALL require no Integration (`integration_id` may be null).
 
 #### Scenario: API mode when the key is present
 
 - **WHEN** `YOUTUBE_API_KEY` is set and a Source of kind `youtube` is scanned
-- **THEN** `youtubeAdapter` fetches videos via the Data API, emits one `watch` Resource per video keyed by its `watch?v=` URL, and leaves `fallbackMode` unset
+- **THEN** `youtubeIngester` fetches videos via the Data API, emits one `watch` Resource per video keyed by its `watch?v=` URL, and leaves `fallbackMode` unset
 
 #### Scenario: Keyless Atom fallback when the key is absent
 
 - **WHEN** `YOUTUBE_API_KEY` is missing and a Source of kind `youtube` is scanned
-- **THEN** `youtubeAdapter` fetches the channel/playlist Atom feed, emits `watch` Resources, and sets `fallbackMode` to `youtube-atom`
+- **THEN** `youtubeIngester` fetches the channel/playlist Atom feed, emits `watch` Resources, and sets `fallbackMode` to `youtube-atom`
 
 #### Scenario: Canonical URL is stable across modes
 
@@ -147,31 +159,31 @@ A failing Source SHALL degrade only that Source's contribution. `runTopicScan` S
 
 ### Requirement: Fallback mode is recorded on the Scan
 
-`runTopicScan` SHALL record on the completed Scan every Source that ran a keyless fallback as an entry `{ sourceId, fallbackMode }` in `scans.degraded_sources`. Running a fallback SHALL NOT mark the Scan `failed`: a Scan whose Sources all succeeded — even if some ran degraded — SHALL be `succeeded`. `degraded_sources` SHALL be empty when no Source fell back.
+`runTopicScan` SHALL record on the completed Scan every Source that ran a keyless fallback as an entry `{ sourceId, fallbackMode }` in `scans.fallback_sources`. Running a fallback SHALL NOT mark the Scan `failed`: a Scan whose Sources all succeeded — even if some fell back — SHALL be `succeeded`. `fallback_sources` SHALL be empty when no Source fell back.
 
-#### Scenario: A degraded Source is recorded and the Scan still succeeds
+#### Scenario: A Source that fell back is recorded and the Scan still succeeds
 
-- **WHEN** a Source's adapter succeeds but reports a `fallbackMode`
-- **THEN** the Scan's `degraded_sources` contains `{ sourceId, fallbackMode }` for that Source and the Scan's status is `succeeded`
+- **WHEN** a Source's ingester succeeds but reports a `fallbackMode`
+- **THEN** the Scan's `fallback_sources` contains `{ sourceId, fallbackMode }` for that Source and the Scan's status is `succeeded`
 
 #### Scenario: No fallback leaves the trace empty
 
-- **WHEN** every Source's adapter succeeds without reporting a `fallbackMode`
-- **THEN** the Scan's `degraded_sources` is empty
+- **WHEN** every Source's ingester succeeds without reporting a `fallbackMode`
+- **THEN** the Scan's `fallback_sources` is empty
 
-#### Scenario: Only degraded Sources are listed
+#### Scenario: Only Sources that fell back are listed
 
 - **WHEN** one Source runs a keyed path and another reports a `fallbackMode`
-- **THEN** the Scan's `degraded_sources` contains only the degraded Source's entry
+- **THEN** the Scan's `fallback_sources` contains only that Source's entry
 
-### Requirement: Search adapter emits Resources from LLM-generated Exa queries
+### Requirement: Search ingester emits Resources from LLM-generated Exa queries
 
-`searchAdapter` SHALL handle Sources of kind `search`. It SHALL read the Source's topic **effective context** (via `source.topic_id`) — the topic's own `context` together with the `context` of each of the topic's attachments — generate a bounded list of search queries from it with an LLM through the LiteLLM proxy (AI SDK structured output with a Zod schema), run each query through Exa's search API using `EXA_API_KEY`, and emit one Resource per result with a canonical URL (the result URL), a title, and `kind` `read`. Results SHALL be deduped by canonical URL within the adapter run. It SHALL require no Integration (`integration_id` may be null; `EXA_API_KEY` and the proxy credential are read from the environment). It SHALL leave `fallbackMode` unset — search has no keyless fallback. It SHALL leave `embedding` and `embedding_model` unset for the curation pipeline.
+`searchIngester` SHALL handle Sources of kind `search`. It SHALL read the Source's topic **effective context** (via `source.topic_id`) — the topic's own `context` together with the `context` of each of the topic's attachments — generate a bounded list of search queries from it with an LLM through the LiteLLM proxy (AI SDK structured output with a Zod schema), run each query through Exa's search API using `EXA_API_KEY`, and emit one Resource per result with a canonical URL (the result URL), a title, and `kind` `read`. Results SHALL be deduped by canonical URL within the ingester run. It SHALL require no Integration (`integration_id` may be null; `EXA_API_KEY` and the proxy credential are read from the environment). It SHALL leave `fallbackMode` unset — search has no keyless fallback. It SHALL leave `embedding` and `embedding_model` unset for the curation pipeline.
 
 #### Scenario: Context doc drives queries and Exa results become Resources
 
 - **WHEN** a Source of kind `search` whose topic has a non-empty effective context (its own `context`, an attachment `context`, or both) is scanned
-- **THEN** `searchAdapter` generates queries from that effective context, searches Exa for each, and emits one `read` Resource per result, each keyed by its canonical URL
+- **THEN** `searchIngester` generates queries from that effective context, searches Exa for each, and emits one `read` Resource per result, each keyed by its canonical URL
 
 #### Scenario: Empty context doc falls back to the topic name
 
@@ -183,58 +195,58 @@ A failing Source SHALL degrade only that Source's contribution. `runTopicScan` S
 - **WHEN** two generated queries return results that resolve to the same canonical URL
 - **THEN** only one Resource is emitted for that URL
 
-#### Scenario: Adapter reports Exa's cost
+#### Scenario: Ingester reports Exa's cost
 
-- **WHEN** `searchAdapter` completes a scan that called Exa
+- **WHEN** `searchIngester` completes a scan that called Exa
 - **THEN** it returns a `cost` equal to the sum of the dollar cost Exa reported across the queries (not `0`), and that cost is summed into the Scan's `cost`
 
 #### Scenario: No results yields no Resources without failing
 
 - **WHEN** query generation returns no queries, or Exa returns no results
-- **THEN** the adapter emits zero Resources and does not fail the Source
+- **THEN** the ingester emits zero Resources and does not fail the Source
 
 #### Scenario: Missing key or search error degrades only this Source
 
 - **WHEN** `EXA_API_KEY` is absent, the LiteLLM proxy is unreachable, or Exa returns an error
 - **THEN** the `search` Source fails in isolation without aborting the Scan, and `fallbackMode` is left unset
 
-### Requirement: Adapters populate the Resource snippet and leave content unset
+### Requirement: Ingesters populate the Resource snippet and leave content unset
 
-Every adapter SHALL populate the emitted Resource's `snippet` from the native text the Source's own API returns, so curation's cheap stages have real text without an extra fetch: `rssAdapter` from the feed entry's description/summary, `youtubeAdapter` from the video description, `redditAdapter` from the post selftext, and `searchAdapter` from Exa's result highlights (requesting highlights in the search call). An adapter SHALL leave `content` unset — curation fills it when it fetches a survivor. This does not change what else an adapter emits: it still emits Resources only (never Findings, scores, or embeddings) with the canonical URL, title, and kind it already produces, and leaves `embedding` and `embedding_model` unset.
+Every ingester SHALL populate the emitted Resource's `snippet` from the native text the Source's own API returns, so curation's cheap stages have real text without an extra fetch: `rssIngester` from the feed entry's description/summary, `youtubeIngester` from the video description, `redditIngester` from the post selftext, and `searchIngester` from Exa's result highlights (requesting highlights in the search call). An ingester SHALL leave `content` unset — curation fills it when it fetches a survivor. This does not change what else an ingester emits: it still emits Resources only (never Findings, scores, or embeddings) with the canonical URL, title, and kind it already produces, and leaves `embedding` and `embedding_model` unset.
 
-#### Scenario: RSS adapter sets the snippet from the entry description
+#### Scenario: RSS ingester sets the snippet from the entry description
 
 - **WHEN** a Source of kind `rss` is scanned and a feed entry has a description or summary
 - **THEN** the emitted Resource's `snippet` holds that native text and its `content` is unset
 
-#### Scenario: YouTube adapter sets the snippet from the video description
+#### Scenario: YouTube ingester sets the snippet from the video description
 
 - **WHEN** a Source of kind `youtube` is scanned
 - **THEN** each emitted Resource's `snippet` holds the video description and its `content` is unset
 
-#### Scenario: Reddit adapter sets the snippet from the post selftext
+#### Scenario: Reddit ingester sets the snippet from the post selftext
 
 - **WHEN** a Source of kind `reddit` is scanned and a post has selftext
 - **THEN** the emitted Resource's `snippet` holds that selftext and its `content` is unset
 
-#### Scenario: Search adapter sets the snippet from Exa highlights
+#### Scenario: Search ingester sets the snippet from Exa highlights
 
 - **WHEN** a Source of kind `search` is scanned
-- **THEN** `searchAdapter` requests highlights from Exa and each emitted Resource's `snippet` holds its result highlights, with `content` unset
+- **THEN** `searchIngester` requests highlights from Exa and each emitted Resource's `snippet` holds its result highlights, with `content` unset
 
 #### Scenario: A missing native text leaves the snippet null, not the title
 
 - **WHEN** a Source's entry has no native description/selftext/highlights
 - **THEN** the emitted Resource's `snippet` is null (the title is never copied into the snippet) and the Resource is still emitted
 
-### Requirement: Search adapter expands YouTube playlist results into videos
+### Requirement: Search ingester expands YouTube playlist results into videos
 
-When a search result's URL is a YouTube playlist (`youtube.com/playlist?list=<id>`), `searchAdapter` SHALL expand it into the playlist's member videos rather than emit the playlist page as a single Resource. Expansion SHALL reuse the YouTube adapter's `playlistItems` Data API path (`YOUTUBE_API_KEY`) and its video-to-Resource mapping, so each member video becomes a `watch` Resource keyed by its canonical `https://www.youtube.com/watch?v=<id>` URL — the same key the `youtube` Source emits, so the two dedupe. Non-playlist results SHALL be unchanged (they remain `read` Resources keyed by their URL). Expansion SHALL run on every scan within the search flow, requiring no new Source kind, schema, or scheduler.
+When a search result's URL is a YouTube playlist (`youtube.com/playlist?list=<id>`), `searchIngester` SHALL expand it into the playlist's member videos rather than emit the playlist page as a single Resource. Expansion SHALL reuse the YouTube ingester's `playlistItems` Data API path (`YOUTUBE_API_KEY`) and its video-to-Resource mapping, so each member video becomes a `watch` Resource keyed by its canonical `https://www.youtube.com/watch?v=<id>` URL — the same key the `youtube` Source emits, so the two dedupe. Non-playlist results SHALL be unchanged (they remain `read` Resources keyed by their URL). Expansion SHALL run on every scan within the search flow, requiring no new Source kind, schema, or scheduler.
 
 #### Scenario: A playlist result is expanded into its videos
 
 - **WHEN** a search result's URL is `youtube.com/playlist?list=<id>` and `YOUTUBE_API_KEY` is set
-- **THEN** the adapter fetches the playlist's items via `playlistItems` and emits one `watch` Resource per video (keyed by its `watch?v=` URL), and the playlist URL itself is not emitted as a Resource
+- **THEN** the ingester fetches the playlist's items via `playlistItems` and emits one `watch` Resource per video (keyed by its `watch?v=` URL), and the playlist URL itself is not emitted as a Resource
 
 #### Scenario: Non-playlist results are untouched
 
@@ -256,11 +268,11 @@ When a search result's URL is a YouTube playlist (`youtube.com/playlist?list=<id
 - **WHEN** expanding one playlist errors (private, 404, or timeout)
 - **THEN** that playlist's original `read` Resource is kept and the Scan's other search results and playlist expansions are unaffected
 
-### Requirement: The reddit adapter records the post score as engagement
-The reddit adapter SHALL map each post's score from the listing response it already fetches into the Resource's `engagement`, with no additional API calls, and a re-scan SHALL refresh the stored value. Adapters that capture no signal leave `engagement` null.
+### Requirement: The reddit ingester records the post score as engagement
+The reddit ingester SHALL map each post's score from the listing response it already fetches into the Resource's `engagement`, with no additional API calls, and a re-scan SHALL refresh the stored value. Ingesters that capture no signal leave `engagement` null.
 
 #### Scenario: A reddit post carries its score
-- **WHEN** the reddit adapter ingests a post with a score
+- **WHEN** the reddit ingester ingests a post with a score
 - **THEN** the stored Resource's `engagement` holds that score, and a later scan updates it
 
 #### Scenario: Other sources stay null

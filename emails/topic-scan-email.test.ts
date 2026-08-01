@@ -50,3 +50,34 @@ test("renderTopicScanEmail numbers each finding by its array position", async ()
 	expect(secondCard.startsWith("2")).toBe(true)
 	expect(secondCard).toContain("Second")
 })
+
+// the recap renders through a limited Markdown subset. formatting survives, but a link only works when it points
+// at one of this email's own Finding urls. everything else, the relevance explanation included, stays plain text
+test("renderTopicScanEmail renders the recap with formatting and only kept-finding links", async () => {
+	// a recap citing the kept finding and an attacker's url, plus raw html, an image, and a note smuggling a link
+	const html = await renderTopicScanEmail({
+		topicName: "LLM tooling",
+		findingCount: 1,
+		findings: [{ title: "Agent news", url: "https://a.com/1", relevanceExplanation: "see [here](https://evil.test)" }],
+		scanSummary:
+			'**The numbers:** 3 kept.\n\nSources: [the agent piece](https://a.com/1) and [click me](https://evil.test)\n\n<a href="https://evil.test">or here</a> <img src="x">',
+	})
+
+	// the allowed formatting renders as real markup
+	expect(html).toContain("<strong")
+
+	// the kept finding's citation is a real anchor, since the finding card below already links there
+	expect(html).toContain("the agent piece</a>")
+
+	// the attacker's link keeps its label, shows its destination as text, and no anchor points at it
+	expect(html).toContain("click me")
+	expect(html).toContain("(https://evil.test)")
+	expect(html).not.toContain('href="https://evil.test"')
+
+	// raw HTML reads as the characters the model typed, and no image tag is produced
+	expect(html).toContain("&lt;a href=")
+	expect(html).not.toContain("<img")
+
+	// the relevance explanation is plain text, so its link syntax stays literal
+	expect(html).toContain("[here](https://evil.test)")
+})

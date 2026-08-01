@@ -39,7 +39,7 @@ Every authored rule is one file under `.agents/`; tools that read the open
 standard get it natively, tools that don't get symlinks. Vendored skills pin
 via a lockfile.
 [domain-model](../.agents/skills/domain-model/SKILL.md) ·
-[adapter-authoring](../.agents/skills/adapter-authoring/SKILL.md) ·
+[ingester-authoring](../.agents/skills/ingester-authoring/SKILL.md) ·
 [git-discipline](../.agents/skills/git-discipline/SKILL.md) ·
 [skills-lock.json](../skills-lock.json)
 
@@ -51,7 +51,7 @@ adds only Claude Code specifics. A standing rule keeps package.json scripts
 and the README in sync in the same change.
 
 ### Deterministic gates at generation time
-Two scripts hold the check logic; each agent harness gets a thin adapter
+Two scripts hold the check logic; each agent harness gets a thin hook bridge
 that translates its hook protocol into "run the scripts." Both scripts take
 a path argument or hook JSON on stdin, and fail loud when jq is missing.
 [check-comment-groups.sh](../scripts/check-comment-groups.sh) ·

@@ -41,7 +41,7 @@ test("toSourceSummary summarizes each kind's config", () => {
 	expect(toSourceSummary("youtube", { playlistId: "PL456" })).toBe("PL456")
 })
 
-// the search adapter ignores its config and web search from the topic prompt, so the summary stays empty for the ui to fill
+// the search ingester ignores its config and web search from the topic prompt, so the summary stays empty for the ui to fill
 test("toSourceSummary is empty for the web search source even when a query is stored", () => {
 	expect(toSourceSummary("search", { query: "production LLM agents" })).toBe("")
 })

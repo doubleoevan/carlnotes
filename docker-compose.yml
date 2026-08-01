@@ -13,6 +13,15 @@ services:
       - DATABASE_URL=${LITELLM_DATABASE_URL}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
+  # the llm-guard scanner that screens an uploaded document and a fetched page before any model reads either.
+  # it's a separate service because it runs in python and the app runtime is bun. unset LLM_GUARD_URL to run without it
+  llm-guard:
+    image: laiyer/llm-guard-api:0.3.15
+    # loopback only: the scanner takes arbitrary text and has no auth, so it should not answer the local network
+    ports:
+      - "127.0.0.1:8001:8000"
+    volumes:
+      - ./infra/llm-guard/scanners.yml:/home/user/app/config/scanners.yml
   # temporal dev server for local attachment-workflow development: a single-binary, in-memory server on 7233 (ui on 8233).
   temporal:
     image: temporalio/admin-tools:1.31

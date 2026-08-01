@@ -40,6 +40,13 @@ test("a generalized inverted index (GIN) covers topics.tags", () => {
 	expect(allMigrationsSql()).toContain(`CREATE INDEX "topics_tags_gin" ON "topics" USING gin ("tags")`)
 })
 
+// the near-duplicate gate's nearest-neighbor lookup must be index-backed, and cosine, since that is the distance it measures
+test("an HNSW cosine index covers resources.embedding", () => {
+	expect(allMigrationsSql()).toContain(
+		`CREATE INDEX "resources_embedding_hnsw" ON "resources" USING hnsw ("embedding" vector_cosine_ops)`,
+	)
+})
+
 // a source without an api key needs no Integration, so the integration_id must be nullable
 test("sources.integration_id is nullable", () => {
 	expect(sources.integrationId.notNull).toBe(false)
@@ -148,7 +155,7 @@ test("bookmarks is unique per user and finding and cascades from both parents", 
 	expect(allMigrationsSql()).toMatch(/bookmarks_finding_id_findings_id_fk.*ON DELETE cascade/)
 })
 
-// an adapter that captures no engagement score leaves the column null
+// an ingester that captures no engagement value leaves the column null
 test("resources.engagement is nullable", () => {
 	expect(resources.engagement.notNull).toBe(false)
 })

@@ -1,8 +1,10 @@
 // the topic finding logic behind the api routes. it loads a topic's findings and records ratings, views, and consumed state
+import { trackEvent } from "@shared/analytics"
 import type { TopicFinding } from "@shared/contracts"
 import { and, desc, eq, gt, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { bookmarks, consumptions, findings, resources, scans } from "../../db/schema"
+import type { AnalyticsProperties } from "../currentUser"
 import { canRateFinding, isTopicFindingVisible } from "./permissions"
 
 /**
@@ -19,8 +21,7 @@ export async function loadTopicFindings(
 		return []
 	}
 
-	// a signed-out visitor has no consumption or bookmark history. sql`false` forces each left join to never
-	// match, rather than comparing a user_id column against null, which drizzle's column typing rejects
+	// a signed-out visitor has no history. sql`false` never matches, since drizzle's typing rejects comparing user_id to null
 	const consumptionJoinCondition = userId
 		? and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
 		: sql`false`
@@ -88,11 +89,22 @@ export async function loadTopicFindings(
 /**
  * Set a topic finding's rating to thumbs up or down, or clear it. Returns false when the user may not rate.
  */
-export async function setRating(userId: string, findingId: string, rating: "up" | "down" | null): Promise<boolean> {
+export async function setRating(
+	userId: string,
+	findingId: string,
+	rating: "up" | "down" | null,
+	analyticsProperties: AnalyticsProperties,
+): Promise<boolean> {
+	// only a rater may write, then the rating lands in one update
 	if (!(await canRateFinding(userId, findingId))) {
 		return false
 	}
 	await db.update(findings).set({ rating }).where(eq(findings.id, findingId))
+
+	// track the rating event. clearing a rating is not one
+	if (rating !== null) {
+		trackEvent("finding_rated", userId, analyticsProperties)
+	}
 	return true
 }
 
@@ -100,10 +112,24 @@ export async function setRating(userId: string, findingId: string, rating: "up" 
  * Bookmark or unbookmark a topic finding for the user. Bookmarking returns false when the finding isn't visible to the user.
  * Unbookmarking always succeeds.
  */
-export async function setBookmarked(userId: string, findingId: string, isBookmarked: boolean): Promise<boolean> {
-	// unbookmarking always removes this user's own row
+export async function setBookmarked(
+	userId: string,
+	findingId: string,
+	isBookmarked: boolean,
+	analyticsProperties: AnalyticsProperties,
+): Promise<boolean> {
+	// unbookmarking always removes this user's own row. track it only when a row was really there to remove,
+	// matching the bookmark path below, so a repeated call cannot report a second unbookmark that never happened
 	if (!isBookmarked) {
-		await db.delete(bookmarks).where(and(eq(bookmarks.userId, userId), eq(bookmarks.findingId, findingId)))
+		const deletedBookmarks = await db
+			.delete(bookmarks)
+			.where(and(eq(bookmarks.userId, userId), eq(bookmarks.findingId, findingId)))
+			.returning({ id: bookmarks.id })
+
+		// a repeated unbookmark deletes nothing, so it reports nothing
+		if (deletedBookmarks.length > 0) {
+			trackEvent("finding_unbookmarked", userId, analyticsProperties)
+		}
 		return true
 	}
 
@@ -111,25 +137,46 @@ export async function setBookmarked(userId: string, findingId: string, isBookmar
 	if (!(await isTopicFindingVisible(userId, findingId))) {
 		return false
 	}
-	await db.insert(bookmarks).values({ userId, findingId }).onConflictDoNothing()
+	const insertedBookmarks = await db
+		.insert(bookmarks)
+		.values({ userId, findingId })
+		.onConflictDoNothing()
+		.returning({ id: bookmarks.id })
+
+	// track the event for analytics
+	if (insertedBookmarks.length > 0) {
+		trackEvent("finding_bookmarked", userId, analyticsProperties)
+	}
 	return true
 }
 
 /**
  * Mark or unmark a topic finding consumed. Returns false when the user may not see it.
  */
-export async function setConsumed(userId: string, findingId: string, isConsumed: boolean): Promise<boolean> {
+export async function setConsumed(
+	userId: string,
+	findingId: string,
+	isConsumed: boolean,
+	analyticsProperties: AnalyticsProperties,
+): Promise<boolean> {
 	if (!(await isTopicFindingVisible(userId, findingId))) {
 		return false
 	}
 	await writeConsumed(userId, findingId, isConsumed)
+
+	// track the event for analytics
+	trackEvent(isConsumed ? "finding_read" : "finding_unread", userId, analyticsProperties)
 	return true
 }
 
 /**
  * Increment the topic finding's view count and mark it consumed. Returns false when the user may not see it.
  */
-export async function recordView(userId: string, findingId: string): Promise<boolean> {
+export async function recordView(
+	userId: string,
+	findingId: string,
+	analyticsProperties: AnalyticsProperties,
+): Promise<boolean> {
 	if (!(await isTopicFindingVisible(userId, findingId))) {
 		return false
 	}
@@ -140,6 +187,9 @@ export async function recordView(userId: string, findingId: string): Promise<boo
 		.set({ viewCount: sql`${findings.viewCount} + 1` })
 		.where(eq(findings.id, findingId))
 	await writeConsumed(userId, findingId, true)
+
+	// track the event for analytics
+	trackEvent("finding_opened", userId, analyticsProperties)
 	return true
 }
 

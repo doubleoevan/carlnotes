@@ -37,7 +37,7 @@ export function LoginPage() {
 			isSubmitting={isSubmitting}
 			footerPrompt={"Don't have an account? "}
 			footerLinkLabel="Sign up"
-			footerHref="/signup"
+			footerHref="/signup?cta=login"
 		/>
 	)
 }
