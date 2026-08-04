@@ -3,7 +3,7 @@
 // the free filter stages run first, so the paid stages only ever spend money on candidates that survived them
 import { eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
-import { bookmarks, findings, type scans, topics } from "../../db/schema"
+import { bookmarks, findings, resources, type scans, topics } from "../../db/schema"
 import type { Budget } from "../budget"
 import type { NewResource } from "../ingest/ingester"
 import { traceStage } from "../telemetry"
@@ -11,6 +11,8 @@ import { admitResources, gateResources, loadTopicContext, loadUnscoredResources,
 import { fetchAndScoreResources } from "./score"
 import { type ScannedSource, summarizeTopicScan, toTopicScanSummary } from "./summarize"
 import { countFilteredResources, emptyReviewOutcome, emptyReviewSummary, type ReviewSummary } from "./track"
+
+export type { ReviewSummary } from "./track"
 
 // a persisted Scan record
 type Scan = typeof scans.$inferSelect
@@ -61,15 +63,17 @@ export async function reviewScan(
 	)
 
 	// the paid stage: fetch each admitted Resource and score it under the Scan's ceilings
-	await traceStage(
+	const scoredResourceIds = await traceStage(
 		"score",
 		budget,
 		() => fetchAndScoreResources(admittedResources, scan, topicId, topicContext, reviewOutcome, budget, litellmApiKey),
-		() => ({ admittedCount: admittedResources.length, keptCount: reviewOutcome.keptFindings.length }),
+		(scoredIds) => ({ admittedCount: admittedResources.length, scoredCount: scoredIds.length }),
 	)
 
-	// keep only the topic's top max_results findings now that this scan's findings are written
-	await filterTopicFindings(topicId)
+	// keep only the topic's top max_results findings now that this scan's findings are written.
+	// narrow the kept findings list to what survived. the recap and the email's link allowlist are both written from it
+	const survivingUrls = await filterTopicFindings(topicId)
+	reviewOutcome.keptFindings = reviewOutcome.keptFindings.filter((finding) => survivingUrls.has(finding.url))
 
 	// summarize the scan
 	const scanSummary = await traceStage(
@@ -87,21 +91,29 @@ export async function reviewScan(
 		keptCount: reviewOutcome.keptFindings.length,
 		filteredCount: countFilteredResources(reviewOutcome),
 		scanSummary,
+		scoredResourceIds,
 	}
 }
 
 // keep only the topic's top max_results findings by relevance score, sparing bookmarked ones.
-async function filterTopicFindings(topicId: string): Promise<void> {
+// returns the urls that survive for the recap and the email's link allowlist
+async function filterTopicFindings(topicId: string): Promise<Set<string>> {
 	// the topic's cap on kept findings
 	const [topic] = await db.select({ maxResults: topics.maxResults }).from(topics).where(eq(topics.id, topicId))
 	if (!topic) {
-		return
+		return new Set()
 	}
 
-	// the topic's findings with their ranking scores
+	// the topic's findings with their ranking scores, the url each one points at, and when it was found
 	const findingRows = await db
-		.select({ id: findings.id, relevanceScore: findings.relevanceScore })
+		.select({
+			id: findings.id,
+			relevanceScore: findings.relevanceScore,
+			createdAt: findings.createdAt,
+			url: resources.url,
+		})
 		.from(findings)
+		.innerJoin(resources, eq(findings.resourceId, resources.id))
 		.where(eq(findings.topicId, topicId))
 
 	// the finding ids anyone bookmarked on this topic
@@ -120,18 +132,28 @@ async function filterTopicFindings(topicId: string): Promise<void> {
 	if (filteredIds.length > 0) {
 		await db.delete(findings).where(inArray(findings.id, filteredIds))
 	}
+
+	// return the filtered topic finding urls
+	const filteredIdSet = new Set(filteredIds)
+	return new Set(
+		findingRows.filter((findingRow) => !filteredIdSet.has(findingRow.id)).map((findingRow) => findingRow.url),
+	)
 }
 
 /**
- * The topic's non-bookmarked finding ids that are ranked beyond maxResults by relevance score and need to be filtered
+ * The topic's non-bookmarked finding ids ranked beyond maxResults by relevance score, which need filtering.
+ * A tie goes to the newer finding, so a Topic already full of top-scored ones can still update from a later Scan.
  */
 export function findingIdsToFilter(
-	findingRows: { id: string; relevanceScore: number; isBookmarked: boolean }[],
+	findingRows: { id: string; relevanceScore: number; createdAt: Date; isBookmarked: boolean }[],
 	maxResults: number,
 ): string[] {
 	// rank the unbookmarked rows and drop everything past the cap
 	const rankedUnbookmarkedRows = findingRows
 		.filter((findingRow) => !findingRow.isBookmarked)
-		.sort((first, second) => second.relevanceScore - first.relevanceScore)
+		.sort(
+			(first, second) =>
+				second.relevanceScore - first.relevanceScore || second.createdAt.getTime() - first.createdAt.getTime(),
+		)
 	return rankedUnbookmarkedRows.slice(maxResults).map((findingRow) => findingRow.id)
 }

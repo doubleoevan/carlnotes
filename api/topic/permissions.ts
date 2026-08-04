@@ -1,4 +1,4 @@
-// the shared access checks for topics and topic findings. one place answers who may see, subscribe, and rate
+// the shared access checks for topics and topic findings. one place checks who may see, subscribe, and rate
 import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { audienceMembers, findings, scans, subscriptions, topicInvites, topics, users } from "../../db/schema"
@@ -10,7 +10,7 @@ type Topic = typeof topics.$inferSelect
  * The topic row when the user owns it, else undefined. The owner gate that every write shares.
  */
 export async function loadOwnedTopic(userId: string, topicId: string): Promise<Topic | undefined> {
-	// one lookup answers both existence and ownership
+	// one lookup checks both existence and ownership
 	const [topic] = await db
 		.select()
 		.from(topics)

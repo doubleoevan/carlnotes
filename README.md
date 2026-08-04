@@ -36,10 +36,12 @@ Feature work lands change-by-change through [OpenSpec](https://github.com/Fissio
 ```bash
 bun install
 bun run dev          # api, ui, temporal, and worker together (concurrently, colored per process); run carl-up first for the Docker infra
+                     # scans run as Temporal workflows, so dev:temporal must be up for any scan to happen, not just for attachments
 bun run dev:ui       # Vite dev server (UI); wraps itself in doppler run
 bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; the Vite dev server proxies /api here
 bun run dev:worker   # scheduled-scan sweep loop (set SCHEDULE_INTERVAL_MS); `bun run schedule` runs one sweep, as a cron would
-bun run dev:temporal # Temporal worker for async attachment processing; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
+bun run dev:temporal # Temporal worker for topic scans and attachment processing; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
+bun run dev:temporal:watch # the same worker, restarted on save; what `bun run dev` uses. a restart mid-review leaves that scan waiting out its 30-minute activity timeout before it fails
 bun run dev:email    # react-email preview server for the templates in emails/ (localhost:3011); no doppler needed
 bun run build:ui     # production build (no doppler, so it runs in CI and deploys)
 ```
@@ -52,6 +54,7 @@ Database — generate a migration from the Drizzle schema, then apply it:
 bun run db:generate   # write a migration from db/schema.ts (offline, no doppler)
 bun run db:migrate    # apply pending migrations (db/migrate.ts, the same one-shot script the deploy job runs)
 bun run db:seed       # creates the dev demo user via a real signup, then loads idempotent stub data (refuses to run outside the dev config)
+bun run litellm:restart # reload litellm-config.yaml. the file is bind-mounted, so a restart picks up an edit with no rebuild
 ```
 
 `db:seed` signs up a real dev account (`DEV_USER_EMAIL` / `DEV_USER_PASSWORD` in `.env.example`) through Better Auth, so log in with those credentials locally to see the seeded demo topics. Auth needs a few more Doppler variables locally: `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`, and `RESEND_API_KEY`/`RESEND_FROM_EMAIL` — see `.env.example` for what each is for. Signup itself is open: no invite code, Google/GitHub are one-click, and email/password sits behind a "Continue with email" toggle.
@@ -87,8 +90,9 @@ bun run smoke              # run all smoke tests
 bun run smoke:scan         # just the topic-scan smoke test (ingestion + review, end-to-end)
 bun run smoke:store        # just the resource-content object-storage round-trip (put → read → delete)
 bun run smoke:attach       # just the URL-attachment smoke test (Firecrawl → store → Temporal workflow → ready)
-bun run smoke:search       # just the search-scout smoke test (context → LLM queries → Exa → Resources)
+bun run smoke:search       # just the web search smoke test (context → LLM queries → Exa → Resources)
 bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its ceiling
+bun run smoke:chat         # just the topic chat retrieval smoke test (question → ranked findings → assembled context)
 bun run smoke:eval         # just the eval-harness smoke: one tiny labeled fixture through the real gate and scoring
 ```
 
@@ -129,6 +133,26 @@ Migrations are a deploy job, not a start-up step. Run the same one-shot script t
 ```bash
 doppler run -- bun db/migrate.ts
 ```
+
+Prompts are a deploy job too, uploaded as candidates rather than promoted. Without this the registry keeps serving the wording it already had while the repo moves on, and a scan reads stale prompts:
+
+```bash
+doppler run -- bun worker/prompts/sync.ts --candidate
+```
+
+Promote a candidate to production in Langfuse once a real scan's note reads right. The runtime falls back to the bundled template whenever a registry template asks for variables the code does not fill, so a stale label can never break a prompt. A prompt whose live wording differs from the bundled one is logged once per process.
+
+The temporal worker and the scan sweep are their own services, built from this same image with the command overridden. They pick up new code on every deploy exactly as the api does. `schedule` decides what to scan and `temporal` does the scan work.
+
+```bash
+doppler run -- bun worker/temporal.ts
+```
+
+```bash
+doppler run -- bun worker/schedule.ts
+```
+
+Without the `temporal` worker, `workflow.start` still succeeds against a queue nobody polls: scans queue silently and the api looks healthy. The scan sweep reports when no worker is polling the scan queue, which is the check to alert on.
 
 ## Attribution
 

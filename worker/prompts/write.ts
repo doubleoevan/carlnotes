@@ -2,7 +2,7 @@
 // writing a prompt strips the frontmatter and template comments, then replaces each {{variable}} with its runtime value
 //
 // the first variable map is untrusted and gets wrapped in a delimiter, so that page content, uploaded documents, and topic text
-// read as data rather than as instructions. the second map is the app's own numbers and dates
+// read as data instead of as instructions. the second map is the app's own numbers and dates
 
 // the frontmatter block at the top of every template. documentation only, never parsed at runtime.
 // exported so that sync.ts can read individual fields from it without re-typing this pattern
@@ -42,13 +42,29 @@ export function writePrompt(
 		values[name] = fenceUntrusted(value, nonce)
 	}
 
-	// fill every placeholder in one pass, so a {{variable}} inside a filled-in value is never itself filled in
-	const prompt = body.replace(PLACEHOLDER_PATTERN, (placeholder, name) => values[name] ?? placeholder)
+	// fill every prompt template placeholder in one pass, so a {{variable}} inside a filled-in value is never itself filled in
+	const unfilledNames: string[] = []
+	const prompt = body.replace(PLACEHOLDER_PATTERN, (placeholder, name) => {
+		if (values[name] === undefined) {
+			unfilledNames.push(name)
+			return placeholder
+		}
+		return values[name]
+	})
+
+	// a placeholder the caller has no value for means the template and the code that fills it have drifted apart,
+	// which a registry holding an older template is enough to cause. it throws instead of sending the model a
+	// prompt with a hole in it, since what comes back reads as a real answer about whatever the hole left out
+	if (unfilledNames.length > 0) {
+		throw new Error(
+			`prompt template has no value for ${unfilledNames.join(", ")}. the caller passed ${Object.keys(values).sort().join(", ")}`,
+		)
+	}
 	return prompt.trim()
 }
 
 /**
- * Wraps an untrusted value in this call's delimiter, after removing the delimiter tags and backticks it carries,
+ * Wraps an untrusted value in this call's delimiter, after removing the delimiter tags and backticks it includes,
  * so the value cannot close the delimiter around it.
  */
 export function fenceUntrusted(value: string, nonce: string): string {

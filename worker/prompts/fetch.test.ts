@@ -1,12 +1,12 @@
 // fetch.ts tests for the no-key prompt fallback path
 import { expect, test } from "bun:test"
-import { FALLBACK_PROMPT_TEMPLATES, fetchPromptTemplate } from "./fetch"
+import { FALLBACK_PROMPT_TEMPLATES, fetchPromptTemplate, hasSameVariables } from "./fetch"
 
 // without Langfuse keys, every prompt name resolves to its fallback Markdown with no registry link
 test("fetchPromptTemplate returns the bundled template unmodified when Langfuse keys are unset", async () => {
 	// clear both keys so the run is deterministic regardless of the calling shell's environment
-	const previousPublicKey = Bun.env.LANGFUSE_PUBLIC_KEY
-	const previousSecretKey = Bun.env.LANGFUSE_SECRET_KEY
+	const originalPublicKey = Bun.env.LANGFUSE_PUBLIC_KEY
+	const originalSecretKey = Bun.env.LANGFUSE_SECRET_KEY
 	Bun.env.LANGFUSE_PUBLIC_KEY = undefined
 	Bun.env.LANGFUSE_SECRET_KEY = undefined
 
@@ -22,7 +22,25 @@ test("fetchPromptTemplate returns the bundled template unmodified when Langfuse 
 		}
 	} finally {
 		// restore whatever keys the calling shell had set, even if an assertion above threw
-		Bun.env.LANGFUSE_PUBLIC_KEY = previousPublicKey
-		Bun.env.LANGFUSE_SECRET_KEY = previousSecretKey
+		Bun.env.LANGFUSE_PUBLIC_KEY = originalPublicKey
+		Bun.env.LANGFUSE_SECRET_KEY = originalSecretKey
+	}
+})
+
+// the prompt registry is for editing wording between deploys, not for changing which variables a prompt takes.
+// a prompt template naming different variables has drifted from the code that fills it, and the bundled template wins
+test("hasSameVariables spots a renamed prompt variable", () => {
+	expect(hasSameVariables("Kept:\n{{keptFindingsBlock}}", "Kept:\n{{keptResourcesBlock}}")).toBe(false)
+})
+
+// wording, order, and repeats are exactly what the prompt registry is allowed to change
+test("hasSameVariables ignores wording, order, and repeats", () => {
+	expect(hasSameVariables("{{a}} then {{b}}", "Rewritten: {{b}}, {{a}} again {{a}}")).toBe(true)
+})
+
+// every bundled prompt template is its own contract, so each must agree with itself
+test("every bundled prompt template agrees with itself", () => {
+	for (const [name, template] of Object.entries(FALLBACK_PROMPT_TEMPLATES)) {
+		expect(hasSameVariables(template, template), `${name} must match itself`).toBe(true)
 	}
 })

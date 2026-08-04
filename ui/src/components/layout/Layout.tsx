@@ -1,5 +1,6 @@
-import { useEffect } from "react"
+import { Suspense, useEffect } from "react"
 import { Outlet, useLocation } from "react-router-dom"
+import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { CoffeeSteam } from "@/components/branding/CoffeeSteam"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
@@ -11,7 +12,7 @@ import { Toaster } from "@/components/primitives/sonner"
  */
 export function Layout() {
 	return (
-		<div className="min-h-screen">
+		<div className="min-h-dvh">
 			<ScrollToTop />
 			<Header />
 			{/* everything below the hero shares one ambient steam backdrop that restarts fresh on each route change.
@@ -22,9 +23,12 @@ export function Layout() {
 				<div className="relative z-20 mx-auto -mt-6 max-w-5xl px-safe">
 					<SearchBar />
 				</div>
-				{/* the routed page above the steam */}
-				<div className="relative z-10 min-h-screen">
-					<Outlet />
+				{/* the routed page above the steam. each page is its own bundle, and the Suspense boundary sits here
+				    so the header and search bar stay put while the next page arrives */}
+				<div className="relative z-10 min-h-dvh">
+					<Suspense fallback={<CoffeeLoading />}>
+						<Outlet />
+					</Suspense>
 				</div>
 			</div>
 			<Footer />

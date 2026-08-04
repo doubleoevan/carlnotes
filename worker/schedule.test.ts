@@ -3,10 +3,16 @@ import { expect, test } from "bun:test"
 import {
 	frequencyWindowMs,
 	isTopicScheduled,
+	staleScanWindowMs,
 	type TopicSweepSummary,
 	toExclusiveTask,
-	trackSweepOutcome,
 } from "./schedule"
+import {
+	FINISH_TIMEOUT_MS,
+	INGEST_TIMEOUT_MS,
+	MAX_SCAN_DURATION_MS,
+	REVIEW_TIMEOUT_MS,
+} from "./workflows/stage-timeouts"
 
 // a promise the test resolves on its own schedule, plus the resolver, so a wrapped task can be kept open deliberately
 function toDeferredTask<Value>(): { promise: Promise<Value>; resolve: (value: Value) => void } {
@@ -19,7 +25,7 @@ function toDeferredTask<Value>(): { promise: Promise<Value>; resolve: (value: Va
 
 // a fresh zeroed topic sweep summary to fold outcomes into
 function emptyTopicSweepSummary(): TopicSweepSummary {
-	return { scheduled: 1, scanned: 0, skippedOverQuota: 0, failed: 0 }
+	return { scheduled: 1, started: 0, skippedOverQuota: 0, failed: 0 }
 }
 
 // the daily frequency waits a day before a re-scan, the weekly frequency waits seven
@@ -42,7 +48,7 @@ test("isTopicScheduled gates on the frequency window", () => {
 })
 
 // a failed scan spends the frequency window like any other,
-// so a Topic whose sources keep failing waits its turn instead of being picked up by every sweep.
+// so a Topic whose sources keep failing waits out the frequency window instead of being picked up by every sweep.
 test("isTopicScheduled holds a Topic back after a failed scan until the window elapses", () => {
 	const now = new Date("2026-07-24T12:00:00Z")
 	// a daily Topic whose scan failed an hour ago should not get scheduled again yet
@@ -63,8 +69,8 @@ test("isTopicScheduled holds a weekdays Topic back on a weekend", () => {
 	expect(isTopicScheduled({ frequency: "weekdays" }, lastScan, new Date("2026-07-27T12:00:00Z"))).toBe(true)
 })
 
-// the first brew outranks the weekend rule, so a weekdays Topic created on a Saturday is not left empty until Monday
-test("isTopicScheduled still brews a brand-new weekdays Topic on a weekend", () => {
+// a Topic's first scan outranks the weekend rule, so a weekdays Topic created on a Saturday is not left empty until Monday
+test("isTopicScheduled still schedules a new weekdays Topic on a weekend", () => {
 	expect(isTopicScheduled({ frequency: "weekdays" }, undefined, new Date("2026-07-25T12:00:00Z"))).toBe(true)
 })
 
@@ -75,7 +81,7 @@ test("isTopicScheduled treats a topic with only a pending running scan as due", 
 	expect(isTopicScheduled({ frequency: "daily" }, undefined, now)).toBe(true)
 })
 
-// a call made while the wrapped task is still running is skipped, rather than overlapping it
+// a call made while the wrapped task is still running is skipped, instead of overlapping it
 test("toExclusiveTask skips a call made while the previous call is still running", async () => {
 	const deferredTask = toDeferredTask<string>()
 	let callCount = 0
@@ -97,22 +103,16 @@ test("toExclusiveTask skips a call made while the previous call is still running
 	expect(callCount).toBe(2)
 })
 
-// a topic scan that ends failed returns normally, so the topic sweep's catch never sees it, but the summary counts it as failed
-test("trackSweepOutcome counts a failed-status scan as failed", () => {
+// the sweep hands each Scan to Temporal and does not wait, so its summary count starts.
+// how a Scan ended is on its own row, and there is no outcome for the sweep to fold in
+test("a topic sweep summary counts starts instead of outcomes", () => {
 	const summary = emptyTopicSweepSummary()
-	trackSweepOutcome(summary, { status: "failed" })
-	expect(summary).toEqual({ scheduled: 1, scanned: 0, skippedOverQuota: 0, failed: 1 })
+	expect(Object.keys(summary).sort()).toEqual(["failed", "scheduled", "skippedOverQuota", "started"])
 })
 
-// a succeeded topic scan, and a scan the runner returned nothing for, both count as scanned
-test("trackSweepOutcome counts a succeeded scan as scanned", () => {
-	const summarySucceeded = emptyTopicSweepSummary()
-	trackSweepOutcome(summarySucceeded, { status: "succeeded" })
-	expect(summarySucceeded.scanned).toBe(1)
-	expect(summarySucceeded.failed).toBe(0)
-
-	// no topic scan row came back, so there is no failure to report
-	const summaryMissing = emptyTopicSweepSummary()
-	trackSweepOutcome(summaryMissing, undefined)
-	expect(summaryMissing.scanned).toBe(1)
+// the scan reclaim waits out the longest a Scan may legally run.
+// deriving it from the stage timeouts is what keeps a timeout from closing out Scans that are running but slow
+test("the scan reclaim window clears the longest a Scan may legally run", () => {
+	expect(MAX_SCAN_DURATION_MS).toBe(INGEST_TIMEOUT_MS + REVIEW_TIMEOUT_MS + FINISH_TIMEOUT_MS)
+	expect(staleScanWindowMs()).toBeGreaterThan(MAX_SCAN_DURATION_MS)
 })

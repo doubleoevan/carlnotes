@@ -1,4 +1,9 @@
 {
 	"extends": "../tsconfig.base.json",
+	// the build output goes above this folder, since react-email treats every entry under --dir as a
+	// template and tries to open the emitted declaration files as emails
+	"compilerOptions": {
+		"outDir": "../.tsbuild/emails"
+	},
 	"include": ["**/*.ts", "**/*.tsx"]
 }

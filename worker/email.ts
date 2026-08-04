@@ -1,7 +1,7 @@
-// send an email through Resend's HTTP API. a failure is logged and reported rather than thrown, so a bad address never fails the caller
+// send an email through Resend's HTTP API. a failure is logged and reported instead of being thrown, so a bad address never fails the caller
 import { reportError } from "@shared/monitoring"
 
-// which email is being sent, so a blocked signup reports apart from a missed digest
+// which kind of email is being sent, so a blocked signup reports differently from a missed scan email
 export type EmailKind = "verification" | "topic-scan" | "manual-scan"
 
 export async function sendEmail(message: {
@@ -19,7 +19,7 @@ export async function sendEmail(message: {
 		return
 	}
 
-	// post the email to Resend. a failure is logged rather than thrown, and names the domain instead of the address
+	// post the email to Resend. a failure is logged instead of being thrown, and names the email domain instead of the full address
 	const recipientDomain = message.to.split("@")[1] ?? "an unknown domain"
 	try {
 		const response = await fetch("https://api.resend.com/emails", {
@@ -34,7 +34,7 @@ export async function sendEmail(message: {
 			}),
 		})
 		if (!response.ok) {
-			// a subscriber silently not receiving their digest looks identical to a quiet scan, so it is reported.
+			// a subscriber silently not receiving their scan email is reported.
 			const errorBody = await response.text()
 			console.error(`resend ${message.emailKind} to ${recipientDomain} failed: ${response.status} ${errorBody}`)
 			reportError(new Error(`resend rejected the send with ${response.status}`), "email", {

@@ -1,4 +1,4 @@
-// feed tests for the rate-eligibility rule that the batched feed uses in place of a per-topic subscription query
+// feed tests for the rate-eligibility rule that the batched feed uses instead of a per-topic subscription query
 import { expect, test } from "bun:test"
 import { canRateInFeed } from "./feeds"
 

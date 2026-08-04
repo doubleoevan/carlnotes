@@ -2,15 +2,15 @@ import type { ActivityResponse } from "@shared/contracts"
 import { X } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
-import { AnchorLink } from "@/components/layout/AnchorLink"
-import { ConfirmDialog } from "@/components/layout/ConfirmDialog"
+import { AnchorLink } from "@/components/common/AnchorLink"
+import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { sendSubscriptionDelete, sendSubscriptionEmail, sendTopicSubscription } from "@/lib/topicClient"
-import { NEXT_SCAN_DISCLAIMER, TABLE_CARD_CLASS } from "@/lib/utils"
+import { cn, NEXT_SCAN_DISCLAIMER, TABLE_CARD_CLASS } from "@/lib/utils"
 
 // one subscription the user holds on a topic they do not own
 type SubscriptionRow = ActivityResponse["subscriptions"][number]
@@ -48,7 +48,7 @@ export function SubscriptionsTable({
 		await sendTopicSubscription(row.topicId, isActive)
 
 		// an "invite" topic gates findings on when the subscription was activated.
-		// activating starts from the next scan rather than showing what the topic already found.
+		// activating starts from the next scan instead of showing what the topic already found.
 		if (isActive && row.visibility === "invite") {
 			toast(`You are subscribed.\n${NEXT_SCAN_DISCLAIMER}`)
 		}
@@ -76,7 +76,7 @@ export function SubscriptionsTable({
 	const emailSubscriptionCount = subscriptions.filter((subscription) => subscription.isEmailEnabled).length
 
 	return (
-		<div className={TABLE_CARD_CLASS}>
+		<div className={cn(TABLE_CARD_CLASS, "mb-4")}>
 			<table className="w-full text-left text-sm">
 				<thead className="text-muted-foreground border-b">
 					<tr>
@@ -136,12 +136,11 @@ export function SubscriptionsTable({
 					onConfirm={handleDeleteSubscription}
 					onClose={() => setSubscriptionToDelete(null)}
 				>
-					Your subscription to{" "}
+					{"Your subscription to "}
 					<AnchorLink href={`/topics/${subscriptionToDelete.topicId}`} className="text-link hover:underline">
 						{subscriptionToDelete.name}
-					</AnchorLink>{" "}
-					gets removed for good, along with any invite that let you in. On an invite-only topic the owner has to invite
-					you again.
+					</AnchorLink>
+					{" gets removed for good."}
 				</ConfirmDialog>
 			)}
 		</div>

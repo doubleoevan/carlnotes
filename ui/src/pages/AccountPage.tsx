@@ -1,7 +1,7 @@
 import type { ActivityResponse, BillingState } from "@shared/contracts"
 import { useEffect, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { fetchActivity } from "@/lib/activityClient"
 import { authClient } from "@/lib/authClient"
@@ -9,7 +9,7 @@ import { fetchBillingState, openBillingPortal } from "@/lib/billingClient"
 import { cn, toCentsLabel } from "@/lib/utils"
 
 // the section card chrome shared by the account page's panels
-const SECTION_CARD_CLASS = "bg-card rounded-lg border p-4 shadow-sm"
+const SECTION_CARD_CLASS = "bg-card rounded-lg border p-4 shadow-lift"
 
 /**
  * The account page: payment notice. the monthly spend against budget, the scan usage, and the current plan
@@ -46,7 +46,13 @@ function BillingSection({ billing, activity }: { billing: BillingState; activity
 	return (
 		<div className="mt-6 space-y-6">
 			{isPastDue ? <PaymentNotice /> : null}
-			{activity && <SpendSection spendCents={activity.spendCents} budgetCents={activity.budgetCents} />}
+			{activity && (
+				<SpendSection
+					scanSpendCents={activity.scanSpendCents}
+					chatSpendCents={activity.chatSpendCents}
+					budgetCents={activity.budgetCents}
+				/>
+			)}
 			<ScanUsageSection billing={billing} />
 			<PlanSection billing={billing} />
 		</div>
@@ -68,11 +74,21 @@ function PaymentNotice() {
 	)
 }
 
-// the progress bar of metered spend against the monthly budget
-function SpendSection({ spendCents, budgetCents }: { spendCents: number | null; budgetCents: number }) {
-	// an unrecorded spend renders as zero width and no percent
-	const spendRatio = spendCents !== null && budgetCents > 0 ? Math.min(1, spendCents / budgetCents) : 0
-	const spendPercent = spendCents !== null && budgetCents > 0 ? Math.round(spendRatio * 100) : null
+// the progress bar of metered spend against the monthly budget, scans and chat as their own segments of one bar
+function SpendSection({
+	scanSpendCents,
+	chatSpendCents,
+	budgetCents,
+}: {
+	scanSpendCents: number
+	chatSpendCents: number
+	budgetCents: number
+}) {
+	// each segment's share of the budget, and the total the label reads
+	const totalCents = scanSpendCents + chatSpendCents
+	const toPercent = (cents: number) => (budgetCents > 0 ? Math.min(100, (cents / budgetCents) * 100) : 0)
+	const spendPercent = budgetCents > 0 ? Math.round(toPercent(totalCents)) : null
+
 	return (
 		<section className={SECTION_CARD_CLASS}>
 			<div className="flex items-baseline justify-between">
@@ -81,11 +97,26 @@ function SpendSection({ spendCents, budgetCents }: { spendCents: number | null; 
 					{spendPercent !== null && <span className="text-muted-foreground font-normal"> {spendPercent}%</span>}
 				</h2>
 				<span className="text-muted-foreground text-sm">
-					{toCentsLabel(spendCents)} of {toCentsLabel(budgetCents)}
+					{toCentsLabel(totalCents)} of {toCentsLabel(budgetCents)}
 				</span>
 			</div>
-			<div className="bg-muted mt-2 h-3 overflow-hidden rounded-full">
-				<div className="bg-primary h-full rounded-full" style={{ width: `${spendRatio * 100}%` }} />
+
+			{/* one bar, two segments. the scan segment sits left in the primary color and the chat segment right in spend-chat */}
+			<div className="bg-muted mt-2 flex h-3 overflow-hidden rounded-full">
+				<div className="bg-primary h-full" style={{ width: `${toPercent(scanSpendCents)}%` }} />
+				<div className="bg-spend-chat h-full" style={{ width: `${toPercent(chatSpendCents)}%` }} />
+			</div>
+
+			{/* the key, so the two segments are readable without hovering */}
+			<div className="text-muted-foreground mt-2 flex gap-4 text-xs">
+				<span className="flex items-center gap-1.5">
+					<span className="bg-primary size-2 rounded-full" />
+					Brews {toCentsLabel(scanSpendCents)}
+				</span>
+				<span className="flex items-center gap-1.5">
+					<span className="bg-spend-chat size-2 rounded-full" />
+					Coffee talk {toCentsLabel(chatSpendCents)}
+				</span>
 			</div>
 			<p className="text-muted-foreground mt-1 text-xs">Money spent against your monthly budget. Not a bill.</p>
 		</section>
@@ -117,7 +148,7 @@ function PlanSection({ billing }: { billing: BillingState }) {
 	return (
 		<section className={SECTION_CARD_CLASS}>
 			<p>
-				<span className="font-semibold">Plan</span>{" "}
+				<span className="font-semibold">{"Plan "}</span>
 				<span className="text-muted-foreground capitalize">{billing.plan}</span>
 			</p>
 			<div className="mt-4">

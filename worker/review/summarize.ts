@@ -15,14 +15,20 @@ const MAX_TOPIC_SCAN_REPORT_FINDINGS = 20
 const REPORT_MAX_RETRIES = 4
 
 // one Source's ingestion outcome, as the report's sources section lists it
-export type ScannedSource = { sourceKind: string; status: "ok" | "failed" | "skipped"; fallbackMode?: string }
+// "fallback" means the Source ran without erroring but emitted nothing,
+// which the report names so a dead feed is visible instead of reading as a quiet one
+export type ScannedSource = {
+	sourceKind: string
+	status: "ok" | "fallback" | "failed" | "skipped"
+	fallbackMode?: string
+}
 
 // the values the scan report prompt is rendered with
 type ScanPromptData = {
 	topicName: string
 	topicContext: string
 	date: string
-	// the Scan's tallies, its Sources' outcomes, and what it spent
+	// the Scan's totals, its Sources' outcomes, and what it spent
 	reviewOutcome: ReviewOutcome
 	scannedSources: ScannedSource[]
 	budget: Budget
@@ -43,7 +49,7 @@ export async function toTopicScanSummary(scanId: string, summarize: () => Promis
 }
 
 /**
- * Writes the scan report for one Scan. Throws when the model answers with nothing.
+ * Writes the scan report for one Scan. Throws when the model returns nothing.
  */
 export async function summarizeTopicScan(
 	topicContext: TopicContext,

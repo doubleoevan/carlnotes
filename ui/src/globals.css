@@ -5,6 +5,28 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* only devices that actually hover. a control revealed on hover is unreachable on a touch screen,
+   so touch keeps it visible instead */
+@custom-variant can-hover (@media (hover: hover));
+
+/* streamdown styles itself with tailwind classes, so its dist has to be scanned or its markdown renders unstyled */
+@source "../../node_modules/streamdown/dist/*.js";
+
+/* the site's two elevations. lift is an ambient halo for surfaces, cards, tables, the search bar, dropdowns,
+   and popups, with a touch of downward contact. raise is the smaller cut for buttons and tiles */
+/* the lift under a bordered card. both layers are offset and tight rather than a wide even glow,
+   so the card reads as raised against the drifting steam behind it instead of haloed, and its 1px border stays the only edge */
+@utility shadow-lift {
+	box-shadow:
+		0 2px 4px rgba(0, 0, 0, 0.16),
+		0 8px 15px -6px rgba(0, 0, 0, 0.34);
+}
+@utility shadow-raise {
+	box-shadow:
+		0 2px 5px rgba(0, 0, 0, 0.2),
+		0 6px 14px -6px rgba(0, 0, 0, 0.3);
+}
+
 @theme inline {
 	/* fonts: Architects Daughter for display, Karla for body */
 	--font-sans: "Karla", ui-sans-serif, system-ui, sans-serif;
@@ -36,6 +58,8 @@
 	--color-badge: var(--badge);
 	--color-link: var(--link);
 	--color-separator: var(--separator);
+	--color-separator-strong: var(--separator-strong);
+	--color-spend-chat: var(--spend-chat);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
@@ -70,8 +94,13 @@
 	--hero-accent: #f09050;
 	--badge: #b5773a;
 	--link: #a35f2d;
+	/* the quiet dashes inside cards and popovers, and the stronger cut for row separators on the page itself */
 	--separator: #dcccb6;
+	--separator-strong: #c9b28b;
 	--ring-line: rgba(120, 96, 72, 0.18);
+	/* the spend meter's chat segment. espresso against the light theme's orange brews segment,
+	   cream against the dark theme's, so the two segments differ in hue and luminance in both */
+	--spend-chat: #6b4a26;
 }
 
 /* Dark roast — dark mode */
@@ -101,14 +130,24 @@
 	--hero-accent: #f09050;
 	--badge: #f09050;
 	--link: #f09050;
+	/* quiet inside cards and popovers, stronger between rows on the page, same split as light mode */
 	--separator: #614e39;
+	--separator-strong: #7b6449;
 	--ring-line: rgba(201, 186, 153, 0.18);
+	/* cream, since the dark theme's badge and primary are the same orange and the two segments blurred together */
+	--spend-chat: #f0e6d6;
 }
 
 /* add extra horizontal padding to handle safe-area insets on landscape mobile, falling back to the standard 1rem gutter */
 @utility px-safe {
 	padding-left: max(1rem, env(safe-area-inset-left, 0px));
 	padding-right: max(1rem, env(safe-area-inset-right, 0px));
+}
+
+/* the docked chat's distance from the bottom edge, clearing the home indicator's swipe zone on a phone
+   while keeping its usual gap everywhere else */
+@utility bottom-safe {
+	bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
 }
 
 @layer base {

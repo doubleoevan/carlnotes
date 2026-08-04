@@ -41,7 +41,7 @@ test("renderTopicScanEmail numbers each finding by its array position", async ()
 	})
 
 	// split on the number span's unique style, so each segment starts right after one card's number opens.
-	// splitting rather than a strict tag-adjacency regex tolerates however the renderer spaces the markup
+	// splitting instead of a strict tag-adjacency regex tolerates however the renderer spaces the markup
 	const cards = html.split('font-weight:400">').slice(1)
 	expect(cards).toHaveLength(2)
 	const [firstCard, secondCard] = cards as [string, string]

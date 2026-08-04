@@ -1,12 +1,12 @@
 import { type SubmitEvent, useEffect, useRef, useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
 import { GithubIcon, GoogleIcon } from "@/components/session/OAuthProviderIcons"
 
-// the oauth buttons carry the dark hero treatment rather than the default primary, so the email path below reads as the quieter option
+// the oauth buttons have the dark hero background instead of the default primary, so the email path below reads as the quieter option
 const OAUTH_BUTTON_CLASS =
 	"bg-hero text-hero-foreground hover:bg-[color-mix(in_oklab,var(--hero)_88%,white)] hover:ring-2 hover:ring-ring w-full gap-2"
 
@@ -56,7 +56,7 @@ export function SessionLayout({
 	}
 
 	return (
-		<div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4 py-12">
+		<div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-12">
 			{/* brand mark */}
 			<AnchorLink href="/" className="mx-auto mb-8 flex items-center gap-2">
 				{/* nudged up to optically center the cup on the wordmark. the offset scales with the icon size */}

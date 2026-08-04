@@ -12,7 +12,7 @@ test("unsubscribedPage names the topic and links to it", () => {
 	expect(page).toContain("https://carlnotes.example.com/topics/t1")
 })
 
-// a missing or forged token lands on a fallback page rather than an error
+// a missing or forged token lands on a fallback page instead of an error
 test("invalidUnsubscribePage renders a fallback message", () => {
 	expect(invalidUnsubscribePage()).toContain("didn't work")
 })

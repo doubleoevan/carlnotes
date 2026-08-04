@@ -2,6 +2,7 @@
 import { z } from "zod"
 import {
 	attachmentStatuses,
+	type chatAttachmentKinds,
 	daysOfWeek,
 	editableSourceKinds,
 	frequencies,
@@ -93,7 +94,7 @@ export type SubscriptionRow = {
 }
 
 // an invitation the user sent on a topic they own. subscribedAt is null until the invitee subscribes,
-// which they do from the topic itself rather than from here
+// which they can do from their own subscriptions table
 export type InviteRow = {
 	topicId: string
 	name: string
@@ -104,12 +105,146 @@ export type InviteRow = {
 
 // the Activity payload: metered variable spend against the effective budget, owned topics, subscriptions, and invites
 export type ActivityResponse = {
-	// spend is the recorded Scan-budget figure in cents, null when the proxy has no record to read
-	spendCents: number | null
+	// this month's spend in cents, split by what scans and chat so that the meter can show the two apart.
+	scanSpendCents: number
+	chatSpendCents: number
 	budgetCents: number
 	topics: ActivityTopic[]
 	subscriptions: SubscriptionRow[]
 	invites: InviteRow[]
+}
+
+// how much conversation the model holds word for word, about twenty typical chat turns
+// it is a character budget that the count of chat turns cannot price
+export const CHAT_MEMORY_CHARS = 40_000
+
+/**
+ * Where the uncompacted chat turns start, walking back from the newest turn until the character budget runs out.
+ */
+export function toUncompactedChatTurnStart(history: { question: string; answer: string }[]): number {
+	// spend the budget newest-first
+	let budget = CHAT_MEMORY_CHARS
+	for (let index = history.length - 1; index >= 0; index--) {
+		const chatTurn = history[index]
+		budget -= (chatTurn?.question.length ?? 0) + (chatTurn?.answer.length ?? 0)
+
+		// the chat turn that overdraws the budget is the first compacted one, unless it is the newest
+		if (budget < 0) {
+			return Math.min(index + 1, history.length - 1)
+		}
+	}
+	return 0
+}
+
+// how many chat turns a send posts to the llm: the ceiling is what the model can read before our code compacts
+export const CHAT_HISTORY_TURNS = 100
+
+// how much of a compacted older answer survives: enough to carry its summary, cheap enough to keep many
+const COMPACT_ANSWER_CHARS = 280
+
+/**
+ * An older answer compacted to its opening characters, so the payload and the prompt clip identically.
+ */
+export function compactChatAnswer(answer: string): string {
+	if (answer.length <= COMPACT_ANSWER_CHARS) {
+		return answer
+	}
+	return `${answer.slice(0, COMPACT_ANSWER_CHARS).trimEnd()}…`
+}
+
+// how many attachments one chat turn may carry, and how large each may run.
+// an image is stored as a data url, whose character cap works out to about 4.5MB of binary, and text is clipped to the same cap
+export const CHAT_MAX_ATTACHMENTS = 4
+export const CHAT_ATTACHMENT_TEXT_CHARS = 50_000
+export const CHAT_IMAGE_DATA_CHARS = 6_000_000
+
+// how long a question may run, shared by the payload cap and the draft box.
+// a copy-paste that would push the draft past it becomes a text attachment chip instead
+export const CHAT_QUESTION_CHARS = 1_000
+
+// how long a topic prompt may grow before a copy-paste is treated as an attachment
+export const TOPIC_PROMPT_CHARS = 2_000
+
+// how many attachments one reader may keep durably against one topic.
+// a keep past the cap is skipped silently, because it runs after the chat turn that asked for it has already finished
+export const CHAT_ATTACHMENT_KEEP_LIMIT = 20
+
+// the shape that every chat attachment includes whatever its kind. keep is only set to false beyond the chat attachment keep limit
+const chatAttachmentFields = {
+	name: z.string().trim().min(1).max(200),
+	keep: z.boolean().default(false),
+}
+
+// one attachment on a chat turn. each kind has its own field requirements
+// the reader of a validated attachment never has to guess whether a field is present
+export const chatAttachmentPayload = z.discriminatedUnion("kind", [
+	z.strictObject({
+		...chatAttachmentFields,
+		kind: z.literal("image"),
+		data: z.string().max(CHAT_IMAGE_DATA_CHARS).startsWith("data:image/"),
+	}),
+	z.strictObject({
+		...chatAttachmentFields,
+		kind: z.literal("pdf"),
+		data: z.string().max(CHAT_IMAGE_DATA_CHARS).startsWith("data:application/pdf"),
+	}),
+	z.strictObject({
+		...chatAttachmentFields,
+		kind: z.literal("text"),
+		text: z.string().max(CHAT_ATTACHMENT_TEXT_CHARS),
+	}),
+])
+export type ChatAttachment = z.infer<typeof chatAttachmentPayload>
+
+/**
+ * Attachment text is held to a cap, with a marker naming the cut so that a reply does not invent a reason the document ends early.
+ */
+export function clipAttachmentText(text: string): string {
+	if (text.length <= CHAT_ATTACHMENT_TEXT_CHARS) {
+		return text
+	}
+	const marker = `\n\n[The attachment is cut here. It runs ${text.length.toLocaleString("en-US")} characters and only the first ${CHAT_ATTACHMENT_TEXT_CHARS.toLocaleString("en-US")} are included.]`
+	return `${text.slice(0, CHAT_ATTACHMENT_TEXT_CHARS - marker.length)}${marker}`
+}
+
+/**
+ * A question with its attachments named in a trailing note, so a later replay reads like the original version
+ */
+export function withAttachmentNote(question: string, attachments: { name: string }[]): string {
+	if (attachments.length === 0) {
+		return question
+	}
+	return `${question}\n\n[attached: ${attachments.map((attachment) => attachment.name).join(", ")}]`
+}
+
+// a chat turn's question plus the conversation so far.
+// the client sends the history and every string is capped so that one request cannot inflate the prompt
+export const chatTurnPayload = z.object({
+	question: z.string().trim().min(1).max(CHAT_QUESTION_CHARS),
+	history: z
+		.array(z.object({ question: z.string().max(1000), answer: z.string().max(6000) }))
+		.max(CHAT_HISTORY_TURNS)
+		.default([]),
+	attachments: z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([]),
+})
+export type ChatTurnPayload = z.infer<typeof chatTurnPayload>
+
+// one persisted chat turn of a stored conversation, replayed on a later page load.
+// `at` is when the chat turn ran. it is returned by a response but absent on the history that a send posts
+export type ChatTurnRow = { question: string; answer: string; at?: string }
+
+// an attachment the user keeps durably for a topic
+export type KeptChatAttachment = { id: string; name: string; kind: (typeof chatAttachmentKinds)[number] }
+
+// the stored conversation for a topic. canChat gates sending and isSignupRequired flags a signed-out visitor
+// the kept attachments are what the chat composer lists and counts against the cap
+export type ChatConversation = {
+	chatTurns: ChatTurnRow[]
+	canChat: boolean
+	isSignupRequired: boolean
+	// an exhausted monthly budget keeps the panel open on the upgrade link instead of hiding chat
+	isBudgetExhausted: boolean
+	keptAttachments: KeptChatAttachment[]
 }
 
 // the admin role-change body. an admin cannot remove their own admin role, enforced server-side
@@ -132,6 +267,9 @@ export type AdminUserRow = {
 	attributedBytes: number
 	// month-to-date variable cost in cents. null when the proxy is unreachable
 	monthVariableCostCents: number | null
+	// the app's own month-to-date totals in cents, split by what produced them
+	scanSpendCents: number
+	chatSpendCents: number
 	// the per-user override in cents (null means the plan value), and the resulting effective monthly budget
 	budgetOverrideCents: number | null
 	effectiveBudgetCents: number
@@ -270,7 +408,7 @@ export const topicResponse = topicFeed.extend({
 export type TopicResponse = z.infer<typeof topicResponse>
 
 // a source in the update payload. an id keeps that stored source as is, without updating its kind.
-// a new source carries its kind and config and is limited to the kinds the editor can add
+// a new source includes its kind and config and is limited to the kinds the editor can add
 export const updateTopicSource = z.union([
 	z.object({ id: z.string() }),
 	z.object({ kind: z.enum(editableSourceKinds), config: z.record(z.string(), z.unknown()) }),
@@ -297,10 +435,6 @@ export type UpdateTopicPayload = z.infer<typeof updateTopicPayload>
 // the subscription toggle body. true subscribes the current user and false unsubscribes them
 export const subscriptionPayload = z.object({ isSubscribed: z.boolean() })
 export type SubscriptionPayload = z.infer<typeof subscriptionPayload>
-
-// the add-attachment-by-url body. ingestUrlAttachment owns the actual url validation, so this just requires it to be non-empty
-export const attachmentUrlPayload = z.object({ url: z.string().trim().min(1) })
-export type AttachmentUrlPayload = z.infer<typeof attachmentUrlPayload>
 
 // which signup button converted, kept in a cookie so it survives the oauth round-trip. the ui writes it, so it cannot live in shared/analytics
 export const SIGNUP_CTA_COOKIE_NAME = "signup_cta"

@@ -1,16 +1,21 @@
+import { lazy, Suspense } from "react"
 import { BrowserRouter, Route, Routes } from "react-router-dom"
+import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { Layout } from "@/components/layout/Layout"
-import { AccountPage } from "@/pages/AccountPage"
-import { ActivityPage } from "@/pages/ActivityPage"
-import { AdminPage } from "@/pages/AdminPage"
-import { HomePage } from "@/pages/HomePage"
-import { LoginPage } from "@/pages/LoginPage"
-import { PricingPage } from "@/pages/PricingPage"
-import { PrivacyPage } from "@/pages/PrivacyPage"
-import { SignupPage } from "@/pages/SignupPage"
-import { TermsPage } from "@/pages/TermsPage"
-import { TopicPage } from "@/pages/TopicPage"
 import { TopicFeedProvider } from "@/providers/TopicFeedProvider"
+
+// each page is fetched on the route that needs it, so a visitor downloads one page and not the whole app.
+// each then call unwraps the page's named export into the default export lazy expects
+const AccountPage = lazy(() => import("@/pages/AccountPage").then((page) => ({ default: page.AccountPage })))
+const ActivityPage = lazy(() => import("@/pages/ActivityPage").then((page) => ({ default: page.ActivityPage })))
+const AdminPage = lazy(() => import("@/pages/AdminPage").then((page) => ({ default: page.AdminPage })))
+const HomePage = lazy(() => import("@/pages/HomePage").then((page) => ({ default: page.HomePage })))
+const LoginPage = lazy(() => import("@/pages/LoginPage").then((page) => ({ default: page.LoginPage })))
+const PricingPage = lazy(() => import("@/pages/PricingPage").then((page) => ({ default: page.PricingPage })))
+const PrivacyPage = lazy(() => import("@/pages/PrivacyPage").then((page) => ({ default: page.PrivacyPage })))
+const SignupPage = lazy(() => import("@/pages/SignupPage").then((page) => ({ default: page.SignupPage })))
+const TermsPage = lazy(() => import("@/pages/TermsPage").then((page) => ({ default: page.TermsPage })))
+const TopicPage = lazy(() => import("@/pages/TopicPage").then((page) => ({ default: page.TopicPage })))
 
 /**
  * The global App root. login and signup render without the Layout shell.
@@ -20,9 +25,24 @@ export function App() {
 	return (
 		<BrowserRouter>
 			<Routes>
-				{/* auth pages, rendered bare with no header and no topic feed */}
-				<Route path="login" element={<LoginPage />} />
-				<Route path="signup" element={<SignupPage />} />
+				{/* the auth pages render bare, with no header and no topic feed, so each includes its own
+				    Suspense fallback instead of the one that Layout holds for every other page */}
+				<Route
+					path="login"
+					element={
+						<Suspense fallback={<CoffeeLoading />}>
+							<LoginPage />
+						</Suspense>
+					}
+				/>
+				<Route
+					path="signup"
+					element={
+						<Suspense fallback={<CoffeeLoading />}>
+							<SignupPage />
+						</Suspense>
+					}
+				/>
 				{/* every other page shares one topic feed context and the Layout shell (header, search bar, footer) */}
 				<Route
 					element={

@@ -2,7 +2,7 @@ import { plans } from "@shared/enums"
 import { PLANS, type Plan } from "@shared/plans"
 import { Check } from "lucide-react"
 import { useState } from "react"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { authClient } from "@/lib/authClient"
@@ -70,7 +70,15 @@ export function PricingPage() {
 					Monthly
 					<Switch checked={isYearly} onCheckedChange={setIsYearly} aria-label="Bill yearly" />
 					Yearly
-					<span className="bg-primary/10 text-link rounded-full px-2 py-0.5 text-xs font-semibold">2 months free</span>
+					{/* the badge switches to yearly */}
+					<button
+						type="button"
+						onClick={() => setIsYearly(true)}
+						disabled={isYearly}
+						className="bg-card border-card text-link rounded-full border px-2 py-0.5 text-xs font-semibold shadow-raise transition-transform hover:scale-105 disabled:cursor-default disabled:hover:scale-100"
+					>
+						2 months free
+					</button>
 				</div>
 			</div>
 
@@ -118,7 +126,7 @@ function PlanCard({
 	return (
 		<section
 			className={cn(
-				"bg-card relative flex flex-col rounded-xl border p-6 shadow-sm",
+				"bg-card relative flex flex-col rounded-xl border p-6 shadow-lift",
 				isHighlighted && "border-primary ring-primary/40 ring-2",
 			)}
 		>

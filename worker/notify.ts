@@ -1,5 +1,5 @@
 // after a scheduled Scan succeeds, email its new Findings to the Topic's subscribers. a manual Scan instead
-// emails whoever started it, however it ended, since a brew you kicked off by hand runs for minutes
+// emails whoever started it, however it ended, since a manual scan runs for minutes
 import { toScanFailureLabel } from "@shared/scanFailure"
 import { and, desc, eq } from "drizzle-orm"
 import { db } from "../db"
@@ -29,6 +29,7 @@ export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void
 
 	// the Scan's new Findings. an empty scan still sends the email with Carl's aside instead of a list
 	const newFindings = await newFindingsForScan(scan)
+	const allowedSummaryUrls = await topicFindingUrls(topic.id)
 
 	// the links back into the app for the email, both undefined when no app base url is configured
 	const appUrl = toAppUrl()
@@ -47,6 +48,7 @@ export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void
 			findings: newFindings,
 			// the recap reads above the list. a scan that failed to summarize leaves it out instead of sending an empty block
 			scanSummary: scan.scanSummary ?? undefined,
+			allowedSummaryUrls,
 			// the header, heading, and footer link back to the app and to this topic
 			appUrl,
 			topicUrl,
@@ -87,6 +89,7 @@ export async function sendManualScanEmail(userId: string, topic: Topic, scan: Sc
 					topicName: topic.name,
 					findings: await newFindingsForScan(scan),
 					scanSummary: scan.scanSummary ?? undefined,
+					allowedSummaryUrls: await topicFindingUrls(topic.id),
 					appUrl,
 					topicUrl,
 				}
@@ -99,6 +102,23 @@ export async function sendManualScanEmail(userId: string, topic: Topic, scan: Sc
 		emailContent,
 		emailKind: "manual-scan",
 	})
+}
+
+// every url the Topic has a Finding for to use as the email's allowlist links.
+// the recap is written before the max results trim runs, so it can cite a finding that gets cut afterward.
+// only a url in the Topic's findings becomes a link. anything else the model wrote stays plain text
+async function topicFindingUrls(topicId: string | null): Promise<string[]> {
+	if (!topicId) {
+		return []
+	}
+
+	// the Topic's Findings joined to their Resource for the urls the recap can link
+	const findingRows = await db
+		.select({ url: resources.url })
+		.from(findings)
+		.innerJoin(resources, eq(findings.resourceId, resources.id))
+		.where(eq(findings.topicId, topicId))
+	return findingRows.map((row) => row.url)
 }
 
 // the Findings this Scan surfaced, joined to their Resources for the email. review only scores Resources with no Finding yet, so these are exactly the new ones
@@ -115,7 +135,7 @@ async function newFindingsForScan(scan: Scan): Promise<TopicScanEmailFinding[]> 
 
 // the Topic's subscribers to email: users at the matching frequency, direct plus audience members, deduped by address
 async function loadTopicEmailSubscribers(topicId: string, frequency: Topic["frequency"]): Promise<Recipient[]> {
-	// only an active subscription with email on gets mail, unsubscribing deactivates the row rather than deleting it
+	// only an active subscription with email on gets mail, unsubscribing deactivates the row instead of deleting it
 	const canEmailSubscription = and(
 		eq(subscriptions.topicId, topicId),
 		eq(subscriptions.frequency, frequency),

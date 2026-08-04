@@ -34,7 +34,7 @@ async function readCappedBody(response: Response, url: string): Promise<string> 
 		return ""
 	}
 
-	// chunks are collected rather than decoded as they arrive, since a character can straddle two of them
+	// chunks are collected instead of being decoded as they arrive, since a character can straddle two of them
 	const chunks: Uint8Array[] = []
 	let byteCount = 0
 	while (true) {

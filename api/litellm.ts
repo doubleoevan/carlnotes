@@ -22,7 +22,7 @@ export async function provisionLiteLLMKey(email: string, budgetCents: number): P
 			budget_duration: LITELLM_BUDGET_DURATION,
 		}),
 	})
-	// surface a specific failure rather than an opaque parse error downstream
+	// surface a specific failure instead of an opaque parse error downstream
 	if (!response.ok) {
 		throw new Error(`litellm key/generate failed: ${response.status} ${await response.text()}`)
 	}

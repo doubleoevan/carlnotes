@@ -1,6 +1,6 @@
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { cn, TABLE_CARD_CLASS } from "@/lib/utils"
 
 // the providers table on the shared table card, scrolling instead of cramping on a narrow screen
@@ -48,7 +48,7 @@ CarlNotes reads public web content on a schedule and scores it against context y
 
 **Account data.** Email address, name if you provide one, and a hashed password. If you sign in with Google or GitHub instead, we receive your email address, verified status, display name, and avatar URL from the provider, and we store the provider account ID and the OAuth tokens it issues. We also store your profile image URL and the signup invite code. Session records so you stay logged in.
 
-**Account linking.** If the verified email from a Google or GitHub sign-in matches an existing CarlNotes account, we link the two rather than creating a duplicate account. Email address is the join key, and this relies on the provider verifying the address.
+**Account linking.** If the verified email from a Google or GitHub sign-in matches an existing CarlNotes account, we link the two instead of creating a duplicate account. Email address is the join key, and this relies on the provider verifying the address.
 
 **Topic configuration.** Topic names, context documents, uploaded attachments, fetched URLs, source lists, tags, cadence settings, and privacy level.
 
@@ -72,7 +72,7 @@ We do not buy data about you from brokers. We do not track you across other webs
 
 - Run scans and build your feed
 - Score findings against your context and improve ranking from your feedback
-- Send the email digests and notifications you enable
+- Send the scan emails and notifications you enable
 - Enforce plan limits and scan budgets
 - Detect abuse, spam, and automated signups
 - Fix bugs and understand which features get used
@@ -92,7 +92,7 @@ We use third-party providers to run the service. Each one receives only what its
 | Cloudflare | File storage and bot protection | Attachments, signup signals |
 | Fireworks AI and other model providers | Scoring, summaries, embeddings, audio | Your context documents and fetched page content |
 | Exa, Firecrawl, and source APIs | Web search and page fetching | Search queries derived from your context |
-| Resend | Email delivery | Email address and digest contents |
+| Resend | Email delivery | Email address and scan email contents |
 | Langfuse | Pipeline tracing | Prompt and response contents |
 | Sentry | Error tracking | Error diagnostics, may include request context |
 | PostHog | Product analytics | Usage events, pseudonymous |

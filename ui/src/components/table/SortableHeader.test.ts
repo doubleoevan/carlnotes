@@ -30,7 +30,7 @@ describe("toSortedRows", () => {
 		expect(toSortedRows(rows, byValue, true).map(byValue)).toEqual([7, 3, null, null])
 	})
 
-	it("copies rather than mutates the given rows", () => {
+	it("copies instead of mutates the given rows", () => {
 		const rows = [{ value: 2 }, { value: 1 }]
 		toSortedRows(rows, byValue, false)
 		expect(rows.map(byValue)).toEqual([2, 1])

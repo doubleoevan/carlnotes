@@ -5,7 +5,7 @@ import { isBudgetError } from "@shared/scanFailure"
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
 import { useLayoutEffect, useRef, useState } from "react"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { cn, durationMsBetween, POPOVER_HEADING_CLASS, toDollarLabel, toDurationLabel } from "@/lib/utils"
 
 // the fields a scan recap popover reads, shared by the topic page's scan history and the Activity drill-down
@@ -102,8 +102,10 @@ function toSafeNoteOptions(allowedUrls?: AllowedNoteUrls) {
 	}
 }
 
-// render a scan recap's Markdown with allowed urls only
-function ScanNoteText({ note, allowedUrls }: { note: string; allowedUrls?: AllowedNoteUrls }) {
+/**
+ * Renders model-written Markdown through the safe subset of elements. Only a url in allowedUrls becomes a link
+ */
+export function SafeNoteText({ note, allowedUrls }: { note: string; allowedUrls?: AllowedNoteUrls }) {
 	return <Markdown options={toSafeNoteOptions(allowedUrls)}>{note}</Markdown>
 }
 
@@ -124,7 +126,7 @@ export function ScrollBox({ children }: { children: React.ReactNode }) {
 export function ScrollNote({ note, allowedUrls }: { note: string; allowedUrls?: AllowedNoteUrls }) {
 	return (
 		<ScrollBox>
-			<ScanNoteText note={note} allowedUrls={allowedUrls} />
+			<SafeNoteText note={note} allowedUrls={allowedUrls} />
 		</ScrollBox>
 	)
 }
@@ -135,6 +137,8 @@ export function ScrollNote({ note, allowedUrls }: { note: string; allowedUrls?: 
  */
 export function TopicScanRecap({ scan, allowedUrls }: { scan: ScanRecapFields; allowedUrls?: AllowedNoteUrls }) {
 	const duration = toDurationLabel(durationMsBetween(scan.startedAt, scan.finishedAt))
+	// the cost waits until the scan settles instead of reading as a finished scan that cost nothing
+	const isCostShown = scan.status !== "running" && scan.cost !== null
 	return (
 		<>
 			<h2 className={POPOVER_HEADING_CLASS}>Dear Diary</h2>
@@ -144,10 +148,10 @@ export function TopicScanRecap({ scan, allowedUrls }: { scan: ScanRecapFields; a
 				<p className="whitespace-pre-line">{toScanRecapPlaceholder(scan)}</p>
 			)}
 			{/* how long it took, and the spend when the api shared it with the owner or an admin */}
-			{(duration || scan.cost !== null) && (
+			{(duration || isCostShown) && (
 				<div className="text-muted-foreground mt-3 space-y-0.5 border-t pt-2 text-xs">
 					{duration && <div>{duration} taken</div>}
-					{scan.cost !== null && <div>cost: {toDollarLabel(scan.cost)}</div>}
+					{isCostShown && <div>cost: {toDollarLabel(scan.cost)}</div>}
 				</div>
 			)}
 		</>
@@ -180,7 +184,7 @@ export function TopicScanNote({ note, allowedUrls }: { note: string; allowedUrls
 					className={cn(isClipped && "overflow-hidden")}
 					style={isClipped ? { maxHeight: COLLAPSED_MAX_HEIGHT } : undefined}
 				>
-					<ScanNoteText note={note} allowedUrls={allowedUrls} />
+					<SafeNoteText note={note} allowedUrls={allowedUrls} />
 				</div>
 				{/* a soft fade tells the reader the note continues below the clip */}
 				{isClipped && (

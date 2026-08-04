@@ -1,8 +1,9 @@
 import type { TopicFeed } from "@shared/contracts"
-import { Bell, SquarePen } from "lucide-react"
+import { PawPrint } from "lucide-react"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { NoteIcon } from "@/components/branding/NoteIcon"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -10,7 +11,7 @@ import { TopicInfo } from "@/components/topic/TopicInfo"
 import { useIsVisible } from "@/hooks/useIsVisible"
 import { authClient } from "@/lib/authClient"
 import { sendTopicSubscription } from "@/lib/topicClient"
-import { cn, toSubscribeTooltip } from "@/lib/utils"
+import { cn, RAIL_ICON_INSET, RAIL_TEXT_INSET, RESOURCE_LIST_CARD_CLASS } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { MoreButton } from "./MoreButton"
 import { TopicResource } from "./TopicResource"
@@ -31,7 +32,7 @@ export function Topic({ topic, index }: TopicProps) {
 	// cap the resources shown unless the topic is expanded
 	const resourcesShown = isExpanded ? topic.findings : topic.findings.slice(0, MAX_RESOURCES)
 	const moreResourcesCount = topic.findings.length - MAX_RESOURCES
-	// bookmarked rows sort first, so this count is exactly how many of the rows shown are pinned rather than numbered
+	// bookmarked rows sort first, so this count is exactly how many of the rows shown are pinned instead of being numbered
 	const pinnedShownCount = resourcesShown.filter((resource) => resource.isBookmarked).length
 
 	// hide the topic until it scrolls into view, then play the hydrate animation
@@ -39,35 +40,39 @@ export function Topic({ topic, index }: TopicProps) {
 	return (
 		<div
 			ref={ref}
-			className={cn("py-4", isVisible ? "animate-hydrate" : "opacity-0")}
+			className={cn("py-2", isVisible ? "animate-hydrate" : "opacity-0")}
 			style={{ animationDelay: `${Math.min(index, 3) * 50}ms` }}
 		>
 			{/* header: title linking to the topic page, info button, tag pills, and the "# new" count */}
 			<div className="flex items-start justify-between gap-3">
 				<div className="min-w-0">
 					<div className="flex items-center gap-2">
-						<AnchorLink href={`/topics/${topic.id}`} className="min-w-0 hover:underline">
+						<AnchorLink href={`/topics/${topic.id}`} className="text-link min-w-0 hover:underline">
 							<h3 className="font-display truncate pt-1 pl-4 pb-1 text-lg leading-tight">{topic.name}</h3>
 						</AnchorLink>
 						<TopicInfoPopover topic={topic} />
 					</div>
-					{/* tags, left-padded to line the text up with the resource icons below them */}
-					<div className="mt-1.5 pl-3 flex flex-wrap gap-1">
-						{topic.tags.map((tag) => (
-							<Badge key={tag} variant="secondary">
-								{tag}
-							</Badge>
-						))}
-					</div>
+					{/* tags, left-padded to line the text up with the resource icons below them.
+					     an untagged topic renders no row at all */}
+					{topic.tags.length > 0 && (
+						<div className="mt-1.5 mb-1.5 pl-3 flex flex-wrap gap-1">
+							{topic.tags.map((tag) => (
+								<Badge key={tag} variant="secondary">
+									{tag}
+								</Badge>
+							))}
+						</div>
+					)}
 				</div>
-				{/* the "# new" count opens the info content, and the subscribe bell sits to its right */}
-				<div className="flex shrink-0 items-center gap-1">
+				{/* the "# new" count opens the info content, and the subscribe toggle sits to its right.
+				    only a non-owner gets that toggle, so an owner's row ends in the count and takes the text inset instead */}
+				<div className={cn(topic.isOwner ? RAIL_TEXT_INSET : RAIL_ICON_INSET, "flex shrink-0 items-center gap-1")}>
 					{topic.newCount > 0 && <NewCountInfo topic={topic} />}
-					{!topic.isOwner && <SubscribeBell topic={topic} />}
+					{!topic.isOwner && <SubscribeToggle topic={topic} />}
 				</div>
 			</div>
-			{/* resource rows with dashed separators between them */}
-			<div className="divide-separator mt-1 pl-3 divide-y divide-dashed">
+			{/* resource rows, each drawing its own dashed separator */}
+			<div className={cn(RESOURCE_LIST_CARD_CLASS, "mt-1.5 p-1")}>
 				{resourcesShown.map((resource, index) => (
 					<TopicResource
 						key={resource.findingId}
@@ -94,8 +99,8 @@ export function Topic({ topic, index }: TopicProps) {
 	)
 }
 
-// the subscribe bell beside the "# new" count. a visitor is sent to signup, a signed-in user toggles their topic subscription
-function SubscribeBell({ topic }: { topic: TopicFeed }) {
+// the subscribe icon beside the "# new" count. a visitor is sent to signup, a signed-in user toggles their topic subscription
+function SubscribeToggle({ topic }: { topic: TopicFeed }) {
 	const navigate = useNavigate()
 	const { reload } = useTopicFeed()
 	const { data: session } = authClient.useSession()
@@ -110,8 +115,8 @@ function SubscribeBell({ topic }: { topic: TopicFeed }) {
 		await reload()
 	}
 
-	// the subscribe bell with its tooltip
-	const tooltip = toSubscribeTooltip(Boolean(session), topic.isSubscribed, false)
+	// the subscribe icon's tooltip
+	const tooltip = !session ? "Sign up to subscribe" : topic.isSubscribed ? "Unsubscribe" : "Subscribe"
 	return (
 		<Tooltip>
 			<TooltipTrigger
@@ -120,7 +125,7 @@ function SubscribeBell({ topic }: { topic: TopicFeed }) {
 				aria-label={tooltip}
 				className="text-muted-foreground hover:text-foreground grid size-11 shrink-0 place-items-center sm:size-7"
 			>
-				<Bell className={cn("size-3.75", topic.isSubscribed && "text-primary fill-current")} />
+				<PawPrint className={cn("size-3.75", topic.isSubscribed && "text-primary fill-current")} />
 			</TooltipTrigger>
 			<TooltipContent>{tooltip}</TooltipContent>
 		</Tooltip>
@@ -134,10 +139,10 @@ function TopicInfoPopover({ topic }: { topic: TopicFeed }) {
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<PopoverTrigger
-						className="text-primary hover:opacity-75 grid size-11 shrink-0 place-items-center sm:size-7"
+						className="hover:opacity-75 grid size-11 shrink-0 place-items-center sm:size-7"
 						aria-label="Topic details"
 					>
-						<SquarePen className="size-3.75" strokeWidth={2.5} />
+						<NoteIcon />
 					</PopoverTrigger>
 				</TooltipTrigger>
 				<TooltipContent>A topic note from Carl</TooltipContent>

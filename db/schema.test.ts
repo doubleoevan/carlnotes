@@ -3,7 +3,16 @@ import { expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import * as schema from "./schema"
-import { findings, resources, sources, subscriptions, topics } from "./schema"
+import {
+	chatTurns,
+	EMBED_DIMENSIONS,
+	EMBED_MODEL_NAME,
+	findings,
+	resources,
+	sources,
+	subscriptions,
+	topics,
+} from "./schema"
 
 // read the generated initial migration once for SQL-level assertions
 const migrationsDirectory = join(import.meta.dir, "migrations")
@@ -76,7 +85,7 @@ test("attachments.status defaults to pending and its outcome columns are nullabl
 	expect(allMigrationsSql()).toContain(`"status" "attachment_status" DEFAULT 'pending' NOT NULL`)
 })
 
-// resource content moves to object storage behind a key. the legacy content column is not dropped in this change
+// a resource's content lives in object storage behind a key. the inline column stays for rows written before it
 test("resources content_key and content_bytes are nullable and content is not dropped", () => {
 	expect(resources.contentKey.notNull).toBe(false)
 	expect(resources.contentBytes.notNull).toBe(false)
@@ -174,6 +183,27 @@ test("consumptions is unique per user and finding and it cascades from both pare
 	expect(allMigrationsSql()).toMatch(/consumptions_finding_id_findings_id_fk.*ON DELETE cascade/)
 })
 
+// a chat turn requires a user and a cost.
+// the question and answer are optional because they are only kept when the gate allows
+test("chat_turns keeps its text nullable and its user and cost not null", () => {
+	expect(chatTurns.question.notNull).toBe(false)
+	expect(chatTurns.answer.notNull).toBe(false)
+	expect(chatTurns.userId.notNull).toBe(true)
+	expect(chatTurns.cost.notNull).toBe(true)
+})
+
+// deleting a user or a topic takes its chat turns with it, and the topic-and-time index covers the conversation read
+test("chat_turns cascades from both parents and indexes topic and time", () => {
+	expect(allMigrationsSql()).toMatch(/chat_turns_user_id_users_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/chat_turns_topic_id_topics_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/CREATE INDEX (IF NOT EXISTS )?"chat_turns_topic_created_idx"/)
+})
+
+// the embedding model name is stored by review and filtered on by chat retrieval
+test("the embedding model name is a schema constant carrying the dimension", () => {
+	expect(EMBED_MODEL_NAME).toBe(`qwen3-embedding-8b/${EMBED_DIMENSIONS}`)
+})
+
 // the file name of the initial migration, the first .sql file in sort order
 function firstMigrationFile(): string {
 	const sqlFiles = readdirSync(migrationsDirectory).filter((file) => file.endsWith(".sql"))
@@ -185,3 +215,11 @@ function allMigrationsSql(): string {
 	const sqlFiles = readdirSync(migrationsDirectory).filter((file) => file.endsWith(".sql"))
 	return sqlFiles.map((file) => readFileSync(join(migrationsDirectory, file), "utf8")).join("\n")
 }
+
+// dispatched_at has no default, since a default would make every existing row look dispatched already.
+// already-finished scans are backfilled too, so they never look like they're still waiting to start
+test("scans records dispatch as a nullable column and backfills finished rows", () => {
+	expect(allMigrationsSql()).toMatch(/ALTER TABLE "scans" ADD COLUMN "dispatched_at" timestamp with time zone;/)
+	expect(allMigrationsSql()).not.toMatch(/"dispatched_at" timestamp with time zone DEFAULT/)
+	expect(allMigrationsSql()).toMatch(/UPDATE "scans" SET "dispatched_at" = "started_at" WHERE "status" <> 'running'/)
+})

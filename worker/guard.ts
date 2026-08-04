@@ -2,7 +2,7 @@
 import { reportError } from "@shared/monitoring"
 
 // the score at or above which a detector counts as a hit. set from the eval harness's measured false-positive
-// rate on articles that discuss prompt injection, rather than the scanner's own default
+// rate on articles that discuss prompt injection, instead of the scanner's own default
 const DEFAULT_INJECTION_THRESHOLD = 0.8
 
 // the network timeout, short like the prompt registry's, so a slow scanner never stalls a scan
@@ -11,19 +11,21 @@ const SCREEN_TIMEOUT_MS = 2500
 // the detectors that reject each type of text. LLM Guard runs its whole set and reports every score,
 // so each screen type reads only the ones it cares about. these names must match LLM Guard's own scanners config
 const SCREEN_TYPES = {
-	// an owner's document also gets leaked credentials, since it is the only text they hand us directly
-	document: ["PromptInjection", "Secrets", "InvisibleText"],
-	page: ["PromptInjection", "InvisibleText"],
+	// an owner's document also gets leaked credentials, since it is the only text they hand us directly.
+	// a page needs the same subject-matter check: only the search Source reaches Exa's moderation,
+	// so a page from a url, rss, reddit, or YouTube Source arrives with nothing having screened it
+	document: ["PromptInjection", "Secrets", "InvisibleText", "BanTopics", "Toxicity"],
+	page: ["PromptInjection", "InvisibleText", "BanTopics", "Toxicity"],
 } as const
 
 export type ScreenType = keyof typeof SCREEN_TYPES
 
 // what the scanner decided about an input: whether it is rejected, which detectors fired, and the text to use from here.
-// personal details are redacted in place rather than rejecting the file, so even an unflagged verdict can carry changed text.
-// callers must use `text` rather than what they passed in
+// personal details are redacted in place instead of rejecting the file, so even an unflagged verdict can carry changed text.
+// callers must use `text` instead of what they passed in
 export type ScreenVerdict = { isFlagged: boolean; detectors: string[]; text: string }
 
-// the scanner's response. the score map decides rejection, and sanitized_prompt carries the redacted text
+// the scanner's response. the score map decides rejection, and sanitized_prompt includes the redacted text
 type GuardResponse = { is_valid?: boolean; scanners?: Record<string, number>; sanitized_prompt?: string }
 
 // nothing flagged, so the caller's own text passes straight through. this is the verdict returned when the scanner is off or down

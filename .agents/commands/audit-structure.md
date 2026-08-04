@@ -58,12 +58,19 @@ Check for:
    - `worker/llm.ts` (now `worker/models.ts`)
    - `worker/review.ts` (now the `worker/review/` folder: `index.ts`, `filter.ts`,
      `score.ts`, `summarize.ts`, `track.ts`)
+   - `api/topic/chat.ts` (now the `api/chat/` folder: `turns.ts`, `attachments.ts`,
+     `encryption.ts`). `api/topic/attachments.ts` stays put and is a different table:
+     topic attachments are owner-uploaded and topic-wide, chat attachments are per-reader
    - `ui/src/components/topic-feed/` (merged into `ui/src/components/topic/`)
    - `ui/src/components/auth/` (now `session/`), `AuthIcons.tsx` (now
      `OAuthProviderIcons.tsx`), `AuthPageShell.tsx` (now `SessionLayout.tsx`)
    - `PageLoading.tsx` (now `branding/CoffeeLoading.tsx`), `ScanNote.tsx` (now
      `topic/TopicScanRecap.tsx`), `SearchFilters.tsx` (folded into `layout/SearchBar.tsx`)
    - `ui/src/components/search/` (proposed then abandoned; SearchBar lives in `layout/`)
+   - `layout/AnchorLink.tsx`, `layout/ConfirmDialog.tsx`, `layout/FileDropZone.tsx` (now
+     `ui/src/components/common/`). `layout/` keeps only page chrome: Header, Footer, SearchBar,
+     ThemeToggle, Attribution. `common/` is shared components that are not chrome, and stays
+     distinct from `primitives/`, which is reserved for shadcn
    - `worker/adapters/` and the short-lived `worker/ingesters/` (both now `worker/ingest/`),
      `adapter.ts` (now `ingester.ts`),
      `SourceAdapter`/`AdapterResult`/`sourceAdapters` (now `SourceIngester`/`IngestResult`/`sourceIngesters`,
@@ -78,6 +85,13 @@ Check for:
      broke that pattern and was reverted
    - `REVIEW_SCAN_BUDGET_USD` (now `SCAN_BUDGET_USD`; the ceiling covers ingestion too, so the
      `REVIEW_` prefix named the wrong scope)
+   - `worker/ingest/canonical.ts` (now `normalize.ts`), `canonicalUrl` (now `toCanonicalUrl`)
+   - `runTopicScan`/`processTopicScan` (now `startTopicScan`/`startScanFor` in `worker/scan.ts`;
+     the pipeline itself is `worker/workflows/run-topic-scan-activities.ts`)
+   - `toFilteredFindings` (now `toSortedFindings`)
+   - `toOfferedUrls`/`OfferedUrlSources` (now `toPossibleSourceUrls`/`PromptSourceUrls` in `ui/src/lib/utils.ts`
+     and `EditTopicModal.tsx`), `ScanNoteText` (now `SafeNoteText`), `loadScan` in the scan activities
+     (now `requireScan`), `db:encrypt-chat` and `api/encryptChatBackfill.ts` (removed)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -13,7 +13,7 @@ test("toPrecisionRecall counts hits against predictions and against labels", () 
 })
 
 // a pipeline that surfaces nothing has no precision to report and must not report NaN
-test("toPrecisionRecall reports zero rather than NaN on an empty denominator", () => {
+test("toPrecisionRecall reports zero instead of NaN on an empty denominator", () => {
 	// nothing predicted, so precision has no denominator: return zero
 	expect(toPrecisionRecall([false, false], [true, false]).precision).toBe(0)
 

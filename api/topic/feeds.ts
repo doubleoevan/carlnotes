@@ -24,7 +24,7 @@ const MAX_POPULAR_TOPICS = 5
 
 // the topic ids this user actively subscribes to, directly or through an audience they belong to
 function activeSubscriptionTopicIdQuery(userId: string) {
-	// the audiences this user belongs to, a subquery rather than a separate round trip since it only feeds the query below
+	// the audiences this user belongs to, a subquery instead of a separate round trip since it only feeds the query below
 	const memberAudiences = db
 		.select({ audienceId: audienceMembers.audienceId })
 		.from(audienceMembers)
@@ -192,7 +192,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 				.where(and(inArray(scans.topicId, topicIds), eq(scans.status, "succeeded")))
 				.orderBy(scans.topicId, desc(scans.startedAt)),
 
-			// select the subscriber count per topic. unsubscribing deactivates the row rather than deleting it,
+			// select the subscriber count per topic. unsubscribing deactivates the row instead of deleting it,
 			// so only active rows count. the join to the topic is what lets the owner's own row drop out
 			db
 				.select({ topicId: subscriptions.topicId, count: count() })
@@ -322,7 +322,7 @@ export function canRateInFeed(
 	userId: string | null,
 	subscribedTopicIdSet: Set<string>,
 ): boolean {
-	// a signed-out visitor has no account to rate as, stated here rather than left to an empty subscriber set
+	// a signed-out visitor has no account to rate as. stated here instead of being left to an empty subscriber set
 	if (!userId) {
 		return false
 	}

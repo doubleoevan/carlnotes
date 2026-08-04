@@ -3,7 +3,7 @@
 import { ADMIN_BUDGET_CENTS, ADMIN_QUOTA, PLANS, type Plan } from "@shared/plans"
 import { and, count, eq, gte, inArray, or, sql } from "drizzle-orm"
 import { db } from "../db"
-import { audienceMembers, billingSubscriptions, scans, subscriptions, topics, users } from "../db/schema"
+import { audienceMembers, billingSubscriptions, chatTurns, scans, subscriptions, topics, users } from "../db/schema"
 import { deleteLiteLLMKey, provisionLiteLLMKey } from "./litellm"
 import { canRateTopic, canSeeTopic } from "./topic/permissions"
 import { scansToday, startOfUtcMonth } from "./topic/quotas"
@@ -13,7 +13,7 @@ type GatedTopic = Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibilit
 
 // the gated capabilities the isAllowed answers
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type Capability = "topic:view" | "topic:edit" | "topic:delete" | "topic:rate" | "topic:create" | "scan:manual" | "admin:console" | "admin:setRole" | "admin:setBudget"
+export type Capability = "topic:view" | "topic:edit" | "topic:delete" | "topic:rate" | "topic:create" | "scan:manual" | "chat:send" | "chat:persist" | "admin:console" | "admin:setRole" | "admin:setBudget"
 
 // a user's authority and entitlement inputs, read together since every gate call needs them
 export type UserAccess = { isAdmin: boolean; plan: Plan; budgetOverrideCents: number | null }
@@ -33,7 +33,22 @@ export async function isAllowed(userId: string | null, capability: Capability, t
 		return true
 	}
 
-	// a non-admin (or signed-out visitor) answers each capability from ownership, subscription, or plan
+	// the chat capabilities check the sign-in status, the topic's visibility, and the user's budget
+	if (capability === "chat:send" || capability === "chat:persist") {
+		return decideChat(userId, capability, topic)
+	}
+
+	// everything else checks ownership, subscription, or plan
+	return decideTopicCapability(userId, capability, access?.plan ?? "free", topic)
+}
+
+// the per-capability answers for a non-admin or a signed-out visitor
+async function decideTopicCapability(
+	userId: string | null,
+	capability: Exclude<Capability, "topic:rate" | "chat:send" | "chat:persist">,
+	plan: Plan,
+	topic?: GatedTopic,
+): Promise<boolean> {
 	switch (capability) {
 		// admin-only capabilities already returned true above for an admin, so a non-admin is refused
 		case "admin:console":
@@ -49,7 +64,7 @@ export async function isAllowed(userId: string | null, capability: Capability, t
 			return Boolean(userId) && topic?.ownerId === userId
 		// creating a topic is gated by the plan's topic cap
 		case "topic:create":
-			return userId ? (await ownerTopicCount(userId)) < PLANS[access?.plan ?? "free"].topicLimit : false
+			return userId ? (await ownerTopicCount(userId)) < PLANS[plan].topicLimit : false
 		// a manual scan needs the owner to be within their daily quota
 		case "scan:manual":
 			return userId && topic ? (await authorizeManualScan(userId, topic)).status === "allowed" : false
@@ -95,19 +110,32 @@ export function effectiveBudgetCents({
 }
 
 /**
- * Whether the user has spent their monthly budget, so the proxy would refuse the model calls a scan makes.
+ * Whether the user has spent their monthly budget, so the proxy would refuse the model calls a scan or a chat turn makes.
  */
 export async function isMonthlySpendExhausted(userId: string): Promise<boolean> {
-	// the app's own recorded scan spend, not the proxy's authoritative figure.
-	// the topic page polls this while a scan runs, so it stays a local sum rather than repeated round trips to litellm
-	const [access, [spendRow]] = await Promise.all([
-		loadUserAccess(userId),
+	// scans and chat draw from one budget pool, so both are summed against the same budget
+	const [access, spend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
+	const spentCents = Math.round(spend.scanDollars * 100) + Math.round(spend.chatDollars * 100)
+	return spentCents >= effectiveBudgetCents(access)
+}
+
+/**
+ * This month's recorded spend for the user, split into scans and chat buckets
+ */
+export async function monthlySpendDollars(userId: string): Promise<{ scanDollars: number; chatDollars: number }> {
+	// both sums use the same UTC month boundary the budget resets on
+	const monthStart = startOfUtcMonth(new Date())
+	const [[scanRow], [chatRow]] = await Promise.all([
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
 			.from(scans)
-			.where(and(eq(scans.ownerId, userId), gte(scans.startedAt, startOfUtcMonth(new Date())))),
+			.where(and(eq(scans.ownerId, userId), gte(scans.startedAt, monthStart))),
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
+			.from(chatTurns)
+			.where(and(eq(chatTurns.userId, userId), gte(chatTurns.createdAt, monthStart))),
 	])
-	return Math.round(Number(spendRow?.dollars ?? 0) * 100) >= effectiveBudgetCents(access)
+	return { scanDollars: Number(scanRow?.dollars ?? 0), chatDollars: Number(chatRow?.dollars ?? 0) }
 }
 
 /**
@@ -263,6 +291,29 @@ export function decideManualScan({
 		return hasPaymentMethod ? { status: "allowed", remaining: 0, isOverage: true } : { status: "quota" }
 	}
 	return { status: "allowed", remaining: dailyScanLimit - scansUsedToday - 1, isOverage: false }
+}
+
+// every chat capability needs a signed-in caller. sending a chat needs a visible topic and budget left
+async function decideChat(
+	userId: string | null,
+	capability: "chat:send" | "chat:persist",
+	topic?: GatedTopic,
+): Promise<boolean> {
+	// a signed-out visitor gets no capabilities
+	if (!userId) {
+		return false
+	}
+
+	// saving history requires an account
+	if (capability === "chat:persist") {
+		return true
+	}
+
+	// sending checks visibility and budget
+	if (!topic || !(await canSeeTopic(userId, topic))) {
+		return false
+	}
+	return !(await isMonthlySpendExhausted(userId))
 }
 
 // how many topics the user owns

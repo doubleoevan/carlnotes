@@ -39,12 +39,12 @@ function AccordionTrigger({ className, children, ...props }: React.ComponentProp
 	)
 }
 
-// the collapsible body, height-animated open/closed
+// the collapsible body, height-animated open/closed.
 function AccordionContent({ className, children, ...props }: React.ComponentProps<typeof AccordionPrimitive.Content>) {
 	return (
 		<AccordionPrimitive.Content
 			data-slot="accordion-content"
-			className="data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down overflow-hidden"
+			className="data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
 			{...props}
 		>
 			<div className={cn("pb-2", className)}>{children}</div>

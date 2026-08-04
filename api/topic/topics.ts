@@ -1,11 +1,13 @@
 // the topic logic behind the api routes. it loads one topic's full payload and applies the owner's creates, edits, and deletes
 import { trackEvent } from "@shared/analytics"
 import type { TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contracts"
+import { reportError } from "@shared/monitoring"
 import { and, count, desc, eq, notInArray, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { attachments, scans, sources, subscriptions, topicInvites, topics } from "../../db/schema"
-import { deleteAttachment } from "../../worker"
+import { deleteAttachment, failStaleScans, scanTopic } from "../../worker"
 import { isAllowed, isMonthlySpendExhausted, loadUserAccess } from "../authorization"
+import { deleteChatAttachments } from "../chat/attachments"
 import type { AnalyticsProperties } from "../currentUser"
 import { loadTopicFindings, newTopicFindingCount, toUrlHost } from "./findings"
 import { loadDirectSubscription, subscriptionActivatedAt } from "./permissions"
@@ -24,6 +26,11 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 	if (!topic || !(await isAllowed(userId, "topic:view", topic))) {
 		return null
 	}
+
+	// close out this Topic's own stale Scan before reading its history
+	// reclaiming a scan on the read means looking at a stale Topic doesn't have
+	// to wait on a sweep that only runs when the worker does
+	await failStaleScans(topic.id)
 
 	// the owner and admins see spend. a signed-out visitor is a plain free viewer who never owns the topic
 	const { isAdmin } = userId ? await loadUserAccess(userId) : { isAdmin: false }
@@ -167,23 +174,28 @@ export function toLastSucceededScan(scanHistory: TopicScan[]): TopicScan | undef
 /**
  * The one-line display summary for a source's config: feed host, subreddit, or channel/playlist id.
  */
-export function toSourceSummary(kind: string, config: Record<string, unknown>): string {
+export function toSourceSummary(sourceKind: string, config: Record<string, unknown>): string {
 	// each kind names its config differently. an unknown kind or a missing value falls back to an empty summary
 	const { url, subreddit, channelId, playlistId } = config
-	if (kind === "rss" && typeof url === "string") {
+	if (sourceKind === "rss" && typeof url === "string") {
 		return toUrlHost(url) ?? url
 	}
 
+	// a url source uses the full path
+	if (sourceKind === "url" && typeof url === "string") {
+		return url
+	}
+
 	// a search source is the built-in web search. its ingester ignores the config, so the ui supplies the copy
-	if (kind === "search") {
+	if (sourceKind === "search") {
 		return ""
 	}
-	if (kind === "reddit" && typeof subreddit === "string") {
+	if (sourceKind === "reddit" && typeof subreddit === "string") {
 		return `r/${subreddit}`
 	}
 
-	// a youtube source carries either a channel id or a playlist id
-	if (kind === "youtube") {
+	// a YouTube source includes either a channel id or a playlist id
+	if (sourceKind === "youtube") {
 		const youtubeId = [channelId, playlistId].find((id) => typeof id === "string")
 		return typeof youtubeId === "string" ? youtubeId : ""
 	}
@@ -213,7 +225,7 @@ export async function createTopic(
 	// one transaction writes the topic and everything hanging off it,
 	// so a failure partway leaves no partial topic and no orphaned first scan
 	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxResults } = payload
-	const topicId = await db.transaction(async (transaction) => {
+	const { topicId, firstScan } = await db.transaction(async (transaction) => {
 		// insert the topic row owned by the user
 		const [topic] = await transaction
 			.insert(topics)
@@ -243,7 +255,7 @@ export async function createTopic(
 			await transaction.insert(topicInvites).values(invitees.map((email) => ({ topicId: topic.id, email })))
 		}
 
-		// insert the new sources. a create payload never carries kept ids
+		// insert the new sources. a create payload never includes kept ids
 		const newSources = payload.sources.flatMap((source) => ("id" in source ? [] : [source]))
 		if (newSources.length > 0) {
 			await transaction
@@ -251,10 +263,18 @@ export async function createTopic(
 				.values(newSources.map((source) => ({ topicId: topic.id, kind: source.kind, config: source.config })))
 		}
 
-		// open the first scan as running, so the topic page shows Carl already reading. the scheduled sweep picks up this row and runs it
-		await transaction.insert(scans).values({ topicId: topic.id, ownerId: userId })
-		return topic.id
+		// open the first scan as running, so the new topic page shows a scan already under way
+		const [firstScan] = await transaction.insert(scans).values({ topicId: topic.id, ownerId: userId }).returning()
+		return { topicId: topic.id, firstScan }
 	})
+
+	// hand off the open scan to Temporal without awaiting the scan itself. the workflow owns it from here
+	if (firstScan) {
+		scanTopic(firstScan, topicId, userId, "creation").catch((error) => {
+			console.error(`could not start first scan for topic ${topicId}`, error)
+			reportError(error, "first-scan", { topicId, userId })
+		})
+	}
 
 	// track the topic creation event
 	trackEvent("topic_created", userId, { ...analyticsProperties, topicId })
@@ -328,12 +348,14 @@ export async function deleteTopic(userId: string, topicId: string): Promise<bool
 		return false
 	}
 
-	// best-effort delete of the stored attachment objects before their rows cascade away
+	// best-effort delete of the stored attachment objects before their rows cascade away,
+	// both the topic's own attachments and chat attachments
 	const attachmentRows = await db
 		.select({ objectKey: attachments.objectKey })
 		.from(attachments)
 		.where(eq(attachments.topicId, topicId))
 	await Promise.all(attachmentRows.map((row) => deleteAttachment(row.objectKey).catch(() => {})))
+	await deleteChatAttachments(topicId)
 
 	// the row delete cascades to sources, findings, invites, and subscriptions.
 	// a scan keeps its row with a null topic, so the spend and the daily count it incurred survive

@@ -1,5 +1,5 @@
 import Markdown from "markdown-to-jsx"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 
 // map the terms markdown to a readable legal-page typography: display-font section headings, foreground body.
 // auto-linking stays off so bare domains stay plain text. the contact emails are explicit mailto links via AnchorLink
@@ -85,7 +85,7 @@ When paid plans are live:
 - Prices are in US dollars and exclude taxes, which you are responsible for
 - Cancel at any time. Access continues to the end of the paid period
 - Fees already paid are non-refundable except where the law requires otherwise
-- Without a payment method on file, usage past your limit is refused rather than billed
+- Without a payment method on file, usage past your limit is refused instead of being billed
 - With a payment method on file, usage past your limit may be billed as metered overage at the posted rate
 - Failed payments may lead to suspension after notice
 - We will give at least 30 days' notice before a price increase applies to you

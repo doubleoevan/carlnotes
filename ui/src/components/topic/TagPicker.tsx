@@ -23,9 +23,9 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 	const [isOpen, setIsOpen] = useState(false)
 	const [tagQuery, setTagQuery] = useState("")
 
-	// the tag suggestions are known tags not already selected, narrowed by the tag search text
+	// the suggested tags are the known ones not already selected, narrowed by the tag search text
 	const tagSearch = tagQuery.trim().toLowerCase()
-	const suggestions = knownTags.filter((tag) => !tags.includes(tag) && tag.toLowerCase().includes(tagSearch))
+	const suggestedTags = knownTags.filter((tag) => !tags.includes(tag) && tag.toLowerCase().includes(tagSearch))
 
 	// offer to create a new tag when allowed, unknown, and not already selected
 	const newTag = tagQuery.trim()
@@ -40,7 +40,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 		setTagQuery("")
 	}
 
-	// enter creates the new tag if allowed, or takes the top suggestion
+	// enter creates the new tag if allowed, or takes the top suggested tag
 	const handleInputKeyDown = (event: React.KeyboardEvent): void => {
 		if (event.key !== "Enter") {
 			return
@@ -48,8 +48,8 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 		event.preventDefault()
 		if (canCreateTyped) {
 			handleAddTag(newTag)
-		} else if (suggestions[0]) {
-			handleAddTag(suggestions[0])
+		} else if (suggestedTags[0]) {
+			handleAddTag(suggestedTags[0])
 		}
 	}
 
@@ -75,7 +75,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 						aria-haspopup="dialog"
 						aria-expanded={isOpen}
 						onClick={() => setIsOpen(!isOpen)}
-						className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-sm"
+						className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-raise"
 					>
 						<Plus className="size-3.5" />
 					</button>
@@ -84,7 +84,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 						<button
 							type="button"
 							aria-label="Add tag"
-							className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-sm"
+							className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-raise"
 						>
 							<Plus className="size-3.5" />
 						</button>
@@ -114,7 +114,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 						)}
 					</div>
 					<div className="mt-1 max-h-48 overflow-y-auto">
-						{suggestions.map((tag) => (
+						{suggestedTags.map((tag) => (
 							<button
 								key={tag}
 								type="button"
@@ -133,7 +133,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 								{`+ Create "${newTag}"`}
 							</button>
 						)}
-						{suggestions.length === 0 && !canCreateTyped && (
+						{suggestedTags.length === 0 && !canCreateTyped && (
 							<p className="text-muted-foreground px-2 py-1.5 text-sm">
 								{canCreate ? "Type to create a tag." : "No matching tags."}
 							</p>

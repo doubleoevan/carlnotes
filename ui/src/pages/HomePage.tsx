@@ -7,7 +7,7 @@ import { Accordion } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { QuotaLink } from "@/components/topic/QuotaLink"
+import { ScanQuotaLink } from "@/components/topic/ScanQuotaLink.tsx"
 import { TagPicker } from "@/components/topic/TagPicker"
 import { TopicFeedSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicFeedSort } from "@/components/topic/TopicFeedSort"
@@ -45,25 +45,18 @@ export function HomePage() {
 		setTagMatchMode,
 		knownTags,
 		reload,
+		reheat,
+		reheatKey,
+		isReheating,
 	} = useTopicFeed()
-	// increment when the refresh button is pressed to remount the sections so their hydrate animation replays
-	const [refreshKey, setRefreshKey] = useState(0)
-	// disables the Reheat button for the length of its own request, so a second click can't stack another reload
-	const [isRefreshing, setIsRefreshing] = useState(false)
 	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
 	// the section the reader opened, or null while none has been opened and the default still applies. an empty string closes every section
 	const [openedSection, setopenedSection] = useState<string | null>(null)
 
-	// refresh reloads the topic feed and replays the load animation.
-	const handleRefresh = async (): Promise<void> => {
-		setIsRefreshing(true)
-		try {
-			// wait for the refreshed topic feed so the load animation replays over the new content
-			await reload()
-			setRefreshKey((previousKey) => previousKey + 1)
-		} finally {
-			setIsRefreshing(false)
-		}
+	// the Reheat button runs the provider's reheat, which reloads the feed and replays the load animation.
+	// the hero's home links run the same reheat when clicked from this page
+	const handleReheat = async (): Promise<void> => {
+		await reheat()
 	}
 
 	// a created topic refreshes the feed behind the navigation to its new page
@@ -85,8 +78,8 @@ export function HomePage() {
 		}
 	}
 
-	// the remount key changes on refresh or any filter change so that updated content animates in
-	const viewKey = `${refreshKey}-${view}-${sort}-${[...resourceKinds].sort().join()}-${tagMatchMode}-${[...tagFilters].sort().join("|")}-${isSignedIn}`
+	// the remount key changes on a reheat or any filter change so that the updated content animates in
+	const viewKey = `${reheatKey}-${view}-${sort}-${[...resourceKinds].sort().join()}-${tagMatchMode}-${[...tagFilters].sort().join("|")}-${isSignedIn}`
 	// signed in opens your topics section, signed out opens the featured topics section
 	const defaultOpenSection = isSignedIn ? "yours" : "featured"
 	const openSection = openedSection ?? defaultOpenSection
@@ -101,17 +94,17 @@ export function HomePage() {
 			</div>
 
 			{/* the Sort menu and the "Reheat" button to the left, the "+ New Topic" block to the right, wrapping onto a second line when the screen is too narrow */}
-			<div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+			<div className="flex flex-wrap items-start justify-between gap-3">
 				<div className="flex items-start gap-2">
 					<TopicFeedSort sort={sort} onChange={setSort} />
 					<button
 						type="button"
-						onClick={handleRefresh}
-						disabled={isRefreshing}
+						onClick={handleReheat}
+						disabled={isReheating}
 						className={cn(MENU_BUTTON_CLASS, "disabled:pointer-events-none disabled:opacity-50")}
 					>
-						{isRefreshing ? <CoffeeMug className="size-4" /> : <RotateCw className="size-4" />}
-						{isRefreshing ? "Reheating…" : "Reheat"}
+						{isReheating ? <CoffeeMug className="size-4" /> : <RotateCw className="size-4" />}
+						{isReheating ? "Reheating…" : "Reheat"}
 					</button>
 				</div>
 				<NewTopicBlock
@@ -121,17 +114,25 @@ export function HomePage() {
 				/>
 			</div>
 
-			{/* skeleton animation while loading */}
-			{topicFeed === null && <TopicFeedSkeleton />}
+			{/* skeleton animation while loading and reheating */}
+			{(topicFeed === null || isReheating) && <TopicFeedSkeleton />}
 
 			{/*
 				the topic sections with a viewKey prop so that any change replays the hydrate animation.
-				opening one section closes whichever was open. the collapsible prop lets the current open one close too
+				opening one section closes the others. the collapsible prop lets the current open one close too.
+				the first section's header sits drops the top padding
 			*/}
-			{topicFeed && (
-				<Accordion key={viewKey} type="single" collapsible value={openSection} onValueChange={setopenedSection}>
+			{topicFeed && !isReheating && (
+				<Accordion
+					key={viewKey}
+					type="single"
+					collapsible
+					value={openSection}
+					onValueChange={setopenedSection}
+					className="[&>*:first-child_[data-slot=accordion-trigger]]:pt-0"
+				>
 					{topicFeed.sections.map((section) => (
-						<TopicSection key={section.key} section={section} />
+						<TopicSection key={section.key} section={section} onNewTopic={handleNewTopic} />
 					))}
 				</Accordion>
 			)}
@@ -211,7 +212,7 @@ function TopicsRemaining({ remaining, isSignedIn }: { remaining: number | null; 
 	// a visitor sees the free plan's cap
 	if (!isSignedIn) {
 		return (
-			<QuotaLink
+			<ScanQuotaLink
 				isLoading={false}
 				isUnlimited={false}
 				label={`${PLANS.free.topicLimit} left`}
@@ -221,7 +222,7 @@ function TopicsRemaining({ remaining, isSignedIn }: { remaining: number | null; 
 		)
 	}
 	return (
-		<QuotaLink
+		<ScanQuotaLink
 			isLoading={remaining === null}
 			isUnlimited={remaining !== null && remaining >= ADMIN_QUOTA}
 			label={`${remaining} left`}

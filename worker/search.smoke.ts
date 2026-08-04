@@ -97,7 +97,7 @@ async function smokeTest(): Promise<number> {
 	}
 }
 
-// run the smoke test, computing the exit code rather than exiting early so telemetry can flush first
+// run the smoke test, computing the exit code instead of exiting early so telemetry can flush first
 startTelemetry()
 let exitCode: number
 try {

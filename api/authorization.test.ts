@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { ADMIN_BUDGET_CENTS, ADMIN_QUOTA, PLANS } from "@shared/plans"
-import { decideManualScan, effectiveBudgetCents, isAdminRole } from "./authorization"
+import { type Capability, decideManualScan, effectiveBudgetCents, isAdminRole } from "./authorization"
 
 // a decideManualScan input for a non-admin owner within the daily limit and no payment method for test cases to override
 function scanInput(overrides: Partial<Parameters<typeof decideManualScan>[0]>): Parameters<typeof decideManualScan>[0] {
@@ -73,6 +73,12 @@ test("decideManualScan lets an admin bypass every limit", () => {
 		remaining: ADMIN_QUOTA,
 		isOverage: false,
 	})
+})
+
+// restrict what can be done from the topic chat
+test("the capability union covers chat send and persist", () => {
+	const chatCapabilities: Capability[] = ["chat:send", "chat:persist"]
+	expect(chatCapabilities).toHaveLength(2)
 })
 
 // no api file outside authorization.ts compares role or plan with ===, so authority can't scatter across the api

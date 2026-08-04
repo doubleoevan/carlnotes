@@ -102,7 +102,7 @@ export async function loadBillingState(userId: string): Promise<BillingState> {
 
 /**
  * Verify and handle a Stripe webhook: update the billing_subscriptions and users.plan from the subscription event.
- * Throws on a bad signature so the route answers 400 and Stripe retries.
+ * Throws on a bad signature so the route responds 400 and Stripe retries.
  */
 export async function handleStripeWebhook(rawBody: string, signature: string | undefined): Promise<void> {
 	// verify the signature before trusting any event payload

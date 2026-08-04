@@ -1,6 +1,6 @@
 // search ingester tests for the result parser and prompt builder
 import { expect, test } from "bun:test"
-import { buildSearchPrompt, parseResults } from "./search"
+import { buildSearchPrompt, parseResults, toResourceKind } from "./search"
 
 // two distinct results plus a third repeating the first url, to exercise in-payload dedupe
 const SEARCH_RESPONSE = {
@@ -34,8 +34,28 @@ test("parseResults defaults cost to 0 when the provider omits costDollars", () =
 
 // an empty context falls back to the topic name, so the search always gets a prompt
 test("buildSearchPrompt falls back to the topic name when the context is empty", async () => {
-	// the prompt written from search-topic.md carries the fallback name and no unfilled placeholders
+	// the prompt written from search-topic.md includes the fallback name and no unfilled placeholders
 	const { prompt: searchPrompt } = await buildSearchPrompt("   ", "Agent infra weekly")
 	expect(searchPrompt).toContain("Agent infra weekly")
 	expect(searchPrompt).not.toContain("{{")
+})
+
+// the scan prompt always includes the topic name for context
+test("buildSearchPrompt includes the topic name alongside the prompt", async () => {
+	const { prompt: searchPrompt } = await buildSearchPrompt("I want the best ones!", "Cute raccoon videos")
+	expect(searchPrompt).toContain("Cute raccoon videos")
+	expect(searchPrompt).toContain("I want the best ones!")
+})
+
+// a web search returns videos and podcasts alongside articles and the kind is based on the host
+test("toResourceKind reads a url's kind off its host", () => {
+	expect(toResourceKind("https://www.youtube.com/watch?v=abc")).toBe("watch")
+	expect(toResourceKind("https://youtu.be/abc")).toBe("watch")
+	expect(toResourceKind("https://m.youtube.com/watch?v=abc")).toBe("watch")
+	expect(toResourceKind("https://podcasts.apple.com/us/podcast/x")).toBe("listen")
+
+	// anything unrecognized, and anything unparseable, reads as an article
+	expect(toResourceKind("https://hamel.dev/blog/judge-bias")).toBe("read")
+	expect(toResourceKind("not a url")).toBe("read")
+	expect(toResourceKind("https://notyoutube.com/watch")).toBe("read")
 })

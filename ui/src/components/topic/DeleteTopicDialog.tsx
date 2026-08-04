@@ -1,5 +1,5 @@
 import type { TopicResponse } from "@shared/contracts"
-import { ConfirmDialog } from "@/components/layout/ConfirmDialog"
+import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { sendTopicDelete } from "@/lib/topicClient"
 
 /**

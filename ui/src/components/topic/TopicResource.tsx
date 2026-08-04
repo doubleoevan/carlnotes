@@ -1,7 +1,8 @@
 import type { TopicFinding } from "@shared/contracts"
-import { Bookmark, Check, Circle, SquarePen, ThumbsDown, ThumbsUp } from "lucide-react"
+import { Bookmark, Check, Circle, ThumbsDown, ThumbsUp } from "lucide-react"
 import type * as React from "react"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { NoteIcon } from "@/components/branding/NoteIcon"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -39,11 +40,13 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers }: T
 		"mt-0.5 text-xs group-hover:text-foreground/80",
 		resource.isConsumed ? "text-muted-foreground/70" : "text-muted-foreground",
 	)
-	// the bookmark toggle's label and tooltip, shared so the two never drift apart
+	// the bookmark mark's label and tooltip, shared so the two never drift apart
 	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
+	// the hover highlight paints on a rounded under-layer, so the separator above the row stays straight.
+	// the separator is the row's own after element, inset so it sits inside the highlight's rounded corners
 	return (
-		<div className="group hover:bg-accent-foreground/20 relative flex rounded-lg transition-colors">
-			{/* the rank aligned with the bookmark toggle */}
+		<div className="group after:border-separator-strong relative isolate flex before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden hover:before:bg-accent-foreground/20">
+			{/* the rank, in the slot the bookmark mark takes over once the row is bookmarked */}
 			{rank !== null && (
 				<span
 					className="text-muted-foreground absolute top-1.5 left-0 grid size-11 place-items-center sm:size-8"
@@ -52,21 +55,16 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers }: T
 					<span className="font-display text-sm tabular-nums">{rank}</span>
 				</span>
 			)}
-			{/* the bookmark toggle, filled while bookmarked to the left, and not filled thile unbookmarked to the right */}
-			{isSignedIn && (
+			{/* the filled bookmark mark, sitting where the rank would be. it only shows on a bookmarked row */}
+			{isSignedIn && resource.isBookmarked && (
 				<Tooltip>
 					<TooltipTrigger
-						onClick={() => bookmark(resource.findingId, !resource.isBookmarked)}
-						aria-pressed={resource.isBookmarked}
+						onClick={() => bookmark(resource.findingId, false)}
+						aria-pressed={true}
 						aria-label={bookmarkLabel}
-						className={cn(
-							"absolute top-1.5 grid size-11 place-items-center sm:size-8",
-							resource.isBookmarked
-								? "text-primary left-0"
-								: "text-muted-foreground/50 hover:text-foreground right-11 sm:right-8",
-						)}
+						className="text-primary absolute top-1.5 left-0 grid size-11 place-items-center sm:size-8"
 					>
-						<Bookmark className={cn("size-3.75", resource.isBookmarked && "fill-current")} strokeWidth={2.5} />
+						<Bookmark className="size-3.75 fill-current" strokeWidth={2.5} />
 					</TooltipTrigger>
 					<TooltipContent>{bookmarkLabel}</TooltipContent>
 				</Tooltip>
@@ -78,7 +76,7 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers }: T
 				className={cn(
 					// the left padding clears the rank slot
 					"flex min-w-0 flex-1 items-start gap-2.5 py-3 pl-9",
-					// only an unbookmarked row has a toggle on the right for the text to clear
+					// the right padding clears the note popover, with extra room on an unbookmarked signed-in row
 					isSignedIn && !resource.isBookmarked ? "pr-20 sm:pr-16" : "pr-10",
 				)}
 			>
@@ -103,35 +101,41 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers }: T
 				isSignedIn={isSignedIn}
 				onConsume={consume}
 				onRate={rate}
+				onBookmark={bookmark}
 			/>
 		</div>
 	)
 }
 
-// the resource info popover. it shows relevance explanation, the fetch date, the view count, and, for a signed-in user, the read toggle and rating buttons
+// the resource info popover. it shows the relevance explanation, the fetch date, the view count,
+// and, for a signed-in user, the bookmark and read toggles with the rating buttons
 function ResourceInfo({
 	resource,
 	isRatable,
 	isSignedIn,
 	onConsume,
 	onRate,
+	onBookmark,
 }: {
-	// the topic finding, whether this user is signed in and may rate it, and the onConsume and onRate handlers
+	// the topic finding, whether this user is signed in and may rate it, and the consume, rate, and bookmark handlers
 	resource: TopicFinding
 	isRatable: boolean
 	isSignedIn: boolean
 	onConsume: TopicFeedHandlers["consume"]
 	onRate: TopicFeedHandlers["rate"]
+	onBookmark: TopicFeedHandlers["bookmark"]
 }) {
+	// the bookmark button's label, flipping with the finding's bookmark state
+	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
 	return (
 		<Popover>
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<PopoverTrigger
-						className="text-primary hover:opacity-75 absolute top-1.5 right-0 grid size-11 place-items-center sm:size-8"
+						className="hover:opacity-75 absolute top-1.5 right-1 grid size-11 place-items-center sm:size-8"
 						aria-label="Notes and feedback"
 					>
-						<SquarePen className="size-3.75" strokeWidth={2.5} />
+						<NoteIcon />
 					</PopoverTrigger>
 				</TooltipTrigger>
 				<TooltipContent>A topic finding note from Carl</TooltipContent>
@@ -154,20 +158,32 @@ function ResourceInfo({
 						{resource.viewCount.toLocaleString()}
 					</InfoSection>
 				</div>
-				{/* the read toggle and rating row, shown only to a signed-in user */}
+				{/* the bookmark, read, and rating controls, only shown to a signed-in user */}
 				{isSignedIn && (
 					<div className="mt-3 border-t pt-2">
-						<button
-							type="button"
-							onClick={() => onConsume(resource.findingId, !resource.isConsumed)}
-							className="hover:bg-accent flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-sm sm:min-h-9"
-						>
-							{resource.isConsumed ? <Circle className="size-4" /> : <Check className="size-4" />}
-							{resource.isConsumed ? "Mark as unread" : "Mark as read"}
-						</button>
+						{/* the bookmark and read toggles share one row */}
+						<div className="flex items-center justify-between gap-2">
+							<button
+								type="button"
+								onClick={() => onBookmark(resource.findingId, !resource.isBookmarked)}
+								aria-pressed={resource.isBookmarked}
+								className="hover:bg-accent flex min-h-11 items-center gap-2 rounded-md px-2 text-sm sm:min-h-9"
+							>
+								<Bookmark className={cn("size-4", resource.isBookmarked && "text-primary fill-current")} />
+								{bookmarkLabel}
+							</button>
+							<button
+								type="button"
+								onClick={() => onConsume(resource.findingId, !resource.isConsumed)}
+								className="hover:bg-accent flex min-h-11 items-center gap-2 rounded-md px-2 text-sm sm:min-h-9"
+							>
+								{resource.isConsumed ? <Circle className="size-4" /> : <Check className="size-4" />}
+								{resource.isConsumed ? "Mark unread" : "Mark read"}
+							</button>
+						</div>
 						{/* the rating row, shown only on topics this user owns or subscribes to */}
 						{isRatable && (
-							<div className="flex min-h-11 items-center justify-between px-2 sm:min-h-9">
+							<div className="mt-2 flex min-h-11 items-center justify-between border-t px-2 pt-2 sm:min-h-9">
 								<span className="text-muted-foreground text-xs">Rate this find</span>
 								<div className="flex gap-1">
 									<ThumbButton

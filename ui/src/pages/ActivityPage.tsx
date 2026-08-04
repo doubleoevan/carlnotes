@@ -44,7 +44,7 @@ function ActivitySections({ activity, onReload }: { activity: ActivityResponse; 
 		<div className="mt-6">
 			<Accordion type="multiple" defaultValue={["topics", "subscriptions", "invites"]}>
 				{/* the user's topics with their monthly spend */}
-				<AccordionItem value="topics" className="border-b-0">
+				<AccordionItem value="topics">
 					<AccordionTrigger className="font-semibold">Your topics</AccordionTrigger>
 					<AccordionContent>
 						<TopicsTable topics={activity.topics} onReloadPage={onReload} />
@@ -53,7 +53,7 @@ function ActivitySections({ activity, onReload }: { activity: ActivityResponse; 
 
 				{/* the user's subscriptions with their active and email preferences */}
 				{activity.subscriptions.length > 0 && (
-					<AccordionItem value="subscriptions" className="border-b-0">
+					<AccordionItem value="subscriptions">
 						<AccordionTrigger className="font-semibold">Your subscriptions</AccordionTrigger>
 						<AccordionContent>
 							<SubscriptionsTable subscriptions={activity.subscriptions} onReloadPage={onReload} />
@@ -63,7 +63,7 @@ function ActivitySections({ activity, onReload }: { activity: ActivityResponse; 
 
 				{/* the user's invitations with their status */}
 				{activity.invites.length > 0 && (
-					<AccordionItem value="invites" className="border-b-0">
+					<AccordionItem value="invites">
 						<AccordionTrigger className="font-semibold">Your invitations</AccordionTrigger>
 						<AccordionContent>
 							<InvitesTable invites={activity.invites} onReload={onReload} />

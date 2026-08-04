@@ -14,12 +14,12 @@ export function currentUser(context: AppContext): string | null {
 	return context.get("user")?.id ?? null
 }
 
-// the properties every user-triggered analytics event carries
+// the properties every user-triggered analytics event includes
 export type AnalyticsProperties = { plan: string; platform: "mobile" | "desktop" }
 
 /**
- * The plan and device an analytics event is attributed to, read off the session and the request.
- * The plan comes from the session rather than the users table, so an event costs no extra query.
+ * The plan and device an analytics event is attributed to.
+ * The plan comes from the session instead of the users table, so an event does not take an extra query.
  */
 export function toAnalyticsProperties(context: AppContext): AnalyticsProperties {
 	return {

@@ -85,19 +85,22 @@ The lookup is therefore **approximate**: an index walk MAY miss a true nearest n
 
 ### Requirement: Embed-filter gates paid stages on topic-context relevance
 
-Curation SHALL embed the topic's effective context (`topicScanContext` — the topic's own `context` merged with its attachments' `context`) and drop, as filtered, any Resource whose cosine similarity to that context embedding is below the relevance threshold. This gate SHALL run before either paid stage (Firecrawl fetch, LLM scoring), so a Resource that fails it incurs no fetch or scoring spend — only the cheap embedding the gate itself required. When the topic's effective context is empty, the filter SHALL fall back to embedding the topic `name`, mirroring the search ingester.
-
-Embedding is metered spend, so the gate SHALL check the Scan's spend ceiling before embedding each candidate and SHALL mark a candidate reached past the ceiling as **deferred**, not filtered — it keeps no embedding and stays eligible for a later Scan. A Scan that discovers an unusually large payload therefore cannot embed and charge for every Resource before the ceiling is consulted.
+Curation SHALL embed the topic's effective context (`topicScanContext` — the topic's own `context` merged with its attachments' `context`) and drop, as filtered, any Resource whose cosine similarity to that context embedding is below the relevance threshold for that Resource's kind. The threshold SHALL be held per kind rather than shared across all of them: a `watch` or `listen` Resource is described by a short blurb where a `read` Resource carries its whole body, so the same similarity means something different for each, and one shared bar drops media for the length of its description rather than for its relevance. Every kind's threshold SHALL be defined, so no kind falls back to an unstated default. This gate SHALL run before either paid stage (Firecrawl fetch, LLM scoring), so a Resource that fails it incurs no fetch or scoring spend — only the cheap embedding the gate itself required. When the topic's effective context is empty, the filter SHALL fall back to embedding the topic `name`, mirroring the search ingester.
 
 #### Scenario: A below-threshold Resource is filtered before any paid stage
 
-- **WHEN** a Resource's similarity to the topic-context embedding is below the relevance threshold
+- **WHEN** a Resource's similarity to the topic-context embedding is below its kind's relevance threshold
 - **THEN** it is dropped as filtered and no Firecrawl fetch or scoring call is made for it (its embedding already ran, for the gate)
 
 #### Scenario: An above-threshold Resource proceeds to fetch and scoring
 
-- **WHEN** a Resource's similarity to the topic-context embedding is at or above the threshold
+- **WHEN** a Resource's similarity to the topic-context embedding is at or above its kind's threshold
 - **THEN** it proceeds to the fetch stage
+
+#### Scenario: A video is judged against the bar for its own kind
+
+- **WHEN** a `watch` Resource scores below the `read` threshold but at or above the `watch` threshold
+- **THEN** it survives the gate and proceeds to fetch and scoring, rather than being dropped for carrying a description instead of an article
 
 #### Scenario: Empty effective context falls back to the topic name
 
@@ -139,6 +142,8 @@ Curation SHALL enforce, before each Resource is dispatched into the paid fetch-a
 
 The USD ceiling is a **Scan-level** ceiling, not a review-level one: it is created before ingestion, ingestion spend charges against it, and its configuration name SHALL name the Scan rather than review. Curation therefore starts with whatever ingestion already spent already counted.
 
+What a Scan has spent SHALL be carried between stages as a value rather than accumulated in one object shared across them. Ingestion returns what it spent, curation receives it and returns what it leaves behind, and the ceiling each stage reads is the running total it was handed. A Scan's stages may run in separate processes, so a shared object mutated in place would let curation start from zero and spend the ceiling twice.
+
 Because the paid section runs under bounded concurrency and each ceiling is checked before dispatch rather than after completion, both ceilings are **approximate**, not hard: up to `(concurrency - 1)` Resources may already be in flight when a ceiling is reached, so the Scan may overshoot either ceiling by that many Resources. This overshoot is accepted. It costs a few cents, and the USD ceiling is an in-memory advisory counter that defers work rather than throwing. The fetch-outcome counts (`reused + revalidated + fetched`) SHALL therefore approximate, and MAY slightly exceed, the count ceiling.
 
 Once either ceiling is reached, curation SHALL stop dispatching further paid work and leave the remaining Resources unscored — carried to a later Scan — without failing the Scan. The free stages that spend nothing — the hash dedupe, the embedding dedupe, and the relevance comparison itself — SHALL NOT be truncated by either cap; embedding, which is metered, SHALL defer past the USD ceiling as the embed-filter requirement states.
@@ -157,6 +162,12 @@ Once either ceiling is reached, curation SHALL stop dispatching further paid wor
 
 - **WHEN** a Scan's ingestion charges enough to reach the USD ceiling before curation starts
 - **THEN** curation dispatches no paid work and defers its candidates, because the ceiling it reads already includes ingestion spend
+
+#### Scenario: Spend survives the boundary between stages
+
+- **GIVEN** a Scan whose ingestion charged against the ceiling
+- **WHEN** curation runs in a different process from the one that ingested
+- **THEN** curation reads the total ingestion already spent, rather than starting from zero
 
 #### Scenario: In-flight work may overshoot a ceiling
 
@@ -177,7 +188,7 @@ Once either ceiling is reached, curation SHALL stop dispatching further paid wor
 
 On close, curation SHALL record each stage's dollar cost in `scans.stage_costs` (keyed at least by ingestion, embedding, fetch, cheap scoring, and premium scoring) and set `scans.cost` to the Scan Budget's total, which already includes ingestion because ingestion charges into the same Budget. `scans.cost` SHALL NOT be composed by summing a separately tracked ingestion number with a review total. It SHALL set `kept_count` to the number of Findings written and `filtered_count` to the number of Resources dropped by hash dedupe, embedding dedupe, the embed-filter, or the content scanner, and SHALL write the scan report to `scans.scan_summary`. It SHALL also record the fetch-outcome counts to `scans.reused`, `scans.revalidated`, and `scans.fetched` — the number of Resources whose content was reused within the TTL, revalidated via a `304`, or freshly fetched — whose sum equals the number of Resources sent through the paid fetch-and-scoring section.
 
-The scan report SHALL be a dated note grounded only in the Scan's actual data — the kept Findings' titles, urls, scores, and relevance explanations; drop, deferral, and failure counts with their causes; per-Source outcomes including fallback modes; and costs. It SHALL cover, when the data supports each: a dated headline; insights and trends drawn across the kept items' relevance explanations; adds and drops with reasoning; sources consulted and skipped with reasoning; data-hygiene actions taken; list and threshold status against a target the topic context itself states; a closing notification decision (send or suppress) with rationale; and a cited-sources list of markdown links to the kept items using their exact stored urls. Because the report renders through a hardened markdown subset whose links are allowlisted to the kept Findings' urls, the prompt MAY ask for light formatting and for links to the kept items, but SHALL instruct that any other link, image, or HTML renders as inert text. A Scan with nothing to review MAY leave `scan_summary` empty, and a Scan whose report call failed SHALL leave it empty rather than failing.
+The scan report SHALL be a dated note grounded only in the Scan's actual data — the kept Findings' titles, urls, scores, and relevance explanations; drop, deferral, and failure counts with their causes; per-Source outcomes including fallback modes; and costs. It SHALL cover, when the data supports each: a dated headline; insights and trends drawn across the kept items' relevance explanations; adds and drops with reasoning; sources consulted and skipped with reasoning; data-hygiene actions taken; list and threshold status against a target the topic context itself states; a closing notification decision (send or suppress) with rationale; and a cited-sources list of markdown links to the kept items using their exact stored urls. Because the report renders through a sanitized markdown subset whose links are allowlisted to the kept Findings' urls, the prompt MAY ask for light formatting and for links to the kept items, but SHALL instruct that any other link, image, or HTML renders as inert text. A Scan with nothing to review MAY leave `scan_summary` empty, and a Scan whose report call failed SHALL leave it empty rather than failing.
 
 #### Scenario: Per-stage costs are recorded and the total is the Budget's
 

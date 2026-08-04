@@ -60,7 +60,7 @@ Recipients SHALL be the distinct email addresses of the Topic's subscribers whos
 
 The email SHALL be grounded only in the Scan's real new Findings: a subject naming the Topic, and content listing each new Finding's title, a link to its Resource URL, and its relevance explanation. It SHALL NOT fabricate Findings or include Findings from other Topics or from prior Scans.
 
-The scan recap card SHALL render through the hardened markdown subset `injection-defense` requires — bold, lists, and headings render, a citation of one of this email's own Finding urls renders as a real link, and every other link, image, or piece of raw HTML is neutralized into inert text — and each Finding's relevance explanation SHALL render as plain text. Every anchor the email carries therefore points where the email already points: the Finding cards' Resource links and the unsubscribe link, so a model that read an attacker's page cannot point the inbox anywhere new.
+The scan recap card SHALL render through the sanitized markdown subset `injection-defense` requires — bold, lists, and headings render, a citation of one of this email's own Finding urls renders as a real link, and every other link, image, or piece of raw HTML is neutralized into inert text — and each Finding's relevance explanation SHALL render as plain text. Every anchor the email carries therefore points where the email already points: the Finding cards' Resource links and the unsubscribe link, so a model that read an attacker's page cannot point the inbox anywhere new.
 
 #### Scenario: The content lists the new Findings and nothing else
 

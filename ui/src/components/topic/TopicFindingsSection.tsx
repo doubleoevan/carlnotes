@@ -1,6 +1,7 @@
 import type { TopicFinding } from "@shared/contracts"
 import { useState } from "react"
 import { TopicResource } from "@/components/topic/TopicResource"
+import { cn, RESOURCE_LIST_CARD_CLASS } from "@/lib/utils"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { MoreButton } from "./MoreButton"
@@ -31,8 +32,8 @@ export function TopicFindingsSection({
 	const pinnedShownCount = topicFindingsShown.filter((finding) => finding.isBookmarked).length
 	return (
 		<CollapsibleSection value="findings" title="Topic findings" className="mt-4">
-			{/* topic finding rows with dashed separators */}
-			<div className="divide-separator divide-y divide-dashed">
+			{/* topic finding rows, each drawing its own dashed separator */}
+			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
 				{topicFindingsShown.map((finding, index) => (
 					<TopicResource
 						key={finding.findingId}
@@ -43,10 +44,10 @@ export function TopicFindingsSection({
 					/>
 				))}
 				{topicFindingsShown.length === 0 && (
-					<p className="text-muted-foreground py-3 pl-9 text-sm">
+					<p className="text-muted-foreground p-3 text-sm">
 						{hasAnyFindings
 							? "Nothing new worth your time yet. Carl has standards."
-							: "Just getting started. The raccoon put a pot on..."}
+							: "Carl's getting started. The raccoon put a pot on..."}
 					</p>
 				)}
 			</div>

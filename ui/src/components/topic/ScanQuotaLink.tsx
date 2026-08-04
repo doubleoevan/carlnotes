@@ -1,11 +1,11 @@
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 
 /**
- * How much of a quota is left, linking the sign-in page for a visitor or the pricing page for a logged-in user.
- * Shows a skeleton until the count lands, or "Unlimited" for an admin.
+ * How much of the scan quota is left, linking to the sign-in page for a visitor or the pricing page for a logged-in user.
+ * Shows a skeleton until the count loads, or "Unlimited" for an admin.
  */
-export function QuotaLink({
+export function ScanQuotaLink({
 	isLoading,
 	isUnlimited,
 	label,
@@ -18,7 +18,7 @@ export function QuotaLink({
 	href: string
 	tooltip: string
 }) {
-	// the count has not landed yet, so the line holds its own height rather than popping in
+	// the count has not loaded yet, so the skeleton holds its line height
 	if (isLoading) {
 		return <div aria-hidden="true" className="bg-muted mr-2.5 h-4 w-16 animate-pulse rounded" />
 	}

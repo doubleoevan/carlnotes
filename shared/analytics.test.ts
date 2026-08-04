@@ -27,7 +27,7 @@ test("toCtaTag admits slugs and rejects everything else", () => {
 	expect(toCtaTag("subscribe")).toBe("subscribe")
 	expect(toCtaTag("topic-quota")).toBe("topic-quota")
 
-	// absence, junk, and anything a cookie editor could inject are dropped rather than sent
+	// absence, junk, and anything a cookie editor could inject are dropped instead of being sent
 	expect(toCtaTag(null)).toBe(null)
 	expect(toCtaTag("")).toBe(null)
 	expect(toCtaTag("has spaces")).toBe(null)
@@ -38,13 +38,13 @@ test("toCtaTag admits slugs and rejects everything else", () => {
 // without a key, nothing is sent
 test("analytics is a no-op without its key", () => {
 	// clear the key so the run is deterministic regardless of the calling shell's environment
-	const previousApiKey = Bun.env.POSTHOG_API_KEY
+	const originalApiKey = Bun.env.POSTHOG_API_KEY
 	Bun.env.POSTHOG_API_KEY = undefined
 
 	try {
 		// a call without a key should not throw an error
 		expect(() => trackEvent("signup_completed", "user-1")).not.toThrow()
 	} finally {
-		Bun.env.POSTHOG_API_KEY = previousApiKey
+		Bun.env.POSTHOG_API_KEY = originalApiKey
 	}
 })

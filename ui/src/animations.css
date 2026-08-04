@@ -29,22 +29,27 @@
 	}
 }
 
-/* radix accordion open and close height transitions */
+/* radix accordion open and close height transitions. the overflow lives in the keyframes so the body clips
+   only while the animation plays, letting a child card's ambient shadow paint past the box at rest */
 @keyframes accordion-down {
 	from {
 		height: 0;
+		overflow: hidden;
 	}
 	to {
 		height: var(--radix-accordion-content-height);
+		overflow: hidden;
 	}
 }
 
 @keyframes accordion-up {
 	from {
 		height: var(--radix-accordion-content-height);
+		overflow: hidden;
 	}
 	to {
 		height: 0;
+		overflow: hidden;
 	}
 }
 

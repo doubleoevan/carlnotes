@@ -31,7 +31,7 @@ test("ingestion spend counts against the Scan's ceiling", () => {
 	const budget = { ...newBudget(), cap: 0.1 }
 	charge(budget, "ingestion", 0.1)
 
-	// the ingestion bucket carries it, the running total sees it, and no review stage may spend after it
+	// the ingestion bucket includes it, the running total sees it, and no review stage may spend after it
 	expect(budget.stageCosts.ingestion).toBeCloseTo(0.1)
 	expect(budget.spent).toBeCloseTo(0.1)
 	expect(canSpend(budget)).toBe(false)

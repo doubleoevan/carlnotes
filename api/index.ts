@@ -1,10 +1,13 @@
 // the api server for the topic feed and topic pages. the ui calls these routes through a fully typed client.
 import { zValidator } from "@hono/zod-validator"
+import { trackEvent } from "@shared/analytics"
 import {
 	attachmentContextPayload,
-	attachmentUrlPayload,
 	bookmarkPayload,
 	budgetOverridePayload,
+	type ChatAttachment,
+	type ChatConversation,
+	chatTurnPayload,
 	checkoutPayload,
 	consumedPayload,
 	inviteRevokePayload,
@@ -14,27 +17,38 @@ import {
 	subscriptionEmailPayload,
 	subscriptionPayload,
 	updateTopicPayload,
+	withAttachmentNote,
 } from "@shared/contracts"
-import { startMonitoring } from "@shared/monitoring"
+import { reportError, startMonitoring } from "@shared/monitoring"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { serveStatic } from "hono/bun"
 import { setCookie } from "hono/cookie"
+import { stream } from "hono/streaming"
 import { z } from "zod"
 import {
 	AttachmentValidationError,
 	attachmentStream,
+	type ChatReplyStream,
 	ingestAttachment,
-	ingestUrlAttachment,
 	MAX_ATTACHMENT_BYTES,
 	startTelemetry,
+	streamChatReply,
 } from "../worker"
 import { loadActivity } from "./activity"
 import { loadAdminTotals, loadAdminUsers, setUserBudgetOverride, setUserRole } from "./admin"
 import { auth, GATE_COOKIE_MAX_AGE_SECONDS, GATE_COOKIE_NAME, signGateToken, verifyTurnstileToken } from "./auth"
 import { isAllowed, topicsRemaining } from "./authorization"
 import { createCheckoutSession, createPortalSession, handleStripeWebhook, loadBillingState } from "./billing"
-import { type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
+import {
+	deleteKeptAttachment,
+	keepChatAttachments,
+	loadDownloadableKeptAttachment,
+	loadKeptAttachments,
+	resolveChatAttachments,
+} from "./chat/attachments"
+import { authorizeChatTurn, clearChatTurns, loadChatTurns, recordChatTurn } from "./chat/turns"
+import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
 import { deleteTopicAttachment, loadDownloadableAttachment, updateTopicAttachmentContext } from "./topic/attachments"
 import { buildTopicFeeds } from "./topic/feeds"
 import { recordView, setBookmarked, setConsumed, setRating } from "./topic/findings"
@@ -216,6 +230,131 @@ const route = new Hono<AppEnv>()
 			? context.json({ error: "quota exhausted" }, 429)
 			: context.json({ error: "forbidden" }, 403)
 	})
+	.get("/topics/:id/chat", async (context) => {
+		// what the panel opens with. the caller's stored conversation, what they have kept, and whether they may chat
+		const userId = currentUser(context)
+		const topicId = context.req.param("id")
+		const [chatTurns, authorization, keptAttachments] = await Promise.all([
+			loadChatTurns(userId, topicId),
+			authorizeChatTurn(userId, topicId),
+			loadKeptAttachments(userId, topicId),
+		])
+
+		// the payload the chat panel renders from
+		const chatConversation: ChatConversation = {
+			chatTurns,
+			canChat: authorization.status === "allowed",
+			isSignupRequired: authorization.status === "signup",
+			isBudgetExhausted: authorization.status === "budget",
+			keptAttachments,
+		}
+		return context.json(chatConversation)
+	})
+	.delete("/topics/:id/chat", async (context) => {
+		// clearing a chat wipes the chat owner's conversation text while the spend rows stay
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "sign up required" }, 401)
+		}
+		await clearChatTurns(userId, context.req.param("id"))
+		return context.json({ ok: true })
+	})
+	.delete("/chat-attachments/:id", async (context) => {
+		// deleting a kept attachment is signed-in only and scoped to its keeper, freeing its cap slot
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "sign up required" }, 401)
+		}
+		const isDeleted = await deleteKeptAttachment(userId, context.req.param("id"))
+		return isDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
+	.get("/chat-attachments/:id/download", async (context) => {
+		// downloading a kept attachment is signed-in only and scoped to its keeper
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		const keptAttachment = await loadDownloadableKeptAttachment(userId, context.req.param("id"))
+		if (!keptAttachment) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// kept text has no stored file, so its words download back directly
+		if (keptAttachment.kind === "text") {
+			return context.body(keptAttachment.text, 200, toDownloadHeaders(keptAttachment.name, "text/plain; charset=utf-8"))
+		}
+		return context.body(
+			attachmentStream(keptAttachment.objectKey),
+			200,
+			toDownloadHeaders(keptAttachment.name, keptAttachment.contentType),
+		)
+	})
+	.post(
+		"/topics/:id/chat",
+		// cap the chat turn body before json parsing buffers it. four data-url images at their contract cap, with room to spare
+		bodyLimit({
+			maxSize: 26 * 1024 * 1024,
+			onError: (context) => context.json({ error: "Those attachments are too large." }, 413),
+		}),
+		zValidator("json", chatTurnPayload),
+		async (context) => {
+			// authorize the chat turn first. each refusal reads differently to the reader, so each gets its own status
+			const userId = currentUser(context)
+			const topicId = context.req.param("id")
+			const { question, history, attachments } = context.req.valid("json")
+			const authorization = await authorizeChatTurn(userId, topicId)
+
+			// an exhausted budget prompts an upgrade
+			if (authorization.status === "budget") {
+				if (userId) {
+					trackEvent("chat_budget_reached", userId, { ...toAnalyticsProperties(context), topicId })
+				}
+				return context.json({ error: "budget exhausted" }, 402)
+			}
+			// a signed-out caller is sent to signup instead
+			if (authorization.status === "signup") {
+				return context.json({ error: "sign up required" }, 401)
+			}
+			// anything left is a visibility refusal
+			if (authorization.status !== "allowed") {
+				return context.json({ error: "forbidden" }, 403)
+			}
+			// the gate already refused a signed-out caller with "signup", so this narrows the type alone
+			if (!userId) {
+				return context.json({ error: "sign up required" }, 401)
+			}
+
+			// a PDF attachment becomes its extracted text here, and an unreadable one refuses the chat turn in words
+			const resolvedAttachments = await resolveChatAttachments(attachments)
+			if (resolvedAttachments === null) {
+				return context.json({ error: "That PDF couldn't be read." }, 422)
+			}
+
+			// stream a chat reply against the topic's own material
+			const chatReply = await streamChatReply({
+				topicId,
+				question,
+				history,
+				attachments: resolvedAttachments,
+				userId,
+				isOwner: authorization.isOwner,
+				litellmApiKey: authorization.litellmApiKey,
+			})
+			if (!chatReply) {
+				return context.json({ error: "not found" }, 404)
+			}
+			// the stored question names its attachments, since the attachments themselves are sent only to the model
+			return streamChatTurn(context, chatReply, {
+				userId,
+				topicId,
+				question: withAttachmentNote(question, attachments),
+				isPersisted: authorization.isPersisted,
+				attachments,
+				litellmApiKey: authorization.litellmApiKey,
+				analyticsProperties: toAnalyticsProperties(context),
+			})
+		},
+	)
 	.post("/topics/:id/subscription", zValidator("json", subscriptionPayload), async (context) => {
 		// reject a signed-out caller
 		const userId = currentUser(context)
@@ -317,31 +456,6 @@ const route = new Hono<AppEnv>()
 			}
 		},
 	)
-	.post("/topics/:id/attachments/url", zValidator("json", attachmentUrlPayload), async (context) => {
-		// reject a signed-out caller
-		const userId = currentUser(context)
-		if (!userId) {
-			return context.json({ error: "unauthorized" }, 401)
-		}
-
-		// check the owner first, so a stranger's link does no fetch or model work
-		if (!(await loadOwnedTopic(userId, context.req.param("id")))) {
-			return context.json({ error: "forbidden" }, 403)
-		}
-
-		// validate the url and fetch the page to Markdown, then store it, write a pending row, and start the workflow
-		try {
-			const attachment = await ingestUrlAttachment(context.req.param("id"), context.req.valid("json").url)
-			return context.json({ id: attachment.id, filename: attachment.filename })
-		} catch (error) {
-			// same split as the file upload: a validation error names the user's mistake, anything else is an operator problem
-			if (error instanceof AttachmentValidationError) {
-				return context.json({ error: error.message }, 400)
-			}
-			console.error(`url attachment ingestion failed for topic ${context.req.param("id")}`, error)
-			return context.json({ error: "Carl couldn't process that link. Try again in a moment." }, 502)
-		}
-	})
 	.patch("/attachments/:id/context", zValidator("json", attachmentContextPayload), async (context) => {
 		// reject a signed-out caller
 		const userId = currentUser(context)
@@ -379,15 +493,11 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// the content-disposition carries an ascii-safe filename plus an rfc 5987 utf-8 copy.
-		// stripping control characters and non-ascii from the fallback stops a crafted filename from injecting header bytes
-		const asciiFilename = attachment.filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "")
-		// nosniff keeps the browser from second-guessing the stored content type and running an uploaded file as script
-		return context.body(attachmentStream(attachment.objectKey), 200, {
-			"Content-Type": attachment.contentType,
-			"Content-Disposition": `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(attachment.filename)}`,
-			"X-Content-Type-Options": "nosniff",
-		})
+		return context.body(
+			attachmentStream(attachment.objectKey),
+			200,
+			toDownloadHeaders(attachment.filename, attachment.contentType),
+		)
 	})
 	.post("/billing/checkout", zValidator("json", checkoutPayload), async (context) => {
 		// reject a signed-out caller
@@ -420,7 +530,7 @@ const route = new Hono<AppEnv>()
 		return context.json(await loadBillingState(userId))
 	})
 	.post("/webhooks/stripe", async (context) => {
-		// verify and apply the stripe event from the raw body. a bad signature answers 400 so stripe retries
+		// verify and apply the stripe event from the raw body. a bad signature responds with a 400 so stripe retries
 		try {
 			await handleStripeWebhook(await context.req.text(), context.req.header("stripe-signature"))
 			return context.json({ received: true })
@@ -479,7 +589,7 @@ export type AppType = typeof route
 startMonitoring()
 startTelemetry()
 
-// one origin serves the api and the built ui. the /api catch-all is mounted before the app shell, so a missing endpoint answers JSON not html
+// one origin serves the api and the built ui. the /api catch-all is mounted before the app shell, so a missing endpoint responds with JSON not HTML
 const app = new Hono()
 	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
 	.get("/api/health", (context) => context.json({ status: "ok" }))
@@ -492,6 +602,75 @@ const app = new Hono()
 	// without a bundle built, this finds nothing and falls through to a 404, which is the normal state in dev
 	.on(["GET", "HEAD"], "*", serveStatic({ path: `${UI_BUNDLE_ROOT}/index.html`, onFound: setBundleCacheControl }))
 
+// the headers that send a stored file back as a download.
+// the ascii name is stripped of anything that could inject header bytes, with a utf-8 copy beside it,
+// and nosniff stops the browser running the file as script
+function toDownloadHeaders(filename: string, contentType: string): Record<string, string> {
+	const asciiFilename = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "")
+	return {
+		"Content-Type": contentType,
+		"Content-Disposition": `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+		"X-Content-Type-Options": "nosniff",
+	}
+}
+
+// stream a chat reply to the reader, then record what the chat turn spent and keep the attachments they asked to keep.
+// the reply streams as it is generated
+function streamChatTurn(
+	context: Context,
+	reply: ChatReplyStream,
+	chatTurn: {
+		userId: string
+		topicId: string
+		question: string
+		isPersisted: boolean
+		attachments: ChatAttachment[]
+		litellmApiKey?: string
+		analyticsProperties: AnalyticsProperties
+	},
+): Response {
+	return stream(context, async (writeStream) => {
+		// forward each chunk as it arrives
+		try {
+			for await (const chunk of reply.textStream) {
+				await writeStream.write(chunk)
+			}
+		} catch (error) {
+			// a stream that breaks partway still spent tokens, so it falls through to the recording below
+			console.error(`chat stream failed for topic ${chatTurn.topicId}`, error)
+			reportError(error, "chat", { topicId: chatTurn.topicId })
+		}
+
+		// record the spend whether the stream finished or broke, so a partial chat turn is never free
+		try {
+			const { text, totalTokens, searchCount } = await reply.completion
+			await recordChatTurn(
+				chatTurn.userId,
+				chatTurn.topicId,
+				totalTokens,
+				searchCount,
+				chatTurn.isPersisted,
+				chatTurn.question,
+				text,
+				chatTurn.analyticsProperties,
+			)
+		} catch (error) {
+			// a failed spend recording must not break a reply
+			console.error(`chat turn recording failed for topic ${chatTurn.topicId}`, error)
+			reportError(error, "chat", { topicId: chatTurn.topicId })
+		}
+
+		// keep what the reader marked once the reply has landed. this is not awaited,
+		// since generating the summaries takes seconds and would hold a finished stream open long enough to read as a hung reply
+		keepChatAttachments(chatTurn.userId, chatTurn.topicId, chatTurn.attachments, chatTurn.litellmApiKey).catch(
+			(error) => {
+				console.error(`keeping chat attachments failed for topic ${chatTurn.topicId}`, error)
+				reportError(error, "chat", { topicId: chatTurn.topicId })
+			},
+		)
+	})
+}
+
 // a hashed filename never changes contents, so it caches for a year. everything else must revalidate to pick up a new bundle
 function setBundleCacheControl(_path: string, context: Context): void {
 	const isHashedAsset = context.req.path.startsWith("/assets/")
@@ -499,4 +678,5 @@ function setBundleCacheControl(_path: string, context: Context): void {
 }
 
 // in dev this runs on port 3000 and vite forwards /api to it. in prod, one service serves both the ui and the api.
-export default { port: 3000, fetch: app.fetch }
+// Bun's 10-second idle default would drop a quiet streaming chat turn, so idleTimeout matches the model timeout
+export default { port: 3000, fetch: app.fetch, idleTimeout: 120 }

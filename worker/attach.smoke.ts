@@ -1,19 +1,21 @@
-// a live smoke test the owner runs by hand for URL attachment ingestion and its processing workflow.
-// it seeds a topic, ingests a real URL, waits for the workflow to mark the attachment ready, and checks the context, counts, and stored object
-// run it with: bun run smoke:attach. it needs the LiteLLM proxy, FIRECRAWL_API_KEY, the S3_* bucket, a Temporal server with its worker running (bun run dev:temporal), the latest migration applied, and Doppler secrets injected
+// a live smoke test the owner runs by hand for attachment ingestion and its processing workflow.
+// it seeds a topic, ingests a file, waits for the workflow to mark the attachment ready, and checks the context, counts, and stored object
+// run it with: bun run smoke:attach. it needs the LiteLLM proxy, the S3_* bucket, a Temporal server with its worker running (bun run dev:temporal), the latest migration applied, and Doppler secrets injected
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { attachments, topics, users } from "../db/schema"
-import { buildTopicScanContext, ingestUrlAttachment } from "./attach"
+import { buildTopicScanContext, ingestAttachment } from "./attach"
 import { attachmentExists, deleteAttachment } from "./store"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 
 // a persisted attachment row
 type Attachment = typeof attachments.$inferSelect
 
-// a real page with plenty of content that Firecrawl scrapes to non-empty Markdown, and a non-empty topic context to merge with
-const ATTACHMENT_URL = "https://simonwillison.net/"
-const TOPIC_CONTEXT = "Smoke-test topic for URL attachment ingestion."
+// enough real prose that the model writes a non-empty context from it, and a topic context to merge with
+const ATTACHMENT_TEXT =
+	"# Raccoon care\n\nRaccoons are omnivores that need a varied diet, secure enclosures, and daily enrichment. " +
+	"They reach maturity at about a year, live fifteen to twenty in captivity, and are illegal to keep in many states."
+const TOPIC_CONTEXT = "Smoke-test topic for attachment ingestion."
 // how long to wait for the workflow to finish before giving up. the worker (bun run dev:temporal) must be running
 const PROCESSING_TIMEOUT_MS = 90_000
 
@@ -65,14 +67,6 @@ async function check(topicId: string, pendingAttachment: Attachment, readyAttach
 	const { context: scanContext } = await buildTopicScanContext(topicId)
 	const isObjectStored = await attachmentExists(readyAttachment.objectKey)
 
-	// prove the empty-fetch guard rejects ingesting before storing anything so that no contextless attachment is ever persisted
-	let isEmptyAttachmentRejected = false
-	try {
-		await ingestUrlAttachment(topicId, ATTACHMENT_URL, async () => ({ markdown: "", etag: null, lastModified: null }))
-	} catch {
-		isEmptyAttachmentRejected = true
-	}
-
 	// verify a pending upload, a workflow that finished ready with a context and counts, the object stored, and the guards
 	const contextText = readyAttachment.context.trim()
 	const results: [string, boolean][] = [
@@ -83,8 +77,6 @@ async function check(topicId: string, pendingAttachment: Attachment, readyAttach
 		["char_count is recorded", (readyAttachment.charCount ?? 0) > 0],
 		["chunk_count is at least one", (readyAttachment.chunkCount ?? 0) >= 1],
 		["stored object exists", isObjectStored],
-		["sourceUrl records the origin URL", readyAttachment.sourceUrl === ATTACHMENT_URL],
-		["empty fetch is rejected", isEmptyAttachmentRejected],
 	]
 
 	// print the smoke test report
@@ -109,7 +101,12 @@ async function smokeTest(): Promise<number> {
 	// ingest up front so the stored object has a reference for cleanup even if a later step throws
 	let objectKey: string | null = null
 	try {
-		const pendingAttachment = await ingestUrlAttachment(topicId, ATTACHMENT_URL)
+		const pendingAttachment = await ingestAttachment({
+			topicId,
+			filename: "raccoon-care.md",
+			contentType: "text/markdown",
+			bytes: new TextEncoder().encode(ATTACHMENT_TEXT),
+		})
 		objectKey = pendingAttachment.objectKey
 		// wait for the workflow to finish, then run assertions over the result
 		const readyAttachment = await waitForAttachment(pendingAttachment.id)
@@ -125,7 +122,7 @@ async function smokeTest(): Promise<number> {
 	}
 }
 
-// run the smoke test, computing the exit code rather than exiting early so telemetry can flush first
+// run the smoke test, computing the exit code instead of exiting early so telemetry can flush first
 startTelemetry()
 let exitCode: number
 try {

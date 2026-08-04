@@ -72,3 +72,16 @@ test("every prompt template ends with app-authored text, not an interpolated val
 		expect(lastLine, `${name} must restate the task after its last untrusted block`).not.toContain("{{")
 	}
 })
+
+// a template naming a variable the caller does not pass is out of sync with the code — an older template
+// still being served by the registry is enough to cause that. it must throw instead of sending the model a blank
+test("writePrompt throws when the template names a variable the caller did not pass", () => {
+	expect(() => writePrompt("Kept:\n{{keptResourcesBlock}}", { keptFindingsBlock: "- a finding" })).toThrow(
+		/keptResourcesBlock/,
+	)
+})
+
+// the error names what was passed, so the mismatch is readable without opening the template
+test("writePrompt's unfilled-variable error names what the caller did pass", () => {
+	expect(() => writePrompt("{{a}} {{b}}", { a: "one" }, { c: "three" })).toThrow(/a, c/)
+})

@@ -18,7 +18,7 @@ export function startMonitoring(): void {
 		return
 	}
 
-	// scrub content before send rather than trusting the caller, and keep pii off by default
+	// scrub content before send instead of trusting the caller, and keep pii off by default
 	Sentry.init({
 		dsn: Bun.env.SENTRY_DSN,
 		environment: Bun.env.DOPPLER_ENVIRONMENT ?? "dev",
@@ -53,7 +53,7 @@ function withoutContent(attached: Record<string, unknown> | undefined): Record<s
 	}
 
 	// the name filter removes what is labeled as content, and the length cap catches what is content.
-	// if an object was already seen, a field pointing back at it is named rather than copied
+	// if an object was already seen, a field pointing back at it is named instead of being copied
 	const seen = new WeakSet<object>([attached])
 	const keptEntries = Object.entries(attached)
 		.filter(([field]) => !CONTENT_FIELD_PATTERN.test(field))
@@ -92,7 +92,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 // the pipeline stages that report a failure, named so Sentry can group them the way the pipeline reads
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ReportedStage = "ingest" | "embed-filter" | "fetch" | "score" | "object-storage" | "scan-report" | "scanner" | "scheduled-scan" | "manual-scan" | "email"
+export type ReportedStage = "ingest" | "embed-filter" | "fetch" | "score" | "object-storage" | "scan-report" | "scanner" | "scheduled-scan" | "manual-scan" | "first-scan" | "email" | "chat" | "prompt-registry"
 
 /**
  * Reports a failure the caller is already handling, so a failure that never throws is still visible.

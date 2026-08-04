@@ -1,10 +1,10 @@
 import type { TopicResponse } from "@shared/contracts"
-import { Bell, Pencil, Trash2 } from "lucide-react"
+import { PawPrint, Pencil, Trash2 } from "lucide-react"
 import type * as React from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { ChatPanel } from "@/components/chat/ChatPanel"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
@@ -28,7 +28,16 @@ import {
 	sendTopicFindingRating,
 	sendTopicSubscription,
 } from "@/lib/topicClient"
-import { cn, matchesFeedView, NEXT_SCAN_DISCLAIMER, toFilteredFindings, toSubscribeTooltip } from "@/lib/utils"
+import {
+	cn,
+	MENU_BUTTON_CLASS,
+	matchesFeedView,
+	NEXT_SCAN_DISCLAIMER,
+	RAIL_ICON_INSET,
+	RAIL_TEXT_INSET,
+	toSortedFindings,
+	toSubscribeTooltip,
+} from "@/lib/utils"
 import { type TopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
 
 // how often to re-fetch the page while a scan is running, so history and the manual scan button follow it live
@@ -42,9 +51,9 @@ const SCAN_STALE_MS = 5 * 60 * 1000
 export function TopicPage() {
 	const { id = "" } = useParams()
 	const navigate = useNavigate()
-	// the session gates the subscribe bell: a visitor is sent to signup instead
+	// the session gates the subscribe control. a visitor's click is sent to signup instead
 	const { data: session } = authClient.useSession()
-	// the shared feed state carries the homepage reload plus the view, sort, and resource kind filters this page honors
+	// the shared feed state includes the homepage reload plus the view, sort, and resource filters
 	const { reload: reloadHomePage, view, sort, setSort, resourceKinds } = useTopicFeed()
 	// the topic page payload. undefined while loading, null when missing or not visible
 	const [topicResponse, setTopicResponse] = useState<TopicResponse | null | undefined>(undefined)
@@ -62,7 +71,10 @@ export function TopicPage() {
 			setTopicResponse(null)
 		}
 	}, [id])
+	// clearing first falls back to the skeleton, so moving between topics never leaves the previous topic's
+	// findings on screen. only the id changes this, so a reload after a handler updates in place instead
 	useEffect(() => {
+		setTopicResponse(undefined)
 		void reloadTopicPage()
 	}, [reloadTopicPage])
 
@@ -112,15 +124,13 @@ export function TopicPage() {
 		}
 		startScan()
 		try {
-			const manualScansRemaining = await sendManualScan(topicResponse.id)
-			if (manualScansRemaining === null) {
-				// the request was rejected outright, so no scan ever started
-				stopScan()
-				return
-			}
+			await sendManualScan(topicResponse.id)
 			await reloadTopicPage()
 		} catch (error) {
 			console.error("manual scan failed", error)
+			toast.error(
+				error instanceof Error ? error.message : "The raccoon got that one. Carl suggests you put another pot on.",
+			)
 			stopScan()
 		}
 	}
@@ -132,8 +142,8 @@ export function TopicPage() {
 		await reloadHomePage()
 	}
 
-	// the findings filtered by resource kind and the active view, with bookmarked rows pinned first
-	const filteredFindings = toFilteredFindings(
+	// the findings this reader sees: narrowed by resource kind and the active view, bookmarked rows pinned first
+	const visibleFindings = toSortedFindings(
 		(topicResponse?.findings ?? []).filter(
 			(finding) => resourceKinds.has(finding.resourceKind) && matchesFeedView(finding, view),
 		),
@@ -146,38 +156,35 @@ export function TopicPage() {
 	// brand-new row still gets a retry a few seconds later instead of going quiet
 	usePollWhileScanning(isScanning || isRunningScan, reloadTopicPage)
 
-	// the manual scan block shows optimistically while loading before checking ownership
-	const isManualScanShown =
-		topicResponse === undefined || (topicResponse?.isOwner && topicResponse.manualScansRemaining !== null)
+	// the manual scan block belongs to an owner with a quota, known only once the payload lands
+	const isManualScanShown = Boolean(topicResponse?.isOwner && topicResponse.manualScansRemaining !== null)
+	// the bottom padding clears the docked chat panel, so the last card can scroll out from under it
 	return (
-		<main className="mx-auto max-w-5xl px-safe pt-3 pb-8">
+		<main className="mx-auto max-w-5xl px-safe pt-3 pb-28">
 			{/* the static control row: it renders before the payload, so the chrome never jumps or animates in. wraps when the screen is too narrow */}
-			<div className="mb-3 flex flex-wrap items-start justify-between gap-3">
+			<div className="flex flex-wrap items-start justify-between gap-3">
 				<TopicFeedSort sort={sort} onChange={setSort} />
-				{isManualScanShown && (
-					<TopicScanButton
-						remainingScans={topicResponse?.manualScansRemaining ?? null}
-						isSpendExhausted={topicResponse?.isSpendExhausted ?? false}
-						isRunning={isRunningScan || isScanning}
-						onManualScan={handleManualScan}
-					/>
-				)}
-			</div>
-
-			{/* link back to the homepage and the topic actions */}
-			<div className="flex items-center justify-between gap-3">
-				<AnchorLink href="/" className="text-link text-sm hover:underline">
-					← All topics
-				</AnchorLink>
-				{topicResponse && (
-					<HeaderActions
-						topic={topicResponse}
-						isSignedIn={Boolean(session)}
-						onEdit={() => setIsEditOpen(true)}
-						onDelete={() => setIsDeleteOpen(true)}
-						onSubscriptionToggle={handleSubscriptionToggle}
-					/>
-				)}
+				{/* the right side holds the reader's subscribe control and the owner's manual scan control.
+				    while the page loads, a skeleton holds the slot */}
+				<div className="flex items-start gap-2">
+					{topicResponse === undefined && (
+						<div
+							aria-hidden="true"
+							className="bg-muted h-11 w-28 animate-pulse rounded-lg motion-reduce:animate-none sm:h-9"
+						/>
+					)}
+					{topicResponse && (
+						<SubscribeButton topic={topicResponse} isSignedIn={Boolean(session)} onToggle={handleSubscriptionToggle} />
+					)}
+					{isManualScanShown && (
+						<TopicScanButton
+							remainingScans={topicResponse?.manualScansRemaining ?? null}
+							isSpendExhausted={topicResponse?.isSpendExhausted ?? false}
+							isRunning={isRunningScan || isScanning}
+							onManualScan={handleManualScan}
+						/>
+					)}
+				</div>
 			</div>
 
 			{/* the loading skeleton, the not-found line, or the hydrating topic sections */}
@@ -187,15 +194,19 @@ export function TopicPage() {
 			)}
 			{topicResponse && (
 				<>
-					{/* the topic header: the title with its unread count, then the tags */}
+					{/* the topic header: the title with its unread count and owner actions, then the tags */}
 					<HydrateSection index={0}>
-						<TopicHeader page={topicResponse} />
+						<TopicHeader
+							topic={topicResponse}
+							onEdit={() => setIsEditOpen(true)}
+							onDelete={() => setIsDeleteOpen(true)}
+						/>
 					</HydrateSection>
 
 					{/* findings, full width, narrowed by the view filters. the view key replays the entrance when they change */}
 					<HydrateSection key={viewKey} index={1}>
 						<TopicFindingsSection
-							topicFindings={filteredFindings}
+							topicFindings={visibleFindings}
 							hasAnyFindings={topicResponse.findings.length > 0}
 							isRatable={topicResponse.canRate}
 							handlers={handlers}
@@ -236,6 +247,9 @@ export function TopicPage() {
 							}}
 						/>
 					)}
+
+					{/* the docked chat panel */}
+					<ChatPanel topicId={topicResponse.id} topicName={topicResponse.name} />
 				</>
 			)}
 		</main>
@@ -243,7 +257,7 @@ export function TopicPage() {
 }
 
 // re-fetch the topic page on an interval while any of its scans are running,
-// so the history status row and the "Brew now" button follow a scan to completion without a manual reload.
+// so the history status row and the "Brew" button follow a scan to completion without a manual reload.
 function usePollWhileScanning(isScanning: boolean, reload: () => Promise<void>): void {
 	useEffect(() => {
 		if (!isScanning) {
@@ -258,61 +272,77 @@ function usePollWhileScanning(isScanning: boolean, reload: () => Promise<void>):
 	}, [isScanning, reload])
 }
 
-// the topic header: the title with its unread count, then its tags. the owner and subscriber actions
-// live on the back-link line above, since they need the same far-right alignment on every load state
-function TopicHeader({ page }: { page: TopicResponse }) {
+// the topic header: the title with its unread count and the owner's actions, then its tags
+function TopicHeader({ topic, onEdit, onDelete }: { topic: TopicResponse; onEdit: () => void; onDelete: () => void }) {
 	return (
 		<>
-			{/* title row. the top margin seats the title level with the homepage's first section heading */}
-			<div className="mt-10 flex items-start justify-between gap-3">
-				<h1 className="font-display min-w-0 text-2xl leading-tight">{page.name}</h1>
-				{page.newCount > 0 && <NewCountInfo topic={page} />}
+			{/* title row */}
+			<div className="mt-6 flex items-start justify-between gap-3">
+				<h1 className="font-display min-w-0 text-2xl leading-tight">{topic.name}</h1>
+				{/* the unread count and the owner's actions share the far right of the title line. only an owner
+				    gets the action icons, so a reader's row ends in the count and takes the text inset instead */}
+				<div className={cn(topic.isOwner ? RAIL_ICON_INSET : RAIL_TEXT_INSET, "flex shrink-0 items-center gap-1")}>
+					{topic.newCount > 0 && <NewCountInfo topic={topic} />}
+					<OwnerActions topic={topic} onEdit={onEdit} onDelete={onDelete} />
+				</div>
 			</div>
-			{/* tags row */}
-			<div className="mt-2 flex flex-wrap gap-1">
-				{page.tags.map((tag) => (
-					<Badge key={tag} variant="secondary">
-						{tag}
-					</Badge>
-				))}
-			</div>
+			{/* tags row, left out entirely by an untagged topic so it includes no empty gap */}
+			{topic.tags.length > 0 && (
+				<div className="mt-2 flex flex-wrap gap-1">
+					{topic.tags.map((tag) => (
+						<Badge key={tag} variant="secondary">
+							{tag}
+						</Badge>
+					))}
+				</div>
+			)}
 		</>
 	)
 }
 
-// the edit delete and subscribe actions
-function HeaderActions({
+// the owner's edit and delete actions. a non-owner sees nothing here
+function OwnerActions({ topic, onEdit, onDelete }: { topic: TopicResponse; onEdit: () => void; onDelete: () => void }) {
+	if (!topic.isOwner) {
+		return null
+	}
+	return (
+		<div className="flex items-center gap-0.5">
+			<IconButton tooltip="Edit this topic" onClick={onEdit}>
+				<Pencil className="size-3.75" />
+			</IconButton>
+			<IconButton tooltip="Delete this topic" onClick={onDelete}>
+				<Trash2 className="size-3.75" />
+			</IconButton>
+		</div>
+	)
+}
+
+// the subscribe control, worded "Follow" on the button. it renders for a reader on a public or invite topic,
+// and the page's toggle handler routes a visitor to signup
+function SubscribeButton({
 	topic,
 	isSignedIn,
-	onEdit,
-	onDelete,
-	onSubscriptionToggle,
+	onToggle,
 }: {
 	topic: TopicResponse
 	isSignedIn: boolean
-	onEdit: () => void
-	onDelete: () => void
-	onSubscriptionToggle: () => void
+	onToggle: () => void
 }) {
-	const subscribeTooltip = toSubscribeTooltip(isSignedIn, topic.isSubscribed, topic.visibility === "invite")
+	if (topic.isOwner || topic.visibility === "private") {
+		return null
+	}
+	const tooltip = toSubscribeTooltip(isSignedIn, topic.isSubscribed, topic.visibility === "invite")
 	return (
-		<div className="flex items-center gap-0.5">
-			{topic.isOwner && (
-				<IconButton tooltip="Edit this topic" onClick={onEdit}>
-					<Pencil className="size-3.75" />
-				</IconButton>
-			)}
-			{topic.isOwner && (
-				<IconButton tooltip="Delete this topic" onClick={onDelete}>
-					<Trash2 className="size-3.75" />
-				</IconButton>
-			)}
-			{!topic.isOwner && topic.visibility !== "private" && (
-				<IconButton tooltip={subscribeTooltip} isPressed={topic.isSubscribed} onClick={onSubscriptionToggle}>
-					<Bell className={cn("size-3.75", topic.isSubscribed && "text-primary fill-current")} />
-				</IconButton>
-			)}
-		</div>
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<button type="button" aria-pressed={topic.isSubscribed} onClick={onToggle} className={MENU_BUTTON_CLASS}>
+					{/* the paw is an outline until subscribed, then fills, matching the homepage topic row */}
+					<PawPrint className={cn("size-4", topic.isSubscribed && "text-primary fill-current")} />
+					{topic.isSubscribed ? "Unfollow" : "Follow"}
+				</button>
+			</TooltipTrigger>
+			<TooltipContent>{tooltip}</TooltipContent>
+		</Tooltip>
 	)
 }
 
@@ -322,7 +352,10 @@ function HydrateSection({ index, children }: { index: number; children: React.Re
 	return (
 		<div
 			ref={ref}
-			className={isVisible ? "animate-hydrate" : "opacity-0"}
+			className={cn(
+				isVisible ? "animate-hydrate" : "opacity-0",
+				"motion-reduce:animate-none motion-reduce:opacity-100",
+			)}
 			style={{ animationDelay: `${Math.min(index, 3) * 50}ms` }}
 		>
 			{children}
@@ -350,7 +383,7 @@ function IconButton({
 					aria-label={tooltip}
 					aria-pressed={isPressed}
 					onClick={onClick}
-					className="text-muted-foreground hover:text-foreground grid size-11 place-items-center sm:size-7"
+					className="text-muted-foreground hover:text-foreground grid h-11 w-7 place-items-center sm:size-7"
 				>
 					{children}
 				</button>

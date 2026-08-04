@@ -23,6 +23,10 @@ export const CHEAP_COST_PER_MILLION_TOKENS = 0.2
 export const PREMIUM_COST_PER_MILLION_TOKENS = 0.6
 export const FIRECRAWL_COST_PER_FETCH = 0.001
 
+// a chat turn's rates, one for the reply's tokens and one for each live web search the turn runs
+export const CHAT_COST_PER_MILLION_TOKENS = 0.6
+export const EXA_COST_PER_SEARCH = 0.005
+
 // the per-stage dollar breakdown recorded on the Scan. ingestion is charged at a fixed rate based on the source before review
 export type StageCosts = {
 	ingestion: number
@@ -106,12 +110,12 @@ export function toFetchCountField(fetchOutcome: FetchOutcome): keyof FetchOutcom
 	return countKeys[fetchOutcome]
 }
 
-// a new zeroed per-stage breakdown to hydrate
+// a per-stage breakdown starting at zero, which each stage adds its own spend to
 function emptyStageCosts(): StageCosts {
 	return { ingestion: 0, embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 }
 }
 
-// a new zeroed fetch count outcome to hydrate
+// fetch counts starting at zero, which each fetch adds its own outcome to
 function emptyFetchCounts(): FetchOutcomeCounts {
 	return { reusedCount: 0, revalidatedCount: 0, fetchedCount: 0 }
 }

@@ -1,4 +1,5 @@
 import type { ReactNode } from "react"
+import { toast } from "sonner"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -20,17 +21,19 @@ import { cn } from "@/lib/utils"
 export function SignOutDialog({
 	className,
 	children,
-	onTriggerClick,
+	open,
+	onOpenChange,
 }: {
-	className: string
-	children: ReactNode
-	onTriggerClick?: () => void
+	className?: string
+	children?: ReactNode
+	open?: boolean
+	onOpenChange?: (isOpen: boolean) => void
 }) {
 	return (
-		<AlertDialog>
-			<AlertDialogTrigger onClick={onTriggerClick} className={className}>
-				{children}
-			</AlertDialogTrigger>
+		<AlertDialog open={open} onOpenChange={onOpenChange}>
+			{/* a caller that opens this from its own state passes no trigger. the phone menu does exactly that,
+			    since a dialog nested inside a menu is dismissed by the same tap that opened it */}
+			{children === undefined ? null : <AlertDialogTrigger className={className}>{children}</AlertDialogTrigger>}
 			<AlertDialogContent>
 				<AlertDialogHeader>
 					<AlertDialogTitle>Signing out?</AlertDialogTitle>
@@ -44,8 +47,14 @@ export function SignOutDialog({
 					</AlertDialogCancel>
 					<AlertDialogAction
 						onClick={async () => {
-							// reload the current page so that signed-in controls disappear without leaving the page
-							await authClient.signOut()
+							// a failed sign-out shows a toast
+							const { error } = await authClient.signOut()
+							if (error) {
+								toast(`Carl could not sign you out. ${error.message ?? "Try again in a moment."}`)
+								return
+							}
+
+							// reload the current page after signing out so the signed-in controls disappear
 							window.location.reload()
 						}}
 					>

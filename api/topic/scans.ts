@@ -2,10 +2,10 @@
 // refuses a duplicate, and hands it off without blocking the request
 import { trackEvent } from "@shared/analytics"
 import { reportError } from "@shared/monitoring"
-import { and, eq } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { db } from "../../db"
-import { scans, topics } from "../../db/schema"
-import { failStaleScans, runTopicScan, sendManualScanEmail } from "../../worker"
+import { topics } from "../../db/schema"
+import { failStaleScans, startTopicScan } from "../../worker"
 import { authorizeManualScan } from "../authorization"
 import { reportManualScanOverage } from "../billing"
 import type { AnalyticsProperties } from "../currentUser"
@@ -36,32 +36,23 @@ export async function runManualScan(
 		return authorization
 	}
 
-	// close out any hung scans first, so a stuck row never blocks a manual fire indefinitely
+	// close out any hung scans first, so a stuck scan row doesn't block a new manual scan indefinitely
 	await failStaleScans()
 
-	// skip while a scan is already in flight, so a manual fire can't burn a quota slot racing the sweep
-	const [runningScan] = await db
-		.select({ id: scans.id })
-		.from(scans)
-		.where(and(eq(scans.topicId, topicId), eq(scans.status, "running")))
-	if (runningScan) {
+	// hand the scan to Temporal. a topic already scanning is refused by the workflow id,
+	// a scan is charged to whoever fired it, so an admin's scan never draws down the owner's quota or budget
+	const started = await startTopicScan(topicId, userId, "manual")
+	if (started.status === "running") {
 		return { status: "running" }
 	}
 
-	// start the scan without awaiting it, since a manual scan runs for minutes.
-	// it is charged to whoever fired it, so an admin's scan never draws down the owner's quota or budget
-	runTopicScan(topicId, userId, true)
-		.then(async (scan) => {
-			// a request that never reached the pipeline never charges
-			if (!scan) {
-				return
-			}
-
-			// the overage bills only once the scan really ran, then its outcome goes out by email
+	// an overage bills only once the scan finished, so it waits on the workflow with a promise instead of on this request with an await.
+	// the email is sent by the workflow itself, which means a scan that resumed after a crash still sends one
+	started.whenFinished
+		.then(async () => {
 			if (authorization.isOverage) {
 				await reportManualScanOverage(userId)
 			}
-			await sendManualScanEmail(userId, topic, scan)
 		})
 		// report a failed scan and its error
 		.catch((error) => {
@@ -69,7 +60,7 @@ export async function runManualScan(
 			reportError(error, "manual-scan", { topicId, userId })
 		})
 
-	// track the scan request. the scan runs for minutes and nothing should wait for it
+	// track the scan request analytics event, then return the quota that the user has left
 	trackEvent("scan_requested", userId, { ...analyticsProperties, topicId })
 	return { status: "started", remaining: authorization.remaining }
 }

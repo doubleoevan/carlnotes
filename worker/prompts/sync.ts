@@ -1,6 +1,9 @@
-// this script pushes each prompt's fallback template up to Langfuse as a production-labeled version. git stays canonical.
+// this script pushes each prompt's bundled template up to Langfuse. git stays canonical.
 // this script is the only writer, so a prompt edited in the Langfuse UI is an experiment that the next run overwrites
 // run this with bun run prompts:sync. it needs LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY set to work
+//
+// --candidate uploads under the candidate label instead of production, which is what the deploy runs by default,
+// so the registry always holds what the code expects while promotion stays a deliberate step
 import { LangfuseClient } from "@langfuse/client"
 import { FALLBACK_PROMPT_TEMPLATES, type PromptName } from "./fetch.ts"
 import { FRONTMATTER_PATTERN, stripFrontmatter } from "./write.ts"
@@ -11,6 +14,9 @@ if (!Bun.env.LANGFUSE_PUBLIC_KEY || !Bun.env.LANGFUSE_SECRET_KEY) {
 }
 
 const client = new LangfuseClient()
+
+// the label this run writes, and the one it compares against so a re-run can still report "unchanged"
+const syncLabel = Bun.argv.includes("--candidate") ? "candidate" : "production"
 
 // the config fields Langfuse stores alongside a prompt version, read back to detect a config-only change
 type PromptConfig = { version?: number; modelTier?: string }
@@ -28,8 +34,13 @@ async function syncPrompts(): Promise<void> {
 	const updatedCount = outcomes.filter((outcome) => outcome === "updated").length
 	const unchangedCount = outcomes.filter((outcome) => outcome === "unchanged").length
 	console.log(
-		`synced ${promptNames.length} prompts: ${createdCount} created, ${updatedCount} updated, ${unchangedCount} unchanged`,
+		`synced ${promptNames.length} prompts as ${syncLabel}: ${createdCount} created, ${updatedCount} updated, ${unchangedCount} unchanged`,
 	)
+
+	// a candidate run changes nothing live, so it says what still has to happen for the wording to reach users
+	if (syncLabel === "candidate" && createdCount + updatedCount > 0) {
+		console.log("these are candidates. promote them to production in Langfuse once a real scan's note reads right")
+	}
 }
 
 // sync one prompt, creating it if missing, pushing a new version if the body changed, or reporting it unchanged
@@ -44,30 +55,30 @@ async function syncPrompt(name: PromptName): Promise<"created" | "updated" | "un
 		modelTier: readFrontmatterField(template, "model tier"),
 	}
 
-	// the current production prompt version, or null if this prompt has never been synced
-	const productionPrompt = await fetchProductionPrompt(name)
+	// what this label currently holds, or null if this prompt has never been synced under it
+	const labeledPrompt = await fetchLabeledPrompt(name)
 
 	// the prompt is unchanged only when both the body text and the config (version, model tier) match
 	// a config-only bump requires a new version even if the wording didn't change
 	const isUnchanged =
-		productionPrompt !== null &&
-		productionPrompt.prompt === body &&
-		productionPrompt.config.version === config.version &&
-		productionPrompt.config.modelTier === config.modelTier
+		labeledPrompt !== null &&
+		labeledPrompt.prompt === body &&
+		labeledPrompt.config.version === config.version &&
+		labeledPrompt.config.modelTier === config.modelTier
 	if (isUnchanged) {
 		return "unchanged"
 	}
 
-	// push a new production version of the prompt
-	await client.prompt.create({ name, prompt: body, type: "text", labels: ["production"], config })
-	return productionPrompt === null ? "created" : "updated"
+	// push a new version of the prompt under this run's label
+	await client.prompt.create({ name, prompt: body, type: "text", labels: [syncLabel], config })
+	return labeledPrompt === null ? "created" : "updated"
 }
 
-// the current production version's body and config, or null if the prompt has never been synced
-async function fetchProductionPrompt(promptName: PromptName): Promise<{ prompt: string; config: PromptConfig } | null> {
+// what this run's label currently holds, or null if this prompt has never been synced under it
+async function fetchLabeledPrompt(promptName: PromptName): Promise<{ prompt: string; config: PromptConfig } | null> {
 	try {
-		// fetch the production version from the registry with caching disabled
-		const prompt = await client.prompt.get(promptName, { label: "production", cacheTtlSeconds: 0 })
+		// fetch this run's label from the registry with caching disabled
+		const prompt = await client.prompt.get(promptName, { label: syncLabel, cacheTtlSeconds: 0 })
 		return { prompt: prompt.prompt, config: (prompt.config ?? {}) as PromptConfig }
 	} catch {
 		// most commonly a 404 for a never-synced prompt. any other failure surfaces loudly at create() instead

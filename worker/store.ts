@@ -29,14 +29,29 @@ export async function attachmentExists(attachmentKey: string): Promise<boolean> 
 	return bucket().exists(attachmentKey)
 }
 
-// read a stored attachment as a byte stream, used by the owner-only download route
+// read a stored attachment as a byte stream, so the whole file doesn't sit in memory
 export function attachmentStream(attachmentKey: string): ReadableStream {
 	return bucket().file(attachmentKey).stream()
 }
 
-// read a stored attachment's raw bytes, used by the processing workflow to extract its text
+// read a stored attachment's raw bytes, for work that needs the whole file
 export async function getAttachmentBytes(attachmentKey: string): Promise<Uint8Array> {
 	return new Uint8Array(await bucket().file(attachmentKey).arrayBuffer())
+}
+
+// the object key for a chat attachment, namespaced by the reader who sent it as well as by the topic.
+export function toChatAttachmentKey(
+	userId: string,
+	topicId: string,
+	chatAttachmentId: string,
+	filename: string,
+): string {
+	// sanitize the untrusted filename into one safe key segment before appending it to the object key
+	const safeFilename = filename
+		.replace(/[^a-z0-9.]+/gi, "-")
+		.slice(0, 200)
+		.replace(/^\.*$/, "file")
+	return `topics/${topicId}/chat-attachments/${userId}/${chatAttachmentId}/${safeFilename}`
 }
 
 // the object key for a Resource's fetched content, namespaced by resource id, mirroring toAttachmentKey

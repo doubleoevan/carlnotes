@@ -21,13 +21,18 @@ export const GATE_COOKIE_NAME = "signup_gate"
 // the better auth endpoint path for password signup, the only path the gate cookie is required on
 const PASSWORD_SIGNUP_PATH = "/sign-up/email"
 
-// the signed-in user Hono's session that middleware sets on the request context
+// the signed-in user that the session middleware sets on Hono's request context
 export type SessionUser = typeof auth.$Infer.Session.user
+
+// whether a phone on the same network may sign in against this server, which is a dev-only convenience
+const isLanDevOriginTrusted = Boolean(Bun.env.LAN_DEV_URL) && Bun.env.DOPPLER_ENVIRONMENT === "dev"
 
 export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: "pg", schema, usePlural: true }),
 	// better auth derives trustedOrigins from baseURL itself, so BETTER_AUTH_URL alone is enough
 	baseURL: Bun.env.BETTER_AUTH_URL,
+	// these are appended to that derived origin, so only the lan address belongs here
+	trustedOrigins: isLanDevOriginTrusted ? [Bun.env.LAN_DEV_URL ?? ""] : undefined,
 	emailAndPassword: { enabled: true },
 	socialProviders: {
 		google: { clientId: Bun.env.GOOGLE_CLIENT_ID ?? "", clientSecret: Bun.env.GOOGLE_CLIENT_SECRET ?? "" },

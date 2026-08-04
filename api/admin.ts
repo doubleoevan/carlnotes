@@ -1,9 +1,19 @@
 // the admin console data: a per-user table of standing and cost, and platform totals with a contribution figure.
 // storage is attributed over globally-deduplicated Resources, and contribution is net revenue minus tracked cost
 import type { AdminTotals, AdminUserRow } from "@shared/contracts"
-import { count, eq, sql } from "drizzle-orm"
+import { count, eq, gte, sql } from "drizzle-orm"
 import { db } from "../db"
-import { attachments, EMBED_DIMENSIONS, findings, resources, topics, users } from "../db/schema"
+import {
+	attachments,
+	chatAttachments,
+	chatTurns,
+	EMBED_DIMENSIONS,
+	findings,
+	resources,
+	scans,
+	topics,
+	users,
+} from "../db/schema"
 import { effectiveBudgetCents, isAdminRole, replaceUserLiteLLMKey } from "./authorization"
 import { readStripeTotalRevenueCents } from "./billing"
 import { readLiteLLMKeySpend } from "./litellm"
@@ -16,8 +26,10 @@ const EMBED_BYTES = EMBED_DIMENSIONS * 4
  * One row per user for the admin table: status, topic count, attributed storage, and month-to-date variable cost against their effective budget.
  */
 export async function loadAdminUsers(): Promise<AdminUserRow[]> {
-	// the base user rows, the per-user topic counts, and the attributed storage, in parallel
-	const [userRows, topicCountRows, storageByUser] = await Promise.all([
+	// the base user rows, the per-user topic counts, the attributed storage, and this month's scan and chat spend,
+	// all in parallel and each as one grouped query
+	const monthStart = startOfUtcMonth(new Date())
+	const [userRows, topicCountRows, storageByUser, scanSpendRows, chatSpendRows] = await Promise.all([
 		db
 			.select({
 				// identity and status
@@ -33,6 +45,16 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			.from(users),
 		db.select({ ownerId: topics.ownerId, count: count() }).from(topics).groupBy(topics.ownerId),
 		loadAttributedStorage(),
+		db
+			.select({ ownerId: scans.ownerId, dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
+			.from(scans)
+			.where(gte(scans.startedAt, monthStart))
+			.groupBy(scans.ownerId),
+		db
+			.select({ userId: chatTurns.userId, dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
+			.from(chatTurns)
+			.where(gte(chatTurns.createdAt, monthStart))
+			.groupBy(chatTurns.userId),
 	])
 
 	// read each user's observed spend in parallel, best-effort, keyed by user id
@@ -46,6 +68,14 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 	const spendByUser = new Map(userSpends)
 	const topicCountByUser = new Map(topicCountRows.map((topicCountRow) => [topicCountRow.ownerId, topicCountRow.count]))
 
+	// the app's own totals keyed by user, in cents
+	const scanSpendByUser = new Map(
+		scanSpendRows.map((scanSpendRow) => [scanSpendRow.ownerId, Math.round(Number(scanSpendRow.dollars) * 100)]),
+	)
+	const chatSpendByUser = new Map(
+		chatSpendRows.map((chatSpendRow) => [chatSpendRow.userId, Math.round(Number(chatSpendRow.dollars) * 100)]),
+	)
+
 	// assemble each row, converting the observed dollar spend to cents and resolving the effective budget
 	return userRows.map((user) => {
 		const spendDollars = spendByUser.get(user.id) ?? null
@@ -57,9 +87,11 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			plan: user.plan,
 			createdAt: user.createdAt.toISOString(),
 			topicCount: topicCountByUser.get(user.id) ?? 0,
-			// the attributed storage, observed monthly cost, and budget
+			// the attributed storage, observed monthly cost, the app's own split totals, and budget
 			attributedBytes: storageByUser.get(user.id) ?? 0,
 			monthVariableCostCents: spendDollars === null ? null : Math.round(spendDollars * 100),
+			scanSpendCents: scanSpendByUser.get(user.id) ?? 0,
+			chatSpendCents: chatSpendByUser.get(user.id) ?? 0,
 			budgetOverrideCents: user.budgetOverrideCents,
 			effectiveBudgetCents: effectiveBudgetCents({
 				isAdmin: isAdminRole(user.role),
@@ -173,6 +205,20 @@ async function loadAttributedStorage(): Promise<Map<string, number>> {
 	// add attachment bytes onto each user's running total
 	for (const attachmentRow of attachmentRows) {
 		bytesByUser.set(attachmentRow.userId, (bytesByUser.get(attachmentRow.userId) ?? 0) + Number(attachmentRow.bytes))
+	}
+
+	// kept chat attachments attribute to the user who kept them, not to the topic's owner
+	const chatAttachmentRows = await db
+		.select({ userId: chatAttachments.userId, bytes: sql<number>`coalesce(sum(${chatAttachments.byteSize}), 0)` })
+		.from(chatAttachments)
+		.groupBy(chatAttachments.userId)
+
+	// add kept bytes onto each user's running total
+	for (const chatAttachmentRow of chatAttachmentRows) {
+		bytesByUser.set(
+			chatAttachmentRow.userId,
+			(bytesByUser.get(chatAttachmentRow.userId) ?? 0) + Number(chatAttachmentRow.bytes),
+		)
 	}
 	return bytesByUser
 }

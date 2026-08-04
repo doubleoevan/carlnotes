@@ -3,7 +3,7 @@ import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 
 /**
- * The confirmation an action opens before it commits: a question, a body with what the action entails, and an onConfirm callback.
+ * The confirmation dialog an action opens before it commits: a question, a body with what the action entails, and an onConfirm callback.
  * The consumer supplies every label so that each confirmation can describe itself.
  */
 export function ConfirmDialog({

@@ -66,7 +66,7 @@ function toPlaylistIdAndAtomUrl(source: Source): { apiPlaylistId: string; atomUr
 
 // a channel's uploads playlist id is the channel id with the UC prefix swapped to UU. YouTube keeps this mapping stable
 function uploadsFromChannel(channelId: string): string {
-	// pass ids without the UC prefix through unchanged. a bad id fails the fetch and degrades only this Source
+	// pass ids without the UC prefix through unchanged. a bad id fails the fetch and stops only this Source
 	return channelId.startsWith("UC") ? `UU${channelId.slice(2)}` : channelId
 }
 
@@ -75,7 +75,7 @@ export async function fetchVideos(playlistId: string, apiKey: string): Promise<N
 	// playlistItems costs one quota unit and skips no videos, which is cheaper and more complete than search.list
 	const url = `https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=${MAX_RESULTS}&playlistId=${playlistId}&key=${apiKey}`
 	const response = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
-	// a failed response degrades only this Source. the Scan isolates the failure
+	// a failed response stops only this Source. the Scan isolates the failure
 	if (!response.ok) {
 		throw new Error(`youtube playlistItems ${playlistId} returned ${response.status}`)
 	}

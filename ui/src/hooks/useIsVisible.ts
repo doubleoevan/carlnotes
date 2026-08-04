@@ -2,8 +2,8 @@ import type { RefObject } from "react"
 import { useEffect, useRef, useState } from "react"
 
 /**
- * A hook to use to reveal on scroll.
- * returns a ref and whether its element has scrolled into view, staying true once seen
+ * A hook to use to reveal elements on scroll.
+ * returns a ref and whether its element has scrolled into view. it stays true once seen
  */
 export function useIsVisible<T extends HTMLElement>(): { ref: RefObject<T | null>; isVisible: boolean } {
 	const ref = useRef<T>(null)
@@ -12,6 +12,13 @@ export function useIsVisible<T extends HTMLElement>(): { ref: RefObject<T | null
 		const element = ref.current
 		// nothing to watch, or already revealed
 		if (!element || isVisible) {
+			return
+		}
+
+		// without the observer there is nothing to reveal on, so the element counts as seen instead of
+		// staying hidden behind a callback that will never arrive
+		if (typeof IntersectionObserver === "undefined") {
+			setIsVisible(true)
 			return
 		}
 

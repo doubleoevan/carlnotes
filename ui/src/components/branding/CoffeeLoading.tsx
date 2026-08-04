@@ -5,7 +5,7 @@ import { CoffeeMug } from "@/components/branding/CoffeeMug"
  */
 export function CoffeeLoading() {
 	return (
-		<div className="text-muted-foreground font-display flex min-h-[50vh] items-center justify-center gap-2 text-lg">
+		<div className="text-muted-foreground font-display flex min-h-[50dvh] items-center justify-center gap-2 text-lg">
 			<CoffeeMug className="size-5" />
 			Loading…
 		</div>

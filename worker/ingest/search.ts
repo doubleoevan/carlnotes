@@ -1,4 +1,5 @@
-// the search ingester. a model converts the topic's context into search queries, Exa runs them, and the results become "read" Resources
+// the search ingester. a model converts the topic's context into search queries, Exa runs them, and each
+// result becomes a Resource of the kind its host implies — a video, a podcast, or an article
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { buildTopicScanContext } from "../attach"
@@ -18,7 +19,7 @@ const FETCH_TIMEOUT_MS = 10_000
 // Exa is the current search provider and may be swapped later. EXA_ENDPOINT and EXA_API_KEY are the only Exa-specific names
 const EXA_ENDPOINT = "https://api.exa.ai/search"
 
-// read the topic's context, generate queries from it, search per query, and merge the deduped "read" Resources
+// read the topic's context, generate queries from it, search per query, and merge the deduped Resources
 export const searchIngester: SourceIngester = async (source: Source) => {
 	// the context combines the topic's prompt with its attachments along with the topic name to be used for query generation
 	const { name, context } = await buildTopicScanContext(source.topicId)
@@ -56,8 +57,10 @@ type SearchResponse = {
 
 // build the search prompt from search-topic.md. an empty context falls back to the topic name
 export async function buildSearchPrompt(context: string, name: string): Promise<BuiltPrompt> {
-	// fall back to the topic name when the context is empty and cap the context length to bound token spend
-	const topicContext = (context.trim() || name).slice(0, MAX_CONTEXT_CHARS)
+	// the name states the subject and the prompt says what to do about it, so the name is labelled and leads.
+	// a prompt like "I want the best ones!" names no subject at all, and searching on it alone finds nothing
+	const namedContext = context.trim() ? `Subject: ${name}\n\nWhat the reader is looking for:\n${context.trim()}` : name
+	const topicContext = namedContext.slice(0, MAX_CONTEXT_CHARS)
 	const { template, name: promptName, registryPrompt } = await fetchPromptTemplate("search-topic")
 
 	// the topic's context is user-supplied text, not app-generated, so it gets fenced in the prompt as untrusted
@@ -83,7 +86,7 @@ async function generateSearchQueries(context: string, name: string): Promise<str
 	return queries.slice(0, MAX_QUERIES)
 }
 
-// turn a search response into deduped "read" Resources plus the dollar cost that the provider reported for the search
+// turn a search response into deduped Resources plus the dollar cost that the provider reported for the search
 export function parseResults(response: SearchResponse): { resources: NewResource[]; cost: number } {
 	// keep the first Resource seen per url so repeated results collapse to one
 	const resourceByUrl = new Map<string, NewResource>()
@@ -93,11 +96,12 @@ export function parseResults(response: SearchResponse): { resources: NewResource
 			continue
 		}
 
-		// map a url to a "read" Resource. the snippet joins Exa's highlights together. the contentHash stays null for review to fill
+		// map a url to a Resource, its resource kind is determined by the link host. the snippet joins Exa's highlights together,
+		// and the contentHash stays null for review to fill
 		resourceByUrl.set(result.url, {
 			url: result.url,
 			title: result.title ?? null,
-			kind: "read",
+			kind: toResourceKind(result.url),
 			snippet: result.highlights?.join(" ") || null,
 			contentHash: null,
 		})
@@ -105,6 +109,46 @@ export function parseResults(response: SearchResponse): { resources: NewResource
 
 	// a missing costDollars.total counts as 0, so the Scan cost tracking is best-effort. LiteLLM meters the authoritative spend
 	return { resources: [...resourceByUrl.values()], cost: response.costDollars?.total ?? 0 }
+}
+
+// the hosts whose pages are watched or listened to instead of being read. a web search returns these alongside articles,
+// so the kind follows the host instead of defaulting to "read" for everything
+const WATCH_HOSTS = [
+	"youtube.com",
+	"youtu.be",
+	"vimeo.com",
+	"loom.com",
+	"ted.com",
+	"dailymotion.com",
+	"tiktok.com",
+	"snapchat.com",
+	"giphy.com",
+	"rumble.com",
+]
+const LISTEN_HOSTS = ["podcasts.apple.com", "open.spotify.com", "overcast.fm", "pocketcasts.com", "soundcloud.com"]
+
+/**
+ * The kind of Resource a link points at, determined its host. Anything unrecognized is returned as "read"
+ */
+export function toResourceKind(url: string): NewResource["kind"] {
+	// an unparseable url has no host to match, so it falls back to the default kind
+	let host: string
+	try {
+		host = new URL(url).hostname.replace(/^www\./, "").toLowerCase()
+	} catch {
+		return "read"
+	}
+
+	// return the resource kind based on the host
+	if (isHostIn(host, WATCH_HOSTS)) {
+		return "watch"
+	}
+	return isHostIn(host, LISTEN_HOSTS) ? "listen" : "read"
+}
+
+// whether a host matches one of the listed hosts, or is a subdomain of one, so m.youtube.com counts as youtube
+function isHostIn(host: string, hosts: string[]): boolean {
+	return hosts.some((knownHost) => host === knownHost || host.endsWith(`.${knownHost}`))
 }
 
 // run every query in parallel and keep the responses that succeeded. one bad query must not discard the rest
@@ -137,11 +181,18 @@ async function runSearch(query: string): Promise<SearchResponse> {
 		throw new Error("EXA_API_KEY is not set")
 	}
 
-	// POST the query with the API key header, bounded by the fetch timeout
+	// POST the query with the API key header, bounded by the fetch timeout.
+	// moderation: true asks Exa itself to filter unsafe results before they ever reach the app
 	const response = await fetch(EXA_ENDPOINT, {
 		method: "POST",
 		headers: { "x-api-key": apiKey, "content-type": "application/json" },
-		body: JSON.stringify({ query, numResults: RESULTS_PER_QUERY, type: "auto", contents: { highlights: true } }),
+		body: JSON.stringify({
+			query,
+			numResults: RESULTS_PER_QUERY,
+			type: "auto",
+			moderation: true,
+			contents: { highlights: true },
+		}),
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	})
 
@@ -154,7 +205,7 @@ async function runSearch(query: string): Promise<SearchResponse> {
 
 // expand any YouTube playlist result into its videos. Resources that are not playlists pass through unchanged
 async function expandYouTubePlaylists(resources: NewResource[]): Promise<NewResource[]> {
-	// playlist expansion needs the YouTube API key. without it, the playlist keeps its plain "read" link
+	// playlist expansion needs the YouTube API key. without it, the playlist keeps its plain link
 	const apiKey = Bun.env.YOUTUBE_API_KEY
 	if (!apiKey) {
 		return resources
@@ -182,7 +233,7 @@ async function expandYouTubePlaylist(resource: NewResource, apiKey: string): Pro
 		return [resource]
 	}
 
-	// a private, deleted, or slow playlist falls back to its "read" link instead of failing the whole search batch
+	// a private, deleted, or slow playlist falls back to its plain link instead of failing the whole search batch
 	try {
 		return await fetchVideos(playlistId, apiKey)
 	} catch (error) {

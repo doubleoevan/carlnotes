@@ -13,7 +13,7 @@ import { CollapsibleSection } from "./CollapsibleSection"
 import { InfoSection } from "./TopicInfo"
 
 // each source's icon, keyed by the label the line renders. the web line is keyed by WEB_SOURCE's label
-// rather than the "search" kind behind it. lucide carries no brand icons, so youtube and reddit take generic shapes
+// instead of the "search" kind behind it. lucide includes no brand icons, so YouTube and reddit take generic shapes
 const SOURCE_ICON: Record<string, LucideIcon> = {
 	web: Globe,
 	rss: Rss,
@@ -85,10 +85,11 @@ function TopicSource({ sourceKind, summary, isMuted }: { sourceKind: string; sum
 	const SourceIcon = SOURCE_ICON[sourceKind] ?? Diamond
 	return (
 		<div className={cn("flex min-w-0 items-baseline gap-1.5", isMuted && "text-muted-foreground")}>
-			{/* the icon rides the first line's baseline, so a summary that wraps keeps it beside the kind. an svg has
-			    no baseline of its own, so it aligns by its box bottom and lands high. the nudge drops it onto the text */}
+			{/* an svg has no baseline of its own, so it aligns by its box bottom and lands high.
+			    the nudge drops it down to the text */}
 			<SourceIcon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0 translate-y-0.5" />
-			<span className="min-w-0 break-words">
+			{/* truncate to one line per source */}
+			<span className="min-w-0 truncate">
 				{sourceKind}
 				{summary && <span className="text-muted-foreground"> — {summary}</span>}
 			</span>

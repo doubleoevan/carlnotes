@@ -80,7 +80,7 @@ export function SignupPage() {
 // the post-signup notice. verification is not a wall, so it offers a way straight into the app
 function VerifyEmailNotice({ email }: { email: string }) {
 	return (
-		<div className="mx-auto flex min-h-screen max-w-sm flex-col justify-center px-4 py-12 text-center">
+		<div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-12 text-center">
 			<CoffeeMug className="text-primary mx-auto size-10" />
 			<h1 className="mt-4 text-2xl font-semibold">Check your email</h1>
 			<p className="text-muted-foreground mt-2 text-sm">

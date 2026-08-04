@@ -64,6 +64,8 @@
       "Bash(doppler run -- docker compose restart litellm:*)",
       "Bash(doppler run -- bash -c 'coderabbit:*)",
       "Bash(doppler run -- bash -c 'test:*)",
+      "Bash(pkill -f bun worker/temporal.ts:*)",
+      "Bash(nohup doppler run -- bun worker/temporal.ts:*)",
       "Skill(opsx:*)"
     ],
     "ask": [

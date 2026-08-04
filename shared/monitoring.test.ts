@@ -5,14 +5,14 @@ import { scrubContent, startMonitoring } from "./monitoring"
 // without a sentry dsn set, nothing starts
 test("monitoring is a no-op without its key", () => {
 	// clear the sentry dsn so the run is deterministic regardless of the calling shell's environment
-	const previousDsn = Bun.env.SENTRY_DSN
+	const originalDsn = Bun.env.SENTRY_DSN
 	Bun.env.SENTRY_DSN = undefined
 
 	try {
 		// the call does not throw an error and has no client to send through
 		expect(() => startMonitoring()).not.toThrow()
 	} finally {
-		Bun.env.SENTRY_DSN = previousDsn
+		Bun.env.SENTRY_DSN = originalDsn
 	}
 })
 
@@ -41,7 +41,7 @@ test("scrubContent survives a circular reference", () => {
 	const cyclic: Record<string, unknown> = { topicId: "topic-1" }
 	cyclic.self = cyclic
 
-	// the cycle is named rather than followed, and the rest of the object survives
+	// the cycle is named instead of being followed, and the rest of the object survives
 	const extra = scrubContent({ extra: cyclic }).extra as { topicId: string; self: string }
 	expect(extra.topicId).toBe("topic-1")
 	expect(extra.self).toBe("[circular]")

@@ -4,11 +4,10 @@ import { and, eq } from "drizzle-orm"
 import { extractText as extractPdfText } from "unpdf"
 import { db } from "../db"
 import { attachments, topics } from "../db/schema"
-import { cheapModel } from "./models.ts"
+import { chatModel, cheapModel } from "./models.ts"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "./prompts/fetch.ts"
 import { writePrompt } from "./prompts/write.ts"
-import { fetchContent, toFetchableUrl } from "./scrape.ts"
 import { deleteAttachment, putAttachment, toAttachmentKey } from "./store"
 import { startAttachmentWorkflow } from "./temporal-client"
 
@@ -83,37 +82,9 @@ export async function ingestAttachment(attachmentUpload: AttachmentUpload): Prom
 	}
 }
 
-// whether an attachment's content type has an extractor (text or PDF), checked synchronously so a bad type is rejected at upload
+// whether an attachment's content type has an extractor (text or PDF), checked synchronously so that an unsupported type is rejected at upload
 function isSupportedAttachmentType(contentType: string): boolean {
-	return contentType.startsWith("text/") || contentType === "application/pdf"
-}
-
-// ingest an attachment from a URL by fetching the page as Markdown via Firecrawl and running the shared file-ingestion path. the fetcher parameter lets the smoke test stub the network call
-export async function ingestUrlAttachment(topicId: string, url: string, fetcher = fetchContent): Promise<Attachment> {
-	// reject a malformed, non-http, or privately routable URL before any fetch
-	let pageUrl: URL
-	try {
-		pageUrl = toFetchableUrl(url)
-	} catch (error) {
-		const reason = error instanceof Error ? error.message : String(error)
-		throw new AttachmentValidationError(`invalid attachment URL, ${reason}`)
-	}
-
-	// reject a nonexistent topic before the paid fetch
-	await isExistingTopic(topicId)
-
-	// fetch the page as Markdown. empty content means nothing usable, so reject instead of storing a contextless attachment
-	const { markdown } = await fetcher(url)
-	if (!markdown.trim()) {
-		throw new AttachmentValidationError(`attachment URL fetched no content: ${url}`)
-	}
-
-	// build a readable filename from the page host. toAttachmentKey sanitizes it again before it lands in the object key
-	const filename = `${pageUrl.hostname.replace(/[^a-z0-9.]+/gi, "-")}.md`
-
-	// wrap the Markdown as a text/markdown upload and run the shared file-ingestion path, recording the origin URL
-	const bytes = new TextEncoder().encode(markdown)
-	return ingestAttachment({ topicId, filename, contentType: "text/markdown", bytes, sourceUrl: url })
+	return contentType.startsWith("text/") || contentType === "application/pdf" || isImageAttachmentType(contentType)
 }
 
 // throw if the topic doesn't exist, so both ingestion paths reject a misaddressed upload before spending storage, inference, or a fetch
@@ -138,8 +109,27 @@ export async function extractText(contentType: string, bytes: Uint8Array): Promi
 		return text
 	}
 
+	// an image includes no text to decode. the model reads it instead, so extraction is not its path
+	if (isImageAttachmentType(contentType)) {
+		throw new AttachmentValidationError(`an image is read by the model, not extracted: ${contentType}`)
+	}
+
 	// any other type has no extractor. reject so the caller stores nothing
 	throw new AttachmentValidationError(`unsupported attachment content type: ${contentType}`)
+}
+
+/**
+ * Whether an attachment is an image, which the model reads directly instead of having its text extracted.
+ */
+export function isImageAttachmentType(contentType: string): boolean {
+	return contentType.startsWith("image/")
+}
+
+/**
+ * Stored image bytes as the data url for the model to read.
+ */
+export function toDataUrl(contentType: string, bytes: Uint8Array): string {
+	return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
 }
 
 // build the context-generation prompt over attach-context.md, capped so a huge document can't blow the token budget
@@ -151,18 +141,43 @@ export async function buildContextPrompt(text: string): Promise<BuiltPrompt> {
 	return { prompt, name, registryPrompt }
 }
 
-// generate a context string from the file's text with the cheap model through LiteLLM. one call, no tools
-export async function generateContext(text: string): Promise<string> {
+// generate a context string from the file's text with the cheap model through LiteLLM,
+// billed to the given key, or to the master key when there is none.
+export async function generateContext(text: string, litellmApiKey?: string): Promise<string> {
 	// fetch and write the prompt
 	const contextPrompt = await buildContextPrompt(text)
 
 	// link the registry version to the trace when one served the prompt
 	const { text: context } = await generateText({
-		model: cheapModel(),
+		model: cheapModel(litellmApiKey),
 		prompt: contextPrompt.prompt,
 		...promptTelemetry(contextPrompt),
 	})
 	return context.trim()
+}
+
+// describe an attached image with the chat model, billed to the reader's own key.
+// the description is what later gets read, never the image itself
+export async function generateImageContext(dataUrl: string, litellmApiKey?: string): Promise<string> {
+	// fetch and write the prompt. it takes no variables, since the image includes everything the model reads
+	const { template, name, registryPrompt } = await fetchPromptTemplate("attach-image-context")
+	const prompt = writePrompt(template, {})
+
+	// send the prompt and the image as one user message, linking the registry version to the trace
+	const { text } = await generateText({
+		model: chatModel(litellmApiKey),
+		messages: [
+			{
+				role: "user",
+				content: [
+					{ type: "text", text: prompt },
+					{ type: "image", image: dataUrl },
+				],
+			},
+		],
+		...promptTelemetry({ prompt, name, registryPrompt }),
+	})
+	return text.trim()
 }
 
 // the context a scan reads for a topic. the topic's prompt merged with every attachment's context

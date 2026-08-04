@@ -36,7 +36,7 @@ async function reportFailedWrite(request: Promise<Response>, action: string, isB
 		return
 	}
 
-	// the log carries the detail, the toast only tells the reader it did not stick
+	// the log includes the detail. the toast only tells the reader that the scan failed, not why.
 	console.error(`${action} failed: ${response.status} ${await response.text()}`)
 	reportRejectedWrite(isBackground)
 }
@@ -79,7 +79,6 @@ export async function sendTopicFindingBookmark(findingId: string, isBookmarked: 
 }
 
 // record that the user opened a topic finding resource. marks it consumed and increments its view count.
-// it rides along with opening the link, so a failure stays silent rather than toasting at someone already reading
 export async function sendTopicFindingOpened(findingId: string): Promise<void> {
 	await reportFailedWrite(
 		client.api["topic-findings"][":id"].view.$post({ param: { id: findingId } }),
@@ -146,11 +145,13 @@ export async function sendSubscriptionEmail(topicId: string, isEmailEnabled: boo
 	)
 }
 
-// trigger a manual scan. returns the manual scans left today, or null when the api rejected the request
-export async function sendManualScan(topicId: string): Promise<number | null> {
+// trigger a manual scan, returning the manual scans left today. throws an error with the api's own rejection reason,
+// since "already running", "quota exhausted", and "forbidden" mean different things to the user
+export async function sendManualScan(topicId: string): Promise<number> {
 	const response = await client.api.topics[":id"].scan.$post({ param: { id: topicId } })
 	if (!response.ok) {
-		return null
+		const body = (await response.json().catch(() => null)) as { error?: string } | null
+		throw new Error(body?.error ?? `scan request failed: ${response.status}`)
 	}
 	return manualScanResponse.parse(await response.json()).remaining
 }
@@ -166,15 +167,6 @@ export async function uploadTopicAttachment(topicId: string, file: File): Promis
 	if (!response.ok) {
 		const body = (await response.json().catch(() => null)) as { error?: string } | null
 		throw new Error(body?.error ?? `upload failed: ${response.status}`)
-	}
-}
-
-// add an attachment to a topic by fetching a url's content. throws on a rejected ingest so the modal can surface it
-export async function sendAttachmentUrl(topicId: string, url: string): Promise<void> {
-	const response = await client.api.topics[":id"].attachments.url.$post({ param: { id: topicId }, json: { url } })
-	if (!response.ok) {
-		const body = (await response.json().catch(() => null)) as { error?: string } | null
-		throw new Error(body?.error ?? `attachment url failed: ${response.status}`)
 	}
 }
 

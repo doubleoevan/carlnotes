@@ -419,3 +419,52 @@ The change SHALL include generated Drizzle migrations that create `billing_subsc
 - **WHEN** the change's migrations are applied
 - **THEN** the index migration runs after embeddings are populated, and creating it does not require altering the column's dimension
 
+### Requirement: Chat Turn is a Topic-scoped record of one question and its reply
+A `chat_turns` table SHALL record one row per chat turn, carrying the Topic it is about, the user who sent it, the turn's estimated cost, its creation time, and its question and answer text. The question and answer SHALL be nullable, holding text for every signed-in sender and staying null for a turn that never completed. A row SHALL always be written, whether or not its text is kept, because every turn spends money the monthly meter must see. The user column SHALL be non-null: chat is signed-in only, so every chat turn has a sender.
+
+Chat Turn SHALL NOT be named "Chat Session"; `sessions` belongs to Better Auth's sign-in plumbing and stays distinct from domain vocabulary.
+
+#### Scenario: A persisted turn stores its text
+- **WHEN** a user whose plan persists conversations completes a chat turn
+- **THEN** a `chat_turns` row is written carrying the question, the answer, and the turn's cost
+
+#### Scenario: An ephemeral turn stores cost without text
+- **WHEN** a user whose plan does not persist conversations completes a chat turn
+- **THEN** a `chat_turns` row is written carrying the turn's cost with null question and answer
+
+### Requirement: The embedding model name is a schema-level constant
+The name stamped into `resources.embedding_model` SHALL be defined once alongside the embedding dimension in the schema module, so the column, the curation pipeline that writes it, and the chat retrieval that filters on it all read one value.
+
+#### Scenario: One constant serves every reader
+- **WHEN** the curation pipeline stamps an embedding model name and chat retrieval filters on it
+- **THEN** both read the same exported constant, and no module defines its own copy
+
+### Requirement: The change includes the chat turns migration
+The change SHALL ship generated migrations creating `chat_turns` and constraining its user column to non-null. They SHALL alter no table the change did not itself create, and SHALL require no backfill.
+
+#### Scenario: The migration leaves every prior table alone
+- **WHEN** the chat turns migrations are applied
+- **THEN** `chat_turns` is created and constrained, and no table predating the change is altered
+
+### Requirement: A Scan records when its workflow was accepted
+
+The `scans` table SHALL carry a nullable timestamp recording when the Scan's workflow was accepted. Null SHALL mean the workflow was never started, which is the state a caller leaves behind when it dies between writing the row and starting the workflow.
+
+The column SHALL be nullable rather than defaulted, because a default would make every row look dispatched and erase the distinction the column exists to record.
+
+#### Scenario: A Scan opened but not dispatched
+
+- **WHEN** a Scan row is written
+- **THEN** its dispatch timestamp is null until its workflow is accepted
+
+#### Scenario: A Scan whose workflow was accepted
+
+- **WHEN** a Scan's workflow start returns
+- **THEN** its dispatch timestamp records that moment
+
+#### Scenario: Scans that predate the column
+
+- **GIVEN** Scans that reached a terminal status before the column existed
+- **WHEN** the column is added
+- **THEN** they are not left looking like Scans awaiting dispatch
+

@@ -13,7 +13,7 @@ test("attachmentContextPayload trims the context and caps its length", () => {
 	// an empty context is a valid edit, since clearing a poisoned context is allowed
 	expect(attachmentContextPayload.parse({ context: "" })).toEqual({ context: "" })
 
-	// anything past the cap is rejected at the boundary rather than stored and paid for later
+	// anything past the cap is rejected at the boundary instead of being stored and paid for later
 	const tooLongContext = "x".repeat(MAX_ATTACHMENT_CONTEXT_CHARS + 1)
 	expect(attachmentContextPayload.safeParse({ context: tooLongContext }).success).toBe(false)
 })

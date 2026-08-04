@@ -9,13 +9,16 @@ export type AnalyticsEvent =
 	// what the owner asks the product to do, and the paywall they hit when asking for more
 	| "scan_requested"
 	| "scan_quota_reached"
-	// engagement, which fires every time rather than only the first time
+	// engagement, which fires every time instead of only the first time
 	| "finding_rated"
 	| "finding_bookmarked"
 	| "finding_unbookmarked"
 	| "finding_read"
 	| "finding_unread"
 	| "finding_opened"
+	// conversation about a topic, and the paywall a reader hits when their month's budget is spent
+	| "chat_turn_sent"
+	| "chat_budget_reached"
 
 /**
  * Records one product event for a user. A no-op if `POSTHOG_API_KEY` isn't set.
@@ -34,7 +37,7 @@ export function trackEvent(event: AnalyticsEvent, userId: string, properties?: R
 const MOBILE_USER_AGENT_PATTERN = /Mobi|Android|iPhone|iPod|IEMobile/i
 
 /**
- * Which kind of device a request came from. Only answers for events that a browser triggered.
+ * Which kind of device a request came from. Only meaningful for events that a browser triggered.
  */
 export function toPlatform(userAgent: string | null | undefined): "mobile" | "desktop" {
 	return userAgent && MOBILE_USER_AGENT_PATTERN.test(userAgent) ? "mobile" : "desktop"

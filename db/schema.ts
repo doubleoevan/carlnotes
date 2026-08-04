@@ -3,6 +3,7 @@
 // enum value sets that live in @shared so that db pgEnums, api validation, and ui rendering can read one source
 import {
 	attachmentStatuses,
+	chatAttachmentKinds,
 	daysOfWeek,
 	frequencies,
 	maxResultsOptions,
@@ -44,11 +45,17 @@ export const scanStatus = pgEnum("scan_status", scanStatuses)
 export const sourceVisibility = pgEnum("source_visibility", sourceVisibilities)
 export const rating = pgEnum("rating", ratings)
 export const plan = pgEnum("plan", plans)
-// the attachment async-processing status enum
+// the attachment async-processing status enum, shared by topic attachments and kept chat attachments
 export const attachmentStatus = pgEnum("attachment_status", attachmentStatuses)
+// what a kept chat attachment originally was
+export const chatAttachmentKind = pgEnum("chat_attachment_kind", chatAttachmentKinds)
 
 // the review embedding's vector width. the resources.embedding column and the worker's embed helper share this one constant
 export const EMBED_DIMENSIONS = 1024
+
+// the embedding's vector space, stamped onto embedding_model so a row names its model and dimension instead of
+// the routing alias. review writes it and chat retrieval filters on it, so a changed model or dimension needs a backfill
+export const EMBED_MODEL_NAME = `qwen3-embedding-8b/${EMBED_DIMENSIONS}`
 
 // the users table. its columns match Better Auth's user schema, plus one app-specific field.
 // the plural name comes from Better Auth's usePlural option.
@@ -242,7 +249,7 @@ export const attachments = pgTable("attachments", {
 // a scan is the record for a single execution of the topic's pipeline
 export const scans = pgTable("scans", {
 	id: primaryId(),
-	// the topic scanned, cleared rather than cascaded so a deleted topic's scans keep their spend history
+	// the topic scanned, cleared instead of being cascaded so that a deleted topic's scans keep their spend history
 	topicId: text("topic_id").references(() => topics.id, { onDelete: "set null" }),
 	// who the scan bills and counts against. it is set at creation and never cleared,
 	// so the spend and the daily count survive a topic being deleted
@@ -255,6 +262,8 @@ export const scans = pgTable("scans", {
 	// when the scan pipeline ran
 	startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
 	finishedAt: timestamp("finished_at", { withTimezone: true }),
+	// when the scan's workflow was accepted. null means it was never started
+	dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
 	// true when the owner triggered this scan by hand with "Run now". scheduled and seeded scans stay false
 	isManual: boolean("is_manual").notNull().default(false),
 	// what it cost and how many resources the scan found, kept, and filtered
@@ -290,8 +299,9 @@ export const resources = pgTable(
 		title: text("title"),
 		// a short excerpt provided by the source, small enough to stay in postgres since every list path reads it
 		snippet: text("snippet"),
-		// the page's full Markdown, now in object storage. content_key references it and content_bytes sizes it
-		// content is the legacy inline column, superseded by content_key
+		// the page's full Markdown. content holds it inline for rows written before object storage.
+		// content_key references it in object storage and content_bytes sizes it.
+		// it is counted toward storage totals.
 		content: text("content"),
 		contentKey: text("content_key"),
 		contentBytes: integer("content_bytes"),
@@ -466,6 +476,65 @@ export const subscriptions = pgTable(
 			sql`(${table.subscriberUserId} is not null) <> (${table.subscriberAudienceId} is not null)`,
 		),
 	],
+)
+
+// a chat turn is one question and its reply. each one writes a row,
+// because each one spends money that the monthly meter has to see,
+export const chatTurns = pgTable(
+	"chat_turns",
+	{
+		id: primaryId(),
+		// who asked
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// the topic the chat turn is about
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		// what the chat turn cost, in the same dollars scans record, summed into the user's monthly spend
+		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
+		// the chat turn's text, stored only when the gate grants the sender chat:persist.
+		// null on a chat turn whose row exists to meter its spend and nothing else
+		question: text("question"),
+		answer: text("answer"),
+		// when the chat turn ran. the monthly spend sum uses it and the chat messages replay in its order
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// covers a reader's persisted conversation read, which filters by topic and orders by time
+	(table) => [index("chat_turns_topic_created_idx").on(table.topicId, table.createdAt)],
+)
+
+// a chat attachment a reader chose to keep: durable, scoped to one reader's conversation with on a topic,
+// re-delivered to every future chat turn they take there.
+export const chatAttachments = pgTable(
+	"chat_attachments",
+	{
+		id: primaryId(),
+		// who kept it, and for which topic's conversation. either deletion takes the kept attachment with it
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		kind: chatAttachmentKind("kind").notNull(),
+		name: text("name").notNull(),
+		// where an image or PDF's original bytes live in object storage. null for kept text, which has no file
+		objectKey: text("object_key"),
+		contentType: text("content_type"),
+		byteSize: integer("byte_size"),
+		// a kept paste or text file's own words, encrypted like a chat turn's text. null for image and PDF,
+		// whose original lives in object storage
+		rawText: text("raw_text"),
+		// the summary that is included in every future chat turn, generated once. empty until the background job finishes
+		context: text("context").notNull().default(""),
+		status: attachmentStatus("status").notNull().default("pending"),
+		error: text("error"),
+		...timestamps(),
+	},
+	// the read path always filters by exactly this pair
+	(table) => [index("chat_attachments_user_topic_idx").on(table.userId, table.topicId)],
 )
 
 // a billing subscription is a user's active paid Stripe subscription.

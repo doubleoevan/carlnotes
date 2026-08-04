@@ -21,8 +21,10 @@ export type ReviewOutcome = {
 	failedCount: number
 }
 
-// the summary returned to the scan by the review
-export type ReviewSummary = { keptCount: number; filteredCount: number; scanSummary: string }
+// the summary returned to the scan by the review. scoredResourceIds names what the paid stage actually paid for to score,
+// including the ones that were trimmed to the topic's max_results after the review
+// biome-ignore format: one line keeps the type under the comment-density hook's limit
+export type ReviewSummary = { keptCount: number; filteredCount: number; scanSummary: string; scoredResourceIds: string[] }
 
 /**
  * Fold one Resource's outcome into the running totals.
@@ -77,5 +79,5 @@ export function emptyReviewOutcome(): ReviewOutcome {
  * The summary a Scan that reviewed nothing records
  */
 export function emptyReviewSummary(): ReviewSummary {
-	return { keptCount: 0, filteredCount: 0, scanSummary: "" }
+	return { keptCount: 0, filteredCount: 0, scanSummary: "", scoredResourceIds: [] }
 }

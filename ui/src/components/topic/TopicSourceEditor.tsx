@@ -8,6 +8,7 @@ import { Badge } from "@/components/primitives/badge"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { cn, WEB_SOURCE } from "@/lib/utils"
 
 // the source kinds that the custom source picker offers, one of the editable source kinds
@@ -18,6 +19,7 @@ const CUSTOM_SOURCE_KINDS = editableSourceKinds.filter((kind) => kind !== "searc
 
 // the placeholder for the source picker's value input, per pickable source kind
 const SOURCE_VALUE_PLACEHOLDER: Record<EditableSourceKind, string> = {
+	url: "page url…",
 	rss: "feed url…",
 	reddit: "subreddit…",
 	youtube: "channel or playlist id…",
@@ -172,14 +174,19 @@ function TopicSource({ kind, summary, onRemove }: { kind: string; summary: strin
 				{kind}
 			</Badge>
 			<span className="text-muted-foreground min-w-0 flex-1 truncate">{summary || "—"}</span>
-			<button
-				type="button"
-				aria-label={`Remove ${kind} source`}
-				onClick={onRemove}
-				className="text-muted-foreground hover:text-foreground shrink-0"
-			>
-				<X className="size-3.5" />
-			</button>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<button
+						type="button"
+						aria-label={`Remove ${kind} source`}
+						onClick={onRemove}
+						className="text-muted-foreground hover:text-foreground shrink-0"
+					>
+						<X className="size-3.5" />
+					</button>
+				</TooltipTrigger>
+				<TooltipContent>Delete source</TooltipContent>
+			</Tooltip>
 		</div>
 	)
 }

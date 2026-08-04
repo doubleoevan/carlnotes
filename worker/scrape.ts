@@ -4,7 +4,7 @@ const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v1/scrape"
 // scraping a live page is slower than a feed fetch, so allow a longer timeout
 const FETCH_TIMEOUT_MS = 30_000
 
-// how long the revalidation request may run before it aborts, so a slow origin never holds up curation
+// how long the revalidation request may run before it aborts, so a slow origin never holds up a scan
 const REVALIDATE_TIMEOUT_MS = Number(Bun.env.REVALIDATE_TIMEOUT_MS ?? "5000")
 
 // hosts that resolve inside our own network. a Source or attachment url is owner-supplied, so fetching one of

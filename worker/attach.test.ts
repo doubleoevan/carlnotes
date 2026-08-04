@@ -1,18 +1,7 @@
 // attachment tests for the extractor, the prompt builder, the ingestion guards, and the object key sanitizer
 import { expect, test } from "bun:test"
-import {
-	AttachmentValidationError,
-	buildContextPrompt,
-	extractText,
-	ingestAttachment,
-	ingestUrlAttachment,
-} from "./attach"
+import { AttachmentValidationError, buildContextPrompt, extractText, ingestAttachment } from "./attach"
 import { toAttachmentKey } from "./store"
-
-// a fetcher that fails if reached. it proves URL validation rejects before any Firecrawl call
-const failIfFetched = async (): Promise<never> => {
-	throw new Error("fetcher should not be called")
-}
 
 // text and Markdown decodes through the extractor
 test("extractText decodes text and markdown to a string", async () => {
@@ -23,8 +12,13 @@ test("extractText decodes text and markdown to a string", async () => {
 // an unsupported content type has no extractor and gets rejected before anything is stored.
 // it must throw the validation-error type, since the api route trusts that type to decide what's safe to show the user
 test("extractText rejects an unsupported content type with a validation error", async () => {
-	await expect(extractText("image/png", new Uint8Array())).rejects.toThrow(AttachmentValidationError)
-	await expect(extractText("image/png", new Uint8Array())).rejects.toThrow(/unsupported/)
+	await expect(extractText("application/zip", new Uint8Array())).rejects.toThrow(AttachmentValidationError)
+	await expect(extractText("application/zip", new Uint8Array())).rejects.toThrow(/unsupported/)
+})
+
+// an image is a supported attachment, but the model reads it instead of an extractor, so extraction is not its path
+test("extractText sends an image to the model instead of extracting it", async () => {
+	await expect(extractText("image/png", new Uint8Array())).rejects.toThrow(/read by the model/)
 })
 
 // an oversized upload is rejected before any storage or model call, as a validation error
@@ -49,20 +43,6 @@ test("buildContextPrompt includes the document text", async () => {
 	const { prompt: contextPrompt } = await buildContextPrompt("a novel about the moon")
 	expect(contextPrompt).toContain("a novel about the moon")
 	expect(contextPrompt).not.toContain("{{")
-})
-
-// a malformed URL is rejected before Firecrawl is ever called, as a validation error
-test("ingestUrlAttachment rejects a malformed URL before fetching", async () => {
-	await expect(ingestUrlAttachment("t1", "not a url", failIfFetched)).rejects.toThrow(AttachmentValidationError)
-	await expect(ingestUrlAttachment("t1", "not a url", failIfFetched)).rejects.toThrow(/invalid attachment URL/)
-})
-
-// a non-http(s) scheme parses as a URL but is rejected before fetching, as a validation error
-test("ingestUrlAttachment rejects a non-http(s) URL before fetching", async () => {
-	await expect(ingestUrlAttachment("t1", "file:///etc/passwd", failIfFetched)).rejects.toThrow(
-		AttachmentValidationError,
-	)
-	await expect(ingestUrlAttachment("t1", "file:///etc/passwd", failIfFetched)).rejects.toThrow(/http/)
 })
 
 // a normal filename passes through untouched, producing a well-formed key

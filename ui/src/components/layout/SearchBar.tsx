@@ -3,7 +3,7 @@ import { resourceKinds as allResourceKinds } from "@shared/enums"
 import { Check, Hash, Search, SlidersHorizontal, X } from "lucide-react"
 import { type KeyboardEvent, useState } from "react"
 import { useNavigate } from "react-router-dom"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Input } from "@/components/primitives/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { authClient } from "@/lib/authClient"
@@ -52,7 +52,7 @@ export function SearchBar() {
 		: []
 
 	// topics first, then resources, so the arrow keys walk one combined list
-	const suggestions: SearchResultSuggestion[] = [
+	const searchSuggestions: SearchResultSuggestion[] = [
 		...topicMatches.map((topic) => ({ type: "topic" as const, topic })),
 		...resourceMatches.map((resource) => ({ type: "resource" as const, resource })),
 	]
@@ -81,12 +81,12 @@ export function SearchBar() {
 		const step = ARROW_STEP[event.key]
 		if (step) {
 			event.preventDefault()
-			setSuggestionIndex((index) => clampSuggestionIndex(index + step, suggestions.length))
+			setSuggestionIndex((index) => clampSuggestionIndex(index + step, searchSuggestions.length))
 			return
 		}
 		// enter opens the highlighted suggestion, falling back to the only one if nothing is highlighted
 		if (event.key === "Enter") {
-			const target = suggestions[suggestionIndex] ?? findOnlySuggestion(suggestions)
+			const target = searchSuggestions[suggestionIndex] ?? findOnlySuggestion(searchSuggestions)
 			if (target) {
 				event.preventDefault()
 				openSuggestion(target)
@@ -96,7 +96,7 @@ export function SearchBar() {
 
 	return (
 		<div className="relative">
-			<div className="bg-card border-border flex items-center gap-2 rounded-lg border py-2 pr-2 pl-3 shadow-sm">
+			<div className="bg-card border-border flex items-center gap-2 rounded-lg border py-2 pr-2 pl-3 shadow-lift">
 				{/* the magnifying glass, then the search input. blur is delayed so a click on a result lands before the dropdown hides */}
 				<Search className="text-muted-foreground size-4 shrink-0" />
 				<Input
@@ -130,8 +130,8 @@ export function SearchBar() {
 			</div>
 			{/* the typeahead dropdown, one row per suggestion, highlighted when the arrow keys land on it */}
 			{showDropdown && (
-				<div className="bg-popover text-popover-foreground absolute top-full right-0 left-0 z-30 mt-1 overflow-hidden rounded-md border p-1 shadow-md">
-					{suggestions.map((suggestion, index) =>
+				<div className="bg-popover text-popover-foreground absolute top-full right-0 left-0 z-30 mt-1 overflow-hidden rounded-md border p-1 shadow-lift">
+					{searchSuggestions.map((suggestion, index) =>
 						suggestion.type === "topic" ? (
 							<TopicResult
 								key={`topic-${suggestion.topic.id}`}
@@ -147,7 +147,9 @@ export function SearchBar() {
 						),
 					)}
 					{/* empty state when nothing matches */}
-					{suggestions.length === 0 && <p className="text-muted-foreground px-2 py-3 text-sm">No matches found.</p>}
+					{searchSuggestions.length === 0 && (
+						<p className="text-muted-foreground px-2 py-3 text-sm">No matches found.</p>
+					)}
 				</div>
 			)}
 		</div>
@@ -160,8 +162,8 @@ function clampSuggestionIndex(index: number, suggestionCount: number): number {
 }
 
 // the lone suggestion when the list has exactly one, so enter can open it without arrowing to it first
-function findOnlySuggestion(suggestions: SearchResultSuggestion[]): SearchResultSuggestion | undefined {
-	return suggestions.length === 1 ? suggestions[0] : undefined
+function findOnlySuggestion(searchSuggestions: SearchResultSuggestion[]): SearchResultSuggestion | undefined {
+	return searchSuggestions.length === 1 ? searchSuggestions[0] : undefined
 }
 
 // a topic result with a topic icon and name that links to the topic page. isActive marks the arrow-key highlight
@@ -194,8 +196,8 @@ function ResourceResult({ resource, isActive }: { resource: TopicFinding; isActi
 	)
 }
 
-// the Filters dropdown at the end of the search bar: the All / Unread / Bookmarked view on top as radios,
-// then which resource kinds appear in the topic feed as checks. Bookmarks belong to a signed-in user, so that view needs a session
+// the Filters dropdown at the end of the search bar: which resource kinds appear in the topic feed,
+// then the All / Unread / Bookmarked filter as radios. the Bookmarked filter requires a session
 function SearchFilters() {
 	// the view and resource kind filters live in the topic feed context, shared by both feed surfaces
 	const { resourceKinds, toggleResourceKind, view, setView } = useTopicFeed()
@@ -216,7 +218,17 @@ function SearchFilters() {
 			{/* the trigger sits inset in the search bar's padded row, not flush with its own border. the offsets
 			    cancel that inset so the gap matches Tag Filters' */}
 			<PopoverContent align="end" alignOffset={-9} sideOffset={13} className="w-44 p-1">
-				{/* one view is active at a time, so its rows are radios. the kinds below the divider are checks */}
+				{/* the kinds lead as checks, since several can be on at once. the view below the divider is one
+				    at a time, so its rows are radios */}
+				{allResourceKinds.map((resourceKind) => (
+					<ResourceKindFilter
+						key={resourceKind}
+						resourceKind={resourceKind}
+						isActive={resourceKinds.has(resourceKind)}
+						onClick={() => toggleResourceKind(resourceKind)}
+					/>
+				))}
+				<hr className="border-border my-1" />
 				<div role="radiogroup" aria-label="View">
 					{viewOptions.map((viewOption) => (
 						<ViewRow
@@ -230,15 +242,6 @@ function SearchFilters() {
 						/>
 					))}
 				</div>
-				<hr className="border-border my-1" />
-				{allResourceKinds.map((resourceKind) => (
-					<ResourceKindFilter
-						key={resourceKind}
-						resourceKind={resourceKind}
-						isActive={resourceKinds.has(resourceKind)}
-						onClick={() => toggleResourceKind(resourceKind)}
-					/>
-				))}
 			</PopoverContent>
 		</Popover>
 	)

@@ -9,8 +9,9 @@ import {
 	matchesFeedView,
 	toAgeLabel,
 	toDurationLabel,
-	toFilteredFindings,
+	toPossibleSourceUrls,
 	toScheduleLabel,
+	toSortedFindings,
 	toTimeLabel,
 } from "./utils"
 
@@ -113,8 +114,23 @@ test("toSortedFindings pins bookmarks and sorts each group", () => {
 	const keptHigh = topicFinding({ findingId: "kept-high", relevanceScore: 0.9 })
 	const keptLow = topicFinding({ findingId: "kept-low", relevanceScore: 0.5 })
 	// the pinned row leads despite its lower relevance, and the unbookmarked group sorts among itself
-	const relevantOrder = toFilteredFindings([keptLow, keptHigh, pinnedLow], "relevant")
+	const relevantOrder = toSortedFindings([keptLow, keptHigh, pinnedLow], "relevant")
 	expect(relevantOrder.map((finding) => finding.findingId)).toEqual(["pinned-low", "kept-high", "kept-low"])
+})
+
+// the homepage and the topic page build a topic's list from separately queried rows, so ties have to
+// settle the same way on both no matter what order the rows arrived in
+test("toSortedFindings breaks relevance ties the same way no matter what the incoming order", () => {
+	const tiedFindings = [
+		topicFinding({ findingId: "b", relevanceScore: 1, publishedAt: "2026-07-01T00:00:00.000Z" }),
+		topicFinding({ findingId: "a", relevanceScore: 1, publishedAt: "2026-07-01T00:00:00.000Z" }),
+		topicFinding({ findingId: "c", relevanceScore: 1, publishedAt: "2026-07-20T00:00:00.000Z" }),
+	]
+	// the newest of the tied findings leads, and the two sharing a date settle by id instead of by arrival
+	const relevantIds = toSortedFindings(tiedFindings, "relevant").map((finding) => finding.findingId)
+	expect(relevantIds).toEqual(["c", "a", "b"])
+	const reversedIds = toSortedFindings([...tiedFindings].reverse(), "relevant").map((finding) => finding.findingId)
+	expect(reversedIds).toEqual(relevantIds)
 })
 
 // trending ranks sort by engagement value first, and value-less findings fall back to recency
@@ -124,7 +140,7 @@ test("toSortedFindings trending falls back to newest without an engagement value
 	const newer = topicFinding({ findingId: "newer", publishedAt: "2026-07-20T00:00:00.000Z" })
 	const older = topicFinding({ findingId: "older", publishedAt: "2026-07-05T00:00:00.000Z" })
 	// engagement values rank first by size, then the value-less order by recency
-	const trendingOrder = toFilteredFindings([older, newer, mild, hot], "trending")
+	const trendingOrder = toSortedFindings([older, newer, mild, hot], "trending")
 	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["hot", "mild", "newer", "older"])
 })
 
@@ -142,4 +158,43 @@ test("toScanRecapPlaceholder matches the scan outcome", () => {
 	expect(toScanRecapPlaceholder({ status: "succeeded", error: null })).toBe(
 		"No entry for this one.\nThe raccoon stole my keyboard.\nFindings are all there though.",
 	)
+})
+
+// a url written plainly in the prompt is offered as a Source
+test("a url in the prompt is offered", () => {
+	expect(toPossibleSourceUrls("read https://example.com/post", [], [])).toEqual(["https://example.com/post"])
+})
+
+// the sentence's own punctuation is not part of the address
+test("trailing sentence punctuation is not part of the url", () => {
+	expect(toPossibleSourceUrls("read https://example.com/post.", [], [])).toEqual(["https://example.com/post"])
+	expect(toPossibleSourceUrls("read https://example.com/post, then rest", [], [])).toEqual(["https://example.com/post"])
+})
+
+// a bracket the url opened belongs to it, and one the sentence opened does not
+test("brackets settle by whether the url opened them", () => {
+	expect(toPossibleSourceUrls("see https://en.wikipedia.org/wiki/Ruby_(gem)", [], [])).toEqual([
+		"https://en.wikipedia.org/wiki/Ruby_(gem)",
+	])
+	expect(toPossibleSourceUrls("(see https://example.com/post)", [], [])).toEqual(["https://example.com/post"])
+})
+
+// a pasted address may carry an upper-case scheme
+test("an upper-case scheme still matches", () => {
+	expect(toPossibleSourceUrls("read HTTPS://example.com/post", [], [])).toEqual(["HTTPS://example.com/post"])
+})
+
+// a url that is already a Source has nothing to offer
+test("a url that is already a source is not offered", () => {
+	const keptSources = [{ kind: "url", config: { url: "https://example.com/post" } }]
+	expect(toPossibleSourceUrls("read https://example.com/post", keptSources, [])).toEqual([])
+	const addedSources = [{ kind: "url", value: "https://example.com/post" }]
+	expect(toPossibleSourceUrls("read https://example.com/post", [], addedSources)).toEqual([])
+})
+
+// the same url written twice is offered once
+test("a repeated url is offered once", () => {
+	expect(toPossibleSourceUrls("https://example.com/a and https://example.com/a", [], [])).toEqual([
+		"https://example.com/a",
+	])
 })

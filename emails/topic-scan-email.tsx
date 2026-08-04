@@ -17,6 +17,9 @@ export type TopicScanEmailProps = {
 	findings: TopicScanEmailFinding[]
 	// Carl's recap of this scan as plain text, omitted when the scan never wrote one
 	scanSummary?: string
+	// the urls the recap may link: the Topic's own Findings, which is a wider set than this scan's new ones
+	// because the recap is written before the Topic is trimmed to its result cap. anything else stays plain text
+	allowedSummaryUrls?: string[]
 	// the app's home and this topic's page. both omitted when the app base url isn't configured, and the labels render as plain text
 	appUrl?: string
 	topicUrl?: string
@@ -30,6 +33,7 @@ export default function TopicScanEmail({
 	findingCount,
 	findings,
 	scanSummary,
+	allowedSummaryUrls,
 	appUrl,
 	topicUrl,
 	unsubscribeUrl,
@@ -46,20 +50,23 @@ export default function TopicScanEmail({
 				.{closingNote(findingCount)}
 			</EmailIntro>
 
-			<ScanSummarySection scanSummary={scanSummary} allowedUrls={new Set(findings.map((finding) => finding.url))} />
+			<ScanSummarySection
+				scanSummary={scanSummary}
+				allowedUrls={new Set(allowedSummaryUrls ?? findings.map((finding) => finding.url))}
+			/>
 			<FindingCards findings={findings} />
 
 			{/* the footer with the one-click unsubscribe link */}
 			<EmailFooter unsubscribeUrl={unsubscribeUrl}>
-				You're receiving this because you subscribe to emails for{" "}
+				{"You're receiving this because you subscribe to emails for "}
 				<LinkOrText href={topicUrl} style={footerBrandLink}>
 					{topicName}
-				</LinkOrText>{" "}
-				on{" "}
+				</LinkOrText>
+				{" on "}
 				<LinkOrText href={appUrl} style={footerBrandLink}>
 					CarlNotes
 				</LinkOrText>
-				.
+				{"."}
 			</EmailFooter>
 		</EmailShell>
 	)
@@ -87,7 +94,7 @@ export function EmailShell({
 					{/* the CarlNotes brand header, linking home */}
 					<Section style={header}>
 						<Text style={brand}>
-							<span style={cup}>☕</span>{" "}
+							<span style={cup}>{"☕ "}</span>
 							<LinkOrText href={appUrl} style={brandLink}>
 								CarlNotes
 							</LinkOrText>
@@ -114,7 +121,7 @@ export function EmailIntro({ heading, children }: { heading: string; children: R
 
 /**
  * AI recap of a scan, rendered above the findings.
- * It renders through the hardened Markdown subset: formatting survives, but a link only works when it cites
+ * It renders through the sanitized Markdown subset: formatting survives, but a link only works when it cites
  * one of this email's own Finding urls — everything else renders as inert text.
  */
 export function ScanSummarySection({
@@ -158,7 +165,6 @@ function FindingLink({
 
 	// anything else prints its label and destination as plain text
 	// markdown-to-jsx hands the label over as a one-string array, but a bare string reads the same way here
-	// TODO: update this for Streamdown after the merge
 	const [firstChild] = Array.isArray(children) ? children : [children]
 	const label = typeof firstChild === "string" ? firstChild : null
 	return (
@@ -258,7 +264,7 @@ function summaryLead(findingCount: number): string {
 	return `Carl brewed a fresh cup of ${findingCount} new ${noun} worth your time on `
 }
 
-// a scan that came up empty gets Carl's aside in his own voice, so an empty digest still reads as intentional
+// a scan that came up empty gets Carl's aside in his own voice, so an empty email still reads as intentional
 function closingNote(findingCount: number): string {
 	return findingCount === 0 ? " Carl has high standards." : ""
 }
@@ -320,7 +326,7 @@ const cup: CSSProperties = { fontSize: "22px" }
 const intro: CSSProperties = { paddingTop: "8px" }
 const h1: CSSProperties = { color: "#2b2b2b", fontSize: "22px", fontWeight: 700, margin: "8px 0 4px" }
 const summaryText: CSSProperties = { color: "#5b5b5b", fontSize: "15px", lineHeight: "1.5", margin: "0" }
-// the recap block, tinted a shade warmer than the finding cards so it reads as Carl's voice rather than another link
+// the recap block, tinted a shade warmer than the finding cards so it reads as Carl's voice instead of another link
 const summaryCard: CSSProperties = {
 	backgroundColor: "#f7f2e9",
 	border: "1px solid #ece2d2",
@@ -364,7 +370,7 @@ const card: CSSProperties = {
 	padding: "14px 16px",
 }
 const cardTitle: CSSProperties = { color: "#7c4a1e", fontSize: "16px", fontWeight: 600, textDecoration: "none" }
-// the same muted tone as cardHost, so the rank reads as a label rather than part of the link itself
+// the same muted tone as cardHost, so the rank reads as a label instead of part of the link itself
 const cardNumber: CSSProperties = { color: "#a79c8c", fontWeight: 400 }
 const cardHost: CSSProperties = { color: "#a79c8c", fontSize: "12px", margin: "2px 0 0" }
 const cardNote: CSSProperties = { color: "#4b4b4b", fontSize: "14px", lineHeight: "1.5", margin: "8px 0 0" }

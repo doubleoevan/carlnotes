@@ -37,7 +37,7 @@ test("mapWithConcurrency never exceeds its limit and returns results in order", 
 	expect(peakInFlight).toBeLessThanOrEqual(3)
 })
 
-// the plan limit is checked before each dispatch, so once it trips the rest are deferred rather than bought
+// the plan limit is checked before each dispatch, so once it trips the rest are deferred instead of bought
 test("the plan limit check halts dispatch once either ceiling is reached", async () => {
 	// a budget that admits two resources before its scored-resource ceiling trips
 	const budget = { ...newBudget(), cap: 0.5, maxScoredResources: 2 }

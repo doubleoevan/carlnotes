@@ -2,25 +2,23 @@
 // measure it against the topic's context, drop the irrelevant and duplicate resources, and rank the survivors best-first
 import { reportError } from "@shared/monitoring"
 import { cosineSimilarity } from "ai"
-import { and, cosineDistance, eq, inArray, isNotNull, lt, notInArray } from "drizzle-orm"
+import { and, cosineDistance, eq, inArray, isNotNull, lt, notInArray, or } from "drizzle-orm"
 import { db } from "../../db"
-import { EMBED_DIMENSIONS, findings, resources } from "../../db/schema"
+import { EMBED_MODEL_NAME, findings, resources, sources } from "../../db/schema"
 import { buildTopicScanContext } from "../attach"
 import { type Budget, canSpend, charge, EMBED_COST_PER_MILLION_TOKENS, tokenCost } from "../budget"
 import type { NewResource } from "../ingest/ingester"
 import { embedVector } from "../models"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
-// stage thresholds for deduping and measuring relevance
+// how close two embeddings must be for the later Resource to count as a duplicate of the earlier one
 const NEAR_DUPLICATE_DISTANCE = 0.05
-const RELEVANCE_THRESHOLD = 0.35
+
+// the relevance bar each resource kind is measured against
+const RELEVANCE_THRESHOLDS: Record<Resource["kind"], number> = { read: 0.35, watch: 0.24, listen: 0.24 }
 
 // the text cap that bounds embedding tokens and spend
 const MAX_EMBED_CHARS = 8000
-
-// the curation embedding's vector space, stamped onto embedding_model so a row names its model and dimension,
-// not the routing alias, making a later change a detectable backfill. EMBED_DIMENSIONS keeps the stamp and the schema aligned
-const EMBED_MODEL_NAME = `qwen3-embedding-8b/${EMBED_DIMENSIONS}`
 
 // qwen3 is instruction-aware, so the query side is wrapped with this task instruction while documents stay plain.
 // omitting the query instruction costs some retrieval quality
@@ -42,8 +40,8 @@ export type AdmittedResources = { contentHashes: Set<string>; embeddings: number
 type RelevanceGateOutcome = { status: "survived"; survivor: SurvivingResource } | ResourceOutcome
 
 /**
- * The stored Resource rows this Scan discovered that have no topic finding yet.
- * Excluding scored rows keeps re-scans from re-scoring them.
+ * The stored Resource rows this Scan discovered that are worth scoring. A Resource already scored for this Topic is excluded,
+ * so a re-scan never pays to score the same article twice. The pages a url Source names are the exception. its content is pulled for every Scan.
  */
 export async function loadUnscoredResources(topicId: string, discoveredResources: NewResource[]): Promise<Resource[]> {
 	// the urls this scan discovered (already deduped by ingestion)
@@ -52,22 +50,38 @@ export async function loadUnscoredResources(topicId: string, discoveredResources
 		return []
 	}
 
+	// the addresses this Topic watches, which a Finding pulls for every Scan
+	const urlSources = await db
+		.select({ config: sources.config })
+		.from(sources)
+		.where(and(eq(sources.topicId, topicId), eq(sources.kind, "url")))
+	const sourceUrls = urlSources
+		.map((urlSource) => urlSource.config?.url)
+		.filter((url): url is string => typeof url === "string")
+
 	// exclude the Resources already scored for this Topic, then load the rest by url
 	const scoredResourceIds = db.select({ id: findings.resourceId }).from(findings).where(eq(findings.topicId, topicId))
+
+	// a source url is always worth reading again, no matter what it scored last time
+	const needsScoring =
+		sourceUrls.length > 0
+			? or(notInArray(resources.id, scoredResourceIds), inArray(resources.url, sourceUrls))
+			: notInArray(resources.id, scoredResourceIds)
+
+	// the stored rows for what this Scan discovered, narrowed to the ones worth paying to score
 	return db
 		.select()
 		.from(resources)
-		.where(and(inArray(resources.url, urls), notInArray(resources.id, scoredResourceIds)))
+		.where(and(inArray(resources.url, urls), needsScoring))
 }
 
 /**
- * Embed the topic's context for the relevance gate using the topic prompt plus its attachments' contexts,
- * with the topic name as a fallback.
+ * Embed the topic's context for the relevance gate: its name, its prompt, and its attachments' contexts.
  */
 export async function loadTopicContext(topicId: string, budget: Budget, litellmApiKey?: string): Promise<TopicContext> {
-	// the context text, falling back to the topic name so that the relevance scoring always has a seed
+	// always include the topic name in the scan context. leading also keeps the name whole when a long prompt or attachment runs into the embed limit
 	const { name, context } = await buildTopicScanContext(topicId)
-	const text = (context.trim() || name).slice(0, MAX_EMBED_CHARS)
+	const text = [name, context.trim()].filter(Boolean).join("\n\n").slice(0, MAX_EMBED_CHARS)
 
 	// embed the context as the query side once and update the estimated embedding cost
 	const embedding = await embedQuery(text, litellmApiKey)
@@ -77,7 +91,7 @@ export async function loadTopicContext(topicId: string, budget: Budget, litellmA
 
 /**
  * Embed every candidate and keep the ones relevant to the topic, recording the outcome of the ones dropped.
- * Embedding is the only metered work here, so a candidate past the Scan's ceiling is deferred rather than embedded.
+ * Embedding is the only metered work here, so a candidate past the Scan's ceiling is deferred instead of being embedded.
  */
 export async function gateResources(
 	unscoredResources: Resource[],
@@ -153,13 +167,14 @@ async function gateResource(
 		// so the next Scan never re-embeds it
 		const embedding = resource.embedding ?? (await embedResource(resource, budget, litellmApiKey))
 
-		// the relevance gate. the similarity it measures also ranks the paid section
+		// the relevance gate, measured against this resource kind's own bar.
+		// the similarity it measures also ranks the paid section
 		const similarity = cosineSimilarity(embedding, topicContext.embedding)
-		if (!isRelevant(similarity)) {
+		if (!isRelevant(similarity, resource.kind)) {
 			return { status: "filtered", reason: "below relevance threshold" }
 		}
 
-		// the survivor carries its vector too, since the ranked pass dedupes against it
+		// the survivor includes its vector too, since the ranked pass dedupes against it
 		return { status: "survived", survivor: { resource, embedding, similarity } }
 	} catch (error) {
 		// a candidate that never got measured is a Finding the reader silently never sees
@@ -251,7 +266,7 @@ export function hasAdmittedNearDuplicate(admitted: AdmittedResources, embedding:
 	)
 }
 
-// whether a Resource carries any ingester-native text to hash and embed like a title or a snippet
+// whether a Resource includes any ingester-native text to hash and embed like a title or a snippet
 function hasNativeText(resource: Resource): boolean {
 	return Boolean(resource.title?.trim() || resource.snippet?.trim())
 }
@@ -299,8 +314,8 @@ export function isNearDuplicate(distance: number): boolean {
 }
 
 /**
- * Whether a similarity clears the resource relevance gate.
+ * Whether a similarity clears the resource relevance gate for its Resource kind.
  */
-export function isRelevant(similarity: number): boolean {
-	return similarity >= RELEVANCE_THRESHOLD
+export function isRelevant(similarity: number, kind: Resource["kind"]): boolean {
+	return similarity >= RELEVANCE_THRESHOLDS[kind]
 }

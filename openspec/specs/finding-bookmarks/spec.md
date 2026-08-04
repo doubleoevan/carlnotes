@@ -33,11 +33,22 @@ A Finding bookmarked by any user SHALL be exempt from the topic's `max_results` 
 - **THEN** after a scan the topic shows the five auto-kept Findings plus the eight bookmarked ones
 
 ### Requirement: Bookmarked Findings pin above the auto-kept feed
-Bookmarked Findings SHALL render as a pinned group above the auto-kept Findings, each marked with a bookmark icon. The pinned group SHALL hold its position in every sort mode: the active sort orders the pinned group among itself and the auto-kept group among itself, never interleaving them. Each Finding card SHALL carry a bookmark control that toggles the state.
+
+Bookmarked Findings SHALL render pinned above the auto-kept Findings, each marked with a bookmark icon. The pinned Findings SHALL hold their position in every sort mode: the active sort orders the pinned Findings among themselves and the auto-kept Findings among themselves, never interleaving the two.
+
+The control that toggles a bookmark SHALL live in the Finding's note popover, beside the read toggle, rather than on the Finding row. The row SHALL carry the bookmark only as a mark — shown once bookmarked, absent otherwise — which clears the bookmark when activated. Keeping the row to a single mark leaves the row itself to its title and source, and puts the two per-reader toggles together in one place instead of splitting them across the row and the popover.
 
 #### Scenario: Pinned stays on top under any sort
 - **WHEN** a user switches the sort mode with bookmarked Findings present
-- **THEN** the bookmarked group stays above the auto-kept group, and each group re-orders internally
+- **THEN** the bookmarked Findings stay above the auto-kept Findings, and each side re-orders internally
+
+#### Scenario: An unbookmarked Finding is bookmarked from its popover
+- **WHEN** a signed-in user opens an unbookmarked Finding's note popover
+- **THEN** a bookmark control sits beside the read toggle and adds the bookmark, and the row itself offers no such control
+
+#### Scenario: A bookmarked row's mark clears the bookmark
+- **WHEN** a signed-in user activates the mark on a bookmarked Finding's row
+- **THEN** the bookmark is removed and the mark disappears
 
 ### Requirement: The Bookmarked view shows only bookmarked Findings
 A "Bookmarked" view SHALL join All and Unread in the search bar's Filters menu, for signed-in users only, and show only the requesting user's bookmarked Findings.

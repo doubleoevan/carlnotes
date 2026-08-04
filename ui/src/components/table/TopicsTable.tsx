@@ -1,13 +1,13 @@
 import type { ActivityScan, ActivityTopic } from "@shared/contracts"
 import { Fragment, useState } from "react"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Switch } from "@/components/primitives/switch"
 import { SortableHeader, useRowSort } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { TopicScanRecap } from "@/components/topic/TopicScanRecap"
 import { sendSubscriptionEmail } from "@/lib/topicClient"
-import { durationMsBetween, TABLE_CARD_CLASS, toCentsLabel, toDurationLabel } from "@/lib/utils"
+import { cn, durationMsBetween, TABLE_CARD_CLASS, toCentsLabel, toDurationLabel } from "@/lib/utils"
 
 // the sort accessors for the owned-topics table columns
 const topicSortValues = {
@@ -48,10 +48,10 @@ export function TopicsTable({ topics, onReloadPage }: { topics: ActivityTopic[];
 	// column totals for the summary line span every topic, not just the visible page
 	const totalScanCount = topics.reduce((sum, topic) => sum + topic.monthScanCount, 0)
 	const totalCostCents = topics.reduce((sum, topic) => sum + topic.monthCostCents, 0)
-	// this sums subscriptions rather than people, so one reader following two topics counts twice
+	// this sums subscriptions instead of people, so one reader following two topics counts twice
 	const totalSubscriberCount = topics.reduce((sum, topic) => sum + topic.subscriberCount, 0)
 	return (
-		<div className={TABLE_CARD_CLASS}>
+		<div className={cn(TABLE_CARD_CLASS, "mb-4")}>
 			<table className="w-full min-w-2xl text-left text-sm">
 				<thead className="text-muted-foreground border-b">
 					<tr>

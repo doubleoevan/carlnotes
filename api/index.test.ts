@@ -3,6 +3,7 @@ import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { CHAT_HISTORY_TURNS } from "@shared/contracts"
 import server from "./index"
 
 // the two bundle files the serving rules treat differently
@@ -12,14 +13,14 @@ const HASHED_ASSET_PATH = "/assets/app-abc123.js"
 // serveStatic resolves its root against the working directory, so a test picks its bundle by moving there.
 // the directory is restored afterward, since the process is shared with every other test file
 async function withWorkingDirectory<T>(directory: string, run: () => Promise<T>): Promise<T> {
-	const previousDirectory = process.cwd()
+	const originalDirectory = process.cwd()
 	process.chdir(directory)
 
 	// restore on the way out however the run ends
 	try {
 		return await run()
 	} finally {
-		process.chdir(previousDirectory)
+		process.chdir(originalDirectory)
 	}
 }
 
@@ -37,8 +38,8 @@ async function makeBundleDirectory(): Promise<string> {
 // what a request to the composed app answered with
 type ResponseSnapshot = { status: number; body: string; cacheControl: string | null; contentType: string | null }
 
-// a request against the composed app, exactly as the runtime would deliver it. the body is read here rather than
-// by the caller, because serveStatic answers with a file Bun reads lazily and the directory moves back on return
+// a request against the composed app, exactly as the runtime would deliver it. the body is read here, not by
+// the caller, since the working directory may already be restored by the time the caller gets to it
 async function request(path: string, method = "GET"): Promise<ResponseSnapshot> {
 	const response = await server.fetch(new Request(`http://localhost:3000${path}`, { method }))
 	return {
@@ -51,7 +52,7 @@ async function request(path: string, method = "GET"): Promise<ResponseSnapshot> 
 
 // the platform polls this to decide whether to cycle the container, so it must answer from the process alone.
 // the suite runs with no database reachable, so a passing check here is the proof that it queries nothing
-test("the health route answers without reaching the database", async () => {
+test("the health route responds without reaching the database", async () => {
 	const response = await request("/api/health")
 	expect(response.status).toBe(200)
 	expect(JSON.parse(response.body)).toEqual({ status: "ok" })
@@ -59,7 +60,7 @@ test("the health route answers without reaching the database", async () => {
 
 // the rule the whole split rests on. a missing endpoint must stay an api failure a fetch client can read,
 // never an HTML page that fails at JSON.parse and looks like a working route
-test("an unknown api path answers a json 404, never the app shell", async () => {
+test("an unknown api path responds with a json 404, never the app shell", async () => {
 	const bundleDirectory = await makeBundleDirectory()
 	const response = await withWorkingDirectory(bundleDirectory, () => request("/api/does-not-exist"))
 
@@ -69,7 +70,7 @@ test("an unknown api path answers a json 404, never the app shell", async () => 
 	expect(JSON.parse(response.body)).toEqual({ error: "not found" })
 })
 
-// a deep link is not a file, so the shell answers, and the client router resolves the path
+// a deep link is not a file, so the shell responds, and the client router resolves the path
 test("an unknown page path serves the app shell", async () => {
 	const bundleDirectory = await makeBundleDirectory()
 	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123"))
@@ -98,8 +99,45 @@ test("a write to an unknown path is not the app shell", async () => {
 	expect(response.body).not.toBe(SHELL_HTML)
 })
 
+// the question is validated before the handler runs, so a bad chat turn is refused without reaching the database or a model
+test("a chat turn with no question is rejected before any work", async () => {
+	const response = await server.fetch(
+		new Request("http://localhost:3000/api/topics/abc123/chat", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ question: "   " }),
+		}),
+	)
+	expect(response.status).toBe(400)
+})
+
+// a question longer that the cap is refused, so that one request cannot inflate the retrieval or the prompt
+test("an oversized chat question is rejected", async () => {
+	const response = await server.fetch(
+		new Request("http://localhost:3000/api/topics/abc123/chat", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ question: "x".repeat(1001) }),
+		}),
+	)
+	expect(response.status).toBe(400)
+})
+
+// the chat history is sent by the client, so its depth is capped before it can inflate the token bill
+test("an oversized chat history is rejected", async () => {
+	const history = Array.from({ length: CHAT_HISTORY_TURNS + 1 }, () => ({ question: "q", answer: "a" }))
+	const response = await server.fetch(
+		new Request("http://localhost:3000/api/topics/abc123/chat", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ question: "what is new?", history }),
+		}),
+	)
+	expect(response.status).toBe(400)
+})
+
 // dev runs the api with no bundle built, since vite serves the ui and proxies /api. that must a 404 and not throw
-test("a missing bundle answers 404 instead of failing", async () => {
+test("a missing bundle responds with a 404 instead of failing", async () => {
 	const emptyDirectory = await mkdtemp(join(tmpdir(), "carl-no-bundle-"))
 	const response = await withWorkingDirectory(emptyDirectory, () => request("/"))
 

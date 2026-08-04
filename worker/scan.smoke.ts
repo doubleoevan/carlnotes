@@ -8,8 +8,9 @@ import { buildContextPrompt } from "./attach"
 import { buildSearchPrompt } from "./ingest/search"
 import { buildScorePrompt } from "./review/score"
 import { buildScanReportPrompt } from "./review/summarize"
-import { runTopicScan } from "./scan"
+import { loadScan } from "./scan"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
+import { finishScan, ingestForScan, reviewForScan } from "./workflows/run-topic-scan-activities"
 
 // a real feed that is reliably up, plus a topic context that matches it so relevant resources pass the relevance gate
 const FEED_URL = "https://simonwillison.net/atom/everything/"
@@ -51,10 +52,20 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 
 // run the topic scan pipeline, check the smoke assertions, and print a report. returns true when every check passes
 async function check(topicId: string, ownerId: string): Promise<boolean> {
-	// run the full pipeline for the topic, ingestion then review
-	const topicScan = await runTopicScan(topicId, ownerId)
+	// run the full pipeline for the topic, ingestion then review, driving the workflow's own stages in order
+	// so the smoke test exercises the real activity code instead of a copy of it, and without needing a Temporal server
+	const [openScan] = await db.insert(scans).values({ topicId, ownerId }).returning()
+	if (!openScan) {
+		throw new Error("could not open a scan for the smoke topic")
+	}
+	const ingestResult = await ingestForScan(openScan.id, topicId)
+	const reviewResult = await reviewForScan(openScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
+	await finishScan(openScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
+
+	// re-read the scan row, since the counts and cost were written by the closing stage
+	const topicScan = await loadScan(openScan.id)
 	if (!topicScan) {
-		throw new Error("runTopicScan returned no scan")
+		throw new Error("the scan row vanished mid-smoke")
 	}
 
 	// read this topic's findings and one embedded resource from this scan, joined through the findings
@@ -142,7 +153,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		topicName: "sample topic",
 		topicContext: "sample topic context",
 		date: "January 1, 2026",
-		// a single kept finding with zeroed drop tallies
+		// a single kept finding with zeroed drop totals
 		reviewOutcome: {
 			keptFindings: [sampleFinding],
 			filteredCounts: {
@@ -207,7 +218,7 @@ async function smokeTest(): Promise<number> {
 	}
 }
 
-// run the smoke test, computing the exit code rather than exiting early so telemetry can flush first
+// run the smoke test, computing the exit code instead of exiting early so telemetry can flush first
 startTelemetry()
 let exitCode: number
 try {

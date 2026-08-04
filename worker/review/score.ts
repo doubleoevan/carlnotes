@@ -35,9 +35,9 @@ const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? 
 // stored resource content stays reusable for this long before a scan revalidates or refetches it. the environment can override it
 const CONTENT_TTL_MS = Number(Bun.env.CONTENT_TTL_MS ?? String(24 * 60 * 60 * 1000))
 
-// how many resources the paid fetch-and-scoring section works on at once. it stays bounded because Firecrawl
-// enforces a per-plan concurrency and answers a burst with 429s, which fall back to the snippet and
-// quietly produce worse Findings. the environment can override it, and 1 restores the old serial behavior
+// how many resources the paid fetch-and-scoring section works concurrently. it stays bounded because Firecrawl
+// enforces a per-plan concurrency and responds to a burst with 429s, which fall back to the snippet.
+// the environment can override it, and a value of 1 restores the original serial behavior
 const REVIEW_CONCURRENCY = Number(Bun.env.REVIEW_CONCURRENCY ?? "4")
 
 // the text cap that bounds scoring tokens and spend
@@ -68,7 +68,7 @@ export async function fetchAndScoreResources(
 	reviewOutcome: ReviewOutcome,
 	budget: Budget,
 	litellmApiKey?: string,
-): Promise<void> {
+): Promise<string[]> {
 	// each Resource checks the ceiling before it starts, so work already in flight when the ceiling is reached
 	// can overshoot it by up to one less than the concurrency. that overshoot is accepted, and costs a few cents
 	const paidOutcomes = await runWithConcurrency(admittedResources, REVIEW_CONCURRENCY, (resource) =>
@@ -77,6 +77,12 @@ export async function fetchAndScoreResources(
 	for (const paidOutcome of paidOutcomes) {
 		trackOutcomes(reviewOutcome, paidOutcome)
 	}
+
+	// the Resources this stage admitted that the ceiling did not defer.
+	// the outcomes come back by index, so a Resource is matched to its own outcome
+	return admittedResources
+		.filter((_, index) => paidOutcomes[index]?.status !== "deferred")
+		.map((resource) => resource.id)
 }
 
 /**
@@ -126,14 +132,14 @@ async function fetchAndScoreResource(
 		budget.fetchCounts[toFetchCountField(fetchOutcome)]++
 
 		// screen the fetched page before any model reads it. a flagged page is dropped under its own cause and never scored
-		const verdict = await screenText(content, "page")
-		if (verdict.isFlagged) {
-			console.error(`resource ${resource.id} ${toFlaggedReason(verdict)}`)
+		const screenVerdict = await screenText(content, "page")
+		if (screenVerdict.isFlagged) {
+			console.error(`resource ${resource.id} ${toFlaggedReason(screenVerdict)}`)
 			return { status: "filtered", reason: "flagged by scanner" }
 		}
 
 		// score the scanner's text, not the original, so any personal details it redacted never reach a model
-		const scoredResource = await scoreResource(verdict.text, topicContext.text, budget, litellmApiKey)
+		const scoredResource = await scoreResource(screenVerdict.text, topicContext.text, budget, litellmApiKey)
 		await upsertFinding(scan, topicId, resource, scoredResource.score, scoredResource.relevanceExplanation)
 
 		// the kept outcome carries the feed-facing details that the report cites

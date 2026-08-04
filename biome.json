@@ -15,7 +15,8 @@
 			"!openspec",
 			"!skills-lock.json",
 			"!db/migrations",
-			"!docs/design"
+			"!docs/design",
+			"!ui/public"
 		]
 	},
 	"formatter": {

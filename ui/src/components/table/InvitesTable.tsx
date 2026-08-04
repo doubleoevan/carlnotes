@@ -1,19 +1,19 @@
 import type { ActivityResponse } from "@shared/contracts"
 import { X } from "lucide-react"
 import { useState } from "react"
-import { AnchorLink } from "@/components/layout/AnchorLink"
-import { ConfirmDialog } from "@/components/layout/ConfirmDialog"
+import { AnchorLink } from "@/components/common/AnchorLink"
+import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { sendInviteDelete } from "@/lib/activityClient"
-import { TABLE_CARD_CLASS } from "@/lib/utils"
+import { cn, TABLE_CARD_CLASS } from "@/lib/utils"
 
 // one invitation the user sent on a topic they own
 type InviteRow = ActivityResponse["invites"][number]
 
-// the sort accessors for the invitations table. a pending invitation stands in as an empty string rather than null,
+// the sort accessors for the invitations table. a pending invitation stands in as an empty string instead of null,
 // which sorts it ahead of every date: last descending and first ascending.
 const inviteSortValues = {
 	name: (row: InviteRow) => row.name,
@@ -23,7 +23,7 @@ const inviteSortValues = {
 }
 
 /**
- * The Activity page's invitations table: who the user invited to their topics, and whether each one subscribed.
+ * The Activity page's invitations table: who the user invited to their topics, and whether each one was subscribed.
  * An invitee subscribes from their own subscriptions table, so the only available action here is withdrawing the invitation.
  */
 export function InvitesTable({ invites, onReload }: { invites: InviteRow[]; onReload: () => void }) {
@@ -49,7 +49,7 @@ export function InvitesTable({ invites, onReload }: { invites: InviteRow[]; onRe
 	// the totals span every invitation, not just the visible page
 	const subscribedCount = invites.filter((inviteRow) => inviteRow.subscribedAt !== null).length
 	return (
-		<div className={TABLE_CARD_CLASS}>
+		<div className={cn(TABLE_CARD_CLASS, "mb-4")}>
 			<table className="w-full text-left text-sm">
 				<thead className="text-muted-foreground border-b">
 					<tr>

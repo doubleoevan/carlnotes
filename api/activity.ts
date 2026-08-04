@@ -4,8 +4,7 @@ import type { ActivityResponse, ActivityScan, ActivityTopic, SubscriptionRow } f
 import { and, count, desc, eq, gte, inArray, ne, or, sql } from "drizzle-orm"
 import { db } from "../db"
 import { audienceMembers, audiences, scans, subscriptions, topicInvites, topics, users } from "../db/schema"
-import { effectiveBudgetCents, isAdminRole } from "./authorization"
-import { readLiteLLMKeySpend } from "./litellm"
+import { effectiveBudgetCents, isAdminRole, monthlySpendDollars } from "./authorization"
 import { startOfUtcMonth } from "./topic/quotas"
 
 // the owner's topic and month-scan rows that toActivityTopics reads
@@ -72,7 +71,7 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 	// the topic-id filter above already guarantees a live, owned topic. this narrows the column's nullable type to match
 	const monthScans = monthScanRows.filter((scan): scan is typeof scan & { topicId: string } => scan.topicId !== null)
 
-	// the active subscriber count per owned topic. unsubscribing deactivates the row rather than deleting it, so only active rows count
+	// the active subscriber count per owned topic. unsubscribing deactivates the row instead of deleting it, so only active rows count
 	// the join to the topic is what drops the owner's own row out
 	const subscriberRows =
 		ownedTopicIds.length > 0
@@ -80,6 +79,7 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 					.select({ topicId: subscriptions.topicId, count: count() })
 					.from(subscriptions)
 					.innerJoin(topics, eq(subscriptions.topicId, topics.id))
+					// count only other subscribers, so the owner's own row never inflates their topic's count
 					.where(
 						and(
 							inArray(subscriptions.topicId, ownedTopicIds),
@@ -102,8 +102,8 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 			: []
 	const emailEnabledByTopic = new Map(ownerEmailRows.map((row) => [row.topicId, row.isEmailEnabled]))
 
-	// the observed llm spend. null when the proxy has no record to read
-	const spendDollars = userRow?.litellmVirtualKey ? await readLiteLLMKeySpend(userRow.litellmVirtualKey) : null
+	// this month's spend divided into what produced it.
+	const monthlySpend = await monthlySpendDollars(user.id)
 
 	// the topics the user subscribes to, directly or through an audience, on topics they do not own.
 	// active and inactive alike, and audienceName is null on a direct subscription
@@ -154,7 +154,8 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 		.where(eq(topics.ownerId, user.id))
 
 	return {
-		spendCents: spendDollars === null ? null : Math.round(spendDollars * 100),
+		scanSpendCents: Math.round(monthlySpend.scanDollars * 100),
+		chatSpendCents: Math.round(monthlySpend.chatDollars * 100),
 		budgetCents: effectiveBudgetCents({
 			isAdmin: isAdminRole(userRow?.role),
 			plan: userRow?.plan ?? "free",
@@ -176,7 +177,7 @@ export async function loadActivity(user: { id: string; email: string }): Promise
  */
 export function toSubscriptionRows(
 	subscriptionRows: (Omit<SubscriptionRow, "subscribedAt"> & { subscribedAt: Date })[],
-) {
+): SubscriptionRow[] {
 	const subscriptionRowsByTopic = new Map<string, (typeof subscriptionRows)[number]>()
 	for (const subscriptionRow of subscriptionRows) {
 		// a direct subscription row displaces an audience subscription row and never the other way round
@@ -188,7 +189,7 @@ export function toSubscriptionRows(
 			subscriptionRowsByTopic.set(subscriptionRow.topicId, subscriptionRow)
 		}
 	}
-	// one row per topic now, with the date encoded for the wire
+	// one row per topic now, with the date encoded for the serialization
 	return [...subscriptionRowsByTopic.values()].map((subscriptionRow) => ({
 		...subscriptionRow,
 		subscribedAt: subscriptionRow.subscribedAt.toISOString(),

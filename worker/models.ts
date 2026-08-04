@@ -8,7 +8,7 @@ import { EMBED_DIMENSIONS } from "../db/schema"
 // litellmApiKey bills a scan to its topic owner's key. callers with no user context use the master key
 
 // how long one model request may run before it aborts. without this a stalled proxy request never returns
-// and pins its Scan in "running" forever, which reads as a scan that is still going rather than one that broke
+// and pins its Scan in "running" forever, which reads as a scan that is still going instead of one that broke
 const MODEL_TIMEOUT_MS = Number(Bun.env.MODEL_TIMEOUT_MS ?? "120000")
 
 // the cheap model handles high-volume inference like query generation and first-pass scoring
@@ -19,6 +19,11 @@ export function cheapModel(litellmApiKey?: string): LanguageModel {
 // the premium model re-scores promoted Resources and writes the relevance explanation
 export function scoreModel(litellmApiKey?: string): LanguageModel {
 	return createModelProxyClient(litellmApiKey).chat("score-model")
+}
+
+// the chat model answers a reader's questions about a topic and describes any images they attach
+export function chatModel(litellmApiKey?: string): LanguageModel {
+	return createModelProxyClient(litellmApiKey).chat("chat-model")
 }
 
 // the embedding model routes through LiteLLM's embed-model alias (qwen3-embedding-8b).

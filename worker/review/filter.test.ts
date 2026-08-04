@@ -33,12 +33,24 @@ test("threshold predicates gate on the right side of the boundary", () => {
 	expect(isNearDuplicate(0.01)).toBe(true)
 	expect(isNearDuplicate(0.5)).toBe(false)
 
-	// a high similarity clears the relevance gate
-	expect(isRelevant(0.9)).toBe(true)
-	expect(isRelevant(0.1)).toBe(false)
+	// a high similarity clears the relevance gate, measured as an article
+	expect(isRelevant(0.9, "read")).toBe(true)
+	expect(isRelevant(0.1, "read")).toBe(false)
 })
 
-// ranking orders the relevance-gate survivors best-first, so a ceiling defers the least relevant rather than the last returned
+// a video's title and channel description embed further from a topic than an article's query-matched extract,
+// so it gets a different relevance bar
+test("the relevance gate measures each kind against its own bar", () => {
+	// a middling similarity clears the gate for a video and misses it for an article
+	expect(isRelevant(0.3, "watch")).toBe(true)
+	expect(isRelevant(0.3, "listen")).toBe(true)
+	expect(isRelevant(0.3, "read")).toBe(false)
+
+	// every kind still has a floor, so an unrelated video is dropped like anything else
+	expect(isRelevant(0.1, "watch")).toBe(false)
+})
+
+// ranking orders the relevance-gate survivors best-first, so a ceiling defers the least relevant instead of the last returned
 test("rankBySimilarity orders survivors best-first and the cap takes the top N", () => {
 	// three survivors in the arbitrary order the database returned them
 	const survivors = [
@@ -47,7 +59,7 @@ test("rankBySimilarity orders survivors best-first and the cap takes the top N",
 		{ resource: toTestResource("mid"), embedding: [1, 1], similarity: 0.72 },
 	]
 
-	// ranked best-first, so truncating to a cap of one keeps the 0.98 rather than the 0.36 that came back first
+	// ranked best-first, so truncating to a cap of one keeps the 0.98 instead of the 0.36 that came back first
 	const ranked = rankBySimilarity(survivors)
 	expect(ranked.map((survivor) => survivor.similarity)).toEqual([0.98, 0.72, 0.36])
 	expect(ranked.slice(0, 1).map((survivor) => survivor.resource.id)).toEqual(["high"])
@@ -64,7 +76,7 @@ test("hasAdmittedNearDuplicate drops a sibling of an already-admitted candidate,
 	admitted.contentHashes.add("hash-a")
 	admitted.embeddings.push(firstEmbedding)
 
-	// a near-identical sibling now dedupes against the admitted one rather than being filtered with it
+	// a near-identical sibling now dedupes against the admitted one instead of being filtered with it
 	expect(hasAdmittedNearDuplicate(admitted, [0.9999, 0.0001, 0])).toBe(true)
 	// a genuinely distinct candidate still passes
 	expect(hasAdmittedNearDuplicate(admitted, [0, 1, 0])).toBe(false)
@@ -103,6 +115,6 @@ test("the admitted member of a near-duplicate set is the higher-scoring one", ()
 		admittedIds.push(survivor.resource.id)
 	}
 
-	// exactly one survived, and it is the higher-scoring resource rather than whichever came back first
+	// exactly one survived, and it is the higher-scoring resource instead of whichever came back first
 	expect(admittedIds).toEqual(["stronger"])
 })

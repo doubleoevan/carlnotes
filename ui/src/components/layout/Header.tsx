@@ -1,21 +1,10 @@
-import {
-	Activity,
-	BadgeDollarSign,
-	LogIn,
-	LogOut,
-	Menu,
-	Moon,
-	ShieldUser,
-	SquarePen,
-	Sun,
-	User,
-	UserPlus,
-} from "lucide-react"
+import { Activity, BadgeDollarSign, LogIn, LogOut, Menu, Moon, ShieldUser, Sun, User, UserPlus } from "lucide-react"
 import { useState } from "react"
 import { useLocation } from "react-router-dom"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { CoffeeRings } from "@/components/branding/CoffeeRings"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { NoteIcon } from "@/components/branding/NoteIcon"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Attribution } from "@/components/layout/Attribution"
 import { ThemeToggle } from "@/components/layout/ThemeToggle"
 import { buttonVariants } from "@/components/primitives/button"
@@ -25,9 +14,14 @@ import { SignOutDialog } from "@/components/session/SignOutDialog"
 import { useTheme } from "@/hooks/useTheme"
 import { authClient } from "@/lib/authClient"
 import { cn } from "@/lib/utils"
+import { useTopicFeed } from "@/providers/TopicFeedProvider"
 
 // the hover treatment shared by the header's menu buttons, tuned for the dark hero banner
 const HERO_BUTTON_HOVER = "hover:bg-white/10 hover:text-hero-foreground dark:hover:bg-white/10"
+
+// Carl's pitch, shown inline on wide screens and inside the phone's note popover
+const CARL_PITCH =
+	"Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes."
 
 // the desktop nav link's classes: the current page gets the same background tint as hover, so it reads as selected
 function menuLinkClassName(pathname: string, href: string): string {
@@ -46,16 +40,31 @@ export function Header() {
 	const isAdmin = session?.user.role === "admin"
 	// the headline shimmers on every route change: keying the wrapper by pathname remounts it to replay
 	const { pathname } = useLocation()
+	// a click on a link that is already home reloads the feed instead of navigating.
+	// a click from a link on another page navigates home
+	const { reheat } = useTopicFeed()
+	function handleHomeClick(event: React.MouseEvent): void {
+		if (pathname !== "/" || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
+			return
+		}
+		event.preventDefault()
+		void reheat()
+	}
 	return (
 		<header className="bg-hero text-hero-foreground relative overflow-hidden">
 			<CoffeeRings />
 			<div className="relative z-10 mx-auto max-w-5xl px-safe pt-5">
 				{/* the top bar with the brand icon on the left and the menu on the right */}
 				<div className="flex items-center justify-between">
-					{/* the brand links back to the home topic feed. the wordmark animates in while the mug stays static */}
-					<AnchorLink href="/" aria-label="CarlNotes home" className="flex items-center gap-2 rounded-md">
+					{/* the brand links home or reheats the feed if already on the home page */}
+					<AnchorLink
+						href="/"
+						aria-label="CarlNotes home"
+						onClick={handleHomeClick}
+						className="flex items-center gap-2 rounded-md"
+					>
 						{/* nudge the cup up to align with the text */}
-						<CoffeeMug className="-translate-y-0.5" />
+						<CoffeeMug className="text-hero-accent -translate-y-0.5" />
 						<span className="animate-hydrate font-display text-xl">CarlNotes</span>
 					</AnchorLink>
 					{/* the desktop menu items, swapped for the hamburger menu on small screens */}
@@ -99,43 +108,63 @@ export function Header() {
 					</div>
 					<HeaderMenu isDark={isDark} onToggleTheme={toggleTheme} isSignedIn={isSignedIn} isAdmin={isAdmin} />
 				</div>
-				{/* the hero: Carl and the headline appear immediately with no hydrate fade, the headline plays a shimmer and the body copy fades in.
-				    the image is pulled down so Carl's lower half tucks behind the search bar card below.
-				    on a narrow screen it stacks so that the copy floats above Carl, who centers on his own row */}
-				<div className="mt-6 flex flex-col-reverse items-center gap-4 sm:flex-row sm:items-end">
-					<img
-						src="/carl-hero.png"
-						alt="Carl, holding a raccoon and a machine learning textbook"
-						className="w-36 shrink-0 self-center pb-6 -mb-4 sm:ml-4 sm:w-52 sm:self-end"
-					/>
-					<div className="min-w-0 pb-4 sm:pb-10">
-						{/* the hero headline: a light wipes across the dimmed text, revealing it in full color. keyed to replay per route */}
-						<div key={pathname} className="shimmer-reveal">
-							{/* the dimmed heading that the light reveals — the page's real h1 */}
-							<h1 className="shimmer-reveal-base font-display text-2xl leading-tight sm:text-4xl">
-								He already read it. <span className="text-hero-accent">All of it.</span>
-							</h1>
-							{/* the full-color copy the light wipes in from the left */}
-							<div aria-hidden="true" className="shimmer-reveal-top font-display text-2xl leading-tight sm:text-4xl">
-								He already read it. <span className="text-hero-accent">All of it.</span>
-							</div>
-							{/* a white glint riding the reveal edge */}
-							<div aria-hidden="true" className="shimmer-reveal-glint font-display text-2xl leading-tight sm:text-4xl">
-								He already read it. All of it.
-							</div>
+				{/* the hero: Carl and the headline appear with no hydrate fade, the headline shimmers, and the copy fades in.
+				    on a narrow screen, the headline spans both columns above Carl. on a wide screen, Carl takes the left and the headline goes right */}
+				<div className="mt-6 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-x-4">
+					{/* the hero headline: a light wipes across the dimmed text, revealing it in full color.
+					keyed to the pathname to replay per route. the overlay copies stay glyph-aligned */}
+					<div
+						key={pathname}
+						className="shimmer-reveal col-span-2 text-center sm:col-span-1 sm:col-start-2 sm:text-left"
+					>
+						{/* the dimmed heading that the light reveals. the page's real h1. only this copy is a link.
+						    the overlay copies are pointer-transparent scenery, so the click always lands here */}
+						<h1 className="shimmer-reveal-base font-display text-2xl leading-tight sm:text-4xl">
+							{`He already read it. `}
+							<AnchorLink href="/" onClick={handleHomeClick} className="text-hero-accent">
+								All of it.
+							</AnchorLink>
+						</h1>
+						{/* the full-color copy the light wipes in from the left */}
+						<div aria-hidden="true" className="shimmer-reveal-top font-display text-2xl leading-tight sm:text-4xl">
+							He already read it. <span className="text-hero-accent">All of it.</span>
 						</div>
-						{/* Carl's pitch, then the call to action and the tagline */}
+						{/* a white glint riding the reveal edge */}
+						<div aria-hidden="true" className="shimmer-reveal-glint font-display text-2xl leading-tight sm:text-4xl">
+							He already read it. All of it.
+						</div>
+					</div>
+					{/* Carl links home. the image is pulled down so his lower half starts behind the search bar */}
+					<AnchorLink
+						href="/"
+						onClick={handleHomeClick}
+						aria-label="CarlNotes home"
+						className="row-start-2 shrink-0 sm:row-span-2 sm:row-start-1 sm:ml-4"
+					>
+						<img
+							src="/carl-hero.png"
+							alt="Carl, holding a raccoon and a machine learning textbook"
+							className="w-28 pb-6 -mb-4 sm:w-52"
+						/>
+					</AnchorLink>
+					{/* the copy clears the search bar overlapping the hero's bottom edge */}
+					<div className="col-start-2 row-start-2 min-w-0 pb-10">
+						{/* Carl's pitch, then the call to action and the tagline.
+						    the pitch on a narrow screen is hidden and shows up in a popup instead */}
 						<div className="animate-hydrate mt-3 text-sm" style={{ animationDelay: "80ms" }}>
-							<p className="max-w-xl">
-								{
-									"Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes."
-								}
+							<p className="hidden max-w-xl sm:block">
+								{CARL_PITCH}
 								<AttributionButton />
 							</p>
 							<p className="mt-3 font-bold">
 								{"Give Carl three topics. You know the ones. He'll brew a hot cup of what you just missed."}
+								<PitchButton />
 							</p>
-							<p className="text-hero-accent mt-1 font-bold">Carl stays up. You stay informed.</p>
+							<p className="text-hero-accent mt-1 font-bold">
+								<AnchorLink href="/" onClick={handleHomeClick} className="hover:underline">
+									Carl stays up. You stay informed.
+								</AnchorLink>
+							</p>
 						</div>
 					</div>
 				</div>
@@ -163,91 +192,133 @@ function HeaderMenu({
 	const closeMenu = (): void => {
 		setIsOpen(false)
 	}
+
+	// the sign-out confirmation is opened from here and shared by a trigger inside the menu
+	const [isConfirmingSignOut, setIsConfirmingSignOut] = useState(false)
+	const confirmSignOut = (): void => {
+		setIsConfirmingSignOut(true)
+		closeMenu()
+	}
+
+	// the menu cannot be open while the confirmation is, so it won't overlap the dialog
+	const isMenuOpen = isOpen && !isConfirmingSignOut
 	return (
-		<Popover open={isOpen} onOpenChange={setIsOpen}>
-			<PopoverTrigger
-				className="grid size-11 place-items-center rounded-md hover:bg-white/10 sm:hidden"
-				aria-label="Menu"
-			>
-				<Menu className="size-5" />
-			</PopoverTrigger>
-			<PopoverContent align="end" className="w-44 p-1">
-				<button
-					type="button"
-					onClick={() => {
-						onToggleTheme()
-						closeMenu()
-					}}
-					className={itemClassName}
+		<>
+			<Popover open={isMenuOpen} onOpenChange={setIsOpen}>
+				<PopoverTrigger
+					className="grid size-11 place-items-center rounded-md hover:bg-white/10 sm:hidden"
+					aria-label="Menu"
 				>
-					{isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-					{isDark ? "Light mode" : "Dark mode"}
-				</button>
-				<AnchorLink href="/pricing" onClick={closeMenu} className={itemClassName}>
-					<BadgeDollarSign className="size-4" />
-					Pricing
-				</AnchorLink>
-				{isSignedIn ? (
-					<>
-						<AnchorLink href="/activity" onClick={closeMenu} className={itemClassName}>
-							<Activity className="size-4" />
-							Activity
-						</AnchorLink>
-						<AnchorLink href="/account" onClick={closeMenu} className={itemClassName}>
-							<User className="size-4" />
-							Account
-						</AnchorLink>
-						{isAdmin ? (
-							<AnchorLink href="/admin" onClick={closeMenu} className={itemClassName}>
-								<ShieldUser className="size-4" />
-								Admin
+					<Menu className="size-5" />
+				</PopoverTrigger>
+				<PopoverContent align="end" className="w-44 p-1">
+					<button
+						type="button"
+						onClick={() => {
+							onToggleTheme()
+							closeMenu()
+						}}
+						className={itemClassName}
+					>
+						{isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
+						{isDark ? "Light mode" : "Dark mode"}
+					</button>
+					<AnchorLink href="/pricing" onClick={closeMenu} className={itemClassName}>
+						<BadgeDollarSign className="size-4" />
+						Pricing
+					</AnchorLink>
+					{isSignedIn ? (
+						<>
+							<AnchorLink href="/activity" onClick={closeMenu} className={itemClassName}>
+								<Activity className="size-4" />
+								Activity
 							</AnchorLink>
-						) : null}
-						<SignOutDialog onTriggerClick={closeMenu} className={itemClassName}>
-							<LogOut className="size-4" />
-							Sign out
-						</SignOutDialog>
-					</>
-				) : (
-					<>
-						<AnchorLink href="/login" onClick={closeMenu} className={itemClassName}>
-							<LogIn className="size-4" />
-							Log in
-						</AnchorLink>
-						{/* use the primary color as a call to action. cta names the button for analytics */}
-						<AnchorLink
-							href="/signup?cta=menu"
-							onClick={closeMenu}
-							className={cn(itemClassName, "bg-primary text-primary-foreground hover:bg-primary/90")}
-						>
-							<UserPlus className="size-4" />
-							Sign up
-						</AnchorLink>
-					</>
-				)}
+							<AnchorLink href="/account" onClick={closeMenu} className={itemClassName}>
+								<User className="size-4" />
+								Account
+							</AnchorLink>
+							{isAdmin ? (
+								<AnchorLink href="/admin" onClick={closeMenu} className={itemClassName}>
+									<ShieldUser className="size-4" />
+									Admin
+								</AnchorLink>
+							) : null}
+							<button type="button" onClick={confirmSignOut} className={itemClassName}>
+								<LogOut className="size-4" />
+								Sign out
+							</button>
+						</>
+					) : (
+						<>
+							<AnchorLink href="/login" onClick={closeMenu} className={itemClassName}>
+								<LogIn className="size-4" />
+								Log in
+							</AnchorLink>
+							{/* use the primary color as a call to action. cta names the button for analytics */}
+							<AnchorLink
+								href="/signup?cta=menu"
+								onClick={closeMenu}
+								className={cn(itemClassName, "bg-primary text-primary-foreground hover:bg-primary/90")}
+							>
+								<UserPlus className="size-4" />
+								Sign up
+							</AnchorLink>
+						</>
+					)}
+				</PopoverContent>
+			</Popover>
+			<SignOutDialog open={isConfirmingSignOut} onOpenChange={setIsConfirmingSignOut} />
+		</>
+	)
+}
+
+// the narrow screen note button after the tagline
+function PitchButton() {
+	return (
+		<Popover>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<PopoverTrigger
+						className="hover:opacity-75 ml-1 inline-grid size-5 translate-y-0.5 place-items-center align-text-bottom sm:hidden"
+						aria-label="Meet Carl"
+					>
+						{/* the tile fills this inline box exactly, so the line keeps its height */}
+						<NoteIcon className="size-5 rounded-sm" />
+					</PopoverTrigger>
+				</TooltipTrigger>
+				<TooltipContent>A note from Carl</TooltipContent>
+			</Tooltip>
+			<PopoverContent align="end" className="w-72 text-sm font-normal">
+				<PopoverCloseButton />
+				{/* the title, under a label so the first line clears the close button */}
+				<div className="text-muted-foreground font-display mb-2 text-center text-xs tracking-wide uppercase">
+					Meet Carl
+				</div>
+				<p>{CARL_PITCH}</p>
 			</PopoverContent>
 		</Popover>
 	)
 }
 
-// a pen button tucked after the pitch. it opens the persona attribution in a popover with a close ✕
+// the note button tucked after the pitch. it opens the persona credit in a popover with a close ✕
 function AttributionButton() {
 	return (
 		<Popover>
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<PopoverTrigger
-						className="text-primary hover:opacity-75 ml-1 inline-grid size-5 translate-y-0.5 place-items-center rounded-md align-text-bottom"
+						className="hover:opacity-75 ml-1 inline-grid size-5 translate-y-0.5 place-items-center align-text-bottom"
 						aria-label="About the CarlNotes persona"
 					>
-						<SquarePen className="size-3.75" strokeWidth={2.5} />
+						{/* the tile fills this inline box exactly, so the line keeps its height */}
+						<NoteIcon className="size-5 rounded-sm" />
 					</PopoverTrigger>
 				</TooltipTrigger>
 				<TooltipContent>A note from Carl</TooltipContent>
 			</Tooltip>
 			<PopoverContent align="start" className="w-80 text-sm">
 				<PopoverCloseButton />
-				{/* the persona credit, under a label so the first line clears the close ✕ */}
+				{/* the persona credit, under a label so the first line clears the close button */}
 				<div className="text-muted-foreground font-display mb-1 text-center text-xs tracking-wide uppercase">
 					The Real Carl
 				</div>

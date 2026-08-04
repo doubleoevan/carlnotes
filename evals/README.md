@@ -13,8 +13,9 @@ Start from real data rather than by hand:
 bun run eval --export <topicId>
 ```
 
-That writes `evals/<topicId>.json` holding the topic's own context and its 50 newest embedded Resources with their
-stored content, each with `isRelevant: null`. Label every one, then add the prose set:
+That writes `evals/<topicId>.json` holding the topic's own context and the 50 newest embedded Resources with their
+stored content, each with `isRelevant: null`. Resources are global rather than topic-scoped, so the corpus is not
+limited to what that topic surfaced. Label every one, then add the prose set:
 
 ```jsonc
 {
@@ -25,6 +26,7 @@ stored content, each with `isRelevant: null`. Label every one, then add the pros
       "url": "https://example.test/1",
       "snippet": "…the ingester-native excerpt…",
       "content": "…the fetched page body…",
+      "kind": "read",
       "isRelevant": true
     }
   ],
@@ -44,6 +46,11 @@ stored content, each with `isRelevant: null`. Label every one, then add the pros
 
 A Resource left at `isRelevant: null` fails the run rather than being silently counted, because a partly-labeled
 corpus reports a number that looks real and is not.
+
+`kind` is the medium the export reads off the Resource, and it decides which relevance bar the gate measures that
+row against — a `watch` or `listen` row is described by a short blurb where a `read` row carries its whole body, so
+they clear different bars. A fixture whose corpus is all articles only ever measures the `read` bar, so its
+precision number does not cover the other two. A row written without a `kind` measures as `read`.
 
 ## Guard-only mode
 

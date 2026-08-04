@@ -85,7 +85,7 @@ function TotalSummaries({ totals, users }: { totals: AdminTotals; users: AdminUs
 // the user counts per plan
 function UsersCard({ users }: { users: AdminUserRow[] }) {
 	return (
-		<div className="bg-card rounded-lg border p-3 shadow-sm">
+		<div className="bg-card rounded-lg border p-3 shadow-lift">
 			<div className="text-muted-foreground text-xs">Users</div>
 			<div className="mt-1 space-y-0.5 text-sm">
 				{plans.map((plan) => (
@@ -102,7 +102,7 @@ function UsersCard({ users }: { users: AdminUserRow[] }) {
 // a card with a labeled summary figure
 function TotalCard({ label, figure }: { label: string; figure: string }) {
 	return (
-		<div className="bg-card rounded-lg border p-3 shadow-sm">
+		<div className="bg-card rounded-lg border p-3 shadow-lift">
 			<div className="text-muted-foreground text-xs">{label}</div>
 			<div className="mt-1 font-semibold">{figure}</div>
 		</div>
@@ -117,6 +117,8 @@ const userSortValues = {
 	signup: (user: AdminUserRow) => user.createdAt,
 	topics: (user: AdminUserRow) => user.topicCount,
 	storage: (user: AdminUserRow) => user.attributedBytes,
+	scans: (user: AdminUserRow) => user.scanSpendCents,
+	chat: (user: AdminUserRow) => user.chatSpendCents,
 	cost: (user: AdminUserRow) => user.monthVariableCostCents,
 	override: (user: AdminUserRow) => user.budgetOverrideCents,
 }
@@ -144,6 +146,20 @@ function UsersTable({
 						<SortableHeader sort={sort} sortKey="signup" label="Signup" className="py-2 pr-4" />
 						<SortableHeader sort={sort} sortKey="topics" label="Topics" className="py-2 pr-4" />
 						<SortableHeader sort={sort} sortKey="storage" label="Storage" className="py-2 pr-4" />
+						<SortableHeader
+							sort={sort}
+							sortKey="scans"
+							label="Scans"
+							tooltip="Month-to-date scan spend"
+							className="py-2 pr-4"
+						/>
+						<SortableHeader
+							sort={sort}
+							sortKey="chat"
+							label="Chat"
+							tooltip="Month-to-date chat spend"
+							className="py-2 pr-4"
+						/>
 						<SortableHeader
 							sort={sort}
 							sortKey="cost"
@@ -221,6 +237,8 @@ function UserRow({
 			<td className="py-2 pr-4">{new Date(user.createdAt).toLocaleDateString()}</td>
 			<td className="py-2 pr-4">{user.topicCount}</td>
 			<td className="py-2 pr-4">{toBytesLabel(user.attributedBytes)}</td>
+			<td className="py-2 pr-4">{toCentsLabel(user.scanSpendCents)}</td>
+			<td className="py-2 pr-4">{toCentsLabel(user.chatSpendCents)}</td>
 			<td className={`py-2 pr-4 ${isOverBudget ? "text-destructive font-semibold" : ""}`}>
 				{toCentsLabel(user.monthVariableCostCents)} / {toCentsLabel(user.effectiveBudgetCents)}
 			</td>

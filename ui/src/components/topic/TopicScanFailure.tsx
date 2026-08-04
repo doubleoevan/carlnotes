@@ -1,5 +1,5 @@
 import { isBudgetError, toScanFailureLabel } from "@shared/scanFailure"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { buttonVariants } from "@/components/primitives/button"
 import { cn } from "@/lib/utils"
 
@@ -18,8 +18,8 @@ export function TopicScanFailure({ error }: { error: string | null }) {
 			<p className="mt-2">
 				<AnchorLink href="/pricing" className={cn(buttonVariants({ size: "sm" }))}>
 					Upgrade
-				</AnchorLink>{" "}
-				to keep the pot brewing
+				</AnchorLink>
+				{" to keep the pot brewing"}
 			</p>
 		</div>
 	)

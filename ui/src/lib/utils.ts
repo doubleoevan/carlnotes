@@ -25,19 +25,26 @@ export function matchesFeedView(finding: Pick<TopicFinding, "isConsumed" | "isBo
 }
 
 /**
- * Order findings for display. Bookmarked findings pin above the unbookmarked ones in every mode, and the
- * active sort orders each group among itself, never interleaving the two.
+ * Order findings for display. Bookmarked findings are pinned above the unbookmarked ones in every mode,
+ * and the current sort orders each group among itself, never interleaving the two.
  */
-export function toFilteredFindings(findings: TopicFinding[], sort: FindingSort): TopicFinding[] {
-	const pinned = findings.filter((finding) => finding.isBookmarked)
-	const unbookmarked = findings.filter((finding) => !finding.isBookmarked)
-	return [...sortFindings(pinned, sort), ...sortFindings(unbookmarked, sort)]
+export function toSortedFindings(findings: TopicFinding[], sort: FindingSort): TopicFinding[] {
+	const bookmarkedFindings = findings.filter((finding) => finding.isBookmarked)
+	const unbookmarkedFindings = findings.filter((finding) => !finding.isBookmarked)
+	return [...sortFindings(bookmarkedFindings, sort), ...sortFindings(unbookmarkedFindings, sort)]
 }
 
 // one group's ordering under the active sort mode
 function sortFindings(findings: TopicFinding[], sort: FindingSort): TopicFinding[] {
+	// relevance scores bunch at the top, so most of the first page ties and the tiebreak does the ordering.
+	// recency then the id settle a tie the same way wherever the list is built
 	if (sort === "relevant") {
-		return [...findings].sort((first, second) => second.relevanceScore - first.relevanceScore)
+		return [...findings].sort(
+			(first, second) =>
+				second.relevanceScore - first.relevanceScore ||
+				byRecency(first, second) ||
+				first.findingId.localeCompare(second.findingId),
+		)
 	}
 	if (sort === "newest") {
 		return [...findings].sort(byRecency)
@@ -80,8 +87,8 @@ export const WEB_SOURCE = { label: "web", summary: "let Carl crawl" }
 export const NEXT_SCAN_DISCLAIMER = "Findings appear after the topic's next brew."
 
 /**
- * The subscribe control's tooltip. A visitor sees the sign-up tooltip.
- * A signed-in user sees the toggle state, and subscribing to an "invite" topic also carries the next-scan disclaimer.
+ * The topic page's subscribe control tooltip. A visitor sees the sign-up nudge, and a signed-in user sees
+ * the toggle state, with the next-scan disclaimer added when subscribing to an "invite" topic.
  */
 export function toSubscribeTooltip(isSignedIn: boolean, isSubscribed: boolean, isInviteTopic: boolean): string {
 	// a visitor is nudged to sign up before the toggle applies to them at all
@@ -90,22 +97,22 @@ export function toSubscribeTooltip(isSignedIn: boolean, isSubscribed: boolean, i
 	}
 	// already subscribed, so the control's action is to leave
 	if (isSubscribed) {
-		return "Unsubscribe"
+		return "Unsubscribe from this topic"
 	}
-	// subscribing to an invite topic is accepting it, so the copy carries the next-scan expectation
-	return isInviteTopic ? `Subscribe. ${NEXT_SCAN_DISCLAIMER}` : "Subscribe"
+	// subscribing to an invite topic is accepting it, so the copy includes the next-scan expectation
+	return isInviteTopic ? `Subscribe to this topic. ${NEXT_SCAN_DISCLAIMER}` : "Subscribe to this topic"
 }
 
 /**
  * The bordered button treatment shared by the feed toolbar's controls.
  */
 export const MENU_BUTTON_CLASS =
-	"bg-card text-muted-foreground hover:text-foreground inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm shadow-sm sm:min-h-9"
+	"bg-card text-muted-foreground hover:text-foreground inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm shadow-raise sm:min-h-9"
 
 /**
  * The card chrome wrapped around every data table, scrolling horizontally on narrow screens.
  */
-export const TABLE_CARD_CLASS = "bg-card overflow-x-auto rounded-lg border p-4 shadow-sm"
+export const TABLE_CARD_CLASS = "bg-card overflow-x-auto rounded-lg border p-4 shadow-lift"
 
 /**
  * The centered display-font title at the top of a note popover.
@@ -115,13 +122,100 @@ export const POPOVER_HEADING_CLASS = "font-display mb-2 text-center text-lg"
 /**
  * The card chrome around the topic page's info and settings sections.
  */
-export const INFO_CARD_CLASS = "border-separator bg-card h-fit rounded-lg border p-5 text-sm shadow-sm"
+export const INFO_CARD_CLASS = "border-separator bg-card h-fit rounded-lg border p-5 text-sm shadow-lift"
+
+/**
+ * The card chrome around a numbered list of resources. Its background is mostly transparent, so the steam rings
+ * drifting behind the page still read through it, and it is the shadow instead of the fill that lifts it off them.
+ * The dark card includes more fill than the light one, which needs less to separate from the page behind it.
+ */
+export const RESOURCE_LIST_CARD_CLASS = "border-separator/60 bg-card/35 dark:bg-card/55 rounded-lg border shadow-lift"
+
+/**
+ * The inset that lines up a right-aligned row with the quota line above it. Text takes the full inset.
+ * An icon button takes a smaller one — its glyph already sits inset from its own touch target, so the
+ * full inset would push it in twice.
+ */
+export const RAIL_TEXT_INSET = "mr-2.5"
+export const RAIL_ICON_INSET = "mr-1"
+
+/**
+ * What a file picker offers, shared by the chat composer and the topic prompt so the two cannot drift.
+ */
+export const FILE_PICKER_ACCEPT = "image/*,application/pdf,.pdf,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.log"
+
+// a url written in a topic prompt, matched case-insensitively since a pasted address may carry an upper-case
+// scheme. it runs to whitespace and then gives back the punctuation that usually ends a sentence, so a trailing
+// period or comma is not read as part of the address. brackets are settled by toBalancedUrl instead of here
+const PROMPT_URL_PATTERN = /https?:\/\/\S*[^\s<>"'.,;:!?]/gi
+
+// a url keeps a closing bracket it opened and gives back one the sentence around it opened, so
+// "(see https://example.com/a)" drops the paren while "https://example.com/a_(b)" keeps its own
+function toBalancedUrl(url: string): string {
+	let balancedUrl = url
+	while (/[)\]]$/.test(balancedUrl)) {
+		// count the bracket that actually closed, so a url ending in ] is not judged by its parens
+		const isParen = balancedUrl.endsWith(")")
+		const opened = balancedUrl.split(isParen ? "(" : "[").length - 1
+		const closed = balancedUrl.split(isParen ? ")" : "]").length - 1
+		if (opened >= closed) {
+			break
+		}
+
+		// the url never opened this one, so it belongs to the sentence
+		balancedUrl = balancedUrl.slice(0, -1)
+	}
+	return balancedUrl
+}
+
+// the url a Source reads, for the kinds that name one. everything else has no url to compare against
+function toSourceUrl(
+	source: { kind: string; config?: Record<string, unknown> } | { kind: string; value: string },
+): string {
+	// a staged Source includes its raw value, while a stored one includes a parsed config
+	if ("value" in source) {
+		return source.kind === "url" || source.kind === "rss" ? source.value : ""
+	}
+	return typeof source.config?.url === "string" ? source.config.url : ""
+}
+
+/**
+ * The urls written in a topic prompt that are not already a Source. They are offered instead of being added, since
+ * a url mentioned in passing is not necessarily one Carl should read on every scan.
+ */
+export function toPossibleSourceUrls(
+	prompt: string,
+	keptSources: { kind: string; config?: Record<string, unknown> }[],
+	addedSources: { kind: string; value: string }[],
+): string[] {
+	const sourceUrls = new Set([...keptSources, ...addedSources].map(toSourceUrl).filter(Boolean))
+	const writtenUrls = (prompt.match(PROMPT_URL_PATTERN) ?? []).map(toBalancedUrl)
+	return [...new Set(writtenUrls)].filter((url) => !sourceUrls.has(url))
+}
 
 /**
  * Merges class names, resolving Tailwind conflicts.
  */
 export function cn(...inputs: ClassValue[]): string {
 	return twMerge(clsx(inputs))
+}
+
+/**
+ * A uniformly shuffled copy of the items. The input array stays untouched.
+ */
+export function shuffle<T>(items: T[]): T[] {
+	// Fisher-Yates over a copy: walk from the back, swapping each slot with a random one not yet fixed,
+	// so every ordering is equally likely
+	const shuffled = [...items]
+	for (let index = shuffled.length - 1; index > 0; index--) {
+		// swap this slot with one at or before it. the casts only drop the undefined that
+		// noUncheckedIndexedAccess adds, since both indexes are in range
+		const swapIndex = Math.floor(Math.random() * (index + 1))
+		const heldItem = shuffled[index] as T
+		shuffled[index] = shuffled[swapIndex] as T
+		shuffled[swapIndex] = heldItem
+	}
+	return shuffled
 }
 
 /**
@@ -209,7 +303,7 @@ export function toScheduleLabel(
 	scheduledDayOfWeek: (typeof daysOfWeek)[number],
 ): string {
 	const time = toTimeLabel(scheduledTime)
-	// only weekly carries a day, capitalized for display
+	// only weekly includes a day, capitalized for display
 	if (frequency === "weekly") {
 		return `Weekly on ${capitalize(scheduledDayOfWeek)} at ${time}`
 	}

@@ -1,7 +1,7 @@
 import type { TopicFeed, TopicResponse } from "@shared/contracts"
 import { Download, ExternalLink, Globe, Lock, Mail } from "lucide-react"
 import type * as React from "react"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
 import { type AllowedNoteUrls, ScrollNote, TopicScanNote } from "@/components/topic/TopicScanRecap"
 import { cn, POPOVER_HEADING_CLASS } from "@/lib/utils"
@@ -34,7 +34,8 @@ export function TopicInfo(props: TopicInfoProps) {
 				{/* the topic prompt */}
 				<InfoSection label="Carl's Prompt">{topic.prompt || "—"}</InfoSection>
 
-				{/* recap of the latest scan through the hardened subset, citing only the kept findings' own urls. the card clips with Read more, the popover scrolls */}
+				{/* recap of the latest scan through the sanitized subset, citing only the kept findings' own urls.
+				    the card clips the note with Read more, the popover shows the note in a scroll box */}
 				{topic.scanSummary && (
 					<InfoSection label="Carl's Notes">
 						{props.isCard ? (

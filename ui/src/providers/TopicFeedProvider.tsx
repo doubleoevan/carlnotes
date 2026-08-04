@@ -1,6 +1,6 @@
 import type { TopicFeedResponse } from "@shared/contracts"
 import { resourceKinds as allResourceKinds } from "@shared/enums"
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react"
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useLocation } from "react-router-dom"
 import { authClient } from "@/lib/authClient"
 import {
@@ -10,7 +10,7 @@ import {
 	sendTopicFindingOpened,
 	sendTopicFindingRating,
 } from "@/lib/topicClient"
-import { type FeedView, type FindingSort, matchesFeedView, toFilteredFindings } from "@/lib/utils"
+import { type FeedView, type FindingSort, matchesFeedView, toSortedFindings } from "@/lib/utils"
 
 // the resource kinds that the Filters menu toggles
 export type ResourceKind = (typeof allResourceKinds)[number]
@@ -71,15 +71,42 @@ function useTopicFeedState() {
 	const [tagFilters, setTagFilters] = useState<string[]>([])
 	const [tagMatchMode, setTagMatchMode] = useState<TagMatchMode>("any")
 
-	// always fetch everything. the view, sort, and resource kind filters are applied client-side
+	// two reloads can be in flight at once, so each takes a number and only the newest may write.
+	// without it, a slow overlapping request lands last and renders a stale feed
+	const latestReloadRef = useRef(0)
+
+	// always fetch everything. the view, sort, and resource kind filters are applied client-side.
 	const reload = useCallback(async () => {
+		const reloadNumber = latestReloadRef.current + 1
+		latestReloadRef.current = reloadNumber
 		try {
 			const loadedTopicFeed = await fetchTopicFeed(true)
+			if (latestReloadRef.current !== reloadNumber) {
+				return false
+			}
 			setTopicFeed(loadedTopicFeed)
+			return true
 		} catch (error) {
 			console.error("feed load failed", error)
+			return false
 		}
 	}, [])
+
+	// a reheat is a manual reload. the key bump remounts the feed sections so the hydrate animation replays
+	const [reheatKey, setReheatKey] = useState(0)
+	const [isReheating, setIsReheating] = useState(false)
+	const reheat = useCallback(async () => {
+		setIsReheating(true)
+		try {
+			// the key bump replays the entrance over new content, so a reload that failed or lost to a newer one
+			// leaves it alone instead of animating the same feed back in as if something had arrived
+			if (await reload()) {
+				setReheatKey((previousKey) => previousKey + 1)
+			}
+		} finally {
+			setIsReheating(false)
+		}
+	}, [reload])
 
 	// load the topic feed on mount, and again whenever sign-in state flips
 	// biome-ignore lint/correctness/useExhaustiveDependencies: isSignedIn isn't read in the body, it's a deliberate re-fetch trigger
@@ -195,6 +222,9 @@ function useTopicFeedState() {
 		setTagMatchMode,
 		knownTags,
 		reload,
+		reheat,
+		reheatKey,
+		isReheating,
 		handlers,
 		// whether the viewer is signed in, so per-user finding controls hide for signed-out visitors
 		isSignedIn,
@@ -225,7 +255,7 @@ function filterTopicFeed(
 				.filter((topic) => matchesTagFilters(topic.tags, tagFilters, tagMatchMode))
 				.map((topic) => ({
 					...topic,
-					findings: toFilteredFindings(
+					findings: toSortedFindings(
 						topic.findings.filter(
 							(finding) => resourceKinds.has(finding.resourceKind) && matchesFeedView(finding, view),
 						),

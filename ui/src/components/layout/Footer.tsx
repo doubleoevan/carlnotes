@@ -1,5 +1,5 @@
 import { useLocation } from "react-router-dom"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Attribution } from "@/components/layout/Attribution"
 import { cn } from "@/lib/utils"
 

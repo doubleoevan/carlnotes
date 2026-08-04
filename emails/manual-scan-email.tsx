@@ -15,14 +15,15 @@ import {
 	type TopicScanEmailFinding,
 } from "./topic-scan-email"
 
-// the topic and links every manual-scan email carries, plus the outcome that decides what the body says
+// the topic and links every manual-scan email includes, plus the outcome that decides what the body says.
+// allowedSummaryUrls are the urls the recap may link: the Topic's own Findings
 export type ManualScanEmailProps = {
 	topicName: string
 	// the app's home and this topic's page urls. both omitted when the app base url isn't configured
 	appUrl?: string
 	topicUrl?: string
 } & (
-	| { status: "succeeded"; findings: TopicScanEmailFinding[]; scanSummary?: string }
+	| { status: "succeeded"; findings: TopicScanEmailFinding[]; scanSummary?: string; allowedSummaryUrls?: string[] }
 	| { status: "failed"; failureReason: string }
 )
 
@@ -45,7 +46,7 @@ export default function ManualScanEmail(props: ManualScanEmailProps): ReactEleme
 				<>
 					<ScanSummarySection
 						scanSummary={props.scanSummary}
-						allowedUrls={new Set(props.findings.map((finding) => finding.url))}
+						allowedUrls={new Set(props.allowedSummaryUrls ?? props.findings.map((finding) => finding.url))}
 					/>
 					<FindingCards findings={props.findings} />
 				</>
@@ -56,7 +57,7 @@ export default function ManualScanEmail(props: ManualScanEmailProps): ReactEleme
 				</Section>
 			)}
 
-			{/* no unsubscribe link, since this email answers a scan the reader triggered instead of a scheduled subscription */}
+			{/* no unsubscribe link, since this email reports a scan the reader triggered instead of a scheduled subscription */}
 			<EmailFooter>
 				{`You're receiving this because you started this brew yourself on `}
 				<LinkOrText href={appUrl} style={footerBrandLink}>
@@ -111,7 +112,7 @@ function toHeading(props: ManualScanEmailProps): string {
 
 // the summary line, up to the topic name that closes it
 function toSummaryLead(props: ManualScanEmailProps): string {
-	// a failed scan leads with what happened rather than a count
+	// a failed scan leads with what happened instead of a count
 	if (props.status === "failed") {
 		return "Carl couldn't finish the brew you started on "
 	}

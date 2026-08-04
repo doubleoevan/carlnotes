@@ -1,27 +1,28 @@
 import type { TopicResponse, UpdateTopicPayload } from "@shared/contracts"
 import { daysOfWeek, frequencies, maxResultsOptions, visibilities } from "@shared/enums"
+import { X } from "lucide-react"
 import type * as React from "react"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
-import { AnchorLink } from "@/components/layout/AnchorLink"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
-import { Textarea } from "@/components/primitives/textarea"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TagPicker, TagPill } from "@/components/topic/TagPicker"
 import { TimePicker } from "@/components/topic/TimePicker"
 import {
 	sendAttachmentContext,
 	sendAttachmentDelete,
-	sendAttachmentUrl,
 	sendTopicCreate,
 	sendTopicUpdate,
 	uploadTopicAttachment,
 } from "@/lib/topicClient"
-import { capitalize } from "@/lib/utils"
+import { capitalize, toPossibleSourceUrls } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
-import { TopicAttachmentEditor } from "./TopicAttachmentEditor"
+import { stageFiles, TopicAttachmentEditor } from "./TopicAttachmentEditor"
+import { TopicPromptComposer } from "./TopicPromptComposer"
 import { type EditableSourceKind, TopicSourceEditor } from "./TopicSourceEditor"
 
 // the field unions that the frequency, day-of-week, and visibility selects offer
@@ -64,7 +65,17 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 	)
 	const [keptAttachments, setKeptAttachments] = useState(topic?.attachments ?? [])
 	const [pendingFiles, setPendingFiles] = useState<File[]>([])
-	const [pendingUrls, setPendingUrls] = useState<string[]>([])
+
+	// the urls this edit will not turn into Sources
+	const [dismissedSourceUrls, setDismissedSourceUrls] = useState<string[]>(() =>
+		toPossibleSourceUrls(topic?.prompt ?? "", topic?.sources ?? [], []),
+	)
+
+	// a url written in the prompt becomes a Source on save unless it is dismissed here first
+	const promptSourceUrls = toPossibleSourceUrls(prompt, keptSources, addedSources).filter(
+		(url) => !dismissedSourceUrls.includes(url),
+	)
+
 	const [isSaving, setIsSaving] = useState(false)
 
 	// handleSave creates or updates the topic first, then stages uploads, then stages removals
@@ -84,12 +95,6 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 			for (const file of [...pendingFiles]) {
 				await uploadTopicAttachment(topicId, file)
 				setPendingFiles((current) => current.filter((pending) => pending !== file))
-			}
-
-			// fetch and ingest the newly added urls one at a time, dropping each from the pending list as it lands
-			for (const url of [...pendingUrls]) {
-				await sendAttachmentUrl(topicId, url)
-				setPendingUrls((current) => current.filter((pending) => pending !== url))
 			}
 
 			// update every attachment that the owner edited for the next topic scan
@@ -135,9 +140,11 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 		visibility,
 		maxResults,
 		invitees: visibility === "invite" ? invitees : [],
+		// the urls still showing under the prompt save as Sources along with the ones added from the sources section
 		sources: [
 			...keptSources.map((source) => ({ id: source.id })),
 			...addedSources.map((source) => ({ kind: source.kind, config: toSourceConfig(source.kind, source.value) })),
+			...promptSourceUrls.map((url) => ({ kind: "url" as const, config: toSourceConfig("url", url) })),
 		],
 	})
 
@@ -151,7 +158,7 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 		<Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
 			{/* min-w-0 on each grid field lets a long url or filename truncate instead of widening the modal */}
 			<DialogContent aria-describedby={undefined} onOpenAutoFocus={handleOpenAutoFocus} className="[&>*]:min-w-0">
-				<DialogTitle>{topic ? "Edit topic" : "Add topic"}</DialogTitle>
+				<DialogTitle>{topic ? "Edit your topic" : "Your new topic"}</DialogTitle>
 
 				{/* title */}
 				<div>
@@ -159,10 +166,22 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 					<Input ref={titleInputRef} value={name} onChange={(event) => setName(event.target.value)} />
 				</div>
 
-				{/* topic prompt */}
+				{/* the topic prompt: pasting, dropping, or picking a file here stages it as an attachment.
+				    a url written here becomes a Source that the PromptSourceUrls component can be used to remove */}
 				<div>
 					<FieldLabel isRequired>{"Carl's Prompt"}</FieldLabel>
-					<Textarea value={prompt} onChange={(event) => setPrompt(event.target.value)} className="min-h-24" />
+					<TopicPromptComposer
+						prompt={prompt}
+						topicName={name}
+						pendingFiles={pendingFiles}
+						onPromptChange={setPrompt}
+						onAddFiles={(files) => stageFiles(pendingFiles, files, setPendingFiles)}
+						onRemoveFile={(file) => setPendingFiles(pendingFiles.filter((pending) => pending !== file))}
+					/>
+					<PromptSourceUrls
+						urls={promptSourceUrls}
+						onDismiss={(url) => setDismissedSourceUrls([...dismissedSourceUrls, url])}
+					/>
 				</div>
 
 				{/* tags pill editor */}
@@ -235,10 +254,8 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 					<TopicAttachmentEditor
 						keptAttachments={keptAttachments}
 						pendingFiles={pendingFiles}
-						pendingUrls={pendingUrls}
 						onKeptChange={setKeptAttachments}
 						onPendingChange={setPendingFiles}
-						onPendingUrlsChange={setPendingUrls}
 					/>
 				</div>
 
@@ -367,7 +384,8 @@ function InviteeEditor({ invitees, onChange }: { invitees: string[]; onChange: (
 
 // build a new source's config from the selector field
 function toSourceConfig(sourceKind: EditableSourceKind, value: string): Record<string, unknown> {
-	if (sourceKind === "rss") {
+	// a page and a feed are both named by their url. what differs is the ingester that reads it
+	if (sourceKind === "url" || sourceKind === "rss") {
 		return { url: value }
 	}
 
@@ -383,4 +401,40 @@ function toSourceConfig(sourceKind: EditableSourceKind, value: string): Record<s
 
 	// YouTube playlist ids start with PL by convention. everything else is treated as a channel id
 	return value.startsWith("PL") ? { playlistId: value } : { channelId: value }
+}
+
+/**
+ * The urls written in the prompt, each saved as a Source unless its ✕ takes it off the list.
+ * A url is opt-out instead of opt-in
+ */
+function PromptSourceUrls({ urls, onDismiss }: { urls: string[]; onDismiss: (url: string) => void }) {
+	if (urls.length === 0) {
+		return null
+	}
+	return (
+		<div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+			<span className="text-muted-foreground text-xs">Reading as a source:</span>
+			{urls.map((url) => (
+				<span
+					key={url}
+					className="border-separator flex max-w-full items-center gap-1 rounded-full border px-2 py-0.5 text-xs"
+				>
+					<span className="truncate">{url}</span>
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<button
+								type="button"
+								aria-label={`Don't read ${url}`}
+								onClick={() => onDismiss(url)}
+								className="text-muted-foreground hover:text-foreground shrink-0"
+							>
+								<X className="size-3" />
+							</button>
+						</TooltipTrigger>
+						<TooltipContent>{`Don't read ${url}`}</TooltipContent>
+					</Tooltip>
+				</span>
+			))}
+		</div>
+	)
 }

@@ -7,7 +7,7 @@ import type { NewResource, Source, SourceIngester } from "./ingester"
 const MAX_POSTS = 25
 const DEFAULT_SORT = "hot"
 
-// reddit's own name and sort charsets. both land in a url path, so anything else is refused rather than encoded
+// reddit's own name and sort charsets. both land in a url path, so anything else is refused instead of being encoded
 const SUBREDDIT_PATTERN = /^[A-Za-z0-9_]{1,21}$/
 const SUBREDDIT_SORTS = ["hot", "new", "top", "rising"]
 const FETCH_TIMEOUT_MS = 10_000
@@ -23,7 +23,7 @@ export const redditIngester: SourceIngester = async (source: Source) => {
 		throw new Error(`reddit source ${source.id} has no valid config.subreddit`)
 	}
 
-	// an unrecognized sort falls back rather than throwing, since it only steers ordering
+	// an unrecognized sort falls back instead of throwing, since it only steers ordering
 	const configuredSort = source.config.sort
 	const sort =
 		typeof configuredSort === "string" && SUBREDDIT_SORTS.includes(configuredSort) ? configuredSort : DEFAULT_SORT
@@ -86,7 +86,7 @@ async function fetchPosts(
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	})
 
-	// a failed listing only degrades this Source. the Scan isolates the failure
+	// a failed listing stops only this Source. the Scan isolates the failure
 	if (!response.ok) {
 		throw new Error(`reddit listing r/${subreddit}/${sort} returned ${response.status}`)
 	}

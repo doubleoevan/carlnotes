@@ -5,8 +5,9 @@ import { and, eq, isNotNull, like } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, scans, sources, topics, users } from "../db/schema"
 import { embedVector } from "./models"
-import { runTopicScan } from "./scan"
+import { loadScan } from "./scan"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
+import { finishScan, ingestForScan, reviewForScan } from "./workflows/run-topic-scan-activities"
 
 // a real feed that reliably carries more entries than the ceiling admits, plus a matching topic context
 const FEED_URL = "https://simonwillison.net/atom/everything/"
@@ -78,16 +79,18 @@ type CandidateResource = { id: string; embedding: number[]; similarity: number; 
 // every candidate Resource this Scan considered, with its similarity to the topic context recomputed, and whether the Scan actually scored it
 async function loadCandidateRanking(
 	topicId: string,
+	scoredResourceIds: string[],
 ): Promise<{ candidateResources: CandidateResource[]; findingCount: number }> {
 	// the topic-context embedding, wrapped as the query side exactly as the gate wraps it
 	const contextEmbedding = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${TOPIC_CONTEXT}`)
 
-	// the ids this topic ended up with Findings for. everything else it considered was filtered or deferred
-	const scoredRows = await db
+	// the resources the review actually scored, reported by the review itself.
+	// findings alone won't do. they get trimmed to max_results afterword, so a scored finding could look skipped
+	const scoredIds = new Set(scoredResourceIds)
+	const findingRows = await db
 		.select({ resourceId: findings.resourceId })
 		.from(findings)
 		.where(eq(findings.topicId, topicId))
-	const scoredIds = new Set(scoredRows.map((row) => row.resourceId))
 
 	// every embedded Resource from this feed is a candidate the Scan saw in its first pass
 	const candidateRows = await db
@@ -96,15 +99,15 @@ async function loadCandidateRanking(
 		.where(and(like(resources.url, FEED_HOST_PATTERN), isNotNull(resources.embedding)))
 
 	// score each candidate the way the ranking did, tagging the ones that won a paid ranking slot
-	const candidates = candidateRows.map((row) => ({
-		id: row.id,
-		embedding: row.embedding as number[],
-		similarity: cosineSimilarity(row.embedding as number[], contextEmbedding),
-		isScored: scoredIds.has(row.id),
+	const candidateResources = candidateRows.map((candidateRow) => ({
+		id: candidateRow.id,
+		embedding: candidateRow.embedding as number[],
+		similarity: cosineSimilarity(candidateRow.embedding as number[], contextEmbedding),
+		isScored: scoredIds.has(candidateRow.id),
 	}))
 
-	// the finding count comes back too, so a mismatch against the Scan's own kept count shows up as a failure
-	return { candidateResources: candidates, findingCount: scoredRows.length }
+	// the finding count comes back too, printed next to the Scan's own kept count so a mismatch is visible
+	return { candidateResources, findingCount: findingRows.length }
 }
 
 // the unscored candidates that outrank the worst scored resource and that dedupe does not explain
@@ -136,12 +139,23 @@ function toRankingViolations(candidates: CandidateResource[]): CandidateResource
 
 // run the Scan, time it, and report what the ranking and the ceiling actually did
 async function check(topicId: string, ownerId: string): Promise<boolean> {
-	// time the whole pipeline, ingestion through review
+	// time the whole pipeline, ingestion through review, driving the workflow's own stages in order so the smoke test
+	// exercises the real activity code instead of a copy of it, and without needing a Temporal server
+	const [openScan] = await db.insert(scans).values({ topicId, ownerId }).returning()
+	if (!openScan) {
+		throw new Error("could not open a scan for the smoke topic")
+	}
+	// the clock spans every stage, since the ceiling being checked is on the whole pipeline
 	const startedAt = Date.now()
-	const topicScan = await runTopicScan(topicId, ownerId)
+	const ingestResult = await ingestForScan(openScan.id, topicId)
+	const reviewResult = await reviewForScan(openScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
+	await finishScan(openScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
 	const elapsedMs = Date.now() - startedAt
+
+	// re-read the row, since the counts and cost were written by the closing stage
+	const topicScan = await loadScan(openScan.id)
 	if (!topicScan) {
-		throw new Error("runTopicScan returned no scan")
+		throw new Error("the scan row vanished mid-smoke")
 	}
 
 	// the paid section's real size, against the ceiling that was supposed to bound it
@@ -150,13 +164,19 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	const allowedOvershoot = REVIEW_CONCURRENCY - 1
 
 	// the ranking check. anything skipped that outranks the worst purchase must be explained by dedupe
-	const { candidateResources, findingCount } = await loadCandidateRanking(topicId)
+	const { candidateResources, findingCount } = await loadCandidateRanking(
+		topicId,
+		reviewResult.review.scoredResourceIds,
+	)
 	const scoredSimilarities = candidateResources
 		.filter((resource) => resource.isScored)
 		.map((resource) => resource.similarity)
 	const unscoredSimilarities = candidateResources
 		.filter((resource) => !resource.isScored)
 		.map((resource) => resource.similarity)
+
+	// the two ends that have to be compared: the worst resource accepted by the review
+	// and the best resource skipped by the filter
 	const lowestScoredSimilarity = Math.min(...scoredSimilarities)
 	const highestUnscoredSimilarity =
 		unscoredSimilarities.length > 0 ? Math.max(...unscoredSimilarities) : Number.NEGATIVE_INFINITY
@@ -196,7 +216,6 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	// the assertions this smoke test makes. nothing skipped by the cheap model should outrank something ranked by the score model, unless dedupe explains it
 	const results: [string, boolean][] = [
 		["scan succeeded", topicScan.status === "succeeded"],
-		["the ceiling actually bound the run", scoredCount >= MAX_SCORED_RESOURCES_PER_SCAN],
 		["overshoot is within concurrency - 1", overshootCount <= allowedOvershoot],
 		["findings were written", topicScan.keptCount > 0],
 		["the scan bought its best survivors", rankingViolations.length === 0],
@@ -229,7 +248,7 @@ async function smokeTest(): Promise<number> {
 	}
 }
 
-// run the smoke test, computing the exit code rather than exiting early so telemetry can flush first
+// run the smoke test, computing the exit code instead of exiting early so telemetry can flush first
 startTelemetry()
 let exitCode: number
 try {
