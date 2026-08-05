@@ -31,6 +31,11 @@ FROM oven/bun:1.3.14 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
+# the Certificate Authority bundle the Doppler CLI verifies api.doppler.com against. the bun image ships without one
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends ca-certificates \
+	&& rm -rf /var/lib/apt/lists/*
+
 # Doppler injects the secrets at start. copied from its own published image rather than curled at build time,
 # so the version is pinned and the build needs no network egress
 COPY --from=dopplerhq/cli:3 /bin/doppler /bin/doppler
