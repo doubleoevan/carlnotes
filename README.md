@@ -128,7 +128,7 @@ docker build --platform=linux/amd64 --build-arg VITE_TURNSTILE_SITE_KEY=<site-ke
 
 `--platform=linux/amd64` matters on Apple Silicon. The Doppler CLI is copied from `dopplerhq/cli:3`, which publishes amd64 only.
 
-Migrations are a deploy job, not a start-up step. Run the same one-shot script the local `db:migrate` runs, as a job on the deployed image, before the new service rolls out:
+Migrations are a deploy job, not a start-up step. A push to `main` runs the `release-main` workflow, which builds the image once, runs this job against it, and only then deploys `app` and `temporal-worker` — so new code never meets an old schema:
 
 ```bash
 doppler run -- bun db/migrate.ts
