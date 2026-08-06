@@ -233,8 +233,61 @@ contract: a body edit can't silently change what callers receive, and the
 reader never has to infer. Inline callbacks (event handlers, `.map`
 lambdas) may stay inferred.
 
+Relaxed in `.tsx` and `.jsx` files: components leave the return inferred,
+since an annotation only restates that the thing renders. Hooks and plain
+helpers in those files still declare a return type, because their return
+value is not visible from the signature.
+
     // wrong — the contract lives in the body
     export async function runScan(scan: Scan) { ... }
+
+    // right — the contract lives in the signature
+    export async function runScan(scan: Scan): Promise<ScanResult> { ... }
+
+### 15. Ordinary words, and words already here
+
+Two checks before naming anything or writing any comment.
+
+**Prefer a word the codebase already uses.** Before introducing a term, search
+for the concept. A second name for an existing thing costs every future reader a
+translation step and splits every search.
+
+    // wrong — the column, the enum, and the UI label all say frequency
+    export const dailyCadences = ["daily", "weekdays"] as const
+
+    // right — the word already in the codebase
+    export const dailyFrequencies = ["daily", "weekdays"] as const
+
+- `cadence` → **frequency**
+- `curate` → **review**, the stage's own name
+- `prune` → **filter**
+- `harvest` → **find**, or **return** for what a function hands back
+- `seam` → **boundary**, or just name the thing
+
+**Among equally accurate options, use the common word.** A rare word makes the
+reader parse vocabulary instead of reading the sentence.
+
+- `carries` / `carrying` → **includes**, when one thing holds another
+- `rather than` → **instead of**, for a choice between two
+- `rides with` / `travels with` → **goes with**
+- `disown` → **deny**
+
+Accuracy beats both rules. When the swap changes the meaning, rewrite instead of
+substituting.
+
+    // wrong — "includes" says the caps are contents, not an attribute
+    // the yearly interval includes the higher caps
+
+    // right
+    // the yearly interval has the higher caps
+
+Applies to comments, test names, and identifiers alike.
+
+    // fine in a .tsx file — the component renders, nothing to restate
+    export function FeedItem({ finding }: FeedItemProps) { ... }
+
+    // still typed in a .tsx file — the hook returns a value the reader can't see
+    function useTopicFeed(topicId: TopicId): TopicFeedState { ... }
 
     // right — the contract lives in the signature
     export async function runScan(scan: Scan): Promise<ScanResult> { ... }

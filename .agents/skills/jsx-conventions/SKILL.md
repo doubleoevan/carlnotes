@@ -36,10 +36,6 @@ feature code.
 - External links render `target="_blank"` with `rel="noopener noreferrer"`.
 - Scheme links (`mailto:`, `tel:`) render a plain `<a>` with no target or rel.
 
-If the project doesn't have this component yet, create it once and use it
-everywhere. The component decides internal vs external vs scheme from the
-`href`; callers never repeat that logic.
-
 ### Apostrophes and quotes — never HTML entities
 
 Never use HTML entities (`&apos;`, `&quot;`, `&amp;`) in JSX text content.

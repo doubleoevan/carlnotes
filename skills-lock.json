@@ -11,7 +11,7 @@
       "source": "doubleoevan/skills",
       "sourceType": "github",
       "skillPath": "skills/code-style/SKILL.md",
-      "computedHash": "d100a17e36a53f72ad9294b3169822ff82cee8262cebe98da951ccb211b063df"
+      "computedHash": "5a1ff2c9bd07409daa38be522a7f447841e57481cf4b790829342d23061e0869"
     },
     "git-discipline": {
       "source": "doubleoevan/skills",
@@ -23,13 +23,13 @@
       "source": "pbakaus/impeccable",
       "sourceType": "github",
       "skillPath": ".agents/skills/impeccable/SKILL.md",
-      "computedHash": "9dcaecb6106e8bec775ae7651e8e989693b0467d21509794cfb94a08d30af4b7"
+      "computedHash": "9a5889a79096b203447966beca35bf2669bb919496264c5b985976ef1dac7321"
     },
     "jsx-conventions": {
       "source": "doubleoevan/skills",
       "sourceType": "github",
       "skillPath": "skills/jsx-conventions/SKILL.md",
-      "computedHash": "4d1cbe7268acfe54a498ea548a0a5b66a6890eca934a79c4a0c0b06676f34e32"
+      "computedHash": "a239c611c0f313db9114a85b5d828f22c8cb9a23665413b587a9bd6e08a7f94e"
     },
     "ponytail": {
       "source": "DietrichGebert/ponytail",
