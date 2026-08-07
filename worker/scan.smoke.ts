@@ -43,7 +43,8 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 	}
 
 	// an RSS source with no API key pointing at the feed
-	await db.insert(sources).values({ topicId: topic.id, kind: "rss", config: { url: FEED_URL } })
+	// store as ready because ingestion skips a Source that has not passed an llm-guard screen, and nothing screens it here
+	await db.insert(sources).values({ topicId: topic.id, kind: "rss", config: { url: FEED_URL }, status: "ready" })
 
 	// a completed Scan dated now, so that a schedule sweep doesn't race this smoke on the same topic
 	await db.insert(scans).values({ topicId: topic.id, ownerId: user.id, status: "succeeded", finishedAt: new Date() })
@@ -168,8 +169,8 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		// one healthy source and an untouched budget
 		scannedSources: [{ sourceKind: "rss", status: "ok" }],
 		budget: {
-			spent: 0,
-			cap: 0.5,
+			spentDollars: 0,
+			limitDollars: 0.5,
 			stageCosts: { ingestion: 0, embedding: 0, fetch: 0, scoringCheap: 0, scoringPremium: 0 },
 			maxScoredResources: 25,
 			fetchCounts: { reusedCount: 0, revalidatedCount: 0, fetchedCount: 0 },

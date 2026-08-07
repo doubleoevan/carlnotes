@@ -1,6 +1,6 @@
 // search ingester tests for the result parser and prompt builder
 import { expect, test } from "bun:test"
-import { buildSearchPrompt, parseResults, toResourceKind } from "./search"
+import { buildSearchPrompt, parseResults } from "./search"
 
 // two distinct results plus a third repeating the first url, to exercise in-payload dedupe
 const SEARCH_RESPONSE = {
@@ -14,7 +14,7 @@ const SEARCH_RESPONSE = {
 
 // each result becomes one "read" Resource mapped to its url, deduped within the payload. the provider's cost is also returned
 test("parseResults maps search results to deduped read Resources and reports cost", () => {
-	const { resources, cost } = parseResults(SEARCH_RESPONSE)
+	const { resources, costDollars } = parseResults(SEARCH_RESPONSE)
 	expect(resources.map((resource) => resource.url)).toEqual(["https://a.com/1", "https://b.com/2"])
 
 	// every Resource is a "read" kind, and the first result's title comes through
@@ -24,12 +24,12 @@ test("parseResults maps search results to deduped read Resources and reports cos
 	// the native snippet is Exa's result highlights joined. a result without it leaves the snippet null
 	expect(resources[0]?.snippet).toBe("hi one hi two")
 	expect(resources[1]?.snippet).toBeNull()
-	expect(cost).toBe(0.005)
+	expect(costDollars).toBe(0.005)
 })
 
 // a response without cost still parses, default cost is 0
 test("parseResults defaults cost to 0 when the provider omits costDollars", () => {
-	expect(parseResults({ results: [] }).cost).toBe(0)
+	expect(parseResults({ results: [] }).costDollars).toBe(0)
 })
 
 // an empty context falls back to the topic name, so the search always gets a prompt
@@ -45,17 +45,4 @@ test("buildSearchPrompt includes the topic name alongside the prompt", async () 
 	const { prompt: searchPrompt } = await buildSearchPrompt("I want the best ones!", "Cute raccoon videos")
 	expect(searchPrompt).toContain("Cute raccoon videos")
 	expect(searchPrompt).toContain("I want the best ones!")
-})
-
-// a web search returns videos and podcasts alongside articles and the kind is based on the host
-test("toResourceKind reads a url's kind off its host", () => {
-	expect(toResourceKind("https://www.youtube.com/watch?v=abc")).toBe("watch")
-	expect(toResourceKind("https://youtu.be/abc")).toBe("watch")
-	expect(toResourceKind("https://m.youtube.com/watch?v=abc")).toBe("watch")
-	expect(toResourceKind("https://podcasts.apple.com/us/podcast/x")).toBe("listen")
-
-	// anything unrecognized, and anything unparseable, reads as an article
-	expect(toResourceKind("https://hamel.dev/blog/judge-bias")).toBe("read")
-	expect(toResourceKind("not a url")).toBe("read")
-	expect(toResourceKind("https://notyoutube.com/watch")).toBe("read")
 })

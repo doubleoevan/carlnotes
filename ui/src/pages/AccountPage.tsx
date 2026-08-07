@@ -74,6 +74,14 @@ function PaymentNotice() {
 	)
 }
 
+// messages for each percentage of the budget spent, lowest threshold last so the first match wins.
+const BUDGET_MESSAGES = [
+	{ budgetUsedPercent: 100, line: "Dry until the 1st. Carl is still reading. He just can't file notes." },
+	{ budgetUsedPercent: 90, line: "Nearly out." },
+	{ budgetUsedPercent: 60, line: "Getting low." },
+	{ budgetUsedPercent: 0, line: "Full pot." },
+] as const
+
 // the progress bar of metered spend against the monthly budget, scans and chat as their own segments of one bar
 function SpendSection({
 	scanSpendCents,
@@ -87,15 +95,16 @@ function SpendSection({
 	// each segment's share of the budget, and the total the label reads
 	const totalCents = scanSpendCents + chatSpendCents
 	const toPercent = (cents: number) => (budgetCents > 0 ? Math.min(100, (cents / budgetCents) * 100) : 0)
-	const spendPercent = budgetCents > 0 ? Math.round(toPercent(totalCents)) : null
+
+	// the budget percent and message
+	const budgetUsedPercent = budgetCents > 0 ? Math.round(toPercent(totalCents)) : 100
+	const budgetMessage =
+		BUDGET_MESSAGES.find((message) => budgetUsedPercent >= message.budgetUsedPercent) ?? BUDGET_MESSAGES[0]
 
 	return (
 		<section className={SECTION_CARD_CLASS}>
 			<div className="flex items-baseline justify-between">
-				<h2 className="font-semibold">
-					Spend this month
-					{spendPercent !== null && <span className="text-muted-foreground font-normal"> {spendPercent}%</span>}
-				</h2>
+				<h2 className="font-semibold">Carl's coffee fund</h2>
 				<span className="text-muted-foreground text-sm">
 					{toCentsLabel(totalCents)} of {toCentsLabel(budgetCents)}
 				</span>
@@ -118,7 +127,18 @@ function SpendSection({
 					Coffee talk {toCentsLabel(chatSpendCents)}
 				</span>
 			</div>
-			<p className="text-muted-foreground mt-1 text-xs">Money spent against your monthly budget. Not a bill.</p>
+			{/* the budget percent and message */}
+			<p className="text-muted-foreground mt-1 text-xs">
+				<span className="text-sm">{budgetUsedPercent}%</span> {budgetMessage.line}
+				{budgetUsedPercent >= 100 && (
+					<>
+						{" "}
+						<AnchorLink href="/pricing" className="underline">
+							Pick up some coffee.
+						</AnchorLink>
+					</>
+				)}
+			</p>
 		</section>
 	)
 }

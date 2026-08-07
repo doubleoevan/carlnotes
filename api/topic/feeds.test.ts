@@ -23,7 +23,7 @@ test("canRateInFeed lets a subscriber rate a public or invite topic", () => {
 })
 
 // a private topic is never allowed to be rated by a non-owner, and a signed-out visitor is never allowed to rate
-test("canRateInFeed refuses a private topic and a signed-out visitor", () => {
+test("canRateInFeed rejects a private topic and a signed-out visitor", () => {
 	// even if the subscriber set somehow has a user, a private topic is not rateable for a non-owner
 	expect(canRateInFeed(topic("owner", "private"), "u2", new Set(["t1"]))).toBe(false)
 	// a signed-out visitor can be neither an owner nor subscriber

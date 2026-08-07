@@ -4,7 +4,7 @@
 TBD - created by archiving change add-activity-page-and-subscriptions. Update Purpose after archive.
 ## Requirements
 ### Requirement: The owner publishes a Topic by setting its visibility
-The edit-topic modal's visibility field SHALL be the publish control: it sets `topics.visibility` (public, invite, or private) through the topic-update endpoint, authorized through the gate like every other Topic write, with no dedicated visibility endpoint. An invite Topic stays unlisted — off the homepage, its URL gated by the invited-email list. Demoting a public Topic to private SHALL leave its subscription rows in place: they simply stop resolving, since a private Topic refuses everyone but the owner, and nothing is deleted, so re-publishing restores the previous subscribers.
+The edit-topic modal's visibility field SHALL be the publish control: it sets `topics.visibility` (public, invite, or private) through the topic-update endpoint, authorized through the gate like every other Topic write, with no dedicated visibility endpoint. An invite Topic stays unlisted — off the homepage, its URL gated by the invited-email list. Demoting a public Topic to private SHALL leave its subscription rows in place: they simply stop resolving, since a private Topic rejects everyone but the owner, and nothing is deleted, so re-publishing restores the previous subscribers.
 
 #### Scenario: Publishing opens the Topic
 - **WHEN** the owner sets a private Topic's visibility to public
@@ -19,7 +19,7 @@ The edit-topic modal's visibility field SHALL be the publish control: it sets `t
 - **THEN** the api rejects it
 
 ### Requirement: Self-subscribing to a public Topic stays consentless and idempotent
-The Subscribe control SHALL create and remove the calling user's own subscription row on a public Topic they can already see, refused on a private Topic, idempotent on repeat. No consent step SHALL be added: the user is only granting themselves read access to already-public content. The subscribe bell SHALL render on the topic page and on each homepage feed card (right of the "# new" count, non-owners only), filled in the primary color while subscribed; a signed-out click SHALL route to signup instead of calling the api.
+The Subscribe control SHALL create and remove the calling user's own subscription row on a public Topic they can already see, rejected on a private Topic, idempotent on repeat. No consent step SHALL be added: the user is only granting themselves read access to already-public content. The subscribe bell SHALL render on the topic page and on each homepage feed card (right of the "# new" count, non-owners only), filled in the primary color while subscribed; a signed-out click SHALL route to signup instead of calling the api.
 
 #### Scenario: Subscribe and unsubscribe round-trip
 - **WHEN** a signed-in non-owner subscribes to a public Topic and later unsubscribes
@@ -60,7 +60,7 @@ On an invite Topic — where the subscription is the sole access grant — a sub
 - **THEN** they continue to see the Topic's full Findings history, exactly as any visitor does
 
 ### Requirement: The consent moment sets the next-scan expectation
-Because an invite acceptor sees nothing until the next scheduled Scan runs, the accept controls SHALL carry a static disclaimer and acceptance SHALL show a toast, both worded around the next scheduled scan rather than an immediate result, so a weekly-cadence Topic does not read as broken during the wait.
+Because an invite acceptor sees nothing until the next scheduled Scan runs, the accept controls SHALL carry a static disclaimer and acceptance SHALL show a toast, both worded around the next scheduled scan rather than an immediate result, so a Topic scanned weekly does not read as broken during the wait.
 
 #### Scenario: Accepting sets the expectation
 - **WHEN** the invitee accepts a pending invite

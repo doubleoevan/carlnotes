@@ -32,12 +32,12 @@ export async function startTopicScan(topicId: string, ownerId: string, trigger: 
 		.limit(1)
 
 	// the scan row is written before the workflow starts, so the Topic page shows a Scan already under way.
-	// a claimed scan row takes this call's owner and trigger.
+	// a scan row taken this way gets this call's owner and trigger.
 	// its spend, quota, and reporting all follow what the scan row says.
 	const scanFields = { ownerId, isManual: trigger === "manual" }
-	const claimedFields = { ...scanFields, startedAt: new Date() }
+	const takenFields = { ...scanFields, startedAt: new Date() }
 	const [scan] = openScan
-		? await db.update(scans).set(claimedFields).where(eq(scans.id, openScan.id)).returning()
+		? await db.update(scans).set(takenFields).where(eq(scans.id, openScan.id)).returning()
 		: await db
 				.insert(scans)
 				.values({ ...scanFields, topicId })
@@ -52,7 +52,7 @@ export async function startTopicScan(topicId: string, ownerId: string, trigger: 
 
 /**
  * Hand an already-open Scan row to Temporal. isExistingRow says the row predates this call,
- * which determines whether a refused or failed scan start removes it.
+ * which determines whether a rejected or failed scan start removes it.
  */
 export async function scanTopic(
 	scan: Scan,
@@ -72,9 +72,9 @@ export async function scanTopic(
 		throw error
 	}
 
-	// a refusal means this Topic already has a Scan in flight. a row this call opened will never run, so it's deleted.
+	// a rejection means this Topic already has a Scan in flight. a row this call opened will never run, so it's deleted.
 	// a row that already existed is has a dispatchedAt saved instead, which heals the case where a start succeeded and
-	// only its dispatchedAt write failed. a scan row that is truly orphaned is reclaimed on the next sweep
+	// only its dispatchedAt write failed. a scan row that is truly orphaned is started on the next sweep
 	if (scanStart.status === "running") {
 		if (!isExistingRow) {
 			await db.delete(scans).where(eq(scans.id, scan.id))

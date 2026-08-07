@@ -15,10 +15,10 @@ test("toScanSummary yields an empty summary when the report throws", async () =>
 
 // buildScanReportPrompt writes the report prompt from summarize-topic-scan.md over the scan's totals, sources, and costs
 test("buildScanReportPrompt grounds the report prompt in the scan's data", async () => {
-	// one kept finding with its reader-facing note
+	// one kept finding with its user-facing note
 	const keptFinding = { title: "One", url: "https://a.com/1", relevanceScore: 0.91, relevanceExplanation: "agent news" }
 
-	// per-cause drop counts plus the deferred and failed counts
+	// per-cause drop counts plus the failed count. the deferred count is set but never reported
 	const reviewOutcome = {
 		keptFindings: [keptFinding],
 		filteredCounts: {
@@ -33,7 +33,7 @@ test("buildScanReportPrompt grounds the report prompt in the scan's data", async
 
 	// the spend breakdown the cost line renders, ingestion included, and two sources with different outcomes
 	const stageCosts = { ingestion: 0.005, embedding: 0.01, fetch: 0.02, scoringCheap: 0.03, scoringPremium: 0.0634 }
-	const budget = { ...newBudget(), spent: 0.1284, stageCosts }
+	const budget = { ...newBudget(), spentDollars: 0.1284, stageCosts }
 	const scannedSources: ScannedSource[] = [
 		{ sourceKind: "rss", status: "ok" },
 		{ sourceKind: "search", status: "failed" },
@@ -57,6 +57,11 @@ test("buildScanReportPrompt grounds the report prompt in the scan's data", async
 	expect(reportPrompt).toContain("duplicate content: 2")
 	expect(reportPrompt).toContain("rss: ok")
 	expect(reportPrompt).toContain("search: failed")
+
+	// the Scan's limits never reach the user's note. Carl can only write about what the data names,
+	// so keeping the deferred count out of the prompt is what keeps it out of the note
+	expect(reportPrompt).not.toContain("spend cap")
+	expect(reportPrompt).not.toContain("deferred")
 
 	// the report beats survive rendering and no placeholder is left unfilled
 	expect(reportPrompt).toContain("worth flagging")

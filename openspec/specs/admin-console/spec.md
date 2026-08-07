@@ -4,15 +4,15 @@
 TBD - created by archiving change add-authz-plans-billing. Update Purpose after archive.
 ## Requirements
 ### Requirement: The admin console is an admin-only route
-An admin console route SHALL render a users table and a totals summary, authorized through `isAllowed(user, "admin:console")`. A non-admin SHALL be refused the route and its data.
+An admin console route SHALL render a users table and a totals summary, authorized through `isAllowed(user, "admin:console")`. A non-admin SHALL be rejected the route and its data.
 
 #### Scenario: An admin opens the console
 - **WHEN** an admin navigates to the console route
 - **THEN** the users table and totals summary render
 
-#### Scenario: A non-admin is refused
+#### Scenario: A non-admin is rejected
 - **WHEN** a non-admin requests the console route or its api
-- **THEN** the request is refused through the gate
+- **THEN** the request is rejected through the gate
 
 ### Requirement: The users table shows each user's standing and cost against budget
 Each row SHALL show email, role, current plan, signup date, topic count, attributed storage, and month-to-date variable cost shown against that user's effective budget, so an outlier is visible at a glance.
@@ -24,6 +24,43 @@ Each row SHALL show email, role, current plan, signup date, topic count, attribu
 #### Scenario: Cost shows against the effective budget
 - **WHEN** a user's month-to-date variable cost is rendered
 - **THEN** it is shown against their effective budget (the override when set, else the plan backstop)
+
+### Requirement: A user's topic count opens their topics
+
+The topic count in each row SHALL open that user's owned Topics beneath it, in the same table the Activity page renders for a user's own Topics, so the console answers "what is this person actually running" without a second screen to build or maintain. The count SHALL carry a marker showing whether the row is open, and a user with no Topics SHALL not be openable.
+
+The Topics SHALL be read when the row is first opened rather than with the console, since a console listing every user would otherwise load every user's Topics to show none of them.
+
+They SHALL be read through the same loader the owner's own Activity page uses, so an admin sees exactly what that user sees and there is no second query to drift from the first.
+
+The email preference SHALL render read-only. It is the owner's to receive, and an admin turning it off for them is not an admin's call.
+
+A Topic that is not public SHALL warn before it is opened, naming the visibility its owner chose. The link SHALL still work — an admin may open any Topic — but a private Topic should say so rather than read like any other row.
+
+#### Scenario: A count opens the user's topics
+
+- **WHEN** an admin activates a user's topic count
+- **THEN** that user's Topics render beneath the row with their brews, followers, dates, visibility, and cost, and the marker shows the row is open
+
+#### Scenario: A user with no topics cannot be opened
+
+- **WHEN** a user's topic count is zero
+- **THEN** the count is not activatable
+
+#### Scenario: The email preference is read-only
+
+- **WHEN** an admin views another user's Topics in the console
+- **THEN** each Topic's email preference is visible and cannot be changed
+
+#### Scenario: A private topic warns before it opens
+
+- **WHEN** an admin points at a Topic whose visibility is private or invite
+- **THEN** the link says so, and it still opens
+
+#### Scenario: Topics load on demand
+
+- **WHEN** the console first renders
+- **THEN** no user's Topics have been read, and the first read happens when a count is opened
 
 ### Requirement: Attributed storage is a labelled attribution, not a chargeback
 Attributed storage SHALL sum the bytes the user's Topics hold — resource content byte counts plus attachment byte counts plus embedding width times row count — and SHALL be labelled "Storage", never storage cost, because Resources are global and deduplicated across users, so the figure is an attribution for spotting heavy accounts, not a chargeback.
@@ -74,7 +111,7 @@ The system SHALL refuse to remove an admin's own admin role, so the platform can
 
 #### Scenario: An admin cannot demote themselves
 - **WHEN** an admin attempts to change their own role away from admin
-- **THEN** the change is refused and their role stays admin
+- **THEN** the change is rejected and their role stays admin
 
 #### Scenario: An admin can change another user's role
 - **WHEN** an admin changes a different user's role

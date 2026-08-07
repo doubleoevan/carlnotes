@@ -35,7 +35,7 @@ export type SignupGatePayload = z.infer<typeof signupGatePayload>
 // the checkout body. which paid plan and billing interval to subscribe to through Stripe Checkout
 export const checkoutPayload = z.object({
 	plan: z.enum(["plus", "premium"]),
-	interval: z.enum(["monthly", "yearly"]),
+	billingInterval: z.enum(["monthly", "yearly"]),
 })
 export type CheckoutPayload = z.infer<typeof checkoutPayload>
 
@@ -66,6 +66,10 @@ export type ActivityScan = {
 export type ActivityTopic = {
 	id: string
 	name: string
+	// who may see the topic, shown with the same glyph the topic page's info card uses
+	visibility: (typeof visibilities)[number]
+	// the topic scan schedule: daily, weekdays, or weekly
+	frequency: (typeof frequencies)[number]
 	// the month-to-date figures and dates the row renders
 	monthScanCount: number
 	// active subscribers, counted the same way the feed and topic page count them: the owner's own row never counts
@@ -136,7 +140,7 @@ export function toUncompactedChatTurnStart(history: { question: string; answer: 
 	return 0
 }
 
-// how many chat turns a send posts to the llm: the ceiling is what the model can read before our code compacts
+// how many chat turns a send posts to the llm: the limit is what the model can read before our code compacts
 export const CHAT_HISTORY_TURNS = 100
 
 // how much of a compacted older answer survives: enough to carry its summary, cheap enough to keep many
@@ -165,7 +169,7 @@ export const CHAT_QUESTION_CHARS = 1_000
 // how long a topic prompt may grow before a copy-paste is treated as an attachment
 export const TOPIC_PROMPT_CHARS = 2_000
 
-// how many attachments one reader may keep durably against one topic.
+// how many attachments one user may keep durably against one topic.
 // a keep past the cap is skipped silently, because it runs after the chat turn that asked for it has already finished
 export const CHAT_ATTACHMENT_KEEP_LIMIT = 20
 
@@ -181,12 +185,12 @@ export const chatAttachmentPayload = z.discriminatedUnion("kind", [
 	z.strictObject({
 		...chatAttachmentFields,
 		kind: z.literal("image"),
-		data: z.string().max(CHAT_IMAGE_DATA_CHARS).startsWith("data:image/"),
+		dataUrl: z.string().max(CHAT_IMAGE_DATA_CHARS).startsWith("data:image/"),
 	}),
 	z.strictObject({
 		...chatAttachmentFields,
 		kind: z.literal("pdf"),
-		data: z.string().max(CHAT_IMAGE_DATA_CHARS).startsWith("data:application/pdf"),
+		dataUrl: z.string().max(CHAT_IMAGE_DATA_CHARS).startsWith("data:application/pdf"),
 	}),
 	z.strictObject({
 		...chatAttachmentFields,
@@ -251,7 +255,7 @@ export type ChatConversation = {
 export const setRolePayload = z.object({ role: z.enum(["admin", "user"]) })
 export type SetRolePayload = z.infer<typeof setRolePayload>
 
-// the admin budget-override body: a per-user monthly ceiling in cents, or null to fall back to the plan's backstop
+// the admin budget-override body: a per-user monthly limit in cents, or null to fall back to the plan's backstop
 export const budgetOverridePayload = z.object({ budgetOverrideCents: z.number().int().nonnegative().nullable() })
 export type BudgetOverridePayload = z.infer<typeof budgetOverridePayload>
 
@@ -352,7 +356,7 @@ export const topicFeed = z.object({
 	// how long the latest succeeded scan took, in milliseconds. null until a scan has succeeded
 	lastScanDurationMs: z.number().nullable(),
 	// this calendar month's total scan cost in dollars, for the owner (and admins on the topic detail page). null otherwise
-	monthCost: z.number().nullable(),
+	monthCostDollars: z.number().nullable(),
 	// an AI generated recap of the latest scan. null until a scan has succeeded
 	scanSummary: z.string().nullable(),
 	// the attachments and sources shown in the info popover. a file attachment downloads for the owner, a url attachment links out to its page
@@ -366,7 +370,17 @@ export const topicFeed = z.object({
 			context: z.string().nullable(),
 		}),
 	),
-	sources: z.array(z.object({ id: z.string(), kind: z.enum(sourceKinds) })),
+	// topic sources with a display summary derived server side from each source's config.
+	// only the owner can see a pending or failed attachment status
+	sources: z.array(
+		z.object({
+			id: z.string(),
+			sourceKind: z.enum(sourceKinds),
+			summary: z.string(),
+			status: z.enum(attachmentStatuses),
+			error: z.string().nullable(),
+		}),
+	),
 	findings: z.array(topicFinding),
 })
 export type TopicFeed = z.infer<typeof topicFeed>
@@ -383,7 +397,7 @@ export const topicScan = z.object({
 	keptCount: z.number(),
 	filteredCount: z.number(),
 	// the scan cost in dollars. null unless the viewer owns the topic or holds the platform admin role
-	cost: z.number().nullable(),
+	costDollars: z.number().nullable(),
 	// an AI written recap of the scan. null until the review has run
 	scanSummary: z.string().nullable(),
 	// why the scan failed, so a topic whose sources all fail does not read as one that simply found nothing
@@ -394,8 +408,6 @@ export type TopicScan = z.infer<typeof topicScan>
 // a topic's full payload. the topic feed shape plus everything the detail page needs
 export const topicResponse = topicFeed.extend({
 	visibility: z.enum(visibilities),
-	// sources with a display summary derived server side from each source's config
-	sources: z.array(z.object({ id: z.string(), kind: z.enum(sourceKinds), summary: z.string() })),
 	// the scan history, newest first
 	scans: z.array(topicScan),
 	// the invited emails. empty for anyone but the owner
@@ -404,15 +416,48 @@ export const topicResponse = topicFeed.extend({
 	manualScansRemaining: z.number().nullable(),
 	// whether the owner has spent their monthly budget, which blocks a scan the same way a used up daily quota does
 	isSpendExhausted: z.boolean(),
+	// whether this user may edit or delete the topic. true for the owner and for any admin
+	canEdit: z.boolean(),
+	// whether the owner holds more daily topics than their plan runs
+	isDailyFrequencyPaused: z.boolean(),
+	// this topic's position in the Featured section as well as all featured topics,
+	// both are null on the topic page for anyone but an admin, who is the only one who can see or set them
+	featureOrder: z.number().nullable(),
+	featuredTopics: z.array(z.object({ id: z.string(), name: z.string(), featureOrder: z.number() })).nullable(),
 })
 export type TopicResponse = z.infer<typeof topicResponse>
 
-// a source in the update payload. an id keeps that stored source as is, without updating its kind.
-// a new source includes its kind and config and is limited to the kinds the editor can add
+// how many Sources one topic may hold, the same on every plan.
+export const MAX_TOPIC_SOURCES = 10
+
+// a source in the update payload. an id keeps that stored source as is, without updating its sourceKind.
+// a new source includes its sourceKind and config, limited to the kinds the editor can add
 export const updateTopicSource = z.union([
 	z.object({ id: z.string() }),
-	z.object({ kind: z.enum(editableSourceKinds), config: z.record(z.string(), z.unknown()) }),
+	z.object({ sourceKind: z.enum(editableSourceKinds), config: z.record(z.string(), z.unknown()) }),
 ])
+
+// the cap the worker applies to a generated attachment context, so an edit can't inflate scan tokens
+export const MAX_ATTACHMENT_CONTEXT_CHARS = 8000
+
+// the source suggestions body. the topic's context is included in the request.
+// excludeSources are sources that the editor already has
+export const suggestSourcesPayload = z.object({
+	name: z.string().trim(),
+	prompt: z.string().trim(),
+	attachmentContext: z.string().trim().max(MAX_ATTACHMENT_CONTEXT_CHARS).default(""),
+	excludeSources: z
+		.array(z.object({ sourceKind: z.enum(editableSourceKinds), value: z.string() }))
+		.max(MAX_TOPIC_SOURCES),
+	limit: z.number().int().min(1).max(MAX_TOPIC_SOURCES),
+})
+export type SuggestSourcesPayload = z.infer<typeof suggestSourcesPayload>
+
+// suggested sources, each already confirmed readable
+export const suggestSourcesResponse = z.object({
+	sources: z.array(z.object({ sourceKind: z.enum(editableSourceKinds), value: z.string() })),
+})
+export type SuggestSourcesResponse = z.infer<typeof suggestSourcesResponse>
 
 // the topic update body the edit modal saves. invitees and sources are lists that the api reconciles
 export const updateTopicPayload = z.object({
@@ -426,9 +471,10 @@ export const updateTopicPayload = z.object({
 	visibility: z.enum(visibilities),
 	// how many findings a scan is set to keep for this topic
 	maxResults: z.number().refine((value) => (maxResultsOptions as readonly number[]).includes(value)),
-	// the full invitee and source lists
+	// the full list of a topic's invitees
 	invitees: z.array(z.string().trim().toLowerCase().pipe(z.email())),
-	sources: z.array(updateTopicSource),
+	// stored, staged, and prompt-derived Sources are combined into one array and limited to MAX_TOPIC_SOURCES
+	sources: z.array(updateTopicSource).max(MAX_TOPIC_SOURCES),
 })
 export type UpdateTopicPayload = z.infer<typeof updateTopicPayload>
 
@@ -449,13 +495,21 @@ export function toCtaTag(value: string | null | undefined): string | null {
 	return value && CTA_TAG_PATTERN.test(value) ? value : null
 }
 
-// the edited attachment context body. the same cap the worker applies to a generated context, so an edit can't inflate scan tokens
-export const MAX_ATTACHMENT_CONTEXT_CHARS = 8000
+// the edited attachment context body
 export const attachmentContextPayload = z.object({ context: z.string().trim().max(MAX_ATTACHMENT_CONTEXT_CHARS) })
 export type AttachmentContextPayload = z.infer<typeof attachmentContextPayload>
 
+// the payload for attaching a page by url. the shape is checked here and the url itself
+// which rejects a malformed, non-http, or internal url and names the reason
+export const attachmentUrlPayload = z.object({ url: z.string().trim().min(1).max(2000) })
+export type AttachmentUrlPayload = z.infer<typeof attachmentUrlPayload>
+
+// the admin's featured topics order choice
+export const topicFeatureOrderPayload = z.object({ position: z.number().int().min(0) })
+export type TopicFeatureOrderPayload = z.infer<typeof topicFeatureOrderPayload>
+
 // the manual scan response which is how many manual scans the user has left today
-export const manualScanResponse = z.object({ remaining: z.number() })
+export const manualScanResponse = z.object({ remainingScans: z.number() })
 export type ManualScanResponse = z.infer<typeof manualScanResponse>
 
 // the homepage payload. the collapsible sections of topic feeds, plus the user's topic-creation quota
@@ -467,8 +521,11 @@ export const topicFeedResponse = z.object({
 			topics: z.array(topicFeed),
 		}),
 	),
-	// how many more topics the user may create under the topic cap
+	// how topics the user can still create under their plan's topic limit
 	topicsRemaining: z.number(),
+	// how many topics the plan can run on a daily frequency, and how many of those slots are still free
+	dailyTopicLimit: z.number(),
+	dailyTopicsRemaining: z.number(),
 })
 export type TopicFeedResponse = z.infer<typeof topicFeedResponse>
 

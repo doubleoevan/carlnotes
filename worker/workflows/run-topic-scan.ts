@@ -2,27 +2,44 @@
 // and resumes at the stage after the last stage that finished instead of paying twice to redo a stage
 import { proxyActivities } from "@temporalio/workflow"
 import type * as scanActivities from "./run-topic-scan-activities"
-import { FINISH_TIMEOUT_MS, INGEST_TIMEOUT_MS, REVIEW_TIMEOUT_MS } from "./stage-timeouts"
+// the attempt counts the retry policies that the temporal activities read
+import {
+	FINISH_ATTEMPTS,
+	FINISH_TIMEOUT_MS,
+	FINISH_TOTAL_TIMEOUT_MS,
+	HEARTBEAT_TIMEOUT_MS,
+	INGEST_ATTEMPTS,
+	INGEST_TIMEOUT_MS,
+	INGEST_TOTAL_TIMEOUT_MS,
+	REVIEW_ATTEMPTS,
+	REVIEW_TIMEOUT_MS,
+	REVIEW_TOTAL_TIMEOUT_MS,
+} from "./stage-timeouts"
 
-// ingest may be retried: it dedupes on canonical url, so a second attempt lands on the same Resources so its spend does not.
-// each attempt builds its own Budget, so the Scan records only the last attempt's ingestion cost,
-// and the ceiling stays soft by one ingestion stage per retry. the attempt cap bounds that
+// ingest activity may be retried: it dedupes on canonical url, so a second attempt converges on the same Resources.
+// it heartbeats, so a dead worker is caught in the heartbeat timeout
 const { ingestForScan } = proxyActivities<typeof scanActivities>({
 	startToCloseTimeout: INGEST_TIMEOUT_MS,
-	retry: { maximumAttempts: 3 },
+	scheduleToCloseTimeout: INGEST_TOTAL_TIMEOUT_MS,
+	heartbeatTimeout: HEARTBEAT_TIMEOUT_MS,
+	retry: { maximumAttempts: INGEST_ATTEMPTS },
 })
 
-// review pays for the fetches and the model calls, so every attempt spends again. it gets exactly one.
-// relaxing this, or moving a paid call into a stage that retries, charges the owner once per attempt
+// review pays for the fetches and the model calls, so it gets one retry and no more. a second attempt skips every
+// Resource that already has a Finding for the Topic and reuses the stored embeddings and content.
+// review isolates its own per-Resource failures, so a failure reaching here is systemic
 const { reviewForScan } = proxyActivities<typeof scanActivities>({
 	startToCloseTimeout: REVIEW_TIMEOUT_MS,
-	retry: { maximumAttempts: 1 },
+	scheduleToCloseTimeout: REVIEW_TOTAL_TIMEOUT_MS,
+	heartbeatTimeout: HEARTBEAT_TIMEOUT_MS,
+	retry: { maximumAttempts: REVIEW_ATTEMPTS },
 })
 
-// the closing writes are idempotent, so they may retry
+// the closing writes are idempotent, so they may retry. they are short enough not to need a heartbeat
 const { finishScan, failScan } = proxyActivities<typeof scanActivities>({
 	startToCloseTimeout: FINISH_TIMEOUT_MS,
-	retry: { maximumAttempts: 3 },
+	scheduleToCloseTimeout: FINISH_TOTAL_TIMEOUT_MS,
+	retry: { maximumAttempts: FINISH_ATTEMPTS },
 })
 
 /**
@@ -35,7 +52,7 @@ export async function runTopicScanWorkflow(
 	ownerId: string,
 	trigger: scanActivities.ScanTrigger,
 ): Promise<void> {
-	// the Budget is built by the first stage and rides between stages as a value. it includes the Scan's ceilings,
+	// the Budget is built by the first stage and rides between stages as a value. it includes the Scan's limits,
 	// which come from the environment, so it is made where an activity can read it, instead of in the workflow
 	let spentBudget: scanActivities.IngestStageResult["budget"] | undefined
 

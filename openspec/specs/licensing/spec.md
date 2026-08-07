@@ -24,3 +24,16 @@ The Privacy page and Terms page SHALL name whichever license the project is actu
 - **WHEN** a user views the Privacy page or the Terms page
 - **THEN** every license mention on that page names the project's current license, not a prior one
 
+### Requirement: The Privacy page states that an administrator can read a private topic
+
+An administrator bypasses the Topic visibility rules and can open any Topic, including a private one, with its context document, attachments, and findings. The Privacy page SHALL say so plainly, in the section about public and shared topics, rather than leaving it to be inferred from a general line about production access.
+
+It SHALL name why the access exists — answering a support question about a Scan, and investigating a Topic reported for abuse — SHALL say that private Topics are not read as a matter of course, and SHALL note that a manual Scan an administrator runs is recorded against them rather than against the owner.
+
+A reader deciding whether to attach a manuscript or describe a job search is deciding on the strength of what this page tells them. A capability the product has and the page omits is the page being wrong.
+
+#### Scenario: The page says an administrator can open a private topic
+
+- **WHEN** a user reads the Privacy page
+- **THEN** it states that a CarlNotes administrator can open any topic including a private one, why, and that it is not routine
+

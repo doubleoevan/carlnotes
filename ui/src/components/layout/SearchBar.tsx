@@ -247,11 +247,11 @@ function SearchFilters() {
 	)
 }
 
-// one view row. a screen-reader-only radio input carries the keyboard and accessibility semantics, and a custom dot renders beside it
+// one view row. a screen-user-only radio input includes the keyboard and accessibility semantics, and a custom dot renders beside it
 function ViewRow({ label, isActive, onChange }: { label: string; isActive: boolean; onChange: () => void }) {
 	return (
 		<label className="hover:bg-accent flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-sm sm:min-h-9">
-			{/* the input carries the semantics but renders nothing, so the custom dot shows its keyboard focus */}
+			{/* the input includes the semantics but renders nothing, so the custom dot shows its keyboard focus */}
 			<input type="radio" name="feed-view" checked={isActive} onChange={onChange} className="peer sr-only" />
 			<span className="border-muted-foreground peer-focus-visible:ring-ring/50 grid size-4 place-items-center rounded-full border peer-focus-visible:ring-[3px]">
 				{isActive ? <span className="bg-primary size-2 rounded-full" /> : null}

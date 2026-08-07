@@ -16,8 +16,8 @@ test("computeContributionCents is null when revenue is unavailable", () => {
 	expect(computeContributionCents(null, 3_000, 0)).toBeNull()
 })
 
-// an admin removing their own admin role is refused, so the platform can never be locked out of its last admin
-test("isSelfDemotion refuses an admin demoting themselves, and nothing else", () => {
+// an admin removing their own admin role is rejected, so the platform can never be locked out of its last admin
+test("isSelfDemotion rejects an admin demoting themselves, and nothing else", () => {
 	expect(isSelfDemotion("u1", "u1", "user")).toBe(true)
 	// promoting yourself and changing someone else's role are both fine
 	expect(isSelfDemotion("u1", "u1", "admin")).toBe(false)

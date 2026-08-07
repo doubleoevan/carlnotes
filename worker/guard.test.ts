@@ -17,7 +17,7 @@ test("toScreenVerdict reads only that type's detectors", () => {
 	expect(toScreenVerdict({ scanners: { BanTopics: 0.99 } }, "page", "a page").isFlagged).toBe(true)
 	expect(toScreenVerdict({ scanners: { Toxicity: 0.99 } }, "page", "a page").isFlagged).toBe(true)
 
-	// a document does consult secrets, since a pasted credential is worth refusing
+	// a document does consult secrets, since a pasted credential is worth rejecting
 	expect(toScreenVerdict({ scanners: { Secrets: 0.99 } }, "document", "a doc")).toEqual({
 		isFlagged: true,
 		detectors: ["Secrets"],
@@ -36,15 +36,15 @@ test("toScreenVerdict flags only at or above the threshold", () => {
 	expect(toScreenVerdict({ scanners: { PromptInjection: 0.8 } }, "page", "a page").isFlagged).toBe(true)
 })
 
-// a scanner that refuses without naming a score still counts, so a version that reports only validity is honored
-test("toScreenVerdict honors a refusal that includes no scores", () => {
+// a scanner that rejects without naming a score still counts, so a version that reports only validity is honored
+test("toScreenVerdict honors a rejection that includes no scores", () => {
 	expect(toScreenVerdict({ is_valid: false }, "page", "a page")).toEqual({
 		isFlagged: true,
 		detectors: ["unnamed"],
 		text: "a page",
 	})
 
-	// a refusal alongside below-threshold scores is the scores' verdict, not a blanket refusal
+	// a rejection alongside below-threshold scores is the scores' verdict, not a blanket rejection
 	expect(toScreenVerdict({ is_valid: false, scanners: { PromptInjection: 0.1 } }, "page", "a page").isFlagged).toBe(
 		false,
 	)

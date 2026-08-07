@@ -1,7 +1,7 @@
 // the Budget crosses a Temporal activity boundary between the topic Scan's stages, so it is serialized and restored between them.
-// these tests cover that hand-off, since a spend that does not survive it is a ceiling that stops applying
+// these tests cover that hand-off, since a spend that does not survive it is a limit that stops applying
 import { describe, expect, test } from "bun:test"
-import { type Budget, canScoreResource, canSpend, charge, newBudget } from "./budget"
+import { type Budget, canScoreResource, canSpend, charge, newBudget, toResumedBudget } from "./budget"
 
 // what Temporal does to a value that crosses an activity boundary
 function acrossActivityBoundary(budget: Budget): Budget {
@@ -16,22 +16,22 @@ describe("a Budget crossing between stages", () => {
 		charge(ingestBudget, "embedding", 0.03)
 
 		const reviewBudget = acrossActivityBoundary(ingestBudget)
-		expect(reviewBudget.spent).toBeCloseTo(0.05, 10)
+		expect(reviewBudget.spentDollars).toBeCloseTo(0.05, 10)
 		expect(reviewBudget.stageCosts.ingestion).toBeCloseTo(0.02, 10)
 		expect(reviewBudget.stageCosts.embedding).toBeCloseTo(0.03, 10)
 	})
 
-	test("keeps the ceiling it was created with, so the later stage measures against the same limit", () => {
-		// the ceilings are read from the environment when the Budget is made, which a workflow may not do
+	test("keeps the limit it was created with, so the later stage measures against the same limit", () => {
+		// the limits are read from the environment when the Budget is made, which a workflow may not do
 		const revivedBudget = acrossActivityBoundary(newBudget())
-		expect(revivedBudget.cap).toBe(newBudget().cap)
+		expect(revivedBudget.limitDollars).toBe(newBudget().limitDollars)
 		expect(revivedBudget.maxScoredResources).toBe(newBudget().maxScoredResources)
 	})
 
-	test("a stage starting from a spent-out Budget respects the ceiling already reached", () => {
-		// the first stage spends the whole ceiling, so the second stage must refuse to pay for anything more
+	test("a stage starting from a spent-out Budget respects the limit already reached", () => {
+		// the first stage spends the whole limit, so the second stage must refuse to pay for anything more
 		const spentOutBudget = newBudget()
-		charge(spentOutBudget, "fetch", spentOutBudget.cap)
+		charge(spentOutBudget, "fetch", spentOutBudget.limitDollars)
 
 		const nextStageBudget = acrossActivityBoundary(spentOutBudget)
 		expect(canSpend(nextStageBudget)).toBe(false)
@@ -39,16 +39,16 @@ describe("a Budget crossing between stages", () => {
 	})
 
 	test("a stage starting from a partly spent Budget may still buy", () => {
-		// half the ceiling is still under it, so the review picks up where ingest left off instead of being capped out
+		// half the limit is still under it, so the review picks up where ingest left off instead of being capped out
 		const partlySpentBudget = newBudget()
-		charge(partlySpentBudget, "fetch", partlySpentBudget.cap / 2)
+		charge(partlySpentBudget, "fetch", partlySpentBudget.limitDollars / 2)
 
 		const nextStageBudget = acrossActivityBoundary(partlySpentBudget)
 		expect(canSpend(nextStageBudget)).toBe(true)
 		expect(canScoreResource(nextStageBudget)).toBe(true)
 	})
 
-	test("includes the scored-resource count, so the paid scoring section's ceiling is not reset by the boundary", () => {
+	test("includes the scored-resource count, so the paid scoring section's limit is not reset by the boundary", () => {
 		// review counts every Resource it scored on the Budget, and a retry that lost those counts would rebuy them
 		const scoredBudget = newBudget()
 		scoredBudget.fetchCounts.fetchedCount = scoredBudget.maxScoredResources
@@ -56,6 +56,52 @@ describe("a Budget crossing between stages", () => {
 		const nextStageBudget = acrossActivityBoundary(scoredBudget)
 		expect(nextStageBudget.fetchCounts.fetchedCount).toBe(scoredBudget.maxScoredResources)
 		expect(canScoreResource(nextStageBudget)).toBe(false)
+	})
+})
+
+describe("a Budget resumed from a heartbeat checkpoint", () => {
+	test("continues the counters the last attempt had reached", () => {
+		// the attempt that died had spent against two buckets and scored some Resources
+		const checkpoint = newBudget()
+		charge(checkpoint, "fetch", 0.04)
+		charge(checkpoint, "scoringPremium", 0.06)
+		checkpoint.fetchCounts.fetchedCount = 7
+
+		const resumedBudget = toResumedBudget(acrossActivityBoundary(checkpoint), newBudget())
+		expect(resumedBudget.spentDollars).toBeCloseTo(0.1, 10)
+		expect(resumedBudget.stageCosts.fetch).toBeCloseTo(0.04, 10)
+		expect(resumedBudget.fetchCounts.fetchedCount).toBe(7)
+	})
+
+	test("takes its limits from a fresh Budget, so a resumed Scan cannot regain an allowance it already spent", () => {
+		// a checkpoint with its own limits would let a Scan that scored to the cap buy the whole allowance again
+		const checkpoint = newBudget()
+		checkpoint.fetchCounts.fetchedCount = checkpoint.maxScoredResources
+		const staleLimits = { ...checkpoint, limitDollars: 999, maxScoredResources: 999 }
+
+		const resumedBudget = toResumedBudget(staleLimits, newBudget())
+		expect(resumedBudget.limitDollars).toBe(newBudget().limitDollars)
+		expect(resumedBudget.maxScoredResources).toBe(newBudget().maxScoredResources)
+		expect(canScoreResource(resumedBudget)).toBe(false)
+	})
+
+	test("falls back to the passed Budget when there is no checkpoint to read", () => {
+		// a stage on its first attempt, and a stage called directly with no activity context, both land here
+		const passedBudget = newBudget()
+		charge(passedBudget, "ingestion", 0.01)
+
+		expect(toResumedBudget(undefined, passedBudget)).toBe(passedBudget)
+		expect(toResumedBudget(null, passedBudget)).toBe(passedBudget)
+	})
+
+	test("falls back to the passed Budget when the checkpoint is not one", () => {
+		// a truncated or foreign detail would otherwise resume from partial counters and undercount the spend
+		const passedBudget = newBudget()
+		charge(passedBudget, "ingestion", 0.01)
+
+		expect(toResumedBudget({ spentDollars: 5 }, passedBudget)).toBe(passedBudget)
+		expect(toResumedBudget({ ...newBudget(), stageCosts: { fetch: 1 } }, passedBudget)).toBe(passedBudget)
+		expect(toResumedBudget("checkpoint", passedBudget)).toBe(passedBudget)
 	})
 })
 
@@ -69,7 +115,7 @@ describe("charge", () => {
 			charge(budget, "scoringCheap", dollars)
 		}
 		// every charge landed, not just the last one
-		expect(budget.spent).toBeCloseTo(0.06, 10)
+		expect(budget.spentDollars).toBeCloseTo(0.06, 10)
 		expect(budget.stageCosts.scoringCheap).toBeCloseTo(0.06, 10)
 	})
 })

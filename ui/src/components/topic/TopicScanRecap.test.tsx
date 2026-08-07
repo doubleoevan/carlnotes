@@ -10,7 +10,7 @@ const HOSTILE_NOTE = [
 	"- [click me](https://evil.test)",
 	'<a href="https://evil.test">or here</a>',
 	"![carl](https://evil.test/x.png)",
-	"Sources: https://real.example/post",
+	"Findings: https://real.example/post",
 ].join("\n\n")
 
 // the allowed structure renders as markup while unauthorized links render as plain text
@@ -39,7 +39,7 @@ test("a note renders formatting but nothing clickable or embedded", () => {
 // a kept Finding's own url is allowed
 test("a link to a kept finding's url renders as an anchor while others stay inert", () => {
 	// one citation of a kept finding and one of an attacker's choosing, in the same note
-	const note = "Sources:\n\n- [the agent piece](https://kept.example/post)\n- [click me](https://evil.test)"
+	const note = "Findings:\n\n- [the agent piece](https://kept.example/post)\n- [click me](https://evil.test)"
 	const html = renderToStaticMarkup(<ScrollNote note={note} allowedUrls={new Set(["https://kept.example/post"])} />)
 
 	// the kept citation is a real anchor to its stored url

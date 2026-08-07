@@ -1,13 +1,22 @@
-// each billing plan's topic cap, daily scan cap, monthly spend backstop, and price. scheduled and manual scans share one daily scan pool
-import type { plans } from "./enums"
+// each billing plan's topic cap, daily topic cap, daily scan cap, monthly spend backstop, and price.
+// scheduled and manual scans share the daily scan pool
+import type { billingIntervals, plans } from "./enums"
 
 export type Plan = (typeof plans)[number]
+export type BillingInterval = (typeof billingIntervals)[number]
+
+// a limit that differs by how the subscription bills. reading one means naming a billing interval
+type BillingIntervalLimit = Record<BillingInterval, number>
+
 type PlanConfig = {
 	// a higher rank inherits every capability of the plans below it. free is 0, premium is highest
 	rank: number
 	topicLimit: number
-	dailyScanLimit: number
-	// the monthly spend backstop in cents. a ceiling on our cost to serve the user, not the user's price
+	// how many of those topics may run on a daily frequency, which is what actually decides the monthly spend.
+	// a daily topic scans about 30 times a month against a weekly topic's 4
+	dailyTopicLimit: BillingIntervalLimit
+	dailyScanLimit: BillingIntervalLimit
+	// the monthly spend backstop in cents. a limit on our cost to serve the user, not the user's price
 	monthlyBudgetCents: number
 	priceMonthlyCents: number
 	priceYearlyCents: number
@@ -17,22 +26,26 @@ type PlanConfig = {
 // well above any real plan's limits, so a genuine remaining count never reaches it
 export const ADMIN_QUOTA = 999
 
-// an admin's monthly spend backstop in cents. admins bypass the topic and scan caps,
+// an admin's monthly spend backstop in cents. admins bypass the topic and scan limits,
 // but it stays a real number, since this bills a real card and a runaway scan loop should still hit a wall
 export const ADMIN_BUDGET_CENTS = 100_000
+
+// what one scan costs on average, in cents
+export const SCAN_COST_CENTS = 10
 
 // yearly is a flat 10x monthly on every plan — two months free,
 // computed here, so the discount can never drift out of sync if a monthly price changes later
 const YEARLY_MONTHS = 10
 const MONTHLY_PRICE_CENTS = { free: 0, plus: 1500, premium: 2900 } as const satisfies Record<Plan, number>
 
-// `satisfies` checks every plan defines every field, while `as const` keeps the values readonly literals
+// the yearly billing interval has higher limits because it can't include metered overage.
 export const PLANS = {
 	// $0 — capped low since there's no revenue to offset the cost
 	free: {
 		rank: 0,
 		topicLimit: 3,
-		dailyScanLimit: 5,
+		dailyTopicLimit: { monthly: 1, yearly: 1 },
+		dailyScanLimit: { monthly: 5, yearly: 5 },
 		monthlyBudgetCents: 300,
 		priceMonthlyCents: MONTHLY_PRICE_CENTS.free,
 		priceYearlyCents: MONTHLY_PRICE_CENTS.free * YEARLY_MONTHS,
@@ -41,7 +54,8 @@ export const PLANS = {
 	plus: {
 		rank: 1,
 		topicLimit: 10,
-		dailyScanLimit: 20,
+		dailyTopicLimit: { monthly: 3, yearly: 4 },
+		dailyScanLimit: { monthly: 15, yearly: 20 },
 		monthlyBudgetCents: 1000,
 		priceMonthlyCents: MONTHLY_PRICE_CENTS.plus,
 		priceYearlyCents: MONTHLY_PRICE_CENTS.plus * YEARLY_MONTHS,
@@ -50,7 +64,8 @@ export const PLANS = {
 	premium: {
 		rank: 2,
 		topicLimit: 25,
-		dailyScanLimit: 50,
+		dailyTopicLimit: { monthly: 6, yearly: 7 },
+		dailyScanLimit: { monthly: 30, yearly: 40 },
 		monthlyBudgetCents: 2000,
 		priceMonthlyCents: MONTHLY_PRICE_CENTS.premium,
 		priceYearlyCents: MONTHLY_PRICE_CENTS.premium * YEARLY_MONTHS,

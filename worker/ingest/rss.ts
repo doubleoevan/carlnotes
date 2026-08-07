@@ -1,4 +1,4 @@
-// the RSS ingester. it turns a RSS that doesn't require an API key or Atom Source into deduped "read" Resources
+// the RSS ingester. it turns an RSS or Atom Source that needs no API key into deduped "read" Resources
 
 import { fetchFeed } from "./feed"
 import type { Source, SourceIngester } from "./ingester"
@@ -14,5 +14,5 @@ export const rssIngester: SourceIngester = async (source: Source) => {
 	}
 
 	// fetch and parse the feed into "read" Resources
-	return { resources: await fetchFeed(feedUrl), cost: 0 }
+	return { resources: await fetchFeed(feedUrl), costDollars: 0 }
 }

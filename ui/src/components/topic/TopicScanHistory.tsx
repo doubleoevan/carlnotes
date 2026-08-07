@@ -1,6 +1,7 @@
 import type { TopicScan } from "@shared/contracts"
 import { useState } from "react"
 import { NoteIcon } from "@/components/branding/NoteIcon"
+import { randomThinkingLine } from "@/components/chat/thinkingLines"
 import {
 	Popover,
 	PopoverAnchor,
@@ -48,7 +49,7 @@ export function TopicScanHistory({ scans, allowedUrls }: { scans: TopicScan[]; a
 }
 
 // one history scan row, the whole of which opens that brew's note. the note still anchors the popover, so the panel
-// comes out of the icon the reader is looking at instead of from wherever they happened to click.
+// comes out of the icon the user is looking at instead of from wherever they happened to click.
 // the hover highlight paints on a rounded under-layer, matching the resource rows above it
 function ScanRow({ scan, allowedUrls }: { scan: TopicScan; allowedUrls?: AllowedNoteUrls }) {
 	return (
@@ -77,7 +78,7 @@ function ScanRow({ scan, allowedUrls }: { scan: TopicScan; allowedUrls?: Allowed
 	)
 }
 
-// the scan's one-line stat: kept and found counts when succeeded, a shimmering "reading" while running, otherwise the failed message
+// the scan's one-line stat: kept and found counts when succeeded, a shimmering thinking line while running, otherwise the failed message
 function ScanStat({ scan }: { scan: TopicScan }) {
 	if (scan.status === "succeeded") {
 		return (
@@ -89,7 +90,13 @@ function ScanStat({ scan }: { scan: TopicScan }) {
 	if (scan.status === "failed") {
 		return <span className="text-destructive min-w-0 flex-1 truncate text-xs">failed</span>
 	}
-	return <span className="shimmer-text min-w-0 flex-1 truncate text-xs">Carl is reading…</span>
+	return <ScanThinkingLine />
+}
+
+// a thinking line while a scan runs, picked once so the poll's re-renders don't swap it mid-scan
+function ScanThinkingLine() {
+	const [thinkingLine] = useState(randomThinkingLine)
+	return <span className="shimmer-text min-w-0 flex-1 truncate text-xs">{`Carl is ${thinkingLine}…`}</span>
 }
 
 // the history scan note itself: the recap, and for a failed scan, the reason it failed

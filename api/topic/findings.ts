@@ -1,6 +1,7 @@
 // the topic finding logic behind the api routes. it loads a topic's findings and records ratings, views, and consumed state
 import { trackEvent } from "@shared/analytics"
 import type { TopicFinding } from "@shared/contracts"
+import { toUrlHost } from "@shared/sources"
 import { and, desc, eq, gt, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { bookmarks, consumptions, findings, resources, scans } from "../../db/schema"
@@ -217,15 +218,4 @@ export function filteredTopicFindings(topicFindings: TopicFinding[], includeCons
  */
 export function newTopicFindingCount(topicFindings: TopicFinding[]): number {
 	return topicFindings.filter((finding) => !finding.isConsumed).length
-}
-
-/**
- * Return the host for the url or null if the url is invalid.
- */
-export function toUrlHost(url: string): string | null {
-	try {
-		return new URL(url).host
-	} catch {
-		return null
-	}
 }

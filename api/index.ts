@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import {
 	attachmentContextPayload,
+	attachmentUrlPayload,
 	bookmarkPayload,
 	budgetOverridePayload,
 	type ChatAttachment,
@@ -16,6 +17,8 @@ import {
 	signupGatePayload,
 	subscriptionEmailPayload,
 	subscriptionPayload,
+	suggestSourcesPayload,
+	topicFeatureOrderPayload,
 	updateTopicPayload,
 	withAttachmentNote,
 } from "@shared/contracts"
@@ -31,14 +34,16 @@ import {
 	attachmentStream,
 	type ChatReplyStream,
 	ingestAttachment,
+	ingestUrlAttachment,
 	MAX_ATTACHMENT_BYTES,
 	startTelemetry,
 	streamChatReply,
+	suggestSources,
 } from "../worker"
 import { loadActivity } from "./activity"
-import { loadAdminTotals, loadAdminUsers, setUserBudgetOverride, setUserRole } from "./admin"
+import { loadAdminTotals, loadAdminUsers, loadAdminUserTopics, setUserBudgetOverride, setUserRole } from "./admin"
 import { auth, GATE_COOKIE_MAX_AGE_SECONDS, GATE_COOKIE_NAME, signGateToken, verifyTurnstileToken } from "./auth"
-import { isAllowed, topicsRemaining } from "./authorization"
+import { isAllowed, loadDailyTopicQuota, topicsRemaining } from "./authorization"
 import { createCheckoutSession, createPortalSession, handleStripeWebhook, loadBillingState } from "./billing"
 import {
 	deleteKeptAttachment,
@@ -50,6 +55,7 @@ import {
 import { authorizeChatTurn, clearChatTurns, loadChatTurns, recordChatTurn } from "./chat/turns"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
 import { deleteTopicAttachment, loadDownloadableAttachment, updateTopicAttachmentContext } from "./topic/attachments"
+import { setTopicFeatureOrder } from "./topic/featuring"
 import { buildTopicFeeds } from "./topic/feeds"
 import { recordView, setBookmarked, setConsumed, setRating } from "./topic/findings"
 import { loadOwnedTopic } from "./topic/permissions"
@@ -112,11 +118,17 @@ const route = new Hono<AppEnv>()
 		// only include consumed topic findings unless the client asks for the "All" view
 		const includeConsumed = context.req.valid("query").all === "true"
 		// merge in the topic-creation quota. a signed-out visitor has none so gets zero
-		const [topicFeeds, remaining] = await Promise.all([
+		const [topicFeeds, remainingNewTopics, dailyTopicQuota] = await Promise.all([
 			buildTopicFeeds(userId, includeConsumed),
 			userId ? topicsRemaining(userId) : Promise.resolve(0),
+			userId ? loadDailyTopicQuota(userId) : Promise.resolve({ limit: 0, remainingTopics: 0 }),
 		])
-		return context.json({ ...topicFeeds, topicsRemaining: remaining })
+		return context.json({
+			...topicFeeds,
+			topicsRemaining: remainingNewTopics,
+			dailyTopicLimit: dailyTopicQuota.limit,
+			dailyTopicsRemaining: dailyTopicQuota.remainingTopics,
+		})
 	})
 	.post("/topics", zValidator("json", updateTopicPayload), async (context) => {
 		// reject a signed-out caller
@@ -124,11 +136,26 @@ const route = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// create a topic for the current user within the topic cap
+		// create a topic for the current user within the topic cap and the daily topic limit
 		const createTopicResult = await createTopic(userId, context.req.valid("json"), toAnalyticsProperties(context))
-		return createTopicResult.status === "created"
-			? context.json({ id: createTopicResult.id })
+		if (createTopicResult.status === "created") {
+			return context.json({ id: createTopicResult.id })
+		}
+
+		// a full topic cap and a full daily topic limit both reject, but only the second can name its number
+		return createTopicResult.status === "dailyFrequency"
+			? context.json({ error: "daily topic limit reached", dailyTopicLimit: createTopicResult.limit }, 429)
 			: context.json({ error: "quota exhausted" }, 429)
+	})
+	.post("/topics/suggest-sources", zValidator("json", suggestSourcesPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// propose sources from the topic's own text. suggesting is not scanning, so it draws on no quota
+		const { name, prompt, attachmentContext, excludeSources, limit } = context.req.valid("json")
+		return context.json({ sources: await suggestSources({ name, prompt, attachmentContext, excludeSources, limit }) })
 	})
 	.post("/topic-findings/:id/rating", zValidator("json", ratingPayload), async (context) => {
 		// reject a signed-out caller
@@ -195,8 +222,20 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// save the edit topic's fields and reconcile the invitee and source lists. owner or admin only.
-		const isUpdated = await updateTopic(userId, context.req.param("id"), context.req.valid("json"))
-		return isUpdated ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+		const updateTopicResult = await updateTopic(
+			userId,
+			context.req.param("id"),
+			context.req.valid("json"),
+			toAnalyticsProperties(context),
+		)
+		if (updateTopicResult.status === "saved") {
+			return context.json({ ok: true })
+		}
+
+		// a daily frequency past the plan's limit is a quota rejection, not an authorization one
+		return updateTopicResult.status === "dailyFrequency"
+			? context.json({ error: "daily topic limit reached", dailyTopicLimit: updateTopicResult.limit }, 429)
+			: context.json({ error: "forbidden" }, 403)
 	})
 	.delete("/topics/:id", async (context) => {
 		// reject a signed-out caller
@@ -205,8 +244,8 @@ const route = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// delete the topic and everything attached to it. owner or admin only.
-		const isDeleted = await deleteTopic(userId, context.req.param("id"))
-		return isDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+		const isTopicDeleted = await deleteTopic(userId, context.req.param("id"), toAnalyticsProperties(context))
+		return isTopicDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.post("/topics/:id/scan", async (context) => {
 		// reject a signed-out caller
@@ -217,7 +256,7 @@ const route = new Hono<AppEnv>()
 		// trigger a manual scan, billed as overage past the daily quota when a card is on file. owner or admin only.
 		const scanResult = await runManualScan(userId, context.req.param("id"), toAnalyticsProperties(context))
 		if (scanResult.status === "started") {
-			return context.json({ remaining: scanResult.remaining })
+			return context.json({ remainingScans: scanResult.remainingScans })
 		}
 
 		// a scan already in flight is a conflict, not a quota or authorization failure
@@ -298,7 +337,7 @@ const route = new Hono<AppEnv>()
 		}),
 		zValidator("json", chatTurnPayload),
 		async (context) => {
-			// authorize the chat turn first. each refusal reads differently to the reader, so each gets its own status
+			// authorize the chat turn first. each rejection reads differently to the user, so each gets its own status
 			const userId = currentUser(context)
 			const topicId = context.req.param("id")
 			const { question, history, attachments } = context.req.valid("json")
@@ -315,16 +354,16 @@ const route = new Hono<AppEnv>()
 			if (authorization.status === "signup") {
 				return context.json({ error: "sign up required" }, 401)
 			}
-			// anything left is a visibility refusal
+			// anything left is a visibility rejection
 			if (authorization.status !== "allowed") {
 				return context.json({ error: "forbidden" }, 403)
 			}
-			// the gate already refused a signed-out caller with "signup", so this narrows the type alone
+			// the gate already rejected a signed-out caller with "signup", so this narrows the type alone
 			if (!userId) {
 				return context.json({ error: "sign up required" }, 401)
 			}
 
-			// a PDF attachment becomes its extracted text here, and an unreadable one refuses the chat turn in words
+			// a PDF attachment becomes its extracted text here, and an unreadable one rejects the chat turn in words
 			const resolvedAttachments = await resolveChatAttachments(attachments)
 			if (resolvedAttachments === null) {
 				return context.json({ error: "That PDF couldn't be read." }, 422)
@@ -456,6 +495,32 @@ const route = new Hono<AppEnv>()
 			}
 		},
 	)
+	.post("/topics/:id/attachments/url", zValidator("json", attachmentUrlPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+
+		// check the owner first, so a stranger's url is never fetched
+		if (!(await loadOwnedTopic(userId, context.req.param("id")))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+
+		// fetch the page and hand its markdown to the same ingestion path a file upload takes
+		try {
+			const { url } = context.req.valid("json")
+			const attachment = await ingestUrlAttachment(context.req.param("id"), url)
+			return context.json({ id: attachment.id, filename: attachment.filename })
+		} catch (error) {
+			// a validation error names the caller's own url, so it shows verbatim. anything else is internal
+			if (error instanceof AttachmentValidationError) {
+				return context.json({ error: error.message }, 400)
+			}
+			console.error(`url attachment ingestion failed for topic ${context.req.param("id")}`, error)
+			return context.json({ error: "Carl couldn't process that link. Try again in a moment." }, 502)
+		}
+	})
 	.patch("/attachments/:id/context", zValidator("json", attachmentContextPayload), async (context) => {
 		// reject a signed-out caller
 		const userId = currentUser(context)
@@ -505,9 +570,9 @@ const route = new Hono<AppEnv>()
 		if (!user) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// open a stripe checkout session for the chosen plan and interval, and hand its url back to redirect to
-		const { plan, interval } = context.req.valid("json")
-		const url = await createCheckoutSession(user.id, user.email, plan, interval)
+		// open a stripe checkout session for the chosen plan and billing interval, and hand its url back to redirect to
+		const { plan, billingInterval } = context.req.valid("json")
+		const url = await createCheckoutSession(user.id, user.email, plan, billingInterval)
 		return context.json({ url })
 	})
 	.post("/billing/portal", async (context) => {
@@ -546,7 +611,7 @@ const route = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// the users table and the totals summary. admin only, through the gate
+		// the users table and the totals summary, admin only.
 		if (!(await isAllowed(userId, "admin:console"))) {
 			return context.json({ error: "forbidden" }, 403)
 		}
@@ -554,18 +619,55 @@ const route = new Hono<AppEnv>()
 		const totals = await loadAdminTotals(users)
 		return context.json({ users, totals })
 	})
+	.patch("/topics/:id/feature-order", zValidator("json", topicFeatureOrderPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+
+		// updating the Featured section is admin only
+		if (!(await isAllowed(userId, "admin:setFeatureOrder"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+
+		// position zero clears the topic's order. any other position inserts it and shifts the rest.
+		// a topic that isn't public is rejected
+		const featureOrderResult = await setTopicFeatureOrder(context.req.param("id"), context.req.valid("json").position)
+		if (featureOrderResult === "missing") {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// the rejection names the rule, so the page shows why
+		return featureOrderResult === "ranked"
+			? context.json({ ok: true })
+			: context.json({ error: "only a public topic can be featured" }, 409)
+	})
 	.post("/admin/users/:id/role", zValidator("json", setRolePayload), async (context) => {
 		// reject a signed-out caller
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// change a user's role, refusing an admin's own self-demotion. admin only, through the gate
+		// change a user's role, rejecting an admin's own self-demotion. admin only.
 		if (!(await isAllowed(userId, "admin:setRole"))) {
 			return context.json({ error: "forbidden" }, 403)
 		}
 		const isRoleSet = await setUserRole(userId, context.req.param("id"), context.req.valid("json").role)
 		return isRoleSet ? context.json({ ok: true }) : context.json({ error: "cannot remove your own admin role" }, 409)
+	})
+	.get("/admin/users/:id/topics", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// one user's owned topics, as the admin console's expandable row shows them, admin only.
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const topics = await loadAdminUserTopics(context.req.param("id"))
+		return topics ? context.json({ topics }) : context.json({ error: "not found" }, 404)
 	})
 	.post("/admin/users/:id/budget", zValidator("json", budgetOverridePayload), async (context) => {
 		// reject a signed-out caller
@@ -573,7 +675,7 @@ const route = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// set or clear a user's budget override and resize their key to the new effective budget. admin only, through the gate
+		// set or clear a user's budget override and resize their key to the new effective budget, admin only.
 		if (!(await isAllowed(userId, "admin:setBudget"))) {
 			return context.json({ error: "forbidden" }, 403)
 		}
@@ -614,7 +716,7 @@ function toDownloadHeaders(filename: string, contentType: string): Record<string
 	}
 }
 
-// stream a chat reply to the reader, then record what the chat turn spent and keep the attachments they asked to keep.
+// stream a chat reply to the user, then record what the chat turn spent and keep the attachments they asked to keep.
 // the reply streams as it is generated
 function streamChatTurn(
 	context: Context,
@@ -660,7 +762,7 @@ function streamChatTurn(
 			reportError(error, "chat", { topicId: chatTurn.topicId })
 		}
 
-		// keep what the reader marked once the reply has landed. this is not awaited,
+		// keep what the user marked once the reply has landed. this is not awaited,
 		// since generating the summaries takes seconds and would hold a finished stream open long enough to read as a hung reply
 		keepChatAttachments(chatTurn.userId, chatTurn.topicId, chatTurn.attachments, chatTurn.litellmApiKey).catch(
 			(error) => {

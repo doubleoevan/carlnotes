@@ -1,5 +1,5 @@
 // the paid stages: fetch each admitted Resource's content, score it against the topic context with tiered
-// models, and write the Finding. every Resource checks the Scan's ceilings before it starts
+// models, and write the Finding. every Resource checks the Scan's limits before it starts
 import { reportError } from "@shared/monitoring"
 import { generateText, type LanguageModel, Output } from "ai"
 import { eq } from "drizzle-orm"
@@ -24,7 +24,7 @@ import { cheapModel, scoreModel } from "../models"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
 import { filterPremiumPrompt, writePrompt } from "../prompts/write"
-import { fetchContent, revalidateContent } from "../scrape"
+import { CONTENT_TTL_MS, fetchContent, isContentStale, revalidateContent } from "../scrape"
 import { deleteResourceContent, getResourceContent, toResourceContentKey, uploadResourceContent } from "../store"
 import type { Resource, TopicContext } from "./filter"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
@@ -33,7 +33,6 @@ import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track
 const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? "0.6")
 
 // stored resource content stays reusable for this long before a scan revalidates or refetches it. the environment can override it
-const CONTENT_TTL_MS = Number(Bun.env.CONTENT_TTL_MS ?? String(24 * 60 * 60 * 1000))
 
 // how many resources the paid fetch-and-scoring section works concurrently. it stays bounded because Firecrawl
 // enforces a per-plan concurrency and responds to a burst with 429s, which fall back to the snippet.
@@ -69,7 +68,7 @@ export async function fetchAndScoreResources(
 	budget: Budget,
 	litellmApiKey?: string,
 ): Promise<string[]> {
-	// each Resource checks the ceiling before it starts, so work already in flight when the ceiling is reached
+	// each Resource checks the limit before it starts, so work already in flight when the limit is reached
 	// can overshoot it by up to one less than the concurrency. that overshoot is accepted, and costs a few cents
 	const paidOutcomes = await runWithConcurrency(admittedResources, REVIEW_CONCURRENCY, (resource) =>
 		fetchAndScoreResource(resource, scan, topicId, topicContext, budget, litellmApiKey),
@@ -78,7 +77,7 @@ export async function fetchAndScoreResources(
 		trackOutcomes(reviewOutcome, paidOutcome)
 	}
 
-	// the Resources this stage admitted that the ceiling did not defer.
+	// the Resources this stage admitted that the limit did not defer.
 	// the outcomes come back by index, so a Resource is matched to its own outcome
 	return admittedResources
 		.filter((_, index) => paidOutcomes[index]?.status !== "deferred")
@@ -121,7 +120,7 @@ async function fetchAndScoreResource(
 	budget: Budget,
 	litellmApiKey?: string,
 ): Promise<ResourceOutcome> {
-	// defer the Resource once the Scan hits its dollar ceiling or its scored-resource ceiling
+	// defer the Resource once the Scan hits its dollar limit or its scored-resource limit
 	if (!canScoreResource(budget)) {
 		return { status: "deferred" }
 	}
@@ -274,7 +273,7 @@ export async function scoreResource(
 		model: scoreModel(litellmApiKey),
 		stage: "scoringPremium",
 		ratePerMillion: PREMIUM_COST_PER_MILLION_TOKENS,
-		// the reader-facing note comes only from this tier
+		// the user-facing note comes only from this tier
 		shouldWriteRelevanceExplanation: true,
 	}
 	return scoreResourceContent(premiumTier, resourceContent, topicContext, budget)
@@ -356,13 +355,6 @@ async function upsertFinding(
  */
 export function isPromoted(score: number): boolean {
 	return score >= REVIEW_PROMOTION_THRESHOLD
-}
-
-/**
- * Whether stored content has outlived the ttl window and needs revalidating or refetching before it is scored again.
- */
-export function isContentStale(fetchedAt: Date, now: Date, ttlMs: number): boolean {
-	return now.getTime() - fetchedAt.getTime() >= ttlMs
 }
 
 /**

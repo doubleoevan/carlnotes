@@ -20,25 +20,25 @@ export function TopicScanButton({
 	onManualScan: () => void
 }) {
 	// an empty daily quota and a spent budget both stop the brew, and Activity is where either one is explained
-	const isBlocked = remainingScans !== null && (remainingScans <= 0 || isSpendExhausted)
+	const isScanBlocked = remainingScans !== null && (remainingScans <= 0 || isSpendExhausted)
 	return (
 		<div className="flex shrink-0 flex-col items-end gap-0.5">
 			<TopicScanTrigger
-				isRunning={isRunning}
-				isBlocked={isBlocked}
-				isDisabled={remainingScans === null}
+				isScanRunning={isRunning}
+				isScanBlocked={isScanBlocked}
+				isScanDisabled={remainingScans === null}
 				isSpendExhausted={isSpendExhausted}
 				onManualScan={onManualScan}
 			/>
-			{/* the quota line hydrates in once the payload lands. blocked points at Activity like the trigger above,
-			    otherwise the count still sells the upgrade */}
+			{/* the quota line hydrates in once the payload lands. a blocked scan points at the account page like the trigger above,
+			    otherwise the count links to the pricing page */}
 			<ScanQuotaLink
 				isLoading={remainingScans === null}
 				// an unlimited daily quota still says so, unless the month's budget is what ran out
 				isUnlimited={remainingScans !== null && remainingScans >= ADMIN_QUOTA && !isSpendExhausted}
 				label={isSpendExhausted ? "Out of budget" : `${remainingScans} left today`}
-				href={isBlocked ? "/activity" : "/pricing"}
-				tooltip={isBlocked ? "See your usage" : "Upgrade for more"}
+				href={isScanBlocked ? "/account" : "/pricing"}
+				tooltip={isScanBlocked ? "Pick up some coffee" : "Upgrade for more"}
 			/>
 		</div>
 	)
@@ -46,21 +46,21 @@ export function TopicScanButton({
 
 // the brew trigger in its three states: running, blocked, or ready
 function TopicScanTrigger({
-	isRunning,
-	isBlocked,
-	isDisabled,
+	isScanRunning,
+	isScanBlocked,
+	isScanDisabled,
 	isSpendExhausted,
 	onManualScan,
 }: {
-	isRunning: boolean
-	isBlocked: boolean
-	isDisabled: boolean
+	isScanRunning: boolean
+	isScanBlocked: boolean
+	isScanDisabled: boolean
 	isSpendExhausted: boolean
 	onManualScan: () => void
 }) {
 	// while a scan runs, the trigger becomes a bigger shimmering "Carl is reading", held at the button's height so
 	// the row never jumps, and inset to end on the same line as the quota line below it
-	if (isRunning) {
+	if (isScanRunning) {
 		return (
 			<div className={cn(RAIL_TEXT_INSET, "flex min-h-11 items-center sm:min-h-9")}>
 				<span className="shimmer-text text-base font-semibold sm:text-lg">Carl is reading…</span>
@@ -68,18 +68,20 @@ function TopicScanTrigger({
 		)
 	}
 
-	// blocked, the trigger stays live but leads to Activity instead of starting a brew that would be refused
-	if (isBlocked) {
+	// if the scan blocked, the trigger stays live but leads to the account page instead of starting a scan
+	if (isScanBlocked) {
 		return (
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<AnchorLink href="/activity" className={MENU_BUTTON_CLASS}>
+					<AnchorLink href="/account" className={MENU_BUTTON_CLASS}>
 						<Coffee className="size-4 fill-none" />
 						Brew
 					</AnchorLink>
 				</TooltipTrigger>
 				<TooltipContent side="bottom">
-					{isSpendExhausted ? "Out of budget this month. See your usage" : "Out of brews today. See your usage"}
+					{isSpendExhausted
+						? "Out of budget this month. Pick up some coffee"
+						: "Out of brews today. Pick up some coffee"}
 				</TooltipContent>
 			</Tooltip>
 		)
@@ -92,7 +94,7 @@ function TopicScanTrigger({
 				<button
 					type="button"
 					onClick={onManualScan}
-					disabled={isDisabled}
+					disabled={isScanDisabled}
 					className={cn(MENU_BUTTON_CLASS, "disabled:pointer-events-none disabled:opacity-50")}
 				>
 					<Coffee className="size-4 fill-none" />

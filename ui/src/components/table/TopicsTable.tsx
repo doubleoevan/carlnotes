@@ -1,13 +1,23 @@
 import type { ActivityScan, ActivityTopic } from "@shared/contracts"
+import { frequencies, isDailyFrequency } from "@shared/enums"
+import { Globe, Lock, Mail } from "lucide-react"
 import { Fragment, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Switch } from "@/components/primitives/switch"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader, useRowSort } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { TopicScanRecap } from "@/components/topic/TopicScanRecap"
 import { sendSubscriptionEmail } from "@/lib/topicClient"
 import { cn, durationMsBetween, TABLE_CARD_CLASS, toCentsLabel, toDurationLabel } from "@/lib/utils"
+
+// the icon and label each visibility reads as, matching the topic page's own info card
+const VISIBILITY_METADATA = {
+	private: { icon: Lock, label: "private" },
+	public: { icon: Globe, label: "public" },
+	invite: { icon: Mail, label: "invite" },
+}
 
 // the sort accessors for the owned-topics table columns
 const topicSortValues = {
@@ -16,6 +26,9 @@ const topicSortValues = {
 	subscribers: (topic: ActivityTopic) => topic.subscriberCount,
 	created: (topic: ActivityTopic) => topic.createdAt,
 	updated: (topic: ActivityTopic) => topic.updatedAt,
+	visibility: (topic: ActivityTopic) => topic.visibility,
+	// sorted by how often the topic brews rather than alphabetically, so the daily ones group at one end
+	schedule: (topic: ActivityTopic) => frequencies.indexOf(topic.frequency),
 	cost: (topic: ActivityTopic) => topic.monthCostCents,
 }
 
@@ -23,7 +36,19 @@ const topicSortValues = {
  * The Activity page's owned-topics table: sortable columns, cost last, a totals line, and a cost-cell click
  * opening that topic's scan drill-down.
  */
-export function TopicsTable({ topics, onReloadPage }: { topics: ActivityTopic[]; onReloadPage: () => void }) {
+export function TopicsTable({
+	topics,
+	onReloadPage,
+	isEmailEditable = true,
+	isOwnersTable = true,
+}: {
+	topics: ActivityTopic[]
+	onReloadPage: () => void
+	// an admin sees a user's email preference without being able to change it
+	isEmailEditable?: boolean
+	// whether the topic table is the user's own or in the admin page's user's table
+	isOwnersTable?: boolean
+}) {
 	const [expandedTopicIds, setExpandedTopicIds] = useState<Set<string>>(new Set())
 	// the Emails column sorts on the owner's stored preference, so its accessor is built here instead of in topicSortValues
 	const sortValues = { ...topicSortValues, emails: (topic: ActivityTopic) => (topic.isEmailEnabled ? 1 : 0) }
@@ -48,8 +73,10 @@ export function TopicsTable({ topics, onReloadPage }: { topics: ActivityTopic[];
 	// column totals for the summary line span every topic, not just the visible page
 	const totalScanCount = topics.reduce((sum, topic) => sum + topic.monthScanCount, 0)
 	const totalCostCents = topics.reduce((sum, topic) => sum + topic.monthCostCents, 0)
-	// this sums subscriptions instead of people, so one reader following two topics counts twice
+	// this sums subscriptions instead of people, so one user following two topics counts twice
 	const totalSubscriberCount = topics.reduce((sum, topic) => sum + topic.subscriberCount, 0)
+	// weekdays counts as daily here because the plan's daily topic limit counts it this way
+	const dailyTopicCount = topics.filter((topic) => isDailyFrequency(topic.frequency)).length
 	return (
 		<div className={cn(TABLE_CARD_CLASS, "mb-4")}>
 			<table className="w-full min-w-2xl text-left text-sm">
@@ -66,12 +93,26 @@ export function TopicsTable({ topics, onReloadPage }: { topics: ActivityTopic[];
 						<SortableHeader
 							sort={sort}
 							sortKey="subscribers"
-							label="Subscribers"
-							tooltip="Active subscribers, not counting you"
+							label="Followers"
+							tooltip="Active followers, not counting you"
 							className="py-2 pr-4"
 						/>
 						<SortableHeader sort={sort} sortKey="created" label="Created" className="py-2 pr-4" />
 						<SortableHeader sort={sort} sortKey="updated" label="Updated" className="py-2 pr-4" />
+						<SortableHeader
+							sort={sort}
+							sortKey="visibility"
+							label="Visibility"
+							tooltip="Who may see this topic"
+							className="py-2 pr-4"
+						/>
+						<SortableHeader
+							sort={sort}
+							sortKey="schedule"
+							label="Schedule"
+							tooltip="How often Carl brews it"
+							className="py-2 pr-4"
+						/>
 						<SortableHeader
 							sort={sort}
 							sortKey="emails"
@@ -93,20 +134,20 @@ export function TopicsTable({ topics, onReloadPage }: { topics: ActivityTopic[];
 						<Fragment key={topic.id}>
 							<tr className="border-b">
 								<td className="py-2 pr-4">
-									<AnchorLink
-										href={`/topics/${topic.id}`}
-										className="text-link block max-w-40 truncate hover:underline sm:max-w-64"
-									>
-										{topic.name}
-									</AnchorLink>
+									<TopicNameLink topic={topic} isOwnersTable={isOwnersTable} />
 								</td>
 								<td className="py-2 pr-4">{topic.monthScanCount}</td>
 								<td className="py-2 pr-4">{topic.subscriberCount}</td>
 								<td className="py-2 pr-4">{new Date(topic.createdAt).toLocaleDateString()}</td>
 								<td className="py-2 pr-4">{new Date(topic.updatedAt).toLocaleDateString()}</td>
 								<td className="py-2 pr-4">
+									<TopicVisibility visibility={topic.visibility} />
+								</td>
+								<td className="py-2 pr-4 capitalize">{topic.frequency}</td>
+								<td className="py-2 pr-4">
 									<Switch
 										checked={topic.isEmailEnabled}
+										disabled={!isEmailEditable}
 										onCheckedChange={(isOn) => handleEmailChange(topic.id, isOn)}
 										aria-label={`${topic.name} emails`}
 									/>
@@ -124,7 +165,7 @@ export function TopicsTable({ topics, onReloadPage }: { topics: ActivityTopic[];
 							</tr>
 							{expandedTopicIds.has(topic.id) && (
 								<tr className="border-b">
-									<td colSpan={7} className="py-2 pl-6">
+									<td colSpan={9} className="py-2 pl-6">
 										<ScansTable scans={topic.scans} />
 									</td>
 								</tr>
@@ -138,12 +179,45 @@ export function TopicsTable({ topics, onReloadPage }: { topics: ActivityTopic[];
 						<td className="py-2 pr-4">{totalScanCount}</td>
 						<td className="py-2 pr-4">{totalSubscriberCount}</td>
 						<td colSpan={3} />
+						<td className="py-2 pr-4">{`${dailyTopicCount} daily`}</td>
+						<td />
 						<td className="py-2 text-right">{toCentsLabel(totalCostCents)}</td>
 					</tr>
 				</tfoot>
 			</table>
 			<TablePagination {...pagination} />
 		</div>
+	)
+}
+
+// the topic's name, linking to its page. a private or invite-only topic has a tooltip
+function TopicNameLink({ topic, isOwnersTable }: { topic: ActivityTopic; isOwnersTable: boolean }) {
+	const nameLink = (
+		<AnchorLink href={`/topics/${topic.id}`} className="text-link block max-w-40 truncate hover:underline sm:max-w-64">
+			{topic.name}
+		</AnchorLink>
+	)
+	if (isOwnersTable || topic.visibility === "public") {
+		return nameLink
+	}
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<span>{nameLink}</span>
+			</TooltipTrigger>
+			<TooltipContent>{`this topic is ${topic.visibility}`}</TooltipContent>
+		</Tooltip>
+	)
+}
+
+// the topic's visibility with it's icon
+function TopicVisibility({ visibility }: { visibility: ActivityTopic["visibility"] }) {
+	const visibilityMetadata = VISIBILITY_METADATA[visibility]
+	return (
+		<span className="flex items-center gap-1.5">
+			<visibilityMetadata.icon aria-hidden="true" className="size-3.5 shrink-0" />
+			{visibilityMetadata.label}
+		</span>
 	)
 }
 
@@ -224,7 +298,7 @@ function ScanNotesCell({ scan }: { scan: ActivityScan }) {
 			<PopoverTrigger className="text-link hover:underline">{duration || "—"}</PopoverTrigger>
 			<PopoverContent align="start" className="w-[calc(100vw-2rem)] max-w-lg text-sm">
 				<PopoverCloseButton />
-				<TopicScanRecap scan={{ ...scan, cost: scan.costCents / 100 }} />
+				<TopicScanRecap scan={{ ...scan, costDollars: scan.costCents / 100 }} />
 			</PopoverContent>
 		</Popover>
 	)

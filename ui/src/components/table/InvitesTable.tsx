@@ -56,7 +56,7 @@ export function InvitesTable({ invites, onReload }: { invites: InviteRow[]; onRe
 						<SortableHeader sort={sort} sortKey="name" label="Topic" className="py-2 pr-4" />
 						<SortableHeader sort={sort} sortKey="invitee" label="Invitee" className="py-2 pr-4" />
 						<SortableHeader sort={sort} sortKey="invited" label="Invited" className="py-2 pr-4" />
-						<SortableHeader sort={sort} sortKey="subscribed" label="Subscribed" className="py-2 pr-4" />
+						<SortableHeader sort={sort} sortKey="subscribed" label="Followed" className="py-2 pr-4" />
 						<th className="py-2" />
 					</tr>
 				</thead>

@@ -8,7 +8,7 @@ test("toPaidSubscription maps an active paid subscription", () => {
 		id: "sub_1",
 		status: "active",
 		customer: "cus_1",
-		metadata: { userId: "u1", plan: "plus" },
+		metadata: { userId: "u1", plan: "plus", interval: "monthly" },
 		current_period_end: 1_800_000_000,
 		default_payment_method: "pm_1",
 	})
@@ -19,7 +19,22 @@ test("toPaidSubscription maps an active paid subscription", () => {
 		stripeSubscriptionId: "sub_1",
 		currentPeriodEnd: new Date(1_800_000_000 * 1000),
 		hasPaymentMethod: true,
+		billingInterval: "monthly",
 	})
+})
+
+// the billing interval is stamped at checkout, and it decides which of the plan's limits apply,
+// and whether metered overage is supported
+test("toPaidSubscription records a yearly subscription's billing interval", () => {
+	const yearlySubscription = toPaidSubscription({
+		id: "sub_1",
+		status: "active",
+		customer: "cus_1",
+		metadata: { userId: "u1", plan: "plus", interval: "yearly" },
+		default_payment_method: "pm_1",
+	})
+	expect(yearlySubscription?.billingInterval).toBe("yearly")
+	expect(yearlySubscription?.hasPaymentMethod).toBe(true)
 })
 
 // a canceled subscription clears the row, reverting the user to free
@@ -61,6 +76,51 @@ test("toPaidSubscription projects a trialing or past_due subscription", () => {
 	}
 })
 
+// the price is what a plan change in the Customer Portal rewrites, and our metadata is not, so the price wins.
+test("toPaidSubscription reads the billing interval off the price, not the stamped metadata", () => {
+	const switchedToYearly = toPaidSubscription({
+		id: "sub_1",
+		status: "active",
+		customer: "cus_1",
+		metadata: { userId: "u1", plan: "plus", interval: "monthly" },
+		items: { data: [{ price: { recurring: { interval: "year" } } }] },
+	})
+	expect(switchedToYearly?.billingInterval).toBe("yearly")
+
+	// a subscriber who moved from yearly back to monthly can be billed overage again
+	const switchedToMonthly = toPaidSubscription({
+		id: "sub_1",
+		status: "active",
+		customer: "cus_1",
+		metadata: { userId: "u1", plan: "plus", interval: "yearly" },
+		items: { data: [{ price: { recurring: { interval: "month" } } }] },
+	})
+	expect(switchedToMonthly?.billingInterval).toBe("monthly")
+})
+
+// a monthly subscription includes its plan price and the metered overage price, both billed monthly
+test("toPaidSubscription reads a monthly subscription including its overage price as monthly", () => {
+	const monthlyWithOverage = toPaidSubscription({
+		id: "sub_1",
+		status: "active",
+		customer: "cus_1",
+		metadata: { userId: "u1", plan: "plus" },
+		items: { data: [{ price: { recurring: { interval: "month" } } }, { price: { recurring: { interval: "month" } } }] },
+	})
+	expect(monthlyWithOverage?.billingInterval).toBe("monthly")
+})
+
+// every subscription created before the billing interval column existed is monthly
+test("toPaidSubscription reads a subscription with no stamped billing interval as monthly", () => {
+	const legacySubscription = toPaidSubscription({
+		id: "sub_1",
+		status: "active",
+		customer: "cus_1",
+		metadata: { userId: "u1", plan: "plus" },
+	})
+	expect(legacySubscription?.billingInterval).toBe("monthly")
+})
+
 // a subscription with no plan metadata is not one of ours, so it clears the row
 test("toPaidSubscription clears when the plan metadata is missing", () => {
 	const invalidSubscription = toPaidSubscription({
@@ -72,7 +132,7 @@ test("toPaidSubscription clears when the plan metadata is missing", () => {
 	expect(invalidSubscription).toBeNull()
 })
 
-// a subscription without a stored card keeps the manual-scan ceiling hard
+// a subscription without a stored card keeps the manual-scan limit hard
 test("projectSubscription reports no card and reads the customer id from an object", () => {
 	const singlePaymentSubscription = toPaidSubscription({
 		id: "sub_1",

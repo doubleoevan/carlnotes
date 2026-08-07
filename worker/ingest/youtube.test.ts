@@ -1,6 +1,6 @@
 // parseVideos tests. verify a playlistItems response gets mapped to deduped watch Resources
 import { expect, test } from "bun:test"
-import { parseVideos, playlistIdFromUrl } from "./youtube"
+import { parseVideos, playlistIdFromUrl, toAtomUrl } from "./youtube"
 
 // two distinct videos plus a third repeating the first videoId, to exercise deduping
 const VIDEOS = [
@@ -51,4 +51,21 @@ test("playlistIdFromUrl extracts the id from playlist urls and rejects the rest"
 	expect(playlistIdFromUrl("https://example.com/playlist?list=PL123")).toBeNull()
 	expect(playlistIdFromUrl("https://www.youtube.com/playlist")).toBeNull()
 	expect(playlistIdFromUrl("not a url")).toBeNull()
+})
+
+// a playlist the caller already identified is asked for as a playlist, whatever letters its id starts with
+test("toAtomUrl names the id by what the caller says it is", () => {
+	// a channel's uploads playlist starts with UU and a mix with RD, and neither is a channel feed
+	expect(toAtomUrl("UUabc123", "playlist")).toBe("https://www.youtube.com/feeds/videos.xml?playlist_id=UUabc123")
+	expect(toAtomUrl("RDabc123", "playlist")).toBe("https://www.youtube.com/feeds/videos.xml?playlist_id=RDabc123")
+	expect(toAtomUrl("UCabc123", "channel")).toBe("https://www.youtube.com/feeds/videos.xml?channel_id=UCabc123")
+})
+
+// a caller that does not know reads the YouTube kind from the id, where only UC names a channel
+test("toAtomUrl reads the kind from the id when the caller does not say", () => {
+	// every playlist prefix falls to playlist, and only a UC id is read as a channel
+	expect(toAtomUrl("UCabc123")).toBe("https://www.youtube.com/feeds/videos.xml?channel_id=UCabc123")
+	for (const playlistId of ["PLabc123", "UUabc123", "RDabc123", "OLabc123", "LLabc123"]) {
+		expect(toAtomUrl(playlistId)).toBe(`https://www.youtube.com/feeds/videos.xml?playlist_id=${playlistId}`)
+	}
 })

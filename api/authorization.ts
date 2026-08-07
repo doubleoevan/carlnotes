@@ -1,19 +1,20 @@
 // the authorization gate. one isAllowed(userId, capability, topic) call answers every authority and entitlement question.
 // an admin bypasses entitlement limits and may view, edit, delete, or scan any topic regardless of owner
-import { ADMIN_BUDGET_CENTS, ADMIN_QUOTA, PLANS, type Plan } from "@shared/plans"
+import { dailyFrequencies } from "@shared/enums"
+import { ADMIN_BUDGET_CENTS, ADMIN_QUOTA, type BillingInterval, PLANS, type Plan } from "@shared/plans"
 import { and, count, eq, gte, inArray, or, sql } from "drizzle-orm"
 import { db } from "../db"
-import { audienceMembers, billingSubscriptions, chatTurns, scans, subscriptions, topics, users } from "../db/schema"
+import { audienceMembers, chatTurns, scans, subscriptions, topics, users } from "../db/schema"
 import { deleteLiteLLMKey, provisionLiteLLMKey } from "./litellm"
 import { canRateTopic, canSeeTopic } from "./topic/permissions"
-import { scansToday, startOfUtcMonth } from "./topic/quotas"
+import { loadBillingAccess, scansToday, startOfUtcMonth } from "./topic/quotas"
 
 // the topic fields every resource capability needs: identity, owner, and visibility
 type GatedTopic = Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility">
 
 // the gated capabilities the isAllowed answers
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type Capability = "topic:view" | "topic:edit" | "topic:delete" | "topic:rate" | "topic:create" | "scan:manual" | "chat:send" | "chat:persist" | "admin:console" | "admin:setRole" | "admin:setBudget"
+export type Capability = "topic:view" | "topic:edit" | "topic:delete" | "topic:rate" | "topic:create" | "scan:request" | "scan:manual" | "chat:send" | "chat:persist" | "admin:console" | "admin:setRole" | "admin:setBudget" | "admin:setFeatureOrder"
 
 // a user's authority and entitlement inputs, read together since every gate call needs them
 export type UserAccess = { isAdmin: boolean; plan: Plan; budgetOverrideCents: number | null }
@@ -50,10 +51,11 @@ async function decideTopicCapability(
 	topic?: GatedTopic,
 ): Promise<boolean> {
 	switch (capability) {
-		// admin-only capabilities already returned true above for an admin, so a non-admin is refused
+		// admin-only capabilities already returned true above for an admin, so a non-admin is rejected
 		case "admin:console":
 		case "admin:setRole":
 		case "admin:setBudget":
+		case "admin:setFeatureOrder":
 			return false
 		// viewing follows the topic's visibility, invite, and subscription rules
 		case "topic:view":
@@ -65,9 +67,12 @@ async function decideTopicCapability(
 		// creating a topic is gated by the plan's topic cap
 		case "topic:create":
 			return userId ? (await ownerTopicCount(userId)) < PLANS[plan].topicLimit : false
+		// whose topic the manual scans are to spend on, which the topic page asks before it reads a quota at all
+		case "scan:request":
+			return Boolean(userId) && topic?.ownerId === userId
 		// a manual scan needs the owner to be within their daily quota
 		case "scan:manual":
-			return userId && topic ? (await authorizeManualScan(userId, topic)).status === "allowed" : false
+			return userId && topic ? (await loadManualScanAuthorization(userId, topic)).status === "allowed" : false
 		// a new capability fails to compile here
 		default:
 			return assertNever(capability)
@@ -110,7 +115,7 @@ export function effectiveBudgetCents({
 }
 
 /**
- * Whether the user has spent their monthly budget, so the proxy would refuse the model calls a scan or a chat turn makes.
+ * Whether the user has spent their monthly budget, so the proxy would reject the model calls a scan or a chat turn makes.
  */
 export async function isMonthlySpendExhausted(userId: string): Promise<boolean> {
 	// scans and chat draw from one budget pool, so both are summed against the same budget
@@ -191,6 +196,22 @@ export async function topicsRemaining(userId: string): Promise<number> {
 }
 
 /**
+ * How many topics the user's plan runs on a daily frequency, and how many topics are still free
+ * Admins get unlimited topics. A topic moved off a daily frequency gives the user their slot back.
+ */
+export async function loadDailyTopicQuota(userId: string): Promise<{ limit: number; remainingTopics: number }> {
+	// admins bypass the daily topic limit, as they do every other quota
+	const [access, { billingInterval }] = await Promise.all([loadUserAccess(userId), loadBillingAccess(userId)])
+	if (access.isAdmin) {
+		return { limit: ADMIN_QUOTA, remainingTopics: ADMIN_QUOTA }
+	}
+
+	// what the plan allows at the user's billing interval, less the topics already on a daily frequency
+	const limit = PLANS[access.plan].dailyTopicLimit[billingInterval]
+	return { limit, remainingTopics: Math.max(0, limit - (await dailyTopicCount(userId))) }
+}
+
+/**
  * The topic ids among the given set that the user is actively subscribed to, directly or through an audience membership.
  * One query resolves every topic at once, so the feed never checks per topic.
  */
@@ -224,55 +245,81 @@ export async function subscribedTopicIds(userId: string, topicIds: string[]): Pr
 export type ManualScanAuthorization =
 	| { status: "forbidden" }
 	| { status: "quota" }
-	| { status: "allowed"; remaining: number; isOverage: boolean }
+	| { status: "allowed"; remainingScans: number; isOverage: boolean }
 
 /**
  * Whether the user may run a manual scan on the topic right now.
  * A payment method makes that limit soft, with extra scans billed as overage.
- * An owner or an admin may scan. An owner checks the daily limit. Admins bypass the limit.
+ * An admin can always scan. An owner checks the daily limit. Admins bypass the limit.
  */
-export async function authorizeManualScan(userId: string, topic: GatedTopic): Promise<ManualScanAuthorization> {
-	// load the user's access, today's scan count, and whether they can be billed, then apply the decision
+export async function loadManualScanAuthorization(userId: string, topic: GatedTopic): Promise<ManualScanAuthorization> {
+	// load the user's access, today's scan count, and whether they can be billed, then authorize
 	const access = await loadUserAccess(userId)
-	const [scansUsedToday, hasPaymentMethod] = await Promise.all([scansToday(userId), loadHasPaymentMethod(userId)])
-	return decideManualScan({
+	const [scansUsedToday, billingAccess] = await Promise.all([scansToday(userId), loadBillingAccess(userId)])
+	return authorizeManualScan({
 		isAdmin: access.isAdmin,
 		plan: access.plan,
 		isOwner: topic.ownerId === userId,
 		scansUsedToday,
-		hasPaymentMethod,
+		...billingAccess,
 	})
 }
 
+// the outcome of a daily-frequency authorization. a rejection includes the limit, so the message can show the number
+export type DailyFrequencyAuthorization = { status: "allowed" } | { status: "quota"; limit: number }
+
 /**
- * Whether the user has a payment method on file, meaning an active billing subscription that Stripe can charge.
- * A payment method makes the daily scan limit soft.
+ * Whether the user may put one more topic on a daily frequency, based on their monthly budget.
  */
-export async function loadHasPaymentMethod(userId: string): Promise<boolean> {
-	const [subscriptionRow] = await db
-		.select({ hasPaymentMethod: billingSubscriptions.hasPaymentMethod })
-		.from(billingSubscriptions)
-		.where(eq(billingSubscriptions.userId, userId))
-	return subscriptionRow?.hasPaymentMethod ?? false
+export async function loadDailyFrequencyAuthorization(userId: string): Promise<DailyFrequencyAuthorization> {
+	const [access, { billingInterval }, dailyTopicsUsed] = await Promise.all([
+		loadUserAccess(userId),
+		loadBillingAccess(userId),
+		dailyTopicCount(userId),
+	])
+	return authorizeDailyFrequency({ isAdmin: access.isAdmin, plan: access.plan, billingInterval, dailyTopicsUsed })
+		? { status: "allowed" }
+		: { status: "quota", limit: PLANS[access.plan].dailyTopicLimit[billingInterval] }
 }
 
 /**
- * The manual-scan decision, applied to values the caller already loaded.
+ * Whether one more daily-frequency topic is allowed.
+ * An admin bypasses the cap. Everyone else fits under their plan's limit for their billing interval.
+ */
+export function authorizeDailyFrequency({
+	isAdmin,
+	plan,
+	billingInterval,
+	dailyTopicsUsed,
+}: {
+	isAdmin: boolean
+	plan: Plan
+	billingInterval: BillingInterval
+	dailyTopicsUsed: number
+}): boolean {
+	return isAdmin || dailyTopicsUsed < PLANS[plan].dailyTopicLimit[billingInterval]
+}
+
+/**
+ * Whether a manual scan is allowed, from values the caller already loaded.
  * A payment method makes that limit soft, with extra scans billed as overage.
  * An owner or an admin may scan. An owner checks the daily limit. Admins bypass the limit.
  */
-export function decideManualScan({
+export function authorizeManualScan({
 	isAdmin,
 	plan,
 	isOwner,
 	scansUsedToday,
 	hasPaymentMethod,
+	billingInterval,
 }: {
 	isAdmin: boolean
 	plan: Plan
 	isOwner: boolean
 	scansUsedToday: number
 	hasPaymentMethod: boolean
+	// how the subscription bills: monthly or yearly
+	billingInterval: BillingInterval
 }): ManualScanAuthorization {
 	// only the owner or an admin may run a manual scan on the topic
 	if (!isAdmin && !isOwner) {
@@ -281,16 +328,17 @@ export function decideManualScan({
 
 	// an admin bypasses the daily scan limit entirely
 	if (isAdmin) {
-		return { status: "allowed", remaining: ADMIN_QUOTA, isOverage: false }
+		return { status: "allowed", remainingScans: ADMIN_QUOTA, isOverage: false }
 	}
 
-	// at or past the daily scan limit, a payment method allows the scan as billed overage.
-	// no payment method is a hard cap
-	const { dailyScanLimit } = PLANS[plan]
+	// at or past the daily scan limit, a card and somewhere to bill it allow the scan as billed overage.
+	// a yearly subscription includes no overage price, so its limit is a hard cap.
+	const dailyScanLimit = PLANS[plan].dailyScanLimit[billingInterval]
 	if (scansUsedToday >= dailyScanLimit) {
-		return hasPaymentMethod ? { status: "allowed", remaining: 0, isOverage: true } : { status: "quota" }
+		const isBillable = hasPaymentMethod && billingInterval === "monthly"
+		return isBillable ? { status: "allowed", remainingScans: 0, isOverage: true } : { status: "quota" }
 	}
-	return { status: "allowed", remaining: dailyScanLimit - scansUsedToday - 1, isOverage: false }
+	return { status: "allowed", remainingScans: dailyScanLimit - scansUsedToday - 1, isOverage: false }
 }
 
 // every chat capability needs a signed-in caller. sending a chat needs a visible topic and budget left
@@ -319,6 +367,15 @@ async function decideChat(
 // how many topics the user owns
 async function ownerTopicCount(userId: string): Promise<number> {
 	const [topicCountRow] = await db.select({ count: count() }).from(topics).where(eq(topics.ownerId, userId))
+	return topicCountRow?.count ?? 0
+}
+
+// how many topics the user has on a daily frequency
+async function dailyTopicCount(userId: string): Promise<number> {
+	const [topicCountRow] = await db
+		.select({ count: count() })
+		.from(topics)
+		.where(and(eq(topics.ownerId, userId), inArray(topics.frequency, [...dailyFrequencies])))
 	return topicCountRow?.count ?? 0
 }
 

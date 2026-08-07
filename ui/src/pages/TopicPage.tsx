@@ -9,10 +9,11 @@ import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { NewCountInfo } from "@/components/topic/Topic"
+import { NewCountInfo, TopicInfoPopover } from "@/components/topic/Topic"
 import { TopicFeedSort } from "@/components/topic/TopicFeedSort"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
+import { TopicRankButton } from "@/components/topic/TopicRankButton"
 import { TopicScanButton } from "@/components/topic/TopicScanButton"
 import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
 import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
@@ -22,6 +23,7 @@ import { authClient } from "@/lib/authClient"
 import {
 	fetchTopicPage,
 	sendManualScan,
+	sendTopicFeatureOrder,
 	sendTopicFindingBookmark,
 	sendTopicFindingConsumed,
 	sendTopicFindingOpened,
@@ -117,6 +119,12 @@ export function TopicPage() {
 		}
 	}
 
+	// ranking a topic shifts the other featured topic orders. the homepage feed reloads alongside this page's own control
+	const handleTopicRank = async (topicId: string, position: number): Promise<void> => {
+		await runThenReload(() => sendTopicFeatureOrder(topicId, position))
+		await reloadHomePage()
+	}
+
 	// trigger a manual scan. isRunningScan shows the state until the new scan row appears in a reload.
 	const handleManualScan = async (): Promise<void> => {
 		if (!topicResponse) {
@@ -142,7 +150,7 @@ export function TopicPage() {
 		await reloadHomePage()
 	}
 
-	// the findings this reader sees: narrowed by resource kind and the active view, bookmarked rows pinned first
+	// the findings this user sees: narrowed by resource kind and the active view, bookmarked rows pinned first
 	const visibleFindings = toSortedFindings(
 		(topicResponse?.findings ?? []).filter(
 			(finding) => resourceKinds.has(finding.resourceKind) && matchesFeedView(finding, view),
@@ -157,14 +165,18 @@ export function TopicPage() {
 	usePollWhileScanning(isScanning || isRunningScan, reloadTopicPage)
 
 	// the manual scan block belongs to an owner with a quota, known only once the payload lands
-	const isManualScanShown = Boolean(topicResponse?.isOwner && topicResponse.manualScansRemaining !== null)
+	const isManualScanShown = topicResponse?.manualScansRemaining != null
 	// the bottom padding clears the docked chat panel, so the last card can scroll out from under it
 	return (
 		<main className="mx-auto max-w-5xl px-safe pt-3 pb-28">
 			{/* the static control row: it renders before the payload, so the chrome never jumps or animates in. wraps when the screen is too narrow */}
 			<div className="flex flex-wrap items-start justify-between gap-3">
 				<TopicFeedSort sort={sort} onChange={setSort} />
-				{/* the right side holds the reader's subscribe control and the owner's manual scan control.
+				{/* an admin arranges the Featured section from inside the topic itself. it only shows to an admin on a public topic */}
+				{topicResponse && (
+					<TopicRankButton topic={topicResponse} isAdmin={session?.user.role === "admin"} onRank={handleTopicRank} />
+				)}
+				{/* the right side holds the user's subscribe control and the owner's manual scan control.
 				    while the page loads, a skeleton holds the slot */}
 				<div className="flex items-start gap-2">
 					{topicResponse === undefined && (
@@ -256,7 +268,7 @@ export function TopicPage() {
 	)
 }
 
-// re-fetch the topic page on an interval while any of its scans are running,
+// re-fetch the topic page on a timer while any of its scans are running,
 // so the history status row and the "Brew" button follow a scan to completion without a manual reload.
 function usePollWhileScanning(isScanning: boolean, reload: () => Promise<void>): void {
 	useEffect(() => {
@@ -264,26 +276,45 @@ function usePollWhileScanning(isScanning: boolean, reload: () => Promise<void>):
 			return
 		}
 
-		// poll until the running scan resolves, then the cleared interval lets the page rest
-		const interval = setInterval(() => {
+		// poll until the running scan resolves, then the cleared timer lets the page rest
+		const pollTimer = setInterval(() => {
 			void reload()
 		}, SCAN_POLL_MS)
-		return () => clearInterval(interval)
+		return () => clearInterval(pollTimer)
 	}, [isScanning, reload])
 }
 
 // the topic header: the title with its unread count and the owner's actions, then its tags
 function TopicHeader({ topic, onEdit, onDelete }: { topic: TopicResponse; onEdit: () => void; onDelete: () => void }) {
+	// the heading opens the note and shows its tooltip as well as the icon in it, so the title holds the state the icon reads
+	const [isNoteOpen, setNoteOpen] = useState(false)
+	const [isNoteHintOpen, setNoteHintOpen] = useState(false)
 	return (
 		<>
-			{/* title row */}
+			{/* title row. the note icon sits in the heading's own text, so a title that wraps keeps the icon beside its last word */}
 			<div className="mt-6 flex items-start justify-between gap-3">
-				<h1 className="font-display min-w-0 text-2xl leading-tight">{topic.name}</h1>
+				{/* biome-ignore lint/a11y/useKeyWithClickEvents: the note icon in the heading is the keyboard path */}
+				<h1
+					onClick={() => setNoteOpen(true)}
+					onMouseEnter={() => setNoteHintOpen(true)}
+					onMouseLeave={() => setNoteHintOpen(false)}
+					className="font-display min-w-0 cursor-pointer text-2xl leading-tight"
+				>
+					{topic.name}
+					<TopicInfoPopover
+						topic={topic}
+						isInline
+						isOpen={isNoteOpen}
+						onOpenChange={setNoteOpen}
+						isHintOpen={isNoteHintOpen}
+						onHintOpenChange={setNoteHintOpen}
+					/>
+				</h1>
 				{/* the unread count and the owner's actions share the far right of the title line. only an owner
-				    gets the action icons, so a reader's row ends in the count and takes the text inset instead */}
+				    gets the action icons, so a user's row ends in the count and takes the text inset instead */}
 				<div className={cn(topic.isOwner ? RAIL_ICON_INSET : RAIL_TEXT_INSET, "flex shrink-0 items-center gap-1")}>
 					{topic.newCount > 0 && <NewCountInfo topic={topic} />}
-					<OwnerActions topic={topic} onEdit={onEdit} onDelete={onDelete} />
+					<TopicActions topic={topic} onEdit={onEdit} onDelete={onDelete} />
 				</div>
 			</div>
 			{/* tags row, left out entirely by an untagged topic so it includes no empty gap */}
@@ -300,9 +331,9 @@ function TopicHeader({ topic, onEdit, onDelete }: { topic: TopicResponse; onEdit
 	)
 }
 
-// the owner's edit and delete actions. a non-owner sees nothing here
-function OwnerActions({ topic, onEdit, onDelete }: { topic: TopicResponse; onEdit: () => void; onDelete: () => void }) {
-	if (!topic.isOwner) {
+// the edit and delete actions, shown to whoever the gate says may use them
+function TopicActions({ topic, onEdit, onDelete }: { topic: TopicResponse; onEdit: () => void; onDelete: () => void }) {
+	if (!topic.canEdit) {
 		return null
 	}
 	return (
@@ -317,7 +348,7 @@ function OwnerActions({ topic, onEdit, onDelete }: { topic: TopicResponse; onEdi
 	)
 }
 
-// the subscribe control, worded "Follow" on the button. it renders for a reader on a public or invite topic,
+// the subscribe control, worded "Follow" on the button. it renders for a user on a public or invite topic,
 // and the page's toggle handler routes a visitor to signup
 function SubscribeButton({
 	topic,

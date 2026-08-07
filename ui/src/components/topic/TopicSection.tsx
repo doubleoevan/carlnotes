@@ -44,13 +44,13 @@ export function TopicSection({ section, onNewTopic }: TopicSectionProps) {
 			</AccordionTrigger>
 			<AccordionContent>
 				{/* the section topics, or a call to action to start one.
-				    a signed-in reader opens a new topic, or a visitor links to the sign-up page */}
+				    a signed-in user opens a new topic, or a visitor links to the sign-up page */}
 				{section.topics.length === 0 && (
 					<p className="text-muted-foreground pl-4 pb-4 text-sm">
 						<button type="button" onClick={onNewTopic} className="text-link hover:underline">
-							Give Carl a topic
+							Give Carl a topic.
 						</button>
-						. You know the one.
+						{` You know the one.`}
 					</p>
 				)}
 				{section.topics.map((topic, index) => (

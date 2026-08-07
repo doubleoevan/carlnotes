@@ -13,11 +13,15 @@ const ATTACHMENT_WORKFLOW = "processAttachment"
 export const SCAN_TASK_QUEUE = "topic-scans"
 const SCAN_WORKFLOW = "runTopicScanWorkflow"
 
+// screening a Source gets its own queue because a Worker binds one workflow bundle to one queue
+export const SOURCE_TASK_QUEUE = "source-screening"
+const SOURCE_WORKFLOW = "screenSourceWorkflow"
+
 // how long a task queue description may take before the scan sweep gives up on it and carries on
 const QUEUE_DESCRIBE_TIMEOUT_MS = 10_000
 
 // whether the Scan was handed to Temporal, and a promise that settles when it ends.
-// "running" means the Topic already had a scan in flight, and the workflow id is what refused this new start
+// "running" means the Topic already had a scan in flight, and the workflow id is what rejected this new start
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type ScanStart = { status: "started"; whenFinished: Promise<void> } | { status: "running" }
 
@@ -36,6 +40,26 @@ export async function startAttachmentWorkflow(attachmentId: string): Promise<voi
 }
 
 /**
+ * Start the llm-guard screening workflow for a url Source that was just saved.
+ * A Source already being screened is rejected by its workflow id, which makes a restart safe to repeat.
+ */
+export async function startSourceScreenWorkflow(sourceId: string): Promise<void> {
+	const client = await getClient()
+	try {
+		await client.workflow.start(SOURCE_WORKFLOW, {
+			taskQueue: SOURCE_TASK_QUEUE,
+			workflowId: `source-${sourceId}`,
+			args: [sourceId],
+		})
+	} catch (error) {
+		// a Source whose screen is already running needs no second one, and anything else is a real failure
+		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
+			throw error
+		}
+	}
+}
+
+/**
  * Start the durable workflow for a Scan row that is already open. Temporal owns the Scan from here,
  * so it runs to a terminal status even if this process goes away.
  */
@@ -48,7 +72,7 @@ export async function startTopicScanWorkflow(
 	const client = await getClient()
 	try {
 		// the workflow id is derived from the topic,
-		// so Temporal itself refuses a second Scan for a Topic that already has one running
+		// so Temporal itself rejects a second Scan for a Topic that already has one running
 		const workflowHandle = await client.workflow.start(SCAN_WORKFLOW, {
 			taskQueue: SCAN_TASK_QUEUE,
 			workflowId: `scan-${topicId}`,

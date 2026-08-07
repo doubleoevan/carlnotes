@@ -46,7 +46,7 @@ export function FileDropZone({
 		}
 	}
 
-	// a drag has to be claimed here as well as on the drop, or the browser leaves the page to open the file
+	// a drag has to be taken here as well as on the drop, or the browser leaves the page to open the file
 	const handleDragOver = (event: React.DragEvent): void => {
 		if (hasDraggedFiles(event)) {
 			event.preventDefault()

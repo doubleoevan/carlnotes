@@ -1,9 +1,19 @@
 // the read side of topic chat. one question picks the topic's most similar findings
 // and assembles the context a reply is written from
 import { reportError } from "@shared/monitoring"
+import { toSourceSummary } from "@shared/sources"
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm"
 import { db } from "../../db"
-import { attachments, chatAttachments, EMBED_MODEL_NAME, findings, resources, scans, topics } from "../../db/schema"
+import {
+	attachments,
+	chatAttachments,
+	EMBED_MODEL_NAME,
+	findings,
+	resources,
+	scans,
+	sources,
+	topics,
+} from "../../db/schema"
 import { embedVector } from "../models"
 import { getResourceContent } from "../store"
 
@@ -17,14 +27,21 @@ const MAX_RESOURCE_CHARS = 2000
 // how many recent scan summaries a chat turn includes, newest first
 const MAX_SCAN_SUMMARIES = 3
 
-// qwen3 is instruction-aware, so the question is wrapped as the query side while stored resource vectors stay plain.
-// the instruction describes a reader's question, since that is what chat embeds
-const EMBED_QUERY_INSTRUCTION = "Given a reader's question about a topic, retrieve web resources that answer it"
+// how close two findings' question-similarity has to be before recency is used to break their tie. cosine distance
+// runs 0 to 2, so the band is narrow: it only reorders findings that answer the question equally well.
+// widen it to lean harder on recency, narrow it to lean harder on question-similarity
+const SIMILARITY_TIE_BAND = 0.05
 
-// one finding as the model sees it: what it points at, why the pipeline kept it, and the text behind it
+// qwen3 is instruction-aware, so the question is wrapped as the query side while stored resource vectors stay plain.
+// the instruction describes a user's question, since that is what chat embeds
+const EMBED_QUERY_INSTRUCTION = "Given a user's question about a topic, retrieve web resources that answer it"
+
+// one finding as the model sees it: what it points at, when this topic found it, why the pipeline kept it,
+// and the text behind it
 export type RetrievedFinding = {
 	title: string | null
 	url: string
+	foundAt: Date
 	relevanceScore: number
 	relevanceExplanation: string
 	text: string
@@ -35,9 +52,11 @@ export type ChatContext = {
 	topicName: string
 	topicPrompt: string
 	findings: RetrievedFinding[]
+	// the places this topic reads, one display line each
+	sources: string[]
 	scanSummaries: string[]
 	attachmentContext: string
-	// this reader's own kept chat attachments for this topic. scoped to the chat use
+	// this user's own kept chat attachments for this topic. scoped to the chat use
 	chatAttachmentContext: string
 }
 
@@ -60,10 +79,11 @@ export async function retrieveChatContext(
 		return null
 	}
 
-	// re-rank the findings against the question, then read the scan summaries and attachment contexts.
+	// re-rank the findings against the question, then read the sources, scan summaries, and attachment contexts.
 	// the topic's own attachments are owner-only
 	const retrievedFindings = await retrieveFindings(topicId, question, litellmApiKey)
-	const [scanSummaries, attachmentContext, chatAttachmentContext] = await Promise.all([
+	const [topicSources, scanSummaries, attachmentContext, chatAttachmentContext] = await Promise.all([
+		readSources(topicId),
 		readScanSummaries(topicId),
 		isOwner ? readAttachmentContext(topicId) : Promise.resolve(""),
 		readChatAttachmentContext(userId, topicId),
@@ -72,6 +92,7 @@ export async function retrieveChatContext(
 		topicName: topic.name,
 		topicPrompt: topic.prompt,
 		findings: retrievedFindings,
+		sources: topicSources,
 		scanSummaries,
 		attachmentContext,
 		chatAttachmentContext,
@@ -87,15 +108,18 @@ async function retrieveFindings(
 	// embed the question through the same helper review uses, which truncates and normalizes it
 	const questionVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${question}`, litellmApiKey)
 
-	// order by cosine distance against the question, keeping only rows this model embedded
+	// order by cosine distance against the question, keeping only rows this model embedded.
+	// the distance is also returned, so recency can break a tie between two findings that answer equally well
 	const rows = await db
 		.select({
 			title: resources.title,
 			url: resources.url,
+			foundAt: findings.createdAt,
 			relevanceScore: findings.relevanceScore,
 			relevanceExplanation: findings.relevanceExplanation,
 			snippet: resources.snippet,
 			contentKey: resources.contentKey,
+			distance: sql<number>`${resources.embedding} <=> ${JSON.stringify(questionVector)}::vector`,
 		})
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
@@ -111,13 +135,28 @@ async function retrieveFindings(
 
 	// read each resource's stored text, falling back to its snippet
 	return Promise.all(
-		rows.map(async (row) => ({
+		toRecencyOrdered(rows).map(async (row) => ({
 			title: row.title,
 			url: row.url,
+			foundAt: row.foundAt,
 			relevanceScore: row.relevanceScore,
 			relevanceExplanation: row.relevanceExplanation,
 			text: (await readResourceText(row.contentKey, row.snippet)).slice(0, MAX_RESOURCE_CHARS),
 		})),
+	)
+}
+
+/**
+ * The retrieved rows with near-ties broken by recency, so the newer of two findings that answer the question equally well leads.
+ * The set never changes, only its order.
+ */
+export function toRecencyOrdered<Row extends { distance: number; foundAt: Date }>(rows: Row[]): Row[] {
+	// banding the distance makes this a real ordering. comparing each pair for closeness instead would not be
+	// transitive, so three findings could sort into an order none of the pairwise answers asked for
+	const toBand = (distance: number): number => Math.floor(distance / SIMILARITY_TIE_BAND)
+	return [...rows].sort(
+		(row, otherRow) =>
+			toBand(row.distance) - toBand(otherRow.distance) || otherRow.foundAt.getTime() - row.foundAt.getTime(),
 	)
 }
 
@@ -138,6 +177,24 @@ async function readResourceText(contentKey: string | null, snippet: string | nul
 		reportError(error, "chat")
 		return snippet ?? ""
 	}
+}
+
+// the topic's ready sources, summarized the same way the topic page shows them.
+// a source that has not passed its llm-guard screen is left out
+async function readSources(topicId: string): Promise<string[]> {
+	const sourceRows = await db
+		.select({ sourceKind: sources.kind, config: sources.config })
+		.from(sources)
+		.where(and(eq(sources.topicId, topicId), eq(sources.status, "ready")))
+
+	// the built-in web search stores nothing worth summarizing, so it names itself
+	return sourceRows.map((sourceRow) => {
+		if (sourceRow.sourceKind === "search") {
+			return "web search — Carl searches the live web for this topic"
+		}
+		const summary = toSourceSummary(sourceRow.sourceKind, sourceRow.config)
+		return summary ? `${sourceRow.sourceKind} — ${summary}` : sourceRow.sourceKind
+	})
 }
 
 // the topic's most recent scan summaries, newest first, skipping scans that didn't write one

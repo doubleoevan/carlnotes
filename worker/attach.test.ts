@@ -1,6 +1,6 @@
 // attachment tests for the extractor, the prompt builder, the ingestion guards, and the object key sanitizer
 import { expect, test } from "bun:test"
-import { AttachmentValidationError, buildContextPrompt, extractText, ingestAttachment } from "./attach"
+import { AttachmentValidationError, buildContextPrompt, extractText, ingestAttachment, toPageFilename } from "./attach"
 import { toAttachmentKey } from "./store"
 
 // text and Markdown decodes through the extractor
@@ -61,4 +61,19 @@ test("toAttachmentKey sanitizes a traversal-y filename", () => {
 // a dot-only filename would leave a "." or ".." segment for a downstream filesystem sync to resolve. it falls back to a fixed name instead
 test("toAttachmentKey rejects a dot-only filename", () => {
 	expect(toAttachmentKey("t1", "a1", "..")).toBe("topics/t1/attachments/a1/file")
+})
+
+// the filename a fetched page is stored under reads as the page it came from
+test("toPageFilename names a page by its host and path", () => {
+	// the path's slashes become dashes, and a bare host keeps no trailing dash
+	expect(toPageFilename(new URL("https://example.com/blog/async-rust"))).toBe("example.com-blog-async-rust.md")
+	expect(toPageFilename(new URL("https://example.com/"))).toBe("example.com.md")
+})
+
+// the extension survives a url long enough to hit the cap, since a name cut mid-suffix reads as a different file type
+test("toPageFilename keeps its extension on a very long url", () => {
+	// a path far past the cap, so the whole budget is spent before the extension is added
+	const filename = toPageFilename(new URL(`https://example.com/${"a".repeat(400)}`))
+	expect(filename).toEndWith(".md")
+	expect(filename.length).toBe(200)
 })

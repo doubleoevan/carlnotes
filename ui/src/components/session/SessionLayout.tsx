@@ -1,19 +1,20 @@
+import { isInAppBrowser, toBrowserPlatform } from "@shared/userAgent"
 import { type SubmitEvent, useEffect, useRef, useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { Button } from "@/components/primitives/button"
+import { Button, buttonVariants } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
 import { GithubIcon, GoogleIcon } from "@/components/session/OAuthProviderIcons"
+import { toChromeIntentUrl } from "@/lib/userAgent"
+import { cn } from "@/lib/utils"
 
-// the oauth buttons have the dark hero background instead of the default primary, so the email path below reads as the quieter option
+// the oauth buttons dark hero background, which leaves the email path reading as the quieter option
 const OAUTH_BUTTON_CLASS =
 	"bg-hero text-hero-foreground hover:bg-[color-mix(in_oklab,var(--hero)_88%,white)] hover:ring-2 hover:ring-ring w-full gap-2"
 
 /**
- * The page both the login and signup routes render inside: the brand mark, one-click OAuth, and an
- * email-and-password form revealed on request. Each route supplies its own submit, wording, and cross-link,
- * so the two stay identical everywhere they should be.
+ * The page both the login and signup routes render inside, each supplying its own submit, wording, and footer link.
  */
 export function SessionLayout({
 	submitLabel,
@@ -37,23 +38,21 @@ export function SessionLayout({
 	footerLinkLabel: string
 	footerHref: string
 }) {
-	const [isEmailFormOpen, setEmailFormOpen] = useState(false)
-	const [email, setEmail] = useState("")
-	const [password, setPassword] = useState("")
-	const emailInputRef = useRef<HTMLInputElement>(null)
+	// an embedded webview rejects Google's oauth
+	const [isBrowserInApp] = useState(() => isInAppBrowser(navigator.userAgent))
 
-	// moves focus to the email field the moment it's revealed
-	useEffect(() => {
-		if (isEmailFormOpen) {
-			emailInputRef.current?.focus()
-		}
-	}, [isEmailFormOpen])
-
-	// hand the typed credentials to the route's own submit
-	const handleSubmit = async (event: SubmitEvent): Promise<void> => {
-		event.preventDefault()
-		await onSubmit(email, password)
-	}
+	// an embedded webview determines whether to show the email form or the oauth buttons first
+	const oauthButtons = <OauthButtons isBrowserInApp={isBrowserInApp} onOAuth={onOAuth} />
+	const emailForm = (
+		<EmailForm
+			isBrowserInApp={isBrowserInApp}
+			onSubmit={onSubmit}
+			submitLabel={submitLabel}
+			isSubmitting={isSubmitting}
+			error={error}
+			extraFields={extraFields}
+		/>
+	)
 
 	return (
 		<div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-12">
@@ -64,58 +63,18 @@ export function SessionLayout({
 				<span className="font-display text-xl">CarlNotes</span>
 			</AnchorLink>
 
-			{/* the one-click paths, which never need the bot check */}
-			<div className="space-y-2">
-				<Button onClick={() => onOAuth("google")} className={OAUTH_BUTTON_CLASS}>
-					<GoogleIcon />
-					Continue with Google
-				</Button>
-				<Button onClick={() => onOAuth("github")} className={OAUTH_BUTTON_CLASS}>
-					<GithubIcon />
-					Continue with GitHub
-				</Button>
-			</div>
-
-			{/* the email path stays folded away until asked for, so oauth reads as the default */}
-			{!isEmailFormOpen ? (
-				<button
-					type="button"
-					onClick={() => setEmailFormOpen(true)}
-					className="text-muted-foreground hover:text-foreground mt-4 text-center text-sm underline underline-offset-4"
-				>
-					Continue with email
-				</button>
+			{/* an embedded webview shows the email form first with a notice */}
+			{isBrowserInApp ? (
+				<>
+					<EmbeddedWebviewNotice />
+					{emailForm}
+					{oauthButtons}
+				</>
 			) : (
-				<form onSubmit={handleSubmit} className="mt-6 space-y-4">
-					<div className="space-y-1.5">
-						<Label htmlFor="email">Email</Label>
-						<Input
-							id="email"
-							type="email"
-							value={email}
-							onChange={(event) => setEmail(event.target.value)}
-							className="bg-card dark:bg-card"
-							ref={emailInputRef}
-							required
-						/>
-					</div>
-					<div className="space-y-1.5">
-						<Label htmlFor="password">Password</Label>
-						<Input
-							id="password"
-							type="password"
-							value={password}
-							onChange={(event) => setPassword(event.target.value)}
-							className="bg-card dark:bg-card"
-							required
-						/>
-					</div>
-					{extraFields}
-					{error && <p className="text-destructive text-sm">{error}</p>}
-					<Button type="submit" disabled={isSubmitting} className="w-full">
-						{submitLabel}
-					</Button>
-				</form>
+				<>
+					{oauthButtons}
+					{emailForm}
+				</>
 			)}
 
 			{/* the link to the other auth route */}
@@ -126,5 +85,156 @@ export function SessionLayout({
 				</AnchorLink>
 			</p>
 		</div>
+	)
+}
+
+// explains why google sign-in needs your own browser to work
+function EmbeddedWebviewNotice() {
+	const platform = toBrowserPlatform(navigator.userAgent)
+	return (
+		<p className="text-muted-foreground mb-4 text-center text-sm whitespace-pre-line">
+			{`Google won't sign you in from inside another app's browser. Email works fine here.\n`}
+			{platform === "android" ? (
+				<AnchorLink href={toChromeIntentUrl(window.location.href)} className="text-link underline">
+					Or open this page in Chrome.
+				</AnchorLink>
+			) : (
+				<span>Or open this page in your browser from this app's own menu above.</span>
+			)}
+		</p>
+	)
+}
+
+// google and GitHub sign-in buttons
+function OauthButtons({
+	isBrowserInApp,
+	onOAuth,
+}: {
+	isBrowserInApp: boolean
+	onOAuth: (provider: "google" | "github") => void
+}) {
+	return (
+		<div className={isBrowserInApp ? "mt-6 space-y-2" : "space-y-2"}>
+			<GoogleOauthButton isBrowserInApp={isBrowserInApp} onOAuth={onOAuth} />
+			<Button onClick={() => onOAuth("github")} className={OAUTH_BUTTON_CLASS}>
+				<GithubIcon />
+				Continue with GitHub
+			</Button>
+		</div>
+	)
+}
+
+// only show the normal Google sign-in button if the user is in a standalone browser
+// otherwise disable the button on ios or show it with a link to chrome on android
+function GoogleOauthButton({
+	isBrowserInApp,
+	onOAuth,
+}: {
+	isBrowserInApp: boolean
+	onOAuth: (provider: "google" | "github") => void
+}) {
+	if (isBrowserInApp && toBrowserPlatform(navigator.userAgent) === "android") {
+		return (
+			<AnchorLink href={toChromeIntentUrl(window.location.href)} className={cn(buttonVariants(), OAUTH_BUTTON_CLASS)}>
+				<GoogleIcon />
+				Continue with Google in Chrome
+			</AnchorLink>
+		)
+	}
+
+	if (isBrowserInApp) {
+		return (
+			<Button disabled className={OAUTH_BUTTON_CLASS}>
+				<GoogleIcon />
+				Google sign-in needs your own browser
+			</Button>
+		)
+	}
+
+	return (
+		<Button onClick={() => onOAuth("google")} className={OAUTH_BUTTON_CLASS}>
+			<GoogleIcon />
+			Continue with Google
+		</Button>
+	)
+}
+
+// the email login form
+function EmailForm({
+	isBrowserInApp,
+	onSubmit,
+	submitLabel,
+	isSubmitting,
+	error,
+	extraFields,
+}: {
+	isBrowserInApp: boolean
+	onSubmit: (email: string, password: string) => Promise<void>
+	submitLabel: string
+	isSubmitting: boolean
+	error: string | null
+	extraFields?: React.ReactNode
+}) {
+	const [isOpen, setOpen] = useState(isBrowserInApp)
+	const [email, setEmail] = useState("")
+	const [password, setPassword] = useState("")
+	const emailInputRef = useRef<HTMLInputElement>(null)
+
+	// moves focus to the email field the moment it's revealed
+	useEffect(() => {
+		if (isOpen && !isBrowserInApp) {
+			emailInputRef.current?.focus()
+		}
+	}, [isOpen, isBrowserInApp])
+
+	// hand the typed credentials to the route's own submit callback
+	const handleSubmit = async (event: SubmitEvent): Promise<void> => {
+		event.preventDefault()
+		await onSubmit(email, password)
+	}
+
+	if (!isOpen) {
+		return (
+			<button
+				type="button"
+				onClick={() => setOpen(true)}
+				className="text-muted-foreground hover:text-foreground mt-4 text-center text-sm underline underline-offset-4"
+			>
+				Continue with email
+			</button>
+		)
+	}
+
+	return (
+		<form onSubmit={handleSubmit} className={isBrowserInApp ? "space-y-4" : "mt-6 space-y-4"}>
+			<div className="space-y-1.5">
+				<Label htmlFor="email">Email</Label>
+				<Input
+					id="email"
+					type="email"
+					value={email}
+					onChange={(event) => setEmail(event.target.value)}
+					className="bg-card dark:bg-card"
+					ref={emailInputRef}
+					required
+				/>
+			</div>
+			<div className="space-y-1.5">
+				<Label htmlFor="password">Password</Label>
+				<Input
+					id="password"
+					type="password"
+					value={password}
+					onChange={(event) => setPassword(event.target.value)}
+					className="bg-card dark:bg-card"
+					required
+				/>
+			</div>
+			{extraFields}
+			{error && <p className="text-destructive text-sm">{error}</p>}
+			<Button type="submit" disabled={isSubmitting} className="w-full">
+				{submitLabel}
+			</Button>
+		</form>
 	)
 }

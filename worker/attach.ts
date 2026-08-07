@@ -8,7 +8,8 @@ import { chatModel, cheapModel } from "./models.ts"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "./prompts/fetch.ts"
 import { writePrompt } from "./prompts/write.ts"
-import { deleteAttachment, putAttachment, toAttachmentKey } from "./store"
+import { fetchContent, toFetchableUrl } from "./scrape"
+import { deleteAttachment, MAX_KEY_FILENAME_CHARS, putAttachment, toAttachmentKey } from "./store"
 import { startAttachmentWorkflow } from "./temporal-client"
 
 // a rejection safe to show the user verbatim: their file or url, not an infra failure like a misconfigured llm proxy
@@ -28,6 +29,10 @@ type AttachmentUpload = {
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
 // cap the extracted text fed to the model
 const MAX_EXTRACT_CHARS = 8000
+// a fetched page is stored as markdown, and its name leaves room for the extension inside the cap
+// the object key applies, so the whole filename survives that key's own truncation with its extension intact
+const PAGE_EXTENSION = ".md"
+const MAX_PAGE_NAME_CHARS = MAX_KEY_FILENAME_CHARS - PAGE_EXTENSION.length
 
 // the synchronous half of ingestion: validate, store the bytes, insert a pending row, and start the processing workflow.
 // extraction and context generation run later in the durable workflow, so a long document does not block the upload
@@ -80,6 +85,45 @@ export async function ingestAttachment(attachmentUpload: AttachmentUpload): Prom
 		await deleteAttachment(objectKey).catch(() => {})
 		throw error
 	}
+}
+
+/**
+ * Ingest a URL as an attachment. The page is fetched here, then handed to the same synchronous half a file upload uses,
+ * so storage, persistence, and orphan cleanup are the shared path. A url that cannot be fetched is rejected instead of stored
+ */
+export async function ingestUrlAttachment(topicId: string, url: string): Promise<Attachment> {
+	// reject a malformed, non-http, or internal url before any request goes out. each rejection names its own reason
+	let fetchableUrl: URL
+	try {
+		fetchableUrl = toFetchableUrl(url)
+	} catch (error) {
+		throw new AttachmentValidationError(error instanceof Error ? error.message : String(error))
+	}
+
+	// a missing key or a dead page both land here. neither is worth leaking to the caller,
+	// so the rejection names the url and nothing else
+	const fetchResult = await fetchContent(fetchableUrl.toString()).catch(() => {
+		throw new AttachmentValidationError(`this page could not be read: ${url}`)
+	})
+
+	// the processing workflow screens this Markdown as a document, so there is no llm-guard screen here
+	return ingestAttachment({
+		topicId,
+		filename: toPageFilename(fetchableUrl),
+		contentType: "text/markdown",
+		bytes: new TextEncoder().encode(fetchResult.markdown),
+		sourceUrl: fetchableUrl.toString(),
+	})
+}
+
+/**
+ * A filename for a fetched page, built from its host and path so the stored object reads as its origin.
+ */
+export function toPageFilename(pageUrl: URL): string {
+	// a fetched page has no filename the way an upload does, so use the url
+	const path = pageUrl.pathname.replaceAll("/", "-").replace(/^-+|-+$/g, "")
+	const pageName = `${pageUrl.hostname}${path ? `-${path}` : ""}`
+	return `${pageName.slice(0, MAX_PAGE_NAME_CHARS)}${PAGE_EXTENSION}`
 }
 
 // whether an attachment's content type has an extractor (text or PDF), checked synchronously so that an unsupported type is rejected at upload
@@ -156,7 +200,7 @@ export async function generateContext(text: string, litellmApiKey?: string): Pro
 	return context.trim()
 }
 
-// describe an attached image with the chat model, billed to the reader's own key.
+// describe an attached image with the chat model, billed to the user's own key.
 // the description is what later gets read, never the image itself
 export async function generateImageContext(dataUrl: string, litellmApiKey?: string): Promise<string> {
 	// fetch and write the prompt. it takes no variables, since the image includes everything the model reads

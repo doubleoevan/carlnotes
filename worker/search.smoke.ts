@@ -32,8 +32,13 @@ async function seedTestData(): Promise<{ source: Source; userId: string }> {
 		throw new Error("failed to seed topic")
 	}
 
-	// a search source with no config. the topic context drives the search ingester
-	const [source] = await db.insert(sources).values({ topicId: topic.id, kind: "search", config: {} }).returning()
+	// store a search source with no config. the topic context drives the search ingester
+	// the status is ready because ingest skips a Source that has not passed an llm-guard screen, and nothing screens one here
+	const [source] = await db
+		.insert(sources)
+		.values({ topicId: topic.id, kind: "search", config: {}, status: "ready" })
+		.returning()
+
 	if (!source) {
 		throw new Error("failed to seed source")
 	}
@@ -44,7 +49,7 @@ async function seedTestData(): Promise<{ source: Source; userId: string }> {
 async function check(source: Source): Promise<boolean> {
 	// run the search ingester. it turns the topic context into queries, searches with the queries,
 	// and returns Resources, with playlists expanded into "watch" Resources
-	const { resources, cost } = await searchIngester(source)
+	const { resources, costDollars } = await searchIngester(source)
 
 	// summarize the discovered Resources: their resource kinds, titles, and whether they all have a url
 	const resourceKinds = new Set(resources.map((resource) => resource.kind))
@@ -59,7 +64,7 @@ async function check(source: Source): Promise<boolean> {
 	console.log(`resources     : ${resources.length}`)
 	console.log(`kinds         : ${[...resourceKinds].join(", ")}`)
 	console.log(`with title    : ${resourcesWithTitle.length}`)
-	console.log(`cost (Exa $)  : ${cost}`)
+	console.log(`cost (Exa $)  : ${costDollars}`)
 	// print a sample resource when the search returned anything
 	if (resources[0]) {
 		console.log(`sample url    : ${resources[0].url}`)
@@ -71,7 +76,7 @@ async function check(source: Source): Promise<boolean> {
 		["discovered resources", resources.length > 0],
 		["every resource has a url", resourcesAllHaveUrl],
 		["resourceKinds are read/watch only", resourceKindsAreValid],
-		["cost is positive", cost > 0],
+		["cost is positive", costDollars > 0],
 	]
 
 	// print each check and return the overall result

@@ -1,10 +1,42 @@
 import type { TopicFeed, TopicResponse } from "@shared/contracts"
-import { Download, ExternalLink, Globe, Lock, Mail } from "lucide-react"
+import {
+	AudioLines,
+	Bird,
+	Bot,
+	Diamond,
+	Download,
+	ExternalLink,
+	Globe,
+	Link,
+	Lock,
+	type LucideIcon,
+	Mail,
+	MessageSquareX,
+	Plug,
+	Puzzle,
+	Rss,
+	Video,
+} from "lucide-react"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
-import { type AllowedNoteUrls, ScrollNote, TopicScanNote } from "@/components/topic/TopicScanRecap"
-import { cn, POPOVER_HEADING_CLASS } from "@/lib/utils"
+import { type AllowedNoteUrls, SafeNoteText, ScrollNote, TopicScanNote } from "@/components/topic/TopicScanRecap"
+import { cn, POPOVER_HEADING_CLASS, WEB_SOURCE } from "@/lib/utils"
+
+// each source's icon, keyed by the label the line renders. the web line is keyed by WEB_SOURCE's label
+// instead of the "search" kind behind it. lucide includes no brand icons, so YouTube and reddit take generic shapes
+const SOURCE_ICON: Record<string, LucideIcon> = {
+	web: Globe,
+	url: Link,
+	rss: Rss,
+	reddit: Bot,
+	youtube: Video,
+	podcast: AudioLines,
+	x: MessageSquareX,
+	bluesky: Bird,
+	composio: Plug,
+	plugin: Puzzle,
+}
 
 // the card variant carries the full topic response for its scan history
 type TopicInfoProps = { topic: TopicFeed; isCard?: false } | { topic: TopicResponse; isCard: true }
@@ -31,8 +63,11 @@ export function TopicInfo(props: TopicInfoProps) {
 				    found nothing. card only, since the feed payload carries no scan history */}
 				{props.isCard && <FailedBrewSection scans={props.topic.scans} />}
 
-				{/* the topic prompt */}
-				<InfoSection label="Carl's Prompt">{topic.prompt || "—"}</InfoSection>
+				{/* the topic prompt, through the same sanitized subset the recap uses.
+				    a url the owner typed can only become a link if the scan kept it as a finding */}
+				<InfoSection label="Carl's Prompt">
+					{topic.prompt ? <SafeNoteText note={topic.prompt} allowedUrls={toFindingUrls(topic)} /> : "—"}
+				</InfoSection>
 
 				{/* recap of the latest scan through the sanitized subset, citing only the kept findings' own urls.
 				    the card clips the note with Read more, the popover shows the note in a scroll box */}
@@ -57,11 +92,14 @@ export function TopicInfo(props: TopicInfoProps) {
 					</InfoSection>
 				)}
 
+				{/* the topic sources are only in the popover, since the topic page has its own sources card */}
+				{!props.isCard && <TopicSourcesSection sources={topic.sources} />}
+
 				{/* who may see the topic. card only, since the feed payload carries no visibility */}
 				{props.isCard && <TopicVisibility visibility={props.topic.visibility} />}
 
 				{/* the subscriber count */}
-				<InfoSection label="Subscribers">{topic.subscriberCount.toLocaleString()}</InfoSection>
+				<InfoSection label="Followers">{topic.subscriberCount.toLocaleString()}</InfoSection>
 			</div>
 		</>
 	)
@@ -102,9 +140,19 @@ function AttachmentPill({
 		return <span className="text-muted-foreground truncate text-xs">{attachment.filename} · failed</span>
 	}
 
-	// a muted suffix while the processing workflow is still running, so the reader knows its context isn't ready yet
-	const processing =
-		attachment.status === "pending" ? <span className="text-muted-foreground shrink-0"> · processing</span> : null
+	// a muted suffix while the attachment processing workflow is still running, so the user knows its context isn't ready yet
+	const isProcessing = attachment.status === "pending"
+	const processing = isProcessing ? <span className="text-muted-foreground shrink-0"> · processing</span> : null
+
+	// a pending attachment's page has been fetched but not screened by llm-guard, so it reads as plain text until it is ready.
+	if (attachment.sourceUrl && isProcessing) {
+		return (
+			<span className="text-secondary-foreground flex min-w-0 items-center truncate text-xs">
+				{attachment.sourceUrl}
+				{processing}
+			</span>
+		)
+	}
 
 	// a url attachment links out to its origin page, its url truncated and underlining on hover
 	if (attachment.sourceUrl) {
@@ -173,4 +221,69 @@ export function InfoSection({
 			<div className="text-foreground mt-1">{children}</div>
 		</div>
 	)
+}
+
+// the sources section: the default web search line first, then one line per custom source
+export function TopicSourcesSection({ sources }: { sources: TopicFeed["sources"] }) {
+	// the default source is the web search source. custom sources are everything else
+	const hasSearchSource = sources.some((source) => source.sourceKind === "search")
+	const customSources = sources.filter((source) => source.sourceKind !== "search")
+	return (
+		<InfoSection label="Sources">
+			<div className="space-y-1">
+				<TopicSource
+					sourceKind={WEB_SOURCE.label}
+					summary={hasSearchSource ? WEB_SOURCE.summary : "off"}
+					isMuted={!hasSearchSource}
+				/>
+				{customSources.map((source) => (
+					<TopicSource
+						key={source.id}
+						sourceKind={source.sourceKind}
+						summary={source.summary}
+						screening={toScreeningNote(source)}
+					/>
+				))}
+			</div>
+		</InfoSection>
+	)
+}
+
+// one line in the sources section: the source icon, the source kind, its config summary,
+// and why it is not yet being read when it has not passed its llm-guard screen
+function TopicSource({
+	sourceKind,
+	summary,
+	isMuted,
+	screening,
+}: {
+	sourceKind: string
+	summary: string
+	isMuted?: boolean
+	screening?: string | null
+}) {
+	// a source kind with no icon of its own still gets a neutral marker
+	const SourceIcon = SOURCE_ICON[sourceKind] ?? Diamond
+	return (
+		<div className={cn("flex min-w-0 items-baseline gap-1.5", (isMuted || screening) && "text-muted-foreground")}>
+			{/* an svg has no baseline of its own, so it aligns by its box bottom and lands high.
+			    the nudge drops it down to the text */}
+			<SourceIcon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0 translate-y-0.5" />
+			{/* truncate to one line per source */}
+			<span className="min-w-0 truncate">
+				{sourceKind}
+				{summary && <span className="text-muted-foreground"> — {summary}</span>}
+				{screening && <span className="text-muted-foreground"> · {screening}</span>}
+			</span>
+		</div>
+	)
+}
+
+// what a source that has not passed its llm-guard screen reads as. only its owner ever sees this.
+// a ready source says nothing here. a failed source names its reason.
+export function toScreeningNote(source: { status: string; error: string | null }): string | null {
+	if (source.status === "pending") {
+		return "checking"
+	}
+	return source.status === "failed" ? (source.error ?? "failed") : null
 }

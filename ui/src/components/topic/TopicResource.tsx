@@ -1,6 +1,7 @@
 import type { TopicFinding } from "@shared/contracts"
 import { Bookmark, Check, Circle, ThumbsDown, ThumbsUp } from "lucide-react"
 import type * as React from "react"
+import { useState } from "react"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
@@ -21,8 +22,8 @@ type TopicResourceProps = {
 }
 
 /**
- * A single topic resource row. Clicking it opens the resource and marks the topic finding consumed.
- * Consumed rows appear muted, like an email inbox.
+ * A single topic resource row. Clicking the row opens the note popup for the topic finding,
+ * and clicking the title opens the resource itself in a new tab. Consumed rows appear muted, like an email inbox.
  */
 export function TopicResource({ resource, rank, isRatable, resourceHandlers }: TopicResourceProps) {
 	// the topic page passes handlers that reload its own payload. the homepage falls back to the shared provider's handlers
@@ -31,9 +32,13 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers }: T
 	// signed-out visitors don't get the per-user read and rating controls
 	const isSignedIn = useIsSignedIn()
 	const ResourceIcon = RESOURCE_KIND_ICON[resource.resourceKind]
-	// unread rows are bold. consumed rows go muted
+	// the whole row opens the note popup for the topic finding and hovering it shows the hint, so both states live here.
+	// the note button stays the popover's trigger, which is what anchors the note and the hint to the icon
+	const [isNoteOpen, setIsNoteOpen] = useState(false)
+	const [isHintOpen, setIsHintOpen] = useState(false)
+	// unread rows are bold. consumed rows go muted. the underline is the link's own, so it only appears over the title itself
 	const titleClass = cn(
-		"truncate text-sm group-hover:text-foreground group-hover:underline",
+		"text-sm group-hover:text-foreground hover:underline",
 		resource.isConsumed ? "text-muted-foreground font-normal" : "text-foreground font-semibold",
 	)
 	const metadataClass = cn(
@@ -45,65 +50,91 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers }: T
 	// the hover highlight paints on a rounded under-layer, so the separator above the row stays straight.
 	// the separator is the row's own after element, inset so it sits inside the highlight's rounded corners
 	return (
-		<div className="group after:border-separator-strong relative isolate flex before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden hover:before:bg-accent-foreground/20">
-			{/* the rank, in the slot the bookmark mark takes over once the row is bookmarked */}
-			{rank !== null && (
-				<span
-					className="text-muted-foreground absolute top-1.5 left-0 grid size-11 place-items-center sm:size-8"
-					aria-hidden="true"
-				>
-					<span className="font-display text-sm tabular-nums">{rank}</span>
-				</span>
-			)}
-			{/* the filled bookmark mark, sitting where the rank would be. it only shows on a bookmarked row */}
-			{isSignedIn && resource.isBookmarked && (
-				<Tooltip>
-					<TooltipTrigger
-						onClick={() => bookmark(resource.findingId, false)}
-						aria-pressed={true}
-						aria-label={bookmarkLabel}
-						className="text-primary absolute top-1.5 left-0 grid size-11 place-items-center sm:size-8"
-					>
-						<Bookmark className="size-3.75 fill-current" strokeWidth={2.5} />
-					</TooltipTrigger>
-					<TooltipContent>{bookmarkLabel}</TooltipContent>
-				</Tooltip>
-			)}
-			{/* the entire topic resource row is the tap target. it opens the resource and marks it consumed. */}
-			<AnchorLink
-				href={resource.url}
-				onClick={() => open(resource.findingId)}
-				className={cn(
-					// the left padding clears the rank slot
-					"flex min-w-0 flex-1 items-start gap-2.5 py-3 pl-9",
-					// the right padding clears the note popover, with extra room on an unbookmarked signed-in row
-					isSignedIn && !resource.isBookmarked ? "pr-20 sm:pr-16" : "pr-10",
-				)}
+		<Popover open={isNoteOpen} onOpenChange={setIsNoteOpen}>
+			{/* the row is a pointer shortcut to the note popup. only the title link opens the resource, the note button opens this popover */}
+			{/* biome-ignore lint/a11y/useKeyWithClickEvents: reachable by keyboard through the link and the note button */}
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: a pointer shortcut over children that carry the semantics */}
+			<div
+				onClick={() => setIsNoteOpen(true)}
+				onMouseEnter={() => setIsHintOpen(true)}
+				onMouseLeave={() => setIsHintOpen(false)}
+				className="group after:border-separator-strong relative isolate flex cursor-pointer before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden hover:before:bg-accent-foreground/20"
 			>
-				<ResourceIcon
+				{/* the rank, in the slot the bookmark mark takes over once the finding is bookmarked */}
+				{rank !== null && (
+					<span
+						className="text-muted-foreground absolute top-1.5 left-0 grid size-11 place-items-center sm:size-8"
+						aria-hidden="true"
+					>
+						<span className="font-display text-sm tabular-nums">{rank}</span>
+					</span>
+				)}
+				{/* the filled bookmark mark, sitting where the rank would be. it only shows on a bookmarked row.
+				    it stops the click so removing a bookmark never also opens the note */}
+				{isSignedIn && resource.isBookmarked && (
+					<Tooltip>
+						<TooltipTrigger
+							onClick={(event) => {
+								event.stopPropagation()
+								bookmark(resource.findingId, false)
+							}}
+							aria-pressed={true}
+							aria-label={bookmarkLabel}
+							className="text-primary absolute top-1.5 left-0 grid size-11 place-items-center sm:size-8"
+						>
+							<Bookmark className="size-3.75 fill-current" strokeWidth={2.5} />
+						</TooltipTrigger>
+						<TooltipContent>{bookmarkLabel}</TooltipContent>
+					</Tooltip>
+				)}
+				<div
 					className={cn(
-						"mt-0.5 size-4 shrink-0 text-muted-foreground group-hover:text-foreground",
-						resource.isConsumed && "opacity-60",
+						// the left padding clears the rank slot
+						"flex min-w-0 flex-1 items-start gap-2.5 py-3 pl-9",
+						// the right padding clears the note popover, with extra room on an unbookmarked signed-in row
+						isSignedIn && !resource.isBookmarked ? "pr-20 sm:pr-16" : "pr-10",
 					)}
-					aria-label={resource.resourceKind}
-				/>
-				<div className="min-w-0 flex-1">
-					<div className={titleClass}>{resource.title ?? resource.url}</div>
-					<div className={metadataClass}>
-						{[resource.source, toAgeLabel(resource.publishedAt)].filter(Boolean).join(" · ")}
+				>
+					<ResourceIcon
+						className={cn(
+							"mt-0.5 size-4 shrink-0 text-muted-foreground group-hover:text-foreground",
+							resource.isConsumed && "opacity-60",
+						)}
+						aria-label={resource.resourceKind}
+					/>
+					<div className="min-w-0 flex-1">
+						{/* the title is the only part that opens the resource. the truncation lives on the wrapper
+						    so the link stays inline and its hover underline covers only the text */}
+						<div className="truncate">
+							<AnchorLink
+								href={resource.url}
+								onClick={(event) => {
+									event.stopPropagation()
+									open(resource.findingId)
+								}}
+								className={titleClass}
+							>
+								{resource.title ?? resource.url}
+							</AnchorLink>
+						</div>
+						<div className={metadataClass}>
+							{[resource.source, toAgeLabel(resource.publishedAt)].filter(Boolean).join(" · ")}
+						</div>
 					</div>
 				</div>
-			</AnchorLink>
-			{/* info button */}
-			<ResourceInfo
-				resource={resource}
-				isRatable={isRatable}
-				isSignedIn={isSignedIn}
-				onConsume={consume}
-				onRate={rate}
-				onBookmark={bookmark}
-			/>
-		</div>
+				{/* the note button, which anchors the popover and opens it on its own for a keyboard user */}
+				<ResourceInfo
+					resource={resource}
+					isRatable={isRatable}
+					isSignedIn={isSignedIn}
+					isHintOpen={isHintOpen && !isNoteOpen}
+					onHintChange={setIsHintOpen}
+					onConsume={consume}
+					onRate={rate}
+					onBookmark={bookmark}
+				/>
+			</div>
+		</Popover>
 	)
 }
 
@@ -113,6 +144,8 @@ function ResourceInfo({
 	resource,
 	isRatable,
 	isSignedIn,
+	isHintOpen,
+	onHintChange,
 	onConsume,
 	onRate,
 	onBookmark,
@@ -121,26 +154,38 @@ function ResourceInfo({
 	resource: TopicFinding
 	isRatable: boolean
 	isSignedIn: boolean
+	// the entire row opens the tooltip, so hovering anywhere on it hints at the note this button opens
+	isHintOpen: boolean
+	onHintChange: (isOpen: boolean) => void
 	onConsume: TopicFeedHandlers["consume"]
 	onRate: TopicFeedHandlers["rate"]
 	onBookmark: TopicFeedHandlers["bookmark"]
 }) {
 	// the bookmark button's label, flipping with the finding's bookmark state
 	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
+	// the row owns the popover's open state, so this holds only the trigger the note anchors to and the content.
+	// the trigger stops the click so it toggles instead of the row also setting it open
 	return (
-		<Popover>
-			<Tooltip>
+		<>
+			<Tooltip open={isHintOpen} onOpenChange={onHintChange}>
 				<TooltipTrigger asChild>
 					<PopoverTrigger
+						onClick={(event) => event.stopPropagation()}
 						className="hover:opacity-75 absolute top-1.5 right-1 grid size-11 place-items-center sm:size-8"
 						aria-label="Notes and feedback"
 					>
 						<NoteIcon />
 					</PopoverTrigger>
 				</TooltipTrigger>
-				<TooltipContent>A topic finding note from Carl</TooltipContent>
+				<TooltipContent side="top">A topic finding note from Carl</TooltipContent>
 			</Tooltip>
-			<PopoverContent align="end" className="w-[calc(100vw-2rem)] max-w-lg text-sm">
+			{/* the content renders through a portal, but a react event bubbles the react tree instead of the dom one,
+			    so without intercepting a click in here reaches the row and reopens what the close button just closed */}
+			<PopoverContent
+				onClick={(event) => event.stopPropagation()}
+				align="end"
+				className="w-[calc(100vw-2rem)] max-w-lg text-sm"
+			>
 				<PopoverCloseButton />
 				<h2 className={POPOVER_HEADING_CLASS}>Topic Finding</h2>
 
@@ -206,7 +251,7 @@ function ResourceInfo({
 					</div>
 				)}
 			</PopoverContent>
-		</Popover>
+		</>
 	)
 }
 

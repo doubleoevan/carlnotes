@@ -36,7 +36,7 @@ export async function unsubscribe(unsubscribeToken: string | undefined): Promise
  * The confirmation page shown after a successful unsubscribe, coffee-toned to match the email.
  */
 export function unsubscribedPage(topic: { id: string; name: string }, appUrl?: string): string {
-	// link straight to the topic so the reader can still drop by for new notes
+	// link straight to the topic so the user can still drop by for new notes
 	const topicUrl = appUrl ? `${appUrl.replace(/\/$/, "")}/topics/${topic.id}` : undefined
 	return renderPage(`
 		<h1>You're unsubscribed</h1>

@@ -43,14 +43,14 @@ export async function traceStage<Result>(
 ): Promise<Result> {
 	return startActiveObservation(name, async (span) => {
 		// what the stage spends is the difference across it, so record the total going in
-		const spentBefore = budget.spent
+		const spentBefore = budget.spentDollars
 		try {
-			const result = await runStage()
-			span.update({ metadata: { costUsd: budget.spent - spentBefore, ...describeStage?.(result) } })
-			return result
+			const stageResult = await runStage()
+			span.update({ metadata: { costUsd: budget.spentDollars - spentBefore, ...describeStage?.(stageResult) } })
+			return stageResult
 		} catch (error) {
 			// a stage that failed still spent, which is when the number matters most. record it, then rethrow
-			span.update({ metadata: { costUsd: budget.spent - spentBefore, isFailed: true } })
+			span.update({ metadata: { costUsd: budget.spentDollars - spentBefore, isFailed: true } })
 			throw error
 		}
 	})

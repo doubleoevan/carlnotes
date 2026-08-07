@@ -1,7 +1,7 @@
 // Stripe Billing: Checkout, the Customer Portal, and the subscription webhook that keeps billing_subscriptions and users.plan in sync.
 // SETUP: create plus and premium products with monthly and yearly prices, plus a metered manual-scan overage price in Stripe
 import type { BillingState } from "@shared/contracts"
-import { PLANS, type Plan } from "@shared/plans"
+import { type BillingInterval, PLANS, type Plan } from "@shared/plans"
 import { eq } from "drizzle-orm"
 import Stripe from "stripe"
 import { db } from "../db"
@@ -20,6 +20,8 @@ type StripeSubscriptionFields = {
 	metadata?: Record<string, string> | null
 	current_period_end?: number | null
 	default_payment_method?: unknown
+	// the prices the subscription actually includes, which is what a plan change in the portal rewrites
+	items?: { data: { price?: { recurring?: { interval?: string | null } | null } | null }[] }
 }
 
 // the billing_subscriptions values for an active paid subscription
@@ -29,7 +31,9 @@ type SubscriptionProjection = {
 	stripeCustomerId: string
 	stripeSubscriptionId: string
 	currentPeriodEnd: Date | null
+	// a card to charge, and how often the subscription bills. only a monthly one includes the metered overage price
 	hasPaymentMethod: boolean
+	billingInterval: BillingInterval
 }
 
 /**
@@ -40,15 +44,18 @@ export async function createCheckoutSession(
 	userId: string,
 	email: string,
 	plan: PaidPlan,
-	interval: "monthly" | "yearly",
+	billingInterval: "monthly" | "yearly",
 ): Promise<string> {
-	// the base plan price plus the metered overage item, so manual-scan overage bills on the same subscription
+	// the base plan price, plus the metered overage item on a monthly plan so its manual-scan overage bills on the
+	// same subscription. the overage price bills monthly, and Stripe rejects one subscription whose prices
+	// disagree about their billing interval, so a yearly plan checks out on its own and includes no overage
+	const overageItems = billingInterval === "monthly" ? [{ price: overagePriceId() }] : []
 	const checkoutSession = await stripe().checkout.sessions.create({
 		mode: "subscription",
 		customer_email: email,
 		client_reference_id: userId,
-		line_items: [{ price: planPriceId(plan, interval), quantity: 1 }, { price: overagePriceId() }],
-		subscription_data: { metadata: { userId, plan } },
+		line_items: [{ price: planPriceId(plan, billingInterval), quantity: 1 }, ...overageItems],
+		subscription_data: { metadata: { userId, plan, interval: billingInterval } },
 		success_url: `${appUrl()}/?billing=success`,
 		cancel_url: `${appUrl()}/?billing=cancel`,
 	})
@@ -87,16 +94,23 @@ export async function loadBillingState(userId: string): Promise<BillingState> {
 	// the plan from the user row, the status and card from the subscription, and today's scan count against the daily limit
 	const [user] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, userId))
 	const [subscription] = await db
-		.select({ status: billingSubscriptions.status, hasPaymentMethod: billingSubscriptions.hasPaymentMethod })
+		.select({
+			status: billingSubscriptions.status,
+			hasPaymentMethod: billingSubscriptions.hasPaymentMethod,
+			billingInterval: billingSubscriptions.billingInterval,
+		})
 		.from(billingSubscriptions)
 		.where(eq(billingSubscriptions.userId, userId))
+
+	// a user with no subscription is on free, which bills on no frequency at all, so it reads as monthly
 	const plan = user?.plan ?? "free"
+	const billingInterval = subscription?.billingInterval ?? "monthly"
 	return {
 		plan,
 		status: subscription?.status ?? null,
 		hasPaymentMethod: subscription?.hasPaymentMethod ?? false,
 		dailyScansUsed: await scansToday(userId),
-		dailyScanLimit: PLANS[plan].dailyScanLimit,
+		dailyScanLimit: PLANS[plan].dailyScanLimit[billingInterval],
 	}
 }
 
@@ -138,7 +152,6 @@ export function toPaidSubscription(subscription: StripeSubscriptionFields): Subs
 		return null
 	}
 
-	// mirror the Stripe status, customer, period end, and card-on-file flag
 	const stripeCustomerId = typeof subscription.customer === "string" ? subscription.customer : subscription.customer.id
 	return {
 		plan,
@@ -147,7 +160,20 @@ export function toPaidSubscription(subscription: StripeSubscriptionFields): Subs
 		stripeSubscriptionId: subscription.id,
 		currentPeriodEnd: subscription.current_period_end ? new Date(subscription.current_period_end * 1000) : null,
 		hasPaymentMethod: Boolean(subscription.default_payment_method),
+		billingInterval: toBillingInterval(subscription),
 	}
+}
+
+// how a subscription bills, read from the price it includes instead of from what checkout stamped on it.
+// changing plan in the Customer Portal swaps the price and leaves our own metadata behind, so the price is the
+// only field that stays true. the metered overage price always bills monthly, so a subscription counts as
+// yearly when any of its prices does, and falls back to the stamped billing interval when no price came with the event
+function toBillingInterval(subscription: StripeSubscriptionFields): BillingInterval {
+	const priceIntervals = subscription.items?.data.map((item) => item.price?.recurring?.interval)
+	if (priceIntervals?.length) {
+		return priceIntervals.includes("year") ? "yearly" : "monthly"
+	}
+	return subscription.metadata?.interval === "yearly" ? "yearly" : "monthly"
 }
 
 /**
@@ -236,12 +262,12 @@ function stripe(): Stripe {
 	return new Stripe(stripeSecretKey)
 }
 
-// a paid plan's Stripe price id for a monthly or yearly interval
-function planPriceId(plan: PaidPlan, interval: "monthly" | "yearly"): string {
-	const priceKey = `STRIPE_PRICE_${plan.toUpperCase()}_${interval.toUpperCase()}`
+// a paid plan's Stripe price id for a monthly or yearly billing interval
+function planPriceId(plan: PaidPlan, billingInterval: "monthly" | "yearly"): string {
+	const priceKey = `STRIPE_PRICE_${plan.toUpperCase()}_${billingInterval.toUpperCase()}`
 	const priceId = Bun.env[priceKey]
 	if (!priceId) {
-		throw new Error(`${priceKey} must be set to check out the ${plan} ${interval} plan`)
+		throw new Error(`${priceKey} must be set to check out the ${plan} ${billingInterval} plan`)
 	}
 	return priceId
 }

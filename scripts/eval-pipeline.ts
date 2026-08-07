@@ -104,7 +104,7 @@ async function measureFixtures(): Promise<void> {
  * Exported so the eval smoke can exercise the harness on a tiny inline fixture before a real corpus is labeled.
  */
 export async function measureFixture(name: string, fixture: EvalFixture): Promise<EvalResult> {
-	// an unlabeled fixture would report a meaningless number, so refuse it outright
+	// an unlabeled fixture would report a meaningless number, so reject it outright
 	const labeledResources = fixture.labeledResources
 	const unlabeledCount = labeledResources.filter((labeled) => labeled.isRelevant === null).length
 	if (unlabeledCount > 0) {
@@ -118,7 +118,7 @@ export async function measureFixture(name: string, fixture: EvalFixture): Promis
 	const topicEmbedding = await embedQuery(topicText)
 	charge(budget, "embedding", tokenCost(Math.ceil(topicText.length / 4), EMBED_COST_PER_MILLION_TOKENS))
 
-	// each Resource goes through the gate, then the tiered scoring the gate's survivors would get
+	// each Resource goes through the access gate, then the tiered scoring the gate's survivors would get
 	const predictions: boolean[] = []
 	for (const labeled of labeledResources) {
 		predictions.push(await isPredictedRelevant(labeled, topicEmbedding, topicText, budget))
@@ -130,7 +130,7 @@ export async function measureFixture(name: string, fixture: EvalFixture): Promis
 	return {
 		name,
 		...toPrecisionRecall(predictions, labels),
-		costUsd: budget.spent,
+		costUsd: budget.spentDollars,
 		resourceCount: labeledResources.length,
 		falsePositiveRate: await toFlaggedRate(fixture.injectionProse.map((article) => article.content)),
 		attackCatchRate: await toFlaggedRate(fixture.injectionAttacks),

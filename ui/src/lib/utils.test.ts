@@ -152,7 +152,7 @@ test("toScanRecapPlaceholder matches the scan outcome", () => {
 	expect(toScanRecapPlaceholder({ status: "failed", error: "Budget has been exceeded!" })).toBe(
 		"Today I ran out of coffee.",
 	)
-	expect(toScanRecapPlaceholder({ status: "failed", error: "connection refused" })).toBe("This one didn't brew.")
+	expect(toScanRecapPlaceholder({ status: "failed", error: "connection rejected" })).toBe("This one didn't brew.")
 
 	// a succeeded scan whose report call threw an error still has its findings, so it must not show still-reading
 	expect(toScanRecapPlaceholder({ status: "succeeded", error: null })).toBe(
@@ -186,9 +186,9 @@ test("an upper-case scheme still matches", () => {
 
 // a url that is already a Source has nothing to offer
 test("a url that is already a source is not offered", () => {
-	const keptSources = [{ kind: "url", config: { url: "https://example.com/post" } }]
+	const keptSources = [{ sourceKind: "url", config: { url: "https://example.com/post" } }]
 	expect(toPossibleSourceUrls("read https://example.com/post", keptSources, [])).toEqual([])
-	const addedSources = [{ kind: "url", value: "https://example.com/post" }]
+	const addedSources = [{ sourceKind: "url", value: "https://example.com/post" }]
 	expect(toPossibleSourceUrls("read https://example.com/post", [], addedSources)).toEqual([])
 })
 

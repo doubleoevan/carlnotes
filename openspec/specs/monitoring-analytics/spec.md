@@ -49,32 +49,53 @@ Console output SHALL NOT leave the box as breadcrumbs. The SDK records every con
 
 ### Requirement: PostHog carries a signup-and-activation event taxonomy only
 
-When `POSTHOG_API_KEY` is set, the app SHALL emit exactly eleven server-side events keyed to the user: the funnel `signup_completed`, `topic_created`, and `first_scan_completed`; the owner-intent pair `scan_requested` and `scan_quota_reached`; and the engagement set `finding_rated`, `finding_bookmarked`, `finding_unbookmarked`, `finding_read`, `finding_unread`, and `finding_opened`. The taxonomy SHALL stay at these eleven until a real post-launch question motivates another, and SHALL NOT include session recording or client-side autocapture.
+When `POSTHOG_API_KEY` is set, the app SHALL emit exactly fifteen server-side events keyed to the user: the funnel `signup_completed`, `topic_created`, and `first_scan_completed`; the Topic mutations `topic_updated` and `topic_deleted`; the owner-intent pair `scan_requested` and `scan_quota_reached`; the engagement set `finding_rated`, `finding_bookmarked`, `finding_unbookmarked`, `finding_read`, `finding_unread`, and `finding_opened`; and the conversation pair `chat_turn_sent` and `chat_budget_reached`. The taxonomy SHALL stay at these fifteen until a real post-launch question motivates another, and SHALL NOT include session recording or client-side autocapture.
+
+`topic_updated` and `topic_deleted` SHALL each carry an `isOwner` property saying whether the user who made the change owns the Topic. An admin may edit or delete any Topic, and nothing else records that it was not the owner who did — a delete especially, since the row is gone afterwards and the event is the only account of who took it. Both are answers to "who changed this", not product questions, which is why they carry a property the funnel events do not.
+
+A page view SHALL NOT be an event. Views are high-volume and low-signal, and a log nobody reads implies an oversight that does not exist. `finding_read` is the reader marking a Finding read, which is a state change they chose, not a view.
 
 An event named `first_` SHALL fire only on the user's genuine first occurrence, established by a count check. `first_scan_completed` qualifies, because a Scan carries its owner and is countable. An engagement event does not: `findings.rating` is topic-scoped with no per-user row to count. So the engagement set fires on every occurrence and analytics derives the first one. No event SHALL claim "first" that the data cannot establish.
 
 Every event SHALL carry the user's `plan` as a property, and every topic-anchored event SHALL also carry the `topicId`, because event history cannot be backfilled. A question about plan-segmented activation is only answerable from the day the property started riding along. Properties SHALL be short identifiers only, never content.
 
-Every event a browser request triggers SHALL also carry a `platform` property of `mobile` or `desktop`, read from that request's user agent, so the funnel is answerable by device. `first_scan_completed` SHALL NOT carry one: a scheduled Scan runs in the worker with no request and no device behind it, and a guessed value would read as real.
+Every event a browser request triggers SHALL also carry three device properties read from that request's user agent: `platform` of `mobile` or `desktop`, `browserPlatform` of `android`, `ios`, or `other`, and `isInAppBrowser`. `platform` answers the funnel by device. `browserPlatform` and `isInAppBrowser` answer whether a visitor arrived inside another app's embedded browser, where Google rejects OAuth with `403 disallowed_useragent` and the session forms lead with email instead — without them there is no way to see how often that path is taken, or how many of those visitors were on Android and could be handed a way out. `platform` SHALL be kept alongside the finer pair rather than replaced by it, because event history cannot be backfilled and redefining a property's values would make old and new events incomparable. `first_scan_completed` SHALL carry none of the three: a scheduled Scan runs in the worker with no request and no device behind it, and a guessed value would read as real.
 
-The `plan` and `platform` an event carries SHALL be read from the session and the request at the route, and passed down to the service function that emits the event. An event SHALL NOT cost a database query of its own, and a service function SHALL NOT need to guard the emit, since emitting already swallows its own failures.
+The user agent SHALL be read once per event and SHALL be the request's own header, never a value the client computed and sent, since a client-supplied device claim is unverifiable. A request that carries no user agent header SHALL still yield every property, reading as `desktop`, `other`, and not an in-app browser.
+
+The `plan` and the device properties an event carries SHALL be read from the session and the request at the route, and passed down to the service function that emits the event. An event SHALL NOT cost a database query of its own, and a service function SHALL NOT need to guard the emit, since emitting already swallows its own failures.
 
 `signup_completed` SHALL also carry a `cta` property naming the button that brought the converting visitor, when one did: each signup entry point tags its link, the signup page keeps the tag in a short-lived cookie so it survives the oauth round-trip, and the server validates the tag against a strict slug shape before attaching it — a direct visit simply carries no `cta`. This is conversion attribution only: which clicks are made and abandoned SHALL NOT be tracked, since that would require client-side analytics, which stays excluded.
+
+#### Scenario: A change by someone other than the owner is on the record
+
+- **WHEN** an admin edits or deletes a Topic they do not own
+- **THEN** the event carries their user id and `isOwner` false, so the change is attributable afterwards
 
 #### Scenario: A signup names the button that converted
 
 - **WHEN** a visitor reaches signup from a tagged button and completes signup, on the password or the oauth path
 - **THEN** their `signup_completed` event carries that button's `cta` tag, while a direct-visit signup carries none and a garbled cookie value is dropped rather than sent
 
+#### Scenario: A signup from inside another app's browser is visible
+
+- **WHEN** a visitor completes signup from a webview such as the LinkedIn, Instagram, or Facebook in-app browser
+- **THEN** `signup_completed` carries `isInAppBrowser` true and the `browserPlatform` that decides whether they could be handed a way out, so the share of signups taking the email-first path is answerable
+
+#### Scenario: A request with no user agent still reports a device
+
+- **WHEN** an event is emitted for a request that sent no user agent header
+- **THEN** it carries `platform` `desktop`, `browserPlatform` `other`, and `isInAppBrowser` false, rather than omitting them
+
 #### Scenario: Events segment by plan from day one
 
-- **WHEN** any of the eleven events is emitted
+- **WHEN** any of the fifteen events is emitted
 - **THEN** it carries the user's plan as a property, and the two topic-anchored events carry the topic id, so the funnel can be split by tier without waiting to re-collect history
 
 #### Scenario: An event costs no query of its own
 
 - **WHEN** a route emits an engagement event
-- **THEN** the plan and platform come from the session and the request already in hand, so no extra read runs on the request path
+- **THEN** the plan and the device properties come from the session and the request already in hand, so no extra read runs on the request path
 
 #### Scenario: A manual scan records the ask, not the outcome
 
@@ -84,7 +105,7 @@ The `plan` and `platform` an event carries SHALL be read from the session and th
 #### Scenario: Running out of manual scans is recorded as a paywall
 
 - **WHEN** an owner asks for a manual Scan with their daily limit spent and no payment method on file
-- **THEN** `scan_quota_reached` is emitted, while an owner whose card on file bills the extra Scan as overage emits `scan_requested` instead, and a caller refused for authority emits neither
+- **THEN** `scan_quota_reached` is emitted, while an owner whose card on file bills the extra Scan as overage emits `scan_requested` instead, and a caller rejected for authority emits neither
 
 #### Scenario: The first scan fires the activation event once
 

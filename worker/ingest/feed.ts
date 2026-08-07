@@ -1,6 +1,6 @@
 // the shared helper for feeds that don't require an API key. it fetches an RSS or Atom url and parses it into deduped Resources
 import Parser from "rss-parser"
-import { toFetchableUrl } from "../scrape"
+import { fetchPublicUrl } from "../scrape"
 import type { NewResource } from "./ingester"
 
 // fetch limits used to bound slow feeds and reject oversized bodies
@@ -18,7 +18,7 @@ export async function fetchFeed(
 ): Promise<NewResource[]> {
 	// send a descriptive User-Agent when the caller provides one. reddit rejects generic or missing agents
 	const headers = options.userAgent ? { "user-agent": options.userAgent } : undefined
-	const response = await fetch(toFetchableUrl(url), { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
+	const response = await fetchPublicUrl(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 
 	// reject error responses before reading the body
 	if (!response.ok) {

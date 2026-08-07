@@ -17,11 +17,15 @@ export const youtubeIngester: SourceIngester = async (source: Source) => {
 	const { apiPlaylistId, atomUrl } = toPlaylistIdAndAtomUrl(source)
 	const apiKey = Bun.env.YOUTUBE_API_KEY
 	if (apiKey) {
-		return { resources: await fetchVideos(apiPlaylistId, apiKey), cost: 0 }
+		return { resources: await fetchVideos(apiPlaylistId, apiKey), costDollars: 0 }
 	}
 
 	// fall back to the keyless Atom feed, tagged so the Scan records the fallback
-	return { resources: await fetchFeed(atomUrl, { resourceKind: "watch" }), cost: 0, fallbackMode: "youtube-atom" }
+	return {
+		resources: await fetchFeed(atomUrl, { resourceKind: "watch" }),
+		costDollars: 0,
+		fallbackMode: "youtube-atom",
+	}
 }
 
 // the fields parseVideos reads from a playlistItems response. every field is optional because the JSON is unvalidated and deleted videos have no videoId
@@ -49,19 +53,37 @@ function toPlaylistIdAndAtomUrl(source: Source): { apiPlaylistId: string; atomUr
 
 	// a playlist id is read directly by both modes
 	if (playlistId) {
-		const atomQuery = new URLSearchParams({ playlist_id: playlistId })
-		return { apiPlaylistId: playlistId, atomUrl: `https://www.youtube.com/feeds/videos.xml?${atomQuery}` }
+		return { apiPlaylistId: playlistId, atomUrl: toAtomUrl(playlistId, "playlist") }
 	}
 
 	// a channel id maps to its uploads playlist for the API and its channel feed for Atom
 	if (channelId) {
-		const atomQuery = new URLSearchParams({ channel_id: channelId })
-		return {
-			apiPlaylistId: uploadsFromChannel(channelId),
-			atomUrl: `https://www.youtube.com/feeds/videos.xml?${atomQuery}`,
-		}
+		return { apiPlaylistId: uploadsFromChannel(channelId), atomUrl: toAtomUrl(channelId, "channel") }
 	}
 	throw new Error(`youtube source ${source.id} has no channelId or playlistId in config`)
+}
+
+/**
+ * The Atom feed url for a YouTube channel or playlist id, which is the keyless way to read either one.
+ */
+export function toAtomUrl(youtubeId: string, youtubeKind: YoutubeIdKind = toYoutubeIdKind(youtubeId)): string {
+	// the feed names the id by what it is. a caller that knows says so, and the rest is read from the id itself
+	const atomQuery =
+		youtubeKind === "playlist"
+			? new URLSearchParams({ playlist_id: youtubeId })
+			: new URLSearchParams({ channel_id: youtubeId })
+	return `https://www.youtube.com/feeds/videos.xml?${atomQuery}`
+}
+
+// whether an id names a channel or a playlist
+export type YoutubeIdKind = "channel" | "playlist"
+
+/**
+ * What a YouTube id is for, parsed from its prefix. Channel ids are the only ones that start with UC,
+ * so everything else is a playlist: PL, and the UU, RD, OL, and LL are the playlists a channel generates.
+ */
+export function toYoutubeIdKind(youtubeId: string): YoutubeIdKind {
+	return youtubeId.startsWith("UC") ? "channel" : "playlist"
 }
 
 // a channel's uploads playlist id is the channel id with the UC prefix swapped to UU. YouTube keeps this mapping stable
@@ -93,7 +115,7 @@ export function parseVideos(playlist: YoutubePlaylist): NewResource[] {
 			continue
 		}
 
-		// this canonical watch url matches what the Atom fallback emits, so different modes dedupe to the same Resource
+		// this canonical watch url matches what the Atom fallback finds, so different modes dedupe to the same Resource
 		const url = `https://www.youtube.com/watch?v=${videoId}`
 		if (resourceByUrl.has(url)) {
 			continue

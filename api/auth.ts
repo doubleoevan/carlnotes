@@ -1,6 +1,7 @@
 // the app's Better Auth instance: email/password and Google/GitHub sign-in, sessions in Neon via the Drizzle adapter
-import { toPlatform, trackEvent } from "@shared/analytics"
+import { trackEvent } from "@shared/analytics"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
+import { isInAppBrowser, toBrowserPlatform, toPlatform } from "@shared/userAgent"
 import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { db } from "../db"
@@ -80,8 +81,14 @@ export const auth = betterAuth({
 				// track the signup funnel's terminal event
 				after: async (user, context) => {
 					const ctaTag = toCtaTag(context?.getCookie(SIGNUP_CTA_COOKIE_NAME) ?? null)
-					const platform = toPlatform(context?.headers?.get("user-agent"))
-					trackEvent("signup_completed", user.id, { plan: "free", platform, ...(ctaTag ? { cta: ctaTag } : {}) })
+					const userAgent = context?.headers?.get("user-agent")
+					trackEvent("signup_completed", user.id, {
+						plan: "free",
+						platform: toPlatform(userAgent),
+						browserPlatform: toBrowserPlatform(userAgent ?? ""),
+						isInAppBrowser: isInAppBrowser(userAgent ?? ""),
+						...(ctaTag ? { cta: ctaTag } : {}),
+					})
 				},
 			},
 		},
@@ -107,8 +114,8 @@ export async function verifyTurnstileToken(token: string): Promise<boolean> {
 		headers: { "Content-Type": "application/x-www-form-urlencoded" },
 		body: new URLSearchParams({ secret, response: token }),
 	})
-	const result = (await response.json()) as { success: boolean }
-	return result.success
+	const verification = (await response.json()) as { success: boolean }
+	return verification.success
 }
 
 // verifies a signup-gate token's signature and expiry

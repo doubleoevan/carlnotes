@@ -8,6 +8,7 @@ import { cheapModel } from "../models.ts"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch.ts"
 import { writePrompt } from "../prompts/write.ts"
 import type { NewResource, Source, SourceIngester } from "./ingester"
+import { toResourceKind } from "./normalize"
 import { fetchVideos, playlistIdFromUrl } from "./youtube"
 
 // query and fetch limits
@@ -30,10 +31,10 @@ export const searchIngester: SourceIngester = async (source: Source) => {
 
 	// merge search query results. sum the per-search cost and collect the Resources
 	const resourceByUrl = new Map<string, NewResource>()
-	let cost = 0
+	let costDollars = 0
 	for (const response of searchResponses) {
 		const searchResults = parseResults(response)
-		cost += searchResults.cost
+		costDollars += searchResults.costDollars
 
 		// dedupe Resources across queries by url, keeping the first seen
 		for (const resource of searchResults.resources) {
@@ -46,7 +47,7 @@ export const searchIngester: SourceIngester = async (source: Source) => {
 	// expand any YouTube playlist result into its videos. the YouTube API bills by quota, so the cost is unchanged
 	const resources = await expandYouTubePlaylists([...resourceByUrl.values()])
 	// search requires an API key, so fallbackMode stays unset
-	return { resources, cost }
+	return { resources, costDollars }
 }
 
 // the shape of Exa's search response
@@ -87,7 +88,7 @@ async function generateSearchQueries(context: string, name: string): Promise<str
 }
 
 // turn a search response into deduped Resources plus the dollar cost that the provider reported for the search
-export function parseResults(response: SearchResponse): { resources: NewResource[]; cost: number } {
+export function parseResults(response: SearchResponse): { resources: NewResource[]; costDollars: number } {
 	// keep the first Resource seen per url so repeated results collapse to one
 	const resourceByUrl = new Map<string, NewResource>()
 	for (const result of response.results) {
@@ -108,47 +109,7 @@ export function parseResults(response: SearchResponse): { resources: NewResource
 	}
 
 	// a missing costDollars.total counts as 0, so the Scan cost tracking is best-effort. LiteLLM meters the authoritative spend
-	return { resources: [...resourceByUrl.values()], cost: response.costDollars?.total ?? 0 }
-}
-
-// the hosts whose pages are watched or listened to instead of being read. a web search returns these alongside articles,
-// so the kind follows the host instead of defaulting to "read" for everything
-const WATCH_HOSTS = [
-	"youtube.com",
-	"youtu.be",
-	"vimeo.com",
-	"loom.com",
-	"ted.com",
-	"dailymotion.com",
-	"tiktok.com",
-	"snapchat.com",
-	"giphy.com",
-	"rumble.com",
-]
-const LISTEN_HOSTS = ["podcasts.apple.com", "open.spotify.com", "overcast.fm", "pocketcasts.com", "soundcloud.com"]
-
-/**
- * The kind of Resource a link points at, determined its host. Anything unrecognized is returned as "read"
- */
-export function toResourceKind(url: string): NewResource["kind"] {
-	// an unparseable url has no host to match, so it falls back to the default kind
-	let host: string
-	try {
-		host = new URL(url).hostname.replace(/^www\./, "").toLowerCase()
-	} catch {
-		return "read"
-	}
-
-	// return the resource kind based on the host
-	if (isHostIn(host, WATCH_HOSTS)) {
-		return "watch"
-	}
-	return isHostIn(host, LISTEN_HOSTS) ? "listen" : "read"
-}
-
-// whether a host matches one of the listed hosts, or is a subdomain of one, so m.youtube.com counts as youtube
-function isHostIn(host: string, hosts: string[]): boolean {
-	return hosts.some((knownHost) => host === knownHost || host.endsWith(`.${knownHost}`))
+	return { resources: [...resourceByUrl.values()], costDollars: response.costDollars?.total ?? 0 }
 }
 
 // run every query in parallel and keep the responses that succeeded. one bad query must not discard the rest

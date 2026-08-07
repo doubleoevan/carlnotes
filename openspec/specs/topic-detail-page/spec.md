@@ -26,17 +26,17 @@ A `▾ Findings` accordion (default expanded) SHALL list the Topic's Findings wi
 - **THEN** only unread Findings show, and selecting All restores the full list with read rows muted
 
 ### Requirement: A right-rail info card summarizes the Topic
-Beside the History list (top-aligned with it, not with Findings), a single info card SHALL show, separated by thin dashed rules: Carl's Notes (the latest succeeded Scan's recap, when one exists); Carl's Prompt; Sources; Attachments as links where a url opens its page and a file downloads for the owner only; Schedule as the frequency, a muted "last scan" age, and how long that scan took; Visibility with its glyph (🔒 private, 🌐 public, ✉ invite); and, for the owner or an admin, this calendar month's total scan spend. The Sources section SHALL lead with the default source — Carl's built-in web scout (the search Source, whose ingester derives queries from the topic prompt), labeled `web` and shown as on or muted off — followed by one line per custom Source with a type glyph, its kind, and a config summary (feed host, subreddit, or channel/playlist id).
+Beside the History list (top-aligned with it, not with Findings), a single info card SHALL show, separated by thin dashed rules: Carl's Notes (the latest succeeded Scan's recap, when one exists); Carl's Prompt; Sources; Attachments as links where a url opens its page and a file downloads for the owner only; Schedule as the frequency, a muted "last scan" age, and how long that scan took; Visibility with its glyph (🔒 private, 🌐 public, ✉ invite); and, for the owner or an admin, this calendar month's total scan spend. The Sources section SHALL lead with the default source — Carl's built-in web search (the search Source, whose ingester derives queries from the topic prompt), labeled `web` and shown as on or muted off — followed by one line per custom Source with a type glyph, its kind, and a config summary (feed host, subreddit, or channel/playlist id).
 
 Carl's Notes, and the same recap wherever the scan-history and activity drill-downs render it, SHALL render through the sanitized markdown subset `injection-defense` requires: bold, lists, and headings render, a citation of a kept Finding's stored url renders as a real link, and every other link, image, or piece of raw HTML is neutralized into inert text — because a model wrote it from attacker-reachable content. A recap citing an item pruned since (or shown on a surface without the findings in hand, like the Activity drill-down) renders that citation inert rather than guessing.
 
 #### Scenario: The info card renders every section
 - **WHEN** the owner views a Topic with sources and a finished Scan
-- **THEN** the card shows Carl's notes, the prompt, the web-scout default line plus per-custom-source kind + summary lines, the schedule with its last-scan age and duration, and the visibility glyph
+- **THEN** the card shows Carl's notes, the prompt, the web-search default line plus per-custom-source kind + summary lines, the schedule with its last-scan age and duration, and the visibility glyph
 
-#### Scenario: A topic without a search source shows the scout as off
+#### Scenario: A topic without a search source shows the web search as off
 - **WHEN** the user views a Topic that has no search Source
-- **THEN** the Sources section still leads with the web scout line, muted and marked off
+- **THEN** the Sources section still leads with the web search line, muted and marked off
 
 #### Scenario: Carl's notes link only to kept findings
 - **WHEN** the latest Scan's recap cites a kept Finding's url and also contains a link elsewhere or HTML syntax
@@ -207,11 +207,11 @@ While a turn is awaiting its first token, the panel SHALL show the animated stea
 - **WHEN** reply text is arriving incrementally
 - **THEN** the incoming line carries a shimmer until the reply completes
 
-### Requirement: The panel surfaces refusals in place of replies
-A turn refused for budget SHALL show an upgrade prompt in the message list, never a silent failure or a generic error.
+### Requirement: The panel surfaces rejections in place of replies
+A turn rejected for budget SHALL show an upgrade prompt in the message list, never a silent failure or a generic error.
 
-#### Scenario: A budget refusal prompts an upgrade
-- **WHEN** a turn is refused because the user's remaining monthly budget cannot cover it
+#### Scenario: A budget rejection prompts an upgrade
+- **WHEN** a turn is rejected because the user's remaining monthly budget cannot cover it
 - **THEN** the panel shows an upgrade prompt in place of a reply
 
 ### Requirement: A signed-out visitor's composer is a signup funnel

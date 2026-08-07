@@ -2,7 +2,7 @@
 
 import { expect, test } from "bun:test"
 import type { TopicScan } from "@shared/contracts"
-import { toLastSucceededScan, toSourceSummary } from "./topics"
+import { isTakingDailySlot, toLastSucceededScan } from "./topics"
 
 // a scan history row, varied only by the status and id each test needs
 function scanRow(id: string, status: TopicScan["status"]): TopicScan {
@@ -15,7 +15,7 @@ function scanRow(id: string, status: TopicScan["status"]): TopicScan {
 		foundCount: 0,
 		keptCount: 0,
 		filteredCount: 0,
-		cost: null,
+		costDollars: null,
 		scanSummary: null,
 		error: null,
 	}
@@ -33,26 +33,27 @@ test("toLastSucceededScan is undefined when no scan has succeeded", () => {
 	expect(toLastSucceededScan([scanRow("failed", "failed"), scanRow("running", "running")])).toBeUndefined()
 })
 
-// each source kind summarizes its own config field
-test("toSourceSummary summarizes each kind's config", () => {
-	expect(toSourceSummary("rss", { url: "https://blog.langchain.dev/rss/" })).toBe("blog.langchain.dev")
-	expect(toSourceSummary("reddit", { subreddit: "mcp" })).toBe("r/mcp")
-	expect(toSourceSummary("youtube", { channelId: "UC123" })).toBe("UC123")
-	expect(toSourceSummary("youtube", { playlistId: "PL456" })).toBe("PL456")
+// only a move to a daily frequency takes one of the plan's daily slots
+test("isTakingDailySlot fires only on a move to a daily frequency", () => {
+	// a new topic has no current frequency, so asking for a daily frequency takes a slot
+	expect(isTakingDailySlot("daily")).toBe(true)
+	expect(isTakingDailySlot("weekdays")).toBe(true)
+	expect(isTakingDailySlot("weekly")).toBe(false)
+
+	// moving a weekly topic onto either daily or weekdays frequency takes a slot
+	expect(isTakingDailySlot("daily", "weekly")).toBe(true)
+	expect(isTakingDailySlot("weekdays", "weekly")).toBe(true)
 })
 
-// the search ingester ignores its config and web search from the topic prompt, so the summary stays empty for the ui to fill
-test("toSourceSummary is empty for the web search source even when a query is stored", () => {
-	expect(toSourceSummary("search", { query: "production LLM agents" })).toBe("")
-})
+// a topic already on a daily frequency keeps the slot it holds, however many slots its owner has.
+// without this an owner who outgrew their plan could not save a rename to the topics they already have
+test("isTakingDailySlot never fires for a topic already on a daily frequency", () => {
+	// re-saving the same frequency takes nothing, and so does moving between the two daily frequencies
+	expect(isTakingDailySlot("daily", "daily")).toBe(false)
+	expect(isTakingDailySlot("weekdays", "weekdays")).toBe(false)
+	expect(isTakingDailySlot("daily", "weekdays")).toBe(false)
+	expect(isTakingDailySlot("weekdays", "daily")).toBe(false)
 
-// an unparseable feed url falls back to the raw url instead of dropping the summary
-test("toSourceSummary keeps a raw rss url that has no host", () => {
-	expect(toSourceSummary("rss", { url: "not a url" })).toBe("not a url")
-})
-
-// a missing config value or an unknown source kind summarize to an empty string
-test("toSourceSummary is empty for missing values and unknown kinds", () => {
-	expect(toSourceSummary("rss", {})).toBe("")
-	expect(toSourceSummary("composio", { anything: true })).toBe("")
+	// giving a slot up takes nothing either
+	expect(isTakingDailySlot("weekly", "daily")).toBe(false)
 })

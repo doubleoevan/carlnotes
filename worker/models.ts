@@ -21,7 +21,7 @@ export function scoreModel(litellmApiKey?: string): LanguageModel {
 	return createModelProxyClient(litellmApiKey).chat("score-model")
 }
 
-// the chat model answers a reader's questions about a topic and describes any images they attach
+// the chat model answers a user's questions about a topic and describes any images they attach
 export function chatModel(litellmApiKey?: string): LanguageModel {
 	return createModelProxyClient(litellmApiKey).chat("chat-model")
 }

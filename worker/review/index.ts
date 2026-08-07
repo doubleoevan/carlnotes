@@ -1,5 +1,5 @@
 // review turns a Scan's discovered Resources into topic findings: filter down to what is worth paying for,
-// rank it, score the top of that ranking under the Scan's ceilings, then summarize what happened.
+// rank it, score the top of that ranking under the Scan's limits, then summarize what happened.
 // the free filter stages run first, so the paid stages only ever spend money on candidates that survived them
 import { eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
@@ -20,7 +20,7 @@ type Scan = typeof scans.$inferSelect
 /**
  * Reviews a Scan's discovered Resources, writes Findings and returns the counts, outcome, and summary.
  * topicId is a parameter because a deleted topic clears the Scan row's own topic id.
- * The Budget arrives already carrying what ingestion spent, so review's ceilings read the Scan's whole spend.
+ * The Budget arrives already carrying what ingestion spent, so review's limits read the Scan's whole spend.
  * litellmApiKey bills its LLM calls to the topic owner's virtual key, falling back to the master key when absent.
  */
 export async function reviewScan(
@@ -62,7 +62,7 @@ export async function reviewScan(
 		(admitted) => ({ survivorCount: survivingResources.length, admittedCount: admitted.length }),
 	)
 
-	// the paid stage: fetch each admitted Resource and score it under the Scan's ceilings
+	// the paid stage: fetch each admitted Resource and score it under the Scan's limits
 	const scoredResourceIds = await traceStage(
 		"score",
 		budget,

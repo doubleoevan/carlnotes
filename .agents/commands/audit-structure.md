@@ -92,6 +92,15 @@ Check for:
    - `toOfferedUrls`/`OfferedUrlSources` (now `toPossibleSourceUrls`/`PromptSourceUrls` in `ui/src/lib/utils.ts`
      and `EditTopicModal.tsx`), `ScanNoteText` (now `SafeNoteText`), `loadScan` in the scan activities
      (now `requireScan`), `db:encrypt-chat` and `api/encryptChatBackfill.ts` (removed)
+   - `SourceEditor.tsx` (now `TopicSourceEditor.tsx`)
+   - "web scout" (now "web search", in UI copy and specs alike) — the built-in Source that
+     searches the web, distinct from the `search` Source kind that names it in code
+   - `emit` as the verb for what an ingester hands back (now "find" for discovering a page,
+     "return" for what the function gives its caller)
+   - "reader" for the person using the app (now "user" everywhere in code). prompt markdown keeps
+     "reader", since Carl addresses one — see the prompt-authoring skill for where that line falls
+   - `refused` (now `rejected`, though the "refuses to <verb>" idiom stays), `ceiling` (now `limit`),
+     "privately routable" / "not publicly routable" / "inside our own network" (all now "internal")
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

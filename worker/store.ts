@@ -6,15 +6,18 @@ export async function putAttachment(key: string, bytes: Uint8Array, contentType:
 	await bucket().write(key, bytes, { type: contentType })
 }
 
+// how long a filename may run inside an object key, so a very long name cannot dominate the path
+export const MAX_KEY_FILENAME_CHARS = 200
+
 // the object key for an attachment, namespaced by topic and attachment id so keys never collide
 export function toAttachmentKey(topicId: string, attachmentId: string, filename: string): string {
 	// sanitize the untrusted filename into one safe key segment
 	// anything but letters, digits, and dots becomes a dash,
-	// length caps at 200,
+	// the length caps at MAX_KEY_FILENAME_CHARS,
 	// and an empty or all-dots name becomes "file"
 	const safeFilename = filename
 		.replace(/[^a-z0-9.]+/gi, "-")
-		.slice(0, 200)
+		.slice(0, MAX_KEY_FILENAME_CHARS)
 		.replace(/^\.*$/, "file")
 	return `topics/${topicId}/attachments/${attachmentId}/${safeFilename}`
 }
@@ -39,7 +42,7 @@ export async function getAttachmentBytes(attachmentKey: string): Promise<Uint8Ar
 	return new Uint8Array(await bucket().file(attachmentKey).arrayBuffer())
 }
 
-// the object key for a chat attachment, namespaced by the reader who sent it as well as by the topic.
+// the object key for a chat attachment, namespaced by the user who sent it as well as by the topic.
 export function toChatAttachmentKey(
 	userId: string,
 	topicId: string,

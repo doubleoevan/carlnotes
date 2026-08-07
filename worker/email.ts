@@ -11,7 +11,8 @@ export async function sendEmail(message: {
 	emailKind: EmailKind
 	headers?: Record<string, string>
 }): Promise<void> {
-	// log and skip without a key and a verified from-address
+	// log and skip without a key and a verified from-address. the reply address is optional,
+	// and an unset one is dropped by JSON.stringify
 	const apiKey = Bun.env.RESEND_API_KEY
 	const fromEmail = Bun.env.RESEND_FROM_EMAIL
 	if (!apiKey || !fromEmail) {
@@ -27,6 +28,7 @@ export async function sendEmail(message: {
 			headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
 			body: JSON.stringify({
 				from: fromEmail,
+				reply_to: Bun.env.RESEND_REPLY_EMAIL,
 				to: message.to,
 				subject: message.subject,
 				html: message.emailContent,

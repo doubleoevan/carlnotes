@@ -58,7 +58,7 @@ export function ChatPanel({ topicId, topicName }: { topicId: string; topicName: 
 	// a visitor navigates to the signup on send
 	const handleSendChat = chat.isSignupRequired ? () => navigate("/signup") : chat.send
 
-	// a reader with no way forward gets no panel, but a logged-out visitor or a user with an exhausted budget shows the panel with a call to action
+	// a user with no way forward gets no panel, but a logged-out visitor or a user with an exhausted budget shows the panel with a call to action
 	if (!chat.isLoaded || (!chat.canChat && !chat.isSignupRequired && !chat.isBudgetExhausted)) {
 		return null
 	}

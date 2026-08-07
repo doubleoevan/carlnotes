@@ -9,7 +9,7 @@ test("web schemes are safe", () => {
 })
 
 // every other scheme renders as plain text and never a clickable link
-test("script and data schemes are refused", () => {
+test("script and data schemes are rejected", () => {
 	expect(isSafeHref("javascript:alert(1)")).toBe(false)
 	// biome-ignore lint/suspicious/noTemplateCurlyInString: a literal attack string, not an interpolation
 	expect(isSafeHref("data:text/html,<script>${'x'}</script>")).toBe(false)

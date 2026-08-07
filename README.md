@@ -112,10 +112,16 @@ bun run eval --guard-only         # only LLM Guard's false-positive and attack-c
 
 A weekly GitHub Action (`.github/workflows/llm-guard-update.yml`) watches Docker Hub for new LLM Guard releases, boots the candidate on the runner, runs the guard-only eval against it, and files an issue carrying both measured rates — so a scanner upgrade arrives as a pre-measured decision, never an unchecked version bump. Read the two rates together: a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate.
 
-Prompt registry (owner-run) — git is canonical for prompt wording (`worker/prompts/*.md`); this pushes it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set:
+Prompt registry (owner-run) — git is canonical for prompt wording (`worker/prompts/*.md`); this pushes it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set.
+
+Each Doppler config points at its own Langfuse project, so the environment is chosen at the `doppler run` call and there is one script per target. The script names the environment it wrote to in its summary line, since a run against dev otherwise reads exactly like a run against production:
 
 ```bash
 bun run prompts:sync
+```
+
+```bash
+bun run prompts:sync:prd
 ```
 
 Container image — the app service is the Hono API plus the built UI bundle it serves. It builds from the repo-root `Dockerfile` and starts under `doppler run`. The LiteLLM proxy is a separate service with its own image in `infra/litellm/`:

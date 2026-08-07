@@ -2,18 +2,18 @@
 import { scansRemainingToday } from "../../db/quotas"
 
 // the per-user scan-quota checks live in db/quotas, next to the tables they read, so the worker shares them
-export { scansToday, startOfUtcDay } from "../../db/quotas"
+export { loadBillingAccess, scansToday, startOfUtcDay } from "../../db/quotas"
 
 /**
- * Scans left today for the plan. Null for a non-owner, unlimited for an admin.
+ * Scans left today for the plan, or null for a user who may not scan this topic at all.
  */
-export async function scansRemaining(userId: string, isOwner: boolean): Promise<number | null> {
-	// a non-owner never sees the quota
-	if (!isOwner) {
+export async function scansRemaining(userId: string, canScan: boolean): Promise<number | null> {
+	// a user who may not scan never sees the quota
+	if (!canScan) {
 		return null
 	}
 
-	// scans left today under the plan, admins included
+	// scans left today under the plan
 	return scansRemainingToday(userId)
 }
 

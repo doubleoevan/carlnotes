@@ -1,7 +1,7 @@
-// topic findings tests for filter, new count, and url host extraction
+// topic findings tests for filter and new count
 import { expect, test } from "bun:test"
 import type { TopicFinding } from "@shared/contracts"
-import { filteredTopicFindings, newTopicFindingCount, toUrlHost } from "./findings"
+import { filteredTopicFindings, newTopicFindingCount } from "./findings"
 
 // a topic finding with placeholder fields. the tests only care about isConsumed
 function topicFinding(isConsumed: boolean): TopicFinding {
@@ -41,10 +41,4 @@ test("filteredTopicFindings hides consumed by default and shows them for the 'Al
 // "# new" counts unconsumed topic findings
 test("newTopicFindingCount counts unconsumed topic findings", () => {
 	expect(newTopicFindingCount([topicFinding(false), topicFinding(true), topicFinding(false)])).toBe(2)
-})
-
-// toUrlHost extracts the url host or returns null for an unparseable url
-test("toUrlHost returns the host or null", () => {
-	expect(toUrlHost("https://www.example.com/x")).toBe("www.example.com")
-	expect(toUrlHost("not a url")).toBeNull()
 })

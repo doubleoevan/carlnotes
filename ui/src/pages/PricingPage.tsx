@@ -1,5 +1,5 @@
 import { plans } from "@shared/enums"
-import { PLANS, type Plan } from "@shared/plans"
+import { PLANS, type Plan, SCAN_COST_CENTS } from "@shared/plans"
 import { Check } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -7,7 +7,7 @@ import { Button, buttonVariants } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { authClient } from "@/lib/authClient"
 import { openBillingPortal, startCheckout } from "@/lib/billingClient"
-import { cn } from "@/lib/utils"
+import { cn, toBrewsWord } from "@/lib/utils"
 
 // the recommended plan that a signed-out visitor sees highlighted
 const RECOMMENDED_PLAN: Plan = "plus"
@@ -25,6 +25,12 @@ function toWholeDollarLabel(cents: number): string {
 	return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`
 }
 
+// the plan's monthly budget stated in Brews, rounded up to ten so it reads as the estimate it is.
+// how many Brews a month depends on how the user schedules their topics
+function toMonthlyScanEstimate(monthlyBudgetCents: number): number {
+	return Math.ceil(monthlyBudgetCents / SCAN_COST_CENTS / 10) * 10
+}
+
 /**
  * The pricing page: the three plans side by side with a monthly/yearly toggle. Signed in, the
  * user's own plan is highlighted. Signed out, the recommended plan is.
@@ -38,7 +44,7 @@ export function PricingPage() {
 	const signedInPlan = session ? ((session.user.plan ?? "free") as Plan) : null
 	const highlightedPlan = signedInPlan ?? RECOMMENDED_PLAN
 
-	// a free user upgrades through checkout at the selected interval (monthly or yearly)
+	// a free user upgrades through checkout at the selected billing interval
 	async function handleCheckout(plan: Plan): Promise<void> {
 		if (plan === "free") {
 			return
@@ -62,7 +68,7 @@ export function PricingPage() {
 
 	return (
 		<main className="mx-auto max-w-5xl px-safe py-10">
-			{/* the heading and the billing-interval toggle */}
+			{/* the heading and the billing interval toggle */}
 			<div className="text-center">
 				<h1 className="font-display text-3xl">Pricing</h1>
 				<p className="text-muted-foreground mt-2">Carl turns caffeine into notes. Choose how much coffee to buy him.</p>
@@ -101,7 +107,7 @@ export function PricingPage() {
 	)
 }
 
-// one plan card: the name, the price at the active interval, the quota list, and the action
+// one plan card: the name, the price for the plan and its limits at the selected billing interval
 function PlanCard({
 	plan,
 	isYearly,
@@ -120,9 +126,20 @@ function PlanCard({
 	onPortal: () => void
 }) {
 	const planConfig = PLANS[plan]
-	// the big number is always per month: the yearly interval shows its effective monthly rate
+	// the plan's monthly price for the selected billing interval
 	const monthlyCents = isYearly ? planConfig.priceYearlyCents / 12 : planConfig.priceMonthlyCents
 	const planBadge = toPlanBadge(plan, signedInPlan, isHighlighted)
+
+	// the selected billing interval and if it raises the limits
+	const billingInterval = isYearly ? "yearly" : "monthly"
+	const { dailyTopicLimit, dailyScanLimit } = planConfig
+	const isDailyTopicLimitRaised = isYearly && dailyTopicLimit.yearly > dailyTopicLimit.monthly
+	const isDailyScanLimitRaised = isYearly && dailyScanLimit.yearly > dailyScanLimit.monthly
+
+	// the plans limits based on the billing interval
+	const dailyTopicLimitForInterval = dailyTopicLimit[billingInterval]
+	const dailyScanLimitForInterval = dailyScanLimit[billingInterval]
+	const monthlyScanEstimate = toMonthlyScanEstimate(planConfig.monthlyBudgetCents)
 	return (
 		<section
 			className={cn(
@@ -150,11 +167,18 @@ function PlanCard({
 						? `Billed ${toWholeDollarLabel(planConfig.priceYearlyCents)} yearly`
 						: "Billed monthly"}
 			</p>
-			{/* the quotas, straight from the plans catalog */}
+			{/* the quotas, straight from the plans catalog. each line answers the question the one above it raises */}
 			<ul className="mt-4 flex-1 space-y-2 text-sm">
 				<QuotaLink label={`${planConfig.topicLimit} topics`} />
-				<QuotaLink label={`${planConfig.dailyScanLimit} scans per day`} />
-				<QuotaLink label={`${toWholeDollarLabel(planConfig.monthlyBudgetCents)} budget per month`} />
+				<QuotaLink
+					label={`${dailyTopicLimitForInterval} daily ${toBrewsWord(dailyTopicLimitForInterval)}`}
+					isRaised={isDailyTopicLimitRaised}
+				/>
+				<QuotaLink
+					label={`${dailyScanLimitForInterval} craft ${toBrewsWord(dailyScanLimitForInterval)} a day`}
+					isRaised={isDailyScanLimitRaised}
+				/>
+				<QuotaLink label={`About ${monthlyScanEstimate} ${toBrewsWord(monthlyScanEstimate)} a month`} />
 			</ul>
 			<PlanAction
 				plan={plan}
@@ -175,12 +199,20 @@ function toPlanBadge(plan: Plan, signedInPlan: Plan | null, isHighlighted: boole
 	return isHighlighted ? "Recommended" : null
 }
 
-// one checked quota line
-function QuotaLink({ label }: { label: string }) {
+// one checked quota line, labeled with the year interval if the quota is raised
+function QuotaLink({ label, isRaised }: { label: string; isRaised?: boolean }) {
 	return (
-		<li className="flex items-center gap-2">
-			<Check className="text-primary size-4 shrink-0" />
-			{label}
+		<li className="flex items-start gap-2">
+			<Check className="text-primary mt-0.5 size-4 shrink-0" />
+			{/* the marker flows with the words instead of beside them, so a wrapped line keeps its shape */}
+			<span>
+				{label}
+				{isRaised && (
+					<span className="bg-card border-card text-link ml-1.5 inline-flex items-center rounded-full border px-1.5 align-middle text-xs font-semibold shadow-raise">
+						with Yearly plan
+					</span>
+				)}
+			</span>
 		</li>
 	)
 }

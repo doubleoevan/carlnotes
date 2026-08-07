@@ -1,4 +1,4 @@
-// a live smoke test for one real Scan on a busy feed, reporting time taken, ceiling overshoot, and whether it kept its
+// a live smoke test for one real Scan on a busy feed, reporting time taken, limit overshoot, and whether it kept its
 // best survivors. run it with: bun run smoke:review. each run resets its feed, so two REVIEW_CONCURRENCY values compare fairly
 import { cosineSimilarity } from "ai"
 import { and, eq, isNotNull, like } from "drizzle-orm"
@@ -9,7 +9,7 @@ import { loadScan } from "./scan"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/run-topic-scan-activities"
 
-// a real feed that reliably carries more entries than the ceiling admits, plus a matching topic context
+// a real feed that reliably carries more entries than the limit admits, plus a matching topic context
 const FEED_URL = "https://simonwillison.net/atom/everything/"
 const FEED_HOST_PATTERN = "%simonwillison.net%"
 const TOPIC_CONTEXT =
@@ -64,8 +64,9 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 		throw new Error("failed to seed topic")
 	}
 
-	// an RSS source with no API key pointing at the feed
-	await db.insert(sources).values({ topicId: topic.id, kind: "rss", config: { url: FEED_URL } })
+	// an RSS source with no API key pointing at the feed.
+	// mark its status ready because ingestion skips a Source that has not passed an llm-guard screen, and nothing screens one here
+	await db.insert(sources).values({ topicId: topic.id, kind: "rss", config: { url: FEED_URL }, status: "ready" })
 
 	// a completed Scan dated now, so a schedule sweep running on this machine reads the topic as not due and leaves it alone.
 	// without it the sweep races this smoke on the same topic and both scans write Findings
@@ -137,7 +138,7 @@ function toRankingViolations(candidates: CandidateResource[]): CandidateResource
 	})
 }
 
-// run the Scan, time it, and report what the ranking and the ceiling actually did
+// run the Scan, time it, and report what the ranking and the limit actually did
 async function check(topicId: string, ownerId: string): Promise<boolean> {
 	// time the whole pipeline, ingestion through review, driving the workflow's own stages in order so the smoke test
 	// exercises the real activity code instead of a copy of it, and without needing a Temporal server
@@ -145,7 +146,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	if (!openScan) {
 		throw new Error("could not open a scan for the smoke topic")
 	}
-	// the clock spans every stage, since the ceiling being checked is on the whole pipeline
+	// the clock spans every stage, since the limit being checked is on the whole pipeline
 	const startedAt = Date.now()
 	const ingestResult = await ingestForScan(openScan.id, topicId)
 	const reviewResult = await reviewForScan(openScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
@@ -158,7 +159,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 		throw new Error("the scan row vanished mid-smoke")
 	}
 
-	// the paid section's real size, against the ceiling that was supposed to bound it
+	// the paid section's real size, against the limit that was supposed to bound it
 	const scoredCount = topicScan.reused + topicScan.revalidated + topicScan.fetched
 	const overshootCount = scoredCount - MAX_SCORED_RESOURCES_PER_SCAN
 	const allowedOvershoot = REVIEW_CONCURRENCY - 1
@@ -185,7 +186,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	// print the run's report
 	console.log("\n=== rank + concurrency smoke report ===")
 	console.log(`REVIEW_CONCURRENCY : ${REVIEW_CONCURRENCY}`)
-	console.log(`ceiling            : ${MAX_SCORED_RESOURCES_PER_SCAN}`)
+	console.log(`limit            : ${MAX_SCORED_RESOURCES_PER_SCAN}`)
 	console.log(`time taken         : ${(elapsedMs / 1000).toFixed(1)}s`)
 	console.log(`scan.status        : ${topicScan.status}`)
 

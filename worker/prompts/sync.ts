@@ -18,6 +18,9 @@ const client = new LangfuseClient()
 // the label this run writes, and the one it compares against so a re-run can still report "unchanged"
 const syncLabel = Bun.argv.includes("--candidate") ? "candidate" : "production"
 
+// which Doppler environment supplied the keys, and so which Langfuse project this script writes to, dev or prd.
+const syncEnvironment = Bun.env.DOPPLER_ENVIRONMENT ?? "an unnamed environment"
+
 // the config fields Langfuse stores alongside a prompt version, read back to detect a config-only change
 type PromptConfig = { version?: number; modelTier?: string }
 
@@ -34,7 +37,7 @@ async function syncPrompts(): Promise<void> {
 	const updatedCount = outcomes.filter((outcome) => outcome === "updated").length
 	const unchangedCount = outcomes.filter((outcome) => outcome === "unchanged").length
 	console.log(
-		`synced ${promptNames.length} prompts as ${syncLabel}: ${createdCount} created, ${updatedCount} updated, ${unchangedCount} unchanged`,
+		`synced ${promptNames.length} prompts to ${syncEnvironment} as ${syncLabel}: ${createdCount} created, ${updatedCount} updated, ${unchangedCount} unchanged`,
 	)
 
 	// a candidate run changes nothing live, so it says what still has to happen for the wording to reach users

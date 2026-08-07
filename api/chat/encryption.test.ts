@@ -1,4 +1,4 @@
-// chat text encryption tests. how stored text is written, read back, and refused when it fails to verify
+// chat text encryption tests. how stored text is written, read back, and rejected when it fails to verify
 import { expect, test } from "bun:test"
 import { decryptChatText, encryptChatText } from "./encryption"
 import { toChatTurnRow } from "./turns"

@@ -79,7 +79,7 @@ export const RESOURCE_KIND_ICON: Record<ResourceKind, LucideIcon> = {
 /**
  * Display copy for the default web search source
  */
-export const WEB_SOURCE = { label: "web", summary: "let Carl crawl" }
+export const WEB_SOURCE = { label: "web", summary: "Let Carl crawl" }
 
 /**
  * The message to show a new invite subscriber that they will see findings only from the next scan onward.
@@ -170,11 +170,11 @@ function toBalancedUrl(url: string): string {
 
 // the url a Source reads, for the kinds that name one. everything else has no url to compare against
 function toSourceUrl(
-	source: { kind: string; config?: Record<string, unknown> } | { kind: string; value: string },
+	source: { sourceKind: string; config?: Record<string, unknown> } | { sourceKind: string; value: string },
 ): string {
 	// a staged Source includes its raw value, while a stored one includes a parsed config
 	if ("value" in source) {
-		return source.kind === "url" || source.kind === "rss" ? source.value : ""
+		return source.sourceKind === "url" || source.sourceKind === "rss" ? source.value : ""
 	}
 	return typeof source.config?.url === "string" ? source.config.url : ""
 }
@@ -185,8 +185,8 @@ function toSourceUrl(
  */
 export function toPossibleSourceUrls(
 	prompt: string,
-	keptSources: { kind: string; config?: Record<string, unknown> }[],
-	addedSources: { kind: string; value: string }[],
+	keptSources: { sourceKind: string; config?: Record<string, unknown> }[],
+	addedSources: { sourceKind: string; value: string }[],
 ): string[] {
 	const sourceUrls = new Set([...keptSources, ...addedSources].map(toSourceUrl).filter(Boolean))
 	const writtenUrls = (prompt.match(PROMPT_URL_PATTERN) ?? []).map(toBalancedUrl)
@@ -315,4 +315,11 @@ export function toScheduleLabel(
  */
 export function capitalize(word: string): string {
 	return word.charAt(0).toUpperCase() + word.slice(1)
+}
+
+/**
+ * A count of Brews with the right plural
+ */
+export function toBrewsWord(count: number): string {
+	return count === 1 ? "Brew" : "Brews"
 }

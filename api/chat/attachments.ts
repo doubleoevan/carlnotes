@@ -17,7 +17,7 @@ import { decryptChatText, encryptChatText } from "./encryption"
 
 /**
  * Resolves a chat turn's attachments into what the model takes. A PDF becomes its extracted text, an image passes through,
- * and text is screened by llm-guard first. Null when a PDF cannot be read, so the route can refuse the chat turn.
+ * and text is screened by llm-guard first. Null when a PDF cannot be read, so the route can reject the chat turn.
  */
 export async function resolveChatAttachments(attachments: ChatAttachment[]): Promise<ChatAttachment[] | null> {
 	const chatAttachments: ChatAttachment[] = []
@@ -32,9 +32,9 @@ export async function resolveChatAttachments(attachments: ChatAttachment[]): Pro
 		let text: string
 		if (attachment.kind === "pdf") {
 			try {
-				text = clipAttachmentText(await extractText("application/pdf", decodeDataUrl(attachment.data)))
+				text = clipAttachmentText(await extractText("application/pdf", decodeDataUrl(attachment.dataUrl)))
 			} catch (error) {
-				// an unreadable PDF refuses the whole chat turn instead of sending half of it
+				// an unreadable PDF rejects the whole chat turn instead of sending half of it
 				console.error("chat pdf extraction failed", error)
 				reportError(error, "chat", { attachmentKind: attachment.kind })
 				return null
@@ -114,7 +114,7 @@ export async function keepChatAttachments(
 				remainingAttachmentSlots -= 1
 			}
 		} catch (error) {
-			// a failed keep never surfaces to the reader, so the log and the report are the only sign of it
+			// a failed keep never surfaces to the user, so the log and the report are the only sign of it
 			console.error(`keeping a chat attachment failed for topic ${topicId}`, error)
 			reportError(error, "chat", { topicId, attachmentKind: attachment.kind })
 		}
@@ -152,7 +152,7 @@ async function keepOneChatAttachment(
 
 	// a kept PDF is read and screened before any of it is stored, so a flagged one leaves no object behind.
 	// the extractor reads a copy, since reading a PDF empties the array it was given, and the original is what gets stored
-	const bytes = decodeDataUrl(attachment.data)
+	const bytes = decodeDataUrl(attachment.dataUrl)
 	const pdfText =
 		attachment.kind === "pdf"
 			? await screenKeptText(await extractText("application/pdf", new Uint8Array(bytes)), topicId)
@@ -161,10 +161,10 @@ async function keepOneChatAttachment(
 		return false
 	}
 
-	// image and PDF attachments keep their original bytes under a key namespaced to the reader,
+	// image and PDF attachments keep their original bytes under a key namespaced to the user,
 	// the same way a topic attachment's file lives in storage while only its summary gets posted to the model
 	const attachmentId = crypto.randomUUID()
-	const contentType = attachment.kind === "pdf" ? "application/pdf" : contentTypeFromDataUrl(attachment.data)
+	const contentType = attachment.kind === "pdf" ? "application/pdf" : contentTypeFromDataUrl(attachment.dataUrl)
 	const objectKey = toChatAttachmentKey(userId, topicId, attachmentId, attachment.name)
 	await putAttachment(objectKey, bytes, contentType)
 
@@ -174,7 +174,7 @@ async function keepOneChatAttachment(
 		const context =
 			attachment.kind === "pdf"
 				? await generateContext(pdfText, litellmApiKey)
-				: await generateImageContext(attachment.data, litellmApiKey)
+				: await generateImageContext(attachment.dataUrl, litellmApiKey)
 		await db.insert(chatAttachments).values({
 			id: attachmentId,
 			userId,
@@ -195,7 +195,7 @@ async function keepOneChatAttachment(
 }
 
 /**
- * The attachments that this reader keeps for the topic, oldest first.
+ * The attachments that this user keeps for the topic, oldest first.
  * The composer ui lists them for deletion and counts them against the cap.
  */
 export async function loadKeptAttachments(
@@ -220,7 +220,7 @@ export type DownloadableKeptAttachment =
 	| { kind: "image" | "pdf"; name: string; objectKey: string; contentType: string }
 
 /**
- * One kept attachment ready to download, scoped to its keeper. Null when the id is not this reader's,
+ * One kept attachment ready to download, scoped to its keeper. Null when the id is not this user's,
  * when an image or PDF has no stored object, or when the raw text no longer decrypts.
  */
 export async function loadDownloadableKeptAttachment(
@@ -282,7 +282,7 @@ export async function deleteKeptAttachment(userId: string, keptAttachmentId: str
 }
 
 /**
- * Delete the chat attachments for a topic, or for one reader on that topic, taking their stored objects with their rows.
+ * Delete the chat attachments for a topic, or for one user on that topic, taking their stored objects with their rows.
  * The objects go first: a row pointing at a missing object is visible and fixable, while an object with no row is neither,
  * and still bills storage that nobody can account for.
  */

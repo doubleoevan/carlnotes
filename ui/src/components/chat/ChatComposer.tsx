@@ -41,7 +41,7 @@ export function ChatComposer({
 }) {
 	const questionBoxRef = useRef<HTMLTextAreaElement>(null)
 
-	// focus the composer as soon as the panel opens, so the reader can just start typing
+	// focus the composer as soon as the panel opens, so the user can just start typing
 	useEffect(() => {
 		questionBoxRef.current?.focus()
 	}, [])
@@ -319,7 +319,7 @@ function AttachmentChips({
 					className="bg-muted flex items-center gap-1.5 rounded-lg border px-1.5 py-1 text-xs"
 				>
 					{attachment.kind === "image" ? (
-						<img src={attachment.data} alt={attachment.name} className="size-6 rounded object-cover" />
+						<img src={attachment.dataUrl} alt={attachment.name} className="size-6 rounded object-cover" />
 					) : (
 						<FileText className="text-muted-foreground size-3.5 shrink-0" />
 					)}

@@ -8,11 +8,11 @@ import {
 	toUncompactedChatTurnStart,
 } from "@shared/contracts"
 
-// why a chat turn was refused, kept apart so that the panel can prompt an upgrade instead of a generic error
-export type ChatRefusal = "budget" | "forbidden" | "failed"
+// why a chat turn was rejected, kept apart so that the panel can prompt an upgrade instead of a generic error
+export type ChatRejection = "budget" | "forbidden" | "failed"
 
-// how a chat turn ended: answered, refused for a reason, or stopped by the reader mid-stream
-export type ChatSendResult = ChatRefusal | "stopped" | null
+// how a chat turn ended: answered, rejected for a reason, or stopped by the user mid-stream
+export type ChatSendResult = ChatRejection | "stopped" | null
 
 /**
  * Loads the caller's persisted conversation and its metadata, including whether the user can continue chatting
@@ -57,7 +57,7 @@ export async function sendChatTurn(
 			signal,
 		})
 		if (!response.ok || !response.body) {
-			return toRefusal(response.status)
+			return toRejection(response.status)
 		}
 
 		// stream each decoded chunk as it lands
@@ -73,7 +73,7 @@ export async function sendChatTurn(
 			onChunk(decoder.decode(value, { stream: true }))
 		}
 	} catch (error) {
-		// the reader's own stop is not a failure, and a broken stream leaves what already arrived on screen
+		// the user's own stop is not a failure, and a broken stream leaves what already arrived on screen
 		if (error instanceof DOMException && error.name === "AbortError") {
 			return "stopped"
 		}
@@ -98,13 +98,13 @@ export async function sendDeleteKeptAttachment(keptAttachmentId: string): Promis
 	return response.ok
 }
 
-// the refusal a status code includes. each one renders differently to the reader
-function toRefusal(status: number): ChatRefusal {
+// the rejection a status code includes. each one renders differently to the user
+function toRejection(status: number): ChatRejection {
 	// an exhausted budget prompts an upgrade
 	if (status === 402) {
 		return "budget"
 	}
 
-	// a sign-in or visibility refusal reads as forbidden, and anything else is a genuine failure
+	// a sign-in or visibility rejection reads as forbidden, and anything else is a genuine failure
 	return status === 401 || status === 403 || status === 404 ? "forbidden" : "failed"
 }

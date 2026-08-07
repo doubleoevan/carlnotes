@@ -77,7 +77,7 @@ We may suspend or terminate an account that breaks these rules, with notice wher
 
 Free trials, plan tiers, and usage limits are described on our pricing page and may change with notice.
 
-Scheduled scans run on your topic's cadence. Manual scans are metered per plan.
+Scheduled scans run at your topic's frequency. Manual scans are metered per plan.
 
 When paid plans are live:
 
@@ -85,7 +85,7 @@ When paid plans are live:
 - Prices are in US dollars and exclude taxes, which you are responsible for
 - Cancel at any time. Access continues to the end of the paid period
 - Fees already paid are non-refundable except where the law requires otherwise
-- Without a payment method on file, usage past your limit is refused instead of being billed
+- Without a payment method on file, usage past your limit is rejected instead of being billed
 - With a payment method on file, usage past your limit may be billed as metered overage at the posted rate
 - Failed payments may lead to suspension after notice
 - We will give at least 30 days' notice before a price increase applies to you

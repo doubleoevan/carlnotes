@@ -17,12 +17,16 @@ test("toActivityTopics groups scans per topic and sums their cents", () => {
 		{
 			id: "t1",
 			name: "Agents",
+			visibility: "public" as const,
+			frequency: "daily" as const,
 			createdAt: new Date("2026-07-01T00:00:00Z"),
 			updatedAt: new Date("2026-07-20T00:00:00Z"),
 		},
 		{
 			id: "t2",
 			name: "Quiet",
+			visibility: "private" as const,
+			frequency: "weekly" as const,
 			createdAt: new Date("2026-07-02T00:00:00Z"),
 			updatedAt: new Date("2026-07-02T00:00:00Z"),
 		},
@@ -37,7 +41,7 @@ test("toActivityTopics groups scans per topic and sums their cents", () => {
 			finishedAt: new Date("2026-07-21T00:02:00Z"),
 			foundCount: 12,
 			keptCount: 3,
-			cost: "0.10",
+			costDollars: "0.10",
 			scanSummary: "Found a few things.",
 		},
 		// a still-running scan carries no finish time or recap yet
@@ -50,7 +54,7 @@ test("toActivityTopics groups scans per topic and sums their cents", () => {
 			finishedAt: null,
 			foundCount: 4,
 			keptCount: 1,
-			cost: "0.25",
+			costDollars: "0.25",
 			scanSummary: null,
 		},
 	]

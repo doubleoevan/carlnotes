@@ -91,7 +91,7 @@ export async function loadTopicContext(topicId: string, budget: Budget, litellmA
 
 /**
  * Embed every candidate and keep the ones relevant to the topic, recording the outcome of the ones dropped.
- * Embedding is the only metered work here, so a candidate past the Scan's ceiling is deferred instead of being embedded.
+ * Embedding is the only metered work here, so a candidate past the Scan's limit is deferred instead of being embedded.
  */
 export async function gateResources(
 	unscoredResources: Resource[],
@@ -158,12 +158,12 @@ async function gateResource(
 	litellmApiKey?: string,
 ): Promise<RelevanceGateOutcome> {
 	try {
-		// embedding costs money, so check the ceiling first. a deferred candidate stays eligible for the next Scan
+		// embedding costs money, so check the limit first. a deferred resource candidate stays eligible for the next Scan
 		if (!resource.embedding && !canSpend(budget)) {
 			return { status: "deferred" }
 		}
 
-		// reuse a Resource's existing global embedding. a candidate the ceiling later defers keeps its vector,
+		// reuse a Resource's existing global embedding. a candidate the limit later defers keeps its vector,
 		// so the next Scan never re-embeds it
 		const embedding = resource.embedding ?? (await embedResource(resource, budget, litellmApiKey))
 
@@ -177,7 +177,7 @@ async function gateResource(
 		// the survivor includes its vector too, since the ranked pass dedupes against it
 		return { status: "survived", survivor: { resource, embedding, similarity } }
 	} catch (error) {
-		// a candidate that never got measured is a Finding the reader silently never sees
+		// a candidate that never got measured is a Finding the user silently never sees
 		console.error(`relevance gate failed for resource ${resource.id}`, error)
 		reportError(error, "embed-filter", { resourceId: resource.id, url: resource.url })
 		return { status: "failed" }

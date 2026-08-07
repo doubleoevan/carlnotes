@@ -9,7 +9,7 @@ import { isAdminRole, replaceUserLiteLLMKey } from "./authorization"
 
 // fixed local credentials so the seeded demo topics are always reachable by logging in as the same account
 const DEV_USER_EMAIL = Bun.env.DEV_USER_EMAIL ?? "evan@carlnotes.dev"
-const DEV_USER_PASSWORD = Bun.env.DEV_USER_PASSWORD ?? "dev-password-change-me"
+const DEV_USER_PASSWORD = Bun.env.DEV_USER_PASSWORD ?? "notesofcarl"
 
 if (import.meta.main) {
 	await seed()
@@ -29,7 +29,7 @@ export async function seed(): Promise<void> {
 	const wasAdminBeforeSeed = isAdminRole(devUser?.role)
 	await seedTopics(devUserId)
 
-	// a signup-minted key carries the free budget, so a fresh promotion reissues it at the admin ceiling.
+	// a signup-minted key carries the free budget, so a fresh promotion reissues it at the admin limit.
 	// an already-admin dev user keeps their key, so re-seeding never rotates it or resets its spend
 	if (!wasAdminBeforeSeed) {
 		await replaceUserLiteLLMKey(devUserId)

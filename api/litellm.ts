@@ -6,7 +6,7 @@
 const LITELLM_BUDGET_DURATION = "30d"
 
 /**
- * Mint a budgeted virtual key for a user. budgetCents is their effective monthly ceiling.
+ * Mint a budgeted virtual key for a user. budgetCents is their effective monthly limit.
  */
 export async function provisionLiteLLMKey(email: string, budgetCents: number): Promise<string> {
 	// ask the proxy to mint a budgeted key aliased to the user's email. the alias carries the mint time too,

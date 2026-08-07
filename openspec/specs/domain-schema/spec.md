@@ -26,18 +26,21 @@ The schema SHALL define a `users` table shaped to Better Auth's current core col
 - **THEN** the database rejects the second insert
 
 ### Requirement: Topic is the configuration and the authority anchor
-A Topic SHALL carry its name, context document, cadence, privacy level (public, invite, or private), and `owner_id` referencing `users`. Authority MUST be expressed only through `owner_id`; the schema MUST NOT define a role enum.
+A Topic SHALL carry its name, context document, frequency, privacy level (public, invite, or private), and `owner_id` referencing `users`. Topic authority MUST be expressed only through `owner_id`, and no table may carry a role column or role enum standing for it. `users.role` is the one exception, holding the platform admin override, which is not a Topic authority.
 
 #### Scenario: Topic records its owner and privacy
 - **WHEN** a topic row is created
-- **THEN** it stores `owner_id`, a privacy value from {public, invite, private}, and a cadence value
+- **THEN** it stores `owner_id`, a privacy value from {public, invite, private}, and a frequency value
 
-#### Scenario: Authority is ownership, not a role
+#### Scenario: Topic authority is ownership, not a role
 - **WHEN** the schema is inspected
-- **THEN** no `role` column or role enum exists on any table
+- **THEN** Topic authority is expressed only through `owner_id`, and no table carries a role column or role enum standing for it
+- **AND** the one exception is `users.role`, the platform admin override, which is not a Topic authority
 
 ### Requirement: Source is a topic input with an optional Integration
-A Source SHALL belong to a Topic and declare a `kind` from {rss, reddit, youtube, search, composio, plugin}. Its `integration_id` MUST be nullable so credential-free sources (RSS) need no Integration, and MUST reference `integrations` when present.
+A Source SHALL belong to a Topic and declare a `kind` from {url, rss, reddit, youtube, search, composio, plugin}. Its `integration_id` MUST be nullable so credential-free sources (RSS) need no Integration, and MUST reference `integrations` when present.
+
+A Source SHALL carry an async screening `status` from {pending, ready, failed}, defaulting to `pending`, and a nullable `error` holding the reason a screen rejected it. The status SHALL be backed by its own Postgres enum rather than reusing the attachment status type, so the column's type names what it describes. The migration that adds the columns SHALL set every existing Source to `ready`, since an existing Source has already been trusted and a `pending` backfill would hide every Source from readers and make every Scan ingest nothing.
 
 #### Scenario: A keyless source has no integration
 - **WHEN** an RSS source is created
@@ -46,6 +49,14 @@ A Source SHALL belong to a Topic and declare a `kind` from {rss, reddit, youtube
 #### Scenario: A credentialed source references an integration
 - **WHEN** a composio source is created
 - **THEN** its `integration_id` references an `integrations` row
+
+#### Scenario: A Source carries a screening status and reason
+- **WHEN** a Source is created without an explicit status
+- **THEN** its `status` is `pending` and its `error` is null
+
+#### Scenario: Existing Sources survive the migration
+- **WHEN** the migration adding the status and error columns runs against a database with existing Sources
+- **THEN** every existing Source row is `ready`, so no Source is hidden and no Scan loses an input
 
 ### Requirement: Scan is one execution of a topic's pipeline
 A Scan SHALL reference its Topic and record start and finish timestamps, its cost, item counts, an `ai_summary` recap of what the scan did, a `status` from {running, succeeded, failed}, and a nullable `error`. Diff-since-last-scan MUST advance its baseline only on a succeeded scan, so a failed scan is skipped and never suppresses the next run's findings. The word "run" MUST NOT appear as a domain field; Scan is the domain term.
@@ -100,7 +111,7 @@ A topic's Feed SHALL be the set of Findings scoped to that Topic, resolved by qu
 - **THEN** there is no `feeds` table, and a topic's feed is obtained by selecting findings where `topic_id` matches
 
 ### Requirement: Subscription joins a subscriber to a Topic
-A Subscription SHALL reference a Topic and exactly one subscriber that is either a user or an Audience, and SHALL carry delivery preferences (cadence, digest). The exclusivity MUST be enforced by a database constraint.
+A Subscription SHALL reference a Topic and exactly one subscriber that is either a user or an Audience, and SHALL carry delivery preferences (frequency, digest). The exclusivity MUST be enforced by a database constraint.
 
 #### Scenario: Subscriber is a user xor an audience
 - **WHEN** a subscription row sets both a user subscriber and an audience subscriber, or neither
@@ -157,7 +168,7 @@ A Resource SHALL have a nullable `snippet` column holding the ingester-native te
 
 #### Scenario: Ingestion inserts with a snippet and no content
 
-- **WHEN** an ingester emits a Resource
+- **WHEN** an ingester returns a Resource
 - **THEN** the row is valid with `snippet` set to the ingester-native text and `content_key`/`content_bytes` null
 
 #### Scenario: Curation stores fetched content
@@ -351,7 +362,7 @@ The `topics` table SHALL carry a `max_results` integer, not null, defaulting to 
 - **WHEN** a topic row is inserted without a max-results value
 - **THEN** `max_results` is 10
 
-#### Scenario: An out-of-range value is refused
+#### Scenario: An out-of-range value is rejected
 - **WHEN** a write attempts a `max_results` outside 5, 10, 15, or 20
 - **THEN** the database rejects it
 

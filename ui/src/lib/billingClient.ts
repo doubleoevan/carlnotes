@@ -1,14 +1,14 @@
 // the typed client for the billing and admin routes. AppType is imported types-only, so no api code enters the ui bundle
-import type { AdminConsoleResponse, BillingState } from "@shared/contracts"
+import type { ActivityTopic, AdminConsoleResponse, BillingState } from "@shared/contracts"
 import { hc } from "hono/client"
 import type { AppType } from "../../../api"
 
 // same-origin client, like the topic client. in dev vite forwards /api to the Hono server
 const client = hc<AppType>(window.location.origin)
 
-// start Stripe Checkout for a plan and interval, then redirect the browser to the hosted page
-export async function startCheckout(plan: "plus" | "premium", interval: "monthly" | "yearly"): Promise<void> {
-	const response = await client.api.billing.checkout.$post({ json: { plan, interval } })
+// start Stripe Checkout for a plan and billing interval, then redirect the browser to the hosted page
+export async function startCheckout(plan: "plus" | "premium", billingInterval: "monthly" | "yearly"): Promise<void> {
+	const response = await client.api.billing.checkout.$post({ json: { plan, billingInterval } })
 	if (!response.ok) {
 		throw new Error(`checkout failed: ${response.status}`)
 	}
@@ -45,11 +45,19 @@ export async function fetchAdminConsole(): Promise<AdminConsoleResponse> {
 	return (await response.json()) as AdminConsoleResponse
 }
 
-// change a user's role from the admin table
-// returns false if the api refuses the change
+// change a user's role from the admin table. returns false if the api rejects the change
 export async function sendUserRole(userId: string, role: "admin" | "user"): Promise<boolean> {
 	const response = await client.api.admin.users[":id"].role.$post({ param: { id: userId }, json: { role } })
 	return response.ok
+}
+
+// one user's topics, read when an admin opens their row in the console
+export async function fetchAdminUserTopics(userId: string): Promise<ActivityTopic[]> {
+	const response = await client.api.admin.users[":id"].topics.$get({ param: { id: userId } })
+	if (!response.ok) {
+		throw new Error(`admin user topics failed: ${response.status}`)
+	}
+	return ((await response.json()) as { topics: ActivityTopic[] }).topics
 }
 
 // set or clear a user's budget override in cents from the admin table

@@ -1,13 +1,15 @@
-import type { AdminConsoleResponse, AdminTotals, AdminUserRow } from "@shared/contracts"
+import type { ActivityTopic, AdminConsoleResponse, AdminTotals, AdminUserRow } from "@shared/contracts"
 import { plans } from "@shared/enums"
+import { ChevronDown } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
+import { TopicsTable } from "@/components/table/TopicsTable"
 import { authClient } from "@/lib/authClient"
-import { fetchAdminConsole, sendUserBudgetOverride, sendUserRole } from "@/lib/billingClient"
-import { TABLE_CARD_CLASS, toCentsLabel } from "@/lib/utils"
+import { fetchAdminConsole, fetchAdminUserTopics, sendUserBudgetOverride, sendUserRole } from "@/lib/billingClient"
+import { cn, TABLE_CARD_CLASS, toCentsLabel } from "@/lib/utils"
 
 // human-readable bytes for the attributed-storage column
 function toBytesLabel(bytes: number): string {
@@ -187,7 +189,7 @@ function UsersTable({
 	)
 }
 
-// a user row with an inline role select and budget-override input
+// a user row with topics subtable, an inline role select, and budget-override input
 function UserRow({
 	user,
 	signedInUserId,
@@ -197,6 +199,10 @@ function UserRow({
 	signedInUserId: string
 	onReloadPage: () => void
 }) {
+	// the user's topics subtable state
+	const [isUserTopicsOpen, setIsUserTopicsOpen] = useState(false)
+	const [userTopics, setUserTopics] = useState<ActivityTopic[] | null>(null)
+
 	// set the user's role on the server, then reload the console
 	async function handleRoleChange(selectedRole: string): Promise<void> {
 		const role = selectedRole === "admin" ? "admin" : "user"
@@ -216,42 +222,93 @@ function UserRow({
 		onReloadPage()
 	}
 
+	// this user's topics, loaded the first time the the subtable is opened and kept for the rest of the session
+	async function handleUserTopicsClick(): Promise<void> {
+		setIsUserTopicsOpen(!isUserTopicsOpen)
+		if (userTopics !== null || user.topicCount === 0) {
+			return
+		}
+		try {
+			setUserTopics(await fetchAdminUserTopics(user.id))
+		} catch (error) {
+			console.error("admin user topics failed", error)
+			toast.error("Couldn't load that user's topics.")
+			setIsUserTopicsOpen(false)
+		}
+	}
+
 	// the cost is shown against the effective budget. highlight the figure if the user is over their budget
 	const isOverBudget = user.monthVariableCostCents !== null && user.monthVariableCostCents > user.effectiveBudgetCents
 	return (
-		<tr className="border-b">
-			<td className="py-2 pr-4">{user.email}</td>
-			<td className="py-2 pr-4">
-				{/* an admin cannot change their own role, so the platform always keeps at least one admin */}
-				<select
-					value={user.role}
-					disabled={user.id === signedInUserId}
-					onChange={(event) => handleRoleChange(event.target.value)}
-					className="rounded-md border px-1 py-0.5 disabled:opacity-50"
-				>
-					<option value="user">user</option>
-					<option value="admin">admin</option>
-				</select>
-			</td>
-			<td className="py-2 pr-4 capitalize">{user.plan}</td>
-			<td className="py-2 pr-4">{new Date(user.createdAt).toLocaleDateString()}</td>
-			<td className="py-2 pr-4">{user.topicCount}</td>
-			<td className="py-2 pr-4">{toBytesLabel(user.attributedBytes)}</td>
-			<td className="py-2 pr-4">{toCentsLabel(user.scanSpendCents)}</td>
-			<td className="py-2 pr-4">{toCentsLabel(user.chatSpendCents)}</td>
-			<td className={`py-2 pr-4 ${isOverBudget ? "text-destructive font-semibold" : ""}`}>
-				{toCentsLabel(user.monthVariableCostCents)} / {toCentsLabel(user.effectiveBudgetCents)}
-			</td>
-			<td className="py-2 pr-4">
-				<input
-					type="number"
-					min={0}
-					defaultValue={user.budgetOverrideCents !== null ? user.budgetOverrideCents / 100 : ""}
-					onBlur={(event) => handleBudgetChange(event.target.value)}
-					placeholder="$0"
-					className="w-24 rounded-md border px-1 py-0.5"
-				/>
-			</td>
-		</tr>
+		<>
+			<tr className="border-b">
+				<td className="py-2 pr-4">{user.email}</td>
+				<td className="py-2 pr-4">
+					{/* an admin cannot change their own role, so the platform always keeps at least one admin */}
+					<select
+						value={user.role}
+						disabled={user.id === signedInUserId}
+						onChange={(event) => handleRoleChange(event.target.value)}
+						className="rounded-md border px-1 py-0.5 disabled:opacity-50"
+					>
+						<option value="user">user</option>
+						<option value="admin">admin</option>
+					</select>
+				</td>
+				<td className="py-2 pr-4 capitalize">{user.plan}</td>
+				<td className="py-2 pr-4">{new Date(user.createdAt).toLocaleDateString()}</td>
+				<td className="py-2 pr-4">
+					{/* the topic count opens this user's topics subtable under the row. a user with no topics has nothing to open */}
+					<button
+						type="button"
+						onClick={handleUserTopicsClick}
+						disabled={user.topicCount === 0}
+						className="text-link flex items-center gap-0.5 hover:underline disabled:cursor-default disabled:no-underline disabled:opacity-50"
+					>
+						{user.topicCount}
+						{/* the chevron points down when the topics table is closed and rotates up when it opens */}
+						{user.topicCount > 0 && (
+							<ChevronDown
+								aria-hidden="true"
+								className={cn("size-3.5 shrink-0 transition-transform", isUserTopicsOpen && "rotate-180")}
+							/>
+						)}
+					</button>
+				</td>
+				<td className="py-2 pr-4">{toBytesLabel(user.attributedBytes)}</td>
+				<td className="py-2 pr-4">{toCentsLabel(user.scanSpendCents)}</td>
+				<td className="py-2 pr-4">{toCentsLabel(user.chatSpendCents)}</td>
+				<td className={`py-2 pr-4 ${isOverBudget ? "text-destructive font-semibold" : ""}`}>
+					{toCentsLabel(user.monthVariableCostCents)} / {toCentsLabel(user.effectiveBudgetCents)}
+				</td>
+				<td className="py-2 pr-4">
+					<input
+						type="number"
+						min={0}
+						defaultValue={user.budgetOverrideCents !== null ? user.budgetOverrideCents / 100 : ""}
+						onBlur={(event) => handleBudgetChange(event.target.value)}
+						placeholder="$0"
+						className="w-24 rounded-md border px-1 py-0.5"
+					/>
+				</td>
+			</tr>
+			{/* this user's topics subtable */}
+			{isUserTopicsOpen && (
+				<tr className="border-b">
+					<td colSpan={10} className="py-2">
+						{userTopics ? (
+							<TopicsTable
+								topics={userTopics}
+								onReloadPage={onReloadPage}
+								isEmailEditable={false}
+								isOwnersTable={false}
+							/>
+						) : (
+							<p className="text-muted-foreground text-sm">Loading topics…</p>
+						)}
+					</td>
+				</tr>
+			)}
+		</>
 	)
 }

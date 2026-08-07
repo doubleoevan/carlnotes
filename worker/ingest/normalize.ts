@@ -1,5 +1,5 @@
-// the url and title normalization a Resource gets before it is stored. the canonical url is the key every Scan
-// dedupes on, since two links to one page often differ only in tracking parameters, case, or a trailing slash
+// the url, title, and kind normalization a Resource gets before it is stored. the canonical url is the key that Scans dedupes on,
+import type { NewResource } from "./ingester"
 
 // the query parameters that name a referrer instead of the page. filter them out of the url
 const TRACKING_PARAMETERS = /^(utm_|fbclid$|gclid$|mc_[ce]id$|igshid$|si$|ref$|ref_src$|source$|spm$)/i
@@ -113,4 +113,43 @@ export function toFallbackTitle(url: string, snippet: string | null | undefined)
 	} catch {
 		return null
 	}
+}
+
+// so the resource kind is inferred from the host
+const WATCH_HOSTS = [
+	"youtube.com",
+	"youtu.be",
+	"vimeo.com",
+	"loom.com",
+	"ted.com",
+	"dailymotion.com",
+	"tiktok.com",
+	"snapchat.com",
+	"giphy.com",
+	"rumble.com",
+]
+const LISTEN_HOSTS = ["podcasts.apple.com", "open.spotify.com", "overcast.fm", "pocketcasts.com", "soundcloud.com"]
+
+/**
+ * The kind of Resource a url points at, determined by its host. Anything unrecognized is returned as "read"
+ */
+export function toResourceKind(url: string): NewResource["kind"] {
+	// an unparseable url has no host to match, so it falls back to the default kind
+	let host: string
+	try {
+		host = new URL(url).hostname.replace(/^www\./, "").toLowerCase()
+	} catch {
+		return "read"
+	}
+
+	// return the resource kind based on the host
+	if (isHostIn(host, WATCH_HOSTS)) {
+		return "watch"
+	}
+	return isHostIn(host, LISTEN_HOSTS) ? "listen" : "read"
+}
+
+// whether a host matches one of the listed hosts, or is a subdomain of one, so m.youtube.com counts as youtube
+function isHostIn(host: string, hosts: string[]): boolean {
+	return hosts.some((knownHost) => host === knownHost || host.endsWith(`.${knownHost}`))
 }

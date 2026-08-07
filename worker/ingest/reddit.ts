@@ -7,7 +7,7 @@ import type { NewResource, Source, SourceIngester } from "./ingester"
 const MAX_POSTS = 25
 const DEFAULT_SORT = "hot"
 
-// reddit's own name and sort charsets. both land in a url path, so anything else is refused instead of being encoded
+// reddit's own name and sort charsets. both land in a url path, so anything else is rejected instead of being encoded
 const SUBREDDIT_PATTERN = /^[A-Za-z0-9_]{1,21}$/
 const SUBREDDIT_SORTS = ["hot", "new", "top", "rising"]
 const FETCH_TIMEOUT_MS = 10_000
@@ -32,12 +32,16 @@ export const redditIngester: SourceIngester = async (source: Source) => {
 	const clientId = Bun.env.REDDIT_CLIENT_ID
 	const clientSecret = Bun.env.REDDIT_CLIENT_SECRET
 	if (clientId && clientSecret) {
-		return { resources: await fetchPosts(subreddit, sort, clientId, clientSecret), cost: 0 }
+		return { resources: await fetchPosts(subreddit, sort, clientId, clientSecret), costDollars: 0 }
 	}
 
 	// fall back to the public subreddit .rss feed, tagged so the Scan records the fallback
 	const rssUrl = `https://www.reddit.com/r/${subreddit}/.rss`
-	return { resources: await fetchFeed(rssUrl, { userAgent: REDDIT_USER_AGENT }), cost: 0, fallbackMode: "reddit-rss" }
+	return {
+		resources: await fetchFeed(rssUrl, { userAgent: REDDIT_USER_AGENT }),
+		costDollars: 0,
+		fallbackMode: "reddit-rss",
+	}
 }
 
 // the fields parsePosts reads from a reddit listing response

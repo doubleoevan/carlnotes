@@ -41,7 +41,7 @@ export function decryptChatText(storedText: string): string | null {
 		return storedText
 	}
 
-	// split the nonce, tag, and ciphertext back apart and refuse anything that does not verify
+	// split the nonce, tag, and ciphertext back apart and reject anything that does not verify
 	try {
 		const storedBytes = Buffer.from(storedText.slice(CIPHERTEXT_PREFIX.length), "base64")
 		const decipher = createDecipheriv("aes-256-gcm", requireChatTextKey(), storedBytes.subarray(0, NONCE_BYTES))

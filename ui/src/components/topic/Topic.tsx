@@ -132,26 +132,83 @@ function SubscribeToggle({ topic }: { topic: TopicFeed }) {
 	)
 }
 
-// the topic info popover from the note icon anchored at the icon
-function TopicInfoPopover({ topic }: { topic: TopicFeed }) {
-	return (
-		<Popover>
-			<Tooltip>
+// the topic's note, opened from the note icon it sits under.
+// anything passed as children opens the same note and shows the same tooltip, keeping the styling it arrived with
+export function TopicInfoPopover({
+	topic,
+	children,
+	isInline = false,
+	isOpen: openFromCaller,
+	onOpenChange,
+	isHintOpen: hintFromCaller,
+	onHintOpenChange,
+}: {
+	topic: TopicFeed
+	children?: React.ReactNode
+	// whether the icon sits in a heading's own text flow
+	isInline?: boolean
+	// a caller that renders the icon inside its own heading includes these so the heading can open the note and show its tooltip
+	isOpen?: boolean
+	onOpenChange?: (isOpen: boolean) => void
+	isHintOpen?: boolean
+	onHintOpenChange?: (isHintOpen: boolean) => void
+}) {
+	const [openHere, setOpenHere] = useState(false)
+	const [hintOpenHere, setHintOpenHere] = useState(false)
+	const isOpen = openFromCaller ?? openHere
+	const setIsOpen = onOpenChange ?? setOpenHere
+	const isHintOpen = hintFromCaller ?? hintOpenHere
+	const setIsHintOpen = onHintOpenChange ?? setHintOpenHere
+
+	// the topic note popover. stop propagation on the trigger and the close button so that the parent element doesn't reopen it
+	const note = (
+		<Popover open={isOpen} onOpenChange={setIsOpen}>
+			<Tooltip open={isHintOpen && !isOpen} onOpenChange={setIsHintOpen}>
 				<TooltipTrigger asChild>
 					<PopoverTrigger
-						className="hover:opacity-75 grid size-11 shrink-0 place-items-center sm:size-7"
+						onClick={(event) => event.stopPropagation()}
+						className={cn(
+							"hover:opacity-75 shrink-0",
+							// for inline, the icon is a 20px tile in the text. it centers on the line instead of aligned with the text's bottom edge.
+							// the pseudo-element grows the tap target back to 44px without taking any layout space
+							isInline
+								? "relative ml-1 inline-grid size-5 -translate-y-1 place-items-center align-middle before:absolute before:-inset-3 before:content-['']"
+								: "grid size-11 place-items-center sm:size-7",
+						)}
 						aria-label="Topic details"
 					>
 						<NoteIcon />
 					</PopoverTrigger>
 				</TooltipTrigger>
-				<TooltipContent>A topic note from Carl</TooltipContent>
+				<TooltipContent side="top">A topic note from Carl</TooltipContent>
 			</Tooltip>
-			<PopoverContent align="start" className="w-[calc(100vw-2rem)] max-w-lg text-sm">
+			<PopoverContent
+				onClick={(event) => event.stopPropagation()}
+				align="start"
+				className="w-[calc(100vw-2rem)] max-w-lg text-sm"
+			>
 				<PopoverCloseButton />
 				<TopicInfo topic={topic} />
 			</PopoverContent>
 		</Popover>
+	)
+	if (!children) {
+		return note
+	}
+
+	// the topic finding opens the note popover
+	return (
+		// biome-ignore lint/a11y/useKeyWithClickEvents: the note button beside it is the keyboard path
+		// biome-ignore lint/a11y/noStaticElementInteractions: a pointer shortcut to the button it sits beside
+		<div
+			onClick={() => setIsOpen(true)}
+			onMouseEnter={() => setIsHintOpen(true)}
+			onMouseLeave={() => setIsHintOpen(false)}
+			className="flex min-w-0 cursor-pointer items-start gap-1"
+		>
+			{children}
+			{note}
+		</div>
 	)
 }
 

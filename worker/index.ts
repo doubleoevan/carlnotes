@@ -5,13 +5,16 @@ export {
 	generateContext,
 	generateImageContext,
 	ingestAttachment,
+	ingestUrlAttachment,
 	MAX_ATTACHMENT_BYTES,
 } from "./attach"
 export { type ChatReplyStream, type ChatTurnInput, streamChatReply } from "./chat"
 export { sendManualScanEmail } from "./notify"
 export { loadScan, scanTopic, startTopicScan } from "./scan"
 export { failStaleScans, runScheduledTopicScans } from "./schedule"
+export { screenPendingSources, screenTopicSources } from "./screen"
 export { attachmentStream, deleteAttachment, putAttachment, toChatAttachmentKey } from "./store"
+export { type SuggestedSource, suggestSources, toSourceKey } from "./suggest"
 // trace the model-calls that the scheduled worker does
 export { shutdownTelemetry, startTelemetry } from "./telemetry"
 export { verifyUnsubscribeToken } from "./unsubscribe"

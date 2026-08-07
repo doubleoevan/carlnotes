@@ -9,7 +9,7 @@ TBD - created by archiving change add-curation-pipeline. Update Purpose after ar
 
 #### Scenario: Curation runs before the Scan closes
 
-- **WHEN** a Scan's Sources have emitted Resources and ingestion has upserted them
+- **WHEN** a Scan's Sources have returned Resources and ingestion has upserted them
 - **THEN** curation runs over the newly discovered, unscored Resources and the Scan is closed once, after curation, with its curation outputs recorded
 
 #### Scenario: Already-scored Resources are skipped
@@ -107,9 +107,9 @@ Curation SHALL embed the topic's effective context (`topicScanContext` — the t
 - **WHEN** the topic's effective context is empty
 - **THEN** the embed-filter compares against the embedding of the topic `name` rather than an empty context
 
-#### Scenario: The ceiling defers embedding rather than charging past it
+#### Scenario: The limit defers embedding rather than charging past it
 
-- **WHEN** the Scan's spend ceiling is already reached and further candidates remain unembedded
+- **WHEN** the Scan's spend limit is already reached and further candidates remain unembedded
 - **THEN** those candidates are counted as deferred, no embedding call is made or charged for them, and they stay eligible for a later Scan
 
 ### Requirement: Survivors are fetched via Firecrawl with a snippet fallback
@@ -138,41 +138,41 @@ For each embed-filter survivor that reaches the fetch stage and is neither reuse
 
 ### Requirement: A per-Scan spend cap halts paid stages
 
-Curation SHALL enforce, before each Resource is dispatched into the paid fetch-and-scoring section, two per-Scan ceilings: the existing USD spend ceiling, and a `MAX_SCORED_RESOURCES_PER_SCAN` count ceiling (env-overridable) on how many Resources are sent through the paid section in the Scan. The count ceiling SHALL bound every Resource that enters the paid section — whether its content was reused, revalidated, or freshly fetched — because scoring is paid in every case.
+Curation SHALL enforce, before each Resource is dispatched into the paid fetch-and-scoring section, two per-Scan limits: the existing USD spend limit, and a `MAX_SCORED_RESOURCES_PER_SCAN` count limit (env-overridable) on how many Resources are sent through the paid section in the Scan. The count limit SHALL bound every Resource that enters the paid section — whether its content was reused, revalidated, or freshly fetched — because scoring is paid in every case.
 
-The USD ceiling is a **Scan-level** ceiling, not a review-level one: it is created before ingestion, ingestion spend charges against it, and its configuration name SHALL name the Scan rather than review. Curation therefore starts with whatever ingestion already spent already counted.
+The USD limit is a **Scan-level** limit, not a review-level one: it is created before ingestion, ingestion spend charges against it, and its configuration name SHALL name the Scan rather than review. Curation therefore starts with whatever ingestion already spent already counted.
 
-What a Scan has spent SHALL be carried between stages as a value rather than accumulated in one object shared across them. Ingestion returns what it spent, curation receives it and returns what it leaves behind, and the ceiling each stage reads is the running total it was handed. A Scan's stages may run in separate processes, so a shared object mutated in place would let curation start from zero and spend the ceiling twice.
+What a Scan has spent SHALL be carried between stages as a value rather than accumulated in one object shared across them. Ingestion returns what it spent, curation receives it and returns what it leaves behind, and the limit each stage reads is the running total it was handed. A Scan's stages may run in separate processes, so a shared object mutated in place would let curation start from zero and spend the limit twice.
 
-Because the paid section runs under bounded concurrency and each ceiling is checked before dispatch rather than after completion, both ceilings are **approximate**, not hard: up to `(concurrency - 1)` Resources may already be in flight when a ceiling is reached, so the Scan may overshoot either ceiling by that many Resources. This overshoot is accepted. It costs a few cents, and the USD ceiling is an in-memory advisory counter that defers work rather than throwing. The fetch-outcome counts (`reused + revalidated + fetched`) SHALL therefore approximate, and MAY slightly exceed, the count ceiling.
+Because the paid section runs under bounded concurrency and each limit is checked before dispatch rather than after completion, both limits are **approximate**, not hard: up to `(concurrency - 1)` Resources may already be in flight when a limit is reached, so the Scan may overshoot either limit by that many Resources. This overshoot is accepted. It costs a few cents, and the USD limit is an in-memory advisory counter that defers work rather than throwing. The fetch-outcome counts (`reused + revalidated + fetched`) SHALL therefore approximate, and MAY slightly exceed, the count limit.
 
-Once either ceiling is reached, curation SHALL stop dispatching further paid work and leave the remaining Resources unscored — carried to a later Scan — without failing the Scan. The free stages that spend nothing — the hash dedupe, the embedding dedupe, and the relevance comparison itself — SHALL NOT be truncated by either cap; embedding, which is metered, SHALL defer past the USD ceiling as the embed-filter requirement states.
+Once either limit is reached, curation SHALL stop dispatching further paid work and leave the remaining Resources unscored — carried to a later Scan — without failing the Scan. The free stages that spend nothing — the hash dedupe, the embedding dedupe, and the relevance comparison itself — SHALL NOT be truncated by either cap; embedding, which is metered, SHALL defer past the USD limit as the embed-filter requirement states.
 
 #### Scenario: The cap halts further paid work
 
-- **WHEN** the Scan reaches either the USD ceiling or the `MAX_SCORED_RESOURCES_PER_SCAN` count mid-curation
+- **WHEN** the Scan reaches either the USD limit or the `MAX_SCORED_RESOURCES_PER_SCAN` count mid-curation
 - **THEN** no further fetch, revalidation, or scoring work is dispatched for the remaining Resources
 
 #### Scenario: The count cap halts paid work independent of spend
 
-- **WHEN** the Scan's `reused + revalidated + fetched` count reaches `MAX_SCORED_RESOURCES_PER_SCAN` while the USD ceiling is not yet reached
-- **THEN** the remaining survivors are deferred unscored, even though spend is under the dollar ceiling
+- **WHEN** the Scan's `reused + revalidated + fetched` count reaches `MAX_SCORED_RESOURCES_PER_SCAN` while the USD limit is not yet reached
+- **THEN** the remaining survivors are deferred unscored, even though spend is under the dollar limit
 
-#### Scenario: Ingestion spend counts against the same ceiling
+#### Scenario: Ingestion spend counts against the same limit
 
-- **WHEN** a Scan's ingestion charges enough to reach the USD ceiling before curation starts
-- **THEN** curation dispatches no paid work and defers its candidates, because the ceiling it reads already includes ingestion spend
+- **WHEN** a Scan's ingestion charges enough to reach the USD limit before curation starts
+- **THEN** curation dispatches no paid work and defers its candidates, because the limit it reads already includes ingestion spend
 
 #### Scenario: Spend survives the boundary between stages
 
-- **GIVEN** a Scan whose ingestion charged against the ceiling
+- **GIVEN** a Scan whose ingestion charged against the limit
 - **WHEN** curation runs in a different process from the one that ingested
 - **THEN** curation reads the total ingestion already spent, rather than starting from zero
 
-#### Scenario: In-flight work may overshoot a ceiling
+#### Scenario: In-flight work may overshoot a limit
 
-- **WHEN** a ceiling is reached while other Resources are already in flight under the concurrency limit
-- **THEN** those in-flight Resources finish and are counted, so the Scan may exceed the ceiling by up to `(concurrency - 1)` Resources, and this is not an error
+- **WHEN** a limit is reached while other Resources are already in flight under the concurrency limit
+- **THEN** those in-flight Resources finish and are counted, so the Scan may exceed the limit by up to `(concurrency - 1)` Resources, and this is not an error
 
 #### Scenario: Unscored Resources are carried and the Scan still succeeds
 
@@ -188,7 +188,9 @@ Once either ceiling is reached, curation SHALL stop dispatching further paid wor
 
 On close, curation SHALL record each stage's dollar cost in `scans.stage_costs` (keyed at least by ingestion, embedding, fetch, cheap scoring, and premium scoring) and set `scans.cost` to the Scan Budget's total, which already includes ingestion because ingestion charges into the same Budget. `scans.cost` SHALL NOT be composed by summing a separately tracked ingestion number with a review total. It SHALL set `kept_count` to the number of Findings written and `filtered_count` to the number of Resources dropped by hash dedupe, embedding dedupe, the embed-filter, or the content scanner, and SHALL write the scan report to `scans.scan_summary`. It SHALL also record the fetch-outcome counts to `scans.reused`, `scans.revalidated`, and `scans.fetched` — the number of Resources whose content was reused within the TTL, revalidated via a `304`, or freshly fetched — whose sum equals the number of Resources sent through the paid fetch-and-scoring section.
 
-The scan report SHALL be a dated note grounded only in the Scan's actual data — the kept Findings' titles, urls, scores, and relevance explanations; drop, deferral, and failure counts with their causes; per-Source outcomes including fallback modes; and costs. It SHALL cover, when the data supports each: a dated headline; insights and trends drawn across the kept items' relevance explanations; adds and drops with reasoning; sources consulted and skipped with reasoning; data-hygiene actions taken; list and threshold status against a target the topic context itself states; a closing notification decision (send or suppress) with rationale; and a cited-sources list of markdown links to the kept items using their exact stored urls. Because the report renders through a sanitized markdown subset whose links are allowlisted to the kept Findings' urls, the prompt MAY ask for light formatting and for links to the kept items, but SHALL instruct that any other link, image, or HTML renders as inert text. A Scan with nothing to review MAY leave `scan_summary` empty, and a Scan whose report call failed SHALL leave it empty rather than failing.
+The scan report SHALL be a dated note grounded only in the Scan's actual data — the kept Findings' titles, urls, scores, and relevance explanations; drop and failure counts with their causes; per-Source outcomes including fallback modes; and costs. It SHALL cover, when the data supports each: a dated headline; insights and trends drawn across the kept items' relevance explanations; adds and drops with reasoning; sources consulted and skipped with reasoning; data-hygiene actions taken; list and threshold status against a target the topic context itself states; a closing line on whether the Scan answered what the Topic asked and why, including when it did not; and a cited-findings list of markdown links to the kept items, each written from the item's title and pointing at its exact stored url, falling back to the url as the link text when an item has no title. That list SHALL NOT be headed "Sources", which names the places a Topic was pointed at rather than what was found there. Because the report renders through a sanitized markdown subset whose links are allowlisted to the kept Findings' urls, the prompt MAY ask for light formatting and for links to the kept items, but SHALL instruct that any other link, image, or HTML renders as inert text. A Scan with nothing to review MAY leave `scan_summary` empty, and a Scan whose report call failed SHALL leave it empty rather than failing.
+
+The Scan's own machinery SHALL NOT reach the report, which is read by the reader in their digest email, on the topic page, on the activity page, and as topic chat's context. The deferral count — Resources held back by the per-Scan dollar cap or the scored-resource cap — SHALL NOT be given to the report, because those limits are configuration the reader has no setting for, so naming them explains a mechanism rather than telling the reader what was found. The count SHALL still be tracked for the worker, since a candidate can be deferred before embedding as well as before scoring and only the latter is visible in stage telemetry. For the same reason the report's closing line SHALL be written as plain prose and SHALL NOT lead with a verdict label such as "send" or "suppress" followed by a dash. Whether a digest is dispatched is decided by whether the Topic has email subscribers, so a notification verdict in the report labels the reader's note with a decision the reader cannot act on. The judgment itself SHALL remain, because how well the Scan answered the Topic's question is the one assessment only curation can make after seeing every candidate.
 
 #### Scenario: Per-stage costs are recorded and the total is the Budget's
 
@@ -215,10 +217,27 @@ The scan report SHALL be a dated note grounded only in the Scan's actual data �
 - **WHEN** the scan-report call throws
 - **THEN** `scan_summary` is empty, the failure is logged, and the Scan still records its costs, counts, and Findings as `succeeded`
 
-#### Scenario: The report records a notification decision
+#### Scenario: The report judges the answer without a notification label
 
 - **WHEN** the scan report is written
-- **THEN** its body ends with an explicit send-or-suppress notification recommendation and the rationale, and no notification is actually dispatched by curation
+- **THEN** it closes with a plain sentence on whether the Scan answered what the Topic asked and why, carrying no "send" or "suppress" verdict label, and whether a digest is dispatched remains decided by the Topic's email subscribers
+
+#### Scenario: A Scan that answered nothing says so
+
+- **GIVEN** a Scan whose kept Findings do not address what the Topic asked
+- **WHEN** its report is written
+- **THEN** the closing line says plainly that the Scan did not answer the question, rather than omitting the judgment
+
+#### Scenario: A Scan that deferred candidates says nothing about it
+
+- **GIVEN** a Scan that held candidates back against its dollar cap or its scored-resource cap
+- **WHEN** its report is written
+- **THEN** neither the deferral count nor the limit that caused it appears in the report, and the report still says plainly that nothing was worth keeping when nothing was
+
+#### Scenario: The deferral count is still tracked
+
+- **WHEN** a candidate is deferred before embedding, or before scoring
+- **THEN** the Scan's review outcome counts it, even though no reader is told
 
 ### Requirement: Tiered LLM scoring produces Findings with relevance explanations
 
@@ -315,18 +334,18 @@ Deleting a Resource SHALL best-effort delete its stored content object via `dele
 
 ### Requirement: The paid section is ordered by relevance, not discovery order
 
-Curation SHALL rank the embed-filter survivors by their cosine similarity to the topic-context embedding, descending, and SHALL send them into the paid fetch-and-scoring section in that order. The similarity is the value the embed-filter already computes for every candidate before any cap applies; curation SHALL retain it rather than discard it after the threshold compare. When a per-Scan ceiling defers the remainder, the Resources that were scored SHALL therefore be the most relevant survivors of the Scan rather than whichever the database returned first.
+Curation SHALL rank the embed-filter survivors by their cosine similarity to the topic-context embedding, descending, and SHALL send them into the paid fetch-and-scoring section in that order. The similarity is the value the embed-filter already computes for every candidate before any cap applies; curation SHALL retain it rather than discard it after the threshold compare. When a per-Scan limit defers the remainder, the Resources that were scored SHALL therefore be the most relevant survivors of the Scan rather than whichever the database returned first.
 
 Ranking SHALL NOT change which Resources pass the relevance threshold, only the order in which the survivors are bought.
 
-#### Scenario: The most relevant survivors are scored when a ceiling defers the rest
+#### Scenario: The most relevant survivors are scored when a limit defers the rest
 
-- **WHEN** a Scan produces more embed-filter survivors than a per-Scan ceiling allows into the paid section
+- **WHEN** a Scan produces more embed-filter survivors than a per-Scan limit allows into the paid section
 - **THEN** the survivors sent through the paid section are the highest-similarity ones, and the lower-similarity remainder is deferred unscored
 
 #### Scenario: A low-similarity Resource discovered first does not displace a better one
 
-- **WHEN** a survivor at 0.36 similarity is returned by the database before a survivor at 0.98, and the ceiling admits only one
+- **WHEN** a survivor at 0.36 similarity is returned by the database before a survivor at 0.98, and the limit admits only one
 - **THEN** the 0.98 survivor is scored and the 0.36 survivor is deferred
 
 #### Scenario: Ranking does not change the relevance gate
@@ -383,7 +402,7 @@ Pass 1 SHALL still embed and persist an embedding for every candidate, including
 
 #### Scenario: A deferred candidate keeps its embedding
 
-- **WHEN** a candidate is embedded in pass 1 and then deferred by a per-Scan ceiling
+- **WHEN** a candidate is embedded in pass 1 and then deferred by a per-Scan limit
 - **THEN** its embedding is persisted and a later Scan reuses it rather than re-embedding it
 
 ### Requirement: A scan-report failure does not fail the Scan

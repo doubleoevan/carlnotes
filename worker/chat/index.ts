@@ -66,7 +66,7 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 		throw error
 	}
 
-	// the briefing interpolates the system prompt with the conversation as real messages.
+	// the system prompt is interpolated with the conversation carried as real messages.
 	// every chat turn gets the search tool, and the total counts what it spends
 	const searchTotal: SearchTotal = { count: 0 }
 	const replyStream = streamText({
@@ -84,7 +84,7 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 }
 
 /**
- * The conversation as model messages, ending on the reader's latest question and whatever they attached to it.
+ * The conversation as model messages, ending on the user's latest question and whatever they attached to it.
  */
 export function toModelMessages(
 	history: HistoryTurn[],
@@ -119,14 +119,14 @@ function toUserContent(question: string, attachments: ChatAttachment[]): string 
 	if (attachments.length === 0) {
 		return question
 	}
-	// text attachments join the question in one text part, each attachment under the name the reader gave it
+	// text attachments join the question in one text part, each attachment under the name the user gave it
 	const textBlocks = attachments
 		.filter((attachment) => attachment.kind === "text")
 		.map((attachment) => `--- attached: ${toAttachmentName(attachment.name)} ---\n${attachment.text}`)
 	// each image is its own part, so the model sees the picture instead of a mention of one
 	const images = attachments
 		.filter((attachment) => attachment.kind === "image")
-		.map((attachment) => ({ type: "image" as const, image: attachment.data }))
+		.map((attachment) => ({ type: "image" as const, image: attachment.dataUrl }))
 	return [{ type: "text" as const, text: [question, ...textBlocks].join("\n\n") }, ...images]
 }
 
@@ -140,7 +140,7 @@ async function toCompletion(
 }
 
 /**
- * Builds the system briefing from the 'chat-topic.md' prompt template, with everything a reader could have written fenced as data.
+ * Builds the system prompt from the 'chat-topic.md' template, with everything a user could have written fenced as data.
  */
 export async function buildChatPrompt(chatContext: ChatContext): Promise<BuiltPrompt> {
 	const { template, name, registryPrompt } = await fetchPromptTemplate("chat-topic")
@@ -150,6 +150,7 @@ export async function buildChatPrompt(chatContext: ChatContext): Promise<BuiltPr
 		topicName: chatContext.topicName,
 		topicPrompt: chatContext.topicPrompt || "Nothing written down yet.",
 		findingsBlock: toFindingsBlock(chatContext),
+		sourcesBlock: toSourcesBlock(chatContext),
 		scanSummariesBlock: toScanSummariesBlock(chatContext),
 		attachmentContext: chatContext.attachmentContext || "None.",
 		chatAttachmentContext: chatContext.chatAttachmentContext || "None.",
@@ -157,24 +158,34 @@ export async function buildChatPrompt(chatContext: ChatContext): Promise<BuiltPr
 	return { prompt, name, registryPrompt }
 }
 
-// the findings as the model reads them, best-match first.
+// the findings as the model reads them, best-match first with recency breaking the near-ties.
 // an empty set says so in words, so the model never invents an answer for a topic with nothing indexed
 function toFindingsBlock(chatContext: ChatContext): string {
 	if (chatContext.findings.length === 0) {
 		return "No findings are indexed for this topic yet."
 	}
 
-	// each finding includes its own url, so a reply can link what it cites
+	// each finding includes its own url so a reply can link what it cites, and the date this topic found it
+	// so the reply can prefer the newer of two that answer equally well and tell the user how old it is
 	return chatContext.findings
 		.map((finding) =>
 			[
 				`### ${finding.title ?? finding.url}`,
 				finding.url,
+				`Found: ${finding.foundAt.toISOString().slice(0, 10)}`,
 				`Relevance: ${finding.relevanceScore.toFixed(2)} — ${finding.relevanceExplanation}`,
 				finding.text,
 			].join("\n"),
 		)
 		.join("\n\n")
+}
+
+// the places this topic reads, one per line, or a plain line saying it has no sources
+function toSourcesBlock(chatContext: ChatContext): string {
+	if (chatContext.sources.length === 0) {
+		return "No sources are set up for this topic yet."
+	}
+	return chatContext.sources.join("\n")
 }
 
 // the recent scan notes, newest first, or a plain line saying there are none

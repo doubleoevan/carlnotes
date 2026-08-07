@@ -36,3 +36,65 @@ The topic detail page's Artisanal Blend card SHALL render a topic's schedule as 
 - **WHEN** the owner opens a weekly topic's page
 - **THEN** the Schedule row reads "Weekly on <day> at <time>", not just the frequency word
 
+### Requirement: Setting a daily frequency is gated by the plan's daily topic limit
+
+Every path that sets a Topic's frequency SHALL enforce the daily topic limit from `authorization`: both creating a Topic and changing an existing Topic's frequency. The edit path is the one that gets missed, and missing it makes the limit meaningless — a user held to one daily Topic at creation could otherwise create three weekly ones and switch them over.
+
+The check SHALL run before the Topic is written, so a rejected change leaves the Topic exactly as it was.
+
+Only a save that **moves** a Topic onto a daily frequency SHALL take a slot. A Topic already on one SHALL keep the slot it holds and SHALL be saveable regardless of how many daily Topics its owner has, including more than their plan allows. An owner can hold more than their limit — by downgrading, or by having had the Topics before the limit existed — and counting a Topic that already holds a slot as taking a new one would lock such an owner out of editing their own Topics at all, down to a rename.
+
+Moving between the two daily frequencies SHALL take nothing either, since both draw on the same slot.
+
+#### Scenario: Creating past the limit is rejected
+
+- **GIVEN** a user whose daily Topics already fill their limit
+- **WHEN** they create a Topic with a daily or weekdays frequency
+- **THEN** the creation is rejected and no Topic row is written
+
+#### Scenario: Switching an existing topic past the limit is rejected
+
+- **GIVEN** the same user, with a weekly Topic
+- **WHEN** they change that Topic's frequency to daily
+- **THEN** the change is rejected and the Topic keeps its weekly frequency
+
+#### Scenario: Editing a topic that is already daily still saves
+
+- **GIVEN** a user at their daily topic limit
+- **WHEN** they edit one of those daily Topics without changing its frequency
+- **THEN** the save succeeds, since it takes no new daily slot
+
+#### Scenario: An owner past their limit can still edit the Topics they hold
+
+- **GIVEN** an owner holding more daily Topics than their plan allows, after a downgrade
+- **WHEN** they rename one of those Topics, leaving its daily frequency alone
+- **THEN** the save succeeds, and only a Topic moving onto a daily frequency is ever rejected
+
+#### Scenario: Moving between the two daily frequencies takes nothing
+
+- **GIVEN** a user at their daily topic limit
+- **WHEN** they change one of those Topics from `daily` to `weekdays`
+- **THEN** the save succeeds, since both frequencies draw on the slot it already holds
+
+#### Scenario: Moving a topic off a daily frequency frees a slot
+
+- **GIVEN** a user at their daily topic limit
+- **WHEN** they change one of those Topics to weekly and then set another to daily
+- **THEN** both changes succeed
+
+### Requirement: A rejected daily frequency explains itself and offers the way up
+
+A rejection SHALL be surfaced to the user in the product's own voice, SHALL name the limit as a number rather than gesturing at it, and SHALL offer a path to the pricing page.
+
+The user is being told they cannot have something, at the moment they asked for it, so it SHALL say what the limit is and what would raise it.
+
+#### Scenario: The rejection names the number
+
+- **WHEN** a user is rejected a daily frequency
+- **THEN** the message states how many Topics their plan runs on a daily schedule, and links to pricing
+
+#### Scenario: The rejection does not read as an error
+
+- **WHEN** the rejection is shown
+- **THEN** it reads as the product speaking, not as a validation failure or a stack trace
+

@@ -1,6 +1,6 @@
 // the admin console data: a per-user table of standing and cost, and platform totals with a contribution figure.
 // storage is attributed over globally-deduplicated Resources, and contribution is net revenue minus tracked cost
-import type { AdminTotals, AdminUserRow } from "@shared/contracts"
+import type { ActivityTopic, AdminTotals, AdminUserRow } from "@shared/contracts"
 import { count, eq, gte, sql } from "drizzle-orm"
 import { db } from "../db"
 import {
@@ -14,6 +14,7 @@ import {
 	topics,
 	users,
 } from "../db/schema"
+import { loadActivity } from "./activity"
 import { effectiveBudgetCents, isAdminRole, replaceUserLiteLLMKey } from "./authorization"
 import { readStripeTotalRevenueCents } from "./billing"
 import { readLiteLLMKeySpend } from "./litellm"
@@ -21,6 +22,18 @@ import { startOfUtcMonth } from "./topic/quotas"
 
 // the bytes one embedded Resource attributes. a float4 dimension is four bytes wide
 const EMBED_BYTES = EMBED_DIMENSIONS * 4
+
+/**
+ * A user's owned topics as their own Activity page would show them for the subtable in an admin's users table
+ */
+export async function loadAdminUserTopics(userId: string): Promise<ActivityTopic[] | null> {
+	// the loader keys off the user, so an admin reads exactly what that user reads, with no second query to drift
+	const [user] = await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.id, userId))
+	if (!user) {
+		return null
+	}
+	return (await loadActivity(user)).topics
+}
 
 /**
  * One row per user for the admin table: status, topic count, attributed storage, and month-to-date variable cost against their effective budget.
@@ -138,7 +151,7 @@ export function computeContributionCents(
 
 /**
  * Change a user's role. An admin cannot remove their own admin role,
- * so the platform can never get locked out of its last admin. Returns false when that self-demotion is refused.
+ * so the platform can never get locked out of its last admin. Returns false when that self-demotion is rejected.
  */
 export async function setUserRole(
 	actingUserId: string,
@@ -155,7 +168,7 @@ export async function setUserRole(
 	return true
 }
 
-// whether a role change is an admin demoting themselves, the one change setUserRole refuses
+// whether a role change is an admin demoting themselves, the one change setUserRole rejects
 export function isSelfDemotion(actingUserId: string, targetUserId: string, role: "admin" | "user"): boolean {
 	return actingUserId === targetUserId && role !== "admin"
 }

@@ -7,12 +7,12 @@ import { ChatBudgetNotice } from "@/components/chat/ChatBudgetNotice"
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown"
 import { randomThinkingLine } from "@/components/chat/thinkingLines"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import type { ChatRefusal } from "@/lib/chatClient"
+import type { ChatRejection } from "@/lib/chatClient"
 import { cn } from "@/lib/utils"
 
-// one chat turn in the message list. the answer fills in as the reply streams and refusal replaces it on a refused chat turn.
+// one chat turn in the message list. the answer fills in as the reply streams and rejection replaces it on a rejected chat turn.
 // it is absent while the reply is still arriving
-export type ChatTurn = { question: string; answer: string; refusal: ChatRefusal | null; at?: number }
+export type ChatTurn = { question: string; answer: string; rejection: ChatRejection | null; at?: number }
 
 // how often the "minutes ago" labels re-read the clock (one minute)
 const CLOCK_TICK_MS = 60_000
@@ -45,7 +45,7 @@ export function ChatMessages({
 	// whether the message list has already landed on the newest chat turn
 	const hasLandedRef = useRef(false)
 
-	// whether the reader is at the newest chat turn or has scrolled up from it.
+	// whether the user is at the newest chat turn or has scrolled up from it.
 	// it decides both whether a new chunk scrolls the view, and whether the jump-to-latest button is offered
 	const [isAtBottom, setIsAtBottom] = useState(true)
 
@@ -56,7 +56,7 @@ export function ChatMessages({
 		return () => clearInterval(interval)
 	}, [])
 
-	// keep the newest chat turn in view while the reply streams, but only for a reader who is already at the bottom,
+	// keep the newest chat turn in view while the reply streams, but only for a user who is already at the bottom,
 	// so a streaming reply never pulls someone away from what they scrolled back to read.
 	// streaming jumps instead of scrolls, because every chunk restarts a smooth scroll from behind
 	const newestAnswerLength = chatTurns.at(-1)?.answer.length ?? 0
@@ -143,7 +143,7 @@ export function ChatMessages({
 }
 
 // the jump back down to the newest chat turn button, floating over the end of the message list.
-// it only shows only once the reader has scrolled away from the bottom
+// it only shows only once the user has scrolled away from the bottom
 function ScrollToLatestButton({ isShown, onClick }: { isShown: boolean; onClick: () => void }) {
 	if (!isShown) {
 		return null
@@ -227,7 +227,7 @@ function ChatInputPlaceholder({ topicName }: { topicName: string }) {
 	return <p className="text-muted-foreground py-2 text-sm">{`Ask me anything about ${topicName || "this topic"}.`}</p>
 }
 
-// the reader's own question to the right
+// the user's own question to the right
 function QuestionBubble({ chatTurn, now }: { chatTurn: ChatTurn; now: number }) {
 	return (
 		<div className="group flex flex-col items-end">
@@ -260,9 +260,9 @@ function AnswerBubble({
 	const isAwaitingFirstToken = isLast && isStreaming && chatTurn.answer === ""
 	const isStreamingThisAnswer = isLast && isStreaming && chatTurn.answer !== ""
 
-	// a refused chat turn shows the failure or a call to action instead of an empty bubble
-	if (chatTurn.refusal) {
-		return <ChatRefusalNotice refusal={chatTurn.refusal} />
+	// a rejected chat turn shows the failure or a call to action instead of an empty bubble
+	if (chatTurn.rejection) {
+		return <ChatRejectionNotice rejection={chatTurn.rejection} />
 	}
 
 	return (
@@ -297,7 +297,7 @@ function AnswerFooter({ answer, at, now }: { answer: string; at?: number; now: n
 }
 
 // the copy button showing a check once the text writes to the clipboard.
-// it copies the raw Markdown, so a paste keeps the formatting the reader saw
+// it copies the raw Markdown, so a paste keeps the formatting the user saw
 function CopyButton({ text }: { text: string }) {
 	const [isCopied, setIsCopied] = useState(false)
 
@@ -335,15 +335,15 @@ function ThinkingLine() {
 	return <span className="shimmer-text">{`Carl is ${thinkingLine}…`}</span>
 }
 
-// what a refused chat turn shows with a possible call to action
-function ChatRefusalNotice({ refusal }: { refusal: ChatRefusal }) {
+// what a rejected chat turn shows with a possible call to action
+function ChatRejectionNotice({ rejection }: { rejection: ChatRejection }) {
 	// a stream that broke mid-reply invites another try
-	if (refusal === "failed") {
+	if (rejection === "failed") {
 		return <p className="text-muted-foreground text-sm">{"Carl lost his train of thought. Try again?"}</p>
 	}
 
 	// an exhausted budget points at the pricing page, and anything else forbidden simply says no
-	if (refusal === "budget") {
+	if (rejection === "budget") {
 		return <ChatBudgetNotice />
 	}
 	return <p className="text-muted-foreground text-sm">{"Carl can't talk about this topic."}</p>

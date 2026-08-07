@@ -58,6 +58,7 @@ async function smokeTest(): Promise<number> {
 		["retrieved at most the current-model findings", ownerContext.findings.length <= (currentModelRow?.count ?? 0)],
 		["a non-owner gets no attachment context", nonOwnerContext.attachmentContext === ""],
 		["both sides see the same findings", ownerContext.findings.length === nonOwnerContext.findings.length],
+		["both sides see the same sources", ownerContext.sources.length === nonOwnerContext.sources.length],
 		[
 			"every retrieved finding includes text or a url",
 			ownerContext.findings.every((finding) => finding.text !== "" || finding.url !== ""),
@@ -72,6 +73,7 @@ async function smokeTest(): Promise<number> {
 	console.log(`retrieved findings : ${ownerContext.findings.length}`)
 	console.log(`scan notes         : ${ownerContext.scanSummaries.length}`)
 	console.log(`owner attachments  : ${ownerContext.attachmentContext.length} chars`)
+	console.log(`ready sources      : ${ownerContext.sources.join(", ") || "none"}`)
 
 	// print each check and return the overall result
 	let allPassed = true

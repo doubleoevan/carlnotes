@@ -1,12 +1,14 @@
 // scans every Topic scheduled by its frequency and emails its new Findings to subscribers.
 // whether a Topic is scheduled is computed from its frequency and its Scans, so a sweep is safe to repeat
 import { shutdownAnalytics } from "@shared/analytics"
+import { isDailyFrequency } from "@shared/enums"
 import { reportError, shutdownMonitoring, startMonitoring } from "@shared/monitoring"
 import { and, eq, isNotNull, isNull, lt, ne, sql } from "drizzle-orm"
 import { db } from "../db"
-import { scansRemainingToday } from "../db/quotas"
+import { dailyTopicIdsWithinLimit, scansRemainingToday } from "../db/quotas"
 import { scans, topics } from "../db/schema"
 import { scanTopic, startTopicScan } from "./scan"
+import { screenPendingSources } from "./screen"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import { countScanQueuePollers, SCAN_TASK_QUEUE } from "./temporal-client"
 import { MAX_SCAN_DURATION_MS } from "./workflows/stage-timeouts"
@@ -14,11 +16,11 @@ import { MAX_SCAN_DURATION_MS } from "./workflows/stage-timeouts"
 // one day in milliseconds, the daily frequency window and the base that the weekly window multiplies
 const DAY_MS = 24 * 60 * 60 * 1000
 
-// how long past its stages' own ceiling a dispatched Scan may stay running before it counts as gone.
+// how long past its stages' own limit a dispatched Scan may stay running before it counts as gone.
 // derived from the stage timeouts instead of being set alongside them, so raising a timeout cannot start closing out Scans that are slow.
 // the environment can still override it
-const RECLAIM_MARGIN_MS = 15 * 60 * 1000
-const STALE_SCAN_MS = Number(Bun.env.STALE_SCAN_MS ?? String(MAX_SCAN_DURATION_MS + RECLAIM_MARGIN_MS))
+const STALE_SCAN_MARGIN_MS = 15 * 60 * 1000
+const STALE_SCAN_MS = Number(Bun.env.STALE_SCAN_MS ?? String(MAX_SCAN_DURATION_MS + STALE_SCAN_MARGIN_MS))
 
 /**
  * How long a dispatched Scan may stay running before it counts as failed.
@@ -31,7 +33,8 @@ export function staleScanWindowMs(): number {
 // or could not be started. the sweep hands each Scan to Temporal and does not wait, so it counts starts instead of outcomes.
 // how a Scan ended is on its own persisted row, and its failures report from the workflow
 type Topic = typeof topics.$inferSelect
-export type TopicSweepSummary = { scheduled: number; started: number; skippedOverQuota: number; failed: number }
+// biome-ignore format: one line keeps the summary's fields under the comment-density hook's limit
+export type TopicSweepSummary = { scheduled: number; started: number; skippedOverQuota: number; skippedOverDailyLimit: number; failed: number }
 
 // a scheduled topic sweep: scan every scheduled Topic under its owner's daily quota, then email its new Findings, isolating failures.
 // wrapped with `toExclusiveTask` so a sweep that fires while a sweep is still going is skipped
@@ -40,6 +43,10 @@ export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSwe
 	// the first is a recovery, the second a failure, and only the dispatchedAt field tells them apart
 	await startUndispatchedScans()
 	await failStaleScans()
+
+	// a Source row is written before its llm-guard screen starts, so this picks up a topic scan whose start never happened.
+	// a Source already being screened is rejected by its workflow id, so this is safe to repeat every sweep
+	await screenPendingSources()
 
 	// scans run on Temporal, so a queue with no worker behind it means nothing is scanning while every caller still succeeds.
 	// the sweep is the one thing that runs on a timer, so it checks whether a reachable server has a worker behind the queue
@@ -51,14 +58,25 @@ export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSwe
 		scheduled: scheduledTopics.length,
 		started: 0,
 		skippedOverQuota: 0,
+		skippedOverDailyLimit: 0,
 		failed: 0,
 	}
+
+	// which of each owner's daily Topics their plan still runs. read once per owner, since a sweep can hold multiple Topics,
+	// but the answer is the same for each owner
+	const dailyTopicIdsByOwner = await loadDailyTopicIdsByOwner(scheduledTopics)
 
 	// scan each scheduled Topic whose owner still has a quota, then email its subscribers
 	for (const topic of scheduledTopics) {
 		// skip a Topic whose owner has no daily quota left. it stays scheduled for a later sweep once the quota window rolls over
 		if ((await scansRemainingToday(topic.ownerId)) <= 0) {
 			topicSweepSummary.skippedOverQuota++
+			continue
+		}
+
+		// skip a daily Topic past its owner's daily topic limit
+		if (!isWithinDailyTopicLimit(topic, dailyTopicIdsByOwner.get(topic.ownerId))) {
+			topicSweepSummary.skippedOverDailyLimit++
 			continue
 		}
 
@@ -78,9 +96,9 @@ export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSwe
 	}
 
 	// a summary line per sweep for the logs
-	const { started, skippedOverQuota, failed } = topicSweepSummary
+	const { started, skippedOverQuota, skippedOverDailyLimit, failed } = topicSweepSummary
 	console.log(
-		`scheduled scan sweep: ${started} started, ${skippedOverQuota} over quota, ${failed} could not start, of ${scheduledTopics.length} scheduled`,
+		`scheduled scan sweep: ${started} started, ${skippedOverQuota} over quota, ${skippedOverDailyLimit} over the daily topic limit, ${failed} could not start, of ${scheduledTopics.length} scheduled`,
 	)
 	return topicSweepSummary
 })
@@ -89,7 +107,7 @@ export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSwe
  * Start the temporal workflow for every Scan that was opened but never dispatched.
  * This is the backstop for the gap between writing a Scan row and starting its workflow.
  * an orphaned scan row recovers on the next sweep instead of waiting out a window.
- * A start that the engine refuses means that Scan is already running, and that refusal sets the dispatch marker,
+ * A start that the engine rejects means that Scan is already running, and that rejection sets the dispatch marker,
  * so a scan row is only ever retried until it is genuinely dispatched.
  */
 async function startUndispatchedScans(): Promise<void> {
@@ -107,7 +125,7 @@ async function startUndispatchedScans(): Promise<void> {
 	console.log(`dispatching ${undispatchedScans.length} scans that were opened but never started`)
 
 	// the scan row records what it was opened for, so the sweep starts it the way its original caller would have.
-	// startedAt is refreshed first, the same way claiming an open scan row does.
+	// startedAt is refreshed first, the same way taking an open scan row does.
 	for (const scan of undispatchedScans) {
 		try {
 			await db.update(scans).set({ startedAt: new Date() }).where(eq(scans.id, scan.id))
@@ -151,7 +169,7 @@ export function toExclusiveTask<Result>(task: () => Promise<Result>): () => Prom
 			return null
 		}
 
-		// claim the run, and release it however the task ends
+		// take the run, and release it however the task ends
 		isRunning = true
 		try {
 			return await task()
@@ -190,6 +208,27 @@ export async function failStaleScans(topicId?: string, now = new Date()): Promis
 	return staleScanIds.length
 }
 
+/**
+ * Whether the sweep still runs this Topic under its owner's daily topic limit. A Topic on a weekly frequency
+ * draws on no daily allowance at all, so the limit never touches it.
+ */
+export function isWithinDailyTopicLimit(
+	topic: Pick<Topic, "id" | "frequency">,
+	ownerDailyTopicIds: Set<string> | undefined,
+): boolean {
+	return !isDailyFrequency(topic.frequency) || Boolean(ownerDailyTopicIds?.has(topic.id))
+}
+
+// the daily Topics each owner's plan can run, keyed by the owner for reuse
+async function loadDailyTopicIdsByOwner(scheduledTopics: Topic[]): Promise<Map<string, Set<string>>> {
+	const dailyTopics = scheduledTopics.filter((topic) => isDailyFrequency(topic.frequency))
+	const ownerIds = [...new Set(dailyTopics.map((topic) => topic.ownerId))]
+	const ownerEntries = await Promise.all(
+		ownerIds.map(async (ownerId): Promise<[string, Set<string>]> => [ownerId, await dailyTopicIdsWithinLimit(ownerId)]),
+	)
+	return new Map(ownerEntries)
+}
+
 // return the Topics scheduled for a scan with this sweep, computed from each Topic's frequency and its most recent Scan
 async function loadScheduledTopics(now = new Date()): Promise<Topic[]> {
 	// the start of each Topic's most recent finished Scan, counting failed ones. a new Topic has none, so it is due
@@ -202,8 +241,8 @@ async function loadScheduledTopics(now = new Date()): Promise<Topic[]> {
 		lastScanStarts.map((scanRow) => [scanRow.topicId, new Date(scanRow.lastStartedAt)]),
 	)
 
-	// a Topic already scanning is refused by the workflow id when the sweep tries to start it, so it is not filtered out here.
-	// a refusal reads the live workflow instead of a topic row, which may be stale
+	// a Topic already scanning is rejected by the workflow id when the sweep tries to start it, so it is not filtered out here.
+	// a rejection reads the live workflow instead of a topic row, which may be stale
 	const topicRows = await db.select().from(topics)
 	return topicRows.filter((topicRow) => isTopicScheduled(topicRow, lastScanStartByTopic.get(topicRow.id), now))
 }

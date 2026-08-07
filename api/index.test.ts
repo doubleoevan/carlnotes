@@ -75,7 +75,7 @@ test("an unknown page path serves the app shell", async () => {
 	const bundleDirectory = await makeBundleDirectory()
 	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123"))
 
-	// the shell revalidates, so a deploy reaches the reader on their next request
+	// the shell revalidates, so a deploy reaches the user on their next request
 	expect(response.status).toBe(200)
 	expect(response.body).toBe(SHELL_HTML)
 	expect(response.cacheControl).toBe("no-cache")
@@ -99,7 +99,7 @@ test("a write to an unknown path is not the app shell", async () => {
 	expect(response.body).not.toBe(SHELL_HTML)
 })
 
-// the question is validated before the handler runs, so a bad chat turn is refused without reaching the database or a model
+// the question is validated before the handler runs, so a bad chat turn is rejected without reaching the database or a model
 test("a chat turn with no question is rejected before any work", async () => {
 	const response = await server.fetch(
 		new Request("http://localhost:3000/api/topics/abc123/chat", {
@@ -111,7 +111,7 @@ test("a chat turn with no question is rejected before any work", async () => {
 	expect(response.status).toBe(400)
 })
 
-// a question longer that the cap is refused, so that one request cannot inflate the retrieval or the prompt
+// a question longer that the cap is rejected, so that one request cannot inflate the retrieval or the prompt
 test("an oversized chat question is rejected", async () => {
 	const response = await server.fetch(
 		new Request("http://localhost:3000/api/topics/abc123/chat", {

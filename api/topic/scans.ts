@@ -1,21 +1,21 @@
 // starting a Scan by hand from the topic page. the scan itself runs in the worker, so this only authorizes it,
-// refuses a duplicate, and hands it off without blocking the request
+// rejects a duplicate, and hands it off without blocking the request
 import { trackEvent } from "@shared/analytics"
 import { reportError } from "@shared/monitoring"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { topics } from "../../db/schema"
 import { failStaleScans, startTopicScan } from "../../worker"
-import { authorizeManualScan } from "../authorization"
+import { loadManualScanAuthorization } from "../authorization"
 import { reportManualScanOverage } from "../billing"
 import type { AnalyticsProperties } from "../currentUser"
 
 // the outcomes of a manual scan request. status: running means a scan is already in flight for the topic
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ManualScanResult = { status: "started"; remaining: number } | { status: "forbidden" } | { status: "quota" } | { status: "running" }
+export type ManualScanResult = { status: "started"; remainingScans: number } | { status: "forbidden" } | { status: "quota" } | { status: "running" }
 
 /**
- * Start a manual scan for the owner or an admin, enforcing the daily quota through the gate. The scan runs without blocking the request.
+ * Start a manual scan for the owner or an admin, enforcing the daily quota. The scan runs without blocking the request.
  */
 export async function runManualScan(
 	userId: string,
@@ -27,7 +27,7 @@ export async function runManualScan(
 	if (!topic) {
 		return { status: "forbidden" }
 	}
-	const authorization = await authorizeManualScan(userId, topic)
+	const authorization = await loadManualScanAuthorization(userId, topic)
 	if (authorization.status !== "allowed") {
 		// track the paywall event. the owner triggered another scan without a card on file to bill the overage to
 		if (authorization.status === "quota") {
@@ -39,7 +39,7 @@ export async function runManualScan(
 	// close out any hung scans first, so a stuck scan row doesn't block a new manual scan indefinitely
 	await failStaleScans()
 
-	// hand the scan to Temporal. a topic already scanning is refused by the workflow id,
+	// hand the scan to Temporal. a topic already scanning is rejected by the workflow id,
 	// a scan is charged to whoever fired it, so an admin's scan never draws down the owner's quota or budget
 	const started = await startTopicScan(topicId, userId, "manual")
 	if (started.status === "running") {
@@ -62,5 +62,5 @@ export async function runManualScan(
 
 	// track the scan request analytics event, then return the quota that the user has left
 	trackEvent("scan_requested", userId, { ...analyticsProperties, topicId })
-	return { status: "started", remaining: authorization.remaining }
+	return { status: "started", remainingScans: authorization.remainingScans }
 }

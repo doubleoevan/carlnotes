@@ -23,7 +23,7 @@ A `▾ History` accordion (default expanded) SHALL list the Topic's Scans newest
 - **THEN** the payload carries no cost value and the popover shows the summary and how long the Scan took, but no cost
 
 ### Requirement: The owner can trigger a manual Scan
-A `▶ Run now` control SHALL render for the owner only, above the title row, and SHALL trigger a real Scan of the Topic through the api. The Scan SHALL be recorded as manual, run without blocking the request, and appear in History (as running until it finishes). The api SHALL authorize the trigger through `isAllowed(user, "scan:manual", topic)`, which allows the owner or an admin and enforces the plan's daily scan limit; requests it refuses SHALL be rejected.
+A `▶ Run now` control SHALL render for the owner only, above the title row, and SHALL trigger a real Scan of the Topic through the api. The Scan SHALL be recorded as manual, run without blocking the request, and appear in History (as running until it finishes). The api SHALL authorize the trigger through `isAllowed(user, "scan:manual", topic)`, which allows the owner or an admin and enforces the plan's daily scan limit; requests it rejects SHALL be rejected.
 
 #### Scenario: Run now starts a scan
 - **WHEN** the owner activates Run now within quota
@@ -38,7 +38,7 @@ A `▶ Run now` control SHALL render for the owner only, above the title row, an
 - **THEN** the api rejects it
 
 ### Requirement: Scans are quota-limited per user per day, by billing plan
-Scans SHALL be limited per user per UTC day to the daily limit of the user's billing plan (free, plus, or premium), counted across every Scan on the user's Topics regardless of origin — scheduled and manual Scans share one pool. Only running and succeeded Scans SHALL count — a failed Scan gives its slot back. With a card on file the daily ceiling is soft: manual Scans beyond the daily limit SHALL be allowed and billed as metered overage (see `subscription-billing`); with no card it is a hard cap. Admins SHALL bypass the limit entirely. The Run-now block SHALL show "N left today" as a link to the pricing page whose tooltip reads "Upgrade for more"; at zero remaining the trigger SHALL be disabled and the api SHALL reject further manual Scans unless metered overage applies.
+Scans SHALL be limited per user per UTC day to the daily limit of the user's billing plan (free, plus, or premium), counted across every Scan on the user's Topics regardless of origin — scheduled and manual Scans share one pool. Only running and succeeded Scans SHALL count — a failed Scan gives its slot back. With a card on file the daily limit is soft: manual Scans beyond the daily limit SHALL be allowed and billed as metered overage (see `subscription-billing`); with no card it is a hard cap. Admins SHALL bypass the limit entirely. The Run-now block SHALL show "N left today" as a link to the pricing page whose tooltip reads "Upgrade for more"; at zero remaining the trigger SHALL be disabled and the api SHALL reject further manual Scans unless metered overage applies.
 
 #### Scenario: Quota exhausts and rejects
 - **WHEN** the owner has run as many Scans today as their plan allows and tries one more
@@ -52,7 +52,7 @@ Scans SHALL be limited per user per UTC day to the daily limit of the user's bil
 - **WHEN** a non-admin owner with no card on file has reached their plan's daily scan limit and triggers another manual Scan
 - **THEN** the api rejects it as over the daily limit
 
-#### Scenario: A card on file makes the daily ceiling soft
+#### Scenario: A card on file makes the daily limit soft
 - **WHEN** a non-admin owner with a card on file has reached their plan's daily scan limit and triggers another manual Scan
 - **THEN** the api starts it and bills the extra Scan as metered overage
 

@@ -1,27 +1,9 @@
 import type { TopicResponse } from "@shared/contracts"
-import { Diamond, Globe, type LucideIcon, MessageCircle, Play, Plug, Puzzle, Rss } from "lucide-react"
-import {
-	cn,
-	INFO_CARD_CLASS,
-	toAgeLabel,
-	toDollarLabel,
-	toDurationLabel,
-	toScheduleLabel,
-	WEB_SOURCE,
-} from "@/lib/utils"
+import { AnchorLink } from "@/components/common/AnchorLink"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { INFO_CARD_CLASS, toAgeLabel, toDollarLabel, toDurationLabel, toScheduleLabel } from "@/lib/utils"
 import { CollapsibleSection } from "./CollapsibleSection"
-import { InfoSection } from "./TopicInfo"
-
-// each source's icon, keyed by the label the line renders. the web line is keyed by WEB_SOURCE's label
-// instead of the "search" kind behind it. lucide includes no brand icons, so YouTube and reddit take generic shapes
-const SOURCE_ICON: Record<string, LucideIcon> = {
-	web: Globe,
-	rss: Rss,
-	reddit: MessageCircle,
-	youtube: Play,
-	composio: Plug,
-	plugin: Puzzle,
-}
+import { InfoSection, TopicSourcesSection } from "./TopicInfo"
 
 /**
  * The topic page's card for how the topic is brewed: where Carl looks, when he looks, and how much he keeps.
@@ -39,6 +21,7 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 					{/* the frequency, its time and (weekly only) day, the last scan age, and how long that scan took */}
 					<InfoSection label="Schedule">
 						{toScheduleLabel(topic.frequency, topic.scheduledTime, topic.scheduledDayOfWeek)}
+						{topic.isDailyFrequencyPaused && <PausedFrequencyNote />}
 						<div className="text-muted-foreground mt-0.5 text-xs">
 							last scan {topic.lastScanAt ? toAgeLabel(topic.lastScanAt) : "never"}
 						</div>
@@ -49,8 +32,8 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 					<InfoSection label="Max results">{`Carl's top ${topic.maxResults}`}</InfoSection>
 
 					{/* this month's total scan spend, visible to the owner or an admin */}
-					{topic.monthCost !== null && (
-						<InfoSection label="Cost this month">{toDollarLabel(topic.monthCost)}</InfoSection>
+					{topic.monthCostDollars !== null && (
+						<InfoSection label="Cost this month">{toDollarLabel(topic.monthCostDollars)}</InfoSection>
 					)}
 				</div>
 			</div>
@@ -58,41 +41,18 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 	)
 }
 
-// the sources section: the default web search line first, then one line per custom source
-function TopicSourcesSection({ sources }: { sources: TopicResponse["sources"] }) {
-	// the default source is the web search source. custom sources are everything else
-	const hasSearchSource = sources.some((source) => source.kind === "search")
-	const customSources = sources.filter((source) => source.kind !== "search")
+// says that the schedule above is paused because the plan is past its limit with a call to action to upgrade on the pricing page
+function PausedFrequencyNote() {
 	return (
-		<InfoSection label="Sources">
-			<div className="space-y-1">
-				<TopicSource
-					sourceKind={WEB_SOURCE.label}
-					summary={hasSearchSource ? WEB_SOURCE.summary : "off"}
-					isMuted={!hasSearchSource}
-				/>
-				{customSources.map((source) => (
-					<TopicSource key={source.id} sourceKind={source.kind} summary={source.summary} />
-				))}
-			</div>
-		</InfoSection>
-	)
-}
-
-// one line in the sources section: the source icon, the source kind, and its config summary
-function TopicSource({ sourceKind, summary, isMuted }: { sourceKind: string; summary: string; isMuted?: boolean }) {
-	// a kind with no icon of its own still gets a neutral marker
-	const SourceIcon = SOURCE_ICON[sourceKind] ?? Diamond
-	return (
-		<div className={cn("flex min-w-0 items-baseline gap-1.5", isMuted && "text-muted-foreground")}>
-			{/* an svg has no baseline of its own, so it aligns by its box bottom and lands high.
-			    the nudge drops it down to the text */}
-			<SourceIcon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0 translate-y-0.5" />
-			{/* truncate to one line per source */}
-			<span className="min-w-0 truncate">
-				{sourceKind}
-				{summary && <span className="text-muted-foreground"> — {summary}</span>}
-			</span>
-		</div>
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<AnchorLink href="/pricing" className="text-link ml-1.5 text-xs hover:underline">
+					not brewing
+				</AnchorLink>
+			</TooltipTrigger>
+			<TooltipContent side="bottom">
+				Your plan ran out of daily pots. Carl keeps the ones you've had longest.
+			</TooltipContent>
+		</Tooltip>
 	)
 }

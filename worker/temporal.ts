@@ -1,12 +1,13 @@
-// the Temporal worker process: it bundles the workflows, registers the activities, and polls both task queues.
+// the Temporal worker process: it bundles the workflows, registers the activities, and polls all three task queues.
 // run it as its own process (bun run dev:temporal). it needs a reachable Temporal server at TEMPORAL_ADDRESS
 import { shutdownAnalytics } from "@shared/analytics"
 import { shutdownMonitoring, startMonitoring } from "@shared/monitoring"
 import { NativeConnection, Worker } from "@temporalio/worker"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
-import { ATTACHMENT_TASK_QUEUE, SCAN_TASK_QUEUE } from "./temporal-client"
+import { ATTACHMENT_TASK_QUEUE, SCAN_TASK_QUEUE, SOURCE_TASK_QUEUE } from "./temporal-client"
 import * as attachmentActivities from "./workflows/process-attachment-activities"
 import * as scanActivities from "./workflows/run-topic-scan-activities"
+import * as sourceActivities from "./workflows/screen-source-activities"
 
 // the SDK shuts a Worker down on its own on SIGINT/SIGTERM, but gives an in-flight activity zero time to
 // finish unless told to wait. review has no retry, so a shutdown mid-review otherwise abandons it outright.
@@ -20,11 +21,11 @@ async function run(): Promise<void> {
 	startTelemetry()
 	startMonitoring()
 
-	// a Worker polls exactly one queue and takes one workflowsPath,
-	// so the attachment and topic scan each get their own Worker instead of sharing one.
-	// they share this process and its connection, so it stays one process to run and supervise
+	// a Worker polls exactly one queue and takes one workflowsPath, so the attachment, topic scan, and source screen
+	// each get their own Worker instead of sharing one. they share this process and its connection, so it stays one process to run and supervise
 	const connection = await NativeConnection.connect({ address: Bun.env.TEMPORAL_ADDRESS })
 	const workers = await Promise.all([
+		// extracts an attachment's text, screens it with llm-guard, and generates its context
 		Worker.create({
 			connection,
 			workflowsPath: new URL("./workflows/process-attachment.ts", import.meta.url).pathname,
@@ -32,6 +33,7 @@ async function run(): Promise<void> {
 			taskQueue: ATTACHMENT_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 		}),
+		// runs one dispatched Scan: ingest, review, and the final write
 		Worker.create({
 			connection,
 			workflowsPath: new URL("./workflows/run-topic-scan.ts", import.meta.url).pathname,
@@ -39,22 +41,30 @@ async function run(): Promise<void> {
 			taskQueue: SCAN_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 		}),
+		// fetches a url Source's page and screens it with llm-guard
+		Worker.create({
+			connection,
+			workflowsPath: new URL("./workflows/screen-source.ts", import.meta.url).pathname,
+			activities: sourceActivities,
+			taskQueue: SOURCE_TASK_QUEUE,
+			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+		}),
 	])
 
-	// either worker stopping ends the process, so the process is restarted instead of silently failing to poll
+	// any worker stopping ends the process, so the process is restarted instead of silently failing to poll
 	const runningWorkers = workers.map((worker) => worker.run())
 	try {
 		await Promise.race(runningWorkers)
 	} finally {
-		// the other worker is still polling on the shared connection, so it is stopped and drained before that connection closes.
-		// a worker that already stopped refuses a second shutdown
+		// the other workers still polling on the shared connection are stopped and drained before that connection closes.
+		// a worker that already stopped rejects a second shutdown
 		for (const worker of workers) {
 			try {
 				worker.shutdown()
 			} catch {}
 		}
 
-		// drain both workers before the connection and everything they report go away.
+		// drain every worker before the connection and everything they report go away.
 		// this process records the activation event and its own errors, and both batch,
 		// so an exit that skips the flush drops whatever was still queued
 		await Promise.allSettled(runningWorkers)

@@ -1,6 +1,9 @@
 // the typed Hono RPC client for every topic route. the api's AppType is imported as types-only, so no api code ends up in the ui bundle
 import {
 	manualScanResponse,
+	type SuggestSourcesPayload,
+	type SuggestSourcesResponse,
+	suggestSourcesResponse,
 	type TopicFeedResponse,
 	type TopicResponse,
 	topicCreateResponse,
@@ -16,12 +19,12 @@ import type { AppType } from "../../../api"
 // and in prod one service serves both the ui and the api
 const client = hc<AppType>(window.location.origin)
 
-// tells the reader a write was rejected. every caller reloads the page afterward, so the screen shows the
-// unchanged truth and the click just looks ignored. isBackground skips the toast for a write the reader
+// tells the user a write was rejected. every caller reloads the page afterward, so the screen shows the
+// unchanged truth and the click just looks ignored. isBackground skips the toast for a write the user
 // never asked for by itself.
 // TODO: report these once the ui has its own Sentry client, since shared/monitoring is server-only
 async function reportFailedWrite(request: Promise<Response>, action: string, isBackground = false): Promise<void> {
-	// a rejected request never reaches a Response at all, so an offline reader is told the same as a refused write
+	// a rejected request never reaches a Response at all, so an offline user is told the same as a rejected write
 	let response: Response
 	try {
 		response = await request
@@ -36,12 +39,12 @@ async function reportFailedWrite(request: Promise<Response>, action: string, isB
 		return
 	}
 
-	// the log includes the detail. the toast only tells the reader that the scan failed, not why.
+	// the log includes the detail. the toast only tells the user that the scan failed, not why.
 	console.error(`${action} failed: ${response.status} ${await response.text()}`)
 	reportRejectedWrite(isBackground)
 }
 
-// the one message a failed write shows, skipped for a write the reader never asked for by itself
+// the one message a failed write shows, skipped for a write the user never asked for by itself
 function reportRejectedWrite(isBackground: boolean): void {
 	if (!isBackground) {
 		toast.error("That didn't save. Carl suggests trying again.")
@@ -96,11 +99,30 @@ export async function fetchTopicPage(topicId: string): Promise<TopicResponse | n
 	return topicResponse.parse(await response.json())
 }
 
+// a topic save that the api rejected because the plan already hit its limit of topics on a daily schedule.
+export class DailyTopicLimitError extends Error {
+	constructor(limit: number) {
+		super(`Carl runs ${limit} ${limit === 1 ? "topic" : "topics"} on a daily schedule for your plan.`)
+	}
+}
+
+// ask for sources this topic could follow, each already confirmed readable by the api.
+// an empty list means nothing new was found, which gets shown to the user in a toast.
+export async function fetchSourceSuggestions(
+	payload: SuggestSourcesPayload,
+): Promise<SuggestSourcesResponse["sources"]> {
+	const response = await client.api.topics["suggest-sources"].$post({ json: payload })
+	if (!response.ok) {
+		throw new Error(`source suggestions failed: ${response.status}`)
+	}
+	return suggestSourcesResponse.parse(await response.json()).sources
+}
+
 // create a topic and return its id. throws on a rejected create, including a reached topic cap
 export async function sendTopicCreate(payload: UpdateTopicPayload): Promise<string> {
 	const response = await client.api.topics.$post({ json: payload })
 	if (!response.ok) {
-		throw new Error(`topic create failed: ${response.status}`)
+		throw (await toDailyTopicLimitError(response)) ?? new Error(`topic create failed: ${response.status}`)
 	}
 	return topicCreateResponse.parse(await response.json()).id
 }
@@ -109,7 +131,24 @@ export async function sendTopicCreate(payload: UpdateTopicPayload): Promise<stri
 export async function sendTopicUpdate(topicId: string, payload: UpdateTopicPayload): Promise<void> {
 	const response = await client.api.topics[":id"].$patch({ param: { id: topicId }, json: payload })
 	if (!response.ok) {
-		throw new Error(`topic update failed: ${response.status}`)
+		throw (await toDailyTopicLimitError(response)) ?? new Error(`topic update failed: ${response.status}`)
+	}
+}
+
+// the daily-topic-limit rejection a rejected topic write includes, or null when it was rejected for anything else
+async function toDailyTopicLimitError(response: Response): Promise<DailyTopicLimitError | null> {
+	const body = (await response.json().catch(() => null)) as { dailyTopicLimit?: number } | null
+	return typeof body?.dailyTopicLimit === "number" ? new DailyTopicLimitError(body.dailyTopicLimit) : null
+}
+
+// sets where a public topic sits in the Featured section, with zero clearing it. admin only, throws on a rejection
+export async function sendTopicFeatureOrder(topicId: string, position: number): Promise<void> {
+	const response = await client.api.topics[":id"]["feature-order"].$patch({
+		param: { id: topicId },
+		json: { position },
+	})
+	if (!response.ok) {
+		throw new Error(`topic feature order update failed: ${response.status}`)
 	}
 }
 
@@ -153,7 +192,7 @@ export async function sendManualScan(topicId: string): Promise<number> {
 		const body = (await response.json().catch(() => null)) as { error?: string } | null
 		throw new Error(body?.error ?? `scan request failed: ${response.status}`)
 	}
-	return manualScanResponse.parse(await response.json()).remaining
+	return manualScanResponse.parse(await response.json()).remainingScans
 }
 
 // upload one attachment file to a topic. plain fetch because the route reads multipart form data, which the typed client cannot carry

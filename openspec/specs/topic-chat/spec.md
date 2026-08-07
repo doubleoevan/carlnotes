@@ -69,9 +69,9 @@ Each turn SHALL carry the conversation's prior exchanges so the reply can resolv
 - **WHEN** a conversation grows past the memory window
 - **THEN** the earliest carried exchanges still reach the model with whole questions and trimmed answers, rather than dropping away
 
-#### Scenario: An oversized history is refused
+#### Scenario: An oversized history is rejected
 - **WHEN** a request carries more history than the contract's carried bound
-- **THEN** the turn is refused by validation before any retrieval or generation runs
+- **THEN** the turn is rejected by validation before any retrieval or generation runs
 
 ### Requirement: Live web search is a signed-in capability
 A signed-in turn MAY invoke a live web search tool a bounded number of times before answering, and each search's cost SHALL be recorded on the turn alongside its token cost. An anonymous turn SHALL NOT trigger any paid web search, so the unauthenticated side of a public Topic can never spend against a third-party API. Whether a turn may search SHALL be answered by the authorization gate.
@@ -100,19 +100,19 @@ The reply SHALL be generated through a named LiteLLM alias, not a hardcoded mode
 - **THEN** reply text reaches the client incrementally as it is generated, rather than only after generation completes
 
 ### Requirement: Chat access reuses the Topic view rule for signed-in users
-A signed-in user SHALL be permitted to chat about a Topic exactly when they are permitted to view it, resolved through the existing authorization gate, with no second access rule introduced for chat. A signed-out visitor SHALL NOT be able to send a turn: the api SHALL refuse an anonymous turn outright, so no anonymous request ever spends against a model.
+A signed-in user SHALL be permitted to chat about a Topic exactly when they are permitted to view it, resolved through the existing authorization gate, with no second access rule introduced for chat. A signed-out visitor SHALL NOT be able to send a turn: the api SHALL reject an anonymous turn outright, so no anonymous request ever spends against a model.
 
 #### Scenario: A subscriber chats about an invite Topic
 - **WHEN** a signed-in user with an active subscription to an invite Topic sends a chat turn
 - **THEN** the turn is allowed
 
-#### Scenario: A stranger is refused on a private Topic
+#### Scenario: A stranger is rejected on a private Topic
 - **WHEN** a user who cannot view a private Topic sends a chat turn about it
-- **THEN** the turn is refused
+- **THEN** the turn is rejected
 
-#### Scenario: An anonymous turn is refused by the api
+#### Scenario: An anonymous turn is rejected by the api
 - **WHEN** a signed-out caller posts a chat turn directly to the api
-- **THEN** it is refused as needing sign-up and no retrieval or generation runs
+- **THEN** it is rejected as needing sign-up and no retrieval or generation runs
 
 ### Requirement: Attachment-derived context is owner-only
 Attachment-derived context SHALL be included in a turn's retrieval context only when the requesting user is the Topic's owner, matching the existing attachment download gate. A non-owner chatting about a Topic SHALL receive its Findings, Scan summaries, and prompt, and never the owner's uploaded documents.
@@ -126,7 +126,7 @@ Attachment-derived context SHALL be included in a turn's retrieval context only 
 - **THEN** the turn's retrieval context contains no attachment-derived material
 
 ### Requirement: Each turn is metered against the account's monthly spend budget
-A turn's estimated cost SHALL be checked against the user's remaining monthly spend budget before generation, drawing from the same per-account pool manual-scan overage draws from. A turn that would exceed the remaining budget SHALL be refused with an upgrade prompt and SHALL NOT be billed. A completed turn's cost SHALL be recorded using the same best-effort token-cost tally curation uses.
+A turn's estimated cost SHALL be checked against the user's remaining monthly spend budget before generation, drawing from the same per-account pool manual-scan overage draws from. A turn that would exceed the remaining budget SHALL be rejected with an upgrade prompt and SHALL NOT be billed. A completed turn's cost SHALL be recorded using the same best-effort token-cost tally curation uses.
 
 #### Scenario: A turn within budget proceeds and records its cost
 - **WHEN** a user with remaining monthly budget sends a chat turn
@@ -134,7 +134,7 @@ A turn's estimated cost SHALL be checked against the user's remaining monthly sp
 
 #### Scenario: A turn over budget is blocked, not billed
 - **WHEN** a user's remaining monthly budget cannot cover an estimated turn
-- **THEN** the turn is refused with an upgrade prompt, no generation runs, and no cost is recorded
+- **THEN** the turn is rejected with an upgrade prompt, no generation runs, and no cost is recorded
 
 #### Scenario: Chat spend and scan spend share one pool
 - **WHEN** a user's chat spend and scan spend together reach their effective monthly budget
@@ -171,7 +171,7 @@ A signed-in reader's conversation with a Topic SHALL be kept server-side on ever
 - **THEN** it asks the authorization gate for the persistence capability and performs no plan or tier comparison of its own
 
 ### Requirement: A conversation can be cleared without erasing its spend
-A signed-in reader SHALL be able to clear their conversation with a Topic from the panel, behind a confirmation. Clearing SHALL null the stored question and answer text on the reader's own rows — everywhere they are signed in — while the rows and their recorded costs remain, so the spend ledger survives the wipe. An anonymous request to clear SHALL be refused.
+A signed-in reader SHALL be able to clear their conversation with a Topic from the panel, behind a confirmation. Clearing SHALL null the stored question and answer text on the reader's own rows — everywhere they are signed in — while the rows and their recorded costs remain, so the spend ledger survives the wipe. An anonymous request to clear SHALL be rejected.
 
 #### Scenario: Clearing empties the conversation everywhere
 - **WHEN** a signed-in reader confirms clearing a Topic's chat
@@ -181,9 +181,9 @@ A signed-in reader SHALL be able to clear their conversation with a Topic from t
 - **WHEN** a conversation with recorded turn costs is cleared
 - **THEN** every cleared turn's cost keeps counting in spend sums and admin totals
 
-#### Scenario: An anonymous clear is refused
+#### Scenario: An anonymous clear is rejected
 - **WHEN** a request to clear arrives without a signed-in user
-- **THEN** the api refuses it and stores nothing
+- **THEN** the api rejects it and stores nothing
 
 ### Requirement: Chat spend renders as its own segment of the account spend meter
 The account page's monthly spend meter SHALL render chat spend as a distinct colored segment from scan spend within the same bar, against the same budget.
@@ -193,7 +193,7 @@ The account page's monthly spend meter SHALL render chat spend as a distinct col
 - **THEN** the spend bar shows two distinguishable segments against one budget total
 
 ### Requirement: A turn can carry attachments to the model without storing them
-A turn MAY carry a bounded number of attachments: an image or a pdf as a data url, or text — a text file or a long paste — as raw text, each kind held to its own capped payload field under its own media type. A pdf SHALL resolve into its extracted text at the api before generation, so only its words reach the model, and an unreadable pdf SHALL refuse the turn in words. Attachments SHALL ride to the model on that turn only — images as image parts, text folded under the question by name — and SHALL never persist or ride carried history; the stored question SHALL instead carry a note naming what was attached, so the transcript and the live bubble read identically. Unsupported file types SHALL be refused with an explanation at the composer, and the api SHALL bound the request body.
+A turn MAY carry a bounded number of attachments: an image or a pdf as a data url, or text — a text file or a long paste — as raw text, each kind held to its own capped payload field under its own media type. A pdf SHALL resolve into its extracted text at the api before generation, so only its words reach the model, and an unreadable pdf SHALL reject the turn in words. Attachments SHALL ride to the model on that turn only — images as image parts, text folded under the question by name — and SHALL never persist or ride carried history; the stored question SHALL instead carry a note naming what was attached, so the transcript and the live bubble read identically. Unsupported file types SHALL be rejected with an explanation at the composer, and the api SHALL bound the request body.
 
 #### Scenario: An image reaches the model and leaves only a note
 - **WHEN** a turn sends with an attached image
@@ -203,9 +203,9 @@ A turn MAY carry a bounded number of attachments: an image or a pdf as a data ur
 - **WHEN** a turn sends with a text file or folded paste attached
 - **THEN** the model receives the text under the attachment's name within the question's message, clipped to the contract's cap
 
-#### Scenario: A mismatched attachment payload is refused
+#### Scenario: A mismatched attachment payload is rejected
 - **WHEN** a request smuggles text in an image attachment or a data url in a text one
-- **THEN** the api refuses the payload
+- **THEN** the api rejects the payload
 
 ### Requirement: A reader can keep a chat attachment as durable per-topic memory
 
@@ -225,9 +225,9 @@ A signed-in reader's chat attachments SHALL default to kept, with a per-chip tog
 
 ### Requirement: Kept attachments are capped and bounded per reader per topic
 
-A reader MAY hold at most a fixed number of kept attachments per topic. The composer SHALL refuse the keep toggle at the cap and say why, so the bookmark never promises a memory that will not persist — never evicting an existing kept attachment to make room, since silently forgetting something deliberately kept is worse than refusing something new. The server SHALL enforce the same cap as a backstop, without blocking or erroring the turn that carried the attempt.
+A reader MAY hold at most a fixed number of kept attachments per topic. The composer SHALL reject the keep toggle at the cap and say why, so the bookmark never promises a memory that will not persist — never evicting an existing kept attachment to make room, since silently forgetting something deliberately kept is worse than rejecting something new. The server SHALL enforce the same cap as a backstop, without blocking or erroring the turn that carried the attempt.
 
-#### Scenario: The keep toggle refuses at the cap with a reason
+#### Scenario: The keep toggle rejects at the cap with a reason
 - **WHEN** a reader at the cap tries to mark another attachment to keep
 - **THEN** the toggle does not flip and a message says the topic's kept memory is full
 
@@ -253,7 +253,7 @@ The composer SHALL offer a manage control, present only when the reader keeps at
 
 #### Scenario: A delete is scoped to its keeper
 - **WHEN** a request tries to delete a kept attachment belonging to another reader
-- **THEN** the api refuses it and the attachment remains
+- **THEN** the api rejects it and the attachment remains
 
 ### Requirement: Kept attachments cascade with their owning topic or account
 

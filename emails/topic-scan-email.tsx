@@ -244,7 +244,7 @@ TopicScanEmail.PreviewProps = {
 		},
 	],
 	scanSummary:
-		"Structured output finally landed, and the eval tooling caught up with it.\n\n**The numbers:** $0.04 spent, 1 near-duplicate filtered, 20 read and 3 kept.\n\nWhat earned their spots: Simon's retrospective is the practical one — prompt versioning and cost controls you can copy today. The structured-output benchmarks matter because they close the loop on schema adherence, which is what made the old parsing workarounds necessary.\n\nSources: https://simonwillison.net/2026/Jan/12/building-with-llms/",
+		"Structured output finally landed, and the eval tooling caught up with it.\n\n**The numbers:** $0.04 spent, 1 near-duplicate filtered, 20 read and 3 kept.\n\nWhat earned their spots: Simon's retrospective is the practical one — prompt versioning and cost controls you can copy today. The structured-output benchmarks matter because they close the loop on schema adherence, which is what made the old parsing workarounds necessary.\n\nFindings:\n\n- [Building software on top of Large Language Models](https://simonwillison.net/2026/Jan/12/building-with-llms/)",
 	appUrl: "https://carlnotes.example.com",
 	topicUrl: "https://carlnotes.example.com/topics/preview-topic",
 	unsubscribeUrl: "https://carlnotes.example.com/api/unsubscribe?token=preview",

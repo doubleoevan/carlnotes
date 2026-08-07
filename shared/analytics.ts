@@ -5,6 +5,9 @@ export type AnalyticsEvent =
 	// the signup funnel, ending at the activation milestone
 	| "signup_completed"
 	| "topic_created"
+	// what happened to a topic after it was saved, and whether its owner is who did it
+	| "topic_updated"
+	| "topic_deleted"
 	| "first_scan_completed"
 	// what the owner asks the product to do, and the paywall they hit when asking for more
 	| "scan_requested"
@@ -16,7 +19,7 @@ export type AnalyticsEvent =
 	| "finding_read"
 	| "finding_unread"
 	| "finding_opened"
-	// conversation about a topic, and the paywall a reader hits when their month's budget is spent
+	// conversation about a topic, and the paywall a user hits when their month's budget is spent
 	| "chat_turn_sent"
 	| "chat_budget_reached"
 
@@ -24,23 +27,17 @@ export type AnalyticsEvent =
  * Records one product event for a user. A no-op if `POSTHOG_API_KEY` isn't set.
  * Properties are short identifiers only, since event history cannot be backfilled.
  */
-export function trackEvent(event: AnalyticsEvent, userId: string, properties?: Record<string, string>): void {
+export function trackEvent(
+	event: AnalyticsEvent,
+	userId: string,
+	properties?: Record<string, string | number | boolean>,
+): void {
 	// a send failure must never surface to the caller. the event is telemetry, not work
 	try {
 		analyticsClient()?.capture({ distinctId: userId, event, properties })
 	} catch (error) {
 		console.error(`analytics capture failed for ${event}`, error)
 	}
-}
-
-// an iPad running iPadOS reports itself as a Mac, so it counts as desktop here, the same way it renders
-const MOBILE_USER_AGENT_PATTERN = /Mobi|Android|iPhone|iPod|IEMobile/i
-
-/**
- * Which kind of device a request came from. Only meaningful for events that a browser triggered.
- */
-export function toPlatform(userAgent: string | null | undefined): "mobile" | "desktop" {
-	return userAgent && MOBILE_USER_AGENT_PATTERN.test(userAgent) ? "mobile" : "desktop"
 }
 
 // the analytics client, built on first use. null means no key, so analytics never starts

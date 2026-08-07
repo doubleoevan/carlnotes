@@ -67,7 +67,7 @@ export async function screenText(text: string, screenType: ScreenType): Promise<
 
 /**
  * Reads this screen type's detectors out of the scanner's scores. A detector at or above the threshold rejects the text,
- * and so does a response that refuses it without naming a score. An accepted text comes back redacted.
+ * and so does a response that rejects it without naming a score. An accepted text comes back redacted.
  */
 export function toScreenVerdict(guardResponse: GuardResponse, screenType: ScreenType, text: string): ScreenVerdict {
 	// the detectors for this type of text that scored at or above the threshold
@@ -78,7 +78,7 @@ export function toScreenVerdict(guardResponse: GuardResponse, screenType: Screen
 		return { isFlagged: true, detectors, text }
 	}
 
-	// a refusal that named no score at all still counts as a refusal
+	// a rejection that named no score at all still counts as a rejection
 	const hasScores = Object.keys(scores).length > 0
 	if (guardResponse.is_valid === false && !hasScores) {
 		return { isFlagged: true, detectors: ["unnamed"], text }

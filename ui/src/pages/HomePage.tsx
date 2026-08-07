@@ -50,7 +50,7 @@ export function HomePage() {
 		isReheating,
 	} = useTopicFeed()
 	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
-	// the section the reader opened, or null while none has been opened and the default still applies. an empty string closes every section
+	// the section the user opened, or null while none has been opened and the default still applies. an empty string closes every section
 	const [openedSection, setopenedSection] = useState<string | null>(null)
 
 	// the Reheat button runs the provider's reheat, which reloads the feed and replays the load animation.
@@ -108,7 +108,7 @@ export function HomePage() {
 					</button>
 				</div>
 				<NewTopicBlock
-					remaining={topicFeed?.topicsRemaining ?? null}
+					remainingTopics={topicFeed?.topicsRemaining ?? null}
 					isSignedIn={isSignedIn}
 					onNewTopic={handleNewTopic}
 				/>
@@ -182,11 +182,11 @@ function TagFiltersMenu({
 
 // the "+ New Topic" button and remaining topic quota
 function NewTopicBlock({
-	remaining,
+	remainingTopics,
 	isSignedIn,
 	onNewTopic,
 }: {
-	remaining: number | null
+	remainingTopics: number | null
 	isSignedIn: boolean
 	onNewTopic: () => void
 }) {
@@ -195,20 +195,20 @@ function NewTopicBlock({
 			<Button
 				size="sm"
 				onClick={onNewTopic}
-				disabled={isSignedIn && (remaining === null || remaining <= 0)}
+				disabled={isSignedIn && (remainingTopics === null || remainingTopics <= 0)}
 				className="min-h-11 gap-1.5 rounded-lg sm:min-h-9"
 			>
 				<Plus className="size-4" />
 				New Topic
 			</Button>
 			{/* the cap line hydrates in once the feed lands */}
-			<TopicsRemaining remaining={remaining} isSignedIn={isSignedIn} />
+			<TopicsRemaining remainingTopics={remainingTopics} isSignedIn={isSignedIn} />
 		</div>
 	)
 }
 
 // the topics remaining showing the free cap with a link to sign up when a visitor is logged out or the current count with a link to the pricing page
-function TopicsRemaining({ remaining, isSignedIn }: { remaining: number | null; isSignedIn: boolean }) {
+function TopicsRemaining({ remainingTopics, isSignedIn }: { remainingTopics: number | null; isSignedIn: boolean }) {
 	// a visitor sees the free plan's cap
 	if (!isSignedIn) {
 		return (
@@ -223,9 +223,9 @@ function TopicsRemaining({ remaining, isSignedIn }: { remaining: number | null; 
 	}
 	return (
 		<ScanQuotaLink
-			isLoading={remaining === null}
-			isUnlimited={remaining !== null && remaining >= ADMIN_QUOTA}
-			label={`${remaining} left`}
+			isLoading={remainingTopics === null}
+			isUnlimited={remainingTopics !== null && remainingTopics >= ADMIN_QUOTA}
+			label={`${remainingTopics} left`}
 			href="/pricing"
 			tooltip="Upgrade for more"
 		/>

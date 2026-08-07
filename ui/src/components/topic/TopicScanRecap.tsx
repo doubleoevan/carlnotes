@@ -16,7 +16,7 @@ export type ScanRecapFields = {
 	startedAt: string
 	finishedAt: string | null
 	scanSummary: string | null
-	cost: number | null
+	costDollars: number | null
 }
 
 /**
@@ -138,7 +138,7 @@ export function ScrollNote({ note, allowedUrls }: { note: string; allowedUrls?: 
 export function TopicScanRecap({ scan, allowedUrls }: { scan: ScanRecapFields; allowedUrls?: AllowedNoteUrls }) {
 	const duration = toDurationLabel(durationMsBetween(scan.startedAt, scan.finishedAt))
 	// the cost waits until the scan settles instead of reading as a finished scan that cost nothing
-	const isCostShown = scan.status !== "running" && scan.cost !== null
+	const isCostShown = scan.status !== "running" && scan.costDollars !== null
 	return (
 		<>
 			<h2 className={POPOVER_HEADING_CLASS}>Dear Diary</h2>
@@ -151,7 +151,7 @@ export function TopicScanRecap({ scan, allowedUrls }: { scan: ScanRecapFields; a
 			{(duration || isCostShown) && (
 				<div className="text-muted-foreground mt-3 space-y-0.5 border-t pt-2 text-xs">
 					{duration && <div>{duration} taken</div>}
-					{isCostShown && <div>cost: {toDollarLabel(scan.cost)}</div>}
+					{isCostShown && <div>cost: {toDollarLabel(scan.costDollars)}</div>}
 				</div>
 			)}
 		</>
@@ -163,31 +163,31 @@ export function TopicScanRecap({ scan, allowedUrls }: { scan: ScanRecapFields; a
  */
 export function TopicScanNote({ note, allowedUrls }: { note: string; allowedUrls?: AllowedNoteUrls }) {
 	const contentRef = useRef<HTMLDivElement>(null)
-	const [isOverflowing, setIsOverflowing] = useState(false)
+	const [isOverflowing, setisOverflowing] = useState(false)
 	const [isExpanded, setIsExpanded] = useState(false)
 
 	// measure the rendered output against the collapsed height. overflow-hidden keeps scrollHeight at the full height
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the note drives the rendered height we re-measure, not a value read here
 	useLayoutEffect(() => {
 		const element = contentRef.current
-		setIsOverflowing(element !== null && element.scrollHeight > COLLAPSED_MAX_HEIGHT + 4)
+		setisOverflowing(element !== null && element.scrollHeight > COLLAPSED_MAX_HEIGHT + 4)
 	}, [note])
 
-	// only clip when the note actually overflows and the reader hasn't expanded it
-	const isClipped = isOverflowing && !isExpanded
+	// only clip the note if the note overflows and the user hasn't expanded it
+	const isNoteClipped = isOverflowing && !isExpanded
 	return (
 		<div>
 			{/* the note, clipped to the collapsed height while long and closed */}
 			<div className="relative">
 				<div
 					ref={contentRef}
-					className={cn(isClipped && "overflow-hidden")}
-					style={isClipped ? { maxHeight: COLLAPSED_MAX_HEIGHT } : undefined}
+					className={cn(isNoteClipped && "overflow-hidden")}
+					style={isNoteClipped ? { maxHeight: COLLAPSED_MAX_HEIGHT } : undefined}
 				>
 					<SafeNoteText note={note} allowedUrls={allowedUrls} />
 				</div>
-				{/* a soft fade tells the reader the note continues below the clip */}
-				{isClipped && (
+				{/* a soft fade tells the user the note continues below the clip */}
+				{isNoteClipped && (
 					<div className="from-card pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t to-transparent" />
 				)}
 			</div>

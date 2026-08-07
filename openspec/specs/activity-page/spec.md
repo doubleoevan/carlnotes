@@ -10,16 +10,46 @@ An Activity page SHALL be reachable from the header menu for a signed-in user an
 - **WHEN** a signed-in user opens the header menu
 - **THEN** an Activity link renders and leads to the Activity page
 
-#### Scenario: A signed-out visitor is refused
+#### Scenario: A signed-out visitor is rejected
 - **WHEN** a request for the Activity payload carries no session
 - **THEN** the api responds unauthorized and returns no user's data
 
 ### Requirement: The monthly spend meter renders on the Account page
-The Account page SHALL show a horizontal progress bar of the user's month-to-date spend versus their effective monthly budget — the plan's backstop, or the per-user override when set — fed by the Activity payload. Spend SHALL be the same per-user figure the Scan budget records and the admin page reports, never a second computed cost. The section SHALL present the figure as money spent against the monthly budget and explicitly not a bill, and all figures SHALL reset with the budget period. The Account page SHALL share the Activity page's width.
+
+The Account page SHALL show a horizontal progress bar of the user's month-to-date spend versus their effective monthly budget — the plan's backstop, or the per-user override when set — fed by the Activity payload. Spend SHALL be the same per-user figure the Scan budget records and the admin page reports, never a second computed cost. All figures SHALL reset with the budget period. The Account page SHALL share the Activity page's width.
+
+The section SHALL read as the product's own fund rather than as an account balance, since the money is what the product spends serving the user and never what the user owes.
+
+The heading SHALL NOT repeat the spend as a percentage. The money figures beside it and the bar below it already carry the proportion, and a third statement of it says nothing new.
+
+In place of a static disclaimer, the section SHALL carry a state line keyed on the fraction of the budget spent, so the same words change as the month goes on:
+
+- under 60% — a line saying the fund is full
+- 60% to 89% — a line saying it is getting low
+- 90% to 99% — a line saying it is nearly out
+- at 100% — a line saying it is spent until the period resets, and that the product is still working but cannot record its results
+
+Every line below 100% SHALL still say the spend is the product's own tab, not the user's.
+
+The 100% line SHALL carry an inline upgrade link, since a user who has just run out is at the highest-intent moment the page offers.
+
+The bar's two segments SHALL keep their existing labels.
 
 #### Scenario: The bar reads the recorded spend and the effective budget
 - **WHEN** the Activity payload is assembled
 - **THEN** spend comes from the same per-user Scan-budget source the admin console reads, and the budget is the override when set, else the plan backstop
+
+#### Scenario: The state line follows the spend
+- **WHEN** a user's month-to-date spend crosses from under 60% to above it, and later past 90%
+- **THEN** the line changes at each threshold without the figures or the bar changing meaning
+
+#### Scenario: A spent budget offers the way up
+- **WHEN** a user has spent their whole monthly budget
+- **THEN** the line says so, says the product is still reading but cannot file notes, and offers an upgrade link inline
+
+#### Scenario: The heading carries no percentage
+- **WHEN** the section renders at any spend level
+- **THEN** the heading names the fund and does not repeat the percentage
 
 ### Requirement: Data tables share one card-and-controls treatment
 Every data table on the Activity and Admin pages SHALL sit on a card background and SHALL offer sortable column headers on its data columns — a new column sorts ascending, a repeat click flips the direction, and sorting reorders the full row set — plus a page-size dropdown and previous/next pagination over the loaded rows — the whole control row hidden while the rows fit under the smallest page size. Null cells SHALL sort last in either direction, so a descending sort never leads with the rows that have no value.
@@ -52,24 +82,33 @@ The delete control on a subscription row and on an invitation row SHALL be an ic
 - **WHEN** the user points at a row's delete icon
 - **THEN** a tooltip names whether it deletes a subscription or an invitation
 
-### Requirement: The owned-topics table reports subscribers
+### Requirement: The owned-topics table reports followers and visibility
 
-The topics accordion SHALL carry a Subscribers column holding each Topic's active subscriber count, and its footer SHALL total that column. The count SHALL match how the feed and Topic page already count subscribers: only active subscriptions count, and the owner's own subscription to their Topic never counts.
+The topics accordion SHALL carry a Followers column holding each Topic's active subscriber count, and its footer SHALL total that column. The count SHALL match how the feed and Topic page already count subscribers: only active subscriptions count, and the owner's own subscription to their Topic never counts.
 
-#### Scenario: A Topic reports its active subscribers
+The column SHALL be worded Followers, and the Subscribed columns on the subscriptions and invitations tables SHALL be worded Followed. The domain noun stays Subscription in the code, and Follow is already the word the Topic page's own button shows a reader, so the tables say what the buttons say. It is also the shorter word, which is what lets these tables carry another column.
+
+The accordion SHALL carry a Visibility column naming who may see each Topic, with the same icon and label the Topic page's info card uses, so a reader can tell at a glance which of their Topics are public without opening each one.
+
+#### Scenario: A Topic reports its active followers
 
 - **WHEN** other users hold active subscriptions to a Topic the user owns
-- **THEN** its Subscribers cell shows how many, and the footer adds it to the total
+- **THEN** its Followers cell shows how many, and the footer adds it to the total
 
-#### Scenario: The owner's own subscription is not a subscriber
+#### Scenario: The owner's own subscription is not a follower
 
 - **WHEN** the owner holds a subscription to their own Topic and nobody else does
-- **THEN** its Subscribers cell reads zero
+- **THEN** its Followers cell reads zero
 
 #### Scenario: A deactivated subscription does not count
 
 - **WHEN** a subscriber switches their subscription off rather than deleting it
-- **THEN** the Topic's Subscribers count drops by one, and the row remains in that subscriber's own table
+- **THEN** the Topic's Followers count drops by one, and the row remains in that subscriber's own table
+
+#### Scenario: A Topic reports who may see it
+
+- **WHEN** the topics accordion renders a Topic
+- **THEN** its Visibility cell names public, private, or invite, with the icon that stands for it
 
 ### Requirement: Subscriptions render in their own accordion, only when non-empty
 
@@ -171,7 +210,7 @@ Withdrawing an invitation SHALL ask for confirmation, and SHALL remove that invi
 #### Scenario: Only the Topic owner may withdraw an invitation
 
 - **WHEN** a caller who does not own the Topic asks to withdraw one of its invitations
-- **THEN** the request is refused
+- **THEN** the request is rejected
 
 #### Scenario: The footer totals both counts
 
@@ -192,7 +231,7 @@ Deactivating SHALL NOT remove the invite, which is what keeps a deactivated subs
 #### Scenario: Delete ends access to an invite Topic
 
 - **WHEN** the user deletes their subscription to an invite Topic and then opens that Topic
-- **THEN** access is refused, since neither an invite nor a subscription grants it any longer
+- **THEN** access is rejected, since neither an invite nor a subscription grants it any longer
 
 #### Scenario: Deactivating leaves the invite in place
 

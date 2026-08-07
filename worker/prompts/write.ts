@@ -68,8 +68,8 @@ export function writePrompt(
  * so the value cannot close the delimiter around it.
  */
 export function fenceUntrusted(value: string, nonce: string): string {
-	const data = value.replace(FORGED_DELIMITER_PATTERN, "").replaceAll("`", "")
-	return `<${UNTRUSTED_DATA_TAG}-${nonce}>\n${data}\n</${UNTRUSTED_DATA_TAG}-${nonce}>`
+	const fencedValue = value.replace(FORGED_DELIMITER_PATTERN, "").replaceAll("`", "")
+	return `<${UNTRUSTED_DATA_TAG}-${nonce}>\n${fencedValue}\n</${UNTRUSTED_DATA_TAG}-${nonce}>`
 }
 
 /**

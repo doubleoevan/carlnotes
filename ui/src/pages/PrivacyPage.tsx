@@ -50,7 +50,7 @@ CarlNotes reads public web content on a schedule and scores it against context y
 
 **Account linking.** If the verified email from a Google or GitHub sign-in matches an existing CarlNotes account, we link the two instead of creating a duplicate account. Email address is the join key, and this relies on the provider verifying the address.
 
-**Topic configuration.** Topic names, context documents, uploaded attachments, fetched URLs, source lists, tags, cadence settings, and privacy level.
+**Topic configuration.** Topic names, context documents, uploaded attachments, fetched URLs, source lists, tags, frequency settings, and privacy level.
 
 **Curation data.** Discovered URLs, extracted page content, embeddings, relevance scores, generated summaries, scan reports, and cost records.
 
@@ -113,6 +113,8 @@ If you publish a topic, its name, description, context summary, sources, and fin
 Content from a connected authenticated source such as a connected email account is never surfaced as a finding and never appears in any shared or public feed. It is used only to inform how findings are scored and searched on your own private topics. Because of this, a topic that uses a connected source can only be private: if you make such a topic invite-only or public, its connected sources are automatically disabled first, so private content can never influence a feed that anyone else can see.
 
 When you invite someone to a topic, they see only findings from scans that run after they accept the invitation, never the topic's earlier history.
+
+A CarlNotes administrator can open any topic, including a private one, along with its context document, attachments, and findings. This exists so we can answer a support question or debug a problem.
 
 ## AI processing
 

@@ -59,6 +59,19 @@ export function TopicAttachmentEditor({
 					))}
 				</div>
 			)}
+			{/* one staged attachment per row, the section matches the prompt's chips. there isn't any context to show until the attachment is saved */}
+			{pendingFiles.length > 0 && (
+				<div className="flex flex-col gap-1.5">
+					{pendingFiles.map((file) => (
+						<PendingAttachmentRow
+							key={toFileKey(file)}
+							file={file}
+							onRemove={() => onPendingChange(pendingFiles.filter((pending) => pending !== file))}
+						/>
+					))}
+				</div>
+			)}
+
 			{/* the add link and its hidden file input */}
 			<button
 				type="button"
@@ -115,10 +128,39 @@ function AttachmentRow({
 	)
 }
 
+// one staged attachment file's row with a delete button
+function PendingAttachmentRow({ file, onRemove }: { file: File; onRemove: () => void }) {
+	return (
+		<div className="min-w-0 -ml-1 text-sm">
+			<div className="flex min-w-0 items-center gap-1.5">
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<button
+							type="button"
+							aria-label={`Remove ${file.name}`}
+							onClick={onRemove}
+							className="text-muted-foreground hover:text-foreground shrink-0"
+						>
+							<X className="size-3.5" />
+						</button>
+					</TooltipTrigger>
+					<TooltipContent>Delete attachment</TooltipContent>
+				</Tooltip>
+				<span className="text-muted-foreground min-w-0 truncate">{file.name}</span>
+			</div>
+		</div>
+	)
+}
+
 // the row's name: a url links out to its page, and a file downloads
 function AttachmentLink({ attachment }: { attachment: KeptAttachment }) {
 	if (attachment.status === "failed") {
 		return <span className="min-w-0 flex-1 truncate">{attachment.filename}</span>
+	}
+
+	// a pending attachment's page has been fetched but not screened, so it is not a link yet
+	if (attachment.sourceUrl && attachment.status === "pending") {
+		return <span className="min-w-0 flex-1 truncate">{attachment.sourceUrl}</span>
 	}
 	if (attachment.sourceUrl) {
 		return (

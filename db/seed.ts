@@ -1,5 +1,5 @@
 // dev-only seed with idempotent stub data so the homepage renders before real scans run. it only runs against the dev Doppler environment
-import { eq } from "drizzle-orm"
+import { eq, isNotNull } from "drizzle-orm"
 import { db } from "./index"
 import { findings, resources, scans, sources, subscriptions, topicInvites, topics, users } from "./schema"
 
@@ -170,7 +170,8 @@ const SUBSCRIBER_COUNTS: Record<string, number> = {
 	top_longevity: 31,
 }
 
-// the hard-coded Featured section. it maps topic id to ascending feature order, and topics without an entry are not featured
+// the hard-coded Featured section. it maps topic id to ascending feature order, and topics without an entry are
+// not featured. seeding clears every feature order first, so these positions become the Featured section
 const FEATURE_ORDER: Record<string, number> = {
 	top_llm_evals: 1,
 	top_longevity: 2,
@@ -180,7 +181,7 @@ const FEATURE_ORDER: Record<string, number> = {
 // seeds the dev branch with demo topics, stub members, and subscriptions under the given dev user.
 // the dev user already exists — api/seed.ts creates it through a real signup before calling this
 export async function seed(devUserId: string): Promise<void> {
-	// refuse outside the dev Doppler environment so the seed can never touch staging or production
+	// reject outside the dev Doppler environment so the seed can never touch staging or production
 	if (process.env.DOPPLER_ENVIRONMENT !== "dev") {
 		const seen = process.env.DOPPLER_ENVIRONMENT ?? "unset"
 		throw new Error(
@@ -202,6 +203,11 @@ export async function seed(devUserId: string): Promise<void> {
 	// the dev user operates the instance, so they hold the admin role. the update keeps re-seeding idempotent
 	await db.update(users).set({ role: "admin" }).where(eq(users.id, devUserId))
 	// each topic and everything hanging off it
+	// clear every feature order before the seeded ones are written. the map below assigns fixed positions, so a
+	// topic ranked by hand since the last seed would end up sharing a position with a seeded one, and the column
+	// has nothing stopping that. after a seed the Featured section is exactly what the map says, and nothing else
+	await db.update(topics).set({ featureOrder: null }).where(isNotNull(topics.featureOrder))
+
 	for (const topic of seedTopics) {
 		await seedTopic(topic)
 	}
@@ -281,6 +287,8 @@ async function seedTopic(topic: SeedTopic): Promise<void> {
 					topicId: topic.id,
 					kind: source.kind,
 					config: source.config,
+					// ready because ingest skips a Source that has not passed an llm-guard screen, and nothing screens a seeded source
+					status: "ready" as const,
 				})),
 			)
 			.onConflictDoNothing()

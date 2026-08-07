@@ -232,6 +232,20 @@
       "when": 1785837052150,
       "tag": "0032_heavy_drax",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1785890112958,
+      "tag": "0033_stale_betty_ross",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1785975268207,
+      "tag": "0034_hot_black_crow",
+      "breakpoints": true
     }
   ]
 }

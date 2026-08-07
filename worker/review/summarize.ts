@@ -15,7 +15,7 @@ const MAX_TOPIC_SCAN_REPORT_FINDINGS = 20
 const REPORT_MAX_RETRIES = 4
 
 // one Source's ingestion outcome, as the report's sources section lists it
-// "fallback" means the Source ran without erroring but emitted nothing,
+// "fallback" means the Source ran without erroring but found nothing,
 // which the report names so a dead feed is visible instead of reading as a quiet one
 export type ScannedSource = {
 	sourceKind: string
@@ -41,7 +41,7 @@ export async function toTopicScanSummary(scanId: string, summarize: () => Promis
 	try {
 		return await summarize()
 	} catch (error) {
-		// the Scan still succeeds with real Findings, so an empty recap is the only thing the reader sees from a summary error
+		// the Scan still succeeds with real Findings, so an empty recap is the only thing the user sees from a summary error
 		console.error(`scan report failed for scan ${scanId}, leaving the summary empty`, error)
 		reportError(error, "scan-report", { scanId })
 		return ""
@@ -130,16 +130,12 @@ function toKeptFindingsBlock(keptFindings: KeptFinding[]): string {
 	return findingLines.join("\n")
 }
 
-// counts the filtered resources by reason, then the deferred and failed totals
+// counts the filtered resources by reason, and shows the failed total. the deferred count stays out.
 function toFilteredResourcesReport(reviewOutcome: ReviewOutcome): string {
 	const filterReasonLines = Object.entries(reviewOutcome.filteredCounts).map(
 		([filterReason, filteredCount]) => `- ${filterReason}: ${filteredCount}`,
 	)
-	return [
-		...filterReasonLines,
-		`- deferred by the spend cap: ${reviewOutcome.deferredCount}`,
-		`- failed during review: ${reviewOutcome.failedCount}`,
-	].join("\n")
+	return [...filterReasonLines, `- failed during review: ${reviewOutcome.failedCount}`].join("\n")
 }
 
 // lists each Source with its kind, how it ended, and any fallback it used
@@ -160,5 +156,5 @@ function toSourcesBlock(scannedSources: ScannedSource[]): string {
 // the Scan's total spend with its per-stage breakdown, ingestion first since it is charged first
 function toCostLine(budget: Budget): string {
 	const { ingestion, embedding, fetch, scoringCheap, scoringPremium } = budget.stageCosts
-	return `total $${budget.spent.toFixed(4)} — ingestion $${ingestion.toFixed(4)}, embedding $${embedding.toFixed(4)}, fetch $${fetch.toFixed(4)}, cheap scoring $${scoringCheap.toFixed(4)}, premium scoring $${scoringPremium.toFixed(4)}`
+	return `total $${budget.spentDollars.toFixed(4)} — ingestion $${ingestion.toFixed(4)}, embedding $${embedding.toFixed(4)}, fetch $${fetch.toFixed(4)}, cheap scoring $${scoringCheap.toFixed(4)}, premium scoring $${scoringPremium.toFixed(4)}`
 }

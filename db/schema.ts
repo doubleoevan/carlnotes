@@ -3,6 +3,7 @@
 // enum value sets that live in @shared so that db pgEnums, api validation, and ui rendering can read one source
 import {
 	attachmentStatuses,
+	billingIntervals,
 	chatAttachmentKinds,
 	daysOfWeek,
 	frequencies,
@@ -45,8 +46,12 @@ export const scanStatus = pgEnum("scan_status", scanStatuses)
 export const sourceVisibility = pgEnum("source_visibility", sourceVisibilities)
 export const rating = pgEnum("rating", ratings)
 export const plan = pgEnum("plan", plans)
+// how often a subscription bills, this determines its plan limits and whether it supports metered overage
+export const billingInterval = pgEnum("billing_interval", billingIntervals)
 // the attachment async-processing status enum, shared by topic attachments and kept chat attachments
 export const attachmentStatus = pgEnum("attachment_status", attachmentStatuses)
+// a source's llm-guard screening status, its own type so the column's type names what it holds
+export const sourceStatus = pgEnum("source_status", attachmentStatuses)
 // what a kept chat attachment originally was
 export const chatAttachmentKind = pgEnum("chat_attachment_kind", chatAttachmentKinds)
 
@@ -217,6 +222,10 @@ export const sources = pgTable("sources", {
 	config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
 	// credentials resolve through an integration when present
 	integrationId: text("integration_id").references(() => integrations.id, { onDelete: "set null" }),
+	// the async screening status and its failure reason. a source is ignored until it is ready:
+	// hidden from anyone but the owner, and skipped by scans. a kind that is not screened is saved ready
+	status: sourceStatus("status").notNull().default("pending"),
+	error: text("error"),
 	// created and updated timestamps
 	...timestamps(),
 })
@@ -501,11 +510,11 @@ export const chatTurns = pgTable(
 		// when the chat turn ran. the monthly spend sum uses it and the chat messages replay in its order
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// covers a reader's persisted conversation read, which filters by topic and orders by time
+	// covers a user's persisted conversation read, which filters by topic and orders by time
 	(table) => [index("chat_turns_topic_created_idx").on(table.topicId, table.createdAt)],
 )
 
-// a chat attachment a reader chose to keep: durable, scoped to one reader's conversation with on a topic,
+// a chat attachment a user chose to keep: durable, scoped to one user's conversation with on a topic,
 // re-delivered to every future chat turn they take there.
 export const chatAttachments = pgTable(
 	"chat_attachments",
@@ -552,8 +561,11 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
 	plan: plan("plan").notNull(),
 	status: text("status").notNull(),
 	currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
-	// whether Stripe has a payment method to charge. with one the daily scan limit bills overage, without one the scan is refused
+	// whether Stripe has a payment method to charge, and how often this subscription bills.
+	// the billing interval decides both the plan's limits and whether a scan past the daily one can be billed at all.
+	// only a monthly billing interval includes the metered overage price.
 	hasPaymentMethod: boolean("has_payment_method").notNull().default(false),
+	billingInterval: billingInterval("interval").notNull().default("monthly"),
 	// created and updated timestamps
 	...timestamps(),
 })

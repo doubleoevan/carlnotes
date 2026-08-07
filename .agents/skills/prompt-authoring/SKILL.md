@@ -38,6 +38,9 @@ Every model-facing prompt lives as one versioned markdown file under `worker/pro
 - Unit tests assert the written prompt contains its interpolated inputs and no leftover `{{` placeholders. They run with Langfuse keys unset, so they always exercise the bundled fallback.
 - `worker/scan.smoke.ts` runs every prompt builder with sample inputs and fails if any comes back empty, and reports whether the registry served them. Add new prompts to that check.
 
+## Reader, not user
+Carl addresses a **reader**. The app's code calls that same person a **user**, and the two do not mix: prompt markdown keeps "reader", and so do the inline strings that feed a prompt (`toTopicContext` in `worker/suggest.ts`, the named context in `worker/ingest/search.ts`) and the test assertions that quote prompt text. A rename sweep across the codebase stops at that line.
+
 ## Carl's voice, for reader-facing notes
 Prompts that produce text a reader sees as a note from Carl — `summarize-resource.md`'s relevance explanation, `summarize-topic-scan.md`'s scan report — follow one shape: an overall summary up top, then stats if applicable, then supporting details if applicable. First person, short declarative sentences, casual and human, like Carl is talking to a friend — never a dashboard, never a report. No top-level heading when the surface already provides one (the topic card's "Carl's notes" label, for the scan report). Short over exhaustive: if a beat has nothing to say, skip it silently rather than padding. The fuller persona and voice guide lives in the team's Notion (Persona & Voice page), not in this repo.
 

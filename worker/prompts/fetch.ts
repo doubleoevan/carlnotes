@@ -7,6 +7,7 @@ import attachContextTemplate from "./attach-context.md" with { type: "text" }
 import attachImageContextTemplate from "./attach-image-context.md" with { type: "text" }
 import chatTopicTemplate from "./chat-topic.md" with { type: "text" }
 import searchTopicTemplate from "./search-topic.md" with { type: "text" }
+import suggestSourcesTemplate from "./suggest-sources.md" with { type: "text" }
 import summarizeResourceTemplate from "./summarize-resource.md" with { type: "text" }
 import summarizeTopicScanTemplate from "./summarize-topic-scan.md" with { type: "text" }
 import { stripFrontmatter } from "./write.ts"
@@ -20,6 +21,7 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"attach-context": attachContextTemplate,
 	"attach-image-context": attachImageContextTemplate,
 	"chat-topic": chatTopicTemplate,
+	"suggest-sources": suggestSourcesTemplate,
 } as const
 
 export type PromptName = keyof typeof FALLBACK_PROMPT_TEMPLATES

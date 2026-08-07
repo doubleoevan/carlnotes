@@ -1,5 +1,6 @@
 // the topic feed logic behind the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
+import { toSourceSummary, toUrlHost } from "@shared/sources"
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import {
@@ -15,7 +16,7 @@ import {
 	topics,
 } from "../../db/schema"
 import { subscribedTopicIds } from "../authorization"
-import { filteredTopicFindings, newTopicFindingCount, toUrlHost } from "./findings"
+import { filteredTopicFindings, newTopicFindingCount } from "./findings"
 import { startOfUtcMonth } from "./quotas"
 import { toScheduledTimeLabel } from "./topics"
 
@@ -76,12 +77,13 @@ export async function buildTopicFeeds(
 			.from(topics)
 			.where(and(othersFilter, isNotNull(topics.featureOrder)))
 			.orderBy(asc(topics.featureOrder)),
-		// popular topics rank by subscriber count, capped before any feed data loads for them
+		// popular topics ranked by subscriber count and capped
+		// topics that nobody subscribes to are still included, newer breaks a subscriber count tie
 		db
 			.select()
 			.from(topics)
 			.where(and(othersFilter, isNull(topics.featureOrder)))
-			.orderBy(desc(subscriberCount))
+			.orderBy(desc(subscriberCount), desc(topics.createdAt))
 			.limit(MAX_POPULAR_TOPICS),
 	])
 
@@ -160,9 +162,18 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 				.where(inArray(findings.topicId, topicIds))
 				.orderBy(desc(findings.relevanceScore)),
 
-			// select every topic's sources, carrying the topic id to group by
+			// select every topic's sources, including the topic id to group by.
+			// the llm-guard screening status is included, since the owner can see a source that hasn't passed.
+			// the config is included to derive each source's display summary
 			db
-				.select({ topicId: sources.topicId, id: sources.id, kind: sources.kind })
+				.select({
+					topicId: sources.topicId,
+					id: sources.id,
+					kind: sources.kind,
+					config: sources.config,
+					status: sources.status,
+					error: sources.error,
+				})
 				.from(sources)
 				.where(inArray(sources.topicId, topicIds)),
 
@@ -246,11 +257,16 @@ function buildTopicFeed(
 	// the owner sees their topic's scan spend. others never do
 	const isOwner = topic.ownerId === userId
 
-	// read the sources, dropping the grouping key from each row
-	const topicSources = (feedData.sourcesByTopic.get(topic.id) ?? []).map((source) => ({
-		id: source.id,
-		kind: source.kind,
-	}))
+	// read the sources, dropping the grouping key from each row. a source that has not passed its llm-guard screen is only seen by its owner
+	const topicSources = (feedData.sourcesByTopic.get(topic.id) ?? [])
+		.filter((source) => source.status === "ready" || isOwner)
+		.map((source) => ({
+			id: source.id,
+			sourceKind: source.kind,
+			summary: toSourceSummary(source.kind, source.config),
+			status: source.status,
+			error: source.error,
+		}))
 
 	// read the attachments, dropping the grouping key from each row.
 	// the feed never edits an attachment's context, so it isn't loaded or sent here
@@ -305,7 +321,7 @@ function buildTopicFeed(
 		lastScanAt: lastScan?.startedAt.toISOString() ?? null,
 		lastScanDurationMs:
 			lastScan?.finishedAt != null ? lastScan.finishedAt.getTime() - lastScan.startedAt.getTime() : null,
-		monthCost: isOwner ? Number(feedData.monthCostByTopic.get(topic.id) ?? 0) : null,
+		monthCostDollars: isOwner ? Number(feedData.monthCostByTopic.get(topic.id) ?? 0) : null,
 		scanSummary: lastScan?.scanSummary ?? null,
 		attachments: topicAttachments,
 		sources: topicSources,

@@ -1,7 +1,6 @@
-// url canonicalization and title fallback, the two guards that keep one page from storing as deplicate Resources
-// also keep a titleless resource from rendering as a bare host
+// tests for url canonicalization, title fallback, and resource kind detection
 import { expect, test } from "bun:test"
-import { toCanonicalUrl, toFallbackTitle } from "./normalize"
+import { toCanonicalUrl, toFallbackTitle, toResourceKind } from "./normalize"
 
 // a host ignores case, so two links that differ only there are the same page
 test("toCanonicalUrl lowercases the host and drops the fragment", () => {
@@ -78,4 +77,17 @@ test("toFallbackTitle skips lines that are not titles", () => {
 	// an opening paragraph runs past a title's length, so the url's own segment stands in instead
 	const paragraph = "Contemporary evaluation techniques are inadequate for agentic systems. ".repeat(4)
 	expect(toFallbackTitle("https://example.com/blog/agent-evals", paragraph)).toBe("agent evals")
+})
+
+// a link's kind is inferred from its host
+test("toResourceKind reads a url's kind off its host", () => {
+	expect(toResourceKind("https://www.youtube.com/watch?v=abc")).toBe("watch")
+	expect(toResourceKind("https://youtu.be/abc")).toBe("watch")
+	expect(toResourceKind("https://m.youtube.com/watch?v=abc")).toBe("watch")
+	expect(toResourceKind("https://podcasts.apple.com/us/podcast/x")).toBe("listen")
+
+	// anything unrecognized, and anything unparseable, reads as an article
+	expect(toResourceKind("https://hamel.dev/blog/judge-bias")).toBe("read")
+	expect(toResourceKind("not a url")).toBe("read")
+	expect(toResourceKind("https://notyoutube.com/watch")).toBe("read")
 })

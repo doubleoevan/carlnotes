@@ -20,15 +20,17 @@
 		"db:migrate": "doppler run -- bun db/migrate.ts",
 		"db:seed": "doppler run -- bun api/seed.ts",
 		"test": "bun test",
-		"smoke": "bun run smoke:scan && bun run smoke:store && bun run smoke:attach && bun run smoke:search && bun run smoke:review && bun run smoke:chat && bun run smoke:eval",
+		"smoke": "bun run smoke:scan && bun run smoke:store && bun run smoke:attach && bun run smoke:search && bun run smoke:links && bun run smoke:review && bun run smoke:chat && bun run smoke:eval",
 		"smoke:eval": "doppler run -- bun scripts/eval-pipeline.smoke.ts",
+		"smoke:links": "doppler run -- bun worker/links.smoke.ts",
 		"smoke:scan": "doppler run -- bun worker/scan.smoke.ts",
 		"smoke:review": "doppler run -- bun worker/review.smoke.ts",
 		"smoke:store": "doppler run -- bun worker/store.smoke.ts",
 		"smoke:attach": "doppler run -- bun worker/attach.smoke.ts",
 		"smoke:search": "doppler run -- bun worker/search.smoke.ts",
 		"smoke:chat": "doppler run -- bun worker/chat.smoke.ts",
-		"prompts:sync": "doppler run -- bun worker/prompts/sync.ts"
+		"prompts:sync": "doppler run -- bun worker/prompts/sync.ts",
+		"prompts:sync:prd": "doppler run --config prd -- bun worker/prompts/sync.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/openai": "^4.0.14",

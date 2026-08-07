@@ -14,7 +14,7 @@
 ## Skills
 Rules agents and reviewers must honor, canonical at `.agents/skills/`:
 - domain-model: canonical vocabulary: Topic, Source, Scan, Resource, Finding, Feed, Subscription, Audience, Integration, Billing Subscription, Bookmark, Chat Turn; never introduce Channel, Follow, Item, Update, Run, Crawl, Group, List, Cohort
-- ingester-authoring: ingesters emit Resources only, never Findings; idempotent by canonical URL; one failing Source never aborts a Scan batch
-- prompt-authoring: model-facing prompts live as versioned markdown under worker/prompts/ with frontmatter and {{variable}} bodies, loaded by thin builders; never inline string literals
+- ingester-authoring: ingesters return Resources only, never Findings; idempotent by canonical URL; one failing Source never aborts a Scan batch
+- prompt-authoring: model-facing prompts live as versioned markdown under worker/prompts/ with frontmatter and {{variable}} bodies, loaded by thin builders; never inline string literals; Carl addresses a "reader" where the app's code says "user"
 - code-style, jsx-conventions, git-discipline: shared readability and git rules
 - vendored guidance: vercel-react-best-practices, web-design-guidelines, ai-sdk, impeccable, ponytail

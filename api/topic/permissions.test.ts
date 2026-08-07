@@ -15,6 +15,6 @@ test("isVisibleAfterActivation opens findings from scans after the activation", 
 })
 
 // with no active subscription nothing opens, which covers an invited user who has not accepted yet
-test("isVisibleAfterActivation refuses a viewer with no active subscription", () => {
+test("isVisibleAfterActivation rejects a viewer with no active subscription", () => {
 	expect(isVisibleAfterActivation(new Date("2026-07-21T00:00:00.000Z"), null)).toBe(false)
 })

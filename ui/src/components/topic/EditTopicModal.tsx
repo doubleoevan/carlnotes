@@ -1,8 +1,15 @@
-import type { TopicResponse, UpdateTopicPayload } from "@shared/contracts"
-import { daysOfWeek, frequencies, maxResultsOptions, visibilities } from "@shared/enums"
-import { X } from "lucide-react"
+import {
+	MAX_ATTACHMENT_CONTEXT_CHARS,
+	MAX_TOPIC_SOURCES,
+	type TopicResponse,
+	type UpdateTopicPayload,
+} from "@shared/contracts"
+import { daysOfWeek, type frequencies, isDailyFrequency, maxResultsOptions, visibilities } from "@shared/enums"
+import { ADMIN_QUOTA } from "@shared/plans"
+import { Coffee, X } from "lucide-react"
 import type * as React from "react"
 import { useRef, useState } from "react"
+import { useNavigate } from "react-router"
 import { toast } from "sonner"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
@@ -10,20 +17,22 @@ import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/p
 import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { ScanQuotaLink } from "@/components/topic/ScanQuotaLink"
 import { TagPicker, TagPill } from "@/components/topic/TagPicker"
 import { TimePicker } from "@/components/topic/TimePicker"
 import {
+	DailyTopicLimitError,
 	sendAttachmentContext,
 	sendAttachmentDelete,
 	sendTopicCreate,
 	sendTopicUpdate,
 	uploadTopicAttachment,
 } from "@/lib/topicClient"
-import { capitalize, toPossibleSourceUrls } from "@/lib/utils"
+import { capitalize, toBrewsWord, toPossibleSourceUrls } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { stageFiles, TopicAttachmentEditor } from "./TopicAttachmentEditor"
 import { TopicPromptComposer } from "./TopicPromptComposer"
-import { type EditableSourceKind, TopicSourceEditor } from "./TopicSourceEditor"
+import { type EditableSourceKind, FULL_SOURCES_NOTE, TopicSourceEditor } from "./TopicSourceEditor"
 
 // the field unions that the frequency, day-of-week, and visibility selects offer
 type Frequency = (typeof frequencies)[number]
@@ -40,19 +49,24 @@ type EditTopicModalProps = {
 // the emoji shown for each visibility option
 const VISIBILITY_EMOJI: Record<Visibility, string> = { private: "🔒", public: "🌐", invite: "✉️" }
 
+// the topic scan frequencies in the order the menu offers them, cheapest first
+const FREQUENCY_OPTIONS = ["weekly", "weekdays", "daily"] as const satisfies readonly Frequency[]
+
 /**
  * The edit topic modal for editing or creating a new topic.
  */
 export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalProps) {
 	// the title input ref to focus it on open
 	const titleInputRef = useRef<HTMLInputElement>(null)
-	// every tag across the loaded feed to seed the tag picker's suggestions
-	const { knownTags } = useTopicFeed()
+	// sends the user to pricing when a daily schedule is at the plan's limit
+	const navigate = useNavigate()
+	// every tag across the loaded feed to seed the tag picker's suggestions, and the topicFeed which has the daily slots left
+	const { knownTags, topicFeed } = useTopicFeed()
 	// the editable topic fields which are empty for a new topic
 	const [name, setName] = useState(topic?.name ?? "")
 	const [prompt, setPrompt] = useState(topic?.prompt ?? "")
 	const [tags, setTags] = useState(topic?.tags ?? [])
-	const [frequency, setFrequency] = useState<Frequency>(topic?.frequency ?? "daily")
+	const [frequency, setFrequency] = useState<Frequency>(topic?.frequency ?? "weekly")
 	const [scheduledTime, setScheduledTime] = useState(topic?.scheduledTime ?? "09:00")
 	const [scheduledDayOfWeek, setScheduledDayOfWeek] = useState<DayOfWeek>(topic?.scheduledDayOfWeek ?? "monday")
 	const [visibility, setVisibility] = useState<Visibility>(topic?.visibility ?? "private")
@@ -60,8 +74,8 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 	const [invitees, setInvitees] = useState(topic?.invitees ?? [])
 	// the kept and added source and attachment lists. a new topic starts with the default web source on
 	const [keptSources, setKeptSources] = useState(topic?.sources ?? [])
-	const [addedSources, setAddedSources] = useState<{ kind: EditableSourceKind; value: string }[]>(
-		topic ? [] : [{ kind: "search", value: "" }],
+	const [addedSources, setAddedSources] = useState<{ sourceKind: EditableSourceKind; value: string }[]>(
+		topic ? [] : [{ sourceKind: "search", value: "" }],
 	)
 	const [keptAttachments, setKeptAttachments] = useState(topic?.attachments ?? [])
 	const [pendingFiles, setPendingFiles] = useState<File[]>([])
@@ -75,6 +89,14 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 	const promptSourceUrls = toPossibleSourceUrls(prompt, keptSources, addedSources).filter(
 		(url) => !dismissedSourceUrls.includes(url),
 	)
+
+	// only attachments that have finished processing have a context to read, so a staged or failed attachment is not included.
+	// the joined contexts are clipped to what the request accepts, since each attachment may carry that much on its own
+	const attachmentContext = keptAttachments
+		.filter((attachment) => attachment.status === "ready" && attachment.context)
+		.map((attachment) => attachment.context)
+		.join("\n\n")
+		.slice(0, MAX_ATTACHMENT_CONTEXT_CHARS)
 
 	const [isSaving, setIsSaving] = useState(false)
 
@@ -117,10 +139,21 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 		} catch (error) {
 			// surface an error as a toast. the modal stays open so a failed upload retries on the next Save
 			console.error("topic save failed", error)
-			toast.error(error instanceof Error ? error.message : "Save failed. Carl suggests trying again.")
+			showSaveError(error)
 		} finally {
 			setIsSaving(false)
 		}
+	}
+
+	// show a toast to tell the reader why a topics save failed
+	const showSaveError = (error: unknown): void => {
+		if (error instanceof DailyTopicLimitError) {
+			toast.error(`${error.message}\n Move a topic to weekly, or get a bigger pot.`, {
+				action: { label: "See plans", onClick: () => navigate("/pricing") },
+			})
+			return
+		}
+		toast.error(error instanceof Error ? error.message : "Save failed. Carl suggests trying again.")
 	}
 
 	// whether this attachment's context differs from the one the page loaded, so an untouched attachment does not get updated
@@ -143,8 +176,11 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 		// the urls still showing under the prompt save as Sources along with the ones added from the sources section
 		sources: [
 			...keptSources.map((source) => ({ id: source.id })),
-			...addedSources.map((source) => ({ kind: source.kind, config: toSourceConfig(source.kind, source.value) })),
-			...promptSourceUrls.map((url) => ({ kind: "url" as const, config: toSourceConfig("url", url) })),
+			...addedSources.map((source) => ({
+				sourceKind: source.sourceKind,
+				config: toSourceConfig(source.sourceKind, source.value),
+			})),
+			...promptSourceUrls.map((url) => ({ sourceKind: "url" as const, config: toSourceConfig("url", url) })),
 		],
 	})
 
@@ -194,6 +230,9 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 				<ScheduleFields
 					frequency={frequency}
 					onFrequencyChange={setFrequency}
+					hasDailySlot={hasDailySlotLeft(topicFeed?.dailyTopicsRemaining, topic?.frequency)}
+					dailyTopicsRemaining={topicFeed?.dailyTopicsRemaining}
+					dailyTopicLimit={topicFeed?.dailyTopicLimit}
 					scheduledTime={scheduledTime}
 					onScheduledTimeChange={setScheduledTime}
 					scheduledDayOfWeek={scheduledDayOfWeek}
@@ -239,10 +278,17 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 
 				{/* topic sources: kept rows, added rows, and the add source picker */}
 				<div>
-					<FieldLabel>Sources</FieldLabel>
+					<div className="flex items-baseline gap-2">
+						<FieldLabel>Sources</FieldLabel>
+						<SourceCapNote />
+					</div>
 					<TopicSourceEditor
 						keptSources={keptSources}
 						addedSources={addedSources}
+						topicName={name}
+						topicPrompt={prompt}
+						topicAttachmentContext={attachmentContext}
+						promptSourceUrls={promptSourceUrls}
 						onKeptChange={setKeptSources}
 						onAddedChange={setAddedSources}
 					/>
@@ -277,6 +323,9 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 function ScheduleFields({
 	frequency,
 	onFrequencyChange,
+	hasDailySlot,
+	dailyTopicsRemaining,
+	dailyTopicLimit,
 	scheduledTime,
 	onScheduledTimeChange,
 	scheduledDayOfWeek,
@@ -284,6 +333,9 @@ function ScheduleFields({
 }: {
 	frequency: Frequency
 	onFrequencyChange: (frequency: Frequency) => void
+	hasDailySlot: boolean
+	dailyTopicsRemaining: number | undefined
+	dailyTopicLimit: number | undefined
 	scheduledTime: string
 	onScheduledTimeChange: (scheduledTime: string) => void
 	scheduledDayOfWeek: DayOfWeek
@@ -291,17 +343,23 @@ function ScheduleFields({
 }) {
 	return (
 		<div>
-			<FieldLabel>Frequency</FieldLabel>
+			{/* how many daily slots the plan has left, so the user sees their limit before they pick a frequency */}
+			<div className="flex items-baseline gap-2">
+				<FieldLabel>Frequency</FieldLabel>
+				<DailyTopicQuotaLink dailyTopicsRemaining={dailyTopicsRemaining} dailyTopicLimit={dailyTopicLimit} />
+			</div>
 			<div className="flex flex-wrap gap-2">
 				<Select value={frequency} onValueChange={(value) => onFrequencyChange(value as Frequency)}>
 					<SelectTrigger className="w-32" aria-label="Scan frequency">
 						<SelectValue />
 					</SelectTrigger>
 					<SelectContent>
-						{frequencies.map((frequencyOption) => (
-							<SelectItem key={frequencyOption} value={frequencyOption}>
-								{capitalize(frequencyOption)}
-							</SelectItem>
+						{FREQUENCY_OPTIONS.map((frequencyOption) => (
+							<FrequencyOption
+								key={frequencyOption}
+								frequency={frequencyOption}
+								isOutOfSlots={isDailyFrequency(frequencyOption) && !hasDailySlot}
+							/>
 						))}
 					</SelectContent>
 				</Select>
@@ -323,6 +381,71 @@ function ScheduleFields({
 				)}
 			</div>
 		</div>
+	)
+}
+
+// how many Sources a topic may hold
+function SourceCapNote() {
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<span className="text-link mr-2.5 text-xs">{`up to ${MAX_TOPIC_SOURCES}`}</span>
+			</TooltipTrigger>
+			<TooltipContent>{FULL_SOURCES_NOTE}</TooltipContent>
+		</Tooltip>
+	)
+}
+
+// how many Topics the plan can run on a daily schedule, linked to the pricing page.
+// the label shows what is left, and the tooltip shows the plan's limit.
+function DailyTopicQuotaLink({
+	dailyTopicsRemaining,
+	dailyTopicLimit,
+}: {
+	dailyTopicsRemaining: number | undefined
+	dailyTopicLimit: number | undefined
+}) {
+	const remainingDailyTopics = dailyTopicsRemaining ?? 0
+	const limit = dailyTopicLimit ?? 0
+	return (
+		<ScanQuotaLink
+			isLoading={dailyTopicsRemaining === undefined}
+			isUnlimited={remainingDailyTopics >= ADMIN_QUOTA}
+			label={`${remainingDailyTopics} daily ${toBrewsWord(remainingDailyTopics)} left`}
+			href="/pricing"
+			tooltip={`Your plan gets ${limit} ${limit === 1 ? "pot" : "pots"} daily`}
+		/>
+	)
+}
+
+// whether the plan has a daily frequency slot left
+function hasDailySlotLeft(dailyTopicsRemaining: number | undefined, topicFrequency: string | undefined): boolean {
+	return (dailyTopicsRemaining ?? 1) > 0 || isDailyFrequency(topicFrequency ?? "")
+}
+
+// one select frequency option. a frequency that the plan has no room for is replaced by a button that takes the user to the pricing page
+function FrequencyOption({ frequency, isOutOfSlots }: { frequency: Frequency; isOutOfSlots: boolean }) {
+	const navigate = useNavigate()
+	if (!isOutOfSlots) {
+		return <SelectItem value={frequency}>{capitalize(frequency)}</SelectItem>
+	}
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<button type="button" className="w-full cursor-pointer text-left" onClick={() => navigate("/pricing")}>
+					<SelectItem value={frequency} disabled>
+						{capitalize(frequency)}
+						{/* a coffee cup where the check mark sits on the option that is selected, since this one is
+						    not chosen but bought */}
+						<span className="absolute right-2 flex size-3.5 items-center justify-center">
+							<Coffee className="size-4" />
+						</span>
+					</SelectItem>
+				</button>
+			</TooltipTrigger>
+			{/* beside the list instead of above it, so the tooltip never covers the option the reader can still pick */}
+			<TooltipContent side="right">Pick up some coffee for more daily scans.</TooltipContent>
+		</Tooltip>
 	)
 }
 
@@ -389,7 +512,7 @@ function toSourceConfig(sourceKind: EditableSourceKind, value: string): Record<s
 		return { url: value }
 	}
 
-	// the web scout needs no config. its ingester derives queries from the topic prompt
+	// the web search needs no config. its ingester derives queries from the topic prompt
 	if (sourceKind === "search") {
 		return {}
 	}

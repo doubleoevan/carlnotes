@@ -7,8 +7,16 @@ import { audienceMembers, audiences, scans, subscriptions, topicInvites, topics,
 import { effectiveBudgetCents, isAdminRole, monthlySpendDollars } from "./authorization"
 import { startOfUtcMonth } from "./topic/quotas"
 
-// the owner's topic and month-scan rows that toActivityTopics reads
-type TopicRow = { id: string; name: string; createdAt: Date; updatedAt: Date }
+// the owner's topic rows that toActivityTopics reads
+type TopicRow = {
+	id: string
+	name: string
+	visibility: ActivityTopic["visibility"]
+	frequency: ActivityTopic["frequency"]
+	createdAt: Date
+	updatedAt: Date
+}
+// the month-scan rows that hang off each topic in the sub-table
 type ScanRow = {
 	id: string
 	topicId: string
@@ -20,7 +28,7 @@ type ScanRow = {
 	// what the scan found, kept, and cost
 	foundCount: number
 	keptCount: number
-	cost: string
+	costDollars: string
 	scanSummary: string | null
 }
 
@@ -39,7 +47,14 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 		.from(users)
 		.where(eq(users.id, user.id))
 	const ownedTopics = await db
-		.select({ id: topics.id, name: topics.name, createdAt: topics.createdAt, updatedAt: topics.updatedAt })
+		.select({
+			id: topics.id,
+			name: topics.name,
+			visibility: topics.visibility,
+			frequency: topics.frequency,
+			createdAt: topics.createdAt,
+			updatedAt: topics.updatedAt,
+		})
 		.from(topics)
 		.where(eq(topics.ownerId, user.id))
 
@@ -61,7 +76,7 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 						// what the scan found, kept, and cost, plus its recap for the reused scan-notes popover
 						foundCount: scans.foundCount,
 						keptCount: scans.keptCount,
-						cost: scans.cost,
+						costDollars: scans.cost,
 						scanSummary: scans.scanSummary,
 					})
 					.from(scans)
@@ -212,13 +227,15 @@ export function toActivityTopics(
 		return {
 			id: topic.id,
 			name: topic.name,
+			visibility: topic.visibility,
+			frequency: topic.frequency,
 			// the month figures and dates the row's columns render
 			monthScanCount: topicScans.length,
 			// a topic nobody subscribes to has no row in the count query at all
 			subscriberCount: subscriberCountByTopic.get(topic.id) ?? 0,
 			createdAt: topic.createdAt.toISOString(),
 			updatedAt: topic.updatedAt.toISOString(),
-			monthCostCents: topicScans.reduce((sum, scan) => sum + toCents(scan.cost), 0),
+			monthCostCents: topicScans.reduce((sum, scan) => sum + toCents(scan.costDollars), 0),
 			// the owner holds a subscription to their own topic, and a missing row reads as on, matching the column default
 			isEmailEnabled: emailEnabledByTopic.get(topic.id) ?? true,
 			scans: topicScans.map((scan) => ({
@@ -229,7 +246,7 @@ export function toActivityTopics(
 				finishedAt: scan.finishedAt?.toISOString() ?? null,
 				foundCount: scan.foundCount,
 				keptCount: scan.keptCount,
-				costCents: toCents(scan.cost),
+				costCents: toCents(scan.costDollars),
 				scanSummary: scan.scanSummary,
 			})),
 		}

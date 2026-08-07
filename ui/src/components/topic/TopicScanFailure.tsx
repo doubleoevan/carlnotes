@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils"
  * Why a scan failed, followed by an Upgrade button when the budget is what stopped it.
  */
 export function TopicScanFailure({ error }: { error: string | null }) {
-	// the budget wall is the only failure a reader can act on, so it is the only one that offers a way out
+	// the budget wall is the only failure a user can act on, so it is the only one that offers a way out
 	if (!isBudgetError(error)) {
 		return <p className="text-destructive">{toScanFailureLabel(error)}</p>
 	}

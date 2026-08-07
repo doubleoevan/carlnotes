@@ -92,7 +92,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 
 // the pipeline stages that report a failure, named so Sentry can group them the way the pipeline reads
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ReportedStage = "ingest" | "embed-filter" | "fetch" | "score" | "object-storage" | "scan-report" | "scanner" | "scheduled-scan" | "manual-scan" | "first-scan" | "email" | "chat" | "prompt-registry"
+export type ReportedStage = "ingest" | "embed-filter" | "fetch" | "score" | "object-storage" | "scan-report" | "scanner" | "scheduled-scan" | "manual-scan" | "first-scan" | "source-screen" | "email" | "chat" | "prompt-registry"
 
 /**
  * Reports a failure the caller is already handling, so a failure that never throws is still visible.

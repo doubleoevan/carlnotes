@@ -10,7 +10,7 @@ import { deleteChatAttachments } from "./attachments"
 import { decryptChatText, encryptChatText } from "./encryption"
 
 // the answers to a chat turn request. signup routes a visitor to the signup page and budget prompts an
-// upgrade, so the refusals stay apart. an allowed chat turn includes the caller's own model key, so its spend
+// upgrade, so the rejections stay apart. an allowed chat turn includes the caller's own model key, so its spend
 // lands under their proxy budget the way a scan's does
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type ChatTurnAuthorization = { status: "allowed"; isOwner: boolean; isPersisted: boolean; litellmApiKey?: string } | { status: "signup" } | { status: "forbidden" } | { status: "budget" }
@@ -20,7 +20,7 @@ export type ChatTurnAuthorization = { status: "allowed"; isOwner: boolean; isPer
  * A signed-out visitor on a visible topic is sent to signup, so no anonymous chat turn ever spends.
  */
 export async function authorizeChatTurn(userId: string | null, topicId: string): Promise<ChatTurnAuthorization> {
-	// a missing topic is refused the same way an invisible one is
+	// a missing topic is rejected the same way an invisible one is
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
 	if (!topic) {
 		return { status: "forbidden" }
@@ -34,7 +34,7 @@ export async function authorizeChatTurn(userId: string | null, topicId: string):
 		return { status: "signup" }
 	}
 
-	// the one refusal left for a signed-in caller who can see the topic is the budget
+	// the one rejection left for a signed-in caller who can see the topic is the budget
 	if (!(await isAllowed(userId, "chat:send", topic))) {
 		return { status: "budget" }
 	}
@@ -105,7 +105,7 @@ export async function loadChatTurns(
 	userId: string | null,
 	topicId: string,
 ): Promise<{ question: string; answer: string; at: string }[]> {
-	// a visitor, or anyone the gate refuses persistence, has nothing stored to read
+	// a visitor, or anyone the gate rejects persistence, has nothing stored to read
 	if (!userId || !(await isAllowed(userId, "chat:persist"))) {
 		return []
 	}

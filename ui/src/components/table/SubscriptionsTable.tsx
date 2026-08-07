@@ -82,7 +82,7 @@ export function SubscriptionsTable({
 					<tr>
 						<SortableHeader sort={sort} sortKey="name" label="Topic" className="py-2 pr-4" />
 						<SortableHeader sort={sort} sortKey="owner" label="Owner" className="py-2 pr-4" />
-						<SortableHeader sort={sort} sortKey="subscribed" label="Subscribed" className="py-2 pr-4" />
+						<SortableHeader sort={sort} sortKey="subscribed" label="Followed" className="py-2 pr-4" />
 						<SortableHeader sort={sort} sortKey="active" label="Active" className="py-2 pr-4" />
 						<SortableHeader
 							sort={sort}

@@ -34,7 +34,7 @@ export type TopicChat = {
 	addFiles: (files: File[]) => Promise<void>
 	addPastedText: (text: string) => void
 	removeAttachment: (index: number) => void
-	// what this reader already keeps for the topic, and the delete that frees a slot
+	// what this user already keeps for the topic, and the delete attachment handler that frees a slot
 	keptAttachments: KeptChatAttachment[]
 	removeKeptAttachment: (keptAttachmentId: string) => Promise<void>
 	canChat: boolean
@@ -58,7 +58,7 @@ export function useTopicChat(topicId: string): TopicChat {
 	const [chatTurns, setChatTurns] = useState<ChatTurn[]>([])
 	const [question, setQuestion] = useState("")
 	const [attachments, setAttachments] = useState<ChatAttachment[]>([])
-	// what this reader already keeps for the topic. it is both the manage list and what the keep limit measures
+	// what this user already keeps for the topic. it is both the manage list and what the keep limit measures
 	const [keptAttachments, setKeptAttachments] = useState<KeptChatAttachment[]>([])
 
 	// the gates the conversation load resolves, and the streaming flag an in-flight chat turn holds
@@ -86,7 +86,7 @@ export function useTopicChat(topicId: string): TopicChat {
 					conversation.chatTurns.map((chatTurn) => ({
 						question: chatTurn.question,
 						answer: chatTurn.answer,
-						refusal: null,
+						rejection: null,
 						at: chatTurn.at ? Date.parse(chatTurn.at) : undefined,
 					})),
 				)
@@ -126,7 +126,7 @@ export function useTopicChat(topicId: string): TopicChat {
 	}
 
 	// take in picked or pasted attachment files. images and PDFs become data urls, text files save as clipped text,
-	// and each rejection explains itself so a refused file never just vanishes
+	// and each rejection explains itself so a rejected file never just vanishes
 	async function addAttachmentFiles(files: File[]): Promise<void> {
 		for (const file of files) {
 			// one chat turn's attachment cap is checked first, so a big multi-select fails loudly at the boundary
@@ -174,9 +174,9 @@ export function useTopicChat(topicId: string): TopicChat {
 			return
 		}
 
-		// the conversation so far gets posted, minus refused chat turns
+		// the conversation so far that gets posted, minus rejected chat turns
 		const historyChatTurns = chatTurns
-			.filter((chatTurn) => chatTurn.refusal === null && chatTurn.answer !== "")
+			.filter((chatTurn) => chatTurn.rejection === null && chatTurn.answer !== "")
 			.map((chatTurn) => ({ question: chatTurn.question, answer: chatTurn.answer }))
 
 		// the attachments get posted with this chat turn, and the kept attachments join the manage list right away.
@@ -194,14 +194,14 @@ export function useTopicChat(topicId: string): TopicChat {
 		])
 		setChatTurns((previousChatTurns) => [
 			...previousChatTurns,
-			{ question: withAttachmentNote(askedQuestion, sentAttachments), answer: "", refusal: null },
+			{ question: withAttachmentNote(askedQuestion, sentAttachments), answer: "", rejection: null },
 		])
 		setIsStreaming(true)
 
 		// stream under a fresh abort controller, so the stop button can cut this chat turn and only this chat turn
 		const controller = new AbortController()
 		abortRef.current = controller
-		const sendResult = await sendChatTurn(
+		const chatSendResult = await sendChatTurn(
 			topicId,
 			askedQuestion,
 			historyChatTurns,
@@ -218,12 +218,12 @@ export function useTopicChat(topicId: string): TopicChat {
 		// a stop before any text drops the whole entire chat turn, so the empty bubble never lingers.
 		// everything else settles the chat turn with its outcome and its time
 		setChatTurns((previousChatTurns) => {
-			if (sendResult === "stopped" && previousChatTurns.at(-1)?.answer === "") {
+			if (chatSendResult === "stopped" && previousChatTurns.at(-1)?.answer === "") {
 				return previousChatTurns.slice(0, -1)
 			}
 			return replaceNewestChatTurn(previousChatTurns, (chatTurn) => ({
 				...chatTurn,
-				refusal: sendResult === "stopped" ? null : sendResult,
+				rejection: chatSendResult === "stopped" ? null : chatSendResult,
 				at: Date.now(),
 			}))
 		})
@@ -272,7 +272,7 @@ export function useTopicChat(topicId: string): TopicChat {
 }
 
 // a picked or pasted file as a chat attachment: an image or a PDF reads to a data url and a text file to clipped text.
-// anything else is refused with an explanation, and null means the file became nothing
+// anything else is rejected with an explanation, and null means the file became nothing
 async function toAttachment(file: File): Promise<ChatAttachment | null> {
 	// images and PDFs post as data urls. the PDF's text is extracted server-side, so only its words ever reach the model
 	const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
@@ -284,23 +284,23 @@ async function toAttachment(file: File): Promise<ChatAttachment | null> {
 		const text = await file.text()
 		return { kind: "text", name: file.name || "text", text: clipAttachmentText(text), keep: false }
 	}
-	// every other kind of attachment is refused out loud
+	// every other kind of attachment is rejected with a toast
 	toast("Carl reads images, PDFs, and text files for now.")
 	return null
 }
 
-// an image or PDF as a data url, refused by name when it runs past the shared size ceiling —
+// an image or PDF as a data url, rejected by name when it runs past the shared size limit —
 // both kinds share the image cap, since both post base64 inside the chat turn's JSON
 async function toDataUrlAttachment(file: File, isPdf: boolean): Promise<ChatAttachment | null> {
 	const dataUrl = await toDataUrl(file)
 	if (dataUrl.length > CHAT_IMAGE_DATA_CHARS) {
-		toast(`That ${isPdf ? "PDF" : "image"} is too large. About 4 MB is the ceiling.`)
+		toast(`That ${isPdf ? "PDF" : "image"} is too large. About 4 MB is the limit.`)
 		return null
 	}
 	return {
 		kind: isPdf ? "pdf" : "image",
 		name: file.name || (isPdf ? "document.pdf" : "image"),
-		data: dataUrl,
+		dataUrl,
 		keep: false,
 	}
 }

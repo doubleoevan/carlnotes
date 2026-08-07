@@ -50,7 +50,7 @@ test("the relevance gate measures each kind against its own bar", () => {
 	expect(isRelevant(0.1, "watch")).toBe(false)
 })
 
-// ranking orders the relevance-gate survivors best-first, so a ceiling defers the least relevant instead of the last returned
+// ranking orders the relevance-gate survivors best-first, so a limit defers the least relevant instead of the last returned
 test("rankBySimilarity orders survivors best-first and the cap takes the top N", () => {
 	// three survivors in the arbitrary order the database returned them
 	const survivors = [

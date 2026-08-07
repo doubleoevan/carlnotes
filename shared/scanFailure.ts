@@ -1,9 +1,9 @@
 // how a stored Scan failure reads to a person, shared by the ui and the worker's emails so the two never describe the same failure differently
-// matches litellm's spend-ceiling refusal wherever it appears inside a stored scan error
+// matches litellm's spend-limit rejection wherever it appears inside a stored scan error
 const BUDGET_ERROR_PATTERN = /budget has been exceeded/i
 
 /**
- * Whether a stored scan failure is the owner's monthly spend-ceiling being hit.
+ * Whether a stored scan failure is the owner's monthly spend-limit being hit.
  */
 export function isBudgetError(error: string | null): boolean {
 	return error !== null && BUDGET_ERROR_PATTERN.test(error)
@@ -13,7 +13,7 @@ export function isBudgetError(error: string | null): boolean {
  * Maps a scan failure to a readable label for the user.
  */
 export function toScanFailureLabel(error: string | null): string {
-	// the budget ceiling is an expected wall, not a malfunction, so it gets plain words
+	// the budget limit is an expected wall, not a malfunction, so it gets plain words
 	if (isBudgetError(error)) {
 		return "Carl hit this month's budget."
 	}
