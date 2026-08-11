@@ -1,66 +1,155 @@
-// toScanSummary self-checks. counts dedupe across Sources, cost sums only the successful Sources, and the status and fallback rules hold
-import { expect, test } from "bun:test"
-import { toScanSummary } from "./ingest"
-import type { NewResource } from "./ingest/ingester"
+// scan tests for opening a Scan row, handing it to Temporal, and reading it back.
+// the database and the Temporal client are stood in so these run without either
+import { expect, mock, test } from "bun:test"
 
-// a fake Resource with just the url and resource kind
-function resource(url: string): NewResource {
-	return { url, kind: "read" }
+// every db verb this file's calls go through, and the rows each one resolves to for the test in flight.
+// reset before each test so one test's setup can't leak into the next
+let dbCalls: string[] = []
+let dbResults: { select: unknown[]; insert: unknown[]; update: unknown[] } = { select: [], insert: [], update: [] }
+
+// a chainable stand-in for a Drizzle query. every method returns itself, so any chain length resolves,
+// and awaiting it resolves to the verb's configured rows
+// biome-ignore lint/suspicious/noExplicitAny: stands in for whatever shape a Drizzle chain link expects
+function toQueryStub(verb: "select" | "insert" | "update" | "delete"): any {
+	dbCalls.push(verb)
+	const rows = verb === "delete" ? [] : dbResults[verb]
+	// biome-ignore lint/suspicious/noExplicitAny: same stand-in shape as the function's return type
+	const stub: any = new Proxy(() => {}, {
+		get: (_target, prop) => (prop === "then" ? (resolve: (value: unknown) => void) => resolve(rows) : () => stub),
+	})
+	return stub
+}
+mock.module("../db", () => ({
+	db: {
+		select: () => toQueryStub("select"),
+		insert: () => toQueryStub("insert"),
+		update: () => toQueryStub("update"),
+		delete: () => toQueryStub("delete"),
+	},
+}))
+
+// the workflow start outcome the mocked temporal client hands back, or an error for it to throw
+let workflowOutcome: { status: "started"; whenFinished: Promise<void> } | { status: "running" } | Error = {
+	status: "started",
+	whenFinished: Promise.resolve(),
+}
+mock.module("./temporal-client", () => ({
+	startTopicScanWorkflow: async () => {
+		if (workflowOutcome instanceof Error) {
+			throw workflowOutcome
+		}
+		return workflowOutcome
+	},
+}))
+
+import type { scans } from "../db/schema"
+import { loadScan, scanTopic, startTopicScan } from "./scan"
+
+type Scan = typeof scans.$inferSelect
+
+// a full Scan row with every required column filled, so a test only names the fields it cares about
+function fakeScan(overrides: Partial<Scan> = {}): Scan {
+	return {
+		id: "scan_1",
+		topicId: "topic_1",
+		ownerId: "owner_1",
+		status: "running",
+		error: null,
+		startedAt: new Date(),
+		finishedAt: null,
+		dispatchedAt: null,
+		isManual: false,
+		cost: "0",
+		foundCount: 0,
+		keptCount: 0,
+		filteredCount: 0,
+		reused: 0,
+		revalidated: 0,
+		fetched: 0,
+		stageCosts: {},
+		scanSummary: null,
+		fallbackSources: [],
+		...overrides,
+	}
 }
 
-// counts dedupe across Sources, cost sums only the successful Sources, and a failure among successes still succeeds
-test("toScanSummary aggregates deduped counts, summed cost, and a succeeded status", () => {
-	const summary = toScanSummary([
-		{
-			status: "ok",
-			sourceId: "s1",
-			sourceKind: "rss",
-			resources: [resource("https://a"), resource("https://b")],
-			costDollars: 0.5,
-		},
-		{ status: "ok", sourceId: "s2", sourceKind: "search", resources: [resource("https://a")], costDollars: 0.25 },
-		{ status: "failed", sourceKind: "reddit" },
-	])
-
-	// two unique urls found, the two successful costs are summed, and succeeds despite the one failure
-	expect(summary.foundCount).toBe(2)
-	expect(summary.costDollars).toBe(0.75)
-
-	// no Source fell back, so the fallback trace stays empty
-	expect(summary.status).toBe("succeeded")
-	expect(summary.fallbackSources).toEqual([])
+test("scanTopic marks the scan dispatched when the workflow starts", async () => {
+	dbCalls = []
+	workflowOutcome = { status: "started", whenFinished: Promise.resolve() }
+	const scan = fakeScan()
+	const result = await scanTopic(scan, scan.topicId as string, scan.ownerId, "manual")
+	expect(result).toEqual({ status: "started", scan, whenFinished: workflowOutcome.whenFinished })
+	// the dispatch write happens, and nothing is deleted
+	expect(dbCalls).toEqual(["update"])
 })
 
-// a Scan fails only when a Source errored and none succeeded
-test("toScanSummary reports failed when every Source that ran threw", () => {
-	// aggregate two failed outcomes
-	const summary = toScanSummary([
-		{ status: "failed", sourceKind: "rss" },
-		{ status: "failed", sourceKind: "search" },
-	])
-	expect(summary.status).toBe("failed")
+test("scanTopic deletes a row it opened when the workflow reports one already running, but keeps a row that predates it", async () => {
+	workflowOutcome = { status: "running" }
+	const scan = fakeScan()
+
+	// this call opened the row, so a rejection means it's cleaned up rather than left orphaned
+	dbCalls = []
+	expect(await scanTopic(scan, scan.topicId as string, scan.ownerId, "manual", false)).toEqual({ status: "running" })
+	expect(dbCalls).toEqual(["delete"])
+
+	// this call took over a row that already existed, so it's kept and just marked dispatched
+	dbCalls = []
+	expect(await scanTopic(scan, scan.topicId as string, scan.ownerId, "manual", true)).toEqual({ status: "running" })
+	expect(dbCalls).toEqual(["update"])
 })
 
-// skips are non-events. a topic with all-skipped Sources still succeeds
-test("toScanSummary treats skipped Sources as non-failures", () => {
-	expect(toScanSummary([{ status: "skipped", sourceKind: "composio" }]).status).toBe("succeeded")
+test("scanTopic deletes a row it opened when the workflow start throws, but keeps a row that predates it", async () => {
+	workflowOutcome = new Error("temporal unreachable")
+	const scan = fakeScan()
+
+	// a row this call opened is removed before the error propagates
+	dbCalls = []
+	await expect(scanTopic(scan, scan.topicId as string, scan.ownerId, "manual", false)).rejects.toThrow(
+		"temporal unreachable",
+	)
+	expect(dbCalls).toEqual(["delete"])
+
+	// a row that predates this call is left for the next sweep to pick up
+	dbCalls = []
+	await expect(scanTopic(scan, scan.topicId as string, scan.ownerId, "manual", true)).rejects.toThrow(
+		"temporal unreachable",
+	)
+	expect(dbCalls).toEqual([])
 })
 
-// only the Source that reports a fallbackMode is traced. the Scan still succeeds
-test("toScanSummary records only the Source that fell back and still succeeds", () => {
-	const summary = toScanSummary([
-		{ status: "ok", sourceId: "keyed", sourceKind: "youtube", resources: [resource("https://a")], costDollars: 0 },
-		{
-			status: "ok",
-			sourceId: "fell-back",
-			sourceKind: "reddit",
-			resources: [],
-			costDollars: 0,
-			fallbackMode: "reddit-rss",
-		},
-	])
+test("startTopicScan opens a new scan row when the topic has none in flight", async () => {
+	dbResults = { select: [], insert: [fakeScan({ id: "scan_new" })], update: [] }
+	workflowOutcome = { status: "started", whenFinished: Promise.resolve() }
+	dbCalls = []
 
-	// only the Source that fell back is traced, and falling back does not fail the Scan
-	expect(summary.fallbackSources).toEqual([{ sourceId: "fell-back", fallbackMode: "reddit-rss" }])
-	expect(summary.status).toBe("succeeded")
+	const result = await startTopicScan("topic_1", "owner_1", "manual")
+	expect(result.status).toBe("started")
+	// the row is created by insert, never taken over by update
+	expect(dbCalls).toEqual(["select", "insert", "update"])
+})
+
+test("startTopicScan takes over an existing open scan row instead of opening a new one", async () => {
+	dbResults = { select: [fakeScan({ id: "scan_open" })], insert: [], update: [fakeScan({ id: "scan_open" })] }
+	workflowOutcome = { status: "started", whenFinished: Promise.resolve() }
+	dbCalls = []
+
+	const result = await startTopicScan("topic_1", "owner_1", "manual")
+	expect(result.status).toBe("started")
+	// the open row is taken over by update, never re-created by insert
+	expect(dbCalls).toEqual(["select", "update", "update"])
+})
+
+test("startTopicScan throws when the scan row failed to write", async () => {
+	dbResults = { select: [], insert: [], update: [] }
+	await expect(startTopicScan("topic_1", "owner_1", "manual")).rejects.toThrow(
+		"could not create scan for topic topic_1",
+	)
+})
+
+test("loadScan reads a scan row by id, or undefined when there is none", async () => {
+	dbResults = { select: [fakeScan({ id: "scan_1" })], insert: [], update: [] }
+	expect((await loadScan("scan_1"))?.id).toBe("scan_1")
+
+	dbResults = { select: [], insert: [], update: [] }
+	expect(await loadScan("missing")).toBeUndefined()
 })

@@ -46,3 +46,6 @@ coverage
 !.vscode/settings.json
 !.vscode/extensions.json
 .cursor/
+# cc-autopilot sprint state (operational; must stay out of wave commits)
+notes/sprint/
+cc-autopilot/

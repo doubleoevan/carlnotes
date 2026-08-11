@@ -17,7 +17,6 @@ export function Toaster(props: React.ComponentProps<typeof SonnerToaster>) {
 	// toasts drop from the top, themed to match the app, with props last so a caller can override.
 	// the wrapper stops pointerdown, so a click on a toast does not close other dialogs.
 	return (
-		// biome-ignore lint/a11y/noStaticElementInteractions: this wrapper has no behavior, it only keeps an event from traveling
 		<div onPointerDown={(event) => event.stopPropagation()}>
 			<SonnerToaster
 				theme={isDark ? "dark" : "light"}
