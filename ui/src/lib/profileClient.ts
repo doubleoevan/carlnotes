@@ -52,3 +52,11 @@ export async function searchUsers(query: string): Promise<UserSearchResult[]> {
 		return []
 	}
 }
+
+// close the signed-in user's own account. throws on a rejection so the account page can say it failed
+export async function sendAccountDelete(): Promise<void> {
+	const response = await fetch("/api/users/me", { method: "DELETE" })
+	if (!response.ok) {
+		throw new Error(`account delete failed: ${response.status}`)
+	}
+}

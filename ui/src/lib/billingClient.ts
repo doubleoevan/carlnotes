@@ -64,3 +64,11 @@ export async function fetchAdminUserTopics(userId: string): Promise<ActivityTopi
 export async function sendUserBudgetOverride(userId: string, budgetOverrideCents: number | null): Promise<void> {
 	await client.api.admin.users[":id"].budget.$post({ param: { id: userId }, json: { budgetOverrideCents } })
 }
+
+// close another user's account from the admin console. throws on a rejection, so the table can say it failed
+export async function sendUserDelete(userId: string): Promise<void> {
+	const response = await client.api.admin.users[":id"].$delete({ param: { id: userId } })
+	if (!response.ok) {
+		throw new Error(`user delete failed: ${response.status}`)
+	}
+}

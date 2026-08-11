@@ -3,13 +3,19 @@
 import { Resvg } from "@resvg/resvg-js"
 import { AVATAR_INK, toAvatarInitials, toAvatarTint } from "@shared/avatars"
 import satori from "satori"
+import { getAttachmentBytes } from "../../worker"
+import { MAX_AVATAR_BYTES, type PublishedAvatar, toAvatarContentType } from "../avatars"
 
 // what every platform crops preview images to. 1200x630 is the size X, Slack, and LinkedIn all expect
 export const PREVIEW_WIDTH = 1200
 export const PREVIEW_HEIGHT = 630
 
 // bump this when the card's design changes. Slack and X cache preview images hard and ignore cache headers.
-export const PREVIEW_TEMPLATE_VERSION = "v2"
+export const PREVIEW_TEMPLATE_VERSION = "v3"
+
+// how wide the byline avatar draws, and how much time a provider photo gets to load before the card gives up on it
+const AVATAR_SIZE = 56
+const PROVIDER_PHOTO_TIMEOUT_MS = 3000
 
 // the brand font, read once at boot. Satori takes font bytes, not a font-family name or a stylesheet
 const displayFont = await Bun.file(new URL("./fonts/ArchitectsDaughter-Regular.ttf", import.meta.url)).arrayBuffer()
@@ -27,43 +33,114 @@ type CardNode = {
 	props: { style?: Record<string, unknown>; children?: (CardNode | string)[] | string } & Record<string, unknown>
 }
 
-// what the card says about a Topic
+// what the card says about a Topic. the avatar is named, not loaded, so the key below costs nothing to build
 export type TopicPreview = {
 	topicId: string
 	title: string
+	// the owner's byline, and the image drawn beside it
 	ownerUserId: string
 	ownerUsername: string
+	ownerAvatar: PublishedAvatar
 	keptCount: number
 	sourceCount: number
 }
 
 /**
- * The stored object key for a card.
+ * The stored object key for a topic preview card.
  *
  * It holds the template version and a hash of everything drawn, so a retitled Topic or a redesigned card both land on a new preview url.
  * The social platforms never re-fetch a url they have seen, so the url has to change instead.
  */
 export function toPreviewKey(card: TopicPreview): string {
-	const drawn = `${card.title}|${card.ownerUsername}|${card.keptCount}|${card.sourceCount}`
-	return `og/${PREVIEW_TEMPLATE_VERSION}/${card.topicId}/${Bun.hash(drawn).toString(36)}.png`
+	const previewImage = `${card.title}|${card.ownerUsername}|${toAvatarIdentity(card.ownerAvatar)}|${card.keptCount}|${card.sourceCount}`
+	return `og/${PREVIEW_TEMPLATE_VERSION}/${card.topicId}/${Bun.hash(previewImage).toString(36)}.png`
+}
+
+// what names the rendered avatar in the avatar key. a stored upload's avatar key already carries its own stamp.
+// a provider photo's url changes when the photo does, so either one changing is enough to give the card on a new url
+function toAvatarIdentity(avatar: PublishedAvatar): string {
+	if (!avatar) {
+		return "initials"
+	}
+	return "avatarKey" in avatar ? avatar.avatarKey : avatar.imageUrl
 }
 
 /**
  * Render a Topic's card to PNG bytes.
  */
 export async function toPreviewPng(card: TopicPreview): Promise<Uint8Array> {
-	// satori generates the topic specific svg
-	const svg = await satori(toPreviewMarkup(card) as Parameters<typeof satori>[0], {
+	// the owner's real image, read-only now, on the miss that is actually rendering something
+	const ownerImage = await toOwnerImageDataUri(card.ownerAvatar)
+	// satori generates the topic-specific svg
+	const previewSvg = await satori(toPreviewMarkup(card, ownerImage) as Parameters<typeof satori>[0], {
 		width: PREVIEW_WIDTH,
 		height: PREVIEW_HEIGHT,
 		fonts: [{ name: "Architects Daughter", data: displayFont, weight: 400, style: "normal" }],
 	})
 	// resvg rasterizes at the card's own width, so the png comes out at exactly the size the platforms crop to
-	return new Resvg(svg, { fitTo: { mode: "width", value: PREVIEW_WIDTH } }).render().asPng()
+	return new Resvg(previewSvg, { fitTo: { mode: "width", value: PREVIEW_WIDTH } }).render().asPng()
 }
 
-// the card's layout. Satori takes React-shaped objects instead of components, and supports a flexbox subset
-function toPreviewMarkup(card: TopicPreview): CardNode {
+// the owner's published image as bytes satori can draw, or null to fall back to their initials.
+// satori has no network of its own, so a remote provider photo is fetched here and inlined
+async function toOwnerImageDataUri(avatar: PublishedAvatar): Promise<string | null> {
+	if (!avatar) {
+		return null
+	}
+	try {
+		// a stored upload comes from the app's own bucket, and its avatar key names the type to serve it as
+		if ("avatarKey" in avatar) {
+			const bytes = await getAttachmentBytes(avatar.avatarKey)
+			return `data:${toAvatarContentType(avatar.avatarKey)};base64,${Buffer.from(bytes).toString("base64")}`
+		}
+		// a provider photo is somebody else's url, so it is bounded by a timeout and a size before being read
+		const response = await fetch(avatar.imageUrl, { signal: AbortSignal.timeout(PROVIDER_PHOTO_TIMEOUT_MS) })
+		if (!response.ok) {
+			return null
+		}
+		const bytes = await toBoundedBytes(response)
+		if (!bytes) {
+			return null
+		}
+		// what the provider says it sent, falling back to the format a provider photo almost always is
+		const contentType = response.headers.get("content-type") ?? "image/jpeg"
+		return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
+	} catch (error) {
+		// an unreadable image draws the initials instead, since a card with no avatar still beats no card
+		console.error("preview avatar load failed", error)
+		return null
+	}
+}
+
+// a response's bytes, or null once it runs past the size an avatar can be. read chunk by chunk rather than
+// buffered whole, since the url belongs to the provider and nothing about the response is ours to trust
+async function toBoundedBytes(response: Response): Promise<Uint8Array | null> {
+	if (!response.body) {
+		return null
+	}
+	const reader = response.body.getReader()
+	const chunks: Uint8Array[] = []
+	let byteLength = 0
+	// the running total is checked before a chunk is kept, so nothing past the cap is ever held
+	while (true) {
+		const { done, value } = await reader.read()
+		if (done) {
+			break
+		}
+		// past the cap the rest is never asked for, so an endless response cannot keep the render open
+		byteLength += value.byteLength
+		if (byteLength > MAX_AVATAR_BYTES) {
+			await reader.cancel()
+			return null
+		}
+		chunks.push(value)
+	}
+	// one image, joined back together now that its whole size is known to be within the cap
+	return Buffer.concat(chunks)
+}
+
+// the preview topic card's layout. Satori takes React-shaped objects instead of components, and supports a flexbox subset
+function toPreviewMarkup(card: TopicPreview, ownerImage: string | null): CardNode {
 	return {
 		type: "div",
 		props: {
@@ -78,7 +155,7 @@ function toPreviewMarkup(card: TopicPreview): CardNode {
 				fontFamily: "Architects Daughter",
 				padding: "64px",
 			},
-			children: [toWordmark(), toTitle(card.title), toFooter(card)],
+			children: [toWordmark(), toTitle(card.title), toFooter(card, ownerImage)],
 		},
 	}
 }
@@ -141,13 +218,13 @@ function toTitle(title: string): CardNode {
 }
 
 // the footer with the topic owner's username and finding counts
-function toFooter(card: TopicPreview): CardNode {
+function toFooter(card: TopicPreview, ownerImage: string | null): CardNode {
 	return {
 		type: "div",
 		props: {
 			style: { display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 30 },
 			children: [
-				toTopicOwner(card),
+				toTopicOwner(card, ownerImage),
 				{
 					type: "div",
 					props: {
@@ -165,33 +242,50 @@ function toCountLabel(count: number, word: string): string {
 	return `${count} ${word}${count === 1 ? "" : "s"}`
 }
 
-// the same username initials image that the app renders
-function toTopicOwner(card: TopicPreview): CardNode {
-	const initials = toAvatarInitials(card.ownerUsername)
+// the topic owner display: the image they publish, or their initials on their tint, then their username
+function toTopicOwner(card: TopicPreview, ownerImage: string | null): CardNode {
 	return {
 		type: "div",
 		props: {
 			style: { display: "flex", alignItems: "center", gap: "16px" },
 			children: [
-				{
-					type: "div",
-					props: {
-						style: {
-							display: "flex",
-							alignItems: "center",
-							justifyContent: "center",
-							width: 56,
-							height: 56,
-							borderRadius: 28,
-							backgroundColor: toAvatarTint(card.ownerUserId),
-							color: AVATAR_INK,
-							fontSize: 24,
-						},
-						children: initials,
-					},
-				},
+				ownerImage ? toOwnerPhoto(ownerImage) : toOwnerInitials(card),
 				{ type: "div", props: { style: { display: "flex" }, children: card.ownerUsername } },
 			],
+		},
+	}
+}
+
+// the published topic owner image, cropped to fit the same circle the initials draw
+function toOwnerPhoto(ownerImage: string): CardNode {
+	return {
+		type: "img",
+		props: {
+			src: ownerImage,
+			width: AVATAR_SIZE,
+			height: AVATAR_SIZE,
+			style: { borderRadius: AVATAR_SIZE / 2, objectFit: "cover" },
+		},
+	}
+}
+
+// the default username initials image that the app renders
+function toOwnerInitials(card: TopicPreview): CardNode {
+	return {
+		type: "div",
+		props: {
+			style: {
+				display: "flex",
+				alignItems: "center",
+				justifyContent: "center",
+				width: AVATAR_SIZE,
+				height: AVATAR_SIZE,
+				borderRadius: AVATAR_SIZE / 2,
+				backgroundColor: toAvatarTint(card.ownerUserId),
+				color: AVATAR_INK,
+				fontSize: 24,
+			},
+			children: toAvatarInitials(card.ownerUsername),
 		},
 	}
 }

@@ -1,14 +1,15 @@
 import { Camera, Check } from "lucide-react"
 import { type SubmitEvent, useState } from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
+import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
 import { PasswordInput } from "@/components/session/PasswordInput"
 import { useAvatar } from "@/hooks/useAvatar"
 import { authClient } from "@/lib/authClient"
-import { sendUsername } from "@/lib/profileClient"
-import { SECTION_CARD_CLASS } from "@/lib/utils"
+import { sendAccountDelete, sendUsername } from "@/lib/profileClient"
+import { cn, SECTION_CARD_CLASS } from "@/lib/utils"
 
 /**
  * The user profile and password settings sections on the account page.
@@ -19,6 +20,8 @@ export function AccountSettings() {
 			<h2 className="font-display pt-2 text-xl">Settings</h2>
 			<ProfileSection />
 			<PasswordSection />
+			{/* closing the account comes last. it is the one thing on this page that cannot be undone */}
+			<DeleteAccountSection />
 		</>
 	)
 }
@@ -245,6 +248,49 @@ function PasswordSection() {
 					Change password
 				</Button>
 			</form>
+		</section>
+	)
+}
+
+// closing the account, at the bottom of the page and styled as a destructive action
+function DeleteAccountSection() {
+	const [isConfirming, setIsConfirming] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+
+	// close the account, then navigate back to the home page
+	const handleDeleteAccount = async (): Promise<void> => {
+		setIsConfirming(false)
+		setError(null)
+		try {
+			await sendAccountDelete()
+			window.location.href = "/"
+		} catch (deleteError) {
+			console.error("account delete failed", deleteError)
+			setError("That didn't reach Carl. Try again.")
+		}
+	}
+
+	return (
+		<section className={cn(SECTION_CARD_CLASS, "border-destructive")}>
+			<h3 className="text-destructive font-semibold">Close your account</h3>
+			<p className="text-muted-foreground mt-1 text-sm">
+				Your topics, findings, subscriptions, and chats go with it. Any paid plan is cancelled. This cannot be undone.
+			</p>
+			{error && <p className="text-destructive mt-2 text-sm">{error}</p>}
+			<Button variant="destructive" className="mt-3" onClick={() => setIsConfirming(true)}>
+				Close account
+			</Button>
+			{isConfirming && (
+				<ConfirmDialog
+					title="Close your account?"
+					confirmLabel="Close account"
+					cancelLabel="Keep it"
+					onConfirm={handleDeleteAccount}
+					onClose={() => setIsConfirming(false)}
+				>
+					Everything Carl kept for you goes with it, and any paid plan is cancelled. This cannot be undone.
+				</ConfirmDialog>
+			)}
 		</section>
 	)
 }

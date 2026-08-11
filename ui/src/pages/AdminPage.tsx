@@ -1,17 +1,24 @@
 import type { ActivityTopic, AdminConsoleResponse, AdminTotals, AdminUserRow } from "@shared/contracts"
 import { plans } from "@shared/enums"
-import { ChevronDown } from "lucide-react"
+import { ChevronDown, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { TopicsTable } from "@/components/table/TopicsTable"
 import { authClient } from "@/lib/authClient"
-import { fetchAdminConsole, fetchAdminUserTopics, sendUserBudgetOverride, sendUserRole } from "@/lib/billingClient"
+import {
+	fetchAdminConsole,
+	fetchAdminUserTopics,
+	sendUserBudgetOverride,
+	sendUserDelete,
+	sendUserRole,
+} from "@/lib/billingClient"
 import { cn, TABLE_CARD_CLASS, toCentsLabel } from "@/lib/utils"
 
 // human-readable bytes for the attributed-storage column
@@ -181,6 +188,8 @@ function UsersTable({
 							tooltip="Budget override"
 							className="py-2 pr-4"
 						/>
+						{/* the close-account column has an empty heading */}
+						<th className="py-2" />
 					</tr>
 				</thead>
 				<tbody>
@@ -207,6 +216,19 @@ function UserRow({
 	// the user's topics subtable state
 	const [isUserTopicsOpen, setIsUserTopicsOpen] = useState(false)
 	const [userTopics, setUserTopics] = useState<ActivityTopic[] | null>(null)
+	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
+
+	// close the account, then reload the admin console
+	async function handleDeleteAccount(): Promise<void> {
+		setIsConfirmingDelete(false)
+		try {
+			await sendUserDelete(user.id)
+			onReloadPage()
+		} catch (error) {
+			console.error("user delete failed", error)
+			toast.error("Closing that account failed.")
+		}
+	}
 
 	// set the user's role on the server, then reload the console
 	async function handleRoleChange(selectedRole: string): Promise<void> {
@@ -311,11 +333,40 @@ function UserRow({
 						className="w-24 rounded-md border px-1 py-0.5"
 					/>
 				</td>
+				<td className="py-2">
+					{/* an admin can close their own account from their account page. their row does not show a delete icon here */}
+					{user.id !== signedInUserId && (
+						<Tooltip>
+							<TooltipTrigger asChild>
+								<button
+									type="button"
+									onClick={() => setIsConfirmingDelete(true)}
+									aria-label={`Close ${user.username}'s account`}
+									className="text-muted-foreground hover:text-destructive rounded-md p-2"
+								>
+									<Trash2 className="size-4" />
+								</button>
+							</TooltipTrigger>
+							<TooltipContent>Close this account</TooltipContent>
+						</Tooltip>
+					)}
+				</td>
 			</tr>
+			{isConfirmingDelete && (
+				<ConfirmDialog
+					title={`Close ${user.username}'s account?`}
+					confirmLabel="Close account"
+					cancelLabel="Keep it"
+					onConfirm={handleDeleteAccount}
+					onClose={() => setIsConfirmingDelete(false)}
+				>
+					{`Their ${user.topicCount} ${user.topicCount === 1 ? "topic" : "topics"}, findings, subscriptions, and chats go with it. Any paid plan is cancelled. This cannot be undone.`}
+				</ConfirmDialog>
+			)}
 			{/* this user's topics subtable */}
 			{isUserTopicsOpen && (
 				<tr className="border-b">
-					<td colSpan={11} className="py-2">
+					<td colSpan={12} className="py-2">
 						{userTopics ? (
 							<TopicsTable
 								topics={userTopics}

@@ -71,11 +71,14 @@ export async function saveAvatarSource(userId: string, avatarSource: "generated"
 	await replaceAvatar(userId, avatarSource, null)
 }
 
+// where a published avatar comes from: a stored object, a url from the user's oauth provider,
+// or nothing when they use the default username initials
+export type PublishedAvatar = { avatarKey: string } | { imageUrl: string } | null
+
 /**
- * Where a user's published avatar comes from: a stored object, a url from their oauth provider,
- * or nothing when they use the username initials.
+ * Where a user's published avatar comes from.
  */
-export async function toPublishedAvatar(userId: string): Promise<{ avatarKey: string } | { imageUrl: string } | null> {
+export async function toPublishedAvatar(userId: string): Promise<PublishedAvatar> {
 	const [user] = await db
 		.select({ avatarSource: users.avatarSource, avatarKey: users.avatarKey, image: users.image })
 		.from(users)

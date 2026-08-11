@@ -4,6 +4,7 @@ import { and, count, eq } from "drizzle-orm"
 import { db } from "../../db"
 import { findings, sources, topics, users } from "../../db/schema"
 import { attachmentExists, getAttachmentBytes, putAttachment } from "../../worker"
+import { toPublishedAvatar } from "../avatars"
 import { type TopicPreview, toPreviewKey, toPreviewPng } from "./previewImage"
 
 // how long a crawler and a browser may hold a preview. the key only changes when the preview does.
@@ -35,11 +36,14 @@ export async function toPublicTopicPreview(topicId: string): Promise<TopicPrevie
 		.select({ sources: count() })
 		.from(sources)
 		.where(and(eq(sources.topicId, topicId), eq(sources.status, "ready")))
+	// which image the owner publishes, named rather than loaded. the topic preview key is built from this,
+	// so a cache hit never pays to fetch the image itself. changing the avatar still lands the card on a new url
 	return {
 		topicId: row.topicId,
 		title: row.title,
 		ownerUserId: row.ownerUserId,
 		ownerUsername: row.ownerUsername,
+		ownerAvatar: await toPublishedAvatar(row.ownerUserId),
 		keptCount: keptRow?.kept ?? 0,
 		sourceCount: sourceRow?.sources ?? 0,
 	}

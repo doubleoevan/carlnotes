@@ -1,11 +1,12 @@
 // the app's Better Auth instance: email/password and Google/GitHub sign-in, sessions in Neon via the Drizzle adapter
 import { trackEvent } from "@shared/analytics"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
+import { toCanonicalEmail } from "@shared/emails"
 import { isInAppBrowser, toBrowserPlatform, toPlatform } from "@shared/userAgent"
 import { toNormalizedUsername } from "@shared/usernames"
 import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
-import { hashPassword } from "better-auth/crypto"
+import { createAuthMiddleware } from "better-auth/api"
 import { and, eq, like } from "drizzle-orm"
 import { db } from "../db"
 import * as schema from "../db/schema"
@@ -27,6 +28,13 @@ export const GATE_COOKIE_NAME = "signup_gate"
 // the better auth endpoint path for password signup, the only path the gate cookie is required on
 const PASSWORD_SIGNUP_PATH = "/sign-up/email"
 
+// the paths that set a password, which are the only ones a breach check belongs on. sign-in is deliberately absent.
+const PASSWORD_SETTING_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/reset-password", "/change-password", "/set-password"])
+
+// the paths carrying an address better auth then looks a user up by or stores. every one of them is canonicalized,
+// since matching a stored address against an incoming one only works when both sides were written the same way
+const EMAIL_BODY_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/sign-in/email", "/request-password-reset", "/change-email"])
+
 // how long a password-reset link stays valid. it is a bearer token sitting in an inbox, so the window is short
 const RESET_TOKEN_LIFETIME_SECONDS = 60 * 60
 
@@ -43,6 +51,49 @@ export type SessionUser = typeof auth.$Infer.Session.user
 // whether a phone on the same network may sign in against this server, which is a dev-only convenience
 const isLanDevOriginTrusted = Boolean(Bun.env.LAN_DEV_URL) && Bun.env.DOPPLER_ENVIRONMENT === "dev"
 
+// the hook that better auth takes, running both of the checks before a credential request
+const beforeCredentialRequest = createAuthMiddleware(async (context) => {
+	await refuseBreachedPassword(context.path, context.body)
+	return toCanonicalEmailBody(context.path, context.body)
+})
+
+// refuse a breached password that was leaked
+async function refuseBreachedPassword(path: string, body: Record<string, unknown> | undefined): Promise<void> {
+	const password = body?.newPassword ?? body?.password
+	if (!PASSWORD_SETTING_PATHS.has(path) || typeof password !== "string") {
+		return
+	}
+	if (await isBreachedPassword(password)) {
+		throw new APIError("BAD_REQUEST", {
+			message: "That password has appeared in a data breach. Pick one you haven't used elsewhere.",
+		})
+	}
+}
+
+// the request body with its email address canonicalized. better auth merges what our beforeCredentialRequest hook returns
+// with the request, so the lookup and the insert both see the canonical email address
+function toCanonicalEmailBody(
+	path: string,
+	body: Record<string, unknown> | undefined,
+): { context: { body: Record<string, unknown> } } | undefined {
+	if (!EMAIL_BODY_PATHS.has(path) || !body) {
+		return undefined
+	}
+	// sign-up and sign-in name this field "email", while a change of address names the field "newEmail"
+	const emailField = typeof body.newEmail === "string" ? "newEmail" : "email"
+	const email = body[emailField]
+	if (typeof email !== "string") {
+		return undefined
+	}
+	return { context: { body: { ...body, [emailField]: toCanonicalEmail(email) } } }
+}
+
+// a provider can return any gmail variant of one mailbox,
+// so the address better auth matches on is canonicalized first for the profile email
+function toCanonicalProfileEmail(profile: { email?: string | null }): { email?: string } {
+	return profile.email ? { email: toCanonicalEmail(profile.email) } : {}
+}
+
 export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: "pg", schema, usePlural: true }),
 	// better auth derives trustedOrigins from baseURL itself, so BETTER_AUTH_URL alone is enough
@@ -54,17 +105,6 @@ export const auth = betterAuth({
 	emailAndPassword: {
 		enabled: true,
 		minPasswordLength: MIN_PASSWORD_LENGTH,
-		// check if the password was breached
-		password: {
-			hash: async (password) => {
-				if (await isBreachedPassword(password)) {
-					throw new APIError("BAD_REQUEST", {
-						message: "That password has appeared in a data breach. Pick one you haven't used elsewhere.",
-					})
-				}
-				return hashPassword(password)
-			},
-		},
 		sendResetPassword: async ({ user, url }) => {
 			await sendResetPasswordEmail(user.email, url)
 		},
@@ -75,11 +115,21 @@ export const auth = betterAuth({
 		},
 	},
 	socialProviders: {
-		google: { clientId: Bun.env.GOOGLE_CLIENT_ID ?? "", clientSecret: Bun.env.GOOGLE_CLIENT_SECRET ?? "" },
-		github: { clientId: Bun.env.GITHUB_CLIENT_ID ?? "", clientSecret: Bun.env.GITHUB_CLIENT_SECRET ?? "" },
+		google: {
+			clientId: Bun.env.GOOGLE_CLIENT_ID ?? "",
+			clientSecret: Bun.env.GOOGLE_CLIENT_SECRET ?? "",
+			mapProfileToUser: toCanonicalProfileEmail,
+		},
+		github: {
+			clientId: Bun.env.GITHUB_CLIENT_ID ?? "",
+			clientSecret: Bun.env.GITHUB_CLIENT_SECRET ?? "",
+			mapProfileToUser: toCanonicalProfileEmail,
+		},
 	},
 	// implicit linking keeps its safe default: a verified email on both the incoming oauth side and the local row
 	account: { accountLinking: { enabled: true } },
+	// refuse a breached password wherever one is being set, and canonicalize the address wherever one arrives
+	hooks: { before: beforeCredentialRequest },
 	// rate limiting for credential endpoints
 	rateLimit: {
 		enabled: true,

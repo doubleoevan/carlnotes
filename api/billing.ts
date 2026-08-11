@@ -259,6 +259,23 @@ async function syncUserPlan(userId: string, plan: Plan): Promise<void> {
 	await replaceUserLiteLLMKey(userId)
 }
 
+/**
+ * Cancel a user's Stripe subscription right away, so a closed account stops being charged.
+ * Does nothing for a user on the free plan, who has no subscription row at all.
+ */
+export async function cancelUserSubscription(userId: string): Promise<void> {
+	// a free user has no subscription row, so there is nothing at Stripe to cancel
+	const [subscription] = await db
+		.select({ stripeSubscriptionId: billingSubscriptions.stripeSubscriptionId })
+		.from(billingSubscriptions)
+		.where(eq(billingSubscriptions.userId, userId))
+	if (!subscription) {
+		return
+	}
+	// cancel immediately rather than at the period end, since the account it belongs to is going away
+	await stripe().subscriptions.cancel(subscription.stripeSubscriptionId)
+}
+
 // the Stripe client, requiring the secret key
 function stripe(): Stripe {
 	const stripeSecretKey = Bun.env.STRIPE_SECRET_KEY

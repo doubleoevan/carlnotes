@@ -36,6 +36,7 @@ import { subscriptionsRoute } from "./topic/subscriptions"
 import { topicsRoute } from "./topic/topics"
 import { invalidUnsubscribePage, unsubscribe, unsubscribedPage } from "./unsubscribe"
 import { usernamesRoute } from "./usernames"
+import { usersRoute } from "./users"
 
 // better auth's reset-password endpoint, the one unauthenticated route that sends mail to an address it is given
 const PASSWORD_RESET_REQUEST_PATH = "/request-password-reset"
@@ -155,6 +156,8 @@ const route = new Hono<AppEnv>()
 	.route("/", profilesRoute)
 	// the username update route
 	.route("/", usernamesRoute)
+	// closing an account, by an admin or by its own user
+	.route("/", usersRoute)
 	// the admin console routes
 	.route("/", adminRoute)
 	.route("/", featuringRoute)

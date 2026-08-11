@@ -314,6 +314,21 @@ export async function deleteChatAttachments(topicId: string, userId?: string): P
 	)
 }
 
+/**
+ * Delete user's stored objects when their account is closing.
+ * Only the objects. the table rows cascade with the users row.
+ */
+export async function deleteStoredChatAttachments(userId: string): Promise<void> {
+	const keptAttachments = await db
+		.select({ objectKey: chatAttachments.objectKey })
+		.from(chatAttachments)
+		.where(eq(chatAttachments.userId, userId))
+
+	// only an attachment with an object key can be deleted from storage
+	const objectKeys = keptAttachments.map((keptAttachment) => keptAttachment.objectKey).filter(Boolean)
+	await Promise.all(objectKeys.map((objectKey) => deleteAttachment(objectKey as string).catch(() => {})))
+}
+
 // a kept chat attachment's routes, both scoped to whoever kept it
 export const chatAttachmentsRoute = new Hono<AppEnv>()
 	.delete("/chat-attachments/:id", async (context) => {

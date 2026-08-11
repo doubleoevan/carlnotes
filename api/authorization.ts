@@ -14,7 +14,7 @@ type GatedTopic = Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibilit
 
 // the gated capabilities the isAllowed answers
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type Capability = "topic:view" | "topic:edit" | "topic:delete" | "topic:rate" | "topic:create" | "scan:request" | "scan:manual" | "chat:send" | "chat:persist" | "admin:console" | "admin:setRole" | "admin:setBudget" | "admin:setFeatureOrder"
+export type Capability = "topic:view" | "topic:edit" | "topic:delete" | "topic:rate" | "topic:create" | "scan:request" | "scan:manual" | "chat:send" | "chat:persist" | "admin:console" | "admin:setRole" | "admin:setBudget" | "admin:setFeatureOrder" | "admin:deleteUser"
 
 // a user's authority and entitlement inputs, read together since every gate call needs them
 export type UserAccess = { isAdmin: boolean; plan: Plan; budgetOverrideCents: number | null }
@@ -56,6 +56,7 @@ async function decideTopicCapability(
 		case "admin:setRole":
 		case "admin:setBudget":
 		case "admin:setFeatureOrder":
+		case "admin:deleteUser":
 			return false
 		// viewing follows the topic's visibility, invite, and subscription rules
 		case "topic:view":

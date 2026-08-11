@@ -2,8 +2,9 @@
 import { PostHog } from "posthog-node"
 
 export type AnalyticsEvent =
-	// the signup funnel, ending at the activation milestone
+	// the signup funnel, ending at the activation milestone, and the account closing that undoes it
 	| "signup_completed"
+	| "account_deleted"
 	| "topic_created"
 	// what happened to a topic after it was saved, and whether its owner is who did it
 	| "topic_updated"
