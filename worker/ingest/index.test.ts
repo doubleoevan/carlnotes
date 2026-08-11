@@ -37,6 +37,21 @@ test("a Scan fails when every Source errored", () => {
 	expect(toScanSummary([{ status: "failed", sourceKind: "rss" }]).status).toBe("failed")
 })
 
+// a Source not yet screened, or with no registered ingester, is skipped rather than run. skips are non-events,
+// so a topic with only skipped Sources still succeeds instead of reading as a failed Scan
+test("toScanSummary treats a skipped Source as a non-event", () => {
+	expect(toScanSummary([{ status: "skipped", sourceKind: "composio" }]).status).toBe("succeeded")
+})
+
+// fallbackMode marks the keyless path an ingester took, independent of whether it still found Resources.
+// an "ok" Source that fell back is traced the same as one reported "fallback"
+test("toScanSummary traces fallbackMode even on a Source that still found Resources", () => {
+	const scanSummary = toScanSummary([
+		toSourceOutcome({ sourceId: "fell-back", sourceKind: "reddit", fallbackMode: "reddit-rss" }),
+	])
+	expect(scanSummary.fallbackSources).toEqual([{ sourceId: "fell-back", fallbackMode: "reddit-rss" }])
+})
+
 // a body an ingester already fetched has to survive the dedupe to reach the store step,
 // or the page would be scraped a second time by review and billed twice
 test("a Resource keeps its fetched body through the dedupe", () => {

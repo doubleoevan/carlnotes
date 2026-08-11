@@ -1,5 +1,29 @@
 // scrape tests for the conditional-refetch helpers
-import { expect, test } from "bun:test"
+import { expect, mock, test } from "bun:test"
+import { isIP } from "node:net"
+
+// stand in for dns resolution so a test never touches the network: an ip literal resolves to itself,
+// and the handful of hostnames these tests use resolve the way the case under test needs
+mock.module("node:dns/promises", () => ({
+	lookup: async (host: string) => {
+		// a literal address resolves to itself, the way the real resolver would
+		const family = isIP(host)
+		if (family) {
+			return [{ address: host, family }]
+		}
+
+		// a stand-in public host, and one that rebinds to the cloud metadata address
+		if (host === "public.example") {
+			return [{ address: "203.0.113.10", family: 4 }]
+		}
+		if (host === "rebinds.example") {
+			return [{ address: "169.254.169.254", family: 4 }]
+		}
+
+		throw new Error(`no mock dns entry for ${host}`)
+	},
+}))
+
 import { conditionalHeaders, fetchPublicUrl, revalidationOutcome, toFetchableUrl } from "./scrape"
 
 // conditionalHeaders carries only the validators that are stored, omitting an absent one
@@ -73,6 +97,34 @@ test("fetchPublicUrl checks every redirect hop, not just the first url", async (
 		const response = await fetchPublicUrl("https://public.example/moved")
 		expect(await response.text()).toBe("public body")
 		expect(requestedUrls).toContain("https://public.example/landed")
+	} finally {
+		globalThis.fetch = originalFetch
+	}
+})
+
+// an IPv4-mapped, unique-local, or link-local IPv6 literal all look public to the hostname pattern,
+// so the resolved-address check is what catches them
+test("fetchPublicUrl rejects an ipv6 literal that resolves inward", async () => {
+	const originalFetch = globalThis.fetch
+	globalThis.fetch = (async (_input: string | URL | Request) => new Response("should not be reached")) as typeof fetch
+
+	try {
+		for (const url of ["http://[::ffff:127.0.0.1]/", "http://[fd00::1]/", "http://[fe80::1]/"]) {
+			await expect(fetchPublicUrl(url)).rejects.toThrow(/is an internal address/)
+		}
+	} finally {
+		globalThis.fetch = originalFetch
+	}
+})
+
+// a hostname with no internal-looking name at all can still resolve to a private address through DNS,
+// so the redirect-hop check has to resolve the host rather than pattern-match its name
+test("fetchPublicUrl rejects a hostname that resolves to a private address", async () => {
+	const originalFetch = globalThis.fetch
+	globalThis.fetch = (async (_input: string | URL | Request) => new Response("should not be reached")) as typeof fetch
+
+	try {
+		await expect(fetchPublicUrl("http://rebinds.example/")).rejects.toThrow(/is an internal address/)
 	} finally {
 		globalThis.fetch = originalFetch
 	}

@@ -1,5 +1,7 @@
 // scrape a page's full content to Markdown through Firecrawl, plus a credit-free conditional GET that checks whether
 // stored content changed. both are raw fetches: the scrape is keyed by FIRECRAWL_API_KEY, the check goes straight to the url
+import { lookup as dnsLookup } from "node:dns/promises"
+
 const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v1/scrape"
 // scraping a live page is slower than a feed fetch, so allow a longer timeout
 const FETCH_TIMEOUT_MS = 30_000
@@ -46,11 +48,77 @@ export function toFetchableUrl(url: string): URL {
 		throw new Error(`url must be http or https: ${url}`)
 	}
 
-	// a hostname that still resolves privately through DNS gets rejected by the network, not here
+	// this only catches a hostname that already looks internal by name or literal. fetchPublicUrl
+	// resolves the host on every hop, so a name that merely resolves to a private address is still caught there
 	if (INTERNAL_HOST_PATTERN.test(target.hostname)) {
 		throw new Error(`url is an internal address: ${url}`)
 	}
 	return target
+}
+
+// the url parser and dns both write an IPv4-mapped address as two hex groups (::ffff:7f00:1),
+// so the embedded address is decoded from hex, not read as the dotted form it started from
+function embeddedIPv4(address: string): string | null {
+	const hex = address.match(/^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/i)
+	const high = hex?.[1]
+	const low = hex?.[2]
+	if (!high || !low) {
+		return null
+	}
+
+	// the two groups are the embedded address's high and low 16 bits
+	const value = (Number.parseInt(high, 16) << 16) | Number.parseInt(low, 16)
+	return [24, 16, 8, 0].map((shift) => (value >>> shift) & 0xff).join(".")
+}
+
+// address ranges that stay inside a private network: loopback, link-local, unique-local, and RFC1918.
+// an IPv4-mapped IPv6 address carries an IPv4 address's rules, so it is unwrapped first
+function isPrivateAddress(address: string, family: number): boolean {
+	// an IPv4-mapped address judges by its embedded IPv4 address
+	const mapped = family === 6 ? embeddedIPv4(address) : null
+	if (mapped) {
+		return isPrivateAddress(mapped, 4)
+	}
+
+	// loopback, this-network, link-local, and the two RFC1918 blocks
+	if (family === 4) {
+		const [a = -1, b = -1] = address.split(".").map(Number)
+		const privateRanges = [
+			a === 0,
+			a === 10,
+			a === 127,
+			a === 169 && b === 254,
+			a === 172 && b >= 16 && b <= 31,
+			a === 192 && b === 168,
+		]
+		return privateRanges.some(Boolean)
+	}
+
+	// loopback, unspecified, link-local (fe80::/10), and unique-local (fc00::/7)
+	const lower = address.toLowerCase()
+	return lower === "::1" || lower === "::" || /^fe[89ab][0-9a-f]:/.test(lower) || /^f[cd][0-9a-f]{2}:/.test(lower)
+}
+
+/**
+ * Resolves a hop's host and throws when any resolved address is private. Catches an IPv4 literal,
+ * an IPv6 literal, and a DNS name that merely resolves inward, all with the one check.
+ */
+async function assertResolvesPublic(target: URL): Promise<void> {
+	// a bracketed IPv6 literal carries its brackets in URL.hostname, strip them before resolving
+	const host = target.hostname.replace(/^\[|\]$/g, "")
+
+	// a host that fails to resolve at all is not reachable either, so it is rejected the same way
+	let addresses: { address: string; family: number }[]
+	try {
+		addresses = await dnsLookup(host, { all: true })
+	} catch {
+		throw new Error(`url does not resolve: ${target}`)
+	}
+
+	// any resolved address landing inside a private network makes the whole host unreachable
+	if (addresses.some((entry) => isPrivateAddress(entry.address, entry.family))) {
+		throw new Error(`url is an internal address: ${target}`)
+	}
 }
 
 // how many redirects a public fetch follows before it gives up
@@ -60,7 +128,7 @@ const MAX_REDIRECTS = 5
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 
 /**
- * Fetches an owner-supplied url, checking every redirect hop against the private-host rule.
+ * Fetches an owner-supplied url, resolving and checking every redirect hop before it is fetched.
  * Throws an error when a hop is malformed, not http(s), internal, or the chain runs too long.
  */
 export async function fetchPublicUrl(url: string, init: RequestInit = {}): Promise<Response> {
@@ -68,6 +136,9 @@ export async function fetchPublicUrl(url: string, init: RequestInit = {}): Promi
 	// so a public page could bounce the worker to the cloud metadata service
 	let target = toFetchableUrl(url)
 	for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
+		// resolve this hop's host before fetching it, so a name that only resolves to a private
+		// address, or an IPv6 literal the pattern above missed, is caught the same way an IPv4 literal is
+		await assertResolvesPublic(target)
 		const response = await fetch(target, { ...init, redirect: "manual" })
 
 		// anything that is not a redirect is the answer, and so is a redirect that names nowhere to go

@@ -1,6 +1,7 @@
-// billing tests for the subscription projection that the webhook applies to billing_subscriptions
+// billing tests for the subscription projection that the webhook applies to billing_subscriptions, and the
+// ordering guards that keep a late or out-of-order webhook retry from overriding a newer one
 import { expect, test } from "bun:test"
-import { toPaidSubscription } from "./billing"
+import { isStaleSubscriptionEvent, shouldClearSubscription, toPaidSubscription } from "./billing"
 
 // an active paid subscription holds the plan, status, customer, period end, and card-on-file flag
 test("toPaidSubscription maps an active paid subscription", () => {
@@ -142,4 +143,41 @@ test("projectSubscription reports no card and reads the customer id from an obje
 	})
 	expect(singlePaymentSubscription?.hasPaymentMethod).toBe(false)
 	expect(singlePaymentSubscription?.stripeCustomerId).toBe("cus_2")
+})
+
+// nothing is stored yet, so the first event for a user is never stale
+test("isStaleSubscriptionEvent accepts the first event when no row is on file", () => {
+	expect(isStaleSubscriptionEvent(undefined, 1_700_000_000)).toBe(false)
+})
+
+// a retried delivery of an event older than the one already applied must not override it, while an event sharing
+// the applied second still applies: a checkout emits several within one second and event.created counts only seconds
+test("isStaleSubscriptionEvent rejects an event older than the one already applied", () => {
+	const applied = { updatedAt: new Date(1_700_000_000 * 1000) }
+	expect(isStaleSubscriptionEvent(applied, 1_699_999_999)).toBe(true)
+	expect(isStaleSubscriptionEvent(applied, 1_700_000_000)).toBe(false)
+	expect(isStaleSubscriptionEvent(applied, 1_700_000_001)).toBe(false)
+})
+
+// an upgrade that swaps the subscription's plan mid-cycle keeps the same current_period_end, so only the event
+// time tells the retried, older "plus" update apart from the "premium" update that already landed
+test("isStaleSubscriptionEvent rejects a same-period plan change delivered out of order", () => {
+	const premiumApplied = { updatedAt: new Date(1_700_000_100 * 1000) }
+	expect(isStaleSubscriptionEvent(premiumApplied, 1_700_000_050)).toBe(true)
+})
+
+// no row on file means nothing to protect, so a cancellation is free to clear it
+test("shouldClearSubscription clears when there is no row on file", () => {
+	expect(shouldClearSubscription(undefined, "sub_a")).toBe(true)
+})
+
+// the stored row is still this subscription's, so cancelling it clears the row
+test("shouldClearSubscription clears when the stored row matches the canceled subscription", () => {
+	expect(shouldClearSubscription({ stripeSubscriptionId: "sub_a" }, "sub_a")).toBe(true)
+})
+
+// a user canceled plus (sub_a) and immediately checked out premium (sub_b). a late deleted event for sub_a
+// must not wipe the sub_b row it left behind
+test("shouldClearSubscription keeps a row that a newer, different subscription already replaced", () => {
+	expect(shouldClearSubscription({ stripeSubscriptionId: "sub_b" }, "sub_a")).toBe(false)
 })

@@ -1,8 +1,20 @@
 // score tests for the promotion threshold, the content ttl, bounded concurrency, and the score prompt
 import { expect, test } from "bun:test"
-import { canScoreResource, newBudget } from "../budget"
+import type { scans } from "../../db/schema"
+import { newBudget } from "../budget"
 import { isContentStale } from "../scrape"
-import { buildScorePrompt, isPromoted, runWithConcurrency, toFetchedContentFields } from "./score"
+import type { Resource } from "./filter"
+import {
+	buildScorePrompt,
+	fetchAndScoreResources,
+	isPromoted,
+	runWithConcurrency,
+	toFetchedContentFields,
+} from "./score"
+import { emptyReviewOutcome } from "./track"
+
+// a persisted Scan row, declared here so score.ts keeps its own copy private
+type Scan = typeof scans.$inferSelect
 
 // a high cheap-model score earns promotion to the premium score-model's re-score
 test("isPromoted gates on the promotion threshold", () => {
@@ -20,7 +32,7 @@ test("isContentStale gates on the ttl window", () => {
 })
 
 // the paid section runs concurrently but bounded, since an unbounded burst draws Firecrawl 429s
-test("mapWithConcurrency never exceeds its limit and returns results in order", async () => {
+test("runWithConcurrency never exceeds its limit and returns results in order", async () => {
 	// track how many tasks are in flight at once, recording the high-water mark
 	let inFlight = 0
 	let peakInFlight = 0
@@ -33,27 +45,37 @@ test("mapWithConcurrency never exceeds its limit and returns results in order", 
 		return item * 2
 	})
 
-	// every item ran, in input order, and no more than the limit was ever in flight
+	// every item ran, in input order, and the limit was actually reached, not just never exceeded,
+	// so a regression to a serial loop (which never exceeds the limit either) would fail this
 	expect(results).toEqual([2, 4, 6, 8, 10, 12, 14])
-	expect(peakInFlight).toBeLessThanOrEqual(3)
+	expect(peakInFlight).toBe(3)
 })
 
-// the plan limit is checked before each dispatch, so once it trips the rest are deferred instead of bought
-test("the plan limit check halts dispatch once either limit is reached", async () => {
-	// a budget that admits two resources before its scored-resource limit trips
-	const budget = { ...newBudget(), limitDollars: 0.5, maxScoredResources: 2 }
+// the plan limit is the same canScoreResource guard fetchAndScoreResource runs before doing any paid work,
+// so deleting that guard would leave every resource here bought instead of deferred, and this test would fail
+test("fetchAndScoreResources defers every admitted Resource once the plan limit is already reached", async () => {
+	// no scoring room left, so the guard trips before a resource is fetched, screened, or scored
+	const budget = { ...newBudget(), maxScoredResources: 0 }
+	const admittedResources = [
+		{ id: "r1", url: "https://a.test" },
+		{ id: "r2", url: "https://b.test" },
+	] as unknown as Resource[]
+	const scan = { id: "scan1" } as unknown as Scan
+	const topicContext = { name: "topic", text: "topic context", embedding: [] }
+	const reviewOutcome = emptyReviewOutcome()
 
-	// dispatch five resources the way the ranked pass does, checking the limit before paying for each
-	const outcomes = await runWithConcurrency([1, 2, 3, 4, 5], 1, async (item) => {
-		if (!canScoreResource(budget)) {
-			return "deferred"
-		}
-		budget.fetchCounts.fetchedCount++
-		return `kept ${item}`
-	})
+	const scoredResourceIds = await fetchAndScoreResources(
+		admittedResources,
+		scan,
+		"topic1",
+		topicContext,
+		reviewOutcome,
+		budget,
+	)
 
-	// the first two were bought, and the rest deferred, without failing anything
-	expect(outcomes).toEqual(["kept 1", "kept 2", "deferred", "deferred", "deferred"])
+	// nothing was bought, and the review outcome recorded both resources as deferred
+	expect(scoredResourceIds).toEqual([])
+	expect(reviewOutcome.deferredCount).toBe(2)
 })
 
 // an empty scrape and a failed object-storage write both leave no key, so the snippet becomes the text to score

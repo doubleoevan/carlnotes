@@ -132,9 +132,10 @@ export async function handleStripeWebhook(rawBody: string, signature: string | u
 	}
 	const event = await stripe().webhooks.constructEventAsync(rawBody, signature, secret)
 
-	// every subscription lifecycle event carries the full subscription, so one handler covers create/update/delete
+	// every subscription lifecycle event carries the full subscription, so one handler covers create/update/delete.
+	// event.created orders retries and out-of-order deliveries against whatever was applied last
 	if (event.type.startsWith("customer.subscription.")) {
-		await applySubscriptionState(event.data.object as Stripe.Subscription)
+		await applySubscriptionState(event.data.object as Stripe.Subscription, event.created)
 	}
 }
 
@@ -229,27 +230,66 @@ export async function readStripeTotalRevenueCents(sinceUnixSeconds: number): Pro
 	}
 }
 
+/**
+ * Whether a webhook event is older than the one already applied for this user. Stripe retries a failed delivery for
+ * up to 3 days and gives no ordering guarantee, so a late retry must never override a newer event already on file.
+ * `event.created` counts whole seconds, and a checkout emits several events within one second, so an event sharing
+ * the stored second still applies: re-applying the same event writes the same row.
+ */
+export function isStaleSubscriptionEvent(existing: { updatedAt: Date } | undefined, eventCreated: number): boolean {
+	return existing !== undefined && eventCreated < existing.updatedAt.getTime() / 1000
+}
+
+// whether a canceled or unpaid event may clear the stored row: only when that row still belongs to the same
+// subscription. a stale cancellation for a subscription the user already replaced must leave the replacement alone
+export function shouldClearSubscription(
+	existing: { stripeSubscriptionId: string } | undefined,
+	subscriptionId: string,
+): boolean {
+	return !existing || existing.stripeSubscriptionId === subscriptionId
+}
+
 // upsert the billing subscription keyed by user ID, or clear it, then update the users.plan and reissue the LiteLLM key
-async function applySubscriptionState(subscription: Stripe.Subscription): Promise<void> {
+async function applySubscriptionState(subscription: Stripe.Subscription, eventCreated: number): Promise<void> {
 	// subscriptions we created must have a userId. ignore anything else
 	const userId = subscription.metadata?.userId
 	if (!userId) {
 		return
 	}
 
-	// a null paid subscription clears the billing_subscriptions row and reverts the user to free
-	const paidSubscription = toPaidSubscription(subscription)
-	if (!paidSubscription) {
-		await db.delete(billingSubscriptions).where(eq(billingSubscriptions.userId, userId))
-		await syncUserPlan(userId, "free")
+	// the row on file, stamped with the event time it was written from. a stale or out-of-order event has nothing new to say
+	const [existingRow] = await db
+		.select({
+			stripeSubscriptionId: billingSubscriptions.stripeSubscriptionId,
+			updatedAt: billingSubscriptions.updatedAt,
+		})
+		.from(billingSubscriptions)
+		.where(eq(billingSubscriptions.userId, userId))
+	if (isStaleSubscriptionEvent(existingRow, eventCreated)) {
 		return
 	}
 
-	// upsert the billing_subscriptions row, then update the users.plan
+	// a null paid subscription clears the billing_subscriptions row and reverts the user to free, but only when the
+	// row still belongs to this subscription
+	const paidSubscription = toPaidSubscription(subscription)
+	if (!paidSubscription) {
+		if (shouldClearSubscription(existingRow, subscription.id)) {
+			await db.delete(billingSubscriptions).where(eq(billingSubscriptions.userId, userId))
+			await syncUserPlan(userId, "free")
+		}
+		return
+	}
+
+	// upsert the billing_subscriptions row, stamping updatedAt with this event's time so a later event can compare
+	// against it, then update the users.plan
+	const eventAppliedAt = new Date(eventCreated * 1000)
 	await db
 		.insert(billingSubscriptions)
-		.values({ userId, ...paidSubscription })
-		.onConflictDoUpdate({ target: billingSubscriptions.userId, set: paidSubscription })
+		.values({ userId, ...paidSubscription, updatedAt: eventAppliedAt })
+		.onConflictDoUpdate({
+			target: billingSubscriptions.userId,
+			set: { ...paidSubscription, updatedAt: eventAppliedAt },
+		})
 	await syncUserPlan(userId, paidSubscription.plan)
 }
 
