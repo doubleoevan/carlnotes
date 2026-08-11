@@ -1,0 +1,100 @@
+{
+	"//": "Field reference: ./cc-autopilot/config.schema.md",
+	"sprint": "codebase-audit",
+	"branch": "autopilot/trial",
+	"pushBranch": "autopilot/trial",
+	"protectedBranch": "main",
+	"mode": "code",
+	"//sourceDir": "CarlNotes has no single src/: the modules are ui/, api/, worker/, db/, shared/. check-wired.mjs takes one directory, so it greps the repo root to find a new symbol's real callers across module boundaries.",
+	"sourceDir": ".",
+	"paths": {
+		"stateDir": "notes/sprint",
+		"board": "notes/sprint/board.json",
+		"boardArchive": "notes/sprint/board.archive.json",
+		"currentBatch": "notes/sprint/current-batch.json",
+		"triageInput": "notes/sprint/triage-input.json",
+		"resume": "notes/sprint/RESUME.md",
+		"wavesDir": "notes/sprint/waves",
+		"orchestrator": "cc-autopilot/orchestrator.md"
+	},
+	"code": {
+		"surfaces": ["ui", "api", "worker", "db", "shared"]
+	},
+	"exercise": "bun test",
+	"gates": {
+		"lint": "bunx biome check .",
+		"typecheck": "bunx tsc -b",
+		"test": "bun test"
+	},
+	"codeRules": "Bun is the runtime and package manager: bun install, bun run <script>, bunx <pkg>, bun test. Never npm, npx, or node. One package.json at the repo root; never add another. Module boundaries: ui never imports api, worker, or db; api and worker import db; db imports nothing app-level. Postgres access goes through Drizzle in db/; never Bun.sql, pg, or a raw client. Comment every logical group: a // comment line above every group of 2+ statements, one line preferred, saying what the group does rather than narrating a consumer or a past bug. Prefer ordinary words over rarer synonyms. Use the canonical domain nouns (Topic, Source, Scan, Resource, Finding, Feed, Subscription, Audience, Integration, Billing Subscription, Bookmark, Chat Turn, Username, Avatar) and never Channel, Item, Update, Run, Crawl, Group, List, or Cohort. Follow is client-facing copy only; every identifier says subscribe, subscription, or subscriber. ui/src/components/primitives/ is reserved for shadcn; put custom shared components elsewhere. Model-facing prompts live as versioned markdown under worker/prompts/ with frontmatter and {{variable}} bodies, never inline string literals. Never print a secret value. Run every gate from the repo root with relative paths.",
+	"bar": "Correct, clear, and lazy: the shortest change that actually works, in the idiom of the code around it. No dead code, no abstraction with one caller, no dependency for what a few lines do. Every logical group carries its // comment, every name says what the thing is, and comments match the code they sit above. Errors surface with an actionable message instead of failing silently. Module boundaries hold, the domain vocabulary is exact, and bunx biome check . + bunx tsc -b + bun test stay green.",
+	"doctrine": "CarlNotes is a modular monolith: ui/ (React SPA on Vite), api/ (Hono), worker/ (Temporal), db/ (Drizzle + Neon Postgres), one package.json at the root, boundaries enforced by tsconfig project references. Preserve existing behavior, interfaces, and architecture unless a card explicitly changes them. Secrets come from Doppler at run time, never from committed files. Feature work is specified in openspec/ before it is built.",
+	"guardrails": [
+		"Bun is the runtime and package manager. Never propose npm, npx, yarn, pnpm, or node.",
+		"One package.json at the repo root. Never propose a monorepo, workspaces, or a second package.json; folders separate concerns, packages separate deployments.",
+		"The ui/ api/ worker/ db/ split and its one-way import direction are settled. Never propose merging, renaming, or re-layering them.",
+		"The UI is a Vite SPA. Never propose Bun.serve HTML imports, bun --hot, Next.js, or another framework.",
+		"Postgres goes through Drizzle in db/. Never propose Bun.sql, pg, an ORM swap, or a raw client.",
+		"The domain vocabulary is closed: Topic, Source, Scan, Resource, Finding, Feed, Subscription, Audience, Integration, Billing Subscription, Bookmark, Chat Turn, Username, Avatar. Never propose Channel, Item, Update, Run, Crawl, Group, List, or Cohort.",
+		"Follow is client-facing copy only. Never propose renaming subscribe/subscription/subscriber identifiers to follow.",
+		"A // comment above every group of 2+ statements is required, not clutter. Never propose stripping comments for density.",
+		"ui/src/components/primitives/ is reserved for shadcn. Never propose hand-written components there.",
+		"Model-facing prompts stay as versioned markdown under worker/prompts/. Never propose inlining them as string literals.",
+		"Biome owns formatting and linting. Never propose Prettier or ESLint.",
+		"Feature specs live in openspec/. Never propose replacing that workflow."
+	],
+	"verbs": "Topic, Source, Scan, Resource, Finding, Feed, Subscription, Audience, Integration, Billing Subscription, Bookmark, Chat Turn, Username, Avatar. Carl addresses a reader where the app's code says user.",
+	"//panel": "Six seats, trimmed from the code-mode default of thirteen to halve the cost of every refill. The dropped seats (english-professor, observability-steward, privacy-identity-steward, release-engineer, docs-onboarding-steward, information-theorist, fixture-curator) are the copy, docs, and ops flavored ones; add any of them back to raise the signal and the spend together.",
+	"panel": {
+		"audit": [
+			"software-engineer",
+			"systems-simplifier",
+			"security-auditor",
+			"performance-engineer",
+			"test-coverage-auditor",
+			"product-distiller"
+		],
+		"generate": [
+			"software-engineer",
+			"systems-simplifier",
+			"security-auditor",
+			"performance-engineer",
+			"test-coverage-auditor",
+			"product-distiller"
+		]
+	},
+	"idPrefixBySurface": {
+		"ui": "UI",
+		"api": "API",
+		"worker": "WRK",
+		"db": "DB",
+		"shared": "SHR"
+	},
+	"verifyRouting": {
+		"panelArbiter": "product-distiller",
+		"byFile": [
+			{
+				"match": ["test", "__tests__", ".test.", ".spec.", ".smoke."],
+				"seat": "software-engineer"
+			},
+			{
+				"match": ["auth", "session", "password", "encryption", "billing", "stripe"],
+				"seat": "security-auditor"
+			}
+		],
+		"byTitle": [
+			{
+				"match": ["copy", "help text", "error message", "documentation", "wording", "naming", "comment"],
+				"seat": "product-distiller"
+			},
+			{
+				"match": ["simplify", "complexity", "dead code", "duplication", "abstraction", "delete"],
+				"seat": "systems-simplifier"
+			},
+			{
+				"match": ["secret", "token", "auth", "injection", "sanitiz", "leak"],
+				"seat": "security-auditor"
+			}
+		]
+	}
+}
