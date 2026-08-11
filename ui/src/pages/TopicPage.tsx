@@ -1,24 +1,23 @@
 import type { TopicResponse } from "@shared/contracts"
-import { PawPrint, Pencil, Trash2 } from "lucide-react"
 import type * as React from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 import { ChatPanel } from "@/components/chat/ChatPanel"
-import { Badge } from "@/components/primitives/badge"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { NewCountInfo, TopicInfoPopover } from "@/components/topic/Topic"
+import { ShareTopic } from "@/components/topic/ShareTopic"
 import { TopicFeedSort } from "@/components/topic/TopicFeedSort"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
+import { SubscribeButton, TopicHeader } from "@/components/topic/TopicPageHeader"
 import { TopicRankButton } from "@/components/topic/TopicRankButton"
 import { TopicScanButton } from "@/components/topic/TopicScanButton"
 import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
 import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
 import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
 import { useIsVisible } from "@/hooks/useIsVisible"
+import { useManualScanProgress, usePollWhileScanning } from "@/hooks/useTopicScan"
 import { authClient } from "@/lib/authClient"
 import {
 	fetchTopicPage,
@@ -30,22 +29,8 @@ import {
 	sendTopicFindingRating,
 	sendTopicSubscription,
 } from "@/lib/topicClient"
-import {
-	cn,
-	MENU_BUTTON_CLASS,
-	matchesFeedView,
-	NEXT_SCAN_DISCLAIMER,
-	RAIL_ICON_INSET,
-	RAIL_TEXT_INSET,
-	toSortedFindings,
-	toSubscribeTooltip,
-} from "@/lib/utils"
+import { cn, MENU_BUTTON_CLASS, matchesFeedView, NEXT_SCAN_DISCLAIMER, toSortedFindings } from "@/lib/utils"
 import { type TopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
-
-// how often to re-fetch the page while a scan is running, so history and the manual scan button follow it live
-const SCAN_POLL_MS = 3000
-// a scan still running past this age is treated as stalled, so a crash-orphaned scan never polls or disables the button forever
-const SCAN_STALE_MS = 5 * 60 * 1000
 
 /**
  * The page for a single topic at /topics/:id: header with owner actions, findings, scan history, and the info card.
@@ -188,6 +173,16 @@ export function TopicPage() {
 					{topicResponse && (
 						<SubscribeButton topic={topicResponse} isSignedIn={Boolean(session)} onToggle={handleSubscriptionToggle} />
 					)}
+					{/* sharing sits beside following, since both are things a user does with someone else's topic.
+					    a private topic has nowhere a reader could follow the link to */}
+					{topicResponse && topicResponse.visibility !== "private" && (
+						<ShareTopic
+							topicId={topicResponse.id}
+							topicName={topicResponse.name}
+							isPublic={topicResponse.visibility === "public"}
+							className={MENU_BUTTON_CLASS}
+						/>
+					)}
 					{isManualScanShown && (
 						<TopicScanButton
 							remainingScans={topicResponse?.manualScansRemaining ?? null}
@@ -268,115 +263,6 @@ export function TopicPage() {
 	)
 }
 
-// re-fetch the topic page on a timer while any of its scans are running,
-// so the history status row and the "Brew" button follow a scan to completion without a manual reload.
-function usePollWhileScanning(isScanning: boolean, reload: () => Promise<void>): void {
-	useEffect(() => {
-		if (!isScanning) {
-			return
-		}
-
-		// poll until the running scan resolves, then the cleared timer lets the page rest
-		const pollTimer = setInterval(() => {
-			void reload()
-		}, SCAN_POLL_MS)
-		return () => clearInterval(pollTimer)
-	}, [isScanning, reload])
-}
-
-// the topic header: the title with its unread count and the owner's actions, then its tags
-function TopicHeader({ topic, onEdit, onDelete }: { topic: TopicResponse; onEdit: () => void; onDelete: () => void }) {
-	// the heading opens the note and shows its tooltip as well as the icon in it, so the title holds the state the icon reads
-	const [isNoteOpen, setNoteOpen] = useState(false)
-	const [isNoteHintOpen, setNoteHintOpen] = useState(false)
-	return (
-		<>
-			{/* title row. the note icon sits in the heading's own text, so a title that wraps keeps the icon beside its last word */}
-			<div className="mt-6 flex items-start justify-between gap-3">
-				{/* biome-ignore lint/a11y/useKeyWithClickEvents: the note icon in the heading is the keyboard path */}
-				<h1
-					onClick={() => setNoteOpen(true)}
-					onMouseEnter={() => setNoteHintOpen(true)}
-					onMouseLeave={() => setNoteHintOpen(false)}
-					className="font-display min-w-0 cursor-pointer text-2xl leading-tight"
-				>
-					{topic.name}
-					<TopicInfoPopover
-						topic={topic}
-						isInline
-						isOpen={isNoteOpen}
-						onOpenChange={setNoteOpen}
-						isHintOpen={isNoteHintOpen}
-						onHintOpenChange={setNoteHintOpen}
-					/>
-				</h1>
-				{/* the unread count and the owner's actions share the far right of the title line. only an owner
-				    gets the action icons, so a user's row ends in the count and takes the text inset instead */}
-				<div className={cn(topic.isOwner ? RAIL_ICON_INSET : RAIL_TEXT_INSET, "flex shrink-0 items-center gap-1")}>
-					{topic.newCount > 0 && <NewCountInfo topic={topic} />}
-					<TopicActions topic={topic} onEdit={onEdit} onDelete={onDelete} />
-				</div>
-			</div>
-			{/* tags row, left out entirely by an untagged topic so it includes no empty gap */}
-			{topic.tags.length > 0 && (
-				<div className="mt-2 flex flex-wrap gap-1">
-					{topic.tags.map((tag) => (
-						<Badge key={tag} variant="secondary">
-							{tag}
-						</Badge>
-					))}
-				</div>
-			)}
-		</>
-	)
-}
-
-// the edit and delete actions, shown to whoever the gate says may use them
-function TopicActions({ topic, onEdit, onDelete }: { topic: TopicResponse; onEdit: () => void; onDelete: () => void }) {
-	if (!topic.canEdit) {
-		return null
-	}
-	return (
-		<div className="flex items-center gap-0.5">
-			<IconButton tooltip="Edit this topic" onClick={onEdit}>
-				<Pencil className="size-3.75" />
-			</IconButton>
-			<IconButton tooltip="Delete this topic" onClick={onDelete}>
-				<Trash2 className="size-3.75" />
-			</IconButton>
-		</div>
-	)
-}
-
-// the subscribe control, worded "Follow" on the button. it renders for a user on a public or invite topic,
-// and the page's toggle handler routes a visitor to signup
-function SubscribeButton({
-	topic,
-	isSignedIn,
-	onToggle,
-}: {
-	topic: TopicResponse
-	isSignedIn: boolean
-	onToggle: () => void
-}) {
-	if (topic.isOwner || topic.visibility === "private") {
-		return null
-	}
-	const tooltip = toSubscribeTooltip(isSignedIn, topic.isSubscribed, topic.visibility === "invite")
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<button type="button" aria-pressed={topic.isSubscribed} onClick={onToggle} className={MENU_BUTTON_CLASS}>
-					{/* the paw is an outline until subscribed, then fills, matching the homepage topic row */}
-					<PawPrint className={cn("size-4", topic.isSubscribed && "text-primary fill-current")} />
-					{topic.isSubscribed ? "Unfollow" : "Follow"}
-				</button>
-			</TooltipTrigger>
-			<TooltipContent>{tooltip}</TooltipContent>
-		</Tooltip>
-	)
-}
-
 // a section that stays hidden until scrolled into view, then plays the staggered hydrate animation
 function HydrateSection({ index, children }: { index: number; children: React.ReactNode }) {
 	const { ref, isVisible } = useIsVisible<HTMLDivElement>()
@@ -392,72 +278,4 @@ function HydrateSection({ index, children }: { index: number; children: React.Re
 			{children}
 		</div>
 	)
-}
-
-// an icon with an action tooltip
-function IconButton({
-	tooltip,
-	isPressed,
-	onClick,
-	children,
-}: {
-	tooltip: string
-	isPressed?: boolean
-	onClick: () => void
-	children: React.ReactNode
-}) {
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<button
-					type="button"
-					aria-label={tooltip}
-					aria-pressed={isPressed}
-					onClick={onClick}
-					className="text-muted-foreground hover:text-foreground grid h-11 w-7 place-items-center sm:size-7"
-				>
-					{children}
-				</button>
-			</TooltipTrigger>
-			<TooltipContent>{tooltip}</TooltipContent>
-		</Tooltip>
-	)
-}
-
-// whether a scan started recently enough to still be genuinely running, versus stalled by a crash
-function isRecentScan(startedAt: string): boolean {
-	return Date.now() - new Date(startedAt).getTime() < SCAN_STALE_MS
-}
-
-// the manual scan button's live state. isScanning is a recent running row, and isRunningScan is optimistic from
-// the click until a row started after it appears in any status, so a fast failure never leaves the button stuck
-function useManualScanProgress(scans: TopicResponse["scans"] | undefined): {
-	isScanning: boolean
-	isRunningScan: boolean
-	startScan: () => void
-	stopScan: () => void
-} {
-	const [isRunningScan, setIsRunningScan] = useState(false)
-	const [scanTriggeredAt, setScanTriggeredAt] = useState<number | null>(null)
-
-	const isScanning = scans?.some((scan) => scan.status === "running" && isRecentScan(scan.startedAt)) ?? false
-	const hasScanSinceTrigger =
-		scanTriggeredAt !== null && (scans?.some((scan) => new Date(scan.startedAt).getTime() >= scanTriggeredAt) ?? false)
-
-	// hand the button over from the optimistic flag to the visible row
-	useEffect(() => {
-		if (isScanning || hasScanSinceTrigger) {
-			setIsRunningScan(false)
-		}
-	}, [isScanning, hasScanSinceTrigger])
-
-	return {
-		isScanning,
-		isRunningScan,
-		startScan: () => {
-			setIsRunningScan(true)
-			setScanTriggeredAt(Date.now())
-		},
-		stopScan: () => setIsRunningScan(false),
-	}
 }

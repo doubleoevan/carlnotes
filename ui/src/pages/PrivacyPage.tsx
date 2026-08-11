@@ -52,7 +52,7 @@ CarlNotes reads public web content on a schedule and scores it against context y
 
 **Topic configuration.** Topic names, context documents, uploaded attachments, fetched URLs, source lists, tags, frequency settings, and privacy level.
 
-**Curation data.** Discovered URLs, extracted page content, embeddings, relevance scores, generated summaries, scan reports, and cost records.
+**Scan data.** Discovered URLs, extracted page content, embeddings, relevance scores, generated summaries, scan reports, and cost records.
 
 **Feedback and state.** Thumbs up and down, consumed state, bookmarks, and subscription preferences. This is what makes your feed improve.
 

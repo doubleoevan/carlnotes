@@ -6,7 +6,7 @@ import { isVisibleAfterActivation } from "./permissions"
 // a subscriber sees a finding only when its scan started after their subscription activated
 test("isVisibleAfterActivation opens findings from scans after the activation", () => {
 	const activatedAt = new Date("2026-07-20T00:00:00.000Z")
-	// a scan from before the activation stays hidden, so the back catalogue never opens
+	// a scan from before the activation stays hidden, so the back catalog never opens
 	expect(isVisibleAfterActivation(new Date("2026-07-19T00:00:00.000Z"), activatedAt)).toBe(false)
 	// a scan at the exact activation instant is not after it, so it stays hidden too
 	expect(isVisibleAfterActivation(new Date("2026-07-20T00:00:00.000Z"), activatedAt)).toBe(false)

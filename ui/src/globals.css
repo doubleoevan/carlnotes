@@ -12,19 +12,13 @@
 /* streamdown styles itself with tailwind classes, so its dist has to be scanned or its markdown renders unstyled */
 @source "../../node_modules/streamdown/dist/*.js";
 
-/* the site's two elevations. lift is an ambient halo for surfaces, cards, tables, the search bar, dropdowns,
-   and popups, with a touch of downward contact. raise is the smaller cut for buttons and tiles */
-/* the lift under a bordered card. both layers are offset and tight rather than a wide even glow,
-   so the card reads as raised against the drifting steam behind it instead of haloed, and its 1px border stays the only edge */
+/* the site's one elevation, under every raised surface: cards, tables, the search bar, popups, buttons, and tiles.
+   both layers are offset and tight rather than a wide even glow, so a surface reads as raised instead of haloed,
+   and its 1px border stays the only edge */
 @utility shadow-lift {
 	box-shadow:
-		0 2px 4px rgba(0, 0, 0, 0.16),
-		0 8px 15px -6px rgba(0, 0, 0, 0.34);
-}
-@utility shadow-raise {
-	box-shadow:
 		0 2px 5px rgba(0, 0, 0, 0.2),
-		0 6px 14px -6px rgba(0, 0, 0, 0.3);
+		0 8px 15px -6px rgba(0, 0, 0, 0.34);
 }
 
 @theme inline {

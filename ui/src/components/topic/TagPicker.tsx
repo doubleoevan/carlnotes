@@ -75,7 +75,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 						aria-haspopup="dialog"
 						aria-expanded={isOpen}
 						onClick={() => setIsOpen(!isOpen)}
-						className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-raise"
+						className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-lift"
 					>
 						<Plus className="size-3.5" />
 					</button>
@@ -84,7 +84,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 						<button
 							type="button"
 							aria-label="Add tag"
-							className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-raise"
+							className="bg-card text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center rounded-full border shadow-lift"
 						>
 							<Plus className="size-3.5" />
 						</button>

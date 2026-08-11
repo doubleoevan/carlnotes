@@ -11,13 +11,21 @@ import { shutdownTelemetry, startTelemetry } from "./telemetry"
 const TOPIC_CONTEXT =
 	"Large language models and LLM tooling: building applications with models like Claude and GPT, prompt engineering, embeddings, retrieval, agents, and AI engineering practices."
 
+// append a stamp for the database to persist a unique identifier for fixture data
+const smokeTestStamp = Date.now()
+
 // seed a fake owner, a topic with a real context, and a search source
 // search needs no config because the topic context is its input
 async function seedTestData(): Promise<{ source: Source; userId: string }> {
 	// a fake owner. deleting it on cleanup cascades to the topic and source
 	const [user] = await db
 		.insert(users)
-		.values({ name: "search-smoke", email: `search-smoke+${Date.now()}@example.test` })
+		.values({
+			name: "search-smoke",
+			email: `search-smoke+${smokeTestStamp}@example.test`,
+			username: `search-smoke-${smokeTestStamp}`,
+			usernameNormalized: `searchsmoke${smokeTestStamp}`,
+		})
 		.returning()
 	if (!user) {
 		throw new Error("failed to seed user")

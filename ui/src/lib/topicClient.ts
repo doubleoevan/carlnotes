@@ -122,7 +122,7 @@ export async function fetchSourceSuggestions(
 export async function sendTopicCreate(payload: UpdateTopicPayload): Promise<string> {
 	const response = await client.api.topics.$post({ json: payload })
 	if (!response.ok) {
-		throw (await toDailyTopicLimitError(response)) ?? new Error(`topic create failed: ${response.status}`)
+		throw (await toTopicWriteError(response)) ?? new Error(`topic create failed: ${response.status}`)
 	}
 	return topicCreateResponse.parse(await response.json()).id
 }
@@ -131,14 +131,19 @@ export async function sendTopicCreate(payload: UpdateTopicPayload): Promise<stri
 export async function sendTopicUpdate(topicId: string, payload: UpdateTopicPayload): Promise<void> {
 	const response = await client.api.topics[":id"].$patch({ param: { id: topicId }, json: payload })
 	if (!response.ok) {
-		throw (await toDailyTopicLimitError(response)) ?? new Error(`topic update failed: ${response.status}`)
+		throw (await toTopicWriteError(response)) ?? new Error(`topic update failed: ${response.status}`)
 	}
 }
 
-// the daily-topic-limit rejection a rejected topic write includes, or null when it was rejected for anything else
-async function toDailyTopicLimitError(response: Response): Promise<DailyTopicLimitError | null> {
-	const body = (await response.json().catch(() => null)) as { dailyTopicLimit?: number } | null
-	return typeof body?.dailyTopicLimit === "number" ? new DailyTopicLimitError(body.dailyTopicLimit) : null
+// how a refused topic write explains itself, or null when the body carried no explanation to show.
+// the body is read once here, since a response body cannot be read twice
+async function toTopicWriteError(response: Response): Promise<Error | null> {
+	const body = (await response.json().catch(() => null)) as { dailyTopicLimit?: number; error?: string } | null
+	// the daily topic limit gets its own error, since that is the one the modal answers with a link to the plans
+	if (typeof body?.dailyTopicLimit === "number") {
+		return new DailyTopicLimitError(body.dailyTopicLimit)
+	}
+	return typeof body?.error === "string" ? new Error(body.error) : null
 }
 
 // sets where a public topic sits in the Featured section, with zero clearing it. admin only, throws on a rejection

@@ -14,7 +14,7 @@ import {
 	topicSectionKeys,
 	visibilities,
 } from "./enums"
-import type { Plan } from "./plans"
+import type { BillingInterval, Plan } from "./plans"
 
 // the rating mutation body. up or down sets the topic finding's rating and null clears it
 export const ratingPayload = z.object({ rating: z.enum(ratings).nullable() })
@@ -38,6 +38,21 @@ export const checkoutPayload = z.object({
 	billingInterval: z.enum(["monthly", "yearly"]),
 })
 export type CheckoutPayload = z.infer<typeof checkoutPayload>
+
+// the update username body. the validation rules live in toUsernameRejection
+export const usernamePayload = z.object({ username: z.string() })
+export type UsernamePayload = z.infer<typeof usernamePayload>
+
+// how long a flag's reason may run. it is a note to a person, not a case file
+export const FLAG_REASON_MAX_CHARS = 1000
+
+// the flag content body. the subject is a Topic id or a username, named by which kind it is so the api can look it up
+export const flagContentPayload = z.object({
+	subjectKind: z.enum(["topic", "profile"]),
+	subjectId: z.string().min(1),
+	reason: z.string().trim().min(1).max(FLAG_REASON_MAX_CHARS),
+})
+export type FlagContentPayload = z.infer<typeof flagContentPayload>
 
 // the invite-revoke body. which invitee the topic owner is withdrawing, named by the address they invited
 export const inviteRevokePayload = z.object({ email: z.string() })
@@ -180,7 +195,7 @@ const chatAttachmentFields = {
 }
 
 // one attachment on a chat turn. each kind has its own field requirements
-// the reader of a validated attachment never has to guess whether a field is present
+// a caller holding a validated attachment never has to guess whether a field is present
 export const chatAttachmentPayload = z.discriminatedUnion("kind", [
 	z.strictObject({
 		...chatAttachmentFields,
@@ -263,6 +278,9 @@ export type BudgetOverridePayload = z.infer<typeof budgetOverridePayload>
 export type AdminUserRow = {
 	id: string
 	email: string
+	username: string
+	// where the avatar comes from. oauth provider, uploaded by user, or generated username initials
+	avatarSource: string
 	role: string
 	plan: Plan
 	createdAt: string
@@ -292,10 +310,49 @@ export type AdminTotals = {
 // the admin-console payload: the users table and the totals summary
 export type AdminConsoleResponse = { users: AdminUserRow[]; totals: AdminTotals }
 
-// the account page's billing state: the current plan, subscription status for retrying a failed payment, card-on-file, and daily scan usage
+// one row in a profile page's topic table. subscriberCount is by Topic, which the footer sums
+export type ProfileTopic = {
+	id: string
+	name: string
+	// when the Topic was created and last updated
+	createdAt: string
+	updatedAt: string
+	// findings kept and resources seen, summed across every succeeded Scan the Topic has run
+	keptCount: number
+	seenCount: number
+	subscriberCount: number
+}
+
+// a user profile search result
+export type UserSearchResult = {
+	userId: string
+	username: string
+	avatarSource: string
+}
+
+// how long a query must be before it can search users, and how many matches can be returned
+export const USER_SEARCH_MIN_CHARS = 2
+export const USER_SEARCH_LIMIT = 5
+
+export type ProfileResponse = {
+	// the avatar's tint is seeded from the user id, so the id is included with the profile
+	userId: string
+	username: string
+	// where the avatar comes from. oauth provider, uploaded by user, or generated username initials
+	avatarSource: string
+	joinedAt: string
+	// distinct people, not summed rows. the same person following multiple Topics counts once here
+	subscriberCount: number
+	topics: ProfileTopic[]
+}
+
+// the account page's billing state: the current plan and how often it bills,
+// payment status for retrying a failed payment, card-on-file, and daily scan usage
 export type BillingState = {
 	plan: Plan
-	// the Stripe subscription status (e.g. active, past_due), or null for a free user with no subscription
+	// how often the subscription bills. a free user has none and reads monthly for limit lookups
+	billingInterval: BillingInterval
+	// the Stripe payment status (e.g. active, past_due), or null for a free user with no subscription
 	status: string | null
 	hasPaymentMethod: boolean
 	dailyScansUsed: number
@@ -341,6 +398,8 @@ export const topicFeed = z.object({
 	scheduledDayOfWeek: z.enum(daysOfWeek),
 	// how many findings a scan is set to keep for this topic
 	maxResults: z.number(),
+	// the topic owner
+	owner: z.object({ userId: z.string(), username: z.string(), avatarSource: z.string() }).nullable(),
 	// isOwner gates attachment downloads. newCount is the user's unconsumed count for the "# new" badge
 	isOwner: z.boolean(),
 	newCount: z.number(),
@@ -350,6 +409,8 @@ export const topicFeed = z.object({
 	isSubscribed: z.boolean(),
 	// how many subscribers the topic has, shown in the info popover
 	subscriberCount: z.number(),
+	// the topic visibility which determines whether to show the share button
+	visibility: z.enum(visibilities),
 	// schedule shown in the info popover
 	createdAt: z.string(),
 	lastScanAt: z.string().nullable(),

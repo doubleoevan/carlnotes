@@ -94,7 +94,7 @@ export function TopicSourceEditor({
 				limit: Math.min(MAX_SUGGESTIONS, sourceSlotsLeft),
 			})
 			if (suggestions.length === 0) {
-				toast("Carl came up empty.\n Try saying more about your topic.")
+				toast("Carl couldn't think of any.\n Try again in a moment.")
 				return
 			}
 			onAddedChange([...addedSources, ...suggestions])

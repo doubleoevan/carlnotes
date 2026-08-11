@@ -13,7 +13,14 @@ export { sendManualScanEmail } from "./notify"
 export { loadScan, scanTopic, startTopicScan } from "./scan"
 export { failStaleScans, runScheduledTopicScans } from "./schedule"
 export { screenPendingSources, screenTopicSources } from "./screen"
-export { attachmentStream, deleteAttachment, putAttachment, toChatAttachmentKey } from "./store"
+export {
+	attachmentExists,
+	attachmentStream,
+	deleteAttachment,
+	getAttachmentBytes,
+	putAttachment,
+	toChatAttachmentKey,
+} from "./store"
 export { type SuggestedSource, suggestSources, toSourceKey } from "./suggest"
 // trace the model-calls that the scheduled worker does
 export { shutdownTelemetry, startTelemetry } from "./telemetry"

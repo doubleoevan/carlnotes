@@ -1,5 +1,6 @@
 // dev-only seed with idempotent stub data so the homepage renders before real scans run. it only runs against the dev Doppler environment
-import { eq, isNotNull } from "drizzle-orm"
+import { toNormalizedUsername } from "@shared/usernames"
+import { eq, isNotNull, sql } from "drizzle-orm"
 import { db } from "./index"
 import { findings, resources, scans, sources, subscriptions, topicInvites, topics, users } from "./schema"
 
@@ -178,6 +179,11 @@ const FEATURE_ORDER: Record<string, number> = {
 	top_mcp_watch: 3,
 }
 
+// a seeded user's username. the names are fixed, so a re-seed doesn't add more rows
+function toSeedUsername(username: string): { username: string; usernameNormalized: string } {
+	return { username, usernameNormalized: toNormalizedUsername(username) }
+}
+
 // seeds the dev branch with demo topics, stub members, and subscriptions under the given dev user.
 // the dev user already exists — api/seed.ts creates it through a real signup before calling this
 export async function seed(devUserId: string): Promise<void> {
@@ -194,15 +200,24 @@ export async function seed(devUserId: string): Promise<void> {
 		id: `usr_member_${i}`,
 		name: `Member ${i + 1}`,
 		email: `member${i}@carlnotes.dev`,
+		...toSeedUsername(`Seeded-Member-${i + 1}`),
 	}))
 	// insert the community owner and every stub member. the dev user already exists, created via a real signup
 	await db
 		.insert(users)
-		.values([{ id: COMMUNITY_USER_ID, name: "CarlNotes Community", email: "community@carlnotes.dev" }, ...memberUsers])
+		.values([
+			{
+				id: COMMUNITY_USER_ID,
+				name: "CarlNotes Community",
+				email: "community@carlnotes.dev",
+				...toSeedUsername("CarlNotes-Community"),
+			},
+			...memberUsers,
+		])
 		.onConflictDoNothing()
 	// the dev user operates the instance, so they hold the admin role. the update keeps re-seeding idempotent
 	await db.update(users).set({ role: "admin" }).where(eq(users.id, devUserId))
-	// each topic and everything hanging off it
+	// each topic and everything it owns
 	// clear every feature order before the seeded ones are written. the map below assigns fixed positions, so a
 	// topic ranked by hand since the last seed would end up sharing a position with a seeded one, and the column
 	// has nothing stopping that. after a seed the Featured section is exactly what the map says, and nothing else
@@ -223,6 +238,26 @@ export async function seed(devUserId: string): Promise<void> {
 	if (subscriptionRows.length > 0) {
 		await db.insert(subscriptions).values(subscriptionRows).onConflictDoNothing()
 	}
+
+	// bring the stored counts up to what was just seeded. the feed and the profile both read this column,
+	// so a seed that skipped it would show every seeded topic with no subscribers.
+	await db.execute(sql`
+		update topics set subscriber_count = (
+			select count(*) from (
+				select subscriptions.subscriber_user_id as subscriber_id
+					from subscriptions
+					where subscriptions.topic_id = topics.id
+						and subscriptions.is_active
+						and subscriptions.subscriber_user_id is not null
+				union
+				select audience_members.user_id as subscriber_id
+					from subscriptions
+					join audience_members on audience_members.audience_id = subscriptions.subscriber_audience_id
+					where subscriptions.topic_id = topics.id and subscriptions.is_active
+			) as effective_subscribers
+			where subscriber_id is distinct from topics.owner_id
+		)
+	`)
 	console.log(`seeded ${seedTopics.length} topics and ${subscriptionRows.length} subscriptions for ${devUserId}`)
 }
 

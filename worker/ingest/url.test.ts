@@ -52,7 +52,7 @@ test("only the page carries the fetched body", () => {
 	expect(resources[1]?.fetchedBody).toBeUndefined()
 })
 
-// a page that could not be read still reaches curation, which fetches it the way it always has
+// a page that could not be read still reaches review, which fetches it the way it always has
 test("a body that could not be read still finds the page alone", () => {
 	const resources = toUrlSourceResources(PAGE_URL, pageBody(""))
 	expect(resources).toEqual([{ url: PAGE_URL, kind: "read", fetchedBody: undefined }])
@@ -72,7 +72,7 @@ test("an internal url is rejected", async () => {
 	await expect(urlIngester(source)).rejects.toThrow("is an internal address")
 })
 
-// a page is not trusted to name only public addresses. every link it lists becomes a Resource that curation fetches later
+// a page is not trusted to name only public addresses. every link it lists becomes a Resource that review fetches later
 test("links pointing at an internal address are dropped", () => {
 	const markdown = [
 		"[Metadata](http://169.254.169.254/latest/meta-data)",
@@ -98,7 +98,7 @@ test("a relative link resolves against the page that wrote it", () => {
 	expect(links).toEqual([{ url: "https://github.com/owner/repo", anchorText: "Trending" }])
 })
 
-// a link with no words still points somewhere, so it is judged on its url rather than dropped
+// a link with no words still points somewhere, so it is judged on its url instead of dropped
 test("a link with no anchor text is kept with a null anchor", () => {
 	expect(toPageLinks("[](https://a.com/bare)", PAGE_URL)).toEqual([{ url: "https://a.com/bare", anchorText: null }])
 })
@@ -136,7 +136,7 @@ test("a page past the cap contributes exactly the cap, in document order", () =>
 	expect(links.at(-1)?.url).toBe(`https://a.com/${MAX_RESULTS - 1}`)
 })
 
-// a page with nothing to link to contributes nothing, rather than erroring
+// a page with nothing to link to contributes nothing, instead of erroring
 test("a page with no links contributes none", () => {
 	expect(toPageLinks("Just words, no links at all.", PAGE_URL)).toEqual([])
 })

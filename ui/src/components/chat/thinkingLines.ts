@@ -1,4 +1,4 @@
-// the lines the chat shows while a reply is on its way. each one has to finish the sentence "Carl is ___"
+// the lines the app shows while waiting for a response. each one has to finish the sentence "Carl is ___"
 import { shuffle } from "@/lib/utils"
 
 export const THINKING_LINES = [
@@ -62,6 +62,11 @@ export const THINKING_LINES = [
 	"thinking outside of the box",
 	"shifting the paradigm",
 	"joining the conversation",
+	'about to say "to your point"',
+	"letting it steep",
+	"applying game theory",
+	"applying chaos theory",
+	"opening Pandora's box",
 ]
 
 // what is left of the current shuffle, refilled once the last line is dealt

@@ -10,7 +10,7 @@ import { SortableHeader, useRowSort } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { TopicScanRecap } from "@/components/topic/TopicScanRecap"
 import { sendSubscriptionEmail } from "@/lib/topicClient"
-import { cn, durationMsBetween, TABLE_CARD_CLASS, toCentsLabel, toDurationLabel } from "@/lib/utils"
+import { cn, durationMsBetween, TABLE_CARD_CLASS, toCentsLabel, toDurationLabel, toMonthYearLabel } from "@/lib/utils"
 
 // the icon and label each visibility reads as, matching the topic page's own info card
 const VISIBILITY_METADATA = {
@@ -27,7 +27,7 @@ const topicSortValues = {
 	created: (topic: ActivityTopic) => topic.createdAt,
 	updated: (topic: ActivityTopic) => topic.updatedAt,
 	visibility: (topic: ActivityTopic) => topic.visibility,
-	// sorted by how often the topic brews rather than alphabetically, so the daily ones group at one end
+	// sorted by how often the topic brews instead of alphabetically, so the daily ones group at one end
 	schedule: (topic: ActivityTopic) => frequencies.indexOf(topic.frequency),
 	cost: (topic: ActivityTopic) => topic.monthCostCents,
 }
@@ -138,8 +138,8 @@ export function TopicsTable({
 								</td>
 								<td className="py-2 pr-4">{topic.monthScanCount}</td>
 								<td className="py-2 pr-4">{topic.subscriberCount}</td>
-								<td className="py-2 pr-4">{new Date(topic.createdAt).toLocaleDateString()}</td>
-								<td className="py-2 pr-4">{new Date(topic.updatedAt).toLocaleDateString()}</td>
+								<td className="py-2 pr-4">{toMonthYearLabel(topic.createdAt)}</td>
+								<td className="py-2 pr-4">{toMonthYearLabel(topic.updatedAt)}</td>
 								<td className="py-2 pr-4">
 									<TopicVisibility visibility={topic.visibility} />
 								</td>

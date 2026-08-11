@@ -28,7 +28,7 @@ export async function screenSource(sourceId: string): Promise<void> {
 	}
 
 	// reject a malformed, non-http, or internal url before any request goes out, then fetch the page.
-	// a page that never loads marks the Source failed rather than being left to yield nothing on every Scan
+	// a page that never loads marks the Source failed instead of being left to yield nothing on every Scan
 	const fetched = await fetchPage(pageUrl)
 	if (fetched instanceof Error) {
 		await failSource(sourceId, `this page could not be read: ${fetched.message}`)

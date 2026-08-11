@@ -7,7 +7,9 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { ShareTopic } from "@/components/topic/ShareTopic"
 import { TopicInfo } from "@/components/topic/TopicInfo"
+import { TopicOwner } from "@/components/topic/TopicOwner"
 import { useIsVisible } from "@/hooks/useIsVisible"
 import { authClient } from "@/lib/authClient"
 import { sendTopicSubscription } from "@/lib/topicClient"
@@ -52,6 +54,8 @@ export function Topic({ topic, index }: TopicProps) {
 						</AnchorLink>
 						<TopicInfoPopover topic={topic} />
 					</div>
+					{/* the profile link for the topic's creator */}
+					{topic.owner && <TopicOwner owner={topic.owner} avatarClassName="size-4" className="mt-1 pl-4 text-xs" />}
 					{/* tags, left-padded to line the text up with the resource icons below them.
 					     an untagged topic renders no row at all */}
 					{topic.tags.length > 0 && (
@@ -65,10 +69,25 @@ export function Topic({ topic, index }: TopicProps) {
 					)}
 				</div>
 				{/* the "# new" count opens the info content, and the subscribe toggle sits to its right.
-				    only a non-owner gets that toggle, so an owner's row ends in the count and takes the text inset instead */}
-				<div className={cn(topic.isOwner ? RAIL_TEXT_INSET : RAIL_ICON_INSET, "flex shrink-0 items-center gap-1")}>
+				    the inset follows the row's last element: an icon everywhere but an owner's private topic, which ends in the count */}
+				<div
+					className={cn(
+						topic.isOwner && topic.visibility === "private" ? RAIL_TEXT_INSET : RAIL_ICON_INSET,
+						"flex shrink-0 items-center gap-1",
+					)}
+				>
 					{topic.newCount > 0 && <NewCountInfo topic={topic} />}
 					{!topic.isOwner && <SubscribeToggle topic={topic} />}
+					{/* only a private topic can't be shared */}
+					{topic.visibility !== "private" && (
+						<ShareTopic
+							topicId={topic.id}
+							topicName={topic.name}
+							isPublic={topic.visibility === "public"}
+							isCompact
+							className="text-muted-foreground hover:text-foreground grid size-11 shrink-0 place-items-center sm:size-7"
+						/>
+					)}
 				</div>
 			</div>
 			{/* resource rows, each drawing its own dashed separator */}

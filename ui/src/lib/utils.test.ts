@@ -10,6 +10,7 @@ import {
 	toAgeLabel,
 	toDurationLabel,
 	toPossibleSourceUrls,
+	toSafeRedirectPath,
 	toScheduleLabel,
 	toSortedFindings,
 	toTimeLabel,
@@ -197,4 +198,15 @@ test("a repeated url is offered once", () => {
 	expect(toPossibleSourceUrls("https://example.com/a and https://example.com/a", [], [])).toEqual([
 		"https://example.com/a",
 	])
+})
+
+// a redirect path stays on this site: absolute urls, protocol-relative, backslash, and control tricks all fall home
+test("toSafeRedirectPath keeps a plain path and rejects everything that could leave the site", () => {
+	expect(toSafeRedirectPath("/topics/top_longevity")).toBe("/topics/top_longevity")
+	expect(toSafeRedirectPath(null)).toBe("/")
+	expect(toSafeRedirectPath("https://evil.com")).toBe("/")
+	expect(toSafeRedirectPath("//evil.com")).toBe("/")
+	expect(toSafeRedirectPath("/\\evil.com")).toBe("/")
+	expect(toSafeRedirectPath("\\/evil.com")).toBe("/")
+	expect(toSafeRedirectPath("/\tevil.com")).toBe("/")
 })

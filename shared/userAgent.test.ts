@@ -1,5 +1,5 @@
 // the session forms reorder on this detection and analytics reports it, so these are real user agent strings
-// rather than invented ones. a token that changes in the wild is what would break both, and only this catches it
+// instead of invented ones. a token that changes in the wild is what would break both, and only this catches it
 
 import { expect, test } from "bun:test"
 import { isInAppBrowser, toBrowserPlatform, toPlatform } from "./userAgent"

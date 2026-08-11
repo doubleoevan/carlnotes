@@ -22,12 +22,20 @@ function vectorLength(value: unknown): number {
 	return Array.isArray(value) ? value.length : 0
 }
 
+// append a stamp for the database to persist a unique identifier for fixture data
+const smokeTestStamp = Date.now()
+
 // seed a fake owner, a topic whose context matches the feed, and an RSS source with no API key
 async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 	// a fake owner. deleting it on cleanup cascades to the topic, source, scan, and findings
 	const [user] = await db
 		.insert(users)
-		.values({ name: "scan-smoke", email: `scan-smoke+${Date.now()}@example.test` })
+		.values({
+			name: "scan-smoke",
+			email: `scan-smoke+${smokeTestStamp}@example.test`,
+			username: `scan-smoke-${smokeTestStamp}`,
+			usernameNormalized: `scansmoke${smokeTestStamp}`,
+		})
 		.returning()
 	if (!user) {
 		throw new Error("failed to seed user")

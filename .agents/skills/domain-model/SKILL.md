@@ -21,6 +21,8 @@ description: Canonical CarlNotes domain vocabulary. Use whenever naming types, t
 | Billing Subscription | a user's active Stripe subscription; the active row derives their plan | `billing_subscriptions`; free = no row; **distinct from Subscription** (a topic subscriber join) — never conflate the two                                                                                                                                                                                                                                                   |
 | Bookmark | a per-user marker keeping a Finding | `bookmarks` mirrors `consumptions`; a bookmarked Finding is exempt from the max-results filter; never a `findings` column                                                                                                                                                                                                                                                   |
 | Chat Turn | one question and its reply about a Topic | `chat_turns`; every chat turn writes a row because every chat turn is metered, and `question`/`answer` are kept only when the gate grants the sender `chat:persist`, so a chat turn without it is a cost row with null text; chat is signed-in only; **never "Chat Session"** — `sessions` is Better Auth's sign-in plumbing |
+| Username | a user's public name, and the only identity a stranger sees | `users.username` plus `users.username_normalized` for case- and separator-insensitive uniqueness, both NOT NULL: the name is drawn inside the signup insert rather than a moment after it, so a row is never nameless. generated so signing up stays one step, changed later from the account page. display only: a profile is addressed by user id, so no link points at a name and a name can be changed freely, with no history and no limit. the small blocklist in `shared/usernames.ts` withholds only the names that would pass someone off as the site or its staff, and a new route needs nothing added to it |
+| Avatar | a user's public image | `users.avatar_source` (generated / oauth / upload) with `users.avatar_key` for the stored image; generated from the username by default; the OAuth photo Better Auth writes to `users.image` stays private until the user opts in, since signing in is authentication and publishing a face is a separate decision |
 
 ## Layering rules
 - Integration = the credential; Source = an input use of it; delivery = an output use of it. Connected once, reused everywhere.
@@ -36,12 +38,15 @@ description: Canonical CarlNotes domain vocabulary. Use whenever naming types, t
 Better Auth manages `users`, `sessions`, `accounts`, `verifications` — identity/access plumbing, the same tier as `users` itself, never content-domain nouns. `accounts` is sign-in identity only (a password credential or an OAuth grant used to authenticate) and is never referenced by a Source or a Subscription. **Integration** stays the sole representation of a connected external account used for sourcing or delivery (e.g. Composio-managed Gmail) — never conflate the two, and never resolve Source/delivery credentials through `accounts`.
 
 ## Rejected terms — never introduce
-- "Channel", "Follow" (UI copy only, never schema)
+- "Channel" (use Feed)
 - "Item" (use Resource or Finding)
 - "Update" (CRUD collision; use Scan or Finding)
 - "Run" (Temporal's word, infra layer only; use Scan)
 - "Crawl" (names one stage of five)
 - "Group", "List", "Cohort" (use Audience)
+
+## Follow and subscribe are one concept: follow is the client-facing word, subscribe is the code word
+Client-facing copy says **follow**, **follower**, and **following**. Every identifier says **subscribe**, **subscription**, and **subscriber** — tables, columns, types, functions, routes, and analytics events alike. The seam is crossed exactly once, where a string is written for a user to read. Never rename a table toward the copy, and never let `follow` reach an identifier: a codebase that says both has two names for one thing and no way to tell which a given `follower_count` means.
 
 ## Rules
 - Singular entity names in code (`Finding`), plural tables (`findings`).

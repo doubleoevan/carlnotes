@@ -1,12 +1,16 @@
 // Stripe Billing: Checkout, the Customer Portal, and the subscription webhook that keeps billing_subscriptions and users.plan in sync.
 // SETUP: create plus and premium products with monthly and yearly prices, plus a metered manual-scan overage price in Stripe
+import { zValidator } from "@hono/zod-validator"
 import type { BillingState } from "@shared/contracts"
+import { checkoutPayload } from "@shared/contracts"
 import { type BillingInterval, PLANS, type Plan } from "@shared/plans"
 import { eq } from "drizzle-orm"
+import { Hono } from "hono"
 import Stripe from "stripe"
 import { db } from "../db"
 import { billingSubscriptions, users } from "../db/schema"
 import { replaceUserLiteLLMKey } from "./authorization"
+import { type AppEnv, currentUser } from "./currentUser"
 import { scansToday } from "./topic/quotas"
 
 // a paid plan is any plan but free. only paid plans map to a Stripe price
@@ -88,7 +92,8 @@ export async function createPortalSession(userId: string): Promise<string | null
 }
 
 /**
- * The account page's billing state: the current plan, subscription status for delinquent payments, card-on-file, and daily scan usage.
+ * The account page's billing state: the current plan and how often it bills,
+ * subscription status for delinquent payments, card-on-file, and daily scan usage.
  */
 export async function loadBillingState(userId: string): Promise<BillingState> {
 	// the plan from the user row, the status and card from the subscription, and today's scan count against the daily limit
@@ -102,11 +107,12 @@ export async function loadBillingState(userId: string): Promise<BillingState> {
 		.from(billingSubscriptions)
 		.where(eq(billingSubscriptions.userId, userId))
 
-	// a user with no subscription is on free, which bills on no frequency at all, so it reads as monthly
+	// a user with no subscription is on the free plan, which bills on no frequency at all, so it defaults to monthly
 	const plan = user?.plan ?? "free"
 	const billingInterval = subscription?.billingInterval ?? "monthly"
 	return {
 		plan,
+		billingInterval,
 		status: subscription?.status ?? null,
 		hasPaymentMethod: subscription?.hasPaymentMethod ?? false,
 		dailyScansUsed: await scansToday(userId),
@@ -285,3 +291,46 @@ function overagePriceId(): string {
 function appUrl(): string {
 	return Bun.env.BETTER_AUTH_URL ?? "http://localhost:5173"
 }
+
+// the billing routes: checkout, the portal, the account page state, and the stripe webhook
+export const billingRoute = new Hono<AppEnv>()
+	.post("/billing/checkout", zValidator("json", checkoutPayload), async (context) => {
+		// reject a signed-out caller
+		const user = context.get("user")
+		if (!user) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// open a stripe checkout session for the chosen plan and billing interval, and hand its url back to redirect to
+		const { plan, billingInterval } = context.req.valid("json")
+		const url = await createCheckoutSession(user.id, user.email, plan, billingInterval)
+		return context.json({ url })
+	})
+	.post("/billing/portal", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// open the stripe customer portal, or 404 when the user has no active subscription to manage
+		const url = await createPortalSession(userId)
+		return url ? context.json({ url }) : context.json({ error: "no subscription" }, 404)
+	})
+	.get("/billing/state", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// the account page's plan, daily scan usage, card-on-file, and payment status
+		return context.json(await loadBillingState(userId))
+	})
+	.post("/webhooks/stripe", async (context) => {
+		// verify and apply the stripe event from the raw body. a bad signature responds with a 400 so stripe retries
+		try {
+			await handleStripeWebhook(await context.req.text(), context.req.header("stripe-signature"))
+			return context.json({ received: true })
+		} catch (error) {
+			console.error("stripe webhook rejected", error)
+			return context.json({ error: "invalid webhook" }, 400)
+		}
+	})

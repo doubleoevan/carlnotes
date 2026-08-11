@@ -8,7 +8,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { sendInviteDelete } from "@/lib/activityClient"
-import { cn, TABLE_CARD_CLASS } from "@/lib/utils"
+import { cn, TABLE_CARD_CLASS, toMonthYearLabel } from "@/lib/utils"
 
 // one invitation the user sent on a topic they own
 type InviteRow = ActivityResponse["invites"][number]
@@ -72,11 +72,11 @@ export function InvitesTable({ invites, onReload }: { invites: InviteRow[]; onRe
 								</AnchorLink>
 							</td>
 							<td className="max-w-40 truncate py-2 pr-4 sm:max-w-64">{row.inviteeEmail}</td>
-							<td className="py-2 pr-4">{new Date(row.invitedAt).toLocaleDateString()}</td>
+							<td className="py-2 pr-4">{toMonthYearLabel(row.invitedAt)}</td>
 							{/* the date they subscribed or pending */}
 							<td className="py-2 pr-4">
 								{row.subscribedAt ? (
-									new Date(row.subscribedAt).toLocaleDateString()
+									toMonthYearLabel(row.subscribedAt)
 								) : (
 									<span className="text-muted-foreground">Pending</span>
 								)}

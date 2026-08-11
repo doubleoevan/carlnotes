@@ -30,6 +30,7 @@ Every logical group of lines gets a comment on the line above it: a single line 
 - A comment must be true. Verify it against the code it describes before writing it, and fix it when the code changes.
 - Describe what the group does, not how.
 - A reader must be able to skim only the comments and understand the full flow of the file.
+- Never record how the code got here. No "every caller", no "this used to", no note on what was tried or ruled out. A comment describes the code as it is now.
 - JSX section comments use `{/* section name */}`.
 
 Self-check before finishing any edit: scan the diff. Any group of two or more

@@ -1,4 +1,4 @@
-import { Activity, BadgeDollarSign, LogIn, LogOut, Menu, Moon, ShieldUser, Sun, User, UserPlus } from "lucide-react"
+import { BadgeDollarSign, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
 import { useState } from "react"
 import { useLocation } from "react-router-dom"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
@@ -7,13 +7,14 @@ import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Attribution } from "@/components/layout/Attribution"
 import { ThemeToggle } from "@/components/layout/ThemeToggle"
+import { MENU_ITEM_CLASS, menuItemClassName, UserMenu, UserMenuItems } from "@/components/layout/UserMenu"
 import { buttonVariants } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SignOutDialog } from "@/components/session/SignOutDialog"
 import { useTheme } from "@/hooks/useTheme"
 import { authClient } from "@/lib/authClient"
-import { cn } from "@/lib/utils"
+import { cn, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 
 // the hover treatment shared by the header's menu buttons, tuned for the dark hero banner
@@ -70,31 +71,24 @@ export function Header() {
 					{/* the desktop menu items, swapped for the hamburger menu on small screens */}
 					<div className="hidden items-center gap-1 sm:flex">
 						<ThemeToggle isDark={isDark} onToggle={toggleTheme} />
-						{/* buttonVariants style these AnchorLinks directly. AnchorLink can't compose with Button's asChild */}
-						<AnchorLink href="/pricing" className={menuLinkClassName(pathname, "/pricing")}>
-							Pricing
-						</AnchorLink>
-						{isSignedIn ? (
-							<>
-								<AnchorLink href="/activity" className={menuLinkClassName(pathname, "/activity")}>
-									Activity
-								</AnchorLink>
-								<AnchorLink href="/account" className={menuLinkClassName(pathname, "/account")}>
-									Account
-								</AnchorLink>
-								{isAdmin ? (
-									<AnchorLink href="/admin" className={menuLinkClassName(pathname, "/admin")}>
-										Admin
-									</AnchorLink>
-								) : null}
-								<SignOutDialog className={cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER)}>
-									Sign out
-								</SignOutDialog>
-							</>
+						{/* pricing moves into the user menu once signed in. it only stays in the header for a logged-out visitor */}
+						{!session && (
+							<AnchorLink href="/pricing" className={menuLinkClassName(pathname, "/pricing")}>
+								Pricing
+							</AnchorLink>
+						)}
+						{session ? (
+							// the user items live below the avatar dropdown instead of the primary navigation
+							<UserMenu
+								userId={session.user.id}
+								username={session.user.username}
+								avatarSource={session.user.avatarSource}
+								isAdmin={isAdmin}
+							/>
 						) : (
 							<>
 								<AnchorLink
-									href="/login"
+									href={`/login?next=${encodeURIComponent(toSafeRedirectPath(pathname))}`}
 									className={cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER)}
 								>
 									Log in
@@ -106,7 +100,13 @@ export function Header() {
 							</>
 						)}
 					</div>
-					<HeaderMenu isDark={isDark} onToggleTheme={toggleTheme} isSignedIn={isSignedIn} isAdmin={isAdmin} />
+					<HeaderMenu
+						isDark={isDark}
+						onToggleTheme={toggleTheme}
+						isSignedIn={isSignedIn}
+						isAdmin={isAdmin}
+						userId={session?.user.id ?? ""}
+					/>
 				</div>
 				{/* the hero: Carl and the headline appear with no hydrate fade, the headline shimmers, and the copy fades in.
 				    on a narrow screen, the headline spans both columns above Carl. on a wide screen, Carl takes the left and the headline goes right */}
@@ -173,20 +173,22 @@ export function Header() {
 	)
 }
 
-// the mobile-only hamburger menu. it mirrors the desktop menu's items
+// the mobile-only hamburger menu. it mirrors the wide-screen menu's items
 function HeaderMenu({
 	isDark,
 	onToggleTheme,
 	isSignedIn,
 	isAdmin,
+	userId,
 }: {
 	isDark: boolean
 	onToggleTheme: () => void
 	isSignedIn: boolean
 	isAdmin: boolean
+	userId: string
 }) {
-	// the row styling shared by every item in the popover
-	const itemClassName = "hover:bg-accent flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-sm"
+	// the path is used to highlight the current menu option
+	const { pathname } = useLocation()
 	// controlled so every item click closes the menu, including navigation and the sign-out confirmation
 	const [isOpen, setIsOpen] = useState(false)
 	const closeMenu = (): void => {
@@ -218,39 +220,31 @@ function HeaderMenu({
 							onToggleTheme()
 							closeMenu()
 						}}
-						className={itemClassName}
+						className={MENU_ITEM_CLASS}
 					>
 						{isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
 						{isDark ? "Light mode" : "Dark mode"}
 					</button>
-					<AnchorLink href="/pricing" onClick={closeMenu} className={itemClassName}>
-						<BadgeDollarSign className="size-4" />
-						Pricing
-					</AnchorLink>
+					{/* pricing goes into the user menu once signed in */}
+					{!isSignedIn && (
+						<AnchorLink href="/pricing" onClick={closeMenu} className={menuItemClassName(pathname, "/pricing")}>
+							<BadgeDollarSign className="size-4" />
+							Pricing
+						</AnchorLink>
+					)}
 					{isSignedIn ? (
+						// the user menu items form the block below a horizontal divider
 						<>
-							<AnchorLink href="/activity" onClick={closeMenu} className={itemClassName}>
-								<Activity className="size-4" />
-								Activity
-							</AnchorLink>
-							<AnchorLink href="/account" onClick={closeMenu} className={itemClassName}>
-								<User className="size-4" />
-								Account
-							</AnchorLink>
-							{isAdmin ? (
-								<AnchorLink href="/admin" onClick={closeMenu} className={itemClassName}>
-									<ShieldUser className="size-4" />
-									Admin
-								</AnchorLink>
-							) : null}
-							<button type="button" onClick={confirmSignOut} className={itemClassName}>
-								<LogOut className="size-4" />
-								Sign out
-							</button>
+							<div className="bg-border my-1 h-px" />
+							<UserMenuItems userId={userId} isAdmin={isAdmin} onNavigate={closeMenu} onSignOut={confirmSignOut} />
 						</>
 					) : (
 						<>
-							<AnchorLink href="/login" onClick={closeMenu} className={itemClassName}>
+							<AnchorLink
+								href={`/login?next=${encodeURIComponent(toSafeRedirectPath(pathname))}`}
+								onClick={closeMenu}
+								className={MENU_ITEM_CLASS}
+							>
 								<LogIn className="size-4" />
 								Log in
 							</AnchorLink>
@@ -258,7 +252,7 @@ function HeaderMenu({
 							<AnchorLink
 								href="/signup?cta=menu"
 								onClick={closeMenu}
-								className={cn(itemClassName, "bg-primary text-primary-foreground hover:bg-primary/90")}
+								className={cn(MENU_ITEM_CLASS, "bg-primary text-primary-foreground hover:bg-primary/90")}
 							>
 								<UserPlus className="size-4" />
 								Sign up

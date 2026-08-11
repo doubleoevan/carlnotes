@@ -10,7 +10,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { sendSubscriptionDelete, sendSubscriptionEmail, sendTopicSubscription } from "@/lib/topicClient"
-import { cn, NEXT_SCAN_DISCLAIMER, TABLE_CARD_CLASS } from "@/lib/utils"
+import { cn, NEXT_SCAN_DISCLAIMER, TABLE_CARD_CLASS, toMonthYearLabel } from "@/lib/utils"
 
 // one subscription the user holds on a topic they do not own
 type SubscriptionRow = ActivityResponse["subscriptions"][number]
@@ -176,7 +176,7 @@ function SubscriptionCells({
 	const isReadOnly = subscription.audienceName !== null
 	return (
 		<>
-			<td className="py-2 pr-4">{new Date(subscription.subscribedAt).toLocaleDateString()}</td>
+			<td className="py-2 pr-4">{toMonthYearLabel(subscription.subscribedAt)}</td>
 			<td className="py-2 pr-4">
 				<Switch
 					checked={subscription.isActive}

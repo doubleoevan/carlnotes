@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm"
 import { db } from "../db"
 import { subscriptions, topics } from "../db/schema"
 import { verifyUnsubscribeToken } from "../worker"
+import { recountTopicSubscribers } from "./topic/subscriberCounts"
 
 /**
  * Verifies the token, deactivates the recipient's direct subscription, and returns the unsubscribed topic (null when the token is bad).
@@ -17,15 +18,19 @@ export async function unsubscribe(unsubscribeToken: string | undefined): Promise
 
 	// deactivate the user's direct subscription and turn its emails off, keeping the row.
 	// an audience-only subscriber has no direct row, so this does not reach them
-	await db
-		.update(subscriptions)
-		.set({ isActive: false, isEmailEnabled: false })
-		.where(
-			and(
-				eq(subscriptions.topicId, unsubscribePayload.topicId),
-				eq(subscriptions.subscriberUserId, unsubscribePayload.userId),
-			),
-		)
+	// update the denormalized subscriber count in the topics table
+	await db.transaction(async (transaction) => {
+		await transaction
+			.update(subscriptions)
+			.set({ isActive: false, isEmailEnabled: false })
+			.where(
+				and(
+					eq(subscriptions.topicId, unsubscribePayload.topicId),
+					eq(subscriptions.subscriberUserId, unsubscribePayload.userId),
+				),
+			)
+		await recountTopicSubscribers(unsubscribePayload.topicId, transaction)
+	})
 
 	// the topic id and name for the confirmation page, falling back when the topic has since been deleted
 	const [topic] = await db.select({ name: topics.name }).from(topics).where(eq(topics.id, unsubscribePayload.topicId))

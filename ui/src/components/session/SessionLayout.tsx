@@ -6,6 +6,7 @@ import { Button, buttonVariants } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
 import { GithubIcon, GoogleIcon } from "@/components/session/OAuthProviderIcons"
+import { PasswordInput } from "@/components/session/PasswordInput"
 import { toChromeIntentUrl } from "@/lib/userAgent"
 import { cn } from "@/lib/utils"
 
@@ -219,17 +220,7 @@ function EmailForm({
 					required
 				/>
 			</div>
-			<div className="space-y-1.5">
-				<Label htmlFor="password">Password</Label>
-				<Input
-					id="password"
-					type="password"
-					value={password}
-					onChange={(event) => setPassword(event.target.value)}
-					className="bg-card dark:bg-card"
-					required
-				/>
-			</div>
+			<PasswordInput id="password" label="Password" value={password} onChange={setPassword} />
 			{extraFields}
 			{error && <p className="text-destructive text-sm">{error}</p>}
 			<Button type="submit" disabled={isSubmitting} className="w-full">

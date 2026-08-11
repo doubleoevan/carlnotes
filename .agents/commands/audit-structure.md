@@ -37,7 +37,9 @@ Check for:
 4. **Stale content drift**: grep all command files, skill files, `scripts/`,
    and `.coderabbit.yaml` for references to renamed or removed things. This
    list is append-only: when any tool flag, path, script, or file is renamed
-   or removed in a change, add its old name here in the same change.
+   or removed in a change, add its old name here in the same change. Only
+   names that reached `main` belong here. A name renamed within the branch
+   that introduced it never shipped, so nothing can still reference it.
    - `--prompt-only` (now `coderabbit review --agent`)
    - `src/` paths from before the `ui/` restructure: `frontend.tsx`,
      `index.css`, `styles/globals.css`, `build.ts`
@@ -65,10 +67,11 @@ Check for:
    - `ui/src/components/auth/` (now `session/`), `AuthIcons.tsx` (now
      `OAuthProviderIcons.tsx`), `AuthPageShell.tsx` (now `SessionLayout.tsx`)
    - `PageLoading.tsx` (now `branding/CoffeeLoading.tsx`), `ScanNote.tsx` (now
-     `topic/TopicScanRecap.tsx`), `SearchFilters.tsx` (folded into `layout/SearchBar.tsx`)
-   - `ui/src/components/search/` (proposed then abandoned; SearchBar lives in `layout/`)
+     `topic/TopicScanRecap.tsx`)
+   - `layout/SearchBar.tsx` (now `ui/src/components/search/`: `SearchBar.tsx`,
+     `SearchFilters.tsx`, `SearchResults.tsx`)
    - `layout/AnchorLink.tsx`, `layout/ConfirmDialog.tsx`, `layout/FileDropZone.tsx` (now
-     `ui/src/components/common/`). `layout/` keeps only page chrome: Header, Footer, SearchBar,
+     `ui/src/components/common/`). `layout/` keeps only page chrome: Header, Footer, UserMenu,
      ThemeToggle, Attribution. `common/` is shared components that are not chrome, and stays
      distinct from `primitives/`, which is reserved for shadcn
    - `worker/adapters/` and the short-lived `worker/ingesters/` (both now `worker/ingest/`),

@@ -1,10 +1,11 @@
 // a live smoke test for one real Scan on a busy feed, reporting time taken, limit overshoot, and whether it kept its
 // best survivors. run it with: bun run smoke:review. each run resets its feed, so two REVIEW_CONCURRENCY values compare fairly
 import { cosineSimilarity } from "ai"
-import { and, eq, isNotNull, like } from "drizzle-orm"
+import { and, eq, inArray, isNotNull, like } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, scans, sources, topics, users } from "../db/schema"
 import { embedVector } from "./models"
+import { isRelevant } from "./review/filter"
 import { loadScan } from "./scan"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/run-topic-scan-activities"
@@ -44,12 +45,20 @@ async function resetFeedResources(): Promise<number> {
 	return resetResources.length
 }
 
+// append a stamp for the database to persist a unique identifier for fixture data
+const smokeTestStamp = Date.now()
+
 // seed a fake owner, a topic whose context matches the feed, and the RSS source
 async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 	// a fake owner. deleting it on cleanup cascades to the topic, source, scan, and findings
 	const [user] = await db
 		.insert(users)
-		.values({ name: "review-smoke", email: `review-smoke+${Date.now()}@example.test` })
+		.values({
+			name: "review-smoke",
+			email: `review-smoke+${smokeTestStamp}@example.test`,
+			username: `review-smoke-${smokeTestStamp}`,
+			usernameNormalized: `reviewsmoke${smokeTestStamp}`,
+		})
 		.returning()
 	if (!user) {
 		throw new Error("failed to seed user")
@@ -75,12 +84,20 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 }
 
 // one candidate Resource as the ranking saw it, with the vector kept so dedupe drops can be explained
-type CandidateResource = { id: string; embedding: number[]; similarity: number; isScored: boolean }
+type CandidateResource = {
+	id: string
+	embedding: number[]
+	similarity: number
+	isScored: boolean
+	kind: (typeof resources.$inferSelect)["kind"]
+	title: string | null
+}
 
 // every candidate Resource this Scan considered, with its similarity to the topic context recomputed, and whether the Scan actually scored it
 async function loadCandidateRanking(
 	topicId: string,
 	scoredResourceIds: string[],
+	candidateUrls: string[],
 ): Promise<{ candidateResources: CandidateResource[]; findingCount: number }> {
 	// the topic-context embedding, wrapped as the query side exactly as the gate wraps it
 	const contextEmbedding = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${TOPIC_CONTEXT}`)
@@ -93,11 +110,12 @@ async function loadCandidateRanking(
 		.from(findings)
 		.where(eq(findings.topicId, topicId))
 
-	// every embedded Resource from this feed is a candidate the Scan saw in its first pass
+	// only the Resources this Scan actually ingested. Resources are global and outlive a run, so matching the feed
+	// host instead would count rows from earlier Scans that this Scan never saw as candidates it skipped
 	const candidateRows = await db
-		.select({ id: resources.id, embedding: resources.embedding })
+		.select({ id: resources.id, embedding: resources.embedding, kind: resources.kind, title: resources.title })
 		.from(resources)
-		.where(and(like(resources.url, FEED_HOST_PATTERN), isNotNull(resources.embedding)))
+		.where(and(inArray(resources.url, candidateUrls), isNotNull(resources.embedding)))
 
 	// score each candidate the way the ranking did, tagging the ones that won a paid ranking slot
 	const candidateResources = candidateRows.map((candidateRow) => ({
@@ -105,6 +123,8 @@ async function loadCandidateRanking(
 		embedding: candidateRow.embedding as number[],
 		similarity: cosineSimilarity(candidateRow.embedding as number[], contextEmbedding),
 		isScored: scoredIds.has(candidateRow.id),
+		kind: candidateRow.kind,
+		title: candidateRow.title,
 	}))
 
 	// the finding count comes back too, printed next to the Scan's own kept count so a mismatch is visible
@@ -120,20 +140,27 @@ function toRankingViolations(candidates: CandidateResource[]): CandidateResource
 		.map((candidate) => candidate.similarity)
 	const lowestScoredSimilarity = Math.min(...scoredSimilarities)
 
-	// an unscored candidate above the worst purchase is only legitimate when dedupe dropped it,
-	// which means some higher-ranked candidate sits within the near-duplicate threshold of it
+	// an unscored candidate above the worst purchase is only legitimate when the filter had a reason to drop it
 	return rankedCandidateResources.filter((candidateResource, index) => {
 		if (candidateResource.isScored || candidateResource.similarity <= lowestScoredSimilarity) {
 			return false
 		}
 
-		// dedupe explains the drop when something ranked above it is a near-duplicate of it
-		const isDeduped = rankedCandidateResources
-			.slice(0, index)
-			.some(
-				(higherRankedResource) =>
-					1 - cosineSimilarity(candidateResource.embedding, higherRankedResource.embedding) < NEAR_DUPLICATE_DISTANCE,
-			)
+		// the relevance gate reads a different threshold per kind, so a read below its own bar is dropped
+		// even while it outranks a watch that cleared the lower one
+		if (!isRelevant(candidateResource.similarity, candidateResource.kind)) {
+			return false
+		}
+
+		// dedupe explains the drop when something ranked above it is a near-duplicate of it, or is the same
+		// article at another url. the second one only shows up as a matching title, since the filter drops a
+		// content-hash duplicate without storing the hash it matched on
+		const higherRanked = rankedCandidateResources.slice(0, index)
+		const isDeduped = higherRanked.some(
+			(higherRankedResource) =>
+				1 - cosineSimilarity(candidateResource.embedding, higherRankedResource.embedding) < NEAR_DUPLICATE_DISTANCE ||
+				(candidateResource.title !== null && higherRankedResource.title === candidateResource.title),
+		)
 		return !isDeduped
 	})
 }
@@ -168,6 +195,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	const { candidateResources, findingCount } = await loadCandidateRanking(
 		topicId,
 		reviewResult.review.scoredResourceIds,
+		ingestResult.resources.map((resource) => resource.url),
 	)
 	const scoredSimilarities = candidateResources
 		.filter((resource) => resource.isScored)

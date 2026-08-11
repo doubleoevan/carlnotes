@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils"
 
 // badge variants — shadcn new-york; used for tag pills and the "# new" count
 const badgeVariants = cva(
-	"inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap shadow-raise [&>svg]:pointer-events-none [&>svg]:size-3",
+	"inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-full border px-2 py-0.5 text-xs font-medium whitespace-nowrap shadow-lift [&>svg]:pointer-events-none [&>svg]:size-3",
 	{
 		variants: {
 			variant: {

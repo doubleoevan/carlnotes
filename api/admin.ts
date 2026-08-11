@@ -1,7 +1,10 @@
 // the admin console data: a per-user table of standing and cost, and platform totals with a contribution figure.
 // storage is attributed over globally-deduplicated Resources, and contribution is net revenue minus tracked cost
+import { zValidator } from "@hono/zod-validator"
 import type { ActivityTopic, AdminTotals, AdminUserRow } from "@shared/contracts"
+import { budgetOverridePayload, setRolePayload } from "@shared/contracts"
 import { count, eq, gte, sql } from "drizzle-orm"
+import { Hono } from "hono"
 import { db } from "../db"
 import {
 	attachments,
@@ -15,8 +18,9 @@ import {
 	users,
 } from "../db/schema"
 import { loadActivity } from "./activity"
-import { effectiveBudgetCents, isAdminRole, replaceUserLiteLLMKey } from "./authorization"
+import { effectiveBudgetCents, isAdminRole, isAllowed, replaceUserLiteLLMKey } from "./authorization"
 import { readStripeTotalRevenueCents } from "./billing"
+import { type AppEnv, currentUser } from "./currentUser"
 import { readLiteLLMKeySpend } from "./litellm"
 import { startOfUtcMonth } from "./topic/quotas"
 
@@ -48,6 +52,8 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 				// identity and status
 				id: users.id,
 				email: users.email,
+				username: users.username,
+				avatarSource: users.avatarSource,
 				role: users.role,
 				plan: users.plan,
 				// the override, signup time, and the key that bills topic scans
@@ -96,6 +102,8 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			// identity and standing
 			id: user.id,
 			email: user.email,
+			username: user.username,
+			avatarSource: user.avatarSource,
 			role: user.role,
 			plan: user.plan,
 			createdAt: user.createdAt.toISOString(),
@@ -151,21 +159,24 @@ export function computeContributionCents(
 
 /**
  * Change a user's role. An admin cannot remove their own admin role,
- * so the platform can never get locked out of its last admin. Returns false when that self-demotion is rejected.
+ * so the platform can never get locked out of its last admin.
  */
 export async function setUserRole(
 	actingUserId: string,
 	targetUserId: string,
 	role: "admin" | "user",
-): Promise<boolean> {
+): Promise<"set" | "selfDemotion" | "missing"> {
 	if (isSelfDemotion(actingUserId, targetUserId, role)) {
-		return false
+		return "selfDemotion"
 	}
 
 	// the role carries its own spend backstop, so the key follows with the promotion or demotion
-	await db.update(users).set({ role }).where(eq(users.id, targetUserId))
+	const [updated] = await db.update(users).set({ role }).where(eq(users.id, targetUserId)).returning({ id: users.id })
+	if (!updated) {
+		return "missing"
+	}
 	await replaceUserLiteLLMKey(targetUserId)
-	return true
+	return "set"
 }
 
 // whether a role change is an admin demoting themselves, the one change setUserRole rejects
@@ -175,10 +186,24 @@ export function isSelfDemotion(actingUserId: string, targetUserId: string, role:
 
 /**
  * Set or clear a user's per-user budget override, then reissue their LiteLLM key at the resulting effective budget.
+ * Returns false when no such user exists.
  */
-export async function setUserBudgetOverride(targetUserId: string, budgetOverrideCents: number | null): Promise<void> {
-	await db.update(users).set({ budgetOverrideCents }).where(eq(users.id, targetUserId))
+export async function setUserBudgetOverride(
+	targetUserId: string,
+	budgetOverrideCents: number | null,
+): Promise<boolean> {
+	// the update reports whether it matched a row, so a made-up user id answers missing instead of ok
+	const [updated] = await db
+		.update(users)
+		.set({ budgetOverrideCents })
+		.where(eq(users.id, targetUserId))
+		.returning({ id: users.id })
+	if (!updated) {
+		return false
+	}
+	// the key is sized to the effective budget, so it follows the override
 	await replaceUserLiteLLMKey(targetUserId)
+	return true
 }
 
 // attributed storage in bytes per user: distinct resource content + embedding bytes + attachment bytes across their topics
@@ -235,3 +260,66 @@ async function loadAttributedStorage(): Promise<Map<string, number>> {
 	}
 	return bytesByUser
 }
+
+// the admin console routes, each re-checking the role through the gate
+export const adminRoute = new Hono<AppEnv>()
+	.get("/admin/console", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// the users table and the totals summary, admin only.
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const users = await loadAdminUsers()
+		const totals = await loadAdminTotals(users)
+		return context.json({ users, totals })
+	})
+	.post("/admin/users/:id/role", zValidator("json", setRolePayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// change a user's role, rejecting an admin's own self-demotion. admin only.
+		if (!(await isAllowed(userId, "admin:setRole"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		// each rejection answers in its own terms: a self-demotion is refused, a made-up user id is not found
+		const roleResult = await setUserRole(userId, context.req.param("id"), context.req.valid("json").role)
+		if (roleResult === "selfDemotion") {
+			return context.json({ error: "cannot remove your own admin role" }, 409)
+		}
+		return roleResult === "set" ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
+	})
+	.get("/admin/users/:id/topics", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// one user's owned topics, as the admin console's expandable row shows them, admin only.
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const topics = await loadAdminUserTopics(context.req.param("id"))
+		return topics ? context.json({ topics }) : context.json({ error: "not found" }, 404)
+	})
+	.post("/admin/users/:id/budget", zValidator("json", budgetOverridePayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// set or clear a user's budget override and resize their key to the new effective budget, admin only.
+		if (!(await isAllowed(userId, "admin:setBudget"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const isOverrideSet = await setUserBudgetOverride(
+			context.req.param("id"),
+			context.req.valid("json").budgetOverrideCents,
+		)
+		return isOverrideSet ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
+	})

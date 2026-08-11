@@ -1,10 +1,23 @@
+import { zValidator } from "@hono/zod-validator"
+import { attachmentContextPayload, attachmentUrlPayload } from "@shared/contracts"
 // the attachment actions behind the api routes. deleting and downloading, and updating the generated context,
 // which the topic:edit gate authorizes so an admin can edit attachments as well as a topic owner.
 import { and, eq } from "drizzle-orm"
+import { Hono } from "hono"
+import { bodyLimit } from "hono/body-limit"
 import { db } from "../../db"
 import { attachments, topics } from "../../db/schema"
-import { deleteAttachment } from "../../worker"
+import {
+	AttachmentValidationError,
+	attachmentStream,
+	deleteAttachment,
+	ingestAttachment,
+	ingestUrlAttachment,
+	MAX_ATTACHMENT_BYTES,
+} from "../../worker"
 import { isAllowed } from "../authorization"
+import { type AppEnv, currentUser } from "../currentUser"
+import { loadOwnedTopic } from "./permissions"
 
 /**
  * Delete an attachment row and best-effort delete its stored object, restricted to the topic owner.
@@ -95,3 +108,142 @@ export async function loadDownloadableAttachment(
 	}
 	return { objectKey: attachment.objectKey, filename: attachment.filename, contentType: attachment.contentType }
 }
+
+// the headers that send a stored file back as a download.
+// the ascii name is stripped of anything that could inject header bytes, with a utf-8 copy beside it,
+// and nosniff stops the browser running the file as script
+export function toDownloadHeaders(filename: string, contentType: string): Record<string, string> {
+	const asciiFilename = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "")
+	return {
+		"Content-Type": contentType,
+		"Content-Disposition": `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+		"X-Content-Type-Options": "nosniff",
+	}
+}
+
+// a topic attachment's routes: adding one by url, editing its context, removing it, and downloading it
+export const topicAttachmentsRoute = new Hono<AppEnv>()
+	.post("/topics/:id/attachments/url", zValidator("json", attachmentUrlPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+
+		// check the owner first, so a stranger's url is never fetched
+		if (!(await loadOwnedTopic(userId, context.req.param("id")))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+
+		// fetch the page and hand its markdown to the same ingestion path a file upload takes
+		try {
+			const { url } = context.req.valid("json")
+			const attachment = await ingestUrlAttachment(context.req.param("id"), url)
+			return context.json({ id: attachment.id, filename: attachment.filename })
+		} catch (error) {
+			// a validation error names the caller's own url, so it shows verbatim. anything else is internal
+			if (error instanceof AttachmentValidationError) {
+				return context.json({ error: error.message }, 400)
+			}
+			console.error(`url attachment ingestion failed for topic ${context.req.param("id")}`, error)
+			return context.json({ error: "Carl couldn't process that link. Try again in a moment." }, 502)
+		}
+	})
+	.patch("/attachments/:id/context", zValidator("json", attachmentContextPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+
+		// replace the previously saved attachment context
+		const isContextUpdated = await updateTopicAttachmentContext(
+			userId,
+			context.req.param("id"),
+			context.req.valid("json").context,
+		)
+		return isContextUpdated ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
+	.delete("/attachments/:id", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// remove an attachment row and its stored object best-effort. owner only
+		const isDeleted = await deleteTopicAttachment(userId, context.req.param("id"))
+		return isDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
+	.get("/attachments/:id/download", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// stream the stored object with its original name. owner only
+		const attachment = await loadDownloadableAttachment(userId, context.req.param("id"))
+		if (!attachment) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		return context.body(
+			attachmentStream(attachment.objectKey),
+			200,
+			toDownloadHeaders(attachment.filename, attachment.contentType),
+		)
+	})
+	.post(
+		"/topics/:id/attachments",
+		// cap the upload body before it's fully buffered into memory. the multipart envelope adds a little over the file limit,
+		// and ingestAttachment re-checks the exact per-file limit on the decoded bytes
+		bodyLimit({
+			maxSize: MAX_ATTACHMENT_BYTES + 1024 * 1024,
+			onError: (context) =>
+				context.json(
+					{ error: `That attachment is too large. The limit is ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB.` },
+					413,
+				),
+		}),
+		async (context) => {
+			// reject a signed-out caller
+			const userId = currentUser(context)
+			if (!userId) {
+				return context.json({ error: "unauthorized" }, 401)
+			}
+
+			// check the owner first, so a stranger's upload does no storage or model work
+			if (!(await loadOwnedTopic(userId, context.req.param("id")))) {
+				return context.json({ error: "forbidden" }, 403)
+			}
+
+			// read the multipart file field
+			const body = await context.req.parseBody()
+			const file = body.file
+			if (!(file instanceof File)) {
+				return context.json({ error: "file field required" }, 400)
+			}
+
+			// run the synchronous part of attachment ingestion:
+			// size and type validation, object storage, a pending row, and starting the processing workflow
+			try {
+				const bytes = new Uint8Array(await file.arrayBuffer())
+				const attachment = await ingestAttachment({
+					topicId: context.req.param("id"),
+					filename: file.name,
+					contentType: file.type,
+					bytes,
+				})
+
+				// hand the persisted attachment identity back to the modal
+				return context.json({ id: attachment.id, filename: attachment.filename })
+			} catch (error) {
+				// a validation error names the user's own mistake, so it shows verbatim.
+				// anything else is internal: log the real cause and keep it out of the response
+				if (error instanceof AttachmentValidationError) {
+					return context.json({ error: error.message }, 400)
+				}
+				console.error(`attachment ingestion failed for topic ${context.req.param("id")}`, error)
+				return context.json({ error: "Carl couldn't process that attachment. Try again in a moment." }, 502)
+			}
+		},
+	)

@@ -1,12 +1,14 @@
 import { plans } from "@shared/enums"
-import { PLANS, type Plan, SCAN_COST_CENTS } from "@shared/plans"
+import { type BillingInterval, PLANS, type Plan, SCAN_COST_CENTS } from "@shared/plans"
 import { Check } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
 import { authClient } from "@/lib/authClient"
-import { openBillingPortal, startCheckout } from "@/lib/billingClient"
+import { fetchBillingState, openBillingPortal, startCheckout } from "@/lib/billingClient"
+import { isUsersPlan, toPlanBadge } from "@/lib/planCards"
 import { cn, toBrewsWord } from "@/lib/utils"
 
 // the recommended plan that a signed-out visitor sees highlighted
@@ -32,17 +34,34 @@ function toMonthlyScanEstimate(monthlyBudgetCents: number): number {
 }
 
 /**
- * The pricing page: the three plans side by side with a monthly/yearly toggle. Signed in, the
- * user's own plan is highlighted. Signed out, the recommended plan is.
+ * The pricing page: the three plans side by side with a monthly/yearly toggle, which opens at the
+ * subscriber's own billing interval. Signed in, the user's own plan is highlighted. Signed out, the
+ * recommended plan is.
  */
 export function PricingPage() {
 	const { data: session } = authClient.useSession()
 	const [isYearly, setIsYearly] = useState(false)
+	const [billingInterval, setBillingInterval] = useState<BillingInterval | null>(null)
 	const [isRedirecting, setIsRedirecting] = useState(false)
 
-	// the signed-in user's plan takes the highlight, and a visitor sees the recommended plan carry it
+	// the signed-in user's plan gets highlighted. the recommended plan gets highlighted for a logged-out visitor
 	const signedInPlan = session ? ((session.user.plan ?? "free") as Plan) : null
 	const highlightedPlan = signedInPlan ?? RECOMMENDED_PLAN
+
+	// only a paid plan can bill on something other than monthly
+	const isSubscribed = signedInPlan !== null && signedInPlan !== "free"
+	const isLoadingInterval = isSubscribed && billingInterval === null
+
+	// the yearly toggle is set to the interval the user bills on
+	useEffect(() => {
+		if (!isSubscribed) {
+			return
+		}
+		fetchBillingState().then((billing) => {
+			setBillingInterval(billing.billingInterval)
+			setIsYearly(billing.billingInterval === "yearly")
+		})
+	}, [isSubscribed])
 
 	// a free user upgrades through checkout at the selected billing interval
 	async function handleCheckout(plan: Plan): Promise<void> {
@@ -72,37 +91,45 @@ export function PricingPage() {
 			<div className="text-center">
 				<h1 className="font-display text-3xl">Pricing</h1>
 				<p className="text-muted-foreground mt-2">Carl turns caffeine into notes. Choose how much coffee to buy him.</p>
-				<div className="mt-6 inline-flex items-center gap-2 text-sm">
-					Monthly
-					<Switch checked={isYearly} onCheckedChange={setIsYearly} aria-label="Bill yearly" />
-					Yearly
-					{/* the badge switches to yearly */}
-					<button
-						type="button"
-						onClick={() => setIsYearly(true)}
-						disabled={isYearly}
-						className="bg-card border-card text-link rounded-full border px-2 py-0.5 text-xs font-semibold shadow-raise transition-transform hover:scale-105 disabled:cursor-default disabled:hover:scale-100"
-					>
-						2 months free
-					</button>
-				</div>
+				{/* the toggle billing interval button is initialized with the signed-in user's plan */}
+				{!isLoadingInterval && (
+					<div className="mt-6 inline-flex items-center gap-2 text-sm">
+						Monthly
+						<Switch checked={isYearly} onCheckedChange={setIsYearly} aria-label="Bill yearly" />
+						Yearly
+						{/* the badge switches to yearly */}
+						<button
+							type="button"
+							onClick={() => setIsYearly(true)}
+							disabled={isYearly}
+							className="bg-card border-card text-link rounded-full border px-2 py-0.5 text-xs font-semibold shadow-lift transition-transform hover:scale-105 disabled:cursor-default disabled:hover:scale-100"
+						>
+							2 months free
+						</button>
+					</div>
+				)}
 			</div>
 
-			{/* the plan cards */}
-			<div className="mt-8 grid gap-6 sm:grid-cols-3">
-				{plans.map((plan) => (
-					<PlanCard
-						key={plan}
-						plan={plan}
-						isYearly={isYearly}
-						isHighlighted={plan === highlightedPlan}
-						signedInPlan={signedInPlan}
-						isRedirecting={isRedirecting}
-						onCheckout={handleCheckout}
-						onPortal={handlePortal}
-					/>
-				))}
-			</div>
+			{/* the plan cards only show after the billing interval is loaded */}
+			{isLoadingInterval ? (
+				<CoffeeLoading />
+			) : (
+				<div className="mt-8 grid gap-6 sm:grid-cols-3">
+					{plans.map((plan) => (
+						<PlanCard
+							key={plan}
+							plan={plan}
+							isYearly={isYearly}
+							isHighlighted={plan === highlightedPlan}
+							signedInPlan={signedInPlan}
+							subscribedInterval={billingInterval}
+							isRedirecting={isRedirecting}
+							onCheckout={handleCheckout}
+							onPortal={handlePortal}
+						/>
+					))}
+				</div>
+			)}
 		</main>
 	)
 }
@@ -113,6 +140,7 @@ function PlanCard({
 	isYearly,
 	isHighlighted,
 	signedInPlan,
+	subscribedInterval,
 	isRedirecting,
 	onCheckout,
 	onPortal,
@@ -121,6 +149,7 @@ function PlanCard({
 	isYearly: boolean
 	isHighlighted: boolean
 	signedInPlan: Plan | null
+	subscribedInterval: BillingInterval | null
 	isRedirecting: boolean
 	onCheckout: (plan: Plan) => void
 	onPortal: () => void
@@ -128,13 +157,16 @@ function PlanCard({
 	const planConfig = PLANS[plan]
 	// the plan's monthly price for the selected billing interval
 	const monthlyCents = isYearly ? planConfig.priceYearlyCents / 12 : planConfig.priceMonthlyCents
-	const planBadge = toPlanBadge(plan, signedInPlan, isHighlighted)
 
 	// the selected billing interval and if it raises the limits
 	const billingInterval = isYearly ? "yearly" : "monthly"
 	const { dailyTopicLimit, dailyScanLimit } = planConfig
 	const isDailyTopicLimitRaised = isYearly && dailyTopicLimit.yearly > dailyTopicLimit.monthly
 	const isDailyScanLimitRaised = isYearly && dailyScanLimit.yearly > dailyScanLimit.monthly
+
+	// whether this card is what the user is already on, which decides both its badge and its action
+	const isCurrentPlan = isUsersPlan(plan, signedInPlan, billingInterval, subscribedInterval)
+	const planBadge = toPlanBadge(isCurrentPlan, signedInPlan, isHighlighted)
 
 	// the plans limits based on the billing interval
 	const dailyTopicLimitForInterval = dailyTopicLimit[billingInterval]
@@ -180,8 +212,9 @@ function PlanCard({
 				/>
 				<QuotaLink label={`About ${monthlyScanEstimate} ${toBrewsWord(monthlyScanEstimate)} a month`} />
 			</ul>
-			<PlanAction
+			<PlanButton
 				plan={plan}
+				isCurrentPlan={isCurrentPlan}
 				signedInPlan={signedInPlan}
 				isRedirecting={isRedirecting}
 				onCheckout={onCheckout}
@@ -189,14 +222,6 @@ function PlanCard({
 			/>
 		</section>
 	)
-}
-
-// the card's top-edge badge: the viewer's own plan always wins over the highlight, and an unhighlighted card gets none
-function toPlanBadge(plan: Plan, signedInPlan: Plan | null, isHighlighted: boolean): string | null {
-	if (plan === signedInPlan) {
-		return "Current plan"
-	}
-	return isHighlighted ? "Recommended" : null
 }
 
 // one checked quota line, labeled with the year interval if the quota is raised
@@ -208,7 +233,7 @@ function QuotaLink({ label, isRaised }: { label: string; isRaised?: boolean }) {
 			<span>
 				{label}
 				{isRaised && (
-					<span className="bg-card border-card text-link ml-1.5 inline-flex items-center rounded-full border px-1.5 align-middle text-xs font-semibold shadow-raise">
+					<span className="bg-card border-card text-link ml-1.5 inline-flex items-center rounded-full border px-1.5 align-middle text-xs font-semibold shadow-lift">
 						with Yearly plan
 					</span>
 				)}
@@ -218,14 +243,16 @@ function QuotaLink({ label, isRaised }: { label: string; isRaised?: boolean }) {
 }
 
 // the card's action: signup for a visitor, checkout for a free user's upgrade, the portal for a paying user
-function PlanAction({
+function PlanButton({
 	plan,
+	isCurrentPlan,
 	signedInPlan,
 	isRedirecting,
 	onCheckout,
 	onPortal,
 }: {
 	plan: Plan
+	isCurrentPlan: boolean
 	signedInPlan: Plan | null
 	isRedirecting: boolean
 	onCheckout: (plan: Plan) => void
@@ -239,14 +266,14 @@ function PlanAction({
 			</AnchorLink>
 		)
 	}
-	if (plan === signedInPlan) {
+	if (isCurrentPlan) {
 		return (
 			<Button variant="outline" disabled className="mt-6 w-full">
 				Current plan
 			</Button>
 		)
 	}
-	// a paying user's plan changes, up or down, go through the Stripe portal
+	// a paying user's plan changes go through the Stripe portal
 	if (signedInPlan !== "free") {
 		return (
 			<Button variant="outline" onClick={onPortal} disabled={isRedirecting} className="mt-6 w-full">

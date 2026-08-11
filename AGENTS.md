@@ -2,7 +2,8 @@
 
 - Comment every logical group: `//` comment line(s) above every group of 2+ statements, one line preferred.
 - One package.json. Folders separate concerns; packages separate deployments.
-- Domain nouns: Topic, Source, Scan, Resource, Finding, Feed, Subscription, Audience, Integration, Billing Subscription, Bookmark, Chat Turn. Never Channel, Follow, Item, Update, Run, Crawl, Group, List, or Cohort.
+- Domain nouns: Topic, Source, Scan, Resource, Finding, Feed, Subscription, Audience, Integration, Billing Subscription, Bookmark, Chat Turn, Username, Avatar. Never Channel, Item, Update, Run, Crawl, Group, List, or Cohort.
+- Follow is client-facing copy only. Every identifier says subscribe, subscription, subscriber, and the seam is crossed once, where a string is written for a user to read.
 - Module boundaries: ui never imports api, worker, or db; api and worker import db; db imports nothing app-level. Enforced by tsconfig project references (`bunx tsc -b`).
 - Bash runs from the repo root: relative paths only, never prefix commands with cd. Scripts and hooks assume repo-root cwd.
 - Diagnostic and probe commands must be static: never `$(...)`, backticks, `${...}` expansion, or `find -exec` — permission rules cannot auto-allow these, so every use prompts. Read files with the Read tool; extract JSON with `jq`, preferred over `python3 -c`.
@@ -13,7 +14,7 @@
 
 ## Skills
 Rules agents and reviewers must honor, canonical at `.agents/skills/`:
-- domain-model: canonical vocabulary: Topic, Source, Scan, Resource, Finding, Feed, Subscription, Audience, Integration, Billing Subscription, Bookmark, Chat Turn; never introduce Channel, Follow, Item, Update, Run, Crawl, Group, List, Cohort
+- domain-model: canonical vocabulary: Topic, Source, Scan, Resource, Finding, Feed, Subscription, Audience, Integration, Billing Subscription, Bookmark, Chat Turn, Username, Avatar; never introduce Channel, Item, Update, Run, Crawl, Group, List, Cohort
 - ingester-authoring: ingesters return Resources only, never Findings; idempotent by canonical URL; one failing Source never aborts a Scan batch
 - prompt-authoring: model-facing prompts live as versioned markdown under worker/prompts/ with frontmatter and {{variable}} bodies, loaded by thin builders; never inline string literals; Carl addresses a "reader" where the app's code says "user"
 - code-style, jsx-conventions, git-discipline: shared readability and git rules

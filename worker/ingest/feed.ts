@@ -11,6 +11,16 @@ const MAX_FEED_BYTES = 5_000_000
 // one reusable parser handles both RSS 2.0 and Atom
 const parser = new Parser()
 
+// an RSS feed source that returned with an error status
+export class FeedStatusError extends Error {
+	constructor(
+		url: string,
+		readonly status: number,
+	) {
+		super(`feed ${url} returned ${status}`)
+	}
+}
+
 // fetch a feed url within the timeout, reject error responses and oversized bodies, then parse it into Resources of the given kind
 export async function fetchFeed(
 	url: string,
@@ -20,9 +30,10 @@ export async function fetchFeed(
 	const headers = options.userAgent ? { "user-agent": options.userAgent } : undefined
 	const response = await fetchPublicUrl(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 
-	// reject error responses before reading the body
+	// reject error responses before reading the body.
+	// include the status, so a caller can tell a feed that does not exist from a feed that is only rate limiting us
 	if (!response.ok) {
-		throw new Error(`feed ${url} returned ${response.status}`)
+		throw new FeedStatusError(url, response.status)
 	}
 	return parseFeed(await readCappedBody(response, url), options.resourceKind)
 }

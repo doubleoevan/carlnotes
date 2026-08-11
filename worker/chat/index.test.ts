@@ -157,7 +157,7 @@ test("older answers compact while the recent window stays uncompacted", () => {
 	const history = longHistory(CHAT_HISTORY_TURNS)
 	const messages = toModelMessages(history, "latest question")
 
-	// every chat turn rides as a pair plus the closing question
+	// every chat turn has two messages: the question and the answer, followed by the latest question
 	expect(messages).toHaveLength(CHAT_HISTORY_TURNS * 2 + 1)
 	expect(messages.at(-1)).toEqual({ role: "user", content: "latest question" })
 

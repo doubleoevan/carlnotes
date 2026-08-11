@@ -118,7 +118,9 @@ export function useTopicChat(topicId: string): TopicChat {
 	// a kept attachment that is granted is counted here, so the next file in the same batch sees it
 	function shouldKeepAttachment(): boolean {
 		if (keptAttachments.length + draftKeepCountRef.current >= CHAT_ATTACHMENT_KEEP_LIMIT) {
-			toast("Carl's memory for this topic is full, so this rides this turn only.")
+			toast(
+				`Carl's already keeping ${CHAT_ATTACHMENT_KEEP_LIMIT} files for this topic. He'll read this one, but it won't get stored.`,
+			)
 			return false
 		}
 		draftKeepCountRef.current += 1

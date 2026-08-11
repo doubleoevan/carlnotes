@@ -15,6 +15,19 @@ export const FINDING_SORTS = ["relevant", "newest", "trending"] as const
 export type FindingSort = (typeof FINDING_SORTS)[number]
 
 /**
+ * A path safe to send a signed-out visitor back to after login. A browser reads a backslash as a slash
+ * and strips control characters, so a backslash path would leave the site the way "//evil.com" would.
+ */
+export function toSafeRedirectPath(path: string | null): string {
+	if (!path?.startsWith("/") || path.startsWith("//")) {
+		return "/"
+	}
+	// checked per character, since a regex written with control characters trips the lint rule against them
+	const hasEscapeCharacter = [...path].some((character) => character === "\\" || character.charCodeAt(0) < 0x20)
+	return hasEscapeCharacter ? "/" : path
+}
+
+/**
  * Whether a finding belongs in the given feed view.
  */
 export function matchesFeedView(finding: Pick<TopicFinding, "isConsumed" | "isBookmarked">, view: FeedView): boolean {
@@ -107,12 +120,15 @@ export function toSubscribeTooltip(isSignedIn: boolean, isSubscribed: boolean, i
  * The bordered button treatment shared by the feed toolbar's controls.
  */
 export const MENU_BUTTON_CLASS =
-	"bg-card text-muted-foreground hover:text-foreground inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm shadow-raise sm:min-h-9"
+	"bg-card text-muted-foreground hover:text-foreground inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm shadow-lift sm:min-h-9"
 
 /**
  * The card chrome wrapped around every data table, scrolling horizontally on narrow screens.
  */
 export const TABLE_CARD_CLASS = "bg-card overflow-x-auto rounded-lg border p-4 shadow-lift"
+
+// the section card chrome shared by the account page's panels
+export const SECTION_CARD_CLASS = "bg-card rounded-lg border p-4 shadow-lift"
 
 /**
  * The centered display-font title at the top of a note popover.
@@ -216,6 +232,16 @@ export function shuffle<T>(items: T[]): T[] {
 		shuffled[swapIndex] = heldItem
 	}
 	return shuffled
+}
+
+/**
+ * An ISO date as its month and year: Jul 2026. Empty for a null date.
+ */
+export function toMonthYearLabel(dateString: string | null): string {
+	if (!dateString) {
+		return ""
+	}
+	return new Date(dateString).toLocaleDateString(undefined, { month: "short", year: "numeric" })
 }
 
 /**

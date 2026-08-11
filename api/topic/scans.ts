@@ -3,12 +3,14 @@
 import { trackEvent } from "@shared/analytics"
 import { reportError } from "@shared/monitoring"
 import { eq } from "drizzle-orm"
+import { Hono } from "hono"
 import { db } from "../../db"
 import { topics } from "../../db/schema"
 import { failStaleScans, startTopicScan } from "../../worker"
 import { loadManualScanAuthorization } from "../authorization"
 import { reportManualScanOverage } from "../billing"
 import type { AnalyticsProperties } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 
 // the outcomes of a manual scan request. status: running means a scan is already in flight for the topic
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
@@ -64,3 +66,27 @@ export async function runManualScan(
 	trackEvent("scan_requested", userId, { ...analyticsProperties, topicId })
 	return { status: "started", remainingScans: authorization.remainingScans }
 }
+
+// the manual scan route
+export const scansRoute = new Hono<AppEnv>().post("/topics/:id/scan", async (context) => {
+	// reject a signed-out caller
+	const userId = currentUser(context)
+	if (!userId) {
+		return context.json({ error: "unauthorized" }, 401)
+	}
+	// trigger a manual scan, billed as overage past the daily quota when a card is on file. owner or admin only.
+	const scanResult = await runManualScan(userId, context.req.param("id"), toAnalyticsProperties(context))
+	if (scanResult.status === "started") {
+		return context.json({ remainingScans: scanResult.remainingScans })
+	}
+
+	// a scan already in flight is a conflict, not a quota or authorization failure
+	if (scanResult.status === "running") {
+		return context.json({ error: "a scan is already running" }, 409)
+	}
+
+	// an exhausted quota and a non-owner topic scan fail differently, so the ui should tell them apart
+	return scanResult.status === "quota"
+		? context.json({ error: "quota exhausted" }, 429)
+		: context.json({ error: "forbidden" }, 403)
+})

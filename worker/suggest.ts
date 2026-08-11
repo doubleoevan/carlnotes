@@ -3,7 +3,7 @@
 import { editableSourceKinds } from "@shared/enums"
 import { generateText, Output } from "ai"
 import { z } from "zod"
-import { fetchFeed } from "./ingest/feed"
+import { FeedStatusError, fetchFeed } from "./ingest/feed"
 import { toCanonicalUrl } from "./ingest/normalize"
 import { toAtomUrl } from "./ingest/youtube"
 import { cheapModel } from "./models"
@@ -31,6 +31,10 @@ const REDDIT_USER_AGENT = "carlnotes/0.1 (source-suggestion; +https://carlnotes.
 
 // how long a verification fetch may run. a slow suggested source is dropped instead of holding up the reply
 const VERIFY_TIMEOUT_MS = 8000
+
+// how many extra sources to ask for beyond what the topic can hold,
+// so that filtered suggestions do not leave the user with an empty list
+const SUGGESTION_HEADROOM = 3
 
 // the model's answer. every field is required, so a candidate missing its value is filtered out
 const suggestionSchema = z.object({
@@ -111,7 +115,7 @@ async function generateSourceSuggestions(suggestionContext: SuggestionContext): 
 		prompt: writePrompt(
 			template,
 			{ topicContext, excludedSources: excludedSources || "None." },
-			{ maxSuggestions: String(suggestionContext.limit) },
+			{ maxSuggestions: String(suggestionContext.limit + SUGGESTION_HEADROOM) },
 		),
 		name,
 		registryPrompt,
@@ -133,7 +137,7 @@ async function generateSourceSuggestions(suggestionContext: SuggestionContext): 
 }
 
 // whether a candidate can actually be read, fetched the way its own ingester reads it.
-// anything that throws, times out, or parses as nothing is dropped without failing the request
+// a source the host says is not there is dropped. one the host would not answer for is kept
 async function isReadable(suggestedSource: SuggestedSource): Promise<boolean> {
 	// the built-in web search names no address, so there is nothing to confirm
 	if (suggestedSource.sourceKind === "search") {
@@ -144,9 +148,24 @@ async function isReadable(suggestedSource: SuggestedSource): Promise<boolean> {
 		await readSuggestedSource(suggestedSource)
 		return true
 	} catch (error) {
+		// a rate limit or a server error is the host saying "not now", not "no such source".
+		// reddit throttles its keyless feed hard, so treating that as unreadable would discard subreddits that do exist.
+		if (isTemporaryFailure(error)) {
+			console.log(`kept a ${suggestedSource.sourceKind} suggestion the host would not confirm: ${String(error)}`)
+			return true
+		}
 		console.log(`dropped an unreadable ${suggestedSource.sourceKind} suggestion: ${String(error)}`)
 		return false
 	}
+}
+
+// whether the host refused to answer instead of answering that the source is not there
+function isTemporaryFailure(error: unknown): boolean {
+	// a timeout or a dropped connection never reached a status at all
+	if (!(error instanceof FeedStatusError)) {
+		return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+	}
+	return error.status === 429 || error.status >= 500
 }
 
 // read the suggested source through the same helper its ingester uses, so a confirmed suggestion is one that will ingest
@@ -170,10 +189,10 @@ async function readSuggestedSource(suggestedSource: SuggestedSource): Promise<vo
 		return
 	}
 
-	// a page only has to answer. the scan reads its content later
+	// a page only has to answer. the scan can read its content later, so a throttled host does not read as a page that isn't there
 	const response = await fetchPublicUrl(suggestedSource.value, { signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS) })
 	if (!response.ok) {
-		throw new Error(`${suggestedSource.value} returned ${response.status}`)
+		throw new FeedStatusError(suggestedSource.value, response.status)
 	}
 }
 

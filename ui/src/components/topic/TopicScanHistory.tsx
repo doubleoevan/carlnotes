@@ -69,7 +69,7 @@ function ScanRow({ scan, allowedUrls }: { scan: TopicScan; allowedUrls?: Allowed
 						</PopoverAnchor>
 					</PopoverTrigger>
 				</TooltipTrigger>
-				{/* the whole row is the trigger, so a centred tooltip would float in the middle of it. it sits at
+				{/* the whole row is the trigger, so a centered tooltip would float in the middle of it. it sits at
 				    the right instead, over the note the row opens */}
 				<TooltipContent align="end">A brew note from Carl</TooltipContent>
 			</Tooltip>

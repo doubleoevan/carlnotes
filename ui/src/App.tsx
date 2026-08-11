@@ -13,6 +13,10 @@ const HomePage = lazy(() => import("@/pages/HomePage").then((page) => ({ default
 const LoginPage = lazy(() => import("@/pages/LoginPage").then((page) => ({ default: page.LoginPage })))
 const PricingPage = lazy(() => import("@/pages/PricingPage").then((page) => ({ default: page.PricingPage })))
 const PrivacyPage = lazy(() => import("@/pages/PrivacyPage").then((page) => ({ default: page.PrivacyPage })))
+const ProfilePage = lazy(() => import("@/pages/ProfilePage").then((page) => ({ default: page.ProfilePage })))
+const ResetPasswordPage = lazy(() =>
+	import("@/pages/ResetPasswordPage").then((page) => ({ default: page.ResetPasswordPage })),
+)
 const SignupPage = lazy(() => import("@/pages/SignupPage").then((page) => ({ default: page.SignupPage })))
 const TermsPage = lazy(() => import("@/pages/TermsPage").then((page) => ({ default: page.TermsPage })))
 const TopicPage = lazy(() => import("@/pages/TopicPage").then((page) => ({ default: page.TopicPage })))
@@ -43,6 +47,14 @@ export function App() {
 						</Suspense>
 					}
 				/>
+				<Route
+					path="reset-password"
+					element={
+						<Suspense fallback={<CoffeeLoading />}>
+							<ResetPasswordPage />
+						</Suspense>
+					}
+				/>
 				{/* every other page shares one topic feed context and the Layout shell (header, search bar, footer) */}
 				<Route
 					element={
@@ -62,6 +74,8 @@ export function App() {
 					<Route path="pricing" element={<PricingPage />} />
 					{/* legal pages, linked from the footer */}
 					<Route path="privacy" element={<PrivacyPage />} />
+					{/* a user's public profile */}
+					<Route path="profiles/:userId" element={<ProfilePage />} />
 					<Route path="terms" element={<TermsPage />} />
 				</Route>
 			</Routes>

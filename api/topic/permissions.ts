@@ -1,4 +1,6 @@
-// the shared access checks for topics and topic findings. one place checks who may see, subscribe, and rate
+// the shared access checks for topics and topic findings. checks who may see, subscribe, and rate,
+// and whether a topic has enough findings to be shown on public pages
+import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
 import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { audienceMembers, findings, scans, subscriptions, topicInvites, topics, users } from "../../db/schema"
@@ -74,6 +76,14 @@ async function hasSubscription(userId: string, topicId: string): Promise<boolean
 		.limit(1)
 	return subscription !== undefined
 }
+
+/**
+ * Whether a public Topic has enough kept Findings to be shown in Featured topics, Popular topics,
+ * and the profile table.
+ */
+export const isShown = sql`(
+	select count(*) from ${findings} where ${findings.topicId} = ${topics.id}
+) >= ${MINIMUM_SHOWN_FINDINGS}`
 
 /**
  * When the user's subscription to the topic became active, or null with no active subscription.
@@ -197,6 +207,7 @@ async function loadFindingTopic(findingId: string): Promise<
 	  })
 	| undefined
 > {
+	// one join maps from the finding to its topic and to the scan that produced it
 	const [topic] = await db
 		.select({ id: topics.id, ownerId: topics.ownerId, visibility: topics.visibility, scanStartedAt: scans.startedAt })
 		.from(findings)

@@ -1,9 +1,14 @@
+import { zValidator } from "@hono/zod-validator"
+import { topicFeatureOrderPayload } from "@shared/contracts"
 // the Featured section's ordering is whole numbers from 1 to the number of featured topics.
 // every change is the same two steps, take the topic out of the ordering and then put it back at a new position,
 // so the numbers stay contiguous whether the caller is ranking, deleting, or making a topic private
 import { and, asc, count, eq, gt, gte, isNotNull, sql } from "drizzle-orm"
+import { Hono } from "hono"
 import { db } from "../../db"
 import { topics } from "../../db/schema"
+import { isAllowed } from "../authorization"
+import { type AppEnv, currentUser } from "../currentUser"
 
 // the database, or a transaction on it, so a caller can release a feature order inside the transaction
 // that is deleting the topic or changing its visibility
@@ -89,3 +94,33 @@ export async function loadFeaturedTopics(): Promise<{ id: string; name: string; 
 	// the column is nullable, and the filter above is what rules the nulls out
 	return featuredRows.map((row) => ({ id: row.id, name: row.name, featureOrder: row.featureOrder ?? 0 }))
 }
+
+// the Featured section's order route, admin only
+export const featuringRoute = new Hono<AppEnv>().patch(
+	"/topics/:id/feature-order",
+	zValidator("json", topicFeatureOrderPayload),
+	async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+
+		// updating the Featured section is admin only
+		if (!(await isAllowed(userId, "admin:setFeatureOrder"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+
+		// position zero clears the topic's order. any other position inserts it and shifts the rest.
+		// a topic that isn't public is rejected
+		const featureOrderResult = await setTopicFeatureOrder(context.req.param("id"), context.req.valid("json").position)
+		if (featureOrderResult === "missing") {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// the rejection names the rule, so the page shows why
+		return featureOrderResult === "ranked"
+			? context.json({ ok: true })
+			: context.json({ error: "only a public topic can be featured" }, 409)
+	},
+)

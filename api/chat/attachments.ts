@@ -2,9 +2,11 @@
 import { CHAT_ATTACHMENT_KEEP_LIMIT, type ChatAttachment, clipAttachmentText } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
 import { and, eq, inArray } from "drizzle-orm"
+import { Hono } from "hono"
 import { db } from "../../db"
 import { chatAttachments } from "../../db/schema"
 import {
+	attachmentStream,
 	deleteAttachment,
 	extractText,
 	generateContext,
@@ -13,6 +15,8 @@ import {
 	toChatAttachmentKey,
 } from "../../worker"
 import { screenText, toFlaggedReason } from "../../worker/guard"
+import { type AppEnv, currentUser } from "../currentUser"
+import { toDownloadHeaders } from "../topic/attachments"
 import { decryptChatText, encryptChatText } from "./encryption"
 
 /**
@@ -57,7 +61,7 @@ export async function resolveChatAttachments(attachments: ChatAttachment[]): Pro
 }
 
 // the words that a kept attachment stores, or null when the scanner flags it.
-// a flagged attachment is dropped rather than remembered
+// a flagged attachment is dropped instead of remembered
 async function screenKeptText(text: string, topicId: string): Promise<string | null> {
 	// clip before screening. the scanner fails once it runs past its own deadline. an unbounded body should not skip the check
 	const screenVerdict = await screenText(clipAttachmentText(text), "document")
@@ -309,3 +313,36 @@ export async function deleteChatAttachments(topicId: string, userId?: string): P
 		),
 	)
 }
+
+// a kept chat attachment's routes, both scoped to whoever kept it
+export const chatAttachmentsRoute = new Hono<AppEnv>()
+	.delete("/chat-attachments/:id", async (context) => {
+		// deleting a kept attachment is signed-in only and scoped to its keeper, freeing its cap slot
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "sign up required" }, 401)
+		}
+		const isDeleted = await deleteKeptAttachment(userId, context.req.param("id"))
+		return isDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
+	.get("/chat-attachments/:id/download", async (context) => {
+		// downloading a kept attachment is signed-in only and scoped to its keeper
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		const keptAttachment = await loadDownloadableKeptAttachment(userId, context.req.param("id"))
+		if (!keptAttachment) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// kept text has no stored file, so its words download back directly
+		if (keptAttachment.kind === "text") {
+			return context.body(keptAttachment.text, 200, toDownloadHeaders(keptAttachment.name, "text/plain; charset=utf-8"))
+		}
+		return context.body(
+			attachmentStream(keptAttachment.objectKey),
+			200,
+			toDownloadHeaders(keptAttachment.name, keptAttachment.contentType),
+		)
+	})

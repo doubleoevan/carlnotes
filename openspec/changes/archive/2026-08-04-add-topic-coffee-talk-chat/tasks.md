@@ -53,7 +53,7 @@
 - [x] 6.5 Wire the waiting and streaming states: the existing `CoffeeMug` while awaiting the first token, a shimmer on the incoming line while text streams. `.shimmer-text` already exists in `ui/src/animations.css`, so no new keyframes were added.
 - [x] 6.6 Render the budget refusal as an upgrade prompt and the anonymous cap refusal as a sign-in invitation, in the message list rather than a toast.
 - [x] 6.7 Mount the panel in `ui/src/pages/TopicPage.tsx`. It hides itself when the payload says this reader may not chat.
-- [x] 6.8 Split the account page's `SpendSection` bar into a brews segment and a coffee talk segment against one budget, with a key beneath it. Both use existing theme tokens, so no new colours were added.
+- [x] 6.8 Split the account page's `SpendSection` bar into a brews segment and a coffee talk segment against one budget, with a key beneath it. Both use existing theme tokens, so no new colors were added.
 
 ## 7. Verification
 
@@ -68,7 +68,7 @@
 ## 8. Post-preview polish
 
 - [x] 8.1 Elevation that reads in both themes: a layered contact-plus-ambient shadow with a hairline ring, bright in dark mode where a black shadow cannot carry, shared by the panel and the pill through one `ELEVATION_CLASS`. Plus bottom scroll clearance on the topic page so the docked panel never permanently covers the last card.
-- [x] 8.2 An emoji-style `CoffeeCup` in `ui/src/components/branding/` — cup on a saucer with white steam, drawn in currentColor so the cup follows the pill's text colour while the steam stays white on the primary background. The collapsed pill uses it; the panel header keeps the original `CoffeeMug`.
+- [x] 8.2 An emoji-style `CoffeeCup` in `ui/src/components/branding/` — cup on a saucer with white steam, drawn in currentColor so the cup follows the pill's text color while the steam stays white on the primary background. The collapsed pill uses it; the panel header keeps the original `CoffeeMug`.
 - [x] 8.3 Split the panel into `ui/src/components/chat/`: `CoffeeTalkPanel` (shell, pill, header, portal, turn state), `ChatMessages` (list, bubbles, refusals, and the `Turn` type), `ChatComposer`, and `ChatMarkdown` (the inert-link renderer, kept separate from the scan note's live-link options on purpose).
 - [x] 8.4 Prompt v2: general knowledge is welcome but the reply marks where it leaves the Topic's material, findings still lead, and the no-links rule extends to remembered URLs. Synced to the registry, spec delta and prompt tests updated. Verified live: a pairwise-comparison question drew "the findings don't cover this, but from my own knowledge…" with five findings named by title first.
 - [x] 8.5 Fix: `idleTimeout: 120` on the Bun server. The 10-second default reaped streaming chat turns mid-reply whenever retrieval plus generation sat quiet too long, surfacing as "Carl lost his train of thought" on an otherwise healthy turn.

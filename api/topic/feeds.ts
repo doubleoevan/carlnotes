@@ -1,7 +1,7 @@
 // the topic feed logic behind the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
 import { toSourceSummary, toUrlHost } from "@shared/sources"
-import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
+import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import {
 	attachments,
@@ -14,9 +14,11 @@ import {
 	sources,
 	subscriptions,
 	topics,
+	users,
 } from "../../db/schema"
 import { subscribedTopicIds } from "../authorization"
 import { filteredTopicFindings, newTopicFindingCount } from "./findings"
+import { isShown } from "./permissions"
 import { startOfUtcMonth } from "./quotas"
 import { toScheduledTimeLabel } from "./topics"
 
@@ -49,13 +51,13 @@ export async function buildTopicFeeds(
 	userId: string | null,
 	includeConsumedResources: boolean,
 ): Promise<Pick<TopicFeedResponse, "sections">> {
-	// a signed-out visitor owns nothing, and every public topic counts as "other"
+	// a signed-out visitor owns nothing, and every public topic counts as "other".
+	// isShown keeps a topic out of the public sections until it has enough findings.
 	const othersFilter = userId
-		? and(ne(topics.ownerId, userId), eq(topics.visibility, "public"))
-		: eq(topics.visibility, "public")
-	// a correlated subscriber count, used to rank the popular section in SQL so topics that won't render never load.
-	// the owner's own row is excluded, since they subscribe to their own topic for delivery and don't count as a subscriber
-	const subscriberCount = sql<number>`(select count(*) from ${subscriptions} where ${subscriptions.topicId} = ${topics.id} and ${subscriptions.isActive} = true and ${subscriptions.subscriberUserId} is distinct from ${topics.ownerId})`
+		? and(ne(topics.ownerId, userId), eq(topics.visibility, "public"), isShown)
+		: and(eq(topics.visibility, "public"), isShown)
+	// the subscriber count ranks the popular section
+	const subscriberCount = topics.subscriberCount
 
 	// the topic ids this user actively subscribes to
 	const activeSubscriptionTopicIds = userId ? activeSubscriptionTopicIdQuery(userId) : null
@@ -130,7 +132,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 		? and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId))
 		: sql`false`
 	// run the topic-batched queries together, plus the subscription query for the signed-in user
-	const [findingRows, sourceRows, attachmentRows, scanRows, subscriberRows, monthCostRows, subscribedTopicIdSet] =
+	const [findingRows, sourceRows, attachmentRows, scanRows, monthCostRows, subscribedTopicIdSet, ownerRows] =
 		await Promise.all([
 			// join each topic finding with its resource. a left join adds the user's consumed date when one exists
 			db
@@ -162,9 +164,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 				.where(inArray(findings.topicId, topicIds))
 				.orderBy(desc(findings.relevanceScore)),
 
-			// select every topic's sources, including the topic id to group by.
-			// the llm-guard screening status is included, since the owner can see a source that hasn't passed.
-			// the config is included to derive each source's display summary
+			// every topic's sources, grouped by topic id. the llm-guard screening status is included to show the owner
 			db
 				.select({
 					topicId: sources.topicId,
@@ -203,21 +203,6 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 				.where(and(inArray(scans.topicId, topicIds), eq(scans.status, "succeeded")))
 				.orderBy(scans.topicId, desc(scans.startedAt)),
 
-			// select the subscriber count per topic. unsubscribing deactivates the row instead of deleting it,
-			// so only active rows count. the join to the topic is what lets the owner's own row drop out
-			db
-				.select({ topicId: subscriptions.topicId, count: count() })
-				.from(subscriptions)
-				.innerJoin(topics, eq(subscriptions.topicId, topics.id))
-				.where(
-					and(
-						inArray(subscriptions.topicId, topicIds),
-						eq(subscriptions.isActive, true),
-						sql`${subscriptions.subscriberUserId} is distinct from ${topics.ownerId}`,
-					),
-				)
-				.groupBy(subscriptions.topicId),
-
 			// sum this month's scan spend per topic for the owner-gated cost line
 			db
 				.select({ topicId: scans.topicId, monthCost: sql<string>`coalesce(sum(${scans.cost}), 0)` })
@@ -227,6 +212,18 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 
 			// the topics this signed-in user is subscribed to, in one query. a signed-out visitor is subscribed to none
 			userId ? subscribedTopicIds(userId, topicIds) : Promise.resolve(new Set<string>()),
+
+			// select each topic's owner with a single query across every topic instead of a lookup per row
+			db
+				.select({
+					topicId: topics.id,
+					userId: users.id,
+					username: users.username,
+					avatarSource: users.avatarSource,
+				})
+				.from(topics)
+				.innerJoin(users, eq(users.id, topics.ownerId))
+				.where(inArray(topics.id, topicIds)),
 		])
 
 	// group each dataset by topic id so that a feed can read its slice in memory
@@ -235,10 +232,10 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 		sourcesByTopic: Map.groupBy(sourceRows, (row) => row.topicId),
 		attachmentsByTopic: Map.groupBy(attachmentRows, (row) => row.topicId),
 		lastScanByTopic: new Map(scanRows.map((row) => [row.topicId, row])),
-		subscriberCountByTopic: new Map(subscriberRows.map((row) => [row.topicId, row.count])),
 		monthCostByTopic: new Map(monthCostRows.map((row) => [row.topicId, row.monthCost])),
 		// the topic ids this user is subscribed to
 		subscribedTopicIdSet,
+		ownerByTopic: new Map(ownerRows.map((row) => [row.topicId, row])),
 	}
 }
 
@@ -253,9 +250,12 @@ function buildTopicFeed(
 	// read this topic's findings, last scan, and subscriber count from the batched data
 	const findingRows = feedData.findingRowsByTopic.get(topic.id) ?? []
 	const lastScan = feedData.lastScanByTopic.get(topic.id)
-	const subscriberCount = feedData.subscriberCountByTopic.get(topic.id) ?? 0
-	// the owner sees their topic's scan spend. others never do
+	// the subscriber count is used to sort the popular section
+	const subscriberCount = topic.subscriberCount
+	// only the owner sees their own topic's scan spend
 	const isOwner = topic.ownerId === userId
+	// the topic owner
+	const ownerRow = feedData.ownerByTopic.get(topic.id)
 
 	// read the sources, dropping the grouping key from each row. a source that has not passed its llm-guard screen is only seen by its owner
 	const topicSources = (feedData.sourcesByTopic.get(topic.id) ?? [])
@@ -309,13 +309,18 @@ function buildTopicFeed(
 		scheduledTime: toScheduledTimeLabel(topic.scheduledTime),
 		scheduledDayOfWeek: topic.scheduledDayOfWeek,
 		maxResults: topic.maxResults,
-		// what this user may do with the topic, plus their unconsumed count
+		// the topic owner to show
+		owner: ownerRow
+			? { userId: ownerRow.userId, username: ownerRow.username, avatarSource: ownerRow.avatarSource }
+			: null,
 		isOwner,
+		// what this user may do with the topic, plus their unconsumed topic findings count
 		canRate: canRateInFeed(topic, userId, feedData.subscribedTopicIdSet),
 		isSubscribed: feedData.subscribedTopicIdSet.has(topic.id),
 		newCount: newTopicFindingCount(topicFindings),
 		// how many subscribers this topic has
 		subscriberCount,
+		visibility: topic.visibility,
 		// the created time, last scan details, attachments, sources, and topic findings
 		createdAt: topic.createdAt.toISOString(),
 		lastScanAt: lastScan?.startedAt.toISOString() ?? null,

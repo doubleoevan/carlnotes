@@ -1,11 +1,15 @@
+import { zValidator } from "@hono/zod-validator"
 // the topic finding logic behind the api routes. it loads a topic's findings and records ratings, views, and consumed state
 import { trackEvent } from "@shared/analytics"
 import type { TopicFinding } from "@shared/contracts"
+import { bookmarkPayload, consumedPayload, ratingPayload } from "@shared/contracts"
 import { toUrlHost } from "@shared/sources"
 import { and, desc, eq, gt, sql } from "drizzle-orm"
+import { Hono } from "hono"
 import { db } from "../../db"
 import { bookmarks, consumptions, findings, resources, scans } from "../../db/schema"
 import type { AnalyticsProperties } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { canRateFinding, isTopicFindingVisible } from "./permissions"
 
 /**
@@ -219,3 +223,59 @@ export function filteredTopicFindings(topicFindings: TopicFinding[], includeCons
 export function newTopicFindingCount(topicFindings: TopicFinding[]): number {
 	return topicFindings.filter((finding) => !finding.isConsumed).length
 }
+
+// the per-finding routes a signed-in reader drives: rating, consumed, bookmarked, and the view an open records
+export const findingsRoute = new Hono<AppEnv>()
+	.post("/topic-findings/:id/rating", zValidator("json", ratingPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// rate this topic finding up, down, or clear the rating
+		const rating = context.req.valid("json").rating
+		const isRated = await setRating(userId, context.req.param("id"), rating, toAnalyticsProperties(context))
+		return isRated ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
+	.post("/topic-findings/:id/consume", zValidator("json", consumedPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// mark this topic finding consumed or unread for the current user
+		const { isConsumed: isMarkedConsumed } = context.req.valid("json")
+		const isConsumed = await setConsumed(
+			userId,
+			context.req.param("id"),
+			isMarkedConsumed,
+			toAnalyticsProperties(context),
+		)
+		return isConsumed ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
+	.post("/topic-findings/:id/bookmark", zValidator("json", bookmarkPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// bookmark or unbookmark this topic finding for the current user, keeping the count below the max results
+		const { isBookmarked } = context.req.valid("json")
+		const isBookmarkSet = await setBookmarked(
+			userId,
+			context.req.param("id"),
+			isBookmarked,
+			toAnalyticsProperties(context),
+		)
+		return isBookmarkSet ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})
+	.post("/topic-findings/:id/view", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// opening a resource records a view on its topic finding and marks the finding consumed
+		const isViewed = await recordView(userId, context.req.param("id"), toAnalyticsProperties(context))
+		return isViewed ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})

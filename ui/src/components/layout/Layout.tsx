@@ -4,8 +4,8 @@ import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { CoffeeSteam } from "@/components/branding/CoffeeSteam"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
-import { SearchBar } from "@/components/layout/SearchBar"
 import { Toaster } from "@/components/primitives/sonner"
+import { SearchBar } from "@/components/search/SearchBar"
 
 /**
  * The app shell shared by every route with a header, search bar, page content, and footer

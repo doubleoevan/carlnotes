@@ -4,6 +4,9 @@ import { ChevronDown } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { UserAvatar } from "@/components/branding/UserAvatar"
+import { AnchorLink } from "@/components/common/AnchorLink"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { TopicsTable } from "@/components/table/TopicsTable"
@@ -113,6 +116,7 @@ function TotalCard({ label, figure }: { label: string; figure: string }) {
 
 // the sort accessors for the users table columns
 const userSortValues = {
+	user: (user: AdminUserRow) => user.username,
 	email: (user: AdminUserRow) => user.email,
 	role: (user: AdminUserRow) => user.role,
 	plan: (user: AdminUserRow) => user.plan,
@@ -142,6 +146,7 @@ function UsersTable({
 			<table className="w-full min-w-3xl text-left text-sm [&_tbody_tr:last-child]:border-b-0">
 				<thead className="text-muted-foreground border-b">
 					<tr>
+						<SortableHeader sort={sort} sortKey="user" label="User" className="py-2 pr-4" />
 						<SortableHeader sort={sort} sortKey="email" label="Email" className="py-2 pr-4" />
 						<SortableHeader sort={sort} sortKey="role" label="Role" className="py-2 pr-4" />
 						<SortableHeader sort={sort} sortKey="plan" label="Plan" className="py-2 pr-4" />
@@ -242,7 +247,22 @@ function UserRow({
 	return (
 		<>
 			<tr className="border-b">
-				<td className="py-2 pr-4">{user.email}</td>
+				<td className="py-2 pr-4">
+					<AnchorLink
+						href={`/profiles/${user.id}`}
+						className="text-link flex items-center gap-2 whitespace-nowrap hover:underline"
+					>
+						<UserAvatar userId={user.id} username={user.username} avatarSource={user.avatarSource} className="size-6" />
+						{user.username}
+					</AnchorLink>
+				</td>
+				{/* the full email is a tooltip, since a long address would push the other columns off the card */}
+				<td className="py-2 pr-4">
+					<Tooltip>
+						<TooltipTrigger className="block max-w-52 truncate text-left">{user.email}</TooltipTrigger>
+						<TooltipContent>{user.email}</TooltipContent>
+					</Tooltip>
+				</td>
 				<td className="py-2 pr-4">
 					{/* an admin cannot change their own role, so the platform always keeps at least one admin */}
 					<select
@@ -295,7 +315,7 @@ function UserRow({
 			{/* this user's topics subtable */}
 			{isUserTopicsOpen && (
 				<tr className="border-b">
-					<td colSpan={10} className="py-2">
+					<td colSpan={11} className="py-2">
 						{userTopics ? (
 							<TopicsTable
 								topics={userTopics}

@@ -1,17 +1,28 @@
 // the topic logic behind the api routes. it loads one topic's full payload and applies the owner's creates, edits, and deletes
+import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import type { TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contracts"
+import { suggestSourcesPayload, updateTopicPayload } from "@shared/contracts"
 import { isDailyFrequency } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
 import { toSourceSummary } from "@shared/sources"
-import { and, count, desc, eq, notInArray, sql } from "drizzle-orm"
+import { and, desc, eq, notInArray } from "drizzle-orm"
+import { Hono } from "hono"
 import { db } from "../../db"
 import { dailyTopicIdsWithinLimit } from "../../db/quotas"
-import { attachments, scans, sources, subscriptions, topicInvites, topics } from "../../db/schema"
-import { deleteAttachment, failStaleScans, scanTopic, screenPendingSources, screenTopicSources } from "../../worker"
+import { attachments, scans, sources, subscriptions, topicInvites, topics, users } from "../../db/schema"
+import {
+	deleteAttachment,
+	failStaleScans,
+	scanTopic,
+	screenPendingSources,
+	screenTopicSources,
+	suggestSources,
+} from "../../worker"
 import { isAllowed, isMonthlySpendExhausted, loadDailyFrequencyAuthorization, loadUserAccess } from "../authorization"
 import { deleteChatAttachments } from "../chat/attachments"
 import type { AnalyticsProperties } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { loadFeaturedTopics, releaseFeatureOrder } from "./featuring"
 import { loadTopicFindings, newTopicFindingCount } from "./findings"
 import { loadDirectSubscription, subscriptionActivatedAt } from "./permissions"
@@ -97,18 +108,8 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 		error: scan.error,
 	}))
 
-	// the active subscriber count and this user's own subscription state. the owner's own row never counts,
-	// since they subscribe to their own topic for delivery and "subscribers" means users other than them
-	const [subscriberRow] = await db
-		.select({ count: count() })
-		.from(subscriptions)
-		.where(
-			and(
-				eq(subscriptions.topicId, topic.id),
-				eq(subscriptions.isActive, true),
-				sql`${subscriptions.subscriberUserId} is distinct from ${topic.ownerId}`,
-			),
-		)
+	// this user's own subscription state. the count itself reads the denormalised column, the same figure the
+	// feed and the profile show, so no page can disagree with another
 	const isSubscribed = userId ? (await loadDirectSubscription(userId, topic.id))?.isActive === true : false
 
 	// the owner-only extras: the invite list and the manual scan quota
@@ -119,6 +120,12 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 	const manualScansRemaining = userId ? await scansRemaining(userId, canScan) : null
 	// only someone who may scan needs their spend checked, and only show their own spend
 	const isSpendExhausted = userId && canScan ? await isMonthlySpendExhausted(userId) : false
+
+	// the topic owner's username, avatar and profile page id
+	const [ownerRow] = await db
+		.select({ userId: users.id, username: users.username, avatarSource: users.avatarSource })
+		.from(users)
+		.where(eq(users.id, topic.ownerId))
 
 	// the latest succeeded scan feeds the schedule section, mirroring the homepage feed
 	const lastSucceededScan = toLastSucceededScan(scanHistory)
@@ -138,6 +145,9 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 		// the topic identity and its editable fields
 		id: topic.id,
 		name: topic.name,
+		owner: ownerRow
+			? { userId: ownerRow.userId, username: ownerRow.username, avatarSource: ownerRow.avatarSource }
+			: null,
 		prompt: topic.prompt,
 		tags: topic.tags,
 		frequency: topic.frequency,
@@ -152,7 +162,7 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 		canRate: await isAllowed(userId, "topic:rate", topic),
 		canEdit: await isAllowed(userId, "topic:edit", topic),
 		newCount: newTopicFindingCount(topicFindings),
-		subscriberCount: subscriberRow?.count ?? 0,
+		subscriberCount: topic.subscriberCount,
 		// the schedule details
 		createdAt: topic.createdAt.toISOString(),
 		lastScanAt: lastSucceededScan?.startedAt ?? null,
@@ -315,7 +325,16 @@ export async function updateTopic(
 		// write the editable topic fields
 		await transaction
 			.update(topics)
-			.set({ name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxResults })
+			.set({
+				name,
+				prompt,
+				tags,
+				frequency,
+				scheduledTime,
+				scheduledDayOfWeek,
+				visibility,
+				maxResults,
+			})
 			.where(eq(topics.id, topicId))
 
 		// only a public topic can be featured, so changing the visibility from public drops it from the featured topics
@@ -458,3 +477,70 @@ export async function deleteTopic(
 	trackEvent("topic_deleted", userId, { ...analyticsProperties, topicId, isOwner: topic.ownerId === userId })
 	return true
 }
+
+// the topic routes: create, source suggestions, read, update, and delete
+export const topicsRoute = new Hono<AppEnv>()
+	.post("/topics", zValidator("json", updateTopicPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// create a topic for the current user within the topic cap and the daily topic limit
+		const createTopicResult = await createTopic(userId, context.req.valid("json"), toAnalyticsProperties(context))
+		if (createTopicResult.status === "created") {
+			return context.json({ id: createTopicResult.id })
+		}
+
+		// a full topic cap and a full daily topic limit both reject, but only the second can name its number
+		return createTopicResult.status === "dailyFrequency"
+			? context.json({ error: "daily topic limit reached", dailyTopicLimit: createTopicResult.limit }, 429)
+			: context.json({ error: "quota exhausted" }, 429)
+	})
+	.post("/topics/suggest-sources", zValidator("json", suggestSourcesPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// propose sources from the topic's own text. suggesting is not scanning, so it draws on no quota
+		const { name, prompt, attachmentContext, excludeSources, limit } = context.req.valid("json")
+		return context.json({ sources: await suggestSources({ name, prompt, attachmentContext, excludeSources, limit }) })
+	})
+	.get("/topics/:id", async (context) => {
+		// the topic detail payload, gated by visibility. a signed-out visitor may only view a public topic
+		const topicPayload = await loadTopicPayload(currentUser(context), context.req.param("id"))
+		return topicPayload ? context.json(topicPayload) : context.json({ error: "not found" }, 404)
+	})
+	.patch("/topics/:id", zValidator("json", updateTopicPayload), async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// save the edit topic's fields and reconcile the invitee and source lists. owner or admin only.
+		const updateTopicResult = await updateTopic(
+			userId,
+			context.req.param("id"),
+			context.req.valid("json"),
+			toAnalyticsProperties(context),
+		)
+		if (updateTopicResult.status === "saved") {
+			return context.json({ ok: true })
+		}
+
+		// a daily frequency past the plan's limit is a quota rejection, not an authorization one
+		return updateTopicResult.status === "dailyFrequency"
+			? context.json({ error: "daily topic limit reached", dailyTopicLimit: updateTopicResult.limit }, 429)
+			: context.json({ error: "forbidden" }, 403)
+	})
+	.delete("/topics/:id", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// delete the topic and everything attached to it. owner or admin only.
+		const isTopicDeleted = await deleteTopic(userId, context.req.param("id"), toAnalyticsProperties(context))
+		return isTopicDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+	})

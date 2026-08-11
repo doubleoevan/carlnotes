@@ -14,16 +14,20 @@ export function Toaster(props: React.ComponentProps<typeof SonnerToaster>) {
 		return () => observer.disconnect()
 	}, [])
 
-	// toasts drop down from the top, styled red by rich colors, with a close button, themed to match the app.
-	// the title preserves line breaks, which sonner's own title style does not, and props last so a caller can override
+	// toasts drop from the top, themed to match the app, with props last so a caller can override.
+	// the wrapper stops pointerdown, so a click on a toast does not close other dialogs.
 	return (
-		<SonnerToaster
-			theme={isDark ? "dark" : "light"}
-			position="top-center"
-			richColors
-			closeButton
-			toastOptions={{ classNames: { title: "whitespace-pre-line" } }}
-			{...props}
-		/>
+		// biome-ignore lint/a11y/noStaticElementInteractions: this wrapper has no behavior, it only keeps an event from traveling
+		<div onPointerDown={(event) => event.stopPropagation()}>
+			<SonnerToaster
+				theme={isDark ? "dark" : "light"}
+				position="top-center"
+				richColors
+				closeButton
+				// pass clicks up to the wrapper to stop it from closing other dialogs
+				toastOptions={{ classNames: { title: "whitespace-pre-line", toast: "pointer-events-auto" } }}
+				{...props}
+			/>
+		</div>
 	)
 }

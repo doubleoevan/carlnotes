@@ -3,6 +3,7 @@
 // enum value sets that live in @shared so that db pgEnums, api validation, and ui rendering can read one source
 import {
 	attachmentStatuses,
+	avatarSources,
 	billingIntervals,
 	chatAttachmentKinds,
 	daysOfWeek,
@@ -32,6 +33,7 @@ import {
 	time,
 	timestamp,
 	unique,
+	uniqueIndex,
 	vector,
 } from "drizzle-orm/pg-core"
 
@@ -54,6 +56,8 @@ export const attachmentStatus = pgEnum("attachment_status", attachmentStatuses)
 export const sourceStatus = pgEnum("source_status", attachmentStatuses)
 // what a kept chat attachment originally was
 export const chatAttachmentKind = pgEnum("chat_attachment_kind", chatAttachmentKinds)
+// where a user's public avatar image comes from. only oauth and upload have a stored object behind them
+export const avatarSource = pgEnum("avatar_source", avatarSources)
 
 // the review embedding's vector width. the resources.embedding column and the worker's embed helper share this one constant
 export const EMBED_DIMENSIONS = 1024
@@ -64,27 +68,40 @@ export const EMBED_MODEL_NAME = `qwen3-embedding-8b/${EMBED_DIMENSIONS}`
 
 // the users table. its columns match Better Auth's user schema, plus one app-specific field.
 // the plural name comes from Better Auth's usePlural option.
-export const users = pgTable("users", {
-	id: primaryId(),
-	name: text("name").notNull(),
-	email: text("email").notNull().unique(),
-	emailVerified: boolean("email_verified").default(false).notNull(),
-	image: text("image"),
-	// this user's litellm virtual key, provisioned with a spend budget at signup. null only before signup completes
-	litellmVirtualKey: text("litellm_virtual_key"),
-	// the platform role: "admin" or "user". plain text to match Better Auth's admin plugin shape
-	role: text("role").notNull().default("user"),
-	// the billing plan. the Stripe webhook projects it from the user's active billing subscription, and free means there is none
-	plan: plan("plan").notNull().default("free"),
-	// a per-user monthly spend override in cents. an admin can raise or lower it, and null falls back to the plan's backstop
-	budgetOverrideCents: integer("budget_override_cents"),
-	// plain timestamps without time zone to mirror Better Auth's own schema exactly
-	createdAt: timestamp("created_at").defaultNow().notNull(),
-	updatedAt: timestamp("updated_at")
-		.defaultNow()
-		.$onUpdate(() => new Date())
-		.notNull(),
-})
+export const users = pgTable(
+	"users",
+	{
+		id: primaryId(),
+		name: text("name").notNull(),
+		email: text("email").notNull().unique(),
+		emailVerified: boolean("email_verified").default(false).notNull(),
+		image: text("image"),
+		// the public username as the user sees it, generated during signup so a row is never null
+		username: text("username").notNull(),
+		// the normalized username to search for already taken ones
+		usernameNormalized: text("username_normalized").notNull(),
+		// where the public avatar comes from, and the stored object behind it.
+		// avatar_key is null for the generated username initials.
+		avatarSource: avatarSource("avatar_source").notNull().default("generated"),
+		avatarKey: text("avatar_key"),
+		// this user's litellm virtual key, provisioned with a spend budget at signup. null only before signup completes
+		litellmVirtualKey: text("litellm_virtual_key"),
+		// the platform role: "admin" or "user". plain text to match Better Auth's admin plugin shape
+		role: text("role").notNull().default("user"),
+		// the billing plan. the Stripe webhook projects it from the user's active billing subscription, and free means there is none
+		plan: plan("plan").notNull().default("free"),
+		// a per-user monthly spend override in cents. an admin can raise or lower it, and null falls back to the plan's backstop
+		budgetOverrideCents: integer("budget_override_cents"),
+		// plain timestamps without time zone to mirror Better Auth's own schema exactly
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		updatedAt: timestamp("updated_at")
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	// this index is what the available username lookup reads
+	(table) => [uniqueIndex("users_username_normalized_unique").on(table.usernameNormalized)],
+)
 
 // the sessions table. Better Auth's record of one signed-in session for a user
 export const sessions = pgTable(
@@ -200,6 +217,9 @@ export const topics = pgTable(
 		featureOrder: integer("feature_order"),
 		// how many findings a scan keeps for this topic, one of the shared allowed sizes
 		maxResults: integer("max_results").notNull().default(10),
+		// the unique subscriber count for direct and audience-inherited topic subscribers, not including the owner.
+		// denormalized to save an extra query per topic
+		subscriberCount: integer("subscriber_count").notNull().default(0),
 		// created and updated timestamps
 		...timestamps(),
 	},
@@ -478,12 +498,14 @@ export const subscriptions = pgTable(
 		// created and updated timestamps
 		...timestamps(),
 	},
-	// enforce exactly-one-subscriber at the database level
+	// enforce exactly-one-subscriber at the database level, and one row per user and topic so a concurrent
+	// double subscribe cannot insert twice. audience rows carry a null user id, which the index treats as distinct
 	(table) => [
 		check(
 			"subscriptions_subscriber_xor",
 			sql`(${table.subscriberUserId} is not null) <> (${table.subscriberAudienceId} is not null)`,
 		),
+		uniqueIndex("subscriptions_topic_subscriber_unique").on(table.topicId, table.subscriberUserId),
 	],
 )
 

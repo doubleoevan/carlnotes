@@ -2,7 +2,7 @@
 import { reportError } from "@shared/monitoring"
 
 // which kind of email is being sent, so a blocked signup reports differently from a missed scan email
-export type EmailKind = "verification" | "topic-scan" | "manual-scan"
+export type EmailKind = "verification" | "password-reset" | "topic-scan" | "manual-scan" | "flag-content"
 
 export async function sendEmail(message: {
 	to: string

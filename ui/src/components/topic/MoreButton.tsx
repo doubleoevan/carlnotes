@@ -2,7 +2,7 @@ import { Button } from "@/components/primitives/button"
 import { cn } from "@/lib/utils"
 
 // the "+ # more / show less" toggle shared by the topic feed and the topic page's findings and history sections.
-// className gets used to set the left padding, since each surface indents its rows differently
+// className gets used to set the left padding, since each section indents its rows differently
 export function MoreButton({
 	isExpanded,
 	moreLabel,

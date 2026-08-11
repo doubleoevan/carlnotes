@@ -2,9 +2,11 @@
 // this month's scan stats and costs, their subscriptions, and the invitations they sent
 import type { ActivityResponse, ActivityScan, ActivityTopic, SubscriptionRow } from "@shared/contracts"
 import { and, count, desc, eq, gte, inArray, ne, or, sql } from "drizzle-orm"
+import { Hono } from "hono"
 import { db } from "../db"
 import { audienceMembers, audiences, scans, subscriptions, topicInvites, topics, users } from "../db/schema"
 import { effectiveBudgetCents, isAdminRole, monthlySpendDollars } from "./authorization"
+import type { AppEnv } from "./currentUser"
 import { startOfUtcMonth } from "./topic/quotas"
 
 // the owner's topic rows that toActivityTopics reads
@@ -260,3 +262,14 @@ export function toCents(dollars: string | null): number {
 	const amount = Number(dollars)
 	return Number.isFinite(amount) ? Math.round(amount * 100) : 0
 }
+
+// the activity page route
+export const activityRoute = new Hono<AppEnv>().get("/activity", async (context) => {
+	// reject a signed-out caller
+	const user = context.get("user")
+	if (!user) {
+		return context.json({ error: "unauthorized" }, 401)
+	}
+	// return the caller's own spend, topics, subscriptions, and invites
+	return context.json(await loadActivity({ id: user.id, email: user.email }))
+})

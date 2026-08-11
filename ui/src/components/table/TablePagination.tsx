@@ -6,6 +6,9 @@ import { type SortValue, useRowSort } from "./SortableHeader"
 // the page-size choices offered by every paginated table
 const PAGE_SIZES = [5, 10, 25, 50] as const
 
+// the smallest page a table can be cut into. below this, the pagination controls are hidden
+export const SMALLEST_PAGE_SIZE = PAGE_SIZES[0]
+
 // the state that the usePagination hook returns for sorting and pagination
 type PaginationState = {
 	page: number

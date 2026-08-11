@@ -18,13 +18,20 @@ const ATTACHMENT_TEXT =
 const TOPIC_CONTEXT = "Smoke-test topic for attachment ingestion."
 // how long to wait for the workflow to finish before giving up. the worker (bun run dev:temporal) must be running
 const PROCESSING_TIMEOUT_MS = 90_000
+// append a stamp for the database to persist a unique identifier for fixture data
+const smokeTestStamp = Date.now()
 
 // seed a fake owner and a topic to attach the URL to
 async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 	// a fake owner. deleting it on cleanup cascades to the topic and its attachments
 	const [user] = await db
 		.insert(users)
-		.values({ name: "attachment-smoke", email: `attachment-smoke+${Date.now()}@example.test` })
+		.values({
+			name: "attachment-smoke",
+			email: `attachment-smoke+${smokeTestStamp}@example.test`,
+			username: `attachment-smoke-${smokeTestStamp}`,
+			usernameNormalized: `attachmentsmoke${smokeTestStamp}`,
+		})
 		.returning()
 	if (!user) {
 		throw new Error("failed to seed user")

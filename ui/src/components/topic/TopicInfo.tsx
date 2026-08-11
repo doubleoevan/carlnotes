@@ -1,42 +1,33 @@
 import type { TopicFeed, TopicResponse } from "@shared/contracts"
-import {
-	AudioLines,
-	Bird,
-	Bot,
-	Diamond,
-	Download,
-	ExternalLink,
-	Globe,
-	Link,
-	Lock,
-	type LucideIcon,
-	Mail,
-	MessageSquareX,
-	Plug,
-	Puzzle,
-	Rss,
-	Video,
-} from "lucide-react"
+import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, Plug, Puzzle, Rss } from "lucide-react"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { BrandIcon } from "@/components/common/BrandIcon"
+import { ShareTopic } from "@/components/topic/ShareTopic"
+import { TopicOwner } from "@/components/topic/TopicOwner"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
 import { type AllowedNoteUrls, SafeNoteText, ScrollNote, TopicScanNote } from "@/components/topic/TopicScanRecap"
-import { cn, POPOVER_HEADING_CLASS, WEB_SOURCE } from "@/lib/utils"
+import { cn, MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS, WEB_SOURCE } from "@/lib/utils"
 
 // each source's icon, keyed by the label the line renders. the web line is keyed by WEB_SOURCE's label
-// instead of the "search" kind behind it. lucide includes no brand icons, so YouTube and reddit take generic shapes
-const SOURCE_ICON: Record<string, LucideIcon> = {
+// instead of the "search" kind behind it
+const SOURCE_ICON: Record<string, SourceIcon> = {
 	web: Globe,
 	url: Link,
 	rss: Rss,
-	reddit: Bot,
-	youtube: Video,
 	podcast: AudioLines,
-	x: MessageSquareX,
-	bluesky: Bird,
 	composio: Plug,
 	plugin: Puzzle,
+	// the four that are somebody's brand use that brand's own logo, since a stand-in glyph reads as the
+	// wrong thing entirely: reddit as a robot, x as a close button, bluesky as the bird x stopped using
+	reddit: (props) => <BrandIcon brand="reddit" {...props} />,
+	youtube: (props) => <BrandIcon brand="youtube" {...props} />,
+	x: (props) => <BrandIcon brand="x" {...props} />,
+	bluesky: (props) => <BrandIcon brand="bluesky" {...props} />,
 }
+
+// a source's icon is either a lucide glyph or one of the brand logos, and both take just a class
+type SourceIcon = (props: { className?: string }) => React.ReactNode
 
 // the card variant carries the full topic response for its scan history
 type TopicInfoProps = { topic: TopicFeed; isCard?: false } | { topic: TopicResponse; isCard: true }
@@ -62,6 +53,24 @@ export function TopicInfo(props: TopicInfoProps) {
 				{/* a failed newest scan is stated plainly, so a topic whose sources are dead doesn't read as one that
 				    found nothing. card only, since the feed payload carries no scan history */}
 				{props.isCard && <FailedBrewSection scans={props.topic.scans} />}
+
+				{/* who tuned this topic, leading the roast because it frames everything under it */}
+				{topic.owner && (
+					<InfoSection label="Carl's Barista">
+						<div className="flex items-center justify-between gap-3">
+							<TopicOwner owner={topic.owner} isLabelShown={false} />
+							{/* a private topic has nowhere a reader could follow the link to */}
+							{topic.visibility !== "private" && (
+								<ShareTopic
+									topicId={topic.id}
+									topicName={topic.name}
+									isPublic={topic.visibility === "public"}
+									className={MENU_BUTTON_CLASS}
+								/>
+							)}
+						</div>
+					</InfoSection>
+				)}
 
 				{/* the topic prompt, through the same sanitized subset the recap uses.
 				    a url the owner typed can only become a link if the scan kept it as a finding */}
@@ -95,10 +104,11 @@ export function TopicInfo(props: TopicInfoProps) {
 				{/* the topic sources are only in the popover, since the topic page has its own sources card */}
 				{!props.isCard && <TopicSourcesSection sources={topic.sources} />}
 
-				{/* who may see the topic. card only, since the feed payload carries no visibility */}
-				{props.isCard && <TopicVisibility visibility={props.topic.visibility} />}
+				{/* who may see the topic, directly above the follower count. the card always says, and the popup
+				    speaks up only when it is not public, since public is what a topic already starts on and
+				    repeating that on every row says nothing */}
+				{(props.isCard || topic.visibility !== "public") && <TopicVisibility visibility={topic.visibility} />}
 
-				{/* the subscriber count */}
 				<InfoSection label="Followers">{topic.subscriberCount.toLocaleString()}</InfoSection>
 			</div>
 		</>
@@ -218,7 +228,8 @@ export function InfoSection({
 	return (
 		<div className={cn("py-3 first:pt-0 last:pb-0", className)}>
 			<div className="text-muted-foreground font-display text-xs tracking-wide uppercase">{label}</div>
-			<div className="text-foreground mt-1">{children}</div>
+			{/* a long unbroken token like a url wraps here instead of pushing the card wider than the page */}
+			<div className="text-foreground mt-1 break-words">{children}</div>
 		</div>
 	)
 }
@@ -269,7 +280,6 @@ function TopicSource({
 			{/* an svg has no baseline of its own, so it aligns by its box bottom and lands high.
 			    the nudge drops it down to the text */}
 			<SourceIcon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0 translate-y-0.5" />
-			{/* truncate to one line per source */}
 			<span className="min-w-0 truncate">
 				{sourceKind}
 				{summary && <span className="text-muted-foreground"> — {summary}</span>}

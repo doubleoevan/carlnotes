@@ -58,7 +58,7 @@ type SearchResponse = {
 
 // build the search prompt from search-topic.md. an empty context falls back to the topic name
 export async function buildSearchPrompt(context: string, name: string): Promise<BuiltPrompt> {
-	// the name states the subject and the prompt says what to do about it, so the name is labelled and leads.
+	// the name states the subject and the prompt says what to do about it, so the name is labeled and leads.
 	// a prompt like "I want the best ones!" names no subject at all, and searching on it alone finds nothing
 	const namedContext = context.trim() ? `Subject: ${name}\n\nWhat the reader is looking for:\n${context.trim()}` : name
 	const topicContext = namedContext.slice(0, MAX_CONTEXT_CHARS)

@@ -20,10 +20,10 @@ function PopoverAnchor({ ...props }: React.ComponentProps<typeof PopoverPrimitiv
 }
 
 // how far the panel stays clear of the viewport edges. nothing in the app is pinned to the top,
-// so this is breathing room rather than clearance for a header, and it keeps the panel off the very edge on a small screen
+// so this is breathing room instead of clearance for a header, and it keeps the panel off the very edge on a small screen
 const COLLISION_PADDING = 8
 
-// the portalled, animated panel. it is a fixed-height shell around a scrolling viewport rather than one growing box,
+// the portalled, animated panel. it is a fixed-height shell around a scrolling viewport instead of one growing box,
 // so a panel taller than the room available scrolls instead of running off the top of the screen
 function PopoverContent({
 	className,

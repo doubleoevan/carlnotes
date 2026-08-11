@@ -2,6 +2,10 @@
 export const sourceKinds = ["url", "rss", "reddit", "youtube", "search", "composio", "plugin"] as const
 export const resourceKinds = ["read", "watch", "listen"] as const
 export const visibilities = ["public", "invite", "private"] as const
+// how many findings a public topic needs before it is shown on other pages
+// the featured and popular sections, the owner's profile table, its link preview,
+// and its feed require a minimum number of findings
+export const MINIMUM_SHOWN_FINDINGS = 3
 export const frequencies = ["daily", "weekdays", "weekly"] as const
 // the frequencies that the plan's daily topic limit caps
 export const dailyFrequencies = ["daily", "weekdays"] as const
@@ -30,5 +34,7 @@ export const editableSourceKinds = ["url", "rss", "reddit", "youtube", "search"]
 export const plans = ["free", "plus", "premium"] as const
 // how often a subscription bills. a plan's limits differ by monthly or yearly billing interval, and only a monthly one supports metered overage
 export const billingIntervals = ["monthly", "yearly"] as const
+// where a user's public avatar comes from. generated uses the username initials
+export const avatarSources = ["generated", "oauth", "upload"] as const
 // how many findings a topic scan may keep
 export const maxResultsOptions = [5, 10, 15, 20] as const

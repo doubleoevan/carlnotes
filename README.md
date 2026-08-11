@@ -16,18 +16,82 @@ Carl stays up. You stay informed.
 
 Bun + TypeScript · React SPA (Vite + Tailwind + shadcn) · Hono · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl · Langfuse · LLM Guard · Sentry + PostHog
 
-## Layout
+## Architecture
 
-Modular monolith — one `package.json`, one deploy:
+CarlNotes is a modular monolith with boundaries enforced by TypeScript: one repository, one `package.json`, four modules.
 
-- `ui/` — React SPA
-- `api/` — Hono HTTP layer
-- `worker/` — Temporal workflows and source ingesters
-- `db/` — Drizzle schema and migrations
+1. `ui/` is a React SPA.
+2. `api/` is a Hono server that serves the built SPA and every `/api` route.
+3. `worker/` holds the scan pipeline and the Temporal workflows.
+4. `db/` holds the Drizzle schema.
+
+That list is the dependency order: each module imports only from the ones below it. `tsconfig` project references make an illegal import a compile error.
+
+```mermaid
+flowchart
+    Browser --> App["app (Hono api + SPA)"]
+    App --> Postgres[(DB)]
+    App -->|starts workflows| Temporal
+    Temporal --> Worker[temporal-worker]
+    Worker --> Sources[Feeds · Reddit · YouTube · Exa]
+    Worker --> Guard[LLM Guard]
+    Worker --> LiteLLM[LiteLLM → Fireworks]
+    Worker --> Postgres
+    Worker --> Resend[Email]
+```
+
+Four processes run in production:
+
+| Process | What it does |
+|---|---|
+| `app` | Serves the SPA and the api. Chat replies and uploads run in-process. |
+| `temporal-worker` | One process hosts three Temporal Workers: a Worker polls exactly one task queue, so attachments, topic scans, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
+| scheduler | `bun worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
+| `llm-guard` | The content scanner is its own service (see below). |
+
+Managed alongside: Neon Postgres (pgvector), object storage through Bun's S3 client (R2 today; the `S3_*` env values pick the target), a self-hosted Temporal server, Resend, and Stripe. Model calls go through a LiteLLM proxy in front of Fireworks: every user gets a virtual key with a monthly budget, and the [litellm config](litellm-config.yaml) maps role names to models so a model swap is a config edit.
+
+### Scan
+
+A topic Scan is one Temporal workflow:
+
+```mermaid
+flowchart
+    Ingest[Ingest Sources] --> Screen[Screen · LLM Guard] --> Score[Score · LiteLLM] --> Review[Keep best Findings] --> Email[Email subscribers]
+```
+
+Each step costs more but handles fewer Resources. Embeddings filter and rank what the Sources found. A cheap model scores what passes. A more expensive model re-scores the best Findings and writes each Finding's relevance explanation. The cheap model then writes the scan report.
+
+Temporal persists every step and retries failed activities. That is why there is no outbox table: the subscriber email is the workflow's last activity, so a crash before it sends resumes there instead of losing it. Emails outside workflows (verification, password reset, reports) send directly through Resend. A failure is reported to Sentry rather than replayed.
+
+### Chat
+
+Every Topic has a chat. It runs in the `app` process, not as a workflow: a reply streams back in seconds, and a lost reply is simply asked again.
+
+Chat is RAG over the Topic's own Feed: the Findings become the context the model writes from. When the Feed cannot answer, the model may call one tool: a live Exa web search, billed per call.
+
+```mermaid
+flowchart
+    Question --> Embed[Embed the question] --> Retrieve[Pick relevant topic Findings] --> Reply[Model streams the reply] --> Store[(Encrypted Chat Turn)]
+    Search[Exa web search] -.-> Reply
+```
+
+Chat is signed-in only. Every chat turn writes a row, because every chat turn is metered. The model spend lands on the asker's own LiteLLM key, sharing the same budget a topic scan charges. Chat text is encrypted. A chat that outgrows its context budget is [compacted](shared/contracts.ts#L143): the newest turns stay whole. Older answers are clipped to their opening characters.
+
+### Content screening (LLM Guard)
+
+LLM Guard screens untrusted text before any model reads it, protecting the app from prompt injection. A fetched page or an uploaded document carries instructions aimed at the model. LLM Guard runs in Python, so it is its own container: the official `llm-guard-api` image, pinned to one version in `docker-compose.yml` and checked weekly for updates by [a GitHub Action](.github/workflows/llm-guard-update.yml). Locally it is reachable only from your own machine, since it accepts arbitrary text with no auth of its own. In production it is its own Northflank service. The app finds it through one value, `LLM_GUARD_URL`. Unset it and screening turns off while everything else behaves the same.
+
+Two kinds of text are screened, each at its entry point:
+
+- **A document a user hands us** — topic and chat attachments, before context is generated. Detectors: prompt injection, secrets, invisible text, adult content, toxicity.
+- **A fetched page** — url Sources, before the page is shown or scored. The same set, minus secrets.
+
+Each screen is one HTTP call with a 2.5-second timeout, and it never blocks the pipeline: on failure the text passes through unflagged, and the prompt loader's unconditional untrusted-data fence still applies. The scanner also redacts personal details in place, so even a document can come back rewritten. Callers must use the returned text. A detector counts as a hit at a score of 0.8 or above, measured with `bun run eval --guard-only` against articles that merely *discuss* prompt injection, not taken from the vendor default. The update check boots each new release, runs that eval, and files an issue with the measured false-positive and catch rates needed to decide whether to upgrade.
 
 Domain vocabulary is load-bearing and lives in `.agents/skills/domain-model/`.
 
-How the AI guardrails work: [docs/ai-scaffolding.md](docs/ai-scaffolding.md).
+How the AI guardrails work lives in [docs/ai-scaffolding.md](docs/ai-scaffolding.md).
 
 Feature work lands change-by-change through [OpenSpec](https://github.com/Fission-AI/OpenSpec) — specs and in-flight changes live in `openspec/`.
 
@@ -36,6 +100,7 @@ Feature work lands change-by-change through [OpenSpec](https://github.com/Fissio
 ```bash
 bun install
 bun run dev          # api, ui, temporal, and worker together (concurrently, colored per process); run carl-up first for the Docker infra
+bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server) and mint a capped dev key; carl-down stops it
                      # scans run as Temporal workflows, so dev:temporal must be up for any scan to happen, not just for attachments
 bun run dev:ui       # Vite dev server (UI); wraps itself in doppler run
 bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; the Vite dev server proxies /api here
@@ -65,7 +130,7 @@ Backfills (owner-run) — one-time data migrations that pair with a schema chang
 doppler run -- bun scripts/backfill-resource-content.ts   # upload existing resources.content to object storage, set content_key/content_bytes
 ```
 
-The content scanner (LLM Guard) is optional too: `docker compose up -d llm-guard` and set `LLM_GUARD_URL`. It screens an uploaded document before its context is generated, and a fetched page before it is scored, looking for injected instructions, secrets, and invisible characters, and redacting personal details in place. The prompt loader's untrusted-data fence is unconditional and does not depend on it. Error monitoring and product analytics are the same: when `SENTRY_DSN` and `POSTHOG_API_KEY` are not set then monitoring and analytics are off but the app behaves the same.
+The content scanner (LLM Guard, see Architecture above) is optional too: `bun run llm-guard:up` and set `LLM_GUARD_URL`. Error monitoring and product analytics are the same: when `SENTRY_DSN` and `POSTHOG_API_KEY` are not set then monitoring and analytics are off but the app behaves the same.
 
 Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium plans and a Stripe webhook derives the active plan. It needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the per-plan `STRIPE_PRICE_*` ids, and a metered `STRIPE_PRICE_MANUAL_SCAN_OVERAGE` (see `.env.example`). Until they're set, checkout, the Customer Portal, metered overage, and the admin console's Stripe net-revenue line stay inert — the gate, plans, and quotas all work without Stripe.
 
@@ -92,6 +157,8 @@ bun run smoke:store        # just the resource-content object-storage round-trip
 bun run smoke:attach       # just the URL-attachment smoke test (Firecrawl → store → Temporal workflow → ready)
 bun run smoke:search       # just the web search smoke test (context → LLM queries → Exa → Resources)
 bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its ceiling
+bun run smoke:subscribers  # just the subscriber-count smoke: both subscription paths against real rows, rolled back after
+bun run smoke:profile      # just the profile smoke: the header's distinct people against the footer's summed rows
 bun run smoke:chat         # just the topic chat retrieval smoke test (question → ranked findings → assembled context)
 bun run smoke:eval         # just the eval-harness smoke: one tiny labeled fixture through the real gate and scoring
 ```

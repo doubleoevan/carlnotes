@@ -146,7 +146,7 @@ function toLinkUrl(target: string, pageUrl: string): string | null {
 	}
 
 	// a page can link anywhere, including at an internal address, and every link here becomes a Resource
-	// that curation later fetches. toFetchableUrl rejects a non-http scheme and an internal address alike
+	// that review later fetches. toFetchableUrl rejects a non-http scheme and an internal address alike
 	try {
 		return toCanonicalUrl(toFetchableUrl(resolvedUrl.toString()).toString())
 	} catch {

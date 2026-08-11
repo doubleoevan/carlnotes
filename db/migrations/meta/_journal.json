@@ -246,6 +246,69 @@
       "when": 1785975268207,
       "tag": "0034_hot_black_crow",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1786248843420,
+      "tag": "0035_complex_gabe_jones",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1786248844420,
+      "tag": "0036_rename_handle_to_username",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1786248845420,
+      "tag": "0037_username_normalized_and_history",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1786306619844,
+      "tag": "0038_steady_taskmaster",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1786326576939,
+      "tag": "0039_silly_changeling",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1786326577939,
+      "tag": "0040_backfill_usernames",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1786326578939,
+      "tag": "0041_username_not_null",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1786404100871,
+      "tag": "0042_dazzling_bedlam",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1786447880028,
+      "tag": "0043_cool_sentry",
+      "breakpoints": true
     }
   ]
 }

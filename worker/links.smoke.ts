@@ -14,11 +14,19 @@ const INDEX_URL = "https://news.ycombinator.com/"
 const UNFETCHABLE_URL = "https://carlnotes-smoke-no-such-host.invalid/page"
 
 // seed an owner, a topic, and the two url Sources. ready, since ingest skips a Source that has not been screened
+// append a stamp for the database to persist a unique identifier for fixture data
+const smokeTestStamp = Date.now()
+
 async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 	// a fake owner. deleting it on cleanup cascades to the topic, its Sources, and its Scans
 	const [user] = await db
 		.insert(users)
-		.values({ name: "links-smoke", email: `links-smoke+${Date.now()}@example.test` })
+		.values({
+			name: "links-smoke",
+			email: `links-smoke+${smokeTestStamp}@example.test`,
+			username: `links-smoke-${smokeTestStamp}`,
+			usernameNormalized: `linkssmoke${smokeTestStamp}`,
+		})
 		.returning()
 	if (!user) {
 		throw new Error("failed to seed user")
@@ -118,7 +126,7 @@ function isSameUrl(url: string, otherUrl: string): boolean {
 	return url.replace(/\/$/, "") === otherUrl.replace(/\/$/, "")
 }
 
-// how many of each resource kind the page found, so a linked video shows up as a watch rather than a read
+// how many of each resource kind the page found, so a linked video shows up as a watch instead of a read
 function countResourceKinds(foundLinks: (typeof resources.$inferSelect)[]): Record<string, number> {
 	const resourceKindCounts: Record<string, number> = {}
 	for (const link of foundLinks) {

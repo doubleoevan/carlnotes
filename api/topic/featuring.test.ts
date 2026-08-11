@@ -10,7 +10,7 @@ describe("the position a ranked topic takes", () => {
 		expect(toTargetPosition(4, 3)).toBe(4)
 	})
 
-	test("a topic already featured appends to the end rather than past it", () => {
+	test("a topic already featured appends to the end instead of past it", () => {
 		// the control offered 4 against four featured topics, and the topic has since left the ordering,
 		// so the three that remain make 4 the end. taking 5 would leave a gap where it used to be
 		expect(toTargetPosition(4, 3)).toBe(4)
