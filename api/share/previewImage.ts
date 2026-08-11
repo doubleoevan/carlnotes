@@ -9,7 +9,7 @@ export const PREVIEW_WIDTH = 1200
 export const PREVIEW_HEIGHT = 630
 
 // bump this when the card's design changes. Slack and X cache preview images hard and ignore cache headers.
-export const PREVIEW_TEMPLATE_VERSION = "v1"
+export const PREVIEW_TEMPLATE_VERSION = "v2"
 
 // the brand font, read once at boot. Satori takes font bytes, not a font-family name or a stylesheet
 const displayFont = await Bun.file(new URL("./fonts/ArchitectsDaughter-Regular.ttf", import.meta.url)).arrayBuffer()
@@ -20,8 +20,12 @@ const CARD_INK = "#f0e6d6"
 const CARD_ACCENT = "#f09050"
 const CARD_MUTED = "#b9a68e"
 
-// one node of the card's markup tree, which is the shape satori reads instead of React elements
-type CardNode = { type: string; props: { style: Record<string, unknown>; children?: (CardNode | string)[] | string } }
+// one node of the card's markup tree, which is the shape satori reads instead of React elements.
+// svg nodes carry their attributes as extra props beside style and children
+type CardNode = {
+	type: string
+	props: { style?: Record<string, unknown>; children?: (CardNode | string)[] | string } & Record<string, unknown>
+}
 
 // what the card says about a Topic
 export type TopicPreview = {
@@ -83,7 +87,48 @@ function toPreviewMarkup(card: TopicPreview): CardNode {
 function toWordmark(): CardNode {
 	return {
 		type: "div",
-		props: { style: { display: "flex", fontSize: 36, color: CARD_ACCENT }, children: "CarlNotes" },
+		props: {
+			style: { display: "flex", alignItems: "center", gap: "14px", fontSize: 36, color: CARD_ACCENT },
+			children: [toMug(), "CarlNotes"],
+		},
+	}
+}
+
+// the header's coffee mug, drawn from the same paths CoffeeMug.tsx renders
+function toMug(): CardNode {
+	const steamWisps = [11.5, 15, 18.5].map((x) => ({
+		type: "path",
+		props: {
+			d: `M${x} 10.5 q-2 -1.6 0 -3.2 q2 -1.6 0 -3.2`,
+			stroke: CARD_ACCENT,
+			strokeWidth: 1.5,
+			strokeLinecap: "round",
+			opacity: 0.7,
+		},
+	}))
+	// the cup body is drawn twice, once as a faint fill and once as the outline, then the handle
+	return {
+		type: "svg",
+		props: {
+			viewBox: "0 0 32 32",
+			width: 44,
+			height: 44,
+			fill: "none",
+			children: [
+				...steamWisps,
+				{ type: "path", props: { d: "M8 13 L8 17 A7 7 0 0 0 22 17 L22 13 Z", fill: CARD_ACCENT, opacity: 0.2 } },
+				{
+					type: "path",
+					props: {
+						d: "M8 13 L8 17 A7 7 0 0 0 22 17 L22 13 Z",
+						stroke: CARD_ACCENT,
+						strokeWidth: 1.8,
+						strokeLinejoin: "round",
+					},
+				},
+				{ type: "path", props: { d: "M22 15 h2.5 a3 3 0 0 1 0 6 H22", stroke: CARD_ACCENT, strokeWidth: 1.8 } },
+			],
+		},
 	}
 }
 
