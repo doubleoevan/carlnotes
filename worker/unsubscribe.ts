@@ -1,5 +1,6 @@
 // signed one-click unsubscribe tokens for the topic-scan email. the signature stops anyone from unsubscribing someone else.
-// HMAC-SHA256 over a base64url payload keyed on the app auth secret, mirroring the signup-gate token in api/auth.ts
+// HMAC-SHA256 over a base64url payload, signed by the shared signer also used for the signup-gate token in api/auth.ts
+import { toSignature } from "@shared/signedTokens"
 
 // an unsubscribe token carries the recipient and the topic to drop them from
 type UnsubscribePayload = { userId: string; topicId: string }
@@ -26,21 +27,4 @@ export async function verifyUnsubscribeToken(token: string): Promise<Unsubscribe
 	} catch {
 		return null
 	}
-}
-
-// HMAC-SHA256 of the value keyed on the app auth secret, base64url-encoded
-async function toSignature(value: string): Promise<string> {
-	// the app auth secret keys the signature, so a token can't be forged without it
-	const secret = Bun.env.BETTER_AUTH_SECRET
-	if (!secret) {
-		throw new Error("BETTER_AUTH_SECRET must be set to sign unsubscribe tokens")
-	}
-
-	// import the secret as an HMAC key, sign the value, and url-encode the result
-	const encoder = new TextEncoder()
-	const key = await crypto.subtle.importKey("raw", encoder.encode(secret), { name: "HMAC", hash: "SHA-256" }, false, [
-		"sign",
-	])
-	const signature = await crypto.subtle.sign("HMAC", key, encoder.encode(value))
-	return Buffer.from(signature).toString("base64url")
 }

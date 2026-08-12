@@ -7,6 +7,7 @@ import { cheapModel } from "../models.ts"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch.ts"
 import { writePrompt } from "../prompts/write.ts"
+import { toFetchableUrl } from "../scrape"
 import type { NewResource, Source, SourceIngester } from "./ingester"
 import { toResourceKind } from "./normalize"
 import { fetchVideos, playlistIdFromUrl } from "./youtube"
@@ -92,17 +93,31 @@ export function parseResults(response: SearchResponse): { resources: NewResource
 	// keep the first Resource seen per url so repeated results collapse to one
 	const resourceByUrl = new Map<string, NewResource>()
 	for (const result of response.results) {
-		// skip results without a usable url. a url is required to dedupe and a null url would break the batch insert
-		if (typeof result.url !== "string" || resourceByUrl.has(result.url)) {
+		// skip results without a usable url. toFetchableUrl rejects anything but an http(s) address,
+		// so a javascript: or internal-address result never becomes a Resource
+		if (typeof result.url !== "string") {
+			continue
+		}
+
+		// a malformed, non-http, or internal-address url leaves no fetchable url to dedupe on
+		let fetchableUrl: string
+		try {
+			fetchableUrl = toFetchableUrl(result.url).toString()
+		} catch {
+			continue
+		}
+
+		// a url already seen from an earlier result collapses to the one Resource
+		if (resourceByUrl.has(fetchableUrl)) {
 			continue
 		}
 
 		// map a url to a Resource, its resource kind is determined by the link host. the snippet joins Exa's highlights together,
 		// and the contentHash stays null for review to fill
-		resourceByUrl.set(result.url, {
-			url: result.url,
+		resourceByUrl.set(fetchableUrl, {
+			url: fetchableUrl,
 			title: result.title ?? null,
-			kind: toResourceKind(result.url),
+			kind: toResourceKind(fetchableUrl),
 			snippet: result.highlights?.join(" ") || null,
 			contentHash: null,
 		})

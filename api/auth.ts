@@ -1,6 +1,7 @@
 // the app's Better Auth instance: email/password and Google/GitHub sign-in, sessions in Neon via the Drizzle adapter
 import { trackEvent } from "@shared/analytics"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
+import { toSignature } from "@shared/signedTokens"
 import { isInAppBrowser, toBrowserPlatform, toPlatform } from "@shared/userAgent"
 import { toNormalizedUsername } from "@shared/usernames"
 import { APIError, betterAuth } from "better-auth"
@@ -221,23 +222,4 @@ async function sendVerificationEmail(email: string, url: string): Promise<void> 
 		emailContent: `Confirm your email: <a href="${url}">${url}</a>`,
 		emailKind: "verification",
 	})
-}
-
-// the value's signature, keyed on the app's auth secret so a tampered token can't verify. HMAC-SHA256, base64url-encoded
-async function toSignature(value: string): Promise<string> {
-	const secret = Bun.env.BETTER_AUTH_SECRET
-	if (!secret) {
-		throw new Error("BETTER_AUTH_SECRET must be set to sign the signup-gate cookie")
-	}
-	// import the app secret as a signing key
-	const key = await crypto.subtle.importKey(
-		"raw",
-		new TextEncoder().encode(secret),
-		{ name: "HMAC", hash: "SHA-256" },
-		false,
-		["sign"],
-	)
-	// sign and encode for a cookie-safe, url-safe string
-	const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value))
-	return Buffer.from(signature).toString("base64url")
 }

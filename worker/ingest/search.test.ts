@@ -32,6 +32,17 @@ test("parseResults defaults cost to 0 when the provider omits costDollars", () =
 	expect(parseResults({ results: [] }).costDollars).toBe(0)
 })
 
+// a result whose url is not http(s) is dropped instead of becoming a Resource
+test("parseResults drops a result with a non-http url", () => {
+	const resources = parseResults({
+		results: [
+			{ url: "javascript:alert(1)", title: "Hostile" },
+			{ url: "https://c.com/3", title: "Safe" },
+		],
+	}).resources
+	expect(resources.map((resource) => resource.url)).toEqual(["https://c.com/3"])
+})
+
 // an empty context falls back to the topic name, so the search always gets a prompt
 test("buildSearchPrompt falls back to the topic name when the context is empty", async () => {
 	// the prompt written from search-topic.md includes the fallback name and no unfilled placeholders

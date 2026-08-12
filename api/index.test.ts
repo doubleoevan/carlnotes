@@ -4,7 +4,9 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CHAT_HISTORY_TURNS } from "@shared/contracts"
-import server from "./index"
+import { Hono } from "hono"
+import { HTTPException } from "hono/http-exception"
+import server, { reportUnhandledError } from "./index"
 
 // the two bundle files the serving rules treat differently
 const SHELL_HTML = "<!doctype html><title>carl</title>"
@@ -68,6 +70,50 @@ test("an unknown api path responds with a json 404, never the app shell", async 
 	expect(response.status).toBe(404)
 	expect(response.contentType).toContain("application/json")
 	expect(JSON.parse(response.body)).toEqual({ error: "not found" })
+})
+
+// a throw inside any /api route must still answer the documented json contract, not Hono's default text/plain page
+test("an unhandled throw under /api is reported and answered as json", async () => {
+	const throwingApp = new Hono().onError(reportUnhandledError).get("/api/boom", () => {
+		throw new Error("boom")
+	})
+	const response = await throwingApp.request("/api/boom")
+
+	expect(response.status).toBe(500)
+	expect(response.headers.get("Content-Type")).toContain("application/json")
+	expect(await response.json()).toEqual({ error: "internal error" })
+})
+
+// the same throw outside /api falls back to Hono's plain-text response, since only the api contract promises json
+test("an unhandled throw outside /api falls back to plain text", async () => {
+	const throwingApp = new Hono().onError(reportUnhandledError).get("/boom", () => {
+		throw new Error("boom")
+	})
+	const response = await throwingApp.request("/boom")
+
+	expect(response.status).toBe(500)
+	expect(await response.text()).toBe("Internal Server Error")
+})
+
+// an error that already carries its own response is the caller's fault. zValidator throws one of these on a
+// malformed body, so answering it as a server fault would turn every 400 into a reported 500
+test("an error carrying its own response keeps that response", async () => {
+	const rejectingApp = new Hono().onError(reportUnhandledError).get("/api/bad", () => {
+		throw new HTTPException(400, { message: "Malformed JSON in request body" })
+	})
+	const response = await rejectingApp.request("/api/bad")
+
+	expect(response.status).toBe(400)
+	expect(await response.text()).toBe("Malformed JSON in request body")
+})
+
+// the throwaway apps above prove the handler, not the wiring. the real server reaches the database, which is
+// unreachable here, so a real /api route throws and pins that the composed app actually carries the handler
+test("the composed app answers a failed /api route as json", async () => {
+	const response = await request("/api/topic-feed")
+
+	expect(response.status).toBe(500)
+	expect(response.contentType).toContain("application/json")
 })
 
 // a deep link is not a file, so the shell responds, and the client router resolves the path

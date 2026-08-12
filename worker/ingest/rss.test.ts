@@ -16,6 +16,13 @@ const ATOM_FEED = `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom
 <entry><title>Atom One</title><link href="https://example.com/x"/></entry>
 </feed>`
 
+// a feed entry whose link carries a javascript: scheme instead of an http(s) url
+const HOSTILE_FEED = `<?xml version="1.0"?><rss version="2.0"><channel>
+<title>Example</title>
+<item><title>Hostile</title><link>javascript:alert(1)</link></item>
+<item><title>Safe</title><link>https://example.com/safe</link></item>
+</channel></rss>`
+
 // RSS entries become one Resource each, deduped by canonical url, all kind "read"
 test("parseFeed maps RSS entries to deduped read Resources", async () => {
 	const resources = await parseFeed(RSS_FEED)
@@ -32,4 +39,10 @@ test("parseFeed maps RSS entries to deduped read Resources", async () => {
 test("parseFeed parses Atom entries", async () => {
 	const resources = await parseFeed(ATOM_FEED)
 	expect(resources.map((resource) => resource.url)).toEqual(["https://example.com/x"])
+})
+
+// an entry whose link is not http(s) is dropped instead of becoming a Resource
+test("parseFeed drops an entry with a non-http link", async () => {
+	const resources = await parseFeed(HOSTILE_FEED)
+	expect(resources.map((resource) => resource.url)).toEqual(["https://example.com/safe"])
 })

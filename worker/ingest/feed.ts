@@ -1,6 +1,6 @@
 // the shared helper for feeds that don't require an API key. it fetches an RSS or Atom url and parses it into deduped Resources
 import Parser from "rss-parser"
-import { fetchPublicUrl } from "../scrape"
+import { fetchPublicUrl, toFetchableUrl } from "../scrape"
 import type { NewResource } from "./ingester"
 
 // fetch limits used to bound slow feeds and reject oversized bodies
@@ -98,13 +98,21 @@ export async function parseFeed(xml: string, resourceKind: NewResource["kind"] =
 	return [...resourceByUrl.values()]
 }
 
-// pick the canonical url. prefer the entry link and fall back to the guid only when it is an absolute url
+// pick the canonical url. prefer the entry link and fall back to the guid only when it is an absolute url.
+// toFetchableUrl rejects anything but an http(s) url, so a javascript: link never becomes a Resource
 function toFeedItemUrl(feedItem: { link?: string; guid?: string }): string | undefined {
 	// a trimmed link wins. an absolute guid is the only accepted fallback
 	const link = feedItem.link?.trim()
-	if (link) {
-		return link
-	}
 	const guid = feedItem.guid?.trim()
-	return guid?.startsWith("http") ? guid : undefined
+	const candidate = link || (guid?.startsWith("http") ? guid : undefined)
+	if (!candidate) {
+		return undefined
+	}
+
+	// a malformed, non-http, or internal-address candidate has no fetchable url to give back
+	try {
+		return toFetchableUrl(candidate).toString()
+	} catch {
+		return undefined
+	}
 }

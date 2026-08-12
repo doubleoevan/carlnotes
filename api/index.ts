@@ -1,10 +1,11 @@
 // the api server for the topic feed and topic pages. the ui calls these routes through a fully typed client.
 import { zValidator } from "@hono/zod-validator"
 import { signupGatePayload } from "@shared/contracts"
-import { startMonitoring } from "@shared/monitoring"
+import { reportError, startMonitoring } from "@shared/monitoring"
 import { type Context, Hono } from "hono"
 import { serveStatic } from "hono/bun"
 import { getCookie, setCookie } from "hono/cookie"
+import { HTTPException } from "hono/http-exception"
 import { z } from "zod"
 import { startTelemetry } from "../worker"
 import { activityRoute } from "./activity"
@@ -169,6 +170,8 @@ startTelemetry()
 
 // one origin serves the api and the built ui. the /api catch-all is mounted before the app shell, so a missing endpoint responds with JSON not HTML
 const app = new Hono()
+	// a throw anywhere below is reported and, under /api, answered as json so a fetch client reads an error not a parse failure
+	.onError(reportUnhandledError)
 	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
 	.get("/api/health", (context) => context.json({ status: "ok" }))
 	.route("/", route)
@@ -209,6 +212,25 @@ const app = new Hono()
 function setBundleCacheControl(_path: string, context: Context): void {
 	const isHashedAsset = context.req.path.startsWith("/assets/")
 	context.header("Cache-Control", isHashedAsset ? "public, max-age=31536000, immutable" : "no-cache")
+}
+
+/**
+ * Answer any unhandled throw, reporting a server fault to Sentry and writing json under /api so a fetch client reads
+ * an error instead of failing to parse Hono's default text page.
+ */
+export function reportUnhandledError(error: Error, context: Context): Response {
+	// an error carrying its own response is the caller's fault, not the server's. zValidator throws one of these on a
+	// malformed body, so answering it here would turn every 400 into a reported 500
+	if (error instanceof HTTPException) {
+		return error.getResponse()
+	}
+
+	// a genuine server fault: record it, then answer in the shape the path's clients parse
+	console.error(error)
+	reportError(error, "api")
+	return context.req.path.startsWith("/api/")
+		? context.json({ error: "internal error" }, 500)
+		: context.text("Internal Server Error", 500)
 }
 
 // in dev this runs on port 3000 and vite forwards /api to it. in prod, one service serves both the ui and the api.
