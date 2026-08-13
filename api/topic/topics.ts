@@ -12,6 +12,11 @@ import { db } from "../../db"
 import { dailyTopicIdsWithinLimit } from "../../db/quotas"
 import { attachments, scans, sources, subscriptions, topicInvites, topics, users } from "../../db/schema"
 import {
+	renderTopicInviteEmail,
+	renderTopicInviteEmailText,
+	toTopicInviteSubject,
+} from "../../emails/topic-invite-email"
+import {
 	deleteAttachment,
 	failStaleScans,
 	scanTopic,
@@ -19,6 +24,8 @@ import {
 	screenTopicSources,
 	suggestSources,
 } from "../../worker"
+import { sendEmail } from "../../worker/email"
+import { createTopicEmailSend } from "../../worker/notify"
 import { isAllowed, isMonthlySpendExhausted, loadDailyFrequencyAuthorization, loadUserAccess } from "../authorization"
 import { deleteChatAttachments } from "../chat/attachments"
 import type { AnalyticsProperties } from "../currentUser"
@@ -40,6 +47,21 @@ type DailyFrequencyRejection = { status: "dailyFrequency"; limit: number }
 // a Source that the payload adds instead of an existing one
 type NewTopicSource = Extract<UpdateTopicPayload["sources"][number], { sourceKind: string }>
 type Scan = typeof scans.$inferSelect
+
+// how a topic the user may not see is gated, or null if no such topic exists
+async function toGatedTopic(
+	topicId: string,
+): Promise<{ visibility: "invite" | "private"; name: string | null } | null> {
+	const [topic] = await db
+		.select({ visibility: topics.visibility, name: topics.name })
+		.from(topics)
+		.where(eq(topics.id, topicId))
+	// a missing or public topic is not gated at all
+	if (!topic || topic.visibility === "public") {
+		return null
+	}
+	return { visibility: topic.visibility, name: topic.visibility === "invite" ? topic.name : null }
+}
 
 /**
  * Load one topic's full payload or null when the topic is missing or not visible to this user.
@@ -92,19 +114,33 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 			.from(attachments)
 			.where(eq(attachments.topicId, topic.id))
 	).map((attachment) => ({ ...attachment, context: isAdmin || isOwner ? attachment.context : null }))
-	const scanRows = await db.select().from(scans).where(eq(scans.topicId, topic.id)).orderBy(desc(scans.startedAt))
+	// every scan column but the recap, which is loaded dynamically one scan at a time
+	const scanRows = await db
+		.select({
+			id: scans.id,
+			status: scans.status,
+			startedAt: scans.startedAt,
+			finishedAt: scans.finishedAt,
+			foundCount: scans.foundCount,
+			keptCount: scans.keptCount,
+			filteredCount: scans.filteredCount,
+			cost: scans.cost,
+			error: scans.error,
+		})
+		.from(scans)
+		.where(eq(scans.topicId, topic.id))
+		.orderBy(desc(scans.startedAt))
 	const scanHistory: TopicScan[] = scanRows.map((scan) => ({
 		id: scan.id,
 		status: scan.status,
 		// the run times, iso encoded for the wire
 		startedAt: scan.startedAt.toISOString(),
 		finishedAt: scan.finishedAt?.toISOString() ?? null,
-		// the counts, the cost in dollars for the owner or an admin, and Carl's recap
+		// the counts, and the cost in dollars for the owner or an admin
 		foundCount: scan.foundCount,
 		keptCount: scan.keptCount,
 		filteredCount: scan.filteredCount,
 		costDollars: isAdmin || isOwner ? Number(scan.cost) : null,
-		scanSummary: scan.scanSummary,
 		error: scan.error,
 	}))
 
@@ -129,6 +165,10 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 
 	// the latest succeeded scan feeds the schedule section, mirroring the homepage feed
 	const lastSucceededScan = toLastSucceededScan(scanHistory)
+	// the topic's own note, which is the latest successful scan's recap.
+	const [latestNote] = lastSucceededScan
+		? await db.select({ scanSummary: scans.scanSummary }).from(scans).where(eq(scans.id, lastSucceededScan.id))
+		: []
 	// how long that scan took, from its start and finish times
 	const lastScanDurationMs =
 		lastSucceededScan?.finishedAt != null
@@ -168,8 +208,8 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 		lastScanAt: lastSucceededScan?.startedAt ?? null,
 		lastScanDurationMs,
 		monthCostDollars,
-		scanSummary: lastSucceededScan?.scanSummary ?? null,
-		// everything hanging off the topic
+		scanSummary: latestNote?.scanSummary ?? null,
+		// everything connected to the topic
 		attachments: attachmentRows,
 		sources: sourceSummaries,
 		scans: scanHistory,
@@ -244,6 +284,8 @@ export async function createTopic(
 	// one transaction writes the topic and everything hanging off it,
 	// so a failure partway leaves no partial topic and no orphaned first scan
 	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxResults } = payload
+	// the deduped invitees, shared by the insert inside the transaction and the invitation emails after it
+	const invitees = [...new Set(payload.invitees)]
 	const { topicId, firstScan } = await db.transaction(async (transaction) => {
 		// insert the topic row owned by the user
 		const [topic] = await transaction
@@ -268,8 +310,7 @@ export async function createTopic(
 		// every subscriber count filters this row back out, since "subscribers" means users other than the author
 		await transaction.insert(subscriptions).values({ topicId: topic.id, subscriberUserId: userId })
 
-		// dedupe and insert the invitees
-		const invitees = [...new Set(payload.invitees)]
+		// insert the invitees
 		if (invitees.length > 0) {
 			await transaction.insert(topicInvites).values(invitees.map((email) => ({ topicId: topic.id, email })))
 		}
@@ -291,6 +332,9 @@ export async function createTopic(
 		console.error(`could not start first scan for topic ${topicId}`, error)
 		reportError(error, "first-scan", { topicId, userId })
 	})
+
+	// email the invitations without holding up the topic created response
+	startInviteEmails({ id: topicId, name, ownerId: userId }, invitees)
 
 	// track the topic creation event
 	trackEvent("topic_created", userId, { ...analyticsProperties, topicId })
@@ -318,9 +362,18 @@ export async function updateTopic(
 		return dailyFrequency
 	}
 
+	// check if an address was already invited, read before the save so only the newly added invitees get an invitation email
+	const existingInviteRows = await db
+		.select({ email: topicInvites.email })
+		.from(topicInvites)
+		.where(eq(topicInvites.topicId, topicId))
+	const existingInvites = new Set(existingInviteRows.map((row) => row.email))
+
 	// one transaction covers the fields and both reconciled invitee and source lists,
 	// so a failure partway never leaves the topic with a partial edit
 	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxResults } = payload
+	// the deduped invitees, shared by the reconcile inside the transaction and the invitation emails after it
+	const invitees = [...new Set(payload.invitees)]
 	await db.transaction(async (transaction) => {
 		// write the editable topic fields
 		await transaction
@@ -343,7 +396,6 @@ export async function updateTopic(
 		}
 
 		// reconcile invitees: drop the removed emails. the payload already trimmed and lowercased them
-		const invitees = [...new Set(payload.invitees)]
 		const staleInviteFilter =
 			invitees.length > 0
 				? and(eq(topicInvites.topicId, topicId), notInArray(topicInvites.email, invitees))
@@ -375,6 +427,13 @@ export async function updateTopic(
 
 	// screen whatever this edit added with llm-guard, now that the rows are committed
 	startPendingSourceScreens(topicId)
+
+	// email only the newly added invitees, so re-saving a topic does not re-emails its list.
+	// the inviter named is the topic's owner, since an admin's edit invites on the owner's behalf
+	startInviteEmails(
+		{ id: topicId, name, ownerId: topic.ownerId },
+		invitees.filter((email) => !existingInvites.has(email)),
+	)
 
 	// record who saved the topic. an admin may edit a topic they do not own so flag if it was not saved by the owner
 	trackEvent("topic_updated", userId, { ...analyticsProperties, topicId, isOwner: topic.ownerId === userId })
@@ -420,6 +479,54 @@ function toNewSourceRow(topicId: string, source: NewTopicSource): typeof sources
 		kind: source.sourceKind,
 		config: source.config,
 		status: source.sourceKind === "url" ? "pending" : "ready",
+	}
+}
+
+// start the invitation emails without holding up the save that added them
+function startInviteEmails(topic: { id: string; name: string; ownerId: string }, invitees: string[]): void {
+	sendTopicInviteEmails(topic, invitees).catch((error) => {
+		console.error(`could not send topic invitations for topic ${topic.id}`, error)
+		reportError(error, "email", { emailKind: "topic-invite", topicId: topic.id })
+	})
+}
+
+// email each newly invited address its invitation, naming the owner and linking to the topic page.
+// the topic page's gate walks a signed-out invitee through login or signup and back to the topic.
+async function sendTopicInviteEmails(
+	topic: { id: string; name: string; ownerId: string },
+	invitees: string[],
+): Promise<void> {
+	// nobody new means no email, and with no app url there is no link to invite anyone to
+	const appUrl = Bun.env.BETTER_AUTH_URL?.replace(/\/$/, "")
+	if (invitees.length === 0 || !appUrl) {
+		return
+	}
+
+	// the inviter is the topic's owner, named by username like everywhere else the app shows them
+	const [owner] = await db.select({ username: users.username }).from(users).where(eq(users.id, topic.ownerId))
+	if (!owner) {
+		return
+	}
+
+	// one email per newly invited address, each naming the address the invitation is tied to.
+	// src marks the arrival for analytics: the gate forwards it as the signup cta for analytics tracking.
+	const topicUrl = `${appUrl}/topics/${topic.id}?src=invite-email`
+	// one invitee's failure is logged and left behind, so the rest of the list still gets invited
+	for (const inviteeEmail of invitees) {
+		const emailProps = { inviterUsername: owner.username, topicName: topic.name, inviteeEmail, topicUrl, appUrl }
+		try {
+			const isAccepted = await sendEmail({
+				to: inviteeEmail,
+				subject: toTopicInviteSubject(emailProps),
+				emailContent: await renderTopicInviteEmail(emailProps),
+				plainTextContent: await renderTopicInviteEmailText(emailProps),
+				emailKind: "topic-invite",
+			})
+			await createTopicEmailSend({ topicId: topic.id, emailKind: "topic-invite", recipientUserId: null, isAccepted })
+		} catch (error) {
+			console.error(`could not invite ${inviteeEmail} to topic ${topic.id}`, error)
+			reportError(error, "email", { emailKind: "topic-invite", topicId: topic.id })
+		}
 	}
 }
 
@@ -510,7 +617,15 @@ export const topicsRoute = new Hono<AppEnv>()
 	.get("/topics/:id", async (context) => {
 		// the topic detail payload, gated by visibility. a signed-out visitor may only view a public topic
 		const topicPayload = await loadTopicPayload(currentUser(context), context.req.param("id"))
-		return topicPayload ? context.json(topicPayload) : context.json({ error: "not found" }, 404)
+		if (topicPayload) {
+			return context.json(topicPayload)
+		}
+		// a topic that exists but is gated responds with how it is gated.
+		// a topic id that matches nothing responds with nothing at all
+		const gatedTopic = await toGatedTopic(context.req.param("id"))
+		return gatedTopic
+			? context.json({ error: "forbidden", gatedVisibility: gatedTopic.visibility, topicName: gatedTopic.name }, 403)
+			: context.json({ error: "not found" }, 404)
 	})
 	.patch("/topics/:id", zValidator("json", updateTopicPayload), async (context) => {
 		// reject a signed-out caller

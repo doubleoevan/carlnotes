@@ -52,6 +52,7 @@ COPY db ./db
 COPY emails ./emails
 COPY worker ./worker
 COPY api ./api
+COPY content ./content
 
 # the ui bundle the app service serves alongside the api
 COPY --from=build /app/ui/dist ./ui/dist

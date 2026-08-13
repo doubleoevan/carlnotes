@@ -75,7 +75,7 @@ We may suspend or terminate an account that breaks these rules, with notice wher
 
 ## 7. Plans, limits, and billing
 
-Free trials, plan tiers, and usage limits are described on our pricing page and may change with notice.
+Free trials, plan tiers, and usage limits are described on our plans page and may change with notice.
 
 Scheduled scans run at your topic's frequency. Manual scans are metered per plan.
 

@@ -255,6 +255,12 @@ export function renderTopicScanEmail(props: TopicScanEmailProps): Promise<string
 	return render(<TopicScanEmail {...props} />)
 }
 
+// the same email message as text, sent with the HTML. a message with no text part reads as machine-generated and goes to a spam filter.
+// also, some clients and screen readers show this instead of HTML
+export function renderTopicScanEmailText(props: TopicScanEmailProps): Promise<string> {
+	return render(<TopicScanEmail {...props} />, { plainText: true })
+}
+
 // summary line up to the topic name that closes it. the visible line links that name, the preheader does not
 function summaryLead(findingCount: number): string {
 	if (findingCount === 0) {

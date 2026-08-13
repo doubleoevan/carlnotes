@@ -5,9 +5,9 @@ import { reportError } from "@shared/monitoring"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
-import { topics } from "../../db/schema"
+import { scans, topics } from "../../db/schema"
 import { failStaleScans, startTopicScan } from "../../worker"
-import { loadManualScanAuthorization } from "../authorization"
+import { isAllowed, loadManualScanAuthorization } from "../authorization"
 import { reportManualScanOverage } from "../billing"
 import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
@@ -67,26 +67,40 @@ export async function runManualScan(
 	return { status: "started", remainingScans: authorization.remainingScans }
 }
 
-// the manual scan route
-export const scansRoute = new Hono<AppEnv>().post("/topics/:id/scan", async (context) => {
-	// reject a signed-out caller
-	const userId = currentUser(context)
-	if (!userId) {
-		return context.json({ error: "unauthorized" }, 401)
-	}
-	// trigger a manual scan, billed as overage past the daily quota when a card is on file. owner or admin only.
-	const scanResult = await runManualScan(userId, context.req.param("id"), toAnalyticsProperties(context))
-	if (scanResult.status === "started") {
-		return context.json({ remainingScans: scanResult.remainingScans })
-	}
+// the manual scan route and one scan's recap
+export const scansRoute = new Hono<AppEnv>()
+	.get("/scans/:id", async (context) => {
+		// the scan with its topic, so the topic's own visibility decides who may read the recap
+		const [scanRow] = await db
+			.select({ scanSummary: scans.scanSummary, topic: topics })
+			.from(scans)
+			.innerJoin(topics, eq(topics.id, scans.topicId))
+			.where(eq(scans.id, context.req.param("id")))
+		// a scan on a topic this caller may not see answers the same way a missing one does
+		if (!(scanRow && (await isAllowed(currentUser(context), "topic:view", scanRow.topic)))) {
+			return context.json({ error: "not found" }, 404)
+		}
+		return context.json({ scanSummary: scanRow.scanSummary })
+	})
+	.post("/topics/:id/scan", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// trigger a manual scan, billed as overage past the daily quota when a card is on file. owner or admin only.
+		const scanResult = await runManualScan(userId, context.req.param("id"), toAnalyticsProperties(context))
+		if (scanResult.status === "started") {
+			return context.json({ remainingScans: scanResult.remainingScans })
+		}
 
-	// a scan already in flight is a conflict, not a quota or authorization failure
-	if (scanResult.status === "running") {
-		return context.json({ error: "a scan is already running" }, 409)
-	}
+		// a scan already in flight is a conflict, not a quota or authorization failure
+		if (scanResult.status === "running") {
+			return context.json({ error: "a scan is already running" }, 409)
+		}
 
-	// an exhausted quota and a non-owner topic scan fail differently, so the ui should tell them apart
-	return scanResult.status === "quota"
-		? context.json({ error: "quota exhausted" }, 429)
-		: context.json({ error: "forbidden" }, 403)
-})
+		// an exhausted quota and a non-owner topic scan fail differently, so the ui should tell them apart
+		return scanResult.status === "quota"
+			? context.json({ error: "quota exhausted" }, 429)
+			: context.json({ error: "forbidden" }, 403)
+	})

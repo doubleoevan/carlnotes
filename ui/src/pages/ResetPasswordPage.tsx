@@ -11,7 +11,7 @@ import { authClient, passSignupGate } from "@/lib/authClient"
 
 /**
  * Password reset and recovery, both on one route: without a token it asks for an email address to send the token to,
- * and with a token it takes a new password.
+ * and with a token it takes a new password. The token count is incremented when a token is spent to issue a new one.
  */
 export function ResetPasswordPage() {
 	const [searchParams] = useSearchParams()
@@ -34,6 +34,7 @@ function ResetRequestForm() {
 	const [isSubmitting, setSubmitting] = useState(false)
 	const [isSent, setSent] = useState(false)
 	const [error, setError] = useState<string | null>(null)
+	const [spentTokenCount, setSpentTokenCount] = useState(0)
 
 	// pass the turnstile gate, then ask for the link. the gate is what stands in for a rate limiter here
 	const handleSubmit = async (event: React.FormEvent): Promise<void> => {
@@ -44,11 +45,19 @@ function ResetRequestForm() {
 		}
 		setSubmitting(true)
 		setError(null)
+
+		// checking the token spends it, so every path that leaves this form on screen needs a new one
+		const failAndRenewChallenge = (message: string): void => {
+			setError(message)
+			setTurnstileToken(null)
+			setSpentTokenCount((previousTokenCount) => previousTokenCount + 1)
+		}
+
 		// a dropped network call reads as a failed check instead of a submit button that stays stuck
 		try {
 			const gate = await passSignupGate(turnstileToken)
 			if ("error" in gate) {
-				setError("That check didn't pass. Try again.")
+				failAndRenewChallenge("That check didn't pass. Try again.")
 				return
 			}
 			// the reply is the same either way, so nothing here learns whether the email address has an account
@@ -57,7 +66,7 @@ function ResetRequestForm() {
 			setSent(true)
 		} catch (requestError) {
 			console.error("password reset request failed", requestError)
-			setError("That didn't reach Carl. Try again.")
+			failAndRenewChallenge("That didn't reach Carl. Try again.")
 		} finally {
 			setSubmitting(false)
 		}
@@ -92,7 +101,7 @@ function ResetRequestForm() {
 					required
 				/>
 			</div>
-			<TurnstileWidget onVerify={setTurnstileToken} />
+			<TurnstileWidget onVerify={setTurnstileToken} spentTokenCount={spentTokenCount} />
 			{error && <p className="text-destructive text-sm">{error}</p>}
 			<Button type="submit" disabled={isSubmitting} className="w-full">
 				Send reset link

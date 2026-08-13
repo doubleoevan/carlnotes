@@ -19,7 +19,7 @@ test("renderManualScanEmail lists a succeeded scan's findings under its recap", 
 	expect(html).not.toContain("Unsubscribe")
 })
 
-// a scan that found nothing still sends an email, since the reader is waiting on the results
+// a scan that found nothing still sends an email, since the user is waiting on the results
 test("renderManualScanEmail reports a succeeded scan that found nothing", async () => {
 	const html = await renderManualScanEmail({ status: "succeeded", topicName: "LLM tooling", findings: [] })
 	expect(html).toContain("found nothing new worth your time")

@@ -8,12 +8,21 @@ import { cn, SECTION_CARD_CLASS, toCentsLabel } from "@/lib/utils"
 /**
  * The budget section on the account page. The payment notice the spend meter, scan usage, and the plan card.
  */
-export function AccountBudget({ billing, activity }: { billing: BillingState; activity: ActivityResponse | null }) {
+export function AccountBudget({
+	billing,
+	activity,
+	isReadOnly = false,
+}: {
+	billing: BillingState
+	activity: ActivityResponse | null
+	// an admin viewing another user's account does not see the upgrade button
+	isReadOnly?: boolean
+}) {
 	// past_due and unpaid are the failed-payment statuses Stripe reports
 	const isPastDue = billing.status === "past_due" || billing.status === "unpaid"
 	return (
 		<>
-			{isPastDue ? <PaymentNotice /> : null}
+			{isPastDue && !isReadOnly ? <PaymentNotice /> : null}
 			{activity && (
 				<SpendSection
 					scanSpendCents={activity.scanSpendCents}
@@ -22,7 +31,7 @@ export function AccountBudget({ billing, activity }: { billing: BillingState; ac
 				/>
 			)}
 			<ScanUsageSection billing={billing} />
-			<PlanSection billing={billing} />
+			<PlanSection billing={billing} isReadOnly={isReadOnly} />
 		</>
 	)
 }
@@ -101,7 +110,7 @@ function SpendSection({
 				{budgetUsedPercent >= 100 && (
 					<>
 						{" "}
-						<AnchorLink href="/pricing" className="underline">
+						<AnchorLink href="/plans" className="underline">
 							Pick up some coffee.
 						</AnchorLink>
 					</>
@@ -132,7 +141,7 @@ function ScanUsageSection({ billing }: { billing: BillingState }) {
 }
 
 // the current plan, how often it bills, and the upgrade button
-function PlanSection({ billing }: { billing: BillingState }) {
+function PlanSection({ billing, isReadOnly }: { billing: BillingState; isReadOnly: boolean }) {
 	return (
 		<section className={SECTION_CARD_CLASS}>
 			<p>
@@ -143,14 +152,17 @@ function PlanSection({ billing }: { billing: BillingState }) {
 					<span className="text-muted-foreground">{`, billed ${billing.billingInterval}`}</span>
 				)}
 			</p>
-			<div className="mt-4">
-				<UpgradeButton billing={billing} />
-			</div>
+			{/* an admin does not see the upgrade button */}
+			{!isReadOnly && (
+				<div className="mt-4">
+					<UpgradeButton billing={billing} />
+				</div>
+			)}
 		</section>
 	)
 }
 
-// a subscribed user manages billing through the portal, and a free user picks a plan on the pricing page
+// a subscribed user manages billing through the portal, and a free user picks a plan on the plans page
 function UpgradeButton({ billing }: { billing: BillingState }) {
 	const [isRedirecting, setIsRedirecting] = useState(false)
 
@@ -172,7 +184,7 @@ function UpgradeButton({ billing }: { billing: BillingState }) {
 	}
 
 	return (
-		<AnchorLink href="/pricing" className={cn(buttonVariants({ variant: "default" }))}>
+		<AnchorLink href="/plans" className={cn(buttonVariants({ variant: "default" }))}>
 			Upgrade
 		</AnchorLink>
 	)

@@ -72,7 +72,6 @@ test("toActivityTopics groups scans per topic and sums their cents", () => {
 	// finishedAt converts to an iso string when it's set and passes null through otherwise
 	expect(agents?.scans[0]?.finishedAt).toBe("2026-07-21T00:02:00.000Z")
 	expect(agents?.scans[1]?.finishedAt).toBeNull()
-	expect(agents?.scans[1]?.scanSummary).toBeNull()
 
 	// a topic with no scans this month still appears, with zeroes
 	expect(quiet?.monthScanCount).toBe(0)

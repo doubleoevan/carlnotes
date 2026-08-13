@@ -5,15 +5,19 @@ import { db } from "../../db"
 import { findings, sources, topics, users } from "../../db/schema"
 import { attachmentExists, getAttachmentBytes, putAttachment } from "../../worker"
 import { toPublishedAvatar } from "../avatars"
-import { type TopicPreview, toPreviewKey, toPreviewPng } from "./previewImage"
+import { countDistinctSubscribers } from "../profiles"
+import { isShown } from "../topic/permissions"
+import { type ProfilePreview, toProfilePreviewKey, toProfilePreviewPng } from "./profileImage"
+import { type TopicPreview, toTopicPreviewKey, toTopicPreviewPng } from "./topicImage"
 
 // how long a crawler and a browser may hold a preview. the key only changes when the preview does.
 const PREVIEW_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 /**
- * What a public Topic's preview says, or null when the Topic is not public.
+ * What a Topic's preview says, or null when no Topic has that id.
+ * Every Topic gets a preview whatever its visibility, so a pasted link never looks broken.
  */
-export async function toPublicTopicPreview(topicId: string): Promise<TopicPreview | null> {
+export async function toTopicPreview(topicId: string): Promise<TopicPreview | null> {
 	const [row] = await db
 		.select({
 			topicId: topics.id,
@@ -25,8 +29,8 @@ export async function toPublicTopicPreview(topicId: string): Promise<TopicPrevie
 		.from(topics)
 		.innerJoin(users, eq(users.id, topics.ownerId))
 		.where(eq(topics.id, topicId))
-	// every public Topic gets a card, a platform fetches the card when the link is pasted and caches what it gets,
-	if (row?.visibility !== "public") {
+	// a topic that doesn't exist does not get a preview
+	if (!row) {
 		return null
 	}
 
@@ -41,6 +45,7 @@ export async function toPublicTopicPreview(topicId: string): Promise<TopicPrevie
 	return {
 		topicId: row.topicId,
 		title: row.title,
+		visibility: row.visibility,
 		ownerUserId: row.ownerUserId,
 		ownerUsername: row.ownerUsername,
 		ownerAvatar: await toPublishedAvatar(row.ownerUserId),
@@ -53,30 +58,66 @@ export async function toPublicTopicPreview(topicId: string): Promise<TopicPrevie
  * A Topic's preview bytes, rendered on the first request and read from storage after.
  * Rendering the image requires a font parse and a rasterize, so it only happens once per distinct preview.
  */
-export async function toCachedPreviewPng(preview: TopicPreview): Promise<{ bytes: Uint8Array; cacheControl: string }> {
-	const previewKey = toPreviewKey(preview)
+export async function toCachedTopicPreviewPng(
+	preview: TopicPreview,
+): Promise<{ bytes: Uint8Array; cacheControl: string }> {
+	return toCachedPng(toTopicPreviewKey(preview), () => toTopicPreviewPng(preview))
+}
+
+/**
+ * A profile's preview bytes, rendered on the first request and read from storage after.
+ * Rendering the image requires a font parse and a rasterize, so it only happens once per distinct preview.
+ */
+export async function toCachedProfilePreviewPng(
+	preview: ProfilePreview,
+): Promise<{ bytes: Uint8Array; cacheControl: string }> {
+	return toCachedPng(toProfilePreviewKey(preview), () => toProfilePreviewPng(preview))
+}
+
+// the stored bytes for the key, or a render and store on the first request for this exact preview
+async function toCachedPng(
+	previewKey: string,
+	renderPng: () => Promise<Uint8Array>,
+): Promise<{ bytes: Uint8Array; cacheControl: string }> {
 	if (await attachmentExists(previewKey)) {
 		return { bytes: await getAttachmentBytes(previewKey), cacheControl: PREVIEW_CACHE_CONTROL }
 	}
 
 	// a miss renders and stores, so the next fetch of this exact preview is a read
-	const bytes = await toPreviewPng(preview)
+	const bytes = await renderPng()
 	await putAttachment(previewKey, bytes, "image/png")
 	return { bytes, cacheControl: PREVIEW_CACHE_CONTROL }
 }
 
 /**
- * The app shell with a specific Topic's preview tags to serve a social platform's crawler.
+ * A Topic page's own description, shared by the OG tags and the structured data.
  */
-export function toPreviewHtml(appShell: string, preview: TopicPreview, appUrl: string): string {
-	const description = preview.ownerUsername
+export function toTopicDescription(preview: TopicPreview): string {
+	return preview.ownerUsername
 		? `A topic by ${preview.ownerUsername}. ${preview.keptCount} findings Carl kept.`
 		: `${preview.keptCount} findings Carl kept.`
+}
+
+/**
+ * The app shell with a specific Topic's preview tags, title, and canonical URL to serve a crawler.
+ * extraHeadTags carries anything else the route appends, like a structured-data script, and
+ * extraBodyTags carries content for the body, like the noscript findings list.
+ */
+export function toTopicPreviewHtml(
+	appShell: string,
+	preview: TopicPreview,
+	appUrl: string,
+	extraHeadTags = "",
+	extraBodyTags = "",
+): string {
+	const description = toTopicDescription(preview)
 	const previewUrl = `${appUrl}/api/topics/${preview.topicId}/preview.png`
 	const title = Bun.escapeHTML(preview.title)
 	// X reads the Twitter tags before the og ones, so a topic that only set og:title
 	// would still be shared with whatever title the shell carries
 	const tags = [
+		`<title>${title} — CarlNotes</title>`,
+		`<link rel="canonical" href="${appUrl}/topics/${preview.topicId}">`,
 		`<meta property="og:title" content="${title}">`,
 		`<meta property="og:description" content="${Bun.escapeHTML(description)}">`,
 		`<meta property="og:image" content="${previewUrl}">`,
@@ -87,7 +128,66 @@ export function toPreviewHtml(appShell: string, preview: TopicPreview, appUrl: s
 		`<meta name="twitter:description" content="${Bun.escapeHTML(description)}">`,
 		`<meta name="twitter:image" content="${previewUrl}">`,
 	].join("")
-	return `${withoutReplacedTags(appShell)}${tags}</head>${toAppShellBody(appShell)}`
+	return toShellWithHeadTags(appShell, `${tags}${extraHeadTags}`, extraBodyTags)
+}
+
+/**
+ * What a profile's preview says, or null when no user has that id.
+ */
+export async function toProfilePreview(userId: string): Promise<ProfilePreview | null> {
+	const [user] = await db.select({ id: users.id, username: users.username }).from(users).where(eq(users.id, userId))
+	if (!user) {
+		return null
+	}
+
+	// the public figures the profile page itself shows a stranger
+	const [topicRow] = await db
+		.select({ publicTopics: count() })
+		.from(topics)
+		.where(and(eq(topics.ownerId, userId), eq(topics.visibility, "public"), isShown))
+	return {
+		userId: user.id,
+		username: user.username,
+		avatar: await toPublishedAvatar(user.id),
+		publicTopicCount: topicRow?.publicTopics ?? 0,
+		followerCount: await countDistinctSubscribers(userId),
+	}
+}
+
+/**
+ * The app shell with a profile's preview tags, title, and canonical URL, the treatment Topic pages get.
+ */
+export function toProfilePreviewHtml(appShell: string, preview: ProfilePreview, appUrl: string): string {
+	const username = Bun.escapeHTML(preview.username)
+	const topicsWord = preview.publicTopicCount === 1 ? "public topic" : "public topics"
+	const followersWord = preview.followerCount === 1 ? "follower" : "followers"
+	const description = `${username} on CarlNotes. ${preview.publicTopicCount} ${topicsWord}, ${preview.followerCount} ${followersWord}.`
+	// the profile's own rendered card, the image a platform unfurls beside the link
+	const previewUrl = `${appUrl}/api/profiles/${preview.userId}/preview.png`
+	const tags = [
+		`<title>${username} — CarlNotes</title>`,
+		`<link rel="canonical" href="${appUrl}/profiles/${preview.userId}">`,
+		`<meta property="og:title" content="${username} — CarlNotes">`,
+		`<meta property="og:description" content="${description}">`,
+		`<meta property="og:image" content="${previewUrl}">`,
+		`<meta property="og:image:alt" content="${username} — CarlNotes">`,
+		`<meta property="og:url" content="${appUrl}/profiles/${preview.userId}">`,
+		`<meta name="twitter:card" content="summary_large_image">`,
+		`<meta name="twitter:title" content="${username} — CarlNotes">`,
+		`<meta name="twitter:description" content="${description}">`,
+		`<meta name="twitter:image" content="${previewUrl}">`,
+	].join("")
+	return toShellWithHeadTags(appShell, tags)
+}
+
+/**
+ * The app shell with the given head tags in place of the ones it replaces: the OG set, the title,
+ * and the canonical link. Every injecting route builds its head through this. bodyTags land right
+ * inside the body element, ahead of the SPA root the shell renders into.
+ */
+export function toShellWithHeadTags(appShell: string, headTags: string, bodyTags = ""): string {
+	const body = toAppShellBody(appShell)
+	return `${withoutReplacedTags(appShell)}${headTags}</head>${bodyTags ? body.replace(/<body[^>]*>/, (bodyTag) => `${bodyTag}${bodyTags}`) : body}`
 }
 
 // the preview tags that a Topic overrides. the shell renders a site-wide default for each.
@@ -104,12 +204,16 @@ const REPLACED_PREVIEW_PROPERTIES = new Set([
 	"twitter:image",
 ])
 
-// the shell with the tags a Topic replaces taken out, so only the Topic's version of each survives
+// the shell with the tags a route replaces taken out — the OG set, the title, and the canonical link —
+// so only the route's version of each survives
 function withoutReplacedTags(appShell: string): string {
 	const head = appShell.slice(0, appShell.indexOf("</head>"))
-	return head.replaceAll(/<meta\s+(?:property|name)="([^"]+)"[^>]*>/g, (tag, property) =>
-		REPLACED_PREVIEW_PROPERTIES.has(property) ? "" : tag,
-	)
+	return head
+		.replace(/<title>[\s\S]*?<\/title>/, "")
+		.replace(/<link\s+rel="canonical"[^>]*>/, "")
+		.replaceAll(/<meta\s+(?:property|name)="([^"]+)"[^>]*>/g, (tag, property) =>
+			REPLACED_PREVIEW_PROPERTIES.has(property) ? "" : tag,
+		)
 }
 
 // everything after the app shell head tag

@@ -1,5 +1,6 @@
-import type { TopicScan } from "@shared/contracts"
+import type { TopicFinding, TopicScan } from "@shared/contracts"
 import { useState } from "react"
+import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { randomThinkingLine } from "@/components/chat/thinkingLines"
 import {
@@ -11,17 +12,33 @@ import {
 } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
-import { type AllowedNoteUrls, TopicScanRecap } from "@/components/topic/TopicScanRecap"
-import { cn, RESOURCE_LIST_CARD_CLASS } from "@/lib/utils"
+import { type AllowedNoteUrls, TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
+import { fetchScanNote } from "@/lib/topicClient"
+import { cn, RESOURCE_LIST_CARD_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/utils"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { MoreButton } from "./MoreButton"
 
 // the most scan rows shown before the "+ # older" expander
 const MAX_HISTORY_SCANS = 5
 
+// how tall the expanded history list grows before it scrolls, about ten rows at 64px each.
+const EXPANDED_HISTORY_CLASS = "max-h-160 overflow-y-auto"
+
 // the collapsible scan history, newest first, capped until expanded.
-// allowedUrls lets a recap cite the topic's still-kept findings as real links. a dropped finding's link renders as plain text
-export function TopicScanHistory({ scans, allowedUrls }: { scans: TopicScan[]; allowedUrls?: AllowedNoteUrls }) {
+// allowedUrls lets a recap cite the topic's still-kept findings as real links. a dropped finding's link renders as plain text.
+// each diary entry lists only the findings its own scan produced.
+export function TopicScanHistory({
+	scans,
+	allowedUrls,
+	findings,
+	topic,
+}: {
+	scans: TopicScan[]
+	allowedUrls?: AllowedNoteUrls
+	findings?: TopicFinding[]
+	// names the topic in each diary's copied Markdown
+	topic: { id: string; name: string; prompt: string }
+}) {
 	const [isExpanded, setIsExpanded] = useState(false)
 	// cap the rows unless expanded
 	const scansShown = isExpanded ? scans : scans.slice(0, MAX_HISTORY_SCANS)
@@ -29,9 +46,17 @@ export function TopicScanHistory({ scans, allowedUrls }: { scans: TopicScan[]; a
 	return (
 		<CollapsibleSection value="history" title="Brew diary">
 			{/* one row per scan, each drawing its own dashed separator */}
-			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
+			<div
+				className={cn(RESOURCE_LIST_CARD_CLASS, "p-1", isExpanded && [EXPANDED_HISTORY_CLASS, THIN_SCROLLBAR_CLASS])}
+			>
 				{scansShown.map((scan) => (
-					<ScanRow key={scan.id} scan={scan} allowedUrls={allowedUrls} />
+					<ScanRow
+						key={scan.id}
+						scan={scan}
+						allowedUrls={allowedUrls}
+						findings={findings?.filter((finding) => finding.scanId === scan.id)}
+						topic={topic}
+					/>
 				))}
 				{scansShown.length === 0 && (
 					<p className="text-muted-foreground py-3 pl-2 text-sm">{"Carl hasn't scanned this topic yet."}</p>
@@ -51,9 +76,33 @@ export function TopicScanHistory({ scans, allowedUrls }: { scans: TopicScan[]; a
 // one history scan row, the whole of which opens that brew's note. the note still anchors the popover, so the panel
 // comes out of the icon the user is looking at instead of from wherever they happened to click.
 // the hover highlight paints on a rounded under-layer, matching the resource rows above it
-function ScanRow({ scan, allowedUrls }: { scan: TopicScan; allowedUrls?: AllowedNoteUrls }) {
+function ScanRow({
+	scan,
+	allowedUrls,
+	findings,
+	topic,
+}: {
+	scan: TopicScan
+	allowedUrls?: AllowedNoteUrls
+	findings?: TopicFinding[]
+	topic: { id: string; name: string; prompt: string }
+}) {
+	// the scan recap is loaded on the first open and kept for the rest of the page's life
+	const [scanSummary, setScanSummary] = useState<string | null>(null)
+	const [isNoteLoaded, setIsNoteLoaded] = useState(false)
+	function handleOpenScanNote(isOpen: boolean): void {
+		if (isOpen && !isNoteLoaded) {
+			fetchScanNote(scan.id)
+				.then((note) => {
+					setScanSummary(note)
+					setIsNoteLoaded(true)
+				})
+				.catch((error) => console.error("scan note load failed", error))
+		}
+	}
+
 	return (
-		<Popover>
+		<Popover onOpenChange={handleOpenScanNote}>
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<PopoverTrigger
@@ -73,7 +122,14 @@ function ScanRow({ scan, allowedUrls }: { scan: TopicScan; allowedUrls?: Allowed
 				    the right instead, over the note the row opens */}
 				<TooltipContent align="end">A brew note from Carl</TooltipContent>
 			</Tooltip>
-			<ScanNote scan={scan} allowedUrls={allowedUrls} />
+			<ScanNote
+				scan={scan}
+				scanSummary={scanSummary}
+				isNoteLoaded={isNoteLoaded}
+				allowedUrls={allowedUrls}
+				findings={findings}
+				topic={topic}
+			/>
 		</Popover>
 	)
 }
@@ -99,8 +155,32 @@ function ScanThinkingLine() {
 	return <span className="shimmer-text min-w-0 flex-1 truncate text-xs">{`Carl is ${thinkingLine}…`}</span>
 }
 
-// the history scan note itself: the recap, and for a failed scan, the reason it failed
-function ScanNote({ scan, allowedUrls }: { scan: TopicScan; allowedUrls?: AllowedNoteUrls }) {
+// the history scan note: the complete recap, and for a failed scan, the reason it failed
+function ScanNote({
+	scan,
+	scanSummary,
+	isNoteLoaded,
+	allowedUrls,
+	findings,
+	topic,
+}: {
+	scan: TopicScan
+	scanSummary: string | null
+	isNoteLoaded: boolean
+	allowedUrls?: AllowedNoteUrls
+	findings?: TopicFinding[]
+	topic: { id: string; name: string; prompt: string }
+}) {
+	// the note is fetched on click, and a loading mug brews in its place until it loads
+	if (!isNoteLoaded) {
+		return (
+			<PopoverContent align="end" className="w-[calc(100vw-2rem)] max-w-lg text-sm">
+				<PopoverCloseButton />
+				<CoffeeLoading className="min-h-24 text-base" />
+			</PopoverContent>
+		)
+	}
+
 	return (
 		<PopoverContent align="end" className="w-[calc(100vw-2rem)] max-w-lg text-sm">
 			<PopoverCloseButton />
@@ -111,7 +191,18 @@ function ScanNote({ scan, allowedUrls }: { scan: TopicScan; allowedUrls?: Allowe
 					<TopicScanFailure error={scan.error} />
 				</div>
 			)}
-			<TopicScanRecap scan={scan} allowedUrls={allowedUrls} />
+			<TopicScanRecap
+				scan={{ ...scan, scanSummary }}
+				allowedUrls={allowedUrls}
+				findings={findings}
+				copyMarkdown={toNotesMarkdown({
+					topicId: topic.id,
+					topicName: topic.name,
+					prompt: topic.prompt,
+					note: scanSummary,
+					findings,
+				})}
+			/>
 		</PopoverContent>
 	)
 }

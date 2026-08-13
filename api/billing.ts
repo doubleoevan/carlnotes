@@ -9,7 +9,7 @@ import { Hono } from "hono"
 import Stripe from "stripe"
 import { db } from "../db"
 import { billingSubscriptions, users } from "../db/schema"
-import { replaceUserLiteLLMKey } from "./authorization"
+import { isAllowed, replaceUserLiteLLMKey } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
 import { scansToday } from "./topic/quotas"
 
@@ -338,8 +338,18 @@ export const billingRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
+
 		// the account page's plan, daily scan usage, card-on-file, and payment status
-		return context.json(await loadBillingState(userId))
+		const requestedUserId = context.req.query("userId")
+		if (!requestedUserId || requestedUserId === userId) {
+			return context.json(await loadBillingState(userId))
+		}
+
+		// only an admin may see another user's billing state
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		return context.json(await loadBillingState(requestedUserId))
 	})
 	.post("/webhooks/stripe", async (context) => {
 		// verify and apply the stripe event from the raw body. a bad signature responds with a 400 so stripe retries

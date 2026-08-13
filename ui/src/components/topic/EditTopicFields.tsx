@@ -100,7 +100,7 @@ export function SourceCapNote() {
 	)
 }
 
-// how many Topics the plan can run on a daily schedule, linked to the pricing page.
+// how many Topics the plan can run on a daily schedule, linked to the plans page.
 // the label shows what is left, and the tooltip shows the plan's limit.
 function DailyTopicQuotaLink({
 	dailyTopicsRemaining,
@@ -116,7 +116,7 @@ function DailyTopicQuotaLink({
 			isLoading={dailyTopicsRemaining === undefined}
 			isUnlimited={remainingDailyTopics >= ADMIN_QUOTA}
 			label={`${remainingDailyTopics} daily ${toBrewsWord(remainingDailyTopics)} left`}
-			href="/pricing"
+			href="/plans"
 			tooltip={`Your plan gets ${limit} ${limit === 1 ? "pot" : "pots"} daily`}
 		/>
 	)
@@ -130,7 +130,7 @@ export function hasDailySlotLeft(
 	return (dailyTopicsRemaining ?? 1) > 0 || isDailyFrequency(topicFrequency ?? "")
 }
 
-// one select frequency option. a frequency that the plan has no room for is replaced by a button that takes the user to the pricing page
+// one select frequency option. a frequency that the plan has no room for is replaced by a button that takes the user to the plans page
 function FrequencyOption({ frequency, isOutOfSlots }: { frequency: Frequency; isOutOfSlots: boolean }) {
 	const navigate = useNavigate()
 	if (!isOutOfSlots) {
@@ -139,7 +139,7 @@ function FrequencyOption({ frequency, isOutOfSlots }: { frequency: Frequency; is
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<button type="button" className="w-full cursor-pointer text-left" onClick={() => navigate("/pricing")}>
+				<button type="button" className="w-full cursor-pointer text-left" onClick={() => navigate("/plans")}>
 					<SelectItem value={frequency} disabled>
 						{capitalize(frequency)}
 						{/* a coffee cup where the check mark sits on the option that is selected, since this one is

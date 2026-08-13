@@ -95,6 +95,23 @@ export const RESOURCE_KIND_ICON: Record<ResourceKind, LucideIcon> = {
 export const WEB_SOURCE = { label: "web", summary: "Let Carl crawl" }
 
 /**
+ * The copy that predates the clipboard api, for the browsers that refuse it. An off-screen field is selected
+ * and copied through the document. It reports whether the copy took, since a browser can refuse this route too.
+ */
+export function copyThroughSelection(text: string): boolean {
+	const textareaElement = document.createElement("textarea")
+	textareaElement.value = text
+	// off-screen instead of hidden, since a field the browser considers invisible cannot be selected
+	textareaElement.style.position = "fixed"
+	textareaElement.style.opacity = "0"
+	document.body.append(textareaElement)
+	textareaElement.select()
+	const isCopied = document.execCommand("copy")
+	textareaElement.remove()
+	return isCopied
+}
+
+/**
  * The message to show a new invite subscriber that they will see findings only from the next scan onward.
  */
 export const NEXT_SCAN_DISCLAIMER = "Findings appear after the topic's next brew."
@@ -123,9 +140,15 @@ export const MENU_BUTTON_CLASS =
 	"bg-card text-muted-foreground hover:text-foreground inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm shadow-lift sm:min-h-9"
 
 /**
- * The card chrome wrapped around every data table, scrolling horizontally on narrow screens.
+ * The thin visible scrollbar sized on both axes, so it shows automatically for vertical and horizontal overflow alike.
  */
-export const TABLE_CARD_CLASS = "bg-card overflow-x-auto rounded-lg border p-4 shadow-lift"
+export const THIN_SCROLLBAR_CLASS =
+	"[&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar]:w-1.5"
+
+/**
+ * The card chrome wrapped around every data table, with the visible scrollbar showing automatically for overflow.
+ */
+export const TABLE_CARD_CLASS = `bg-card overflow-x-auto rounded-lg border p-4 shadow-lift ${THIN_SCROLLBAR_CLASS}`
 
 // the section card chrome shared by the account page's panels
 export const SECTION_CARD_CLASS = "bg-card rounded-lg border p-4 shadow-lift"

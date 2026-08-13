@@ -12,7 +12,8 @@ import { and, count, countDistinct, eq, inArray, isNotNull, like, ne, sql } from
 import { Hono } from "hono"
 import { db } from "../db"
 import { audienceMembers, findings, scans, subscriptions, topics, users } from "../db/schema"
-import type { AppEnv } from "./currentUser"
+import { isAllowed } from "./authorization"
+import { type AppEnv, currentUser } from "./currentUser"
 import { isShown } from "./topic/permissions"
 
 // the transaction a caller is already inside, or the pool when there is none
@@ -41,8 +42,9 @@ export async function searchUsers(query: string): Promise<UserSearchResult[]> {
 
 /**
  * A user's public profile by id, or null when there is no such user.
+ * An owner viewing their own profile sees their private and invite topics, which are hidden for everyone else except an admin.
  */
-export async function loadProfile(userId: string): Promise<ProfileResponse | null> {
+export async function loadProfile(userId: string, viewerId: string | null): Promise<ProfileResponse | null> {
 	const [user] = await db
 		.select({ id: users.id, username: users.username, createdAt: users.createdAt, avatarSource: users.avatarSource })
 		.from(users)
@@ -51,13 +53,17 @@ export async function loadProfile(userId: string): Promise<ProfileResponse | nul
 		return null
 	}
 
+	// only an owner or an admin can see the non-public topics on the profile page
+	const includesNonPublicTopics =
+		viewerId === user.id || (viewerId !== null && (await isAllowed(viewerId, "admin:console")))
 	return {
 		userId: user.id,
 		username: user.username,
 		avatarSource: user.avatarSource,
 		joinedAt: user.createdAt.toISOString(),
 		subscriberCount: await countDistinctSubscribers(user.id),
-		topics: await loadProfileTopics(user.id),
+		includesNonPublicTopics,
+		topics: await loadProfileTopics(user.id, includesNonPublicTopics),
 	}
 }
 
@@ -86,18 +92,23 @@ export async function countDistinctSubscribers(userId: string, handle: DbHandle 
 	return subscribers?.subscriberCount ?? 0
 }
 
-// the owner's public topics with the columns the profile table shows. private and invite topics never appear
-async function loadProfileTopics(userId: string): Promise<ProfileTopic[]> {
+// the topics the profile table shows. anyone sees the owner's public topics.
+// only the owner or admin can see the non-public topics.
+async function loadProfileTopics(userId: string, includesNonPublicTopics: boolean): Promise<ProfileTopic[]> {
+	const visibleTopics = includesNonPublicTopics
+		? eq(topics.ownerId, userId)
+		: and(eq(topics.ownerId, userId), eq(topics.visibility, "public"), isShown)
 	const rows = await db
 		.select({
 			id: topics.id,
 			name: topics.name,
+			visibility: topics.visibility,
 			createdAt: topics.createdAt,
 			updatedAt: topics.updatedAt,
 			subscriberCount: topics.subscriberCount,
 		})
 		.from(topics)
-		.where(and(eq(topics.ownerId, userId), eq(topics.visibility, "public"), isShown))
+		.where(visibleTopics)
 		.orderBy(topics.createdAt)
 
 	// the kept-over-seen figures come from the topic's past scans, aggregated across every scan it has run
@@ -105,6 +116,7 @@ async function loadProfileTopics(userId: string): Promise<ProfileTopic[]> {
 	return rows.map((row) => ({
 		id: row.id,
 		name: row.name,
+		visibility: row.visibility,
 		createdAt: row.createdAt.toISOString(),
 		updatedAt: row.updatedAt.toISOString(),
 		subscriberCount: row.subscriberCount,
@@ -150,8 +162,8 @@ export const profilesRoute = new Hono<AppEnv>()
 	.get("/users", async (context) => {
 		return context.json({ users: await searchUsers(context.req.query("q") ?? "") })
 	})
-	// public: a profile is readable by a stranger, so it resolves with no session at all
+	// a profile does not require a session. but a session is required to show non-public topics to the owner or an admin.
 	.get("/profiles/:userId", async (context) => {
-		const profile = await loadProfile(context.req.param("userId"))
+		const profile = await loadProfile(context.req.param("userId"), currentUser(context))
 		return profile ? context.json(profile) : context.json({ error: "not found" }, 404)
 	})

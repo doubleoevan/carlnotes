@@ -3,6 +3,7 @@ import { X } from "lucide-react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
+import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader } from "@/components/table/SortableHeader"
@@ -17,7 +18,8 @@ type InviteRow = ActivityResponse["invites"][number]
 // which sorts it ahead of every date: last descending and first ascending.
 const inviteSortValues = {
 	name: (row: InviteRow) => row.name,
-	invitee: (row: InviteRow) => row.inviteeEmail,
+	// an invitee with an account sorts by their username, the name the cell shows
+	invitee: (row: InviteRow) => row.invitee?.username ?? row.inviteeEmail,
 	invited: (row: InviteRow) => row.invitedAt,
 	subscribed: (row: InviteRow) => row.subscribedAt ?? "",
 }
@@ -26,7 +28,16 @@ const inviteSortValues = {
  * The Activity page's invitations table: who the user invited to their topics, and whether each one was subscribed.
  * An invitee subscribes from their own subscriptions table, so the only available action here is withdrawing the invitation.
  */
-export function InvitesTable({ invites, onReload }: { invites: InviteRow[]; onReload: () => void }) {
+export function InvitesTable({
+	invites,
+	onReload,
+	isReadOnly = false,
+}: {
+	invites: InviteRow[]
+	onReload: () => void
+	// an admin reading another user's page cannot delete their invitations
+	isReadOnly?: boolean
+}) {
 	// newest invitation first
 	const { pageRows, sort, pagination } = usePaginatedRowSort(invites, inviteSortValues, {
 		key: "invited",
@@ -71,7 +82,20 @@ export function InvitesTable({ invites, onReload }: { invites: InviteRow[]; onRe
 									{row.name}
 								</AnchorLink>
 							</td>
-							<td className="max-w-40 truncate py-2 pr-4 sm:max-w-64">{row.inviteeEmail}</td>
+							{/* the invitee's avatar and username if the email address has an account, otherwise the email.
+							    it opens their profile in a new tab */}
+							<td className="max-w-40 truncate py-2 pr-4 sm:max-w-64">
+								{row.invitee ? (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<UserProfileLink user={row.invitee} avatarClassName="size-5" isNewTab />
+										</TooltipTrigger>
+										<TooltipContent>{`${row.invitee.username}'s profile`}</TooltipContent>
+									</Tooltip>
+								) : (
+									row.inviteeEmail
+								)}
+							</td>
 							<td className="py-2 pr-4">{toMonthYearLabel(row.invitedAt)}</td>
 							{/* the date they subscribed or pending */}
 							<td className="py-2 pr-4">
@@ -82,19 +106,21 @@ export function InvitesTable({ invites, onReload }: { invites: InviteRow[]; onRe
 								)}
 							</td>
 							<td className="py-2 text-right">
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<Button
-											size="icon-sm"
-											variant="ghost"
-											onClick={() => setInviteToDelete(row)}
-											aria-label="Delete invitation"
-										>
-											<X className="size-4" />
-										</Button>
-									</TooltipTrigger>
-									<TooltipContent>Delete invitation</TooltipContent>
-								</Tooltip>
+								{!isReadOnly && (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<Button
+												size="icon-sm"
+												variant="ghost"
+												onClick={() => setInviteToDelete(row)}
+												aria-label="Delete invitation"
+											>
+												<X className="size-4" />
+											</Button>
+										</TooltipTrigger>
+										<TooltipContent>Delete invitation</TooltipContent>
+									</Tooltip>
+								)}
 							</td>
 						</tr>
 					))}

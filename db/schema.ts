@@ -445,6 +445,22 @@ export const topicInvites = pgTable(
 	(table) => [primaryKey({ columns: [table.topicId, table.email] })],
 )
 
+// an email that a topic sent that resend accepted to be tracked by the admin page.
+// rows are deleted with their topic when it's deleted
+export const topicEmailSends = pgTable("topic_email_sends", {
+	id: primaryId(),
+	// the topic the email was about
+	topicId: text("topic_id")
+		.notNull()
+		.references(() => topics.id, { onDelete: "cascade" }),
+	// who received the email, null for an invitee with no account yet. the user id rather than the address, so no
+	// address is duplicated here and a closed account leaves the send on record without naming anyone
+	recipientUserId: text("recipient_user_id").references(() => users.id, { onDelete: "set null" }),
+	// which kind of email went out: topic-scan, manual-scan, or topic-invite
+	emailKind: text("email_kind").notNull(),
+	sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
+})
+
 // an audience is a named set of users that subscribes to topics as one
 export const audiences = pgTable("audiences", {
 	id: primaryId(),

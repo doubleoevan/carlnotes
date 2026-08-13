@@ -34,11 +34,11 @@ function toMonthlyScanEstimate(monthlyBudgetCents: number): number {
 }
 
 /**
- * The pricing page: the three plans side by side with a monthly/yearly toggle, which opens at the
+ * The plans page: the three plans side by side with a monthly/yearly toggle, which opens at the
  * subscriber's own billing interval. Signed in, the user's own plan is highlighted. Signed out, the
  * recommended plan is.
  */
-export function PricingPage() {
+export function PlansPage() {
 	const { data: session } = authClient.useSession()
 	const [isYearly, setIsYearly] = useState(false)
 	const [billingInterval, setBillingInterval] = useState<BillingInterval | null>(null)
@@ -57,10 +57,16 @@ export function PricingPage() {
 		if (!isSubscribed) {
 			return
 		}
-		fetchBillingState().then((billing) => {
-			setBillingInterval(billing.billingInterval)
-			setIsYearly(billing.billingInterval === "yearly")
-		})
+		fetchBillingState()
+			.then((billing) => {
+				setBillingInterval(billing.billingInterval)
+				setIsYearly(billing.billingInterval === "yearly")
+			})
+			// a failed read settles on monthly, since a null interval holds the page on its loading state
+			.catch((error) => {
+				console.error("billing state load failed", error)
+				setBillingInterval("monthly")
+			})
 	}, [isSubscribed])
 
 	// a free user upgrades through checkout at the selected billing interval
@@ -79,8 +85,13 @@ export function PricingPage() {
 	// a paying user changes or cancels their plan through the Stripe portal
 	async function handlePortal(): Promise<void> {
 		setIsRedirecting(true)
-		const isOpened = await openBillingPortal()
-		if (!isOpened) {
+		// a portal that never opens leaves the button spinning, whether it refused or threw
+		try {
+			if (!(await openBillingPortal())) {
+				setIsRedirecting(false)
+			}
+		} catch (error) {
+			console.error("billing portal failed", error)
 			setIsRedirecting(false)
 		}
 	}
@@ -89,7 +100,7 @@ export function PricingPage() {
 		<main className="mx-auto max-w-5xl px-safe py-10">
 			{/* the heading and the billing interval toggle */}
 			<div className="text-center">
-				<h1 className="font-display text-3xl">Pricing</h1>
+				<h1 className="font-display text-3xl">Plans</h1>
 				<p className="text-muted-foreground mt-2">Carl turns caffeine into notes. Choose how much coffee to buy him.</p>
 				{/* the toggle billing interval button is initialized with the signed-in user's plan */}
 				{!isLoadingInterval && (

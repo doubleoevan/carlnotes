@@ -8,7 +8,7 @@ import { Button } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { InfoSection } from "@/components/topic/TopicInfo"
-import { ScrollBox } from "@/components/topic/TopicScanRecap"
+import { ScrollBox, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
 import { cn, POPOVER_HEADING_CLASS, RESOURCE_KIND_ICON, toAgeLabel } from "@/lib/utils"
 import { type TopicFeedHandlers, useIsSignedIn, useTopicFeedActions } from "@/providers/TopicFeedProvider"
 
@@ -19,16 +19,19 @@ type TopicResourceProps = {
 	rank: number | null
 	isRatable: boolean
 	resourceHandlers?: TopicFeedHandlers
+	// names the topic in the note popover's copied Markdown
+	topic: { id: string; name: string; prompt: string }
 }
 
 /**
  * A single topic resource row. Clicking the row opens the note popup for the topic finding,
  * and clicking the title opens the resource itself in a new tab. Consumed rows appear muted, like an email inbox.
  */
-export function TopicResource({ resource, rank, isRatable, resourceHandlers }: TopicResourceProps) {
-	// the topic page passes handlers that reload its own payload. the homepage falls back to the shared provider's handlers
+export function TopicResource({ resource, rank, isRatable, resourceHandlers, topic }: TopicResourceProps) {
+	// the topic page passes handlers that reload their own payload. the homepage falls back to the shared provider's handlers
 	const providerHandlers = useTopicFeedActions()
-	const { open, consume, rate, bookmark } = resourceHandlers ?? providerHandlers
+	const { openTopicFinding, consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding } =
+		resourceHandlers ?? providerHandlers
 	// signed-out visitors don't get the per-user read and rating controls
 	const isSignedIn = useIsSignedIn()
 	const ResourceIcon = RESOURCE_KIND_ICON[resource.resourceKind]
@@ -76,7 +79,7 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers }: T
 						<TooltipTrigger
 							onClick={(event) => {
 								event.stopPropagation()
-								bookmark(resource.findingId, false)
+								bookmarkTopicFinding(resource.findingId, false)
 							}}
 							aria-pressed={true}
 							aria-label={bookmarkLabel}
@@ -110,7 +113,7 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers }: T
 								href={resource.url}
 								onClick={(event) => {
 									event.stopPropagation()
-									open(resource.findingId)
+									openTopicFinding(resource.findingId)
 								}}
 								className={titleClass}
 							>
@@ -125,13 +128,14 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers }: T
 				{/* the note button, which anchors the popover and opens it on its own for a keyboard user */}
 				<ResourceInfo
 					resource={resource}
+					topic={topic}
 					isRatable={isRatable}
 					isSignedIn={isSignedIn}
 					isHintOpen={isHintOpen && !isNoteOpen}
 					onHintChange={setIsHintOpen}
-					onConsume={consume}
-					onRate={rate}
-					onBookmark={bookmark}
+					onConsume={consumeTopicFinding}
+					onRate={rateTopicFinding}
+					onBookmark={bookmarkTopicFinding}
 				/>
 			</div>
 		</Popover>
@@ -142,6 +146,7 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers }: T
 // and, for a signed-in user, the bookmark and read toggles with the rating buttons
 function ResourceInfo({
 	resource,
+	topic,
 	isRatable,
 	isSignedIn,
 	isHintOpen,
@@ -150,6 +155,7 @@ function ResourceInfo({
 	onRate,
 	onBookmark,
 }: {
+	topic: TopicResourceProps["topic"]
 	// the topic finding, whether this user is signed in and may rate it, and the consume, rate, and bookmark handlers
 	resource: TopicFinding
 	isRatable: boolean
@@ -157,9 +163,9 @@ function ResourceInfo({
 	// the entire row opens the tooltip, so hovering anywhere on it hints at the note this button opens
 	isHintOpen: boolean
 	onHintChange: (isOpen: boolean) => void
-	onConsume: TopicFeedHandlers["consume"]
-	onRate: TopicFeedHandlers["rate"]
-	onBookmark: TopicFeedHandlers["bookmark"]
+	onConsume: TopicFeedHandlers["consumeTopicFinding"]
+	onRate: TopicFeedHandlers["rateTopicFinding"]
+	onBookmark: TopicFeedHandlers["bookmarkTopicFinding"]
 }) {
 	// the bookmark button's label, flipping with the finding's bookmark state
 	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
@@ -191,7 +197,14 @@ function ResourceInfo({
 
 				{/* the AI explanation of why this resource is relevant, in a scroll box so a long note stays contained */}
 				<div className="text-muted-foreground font-display mb-1 text-xs tracking-wide uppercase">{"Carl's notes"}</div>
-				<ScrollBox>
+				<ScrollBox
+					copyMarkdown={toNotesMarkdown({
+						topicId: topic.id,
+						topicName: topic.name,
+						prompt: topic.prompt,
+						note: `[${resource.title ?? resource.url}](${resource.url})\n\n${resource.relevanceExplanation}`,
+					})}
+				>
 					<p>{resource.relevanceExplanation || "No notes yet."}</p>
 				</ScrollBox>
 				{/* when the resource was fetched and how many times it was opened */}

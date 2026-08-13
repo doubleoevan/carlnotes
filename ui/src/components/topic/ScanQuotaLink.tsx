@@ -2,7 +2,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 
 /**
- * How much of the scan quota is left, linking to the sign-in page for a visitor or the pricing page for a logged-in user.
+ * How much of the scan quota is left, linking to the sign-in page for a visitor or the plans page for a logged-in user.
  * Shows a skeleton until the count loads, or "Unlimited" for an admin.
  */
 export function ScanQuotaLink({

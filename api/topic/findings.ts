@@ -42,8 +42,9 @@ export async function loadTopicFindings(
 	// join each topic finding with its resource. a left join adds the user's consumed date when one exists
 	const findingRows = await db
 		.select({
-			// load the finding identity and its resource metadata
+			// load the finding identity, the scan that produced it, and its resource metadata
 			findingId: findings.id,
+			scanId: findings.scanId,
 			resourceId: resources.id,
 			url: resources.url,
 			resourceKind: resources.kind,
@@ -72,6 +73,7 @@ export async function loadTopicFindings(
 	// shape each row into a topic finding and set its isConsumed flag
 	return findingRows.map((row) => ({
 		findingId: row.findingId,
+		scanId: row.scanId,
 		resourceId: row.resourceId,
 		url: row.url,
 		resourceKind: row.resourceKind,
@@ -224,7 +226,7 @@ export function newTopicFindingCount(topicFindings: TopicFinding[]): number {
 	return topicFindings.filter((finding) => !finding.isConsumed).length
 }
 
-// the per-finding routes a signed-in reader drives: rating, consumed, bookmarked, and the view an open records
+// the per-finding routes a signed-in user drives: rating, consumed, bookmarked, and the view an open records
 export const findingsRoute = new Hono<AppEnv>()
 	.post("/topic-findings/:id/rating", zValidator("json", ratingPayload), async (context) => {
 		// reject a signed-out caller

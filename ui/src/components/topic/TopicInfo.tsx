@@ -3,10 +3,17 @@ import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, P
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { BrandIcon } from "@/components/common/BrandIcon"
-import { ShareTopic } from "@/components/topic/ShareTopic"
-import { TopicOwner } from "@/components/topic/TopicOwner"
+import { UserProfileLink } from "@/components/common/UserProfileLink"
+import { TopicShareButton } from "@/components/topic/ShareTopic"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
-import { type AllowedNoteUrls, SafeNoteText, ScrollNote, TopicScanNote } from "@/components/topic/TopicScanRecap"
+import {
+	type AllowedNoteUrls,
+	NumberedTopicFindingList,
+	SafeNoteText,
+	ScrollNote,
+	TopicScanNote,
+	toNotesMarkdown,
+} from "@/components/topic/TopicScanRecap"
 import { cn, MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS, WEB_SOURCE } from "@/lib/utils"
 
 // each source's icon, keyed by the label the line renders. the web line is keyed by WEB_SOURCE's label
@@ -30,7 +37,9 @@ const SOURCE_ICON: Record<string, SourceIcon> = {
 type SourceIcon = (props: { className?: string }) => React.ReactNode
 
 // the card variant carries the full topic response for its scan history
-type TopicInfoProps = { topic: TopicFeed; isCard?: false } | { topic: TopicResponse; isCard: true }
+type TopicInfoProps =
+	| { topic: TopicFeed; isCard?: false; onMakeTopicPublic?: undefined }
+	| { topic: TopicResponse; isCard: true; onMakeTopicPublic?: () => void }
 
 // the visibility mapped to its icon and label
 const VISIBILITY_METADATA = {
@@ -44,6 +53,15 @@ const VISIBILITY_METADATA = {
  */
 export function TopicInfo(props: TopicInfoProps) {
 	const { topic } = props
+	// the topic scan's ranked topic findings list with the content offered to copy to the clipboard as Markdown for AI
+	const topicFindings = topic.findings.length > 0 ? <NumberedTopicFindingList findings={topic.findings} /> : null
+	const notesMarkdown = toNotesMarkdown({
+		topicId: topic.id,
+		topicName: topic.name,
+		prompt: topic.prompt,
+		note: topic.scanSummary,
+		findings: topic.findings,
+	})
 	return (
 		<>
 			{/* the card gets its own header from the accordion wrapping it, so this title is popover-only.
@@ -58,16 +76,12 @@ export function TopicInfo(props: TopicInfoProps) {
 				{topic.owner && (
 					<InfoSection label="Carl's Barista">
 						<div className="flex items-center justify-between gap-3">
-							<TopicOwner owner={topic.owner} isLabelShown={false} />
-							{/* a private topic has nowhere a reader could follow the link to */}
-							{topic.visibility !== "private" && (
-								<ShareTopic
-									topicId={topic.id}
-									topicName={topic.name}
-									isPublic={topic.visibility === "public"}
-									className={MENU_BUTTON_CLASS}
-								/>
-							)}
+							<UserProfileLink user={topic.owner} />
+							<TopicShareButton
+								topic={topic}
+								className={MENU_BUTTON_CLASS}
+								onMakeTopicPublic={props.onMakeTopicPublic}
+							/>
 						</div>
 					</InfoSection>
 				)}
@@ -78,14 +92,18 @@ export function TopicInfo(props: TopicInfoProps) {
 					{topic.prompt ? <SafeNoteText note={topic.prompt} allowedUrls={toFindingUrls(topic)} /> : "—"}
 				</InfoSection>
 
-				{/* recap of the latest scan through the sanitized subset, citing only the kept findings' own urls.
-				    the card clips the note with Read more, the popover shows the note in a scroll box */}
+				{/* recap of the latest scan through the sanitized subset, citing only the kept findings' own urls,
+				    with the numbered findings below it. the card clips with Read more up to a max height that scrolls */}
 				{topic.scanSummary && (
-					<InfoSection label="Carl's Notes">
+					<InfoSection label={topic.findings.length > 0 ? `Carl's Top ${topic.findings.length}` : "Carl's Notes"}>
 						{props.isCard ? (
-							<TopicScanNote note={topic.scanSummary} allowedUrls={toFindingUrls(topic)} />
+							<TopicScanNote note={topic.scanSummary} allowedUrls={toFindingUrls(topic)} copyMarkdown={notesMarkdown}>
+								{topicFindings}
+							</TopicScanNote>
 						) : (
-							<ScrollNote note={topic.scanSummary} allowedUrls={toFindingUrls(topic)} />
+							<ScrollNote note={topic.scanSummary} allowedUrls={toFindingUrls(topic)} copyMarkdown={notesMarkdown}>
+								{topicFindings}
+							</ScrollNote>
 						)}
 					</InfoSection>
 				)}

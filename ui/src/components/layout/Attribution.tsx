@@ -6,7 +6,8 @@ import { cn } from "@/lib/utils"
  */
 export function Attribution({ className, isFooter = false }: { className?: string; isFooter?: boolean }) {
 	return (
-		<div className={cn("text-left", className)}>
+		// data-nosnippet keeps google from quoting the persona credit as if it described the site
+		<div data-nosnippet className={cn("text-left", className)}>
 			{/* the persona credit and its links */}
 			<p>
 				{"The persona for CarlNotes was inspired by "}

@@ -39,6 +39,8 @@ type Visibility = (typeof visibilities)[number]
 // the topic and its callbacks
 type EditTopicModalProps = {
 	topic?: TopicResponse
+	// opens with public already selected, staged like any other edit so nothing changes until the owner saves
+	isMakingTopicPublic?: boolean
 	onClose: () => void
 	onTopicSaved: (topicId: string) => Promise<void>
 }
@@ -46,13 +48,21 @@ type EditTopicModalProps = {
 // the emoji shown for each visibility option
 const VISIBILITY_EMOJI: Record<Visibility, string> = { private: "🔒", public: "🌐", invite: "✉️" }
 
+// the visibility the modal opens on. a share control asks for public, and everything else opens on the topic's own
+function toStartingVisibility(topic: TopicResponse | undefined, isMakingTopicPublic?: boolean): Visibility {
+	if (isMakingTopicPublic) {
+		return "public"
+	}
+	return topic?.visibility ?? "invite"
+}
+
 /**
  * The edit topic modal for editing or creating a new topic.
  */
-export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalProps) {
+export function EditTopicModal({ topic, isMakingTopicPublic, onClose, onTopicSaved }: EditTopicModalProps) {
 	// the title input ref to focus it on open
 	const titleInputRef = useRef<HTMLInputElement>(null)
-	// sends the user to pricing when a daily schedule is at the plan's limit
+	// sends the user to the plans page when a daily schedule is at the plan's limit
 	const navigate = useNavigate()
 	// every tag across the loaded feed to seed the tag picker's suggestions, and the topicFeed which has the daily slots left
 	const { knownTags, topicFeed } = useTopicFeed()
@@ -63,7 +73,8 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 	const [frequency, setFrequency] = useState<Frequency>(topic?.frequency ?? "weekly")
 	const [scheduledTime, setScheduledTime] = useState(topic?.scheduledTime ?? "09:00")
 	const [scheduledDayOfWeek, setScheduledDayOfWeek] = useState<DayOfWeek>(topic?.scheduledDayOfWeek ?? "monday")
-	const [visibility, setVisibility] = useState<Visibility>(topic?.visibility ?? "private")
+	// a new topic defaults to invite for sharing without showing up automatically in the popular section
+	const [visibility, setVisibility] = useState<Visibility>(toStartingVisibility(topic, isMakingTopicPublic))
 	const [maxResults, setMaxResults] = useState(topic?.maxResults ?? 10)
 	const [invitees, setInvitees] = useState(topic?.invitees ?? [])
 	// the kept and added source and attachment lists. a new topic starts with the default web source on
@@ -94,8 +105,8 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 
 	const [isSaving, setIsSaving] = useState(false)
 
-	// handleSave creates or updates the topic first, then stages uploads, then stages removals
-	const handleSave = async (): Promise<void> => {
+	// handleSaveTopic creates or updates the topic first, then stages uploads, then stages removals
+	const handleSaveTopic = async (): Promise<void> => {
 		setIsSaving(true)
 		try {
 			// an existing topic updates in place. a new one is created and yields its id
@@ -143,7 +154,7 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 	const showSaveError = (error: unknown): void => {
 		if (error instanceof DailyTopicLimitError) {
 			toast.error(`${error.message}\n Move a topic to weekly, or get a bigger pot.`, {
-				action: { label: "See plans", onClick: () => navigate("/pricing") },
+				action: { label: "See plans", onClick: () => navigate("/plans") },
 			})
 			return
 		}
@@ -166,7 +177,7 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 		scheduledDayOfWeek,
 		visibility,
 		maxResults,
-		invitees: visibility === "invite" ? invitees : [],
+		invitees: visibility !== "private" ? invitees : [],
 		// the urls still showing under the prompt save as Sources along with the ones added from the sources section
 		sources: [
 			...keptSources.map((source) => ({ id: source.id })),
@@ -267,8 +278,8 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 					</div>
 				</div>
 
-				{/* invitees only shown while visibility is invite */}
-				{visibility === "invite" && <InviteeEditor invitees={invitees} onChange={setInvitees} />}
+				{/* invitees shown unless the topic is private. a public topic invites too, the email is the reach */}
+				{visibility !== "private" && <InviteeEditor invitees={invitees} onChange={setInvitees} />}
 
 				{/* topic sources: kept rows, added rows, and the add source picker */}
 				<div>
@@ -304,7 +315,7 @@ export function EditTopicModal({ topic, onClose, onTopicSaved }: EditTopicModalP
 					<Button variant="ghost" onClick={onClose} disabled={isSaving}>
 						Cancel
 					</Button>
-					<Button onClick={handleSave} disabled={isSaving || !name.trim() || !prompt.trim()}>
+					<Button onClick={handleSaveTopic} disabled={isSaving || !name.trim() || !prompt.trim()}>
 						Save
 					</Button>
 				</DialogFooter>

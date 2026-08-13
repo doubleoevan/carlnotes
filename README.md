@@ -14,7 +14,7 @@ Carl stays up. You stay informed.
 
 ## Stack
 
-Bun + TypeScript · React SPA (Vite + Tailwind + shadcn) · Hono · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl · Langfuse · LLM Guard · Sentry + PostHog
+Bun + TypeScript · React SPA (Vite + Tailwind + shadcn) · TanStack Query · Hono · Better Auth · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl · Langfuse · LLM Guard · Sentry + PostHog
 
 ## Architecture
 
@@ -45,11 +45,11 @@ Four processes run in production:
 | Process | What it does |
 |---|---|
 | `app` | Serves the SPA and the api. Chat replies and uploads run in-process. |
-| `temporal-worker` | One process hosts three Temporal Workers: a Worker polls exactly one task queue, so attachments, topic scans, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
+| `temporal-worker` | One process hosts three Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
 | scheduler | `bun worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
 | `llm-guard` | The content scanner is its own service (see below). |
 
-Managed alongside: Neon Postgres (pgvector), object storage through Bun's S3 client (R2 today; the `S3_*` env values pick the target), a self-hosted Temporal server, Resend, and Stripe. Model calls go through a LiteLLM proxy in front of Fireworks: every user gets a virtual key with a monthly budget, and the [litellm config](litellm-config.yaml) maps role names to models so a model swap is a config edit.
+Every process above runs on Northflank, which deploys on a git trigger. Managed alongside: Neon Postgres (pgvector), object storage through Bun's S3 client (R2 today; the `S3_*` env values pick the target), a self-hosted Temporal server, Resend, and Stripe. Model calls go through a LiteLLM proxy in front of Fireworks: every user gets a virtual key with a monthly budget, and the [litellm config](litellm-config.yaml) maps role names to models so a model swap is a config edit.
 
 ### Scan
 
@@ -76,18 +76,20 @@ flowchart
     Search[Exa web search] -.-> Reply
 ```
 
-Chat is signed-in only. Every chat turn writes a row, because every chat turn is metered. The model spend lands on the asker's own LiteLLM key, sharing the same budget a topic scan charges. Chat text is encrypted. A chat that outgrows its context budget is [compacted](shared/contracts.ts#L143): the newest turns stay whole. Older answers are clipped to their opening characters.
+Chat is signed-in only. Every chat turn writes a row, because every chat turn is metered. The model spend lands on the asker's own LiteLLM key, sharing the same budget a topic scan charges. Chat text is encrypted. A chat that outgrows its context budget is compacted. The newest turns stay whole. Older answers are clipped to their opening characters.
 
 ### Content screening (LLM Guard)
 
-LLM Guard screens untrusted text before any model reads it, protecting the app from prompt injection. A fetched page or an uploaded document carries instructions aimed at the model. LLM Guard runs in Python, so it is its own container: the official `llm-guard-api` image, pinned to one version in `docker-compose.yml` and checked weekly for updates by [a GitHub Action](.github/workflows/llm-guard-update.yml). Locally it is reachable only from your own machine, since it accepts arbitrary text with no auth of its own. In production it is its own Northflank service. The app finds it through one value, `LLM_GUARD_URL`. Unset it and screening turns off while everything else behaves the same.
+LLM Guard screens untrusted text before any model reads it, protecting the app from prompt injection. A fetched page or an uploaded document carries instructions aimed at the model. LLM Guard runs in Python, so it is its own container: the official `llm-guard-api` image, pinned to one version in `docker-compose.yml` and checked weekly for updates by [a GitHub Action](.github/workflows/llm-guard-update.yml). Locally it is only reachable from your own machine, since it accepts arbitrary text with no auth of its own. In production it is its own Northflank service. The app finds it through one value, `LLM_GUARD_URL`. Unset it and screening turns off while everything else behaves the same.
 
 Two kinds of text are screened, each at its entry point:
 
 - **A document a user hands us** — topic and chat attachments, before context is generated. Detectors: prompt injection, secrets, invisible text, adult content, toxicity.
 - **A fetched page** — url Sources, before the page is shown or scored. The same set, minus secrets.
 
-Each screen is one HTTP call with a 2.5-second timeout, and it never blocks the pipeline: on failure the text passes through unflagged, and the prompt loader's unconditional untrusted-data fence still applies. The scanner also redacts personal details in place, so even a document can come back rewritten. Callers must use the returned text. A detector counts as a hit at a score of 0.8 or above, measured with `bun run eval --guard-only` against articles that merely *discuss* prompt injection, not taken from the vendor default. The update check boots each new release, runs that eval, and files an issue with the measured false-positive and catch rates needed to decide whether to upgrade.
+Each screen is one HTTP call with a 2.5-second timeout, and it never blocks the pipeline: on failure the text passes through unflagged. The prompt loader's unconditional untrusted-data fence still applies, and Exa always filters for moderate content.
+
+The scanner also redacts personal details in place, so even a document can come back rewritten. Callers must use the returned text. A detector flags content at a score of 0.8 or above, measured with `bun run eval --guard-only` against articles that merely *discuss* prompt injection, not taken from the vendor default. The update check boots each new release, runs that eval, and files an issue with the measured false-positive and catch rates needed to decide whether to upgrade.
 
 Domain vocabulary is load-bearing and lives in `.agents/skills/domain-model/`.
 
@@ -113,7 +115,7 @@ bun run build:ui     # production build (no doppler, so it runs in CI and deploy
 
 The homepage needs both `dev:ui` and `dev:api` running (or just `bun run dev` for the whole stack), plus a seeded dev database (below). The dev, db, and smoke scripts wrap themselves in `doppler run`, so they need a Doppler-configured machine.
 
-Database — generate a migration from the Drizzle schema, then apply it:
+Database: generate a migration from the Drizzle schema, then apply it:
 
 ```bash
 bun run db:generate   # write a migration from db/schema.ts (offline, no doppler)
@@ -130,9 +132,9 @@ Backfills (owner-run) — one-time data migrations that pair with a schema chang
 doppler run -- bun scripts/backfill-resource-content.ts   # upload existing resources.content to object storage, set content_key/content_bytes
 ```
 
-The content scanner (LLM Guard, see Architecture above) is optional too: `bun run llm-guard:up` and set `LLM_GUARD_URL`. Error monitoring and product analytics are the same: when `SENTRY_DSN` and `POSTHOG_API_KEY` are not set then monitoring and analytics are off but the app behaves the same.
+The content scanner (LLM Guard, see Architecture above) is optional too: `bun run llm-guard:up` and set `LLM_GUARD_URL`. Error monitoring and product analytics are the same: when `SENTRY_DSN` and `POSTHOG_API_KEY` are not set, the monitoring and analytics are off but the app behaves the same.
 
-Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium plans and a Stripe webhook derives the active plan. It needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the per-plan `STRIPE_PRICE_*` ids, and a metered `STRIPE_PRICE_MANUAL_SCAN_OVERAGE` (see `.env.example`). Until they're set, checkout, the Customer Portal, metered overage, and the admin console's Stripe net-revenue line stay inert — the gate, plans, and quotas all work without Stripe.
+Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium plans and a Stripe webhook derives the active plan. It needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the per-plan `STRIPE_PRICE_*` ids, and a metered `STRIPE_PRICE_MANUAL_SCAN_OVERAGE` (see `.env.example`). Until they're set, checkout, the Customer Portal, metered overage, and the admin console's Stripe net-revenue line are static. The gate, plans, and quotas all work without Stripe.
 
 Checks — run the full gate with one command (enforced on push by `scripts/preflight.sh`):
 
@@ -148,7 +150,7 @@ bunx tsc -b
 bun test
 ```
 
-Live smoke tests (owner-run) — exercise real flows against live services (LiteLLM proxy, Firecrawl, object storage), so they make paid calls and are **not** part of `bun run check`. Need the LiteLLM proxy up (`docker compose up -d litellm`) and the latest migration applied; the attachment smoke also needs a Temporal server (`docker compose up -d temporal`) and the running worker (`bun run dev:temporal`):
+Live smoke tests (owner-run) — exercise real flows against live services (LiteLLM proxy, Firecrawl, object storage), so they make paid calls and are **not** part of `bun run check`. Need the LiteLLM proxy up (`docker compose up -d litellm`) and the latest migration applied; the attachment smoke test also needs a Temporal server (`docker compose up -d temporal`) and the running worker (`bun run dev:temporal`):
 
 ```bash
 bun run smoke              # run all smoke tests
@@ -157,19 +159,19 @@ bun run smoke:store        # just the resource-content object-storage round-trip
 bun run smoke:attach       # just the URL-attachment smoke test (Firecrawl → store → Temporal workflow → ready)
 bun run smoke:search       # just the web search smoke test (context → LLM queries → Exa → Resources)
 bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its ceiling
-bun run smoke:subscribers  # just the subscriber-count smoke: both subscription paths against real rows, rolled back after
-bun run smoke:profile      # just the profile smoke: the header's distinct people against the footer's summed rows
+bun run smoke:subscribers  # just the subscriber-count smoke test: both subscription paths against real rows, rolled back after
+bun run smoke:profile      # just the profile smoke test: the header's distinct people against the footer's summed rows
 bun run smoke:chat         # just the topic chat retrieval smoke test (question → ranked findings → assembled context)
-bun run smoke:eval         # just the eval-harness smoke: one tiny labeled fixture through the real gate and scoring
+bun run smoke:eval         # just the eval-harness smoke test: one tiny labeled fixture through the real gate and scoring
 ```
 
-The review smoke reads `REVIEW_CONCURRENCY` and `MAX_SCORED_RESOURCES_PER_SCAN`, so it doubles as an A/B for the concurrency limit. Each run resets its feed's Resources cold first, so two runs differ only by their settings:
+The review smoke test reads `REVIEW_CONCURRENCY` and `MAX_SCORED_RESOURCES_PER_SCAN`, so it doubles as an A/B for the concurrency limit. Each run resets its feed's Resources cold first, so two runs differ only by their settings:
 
 ```bash
 REVIEW_CONCURRENCY=1 MAX_SCORED_RESOURCES_PER_SCAN=8 bun run smoke:review
 ```
 
-Evals (owner-run) — measures the review pipeline against a labeled corpus. It runs the real embed-filter and tiered scoring, so it spends money and is **not** part of `bun run check`. Fixtures and the labeling workflow live in [evals/README.md](evals/README.md):
+Evals (owner-run) measure the review pipeline against a labeled corpus. They run the real embed-filter and tiered scoring, so they spend money and are **not** part of `bun run check`. Fixtures and the labeling workflow live in [evals/README.md](evals/README.md):
 
 ```bash
 bun run eval                      # measure every fixture: precision, recall, cost per topic, and scanner false positives
@@ -177,9 +179,9 @@ bun run eval --export <topicId>   # write an unlabeled fixture from a real Topic
 bun run eval --guard-only         # only LLM Guard's false-positive and attack-catch rates; no model spend
 ```
 
-A weekly GitHub Action (`.github/workflows/llm-guard-update.yml`) watches Docker Hub for new LLM Guard releases, boots the candidate on the runner, runs the guard-only eval against it, and files an issue carrying both measured rates — so a scanner upgrade arrives as a pre-measured decision, never an unchecked version bump. Read the two rates together: a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate.
+A weekly GitHub Action (`.github/workflows/llm-guard-update.yml`) watches Docker Hub for new LLM Guard releases, boots the candidate on the runner, runs the guard-only eval against it, and files an issue carrying both measured rates, so a scanner upgrade arrives as a pre-measured decision, never an unchecked version bump. Read the two rates together: a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate.
 
-Prompt registry (owner-run) — git is canonical for prompt wording (`worker/prompts/*.md`); this pushes it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set.
+Prompt registry (owner-run): git is canonical for prompt wording (`worker/prompts/*.md`); this pushes it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set.
 
 Each Doppler config points at its own Langfuse project, so the environment is chosen at the `doppler run` call and there is one script per target. The script names the environment it wrote to in its summary line, since a run against dev otherwise reads exactly like a run against production:
 
@@ -191,26 +193,30 @@ bun run prompts:sync
 bun run prompts:sync:prd
 ```
 
-Container image — the app service is the Hono API plus the built UI bundle it serves. It builds from the repo-root `Dockerfile` and starts under `doppler run`. The LiteLLM proxy is a separate service with its own image in `infra/litellm/`:
+Container image: The app service is the Hono API plus the built UI bundle it serves. It builds from the repo-root `Dockerfile` and starts under `doppler run`. The LiteLLM proxy is a separate service with its own image in `infra/litellm/`:
 
 ```bash
 docker build --platform=linux/amd64 --build-arg VITE_TURNSTILE_SITE_KEY=<site-key> -t carlnotes-app .
 ```
 
-`VITE_TURNSTILE_SITE_KEY` is the one setting that cannot wait for `doppler run`: Vite inlines it into the bundle at build time, so it has to be present during the build. It is a public key that ships to every visitor, so it comes in as a build argument rather than through a build-stage Doppler token, which would hand the build read access to every real secret to inject a public one. 
+`VITE_TURNSTILE_SITE_KEY` is the one setting that cannot wait for `doppler run`: Vite inlines it into the bundle at build time, so it has to be present during the build. It is a public key that ships to every visitor.
 
 `--platform=linux/amd64` matters on Apple Silicon. The Doppler CLI is copied from `dopplerhq/cli:3`, which publishes amd64 only.
 
-Migrations are a deploy job, not a start-up step. A push to `main` runs the `release-main` workflow, which builds the image once, runs this job against it, and only then deploys `app` and `temporal-worker` — so new code never meets an old schema:
+Migrations are a deploy job, not a start-up step. A push to `main` runs the `release-main` workflow, which builds the image once, runs this job against it, and only then deploys `app` and `temporal-worker`. So new code never meets an old schema:
 
 ```bash
 doppler run -- bun db/migrate.ts
+# or
+bun run db:migrate
 ```
 
 Prompts are a deploy job too, uploaded as candidates rather than promoted. Without this the registry keeps serving the wording it already had while the repo moves on, and a scan reads stale prompts:
 
 ```bash
 doppler run -- bun worker/prompts/sync.ts --candidate
+# or
+bun run prompts:sync --candidate
 ```
 
 Promote a candidate to production in Langfuse once a real scan's note reads right. The runtime falls back to the bundled template whenever a registry template asks for variables the code does not fill, so a stale label can never break a prompt. A prompt whose live wording differs from the bundled one is logged once per process.
@@ -219,10 +225,14 @@ The temporal worker and the scan sweep are their own services, built from this s
 
 ```bash
 doppler run -- bun worker/temporal.ts
+# or
+bun run dev:temporal
 ```
 
 ```bash
 doppler run -- bun worker/schedule.ts
+# or
+bun run schedule
 ```
 
 Without the `temporal` worker, `workflow.start` still succeeds against a queue nobody polls: scans queue silently and the api looks healthy. The scan sweep reports when no worker is polling the scan queue, which is the check to alert on.

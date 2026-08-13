@@ -1,6 +1,7 @@
 import type { TopicFeedResponse } from "@shared/contracts"
 import { resourceKinds as allResourceKinds } from "@shared/enums"
-import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { useLocation } from "react-router-dom"
 import { authClient } from "@/lib/authClient"
 import {
@@ -21,10 +22,10 @@ export type TagMatchMode = (typeof tagMatchModes)[number]
 
 // the actions a topic feed resource can trigger. bundled so that components can share these handlers
 export type TopicFeedHandlers = {
-	open: (findingId: string) => void
-	consume: (findingId: string, isConsumed: boolean) => void
-	rate: (findingId: string, rating: "up" | "down" | null) => void
-	bookmark: (findingId: string, isBookmarked: boolean) => void
+	openTopicFinding: (findingId: string) => void
+	consumeTopicFinding: (findingId: string, isConsumed: boolean) => void
+	rateTopicFinding: (findingId: string, rating: "up" | "down" | null) => void
+	bookmarkTopicFinding: (findingId: string, isBookmarked: boolean) => void
 }
 
 // shape of the topic feed context derived from the hook's return type
@@ -58,7 +59,6 @@ export function useIsSignedIn(): boolean {
 
 // the topic feed state the provider owns: data, the view and sort toggles, the resource kind filters, the tag filters, and the topic finding handlers
 function useTopicFeedState() {
-	const [topicFeed, setTopicFeed] = useState<TopicFeedResponse | null>(null)
 	// like Gmail, shows everything by default with consumed rows muted. Unread narrows to unconsumed, Bookmarked to bookmarks
 	const [view, setView] = useState<FeedView>("all")
 	// how findings order within the pinned and unbookmarked groups. read-side only, never persisted
@@ -71,26 +71,27 @@ function useTopicFeedState() {
 	const [tagFilters, setTagFilters] = useState<string[]>([])
 	const [tagMatchMode, setTagMatchMode] = useState<TagMatchMode>("any")
 
-	// two reloads can be in flight at once, so each takes a number and only the newest may write.
-	// without it, a slow overlapping request lands last and renders a stale feed
-	const latestReloadRef = useRef(0)
-
-	// always fetch everything. the view, sort, and resource kind filters are applied client-side.
-	const reload = useCallback(async () => {
-		const reloadNumber = latestReloadRef.current + 1
-		latestReloadRef.current = reloadNumber
-		try {
-			const loadedTopicFeed = await fetchTopicFeed(true)
-			if (latestReloadRef.current !== reloadNumber) {
-				return false
+	// tanstack caches the topic feed keyed by the signed-in user, so each identity holds its own feed,
+	// and a sign-in or sign-out never renders the last one's.
+	// the fetch asks for every finding, read or not, since the view, sort, resource kind, and tag filters run client-side
+	const queryClient = useQueryClient()
+	const { data: topicFeed = null, refetch } = useQuery({
+		queryKey: ["topic-feed", session?.user.id ?? null],
+		// log a failed load, then rethrow so the query records the error
+		queryFn: async () => {
+			try {
+				return await fetchTopicFeed(true)
+			} catch (error) {
+				console.error("feed load failed", error)
+				throw error
 			}
-			setTopicFeed(loadedTopicFeed)
-			return true
-		} catch (error) {
-			console.error("feed load failed", error)
-			return false
-		}
-	}, [])
+		},
+	})
+
+	// re-fetch the feed, reporting whether fresh data landed
+	const reload = useCallback(async () => {
+		return (await refetch()).isSuccess
+	}, [refetch])
 
 	// a reheat is a manual reload. the key bump remounts the feed sections so the hydrate animation replays
 	const [reheatKey, setReheatKey] = useState(0)
@@ -98,8 +99,8 @@ function useTopicFeedState() {
 	const reheat = useCallback(async () => {
 		setIsReheating(true)
 		try {
-			// the key bump replays the entrance over new content, so a reload that failed or lost to a newer one
-			// leaves it alone instead of animating the same feed back in as if something had arrived
+			// the key bump replays the entrance animation over new content, so a reload that failed leaves it alone
+			// instead of animating the feed again
 			if (await reload()) {
 				setReheatKey((previousKey) => previousKey + 1)
 			}
@@ -107,12 +108,6 @@ function useTopicFeedState() {
 			setIsReheating(false)
 		}
 	}, [reload])
-
-	// load the topic feed on mount, and again whenever sign-in state flips
-	// biome-ignore lint/correctness/useExhaustiveDependencies: isSignedIn isn't read in the body, it's a deliberate re-fetch trigger
-	useEffect(() => {
-		void reload()
-	}, [reload, isSignedIn])
 
 	// clear filters on route navigation
 	const { pathname } = useLocation()
@@ -125,56 +120,56 @@ function useTopicFeedState() {
 		setTagMatchMode("any")
 	}, [pathname])
 
+	// re-fetch the topic feed after a new finding is written, in place of each handler awaiting its own reload
+	const invalidateTopicFeed = useCallback(() => {
+		void queryClient.invalidateQueries({ queryKey: ["topic-feed"] })
+	}, [queryClient])
+
 	// mark a topic finding consumed or unread with the isConsumed flag
-	const consume = useCallback(
-		async (findingId: string, isConsumed: boolean) => {
-			try {
-				await sendTopicFindingConsumed(findingId, isConsumed)
-				await reload()
-			} catch (error) {
-				console.error("consume failed", error)
-			}
-		},
-		[reload],
+	const consumeTopicFindingMutation = useMutation({
+		mutationFn: (input: { findingId: string; isConsumed: boolean }) =>
+			sendTopicFindingConsumed(input.findingId, input.isConsumed),
+		onSuccess: invalidateTopicFeed,
+		onError: (error) => console.error("consume failed", error),
+	})
+	const consumeTopicFinding = useCallback<TopicFeedHandlers["consumeTopicFinding"]>(
+		(findingId, isConsumed) => consumeTopicFindingMutation.mutate({ findingId, isConsumed }),
+		[consumeTopicFindingMutation.mutate],
 	)
 
 	// opening a topic finding resource records a view event and also marks the topic finding consumed
-	const open = useCallback(
-		async (findingId: string) => {
-			try {
-				await sendTopicFindingOpened(findingId)
-				await reload()
-			} catch (error) {
-				console.error("view failed", error)
-			}
-		},
-		[reload],
+	const openTopicFindingMutation = useMutation({
+		mutationFn: (findingId: string) => sendTopicFindingOpened(findingId),
+		onSuccess: invalidateTopicFeed,
+		onError: (error) => console.error("view failed", error),
+	})
+	const openTopicFinding = useCallback<TopicFeedHandlers["openTopicFinding"]>(
+		(findingId) => openTopicFindingMutation.mutate(findingId),
+		[openTopicFindingMutation.mutate],
 	)
 
-	// set or clear a thumbs up or down rating
-	const rate = useCallback(
-		async (findingId: string, rating: "up" | "down" | null) => {
-			try {
-				await sendTopicFindingRating(findingId, rating)
-				await reload()
-			} catch (error) {
-				console.error("rate failed", error)
-			}
-		},
-		[reload],
+	// set or clear a thumbs up or down topic finding rating
+	const rateTopicFindingMutation = useMutation({
+		mutationFn: (input: { findingId: string; rating: "up" | "down" | null }) =>
+			sendTopicFindingRating(input.findingId, input.rating),
+		onSuccess: invalidateTopicFeed,
+		onError: (error) => console.error("rate failed", error),
+	})
+	const rateTopicFinding = useCallback<TopicFeedHandlers["rateTopicFinding"]>(
+		(findingId, rating) => rateTopicFindingMutation.mutate({ findingId, rating }),
+		[rateTopicFindingMutation.mutate],
 	)
 
 	// bookmark or unbookmark a topic finding, keeping it past the max-results filter
-	const bookmark = useCallback(
-		async (findingId: string, isBookmarked: boolean) => {
-			try {
-				await sendTopicFindingBookmark(findingId, isBookmarked)
-				await reload()
-			} catch (error) {
-				console.error("bookmark failed", error)
-			}
-		},
-		[reload],
+	const bookmarkTopicFindingMutation = useMutation({
+		mutationFn: (input: { findingId: string; isBookmarked: boolean }) =>
+			sendTopicFindingBookmark(input.findingId, input.isBookmarked),
+		onSuccess: invalidateTopicFeed,
+		onError: (error) => console.error("bookmark failed", error),
+	})
+	const bookmarkTopicFinding = useCallback<TopicFeedHandlers["bookmarkTopicFinding"]>(
+		(findingId, isBookmarked) => bookmarkTopicFindingMutation.mutate({ findingId, isBookmarked }),
+		[bookmarkTopicFindingMutation.mutate],
 	)
 
 	// toggle a resource kind in or out of the filtered set. reset to all resource kinds if empty
@@ -199,8 +194,8 @@ function useTopicFeedState() {
 
 	// bundle the handlers, then apply the filters and sort for the topic feed
 	const handlers: TopicFeedHandlers = useMemo(
-		() => ({ open, consume, rate, bookmark }),
-		[open, consume, rate, bookmark],
+		() => ({ openTopicFinding, consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding }),
+		[openTopicFinding, consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding],
 	)
 	const filteredTopicFeed = useMemo(
 		() => filterTopicFeed(topicFeed, resourceKinds, view, sort, tagFilters, tagMatchMode),

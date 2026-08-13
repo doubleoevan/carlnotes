@@ -1,12 +1,15 @@
-import type { TopicResponse } from "@shared/contracts"
+import { type TopicResponse, toCtaTag } from "@shared/contracts"
 import type * as React from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
+import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { ChatPanel } from "@/components/chat/ChatPanel"
+import { AnchorLink } from "@/components/common/AnchorLink"
+import { Button, buttonVariants } from "@/components/primitives/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { ShareTopic } from "@/components/topic/ShareTopic"
+import { TopicShareButton } from "@/components/topic/ShareTopic"
 import { TopicFeedSort } from "@/components/topic/TopicFeedSort"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
@@ -21,6 +24,7 @@ import { useManualScanProgress, usePollWhileScanning } from "@/hooks/useTopicSca
 import { authClient } from "@/lib/authClient"
 import {
 	fetchTopicPage,
+	type GatedVisibility,
 	sendManualScan,
 	sendTopicFeatureOrder,
 	sendTopicFindingBookmark,
@@ -44,15 +48,22 @@ export function TopicPage() {
 	const { reload: reloadHomePage, view, sort, setSort, resourceKinds } = useTopicFeed()
 	// the topic page payload. undefined while loading, null when missing or not visible
 	const [topicResponse, setTopicResponse] = useState<TopicResponse | null | undefined>(undefined)
+	// how the topic is gated if this user may not see it, an invite topic's gate shows its name, a private topic shows nothing.
+	const [gatedTopic, setGatedTopic] = useState<{ visibility: GatedVisibility; topicName: string | null } | null>(null)
 	// which dialog is open, and whether a manual scan request is in-flight
-	const [isEditOpen, setIsEditOpen] = useState(false)
+	// how the edit modal opened, or null while it is closed. "make-public" stages the topic's visibility switch to "public" for review
+	const [editMode, setEditMode] = useState<"edit" | "make-public" | null>(null)
 	const [isDeleteOpen, setIsDeleteOpen] = useState(false)
 	const { isScanning, isRunningScan, startScan, stopScan } = useManualScanProgress(topicResponse?.scans)
 
 	// reload the page payload when the topic id changes
 	const reloadTopicPage = useCallback(async () => {
 		try {
-			setTopicResponse(await fetchTopicPage(id))
+			const topicPage = await fetchTopicPage(id)
+			setTopicResponse(topicPage.status === "visible" ? topicPage.topic : null)
+			setGatedTopic(
+				topicPage.status === "gated" ? { visibility: topicPage.visibility, topicName: topicPage.topicName } : null,
+			)
 		} catch (error) {
 			console.error("topic page load failed", error)
 			setTopicResponse(null)
@@ -62,6 +73,7 @@ export function TopicPage() {
 	// findings on screen. only the id changes this, so a reload after a handler updates in place instead
 	useEffect(() => {
 		setTopicResponse(undefined)
+		setGatedTopic(null)
 		void reloadTopicPage()
 	}, [reloadTopicPage])
 
@@ -79,10 +91,12 @@ export function TopicPage() {
 	)
 	const handlers: TopicFeedHandlers = useMemo(
 		() => ({
-			open: (findingId) => runThenReload(() => sendTopicFindingOpened(findingId)),
-			consume: (findingId, isConsumed) => runThenReload(() => sendTopicFindingConsumed(findingId, isConsumed)),
-			rate: (findingId, rating) => runThenReload(() => sendTopicFindingRating(findingId, rating)),
-			bookmark: (findingId, isBookmarked) => runThenReload(() => sendTopicFindingBookmark(findingId, isBookmarked)),
+			openTopicFinding: (findingId) => runThenReload(() => sendTopicFindingOpened(findingId)),
+			consumeTopicFinding: (findingId, isConsumed) =>
+				runThenReload(() => sendTopicFindingConsumed(findingId, isConsumed)),
+			rateTopicFinding: (findingId, rating) => runThenReload(() => sendTopicFindingRating(findingId, rating)),
+			bookmarkTopicFinding: (findingId, isBookmarked) =>
+				runThenReload(() => sendTopicFindingBookmark(findingId, isBookmarked)),
 		}),
 		[runThenReload],
 	)
@@ -130,7 +144,7 @@ export function TopicPage() {
 
 	// a saved edit reloads this page and the homepage feed behind it
 	const handleTopicSaved = async (): Promise<void> => {
-		setIsEditOpen(false)
+		setEditMode(null)
 		await reloadTopicPage()
 		await reloadHomePage()
 	}
@@ -151,6 +165,7 @@ export function TopicPage() {
 
 	// the manual scan block belongs to an owner with a quota, known only once the payload lands
 	const isManualScanShown = topicResponse?.manualScansRemaining != null
+
 	// the bottom padding clears the docked chat panel, so the last card can scroll out from under it
 	return (
 		<main className="mx-auto max-w-5xl px-safe pt-3 pb-28">
@@ -173,16 +188,15 @@ export function TopicPage() {
 					{topicResponse && (
 						<SubscribeButton topic={topicResponse} isSignedIn={Boolean(session)} onToggle={handleSubscriptionToggle} />
 					)}
-					{/* sharing sits beside following, since both are things a user does with someone else's topic.
-					    a private topic has nowhere a reader could follow the link to */}
-					{topicResponse && topicResponse.visibility !== "private" && (
-						<ShareTopic
-							topicId={topicResponse.id}
-							topicName={topicResponse.name}
-							isPublic={topicResponse.visibility === "public"}
+					{/* the share topic button */}
+					{topicResponse && (
+						<TopicShareButton
+							topic={topicResponse}
 							className={MENU_BUTTON_CLASS}
+							onMakeTopicPublic={() => setEditMode("make-public")}
 						/>
 					)}
+					{/* the scan topic Brew button */}
 					{isManualScanShown && (
 						<TopicScanButton
 							remainingScans={topicResponse?.manualScansRemaining ?? null}
@@ -194,10 +208,14 @@ export function TopicPage() {
 				</div>
 			</div>
 
-			{/* the loading skeleton, the not-found line, or the hydrating topic sections */}
-			{topicResponse === undefined && <TopicSkeleton />}
-			{topicResponse === null && (
-				<p className="text-muted-foreground mt-6 text-sm">{"Carl couldn't find this topic. He checked twice."}</p>
+			{/* the loading skeleton, the not-found or not visible line, or the hydrating topic sections */}
+			{!topicResponse && (
+				<TopicPagePlaceholder
+					isLoading={topicResponse === undefined}
+					gatedTopic={gatedTopic}
+					isSignedIn={Boolean(session)}
+					topicId={id}
+				/>
 			)}
 			{topicResponse && (
 				<>
@@ -205,7 +223,7 @@ export function TopicPage() {
 					<HydrateSection index={0}>
 						<TopicHeader
 							topic={topicResponse}
-							onEdit={() => setIsEditOpen(true)}
+							onEdit={() => setEditMode("edit")}
 							onDelete={() => setIsDeleteOpen(true)}
 						/>
 					</HydrateSection>
@@ -217,6 +235,7 @@ export function TopicPage() {
 							hasAnyFindings={topicResponse.findings.length > 0}
 							isRatable={topicResponse.canRate}
 							handlers={handlers}
+							topic={{ id: topicResponse.id, name: topicResponse.name, prompt: topicResponse.prompt }}
 						/>
 					</HydrateSection>
 
@@ -229,18 +248,21 @@ export function TopicPage() {
 								<TopicScanHistory
 									scans={topicResponse.scans}
 									allowedUrls={new Set(topicResponse.findings.map((finding) => finding.url))}
+									findings={topicResponse.findings}
+									topic={{ id: topicResponse.id, name: topicResponse.name, prompt: topicResponse.prompt }}
 								/>
 								<TopicSettingsCard topic={topicResponse} />
 							</div>
-							<TopicInfoCard topic={topicResponse} />
+							<TopicInfoCard topic={topicResponse} onMakeTopicPublic={() => setEditMode("make-public")} />
 						</div>
 					</HydrateSection>
 
 					{/* the owner dialogs, mounted only while open so their state resets each time */}
-					{isEditOpen && (
+					{editMode && (
 						<EditTopicModal
 							topic={topicResponse}
-							onClose={() => setIsEditOpen(false)}
+							isMakingTopicPublic={editMode === "make-public"}
+							onClose={() => setEditMode(null)}
 							onTopicSaved={handleTopicSaved}
 						/>
 					)}
@@ -260,6 +282,119 @@ export function TopicPage() {
 				</>
 			)}
 		</main>
+	)
+}
+
+// what stands in for the topic: the skeleton while it loads,
+// the skeleton behind the notice when this user may not see it,
+// and a plain line when there is no such topic at all
+function TopicPagePlaceholder({
+	isLoading,
+	gatedTopic,
+	isSignedIn,
+	topicId,
+}: {
+	isLoading: boolean
+	gatedTopic: { visibility: GatedVisibility; topicName: string | null } | null
+	isSignedIn: boolean
+	topicId: string
+}) {
+	if (isLoading) {
+		return <TopicSkeleton />
+	}
+	if (!gatedTopic) {
+		return <p className="text-muted-foreground mt-6 text-sm">{"Carl couldn't find this topic. He checked twice."}</p>
+	}
+	// the page's skeleton behind the notice. the title is shown for an invite topic the user does not have access to
+	return (
+		<>
+			<TopicSkeleton topicTitle={gatedTopic.topicName ?? undefined} />
+			<TopicGateNotice visibility={gatedTopic.visibility} isSignedIn={isSignedIn} topicId={topicId} />
+		</>
+	)
+}
+
+/**
+ * What a user sees when they open a topic they don't have access to: the page's skeleton behind a notice.
+ */
+function TopicGateNotice({
+	visibility,
+	isSignedIn,
+	topicId,
+}: {
+	visibility: GatedVisibility
+	isSignedIn: boolean
+	topicId: string
+}) {
+	const navigate = useNavigate()
+	// the visibility notice for a topic that a user does not have access to
+	const title = visibility === "invite" ? "This topic is invite-only" : "This topic is private"
+
+	// offer the signup to a visitor who is logged-out
+	const returnPath = `?next=${encodeURIComponent(`/topics/${topicId}`)}`
+	// which arrival a signup gets attributed to for analytics
+	const [searchParams] = useSearchParams()
+	const ctaTag = toCtaTag(searchParams.get("src")) ?? "gate"
+	return (
+		<Dialog open onOpenChange={() => navigate("/")}>
+			{/* no ✕: the gate's own actions are the ways out, logging in, signing up, or going back */}
+			<DialogContent className="sm:max-w-md" hideCloseButton>
+				<DialogTitle>{title}</DialogTitle>
+				<DialogDescription>
+					{isSignedIn ? <GatedAskOwner visibility={visibility} /> : <GatedSignedOutLead visibility={visibility} />}
+				</DialogDescription>
+				<DialogFooter>
+					{isSignedIn ? (
+						// the only action a signed-in user has here is leaving
+						<Button onClick={() => navigate("/")}>Back to CarlNotes</Button>
+					) : (
+						<GatedSignedOutActions visibility={visibility} returnPath={returnPath} ctaTag={ctaTag} />
+					)}
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	)
+}
+
+// what a signed-in user is told for a topic they don't have access to
+function GatedAskOwner({ visibility }: { visibility: GatedVisibility }) {
+	return visibility === "invite"
+		? "Ask the topic owner for an invite to see it."
+		: "Ask the topic owner to invite you to see it."
+}
+
+// what a signed-out user is told for a topic they don't have access to
+function GatedSignedOutLead({ visibility }: { visibility: GatedVisibility }) {
+	return visibility === "invite" ? "Sign up to see it." : "Log in to see it, if it's yours."
+}
+
+// the signed-out visitors call-to-action links returning back to this topic.
+function GatedSignedOutActions({
+	visibility,
+	returnPath,
+	ctaTag,
+}: {
+	visibility: GatedVisibility
+	returnPath: string
+	ctaTag: string
+}) {
+	if (visibility === "private") {
+		return (
+			<AnchorLink href={`/login${returnPath}`} className={buttonVariants({ variant: "default" })}>
+				Log in
+			</AnchorLink>
+		)
+	}
+	return (
+		<>
+			<AnchorLink href={`/login${returnPath}`} className={buttonVariants({ variant: "outline" })}>
+				Log in
+			</AnchorLink>
+			{/* cta names the arrival for the signup_completed event, the way the header and plans buttons do */}
+			<AnchorLink href={`/signup${returnPath}&cta=${ctaTag}`} className={buttonVariants({ variant: "default" })}>
+				Sign up
+			</AnchorLink>
+		</>
 	)
 }
 

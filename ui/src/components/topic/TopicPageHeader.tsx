@@ -2,10 +2,10 @@ import type { TopicResponse } from "@shared/contracts"
 import { PawPrint, Pencil, Trash2 } from "lucide-react"
 import type * as React from "react"
 import { useState } from "react"
+import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { NewCountInfo, TopicInfoPopover } from "@/components/topic/Topic"
-import { TopicOwner } from "@/components/topic/TopicOwner"
 import { cn, MENU_BUTTON_CLASS, RAIL_ICON_INSET, RAIL_TEXT_INSET, toSubscribeTooltip } from "@/lib/utils"
 
 /**
@@ -52,7 +52,7 @@ export function TopicHeader({
 				</div>
 			</div>
 			{/* the topic owner's avatar, username and profile link */}
-			{topic.owner && <TopicOwner owner={topic.owner} className="mt-2 text-sm" />}
+			{topic.owner && <UserProfileLink user={topic.owner} label="Brewed by" className="mt-2 text-sm" />}
 			{/* tags row, left out entirely by an untagged topic so it includes no empty gap */}
 			{topic.tags.length > 0 && (
 				<div className="mt-2 flex flex-wrap gap-1">

@@ -300,6 +300,8 @@ function AnswerFooter({ answer, at, now }: { answer: string; at?: number; now: n
 // it copies the raw Markdown, so a paste keeps the formatting the user saw
 function CopyButton({ text }: { text: string }) {
 	const [isCopied, setIsCopied] = useState(false)
+	// controlled so the copied confirmation survives the click, since a tooltip closes when its trigger is clicked
+	const [isTooltipOpen, setIsTooltipOpen] = useState(false)
 
 	// write the clipboard and flash the check
 	async function handleCopy(): Promise<void> {
@@ -313,7 +315,7 @@ function CopyButton({ text }: { text: string }) {
 	}
 
 	return (
-		<Tooltip>
+		<Tooltip open={isCopied || isTooltipOpen} onOpenChange={setIsTooltipOpen}>
 			<TooltipTrigger asChild>
 				<button
 					type="button"
@@ -342,9 +344,9 @@ function ChatRejectionNotice({ rejection }: { rejection: ChatRejection }) {
 		return <p className="text-muted-foreground text-sm">{"Carl lost his train of thought. Try again?"}</p>
 	}
 
-	// an exhausted budget points at the pricing page, and anything else forbidden simply says no
+	// an exhausted budget shows a call-to-action to upgrade at the plans page. anything forbidden simply says no
 	if (rejection === "budget") {
 		return <ChatBudgetNotice />
 	}
-	return <p className="text-muted-foreground text-sm">{"Carl can't talk about this topic."}</p>
+	return <p className="text-muted-foreground text-sm">{"Carl can't talk about that."}</p>
 }

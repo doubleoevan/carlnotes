@@ -31,9 +31,12 @@ const subscriptionSortValues = {
 export function SubscriptionsTable({
 	subscriptions,
 	onReloadPage,
+	isReadOnly = false,
 }: {
 	subscriptions: SubscriptionRow[]
 	onReloadPage: () => void
+	// an admin reading another user's page sees disabled controls and no delete button
+	isReadOnly?: boolean
 }) {
 	// defaults to the newest subscribed first, since the server's own row order isn't stable across reloads
 	const { pageRows, sort, pagination } = usePaginatedRowSort(subscriptions, subscriptionSortValues, {
@@ -108,6 +111,7 @@ export function SubscriptionsTable({
 							<SubscriptionOwnerCell subscription={row} />
 							<SubscriptionCells
 								subscription={row}
+								isPageReadOnly={isReadOnly}
 								onActiveChange={handleActiveChange}
 								onEmailChange={handleEmailChange}
 								onDeleteRequest={() => setSubscriptionToDelete({ topicId: row.topicId, name: row.name })}
@@ -120,8 +124,8 @@ export function SubscriptionsTable({
 						<td className="py-2 pr-4">Total</td>
 						<td className="py-2 pr-4" />
 						<td className="py-2 pr-4" />
-						<td className="py-2 pr-4">{activeSubscriptionCount}</td>
-						<td className="py-2 pr-4">{emailSubscriptionCount}</td>
+						<td className="py-2 pr-4">{`${activeSubscriptionCount}/${subscriptions.length} active`}</td>
+						<td className="py-2 pr-4">{`${emailSubscriptionCount}/${subscriptions.length} on`}</td>
 						<td className="py-2" />
 					</tr>
 				</tfoot>
@@ -164,16 +168,19 @@ function SubscriptionOwnerCell({ subscription }: { subscription: SubscriptionRow
 // the audience, so its switches are disabled and it offers no delete: every subscription write targets the caller's own row
 function SubscriptionCells({
 	subscription,
+	isPageReadOnly,
 	onActiveChange,
 	onEmailChange,
 	onDeleteRequest,
 }: {
 	subscription: SubscriptionRow
+	// the whole page is read-only for an admin reading somebody else, on top of the per-row audience case
+	isPageReadOnly: boolean
 	onActiveChange: (row: SubscriptionRow, isActive: boolean) => void
 	onEmailChange: (topicId: string, isEmailEnabled: boolean) => void
 	onDeleteRequest: () => void
 }) {
-	const isReadOnly = subscription.audienceName !== null
+	const isReadOnly = isPageReadOnly || subscription.audienceName !== null
 	return (
 		<>
 			<td className="py-2 pr-4">{toMonthYearLabel(subscription.subscribedAt)}</td>

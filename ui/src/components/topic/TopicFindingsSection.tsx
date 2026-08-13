@@ -15,6 +15,8 @@ type TopicFindingsSectionProps = {
 	hasAnyFindings: boolean
 	isRatable: boolean
 	handlers: TopicFeedHandlers
+	// names the topic in each note popover's copied Markdown
+	topic: { id: string; name: string; prompt: string }
 }
 
 // the collapsible topic findings list, capped at five rows with the homepage expander
@@ -23,6 +25,7 @@ export function TopicFindingsSection({
 	hasAnyFindings,
 	isRatable,
 	handlers,
+	topic,
 }: TopicFindingsSectionProps) {
 	const [isExpanded, setIsExpanded] = useState(false)
 	// cap the rows unless expanded
@@ -41,6 +44,7 @@ export function TopicFindingsSection({
 						rank={finding.isBookmarked ? null : index - pinnedShownCount + 1}
 						isRatable={isRatable}
 						resourceHandlers={handlers}
+						topic={topic}
 					/>
 				))}
 				{topicFindingsShown.length === 0 && (

@@ -10,6 +10,7 @@ import { createAuthMiddleware } from "better-auth/api"
 import { and, eq, like } from "drizzle-orm"
 import { db } from "../db"
 import * as schema from "../db/schema"
+import { renderAuthEmail, renderAuthEmailText } from "../emails/auth-email"
 import { sendEmail } from "../worker/email"
 import { effectiveBudgetCents } from "./authorization"
 import { provisionLiteLLMKey } from "./litellm"
@@ -153,6 +154,14 @@ export const auth = betterAuth({
 	// the litellm virtual key stays server-only. role and plan are included in the session
 	// so the ui can render the admin link and the account page
 	user: {
+		// changing an address takes two links: the link to the current address authorizes the move,
+		// the other link proves the email is valid.
+		changeEmail: {
+			enabled: true,
+			sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
+				await sendChangeEmailConfirmationEmail(user.email, newEmail, url)
+			},
+		},
 		additionalFields: {
 			litellmVirtualKey: { type: "string", required: false, input: false, returned: false },
 			role: { type: "string", required: false, input: false, returned: true },
@@ -252,23 +261,59 @@ async function clearResetPasswordTokens(userId: string): Promise<void> {
 		.where(and(like(schema.verifications.identifier, "reset-password:%"), eq(schema.verifications.value, userId)))
 }
 
-// sends the reset-password link. one sentence and a url.
+// sends the reset-password link
 async function sendResetPasswordEmail(email: string, url: string): Promise<void> {
+	const emailProps = {
+		heading: "Reset your password",
+		lead: "Carl can let you back in. Pick a new password with the link below.",
+		buttonLabel: "Reset your password",
+		url,
+		linkNote: "The link works once and expires in an hour.",
+		appUrl: Bun.env.BETTER_AUTH_URL,
+	}
 	await sendEmail({
 		to: email,
 		subject: "Reset your password",
-		emailContent: `Reset your password: <a href="${url}">${url}</a>. The link works once and expires in an hour. Ignore this email if you didn't ask for it.`,
+		emailContent: await renderAuthEmail(emailProps),
+		plainTextContent: await renderAuthEmailText(emailProps),
 		emailKind: "password-reset",
 	})
 }
 
-// sends the signup email-verification link. a delivery failure is logged, not fatal
+// sends the link that authorizes a change of address to the current address instead of the new one.
+// once confirmed, a second email is sent to the new address to make sure it is valid.
+async function sendChangeEmailConfirmationEmail(currentEmail: string, newEmail: string, url: string): Promise<void> {
+	const emailProps = {
+		heading: "Confirm your new email",
+		lead: `Someone asked to move this account to ${newEmail}. Confirm it and Carl will send notes to the new address.`,
+		buttonLabel: "Confirm the change",
+		url,
+		linkNote: "Nothing changes until you confirm.",
+		appUrl: Bun.env.BETTER_AUTH_URL,
+	}
+	await sendEmail({
+		to: currentEmail,
+		subject: "Confirm your new email",
+		emailContent: await renderAuthEmail(emailProps),
+		plainTextContent: await renderAuthEmailText(emailProps),
+		emailKind: "email-change",
+	})
+}
+
+// sends the signup email-verification link. a delivery failure is logged but not fatal
 async function sendVerificationEmail(email: string, url: string): Promise<void> {
-	// the verification link as minimal HTML
+	const emailProps = {
+		heading: "Confirm your email",
+		lead: "Carl is ready to start reading for you. Confirm this address so he knows where to send what he finds.",
+		buttonLabel: "Confirm your email",
+		url,
+		appUrl: Bun.env.BETTER_AUTH_URL,
+	}
 	await sendEmail({
 		to: email,
 		subject: "Confirm your email",
-		emailContent: `Confirm your email: <a href="${url}">${url}</a>`,
+		emailContent: await renderAuthEmail(emailProps),
+		plainTextContent: await renderAuthEmailText(emailProps),
 		emailKind: "verification",
 	})
 }

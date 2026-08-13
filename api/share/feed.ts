@@ -25,7 +25,7 @@ export async function toTopicFeedXml(topicId: string, appUrl: string): Promise<s
 		.from(topics)
 		.innerJoin(users, eq(users.id, topics.ownerId))
 		.where(eq(topics.id, topicId))
-	// return nothing if the Topic is not public. one with no findings still gets a feed, so a reader can subscribe now
+	// return nothing if the Topic is not public. one with no findings still gets a feed, so a user can subscribe now
 	if (topic?.visibility !== "public") {
 		return null
 	}

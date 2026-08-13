@@ -1,12 +1,21 @@
 // a scan recap is model-written from pages we don't control, so it renders through a limited Markdown subset.
 // formatting is allowed, but a link only works when it points at a kept Finding's url. everything else is plain text
+import type { TopicFinding } from "@shared/contracts"
 import type { scanStatuses } from "@shared/enums"
 import { isBudgetError } from "@shared/scanFailure"
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
 import { useLayoutEffect, useRef, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { cn, durationMsBetween, POPOVER_HEADING_CLASS, toDollarLabel, toDurationLabel } from "@/lib/utils"
+import { CopyMarkdownButton } from "@/components/common/CopyMarkdownButton"
+import {
+	cn,
+	durationMsBetween,
+	POPOVER_HEADING_CLASS,
+	THIN_SCROLLBAR_CLASS,
+	toDollarLabel,
+	toDurationLabel,
+} from "@/lib/utils"
 
 // the fields a scan recap popover reads, shared by the topic page's scan history and the Activity drill-down
 export type ScanRecapFields = {
@@ -31,7 +40,7 @@ export function toScanRecapPlaceholder(scan: Pick<ScanRecapFields, "status" | "e
 
 	// a scan that never finished is still being read. the break renders through the placeholder's whitespace-pre-line
 	if (scan.status === "running") {
-		return "I'm on my fifth mug.\nThe internet was busy today…"
+		return "I'm on my fifteenth mug.\nThe internet was busy today…"
 	}
 
 	// it succeeded, so the findings are real even though writing them up failed. saying "still reading" here would be a lie
@@ -110,32 +119,101 @@ export function SafeNoteText({ note, allowedUrls }: { note: string; allowedUrls?
 }
 
 /**
- * A bordered box that scrolls when its content overflows, with a thin visible scrollbar to indicate that it is scrollable
+ * A bordered box that scrolls when its content overflows, with a thin visible scrollbar to indicate that it is scrollable.
+ * With copyMarkdown set, a copy control floats on the corner instead of scrolling away, offering the box's content as Markdown for an AI.
  */
-export function ScrollBox({ children }: { children: React.ReactNode }) {
+export function ScrollBox({ children, copyMarkdown }: { children: React.ReactNode; copyMarkdown?: string }) {
 	return (
-		<div className="border-border max-h-72 overflow-y-auto rounded-md border p-2 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/40 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar]:w-1.5">
-			{children}
+		<div className="group border-border relative rounded-md border">
+			<div className={cn("max-h-72 overflow-y-auto p-2", THIN_SCROLLBAR_CLASS)}>{children}</div>
+			{copyMarkdown && <CopyMarkdownButton markdown={copyMarkdown} />}
 		</div>
 	)
 }
 
 /**
- * A scan note inside the scroll box
+ * A scan note with findings inside of the scroll box.
  */
-export function ScrollNote({ note, allowedUrls }: { note: string; allowedUrls?: AllowedNoteUrls }) {
+export function ScrollNote({
+	note,
+	allowedUrls,
+	copyMarkdown,
+	children,
+}: {
+	note: string
+	allowedUrls?: AllowedNoteUrls
+	copyMarkdown?: string
+	children?: React.ReactNode
+}) {
 	return (
-		<ScrollBox>
+		<ScrollBox copyMarkdown={copyMarkdown}>
 			<SafeNoteText note={note} allowedUrls={allowedUrls} />
+			{children}
 		</ScrollBox>
 	)
 }
 
 /**
- * A scan recap popover's body: Carl's full summary, then how long the scan took and its cost. Reused by
- * the topic page's scan history and the Activity page's per-scan drill-down.
+ * The copied notes as Markdown for an AI: the linked topic title, the prompt, the note, and the numbered findings as Markdown links.
  */
-export function TopicScanRecap({ scan, allowedUrls }: { scan: ScanRecapFields; allowedUrls?: AllowedNoteUrls }) {
+export function toNotesMarkdown({
+	topicId,
+	topicName,
+	prompt,
+	note,
+	findings,
+}: {
+	topicId: string
+	topicName: string
+	prompt?: string
+	note?: string | null
+	findings?: TopicFinding[]
+}): string {
+	// the topic title links back to its page, so the pasted context can be followed to the source
+	const title = `# [${topicName}](${window.location.origin}/topics/${topicId})`
+	const findingLines = (findings ?? []).map(
+		(finding, index) =>
+			`${index + 1}. [${finding.title ?? finding.url}](${finding.url}) — ${finding.relevanceExplanation}`,
+	)
+	return [title, prompt, note, findingLines.join("\n")].filter(Boolean).join("\n\n")
+}
+
+/**
+ * The numbered topic finding list: rank, linked title, host, and relevance explanation.
+ */
+export function NumberedTopicFindingList({ findings }: { findings: TopicFinding[] }) {
+	return (
+		<ol className="mt-3 space-y-2.5">
+			{findings.map((finding, index) => (
+				<li key={finding.findingId}>
+					<AnchorLink href={finding.url} className="text-link hover:underline">
+						{index + 1}. {finding.title ?? finding.url}
+					</AnchorLink>
+					{/* the host under the title, then the model's reason the finding was kept.
+					    the reason reads at the note's own size, only the host line stays small */}
+					{finding.source && <div className="text-muted-foreground text-xs">{finding.source}</div>}
+					<p className="mt-0.5">{finding.relevanceExplanation}</p>
+				</li>
+			))}
+		</ol>
+	)
+}
+
+/**
+ * A scan recap popover's body: the full summary with the topic scan's findings numbered below it,
+ * then how long the scan took, and its cost.
+ */
+export function TopicScanRecap({
+	scan,
+	allowedUrls,
+	findings,
+	copyMarkdown,
+}: {
+	scan: ScanRecapFields
+	allowedUrls?: AllowedNoteUrls
+	findings?: TopicFinding[]
+	copyMarkdown?: string
+}) {
 	const duration = toDurationLabel(durationMsBetween(scan.startedAt, scan.finishedAt))
 	// the cost waits until the scan settles instead of reading as a finished scan that cost nothing
 	const isCostShown = scan.status !== "running" && scan.costDollars !== null
@@ -143,7 +221,9 @@ export function TopicScanRecap({ scan, allowedUrls }: { scan: ScanRecapFields; a
 		<>
 			<h2 className={POPOVER_HEADING_CLASS}>Dear Diary</h2>
 			{scan.scanSummary ? (
-				<ScrollNote note={scan.scanSummary} allowedUrls={allowedUrls} />
+				<ScrollNote note={scan.scanSummary} allowedUrls={allowedUrls} copyMarkdown={copyMarkdown}>
+					{findings && findings.length > 0 && <NumberedTopicFindingList findings={findings} />}
+				</ScrollNote>
 			) : (
 				<p className="whitespace-pre-line">{toScanRecapPlaceholder(scan)}</p>
 			)}
@@ -160,37 +240,60 @@ export function TopicScanRecap({ scan, allowedUrls }: { scan: ScanRecapFields; a
 
 /**
  * A scan recap note, clipped with a Read more / Read less toggle once it grows past the collapsed height.
+ * It displays a scrollbar if the note overflows its window height.
  */
-export function TopicScanNote({ note, allowedUrls }: { note: string; allowedUrls?: AllowedNoteUrls }) {
+export function TopicScanNote({
+	note,
+	allowedUrls,
+	copyMarkdown,
+	children,
+}: {
+	note: string
+	allowedUrls?: AllowedNoteUrls
+	copyMarkdown?: string
+	children?: React.ReactNode
+}) {
 	const contentRef = useRef<HTMLDivElement>(null)
 	const [isOverflowing, setisOverflowing] = useState(false)
 	const [isExpanded, setIsExpanded] = useState(false)
 
-	// measure the rendered output against the collapsed height. overflow-hidden keeps scrollHeight at the full height
+	// measure the rendered output against the collapsed height. overflow-hidden keeps scrollHeight at the full height,
+	// and any children have rendered below the note by the time this measures. while expanded the clipped div is not mounted,
+	// so the measurement keeps its last answer, and the toggle stays
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the note drives the rendered height we re-measure, not a value read here
 	useLayoutEffect(() => {
 		const element = contentRef.current
-		setisOverflowing(element !== null && element.scrollHeight > COLLAPSED_MAX_HEIGHT + 4)
+		if (element) {
+			setisOverflowing(element.scrollHeight > COLLAPSED_MAX_HEIGHT + 4)
+		}
 	}, [note])
 
-	// only clip the note if the note overflows and the user hasn't expanded it
-	const isNoteClipped = isOverflowing && !isExpanded
 	return (
 		<div>
-			{/* the note, clipped to the collapsed height while long and closed */}
-			<div className="relative">
-				<div
-					ref={contentRef}
-					className={cn(isNoteClipped && "overflow-hidden")}
-					style={isNoteClipped ? { maxHeight: COLLAPSED_MAX_HEIGHT } : undefined}
-				>
+			{isExpanded ? (
+				// the expanded note and findings scroll inside a bounded box, so the card keeps its
+				// height and Read less stays just below
+				<ScrollBox copyMarkdown={copyMarkdown}>
 					<SafeNoteText note={note} allowedUrls={allowedUrls} />
+					{children}
+				</ScrollBox>
+			) : (
+				<div className="relative">
+					{/* the note, clipped to the collapsed height while long and closed */}
+					<div
+						ref={contentRef}
+						className={cn(isOverflowing && "overflow-hidden")}
+						style={isOverflowing ? { maxHeight: COLLAPSED_MAX_HEIGHT } : undefined}
+					>
+						<SafeNoteText note={note} allowedUrls={allowedUrls} />
+						{children}
+					</div>
+					{/* a soft fade tells the user the note continues below the clip */}
+					{isOverflowing && (
+						<div className="from-card pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t to-transparent" />
+					)}
 				</div>
-				{/* a soft fade tells the user the note continues below the clip */}
-				{isNoteClipped && (
-					<div className="from-card pointer-events-none absolute inset-x-0 bottom-0 h-8 bg-gradient-to-t to-transparent" />
-				)}
-			</div>
+			)}
 			{/* the toggle appears only for a note long enough to clip */}
 			{isOverflowing && (
 				<button

@@ -1,15 +1,16 @@
 import type { ActivityScan, ActivityTopic } from "@shared/contracts"
 import { frequencies, isDailyFrequency } from "@shared/enums"
-import { Globe, Lock, Mail } from "lucide-react"
+import { ChevronDown, Globe, Lock, Mail } from "lucide-react"
 import { Fragment, useState } from "react"
+import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { SortableHeader, useRowSort } from "@/components/table/SortableHeader"
+import { SortableHeader } from "@/components/table/SortableHeader"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
-import { TopicScanRecap } from "@/components/topic/TopicScanRecap"
-import { sendSubscriptionEmail } from "@/lib/topicClient"
+import { TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
+import { fetchScanNote, sendSubscriptionEmail } from "@/lib/topicClient"
 import { cn, durationMsBetween, TABLE_CARD_CLASS, toCentsLabel, toDurationLabel, toMonthYearLabel } from "@/lib/utils"
 
 // the icon and label each visibility reads as, matching the topic page's own info card
@@ -29,6 +30,7 @@ const topicSortValues = {
 	visibility: (topic: ActivityTopic) => topic.visibility,
 	// sorted by how often the topic brews instead of alphabetically, so the daily ones group at one end
 	schedule: (topic: ActivityTopic) => frequencies.indexOf(topic.frequency),
+	emailed: (topic: ActivityTopic) => topic.monthEmailCount,
 	cost: (topic: ActivityTopic) => topic.monthCostCents,
 }
 
@@ -72,11 +74,15 @@ export function TopicsTable({
 
 	// column totals for the summary line span every topic, not just the visible page
 	const totalScanCount = topics.reduce((sum, topic) => sum + topic.monthScanCount, 0)
+	const totalEmailCount = topics.reduce((sum, topic) => sum + topic.monthEmailCount, 0)
 	const totalCostCents = topics.reduce((sum, topic) => sum + topic.monthCostCents, 0)
 	// this sums subscriptions instead of people, so one user following two topics counts twice
 	const totalSubscriberCount = topics.reduce((sum, topic) => sum + topic.subscriberCount, 0)
 	// weekdays counts as daily here because the plan's daily topic limit counts it this way
 	const dailyTopicCount = topics.filter((topic) => isDailyFrequency(topic.frequency)).length
+	// how many topics anyone can see, and how many send emails to their owner
+	const publicTopicCount = topics.filter((topic) => topic.visibility === "public").length
+	const emailOnCount = topics.filter((topic) => topic.isEmailEnabled).length
 	return (
 		<div className={cn(TABLE_CARD_CLASS, "mb-4")}>
 			<table className="w-full min-w-2xl text-left text-sm">
@@ -110,7 +116,7 @@ export function TopicsTable({
 							sort={sort}
 							sortKey="schedule"
 							label="Schedule"
-							tooltip="How often Carl brews it"
+							tooltip="How often Carl brews"
 							className="py-2 pr-4"
 						/>
 						<SortableHeader
@@ -118,6 +124,13 @@ export function TopicsTable({
 							sortKey="emails"
 							label="Emails"
 							tooltip="Receive emails"
+							className="py-2 pr-4"
+						/>
+						<SortableHeader
+							sort={sort}
+							sortKey="emailed"
+							label="Emailed"
+							tooltip="Emails the owner received this month"
 							className="py-2 pr-4"
 						/>
 						<SortableHeader
@@ -152,21 +165,35 @@ export function TopicsTable({
 										aria-label={`${topic.name} emails`}
 									/>
 								</td>
+								<td className="py-2 pr-4">{topic.monthEmailCount}</td>
 								{/* the cost cell doubles as the drill-down toggle for this topic's scans */}
 								<td className="py-2 text-right">
-									<button
-										type="button"
-										onClick={() => handleCostCellClick(topic.id)}
-										className="text-link hover:underline"
-									>
-										{toCentsLabel(topic.monthCostCents)}
-									</button>
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="button"
+												onClick={() => handleCostCellClick(topic.id)}
+												className="text-link inline-flex items-center gap-0.5 hover:underline"
+											>
+												{toCentsLabel(topic.monthCostCents)}
+												{/* the chevron shows whether the scan costs table is open or closed */}
+												<ChevronDown
+													aria-hidden="true"
+													className={cn(
+														"size-3.5 shrink-0 transition-transform",
+														expandedTopicIds.has(topic.id) && "rotate-180",
+													)}
+												/>
+											</button>
+										</TooltipTrigger>
+										<TooltipContent>Brew costs</TooltipContent>
+									</Tooltip>
 								</td>
 							</tr>
 							{expandedTopicIds.has(topic.id) && (
 								<tr className="border-b">
-									<td colSpan={9} className="py-2 pl-6">
-										<ScansTable scans={topic.scans} />
+									<td colSpan={10} className="py-2 pl-6">
+										<ScansTable scans={topic.scans} topic={topic} />
 									</td>
 								</tr>
 							)}
@@ -176,11 +203,13 @@ export function TopicsTable({
 				<tfoot>
 					<tr className="text-muted-foreground">
 						<td className="py-2 pr-4">Total</td>
-						<td className="py-2 pr-4">{totalScanCount}</td>
-						<td className="py-2 pr-4">{totalSubscriberCount}</td>
-						<td colSpan={3} />
+						<td className="py-2 pr-4">{toCountLabel(totalScanCount, "brew")}</td>
+						<td className="py-2 pr-4">{toCountLabel(totalSubscriberCount, "follower")}</td>
+						<td colSpan={2} />
+						<td className="py-2 pr-4">{`${publicTopicCount}/${topics.length} public`}</td>
 						<td className="py-2 pr-4">{`${dailyTopicCount} daily`}</td>
-						<td />
+						<td className="py-2 pr-4">{`${emailOnCount}/${topics.length} on`}</td>
+						<td className="py-2 pr-4">{`${totalEmailCount} sent`}</td>
 						<td className="py-2 text-right">{toCentsLabel(totalCostCents)}</td>
 					</tr>
 				</tfoot>
@@ -210,8 +239,8 @@ function TopicNameLink({ topic, isOwnersTable }: { topic: ActivityTopic; isOwner
 	)
 }
 
-// the topic's visibility with it's icon
-function TopicVisibility({ visibility }: { visibility: ActivityTopic["visibility"] }) {
+// the topic's visibility with its icon
+export function TopicVisibility({ visibility }: { visibility: ActivityTopic["visibility"] }) {
 	const visibilityMetadata = VISIBILITY_METADATA[visibility]
 	return (
 		<span className="flex items-center gap-1.5">
@@ -219,6 +248,11 @@ function TopicVisibility({ visibility }: { visibility: ActivityTopic["visibility
 			{visibilityMetadata.label}
 		</span>
 	)
+}
+
+// a totals-row count with its lowercase noun, so every footer figure shows what it counts
+function toCountLabel(count: number, noun: string): string {
+	return `${count} ${noun}${count === 1 ? "" : "s"}`
 }
 
 // return a copy of the set with the id present or absent
@@ -232,18 +266,18 @@ function withTopicId(topicIds: Set<string>, topicId: string, isMember: boolean):
 	return next
 }
 
-// the sort accessors for a topic's scans-this-month columns. notes sorts by how long the scan took, not by label text
+// the sort accessors for a topic's scans-this-month columns. time sorts by how long the scan took, not by label text
 const scanSortValues = {
 	date: (scan: ActivityScan) => new Date(scan.startedAt).getTime(),
 	read: (scan: ActivityScan) => scan.foundCount,
 	kept: (scan: ActivityScan) => scan.keptCount,
-	notes: (scan: ActivityScan) => durationMsBetween(scan.startedAt, scan.finishedAt),
+	time: (scan: ActivityScan) => durationMsBetween(scan.startedAt, scan.finishedAt),
 	cost: (scan: ActivityScan) => scan.costCents,
 }
 
-// one topic's scans this month: sortable columns, cost last, and a totals line
-function ScansTable({ scans }: { scans: ActivityTopic["scans"] }) {
-	const sort = useRowSort(scans, scanSortValues)
+// a topic's scans this month: sortable columns, and a totals line, with pagination.
+function ScansTable({ scans, topic }: { scans: ActivityTopic["scans"]; topic: Pick<ActivityTopic, "id" | "name"> }) {
+	const { pageRows, sort, pagination } = usePaginatedRowSort(scans, scanSortValues)
 
 	if (scans.length === 0) {
 		return <p className="text-muted-foreground text-sm">No brews this month.</p>
@@ -254,51 +288,81 @@ function ScansTable({ scans }: { scans: ActivityTopic["scans"] }) {
 	const totalKeptCount = scans.reduce((sum, scan) => sum + scan.keptCount, 0)
 	const totalCostCents = scans.reduce((sum, scan) => sum + scan.costCents, 0)
 	return (
-		<table className="w-full text-left text-sm">
-			<thead className="text-muted-foreground border-b">
-				<tr>
-					<SortableHeader sort={sort} sortKey="date" label="Date" className="py-1 pr-4" />
-					<SortableHeader sort={sort} sortKey="read" label="Read" className="py-1 pr-4" />
-					<SortableHeader sort={sort} sortKey="kept" label="Kept" className="py-1 pr-4" />
-					<SortableHeader sort={sort} sortKey="notes" label="Notes" className="py-1 pr-4" />
-					<SortableHeader sort={sort} sortKey="cost" label="Cost" className="py-1 text-right" />
-				</tr>
-			</thead>
-			<tbody>
-				{sort.sortedRows.map((scan) => (
-					<tr key={scan.id} className="border-b">
-						<td className="py-1 pr-4">{new Date(scan.startedAt).toLocaleDateString()}</td>
-						<td className="py-1 pr-4">{scan.foundCount}</td>
-						<td className="py-1 pr-4">{scan.keptCount}</td>
-						<td className="py-1 pr-4">
-							<ScanNotesCell scan={scan} />
-						</td>
-						<td className="py-1 text-right">{toCentsLabel(scan.costCents)}</td>
+		<>
+			<table className="w-full text-left text-sm">
+				<thead className="text-muted-foreground border-b">
+					<tr>
+						<SortableHeader sort={sort} sortKey="date" label="Date" className="py-1 pr-4" />
+						<SortableHeader sort={sort} sortKey="read" label="Read" className="py-1 pr-4" />
+						<SortableHeader sort={sort} sortKey="kept" label="Kept" className="py-1 pr-4" />
+						<SortableHeader
+							sort={sort}
+							sortKey="time"
+							label="Brew time"
+							tooltip="How long each brew took. Click a time for Carl's notes"
+							className="py-1 pr-4"
+						/>
+						<SortableHeader sort={sort} sortKey="cost" label="Cost" className="py-1 text-right" />
 					</tr>
-				))}
-			</tbody>
-			<tfoot>
-				<tr className="text-muted-foreground">
-					<td className="py-1 pr-4">Total</td>
-					<td className="py-1 pr-4">{totalFoundCount}</td>
-					<td className="py-1 pr-4">{totalKeptCount}</td>
-					<td className="py-1 pr-4" />
-					<td className="py-1 text-right">{toCentsLabel(totalCostCents)}</td>
-				</tr>
-			</tfoot>
-		</table>
+				</thead>
+				<tbody>
+					{pageRows.map((scan) => (
+						<tr key={scan.id} className="border-b">
+							<td className="py-1 pr-4">{new Date(scan.startedAt).toLocaleDateString()}</td>
+							<td className="py-1 pr-4">{scan.foundCount}</td>
+							<td className="py-1 pr-4">{scan.keptCount}</td>
+							<td className="py-1 pr-4">
+								<ScanNotesCell scan={scan} topic={topic} />
+							</td>
+							<td className="py-1 text-right">{toCentsLabel(scan.costCents)}</td>
+						</tr>
+					))}
+				</tbody>
+				<tfoot>
+					<tr className="text-muted-foreground">
+						<td className="py-1 pr-4">Total</td>
+						<td className="py-1 pr-4">{`${totalFoundCount} read`}</td>
+						<td className="py-1 pr-4">{`${totalKeptCount} kept`}</td>
+						<td className="py-1 pr-4" />
+						<td className="py-1 text-right">{toCentsLabel(totalCostCents)}</td>
+					</tr>
+				</tfoot>
+			</table>
+			<TablePagination {...pagination} />
+		</>
 	)
 }
 
-// the Notes cell: the time taken as clickable link-colored text, opening the same recap popover the topic page's scan history uses
-function ScanNotesCell({ scan }: { scan: ActivityScan }) {
+// the Brew time cell: the time taken as clickable link-colored text, opening the same recap popover the topic page's scan history uses
+function ScanNotesCell({ scan, topic }: { scan: ActivityScan; topic: Pick<ActivityTopic, "id" | "name"> }) {
 	const duration = toDurationLabel(durationMsBetween(scan.startedAt, scan.finishedAt))
+	// the scan recap is loaded on click and is kept for the rest of the page's life
+	const [scanSummary, setScanSummary] = useState<string | null>(null)
+	const [isNoteLoaded, setIsNoteLoaded] = useState(false)
+	function handleOpenScanNote(isOpen: boolean): void {
+		if (isOpen && !isNoteLoaded) {
+			fetchScanNote(scan.id)
+				.then((note) => {
+					setScanSummary(note)
+					setIsNoteLoaded(true)
+				})
+				.catch((error) => console.error("scan note load failed", error))
+		}
+	}
+
 	return (
-		<Popover>
+		<Popover onOpenChange={handleOpenScanNote}>
 			<PopoverTrigger className="text-link hover:underline">{duration || "—"}</PopoverTrigger>
 			<PopoverContent align="start" className="w-[calc(100vw-2rem)] max-w-lg text-sm">
 				<PopoverCloseButton />
-				<TopicScanRecap scan={{ ...scan, costDollars: scan.costCents / 100 }} />
+				{isNoteLoaded ? (
+					<TopicScanRecap
+						scan={{ ...scan, costDollars: scan.costCents / 100, scanSummary }}
+						copyMarkdown={toNotesMarkdown({ topicId: topic.id, topicName: topic.name, note: scanSummary })}
+					/>
+				) : (
+					<CoffeeLoading className="min-h-24 text-base" />
+				)}
 			</PopoverContent>
 		</Popover>
 	)

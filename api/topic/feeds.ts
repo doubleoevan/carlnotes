@@ -139,8 +139,9 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 				.select({
 					// the owning topic's id groups the rows
 					topicId: findings.topicId,
-					// the topic finding's identity and its resource metadata
+					// the topic finding's identity, the scan that produced it, and its resource metadata
 					findingId: findings.id,
+					scanId: findings.scanId,
 					resourceId: resources.id,
 					url: resources.url,
 					resourceKind: resources.kind,
@@ -281,6 +282,7 @@ function buildTopicFeed(
 	// shape each row into a topic finding and set its isConsumed flag
 	const topicFindings: TopicFinding[] = findingRows.map((row) => ({
 		findingId: row.findingId,
+		scanId: row.scanId,
 		resourceId: row.resourceId,
 		url: row.url,
 		resourceKind: row.resourceKind,

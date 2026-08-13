@@ -74,7 +74,6 @@ export type ActivityScan = {
 	foundCount: number
 	keptCount: number
 	costCents: number
-	scanSummary: string | null
 }
 
 // one owned-Topic row on the Activity page, carrying its month Scans for the sub-table
@@ -92,6 +91,8 @@ export type ActivityTopic = {
 	createdAt: string
 	updatedAt: string
 	monthCostCents: number
+	// how many emails the topic sent this month that resend accepted
+	monthEmailCount: number
 	// the owner's own subscription decides whether this topic emails them
 	isEmailEnabled: boolean
 	scans: ActivityScan[]
@@ -118,12 +119,20 @@ export type InviteRow = {
 	topicId: string
 	name: string
 	inviteeEmail: string
+	// the invitee's account if the invited address has one, for the table's avatar and profile link
+	invitee: ProfileIdentity | null
 	invitedAt: string
 	subscribedAt: string | null
 }
 
-// the Activity payload: metered variable spend against the effective budget, owned topics, subscriptions, and invites
+// the user identity for a profile page link
+export type ProfileIdentity = { userId: string; username: string; avatarSource: string | null }
+
+// the Activity payload: whose it is, metered variable spend against the effective budget, owned topics,
+// subscriptions, and invites
 export type ActivityResponse = {
+	// whose activity this is: the user's own, or the user an admin is viewing
+	user: ProfileIdentity
 	// this month's spend in cents, split by what scans and chat so that the meter can show the two apart.
 	scanSpendCents: number
 	chatSpendCents: number
@@ -314,6 +323,8 @@ export type AdminConsoleResponse = { users: AdminUserRow[]; totals: AdminTotals 
 export type ProfileTopic = {
 	id: string
 	name: string
+	// who may see the topic
+	visibility: (typeof visibilities)[number]
 	// when the Topic was created and last updated
 	createdAt: string
 	updatedAt: string
@@ -343,6 +354,8 @@ export type ProfileResponse = {
 	joinedAt: string
 	// distinct people, not summed rows. the same person following multiple Topics counts once here
 	subscriberCount: number
+	// whether the topics below include the user's private and invite ones, which only the owner and an admin view
+	includesNonPublicTopics: boolean
 	topics: ProfileTopic[]
 }
 
@@ -362,6 +375,8 @@ export type BillingState = {
 // a topic finding. the AI judgment about one Resource under a Topic, plus the user's consumed and bookmarked state
 export const topicFinding = z.object({
 	findingId: z.string(),
+	// the topic scan that produced the finding, so a topic scan's diary can list its own findings
+	scanId: z.string(),
 	resourceId: z.string(),
 	url: z.string(),
 	// the kind of the resource this finding points at, not a kind of finding
@@ -459,11 +474,12 @@ export const topicScan = z.object({
 	filteredCount: z.number(),
 	// the scan cost in dollars. null unless the viewer owns the topic or holds the platform admin role
 	costDollars: z.number().nullable(),
-	// an AI written recap of the scan. null until the review has run
-	scanSummary: z.string().nullable(),
 	// why the scan failed, so a topic whose sources all fail does not read as one that simply found nothing
 	error: z.string().nullable(),
 })
+
+// one scan's recap, loaded per scan instead of riding along with the history
+export const scanNote = z.object({ scanSummary: z.string().nullable() })
 export type TopicScan = z.infer<typeof topicScan>
 
 // a topic's full payload. the topic feed shape plus everything the detail page needs

@@ -92,18 +92,19 @@
 	--separator: #dcccb6;
 	--separator-strong: #c9b28b;
 	--ring-line: rgba(120, 96, 72, 0.18);
-	/* the spend meter's chat segment. espresso against the light theme's orange brews segment,
+	/* the budget's chat segment. espresso against the light theme's orange brews segment,
 	   cream against the dark theme's, so the two segments differ in hue and luminance in both */
 	--spend-chat: #6b4a26;
 }
 
-/* Dark roast — dark mode */
+/* Dark roast — dark mode. the background sits a step lighter and the cards a step darker,
+   so the two surfaces separate without a border doing the work */
 .dark {
-	--background: #4f3e2d;
+	--background: #584532;
 	--foreground: #f0e6d6;
-	--card: #382a1b;
+	--card: #302417;
 	--card-foreground: #f0e6d6;
-	--popover: #382a1b;
+	--popover: #302417;
 	--popover-foreground: #f0e6d6;
 	--primary: #f09050;
 	--primary-foreground: #1a1511;

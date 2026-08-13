@@ -67,6 +67,7 @@ export const THINKING_LINES = [
 	"applying game theory",
 	"applying chaos theory",
 	"opening Pandora's box",
+	"asking for a second opinion",
 ]
 
 // what is left of the current shuffle, refilled once the last line is dealt

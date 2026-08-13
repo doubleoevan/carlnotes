@@ -1,6 +1,6 @@
 // the avatar image: which letters a username draws, which tint a user id picks, and the contrast the palette can hold
 import { describe, expect, it } from "bun:test"
-import { AVATAR_INK, AVATAR_TINT_MAX_LUMINANCE, AVATAR_TINTS, toAvatarInitials, toAvatarTint } from "./avatars"
+import { AVATAR_COLOR, AVATAR_TINT_MAX_LUMINANCE, AVATAR_TINTS, toAvatarInitials, toAvatarTint } from "./avatars"
 
 // WCAG relative luminance for visibility
 function toRelativeLuminance(hex: string): number {
@@ -76,7 +76,7 @@ describe("the palette", () => {
 	// keep the contrast ratio above 4.5:1 on every tint
 	it("clears accessibility for normal text on every tint", () => {
 		for (const tint of AVATAR_TINTS) {
-			expect(toContrastRatio(AVATAR_INK, tint)).toBeGreaterThanOrEqual(4.5)
+			expect(toContrastRatio(AVATAR_COLOR, tint)).toBeGreaterThanOrEqual(4.5)
 		}
 	})
 })

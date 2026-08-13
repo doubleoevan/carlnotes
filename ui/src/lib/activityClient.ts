@@ -6,9 +6,10 @@ import type { AppType } from "../../../api"
 // same-origin client, like the topic client. in dev vite forwards /api to the Hono server
 const client = hc<AppType>(window.location.origin)
 
-// the caller's own activity payload: monthly spend against budget, owned topics, subscriptions, and sent invitations
-export async function fetchActivity(): Promise<ActivityResponse> {
-	const response = await client.api.activity.$get()
+// the activity payload: monthly spend against budget, owned topics, subscriptions, and sent invitations.
+// the user's own activity, or another user's activity for an admin
+export async function fetchActivity(userId?: string): Promise<ActivityResponse> {
+	const response = await client.api.activity.$get({ query: userId ? { userId } : {} })
 	if (!response.ok) {
 		throw new Error(`activity failed: ${response.status}`)
 	}

@@ -16,7 +16,7 @@ export function TopicScanFailure({ error }: { error: string | null }) {
 			<p>{toScanFailureLabel(error)}</p>
 			{/* the call to action gets its own line, so the button does not break up the sentence above it */}
 			<p className="mt-2">
-				<AnchorLink href="/pricing" className={cn(buttonVariants({ size: "sm" }))}>
+				<AnchorLink href="/plans" className={cn(buttonVariants({ size: "sm" }))}>
 					Upgrade
 				</AnchorLink>
 				{" to keep the pot brewing"}

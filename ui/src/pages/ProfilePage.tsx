@@ -12,6 +12,7 @@ import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/c
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { SMALLEST_PAGE_SIZE, TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
+import { TopicVisibility } from "@/components/table/TopicsTable"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { TopicInfo } from "@/components/topic/TopicInfo"
 import { authClient } from "@/lib/authClient"
@@ -20,7 +21,8 @@ import { fetchTopicPage } from "@/lib/topicClient"
 import { cn, TABLE_CARD_CLASS, toMonthYearLabel } from "@/lib/utils"
 
 /**
- * A user's public profile: their avatar, username, subscriber count, when they joined, and a list of their public Topics.
+ * A user's public profile: their avatar, username, subscriber count, when they joined, and their public Topics,
+ * with the owner's non-public topics only shown to the owner or an admin.
  */
 export function ProfilePage() {
 	const { userId } = useParams<{ userId: string }>()
@@ -63,6 +65,8 @@ export function ProfilePage() {
 			{/* a topic can be created from the profile page */}
 			<TopicTable
 				topics={profile.topics}
+				isOwnProfile={session?.user.id === profile.userId}
+				includesNonPublicTopics={profile.includesNonPublicTopics}
 				onNewTopic={session?.user.id === profile.userId ? () => setIsNewTopicOpen(true) : undefined}
 			/>
 			{isNewTopicOpen && <EditTopicModal onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
@@ -148,10 +152,30 @@ const profileTopicSortValues = {
 	// "kept" divided by "seen" sorts the ratio
 	kept: (topic: ProfileTopic) => (topic.seenCount > 0 ? topic.keptCount / topic.seenCount : 0),
 	subscribers: (topic: ProfileTopic) => topic.subscriberCount,
+	visibility: (topic: ProfileTopic) => topic.visibility,
 }
 
-// the profile page owner's public topics
-function TopicTable({ topics, onNewTopic }: { topics: ProfileTopic[]; onNewTopic?: () => void }) {
+// what the topic column's tooltip says, since the table holds a different set for a visitor than for the owner or an admin
+function toTopicColumnTooltip(isOwnProfile: boolean, includesNonPublicTopics: boolean): string {
+	if (isOwnProfile) {
+		return "Your topics"
+	}
+	return includesNonPublicTopics ? "All topics" : "Public topics"
+}
+
+// the profile owner's topics, only public topics shown for others and all topics shown for the owner or an admin
+// non-public topic rows have a muted background
+function TopicTable({
+	topics,
+	isOwnProfile,
+	includesNonPublicTopics,
+	onNewTopic,
+}: {
+	topics: ProfileTopic[]
+	isOwnProfile: boolean
+	includesNonPublicTopics: boolean
+	onNewTopic?: () => void
+}) {
 	// the sorted column applies across all the tables pages
 	const { pageRows, sort, pagination } = usePaginatedRowSort(topics, profileTopicSortValues)
 
@@ -160,6 +184,7 @@ function TopicTable({ topics, onNewTopic }: { topics: ProfileTopic[]; onNewTopic
 		kept: topics.reduce((sum, topic) => sum + topic.keptCount, 0),
 		seen: topics.reduce((sum, topic) => sum + topic.seenCount, 0),
 		subscribers: topics.reduce((sum, topic) => sum + topic.subscriberCount, 0),
+		public: topics.filter((topic) => topic.visibility === "public").length,
 	}
 
 	// only the profile's owner can create a topic from their profile page.
@@ -174,7 +199,8 @@ function TopicTable({ topics, onNewTopic }: { topics: ProfileTopic[]; onNewTopic
 						</Button>
 					</>
 				) : (
-					<p className="font-display text-lg">No public topics yet.</p>
+					// an admin sees every topic, so an empty table means the user has none at all
+					<p className="font-display text-lg">{includesNonPublicTopics ? "No topics yet." : "No public topics yet."}</p>
 				)}
 			</div>
 		)
@@ -189,11 +215,21 @@ function TopicTable({ topics, onNewTopic }: { topics: ProfileTopic[]; onNewTopic
 							sort={sort}
 							sortKey="topic"
 							label="Topic"
-							tooltip="Public topics"
+							tooltip={toTopicColumnTooltip(isOwnProfile, includesNonPublicTopics)}
 							className="py-2 pr-4 text-left"
 						/>
 						<SortableHeader sort={sort} sortKey="created" label="Created" className="py-2 pr-4 text-left" />
 						<SortableHeader sort={sort} sortKey="updated" label="Updated" className="py-2 pr-4 text-left" />
+						{/* only the owner and an admin see the visibility column, since a visitor's rows are all public */}
+						{includesNonPublicTopics && (
+							<SortableHeader
+								sort={sort}
+								sortKey="visibility"
+								label="Visibility"
+								tooltip="Who may see this topic"
+								className="py-2 pr-4 text-left"
+							/>
+						)}
 						<SortableHeader
 							sort={sort}
 							sortKey="subscribers"
@@ -212,7 +248,8 @@ function TopicTable({ topics, onNewTopic }: { topics: ProfileTopic[]; onNewTopic
 				</thead>
 				<tbody className="divide-separator divide-y divide-dashed">
 					{pageRows.map((topic) => (
-						<tr key={topic.id}>
+						// the owner's non-public rows sit on a tint, since a visitor never sees those topics here
+						<tr key={topic.id} className={topic.visibility !== "public" ? "bg-muted/40" : undefined}>
 							<td className="py-2 pr-4">
 								<AnchorLink href={`/topics/${topic.id}`} className="text-link hover:underline">
 									{topic.name}
@@ -220,6 +257,12 @@ function TopicTable({ topics, onNewTopic }: { topics: ProfileTopic[]; onNewTopic
 							</td>
 							<td className="text-muted-foreground py-2 pr-4">{toMonthYearLabel(topic.createdAt)}</td>
 							<td className="text-muted-foreground py-2 pr-4">{toMonthYearLabel(topic.updatedAt)}</td>
+							{/* only the owner and an admin have the visibility column to fill */}
+							{includesNonPublicTopics && (
+								<td className="py-2 pr-4">
+									<TopicVisibility visibility={topic.visibility} />
+								</td>
+							)}
 							<td className="py-2 pr-4">{topic.subscriberCount.toLocaleString()}</td>
 							<td className="py-2">
 								<TopicPopover topic={topic} />
@@ -232,9 +275,12 @@ function TopicTable({ topics, onNewTopic }: { topics: ProfileTopic[]; onNewTopic
 					<tr>
 						<td className="py-2 pr-4">Total</td>
 						<td className="py-2 pr-4" colSpan={2} />
-						<td className="py-2 pr-4">{totals.subscribers.toLocaleString()}</td>
+						{includesNonPublicTopics && <td className="py-2 pr-4">{`${totals.public}/${topics.length} public`}</td>}
+						<td className="py-2 pr-4">
+							{`${totals.subscribers.toLocaleString()} follower${totals.subscribers === 1 ? "" : "s"}`}
+						</td>
 						<td className="py-2">
-							{totals.kept.toLocaleString()} / {totals.seen.toLocaleString()}
+							{totals.kept.toLocaleString()} / {totals.seen.toLocaleString()} findings
 						</td>
 					</tr>
 				</tfoot>
@@ -256,8 +302,9 @@ function TopicPopover({ topic }: { topic: ProfileTopic }) {
 	// a failed fetch leaves the state empty, so reopening the popover retries it
 	function handleOpenChange(isOpen: boolean): void {
 		if (isOpen && !topicInfo) {
+			// a gated topic has no payload to show in the popover, which leaves it empty the same way a failure does
 			fetchTopicPage(topic.id)
-				.then(setTopicInfo)
+				.then((result) => setTopicInfo(result.status === "visible" ? result.topic : null))
 				.catch((error) => console.error("topic info load failed", error))
 		}
 	}
@@ -276,7 +323,7 @@ function TopicPopover({ topic }: { topic: ProfileTopic }) {
 				</TooltipTrigger>
 				{/* the cell reads kept-first to match its heading, so the tooltip spells both out in words */}
 				<TooltipContent>
-					Saw {topic.seenCount.toLocaleString()}. Kept {topic.keptCount.toLocaleString()}.
+					Kept {topic.keptCount.toLocaleString()} out of {topic.seenCount.toLocaleString()} findings
 				</TooltipContent>
 			</Tooltip>
 			{/* the topic info popup */}

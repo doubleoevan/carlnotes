@@ -57,7 +57,7 @@ export default function ManualScanEmail(props: ManualScanEmailProps): ReactEleme
 				</Section>
 			)}
 
-			{/* no unsubscribe link, since this email reports a scan the reader triggered instead of a scheduled subscription */}
+			{/* no unsubscribe link, since this email reports a scan the user triggered instead of a scheduled subscription */}
 			<EmailFooter>
 				{`You're receiving this because you started this brew yourself on `}
 				<LinkOrText href={appUrl} style={footerBrandLink}>
@@ -98,6 +98,12 @@ export function renderManualScanEmail(props: ManualScanEmailProps): Promise<stri
 	return render(<ManualScanEmail {...props} />)
 }
 
+// the same email as plain text, sent with the HTML. a message with no text part reads as machine-generated and goes to a spam filter.
+// also, some clients and screen readers show this instead of HTML
+export function renderManualScanEmailText(props: ManualScanEmailProps): Promise<string> {
+	return render(<ManualScanEmail {...props} />, { plainText: true })
+}
+
 // the subject line, so the sender and the template never describe the same scan differently
 export function toManualScanSubject(props: ManualScanEmailProps): string {
 	return props.status === "succeeded"
@@ -112,7 +118,7 @@ function toHeading(props: ManualScanEmailProps): string {
 
 // the summary line, up to the topic name that closes it
 function toSummaryLead(props: ManualScanEmailProps): string {
-	// a failed scan leads with what happened instead of a count
+	// a failed scan leads shows what happened instead of a count
 	if (props.status === "failed") {
 		return "Carl couldn't finish the brew you started on "
 	}

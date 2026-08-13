@@ -80,6 +80,7 @@ function topicFinding(overrides: Partial<TopicFinding>): TopicFinding {
 	return {
 		// identity and resource metadata. publishedAt and fetchedAt are what the recency sorts read
 		findingId: "f",
+		scanId: "s",
 		resourceId: "r",
 		url: "https://example.com/a",
 		resourceKind: "read",
@@ -148,7 +149,7 @@ test("toSortedFindings trending falls back to newest without an engagement value
 // the recap placeholder shows still-reading only while the scan runs, or a call to action for the budget wall
 test("toScanRecapPlaceholder matches the scan outcome", () => {
 	expect(toScanRecapPlaceholder({ status: "running", error: null })).toBe(
-		"I'm on my fifth mug.\nThe internet was busy today…",
+		"I'm on my fifteenth mug.\nThe internet was busy today…",
 	)
 	expect(toScanRecapPlaceholder({ status: "failed", error: "Budget has been exceeded!" })).toBe(
 		"Today I ran out of coffee.",

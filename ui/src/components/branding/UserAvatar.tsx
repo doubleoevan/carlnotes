@@ -1,4 +1,4 @@
-import { AVATAR_INK, toAvatarInitials, toAvatarTint } from "@shared/avatars"
+import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@shared/avatars"
 import { cn } from "@/lib/utils"
 
 const AVATAR_CLASS =
@@ -39,7 +39,7 @@ function toAvatarImage(userId: string, initials: string, avatarSource?: string |
 			<text
 				x="16"
 				y="16"
-				fill={AVATAR_INK}
+				fill={AVATAR_COLOR}
 				fontSize="13"
 				textAnchor="middle"
 				dominantBaseline="central"

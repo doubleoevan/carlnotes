@@ -30,8 +30,13 @@ export async function openBillingPortal(): Promise<boolean> {
 }
 
 // the current user's billing state for the account page
-export async function fetchBillingState(): Promise<BillingState> {
-	const response = await client.api.billing.state.$get()
+export async function fetchBillingState(userId?: string): Promise<BillingState> {
+	// the user's own billing state, or another user's for an admin to view
+	const response = await client.api.billing.state.$get({ query: userId ? { userId } : {} })
+	// a rejected read carries an error body, which would otherwise parse as a billing state
+	if (!response.ok) {
+		throw new Error(`billing state failed: ${response.status}`)
+	}
 	return (await response.json()) as BillingState
 }
 

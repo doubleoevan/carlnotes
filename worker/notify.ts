@@ -3,16 +3,50 @@
 import { toScanFailureLabel } from "@shared/scanFailure"
 import { and, desc, eq } from "drizzle-orm"
 import { db } from "../db"
-import { audienceMembers, findings, resources, type scans, subscriptions, type topics, users } from "../db/schema"
-import { type ManualScanEmailProps, renderManualScanEmail, toManualScanSubject } from "../emails/manual-scan-email"
-import { renderTopicScanEmail, type TopicScanEmailFinding } from "../emails/topic-scan-email"
-import { sendEmail } from "./email"
+import {
+	audienceMembers,
+	findings,
+	resources,
+	type scans,
+	subscriptions,
+	topicEmailSends,
+	type topics,
+	users,
+} from "../db/schema"
+import {
+	type ManualScanEmailProps,
+	renderManualScanEmail,
+	renderManualScanEmailText,
+	toManualScanSubject,
+} from "../emails/manual-scan-email"
+import { renderTopicScanEmail, renderTopicScanEmailText, type TopicScanEmailFinding } from "../emails/topic-scan-email"
+import { type EmailKind, sendEmail } from "./email"
 import { signUnsubscribeToken } from "./unsubscribe"
 
 // a persisted Topic and Scan, and one recipient of the email: the subscriber's user id and address
 type Topic = typeof topics.$inferSelect
 type Scan = typeof scans.$inferSelect
 type Recipient = { userId: string; email: string }
+
+/**
+ * Persist an accepted sent email for the topic and who received it
+ */
+export async function createTopicEmailSend({
+	topicId,
+	emailKind,
+	recipientUserId,
+	isAccepted,
+}: {
+	topicId: string
+	emailKind: EmailKind
+	// null for an invitee the app has no account for
+	recipientUserId: string | null
+	isAccepted: boolean
+}): Promise<void> {
+	if (isAccepted) {
+		await db.insert(topicEmailSends).values({ topicId, emailKind, recipientUserId })
+	}
+}
 
 // email a scheduled topic Scan's outcome to the Topic's email subscribers
 export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void> {
@@ -42,7 +76,7 @@ export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void
 			: `Notes on ${topic.name}: ${newFindings.length} finding${newFindings.length === 1 ? "" : "s"}`
 	for (const recipient of recipients) {
 		const unsubscribeUrl = await toUnsubscribeUrl(recipient.userId, topic.id)
-		const emailContent = await renderTopicScanEmail({
+		const emailProps = {
 			topicName: topic.name,
 			findingCount: newFindings.length,
 			findings: newFindings,
@@ -53,13 +87,21 @@ export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void
 			appUrl,
 			topicUrl,
 			unsubscribeUrl,
-		})
-		await sendEmail({
+		}
+		// the HTML and its plain-text version, rendered from the same email props to be in sync
+		const isAccepted = await sendEmail({
 			to: recipient.email,
 			subject,
-			emailContent,
+			emailContent: await renderTopicScanEmail(emailProps),
+			plainTextContent: await renderTopicScanEmailText(emailProps),
 			emailKind: "topic-scan",
 			headers: toUnsubscribeHeaders(unsubscribeUrl),
+		})
+		await createTopicEmailSend({
+			topicId: topic.id,
+			emailKind: "topic-scan",
+			recipientUserId: recipient.userId,
+			isAccepted,
 		})
 	}
 }
@@ -95,13 +137,14 @@ export async function sendManualScanEmail(userId: string, topic: Topic, scan: Sc
 				}
 
 	// send one email, with the subject built from the same props the body renders from
-	const emailContent = await renderManualScanEmail(emailProps)
-	await sendEmail({
+	const isAccepted = await sendEmail({
 		to: user.email,
 		subject: toManualScanSubject(emailProps),
-		emailContent,
+		emailContent: await renderManualScanEmail(emailProps),
+		plainTextContent: await renderManualScanEmailText(emailProps),
 		emailKind: "manual-scan",
 	})
+	await createTopicEmailSend({ topicId: topic.id, emailKind: "manual-scan", recipientUserId: userId, isAccepted })
 }
 
 // every url the Topic has a Finding for to use as the email's allowlist links.

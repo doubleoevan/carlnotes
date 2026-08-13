@@ -11,7 +11,7 @@ const ActivityPage = lazy(() => import("@/pages/ActivityPage").then((page) => ({
 const AdminPage = lazy(() => import("@/pages/AdminPage").then((page) => ({ default: page.AdminPage })))
 const HomePage = lazy(() => import("@/pages/HomePage").then((page) => ({ default: page.HomePage })))
 const LoginPage = lazy(() => import("@/pages/LoginPage").then((page) => ({ default: page.LoginPage })))
-const PricingPage = lazy(() => import("@/pages/PricingPage").then((page) => ({ default: page.PricingPage })))
+const PlansPage = lazy(() => import("@/pages/PlansPage").then((page) => ({ default: page.PlansPage })))
 const PrivacyPage = lazy(() => import("@/pages/PrivacyPage").then((page) => ({ default: page.PrivacyPage })))
 const ProfilePage = lazy(() => import("@/pages/ProfilePage").then((page) => ({ default: page.ProfilePage })))
 const ResetPasswordPage = lazy(() =>
@@ -71,7 +71,7 @@ export function App() {
 					<Route path="account" element={<AccountPage />} />
 					<Route path="admin" element={<AdminPage />} />
 					{/* the plan cards side by side */}
-					<Route path="pricing" element={<PricingPage />} />
+					<Route path="plans" element={<PlansPage />} />
 					{/* legal pages, linked from the footer */}
 					<Route path="privacy" element={<PrivacyPage />} />
 					{/* a user's public profile */}

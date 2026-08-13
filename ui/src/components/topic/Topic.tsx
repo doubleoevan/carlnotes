@@ -4,12 +4,12 @@ import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ShareTopic } from "@/components/topic/ShareTopic"
 import { TopicInfo } from "@/components/topic/TopicInfo"
-import { TopicOwner } from "@/components/topic/TopicOwner"
 import { useIsVisible } from "@/hooks/useIsVisible"
 import { authClient } from "@/lib/authClient"
 import { sendTopicSubscription } from "@/lib/topicClient"
@@ -55,7 +55,14 @@ export function Topic({ topic, index }: TopicProps) {
 						<TopicInfoPopover topic={topic} />
 					</div>
 					{/* the profile link for the topic's creator */}
-					{topic.owner && <TopicOwner owner={topic.owner} avatarClassName="size-4" className="mt-1 pl-4 text-xs" />}
+					{topic.owner && (
+						<UserProfileLink
+							user={topic.owner}
+							label="Brewed by"
+							avatarClassName="size-4"
+							className="mt-1 pl-4 text-xs"
+						/>
+					)}
 					{/* tags, left-padded to line the text up with the resource icons below them.
 					     an untagged topic renders no row at all */}
 					{topic.tags.length > 0 && (
@@ -98,6 +105,7 @@ export function Topic({ topic, index }: TopicProps) {
 						resource={resource}
 						rank={resource.isBookmarked ? null : index - pinnedShownCount + 1}
 						isRatable={topic.canRate}
+						topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
 					/>
 				))}
 				{resourcesShown.length === 0 && (

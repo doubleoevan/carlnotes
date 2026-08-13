@@ -1,4 +1,4 @@
-// pricing plan identity: which plan the user is on, and which badge displays on the pricing page cards
+// plan identity: which plan the user is on, and which badge displays on the plans page cards
 import { describe, expect, it } from "bun:test"
 import { isUsersPlan, toPlanBadge } from "./planCards"
 

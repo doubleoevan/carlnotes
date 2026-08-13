@@ -207,7 +207,8 @@ function NewTopicBlock({
 	)
 }
 
-// the topics remaining showing the free cap with a link to sign up when a visitor is logged out or the current count with a link to the pricing page
+// the topic slots remaining showing the free cap with a link to sign up when a visitor is logged out,
+// or the current count with a link to the plans page
 function TopicsRemaining({ remainingTopics, isSignedIn }: { remainingTopics: number | null; isSignedIn: boolean }) {
 	// a visitor sees the free plan's cap
 	if (!isSignedIn) {
@@ -226,7 +227,7 @@ function TopicsRemaining({ remainingTopics, isSignedIn }: { remainingTopics: num
 			isLoading={remainingTopics === null}
 			isUnlimited={remainingTopics !== null && remainingTopics >= ADMIN_QUOTA}
 			label={`${remainingTopics} left`}
-			href="/pricing"
+			href="/plans"
 			tooltip="Upgrade for more"
 		/>
 	)

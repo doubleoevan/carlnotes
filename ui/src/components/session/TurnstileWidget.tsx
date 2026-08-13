@@ -9,6 +9,7 @@ type Turnstile = {
 		container: HTMLElement,
 		options: { sitekey: string; callback: (token: string) => void; size?: "flexible" },
 	) => string
+	reset: (widgetId: string) => void
 	remove: (widgetId: string) => void
 }
 
@@ -19,10 +20,20 @@ declare global {
 }
 
 /**
- * A Cloudflare Turnstile challenge widget. calls onVerify with the passed in token
+ * A Cloudflare Turnstile challenge widget. calls onVerify with the passed in token.
+ *
+ * A token is spent the first time it is checked, so a form that failed is holding a token that will never pass again.
+ * Incrementing spentTokenCount issues a new one in place of the spent one.
  */
-export function TurnstileWidget({ onVerify }: { onVerify: (token: string) => void }) {
+export function TurnstileWidget({
+	onVerify,
+	spentTokenCount = 0,
+}: {
+	onVerify: (token: string) => void
+	spentTokenCount?: number
+}) {
 	const containerRef = useRef<HTMLDivElement>(null)
+	const widgetIdRef = useRef<string | undefined>(undefined)
 
 	useEffect(() => {
 		// load the script once. a second widget on the same page reuses the already-loaded window.turnstile
@@ -44,6 +55,7 @@ export function TurnstileWidget({ onVerify }: { onVerify: (token: string) => voi
 					callback: onVerify,
 					size: "flexible",
 				})
+				widgetIdRef.current = widgetId
 			}
 		}
 		if (window.turnstile) {
@@ -57,9 +69,17 @@ export function TurnstileWidget({ onVerify }: { onVerify: (token: string) => voi
 			script.removeEventListener("load", renderWidget)
 			if (widgetId) {
 				window.turnstile?.remove(widgetId)
+				widgetIdRef.current = undefined
 			}
 		}
 	}, [onVerify])
+
+	// a new challenge whenever the form reports the last token was spent. the first render has no token to replace.
+	useEffect(() => {
+		if (spentTokenCount > 0 && widgetIdRef.current) {
+			window.turnstile?.reset(widgetIdRef.current)
+		}
+	}, [spentTokenCount])
 
 	return <div ref={containerRef} />
 }

@@ -3,6 +3,7 @@ import {
 	manualScanResponse,
 	type SuggestSourcesPayload,
 	type SuggestSourcesResponse,
+	scanNote,
 	suggestSourcesResponse,
 	type TopicFeedResponse,
 	type TopicResponse,
@@ -90,13 +91,41 @@ export async function sendTopicFindingOpened(findingId: string): Promise<void> {
 	)
 }
 
-// fetch one topic's page payload. null when the topic is missing or not visible to this user
-export async function fetchTopicPage(topicId: string): Promise<TopicResponse | null> {
+// how a topic the user may not see is gated
+export type GatedVisibility = "invite" | "private"
+
+// what asking for a topic page got: the topic, the gate in front of it, or no such topic at all.
+// an invite topic's gate carries its name, so the notice can show the invitation that linked here
+export type TopicPageResult =
+	| { status: "visible"; topic: TopicResponse }
+	| { status: "gated"; visibility: GatedVisibility; topicName: string | null }
+	| { status: "missing" }
+
+// fetch one topic's page payload, or how it is gated if this user may not see it
+export async function fetchTopicPage(topicId: string): Promise<TopicPageResult> {
 	const response = await client.api.topics[":id"].$get({ param: { id: topicId } })
+	if (response.ok) {
+		return { status: "visible", topic: topicResponse.parse(await response.json()) }
+	}
+	// a gated topic show how it is gated. the values are checked rather than trusted,
+	// since a response body is not guaranteed to match its type
+	const body = (await response.json().catch(() => null)) as { gatedVisibility?: unknown; topicName?: unknown } | null
+	const visibility = body?.gatedVisibility
+	if (visibility !== "invite" && visibility !== "private") {
+		return { status: "missing" }
+	}
+	return { status: "gated", visibility, topicName: typeof body?.topicName === "string" ? body.topicName : null }
+}
+
+/**
+ * One scan's recap, or null when the scan is gone or the topic is not visible.
+ */
+export async function fetchScanNote(scanId: string): Promise<string | null> {
+	const response = await client.api.scans[":id"].$get({ param: { id: scanId } })
 	if (!response.ok) {
 		return null
 	}
-	return topicResponse.parse(await response.json())
+	return scanNote.parse(await response.json()).scanSummary
 }
 
 // a topic save that the api rejected because the plan already hit its limit of topics on a daily schedule.

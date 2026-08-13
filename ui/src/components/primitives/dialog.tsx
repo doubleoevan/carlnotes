@@ -23,8 +23,14 @@ function DialogOverlay({ className, ...props }: React.ComponentProps<typeof Dial
 	)
 }
 
-// the centered, portalled panel with its ✕ close in the top corner
-function DialogContent({ className, children, ...props }: React.ComponentProps<typeof DialogPrimitive.Content>) {
+// the centered, modal panel with its close button in the top corner.
+// hideCloseButton drops the ✕ for a dialog whose own actions are the only ways out
+function DialogContent({
+	className,
+	children,
+	hideCloseButton,
+	...props
+}: React.ComponentProps<typeof DialogPrimitive.Content> & { hideCloseButton?: boolean }) {
 	return (
 		<DialogPrimitive.Portal data-slot="dialog-portal">
 			<DialogOverlay />
@@ -38,12 +44,14 @@ function DialogContent({ className, children, ...props }: React.ComponentProps<t
 			>
 				{children}
 				{/* the ✕ close in the top corner */}
-				<DialogPrimitive.Close
-					className="focus-visible:ring-ring/50 text-muted-foreground hover:text-foreground absolute top-4 right-4 grid size-8 place-items-center rounded-md outline-none focus-visible:ring-[3px]"
-					aria-label="Close"
-				>
-					<X className="size-4" />
-				</DialogPrimitive.Close>
+				{!hideCloseButton && (
+					<DialogPrimitive.Close
+						className="focus-visible:ring-ring/50 text-muted-foreground hover:text-foreground absolute top-4 right-4 grid size-8 place-items-center rounded-md outline-none focus-visible:ring-[3px]"
+						aria-label="Close"
+					>
+						<X className="size-4" />
+					</DialogPrimitive.Close>
+				)}
 			</DialogPrimitive.Content>
 		</DialogPrimitive.Portal>
 	)

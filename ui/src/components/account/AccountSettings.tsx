@@ -19,6 +19,7 @@ export function AccountSettings() {
 		<>
 			<h2 className="font-display pt-2 text-xl">Settings</h2>
 			<ProfileSection />
+			<EmailSection />
 			<PasswordSection />
 			{/* closing the account comes last. it is the one thing on this page that cannot be undone */}
 			<DeleteAccountSection />
@@ -172,6 +173,8 @@ function ProfileSection() {
 						placeholder={currentUsername}
 						aria-describedby={updateRejection ? "username-rejection" : undefined}
 						className="bg-card dark:bg-card"
+						// a field named "username" reads as a login to password managers so set the autocomplete to nickname
+						autoComplete="nickname"
 						required
 					/>
 				</div>
@@ -184,6 +187,74 @@ function ProfileSection() {
 					Change username
 				</Button>
 			</form>
+		</section>
+	)
+}
+
+// the change email section. the current address is where scan emails are delivered, so a change is confirmed twice
+function EmailSection() {
+	const { data: session } = authClient.useSession()
+	const [newEmail, setNewEmail] = useState("")
+	const [isSubmitting, setSubmitting] = useState(false)
+	const [error, setError] = useState<string | null>(null)
+	const [isRequested, setRequested] = useState(false)
+
+	// ask for the email change. better auth writes to the current address first, and only afterword to the new one
+	async function handleChangeEmail(event: SubmitEvent): Promise<void> {
+		event.preventDefault()
+		setSubmitting(true)
+		setError(null)
+		try {
+			const { error: changeError } = await authClient.changeEmail({ newEmail, callbackURL: "/account" })
+			if (changeError) {
+				setError(changeError.message ?? "That didn't work. Try again.")
+				return
+			}
+			setRequested(true)
+		} catch (changeError) {
+			console.error("email change failed", changeError)
+			setError("That didn't reach Carl. Try again.")
+		} finally {
+			setSubmitting(false)
+		}
+	}
+
+	if (!session) {
+		return null
+	}
+
+	return (
+		<section className={SECTION_CARD_CLASS}>
+			<h3 className="font-semibold">Email</h3>
+			<p className="text-muted-foreground mt-1 text-sm">
+				{"Scans are delivered here. It's also how you sign in with a password."}
+			</p>
+			<p className="mt-2 text-sm">{session.user.email}</p>
+			{isRequested ? (
+				<p className="mt-3 text-sm">
+					{`Check ${session.user.email} for a link to confirm the change.`}
+					<br />
+					{"Confirm so Carl can send notes to your new address."}
+				</p>
+			) : (
+				<form onSubmit={handleChangeEmail} className="mt-3 max-w-sm space-y-3">
+					<div className="space-y-1.5">
+						<Label htmlFor="new-email">New email</Label>
+						<Input
+							id="new-email"
+							type="email"
+							value={newEmail}
+							onChange={(event) => setNewEmail(event.target.value)}
+							className="bg-card dark:bg-card"
+							required
+						/>
+					</div>
+					{error && <p className="text-destructive text-sm">{error}</p>}
+					<Button type="submit" disabled={isSubmitting || newEmail.length === 0}>
+						Change email
+					</Button>
+				</form>
+			)}
 		</section>
 	)
 }

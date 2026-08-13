@@ -2,14 +2,14 @@
 // both are deterministic, so avatar is always the same image
 
 // the tints an avatar circle can take. each one sits at or below AVATAR_TINT_MAX_LUMINANCE,
-// which keeps AVATAR_INK above 4.5:1 against it. adding a tint is checked by the palette test
+// which keeps AVATAR_COLOR above 4.5:1 against it. adding a tint is checked by the palette test
 export const AVATAR_TINTS = ["#8c5a2b", "#a3542e", "#7a4a52", "#6b6440", "#4f5f5a", "#8a4f6d"] as const
 
 // the letters, light enough to stay above 4.5:1 against every tint above
-export const AVATAR_INK = "#f6efe6"
+export const AVATAR_COLOR = "#f6efe6"
 
 /**
- * The relative luminance a tint must stay at or below to keep AVATAR_INK at 4.5:1 or better.
+ * The relative luminance a tint must stay at or below to keep AVATAR_COLOR at 4.5:1 or better.
  */
 export const AVATAR_TINT_MAX_LUMINANCE = 0.15
 

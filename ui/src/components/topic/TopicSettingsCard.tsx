@@ -41,12 +41,12 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 	)
 }
 
-// says that the schedule above is paused because the plan is past its limit with a call to action to upgrade on the pricing page
+// says that the schedule above is paused because the plan is past its limit with a call to action to upgrade on the plans page
 function PausedFrequencyNote() {
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<AnchorLink href="/pricing" className="text-link ml-1.5 text-xs hover:underline">
+				<AnchorLink href="/plans" className="text-link ml-1.5 text-xs hover:underline">
 					not brewing
 				</AnchorLink>
 			</TooltipTrigger>

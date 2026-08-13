@@ -31,13 +31,13 @@ export function TopicScanButton({
 				onManualScan={onManualScan}
 			/>
 			{/* the quota line hydrates in once the payload lands. a blocked scan points at the account page like the trigger above,
-			    otherwise the count links to the pricing page */}
+			    otherwise the count links to the plans page */}
 			<ScanQuotaLink
 				isLoading={remainingScans === null}
 				// an unlimited daily quota still says so, unless the month's budget is what ran out
 				isUnlimited={remainingScans !== null && remainingScans >= ADMIN_QUOTA && !isSpendExhausted}
 				label={isSpendExhausted ? "Out of budget" : `${remainingScans} left today`}
-				href={isScanBlocked ? "/account" : "/pricing"}
+				href={isScanBlocked ? "/account" : "/plans"}
 				tooltip={isScanBlocked ? "Pick up some coffee" : "Upgrade for more"}
 			/>
 		</div>

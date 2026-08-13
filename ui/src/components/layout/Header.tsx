@@ -1,4 +1,4 @@
-import { BadgeDollarSign, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
+import { Columns3Cog, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
 import { useState } from "react"
 import { useLocation } from "react-router-dom"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
@@ -71,10 +71,10 @@ export function Header() {
 					{/* the desktop menu items, swapped for the hamburger menu on small screens */}
 					<div className="hidden items-center gap-1 sm:flex">
 						<ThemeToggle isDark={isDark} onToggle={toggleTheme} />
-						{/* pricing moves into the user menu once signed in. it only stays in the header for a logged-out visitor */}
+						{/* plans moves into the user menu once signed in. it only stays in the header for a logged-out visitor */}
 						{!session && (
-							<AnchorLink href="/pricing" className={menuLinkClassName(pathname, "/pricing")}>
-								Pricing
+							<AnchorLink href="/plans" className={menuLinkClassName(pathname, "/plans")}>
+								Plans
 							</AnchorLink>
 						)}
 						{session ? (
@@ -225,11 +225,11 @@ function HeaderMenu({
 						{isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
 						{isDark ? "Light mode" : "Dark mode"}
 					</button>
-					{/* pricing goes into the user menu once signed in */}
+					{/* plans goes into the user menu once signed in */}
 					{!isSignedIn && (
-						<AnchorLink href="/pricing" onClick={closeMenu} className={menuItemClassName(pathname, "/pricing")}>
-							<BadgeDollarSign className="size-4" />
-							Pricing
+						<AnchorLink href="/plans" onClick={closeMenu} className={menuItemClassName(pathname, "/plans")}>
+							<Columns3Cog className="size-4" />
+							Plans
 						</AnchorLink>
 					)}
 					{isSignedIn ? (

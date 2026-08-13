@@ -270,19 +270,37 @@ function UserRow({
 		<>
 			<tr className="border-b">
 				<td className="py-2 pr-4">
-					<AnchorLink
-						href={`/profiles/${user.id}`}
-						className="text-link flex items-center gap-2 whitespace-nowrap hover:underline"
-					>
-						<UserAvatar userId={user.id} username={user.username} avatarSource={user.avatarSource} className="size-6" />
-						{user.username}
-					</AnchorLink>
+					{/* the avatar and username link to the user's profile, the way they do everywhere else */}
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<AnchorLink
+								href={`/profiles/${user.id}`}
+								className="text-link flex items-center gap-2 whitespace-nowrap hover:underline"
+							>
+								<UserAvatar
+									userId={user.id}
+									username={user.username}
+									avatarSource={user.avatarSource}
+									className="size-6"
+								/>
+								{user.username}
+							</AnchorLink>
+						</TooltipTrigger>
+						<TooltipContent>{`${user.username}'s profile`}</TooltipContent>
+					</Tooltip>
 				</td>
-				{/* the full email is a tooltip, since a long address would push the other columns off the card */}
+				{/* the email links to the user's activity page, where their spend and topics are */}
 				<td className="py-2 pr-4">
 					<Tooltip>
-						<TooltipTrigger className="block max-w-52 truncate text-left">{user.email}</TooltipTrigger>
-						<TooltipContent>{user.email}</TooltipContent>
+						<TooltipTrigger asChild>
+							<AnchorLink
+								href={`/activity?userId=${user.id}`}
+								className="text-link block max-w-52 truncate text-left hover:underline"
+							>
+								{user.email}
+							</AnchorLink>
+						</TooltipTrigger>
+						<TooltipContent>{`${user.username}'s activity`}</TooltipContent>
 					</Tooltip>
 				</td>
 				<td className="py-2 pr-4">
@@ -297,7 +315,17 @@ function UserRow({
 						<option value="admin">admin</option>
 					</select>
 				</td>
-				<td className="py-2 pr-4 capitalize">{user.plan}</td>
+				<td className="py-2 pr-4">
+					{/* the plan links to the user's account page */}
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<AnchorLink href={`/account?userId=${user.id}`} className="text-link capitalize hover:underline">
+								{user.plan}
+							</AnchorLink>
+						</TooltipTrigger>
+						<TooltipContent>{`${user.username}'s account`}</TooltipContent>
+					</Tooltip>
+				</td>
 				<td className="py-2 pr-4">{new Date(user.createdAt).toLocaleDateString()}</td>
 				<td className="py-2 pr-4">
 					{/* the topic count opens this user's topics subtable under the row. a user with no topics has nothing to open */}
@@ -324,13 +352,14 @@ function UserRow({
 					{toCentsLabel(user.monthVariableCostCents)} / {toCentsLabel(user.effectiveBudgetCents)}
 				</td>
 				<td className="py-2 pr-4">
+					{/* four digits wide, since an override will be a small whole-dollar figure */}
 					<input
 						type="number"
 						min={0}
 						defaultValue={user.budgetOverrideCents !== null ? user.budgetOverrideCents / 100 : ""}
 						onBlur={(event) => handleBudgetChange(event.target.value)}
 						placeholder="$0"
-						className="w-24 rounded-md border px-1 py-0.5"
+						className="w-16 rounded-md border px-1 py-0.5"
 					/>
 				</td>
 				<td className="py-2">

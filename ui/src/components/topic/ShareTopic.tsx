@@ -5,7 +5,7 @@ import { BrandIcon } from "@/components/common/BrandIcon"
 import { FlagContentDialog } from "@/components/common/FlagContentDialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { cn } from "@/lib/utils"
+import { cn, copyThroughSelection } from "@/lib/utils"
 
 // how long the copied confirmation stays up
 const COPIED_FEEDBACK_MS = 1500
@@ -59,14 +59,20 @@ export function ShareTopic({
 	className,
 	isCompact,
 	isPublic,
+	isOwner,
+	onMakeTopicPublic,
 }: {
 	topicId: string
 	topicName: string
 	className?: string
-	// the feed row shows the panda alone, since its neighbours are icons with no labels either
+	// the homepage topic row shows the panda icon instead of the button
 	isCompact?: boolean
-	// an invite topic shows the link and the flag only
+	// only a public topic can be shared
 	isPublic: boolean
+	// the owner gets a call-to-action tooltip and a button to make the topic public
+	isOwner?: boolean
+	// the callback that the owner gets to save the topic as public
+	onMakeTopicPublic?: () => void
 }) {
 	const [copiedLabel, setCopiedLabel] = useState<string | null>(null)
 	// controlled so the report row can close the menu under the flag dialog it opens
@@ -83,7 +89,7 @@ export function ShareTopic({
 	const [encodedUrl, encodedTitle] = [encodeURIComponent(topicUrl), encodeURIComponent(topicName)]
 
 	// copy, then say so on the row that was clicked. some browsers refuse the clipboard api even over https,
-	// so a refused write falls back, and the row confirms only once something was actually copied
+	// so a rejected copy falls back, and the row confirms only once something was actually copied
 	async function handleCopy(label: string, text: string): Promise<void> {
 		let isCopied = true
 		try {
@@ -97,7 +103,16 @@ export function ShareTopic({
 		}
 	}
 
+	// disabled share options show the owner a call-to-action tooltip with a click handler to make the topic public
 	const rowClassName = "hover:bg-accent flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-sm"
+	const disabledReason = isOwner ? "Make this topic public to post it" : "This topic must be public to post it"
+	const handleDisabledClick =
+		isOwner && onMakeTopicPublic
+			? () => {
+					setIsOpen(false)
+					onMakeTopicPublic()
+				}
+			: undefined
 	return (
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
 			<Tooltip>
@@ -110,16 +125,26 @@ export function ShareTopic({
 				<TooltipContent>Share this topic</TooltipContent>
 			</Tooltip>
 			<PopoverContent align="end" className="w-52 p-1">
-				{/* a broadcast target only reaches strangers, and an invite topic has none */}
-				{isPublic &&
-					SHARE_TARGETS.map((target) => (
+				{/* only public topics can be shared */}
+				{SHARE_TARGETS.map((target) =>
+					isPublic ? (
 						<AnchorLink key={target.label} href={target.toUrl(encodedUrl, encodedTitle)} className={rowClassName}>
 							{target.icon}
 							{target.label}
 						</AnchorLink>
-					))}
-				{/* the copy rows sit under a rule, since they hand you something instead of taking you somewhere */}
-				{isPublic && <div className="bg-border my-1 h-px" />}
+					) : (
+						<DisabledRow
+							key={target.label}
+							label={target.label}
+							icon={target.icon}
+							reason={disabledReason}
+							onClick={handleDisabledClick}
+						/>
+					),
+				)}
+				{/* the copy rows sit under a rule, since they don't take you to another platform */}
+				<div className="bg-border my-1 h-px" />
+				{/* the link keeps working on an invite topic, since that is what an invitee opens */}
 				<CopyRow
 					label="Copy link"
 					icon={<Link className="size-4" />}
@@ -127,13 +152,21 @@ export function ShareTopic({
 					isCopied={copiedLabel === "Copy link"}
 					onCopy={() => handleCopy("Copy link", topicUrl)}
 				/>
-				{isPublic && (
+				{/* an rss feed can only be served for a public topic */}
+				{isPublic ? (
 					<CopyRow
 						label="Copy RSS"
 						icon={<Rss className="size-4" />}
 						className={rowClassName}
 						isCopied={copiedLabel === "Copy RSS"}
 						onCopy={() => handleCopy("Copy RSS", feedUrl)}
+					/>
+				) : (
+					<DisabledRow
+						label="Copy RSS"
+						icon={<Rss className="size-4" />}
+						reason={disabledReason}
+						onClick={handleDisabledClick}
 					/>
 				)}
 				{/* reporting sits under its own rule, since it is the one row here that is not about passing the topic on */}
@@ -155,22 +188,70 @@ export function ShareTopic({
 	)
 }
 
-// the copy that predates the clipboard api, for the browsers that refuse it. an off-screen field is selected
-// and copied through the document. it reports whether the copy took, since a browser can refuse this route too
-function copyThroughSelection(text: string): boolean {
-	const field = document.createElement("textarea")
-	field.value = text
-	// off-screen instead of hidden, since a field the browser considers invisible cannot be selected
-	field.style.position = "fixed"
-	field.style.opacity = "0"
-	document.body.append(field)
-	field.select()
-	const isCopied = document.execCommand("copy")
-	field.remove()
-	return isCopied
+/**
+ * A Topic's share control for posting this topic to social platforms.
+ */
+export function TopicShareButton({
+	topic,
+	className,
+	isCompact,
+	onMakeTopicPublic,
+}: {
+	topic: { id: string; name: string; visibility: string; isOwner: boolean }
+	className?: string
+	isCompact?: boolean
+	// a click handler only passed in for the topic owner
+	onMakeTopicPublic?: () => void
+}) {
+	return (
+		<ShareTopic
+			topicId={topic.id}
+			topicName={topic.name}
+			isPublic={topic.visibility === "public"}
+			isOwner={topic.isOwner}
+			isCompact={isCompact}
+			className={className}
+			onMakeTopicPublic={onMakeTopicPublic}
+		/>
+	)
 }
 
-// one clipboard row, which confirms in place
+// a share row that is disabled for a topic that is not public.
+// only an owner can make the topic public with a call-to-action tooltip and a click handler
+function DisabledRow({
+	label,
+	icon,
+	reason,
+	onClick,
+}: {
+	label: string
+	icon?: React.ReactNode
+	reason: string
+	// only passed in for the topic owner
+	onClick?: () => void
+}) {
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<button
+					type="button"
+					aria-disabled={onClick ? undefined : "true"}
+					onClick={onClick}
+					className={cn(
+						"text-muted-foreground/60 flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-sm",
+						onClick ? "hover:bg-accent cursor-pointer" : "cursor-not-allowed",
+					)}
+				>
+					{icon}
+					{label}
+				</button>
+			</TooltipTrigger>
+			<TooltipContent>{reason}</TooltipContent>
+		</Tooltip>
+	)
+}
+
+// the clipboard option, which confirms in place
 function CopyRow({
 	label,
 	icon,

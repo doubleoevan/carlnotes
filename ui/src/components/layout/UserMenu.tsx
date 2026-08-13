@@ -1,4 +1,4 @@
-import { Activity, BadgeDollarSign, CircleUserRound, LogOut, ShieldUser, User } from "lucide-react"
+import { Activity, CircleUserRound, Columns3Cog, LogOut, ShieldUser, User } from "lucide-react"
 import { useState } from "react"
 import { useLocation } from "react-router-dom"
 import { UserAvatar } from "@/components/branding/UserAvatar"
@@ -105,9 +105,9 @@ export function UserMenuItems({
 				<User className="size-4" />
 				Account
 			</AnchorLink>
-			<AnchorLink href="/pricing" onClick={onNavigate} className={menuItemClassName(pathname, "/pricing")}>
-				<BadgeDollarSign className="size-4" />
-				Pricing
+			<AnchorLink href="/plans" onClick={onNavigate} className={menuItemClassName(pathname, "/plans")}>
+				<Columns3Cog className="size-4" />
+				Plans
 			</AnchorLink>
 			{isAdmin ? (
 				<AnchorLink href="/admin" onClick={onNavigate} className={menuItemClassName(pathname, "/admin")}>

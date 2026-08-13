@@ -4,8 +4,17 @@ import type { ActivityResponse, ActivityScan, ActivityTopic, SubscriptionRow } f
 import { and, count, desc, eq, gte, inArray, ne, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
-import { audienceMembers, audiences, scans, subscriptions, topicInvites, topics, users } from "../db/schema"
-import { effectiveBudgetCents, isAdminRole, monthlySpendDollars } from "./authorization"
+import {
+	audienceMembers,
+	audiences,
+	scans,
+	subscriptions,
+	topicEmailSends,
+	topicInvites,
+	topics,
+	users,
+} from "../db/schema"
+import { effectiveBudgetCents, isAdminRole, isAllowed, monthlySpendDollars } from "./authorization"
 import type { AppEnv } from "./currentUser"
 import { startOfUtcMonth } from "./topic/quotas"
 
@@ -31,20 +40,21 @@ type ScanRow = {
 	foundCount: number
 	keptCount: number
 	costDollars: string
-	scanSummary: string | null
 }
 
 /**
  * Assemble the Activity payload for the signed-in user
  */
 export async function loadActivity(user: { id: string; email: string }): Promise<ActivityResponse> {
-	// select the user's budget inputs, spend key, and owned topics
+	// select the user's identity, budget inputs, spend key, and owned topics
 	const [userRow] = await db
 		.select({
 			litellmVirtualKey: users.litellmVirtualKey,
 			role: users.role,
 			plan: users.plan,
 			budgetOverrideCents: users.budgetOverrideCents,
+			username: users.username,
+			avatarSource: users.avatarSource,
 		})
 		.from(users)
 		.where(eq(users.id, user.id))
@@ -75,11 +85,10 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 						error: scans.error,
 						startedAt: scans.startedAt,
 						finishedAt: scans.finishedAt,
-						// what the scan found, kept, and cost, plus its recap for the reused scan-notes popover
+						// what the scan found, kept, and cost.
 						foundCount: scans.foundCount,
 						keptCount: scans.keptCount,
 						costDollars: scans.cost,
-						scanSummary: scans.scanSummary,
 					})
 					.from(scans)
 					.where(and(inArray(scans.topicId, ownedTopicIds), gte(scans.startedAt, startOfUtcMonth(new Date()))))
@@ -107,6 +116,24 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 					.groupBy(subscriptions.topicId)
 			: []
 	const subscriberCountByTopic = new Map(subscriberRows.map((row) => [row.topicId, row.count]))
+
+	// this month's email count sent to the topic owner grouped by topic
+	const emailSendRows =
+		ownedTopicIds.length > 0
+			? await db
+					.select({ topicId: topicEmailSends.topicId, count: count() })
+					.from(topicEmailSends)
+					.innerJoin(topics, eq(topicEmailSends.topicId, topics.id))
+					.where(
+						and(
+							inArray(topicEmailSends.topicId, ownedTopicIds),
+							eq(topicEmailSends.recipientUserId, topics.ownerId),
+							gte(topicEmailSends.sentAt, startOfUtcMonth(new Date())),
+						),
+					)
+					.groupBy(topicEmailSends.topicId)
+			: []
+	const emailCountByTopic = new Map(emailSendRows.map((row) => [row.topicId, row.count]))
 
 	// the owner's own subscription row on each topic they own, which is what the Emails column toggles.
 	// a topic with no row for the owner reads as on below, matching the column default
@@ -160,6 +187,10 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 			inviteeEmail: topicInvites.email,
 			invitedAt: topicInvites.invitedAt,
 			subscribedAt: subscriptions.createdAt,
+			// the invitee's account fields, all null until the invited address has an account
+			inviteeUserId: users.id,
+			inviteeUsername: users.username,
+			inviteeAvatarSource: users.avatarSource,
 		})
 		.from(topicInvites)
 		.innerJoin(topics, eq(topicInvites.topicId, topics.id))
@@ -171,6 +202,8 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 		.where(eq(topics.ownerId, user.id))
 
 	return {
+		// whose activity this is, for the page's profile link
+		user: { userId: user.id, username: userRow?.username ?? "", avatarSource: userRow?.avatarSource ?? null },
 		scanSpendCents: Math.round(monthlySpend.scanDollars * 100),
 		chatSpendCents: Math.round(monthlySpend.chatDollars * 100),
 		budgetCents: effectiveBudgetCents({
@@ -178,10 +211,17 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 			plan: userRow?.plan ?? "free",
 			budgetOverrideCents: userRow?.budgetOverrideCents ?? null,
 		}),
-		topics: toActivityTopics(ownedTopics, monthScans, subscriberCountByTopic, emailEnabledByTopic),
+		topics: toActivityTopics(ownedTopics, monthScans, subscriberCountByTopic, emailEnabledByTopic, emailCountByTopic),
 		subscriptions: toSubscriptionRows(subscriptionRows),
 		invites: inviteRows.map((row) => ({
-			...row,
+			topicId: row.topicId,
+			name: row.name,
+			inviteeEmail: row.inviteeEmail,
+			// the invitee's identity when the invited address has an account, else null
+			invitee:
+				row.inviteeUserId && row.inviteeUsername
+					? { userId: row.inviteeUserId, username: row.inviteeUsername, avatarSource: row.inviteeAvatarSource }
+					: null,
 			invitedAt: row.invitedAt.toISOString(),
 			subscribedAt: row.subscribedAt?.toISOString() ?? null,
 		})),
@@ -221,6 +261,7 @@ export function toActivityTopics(
 	scanRows: ScanRow[],
 	subscriberCountByTopic: Map<string, number>,
 	emailEnabledByTopic: Map<string, boolean> = new Map(),
+	emailCountByTopic: Map<string, number> = new Map(),
 ): ActivityTopic[] {
 	// group each topic's scans once, then build every row
 	const scansByTopic = Map.groupBy(scanRows, (scan) => scan.topicId)
@@ -238,6 +279,8 @@ export function toActivityTopics(
 			createdAt: topic.createdAt.toISOString(),
 			updatedAt: topic.updatedAt.toISOString(),
 			monthCostCents: topicScans.reduce((sum, scan) => sum + toCents(scan.costDollars), 0),
+			// the number of emails sent to the topic's owner this month
+			monthEmailCount: emailCountByTopic.get(topic.id) ?? 0,
 			// the owner holds a subscription to their own topic, and a missing row reads as on, matching the column default
 			isEmailEnabled: emailEnabledByTopic.get(topic.id) ?? true,
 			scans: topicScans.map((scan) => ({
@@ -249,7 +292,6 @@ export function toActivityTopics(
 				foundCount: scan.foundCount,
 				keptCount: scan.keptCount,
 				costCents: toCents(scan.costDollars),
-				scanSummary: scan.scanSummary,
 			})),
 		}
 	})
@@ -263,13 +305,29 @@ export function toCents(dollars: string | null): number {
 	return Number.isFinite(amount) ? Math.round(amount * 100) : 0
 }
 
-// the activity page route
+// the activity page route. an admin may name another user to read, and everyone else reads themselves
 export const activityRoute = new Hono<AppEnv>().get("/activity", async (context) => {
 	// reject a signed-out caller
 	const user = context.get("user")
 	if (!user) {
 		return context.json({ error: "unauthorized" }, 401)
 	}
-	// return the caller's own spend, topics, subscriptions, and invites
-	return context.json(await loadActivity({ id: user.id, email: user.email }))
+
+	// without the userId param, the user loads their own activity
+	const requestedUserId = context.req.query("userId")
+	if (!requestedUserId || requestedUserId === user.id) {
+		return context.json(await loadActivity({ id: user.id, email: user.email }))
+	}
+
+	// viewing another user's activity requires the admin:console permission
+	if (!(await isAllowed(user.id, "admin:console"))) {
+		return context.json({ error: "forbidden" }, 403)
+	}
+
+	// show the target user's activity, or nothing if no such user exists
+	const [targetUser] = await db
+		.select({ id: users.id, email: users.email })
+		.from(users)
+		.where(eq(users.id, requestedUserId))
+	return targetUser ? context.json(await loadActivity(targetUser)) : context.json({ error: "not found" }, 404)
 })
