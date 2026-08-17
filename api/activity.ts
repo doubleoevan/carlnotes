@@ -36,6 +36,8 @@ type ScanRow = {
 	error: string | null
 	startedAt: Date
 	finishedAt: Date | null
+	// set if the user stopped the scan, which the recap line reads
+	stoppedAt: Date | null
 	// what the scan found, kept, and cost
 	foundCount: number
 	keptCount: number
@@ -85,6 +87,7 @@ export async function loadActivity(user: { id: string; email: string }): Promise
 						error: scans.error,
 						startedAt: scans.startedAt,
 						finishedAt: scans.finishedAt,
+						stoppedAt: scans.stoppedAt,
 						// what the scan found, kept, and cost.
 						foundCount: scans.foundCount,
 						keptCount: scans.keptCount,
@@ -289,6 +292,7 @@ export function toActivityTopics(
 				error: scan.error,
 				startedAt: scan.startedAt.toISOString(),
 				finishedAt: scan.finishedAt?.toISOString() ?? null,
+				stoppedAt: scan.stoppedAt?.toISOString() ?? null,
 				foundCount: scan.foundCount,
 				keptCount: scan.keptCount,
 				costCents: toCents(scan.costDollars),

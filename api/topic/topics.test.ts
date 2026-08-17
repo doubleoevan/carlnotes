@@ -11,6 +11,7 @@ function scanRow(id: string, status: TopicScan["status"]): TopicScan {
 		status,
 		startedAt: "2026-07-24T12:00:00.000Z",
 		finishedAt: "2026-07-24T12:01:00.000Z",
+		stoppedAt: null,
 		// the counts, cost, and failure reason the page reads
 		foundCount: 0,
 		keptCount: 0,

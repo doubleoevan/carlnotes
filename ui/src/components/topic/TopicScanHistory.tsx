@@ -134,7 +134,8 @@ function ScanRow({
 	)
 }
 
-// the scan's one-line stat: kept and found counts when succeeded, a shimmering thinking line while running, otherwise the failed message
+// the scan's one-line stat: kept and found counts when succeeded, a shimmering thinking line while running, otherwise the failed message.
+// a cancelled scan never reaches here, since the page's api filters those out
 function ScanStat({ scan }: { scan: TopicScan }) {
 	if (scan.status === "succeeded") {
 		return (

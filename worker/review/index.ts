@@ -30,7 +30,14 @@ export async function reviewScan(
 	scannedSources: ScannedSource[],
 	budget: Budget,
 	litellmApiKey?: string,
+	stopSignal?: AbortSignal,
 ): Promise<ReviewSummary> {
+	// a Scan stopped during ingestion reaches the review already cancelled, and a review's first act is a paid embedding,
+	// so it stops immediately instead of paying for a topic context it will never score against
+	if (stopSignal?.aborted) {
+		return emptyReviewSummary()
+	}
+
 	// load the unscored list of discovered Resources for this Topic
 	const unscoredResources = await loadUnscoredResources(topicId, discoveredResources)
 	if (unscoredResources.length === 0) {
@@ -42,14 +49,18 @@ export async function reviewScan(
 	// the running totals for this review. each stage below traces as its own span with what it spent
 	const reviewOutcome = emptyReviewOutcome()
 
-	// embed the topic's effective context once for the relevance gate, keeping its name and text for the scorer and the report
+	// embed the topic's effective context once for the relevance gate, keeping its name and text for the scorer and the report.
+	// a stop that landed while the candidates were being read buys no context, since nothing is left to measure against it
+	if (stopSignal?.aborted) {
+		return emptyReviewSummary()
+	}
 	const topicContext = await loadTopicContext(topicId, budget, litellmApiKey)
 
 	// the first pass embeds every candidate and keeps the ones relevant to the topic
 	const survivingResources = await traceStage(
 		"embed-filter",
 		budget,
-		() => gateResources(unscoredResources, topicContext, reviewOutcome, budget, litellmApiKey),
+		() => gateResources(unscoredResources, topicContext, reviewOutcome, budget, litellmApiKey, stopSignal),
 		(survivors) => ({ candidateCount: unscoredResources.length, survivorCount: survivors.length }),
 	)
 
@@ -66,7 +77,17 @@ export async function reviewScan(
 	const scoredResourceIds = await traceStage(
 		"score",
 		budget,
-		() => fetchAndScoreResources(admittedResources, scan, topicId, topicContext, reviewOutcome, budget, litellmApiKey),
+		() =>
+			fetchAndScoreResources(
+				admittedResources,
+				scan,
+				topicId,
+				topicContext,
+				reviewOutcome,
+				budget,
+				litellmApiKey,
+				stopSignal,
+			),
 		(scoredIds) => ({ admittedCount: admittedResources.length, scoredCount: scoredIds.length }),
 	)
 
@@ -75,16 +96,19 @@ export async function reviewScan(
 	const survivingUrls = await filterTopicFindings(topicId)
 	reviewOutcome.keptFindings = reviewOutcome.keptFindings.filter((finding) => survivingUrls.has(finding.url))
 
-	// summarize the scan
-	const scanSummary = await traceStage(
-		"scan-report",
-		budget,
-		() =>
-			toTopicScanSummary(scan.id, () =>
-				summarizeTopicScan(topicContext, reviewOutcome, scannedSources, budget, litellmApiKey),
-			),
-		(report) => ({ isReportWritten: report.length > 0 }),
-	)
+	// summarize the scan, unless the user stopped it. the recap is a paid model call and a stop means stop spending,
+	// so a stopped Scan keeps its Findings and goes without a recap, which the topic page has its own line for
+	const scanSummary = stopSignal?.aborted
+		? ""
+		: await traceStage(
+				"scan-report",
+				budget,
+				() =>
+					toTopicScanSummary(scan.id, () =>
+						summarizeTopicScan(topicContext, reviewOutcome, scannedSources, budget, litellmApiKey),
+					),
+				(report) => ({ isReportWritten: report.length > 0 }),
+			)
 
 	// fold the totals into the summary that the Scan records. the caller reads spend and fetch counts off the Budget
 	return {

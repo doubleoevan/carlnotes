@@ -128,16 +128,21 @@ export function tokenCost(tokens: number, ratePerMillion: number): number {
 }
 
 /**
- * Whether paid tasks may still run because the Scan is under its spend limit.
+ * Whether paid tasks may still run because the Scan is under its spend limit and the user has not stopped it.
  */
-export function canSpend(budget: Budget): boolean {
-	return budget.spentDollars < budget.limitDollars
+export function canSpend(budget: Budget, stopSignal?: AbortSignal): boolean {
+	return !stopSignal?.aborted && budget.spentDollars < budget.limitDollars
 }
 
 /**
- * Whether a Resource may still be scored because the Scan is under both its dollar and scored-resource limits.
+ * Whether a Resource may still be scored because the Scan is under both its dollar and scored-resource limits,
+ * and the user has not stopped it. A stop is treated the same as a limit reached, so the Resources left over
+ * are deferred instead of thrown away.
  */
-export function canScoreResource(budget: Budget): boolean {
+export function canScoreResource(budget: Budget, stopSignal?: AbortSignal): boolean {
+	if (stopSignal?.aborted) {
+		return false
+	}
 	return budget.spentDollars < budget.limitDollars && scoredResourcesCount(budget) < budget.maxScoredResources
 }
 

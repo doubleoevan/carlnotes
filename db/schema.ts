@@ -293,6 +293,9 @@ export const scans = pgTable("scans", {
 	finishedAt: timestamp("finished_at", { withTimezone: true }),
 	// when the scan's workflow was accepted. null means it was never started
 	dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+	// when the user stopped the scan. a stopped scan still saves as succeeded and still charges what it spent,
+	// so this is what removes it from the daily scan count while leaving it in the monthly spend
+	stoppedAt: timestamp("stopped_at", { withTimezone: true }),
 	// true when the owner triggered this scan by hand with "Run now". scheduled and seeded scans stay false
 	isManual: boolean("is_manual").notNull().default(false),
 	// what it cost and how many resources the scan found, kept, and filtered

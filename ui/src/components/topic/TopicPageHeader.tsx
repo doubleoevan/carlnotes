@@ -1,7 +1,7 @@
 import type { TopicResponse } from "@shared/contracts"
 import { PawPrint, Pencil, Trash2 } from "lucide-react"
-import type * as React from "react"
 import { useState } from "react"
+import { IconButton } from "@/components/common/IconButton"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -106,36 +106,6 @@ export function SubscribeButton({
 					{/* the paw is an outline until subscribed, then fills, matching the homepage topic row */}
 					<PawPrint className={cn("size-4", topic.isSubscribed && "text-primary fill-current")} />
 					{topic.isSubscribed ? "Unfollow" : "Follow"}
-				</button>
-			</TooltipTrigger>
-			<TooltipContent>{tooltip}</TooltipContent>
-		</Tooltip>
-	)
-}
-
-// an icon with an action tooltip
-function IconButton({
-	tooltip,
-	isPressed,
-	onClick,
-	children,
-}: {
-	tooltip: string
-	isPressed?: boolean
-	onClick: () => void
-	children: React.ReactNode
-}) {
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<button
-					type="button"
-					aria-label={tooltip}
-					aria-pressed={isPressed}
-					onClick={onClick}
-					className="text-muted-foreground hover:text-foreground grid h-11 w-7 place-items-center sm:size-7"
-				>
-					{children}
 				</button>
 			</TooltipTrigger>
 			<TooltipContent>{tooltip}</TooltipContent>

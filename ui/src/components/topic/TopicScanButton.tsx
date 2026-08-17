@@ -1,9 +1,10 @@
 import { ADMIN_QUOTA } from "@shared/plans"
-import { Coffee } from "lucide-react"
+import { CirclePause, Coffee } from "lucide-react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { IconButton } from "@/components/common/IconButton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { ScanQuotaLink } from "@/components/topic/ScanQuotaLink.tsx"
-import { cn, MENU_BUTTON_CLASS, RAIL_TEXT_INSET } from "@/lib/utils"
+import { ScanQuotaLink } from "@/components/topic/ScanQuotaLink"
+import { cn, MENU_BUTTON_CLASS, RAIL_ICON_INSET } from "@/lib/utils"
 
 /**
  * The topic page's "Brew" control: the trigger in its running, blocked, or ready state, with the day's remaining scans below it.
@@ -12,12 +13,16 @@ export function TopicScanButton({
 	remainingScans,
 	isSpendExhausted,
 	isRunning,
+	isCancelling,
 	onManualScan,
+	onCancelScan,
 }: {
 	remainingScans: number | null
 	isSpendExhausted: boolean
 	isRunning: boolean
+	isCancelling: boolean
 	onManualScan: () => void
+	onCancelScan?: () => void
 }) {
 	// an empty daily quota and a spent budget both stop the brew, and Activity is where either one is explained
 	const isScanBlocked = remainingScans !== null && (remainingScans <= 0 || isSpendExhausted)
@@ -28,7 +33,9 @@ export function TopicScanButton({
 				isScanBlocked={isScanBlocked}
 				isScanDisabled={remainingScans === null}
 				isSpendExhausted={isSpendExhausted}
+				isScanCancelling={isCancelling}
 				onManualScan={onManualScan}
+				onCancelScan={onCancelScan}
 			/>
 			{/* the quota line hydrates in once the payload lands. a blocked scan points at the account page like the trigger above,
 			    otherwise the count links to the plans page */}
@@ -50,20 +57,31 @@ function TopicScanTrigger({
 	isScanBlocked,
 	isScanDisabled,
 	isSpendExhausted,
+	isScanCancelling,
 	onManualScan,
+	onCancelScan,
 }: {
 	isScanRunning: boolean
 	isScanBlocked: boolean
 	isScanDisabled: boolean
 	isSpendExhausted: boolean
+	isScanCancelling: boolean
 	onManualScan: () => void
+	onCancelScan?: () => void
 }) {
-	// while a scan runs, the trigger becomes a bigger shimmering "Carl is reading", held at the button's height so
-	// the row never jumps, and inset to end on the same line as the quota line below it
+	// while a scan runs, the trigger becomes a bigger shimmering "Carl is Brewing" with the cancel icon to the right,
+	// held at the button's height so the row never jumps. the row ends in an icon here, so it takes the icon inset
+	// and the glyph lands on the same line as the quota below it
 	if (isScanRunning) {
 		return (
-			<div className={cn(RAIL_TEXT_INSET, "flex min-h-11 items-center sm:min-h-9")}>
-				<span className="shimmer-text text-base font-semibold sm:text-lg">Carl is reading…</span>
+			<div className={cn(RAIL_ICON_INSET, "flex min-h-11 items-center gap-1 sm:min-h-9")}>
+				<span className="shimmer-text text-base font-semibold sm:text-lg">Carl is Brewing…</span>
+				{/* only whoever may scan may stop it. the icon disappears once clicked. */}
+				{onCancelScan && !isScanCancelling && (
+					<IconButton tooltip="Stop this Brew" onClick={onCancelScan}>
+						<CirclePause className="size-3.75" />
+					</IconButton>
+				)}
 			</div>
 		)
 	}

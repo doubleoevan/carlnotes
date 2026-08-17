@@ -4,7 +4,7 @@
 import { propagateAttributes, startActiveObservation } from "@langfuse/tracing"
 import { trackEvent } from "@shared/analytics"
 import { asyncLocalStorage } from "@temporalio/activity"
-import { and, count, eq } from "drizzle-orm"
+import { and, count, eq, isNull } from "drizzle-orm"
 import { db } from "../../db"
 import { findings, scans, topics, users } from "../../db/schema"
 import { type Budget, newBudget, toResumedBudget } from "../budget"
@@ -48,7 +48,10 @@ export async function ingestForScan(scanId: string, topicId: string): Promise<In
 	return traceScanStage("scan-ingest", scanId, topicId, () =>
 		withHeartbeat(budget, async () => {
 			// every later stage charges into the budget this returns
+			// ingestion runs every Source at once, so a stop has nothing left to hold back once it is under way.
+			// a Scan stopped here finishes ingesting and then closes before review, which is where the money is
 			const { sourceOutcomes, summary } = await ingestFromTopicSources(topicId, budget)
+			await recordScanProgress(scanId, budget)
 			return {
 				resources: summary.resources,
 				foundCount: summary.foundCount,
@@ -90,7 +93,9 @@ export async function reviewForScan(
 				ingested.sourceOutcomes,
 				stageBudget,
 				owner?.litellmVirtualKey ?? undefined,
+				stopSignal(),
 			)
+			await recordScanProgress(scanId, stageBudget)
 			return { review, budget: stageBudget }
 		}),
 	)
@@ -160,6 +165,47 @@ export async function finishScan(
 }
 
 /**
+ * Close a Scan the user stopped, keeping what it managed to keep. It saves as succeeded instead of failed,
+ * because its Findings are real and its cost is owed. The stoppedAt timestamp is what gives its daily scan back
+ * and what tells the topic page it was stopped.
+ * Nothing is emailed. A manual Scan needs no report, since whoever stopped it is watching the page it would report,
+ * and a scheduled one sends no digest, since a Topic read only part way is not a reading to announce.
+ * The spend is left as each stage recorded it, since a cancelled stage's own totals never reach the workflow.
+ */
+export async function stopScan(scanId: string): Promise<void> {
+	// the Scan saves the moment the stop lands, while its cancelled stage is still winding down. what that stage
+	// ends up spending and keeping it records itself, so this update leaves both alone and only saves the row.
+	// a Scan that already has a finish time ran to the end before the cancel landed, and may have emailed its report,
+	// so the unfinished check is what stops a completed Scan from being marked stopped and refunded
+	await db
+		.update(scans)
+		.set({ status: "succeeded", stoppedAt: new Date(), finishedAt: new Date() })
+		.where(and(eq(scans.id, scanId), isNull(scans.finishedAt)))
+}
+
+/**
+ * Record what a stage spent and what the Scan has kept, as that stage ends. A Scan that runs to the end overwrites
+ * this with its final totals, but a Scan the user stops never gets that far: the workflow drops its cancelled stage's
+ * return value, and saves the row before the stage has finished. Saving from inside the stage is what
+ * gets the real spend and the real kept count onto a stopped Scan.
+ */
+async function recordScanProgress(scanId: string, budget: Budget): Promise<void> {
+	// the Findings are the count, the same source a Scan that runs to the end counts from
+	const [keptRow] = await db.select({ count: count() }).from(findings).where(eq(findings.scanId, scanId))
+	await db
+		.update(scans)
+		.set({
+			keptCount: keptRow?.count ?? 0,
+			stageCosts: budget.stageCosts,
+			cost: budget.spentDollars.toString(),
+			reused: budget.fetchCounts.reusedCount,
+			revalidated: budget.fetchCounts.revalidatedCount,
+			fetched: budget.fetchCounts.fetchedCount,
+		})
+		.where(eq(scans.id, scanId))
+}
+
+/**
  * Record a Scan as failed along with what it had already spent, for a workflow whose stage threw an error.
  */
 export async function failScan(scanId: string, reason: string, budget?: Budget): Promise<void> {
@@ -178,6 +224,12 @@ function withHeartbeat<Result>(budget: Budget, runStage: () => Promise<Result>):
 	const activityContext = asyncLocalStorage.getStore()
 	const heartbeatPump = setInterval(() => activityContext?.heartbeat(budget), HEARTBEAT_INTERVAL_MS)
 	return runStage().finally(() => clearInterval(heartbeatPump))
+}
+
+// the signal that aborts when the user stops the Scan, which Temporal raises on the running activity once its
+// next heartbeat returns. a stage run outside a workflow has no context and so never stops
+function stopSignal(): AbortSignal | undefined {
+	return asyncLocalStorage.getStore()?.cancellationSignal
 }
 
 // the Budget this attempt runs against: the counters the last attempt checkpointed, or the passed budget

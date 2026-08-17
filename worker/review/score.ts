@@ -68,11 +68,12 @@ export async function fetchAndScoreResources(
 	reviewOutcome: ReviewOutcome,
 	budget: Budget,
 	litellmApiKey?: string,
+	stopSignal?: AbortSignal,
 ): Promise<string[]> {
 	// each Resource checks the limit before it starts, so work already in flight when the limit is reached
 	// can overshoot it by up to one less than the concurrency. that overshoot is accepted, and costs a few cents
 	const paidOutcomes = await runWithConcurrency(admittedResources, REVIEW_CONCURRENCY, (resource) =>
-		fetchAndScoreResource(resource, scan, topicId, topicContext, budget, litellmApiKey),
+		fetchAndScoreResource(resource, scan, topicId, topicContext, budget, litellmApiKey, stopSignal),
 	)
 	for (const paidOutcome of paidOutcomes) {
 		trackOutcomes(reviewOutcome, paidOutcome)
@@ -120,9 +121,12 @@ async function fetchAndScoreResource(
 	topicContext: TopicContext,
 	budget: Budget,
 	litellmApiKey?: string,
+	stopSignal?: AbortSignal,
 ): Promise<ResourceOutcome> {
-	// defer the Resource once the Scan hits its dollar limit or its scored-resource limit
-	if (!canScoreResource(budget)) {
+	// defer the Resource once the Scan hits its dollar limit or its scored-resource limit,
+	// or once the user stops the Scan. a stop processes the rest of the Resources through the same path a spent budget uses,
+	// so the review returns what it scored instead of throwing away the stage's work
+	if (!canScoreResource(budget, stopSignal)) {
 		return { status: "deferred" }
 	}
 

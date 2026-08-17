@@ -84,7 +84,7 @@
 	animation: hydrate-in 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
 }
 
-/* a bright band sweeps across muted text, like Claude's "thinking" shimmer, for "Carl is reading" while a scan runs */
+/* a bright band sweeps across muted text, like Claude's "thinking" shimmer, for "Carl is Brewing" while a scan runs */
 @keyframes shimmer-sweep {
 	from {
 		background-position: 200% center;

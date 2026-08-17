@@ -123,6 +123,7 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 			status: scans.status,
 			startedAt: scans.startedAt,
 			finishedAt: scans.finishedAt,
+			stoppedAt: scans.stoppedAt,
 			foundCount: scans.foundCount,
 			keptCount: scans.keptCount,
 			filteredCount: scans.filteredCount,
@@ -132,19 +133,26 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 		.from(scans)
 		.where(eq(scans.topicId, topic.id))
 		.orderBy(desc(scans.startedAt))
-	const scanHistory: TopicScan[] = scanRows.map((scan) => ({
-		id: scan.id,
-		status: scan.status,
-		// the run times, iso encoded for the wire
-		startedAt: scan.startedAt.toISOString(),
-		finishedAt: scan.finishedAt?.toISOString() ?? null,
-		// the counts, and the cost in dollars for the owner or an admin
-		foundCount: scan.foundCount,
-		keptCount: scan.keptCount,
-		filteredCount: scan.filteredCount,
-		costDollars: isAdmin || isOwner ? Number(scan.cost) : null,
-		error: scan.error,
-	}))
+	// a scan the user cancelled is left out of the history.
+	// and out of the last-succeeded scan that the schedule line and the topic's note are read from,
+	// where it would otherwise report a scan time with no recap behind it.
+	// the month's cost below still counts it, since it was spent
+	const scanHistory: TopicScan[] = scanRows
+		.filter((scan) => scan.stoppedAt === null)
+		.map((scan) => ({
+			id: scan.id,
+			status: scan.status,
+			// the run times, iso encoded for the wire
+			startedAt: scan.startedAt.toISOString(),
+			finishedAt: scan.finishedAt?.toISOString() ?? null,
+			stoppedAt: scan.stoppedAt?.toISOString() ?? null,
+			// the counts, and the cost in dollars for the owner or an admin
+			foundCount: scan.foundCount,
+			keptCount: scan.keptCount,
+			filteredCount: scan.filteredCount,
+			costDollars: isAdmin || isOwner ? Number(scan.cost) : null,
+			error: scan.error,
+		}))
 
 	// this user's own subscription state. the count itself reads the denormalised column, the same figure the
 	// feed and the profile show, so no page can disagree with another

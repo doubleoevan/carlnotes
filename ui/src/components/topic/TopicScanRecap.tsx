@@ -24,18 +24,26 @@ export type ScanRecapFields = {
 	error: string | null
 	startedAt: string
 	finishedAt: string | null
+	// set when the user stopped the scan, which is a different missing recap from a scan that simply had none written
+	stoppedAt: string | null
 	scanSummary: string | null
 	costDollars: number | null
 }
 
 /**
  * The diary line standing in for a missing recap, in Carl's own voice: still reading while the scan runs,
- * what stopped a failed one, and for a scan that finished without notes, that the findings still landed.
+ * what stopped a failed one, what a user's cancel interrupted, and for a scan that finished without notes,
+ * that the findings still landed.
  */
-export function toScanRecapPlaceholder(scan: Pick<ScanRecapFields, "status" | "error">): string {
+export function toScanRecapPlaceholder(scan: Pick<ScanRecapFields, "status" | "error" | "stoppedAt">): string {
 	// a failed scan says what stopped it, naming the wall Carl hits most often
 	if (scan.status === "failed") {
 		return isBudgetError(scan.error) ? "Today I ran out of coffee." : "This one didn't brew."
+	}
+
+	// the user stopped this scan, so there was never a recap to write. what Carl had already kept still stands
+	if (scan.stoppedAt) {
+		return "Carl stopped brewing.\nThis was in the pot."
 	}
 
 	// a scan that never finished is still being read. the break renders through the placeholder's whitespace-pre-line
@@ -44,7 +52,7 @@ export function toScanRecapPlaceholder(scan: Pick<ScanRecapFields, "status" | "e
 	}
 
 	// it succeeded, so the findings are real even though writing them up failed. saying "still reading" here would be a lie
-	return "No entry for this one.\nThe raccoon stole my keyboard.\nFindings are all there though."
+	return "No entry for this one.\nThe raccoon stole my keyboard.\nFindings are there though."
 }
 
 // clip a long note to this many pixels when collapsed, measured against the rendered output

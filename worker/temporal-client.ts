@@ -1,6 +1,6 @@
 // the Temporal client that the api and the sweep use to start durable workflows.
 // one lazily built connection is reused, so a request starts a workflow without opening a fresh connection each time
-import { Client, Connection, WorkflowExecutionAlreadyStartedError } from "@temporalio/client"
+import { Client, Connection, WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from "@temporalio/client"
 import type { ScanTrigger } from "./workflows/run-topic-scan-activities"
 
 // the task queue the attachment worker polls, and the workflow it runs
@@ -24,6 +24,9 @@ const QUEUE_DESCRIBE_TIMEOUT_MS = 10_000
 // "running" means the Topic already had a scan in flight, and the workflow id is what rejected this new start
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type ScanStart = { status: "started"; whenFinished: Promise<void> } | { status: "running" }
+
+// whether a cancel reached a running Scan. "idle" means the Topic didn't have one, which is a valid response instead of a failure
+export type ScanCancel = { status: "cancelled" } | { status: "idle" }
 
 // the reused client promise, built on first use from the TEMPORAL_ADDRESS endpoint
 let clientPromise: Promise<Client> | undefined
@@ -88,6 +91,24 @@ export async function startTopicScanWorkflow(
 		// a Topic already scanning is an expected answer, not a failure. anything else is
 		if (error instanceof WorkflowExecutionAlreadyStartedError) {
 			return { status: "running" }
+		}
+		throw error
+	}
+}
+
+/**
+ * Cancel the Scan a Topic is running. The workflow id is derived from the Topic, so the caller needs no stored id.
+ * A Topic with nothing running anymore answers "idle", since a Scan that already completed is not a failed cancel.
+ */
+export async function cancelTopicScanWorkflow(topicId: string): Promise<ScanCancel> {
+	const client = await getClient()
+	try {
+		await client.workflow.getHandle(`scan-${topicId}`).cancel()
+		return { status: "cancelled" }
+	} catch (error) {
+		// a workflow that is missing or already completed leaves nothing to cancel
+		if (error instanceof WorkflowNotFoundError) {
+			return { status: "idle" }
 		}
 		throw error
 	}

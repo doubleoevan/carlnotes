@@ -24,10 +24,16 @@ export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<
 export function useManualScanProgress(scans: TopicResponse["scans"] | undefined): {
 	isScanning: boolean
 	isRunningScan: boolean
+	isCancellingScan: boolean
+	// the flags above are set by these, one pair for the trigger and one for the cancel
 	startScan: () => void
 	stopScan: () => void
+	cancelScan: () => void
+	stopCancelling: () => void
 } {
+	// the optimistic flags covering the gap between a click and the row that answers it
 	const [isRunningScan, setIsRunningScan] = useState(false)
+	const [isCancellingScan, setIsCancellingScan] = useState(false)
 	const [scanTriggeredAt, setScanTriggeredAt] = useState<number | null>(null)
 
 	// the topic's current scan status
@@ -42,13 +48,26 @@ export function useManualScanProgress(scans: TopicResponse["scans"] | undefined)
 		}
 	}, [isScanning, hasScanSinceTrigger])
 
+	// a cancel takes a moment to reach the running stage, so the flag resets only once no scan is running
+	useEffect(() => {
+		if (!isScanning) {
+			setIsCancellingScan(false)
+		}
+	}, [isScanning])
+
+	// the live flags, then the actions the button drives them with
 	return {
 		isScanning,
 		isRunningScan,
+		isCancellingScan,
+		// a trigger optimistically sets the flag and the timestamp that the database should override
 		startScan: () => {
 			setIsRunningScan(true)
 			setScanTriggeredAt(Date.now())
 		},
 		stopScan: () => setIsRunningScan(false),
+		cancelScan: () => setIsCancellingScan(true),
+		// a cancel that the api rejected leaves the scan running, so the cancel control comes back to be tried again
+		stopCancelling: () => setIsCancellingScan(false),
 	}
 }

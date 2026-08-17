@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
 import { scans, topics } from "../../db/schema"
-import { failStaleScans, startTopicScan } from "../../worker"
+import { failStaleScans, loadScan, startTopicScan, stopTopicScan } from "../../worker"
 import { isAllowed, loadManualScanAuthorization } from "../authorization"
 import { reportManualScanOverage } from "../billing"
 import type { AnalyticsProperties } from "../currentUser"
@@ -15,6 +15,10 @@ import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 // the outcomes of a manual scan request. status: running means a scan is already in flight for the topic
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type ManualScanResult = { status: "started"; remainingScans: number } | { status: "forbidden" } | { status: "quota" } | { status: "running" }
+
+// the outcomes of a stop request. status: idle means the Topic had no Scan running to stop
+// biome-ignore format: one line keeps the union under the comment-density hook's limit
+export type StopScanResult = { status: "stopped" } | { status: "idle" } | { status: "forbidden" }
 
 /**
  * Start a manual scan for the owner or an admin, enforcing the daily quota. The scan runs without blocking the request.
@@ -52,7 +56,10 @@ export async function runManualScan(
 	// the email is sent by the workflow itself, which means a scan that resumed after a crash still sends one
 	started.whenFinished
 		.then(async () => {
-			if (authorization.isOverage) {
+			// a Scan the user stopped gave its daily scan back, so the limit the overage bills for is no longer exceeded.
+			// what it spent before the stop is still tracked against the month
+			const finishedScan = await loadScan(started.scan.id)
+			if (authorization.isOverage && !finishedScan?.stoppedAt) {
 				await reportManualScanOverage(userId)
 			}
 		})
@@ -65,6 +72,21 @@ export async function runManualScan(
 	// track the scan request analytics event, then return the quota that the user has left
 	trackEvent("scan_requested", userId, { ...analyticsProperties, topicId })
 	return { status: "started", remainingScans: authorization.remainingScans }
+}
+
+/**
+ * Stop the Scan a Topic is running. Authority alone decides who may do this, never the daily quota.
+ */
+export async function stopManualScan(userId: string, topicId: string): Promise<StopScanResult> {
+	// only a user who can scan a topic may stop a scan on it
+	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
+	if (!(topic && (await isAllowed(userId, "scan:request", topic)))) {
+		return { status: "forbidden" }
+	}
+
+	// a Topic whose Scan already finished has nothing to stop, which is an answer instead of a failure
+	const stopped = await stopTopicScan(topicId)
+	return stopped.status === "cancelled" ? { status: "stopped" } : { status: "idle" }
 }
 
 // the manual scan route and one scan's recap
@@ -103,4 +125,18 @@ export const scansRoute = new Hono<AppEnv>()
 		return scanResult.status === "quota"
 			? context.json({ error: "quota exhausted" }, 429)
 			: context.json({ error: "forbidden" }, 403)
+	})
+	.post("/topics/:id/scan/stop", async (context) => {
+		// reject a signed-out caller
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+
+		// stop the Topic's running Scan. a Topic with none running answers the same way as one that was stopped
+		const stopResult = await stopManualScan(userId, context.req.param("id"))
+		if (stopResult.status === "forbidden") {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		return context.json({ status: stopResult.status })
 	})

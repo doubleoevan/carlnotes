@@ -1,7 +1,7 @@
 // per-user scan-quota checks
 import { dailyFrequencies } from "@shared/enums"
 import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan } from "@shared/plans"
-import { and, count, eq, gte, inArray, ne } from "drizzle-orm"
+import { and, count, eq, gte, inArray, isNull, ne } from "drizzle-orm"
 import { db } from "."
 import { billingSubscriptions, scans, topics, users } from "./schema"
 
@@ -15,11 +15,19 @@ export async function loadUserAccess(userId: string): Promise<{ isAdmin: boolean
 // how many scans ran for the user since utc midnight, scheduled and manual combined.
 // a scan carries its own owner, so deleting a topic can't remove the count its scans already used up
 export async function scansToday(userId: string): Promise<number> {
-	// count every non-failed scan inside the utc day. a failed scan gives its slot back
+	// count every non-failed scan inside the utc day. a failed scan gives its slot back, and so does one the user stopped,
+	// which is saved as succeeded but is identified by its stoppedAt date
 	const [scanCountRow] = await db
 		.select({ count: count() })
 		.from(scans)
-		.where(and(eq(scans.ownerId, userId), ne(scans.status, "failed"), gte(scans.startedAt, startOfUtcDay(new Date()))))
+		.where(
+			and(
+				eq(scans.ownerId, userId),
+				ne(scans.status, "failed"),
+				isNull(scans.stoppedAt),
+				gte(scans.startedAt, startOfUtcDay(new Date())),
+			),
+		)
 	return scanCountRow?.count ?? 0
 }
 
