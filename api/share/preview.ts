@@ -40,8 +40,8 @@ export async function toTopicPreview(topicId: string): Promise<TopicPreview | nu
 		.select({ sources: count() })
 		.from(sources)
 		.where(and(eq(sources.topicId, topicId), eq(sources.status, "ready")))
-	// which image the owner publishes, named rather than loaded. the topic preview key is built from this,
-	// so a cache hit never pays to fetch the image itself. changing the avatar still lands the card on a new url
+	// which image the owner publishes, named instead of loaded. the topic preview key is built from this,
+	// so a cache hit never pays to fetch the image itself. changing the avatar still gives the card a new url
 	return {
 		topicId: row.topicId,
 		title: row.title,
@@ -100,8 +100,8 @@ export function toTopicDescription(preview: TopicPreview): string {
 
 /**
  * The app shell with a specific Topic's preview tags, title, and canonical URL to serve a crawler.
- * extraHeadTags carries anything else the route appends, like a structured-data script, and
- * extraBodyTags carries content for the body, like the noscript findings list.
+ * extraHeadTags includes anything else the route appends, like a structured-data script, and
+ * extraBodyTags includes content for the body, like the noscript findings list.
  */
 export function toTopicPreviewHtml(
 	appShell: string,
@@ -114,7 +114,7 @@ export function toTopicPreviewHtml(
 	const previewUrl = `${appUrl}/api/topics/${preview.topicId}/preview.png`
 	const title = Bun.escapeHTML(preview.title)
 	// X reads the Twitter tags before the og ones, so a topic that only set og:title
-	// would still be shared with whatever title the shell carries
+	// would still be shared with whatever title the shell has
 	const tags = [
 		`<title>${title} — CarlNotes</title>`,
 		`<link rel="canonical" href="${appUrl}/topics/${preview.topicId}">`,
@@ -181,39 +181,27 @@ export function toProfilePreviewHtml(appShell: string, preview: ProfilePreview, 
 }
 
 /**
- * The app shell with the given head tags in place of the ones it replaces: the OG set, the title,
- * and the canonical link. Every injecting route builds its head through this. bodyTags land right
- * inside the body element, ahead of the SPA root the shell renders into.
+ * The app shell with the given head tags in place of the shell's own version of each. Every injecting
+ * route builds its head through this. A tag the route leaves alone keeps the shell's site-wide default,
+ * so a page that sets only a title still shows the default preview card.
+ * bodyTags wrap the SPA root that the shell renders into.
  */
 export function toShellWithHeadTags(appShell: string, headTags: string, bodyTags = ""): string {
 	const body = toAppShellBody(appShell)
-	return `${withoutReplacedTags(appShell)}${headTags}</head>${bodyTags ? body.replace(/<body[^>]*>/, (bodyTag) => `${bodyTag}${bodyTags}`) : body}`
+	return `${withoutReplacedTags(appShell, headTags)}${headTags}</head>${bodyTags ? body.replace(/<body[^>]*>/, (bodyTag) => `${bodyTag}${bodyTags}`) : body}`
 }
 
-// the preview tags that a Topic overrides. the shell renders a site-wide default for each.
-// appending without removing those tags leaves two of every tag.
-const REPLACED_PREVIEW_PROPERTIES = new Set([
-	"og:title",
-	"og:description",
-	"og:image",
-	"og:image:alt",
-	"og:url",
-	"twitter:card",
-	"twitter:title",
-	"twitter:description",
-	"twitter:image",
-])
+// a meta-tag, capturing the property or name it has
+const META_PROPERTY_PATTERN = /<meta\s+(?:property|name)="([^"]+)"[^>]*>/g
 
-// the shell with the tags a route replaces taken out — the OG set, the title, and the canonical link —
-// so only the route's version of each survives
-function withoutReplacedTags(appShell: string): string {
+// the shell head with only the tags this route writes taken out, so appending the route's own tags leaves one of each
+function withoutReplacedTags(appShell: string, headTags: string): string {
+	const replacedProperties = new Set([...headTags.matchAll(META_PROPERTY_PATTERN)].map(([, property]) => property))
 	const head = appShell.slice(0, appShell.indexOf("</head>"))
 	return head
-		.replace(/<title>[\s\S]*?<\/title>/, "")
-		.replace(/<link\s+rel="canonical"[^>]*>/, "")
-		.replaceAll(/<meta\s+(?:property|name)="([^"]+)"[^>]*>/g, (tag, property) =>
-			REPLACED_PREVIEW_PROPERTIES.has(property) ? "" : tag,
-		)
+		.replace(/<title>[\s\S]*?<\/title>/, (title) => (headTags.includes("<title>") ? "" : title))
+		.replace(/<link\s+rel="canonical"[^>]*>/, (link) => (headTags.includes('rel="canonical"') ? "" : link))
+		.replaceAll(META_PROPERTY_PATTERN, (tag, property) => (replacedProperties.has(property) ? "" : tag))
 }
 
 // everything after the app shell head tag
