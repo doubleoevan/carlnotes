@@ -1,5 +1,5 @@
 import { ADMIN_QUOTA, PLANS } from "@shared/plans"
-import { Check, Plus, RotateCw, SlidersHorizontal } from "lucide-react"
+import { Ban, Blend, Check, CircleX, type LucideIcon, Plus, RotateCw, SlidersHorizontal, Target } from "lucide-react"
 import { useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
@@ -16,12 +16,12 @@ import { authClient } from "@/lib/authClient"
 import { cn, MENU_BUTTON_CLASS } from "@/lib/utils"
 import { type TagMatchMode, tagMatchModes, useTopicFeed } from "@/providers/TopicFeedProvider"
 
-// the display label per tag match mode
-const TAG_MATCH_LABEL: Record<TagMatchMode, string> = {
-	any: "Any Match",
-	all: "All Match",
-	none: "Exclude Tags",
-	off: "Off",
+// each tag match mode's display label and icon
+const TAG_MATCH_ROWS: Record<TagMatchMode, { label: string; Icon: LucideIcon }> = {
+	any: { label: "Any Match", Icon: Blend },
+	all: { label: "All Match", Icon: Target },
+	none: { label: "Exclude Tags", Icon: Ban },
+	off: { label: "Off", Icon: CircleX },
 }
 
 /**
@@ -160,21 +160,25 @@ function TagFiltersMenu({
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-40 p-1">
 				{/* one row per match mode with a check on the active one */}
-				{tagMatchModes.map((matchMode) => (
-					<button
-						key={matchMode}
-						type="button"
-						onClick={() => {
-							onTagModeChange(matchMode)
-							setIsOpen(false)
-						}}
-						aria-pressed={matchMode === mode}
-						className="hover:bg-accent flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-sm sm:min-h-9"
-					>
-						<span className="flex-1 text-left">{TAG_MATCH_LABEL[matchMode]}</span>
-						{matchMode === mode ? <Check className="size-4" /> : null}
-					</button>
-				))}
+				{tagMatchModes.map((matchMode) => {
+					const { label, Icon } = TAG_MATCH_ROWS[matchMode]
+					return (
+						<button
+							key={matchMode}
+							type="button"
+							onClick={() => {
+								onTagModeChange(matchMode)
+								setIsOpen(false)
+							}}
+							aria-pressed={matchMode === mode}
+							className="hover:bg-accent flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-sm sm:min-h-9"
+						>
+							<Icon className="size-4 text-muted-foreground" />
+							<span className="flex-1 text-left">{label}</span>
+							{matchMode === mode ? <Check className="size-4" /> : null}
+						</button>
+					)
+				})}
 			</PopoverContent>
 		</Popover>
 	)
