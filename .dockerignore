@@ -26,9 +26,10 @@ ui/dist
 .vscode
 .idea
 
-# specs, docs, and local scripts that never execute in the container
+# specs and prose that never execute in the container.
+# scripts stays out of this list because the docs build needs it. the root tsconfig points at scripts,
+# and the docs build reads the root tsconfig, so leaving scripts out fails the build
 openspec
-scripts
 README.md
 LICENSE
 AGENTS.md
