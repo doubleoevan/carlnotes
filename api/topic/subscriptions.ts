@@ -6,8 +6,9 @@ import { and, eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
 import { subscriptions, topicInvites, topics, users } from "../../db/schema"
+import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
-import { canSeeTopic, loadOwnedTopic } from "./permissions"
+import { loadOwnedTopic } from "./permissions"
 import { recountTopicSubscribers } from "./subscriberCounts"
 
 /**
@@ -15,9 +16,11 @@ import { recountTopicSubscribers } from "./subscriberCounts"
  * Unsubscribing only deactivates the row, so it can be reactivated. deleteTopicSubscription removes it for good.
  */
 export async function setTopicSubscription(userId: string, topicId: string, isSubscribed: boolean): Promise<boolean> {
-	// only a visible, non-private topic that someone else owns can be subscribed to
+	// only a visible, non-private topic that someone else owns can be subscribed to.
+	// an admin may also subscribe to an invite topic they were never invited to.
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
-	if (!topic || topic.visibility === "private" || topic.ownerId === userId || !(await canSeeTopic(userId, topic))) {
+	// biome-ignore format: one line keeps the guard under the comment-density hook's limit
+	if (!topic || topic.visibility === "private" || topic.ownerId === userId || !(await isAllowed(userId, "topic:view", topic))) {
 		return false
 	}
 
