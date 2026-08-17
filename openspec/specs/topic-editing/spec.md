@@ -4,7 +4,7 @@
 TBD - created by archiving change add-topic-detail-and-edit-pages. Update Purpose after archive.
 ## Requirements
 ### Requirement: Editing happens in a modal, not a route
-The ✎ icon SHALL open a centered edit modal over the dimmed topic page with an `Edit topic` title and a ✕ close. The same modal SHALL serve topic creation (titled `Add topic`) with empty fields, invite visibility and weekly schedule defaults, and the default web source switched on. The modal SHALL present, top to bottom: Title (text input), Carl's Prompt (textarea), Tags (pill editor with per-pill ✕ and a "+" that opens a search-and-create picker in the style of GitHub's label menu — a filter input over the tags known from the loaded feed, click-to-add rows, and a Create row for a typed tag that matches nothing), Frequency and Visibility as two side-by-side selects (daily/weekly; private/public/invite), Invitees (whenever visibility is public or invite — a private Topic has nobody to invite), Sources, Attachments, and a right-aligned Cancel/Save footer. The Sources field SHALL split into a default group — Carl's built-in web search, labeled `web`, removable when on and offered as a turn-on control when off — and a custom group listing the other sources with ✕, an add picker limited to rss, reddit, and youtube, and a Suggest sources control. The `/topics/:id/edit` route SHALL NOT exist.
+The ✎ icon SHALL open a centered edit modal over the dimmed topic page with an `Edit topic` title and a ✕ close. The same modal SHALL serve topic creation (titled `Add topic`) with empty fields, private daily defaults, and every registered default source switched on. The modal SHALL present, top to bottom: Title (text input), Carl's Prompt (textarea), Tags (pill editor with per-pill ✕ and a "+" that opens a search-and-create picker in the style of GitHub's label menu — a filter input over the tags known from the loaded feed, click-to-add rows, and a Create row for a typed tag that matches nothing), Frequency and Visibility as two side-by-side selects (daily/weekly; private/public/invite), Invitees (only when visibility is invite), Sources, Attachments, and a right-aligned Cancel/Save footer. The Sources field SHALL split into a default group — one row per kind in the shared default-Source registry, each labeled from that registry, removable when on and offered as a turn-on control when off, Carl's built-in web scout (`web`) among them — and a custom group listing the other sources with ✕ and an add picker offering the editable source kinds, including `podcast`, which takes a show's podcast id. The `/topics/:id/edit` route SHALL NOT exist.
 
 #### Scenario: The modal opens from the pencil
 - **WHEN** the owner activates ✎
@@ -14,10 +14,46 @@ The ✎ icon SHALL open a centered edit modal over the dimmed topic page with an
 - **WHEN** the owner edits fields, stages an upload, and then cancels
 - **THEN** nothing is persisted and the page payload is unchanged
 
+#### Scenario: Creation stages every default source
+- **WHEN** the modal opens for creation
+- **THEN** the default group shows one row per registered default kind, web among them, each switched on
+
+#### Scenario: A podcast is added by its podcast id
+- **WHEN** the owner adds a `podcast` source and types a show's podcast id
+- **THEN** it is staged as a custom source carrying that id, and the default group is unaffected
+
 #### Scenario: A new topic starts on invite
 
 - **WHEN** the owner opens the Add topic modal
 - **THEN** visibility starts on invite with the invitee editor showing, and the owner may switch to private or public before saving
+
+#### Scenario: A Google News source sits in the custom group
+- **WHEN** the modal opens on a Topic holding a Google News Source
+- **THEN** the default group shows only the web scout, and the Google News Source is listed among the custom sources as the publisher it covers
+
+#### Scenario: Creation starts with the preselected Sources on
+- **WHEN** the owner opens the modal to add a Topic
+- **THEN** the default group shows every preselected kind switched on, and saving creates one configless Source for each that is still on
+
+#### Scenario: A default source turns back on after being removed
+- **WHEN** the owner removes a default source and then activates its turn-on control
+- **THEN** that default source is staged again and saving restores it
+
+#### Scenario: A Bluesky account is added as a custom source
+- **WHEN** the owner picks bluesky in the add picker and enters an account handle
+- **THEN** it is staged as a custom Bluesky Source carrying that handle, with any leading `@` stripped
+
+#### Scenario: A new Topic is created with every default Source on
+- **WHEN** the owner opens `Add topic` and saves without touching the Sources field
+- **THEN** the created Topic holds one Source per member of the default Source set, and no `x` Source
+
+#### Scenario: An X source is added by handle from the custom picker
+- **WHEN** the owner opens the add picker, chooses `x`, and types a handle
+- **THEN** a custom `x` Source is staged carrying that handle, with any leading `@` stripped, and it renders in the custom group with its `@handle` summary
+
+#### Scenario: Turning one default Source off leaves the others on
+- **WHEN** the owner removes a row from the default group and saves
+- **THEN** the Topic keeps its other default Sources, holds no Source of the removed kind, and that row is offered as a turn-on control
 
 ### Requirement: Topic creation is capped per user
 The api SHALL create a topic owned by the current user from the same validated payload as an update, inserting its invitees and sources, capped at the caller's billing-plan topic limit (Free 3, Plus 10, Premium 25) — the cap counts owned topics, so deleting one frees a slot. Requests past the cap SHALL be rejected, and the modal's staged attachments SHALL upload against the new topic's id after creation.
@@ -77,7 +113,7 @@ The edit-topic modal SHALL offer a "Max results" select with the options Carl's 
 - **THEN** the api rejects the payload
 
 ### Requirement: Save applies the whole edit through the gate
-Save SHALL apply the edit as desired state: one update call carrying the fields, the full invitee list, and the full source list (the api reconciles stored rows — kept by id, inserted without id, deleted when missing), then staged attachment uploads, then staged attachment removals. The api SHALL validate the payload (non-empty name, enum frequency/visibility, well-formed invitee emails, source kinds limited to rss/reddit/youtube/search) and SHALL authorize the write through `isAllowed(user, "topic:edit", topic)`, which allows the owner or an admin and rejects everyone else. These steps SHALL run in sequence and are not one transaction: the field, invitee, and source update commits first, then staged uploads and removals apply independently, so a failure partway leaves the committed update in place with some attachments not yet uploaded or removed. The modal SHALL surface the error rather than roll back; because the update and reconciled lists are desired-state, re-saving reconverges them, and Cancel always discards staged-but-unsaved attachment changes.
+Save SHALL apply the edit as desired state: one update call carrying the fields, the full invitee list, and the full source list (the api reconciles stored rows — kept by id, inserted without id, deleted when missing), then staged attachment uploads, then staged attachment removals. The api SHALL validate the payload (non-empty name, enum frequency/visibility, well-formed invitee emails, source kinds limited to the editable set: url, rss, reddit, youtube, search, and bluesky) and SHALL authorize the write through `isAllowed(user, "topic:edit", topic)`, which allows the owner or an admin and rejects everyone else. These steps SHALL run in sequence and are not one transaction: the field, invitee, and source update commits first, then staged uploads and removals apply independently, so a failure partway leaves the committed update in place with some attachments not yet uploaded or removed. The modal SHALL surface the error rather than roll back; because the update and reconciled lists are desired-state, re-saving reconverges them, and Cancel always discards staged-but-unsaved attachment changes.
 
 #### Scenario: A field and source edit round-trips
 - **WHEN** the owner renames the Topic, removes a source, adds an rss source, and saves
@@ -90,6 +126,10 @@ Save SHALL apply the edit as desired state: one update call carrying the fields,
 #### Scenario: A non-owner cannot update
 - **WHEN** a user who is neither the owner nor an admin sends an update for the Topic
 - **THEN** the api rejects it as forbidden
+
+#### Scenario: A bluesky source is accepted by validation
+- **WHEN** a save carries a source of kind bluesky naming an account handle
+- **THEN** the api accepts the payload and reconciles the source row
 
 ### Requirement: A Topic holds at most ten Sources
 
@@ -194,4 +234,65 @@ Sending SHALL be fire-and-forget after the save commits: a failed send is logged
 
 - **WHEN** the owner saves a public Topic with a newly added invitee address
 - **THEN** that address receives the same invitation email, and the topic page opens for them without a gate
+
+### Requirement: Default Sources come from one registry
+
+The default Source set SHALL be one shared registry rather than a comparison against the `search` kind. Each entry SHALL name its key, the Source kind it saves as, the label and summary the UI shows for it, and how its config is built. The registry SHALL hold Carl's web scout (kind `search`, labeled `web`, configless) and SHALL be the single place both the edit modal and the topic info card read the default set from, so adding a default Source means adding an entry. A stored Source SHALL match a registry entry by its kind.
+
+Google News SHALL NOT be a registry entry: it is a custom Source, because it needs a publisher that only its owner — or a later change that suggests news sources — can name.
+
+#### Scenario: A new Topic preselects every default Source
+
+- **WHEN** the modal opens to create a Topic
+- **THEN** every registry entry is switched on, so the new Topic saves with the web scout and no other Source
+
+#### Scenario: A default Source is removable
+
+- **WHEN** the owner removes the web scout and saves a Topic that has other Sources
+- **THEN** no `search` Source is stored and the default group offers it as a turn-on control
+
+#### Scenario: The last remaining Source cannot be removed
+
+- **WHEN** the owner removes the only Source the Topic has left, default or custom
+- **THEN** the removal is refused with the same warning the editor already gives
+
+#### Scenario: Saving writes one row per switched-on entry
+
+- **WHEN** a Topic is saved with a registry entry switched on
+- **THEN** exactly one Source of that entry's kind is stored, holding the config the entry builds
+
+### Requirement: The custom source picker offers options, not source kinds
+
+The picker SHALL list custom source **options** from one shared table rather than listing source kinds, because an option is not always a kind of its own. Each option SHALL name the kind it saves as, the label the picker and the staged row show, the placeholder its value input carries, and how it turns the typed value into a Source config. The table SHALL be the single place a custom Source's config is built, so the modal carries no per-kind config branch of its own.
+
+The picker SHALL offer a `google news` option whose input is a publisher domain and whose kind is `rss`, alongside the `url`, `rss`, `reddit`, and `youtube` options. An option that cannot build a config from what was typed SHALL stage no Source.
+
+#### Scenario: Google News is added from the picker
+
+- **WHEN** the owner picks `google news`, types `techcrunch.com`, and saves
+- **THEN** an `rss` Source is stored whose url is the Google News feed for that publisher, and the editor lists it as a custom Source
+
+#### Scenario: The picker names what each option wants
+
+- **WHEN** the owner selects an option in the picker
+- **THEN** the value input carries that option's own placeholder, such as `publisher domain…` for `google news` and `feed url…` for `rss`
+
+#### Scenario: A value the option cannot build from stages nothing
+
+- **WHEN** the owner picks `google news` and types a value with no domain in it
+- **THEN** no Source is staged and the rest of the save is unaffected
+
+### Requirement: The default Source set is one registry
+
+The Sources a new Topic starts with SHALL be one named set of source kinds that every surface reads, rather than a source kind named individually wherever defaults are decided. A source kind joins the set by being listed in it, and a Topic created from the editor SHALL be staged with one Source of every kind in the set, each configless. Each default kind SHALL carry its own display copy — a short label and a summary of what it does — so a default Source line reads as what it does rather than as its enum value. Every editable kind outside the set SHALL be offered in the custom add picker instead, where it names what to pull from.
+
+#### Scenario: A new Topic starts with every default Source on
+
+- **WHEN** the owner opens the modal to create a Topic
+- **THEN** one Source per default kind is staged and shown as on, and saving creates them
+
+#### Scenario: A kind outside the default set is offered as a custom source
+
+- **WHEN** the owner opens the custom source add picker
+- **THEN** it offers every editable source kind that is not in the default set, including bluesky
 
