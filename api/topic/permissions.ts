@@ -171,6 +171,15 @@ export async function canRateFinding(userId: string, findingId: string): Promise
 }
 
 /**
+ * Whether the user may bookmark a topic finding. Bookmarks belong to the owner of the topic,
+ * so seeing a finding is not enough to pin one.
+ */
+export async function canBookmarkFinding(userId: string, findingId: string): Promise<boolean> {
+	const topic = await loadFindingTopic(findingId)
+	return topic?.ownerId === userId
+}
+
+/**
  * Whether the user may see a topic finding.
  */
 export async function isTopicFindingVisible(userId: string, findingId: string): Promise<boolean> {

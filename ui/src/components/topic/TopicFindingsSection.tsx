@@ -9,11 +9,13 @@ import { MoreButton } from "./MoreButton"
 // the max topic finding rows shown before the expander
 const MAX_TOPIC_FINDINGS = 5
 
-// the topic findings section props: the view-filtered rows, whether any exist at all, ratability, and the row handlers
+// the topic findings section props: the view-filtered rows, whether any exist at all,
+// what this user may do to a row, and the row handlers
 type TopicFindingsSectionProps = {
 	topicFindings: TopicFinding[]
 	hasAnyFindings: boolean
 	isRatable: boolean
+	isBookmarkable: boolean
 	handlers: TopicFeedHandlers
 	// names the topic in each note popover's copied Markdown
 	topic: { id: string; name: string; prompt: string }
@@ -24,6 +26,7 @@ export function TopicFindingsSection({
 	topicFindings,
 	hasAnyFindings,
 	isRatable,
+	isBookmarkable,
 	handlers,
 	topic,
 }: TopicFindingsSectionProps) {
@@ -43,6 +46,7 @@ export function TopicFindingsSection({
 						resource={finding}
 						rank={finding.isBookmarked ? null : index - pinnedShownCount + 1}
 						isRatable={isRatable}
+						isBookmarkable={isBookmarkable}
 						resourceHandlers={handlers}
 						topic={topic}
 					/>

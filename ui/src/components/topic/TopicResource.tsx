@@ -13,11 +13,12 @@ import { cn, POPOVER_HEADING_CLASS, RESOURCE_KIND_ICON, toAgeLabel } from "@/lib
 import { type TopicFeedHandlers, useIsSignedIn, useTopicFeedActions } from "@/providers/TopicFeedProvider"
 
 // the row's topic finding, its rank among the topic's auto-kept findings (null when a bookmark pins it instead),
-// whether this user may rate it, and optional handlers that override the topic feed provider's handlers
+// whether this user may rate and bookmark it, and optional handlers that override the topic feed provider's handlers
 type TopicResourceProps = {
 	resource: TopicFinding
 	rank: number | null
 	isRatable: boolean
+	isBookmarkable: boolean
 	resourceHandlers?: TopicFeedHandlers
 	// names the topic in the note popover's copied Markdown
 	topic: { id: string; name: string; prompt: string }
@@ -27,7 +28,14 @@ type TopicResourceProps = {
  * A single topic resource row. Clicking the row opens the note popup for the topic finding,
  * and clicking the title opens the resource itself in a new tab. Consumed rows appear muted, like an email inbox.
  */
-export function TopicResource({ resource, rank, isRatable, resourceHandlers, topic }: TopicResourceProps) {
+export function TopicResource({
+	resource,
+	rank,
+	isRatable,
+	isBookmarkable,
+	resourceHandlers,
+	topic,
+}: TopicResourceProps) {
 	// the topic page passes handlers that reload their own payload. the homepage falls back to the shared provider's handlers
 	const providerHandlers = useTopicFeedActions()
 	const { openTopicFinding, consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding } =
@@ -130,6 +138,7 @@ export function TopicResource({ resource, rank, isRatable, resourceHandlers, top
 					resource={resource}
 					topic={topic}
 					isRatable={isRatable}
+					isBookmarkable={isBookmarkable}
 					isSignedIn={isSignedIn}
 					isHintOpen={isHintOpen && !isNoteOpen}
 					onHintChange={setIsHintOpen}
@@ -148,6 +157,7 @@ function ResourceInfo({
 	resource,
 	topic,
 	isRatable,
+	isBookmarkable,
 	isSignedIn,
 	isHintOpen,
 	onHintChange,
@@ -156,9 +166,10 @@ function ResourceInfo({
 	onBookmark,
 }: {
 	topic: TopicResourceProps["topic"]
-	// the topic finding, whether this user is signed in and may rate it, and the consume, rate, and bookmark handlers
+	// the topic finding, whether this user is signed in and may rate or bookmark it, and the consume, rate, and bookmark handlers
 	resource: TopicFinding
 	isRatable: boolean
+	isBookmarkable: boolean
 	isSignedIn: boolean
 	// the entire row opens the tooltip, so hovering anywhere on it hints at the note this button opens
 	isHintOpen: boolean
@@ -169,6 +180,8 @@ function ResourceInfo({
 }) {
 	// the bookmark button's label, flipping with the finding's bookmark state
 	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
+	// only a topic's owner bookmarks its findings, and a bookmark held from before that rule stays removable
+	const isBookmarkShown = isBookmarkable || resource.isBookmarked
 	// the row owns the popover's open state, so this holds only the trigger the note anchors to and the content.
 	// the trigger stops the click so it toggles instead of the row also setting it open
 	return (
@@ -219,17 +232,19 @@ function ResourceInfo({
 				{/* the bookmark, read, and rating controls, only shown to a signed-in user */}
 				{isSignedIn && (
 					<div className="mt-3 border-t pt-2">
-						{/* the bookmark and read toggles share one row */}
+						{/* the bookmark and read toggles share one row, and a user who cannot bookmark gets the read toggle alone */}
 						<div className="flex items-center justify-between gap-2">
-							<button
-								type="button"
-								onClick={() => onBookmark(resource.findingId, !resource.isBookmarked)}
-								aria-pressed={resource.isBookmarked}
-								className="hover:bg-accent flex min-h-11 items-center gap-2 rounded-md px-2 text-sm sm:min-h-9"
-							>
-								<Bookmark className={cn("size-4", resource.isBookmarked && "text-primary fill-current")} />
-								{bookmarkLabel}
-							</button>
+							{isBookmarkShown && (
+								<button
+									type="button"
+									onClick={() => onBookmark(resource.findingId, !resource.isBookmarked)}
+									aria-pressed={resource.isBookmarked}
+									className="hover:bg-accent flex min-h-11 items-center gap-2 rounded-md px-2 text-sm sm:min-h-9"
+								>
+									<Bookmark className={cn("size-4", resource.isBookmarked && "text-primary fill-current")} />
+									{bookmarkLabel}
+								</button>
+							)}
 							<button
 								type="button"
 								onClick={() => onConsume(resource.findingId, !resource.isConsumed)}
