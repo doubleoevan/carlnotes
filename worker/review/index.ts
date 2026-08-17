@@ -20,7 +20,7 @@ type Scan = typeof scans.$inferSelect
 /**
  * Reviews a Scan's discovered Resources, writes Findings and returns the counts, outcome, and summary.
  * topicId is a parameter because a deleted topic clears the Scan row's own topic id.
- * The Budget arrives already carrying what ingestion spent, so review's limits read the Scan's whole spend.
+ * The Budget already includes what ingestion spent, so review's limits read the Scan's whole spend.
  * litellmApiKey bills its LLM calls to the topic owner's virtual key, falling back to the master key when absent.
  */
 export async function reviewScan(
@@ -39,7 +39,7 @@ export async function reviewScan(
 		return emptyReviewSummary()
 	}
 
-	// the running totals for this review. each stage below traces as its own span carrying what it spent
+	// the running totals for this review. each stage below traces as its own span with what it spent
 	const reviewOutcome = emptyReviewOutcome()
 
 	// embed the topic's effective context once for the relevance gate, keeping its name and text for the scorer and the report

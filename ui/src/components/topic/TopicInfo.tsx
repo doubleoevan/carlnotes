@@ -1,4 +1,5 @@
 import type { TopicFeed, TopicResponse } from "@shared/contracts"
+import { DEFAULT_SOURCES, toDefaultSource } from "@shared/sources"
 import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, Plug, Puzzle, Rss } from "lucide-react"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -14,10 +15,9 @@ import {
 	TopicScanNote,
 	toNotesMarkdown,
 } from "@/components/topic/TopicScanRecap"
-import { cn, MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS, WEB_SOURCE } from "@/lib/utils"
+import { cn, MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS } from "@/lib/utils"
 
-// each source's icon, keyed by the label the line renders. the web line is keyed by WEB_SOURCE's label
-// instead of the "search" kind behind it
+// each source's icon, keyed by the label the line renders. a default source is keyed by its own label instead of its kind
 const SOURCE_ICON: Record<string, SourceIcon> = {
 	web: Globe,
 	url: Link,
@@ -36,7 +36,7 @@ const SOURCE_ICON: Record<string, SourceIcon> = {
 // a source's icon is either a lucide glyph or one of the brand logos, and both take just a class
 type SourceIcon = (props: { className?: string }) => React.ReactNode
 
-// the card variant carries the full topic response for its scan history
+// the card variant includes the full topic response for its scan history
 type TopicInfoProps =
 	| { topic: TopicFeed; isCard?: false; onMakeTopicPublic?: undefined }
 	| { topic: TopicResponse; isCard: true; onMakeTopicPublic?: () => void }
@@ -252,19 +252,23 @@ export function InfoSection({
 	)
 }
 
-// the sources section: the default web search line first, then one line per custom source
+// the sources section: a line per default source first, then one line per custom source
 export function TopicSourcesSection({ sources }: { sources: TopicFeed["sources"] }) {
-	// the default source is the web search source. custom sources are everything else
-	const hasSearchSource = sources.some((source) => source.sourceKind === "search")
-	const customSources = sources.filter((source) => source.sourceKind !== "search")
+	// which default sources the topic has on
+	// and custom sources, which are sources with the default ones filtered out
+	const defaultSourceKeys = new Set(sources.flatMap((source) => toDefaultSource(source.sourceKind)?.key ?? []))
+	const customSources = sources.filter((source) => !toDefaultSource(source.sourceKind))
 	return (
 		<InfoSection label="Sources">
 			<div className="space-y-1">
-				<TopicSource
-					sourceKind={WEB_SOURCE.label}
-					summary={hasSearchSource ? WEB_SOURCE.summary : "off"}
-					isMuted={!hasSearchSource}
-				/>
+				{DEFAULT_SOURCES.map((defaultSource) => (
+					<TopicSource
+						key={defaultSource.key}
+						sourceKind={defaultSource.label}
+						summary={defaultSourceKeys.has(defaultSource.key) ? defaultSource.summary : "off"}
+						isMuted={!defaultSourceKeys.has(defaultSource.key)}
+					/>
+				))}
 				{customSources.map((source) => (
 					<TopicSource
 						key={source.id}

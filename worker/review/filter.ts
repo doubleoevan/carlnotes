@@ -30,7 +30,7 @@ export type Resource = typeof resources.$inferSelect
 // the topic's derived context loaded once per Scan: its name, its embedded text, and the embedding the relevance gate compares against
 export type TopicContext = { name: string; text: string; embedding: number[] }
 
-// a Resource that cleared the relevance gate, carrying the embedding and the similarity score that ranks it
+// a Resource that cleared the relevance gate, with the embedding and the similarity score that ranks it
 export type SurvivingResource = { resource: Resource; embedding: number[]; similarity: number }
 
 // the dedupe keys for what this Scan has admitted. kept in memory because the rows also hold embeddings for candidates it dropped
@@ -217,7 +217,7 @@ async function admitResource(
 	return null
 }
 
-// a Resource outside this Scan already carrying this content hash makes this a content-level duplicate.
+// a Resource outside this Scan that already has this content hash makes this a content-level duplicate.
 // excluding the current Scan's candidates stops a re-discovered candidate from matching the hash it stored itself and dropping both
 async function hasStoredHash(hash: string, candidateIds: string[]): Promise<boolean> {
 	// look for a stored Resource with the same hash

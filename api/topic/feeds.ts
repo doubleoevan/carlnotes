@@ -1,6 +1,6 @@
 // the topic feed logic behind the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
-import { toSourceSummary, toUrlHost } from "@shared/sources"
+import { toSourceSummary, toSourceValue, toUrlHost } from "@shared/sources"
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import {
@@ -178,7 +178,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 				.from(sources)
 				.where(inArray(sources.topicId, topicIds)),
 
-			// select every topic's attachments, carrying the topic id to group by
+			// select every topic's attachments, including the topic id to group by
 			db
 				.select({
 					topicId: attachments.topicId,
@@ -265,6 +265,7 @@ function buildTopicFeed(
 			id: source.id,
 			sourceKind: source.kind,
 			summary: toSourceSummary(source.kind, source.config),
+			value: toSourceValue(source.kind, source.config),
 			status: source.status,
 			error: source.error,
 		}))

@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { canScoreResource, newBudget } from "../budget"
 import { isContentStale } from "../scrape"
-import { buildScorePrompt, isPromoted, runWithConcurrency, toFetchedContentFields } from "./score"
+import { buildScorePrompt, isPromoted, isSnippetComplete, runWithConcurrency, toFetchedContentFields } from "./score"
 
 // a high cheap-model score earns promotion to the premium score-model's re-score
 test("isPromoted gates on the promotion threshold", () => {
@@ -17,6 +17,16 @@ test("isContentStale gates on the ttl window", () => {
 	expect(isContentStale(new Date("2026-07-24T11:00:00Z"), now, 86_400_000)).toBe(false)
 	expect(isContentStale(new Date("2026-07-22T12:00:00Z"), now, 86_400_000)).toBe(true)
 	expect(isContentStale(new Date("2026-07-23T12:00:00Z"), now, 86_400_000)).toBe(true)
+})
+
+// a tweet arrives with its whole text, so scoring it must never pay for a fetch that x.com would refuse anyway
+test("isSnippetComplete skips the fetch for a tweet and for nothing else", () => {
+	expect(isSnippetComplete("https://x.com/sama/status/123")).toBe(true)
+
+	// every other host still fetches, including one that merely ends in the same letters
+	expect(isSnippetComplete("https://example.com/post")).toBe(false)
+	expect(isSnippetComplete("https://notx.com/sama/status/123")).toBe(false)
+	expect(isSnippetComplete("https://www.reddit.com/r/x/comments/a/first/")).toBe(false)
 })
 
 // the paid section runs concurrently but bounded, since an unbounded burst draws Firecrawl 429s

@@ -1,7 +1,12 @@
 // track what became of each finding candidate a review looked at
 
 // the reasons a Resource is filtered out
-export type FilterReason = "duplicate content" | "near-duplicate" | "below relevance threshold" | "flagged by scanner"
+export type FilterReason =
+	| "duplicate content"
+	| "near-duplicate"
+	| "below relevance threshold"
+	| "flagged by scanner"
+	| "no text to score"
 
 // a kept resource finding's details, collected for the scan report
 export type KeptFinding = { title: string | null; url: string; relevanceScore: number; relevanceExplanation: string }
@@ -69,6 +74,7 @@ export function emptyReviewOutcome(): ReviewOutcome {
 			"near-duplicate": 0,
 			"below relevance threshold": 0,
 			"flagged by scanner": 0,
+			"no text to score": 0,
 		},
 		deferredCount: 0,
 		failedCount: 0,

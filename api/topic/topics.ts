@@ -5,7 +5,7 @@ import type { TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contr
 import { suggestSourcesPayload, updateTopicPayload } from "@shared/contracts"
 import { isDailyFrequency } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
-import { toSourceSummary } from "@shared/sources"
+import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, desc, eq, notInArray } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
@@ -19,6 +19,7 @@ import {
 import {
 	deleteAttachment,
 	failStaleScans,
+	lookupPodcast,
 	scanTopic,
 	screenPendingSources,
 	screenTopicSources,
@@ -96,6 +97,7 @@ export async function loadTopicPayload(userId: string | null, topicId: string): 
 			id: source.id,
 			sourceKind: source.kind,
 			summary: toSourceSummary(source.kind, source.config),
+			value: toSourceValue(source.kind, source.config),
 			status: source.status,
 			error: source.error,
 		}))
@@ -254,7 +256,6 @@ async function toDailyFrequencyPaused(
 	}
 	return !(await dailyTopicIdsWithinLimit(topic.ownerId)).has(topic.id)
 }
-
 /**
  * A scheduled time for the wire, dropping the seconds drizzle's time column always returns ("09:00:00" to "09:00").
  */
@@ -286,6 +287,7 @@ export async function createTopic(
 	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxResults } = payload
 	// the deduped invitees, shared by the insert inside the transaction and the invitation emails after it
 	const invitees = [...new Set(payload.invitees)]
+	const podcastNames = await toPodcastNames(payload.sources)
 	const { topicId, firstScan } = await db.transaction(async (transaction) => {
 		// insert the topic row owned by the user
 		const [topic] = await transaction
@@ -318,7 +320,9 @@ export async function createTopic(
 		// insert the new sources. a create payload never includes kept ids
 		const newSources = payload.sources.flatMap((source) => ("id" in source ? [] : [source]))
 		if (newSources.length > 0) {
-			await transaction.insert(sources).values(newSources.map((source) => toNewSourceRow(topic.id, source)))
+			await transaction
+				.insert(sources)
+				.values(newSources.map((source) => toNewSourceRow(topic.id, source, podcastNames)))
 		}
 
 		// open the first scan as running, so the new topic page shows a scan already under way
@@ -374,6 +378,7 @@ export async function updateTopic(
 	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxResults } = payload
 	// the deduped invitees, shared by the reconcile inside the transaction and the invitation emails after it
 	const invitees = [...new Set(payload.invitees)]
+	const podcastNames = await toPodcastNames(payload.sources)
 	await db.transaction(async (transaction) => {
 		// write the editable topic fields
 		await transaction
@@ -418,10 +423,12 @@ export async function updateTopic(
 				: eq(sources.topicId, topicId)
 		await transaction.delete(sources).where(staleSourceFilter)
 
-		// insert the newly added sources. the flatMap narrows the union to the members carrying source kind and source config
+		// insert the newly added sources. the flatMap narrows the union to the members with source kind and source config
 		const newSources = payload.sources.flatMap((source) => ("id" in source ? [] : [source]))
 		if (newSources.length > 0) {
-			await transaction.insert(sources).values(newSources.map((source) => toNewSourceRow(topicId, source)))
+			await transaction
+				.insert(sources)
+				.values(newSources.map((source) => toNewSourceRow(topicId, source, podcastNames)))
 		}
 	})
 
@@ -473,13 +480,42 @@ async function toFeaturedTopics(
 
 // a new Source row. a url Source is saved as pending so it isn't ready until its page has been fetched and screened,
 // every other source kind is saved as ready
-function toNewSourceRow(topicId: string, source: NewTopicSource): typeof sources.$inferInsert {
+function toNewSourceRow(
+	topicId: string,
+	source: NewTopicSource,
+	podcastNames: Map<string, string>,
+): typeof sources.$inferInsert {
+	// a podcast Source keeps the show's name beside its id, so it reads by name instead of by number
+	const podcastId = source.config.podcastId
+	const podcastName = typeof podcastId === "string" ? podcastNames.get(podcastId) : undefined
 	return {
 		topicId,
 		kind: source.sourceKind,
-		config: source.config,
+		config: podcastName ? { ...source.config, name: podcastName } : source.config,
 		status: source.sourceKind === "url" ? "pending" : "ready",
 	}
+}
+
+// the show names for the podcast Sources this payload adds, read before the write so no request runs inside a transaction.
+// a name that will not resolve is left out, and the ingester stores it on the first scan instead
+async function toPodcastNames(payloadSources: UpdateTopicPayload["sources"]): Promise<Map<string, string>> {
+	// the ids this payload adds without a name of their own. a kept Source keeps whatever name it was saved with,
+	// and a suggested one arrives already named, so only a hand-typed id needs the lookup
+	const podcastIds = payloadSources.flatMap((source) =>
+		"id" in source ||
+		source.sourceKind !== "podcast" ||
+		typeof source.config.podcastId !== "string" ||
+		typeof source.config.name === "string"
+			? []
+			: [source.config.podcastId],
+	)
+	if (podcastIds.length === 0) {
+		return new Map()
+	}
+
+	// look every show up at once. iTunes being unreachable costs a name, never the save
+	const podcasts = await Promise.all(podcastIds.map((podcastId) => lookupPodcast(podcastId).catch(() => null)))
+	return new Map(podcasts.flatMap((podcast) => (podcast ? [[podcast.podcastId, podcast.name] as const] : [])))
 }
 
 // start the invitation emails without holding up the save that added them

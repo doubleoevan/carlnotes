@@ -81,7 +81,7 @@ Scheduled scans run at your topic's frequency. Manual scans are metered per plan
 
 When paid plans are live:
 
-- Subscriptions bill in advance on a recurring basis until cancelled
+- Subscriptions bill in advance on a recurring basis until canceled
 - Prices are in US dollars and exclude taxes, which you are responsible for
 - Cancel at any time. Access continues to the end of the paid period
 - Fees already paid are non-refundable except where the law requires otherwise

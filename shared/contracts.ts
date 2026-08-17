@@ -15,6 +15,7 @@ import {
 	visibilities,
 } from "./enums"
 import type { BillingInterval, Plan } from "./plans"
+import { customSourceKeys } from "./sources"
 
 // the rating mutation body. up or down sets the topic finding's rating and null clears it
 export const ratingPayload = z.object({ rating: z.enum(ratings).nullable() })
@@ -453,6 +454,8 @@ export const topicFeed = z.object({
 			id: z.string(),
 			sourceKind: z.enum(sourceKinds),
 			summary: z.string(),
+			// what the source is identified by, which is what a suggestion is deduped against
+			value: z.string(),
 			status: z.enum(attachmentStatuses),
 			error: z.string().nullable(),
 		}),
@@ -524,15 +527,17 @@ export const suggestSourcesPayload = z.object({
 	prompt: z.string().trim(),
 	attachmentContext: z.string().trim().max(MAX_ATTACHMENT_CONTEXT_CHARS).default(""),
 	excludeSources: z
-		.array(z.object({ sourceKind: z.enum(editableSourceKinds), value: z.string() }))
+		.array(z.object({ sourceOption: z.enum(customSourceKeys), value: z.string() }))
 		.max(MAX_TOPIC_SOURCES),
 	limit: z.number().int().min(1).max(MAX_TOPIC_SOURCES),
 })
 export type SuggestSourcesPayload = z.infer<typeof suggestSourcesPayload>
 
-// suggested sources, each already confirmed readable
+// suggested sources, each already confirmed readable. name is the display name for the source
 export const suggestSourcesResponse = z.object({
-	sources: z.array(z.object({ sourceKind: z.enum(editableSourceKinds), value: z.string() })),
+	sources: z.array(
+		z.object({ sourceOption: z.enum(customSourceKeys), value: z.string(), name: z.string().optional() }),
+	),
 })
 export type SuggestSourcesResponse = z.infer<typeof suggestSourcesResponse>
 

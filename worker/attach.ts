@@ -100,9 +100,9 @@ export async function ingestUrlAttachment(topicId: string, url: string): Promise
 		throw new AttachmentValidationError(error instanceof Error ? error.message : String(error))
 	}
 
-	// a missing key or a dead page both land here. neither is worth leaking to the caller,
-	// so the rejection names the url and nothing else
-	const fetchResult = await fetchContent(fetchableUrl.toString()).catch(() => {
+	// an attached url names a page to read, so it takes the scrape instead of the caption path a video would.
+	// a missing key or a dead page both land here, and the rejection names the url and nothing else
+	const fetchResult = await fetchContent(fetchableUrl.toString(), "read").catch(() => {
 		throw new AttachmentValidationError(`this page could not be read: ${url}`)
 	})
 
@@ -111,7 +111,7 @@ export async function ingestUrlAttachment(topicId: string, url: string): Promise
 		topicId,
 		filename: toPageFilename(fetchableUrl),
 		contentType: "text/markdown",
-		bytes: new TextEncoder().encode(fetchResult.markdown),
+		bytes: new TextEncoder().encode(fetchResult.text),
 		sourceUrl: fetchableUrl.toString(),
 	})
 }

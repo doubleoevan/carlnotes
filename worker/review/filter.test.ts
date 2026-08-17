@@ -89,7 +89,7 @@ test("an admitted content hash drops a later sibling sharing it", () => {
 	expect(admitted.contentHashes.has("hash-a")).toBe(false)
 	admitted.contentHashes.add("hash-a")
 
-	// a later candidate carrying the same hash is caught, and a different hash is not
+	// a later candidate with the same hash is caught, and a different hash is not
 	expect(admitted.contentHashes.has("hash-a")).toBe(true)
 	expect(admitted.contentHashes.has("hash-b")).toBe(false)
 })

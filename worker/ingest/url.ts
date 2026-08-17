@@ -2,7 +2,6 @@
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { resources } from "../../db/schema"
-import { FIRECRAWL_COST_PER_FETCH } from "../budget"
 import { CONTENT_TTL_MS, fetchContent, isContentStale, toFetchableUrl } from "../scrape"
 import { getResourceContent } from "../store"
 import type { FetchedBody, IngestedResource, IngestResult, Source, SourceIngester } from "./ingester"
@@ -99,10 +98,11 @@ async function readPageBody(pageUrl: string): Promise<PageBody> {
 		return { markdown: storedMarkdown, costDollars: 0 }
 	}
 
-	// scrape the page and send back the body, so ingestion can store it and review can reuse it instead of scraping again
+	// scrape the page and send back the body, so ingestion can store it and review can reuse it instead of scraping again.
+	// a url Source names a page to read, so it takes the scrape instead of the caption path a video would
 	try {
-		const { markdown, etag, lastModified } = await fetchContent(pageUrl)
-		return { markdown, costDollars: FIRECRAWL_COST_PER_FETCH, fetchedBody: { markdown, etag, lastModified } }
+		const { text: markdown, cost, etag, lastModified } = await fetchContent(pageUrl, "read")
+		return { markdown, costDollars: cost, fetchedBody: { markdown, etag, lastModified } }
 	} catch (error) {
 		// the page had an error, so review will try to fetch it again
 		console.error(`url source could not read the page at ${pageUrl}`, error)

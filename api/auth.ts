@@ -32,7 +32,7 @@ const PASSWORD_SIGNUP_PATH = "/sign-up/email"
 // the paths that set a password, which are the only ones a breach check belongs on. sign-in is deliberately absent.
 const PASSWORD_SETTING_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/reset-password", "/change-password", "/set-password"])
 
-// the paths carrying an address better auth then looks a user up by or stores. every one of them is canonicalized,
+// the paths carrying an address better auth then looks a user up by or stores. each one of them is canonicalized,
 // since matching a stored address against an incoming one only works when both sides were written the same way
 const EMAIL_BODY_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/sign-in/email", "/request-password-reset", "/change-email"])
 

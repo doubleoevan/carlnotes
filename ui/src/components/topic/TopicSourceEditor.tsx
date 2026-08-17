@@ -1,5 +1,11 @@
-import { MAX_TOPIC_SOURCES, type TopicResponse } from "@shared/contracts"
-import { editableSourceKinds } from "@shared/enums"
+import { MAX_TOPIC_SOURCES, type SuggestSourcesPayload, type TopicResponse } from "@shared/contracts"
+import {
+	CUSTOM_SOURCE_OPTIONS,
+	type CustomSourceKey,
+	DEFAULT_SOURCES,
+	toCustomSourceOption,
+	toSourceSummary,
+} from "@shared/sources"
 import { Lightbulb, X } from "lucide-react"
 import type * as React from "react"
 import { useState } from "react"
@@ -11,14 +17,11 @@ import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { fetchSourceSuggestions } from "@/lib/topicClient"
-import { cn, WEB_SOURCE } from "@/lib/utils"
+import { cn } from "@/lib/utils"
 import { toScreeningNote } from "./TopicInfo"
 
-// the source kinds that the custom source picker offers, one of the editable source kinds
-export type EditableSourceKind = (typeof editableSourceKinds)[number]
-
-// the source kinds that the custom source picker offers. the search kind is the default web search, managed by its own toggle
-const CUSTOM_SOURCE_KINDS = editableSourceKinds.filter((kind) => kind !== "search")
+// a source staged by the picker or by a suggestion: the custom source option it came from, and its typed value
+export type AddedSource = { optionKey: string; value: string; name?: string }
 
 // how many sources one suggestion request asks for at most
 const MAX_SUGGESTIONS = 3
@@ -26,56 +29,59 @@ const MAX_SUGGESTIONS = 3
 // what the source controls say once the topic has reached its source limit
 export const FULL_SOURCES_NOTE = `Carl reads ${MAX_TOPIC_SOURCES} sources per topic. Drop one to add another.`
 
-// the placeholder for the source picker's value input, per pickable source kind
-const SOURCE_VALUE_PLACEHOLDER: Record<EditableSourceKind, string> = {
-	url: "page url…",
-	rss: "feed url…",
-	reddit: "subreddit…",
-	youtube: "channel or playlist id…",
-	search: "",
+// a staged row reads as its resolved name, then as its config summary, then as what was typed
+function toStagedSummary(added: AddedSource): string {
+	if (added.name) {
+		return added.name
+	}
+	const option = toCustomSourceOption(added.optionKey)
+	const config = option?.toConfig(added.value)
+	return (option && config && toSourceSummary(option.sourceKind, config)) || added.value
 }
 
-// the source editor props: the kept stored sources, the pending new ones, and their change callbacks.
-// the topic's own words and its prompt urls come along too, since suggesting reads the first and the cap counts the second
+// the source editor props: the default sources switched on by key, the kept stored sources, the pending new ones,
+// and their change callbacks. the topic's own words and its prompt urls come along too,
+// since suggesting reads the first and the cap counts the second
 type TopicSourceEditorProps = {
+	defaultSourceKeys: string[]
 	keptSources: TopicResponse["sources"]
-	addedSources: { sourceKind: EditableSourceKind; value: string }[]
+	addedSources: AddedSource[]
 	topicName: string
 	topicPrompt: string
 	topicAttachmentContext: string
 	promptSourceUrls: string[]
+	onDefaultKeysChange: (keys: string[]) => void
 	onKeptChange: (sources: TopicResponse["sources"]) => void
-	onAddedChange: (sources: { sourceKind: EditableSourceKind; value: string }[]) => void
+	onAddedChange: (sources: AddedSource[]) => void
 }
 
 /**
- * The sources editor: the default web search toggle, then the custom rows with ✕ and the source kind/value add picker
+ * The sources editor: a row per default source, then the custom rows with an ✕ to remove, and the source option/value add picker
  */
 export function TopicSourceEditor({
+	defaultSourceKeys,
 	keptSources,
 	addedSources,
 	topicName,
 	topicPrompt,
 	topicAttachmentContext,
 	promptSourceUrls,
+	onDefaultKeysChange,
 	onKeptChange,
 	onAddedChange,
 }: TopicSourceEditorProps) {
-	// the add-source picker's open state with its pending kind and value
+	// the add-source picker's open state with its pending option and value
 	const [isAdding, setIsAdding] = useState(false)
-	const [newKind, setNewKind] = useState<EditableSourceKind>("rss")
+	const [newOptionKey, setNewOptionKey] = useState("rss")
 	const [newValue, setNewValue] = useState("")
 	// the suggest sources request in flight, which replaces the Recommend button with a thinking line while it runs
 	const [isSuggestingSources, setIsSuggestingSources] = useState(false)
 
-	// split the default web search from the custom sources
-	const hasWebSource = [...keptSources, ...addedSources].some((source) => source.sourceKind === "search")
-	const keptCustomSources = keptSources.filter((source) => source.sourceKind !== "search")
-	const addedCustomSources = addedSources.filter((source) => source.sourceKind !== "search")
+	// the option the picker is on, which names the value input's placeholder
+	const newOption = toCustomSourceOption(newOptionKey)
 	// a topic needs somewhere to look, so the last remaining source cannot be removed.
 	// urls written into the prompt become sources on save, so they take a sources slot the same as any other
-	const totalSources =
-		(hasWebSource ? 1 : 0) + keptCustomSources.length + addedCustomSources.length + promptSourceUrls.length
+	const totalSources = defaultSourceKeys.length + keptSources.length + addedSources.length + promptSourceUrls.length
 	const sourceSlotsLeft = MAX_TOPIC_SOURCES - totalSources
 	const isFull = sourceSlotsLeft <= 0
 
@@ -97,7 +103,14 @@ export function TopicSourceEditor({
 				toast("Carl couldn't think of any.\n Try again in a moment.")
 				return
 			}
-			onAddedChange([...addedSources, ...suggestions])
+
+			// a suggestion names the option it is added through, which is what stages it and includes the display name
+			const suggestedSources = suggestions.map((suggestion) => ({
+				optionKey: suggestion.sourceOption,
+				value: suggestion.value,
+				name: suggestion.name,
+			}))
+			onAddedChange([...addedSources, ...suggestedSources])
 		} catch (error) {
 			console.error("source suggestions failed", error)
 			toast.error("Carl couldn't think of any.\n Try again in a moment.")
@@ -115,22 +128,17 @@ export function TopicSourceEditor({
 		remove()
 	}
 
-	// the web search source turns on by staging a configless search source, and off by dropping every search row
-	const handleSearchSourceOn = (): void => {
-		onAddedChange([...addedSources, { sourceKind: "search", value: "" }])
-	}
-	const handleSearchSourceOff = (): void =>
-		removeSource(() => {
-			onKeptChange(keptCustomSources)
-			onAddedChange(addedCustomSources)
-		})
+	// a default source turns on by adding its key and off by dropping it. the save builds its config from the registry
+	const handleAddDefaultSource = (key: string): void => onDefaultKeysChange([...defaultSourceKeys, key])
+	const handleRemoveDefaultSource = (key: string): void =>
+		removeSource(() => onDefaultKeysChange(defaultSourceKeys.filter((defaultKey) => defaultKey !== key)))
 
 	// stage the picked source and reset the picker, skipping an exact duplicate
 	const handleAddSource = (): void => {
 		const value = newValue.trim()
-		const isDuplicateSource = addedSources.some((added) => added.sourceKind === newKind && added.value === value)
+		const isDuplicateSource = addedSources.some((added) => added.optionKey === newOptionKey && added.value === value)
 		if (value && !isDuplicateSource) {
-			onAddedChange([...addedSources, { sourceKind: newKind, value }])
+			onAddedChange([...addedSources, { optionKey: newOptionKey, value }])
 		}
 		setNewValue("")
 		setIsAdding(false)
@@ -144,20 +152,25 @@ export function TopicSourceEditor({
 
 	return (
 		<div>
-			{/* default sources: web search, on or off */}
+			{/* default sources: one row per default source, on or off */}
 			<TopicSourceSectionLabel>default sources</TopicSourceSectionLabel>
-			{hasWebSource ? (
-				<TopicSource sourceKind={WEB_SOURCE.label} summary={WEB_SOURCE.summary} onRemove={handleSearchSourceOff} />
-			) : (
-				<button type="button" onClick={handleSearchSourceOn} className="text-link text-sm hover:underline">
-					+ web search
-				</button>
-			)}
+			<div className="space-y-1.5">
+				{DEFAULT_SOURCES.map((defaultSource) => (
+					<TopicDefaultSource
+						key={defaultSource.key}
+						label={defaultSource.label}
+						summary={defaultSource.summary}
+						isOn={defaultSourceKeys.includes(defaultSource.key)}
+						onTurnOn={() => handleAddDefaultSource(defaultSource.key)}
+						onTurnOff={() => handleRemoveDefaultSource(defaultSource.key)}
+					/>
+				))}
+			</div>
 
 			{/* custom sources: one row per source with the source kind pill, its config text, and ✕ to remove it */}
 			<TopicSourceSectionLabel className="mt-2.5">custom sources</TopicSourceSectionLabel>
 			<div className="space-y-1.5">
-				{keptCustomSources.map((source) => (
+				{keptSources.map((source) => (
 					<TopicSource
 						key={source.id}
 						sourceKind={source.sourceKind}
@@ -166,33 +179,35 @@ export function TopicSourceEditor({
 						onRemove={() => removeSource(() => onKeptChange(keptSources.filter((kept) => kept.id !== source.id)))}
 					/>
 				))}
-				{addedCustomSources.map((source) => (
+				{addedSources.map((source, sourceIndex) => (
 					<TopicSource
-						key={`${source.sourceKind}-${source.value}`}
-						sourceKind={source.sourceKind}
-						summary={source.value}
-						onRemove={() => removeSource(() => onAddedChange(addedSources.filter((added) => added !== source)))}
+						key={`${source.optionKey}-${source.value}`}
+						sourceKind={toCustomSourceOption(source.optionKey)?.label ?? source.optionKey}
+						summary={toStagedSummary(source)}
+						onRemove={() =>
+							removeSource(() => onAddedChange(addedSources.filter((_, addedIndex) => addedIndex !== sourceIndex)))
+						}
 					/>
 				))}
 			</div>
-			{/* the add source picker: a kind select, the value input, Add, and ✕ to cancel without staging anything */}
+			{/* the add source picker: a source type select, the value input, Add, and ✕ to cancel without staging anything */}
 			{isAdding ? (
 				<div className="mt-2 flex items-center gap-2">
-					<Select value={newKind} onValueChange={(value) => setNewKind(value as EditableSourceKind)}>
-						<SelectTrigger className="w-28 shrink-0">
+					<Select value={newOptionKey} onValueChange={setNewOptionKey}>
+						<SelectTrigger className="w-32 shrink-0">
 							<SelectValue />
 						</SelectTrigger>
 						<SelectContent>
-							{CUSTOM_SOURCE_KINDS.map((kind) => (
-								<SelectItem key={kind} value={kind}>
-									{kind}
+							{CUSTOM_SOURCE_OPTIONS.map((option) => (
+								<SelectItem key={option.key} value={option.key}>
+									{option.label}
 								</SelectItem>
 							))}
 						</SelectContent>
 					</Select>
 					<Input
 						autoFocus
-						placeholder={SOURCE_VALUE_PLACEHOLDER[newKind]}
+						placeholder={newOption?.placeholder}
 						value={newValue}
 						onChange={(event) => setNewValue(event.target.value)}
 						onKeyDown={(event) => event.key === "Enter" && handleAddSource()}
@@ -229,17 +244,34 @@ export function TopicSourceEditor({
 }
 
 // everything the topic already follows, in the shape the api compares by. a kept source is named by its summary,
-// which is the feed's host or the subreddit or the id, and that is what identity is decided on
+// which is the publisher or the feed's host or the subreddit or the id, and that is what identity is decided on
 function toExcludedSources(
 	keptSources: TopicResponse["sources"],
-	addedSources: { sourceKind: EditableSourceKind; value: string }[],
+	addedSources: AddedSource[],
 	promptSourceUrls: string[],
-): { sourceKind: EditableSourceKind; value: string }[] {
+): SuggestSourcesPayload["excludeSources"] {
+	// a staged source already names its option, and a stored one names the kind that option saves as.
+	// the web scout is left out, since it is a default source and never suggested
+	const storedSources = keptSources.flatMap((source) => {
+		const optionKey = toCustomSourceKey(source.sourceKind)
+		return optionKey ? [{ sourceOption: optionKey, value: source.value }] : []
+	})
 	return [
-		...keptSources.map((source) => ({ sourceKind: source.sourceKind as EditableSourceKind, value: source.summary })),
-		...addedSources,
-		...promptSourceUrls.map((url) => ({ sourceKind: "url" as const, value: url })),
+		...storedSources,
+		...addedSources.flatMap((added) => toExcludedStagedSource(added)),
+		...promptSourceUrls.map((url) => ({ sourceOption: "url" as const, value: url })),
 	]
+}
+
+// the option key a stored source's kind belongs to, or undefined for a kind the picker cannot add
+function toCustomSourceKey(sourceKind: string): CustomSourceKey | undefined {
+	return CUSTOM_SOURCE_OPTIONS.find((option) => option.sourceKind === sourceKind)?.key
+}
+
+// a staged source in the shape the api compares by, dropped when its option is one the picker no longer offers
+function toExcludedStagedSource(added: AddedSource): SuggestSourcesPayload["excludeSources"] {
+	const option = toCustomSourceOption(added.optionKey)
+	return option ? [{ sourceOption: option.key, value: added.value }] : []
 }
 
 // the link that opens the add-source picker
@@ -299,6 +331,30 @@ function RecommendButton({
 function ThinkingLine() {
 	const [thinkingLine] = useState(randomThinkingLine)
 	return <span className="shimmer-text text-sm">{`Carl is ${thinkingLine}…`}</span>
+}
+
+// one default source row. it removes like any other source when on, and reads as a turn-on control when off
+function TopicDefaultSource({
+	label,
+	summary,
+	isOn,
+	onTurnOn,
+	onTurnOff,
+}: {
+	label: string
+	summary: string
+	isOn: boolean
+	onTurnOn: () => void
+	onTurnOff: () => void
+}) {
+	if (!isOn) {
+		return (
+			<button type="button" onClick={onTurnOn} className="text-link text-sm hover:underline">
+				+ {label}
+			</button>
+		)
+	}
+	return <TopicSource sourceKind={label} summary={summary} onRemove={onTurnOff} />
 }
 
 // a tiny source section label inside the sources field

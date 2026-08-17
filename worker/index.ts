@@ -9,6 +9,7 @@ export {
 	MAX_ATTACHMENT_BYTES,
 } from "./attach"
 export { type ChatReplyStream, type ChatTurnInput, streamChatReply } from "./chat"
+export { lookupPodcast } from "./ingest/podcast"
 export { sendManualScanEmail } from "./notify"
 export { loadScan, scanTopic, startTopicScan } from "./scan"
 export { failStaleScans, runScheduledTopicScans } from "./schedule"

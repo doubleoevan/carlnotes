@@ -1,5 +1,6 @@
 import { MAX_ATTACHMENT_CONTEXT_CHARS, type TopicResponse, type UpdateTopicPayload } from "@shared/contracts"
 import { maxResultsOptions, visibilities } from "@shared/enums"
+import { DEFAULT_SOURCES, toCustomSourceOption, toDefaultSource } from "@shared/sources"
 import { useRef, useState } from "react"
 import { useNavigate } from "react-router"
 import { toast } from "sonner"
@@ -27,11 +28,10 @@ import {
 	PromptSourceUrls,
 	ScheduleFields,
 	SourceCapNote,
-	toSourceConfig,
 } from "./EditTopicFields"
 import { stageFiles, TopicAttachmentEditor } from "./TopicAttachmentEditor"
 import { TopicPromptComposer } from "./TopicPromptComposer"
-import { type EditableSourceKind, TopicSourceEditor } from "./TopicSourceEditor"
+import { type AddedSource, TopicSourceEditor } from "./TopicSourceEditor"
 
 // the field union that the visibility select offers
 type Visibility = (typeof visibilities)[number]
@@ -77,11 +77,11 @@ export function EditTopicModal({ topic, isMakingTopicPublic, onClose, onTopicSav
 	const [visibility, setVisibility] = useState<Visibility>(toStartingVisibility(topic, isMakingTopicPublic))
 	const [maxResults, setMaxResults] = useState(topic?.maxResults ?? 10)
 	const [invitees, setInvitees] = useState(topic?.invitees ?? [])
-	// the kept and added source and attachment lists. a new topic starts with the default web source on
-	const [keptSources, setKeptSources] = useState(topic?.sources ?? [])
-	const [addedSources, setAddedSources] = useState<{ sourceKind: EditableSourceKind; value: string }[]>(
-		topic ? [] : [{ sourceKind: "search", value: "" }],
-	)
+	// which default sources are on, by key. a new topic starts with all of them on
+	const [defaultSourceKeys, setDefaultSourceKeys] = useState(() => toDefaultSourceKeys(topic))
+	// the kept and added source and attachment lists. a stored default source is included by the array above
+	const [keptSources, setKeptSources] = useState(toCustomSources(topic?.sources ?? []))
+	const [addedSources, setAddedSources] = useState<AddedSource[]>([])
 	const [keptAttachments, setKeptAttachments] = useState(topic?.attachments ?? [])
 	const [pendingFiles, setPendingFiles] = useState<File[]>([])
 
@@ -168,26 +168,50 @@ export function EditTopicModal({ topic, isMakingTopicPublic, onClose, onTopicSav
 	}
 
 	// the update payload: the topic fields plus the desired invitee and source lists
-	const buildUpdatePayload = (): UpdateTopicPayload => ({
-		name,
-		prompt,
-		tags,
-		frequency,
-		scheduledTime,
-		scheduledDayOfWeek,
-		visibility,
-		maxResults,
-		invitees: visibility !== "private" ? invitees : [],
-		// the urls still showing under the prompt save as Sources along with the ones added from the sources section
-		sources: [
-			...keptSources.map((source) => ({ id: source.id })),
-			...addedSources.map((source) => ({
-				sourceKind: source.sourceKind,
-				config: toSourceConfig(source.sourceKind, source.value),
-			})),
-			...promptSourceUrls.map((url) => ({ sourceKind: "url" as const, config: toSourceConfig("url", url) })),
-		],
-	})
+	const buildUpdatePayload = (): UpdateTopicPayload => {
+		// every default source that is on is staged as its own row, and every picked one is built by its option.
+		// an option that cannot build a config from what was typed is left out
+		const defaultSources = DEFAULT_SOURCES.filter((defaultSource) => defaultSourceKeys.includes(defaultSource.key))
+		const stagedDefaultSources = defaultSources.map((defaultSource) => ({
+			sourceKind: defaultSource.sourceKind,
+			config: defaultSource.toConfig(),
+		}))
+		const stagedCustomSources = addedSources.flatMap((addedSource) => {
+			const sourceOption = toCustomSourceOption(addedSource.optionKey)
+			const sourceConfig = sourceOption?.toConfig(addedSource.value)
+			if (!sourceOption || !sourceConfig) {
+				return []
+			}
+
+			// a resolved display name is included into the source config
+			const isNamedSource = sourceOption.sourceKind === "podcast" || sourceOption.sourceKind === "youtube"
+			return [
+				{
+					sourceKind: sourceOption.sourceKind,
+					config: addedSource.name && isNamedSource ? { ...sourceConfig, name: addedSource.name } : sourceConfig,
+				},
+			]
+		})
+
+		return {
+			name,
+			prompt,
+			tags,
+			frequency,
+			scheduledTime,
+			scheduledDayOfWeek,
+			visibility,
+			maxResults,
+			invitees: visibility !== "private" ? invitees : [],
+			// the urls still showing under the prompt save as Sources along with the ones added from the sources section
+			sources: [
+				...stagedDefaultSources,
+				...keptSources.map((source) => ({ id: source.id })),
+				...stagedCustomSources,
+				...promptSourceUrls.map((url) => ({ sourceKind: "url" as const, config: { url } })),
+			],
+		}
+	}
 
 	// use the dialog's autofocus to select the title input when the modal opens
 	const handleOpenAutoFocus = (event: Event): void => {
@@ -288,12 +312,14 @@ export function EditTopicModal({ topic, isMakingTopicPublic, onClose, onTopicSav
 						<SourceCapNote />
 					</div>
 					<TopicSourceEditor
+						defaultSourceKeys={defaultSourceKeys}
 						keptSources={keptSources}
 						addedSources={addedSources}
 						topicName={name}
 						topicPrompt={prompt}
 						topicAttachmentContext={attachmentContext}
 						promptSourceUrls={promptSourceUrls}
+						onDefaultKeysChange={setDefaultSourceKeys}
 						onKeptChange={setKeptSources}
 						onAddedChange={setAddedSources}
 					/>
@@ -322,4 +348,20 @@ export function EditTopicModal({ topic, isMakingTopicPublic, onClose, onTopicSav
 			</DialogContent>
 		</Dialog>
 	)
+}
+
+// which default sources a topic has on. a new topic starts with each one of them
+function toDefaultSourceKeys(topic?: TopicResponse): string[] {
+	if (!topic) {
+		return DEFAULT_SOURCES.map((defaultSource) => defaultSource.key)
+	}
+
+	// a stored source is a default one when it matches an entry,
+	// two stored sources can match the same entry, so the keys are deduped
+	return [...new Set(topic.sources.flatMap((source) => toDefaultSource(source.sourceKind)?.key ?? []))]
+}
+
+// the topic's sources that are not default ones
+function toCustomSources(sources: TopicResponse["sources"]): TopicResponse["sources"] {
+	return sources.filter((source) => !toDefaultSource(source.sourceKind))
 }

@@ -14,7 +14,7 @@ Carl stays up. You stay informed.
 
 ## Stack
 
-Bun + TypeScript · React SPA (Vite + Tailwind + shadcn) · TanStack Query · Hono · Better Auth · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl · Langfuse · LLM Guard · Sentry + PostHog
+Bun + TypeScript · React SPA (Vite + Tailwind + shadcn) · TanStack Query · Hono · Better Auth · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl + TwitterAPI.io · Langfuse · LLM Guard · Sentry + PostHog
 
 ## Architecture
 
@@ -158,12 +158,18 @@ bun run smoke:scan         # just the topic-scan smoke test (ingestion + review,
 bun run smoke:store        # just the resource-content object-storage round-trip (put → read → delete)
 bun run smoke:attach       # just the URL-attachment smoke test (Firecrawl → store → Temporal workflow → ready)
 bun run smoke:search       # just the web search smoke test (context → LLM queries → Exa → Resources)
+bun run smoke:reddit       # just the reddit access smoke test: a subreddit and a search Source through each mode, reporting which one answered
+bun run smoke:x            # just the X smoke test: one handle's tweets and what they cost, plus the lookup that vets a suggested account
 bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its ceiling
 bun run smoke:subscribers  # just the subscriber-count smoke test: both subscription paths against real rows, rolled back after
 bun run smoke:profile      # just the profile smoke test: the header's distinct people against the footer's summed rows
 bun run smoke:chat         # just the topic chat retrieval smoke test (question → ranked findings → assembled context)
 bun run smoke:eval         # just the eval-harness smoke test: one tiny labeled fixture through the real gate and scoring
 ```
+
+Run the reddit smoke test from the deployed environment, not just a laptop: 
+Reddit's keyless endpoints serve a home internet connection but often return 403 to a hosting provider's IP range, 
+so the same test can pass on your machine and fail in production.
 
 The review smoke test reads `REVIEW_CONCURRENCY` and `MAX_SCORED_RESOURCES_PER_SCAN`, so it doubles as an A/B for the concurrency limit. Each run resets its feed's Resources cold first, so two runs differ only by their settings:
 

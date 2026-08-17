@@ -46,6 +46,16 @@ test("toCanonicalUrl leaves youtube's exact ids alone", () => {
 	expect(toCanonicalUrl("https://youtu.be/dQw4w9WgXcQ")).toBe("https://youtu.be/dQw4w9WgXcQ")
 })
 
+// twitter was renamed to x, so the same tweet found under either host stores once whatever the handle's case
+test("toCanonicalUrl folds twitter.com onto x.com", () => {
+	expect(toCanonicalUrl("https://twitter.com/Sama/status/123")).toBe("https://x.com/sama/status/123")
+	expect(toCanonicalUrl("https://www.twitter.com/Sama/status/123")).toBe("https://x.com/sama/status/123")
+	expect(toCanonicalUrl("https://mobile.twitter.com/Sama/status/123")).toBe("https://x.com/sama/status/123")
+
+	// the ingester's own url is already canonical, so canonicalizing it again changes nothing
+	expect(toCanonicalUrl("https://x.com/sama/status/123")).toBe("https://x.com/sama/status/123")
+})
+
 // a url that cannot be parsed still has to come back, since a wrong dedupe key is worse than none
 test("toCanonicalUrl returns an unparseable url untouched", () => {
 	expect(toCanonicalUrl("not a url")).toBe("not a url")

@@ -1,5 +1,16 @@
 // the canonical enum value sets. db builds its pgEnums from these, api validates with them, and ui renders with them
-export const sourceKinds = ["url", "rss", "reddit", "youtube", "search", "composio", "plugin"] as const
+export const sourceKinds = [
+	"url",
+	"rss",
+	"reddit",
+	"youtube",
+	"podcast",
+	"search",
+	"bluesky",
+	"x",
+	"composio",
+	"plugin",
+] as const
 export const resourceKinds = ["read", "watch", "listen"] as const
 export const visibilities = ["public", "invite", "private"] as const
 // how many findings a public topic needs before it is shown on other pages
@@ -29,7 +40,8 @@ export const ratings = ["up", "down"] as const
 // the keys for the homepage's topic feed sections. yours and subscribed required a signed-in visitor
 export const topicSectionKeys = ["yours", "subscribed", "featured", "popular"] as const
 // the source kinds a user can add from the topic editor. composio and plugin sources will be custom instead of default
-export const editableSourceKinds = ["url", "rss", "reddit", "youtube", "search"] as const
+export const editableSourceKinds = ["url", "rss", "reddit", "youtube", "podcast", "search", "bluesky", "x"] as const
+
 // the billing plans. every user starts on free
 export const plans = ["free", "plus", "premium"] as const
 // how often a subscription bills. a plan's limits differ by monthly or yearly billing interval, and only a monthly one supports metered overage

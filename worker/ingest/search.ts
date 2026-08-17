@@ -196,7 +196,7 @@ async function expandYouTubePlaylist(resource: NewResource, apiKey: string): Pro
 
 	// a private, deleted, or slow playlist falls back to its plain link instead of failing the whole search batch
 	try {
-		return await fetchVideos(playlistId, apiKey)
+		return (await fetchVideos(playlistId, apiKey)).resources
 	} catch (error) {
 		console.error(`search playlist ${playlistId} expansion failed`, error)
 		return [resource]

@@ -29,7 +29,7 @@ export type IngestStageResult = {
 	resources: NewResource[]
 	foundCount: number
 	status: Scan["status"]
-	fallbackSources: Scan["fallbackSources"]
+	problemSources: Scan["problemSources"]
 	sourceOutcomes: SourceOutcome[]
 	budget: Budget
 }
@@ -39,7 +39,7 @@ export type ReviewStageResult = { review: ReviewSummary; budget: Budget }
 
 /**
  * Ingest every Source on the Topic and store what they turned up. Safe to run again: Resources dedupe on canonical url,
- * so a second ingest attempt lands on the same set of resources instead of ingesting again.
+ * so a second ingest attempt reaches the same set of resources instead of ingesting again.
  */
 export async function ingestForScan(scanId: string, topicId: string): Promise<IngestStageResult> {
 	// the Budget is made here instead of in the workflow, since its limits are read from the environment
@@ -53,7 +53,7 @@ export async function ingestForScan(scanId: string, topicId: string): Promise<In
 				resources: summary.resources,
 				foundCount: summary.foundCount,
 				status: summary.status,
-				fallbackSources: summary.fallbackSources,
+				problemSources: summary.problemSources,
 				sourceOutcomes,
 				budget,
 			}
@@ -119,7 +119,7 @@ export async function finishScan(
 		.set({
 			status: ingested.status,
 			foundCount: ingested.foundCount,
-			fallbackSources: ingested.fallbackSources,
+			problemSources: ingested.problemSources,
 			keptCount: keptRow?.count ?? review.keptCount,
 			filteredCount: review.filteredCount,
 			stageCosts: budget.stageCosts,

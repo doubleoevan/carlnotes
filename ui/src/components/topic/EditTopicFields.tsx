@@ -14,7 +14,7 @@ import { ScanQuotaLink } from "@/components/topic/ScanQuotaLink"
 import { TagPill } from "@/components/topic/TagPicker"
 import { TimePicker } from "@/components/topic/TimePicker"
 import { capitalize, toBrewsWord } from "@/lib/utils"
-import { type EditableSourceKind, FULL_SOURCES_NOTE } from "./TopicSourceEditor"
+import { FULL_SOURCES_NOTE } from "./TopicSourceEditor"
 
 // the field unions that the frequency and day-of-week selects offer
 export type Frequency = (typeof frequencies)[number]
@@ -210,27 +210,6 @@ export function InviteeEditor({ invitees, onChange }: { invitees: string[]; onCh
 			</p>
 		</div>
 	)
-}
-
-// build a new source's config from the selector field
-export function toSourceConfig(sourceKind: EditableSourceKind, value: string): Record<string, unknown> {
-	// a page and a feed are both named by their url. what differs is the ingester that reads it
-	if (sourceKind === "url" || sourceKind === "rss") {
-		return { url: value }
-	}
-
-	// the web search needs no config. its ingester derives queries from the topic prompt
-	if (sourceKind === "search") {
-		return {}
-	}
-
-	// a reddit source takes its subreddit with any leading r/ stripped
-	if (sourceKind === "reddit") {
-		return { subreddit: value.replace(/^r\//, "") }
-	}
-
-	// YouTube playlist ids start with PL by convention. everything else is treated as a channel id
-	return value.startsWith("PL") ? { playlistId: value } : { channelId: value }
 }
 
 /**

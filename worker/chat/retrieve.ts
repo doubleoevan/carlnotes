@@ -21,7 +21,8 @@ import { getResourceContent } from "../store"
 // this is a top-ranked subset of those findings, reranked based on the question
 const MAX_RETRIEVED_FINDINGS = 8
 
-// how much of one resource's text a chat turn includes. enough to answer from, small enough that they fit in the prompt.
+// how much of one resource's text a chat turn includes. enough to answer from, small enough that several fit in one prompt.
+// it stays at or under MAX_SCORE_CHARS since llm-guard screened nothing past that prefix
 const MAX_RESOURCE_CHARS = 2000
 
 // how many recent scan summaries a chat turn includes, newest first
