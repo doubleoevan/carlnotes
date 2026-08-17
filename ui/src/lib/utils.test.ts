@@ -148,17 +148,26 @@ test("toSortedFindings trending falls back to newest without an engagement value
 
 // the recap placeholder shows still-reading only while the scan runs, or a call to action for the budget wall
 test("toScanRecapPlaceholder matches the scan outcome", () => {
-	expect(toScanRecapPlaceholder({ status: "running", error: null })).toBe(
+	expect(toScanRecapPlaceholder({ status: "running", error: null, stoppedAt: null })).toBe(
 		"I'm on my fifteenth mug.\nThe internet was busy today…",
 	)
-	expect(toScanRecapPlaceholder({ status: "failed", error: "Budget has been exceeded!" })).toBe(
+	// a failed scan names the budget wall by its own error text
+	expect(toScanRecapPlaceholder({ status: "failed", error: "Budget has been exceeded!", stoppedAt: null })).toBe(
 		"Today I ran out of coffee.",
 	)
-	expect(toScanRecapPlaceholder({ status: "failed", error: "connection rejected" })).toBe("This one didn't brew.")
+	// any other failure gets the plain line
+	expect(toScanRecapPlaceholder({ status: "failed", error: "connection rejected", stoppedAt: null })).toBe(
+		"This one didn't brew.",
+	)
 
 	// a succeeded scan whose report call threw an error still has its findings, so it must not show still-reading
-	expect(toScanRecapPlaceholder({ status: "succeeded", error: null })).toBe(
-		"No entry for this one.\nThe raccoon stole my keyboard.\nFindings are all there though.",
+	expect(toScanRecapPlaceholder({ status: "succeeded", error: null, stoppedAt: null })).toBe(
+		"No entry for this one.\nThe raccoon stole my keyboard.\nFindings are there though.",
+	)
+
+	// a stopped scan closes as succeeded, so only its stoppedAt tells it apart from one that had no note written
+	expect(toScanRecapPlaceholder({ status: "succeeded", error: null, stoppedAt: "2026-07-24T12:01:00.000Z" })).toBe(
+		"Carl stopped brewing.\nThis was in the pot.",
 	)
 })
 
@@ -205,6 +214,7 @@ test("a repeated url is offered once", () => {
 test("toSafeRedirectPath keeps a plain path and rejects everything that could leave the site", () => {
 	expect(toSafeRedirectPath("/topics/top_longevity")).toBe("/topics/top_longevity")
 	expect(toSafeRedirectPath(null)).toBe("/")
+	// every way out of the site comes home instead
 	expect(toSafeRedirectPath("https://evil.com")).toBe("/")
 
 	// every spelling of another site, however it is disguised, lands back on the homepage

@@ -26,6 +26,7 @@ import {
 	fetchTopicPage,
 	type GatedVisibility,
 	sendManualScan,
+	sendScanStop,
 	sendTopicFeatureOrder,
 	sendTopicFindingBookmark,
 	sendTopicFindingConsumed,
@@ -54,7 +55,8 @@ export function TopicPage() {
 	// how the edit modal opened, or null while it is closed. "make-public" stages the topic's visibility switch to "public" for review
 	const [editMode, setEditMode] = useState<"edit" | "make-public" | null>(null)
 	const [isDeleteOpen, setIsDeleteOpen] = useState(false)
-	const { isScanning, isRunningScan, startScan, stopScan } = useManualScanProgress(topicResponse?.scans)
+	const { isScanning, isRunningScan, isCancellingScan, startScan, stopScan, cancelScan, stopCancelling } =
+		useManualScanProgress(topicResponse?.scans)
 
 	// reload the page payload when the topic id changes
 	const reloadTopicPage = useCallback(async () => {
@@ -142,6 +144,23 @@ export function TopicPage() {
 		}
 	}
 
+	// cancel the running scan. The scan keeps what was already collected, and the scan limit slot is given back
+	const handleCancelScan = async (): Promise<void> => {
+		if (!topicResponse) {
+			return
+		}
+		cancelScan()
+		try {
+			await sendScanStop(topicResponse.id)
+			await reloadTopicPage()
+		} catch (error) {
+			// the scan is still going, so the control comes back instead of leaving a running scan with no way to stop it
+			console.error("stopping the scan failed", error)
+			toast.error(error instanceof Error ? error.message : "Carl didn't catch that. That brew is still going.")
+			stopCancelling()
+		}
+	}
+
 	// a saved edit reloads this page and the homepage feed behind it
 	const handleTopicSaved = async (): Promise<void> => {
 		setEditMode(null)
@@ -202,7 +221,10 @@ export function TopicPage() {
 							remainingScans={topicResponse?.manualScansRemaining ?? null}
 							isSpendExhausted={topicResponse?.isSpendExhausted ?? false}
 							isRunning={isRunningScan || isScanning}
+							isCancelling={isCancellingScan}
 							onManualScan={handleManualScan}
+							// only a scan that has a row to cancel can be cancelled, so the optimistic click gap has no icon
+							onCancelScan={isScanning ? handleCancelScan : undefined}
 						/>
 					)}
 				</div>

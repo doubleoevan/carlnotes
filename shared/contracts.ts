@@ -71,6 +71,8 @@ export type ActivityScan = {
 	error: string | null
 	startedAt: string
 	finishedAt: string | null
+	// set if the user stopped the scan, which the recap line reads
+	stoppedAt: string | null
 	// what the scan found, kept, and cost
 	foundCount: number
 	keptCount: number
@@ -471,6 +473,8 @@ export const topicScan = z.object({
 	// when the scan ran. finishedAt stays null while it is running
 	startedAt: z.string(),
 	finishedAt: z.string().nullable(),
+	// when the user stopped the scan, null for one that ran to the end. a stopped scan is still saved as succeeded
+	stoppedAt: z.string().nullable(),
 	// what the scan found, kept, and filtered
 	foundCount: z.number(),
 	keptCount: z.number(),

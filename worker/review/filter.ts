@@ -99,11 +99,16 @@ export async function gateResources(
 	reviewOutcome: ReviewOutcome,
 	budget: Budget,
 	litellmApiKey?: string,
+	stopSignal?: AbortSignal,
 ): Promise<SurvivingResource[]> {
 	// a survivor goes on to the ranked pass. anything else is already a finished outcome
 	const survivors: SurvivingResource[] = []
 	for (const resource of unscoredResources) {
-		const gateOutcome = await gateResource(resource, topicContext, budget, litellmApiKey)
+		// a stopped Scan leaves the rest of the candidates for the next scan instead of walking the list to no end
+		if (stopSignal?.aborted) {
+			break
+		}
+		const gateOutcome = await gateResource(resource, topicContext, budget, litellmApiKey, stopSignal)
 		if (gateOutcome.status === "survived") {
 			survivors.push(gateOutcome.survivor)
 			continue
@@ -156,10 +161,12 @@ async function gateResource(
 	topicContext: TopicContext,
 	budget: Budget,
 	litellmApiKey?: string,
+	stopSignal?: AbortSignal,
 ): Promise<RelevanceGateOutcome> {
 	try {
-		// embedding costs money, so check the limit first. a deferred resource candidate stays eligible for the next Scan
-		if (!resource.embedding && !canSpend(budget)) {
+		// embedding costs money, so check the limit first. a deferred resource candidate stays eligible for the next Scan,
+		// which is also what a stopped Scan leaves behind for the next scan
+		if (!resource.embedding && !canSpend(budget, stopSignal)) {
 			return { status: "deferred" }
 		}
 

@@ -119,3 +119,34 @@ describe("charge", () => {
 		expect(budget.stageCosts.scoringCheap).toBeCloseTo(0.06, 10)
 	})
 })
+
+describe("a Scan the user stopped", () => {
+	test("scores no further Resources, however much budget is left", () => {
+		// the stop reads as another limit reached, so the Resources still queued are deferred instead of scored.
+		// a budget with room left is what proves the signal is what stopped it
+		const budget = newBudget()
+		const stopSignal = AbortSignal.abort()
+
+		expect(canScoreResource(budget)).toBe(true)
+		expect(canScoreResource(budget, stopSignal)).toBe(false)
+	})
+
+	test("buys nothing else at all, so no embedding or recap is paid for after it", () => {
+		// every paid step outside scoring reads canSpend, and a stop has to close those too
+		const budget = newBudget()
+		const stopSignal = AbortSignal.abort()
+
+		expect(canSpend(budget)).toBe(true)
+		expect(canSpend(budget, stopSignal)).toBe(false)
+	})
+
+	test("keeps scoring until the stop signal is received", () => {
+		// a Scan nobody stopped has a signal that has not aborted, which changes nothing about the gate
+		const budget = newBudget()
+		const stopController = new AbortController()
+
+		expect(canScoreResource(budget, stopController.signal)).toBe(true)
+		stopController.abort()
+		expect(canScoreResource(budget, stopController.signal)).toBe(false)
+	})
+})

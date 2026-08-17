@@ -229,6 +229,16 @@ export async function sendManualScan(topicId: string): Promise<number> {
 	return manualScanResponse.parse(await response.json()).remainingScans
 }
 
+// stop the topic's running scan. a topic with nothing running answers the same way, since either way no scan keeps running after this.
+// it throws an error on a rejection instead of reporting one, so the display can put its cancel control back
+export async function sendScanStop(topicId: string): Promise<void> {
+	const response = await client.api.topics[":id"].scan.stop.$post({ param: { id: topicId } })
+	if (!response.ok) {
+		const body = (await response.json().catch(() => null)) as { error?: string } | null
+		throw new Error(body?.error ?? `stop request failed: ${response.status}`)
+	}
+}
+
 // upload one attachment file to a topic. plain fetch because the route reads multipart form data, which the typed client cannot carry
 export async function uploadTopicAttachment(topicId: string, file: File): Promise<void> {
 	// send the file as the form's file field

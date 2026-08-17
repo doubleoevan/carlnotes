@@ -3,7 +3,7 @@
 import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "../db"
 import { scans } from "../db/schema"
-import { type ScanStart, startTopicScanWorkflow } from "./temporal-client"
+import { cancelTopicScanWorkflow, type ScanCancel, type ScanStart, startTopicScanWorkflow } from "./temporal-client"
 import type { ScanTrigger } from "./workflows/run-topic-scan-activities"
 
 // a persisted Scan row
@@ -87,6 +87,14 @@ export async function scanTopic(
 	// the dispatchedAt field is written after the scan start returns, so a scan row reads as undispatched until it's started
 	await setScanDispatchedDate(scan.id)
 	return { status: "started", scan, whenFinished: scanStart.whenFinished }
+}
+
+/**
+ * Stop the Scan a Topic is running. The workflow saves its own row from here, persisting when it was stopped,
+ * so the Scan keeps the Findings it wrote and the money it spent while giving its daily scan back.
+ */
+export async function stopTopicScan(topicId: string): Promise<ScanCancel> {
+	return cancelTopicScanWorkflow(topicId)
 }
 
 // record that a Scan's workflow was started, which is what tells a later sweep it does not need dispatching

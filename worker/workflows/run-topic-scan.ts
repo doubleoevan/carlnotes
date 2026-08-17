@@ -1,6 +1,6 @@
 // the durable Scan: it runs the pipeline's three stages as activities, so a Scan outlives whatever process asked for it
 // and resumes at the stage after the last stage that finished instead of paying twice to redo a stage
-import { proxyActivities } from "@temporalio/workflow"
+import { CancellationScope, isCancellation, proxyActivities } from "@temporalio/workflow"
 import type * as scanActivities from "./run-topic-scan-activities"
 // the attempt counts the retry policies that the temporal activities read
 import {
@@ -36,7 +36,7 @@ const { reviewForScan } = proxyActivities<typeof scanActivities>({
 })
 
 // the closing writes are idempotent, so they may retry. they are short enough not to need a heartbeat
-const { finishScan, failScan } = proxyActivities<typeof scanActivities>({
+const { finishScan, failScan, stopScan } = proxyActivities<typeof scanActivities>({
 	startToCloseTimeout: FINISH_TIMEOUT_MS,
 	scheduleToCloseTimeout: FINISH_TOTAL_TIMEOUT_MS,
 	retry: { maximumAttempts: FINISH_ATTEMPTS },
@@ -65,8 +65,26 @@ export async function runTopicScanWorkflow(
 		const reviewResult = await reviewForScan(scanId, topicId, ownerId, ingestResult, ingestResult.budget)
 		spentBudget = reviewResult.budget
 
+		// a cancelled stage returns what it had instead of throwing an error, so a Scan cancelled late arrives here
+		// with every stage finished. saving it as stopped is what keeps it out of the day's scan count
+		if (CancellationScope.current().consideredCancelled) {
+			await stopCancelledScan(scanId)
+			return
+		}
 		await finishScan(scanId, topicId, ownerId, trigger, ingestResult, reviewResult)
 	} catch (error) {
+		// a cancel that landed while a stage was awaiting rejects that stage instead of returning through it
+		if (isCancellation(error)) {
+			await stopCancelledScan(scanId)
+			return
+		}
 		await failScan(scanId, error instanceof Error ? error.message : String(error), spentBudget)
 	}
+}
+
+// save a Scan the user cancelled. it keeps the Findings it wrote and the dollars its stages recorded,
+// and gives its daily scan back, so it is stopped instead of failed. the write runs where cancellation cannot reach it,
+// since every activity a cancelled workflow starts is cancelled the moment it starts, which would leave the row running for the sweep
+function stopCancelledScan(scanId: string) {
+	return CancellationScope.nonCancellable(() => stopScan(scanId))
 }
