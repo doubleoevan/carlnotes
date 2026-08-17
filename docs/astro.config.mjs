@@ -22,6 +22,8 @@ export default defineConfig({
 		starlight({
 			title: "CarlNotes Docs",
 			description: "How Carl takes his coffee.",
+			// sends the header wordmark back to the app, since the docs are one surface of the product
+			routeMiddleware: "./src/routeData.ts",
 			// the four sections in reading order. Start here names its two pages, which sit at the content
 			// root so their urls stay one segment. the other sections fill from their own folders,
 			// where a new page joins by being added to the folder and orders itself with sidebar.order
