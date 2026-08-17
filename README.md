@@ -110,7 +110,11 @@ bun run dev:worker   # scheduled-scan sweep loop (set SCHEDULE_INTERVAL_MS); `bu
 bun run dev:temporal # Temporal worker for topic scans and attachment processing; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
 bun run dev:temporal:watch # the same worker, restarted on save; what `bun run dev` uses. a restart mid-review leaves that scan waiting out its 30-minute activity timeout before it fails
 bun run dev:email    # react-email preview server for the templates in emails/ (localhost:3011); no doppler needed
+bun run dev:docs     # Starlight dev server on localhost:4321/docs, with hot reload; also shows draft pages that the production build leaves out
+                     # it runs in the background: `cd docs && astro dev stop` ends it, `astro dev logs` tails it
 bun run build:ui     # production build (no doppler, so it runs in CI and deploys)
+bun run build:docs   # build static docs to docs/dist, which the api serves under /docs
+                     # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload
 ```
 
 The homepage needs both `dev:ui` and `dev:api` running (or just `bun run dev` for the whole stack), plus a seeded dev database (below). The dev, db, and smoke scripts wrap themselves in `doppler run`, so they need a Doppler-configured machine.

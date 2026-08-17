@@ -3,6 +3,7 @@ import { useState } from "react"
 import { useLocation } from "react-router-dom"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { DocsLink } from "@/components/layout/DocsLink"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { SignOutDialog } from "@/components/session/SignOutDialog"
 import { cn } from "@/lib/utils"
@@ -109,6 +110,7 @@ export function UserMenuItems({
 				<Columns3Cog className="size-4" />
 				Plans
 			</AnchorLink>
+			<DocsLink className={MENU_ITEM_CLASS} hasIcon onNavigate={onNavigate} />
 			{isAdmin ? (
 				<AnchorLink href="/admin" onClick={onNavigate} className={menuItemClassName(pathname, "/admin")}>
 					<ShieldUser className="size-4" />

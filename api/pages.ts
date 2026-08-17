@@ -58,12 +58,7 @@ export const pagesRoute = new Hono()
 	.get("/pricing", (context) => context.redirect("/plans", 301))
 	// the crawler map of every public page, generated from live data on each request
 	.get("/sitemap.xml", async (context) => {
-		const contentPaths = [
-			"/blog",
-			"/docs",
-			...loadPages("blog").map((page) => `/blog/${page.slug}`),
-			...loadPages("docs").map((page) => `/docs/${page.slug}`),
-		]
+		const contentPaths = ["/blog", ...loadPages("blog").map((page) => `/blog/${page.slug}`)]
 		return context.body(await toSitemapXml(appUrl(), contentPaths), 200, {
 			"Content-Type": "application/xml; charset=utf-8",
 		})

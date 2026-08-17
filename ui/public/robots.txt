@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://carlnotes.com/sitemap.xml
+Sitemap: https://carlnotes.com/docs/sitemap-index.xml

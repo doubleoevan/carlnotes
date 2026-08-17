@@ -16,8 +16,9 @@ const ORGANIZATION_PROFILES = [
 ]
 
 /**
- * The sitemap, built from live data on each request: the static routes, the blog pages, the docs pages, and every public Topic.
+ * The sitemap, built from live data on each request: the static routes, the blog pages, and every public Topic.
  * Profile pages keep their canonical url and preview card but are too thin to promote to a crawler.
+ * The docs are absent because they are statically built files rather than anything this route can read, and the docs site emits its own sitemap.
  */
 export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Promise<string> {
 	// the public topics, each one added to the sitemap as its own page

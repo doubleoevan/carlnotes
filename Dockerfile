@@ -25,6 +25,10 @@ ARG VITE_TURNSTILE_SITE_KEY
 RUN test -n "$VITE_TURNSTILE_SITE_KEY" || (echo "VITE_TURNSTILE_SITE_KEY build arg is required" >&2; exit 1)
 RUN bun run build:ui
 
+# the docs site, built to static files the app service serves under /docs. Astro and Starlight are dev
+# dependencies, so the toolchain stays in this stage and only the built output is copied forward
+RUN bun run build:docs
+
 # the runtime carries only what serving a request needs: production dependencies, the modules Bun executes, and the built bundle.
 # the toolchain and every dev dependency stay behind in the build stage
 FROM oven/bun:1.3.14 AS runtime
@@ -52,10 +56,15 @@ COPY db ./db
 COPY emails ./emails
 COPY worker ./worker
 COPY api ./api
+
+# the blog's markdown, which the api renders per request. the docs moved to the Starlight site above
 COPY content ./content
 
 # the ui bundle the app service serves alongside the api
 COPY --from=build /app/ui/dist ./ui/dist
+
+# the built docs site, served under /docs
+COPY --from=build /app/docs/dist ./docs/dist
 
 # the api listens on 3000, matching the port api/index.ts exports
 EXPOSE 3000

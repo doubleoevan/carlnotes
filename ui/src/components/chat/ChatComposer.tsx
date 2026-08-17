@@ -126,7 +126,7 @@ export function ChatComposer({
 						onChange={(event) => onChange(event.target.value)}
 						onKeyDown={handleQuestionKeyDown}
 						onPaste={handlePaste}
-						placeholder="Hand-crafted notes taste better…"
+						placeholder="Hand-crafted notes are richer…"
 						aria-label="Ask about this topic"
 						className="placeholder:text-muted-foreground min-w-0 flex-1 resize-none bg-transparent py-2 text-base leading-relaxed outline-none sm:py-1 sm:text-sm"
 					/>

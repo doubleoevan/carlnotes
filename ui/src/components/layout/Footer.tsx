@@ -1,6 +1,7 @@
 import { useLocation } from "react-router-dom"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Attribution } from "@/components/layout/Attribution"
+import { DocsLink } from "@/components/layout/DocsLink"
 import { cn } from "@/lib/utils"
 
 /**
@@ -28,8 +29,9 @@ function FooterLegal() {
 				<span>AGPL-3.0 licensed.</span>
 				<span>Take the code. Leave the raccoon.</span>
 			</div>
-			{/* source, license, and the legal pages. the current page's link stays underlined */}
+			{/* the docs, the source, the license, and the legal pages. the current page's link stays underlined */}
 			<div className="flex flex-wrap justify-center gap-x-6 gap-y-1">
+				<DocsLink className="text-link hover:underline" />
 				<AnchorLink href="https://github.com/doubleoevan/carlnotes" className="text-link hover:underline">
 					Source Code
 				</AnchorLink>

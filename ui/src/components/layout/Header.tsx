@@ -6,6 +6,7 @@ import { CoffeeRings } from "@/components/branding/CoffeeRings"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Attribution } from "@/components/layout/Attribution"
+import { DocsLink } from "@/components/layout/DocsLink"
 import { ThemeToggle } from "@/components/layout/ThemeToggle"
 import { MENU_ITEM_CLASS, menuItemClassName, UserMenu, UserMenuItems } from "@/components/layout/UserMenu"
 import { buttonVariants } from "@/components/primitives/button"
@@ -71,11 +72,14 @@ export function Header() {
 					{/* the desktop menu items, swapped for the hamburger menu on small screens */}
 					<div className="hidden items-center gap-1 sm:flex">
 						<ThemeToggle isDark={isDark} onToggle={toggleTheme} />
-						{/* plans moves into the user menu once signed in. it only stays in the header for a logged-out visitor */}
+						{/* docs and plans move into the user menu once signed in. they only stay in the header for a logged-out visitor */}
 						{!session && (
-							<AnchorLink href="/plans" className={menuLinkClassName(pathname, "/plans")}>
-								Plans
-							</AnchorLink>
+							<>
+								<DocsLink className={menuLinkClassName(pathname, "/docs")} />
+								<AnchorLink href="/plans" className={menuLinkClassName(pathname, "/plans")}>
+									Plans
+								</AnchorLink>
+							</>
 						)}
 						{session ? (
 							// the user items live below the avatar dropdown instead of the primary navigation
@@ -225,12 +229,15 @@ function HeaderMenu({
 						{isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
 						{isDark ? "Light mode" : "Dark mode"}
 					</button>
-					{/* plans goes into the user menu once signed in */}
+					{/* docs and plans move into the user menu once signed in */}
 					{!isSignedIn && (
-						<AnchorLink href="/plans" onClick={closeMenu} className={menuItemClassName(pathname, "/plans")}>
-							<Columns3Cog className="size-4" />
-							Plans
-						</AnchorLink>
+						<>
+							<DocsLink className={MENU_ITEM_CLASS} hasIcon onNavigate={closeMenu} />
+							<AnchorLink href="/plans" onClick={closeMenu} className={menuItemClassName(pathname, "/plans")}>
+								<Columns3Cog className="size-4" />
+								Plans
+							</AnchorLink>
+						</>
 					)}
 					{isSignedIn ? (
 						// the user menu items form the block below a horizontal divider

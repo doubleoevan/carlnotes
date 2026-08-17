@@ -15,6 +15,9 @@ vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
 .vite/
 
+# Astro's generated types for the docs site, written by astro sync on every build
+.astro/
+
 # react-email preview server build output
 .react-email/
 

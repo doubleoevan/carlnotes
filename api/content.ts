@@ -1,5 +1,6 @@
-// the server-rendered content pages: Markdown under content/blog/ and content/docs/,
+// the server-rendered blog pages: Markdown under content/blog/,
 // rendered to HTML in Hono so the pages are readable without JS execution.
+// the docs are a Starlight site built to static files, served from api/index.ts, and never reach this renderer.
 import { readdirSync, readFileSync } from "node:fs"
 import { Hono } from "hono"
 import Markdown from "markdown-to-jsx"
@@ -10,10 +11,9 @@ import { toJsonLdTag } from "./seo"
 // the content directories, resolved from this file so the api serves them from any working directory
 const CONTENT_ROOT = `${import.meta.dir}/../content`
 
-// the two surfaces: where each reads from, its index title, and the JSON-LD type its pages carry
+// the one surface: where it reads from, its index title, and the JSON-LD type it gives its pages
 const SURFACES = {
 	blog: { title: "Blog", description: "Notes of Carl.", jsonLdType: "BlogPosting" },
-	docs: { title: "Docs", description: "How CarlNotes works, in plain terms.", jsonLdType: "Article" },
 } as const
 type Surface = keyof typeof SURFACES
 
@@ -138,17 +138,11 @@ function servePage(surface: Surface, slug: string): string | null {
 	})
 }
 
-// the content routes: an index and a page route per surface
+// the content routes: the blog's index and its page route
 export const contentRoute = new Hono()
 	.get("/blog", (context) => context.html(serveIndex("blog")))
 	.get("/blog/:slug", (context) => {
 		const html = servePage("blog", context.req.param("slug"))
-		return html ? context.html(html) : context.text("Not found", 404)
-	})
-	// the docs surface, served the same way out of its own folder
-	.get("/docs", (context) => context.html(serveIndex("docs")))
-	.get("/docs/:slug", (context) => {
-		const html = servePage("docs", context.req.param("slug"))
 		return html ? context.html(html) : context.text("Not found", 404)
 	})
 
