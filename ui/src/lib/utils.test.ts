@@ -190,7 +190,7 @@ test("an upper-case scheme still matches", () => {
 test("a url that is already a source is not offered", () => {
 	const keptSources = [{ sourceKind: "url", config: { url: "https://example.com/post" } }]
 	expect(toPossibleSourceUrls("read https://example.com/post", keptSources, [])).toEqual([])
-	const addedSources = [{ sourceKind: "url", value: "https://example.com/post" }]
+	const addedSources = [{ optionKey: "url", value: "https://example.com/post" }]
 	expect(toPossibleSourceUrls("read https://example.com/post", [], addedSources)).toEqual([])
 })
 
@@ -206,6 +206,8 @@ test("toSafeRedirectPath keeps a plain path and rejects everything that could le
 	expect(toSafeRedirectPath("/topics/top_longevity")).toBe("/topics/top_longevity")
 	expect(toSafeRedirectPath(null)).toBe("/")
 	expect(toSafeRedirectPath("https://evil.com")).toBe("/")
+
+	// every spelling of another site, however it is disguised, lands back on the homepage
 	expect(toSafeRedirectPath("//evil.com")).toBe("/")
 	expect(toSafeRedirectPath("/\\evil.com")).toBe("/")
 	expect(toSafeRedirectPath("\\/evil.com")).toBe("/")

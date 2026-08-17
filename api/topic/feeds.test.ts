@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { canRateInFeed } from "./feeds"
 
-// a topic carrying just the fields canRateInFeed needs
+// a topic with just the fields canRateInFeed needs
 function topic(ownerId: string, visibility: "public" | "invite" | "private"): Parameters<typeof canRateInFeed>[0] {
 	return { id: "t1", ownerId, visibility }
 }

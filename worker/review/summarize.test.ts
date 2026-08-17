@@ -26,6 +26,7 @@ test("buildScanReportPrompt grounds the report prompt in the scan's data", async
 			"near-duplicate": 1,
 			"below relevance threshold": 4,
 			"flagged by scanner": 1,
+			"no text to score": 0,
 		},
 		deferredCount: 1,
 		failedCount: 0,
@@ -36,7 +37,8 @@ test("buildScanReportPrompt grounds the report prompt in the scan's data", async
 	const budget = { ...newBudget(), spentDollars: 0.1284, stageCosts }
 	const scannedSources: ScannedSource[] = [
 		{ sourceKind: "rss", status: "ok" },
-		{ sourceKind: "search", status: "failed" },
+		{ sourceKind: "search", status: "failed", reason: "exa search returned 500" },
+		{ sourceKind: "reddit", status: "fallback", fallbackMode: "reddit-rss" },
 	]
 
 	// render the report prompt over the sample scan
@@ -50,13 +52,16 @@ test("buildScanReportPrompt grounds the report prompt in the scan's data", async
 		budget,
 	})
 
-	// the date, kept finding, drop causes, and source outcomes all land in the prompt
+	// the date, kept finding, drop causes, and source outcomes are all included in the prompt
 	expect(reportPrompt).toContain("July 21, 2026")
 	expect(reportPrompt).toContain("https://a.com/1")
 	expect(reportPrompt).toContain("agent news")
 	expect(reportPrompt).toContain("duplicate content: 2")
 	expect(reportPrompt).toContain("rss: ok")
-	expect(reportPrompt).toContain("search: failed")
+
+	// a failed Source names why it failed, and one that fell back names the access mode it fell back to
+	expect(reportPrompt).toContain("search: failed — exa search returned 500")
+	expect(reportPrompt).toContain("reddit: fallback — fell back to reddit-rss")
 
 	// the Scan's limits never reach the user's note. Carl can only write about what the data names,
 	// so keeping the deferred count out of the prompt is what keeps it out of the note

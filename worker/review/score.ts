@@ -13,7 +13,6 @@ import {
 	canSpend,
 	charge,
 	type FetchOutcome,
-	FIRECRAWL_COST_PER_FETCH,
 	PREMIUM_COST_PER_MILLION_TOKENS,
 	type StageCosts,
 	toFetchCountField,
@@ -32,15 +31,17 @@ import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track
 // the cheap model score that earns a premium model re-score and a relevance explanation. the environment can override it
 const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? "0.6")
 
-// stored resource content stays reusable for this long before a scan revalidates or refetches it. the environment can override it
-
 // how many resources the paid fetch-and-scoring section works concurrently. it stays bounded because Firecrawl
 // enforces a per-plan concurrency and responds to a burst with 429s, which fall back to the snippet.
 // the environment can override it, and a value of 1 restores the original serial behavior
 const REVIEW_CONCURRENCY = Number(Bun.env.REVIEW_CONCURRENCY ?? "4")
 
-// the text cap that bounds scoring tokens and spend
+// the text cap that bounds scoring tokens and spend. it also bounds what the scanner screens, so a model never
+// reads a character the scanner did not see. reading stored content past this point needs its own screen first
 const MAX_SCORE_CHARS = 8000
+
+// how a tweet's canonical url always starts, since ingestion folds twitter.com onto x.com and lowercases the host
+const X_URL_PREFIX = "https://x.com/"
 
 // the model's structured output. a relevance score from 0 to 1, plus a relevance explanation that only the premium model is asked to write
 const scoreSchema = z.object({ score: z.number(), relevanceExplanation: z.string().optional() })
@@ -130,8 +131,16 @@ async function fetchAndScoreResource(
 		const { content, fetchOutcome } = await fetchResourceContent(resource, budget)
 		budget.fetchCounts[toFetchCountField(fetchOutcome)]++
 
-		// screen the fetched page before any model reads it. a flagged page is dropped under its own cause and never scored
-		const screenVerdict = await screenText(content, "page")
+		// a Resource that resolved to no text at all, an episode with no transcript and no show notes, is dropped
+		// here, so neither the scanner nor a scoring model is paid to read nothing
+		if (!content.trim()) {
+			return { status: "filtered", reason: "no text to score" }
+		}
+
+		// screen the fetched page before any model reads it. a flagged page is dropped under its own cause and never scored.
+		// only the scored prefix is sent, which is every character a model ever reads. a transcript runs to tens of thousands
+		// of characters, and sending all of them risks the scanner's timeout, which would drop the screening entirely
+		const screenVerdict = await screenText(content.slice(0, MAX_SCORE_CHARS), "page")
 		if (screenVerdict.isFlagged) {
 			console.error(`resource ${resource.id} ${toFlaggedReason(screenVerdict)}`)
 			return { status: "filtered", reason: "flagged by scanner" }
@@ -141,7 +150,7 @@ async function fetchAndScoreResource(
 		const scoredResource = await scoreResource(screenVerdict.text, topicContext.text, budget, litellmApiKey)
 		await upsertFinding(scan, topicId, resource, scoredResource.score, scoredResource.relevanceExplanation)
 
-		// the kept outcome carries the feed-facing details that the report cites
+		// the kept outcome includes the feed-facing details that the report cites
 		const keptFinding = {
 			title: resource.title,
 			url: resource.url,
@@ -158,12 +167,17 @@ async function fetchAndScoreResource(
 	}
 }
 
-// get the survivor's content: reuse it if fresh, revalidate stale content with a cheap conditional GET, else fetch from Firecrawl.
-// reuse and a 304 cost no fetch credit. only the Firecrawl fetch is billed, and a failed fetch falls back to the snippet
+// get the survivor's content: reuse it if fresh, revalidate stale content with a cheap conditional GET, else fetch it fresh.
+// reuse and a 304 cost no fetch credit. only the Firecrawl scrape is billed, and a failed fetch falls back to the snippet
 async function fetchResourceContent(
 	resource: Resource,
 	budget: Budget,
 ): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
+	// a Resource whose snippet is already its whole text needs no fetch. it counts as reused, which charges no fetch credit
+	if (isSnippetComplete(resource.url)) {
+		return { content: resource.snippet ?? "", fetchOutcome: "reused" }
+	}
+
 	// reuse stored content scores as-is if it isn't stale, read back from object storage, with no fetch
 	if (resource.contentKey && !isContentStale(resource.fetchedAt, new Date(), CONTENT_TTL_MS)) {
 		const storedContent = await readStoredContent(resource.contentKey, resource.id)
@@ -182,11 +196,11 @@ async function fetchResourceContent(
 		}
 	}
 
-	// fetch with a billed Firecrawl, storing fresh content and the etag and last-modified
-	return fetchViaFirecrawl(resource, budget)
+	// fetch fresh content, storing it along with the etag and last-modified
+	return fetchAndStoreContent(resource, budget)
 }
 
-// read a Resource's stored Markdown or null when the object is gone or unreadable.
+// read a Resource's stored text or null when the object is gone or unreadable.
 // a missing object is a cache miss, not a Resource failure, so the caller falls through and fetches the page again
 async function readStoredContent(contentKey: string, resourceId: string): Promise<string | null> {
 	try {
@@ -199,20 +213,22 @@ async function readStoredContent(contentKey: string, resourceId: string): Promis
 	}
 }
 
-// fetch the content from Firecrawl, write it to object storage, and record its key, size, and validators on the resource row.
-// a failed scrape or a failed object-storage write falls back to the native snippet, never failing the Resource or the Scan
-async function fetchViaFirecrawl(
+// fetch the content by the path the Resource's kind selects, write it to object storage, and record its key, size,
+// and validators on the resource row. a failed fetch or a failed object-storage write falls back to the native snippet,
+// never failing the Resource or the Scan
+async function fetchAndStoreContent(
 	resource: Resource,
 	budget: Budget,
 ): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
 	try {
-		// fetch the page Markdown, charge the scrape, then write the body to object storage
-		const { markdown, etag, lastModified } = await fetchContent(resource.url)
-		charge(budget, "fetch", FIRECRAWL_COST_PER_FETCH)
-		const stored = markdown ? await storeResourceContent(resource.id, markdown) : null
+		// fetch the content, charge what that fetch spent, then write the body to object storage.
+		// a transcript goes straight to YouTube, so it charges zero into the same fetch bucket a scrape charges
+		const { text, cost, etag, lastModified } = await fetchContent(resource.url, resource.kind, resource.transcriptUrl)
+		charge(budget, "fetch", cost)
+		const stored = text ? await storeResourceContent(resource.id, text) : null
 
 		// decide the text to score and the key to store, then store the resource row
-		const { scoringText, contentKey, contentBytes } = toFetchedContentFields(stored, markdown, resource.snippet)
+		const { scoringText, contentKey, contentBytes } = toFetchedContentFields(stored, text, resource.snippet)
 		await db
 			.update(resources)
 			.set({ contentKey, contentBytes, etag, lastModified, fetchedAt: new Date() })
@@ -220,20 +236,20 @@ async function fetchViaFirecrawl(
 		return { content: scoringText, fetchOutcome: "fetched" }
 	} catch (error) {
 		// the fetch failed, so fall back to the snippet. the Finding is still written, with less to go on
-		console.error(`firecrawl fetch failed for ${resource.url}`, error)
+		console.error(`content fetch failed for ${resource.url}`, error)
 		reportError(error, "fetch", { resourceId: resource.id, url: resource.url })
 		return { content: resource.snippet ?? "", fetchOutcome: "fetched" }
 	}
 }
 
-// write the fetched Markdown to object storage, returning its key and size, or null when the write fails.
+// write the fetched text to object storage, returning its key and size, or null when the write fails.
 // a failed write best-effort deletes the object so it leaves no orphan, and review falls back to the snippet
 async function storeResourceContent(
 	resourceId: string,
-	markdown: string,
+	text: string,
 ): Promise<{ contentKey: string; bytes: number } | null> {
 	try {
-		return await uploadResourceContent(resourceId, markdown)
+		return await uploadResourceContent(resourceId, text)
 	} catch (error) {
 		// the write failed. delete any partial object, then return null so scoring falls back to the snippet.
 		// nothing is stored, so a later Scan refetches this page
@@ -335,7 +351,7 @@ async function upsertFinding(
 	// insert the topic finding
 	await db
 		.insert(findings)
-		// the finding carries the relevance score and explanation, plus the scan that produced them
+		// the finding includes the relevance score and explanation, plus the scan that produced them
 		.values({
 			topicId,
 			resourceId: resource.id,
@@ -358,16 +374,24 @@ export function isPromoted(score: number): boolean {
 }
 
 /**
+ * Whether the Resource's snippet is already its whole text, so fetching the page would add nothing.
+ * A tweet is the only one today, and x.com refuses scraping, so a fetch there is billed only to fail.
+ */
+export function isSnippetComplete(url: string): boolean {
+	return url.startsWith(X_URL_PREFIX)
+}
+
+/**
  * The fields that a fetch writes to the Resource row, plus the text it scores. A body written to object storage
- * is scored in memory and keeps its key. An empty scrape or a failed write scores the snippet instead and keeps no key.
+ * is scored in memory and keeps its key. An empty fetch or a failed write scores the snippet instead and keeps no key.
  */
 export function toFetchedContentFields(
 	stored: { contentKey: string; bytes: number } | null,
-	markdown: string,
+	text: string,
 	snippet: string | null,
 ): { scoringText: string; contentKey: string | null; contentBytes: number | null } {
 	return {
-		scoringText: stored ? markdown : (snippet ?? ""),
+		scoringText: stored ? text : (snippet ?? ""),
 		contentKey: stored?.contentKey ?? null,
 		contentBytes: stored?.bytes ?? null,
 	}

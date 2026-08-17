@@ -1,15 +1,51 @@
 // source suggestion tests that identify when two Sources have the same source key,
 // so a suggestion does not repeat what was already added
 import { expect, test } from "bun:test"
-import { type SuggestedSource, type SuggestionContext, toSourceKey, toTopicContext } from "./suggest"
+import { FeedStatusError } from "./ingest/feed"
+import {
+	isTemporaryFailure,
+	type SuggestedSource,
+	type SuggestionContext,
+	toSourceKey,
+	toTopicContext,
+} from "./suggest"
 
-// one proposed source, so a case names only the kind and value it varies
-const source = (sourceKind: SuggestedSource["sourceKind"], value: string): SuggestedSource => ({ sourceKind, value })
+// one proposed source, so a case names only the option and value it varies
+const source = (sourceOption: SuggestedSource["sourceOption"], value: string): SuggestedSource => ({
+	sourceOption,
+	value,
+})
 
-// a subreddit reads the same no matter how it was written
+// a subreddit reads the same no matter how it was written, since it is normalized by the ingester's own rule
 test("a subreddit is the same source no matter how it was written", () => {
 	expect(toSourceKey(source("reddit", "r/LocalLLaMA"))).toBe(toSourceKey(source("reddit", "localllama")))
 	expect(toSourceKey(source("reddit", "rust"))).not.toBe(toSourceKey(source("reddit", "golang")))
+})
+
+// a handle is a domain name, so it reads the same in any case and with or without its @
+test("a bluesky account has the same source however its handle was written", () => {
+	const account = toSourceKey(source("bluesky", "TheVerge.com"))
+	expect(toSourceKey(source("bluesky", "@theverge.com"))).toBe(account)
+	expect(toSourceKey(source("bluesky", "arstechnica.com"))).not.toBe(account)
+})
+
+// an account and a site are two different things to follow, even where the handle is the site's own domain
+test("a bluesky account is not the same source as a feed on the matching domain", () => {
+	expect(toSourceKey(source("bluesky", "theverge.com"))).not.toBe(
+		toSourceKey(source("rss", "https://theverge.com/rss")),
+	)
+})
+
+// a name the ingester would reject still keys to itself, so it dedupes normally before it is dropped as unreadable
+test("a subreddit name reddit would not accept still keys to itself", () => {
+	expect(toSourceKey(source("reddit", "not a subreddit"))).toBe(toSourceKey(source("reddit", "NOT A SUBREDDIT")))
+	expect(toSourceKey(source("reddit", "not a subreddit"))).not.toBe(toSourceKey(source("reddit", "mcp")))
+})
+
+// a handle reads the same, however, it was written, so a topic already following an account is not suggested again
+test("an x handle is the same source however it was written", () => {
+	expect(toSourceKey(source("x", "@Sama"))).toBe(toSourceKey(source("x", "sama")))
+	expect(toSourceKey(source("x", "openai"))).not.toBe(toSourceKey(source("x", "anthropic")))
 })
 
 // one publication is one source, so a topic already following a site is not suggested its other feed
@@ -28,13 +64,16 @@ test("a url is the same source only at the same address", () => {
 })
 
 // a feed and a page at one address are different sources, since a different ingester reads each
-test("the source kind is part of the source key identifier", () => {
+test("the source option is part of the source key identifier", () => {
 	expect(toSourceKey(source("url", "https://a.test/feed"))).not.toBe(toSourceKey(source("rss", "https://a.test/feed")))
 })
 
-// the built-in web search is always the same key, so only one web search can ever be added
-test("the built-in web search is one source", () => {
-	expect(toSourceKey(source("search", ""))).toBe(toSourceKey(source("search", "anything")))
+// a Google News source covers one publisher, so it is the same source as that publisher's own feed
+test("a Google News source is the same source as the publisher it covers", () => {
+	const publisherFeed = toSourceKey(source("rss", "https://techcrunch.com/feed/"))
+	expect(toSourceKey(source("googleNews", "techcrunch.com"))).toBe(publisherFeed)
+	expect(toSourceKey(source("googleNews", "https://www.TechCrunch.com/2026/01/02/an-article"))).toBe(publisherFeed)
+	expect(toSourceKey(source("googleNews", "theverge.com"))).not.toBe(publisherFeed)
 })
 
 // a YouTube id is exact, since a channel and a playlist differentiated by the id itself
@@ -43,9 +82,42 @@ test("a youtube source is the same only at the same id", () => {
 	expect(toSourceKey(source("youtube", "UCabc"))).not.toBe(toSourceKey(source("youtube", "PLabc")))
 })
 
+// a podcast keys by name until iTunes resolves it, and by its exact id after
+test("a podcast is the same source at the same name or the same id", () => {
+	expect(toSourceKey(source("podcast", "Hard Fork"))).toBe(toSourceKey(source("podcast", " hard fork ")))
+	expect(toSourceKey(source("podcast", "1528594034"))).toBe(toSourceKey(source("podcast", "1528594034")))
+
+	// a name and the id it resolves to are different keys, which is why a resolved suggestion is deduped a second time
+	expect(toSourceKey(source("podcast", "Hard Fork"))).not.toBe(toSourceKey(source("podcast", "1528594034")))
+})
+
+// a podcast named by a show is not the same source as a feed url, since a different ingester reads each
+test("a podcast is not keyed as a feed", () => {
+	expect(toSourceKey(source("podcast", "Hard Fork"))).not.toBe(toSourceKey(source("rss", "Hard Fork")))
+})
+
 // an unparseable value still keys to something, so a malformed candidate source is compared instead of crashing
 test("a value that is not a url still keys to itself", () => {
 	expect(toSourceKey(source("rss", "not a url"))).toBe("rss:not a url")
+})
+
+// reddit returns 403 to a blocked IP range and 404 to a subreddit that is not there,
+// so a deployment that reddit blocks still keeps its suggestions while an invented subreddit is dropped
+test("a reddit suggestion survives a blocked host but not a missing subreddit", () => {
+	expect(isTemporaryFailure(new FeedStatusError("https://www.reddit.com/r/mcp/.rss", 403), "reddit")).toBe(true)
+	expect(isTemporaryFailure(new FeedStatusError("https://www.reddit.com/r/nope/.rss", 404), "reddit")).toBe(false)
+})
+
+// every other source kind reads 403 as the host to show that the source is not readable
+test("a 403 drops a suggestion for any other source kind", () => {
+	expect(isTemporaryFailure(new FeedStatusError("https://a.test/feed", 403), "rss")).toBe(false)
+	expect(isTemporaryFailure(new FeedStatusError("https://a.test/page", 403), "url")).toBe(false)
+})
+
+// a throttled or broken host is never returned as "no such source", whatever the source kind
+test("a rate limit or a server error keeps a suggestion of any kind", () => {
+	expect(isTemporaryFailure(new FeedStatusError("https://a.test/feed", 429), "rss")).toBe(true)
+	expect(isTemporaryFailure(new FeedStatusError("https://a.test/feed", 503), "rss")).toBe(true)
 })
 
 // a suggestion context holding only what the context reads, for test cases to override

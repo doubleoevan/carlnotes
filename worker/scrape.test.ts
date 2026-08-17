@@ -1,8 +1,31 @@
-// scrape tests for the conditional-refetch helpers
+// scrape tests for the conditional-refetch helpers and the caption-track parsing of every host that publishes one
 import { expect, test } from "bun:test"
-import { conditionalHeaders, fetchPublicUrl, revalidationOutcome, toFetchableUrl } from "./scrape"
+import {
+	conditionalHeaders,
+	fetchContent,
+	fetchPublicUrl,
+	revalidationOutcome,
+	toCueText,
+	toDailymotionCaptionTracks,
+	toDailymotionVideoId,
+	toFetchableUrl,
+	toTranscriptText,
+	toVimeoCaptionTracks,
+	toVimeoVideoId,
+	toYoutubeCaptionTracks,
+	toYoutubeVideoId,
+} from "./scrape"
 
-// conditionalHeaders carries only the validators that are stored, omitting an absent one
+// one track as the YouTube player endpoint lists it, and the two renderers it nests the list under
+type YoutubeTrack = { baseUrl?: string; languageCode?: string }
+type PlayerPayload = { captions: { playerCaptionsTracklistRenderer: { captionTracks: YoutubeTrack[] } } }
+
+// wrap a track list in the shape the YouTube player endpoint returns it in
+function toPlayerPayload(captionTracks: YoutubeTrack[]): PlayerPayload {
+	return { captions: { playerCaptionsTracklistRenderer: { captionTracks } } }
+}
+
+// conditionalHeaders sends only the validators that are stored, omitting an absent one
 test("conditionalHeaders builds from whichever validators are stored", () => {
 	// test only the etag, only the last-modified date, both, and neither headers are built
 	expect(conditionalHeaders({ etag: '"abc"', lastModified: null })).toEqual({ "If-None-Match": '"abc"' })
@@ -76,4 +99,143 @@ test("fetchPublicUrl checks every redirect hop, not just the first url", async (
 	} finally {
 		globalThis.fetch = originalFetch
 	}
+})
+
+// only a YouTube video url takes the transcript path, so everything else has to come back null
+test("toYoutubeVideoId reads the id from a watch url and a short link only", () => {
+	// a watch page on any YouTube host has the id in the v param, and extra params do not disturb it
+	expect(toYoutubeVideoId("https://www.youtube.com/watch?v=abc123")).toBe("abc123")
+	expect(toYoutubeVideoId("https://m.youtube.com/watch?v=abc123")).toBe("abc123")
+	expect(toYoutubeVideoId("https://www.youtube.com/watch?v=abc123&list=PL999&t=42")).toBe("abc123")
+
+	// a short link has the id as its first path segment, with any timestamp hanging off the query
+	expect(toYoutubeVideoId("https://youtu.be/abc123")).toBe("abc123")
+	expect(toYoutubeVideoId("https://youtu.be/abc123?t=42")).toBe("abc123")
+
+	// a short, an embed, and a live replay each have the id after the path that names them
+	expect(toYoutubeVideoId("https://www.youtube.com/shorts/abc123")).toBe("abc123")
+	expect(toYoutubeVideoId("https://www.youtube.com/embed/abc123")).toBe("abc123")
+	expect(toYoutubeVideoId("https://www.youtube.com/live/abc123")).toBe("abc123")
+
+	// a playlist page, a channel, another video host, a bare short link, and an unparseable string are all not videos
+	expect(toYoutubeVideoId("https://www.youtube.com/playlist?list=PL999")).toBeNull()
+	expect(toYoutubeVideoId("https://www.youtube.com/@somechannel")).toBeNull()
+	expect(toYoutubeVideoId("https://vimeo.com/12345")).toBeNull()
+	expect(toYoutubeVideoId("https://youtu.be/")).toBeNull()
+	expect(toYoutubeVideoId("https://www.youtube.com/shorts/")).toBeNull()
+	expect(toYoutubeVideoId("not a url")).toBeNull()
+})
+
+// only a Vimeo url takes the Vimeo transcript path, and a Vimeo id is the digits in the path
+test("toVimeoVideoId reads the id from every Vimeo url shape", () => {
+	// a plain link, a player embed, and the channel and group links all have the id as a digit segment
+	expect(toVimeoVideoId("https://vimeo.com/76979871")).toBe("76979871")
+	expect(toVimeoVideoId("https://player.vimeo.com/video/76979871")).toBe("76979871")
+	expect(toVimeoVideoId("https://vimeo.com/channels/staffpicks/76979871")).toBe("76979871")
+	expect(toVimeoVideoId("https://vimeo.com/groups/motion/videos/76979871")).toBe("76979871")
+
+	// a user page, another host, and an unparseable string are all not videos
+	expect(toVimeoVideoId("https://vimeo.com/someuser")).toBeNull()
+	expect(toVimeoVideoId("https://youtube.com/watch?v=abc")).toBeNull()
+	expect(toVimeoVideoId("not a url")).toBeNull()
+})
+
+// a Dailymotion url puts a title slug after its id, which the metadata endpoint does not accept
+test("toDailymotionVideoId reads the bare id without its title slug", () => {
+	// a full link has the id after /video, and a dai.ly short link has it as its first segment
+	expect(toDailymotionVideoId("https://www.dailymotion.com/video/x942ozu")).toBe("x942ozu")
+	expect(toDailymotionVideoId("https://dai.ly/x942ozu")).toBe("x942ozu")
+
+	// a title slug follows the id after an underscore and is not part of it
+	expect(toDailymotionVideoId("https://www.dailymotion.com/video/x942ozu_some-title")).toBe("x942ozu")
+
+	// a channel page, another host, and an unparseable string are all not videos
+	expect(toDailymotionVideoId("https://www.dailymotion.com/somechannel")).toBeNull()
+	expect(toDailymotionVideoId("https://vimeo.com/76979871")).toBeNull()
+	expect(toDailymotionVideoId("not a url")).toBeNull()
+})
+
+// every host lists its tracks in its own shape and its own order, so each maps to the shared one
+test("each host's payload maps to the shared caption track shape", () => {
+	// YouTube nests its list two renderers deep and returns it sorted by language code
+	const youtubeTracks = toYoutubeCaptionTracks(
+		toPlayerPayload([
+			{ baseUrl: "https://www.youtube.com/api/timedtext?lang=ar", languageCode: "ar" },
+			{ baseUrl: "https://www.youtube.com/api/timedtext?lang=en", languageCode: "en" },
+		]),
+	)
+	expect(youtubeTracks).toEqual([
+		{ languageCode: "ar", url: "https://www.youtube.com/api/timedtext?lang=ar" },
+		{ languageCode: "en", url: "https://www.youtube.com/api/timedtext?lang=en" },
+	])
+
+	// Vimeo names the language "lang" and serves its tracks from its own caption domain
+	const vimeoTracks = toVimeoCaptionTracks({
+		request: { text_tracks: [{ lang: "de", url: "https://captions.vimeo.com/captions/170.vtt" }] },
+	})
+	expect(vimeoTracks).toEqual([{ languageCode: "de", url: "https://captions.vimeo.com/captions/170.vtt" }])
+
+	// Dailymotion keys its map by language and holds each track's urls in a list
+	const dailymotionTracks = toDailymotionCaptionTracks({
+		subtitles: { data: { "en-auto": { urls: ["https://static2.dmcdn.net/x.srt"] } } },
+	})
+	expect(dailymotionTracks).toEqual([{ languageCode: "en-auto", url: "https://static2.dmcdn.net/x.srt" }])
+
+	// a track listed without a url is nothing to fetch, and an absent list reads as no captions
+	expect(toVimeoCaptionTracks({ request: { text_tracks: [{ lang: "en" }] } })).toEqual([])
+	expect(toYoutubeCaptionTracks(null)).toEqual([])
+	expect(toDailymotionCaptionTracks(null)).toEqual([])
+})
+
+// Vimeo serves WEBVTT and Dailymotion serves SRT, and one parser has to read both
+test("toCueText reads WEBVTT and SRT down to their words", () => {
+	// a WEBVTT file opens with its header, then numbers each cue above its timing line
+	const webvtt =
+		"WEBVTT\n\n1\n00:00:05.237 --> 00:00:08.043\nHere at Vimeo we are\n\n2\n00:00:08.043 --> 00:00:10.000\nalways working"
+	expect(toCueText(webvtt)).toBe("Here at Vimeo we are always working")
+
+	// an SRT file has no header and punctuates its timestamps with commas
+	const srt =
+		"1\n00:00:00,000 --> 00:00:03,000\nAmbulance emergency\n\n2\n00:00:03,000 --> 00:00:07,000\nis the patient breathing?"
+	expect(toCueText(srt)).toBe("Ambulance emergency is the patient breathing?")
+
+	// WEBVTT marks up speakers and emphasis inline, which is not spoken text
+	expect(toCueText("WEBVTT\n\n00:00:01.000 --> 00:00:02.000\n<v Alice>hello <i>there</i>")).toBe("hello there")
+
+	// a note block annotates a cue file and is not spoken either
+	expect(toCueText("WEBVTT\n\nNOTE this is a comment\n\n00:00:01.000 --> 00:00:02.000\nthe words")).toBe("the words")
+
+	// a file with no cues at all joins to nothing	expect(toCueText("WEBVTT\n\n")).toBe("")
+	expect(toCueText("")).toBe("")
+})
+
+// the caption response arrives as timed lines, which have to read as prose by the time a model sees them
+test("toTranscriptText joins the caption lines without running their words together", () => {
+	// a line ends without a trailing space, so joining lines directly would produce "howcrazy" out of "how" and "crazy"
+	const captions = {
+		events: [{ segs: [{ utf8: "appreciate how" }] }, { segs: [{ utf8: "crazy it is" }] }],
+	}
+	expect(toTranscriptText(captions)).toBe("appreciate how crazy it is")
+
+	// within one line the segments are words with their own spacing, so they join directly
+	expect(toTranscriptText({ events: [{ segs: [{ utf8: "hello " }, { utf8: "world" }] }] })).toBe("hello world")
+
+	// the line breaks and padding in captions collapse to single spaces
+	expect(
+		toTranscriptText({
+			events: [{ segs: [{ utf8: "one" }] }, { segs: [{ utf8: "\n" }] }, { segs: [{ utf8: "two" }] }],
+		}),
+	).toBe("one two")
+
+	// an event with no segments is a timing-only gap, so it contributes nothing
+	expect(toTranscriptText({ events: [{}, { segs: [{ utf8: "only this" }] }] })).toBe("only this")
+
+	// nothing spoken joins to nothing	expect(toTranscriptText({ events: [] })).toBe("")
+	expect(toTranscriptText(null)).toBe("")
+})
+
+// an episode that declared no transcript is scored on its show notes, so the router spends no scrape credit on it
+test("fetchContent skips the fetch for an episode with no transcript", async () => {
+	const fetched = await fetchContent("https://example.com/episode", "listen")
+	expect(fetched).toEqual({ text: "", cost: 0, etag: null, lastModified: null })
 })

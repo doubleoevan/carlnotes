@@ -104,6 +104,16 @@ Check for:
      "reader", since Carl addresses one — see the prompt-authoring skill for where that line falls
    - `refused` (now `rejected`, though the "refuses to <verb>" idiom stays), `ceiling` (now `limit`),
      "privately routable" / "not publicly routable" / "inside our own network" (all now "internal")
+   - `scans.fallback_sources` / `fallbackSources` (now `problem_sources` / `problemSources`; the column holds
+     both a Source that fell back and one that failed, so neither arm's name could stand for it. `fallbackMode`
+     is a different thing and keeps its name). `degraded_sources` is the original name migration 0028 renamed
+     away from, and is not to be returned to
+   - `SORT_LABELS` (now `SORT_ROWS`), `TAG_MATCH_LABEL` (now `TAG_MATCH_ROWS`); both map a mode to its label
+     and its icon rather than to a label alone
+   - `carries` / `carrying` in comments (now `includes` when one thing holds another, `has` for an attribute,
+     `sends` for something transmitted), `rather than` (now `instead of`), `rides with` (now `goes with`),
+     `steers` (say what it sets or bounds), `lands in` (now `is included in`), and em dashes in comments
+     (use a comma or a second sentence)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

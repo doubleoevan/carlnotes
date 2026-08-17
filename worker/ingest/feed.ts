@@ -1,15 +1,26 @@
 // the shared helper for feeds that don't require an API key. it fetches an RSS or Atom url and parses it into deduped Resources
 import Parser from "rss-parser"
-import { fetchPublicUrl } from "../scrape"
+import { fetchPublicUrl, readCappedBody } from "../scrape"
 import type { NewResource } from "./ingester"
 
-// fetch limits used to bound slow feeds and reject oversized bodies
+// how long a feed fetch may run before it aborts. an oversized body is rejected by the shared read cap
 const FETCH_TIMEOUT_MS = 10_000
-// the cap applied while reading, so an oversized feed never lands in memory
-const MAX_FEED_BYTES = 5_000_000
 
-// one reusable parser handles both RSS 2.0 and Atom
-const parser = new Parser()
+// the transcript element a podcast feed publishes for an episode. rss-parser exposes an element's attributes under $
+type FeedTranscript = { $?: { url?: string; type?: string } }
+
+// the three places an entry item can name an address, in the order they are preferred
+type FeedItemAddresses = { link?: string; guid?: string; enclosure?: { url?: string } }
+
+// the transcript formats worth preferring, since their bytes are the words themselves.
+// the alternatives are HTML and JSON wrappers that would score with their markup in the way
+const READABLE_TRANSCRIPT_TYPES = ["text/plain", "text/vtt"]
+
+// one reusable parser handles both RSS 2.0 and Atom. an entry's transcript elements are kept as an array,
+// since a feed may publish the same episode's transcript in several formats
+const parser = new Parser<unknown, { transcripts?: FeedTranscript[] }>({
+	customFields: { item: [["podcast:transcript", "transcripts", { keepArray: true }]] },
+})
 
 // an RSS feed source that returned with an error status
 export class FeedStatusError extends Error {
@@ -17,7 +28,7 @@ export class FeedStatusError extends Error {
 		url: string,
 		readonly status: number,
 	) {
-		super(`feed ${url} returned ${status}`)
+		super(`${url} returned ${status}`)
 	}
 }
 
@@ -26,6 +37,16 @@ export async function fetchFeed(
 	url: string,
 	options: { userAgent?: string; resourceKind?: NewResource["kind"] } = {},
 ): Promise<NewResource[]> {
+	return (await fetchNamedFeed(url, options)).resources
+}
+
+/**
+ * Fetch a feed keeping the feed's own name, which is the channel or show name its Source can be called by.
+ */
+export async function fetchNamedFeed(
+	url: string,
+	options: { userAgent?: string; resourceKind?: NewResource["kind"] } = {},
+): Promise<{ feedName: string | null; resources: NewResource[] }> {
 	// send a descriptive User-Agent when the caller provides one. reddit rejects generic or missing agents
 	const headers = options.userAgent ? { "user-agent": options.userAgent } : undefined
 	const response = await fetchPublicUrl(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
@@ -35,52 +56,25 @@ export async function fetchFeed(
 	if (!response.ok) {
 		throw new FeedStatusError(url, response.status)
 	}
-	return parseFeed(await readCappedBody(response, url), options.resourceKind)
-}
-
-// read the body a chunk at a time and stop at the cap, so an endless response is dropped instead of buffered whole
-async function readCappedBody(response: Response, url: string): Promise<string> {
-	const reader = response.body?.getReader()
-	if (!reader) {
-		return ""
-	}
-
-	// chunks are collected instead of being decoded as they arrive, since a character can straddle two of them
-	const chunks: Uint8Array[] = []
-	let byteCount = 0
-	while (true) {
-		const { done, value } = await reader.read()
-		if (done) {
-			break
-		}
-
-		// cancelling closes the connection, so an endless response stops costing us bandwidth
-		byteCount += value.length
-		if (byteCount > MAX_FEED_BYTES) {
-			await reader.cancel()
-			throw new Error(`feed ${url} exceeds ${MAX_FEED_BYTES} bytes`)
-		}
-		chunks.push(value)
-	}
-
-	// join the chunks once, since a decoder cannot span them safely
-	const body = new Uint8Array(byteCount)
-	let offset = 0
-	for (const chunk of chunks) {
-		body.set(chunk, offset)
-		offset += chunk.length
-	}
-	return new TextDecoder().decode(body)
+	return parseNamedFeed(await readCappedBody(response, url), options.resourceKind ?? "read")
 }
 
 // parsing is separate from fetching so it can be tested without a network. entries are deduped within the feed by canonical url
 export async function parseFeed(xml: string, resourceKind: NewResource["kind"] = "read"): Promise<NewResource[]> {
+	return (await parseNamedFeed(xml, resourceKind)).resources
+}
+
+// the parse itself, keeping the feed's title alongside its entries
+async function parseNamedFeed(
+	xml: string,
+	resourceKind: NewResource["kind"],
+): Promise<{ feedName: string | null; resources: NewResource[] }> {
 	// parse RSS or Atom, then keep the first Resource seen per canonical url
 	const feed = await parser.parseString(xml)
 	const resourceByUrl = new Map<string, NewResource>()
 	for (const feedItem of feed.items) {
 		// skip entries with no usable canonical url. the url is the required, unique dedupe key
-		const url = toFeedItemUrl(feedItem)
+		const url = toFeedItemUrl(feedItem, feed.link)
 		if (!url || resourceByUrl.has(url)) {
 			continue
 		}
@@ -91,20 +85,43 @@ export async function parseFeed(xml: string, resourceKind: NewResource["kind"] =
 			title: feedItem.title ?? null,
 			kind: resourceKind,
 			snippet: feedItem.contentSnippet || feedItem.content || feedItem.summary || null,
+			transcriptUrl: toTranscriptUrl(feedItem.transcripts),
 			contentHash: null,
 		})
 	}
-	// the deduped Resources, in feed order
-	return [...resourceByUrl.values()]
+	// the feed's own name and the deduped Resources, in feed order
+	return { feedName: feed.title?.trim() || null, resources: [...resourceByUrl.values()] }
 }
 
-// pick the canonical url. prefer the entry link and fall back to the guid only when it is an absolute url
-function toFeedItemUrl(feedItem: { link?: string; guid?: string }): string | undefined {
-	// a trimmed link wins. an absolute guid is the only accepted fallback
-	const link = feedItem.link?.trim()
-	if (link) {
-		return link
-	}
+/**
+ * The transcript url to store for an entry, preferring a plain text or WebVTT one. Null when the entry names none.
+ */
+export function toTranscriptUrl(transcripts: FeedTranscript[] = []): string | null {
+	// keep only the elements that name a url
+	const namedTranscripts = transcripts.filter((transcript) => transcript.$?.url)
+	const readableTranscript = namedTranscripts.find((transcript) =>
+		READABLE_TRANSCRIPT_TYPES.includes(transcript.$?.type ?? ""),
+	)
+
+	// a readable format wins, and anything else is taken as the feed listed it
+	return (readableTranscript ?? namedTranscripts[0])?.$?.url ?? null
+}
+
+/**
+ * Pick an entry's canonical url: its own link, an absolute guid, or the address of what it encloses.
+ */
+export function toFeedItemUrl(feedItem: FeedItemAddresses, feedLink?: string): string | undefined {
+	// the address the entry names for itself. an absolute guid wins, and an enclosure names its audio file
 	const guid = feedItem.guid?.trim()
-	return guid?.startsWith("http") ? guid : undefined
+	const entryUrl = guid?.startsWith("http") ? guid : feedItem.enclosure?.url?.trim()
+
+	// a podcast feed often repeats the show's link on every episode, so a link equal to the feed's own names
+	// the show instead of the episode. the entry's own address keeps those episodes from collapsing into one
+	const link = feedItem.link?.trim()
+	if (link && link === feedLink?.trim() && entryUrl) {
+		return entryUrl
+	}
+
+	// otherwise the entry's link wins, and an entry with no link falls back to the address it named
+	return link || entryUrl
 }

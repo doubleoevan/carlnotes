@@ -23,6 +23,11 @@ export const CHEAP_COST_PER_MILLION_TOKENS = 0.2
 export const PREMIUM_COST_PER_MILLION_TOKENS = 0.6
 export const FIRECRAWL_COST_PER_FETCH = 0.001
 
+// what one tweet costs to read through TwitterAPI.io, from its $0.15 per 1,000 basis.
+// a request that returns nothing still bills the same figure as its floor
+export const X_COST_PER_READ = 0.00015
+export const X_COST_MINIMUM_PER_REQUEST = 0.00015
+
 // a chat turn's rates, one for the reply's tokens and one for each live web search the turn runs
 export const CHAT_COST_PER_MILLION_TOKENS = 0.6
 export const EXA_COST_PER_SEARCH = 0.005

@@ -36,7 +36,7 @@ export async function screenSource(sourceId: string): Promise<void> {
 	}
 
 	// screen the fetched Markdown the same way a Resource's content is screened before it is scored
-	const screenVerdict = await screenText(fetched.markdown, "page")
+	const screenVerdict = await screenText(fetched.text, "page")
 	if (screenVerdict.isFlagged) {
 		await failSource(sourceId, toFlaggedReason(screenVerdict))
 		return
@@ -53,8 +53,9 @@ export async function failSource(sourceId: string, reason: string): Promise<void
 
 // the page's Markdown, or the error that stopped it. every rejection names its own reason to show to the topic's owner
 async function fetchPage(pageUrl: string): Promise<FetchResult | Error> {
+	// a Source url names a page to read, so it takes the scrape instead of the caption path a video would
 	try {
-		return await fetchContent(toFetchableUrl(pageUrl).toString())
+		return await fetchContent(toFetchableUrl(pageUrl).toString(), "read")
 	} catch (error) {
 		return error instanceof Error ? error : new Error(String(error))
 	}

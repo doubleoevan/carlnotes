@@ -17,10 +17,12 @@ const REPORT_MAX_RETRIES = 4
 // one Source's ingestion outcome, as the report's sources section lists it
 // "fallback" means the Source ran without erroring but found nothing,
 // which the report names so a dead feed is visible instead of reading as a quiet one
+// a failed Source includes the reason it failed, so a blocked Source can read as blocked
 export type ScannedSource = {
 	sourceKind: string
 	status: "ok" | "fallback" | "failed" | "skipped"
 	fallbackMode?: string
+	reason?: string
 }
 
 // the values the scan report prompt is rendered with
@@ -92,18 +94,19 @@ export async function summarizeTopicScan(
 export async function buildScanReportPrompt(promptData: ScanPromptData): Promise<BuiltPrompt> {
 	const { template, name, registryPrompt } = await fetchPromptTemplate("summarize-topic-scan")
 
-	// fill the template. the topic text and kept block are reachable by an attacker, so they get fenced as untrusted
+	// fill the template. the topic text, the kept block, and the sources block are reachable by an attacker.
+	// a failed Source's reason can include a host's own response text, so all three get fenced as untrusted
 	const prompt = writePrompt(
 		template,
 		{
 			topicName: promptData.topicName,
 			topicContext: promptData.topicContext,
 			keptFindingsBlock: toKeptFindingsBlock(promptData.reviewOutcome.keptFindings),
+			sourcesBlock: toSourcesBlock(promptData.scannedSources),
 		},
 		{
 			date: promptData.date,
 			filteredBreakdown: toFilteredResourcesReport(promptData.reviewOutcome),
-			sourcesBlock: toSourcesBlock(promptData.scannedSources),
 			costLine: toCostLine(promptData.budget),
 		},
 	)
@@ -138,17 +141,19 @@ function toFilteredResourcesReport(reviewOutcome: ReviewOutcome): string {
 	return [...filterReasonLines, `- failed during review: ${reviewOutcome.failedCount}`].join("\n")
 }
 
-// lists each Source with its kind, how it ended, and any fallback it used
+// lists each Source with its kind, how it ended, any fallback it used, and why it failed
 function toSourcesBlock(scannedSources: ScannedSource[]): string {
 	if (scannedSources.length === 0) {
 		return "none recorded"
 	}
 
-	// one bullet per Source
+	// one bullet per Source. a failed Source states its reason, so the report can say it was blocked.
+	// a Source that could not be reached would otherwise read as one that found nothing
 	return scannedSources
 		.map((scannedSource) => {
 			const fallbackNote = scannedSource.fallbackMode ? ` — fell back to ${scannedSource.fallbackMode}` : ""
-			return `- ${scannedSource.sourceKind}: ${scannedSource.status}${fallbackNote}`
+			const failureNote = scannedSource.reason ? ` — ${scannedSource.reason}` : ""
+			return `- ${scannedSource.sourceKind}: ${scannedSource.status}${fallbackNote}${failureNote}`
 		})
 		.join("\n")
 }

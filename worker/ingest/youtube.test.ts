@@ -1,6 +1,6 @@
 // parseVideos tests. verify a playlistItems response gets mapped to deduped watch Resources
 import { expect, test } from "bun:test"
-import { parseVideos, playlistIdFromUrl, toAtomUrl } from "./youtube"
+import { parseVideos, playlistIdFromUrl, toAtomUrl, toYoutubeSourceId } from "./youtube"
 
 // two distinct videos plus a third repeating the first videoId, to exercise deduping
 const VIDEOS = [
@@ -45,7 +45,7 @@ test("playlistIdFromUrl extracts the id from playlist urls and rejects the rest"
 	expect(playlistIdFromUrl("https://youtube.com/playlist?list=PL123")).toBe("PL123")
 	expect(playlistIdFromUrl("https://m.youtube.com/playlist?list=PL123&si=abc")).toBe("PL123")
 
-	// a /watch url still yields null even if it carries the "list" param.
+	// a /watch url still yields null even if it has the "list" param.
 	// so do a non-YouTube host, a /playlist with no list param, and junk
 	expect(playlistIdFromUrl("https://www.youtube.com/watch?v=abc&list=PL123")).toBeNull()
 	expect(playlistIdFromUrl("https://example.com/playlist?list=PL123")).toBeNull()
@@ -68,4 +68,25 @@ test("toAtomUrl reads the kind from the id when the caller does not say", () => 
 	for (const playlistId of ["PLabc123", "UUabc123", "RDabc123", "OLabc123", "LLabc123"]) {
 		expect(toAtomUrl(playlistId)).toBe(`https://www.youtube.com/feeds/videos.xml?playlist_id=${playlistId}`)
 	}
+})
+
+// a suggestion names a channel, however the model wrote it, and only an id can be fetched.
+// a handle costs a lookup, so the offline forms are what this covers
+test("toYoutubeSourceId reads the id out of every form that already carries one", async () => {
+	// a raw channel id and every playlist prefix are already what the feed reads
+	expect(await toYoutubeSourceId("UCHnyfMqiRRG1u-2MsSQLbXA")).toBe("UCHnyfMqiRRG1u-2MsSQLbXA")
+	expect(await toYoutubeSourceId("PLZHQObOWTQDPD3MizzM2xVFitgF8hE_ab")).toBe("PLZHQObOWTQDPD3MizzM2xVFitgF8hE_ab")
+	expect(await toYoutubeSourceId("  UUabc123def456ghi789jk  ")).toBe("UUabc123def456ghi789jk")
+
+	// a channel url and a playlist url each have an id that would otherwise be thrown away for being wrapped in a url
+	expect(await toYoutubeSourceId("https://www.youtube.com/channel/UCHnyfMqiRRG1u-2MsSQLbXA")).toBe(
+		"UCHnyfMqiRRG1u-2MsSQLbXA",
+	)
+	expect(await toYoutubeSourceId("https://m.youtube.com/playlist?list=PLabc123")).toBe("PLabc123")
+
+	// a bare name, another host, a video, and an unparseable string all name no channel or playlist
+	expect(await toYoutubeSourceId("Veritasium")).toBeNull()
+	expect(await toYoutubeSourceId("https://example.com/channel/UCHnyfMqiRRG1u-2MsSQLbXA")).toBeNull()
+	expect(await toYoutubeSourceId("https://www.youtube.com/watch?v=abc123")).toBeNull()
+	expect(await toYoutubeSourceId("not a url")).toBeNull()
 })

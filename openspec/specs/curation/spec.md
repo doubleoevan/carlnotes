@@ -112,30 +112,6 @@ Curation SHALL embed the topic's effective context (`topicScanContext` — the t
 - **WHEN** the Scan's spend limit is already reached and further candidates remain unembedded
 - **THEN** those candidates are counted as deferred, no embedding call is made or charged for them, and they stay eligible for a later Scan
 
-### Requirement: Survivors are fetched via Firecrawl with a snippet fallback
-
-For each embed-filter survivor that reaches the fetch stage and is neither reused nor revalidated (see the reuse-and-revalidation requirement), curation SHALL fetch the page's full content via Firecrawl (raw HTTP, `FIRECRAWL_API_KEY`), write the fetched markdown to object storage, store its `content_key` and `content_bytes` on the Resource, refresh `resources.fetched_at`, persist any origin `etag`/`last_modified` the fetch response exposes (leaving them null when it does not), and count the outcome as `fetched`. It SHALL score the in-memory markdown in the same pass so the fetch does not round-trip through object storage. On a Firecrawl fetch failure it SHALL fall back to the Resource's native snippet — never the bare title — as the text to score. On an object-storage write failure it SHALL best-effort delete the object, leave `content_key` null, and fall back to the snippet, mirroring the attachment orphan-cleanup posture. Neither failure SHALL fail the Resource or the Scan.
-
-#### Scenario: Content is fetched and stored
-
-- **WHEN** a survivor is fetched successfully via Firecrawl
-- **THEN** the fetched markdown is written to object storage, the Resource stores its `content_key` and `content_bytes`, `fetched_at` is refreshed, the outcome is counted as `fetched`, and scoring runs against the in-memory markdown without re-reading it from object storage
-
-#### Scenario: Fetch validators are persisted when exposed
-
-- **WHEN** the Firecrawl fetch response exposes an origin `etag` or `last_modified`
-- **THEN** curation stores them on the Resource so a later Scan can send a conditional GET, and leaves them null when the response exposes neither
-
-#### Scenario: Fetch failure falls back to the snippet
-
-- **WHEN** the Firecrawl fetch for a survivor fails
-- **THEN** scoring runs against the Resource's native snippet, `content_key` stays null, and the Resource is not failed
-
-#### Scenario: An object-storage write failure falls back to the snippet
-
-- **WHEN** the object-storage write for a fetched survivor fails
-- **THEN** curation best-effort deletes the object, leaves `content_key` null, scores the snippet, and does not fail the Resource or the Scan
-
 ### Requirement: A per-Scan spend cap halts paid stages
 
 Curation SHALL enforce, before each Resource is dispatched into the paid fetch-and-scoring section, two per-Scan limits: the existing USD spend limit, and a `MAX_SCORED_RESOURCES_PER_SCAN` count limit (env-overridable) on how many Resources are sent through the paid section in the Scan. The count limit SHALL bound every Resource that enters the paid section — whether its content was reused, revalidated, or freshly fetched — because scoring is paid in every case.
@@ -188,9 +164,7 @@ Once either limit is reached, curation SHALL stop dispatching further paid work 
 
 On close, curation SHALL record each stage's dollar cost in `scans.stage_costs` (keyed at least by ingestion, embedding, fetch, cheap scoring, and premium scoring) and set `scans.cost` to the Scan Budget's total, which already includes ingestion because ingestion charges into the same Budget. `scans.cost` SHALL NOT be composed by summing a separately tracked ingestion number with a review total. It SHALL set `kept_count` to the number of Findings written and `filtered_count` to the number of Resources dropped by hash dedupe, embedding dedupe, the embed-filter, or the content scanner, and SHALL write the scan report to `scans.scan_summary`. It SHALL also record the fetch-outcome counts to `scans.reused`, `scans.revalidated`, and `scans.fetched` — the number of Resources whose content was reused within the TTL, revalidated via a `304`, or freshly fetched — whose sum equals the number of Resources sent through the paid fetch-and-scoring section.
 
-The scan report SHALL be a dated note grounded only in the Scan's actual data — the kept Findings' titles, urls, scores, and relevance explanations; drop and failure counts with their causes; per-Source outcomes including fallback modes; and costs. It SHALL cover, when the data supports each: a dated headline; insights and trends drawn across the kept items' relevance explanations; adds and drops with reasoning; sources consulted and skipped with reasoning; data-hygiene actions taken; list and threshold status against a target the topic context itself states; a closing line on whether the Scan answered what the Topic asked and why, including when it did not; and a cited-findings list of markdown links to the kept items, each written from the item's title and pointing at its exact stored url, falling back to the url as the link text when an item has no title. That list SHALL NOT be headed "Sources", which names the places a Topic was pointed at rather than what was found there. Because the report renders through a sanitized markdown subset whose links are allowlisted to the kept Findings' urls, the prompt MAY ask for light formatting and for links to the kept items, but SHALL instruct that any other link, image, or HTML renders as inert text. A Scan with nothing to review MAY leave `scan_summary` empty, and a Scan whose report call failed SHALL leave it empty rather than failing.
-
-The Scan's own machinery SHALL NOT reach the report, which is read by the reader in their digest email, on the topic page, on the activity page, and as topic chat's context. The deferral count — Resources held back by the per-Scan dollar cap or the scored-resource cap — SHALL NOT be given to the report, because those limits are configuration the reader has no setting for, so naming them explains a mechanism rather than telling the reader what was found. The count SHALL still be tracked for the worker, since a candidate can be deferred before embedding as well as before scoring and only the latter is visible in stage telemetry. For the same reason the report's closing line SHALL be written as plain prose and SHALL NOT lead with a verdict label such as "send" or "suppress" followed by a dash. Whether a digest is dispatched is decided by whether the Topic has email subscribers, so a notification verdict in the report labels the reader's note with a decision the reader cannot act on. The judgment itself SHALL remain, because how well the Scan answered the Topic's question is the one assessment only curation can make after seeing every candidate.
+The scan report SHALL be a dated note grounded only in the Scan's actual data — the kept Findings' titles, urls, scores, and relevance explanations; drop, deferral, and failure counts with their causes; per-Source outcomes including the fallback mode of a Source that fell back and the reason a Source failed; and costs. It SHALL cover, when the data supports each: a dated headline; insights and trends drawn across the kept items' relevance explanations; adds and drops with reasoning; sources consulted, skipped, and failed with reasoning; data-hygiene actions taken; list and threshold status against a target the topic context itself states; a closing notification decision (send or suppress) with rationale; and a cited-sources list of markdown links to the kept items using their exact stored urls. A Source that failed SHALL be reported as failed with its reason rather than being left to read as a Source that found nothing. Because the report renders through a sanitized markdown subset whose links are allowlisted to the kept Findings' urls, the prompt MAY ask for light formatting and for links to the kept items, but SHALL instruct that any other link, image, or HTML renders as inert text. A Scan with nothing to review MAY leave `scan_summary` empty, and a Scan whose report call failed SHALL leave it empty rather than failing.
 
 #### Scenario: Per-stage costs are recorded and the total is the Budget's
 
@@ -212,10 +186,20 @@ The Scan's own machinery SHALL NOT reach the report, which is read by the reader
 - **WHEN** curation finishes reviewing at least one Resource and the report call succeeds
 - **THEN** `scan_summary` holds a non-empty dated report that cites only items, sources, and numbers from the Scan's data, linking kept items by their exact stored urls and linking nowhere else
 
+#### Scenario: A blocked Source is reported as blocked
+
+- **WHEN** a Source failed with a reason, such as every Reddit access mode being refused
+- **THEN** the report's data includes that Source's kind, its failed status, and its reason, so the note can say the Source was blocked rather than implying a quiet week
+
 #### Scenario: A failed report leaves the summary empty without failing the Scan
 
 - **WHEN** the scan-report call throws
 - **THEN** `scan_summary` is empty, the failure is logged, and the Scan still records its costs, counts, and Findings as `succeeded`
+
+#### Scenario: The report records a notification decision
+
+- **WHEN** the scan report is written
+- **THEN** its body ends with an explicit send-or-suppress notification recommendation and the rationale, and no notification is actually dispatched by curation
 
 #### Scenario: The report judges the answer without a notification label
 
@@ -274,35 +258,42 @@ Curation SHALL embed the topic's effective context as the query side and each Re
 
 ### Requirement: Curation reuses fresh content and revalidates stale content before fetching
 
-Before any Firecrawl fetch, curation SHALL resolve an embed-filter survivor's content by reuse or revalidation when possible, so already-stored content is not re-scraped:
+Before any fetch of either path, curation SHALL resolve an embed-filter survivor's content by reuse or revalidation when possible, so already-stored content is not fetched again:
 
-- **Reuse (free):** when the Resource already has `content` and `now − fetched_at < CONTENT_TTL_MS` (an env-overridable constant), curation SHALL score the stored `content` without any fetch, spend no fetch credit, and count the outcome as `reused`.
-- **Revalidate (free):** when the Resource has `content` that is stale (`fetched_at` at or beyond `CONTENT_TTL_MS`) and carries at least one stored validator (`etag` or `last_modified`), curation SHALL send a plain conditional GET to the Resource URL directly — not through Firecrawl — with `If-None-Match` and/or `If-Modified-Since` built from the stored validators, bounded by its own short `AbortSignal.timeout`. A `304 Not Modified` SHALL refresh `fetched_at`, reuse the stored `content`, spend no fetch credit, and count the outcome as `revalidated`. Any other status, a probe error or timeout, or absent validators SHALL fall through to the Firecrawl fetch. The probe SHALL NOT fail the Resource or the Scan.
+- **Reuse (free):** when the Resource already has `content` and `now − fetched_at < CONTENT_TTL_MS` (an env-overridable constant), curation SHALL score the stored `content` without any fetch, spend no fetch credit, and count the outcome as `reused`. This applies to a stored transcript exactly as it does to stored markdown.
+- **Revalidate (free):** when the Resource has `content` that is stale (`fetched_at` at or beyond `CONTENT_TTL_MS`) and carries at least one stored validator (`etag` or `last_modified`), curation SHALL send a plain conditional GET to the Resource URL directly — not through Firecrawl — with `If-None-Match` and/or `If-Modified-Since` built from the stored validators, bounded by its own short `AbortSignal.timeout`. A `304 Not Modified` SHALL refresh `fetched_at`, reuse the stored `content`, spend no fetch credit, and count the outcome as `revalidated`. Any other status, a probe error or timeout, or absent validators SHALL fall through to the fetch. The probe SHALL NOT fail the Resource or the Scan.
+
+The transcript path exposes no usable validators, so a stale video stores neither and always falls through to a fresh transcript fetch. That refetch is free, so nothing is lost by never revalidating a video.
 
 #### Scenario: Fresh stored content is reused without any fetch
 
 - **WHEN** a survivor already has `content` and its `fetched_at` is within `CONTENT_TTL_MS`
-- **THEN** curation scores the stored content, makes no Firecrawl call, charges no fetch cost, and counts the outcome as `reused`
+- **THEN** curation scores the stored content, makes no fetch call of either path, charges no fetch cost, and counts the outcome as `reused`
+
+#### Scenario: A stored transcript is reused like stored markdown
+
+- **WHEN** a video's transcript was stored by an earlier Scan and its `fetched_at` is within `CONTENT_TTL_MS`
+- **THEN** curation scores the stored transcript, fetches no caption track, and counts the outcome as `reused`
 
 #### Scenario: A stale Resource with a matching validator returns 304 and is reused
 
 - **WHEN** a survivor's `content` is stale but it has a stored `etag` or `last_modified`, and a conditional GET to its URL returns `304`
-- **THEN** curation refreshes `fetched_at`, reuses the stored content, makes no Firecrawl call, charges no fetch cost, and counts the outcome as `revalidated`
+- **THEN** curation refreshes `fetched_at`, reuses the stored content, makes no fetch call, charges no fetch cost, and counts the outcome as `revalidated`
 
 #### Scenario: A non-304 conditional response falls through to Firecrawl
 
 - **WHEN** the conditional GET returns any status other than `304`
-- **THEN** curation abandons the probe result and performs the normal Firecrawl fetch
+- **THEN** curation abandons the probe result and performs the normal fetch for that Resource's path: Firecrawl for a page, a fresh caption track for a video
 
 #### Scenario: A probe error or timeout falls through without failing the Resource
 
 - **WHEN** the conditional GET throws or exceeds its `AbortSignal.timeout`
-- **THEN** curation falls through to the Firecrawl fetch, and the probe failure neither fails the Resource nor the Scan
+- **THEN** curation falls through to the fetch, and the probe failure neither fails the Resource nor the Scan
 
 #### Scenario: Stale content with no stored validators skips straight to Firecrawl
 
 - **WHEN** a survivor's `content` is stale and it has neither `etag` nor `last_modified`
-- **THEN** curation makes no conditional GET and performs the Firecrawl fetch directly
+- **THEN** curation makes no conditional GET and fetches directly — the Firecrawl scrape for a page, a fresh caption track for a video
 
 ### Requirement: Curation reads a Resource's stored body from object storage
 
@@ -450,4 +441,103 @@ Curation SHALL pass a Resource's fetched content through the scanner's source-co
 
 - **WHEN** the scanner returns no detection for a fetched page
 - **THEN** scoring proceeds exactly as it does today
+
+### Requirement: Survivors are fetched by the path their kind selects, with a snippet fallback
+
+For each embed-filter survivor that reaches the fetch stage and is neither reused nor revalidated (see the reuse-and-revalidation requirement), curation SHALL fill the Resource's content by the path its kind and url select, write the fetched text to object storage, store its `content_key` and `content_bytes` on the Resource, refresh `resources.fetched_at`, persist any origin `etag`/`last_modified` the fetch exposes (leaving them null when it does not), and count the outcome as `fetched`. It SHALL score the in-memory text in the same pass so the fetch does not round-trip through object storage.
+
+The paths that fill content, checked in this order:
+
+- **Declared transcript (free).** A Resource whose Source declared a transcript address in `resources.transcript_url` — a podcast feed's `<podcast:transcript>` today — SHALL be filled from that address whatever its kind: a plain bounded GET straight to the origin, every redirect hop checked, read down to its words by the same cue reader the caption tracks use, charging zero. A transcript address exposes no validators of the page's own, so `etag` and `last_modified` stay null and a stale one refetches rather than revalidates.
+- **Show notes (no fetch).** A `listen` Resource with no declared transcript SHALL NOT be fetched at all: an episode page is a player and its show notes, and the notes are already in the snippet, so curation scores the snippet and spends nothing.
+- **Firecrawl (billed).** Every other Resource except a video on a supported caption host SHALL be fetched as page markdown via Firecrawl (raw HTTP, `FIRECRAWL_API_KEY`), charging the Firecrawl per-fetch rate. This includes a `watch` Resource on any host with no readable captions — Loom, TED, TikTok — because only the hosts below publish a caption track the transcript path can read.
+- **Caption track (free).** A `watch` Resource whose url parses to a video id on a host that publishes captions keylessly SHALL instead be filled from that video's published caption track: ask the host for the video's track list, prefer the first track whose language code begins with `en` and otherwise the first published one, fetch it, and join it into plain text. These paths go straight to the host, spend no vendor credit, and SHALL charge zero. The supported hosts are:
+
+  - **YouTube** — the player endpoint lists the tracks, which are served as `json3`. The list SHALL be requested as a mobile client, because the caption urls the web client hands out are gated and serve an empty body.
+  - **Vimeo** — the player config lists the tracks, which are served as WEBVTT. A video whose owner restricted embedding answers `403`, which is a failed fetch like any other.
+  - **Dailymotion** — the player metadata lists the tracks, which are served as SRT.
+
+  A host SHALL be added only on evidence that its captions can actually be read without a key, not on the presence of a caption feature. A url on a `watch` host with no supported caption path SHALL take the Firecrawl path unchanged.
+
+  Because a caption url comes back inside a remote payload rather than being composed by curation, it SHALL be fetched only when it is an `https` url within the host's own caption domain. A domain check is the property that matters, since these hosts serve captions from their own separate caption hosts and cdn shards rather than from one fixed endpoint.
+
+  A caption response SHALL be judged empty by its joined text rather than by its status, because a gated caption url answers `200` with a zero-byte body rather than an error.
+
+  Caption lines SHALL join on a space and the segments within a line SHALL join directly. A line ends without trailing whitespace, so joining every segment directly runs each line's last word into the next line's first.
+
+Kind alone SHALL NOT select a caption path: a `watch` Resource on an unsupported host has no caption track to read, and sending it down that path would fail a fetch that Firecrawl serves. A declared `transcript_url` outranks every kind-based rule, and `listen` is the one kind that selects on its own — to no fetch at all, never to a paid one.
+
+Each fetch SHALL report the dollars it spent, and curation SHALL charge that amount to the `fetch` entry of the Scan's stage costs. A transcript therefore meters into the same entry as a scrape rather than earning one of its own, and leaves that entry unchanged because it costs nothing. Every path counts its outcome as `fetched` — the show-notes path too, since scoring is paid whichever way the content arrived — so a transcribed video or a snippet-scored episode counts against the Scan's scored-resource ceiling like any other scored Resource.
+
+A video with no published caption track, an unreadable player payload, or a transcript that joins to nothing SHALL be treated as a failed fetch. On a fetch failure of any path, curation SHALL fall back to the Resource's native snippet — never the bare title — as the text to score, leaving `content_key` null. On an object-storage write failure it SHALL best-effort delete the object, leave `content_key` null, and fall back to the snippet, mirroring the attachment orphan-cleanup posture. Neither failure SHALL fail the Resource or the Scan.
+
+#### Scenario: Content is fetched and stored
+
+- **WHEN** a survivor is fetched successfully by either path
+- **THEN** the fetched text is written to object storage, the Resource stores its `content_key` and `content_bytes`, `fetched_at` is refreshed, the outcome is counted as `fetched`, and scoring runs against the in-memory text without re-reading it from object storage
+
+#### Scenario: A video on a supported host is scored on its transcript
+
+- **WHEN** a `watch` survivor's url carries a video id on YouTube, Vimeo, or Dailymotion and the video publishes a caption track
+- **THEN** curation fetches that caption track instead of calling Firecrawl, joins it into plain text, and scores the transcript rather than the video's description
+
+#### Scenario: Each host's own payload shape yields the same track list
+
+- **WHEN** curation reads a track list from YouTube's player endpoint, Vimeo's player config, or Dailymotion's player metadata
+- **THEN** each maps to the same track shape of a language code and a url, so one preference rule and one fetch serve all three
+
+#### Scenario: An English track is preferred over the other published ones
+
+- **WHEN** a video publishes caption tracks in several languages, listed in the host's own order so English is not first
+- **THEN** curation picks the first track whose language code begins with `en`, and falls back to the first published track when there is none
+
+#### Scenario: Both caption file formats read down to their words
+
+- **WHEN** a track arrives as WEBVTT with a header and numbered cues, or as SRT with comma-punctuated timestamps
+- **THEN** the cue numbers, timing lines, notes, and inline markup are dropped and only the spoken words are kept
+
+#### Scenario: Caption lines do not run their words together
+
+- **WHEN** one caption line ends with a word and the next begins with another
+- **THEN** the joined transcript keeps them as two words rather than fusing them into one
+
+#### Scenario: A video with no captions scores its snippet
+
+- **WHEN** a `watch` survivor is on a supported host but publishes no caption track, or its owner restricted access to the track list
+- **THEN** its content is left unset, `content_key` stays null, and it is scored on its native snippet exactly as a failed scrape is
+
+#### Scenario: Every way a host addresses a video takes the transcript path
+
+- **WHEN** a `watch` survivor's url is a YouTube watch page, short link, short, embed, or live replay; a Vimeo plain, channel, group, or player link; or a Dailymotion video url or `dai.ly` short link
+- **THEN** curation reads the video id out of it and fetches its caption track, rather than treating only the canonical form as a video
+
+#### Scenario: A video on an unsupported host keeps the Firecrawl path
+
+- **WHEN** a `watch` survivor's url is on Loom, TED, TikTok, Rumble, or any other host with no supported caption path
+- **THEN** curation fetches it via Firecrawl and charges the Firecrawl per-fetch rate, unchanged from today
+
+#### Scenario: A transcript meters into the fetch entry without growing it
+
+- **WHEN** a Scan fills a video's content from its caption track
+- **THEN** the fetch charges zero into `stage_costs.fetch` — no other entry — and the outcome still counts as `fetched` against the scored-resource ceiling
+
+#### Scenario: A caption url outside the host's own domain is not fetched
+
+- **WHEN** a track list names a url that is not `https` or that points outside the host's caption domain
+- **THEN** curation does not fetch it, the transcript fetch fails, and the Resource is scored on its snippet
+
+#### Scenario: Fetch validators are persisted when exposed
+
+- **WHEN** the fetch response exposes an origin `etag` or `last_modified`
+- **THEN** curation stores them on the Resource so a later Scan can send a conditional GET, and leaves them null when the response exposes neither
+
+#### Scenario: Fetch failure falls back to the snippet
+
+- **WHEN** the fetch for a survivor fails on either path
+- **THEN** scoring runs against the Resource's native snippet, `content_key` stays null, and the Resource is not failed
+
+#### Scenario: An object-storage write failure falls back to the snippet
+
+- **WHEN** the object-storage write for a fetched survivor fails
+- **THEN** curation best-effort deletes the object, leaves `content_key` null, scores the snippet, and does not fail the Resource or the Scan
 

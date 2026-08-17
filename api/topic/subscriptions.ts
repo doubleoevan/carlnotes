@@ -67,7 +67,7 @@ export async function deleteTopicInvite(ownerId: string, topicId: string, invite
 		await transaction
 			.delete(topicInvites)
 			.where(and(eq(topicInvites.topicId, topicId), eq(topicInvites.email, inviteeEmail)))
-		// the invitee is found by the address the invite named, since an invite carries no user id
+		// the invitee is found by the address the invite named, since an invite has no user id
 		const inviteeId = db.select({ id: users.id }).from(users).where(eq(users.email, inviteeEmail))
 		await transaction
 			.delete(subscriptions)

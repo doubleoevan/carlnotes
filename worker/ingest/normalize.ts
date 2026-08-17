@@ -5,8 +5,12 @@ import type { NewResource } from "./ingester"
 const TRACKING_PARAMETERS = /^(utm_|fbclid$|gclid$|mc_[ce]id$|igshid$|si$|ref$|ref_src$|source$|spm$)/i
 
 // paths are case-sensitive in general. reddit's are not, since a subreddit name reads the same either way
-// and a post-id is already lowercase base36
-const CASE_INSENSITIVE_PATH_HOSTS = ["reddit.com"]
+// and a post-id is already lowercase base36. x serves the same tweet whatever the handle's case, and a status id is digits
+const CASE_INSENSITIVE_PATH_HOSTS = ["reddit.com", "x.com"]
+
+// a host renamed to another one, which serves the same page under both names. only a rename belongs here,
+// so a tweet found as twitter.com and the same tweet read from x.com store once
+const RENAMED_HOSTS: Record<string, string> = { "twitter.com": "x.com", "mobile.twitter.com": "x.com" }
 
 // a YouTube channel named by its handle, which ignores case, optionally followed by a tab like /videos
 const YOUTUBE_HANDLE_PATH = /^\/(@[^/]+|c\/[^/]+|user\/[^/]+)(\/|$)/
@@ -56,6 +60,12 @@ export function toCanonicalUrl(url: string): string {
 	// and a non-default port addresses a different server instead of the same page
 	parsedUrl.hostname = parsedUrl.hostname.toLowerCase()
 
+	// a renamed host folds to its current name, matched with and without the www prefix
+	const renamedHost = RENAMED_HOSTS[parsedUrl.hostname] ?? RENAMED_HOSTS[parsedUrl.hostname.replace(/^www\./, "")]
+	if (renamedHost) {
+		parsedUrl.hostname = renamedHost
+	}
+
 	// a fragment addresses a place inside the page, not a different page
 	parsedUrl.hash = ""
 
@@ -73,7 +83,7 @@ export function toCanonicalUrl(url: string): string {
 		(knownHost) => hostWithoutWww === knownHost || hostWithoutWww.endsWith(`.${knownHost}`),
 	)
 
-	// YouTube folds case only on its handle forms. its other paths carry exact ids: /channel/UC…, /shorts/…,
+	// YouTube folds case only on its handle forms. its other paths use exact ids: /channel/UC…, /shorts/…,
 	// lowercasing one points the url at a page that is not there
 	const isYouTube = hostWithoutWww === "youtube.com" || hostWithoutWww.endsWith(".youtube.com")
 	const isYouTubeHandle =
@@ -123,6 +133,7 @@ const WATCH_HOSTS = [
 	"loom.com",
 	"ted.com",
 	"dailymotion.com",
+	"dai.ly",
 	"tiktok.com",
 	"snapchat.com",
 	"giphy.com",

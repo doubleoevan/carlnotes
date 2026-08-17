@@ -237,7 +237,7 @@ export const sources = pgTable("sources", {
 	topicId: text("topic_id")
 		.notNull()
 		.references(() => topics.id, { onDelete: "cascade" }),
-	// the source kind: rss, reddit, YouTube, search, composio, or plugin. config holds its per-kind settings
+	// the source kind: url, rss, reddit, YouTube, podcast, search, bluesky, x, composio, or plugin. config holds its per-kind settings
 	kind: sourceKind("kind").notNull(),
 	config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
 	// credentials resolve through an integration when present
@@ -306,11 +306,17 @@ export const scans = pgTable("scans", {
 	fetched: integer("fetched").notNull().default(0),
 	// per-stage breakdown of costs: embedding, fetch, cheap/premium scoring. `cost` holds the total
 	stageCosts: jsonb("stage_costs").$type<Record<string, number>>().notNull().default({}),
-	// an ai written recap of what the scan did
+	// an AI written recap of what the scan did
 	scanSummary: text("scan_summary"),
-	// sources that had no API key for this scan and fell back to a public feed instead. empty means none did.
-	fallbackSources: jsonb("fallback_sources")
-		.$type<{ sourceId: string; fallbackMode: string }[]>()
+	// sources that did not deliver normally: one that fell back to a keyless path, or one that failed outright.
+	// empty means every source ran its primary path and succeeded
+	problemSources: jsonb("problem_sources")
+		.$type<
+			(
+				| { sourceId: string; status: "fallback"; fallbackMode: string }
+				| { sourceId: string; status: "failed"; reason: string }
+			)[]
+		>()
 		.notNull()
 		.default([]),
 })
@@ -345,6 +351,9 @@ export const resources = pgTable(
 		// null until a fetch provides them
 		etag: text("etag"),
 		lastModified: text("last_modified"),
+		// where the source published a transcript of this resource, like a podcast feed's transcript link.
+		// the address only. review fetches the text into content_key like any other body. null when the source published none
+		transcriptUrl: text("transcript_url"),
 		// created and updated timestamps
 		...timestamps(),
 	},
@@ -453,8 +462,8 @@ export const topicEmailSends = pgTable("topic_email_sends", {
 	topicId: text("topic_id")
 		.notNull()
 		.references(() => topics.id, { onDelete: "cascade" }),
-	// who received the email, null for an invitee with no account yet. the user id rather than the address, so no
-	// address is duplicated here and a closed account leaves the send on record without naming anyone
+	// who received the email, null for an invitee with no account yet. the user id instead of the address,
+	// so no address is duplicated here, and a closed account leaves the send on record without naming anyone
 	recipientUserId: text("recipient_user_id").references(() => users.id, { onDelete: "set null" }),
 	// which kind of email went out: topic-scan, manual-scan, or topic-invite
 	emailKind: text("email_kind").notNull(),
@@ -515,7 +524,7 @@ export const subscriptions = pgTable(
 		...timestamps(),
 	},
 	// enforce exactly-one-subscriber at the database level, and one row per user and topic so a concurrent
-	// double subscribe cannot insert twice. audience rows carry a null user id, which the index treats as distinct
+	// double subscribe cannot insert twice. audience rows have a null user id, which the index treats as distinct
 	(table) => [
 		check(
 			"subscriptions_subscriber_xor",

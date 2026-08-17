@@ -234,6 +234,7 @@ export function TopicPage() {
 							topicFindings={visibleFindings}
 							hasAnyFindings={topicResponse.findings.length > 0}
 							isRatable={topicResponse.canRate}
+							isBookmarkable={topicResponse.isOwner}
 							handlers={handlers}
 							topic={{ id: topicResponse.id, name: topicResponse.name, prompt: topicResponse.prompt }}
 						/>

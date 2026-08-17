@@ -27,14 +27,15 @@ test("a fallback Source keeps its cost while adding no Resources", () => {
 test("a fallback Source counts as a clean run when another Source failed", () => {
 	const scanSummary = toScanSummary([
 		toSourceOutcome({ status: "fallback", resources: [] }),
-		{ status: "failed", sourceKind: "search" },
+		{ status: "failed", sourceId: "src_2", sourceKind: "search", reason: "exa search returned 500" },
 	])
 	expect(scanSummary.status).toBe("succeeded")
 })
 
 // if every Source errored it is recorded as a failed Scan
 test("a Scan fails when every Source errored", () => {
-	expect(toScanSummary([{ status: "failed", sourceKind: "rss" }]).status).toBe("failed")
+	const outcome = { status: "failed", sourceId: "src_1", sourceKind: "rss", reason: "feed returned 404" } as const
+	expect(toScanSummary([outcome]).status).toBe("failed")
 })
 
 // a body an ingester already fetched has to survive the dedupe to reach the store step,

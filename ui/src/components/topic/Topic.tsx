@@ -105,6 +105,7 @@ export function Topic({ topic, index }: TopicProps) {
 						resource={resource}
 						rank={resource.isBookmarked ? null : index - pinnedShownCount + 1}
 						isRatable={topic.canRate}
+						isBookmarkable={topic.isOwner}
 						topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
 					/>
 				))}

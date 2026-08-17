@@ -10,7 +10,7 @@ import { db } from "../../db"
 import { bookmarks, consumptions, findings, resources, scans } from "../../db/schema"
 import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { canRateFinding, isTopicFindingVisible } from "./permissions"
+import { canBookmarkFinding, canRateFinding, isTopicFindingVisible } from "./permissions"
 
 /**
  * Load a topic's findings joined to their resources with the user's consumed state, most relevant first.
@@ -102,7 +102,7 @@ export async function setRating(
 	rating: "up" | "down" | null,
 	analyticsProperties: AnalyticsProperties,
 ): Promise<boolean> {
-	// only a rater may write, then the rating lands in one update
+	// only a rater may write, then the rating is written in one update
 	if (!(await canRateFinding(userId, findingId))) {
 		return false
 	}
@@ -116,8 +116,8 @@ export async function setRating(
 }
 
 /**
- * Bookmark or unbookmark a topic finding for the user. Bookmarking returns false when the finding isn't visible to the user.
- * Unbookmarking always succeeds.
+ * Bookmark or unbookmark a topic finding for the user. Bookmarking returns false unless the user owns the topic.
+ * Unbookmarking always succeeds, so a bookmark held from before the owner rule can still be removed.
  */
 export async function setBookmarked(
 	userId: string,
@@ -140,8 +140,8 @@ export async function setBookmarked(
 		return true
 	}
 
-	// bookmarking requires the finding to be visible to this user. a duplicate insert does nothing
-	if (!(await isTopicFindingVisible(userId, findingId))) {
+	// bookmarking requires this user to own the topic. a duplicate insert does nothing
+	if (!(await canBookmarkFinding(userId, findingId))) {
 		return false
 	}
 	const insertedBookmarks = await db

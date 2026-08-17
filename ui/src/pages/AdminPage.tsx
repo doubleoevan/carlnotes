@@ -389,7 +389,7 @@ function UserRow({
 					onConfirm={handleDeleteAccount}
 					onClose={() => setIsConfirmingDelete(false)}
 				>
-					{`Their ${user.topicCount} ${user.topicCount === 1 ? "topic" : "topics"}, findings, subscriptions, and chats go with it. Any paid plan is cancelled. This cannot be undone.`}
+					{`Their ${user.topicCount} ${user.topicCount === 1 ? "topic" : "topics"}, findings, subscriptions, and chats go with it. Any paid plan is canceled. This cannot be undone.`}
 				</ConfirmDialog>
 			)}
 			{/* this user's topics subtable */}
