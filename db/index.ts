@@ -3,8 +3,7 @@ import { Pool } from "@neondatabase/serverless"
 import { drizzle } from "drizzle-orm/neon-serverless"
 import * as schema from "./schema"
 
-// one pooled Neon client for the app. it connects lazily on the first query, over the WebSocket that Bun provides globally.
-// exported so a script can close it and exit instead of hanging on an idle connection
+// one pooled Neon client for the app
 export const connectionPool = new Pool({ connectionString: process.env.DATABASE_URL })
 
 // log background pool errors and idle-client failures so an unhandled event never crashes the process

@@ -1,6 +1,6 @@
 import type { TopicResponse } from "@shared/contracts"
+import { sendDeleteTopic } from "@/clients/topicClient"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
-import { sendTopicDelete } from "@/lib/topicClient"
 
 /**
  * The Delete Topic confirmation dialog
@@ -17,7 +17,7 @@ export function DeleteTopicDialog({
 	// delete the topic, then let the parent refresh the feed and navigate home
 	const handleDelete = async (): Promise<void> => {
 		try {
-			await sendTopicDelete(topic.id)
+			await sendDeleteTopic(topic.id)
 			await onTopicDeleted()
 		} catch (error) {
 			console.error("topic delete failed", error)

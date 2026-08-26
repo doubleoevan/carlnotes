@@ -1,5 +1,4 @@
-// X test cases over the pure functions: the handle guard, the tweet mapping, the query bounds,
-// and the cost arithmetic. all verified offline, so no key and no provider call is involved
+// X test cases over the pure functions
 import { expect, test } from "bun:test"
 import { X_COST_MINIMUM_PER_REQUEST, X_COST_PER_READ } from "../budget"
 import { mergeSearchResponses, toBoundedQuery, toRequestCost, toResources, toSnippet, toSourceHandle } from "./x"
@@ -32,7 +31,7 @@ test(`toResources maps tweets to deduped "read" Resources`, () => {
 		"https://x.com/karpathy/status/2",
 	])
 
-	// every Resource is a "read" kind, and the title names the author since a tweet has none of its own
+	// every Resource is a "read" kind, and the title names the author
 	expect(resources.every((resource) => resource.kind === "read")).toBe(true)
 	expect(resources[0]?.title).toBe("@Sama on X")
 
@@ -70,8 +69,7 @@ test("toSourceHandle takes a writable handle and refuses the rest", () => {
 	expect(toSourceHandle({ handle: 42 })).toBeNull()
 })
 
-// x rewrites every url into a t.co link, and review never fetches a tweet, so a link-only tweet
-// would otherwise reach scoring with a bare shortener as its whole content
+// X rewrites every url into a t.co link, and review never fetches a tweet
 test("toSnippet strips shortened links and drops a tweet that was only one", () => {
 	expect(toSnippet("worth reading https://t.co/8B2G4GhOqU")).toBe("worth reading")
 	expect(toSnippet("https://t.co/8B2G4GhOqU")).toBeNull()

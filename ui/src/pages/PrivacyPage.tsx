@@ -1,21 +1,23 @@
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { cn, TABLE_CARD_CLASS } from "@/lib/utils"
+import { TableCard } from "@/components/table/TableCard"
+import { usePageTitle } from "@/hooks/usePageTitle"
+import { PAGE_CLASS, TABLE_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
 // the providers table on the shared table card, scrolling instead of cramping on a narrow screen
 function ScrollableTable({ children }: { children?: React.ReactNode }) {
 	return (
-		<div className={cn(TABLE_CARD_CLASS, "mt-4")}>
-			<table className="w-full min-w-[34rem] border-collapse text-left text-sm [&_tbody_tr:last-child_td]:border-b-0">
-				{children}
-			</table>
-		</div>
+		<TableCard className="mt-4">
+			<div className={TABLE_SCROLL_CLASS}>
+				<table className={cn(TABLE_CLASS, "min-w-[34rem] [&_tbody_tr:last-child_td]:border-b-0")}>{children}</table>
+			</div>
+		</TableCard>
 	)
 }
 
-// map the privacy markdown to the same legal-page typography as the terms page, plus bold labels and the table.
-// auto-linking stays off so bare domains stay plain text. the contact emails are explicit mailto links via AnchorLink
+// map the privacy markdown to the same legal-page typography as the terms page, plus bold labels and the table
 const PRIVACY_MARKDOWN_OPTIONS = {
 	disableAutoLink: true,
 	overrides: {
@@ -162,8 +164,9 @@ We will post any change here and update the date above. If the change is materia
  * CarlNotes' privacy policy for the hosted service.
  */
 export function PrivacyPage() {
+	usePageTitle("Privacy")
 	return (
-		<main className="mx-auto max-w-3xl px-4 py-8">
+		<main className={PAGE_CLASS}>
 			{/* the title and the effective / last-updated dates */}
 			<h1 className="font-display text-2xl">Privacy Policy</h1>
 			<p className="text-muted-foreground mt-2 text-sm">Effective date: July 24, 2026 · Last updated: July 24, 2026</p>

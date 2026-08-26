@@ -5,7 +5,7 @@ import { newBudget } from "../budget"
 import { buildScanReportPrompt, type ScannedSource, toTopicScanSummary } from "./summarize"
 
 // an AI report that fails returns an empty summary
-test("toScanSummary yields an empty summary when the report throws", async () => {
+test("toScanSummary yields an empty summary when the report throws an error", async () => {
 	// a successful AI report is returned untouched
 	expect(await toTopicScanSummary("scan-1", async () => "a dated report")).toBe("a dated report")
 
@@ -63,9 +63,8 @@ test("buildScanReportPrompt grounds the report prompt in the scan's data", async
 	expect(reportPrompt).toContain("search: failed — exa search returned 500")
 	expect(reportPrompt).toContain("reddit: fallback — fell back to reddit-rss")
 
-	// the Scan's limits never reach the user's note. Carl can only write about what the data names,
-	// so keeping the deferred count out of the prompt is what keeps it out of the note
-	expect(reportPrompt).not.toContain("spend cap")
+	// the Scan's limits never reach the user's note
+	expect(reportPrompt).not.toContain("spend limit")
 	expect(reportPrompt).not.toContain("deferred")
 
 	// the report beats survive rendering and no placeholder is left unfilled

@@ -1,5 +1,4 @@
-// source suggestion tests that identify when two Sources have the same source key,
-// so a suggestion does not repeat what was already added
+// source suggestion tests that identify when two Sources have the same source key
 import { expect, test } from "bun:test"
 import { FeedStatusError } from "./ingest/feed"
 import {
@@ -16,7 +15,7 @@ const source = (sourceOption: SuggestedSource["sourceOption"], value: string): S
 	value,
 })
 
-// a subreddit reads the same no matter how it was written, since it is normalized by the ingester's own rule
+// a subreddit reads the same no matter how it was written, normalized by the ingester's own rule
 test("a subreddit is the same source no matter how it was written", () => {
 	expect(toSourceKey(source("reddit", "r/LocalLLaMA"))).toBe(toSourceKey(source("reddit", "localllama")))
 	expect(toSourceKey(source("reddit", "rust"))).not.toBe(toSourceKey(source("reddit", "golang")))
@@ -63,7 +62,7 @@ test("a url is the same source only at the same address", () => {
 	expect(toSourceKey(source("url", "https://github.com/explore"))).not.toBe(trending)
 })
 
-// a feed and a page at one address are different sources, since a different ingester reads each
+// a feed and a page at one address are different sources, one per ingester
 test("the source option is part of the source key identifier", () => {
 	expect(toSourceKey(source("url", "https://a.test/feed"))).not.toBe(toSourceKey(source("rss", "https://a.test/feed")))
 })
@@ -76,7 +75,7 @@ test("a Google News source is the same source as the publisher it covers", () =>
 	expect(toSourceKey(source("googleNews", "theverge.com"))).not.toBe(publisherFeed)
 })
 
-// a YouTube id is exact, since a channel and a playlist differentiated by the id itself
+// a YouTube id is exact, and a channel and a playlist are differentiated by the id itself
 test("a youtube source is the same only at the same id", () => {
 	expect(toSourceKey(source("youtube", "UCabc"))).toBe(toSourceKey(source("youtube", "UCabc")))
 	expect(toSourceKey(source("youtube", "UCabc"))).not.toBe(toSourceKey(source("youtube", "PLabc")))
@@ -91,18 +90,17 @@ test("a podcast is the same source at the same name or the same id", () => {
 	expect(toSourceKey(source("podcast", "Hard Fork"))).not.toBe(toSourceKey(source("podcast", "1528594034")))
 })
 
-// a podcast named by a show is not the same source as a feed url, since a different ingester reads each
+// a podcast named by a show is a different source from a feed url, one per ingester
 test("a podcast is not keyed as a feed", () => {
 	expect(toSourceKey(source("podcast", "Hard Fork"))).not.toBe(toSourceKey(source("rss", "Hard Fork")))
 })
 
-// an unparseable value still keys to something, so a malformed candidate source is compared instead of crashing
+// an unparseable value still keys to something, so a malformed namedSource source is compared instead of crashing
 test("a value that is not a url still keys to itself", () => {
 	expect(toSourceKey(source("rss", "not a url"))).toBe("rss:not a url")
 })
 
-// reddit returns 403 to a blocked IP range and 404 to a subreddit that is not there,
-// so a deployment that reddit blocks still keeps its suggestions while an invented subreddit is dropped
+// reddit returns 403 to a blocked IP range and 404 to a subreddit that is not there
 test("a reddit suggestion survives a blocked host but not a missing subreddit", () => {
 	expect(isTemporaryFailure(new FeedStatusError("https://www.reddit.com/r/mcp/.rss", 403), "reddit")).toBe(true)
 	expect(isTemporaryFailure(new FeedStatusError("https://www.reddit.com/r/nope/.rss", 404), "reddit")).toBe(false)
@@ -145,7 +143,7 @@ test("the topic context includes the attachment context when there is one", () =
 	)
 })
 
-// a long attachment cannot inflate the prompt, since the context stays clipped
+// a long attachment cannot inflate the prompt. the context stays clipped
 test("the topic context stays clipped whatever the attachment includes", () => {
 	const topicContext = toTopicContext(toSuggestionContext({ attachmentContext: "a".repeat(10_000) }))
 	expect(topicContext.length).toBe(4000)

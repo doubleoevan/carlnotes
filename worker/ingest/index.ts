@@ -1,5 +1,4 @@
-// the ingest stage: run a topic's Sources through their ingesters, dedupe what they find, and store it.
-// one failing Source stops only itself, so a Scan still succeeds on whatever the other Sources found
+// the ingest stage: run a topic's Sources through their ingesters, dedupe what they find, and store it
 import { reportError } from "@shared/monitoring"
 import { eq, sql } from "drizzle-orm"
 import { db } from "../../db"
@@ -21,8 +20,7 @@ import { youtubeIngester } from "./youtube"
 // how much of a failure message the Scan's trace keeps.
 const MAX_FAILURE_REASON_CHARS = 300
 
-// the ingester registry maps each source kind to its ingester. a new source kind adds one line here.
-// composio and plugin have no ingesters yet, so the record is Partial and a lookup can miss
+// the ingester registry maps each source kind to its ingester
 const sourceIngesters: Partial<Record<Source["kind"], SourceIngester>> = {
 	url: urlIngester,
 	rss: rssIngester,
@@ -38,10 +36,7 @@ const sourceIngesters: Partial<Record<Source["kind"], SourceIngester>> = {
 type Scan = typeof scans.$inferSelect
 type ProblemSource = Scan["problemSources"][number]
 
-// the outcome of running one Source. every variant includes the Source kind so the Scan report can name it
-// a successful outcome adds its found Resources and the source id for tracing
-// a Source that ran without erroring but found nothing is a fallback, not an ok
-// a failed outcome includes the reason it failed, so a blocked Source reads as blocked
+// the outcome of running one Source
 export type SourceOutcome =
 	| ({ status: "ok"; sourceId: string; sourceKind: string } & IngestResult)
 	| ({ status: "fallback"; sourceId: string; sourceKind: string } & IngestResult)
@@ -64,8 +59,7 @@ export type IngestOutcome = { sourceOutcomes: SourceOutcome[]; summary: ScanSumm
  * Ingest every Source on the topic and store the deduped Resources, charging what the Sources cost to the Budget.
  */
 export async function ingestFromTopicSources(topicId: string, budget: Budget): Promise<IngestOutcome> {
-	// read the topic's Sources and run each through its ingester, with per-Source failures isolated.
-	// the charge happens inside the span, so the ingest stage's cost is recorded on the span that spent it
+	// read the topic's Sources and run each through its ingester, with per-Source failures isolated
 	const topicSources = await db.select().from(sources).where(eq(sources.topicId, topicId))
 	const ingestOutcome = await traceStage(
 		"ingest",
@@ -80,11 +74,9 @@ export async function ingestFromTopicSources(topicId: string, budget: Budget): P
 		(result) => ({ sourceCount: topicSources.length, foundCount: result.summary.foundCount }),
 	)
 
-	// insert the deduped Resources. an already-stored url keeps everything but its engagement score,
-	// and coalesce keeps the stored engagement score when a re-discovery includes no engagement value.
-	// the body an ingester sent is not a column, so it is stripped here and stored once the rows have ids
+	// insert the deduped Resources
 	if (ingestOutcome.summary.resources.length > 0) {
-		const storedRows = await db
+		const resourceRows = await db
 			.insert(resources)
 			.values(ingestOutcome.summary.resources.map(({ fetchedBody, ...resource }) => resource))
 			.onConflictDoUpdate({
@@ -92,14 +84,15 @@ export async function ingestFromTopicSources(topicId: string, budget: Budget): P
 				set: { engagement: sql`coalesce(excluded.engagement, ${resources.engagement})` },
 			})
 			.returning({ id: resources.id, url: resources.url })
-		await storeFetchedBodies(ingestOutcome.summary.resources, new Map(storedRows.map((row) => [row.url, row.id])))
+		await storeFetchedBodies(
+			ingestOutcome.summary.resources,
+			new Map(resourceRows.map((resourceRow) => [resourceRow.url, resourceRow.id])),
+		)
 	}
 	return ingestOutcome
 }
 
-// store the bodies the ingesters already fetched, so the review reuses them instead of scraping the same page again.
-// a Resource whose store fails keeps content_key unset, which is the state every other Resource is in,
-// the review fetches the resource on its own terms, and only the ingester's fetch is wasted
+// store the bodies the ingesters already fetched, so the review reuses them instead of scraping the same page again
 async function storeFetchedBodies(ingestedResources: IngestedResource[], idByUrl: Map<string, string>): Promise<void> {
 	const resourceBodies = ingestedResources.flatMap((resource) => {
 		const resourceId = idByUrl.get(resource.url)
@@ -108,7 +101,7 @@ async function storeFetchedBodies(ingestedResources: IngestedResource[], idByUrl
 	await Promise.all(resourceBodies.map(({ resourceId, fetchedBody }) => storeFetchedBody(resourceId, fetchedBody)))
 }
 
-// write one resource body to object storage and save what the review's reuse rule reads: the key, the size, the validators, and when it was fetched
+// write one resource body to object storage and save what the review's reuse rule reads
 async function storeFetchedBody(resourceId: string, fetchedBody: FetchedBody): Promise<void> {
 	try {
 		const { contentKey, bytes } = await uploadResourceContent(resourceId, fetchedBody.markdown)
@@ -134,8 +127,7 @@ async function storeFetchedBody(resourceId: string, fetchedBody: FetchedBody): P
  * Pure aggregation over Source outcomes. Dedupes Resources by canonical url, sums cost, and decides the status.
  */
 export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
-	// dedupe the found Resources across Sources by canonical url. sum the cost,
-	// and collect the Sources that did not deliver normally
+	// dedupe the found Resources across Sources by canonical url
 	const resourceByUrl = new Map<string, IngestedResource>()
 	const problemSources: ProblemSource[] = []
 	let costDollars = 0
@@ -152,7 +144,6 @@ export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
 		}
 
 		// sum this Source's cost and merge its Resources, keeping the first one seen per canonical url
-		// so that two links to the same page collapse instead of storing twice
 		costDollars += outcome.costDollars
 		for (const resource of outcome.resources) {
 			const canonicalUrl = toCanonicalUrl(resource.url)
@@ -191,8 +182,7 @@ function toProblemSource(outcome: SourceOutcome): ProblemSource | null {
 
 // run a Source through its registered ingester, turning any failure into an isolated outcome
 async function ingestFromSource(source: Source): Promise<SourceOutcome> {
-	// a Source that has not passed its llm-guard screen is skipped before its ingester is reached,
-	// so an unscreened url isn't fetched into a Resource.
+	// a Source that has not passed its llm-guard screen is skipped before its ingester is reached
 	if (source.status !== "ready") {
 		return { status: "skipped", sourceKind: source.kind }
 	}
@@ -206,13 +196,11 @@ async function ingestFromSource(source: Source): Promise<SourceOutcome> {
 	// run the ingester. an error stops only this Source, so the Scan keeps whatever the other sources found
 	try {
 		const ingestResult = await ingester(source)
-		// a Source that found nothing is reported as a fallback,
-		// so a feed that has gone dead stops reading as one that found nothing new
+		// a Source that found nothing is reported as a fallback
 		const status = ingestResult.resources.length === 0 ? "fallback" : "ok"
 		return { status, sourceId: source.id, sourceKind: source.kind, ...ingestResult }
 	} catch (error) {
-		// log and report the failure, then return this Source with a failed status and the reason,
-		// which the Scan traces and the scan report names
+		// log and report the failure, then return this Source with a failed status and the reason
 		console.error(`source ${source.id} (${source.kind}) failed`, error)
 		reportError(error, "ingest", { sourceId: source.id, sourceKind: source.kind })
 		const reason = (error instanceof Error ? error.message : String(error)).slice(0, MAX_FAILURE_REASON_CHARS)

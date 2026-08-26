@@ -1,5 +1,4 @@
-// what one Scan may spend and what it has spent. created before ingestion and updated through every stage,
-// ingest and review charge costs to the same object, and one limit checks all of it
+// what one Scan may spend and what it has spent
 
 // the per-Scan spend limit, covering everything that the Scan charges during ingestion, embedding, fetch, and scoring
 const SCAN_BUDGET_USD = toSpendLimit(Bun.env.SCAN_BUDGET_USD)
@@ -13,8 +12,7 @@ function toSpendLimit(configuredLimit: string | undefined): number {
 	return limit
 }
 
-// the approximate limit on how many resources one Scan can score, bounding the paid fetch-and-scoring section.
-// it is checked before dispatch, so concurrency can overshoot it slightly. an environment variable can override it
+// the approximate limit on how many resources one Scan can score, bounding the paid fetch-and-scoring section
 const MAX_SCORED_RESOURCES_PER_SCAN = Number(Bun.env.MAX_SCORED_RESOURCES_PER_SCAN ?? "30")
 
 // best-effort dollar rates for the soft limit and the per-stage breakdown. LiteLLM meters the authoritative spend
@@ -23,16 +21,15 @@ export const CHEAP_COST_PER_MILLION_TOKENS = 0.2
 export const PREMIUM_COST_PER_MILLION_TOKENS = 0.6
 export const FIRECRAWL_COST_PER_FETCH = 0.001
 
-// what one tweet costs to read through TwitterAPI.io, from its $0.15 per 1,000 basis.
-// a request that returns nothing still bills the same figure as its floor
+// what one tweet costs to read through TwitterAPI.io, from its $0.15 per 1,000 basis
 export const X_COST_PER_READ = 0.00015
 export const X_COST_MINIMUM_PER_REQUEST = 0.00015
 
 // a chat turn's rates, one for the reply's tokens and one for each live web search the turn runs
-export const CHAT_COST_PER_MILLION_TOKENS = 0.6
-export const EXA_COST_PER_SEARCH = 0.005
+export const CHAT_COST_PER_MILLION_TOKENS = 4.0
+export const EXA_COST_PER_SEARCH = 0.007
 
-// the per-stage dollar breakdown recorded on the Scan. ingestion is charged at a fixed rate based on the source before review
+// the per-stage dollar breakdown recorded on the Scan
 export type StageCosts = {
 	ingestion: number
 	embedding: number
@@ -45,8 +42,7 @@ export type StageCosts = {
 export type FetchOutcome = "reused" | "revalidated" | "fetched"
 export type FetchOutcomeCounts = { reusedCount: number; revalidatedCount: number; fetchedCount: number }
 
-// the running budget for an entire Scan: what it has spent against its limit,
-// the per-stage breakdown, how many resources it may score, and its fetch counts
+// the running budget for an entire Scan
 export type Budget = {
 	spentDollars: number
 	limitDollars: number
@@ -70,7 +66,7 @@ export function newBudget(): Budget {
 
 /**
  * The budget a retried stage continues from. The counters come from the checkpoint budget that the last attempt heartbeated,
- * and the limits from a fresh budget, since limits are read from the environment and a checkpointed limit would be stale.
+ * and the limits from a fresh budget. Limits are read from the environment, and a checkpointed one would be stale.
  * A checkpoint that is missing or malformed falls back to the budget the stage was passed.
  */
 export function toResumedBudget(checkpointBudget: unknown, passedBudget: Budget): Budget {
@@ -79,8 +75,7 @@ export function toResumedBudget(checkpointBudget: unknown, passedBudget: Budget)
 		return passedBudget
 	}
 
-	// the limits come from a fresh budget, not the checkpoint,
-	// so a checkpoint cannot hand the Scan a bigger allowance than the one it started under
+	// the limits come from a fresh budget, not the checkpoint
 	const { limitDollars, maxScoredResources } = newBudget()
 	return {
 		spentDollars: checkpointBudget.spentDollars,
@@ -101,8 +96,7 @@ function isBudgetCheckpoint(checkpoint: unknown): checkpoint is Budget {
 	)
 }
 
-// whether the value includes a number for every field that the template names. the template is the empty value itself,
-// so a new counter cannot be added without this check covering it
+// whether the value includes a number for every field that the template names
 function hasNumericFields(value: unknown, template: Record<string, number>): boolean {
 	const record = value as Record<string, unknown> | null
 	return (

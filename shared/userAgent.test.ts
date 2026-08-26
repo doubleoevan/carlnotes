@@ -1,5 +1,4 @@
-// the session forms reorder on this detection and analytics reports it, so these are real user agent strings
-// instead of invented ones. a token that changes in the wild is what would break both, and only this catches it
+// the session forms reorder on this detection and analytics reports it
 
 import { expect, test } from "bun:test"
 import { isInAppBrowser, toBrowserPlatform, toPlatform } from "./userAgent"
@@ -45,7 +44,7 @@ test("the platform tells android from ios, since only one has a way out", () => 
 	expect(toBrowserPlatform(BROWSER_AGENTS.desktopChrome)).toBe("other")
 })
 
-// a request with no user agent header still has to yield a value, since every browser event carries one
+// a request with no user agent header still has to yield a value
 test("a missing user agent reads as desktop and not a webview", () => {
 	expect(toPlatform(null)).toBe("desktop")
 	expect(toPlatform(undefined)).toBe("desktop")

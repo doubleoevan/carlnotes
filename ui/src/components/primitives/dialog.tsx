@@ -23,8 +23,7 @@ function DialogOverlay({ className, ...props }: React.ComponentProps<typeof Dial
 	)
 }
 
-// the centered, modal panel with its close button in the top corner.
-// hideCloseButton drops the ✕ for a dialog whose own actions are the only ways out
+// the centered, modal panel with its close button in the top corner
 function DialogContent({
 	className,
 	children,

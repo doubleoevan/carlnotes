@@ -17,8 +17,7 @@ export function Footer() {
 	)
 }
 
-// the copyright and license line, then the legal link row, each centered with a readable gap between items.
-// the link for the page currently open is underlined
+// the copyright and license line, then the legal link row, each centered with a readable gap between items
 function FooterLegal() {
 	const { pathname } = useLocation()
 	return (
@@ -29,7 +28,7 @@ function FooterLegal() {
 				<span>AGPL-3.0 licensed.</span>
 				<span>Take the code. Leave the raccoon.</span>
 			</div>
-			{/* the docs, the source, the license, and the legal pages. the current page's link stays underlined */}
+			{/* the docs, the source, the license, and the legal pages */}
 			<div className="flex flex-wrap justify-center gap-x-6 gap-y-1">
 				<DocsLink className="text-link hover:underline" />
 				<AnchorLink href="https://github.com/doubleoevan/carlnotes" className="text-link hover:underline">

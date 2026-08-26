@@ -2,8 +2,8 @@
 import { expect, test } from "bun:test"
 import { canScoreResource, canSpend, charge, newBudget, tokenCost } from "../budget"
 
-// charge accumulates per-stage costs into the total. canSpend flips to false once the budget cap is reached
-test("charge accumulates the per-stage costs and the budget cap halts paid work", () => {
+// charge accumulates per-stage costs into the total. canSpend flips to false once the budget limit is reached
+test("charge accumulates the per-stage costs and the budget limit halts paid work", () => {
 	// a fresh budget with a low limit
 	const budget = { ...newBudget(), limitDollars: 0.1, maxScoredResources: 5 }
 	// two charges accumulate into their buckets and the running total
@@ -12,7 +12,7 @@ test("charge accumulates the per-stage costs and the budget cap halts paid work"
 	expect(budget.stageCosts.fetch).toBe(0.04)
 	expect(budget.stageCosts.scoringPremium).toBe(0.04)
 	expect(budget.spentDollars).toBeCloseTo(0.08)
-	// still under the cap, so paid work may run
+	// still under the limit, so paid work may run
 	expect(canSpend(budget)).toBe(true)
 	// one more charge reaches the limit and halts further paid work
 	charge(budget, "fetch", 0.03)
@@ -45,12 +45,12 @@ test("a free Source leaves the ingestion bucket at zero", () => {
 	expect(budget.spentDollars).toBe(0)
 })
 
-// canScoreResource halts paid work once the scored-resource count reaches the cap, even while spend is under the dollar limit
+// canScoreResource halts paid work once the scored-resource count reaches the limit, even while spend is under
 test("canScoreResource halts on the scored-resource count independent of spend", () => {
 	// under both limits, paid work may run
 	const budget = { ...newBudget(), limitDollars: 0.5, maxScoredResources: 2 }
 	expect(canScoreResource(budget)).toBe(true)
-	// the outcome total reaches the cap while spend stays under the dollar limit, so paid work halts
+	// the outcome total reaches the limit while spend stays under the dollar limit, so paid work halts
 	budget.fetchCounts.fetchedCount = 1
 	budget.fetchCounts.reusedCount = 1
 	expect(canScoreResource(budget)).toBe(false)

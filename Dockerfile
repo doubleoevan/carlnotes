@@ -66,6 +66,9 @@ COPY --from=build /app/ui/dist ./ui/dist
 # the built docs site, served under /docs
 COPY --from=build /app/docs/dist ./docs/dist
 
+# the docs markdown source, which the docs:embed deploy job chunks and embeds for chat
+COPY docs/src/content/docs ./docs/src/content/docs
+
 # the api listens on 3000, matching the port api/index.ts exports
 EXPOSE 3000
 USER bun

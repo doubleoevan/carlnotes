@@ -24,7 +24,7 @@ test("embedding and embedding_model are nullable", () => {
 	expect(resources.embeddingModel.notNull).toBe(false)
 })
 
-// the embedding vector is migrated to 1024 dimensions for qwen3-embedding-8b. a dimension change is a schema migration plus a re-embed backfill
+// the embedding vector is migrated to 1024 dimensions for qwen3-embedding-8b
 test("the embedding column is migrated to a 1024-dim vector", () => {
 	expect(allMigrationsSql()).toContain("vector(1024)")
 })
@@ -35,7 +35,7 @@ test("no feeds table or export exists", () => {
 	expect(initialSql).not.toContain('CREATE TABLE "feeds"')
 })
 
-// tags are Topic metadata with an empty default, so existing rows need no backfill. tags are never a separate entity and resources and findings stay untagged
+// tags are Topic metadata with an empty default, so existing rows need no backfill
 test("topics.tags is a non-null, empty-default column and tags is not an entity", () => {
 	expect(topics.tags.notNull).toBe(true)
 	expect(allMigrationsSql()).toContain(`"tags" text[] DEFAULT '{}' NOT NULL`)
@@ -49,7 +49,7 @@ test("a generalized inverted index (GIN) covers topics.tags", () => {
 	expect(allMigrationsSql()).toContain(`CREATE INDEX "topics_tags_gin" ON "topics" USING gin ("tags")`)
 })
 
-// the near-duplicate gate's nearest-neighbor lookup must be index-backed, and cosine, since that is the distance it measures
+// the near-duplicate gate's nearest-neighbor lookup must be index-backed, and cosine, the distance it measures
 test("an HNSW cosine index covers resources.embedding", () => {
 	expect(allMigrationsSql()).toContain(
 		`CREATE INDEX "resources_embedding_hnsw" ON "resources" USING hnsw ("embedding" vector_cosine_ops)`,
@@ -93,13 +93,11 @@ test("resources content_key and content_bytes are nullable and content is not dr
 	expect(allMigrationsSql()).toContain(`ADD COLUMN "content_key" text`)
 })
 
-// a Subscription's subscriber is a user or an audience, so both columns exist and are mutually exclusive
-test("a subscription exposes both subscriber columns with a mutual exclusion check", () => {
+// a Subscription's subscriber is a user, and nothing else. teams reach a topic through their members' own rows
+test("a subscription names its subscribing user and nothing else", () => {
 	expect(subscriptions.subscriberUserId).toBeDefined()
-	expect(subscriptions.subscriberAudienceId).toBeDefined()
-	expect(initialSql).toContain("subscriptions_subscriber_xor")
-	// assert the real xor expression, not just the constraint name, so a malformed CHECK can't pass
-	expect(initialSql).toMatch(/subscriber_user_id.* <> .*subscriber_audience_id/)
+	expect(subscriptions.subscriberUserId.notNull).toBe(true)
+	expect("subscriberAudienceId" in subscriptions).toBe(false)
 })
 
 // pgvector must be enabled before the resources table that uses the vector embedding is created
@@ -114,6 +112,27 @@ test("topic_invites is keyed by topic and email and cascades from its topic", ()
 	expect(allMigrationsSql()).toMatch(/topic_invites_topic_id_topics_id_fk.*ON DELETE cascade/)
 })
 
+// re-inviting the same person is a no-op whether invited by email or by username, enforced per target by these indexes
+test("invites have per-target unique indexes on the invited user", () => {
+	expect(allMigrationsSql()).toContain(
+		`CONSTRAINT "invites_topic_invited_user_unique" UNIQUE("topic_id","invited_user_id")`,
+	)
+	expect(allMigrationsSql()).toContain(
+		`CONSTRAINT "invites_team_invited_user_unique" UNIQUE("team_id","invited_user_id")`,
+	)
+	// a closed account's pending invitations clear with it
+	expect(allMigrationsSql()).toMatch(/invites_invited_user_id_users_id_fk.*ON DELETE cascade/)
+})
+
+// a link invite names nobody: the email and invited-user columns are both nullable, so a row with neither is accepted
+test("a link invite row names nobody", () => {
+	expect(schema.invites.email.notNull).toBe(false)
+	expect(schema.invites.invitedUserId.notNull).toBe(false)
+	// the decline stamp and the recipient setting round out the user-invite lifecycle
+	expect(schema.invites.declinedAt.notNull).toBe(false)
+	expect(allMigrationsSql()).toContain(`"invite_access" "invite_access" DEFAULT 'anyone' NOT NULL`)
+})
+
 // a scan records whether the owner triggered it by hand, so the marker must exist and default to false
 test("scans.is_manual is non-null and defaults to false", () => {
 	expect(schema.scans.isManual.notNull).toBe(true)
@@ -126,15 +145,15 @@ test("users.role is non-null and defaults to user", () => {
 	expect(allMigrationsSql()).toContain(`"role" text DEFAULT 'user' NOT NULL`)
 })
 
-// the billing plan is a proper pgEnum, unlike role, since it carries no external-library constraint
+// the billing plan is a proper pgEnum, unlike role, which an external library constrains
 test("users.plan is a free/plus/premium enum, non-null, and defaults to free", () => {
 	expect(schema.users.plan.notNull).toBe(true)
 	expect(allMigrationsSql()).toContain(`CREATE TYPE "public"."plan" AS ENUM('free', 'plus', 'premium')`)
 	expect(allMigrationsSql()).toContain(`"plan" "plan" DEFAULT 'free' NOT NULL`)
 })
 
-// a billing subscription mirrors a user's active Stripe subscription and derives their plan. one active row per user, cascading with the user
-test("billing_subscriptions is one-per-user, cascades, and carries the Stripe, plan, and card columns", () => {
+// a billing subscription mirrors a user's active Stripe subscription and derives their plan
+test("billing_subscriptions is one-per-user, cascades, and has the Stripe, plan, and card columns", () => {
 	expect("billingSubscriptions" in schema).toBe(true)
 	expect(schema.billingSubscriptions.hasPaymentMethod.notNull).toBe(true)
 	expect(allMigrationsSql()).toContain(`CONSTRAINT "billing_subscriptions_user_id_unique" UNIQUE("user_id")`)
@@ -142,7 +161,7 @@ test("billing_subscriptions is one-per-user, cascades, and carries the Stripe, p
 	expect(allMigrationsSql()).toContain(`"has_payment_method" boolean DEFAULT false NOT NULL`)
 })
 
-// the per-user budget override is nullable, since a null means the plan's own monthly backstop applies
+// the per-user budget override is nullable, where a null means the plan's own monthly backstop applies
 test("users.budget_override_cents is a nullable integer", () => {
 	expect(schema.users.budgetOverrideCents.notNull).toBe(false)
 	expect(allMigrationsSql()).toContain(`ADD COLUMN "budget_override_cents" integer`)
@@ -183,8 +202,7 @@ test("consumptions is unique per user and finding and it cascades from both pare
 	expect(allMigrationsSql()).toMatch(/consumptions_finding_id_findings_id_fk.*ON DELETE cascade/)
 })
 
-// a chat turn requires a user and a cost.
-// the question and answer are optional because they are only kept when the gate allows
+// a chat turn requires a user and a cost
 test("chat_turns keeps its text nullable and its user and cost not null", () => {
 	expect(chatTurns.question.notNull).toBe(false)
 	expect(chatTurns.answer.notNull).toBe(false)
@@ -200,7 +218,7 @@ test("chat_turns cascades from both parents and indexes topic and time", () => {
 })
 
 // the embedding model name is stored by review and filtered on by chat retrieval
-test("the embedding model name is a schema constant carrying the dimension", () => {
+test("the embedding model name is a schema constant that includes the dimension", () => {
 	expect(EMBED_MODEL_NAME).toBe(`qwen3-embedding-8b/${EMBED_DIMENSIONS}`)
 })
 
@@ -216,10 +234,36 @@ function allMigrationsSql(): string {
 	return sqlFiles.map((file) => readFileSync(join(migrationsDirectory, file), "utf8")).join("\n")
 }
 
-// dispatched_at has no default, since a default would make every existing row look dispatched already.
-// already-finished scans are backfilled too, so they never look like they're still waiting to start
+// dispatched_at has no default, which would make every existing row look dispatched already
 test("scans records dispatch as a nullable column and backfills finished rows", () => {
 	expect(allMigrationsSql()).toMatch(/ALTER TABLE "scans" ADD COLUMN "dispatched_at" timestamp with time zone;/)
 	expect(allMigrationsSql()).not.toMatch(/"dispatched_at" timestamp with time zone DEFAULT/)
 	expect(allMigrationsSql()).toMatch(/UPDATE "scans" SET "dispatched_at" = "started_at" WHERE "status" <> 'running'/)
+})
+
+// every non-test source file under the given folders, read for the reference scans below
+function sourceFilesUnder(folders: string[]): { path: string; text: string }[] {
+	const repoRoot = join(import.meta.dir, "..")
+	return folders.flatMap((folder) =>
+		readdirSync(join(repoRoot, folder), { recursive: true })
+			.map(String)
+			.filter((name) => /\.(ts|tsx)$/.test(name) && !/\.(test|smoke)\./.test(name) && !name.includes(".tsbuild"))
+			.map((name) => ({ path: `${folder}/${name}`, text: readFileSync(join(repoRoot, folder, name), "utf8") })),
+	)
+}
+
+// reading signal is record-only
+test("finding feedback and views are written and displayed, never read into ranking", () => {
+	const readers = sourceFilesUnder(["api", "worker"])
+		.filter((file) => /findingFeedback|findingViews|ratedTeamId|ratedRole/.test(file.text))
+		.map((file) => file.path)
+	expect(readers.sort()).toEqual(["api/topic/findings.ts"])
+})
+
+// the room's chat messages are the team's conversation. it never reaches scoring, retrieval, or embeddings
+test("room messages and summaries never reach the worker pipeline", () => {
+	const readers = sourceFilesUnder(["worker"])
+		.filter((file) => /chatRoomMessages|chatRoomSummaries/.test(file.text))
+		.map((file) => file.path)
+	expect(readers).toEqual([])
 })

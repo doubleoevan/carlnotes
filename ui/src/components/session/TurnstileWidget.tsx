@@ -45,8 +45,7 @@ export function TurnstileWidget({
 			document.head.append(script)
 		}
 
-		// render into this widget's own container once the script is ready.
-		// flexible sizing fills the container's width instead of cloudflare's fixed 300px default
+		// render into this widget's own container once the script is ready
 		let widgetId: string | undefined
 		const renderWidget = (): void => {
 			if (containerRef.current && window.turnstile) {

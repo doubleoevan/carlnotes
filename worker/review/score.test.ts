@@ -29,8 +29,8 @@ test("isSnippetComplete skips the fetch for a tweet and for nothing else", () =>
 	expect(isSnippetComplete("https://www.reddit.com/r/x/comments/a/first/")).toBe(false)
 })
 
-// the paid section runs concurrently but bounded, since an unbounded burst draws Firecrawl 429s
-test("mapWithConcurrency never exceeds its limit and returns results in order", async () => {
+// the paid section runs concurrently but bounded. an unbounded burst draws Firecrawl 429s
+test("runWithConcurrency never exceeds its limit and returns results in order", async () => {
 	// track how many tasks are in flight at once, recording the high-water mark
 	let inFlight = 0
 	let peakInFlight = 0
@@ -67,7 +67,7 @@ test("the plan limit check halts dispatch once either limit is reached", async (
 })
 
 // an empty scrape and a failed object-storage write both leave no key, so the snippet becomes the text to score
-test("toFetchedContentFields keeps the key and scores content when stored, else falls back to the snippet", () => {
+test("toFetchedContentFields keeps the key and scores content when stored, otherwise falls back to the snippet", () => {
 	// a successful store keeps the key and size and scores the in-memory content
 	expect(toFetchedContentFields({ contentKey: "resources/r1/content.md", bytes: 12 }, "body", "snip")).toEqual({
 		scoringText: "body",

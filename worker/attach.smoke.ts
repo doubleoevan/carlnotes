@@ -1,5 +1,4 @@
-// a live smoke test the owner runs by hand for attachment ingestion and its processing workflow.
-// it seeds a topic, ingests a file, waits for the workflow to mark the attachment ready, and checks the context, counts, and stored object
+// a live smoke test the owner runs by hand for attachment ingestion and its processing workflow
 // run it with: bun run smoke:attach. it needs the LiteLLM proxy, the S3_* bucket, a Temporal server with its worker running (bun run dev:temporal), the latest migration applied, and Doppler secrets injected
 import { eq } from "drizzle-orm"
 import { db } from "../db"
@@ -68,7 +67,7 @@ async function waitForAttachment(attachmentId: string): Promise<Attachment> {
 	)
 }
 
-// run the smoke assertions over the pending attachment row and the finished row, and print a report. returns true if every check passes
+// run the smoke assertions over the pending attachment row and the finished row, and print a report
 async function check(topicId: string, pendingAttachment: Attachment, readyAttachment: Attachment): Promise<boolean> {
 	// the merged context a scan would read, plus whether the stored object is still in the bucket
 	const { context: scanContext } = await buildTopicScanContext(topicId)
@@ -105,7 +104,7 @@ async function check(topicId: string, pendingAttachment: Attachment, readyAttach
 // seed, ingest, wait for the workflow, and check, then clean up the stored object and the fake owner
 async function smokeTest(): Promise<number> {
 	const { topicId, userId } = await seedTestData()
-	// ingest up front so the stored object has a reference for cleanup even if a later step throws
+	// ingest up front so the stored object has a reference for cleanup even if a later step throws an error
 	let objectKey: string | null = null
 	try {
 		const pendingAttachment = await ingestAttachment({

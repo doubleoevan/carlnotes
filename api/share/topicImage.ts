@@ -1,5 +1,4 @@
-// the link-preview card a pasted Topic url renders as: the Topic's name, its owner's byline, and its findings counts.
-// it renders with the frame and the shared pieces in previewImage.ts
+// the link-preview card a pasted Topic url renders as
 import type { PublishedAvatar } from "../avatars"
 import {
 	CARD_MUTED_COLOR,

@@ -57,7 +57,7 @@ Machine credentials, never repo secrets. Doppler stays app-runtime only.
 ### Agents
 
 - Claude Code works out of the box on your subscription: planning and design-heavy work
-- OpenCode does spec-driven apply work through LiteLLM; carl-up mints its capped `dev` key automatically on first boot. Open a new terminal after the first run
+- OpenCode does spec-driven apply work through LiteLLM; carl-up mints its limited `dev` key automatically on first boot. Open a new terminal after the first run
 - Custom commands live in `.agents/commands/` and load in both agents: `/ship` runs the full pre-push ritual (gates + both reviewers), `/audit-structure` checks the tooling layout for drift
 - The pre-push hook runs the same gates no matter which agent, or human, pushes
 

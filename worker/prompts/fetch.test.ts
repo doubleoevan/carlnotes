@@ -27,8 +27,7 @@ test("fetchPromptTemplate returns the bundled template unmodified when Langfuse 
 	}
 })
 
-// the prompt registry is for editing wording between deploys, not for changing which variables a prompt takes.
-// a prompt template naming different variables has drifted from the code that fills it, and the bundled template wins
+// the prompt registry is for editing wording between deploys, not for changing which variables a prompt takes
 test("hasSameVariables spots a renamed prompt variable", () => {
 	expect(hasSameVariables("Kept:\n{{keptFindingsBlock}}", "Kept:\n{{keptResourcesBlock}}")).toBe(false)
 })

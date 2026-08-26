@@ -4,8 +4,7 @@ import { useEffect, useState } from "react"
 // how often to re-fetch the page while a scan is running, so history and the manual scan button follow it live
 const SCAN_POLL_MS = 3000
 
-// re-fetch the topic page on a timer while any of its scans are running,
-// so the history status row and the "Brew" button follow a scan to completion without a manual reload.
+// re-fetch the topic page on a timer while any of its scans are running
 export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<void>): void {
 	useEffect(() => {
 		if (!isScanning) {
@@ -31,7 +30,7 @@ export function useManualScanProgress(scans: TopicResponse["scans"] | undefined)
 	cancelScan: () => void
 	stopCancelling: () => void
 } {
-	// the optimistic flags covering the gap between a click and the row that answers it
+	// the optimistic flags covering the gap between a click and the row that confirms it
 	const [isRunningScan, setIsRunningScan] = useState(false)
 	const [isCancellingScan, setIsCancellingScan] = useState(false)
 	const [scanTriggeredAt, setScanTriggeredAt] = useState<number | null>(null)

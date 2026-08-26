@@ -1,11 +1,10 @@
 // a live smoke test for the profile's two subscriber numbers, which are different.
-// the header counts distinct people and the footer sums the topic row subscribers.
 // run it with: bun run smoke:profile. needs Doppler secrets
 import { and, eq, sum } from "drizzle-orm"
 import { connectionPool, db } from "../db"
 import { subscriptions, topics, users } from "../db/schema"
 import { countDistinctSubscribers } from "./profiles"
-import { recountTopicSubscribers } from "./topic/subscriberCounts"
+import { updateTopicSubscriberCount } from "./topic/subscriberCounts"
 
 // the transaction each test case runs inside, so that no fixture ever escapes it
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -62,7 +61,7 @@ async function withOwner(runCase: (fixture: Fixture, transaction: DbTransaction)
 
 			// recount subscribers for every topic, then read the two numbers the profile shows
 			for (const topicId of fixture.topicIds) {
-				await recountTopicSubscribers(topicId, transaction)
+				await updateTopicSubscriberCount(topicId, transaction)
 			}
 			counts = await toProfileCounts(fixture.ownerId, transaction)
 			throw new Rollback()

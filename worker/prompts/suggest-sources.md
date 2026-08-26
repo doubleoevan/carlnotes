@@ -16,7 +16,7 @@ Topic:
 Sources this topic already follows, which you must not propose again:
 {{excludedSources}}
 
-Pick sources that keep producing, so the topic keeps finding new material:
+Select sources that keep producing, so the topic keeps finding new material:
 
 - **rss** — a feed url. A blog, a publication, a release feed, a changelog. Prefer this whenever you know the feed's own address.
 - **googleNews** — a news publisher's domain, like `techcrunch.com`. This follows everything Google News carries from that publisher, so propose it for a newspaper, a magazine, or a news site instead of guessing at a feed url they may not publish.

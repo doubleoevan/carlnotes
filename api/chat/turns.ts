@@ -17,14 +17,12 @@ import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { deleteChatAttachments, keepChatAttachments, loadKeptAttachments, resolveChatAttachments } from "./attachments"
 import { decryptChatText, encryptChatText } from "./encryption"
 
-// the answers to a chat turn request. signup routes a visitor to the signup page and budget prompts an
-// upgrade, so the rejections stay apart. an allowed chat turn includes the caller's own model key, so its spend
-// lands under their proxy budget the way a scan's does
+// the outcomes of a chat turn request
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type ChatTurnAuthorization = { status: "allowed"; isOwner: boolean; isPersisted: boolean; litellmApiKey?: string } | { status: "signup" } | { status: "forbidden" } | { status: "budget" }
 
 /**
- * Whether this caller may take a chat turn on the topic right now, and how that chat turn should be recorded.
+ * Whether this user may take a chat turn on the topic right now, and how that chat turn should be recorded.
  * A signed-out visitor on a visible topic is sent to signup, so no anonymous chat turn ever spends.
  */
 export async function authorizeChatTurn(userId: string | null, topicId: string): Promise<ChatTurnAuthorization> {
@@ -42,12 +40,12 @@ export async function authorizeChatTurn(userId: string | null, topicId: string):
 		return { status: "signup" }
 	}
 
-	// the one rejection left for a signed-in caller who can see the topic is the budget
+	// the one rejection left for a signed-in user who can see the topic is the budget
 	if (!(await isAllowed(userId, "chat:send", topic))) {
 		return { status: "budget" }
 	}
 
-	// the gate decides whether the chat turn keeps its text, and its model calls bill to the caller's own key
+	// the gate decides whether the chat turn keeps its text, and its model calls bill to the user's own key
 	const [isPersisted, [userRow]] = await Promise.all([
 		isAllowed(userId, "chat:persist"),
 		db.select({ litellmVirtualKey: users.litellmVirtualKey }).from(users).where(eq(users.id, userId)),
@@ -61,7 +59,7 @@ export async function authorizeChatTurn(userId: string | null, topicId: string):
 }
 
 /**
- * Record a finished chat turn's spend, keeping its text only when the gate allows the caller that.
+ * Record a finished chat turn's spend, keeping its text only when the gate allows the user that.
  * A chat turn that streamed and then failed still records, so a partial chat turn is never free.
  */
 export async function recordChatTurn(
@@ -83,20 +81,37 @@ export async function recordChatTurn(
 }
 
 /**
+ * Record a chat room completion into the same chat ledger a private chat turn writes, with the chat room message it
+ * answered and its token total. The billed member's monthly budget reads this row like any other.
+ */
+export async function recordChatRoomTurn(
+	userId: string,
+	topicId: string | null,
+	teamId: string,
+	roomMessageId: number,
+	completion: { totalTokens: number; searchCount: number },
+): Promise<void> {
+	// the text lives in the room's messages, so the ledger row stores only the meter and the reference
+	const row = toChatTurnRow(userId, topicId, completion.totalTokens, completion.searchCount, false, "", "")
+	await db
+		.insert(chatTurns)
+		.values({ ...row, roomMessageId, teamId: topicId === null ? teamId : null, totalTokens: completion.totalTokens })
+}
+
+/**
  * The row one finished chat turn writes. Its cost is the same best-effort token total a scan uses plus what its
- * web searches cost, since LiteLLM meters the authoritative figure.
+ * web searches cost.
  */
 export function toChatTurnRow(
 	userId: string,
-	topicId: string,
+	topicId: string | null,
 	totalTokens: number,
 	searchCount: number,
 	isPersisted: boolean,
 	question: string,
 	answer: string,
 ): typeof chatTurns.$inferInsert {
-	// a chat turn that does not persist stores null text, so its row is a meter entry and nothing more.
-	// persisted text stores encrypted, so the database never holds the conversation readable
+	// a chat turn that does not persist stores null text, so its row is a meter entry and nothing more
 	return {
 		userId,
 		topicId,
@@ -107,7 +122,7 @@ export function toChatTurnRow(
 }
 
 /**
- * The caller's stored chat turns for a topic, oldest first. The whole conversation, since the panel virtualizes its list.
+ * The user's stored chat turns for a topic, oldest first. The whole conversation.
  */
 export async function loadChatTurns(
 	userId: string | null,
@@ -126,21 +141,21 @@ export async function loadChatTurns(
 		.orderBy(desc(chatTurns.createdAt))
 
 	// decrypt each stored pair, dropping the meter-only rows and any text that fails to verify
-	return chatTurnRows.reverse().flatMap((row) => {
-		if (row.question === null || row.answer === null) {
+	return chatTurnRows.reverse().flatMap((chatTurnRow) => {
+		if (chatTurnRow.question === null || chatTurnRow.answer === null) {
 			return []
 		}
 
-		// a pair is replayed only when both sides decrypt, since half a chat turn reads as a glitch
-		const question = decryptChatText(row.question)
-		const answer = decryptChatText(row.answer)
-		return question !== null && answer !== null ? [{ question, answer, at: row.createdAt.toISOString() }] : []
+		// a pair is replayed only when both sides decrypt
+		const question = decryptChatText(chatTurnRow.question)
+		const answer = decryptChatText(chatTurnRow.answer)
+		return question !== null && answer !== null ? [{ question, answer, at: chatTurnRow.createdAt.toISOString() }] : []
 	})
 }
 
 /**
- * Clear the caller's conversation with a topic: every chat turn's text is nulled and everything they kept for the
- * topic goes with it, since a kept file is conversation memory. The chat turn rows stay because they are the spend
+ * Clear the user's conversation with a topic: every chat turn's text is nulled and everything they kept for the
+ * topic goes with it. The chat turn rows stay as the spend
  * ledger, and deleting them would let a cleared chat reset the month's meter.
  */
 export async function clearChatTurns(userId: string, topicId: string): Promise<void> {
@@ -151,8 +166,7 @@ export async function clearChatTurns(userId: string, topicId: string): Promise<v
 	await deleteChatAttachments(topicId, userId)
 }
 
-// stream a chat reply to the user, then record what the chat turn spent and keep the attachments they asked to keep.
-// the reply streams as it is generated
+// stream a chat reply to the user
 function streamChatTurn(
 	context: Context,
 	reply: ChatReplyStream,
@@ -197,8 +211,8 @@ function streamChatTurn(
 			reportError(error, "chat", { topicId: chatTurn.topicId })
 		}
 
-		// keep what the user marked once the reply has landed. this is not awaited,
-		// since generating the summaries takes seconds and would hold a finished stream open long enough to read as a hung reply
+		// keep what the user marked once the reply has finished. the summaries take seconds, so they run on
+		// past the closed stream
 		keepChatAttachments(chatTurn.userId, chatTurn.topicId, chatTurn.attachments, chatTurn.litellmApiKey).catch(
 			(error) => {
 				console.error(`keeping chat attachments failed for topic ${chatTurn.topicId}`, error)
@@ -211,7 +225,7 @@ function streamChatTurn(
 // the chat routes: the conversation, clearing it, and the streamed reply
 export const chatRoute = new Hono<AppEnv>()
 	.get("/topics/:id/chat", async (context) => {
-		// what the panel opens with. the caller's stored conversation, what they have kept, and whether they may chat
+		// what the panel opens with. the user's stored conversation, what they have kept, and whether they may chat
 		const userId = currentUser(context)
 		const topicId = context.req.param("id")
 		const [chatTurns, authorization, keptAttachments] = await Promise.all([
@@ -241,7 +255,7 @@ export const chatRoute = new Hono<AppEnv>()
 	})
 	.post(
 		"/topics/:id/chat",
-		// cap the chat turn body before json parsing buffers it. four data-url images at their contract cap, with room to spare
+		// limit the chat turn body before json parsing buffers it
 		bodyLimit({
 			maxSize: 26 * 1024 * 1024,
 			onError: (context) => context.json({ error: "Those attachments are too large." }, 413),
@@ -261,7 +275,7 @@ export const chatRoute = new Hono<AppEnv>()
 				}
 				return context.json({ error: "budget exhausted" }, 402)
 			}
-			// a signed-out caller is sent to signup instead
+			// a signed-out visitor is sent to signup instead
 			if (authorization.status === "signup") {
 				return context.json({ error: "sign up required" }, 401)
 			}
@@ -269,7 +283,7 @@ export const chatRoute = new Hono<AppEnv>()
 			if (authorization.status !== "allowed") {
 				return context.json({ error: "forbidden" }, 403)
 			}
-			// the gate already rejected a signed-out caller with "signup", so this narrows the type alone
+			// the gate already rejected a signed-out visitor with "signup", so this narrows the type alone
 			if (!userId) {
 				return context.json({ error: "sign up required" }, 401)
 			}
@@ -293,7 +307,7 @@ export const chatRoute = new Hono<AppEnv>()
 			if (!chatReply) {
 				return context.json({ error: "not found" }, 404)
 			}
-			// the stored question names its attachments, since the attachments themselves are sent only to the model
+			// the stored question names its attachments
 			return streamChatTurn(context, chatReply, {
 				userId,
 				topicId,

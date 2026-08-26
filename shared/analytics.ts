@@ -13,6 +13,8 @@ export type AnalyticsEvent =
 	// what the owner asks the product to do, and the paywall they hit when asking for more
 	| "scan_requested"
 	| "scan_quota_reached"
+	// sharing a topic, tagged by the control that created the invite
+	| "invite_created"
 	// engagement, which fires every time instead of only the first time
 	| "finding_rated"
 	| "finding_bookmarked"
@@ -26,7 +28,7 @@ export type AnalyticsEvent =
 
 /**
  * Records one product event for a user. A no-op if `POSTHOG_API_KEY` isn't set.
- * Properties are short identifiers only, since event history cannot be backfilled.
+ * Properties are short identifiers only. Event history cannot be backfilled.
  */
 export function trackEvent(
 	event: AnalyticsEvent,
@@ -59,7 +61,7 @@ function analyticsClient(): PostHog | null {
  * Flushes pending events before a short-lived process exits. Safe to call whether or not analytics started.
  */
 export async function shutdownAnalytics(): Promise<void> {
-	// a flush failure must never flip the outcome the run earned
+	// a flush failure must never change the analytics run's result
 	try {
 		await analytics?.shutdown()
 	} catch (error) {

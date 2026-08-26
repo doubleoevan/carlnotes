@@ -26,7 +26,7 @@ export function Attribution({ className, isFooter = false }: { className?: strin
 				<AnchorLink href="https://www.skool.com/cliefnotes" className="text-link hover:underline">
 					Clief Notes
 				</AnchorLink>
-				{/* the footer flows the call-to-action inline right after the credit; the hero drops it to a line below */}
+				{/* the footer flows the call-to-action inline right after the credit. the hero drops it to a line below */}
 				{isFooter ? ". Go learn from him. Carl did." : "."}
 			</p>
 			{!isFooter && <p className="mt-1.5 text-center">Go learn from him. Carl did.</p>}

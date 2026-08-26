@@ -1,93 +1,37 @@
-import { Camera, Check } from "lucide-react"
+import { Check, Info, Settings } from "lucide-react"
 import { type SubmitEvent, useState } from "react"
-import { UserAvatar } from "@/components/branding/UserAvatar"
+import { authClient } from "@/clients/authClient"
+import { sendDeleteAccount, sendInviteAccess, sendUsername } from "@/clients/profileClient"
+import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { PasswordInput } from "@/components/session/PasswordInput"
 import { useAvatar } from "@/hooks/useAvatar"
-import { authClient } from "@/lib/authClient"
-import { sendAccountDelete, sendUsername } from "@/lib/profileClient"
-import { cn, SECTION_CARD_CLASS } from "@/lib/utils"
+import { CARD_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
 /**
- * The user profile and password settings sections on the account page.
+ * The settings sections on the account page: profile, email, password, invitations, and closing the account.
  */
 export function AccountSettings() {
 	return (
 		<>
-			<h2 className="font-display pt-2 text-xl">Settings</h2>
+			{/* the section title with its icon */}
+			<h2 className="font-display flex items-center gap-2 pt-2 text-xl">
+				<Settings className="size-5" />
+				Settings
+			</h2>
 			<ProfileSection />
 			<EmailSection />
 			<PasswordSection />
+			<InvitationsSection />
 			{/* closing the account comes last. it is the one thing on this page that cannot be undone */}
 			<DeleteAccountSection />
 		</>
 	)
-}
-
-// the avatar with a camera overlay on hover. a click anywhere on the image opens the file chooser
-function AvatarPicker({
-	userId,
-	username,
-	avatarSource,
-}: {
-	userId: string
-	username: string
-	avatarSource?: string | null
-}) {
-	const [isUploading, setUploading] = useState(false)
-	const [updateRejection, setUpdateRejection] = useState<string | null>(null)
-	const { uploadPhoto } = useAvatar()
-
-	// upload the avatar photo. the hook refreshes the session on success, which updates every avatar on the page
-	async function handleFileChange(event: React.ChangeEvent<HTMLInputElement>): Promise<void> {
-		const avatarFile = event.target.files?.[0]
-		if (!avatarFile) {
-			return
-		}
-		setUploading(true)
-		setUpdateRejection(null)
-		try {
-			const avatarRejection = await uploadPhoto(avatarFile)
-			if (avatarRejection) {
-				setUpdateRejection(AVATAR_REJECTIONS[avatarRejection] ?? "That didn't reach Carl. Try again.")
-			}
-		} catch (error) {
-			console.error("avatar upload failed", error)
-			setUpdateRejection("That didn't reach Carl. Try again.")
-		} finally {
-			setUploading(false)
-		}
-	}
-
-	return (
-		<div>
-			<label className="group relative block size-14 cursor-pointer" aria-label="Change your avatar">
-				<UserAvatar userId={userId} username={username} avatarSource={avatarSource} className="size-14" />
-				{/* the camera overlay shows up on the avatar and only appears on hover or keyboard focus */}
-				<span className="absolute inset-0 grid place-items-center rounded-full bg-black/55 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-					<Camera className="size-5 text-white" />
-				</span>
-				<input
-					type="file"
-					accept="image/png,image/jpeg,image/webp,image/gif"
-					onChange={handleFileChange}
-					disabled={isUploading}
-					className="sr-only"
-				/>
-			</label>
-			{updateRejection && <p className="text-destructive mt-1 text-xs">{updateRejection}</p>}
-		</div>
-	)
-}
-
-// error messages for avatar uploads
-const AVATAR_REJECTIONS: Record<string, string> = {
-	"too-large": "That image is over 2MB.",
-	empty: "That file was empty.",
-	"unsupported-type": "PNG, JPEG, WebP or GIF only.",
 }
 
 // error messages for username updates
@@ -127,24 +71,24 @@ function ProfileSection() {
 			await refreshSession()
 			setUsername("")
 		} catch (error) {
-			console.error("username claim failed", error)
+			console.error("username change failed", error)
 			setUpdateRejection("That didn't reach Carl. Try again.")
 		} finally {
 			setSaving(false)
 		}
 	}
 
-	// must be logged in to see your account page
+	// only a signed-in user has an account page
 	if (!session) {
 		return null
 	}
 	const currentUsername = session.user.username
 
 	return (
-		<section className={SECTION_CARD_CLASS}>
+		<section className={CARD_CLASS}>
 			<h3 className="font-semibold">Profile</h3>
 			<div className="mt-3 flex items-center gap-4">
-				<AvatarPicker userId={session.user.id} username={currentUsername} avatarSource={avatarSource} />
+				<UserAvatarPicker userId={session.user.id} username={currentUsername} />
 				<div className="text-sm">
 					<p className="font-display text-lg">{currentUsername}</p>
 					{/* the provider photo avatar is opt-in. the default avatar is username initials */}
@@ -199,7 +143,7 @@ function EmailSection() {
 	const [error, setError] = useState<string | null>(null)
 	const [isRequested, setRequested] = useState(false)
 
-	// ask for the email change. better auth writes to the current address first, and only afterword to the new one
+	// ask for the email change. better auth emails the current address first, and only afterward the new one
 	async function handleChangeEmail(event: SubmitEvent): Promise<void> {
 		event.preventDefault()
 		setSubmitting(true)
@@ -224,7 +168,7 @@ function EmailSection() {
 	}
 
 	return (
-		<section className={SECTION_CARD_CLASS}>
+		<section className={CARD_CLASS}>
 			<h3 className="font-semibold">Email</h3>
 			<p className="text-muted-foreground mt-1 text-sm">
 				{"Scans are delivered here. It's also how you sign in with a password."}
@@ -296,7 +240,7 @@ function PasswordSection() {
 	}
 
 	return (
-		<section className={SECTION_CARD_CLASS}>
+		<section className={CARD_CLASS}>
 			<h3 className="font-semibold">Password</h3>
 			<form onSubmit={handleChangePassword} className="mt-3 max-w-sm space-y-3">
 				<PasswordInput
@@ -323,7 +267,77 @@ function PasswordSection() {
 	)
 }
 
-// closing the account, at the bottom of the page and styled as a destructive action
+// the three levels of invitation access
+const INVITE_CHOICES = [
+	{ value: "anyone", label: "Anyone" },
+	{ value: "connected", label: "People I interact with" },
+	{ value: "nobody", label: "Nobody" },
+] as const
+
+function InvitationsSection() {
+	const { data: session, refetch: refreshSession } = authClient.useSession()
+	const [inviteAccess, setInviteAccess] = useState<string | null>(null)
+	const [saveError, setSaveError] = useState<string | null>(null)
+	if (!session) {
+		return null
+	}
+	const inviteChoice = inviteAccess ?? ((session.user as { inviteAccess?: string }).inviteAccess || "anyone")
+
+	// an invite access choice is saved on click
+	async function handleSetInviteAccess(value: "anyone" | "connected" | "nobody"): Promise<void> {
+		setInviteAccess(value)
+		setSaveError(null)
+		try {
+			await sendInviteAccess(value)
+			await refreshSession()
+		} catch (error) {
+			console.error("who-may-invite update failed", error)
+			setInviteAccess(null)
+			setSaveError("That didn't save. Try again.")
+		}
+	}
+
+	return (
+		<section className={CARD_CLASS}>
+			<h3 className="font-semibold">Invitations</h3>
+			{/* invite access is updated on click. the fieldset names the group for a screen reader */}
+			<fieldset className="mt-1">
+				<legend className="text-muted-foreground text-sm">Who may invite you to topics and teams.</legend>
+				<div className="mt-3 space-y-2">
+					{INVITE_CHOICES.map((choice) => (
+						<label key={choice.value} className="flex cursor-pointer items-center gap-2 text-sm">
+							<input
+								type="radio"
+								name="who-may-invite"
+								checked={inviteChoice === choice.value}
+								onChange={() => void handleSetInviteAccess(choice.value)}
+								className="cursor-pointer"
+							/>
+							{choice.label}
+							{/* the "connected" invite access shows a tooltip describing what that means */}
+							{choice.value === "connected" && (
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<Info
+											className="text-muted-foreground stroke-card size-3.5 fill-current"
+											aria-label="What counts as interacting"
+										/>
+									</TooltipTrigger>
+									<TooltipContent className="max-w-64">
+										People you share a team with, people following one of your topics, and people whose invitations you
+										accepted.
+									</TooltipContent>
+								</Tooltip>
+							)}
+						</label>
+					))}
+				</div>
+			</fieldset>
+			{saveError && <p className="text-destructive mt-2 text-sm">{saveError}</p>}
+		</section>
+	)
+}
+
 function DeleteAccountSection() {
 	const [isConfirming, setIsConfirming] = useState(false)
 	const [error, setError] = useState<string | null>(null)
@@ -333,7 +347,7 @@ function DeleteAccountSection() {
 		setIsConfirming(false)
 		setError(null)
 		try {
-			await sendAccountDelete()
+			await sendDeleteAccount()
 			window.location.href = "/"
 		} catch (deleteError) {
 			console.error("account delete failed", deleteError)
@@ -342,7 +356,7 @@ function DeleteAccountSection() {
 	}
 
 	return (
-		<section className={cn(SECTION_CARD_CLASS, "border-destructive")}>
+		<section className={cn(CARD_CLASS, "border-destructive")}>
 			<h3 className="text-destructive font-semibold">Close your account</h3>
 			<p className="text-muted-foreground mt-1 text-sm">
 				Your topics, findings, subscriptions, and chats go with it. Any paid plan is canceled. This cannot be undone.

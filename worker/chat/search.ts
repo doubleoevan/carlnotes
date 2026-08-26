@@ -1,11 +1,9 @@
-// the live web search tool a signed-in chat turn may call. it returns compact text for the model
-// and totals each search, so the caller can bill what the chat turn spent
+// the live web search tool a signed-in chat turn may call
 import { reportError } from "@shared/monitoring"
 import { type Tool, tool } from "ai"
 import { z } from "zod"
 
-// the same Exa endpoint the search ingester uses. a search returns few results and gives up quickly,
-// since all of them have to fit inside one reply
+// the same Exa endpoint the search ingester uses
 const EXA_ENDPOINT = "https://api.exa.ai/search"
 const RESULTS_PER_SEARCH = 3
 const SEARCH_TIMEOUT_MS = 10_000
@@ -32,8 +30,7 @@ export function webSearchTool(total: SearchTotal): Tool<{ query: string }, strin
 	})
 }
 
-// run one Exa search and flatten it to titles, URLs, and highlights, so a reply can cite and link what it found.
-// a failure reports itself as text, so a broken search shortens the answer instead of killing the chat turn
+// run one Exa search and flatten it to titles, URLs, and highlights, so a reply can cite and link what it found
 async function runSearch(query: string): Promise<string> {
 	// Exa needs its key. without one the tool reports the miss and the model answers without the web
 	const apiKey = Bun.env.EXA_API_KEY
@@ -42,8 +39,7 @@ async function runSearch(query: string): Promise<string> {
 	}
 
 	try {
-		// POST the query, bounded by its own timeout so a slow search never stalls the whole chat turn.
-		// moderation: true asks Exa itself to filter unsafe results before they ever reach the model
+		// POST the query, bounded by its own timeout so a slow search never stalls the whole chat turn
 		const response = await fetch(EXA_ENDPOINT, {
 			method: "POST",
 			headers: { "x-api-key": apiKey, "content-type": "application/json" },
@@ -70,8 +66,7 @@ async function runSearch(query: string): Promise<string> {
 	}
 }
 
-// each result holds its title, its url on the next line, then its highlights.
-// the url is included so a reply links to a real address
+// each result holds its title, its url on the next line, then its highlights
 function toResultsText(searchResponse: SearchResponse): string {
 	const searchResults = searchResponse.results ?? []
 	if (searchResults.length === 0) {

@@ -29,12 +29,12 @@ him to exclude. Compare:
 > listicles, funding announcements, hot takes about AI replacing programmers, and anything without
 > technical detail.
 
-The first prompt makes every blog post about AI a candidate. The second gives Carl a way to filter
+The first prompt puts every blog post about AI in front of Carl. The second gives Carl a way to filter
 the irrelevant ones out. The findings from the second prompt are sharper.
 
 ## Read Carl's notes as feedback
 
-Every finding carries a note from Carl explaining why it matters. The app labels it
+Every finding includes a note from Carl explaining why it matters. The app labels it
 **Carl's Notes**. That note is your feedback. When a note reads like a stretch, "this mentions
 coding, and it mentions AI, so", the prompt was too broad for Carl to use discretion. Tighten what to exclude
 and Carl gets better judgement.
@@ -72,8 +72,8 @@ To check if a rewrite worked, run a brew with the **Brew** button and compare it
 the earlier entries in your **Brew diary** on the topic page. Read counts, kept counts, and the updated
 findings will tell you whether the rewrite helped.
 
-## What thumbs do today
+## What thumbs mean today
 
 Each finding has a **Rate this find** control with a thumbs up and thumbs down. Ratings feed a topic feed's
 **Trending** order, so that you and other readers can say what matters. They don't change how future
-brews are scored. That is on the roadmap. Today, telling Carl what's relevant is in the prompt.
+brews are scored. That's on the roadmap. Today, telling Carl what's relevant is in the prompt.

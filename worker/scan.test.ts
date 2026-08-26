@@ -1,4 +1,4 @@
-// toScanSummary self-checks. counts dedupe across Sources, cost sums only the successful Sources, and the status and fallback rules hold
+// toScanSummary self-checks
 import { expect, test } from "bun:test"
 import { toScanSummary } from "./ingest"
 import type { NewResource } from "./ingest/ingester"

@@ -1,5 +1,4 @@
-// the Budget crosses a Temporal activity boundary between the topic Scan's stages, so it is serialized and restored between them.
-// these tests cover that hand-off, since a spend that does not survive it is a limit that stops applying
+// the Budget crosses a Temporal activity boundary between the topic Scan's stages
 import { describe, expect, test } from "bun:test"
 import { type Budget, canScoreResource, canSpend, charge, newBudget, toResumedBudget } from "./budget"
 
@@ -39,7 +38,7 @@ describe("a Budget crossing between stages", () => {
 	})
 
 	test("a stage starting from a partly spent Budget may still buy", () => {
-		// half the limit is still under it, so the review picks up where ingest left off instead of being capped out
+		// half the limit is still under it, so the review picks up where ingest left off instead of being limited out
 		const partlySpentBudget = newBudget()
 		charge(partlySpentBudget, "fetch", partlySpentBudget.limitDollars / 2)
 
@@ -74,7 +73,7 @@ describe("a Budget resumed from a heartbeat checkpoint", () => {
 	})
 
 	test("takes its limits from a fresh Budget, so a resumed Scan cannot regain an allowance it already spent", () => {
-		// a checkpoint with its own limits would let a Scan that scored to the cap buy the whole allowance again
+		// a checkpoint with its own limits would let a Scan that scored to the limit buy the whole allowance again
 		const checkpoint = newBudget()
 		checkpoint.fetchCounts.fetchedCount = checkpoint.maxScoredResources
 		const staleLimits = { ...checkpoint, limitDollars: 999, maxScoredResources: 999 }
@@ -107,8 +106,7 @@ describe("a Budget resumed from a heartbeat checkpoint", () => {
 
 describe("charge", () => {
 	test("mutates the Budget it is given, and parallel scoring tasks charge the same budget", () => {
-		// the paid section charges from tasks running under REVIEW_CONCURRENCY.
-		// a copy per task would keep only whichever charge finished last, and every charge but one would go unrecorded
+		// the paid section charges from tasks running under REVIEW_CONCURRENCY
 		const budget = newBudget()
 		const tasks = [0.01, 0.02, 0.03]
 		for (const dollars of tasks) {
@@ -122,8 +120,7 @@ describe("charge", () => {
 
 describe("a Scan the user stopped", () => {
 	test("scores no further Resources, however much budget is left", () => {
-		// the stop reads as another limit reached, so the Resources still queued are deferred instead of scored.
-		// a budget with room left is what proves the signal is what stopped it
+		// the stop reads as another limit reached, so the Resources still queued are deferred instead of scored
 		const budget = newBudget()
 		const stopSignal = AbortSignal.abort()
 

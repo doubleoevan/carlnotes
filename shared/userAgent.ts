@@ -1,7 +1,6 @@
 // what a user agent says about the browser it came from. the ui reads its own, the api reads the request header
 
-// the tokens the apps that send us traffic put in their user agent. FBAN and FBAV cover Facebook's own webview,
-// and Android marks every webview with wv whatever app is hosting it
+// the tokens the apps that send us traffic put in their user agent
 const IN_APP_BROWSER_TOKENS = ["LinkedInApp", "Instagram", "FBAN", "FBAV", "; wv)"]
 
 // an iPad running iPadOS reports itself as a Mac, so it counts as desktop here, the same way it renders

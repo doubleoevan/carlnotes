@@ -19,7 +19,7 @@ test("renderManualScanEmail lists a succeeded scan's findings under its recap", 
 	expect(html).not.toContain("Unsubscribe")
 })
 
-// a scan that found nothing still sends an email, since the user is waiting on the results
+// a scan that found nothing still sends an email to the user waiting on the results
 test("renderManualScanEmail reports a succeeded scan that found nothing", async () => {
 	const html = await renderManualScanEmail({ status: "succeeded", topicName: "LLM tooling", findings: [] })
 	expect(html).toContain("found nothing new worth your time")
@@ -34,7 +34,7 @@ test("renderManualScanEmail reports a failed scan's reason", async () => {
 		failureReason: "Carl hit this month's budget.",
 	})
 
-	// matched without their apostrophes, since the renderer escapes those to HTML entities
+	// matched without their apostrophes, which the renderer escapes to HTML entities
 	expect(html).toContain("finish the brew you started")
 	expect(html).toContain("Carl hit this month")
 	expect(html).toContain("keep trying on this topic")

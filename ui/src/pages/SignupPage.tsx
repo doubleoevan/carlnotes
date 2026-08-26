@@ -1,11 +1,12 @@
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
 import { useEffect, useState } from "react"
 import { useSearchParams } from "react-router-dom"
+import { authClient, passSignupGate } from "@/clients/authClient"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { Button } from "@/components/primitives/button"
 import { SessionLayout } from "@/components/session/SessionLayout"
 import { TurnstileWidget } from "@/components/session/TurnstileWidget"
-import { authClient, passSignupGate } from "@/lib/authClient"
+import { usePageTitle } from "@/hooks/usePageTitle"
 import { toSafeRedirectPath } from "@/lib/utils"
 
 /**
@@ -14,6 +15,7 @@ import { toSafeRedirectPath } from "@/lib/utils"
  * The token count is incremented when a token is spent to issue a new one.
  */
 export function SignupPage() {
+	usePageTitle("Sign up")
 	// where to land once the account exists, so an invitee opening a topic link comes back to it
 	const [searchParams] = useSearchParams()
 	const redirectPath = toSafeRedirectPath(searchParams.get("next"))
@@ -105,7 +107,7 @@ function VerifyEmailNotice({ email, redirectPath }: { email: string; redirectPat
 			<p className="text-muted-foreground mt-2 text-sm">
 				{`We sent a link to confirm ${email}. You don't have to click it now. You can start using CarlNotes right away.`}
 			</p>
-			{/* full navigation, not client-side: otherwise useSession keeps its cached signed-out state */}
+			{/* full navigation, not client-side. useSession otherwise keeps its cached signed-out state */}
 			<Button onClick={() => (window.location.href = redirectPath)} className="mt-6">
 				Continue to CarlNotes
 			</Button>

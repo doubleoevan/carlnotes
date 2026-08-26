@@ -1,5 +1,4 @@
-// how a stored Scan failure reads to a person, shared by the ui and the worker's emails so the two never describe the same failure differently
-// matches litellm's spend-limit rejection wherever it appears inside a stored scan error
+// how a stored Scan failure reads to a person, shared by the ui and the worker's emails
 const BUDGET_ERROR_PATTERN = /budget has been exceeded/i
 
 /**

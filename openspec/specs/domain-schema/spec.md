@@ -4,33 +4,46 @@
 TBD - created by archiving change add-domain-schema. Update Purpose after archive.
 ## Requirements
 ### Requirement: Canonical domain entities are persisted
-The schema SHALL define the canonical domain vocabulary as Drizzle tables: Topic, Source, Scan, Resource, Finding, Subscription, Audience, and Integration, plus a `users` table and an `audience_members` join. Entity names MUST be singular in code and plural as table names. No rejected term (Channel, Item, Update, Run, Crawl, Group, List, Cohort, Follow) SHALL be used as a domain entity, table, or type name. This scopes to domain nouns only — incidental substrings in standard column names (e.g. `updated_at`, `created_at`) are exempt.
+
+The schema SHALL define the domain vocabulary as Drizzle tables: Topic, Source, Scan, Resource, Finding, Subscription, Team, and Integration, plus a `users` table and the `team_members` and `team_topics` joins. Entity names MUST be singular in code and plural as table names. No rejected term (Channel, Item, Update, Run, Crawl, Group, List, Cohort, Follow, Org, Workspace) SHALL be used as a domain entity, table, or type name. This scopes to domain nouns only — incidental substrings in standard column names (e.g. `updated_at`, `created_at`) are exempt.
 
 #### Scenario: Schema type-checks and exposes every entity
+
 - **WHEN** `bunx tsc -b` runs against the repository
-- **THEN** `db/schema.ts` compiles and exports a Drizzle table for each of `topics`, `sources`, `scans`, `resources`, `findings`, `subscriptions`, `audiences`, `audience_members`, `integrations`, and `users`
+- **THEN** `db/schema.ts` compiles and exports a Drizzle table for each of `topics`, `sources`, `scans`, `resources`, `findings`, `subscriptions`, `teams`, `team_members`, `team_topics`, `integrations`, and `users`
 
 #### Scenario: No rejected domain noun appears
+
 - **WHEN** the schema's entity, table, and type names are inspected
 - **THEN** none is a rejected domain noun, and standard columns like `updated_at` are not flagged
 
 ### Requirement: Users table anchors ownership
+
 The schema SHALL define a `users` table shaped to Better Auth's current core columns (as documented by its Drizzle adapter) so Better Auth can adopt it at launch without a rewrite. Email MUST be unique.
 
 #### Scenario: A user owns records via foreign keys
-- **WHEN** a topic, audience, or integration row is created
+
+- **WHEN** a topic, team membership, or integration row is created
 - **THEN** its owner/user reference is a foreign key to `users.id`
 
 #### Scenario: Email is unique
+
 - **WHEN** two user rows are inserted with the same email
 - **THEN** the database rejects the second insert
 
 ### Requirement: Topic is the configuration and the authority anchor
-A Topic SHALL carry its name, context document, frequency, privacy level (public, invite, or private), and `owner_id` referencing `users`. Topic authority MUST be expressed only through `owner_id`, and no table may carry a role column or role enum standing for it. `users.role` is the one exception, holding the platform admin override, which is not a Topic authority.
+
+A Topic SHALL have its name, context document, frequency, privacy level (public, invite, or private), and `owner_id` referencing `users`. Topic authority MUST be expressed through `owner_id` and, where teams hold the Topic — the owning `team_id` and the `team_topics` shares — through the member roles on `team_members` — the one table that may hold a role column standing for Topic authority, and only as the gate's input. No other table may hold a role column or role enum for it. `users.role` remains the platform admin override, which is not a Topic authority.
 
 #### Scenario: Topic records its owner and privacy
+
 - **WHEN** a topic row is created
 - **THEN** it stores `owner_id`, a privacy value from {public, invite, private}, and a frequency value
+
+#### Scenario: Topic authority is ownership plus membership, through the gate
+
+- **WHEN** the schema is inspected
+- **THEN** Topic authority is expressed through `owner_id` and `team_members.role`, both consumed only by the gate, with `users.role` the platform admin exception
 
 #### Scenario: Topic authority is ownership, not a role
 - **WHEN** the schema is inspected
@@ -117,18 +130,18 @@ A topic's Feed SHALL be the set of Findings scoped to that Topic, resolved by qu
 - **THEN** there is no `feeds` table, and a topic's feed is obtained by selecting findings where `topic_id` matches
 
 ### Requirement: Subscription joins a subscriber to a Topic
-A Subscription SHALL reference a Topic and exactly one subscriber that is either a user or an Audience, and SHALL carry delivery preferences (frequency, digest). The exclusivity MUST be enforced by a database constraint.
 
-#### Scenario: Subscriber is a user xor an audience
-- **WHEN** a subscription row sets both a user subscriber and an audience subscriber, or neither
+A Subscription SHALL reference a Topic and a subscribing user, and SHALL include delivery preferences. `subscriber_user_id` SHALL be NOT NULL: a user is the only kind of subscriber, and a Team reaches a Topic through its members' own Subscription rows instead of through a subscriber of its own.
+
+#### Scenario: Every subscription names its user
+
+- **WHEN** a subscription row is written without a subscribing user
 - **THEN** the database rejects the row
 
-### Requirement: Audience is a named set of users that subscribes as one
-An Audience SHALL be owned by a user and have members joined through `audience_members`. Each `audience_members` row MUST reference both an `audiences` row and a `users` row.
+#### Scenario: Team delivery is per member
 
-#### Scenario: Members join an audience
-- **WHEN** a user is added to an audience
-- **THEN** an `audience_members` row references both the audience and the user
+- **WHEN** a Team holds a Topic
+- **THEN** each member's delivery is their own Subscription row, and no row subscribes the Team itself
 
 ### Requirement: Integration is a user's reusable connected account
 An Integration SHALL belong to a user and hold the connected-account grant and scopes, and MUST be referenceable by Sources (input) so a credential is connected once and reused.
@@ -257,17 +270,6 @@ The `users` table SHALL carry a nullable column recording the user's provisioned
 #### Scenario: Sign-in never reads Integration
 - **WHEN** a user authenticates via password or OAuth
 - **THEN** the session is established through Better Auth's `users`/`accounts`/`sessions` tables, and no `integrations` row is read or written
-
-### Requirement: Topic invites are rows keyed by topic and email
-The schema SHALL record invite-visibility access in a `topic_invites` table: `topic_id` referencing `topics` with cascade delete, the invited `email`, and an `invited_at` timestamp. `(topic_id, email)` SHALL be the composite primary key so re-inviting the same email is a no-op. Invites reference emails, not user rows, so a Topic can be shared with someone before they have an account. An invite row SHALL grant topic-page view access and stand as a pending subscription offer: a matching-email user with no subscription row on the Topic holds a pending invite, and no subscription exists until they accept. A Subscription row's `created_at` SHALL be its activation time — rows are created at self-subscribe or invite acceptance — and the invite-topic Finding visibility gate compares Scan start times against it.
-
-#### Scenario: An invite is unique per topic and email and follows its topic
-- **WHEN** the same email is invited to a Topic twice and the Topic is later deleted
-- **THEN** exactly one invite row existed for that pair, and deleting the Topic removed it
-
-#### Scenario: Pending needs no schema of its own
-- **WHEN** an invited email's user has no subscription row on the Topic
-- **THEN** that state is the pending invite, and accepting creates the subscription row whose `created_at` is the activation time
 
 ### Requirement: Scans carry a manual marker
 The `scans` table SHALL carry an `is_manual` boolean, not null, default false. Manually triggered Scans set it true, and scheduled and seeded Scans keep the default. The marker is bookkeeping that records which Scans an owner triggered. It is not a quota input: the per-user daily scan quota counts scheduled and manual runs alike.
@@ -487,7 +489,7 @@ The column SHALL be nullable rather than defaulted, because a default would make
 
 ### Requirement: Users carry a public username and an avatar source
 
-The `users` table SHALL carry `username` (text, unique without regard to case), `username_normalized` (text, the comparison form the unique index is built on), `avatar_source` (enum of `generated`, `oauth`, `upload`, default `generated`), and `avatar_key` (text, nullable). Both name columns SHALL be NOT NULL, since the name is drawn inside the signup insert and no row may exist without one.
+The `users` table SHALL include `username` (text), `username_normalized` (text, the comparison form), `avatar_source` (enum of `generated`, `oauth`, `upload`, default `generated`), and `avatar_key` (text, nullable). Both name columns SHALL be NOT NULL, since the name is drawn inside the signup insert and no row may exist without one. Uniqueness SHALL be enforced by a unique index on `users.username_normalized`.
 
 `avatar_key` SHALL hold the object-storage key and SHALL be null unless `avatar_source` is `upload`. The provider photo is resolved from the user's email address and stores nothing, so it needs no key.
 
@@ -496,9 +498,9 @@ Better Auth's existing `users.image` SHALL be left as it is. It stays a private 
 #### Scenario: A username is unique regardless of case
 
 - **WHEN** two users would hold usernames differing only by case
-- **THEN** the database refuses the second
+- **THEN** the unique index on `users.username_normalized` rejects the second
 
-#### Scenario: Only an upload carries a key
+#### Scenario: Only an upload has a key
 
 - **WHEN** a user's `avatar_source` is `generated` or `oauth`
 - **THEN** their `avatar_key` is null
@@ -508,21 +510,10 @@ Better Auth's existing `users.image` SHALL be left as it is. It stays a private 
 - **WHEN** the migration runs
 - **THEN** `users.image` keeps its existing shape and meaning
 
-### Requirement: Topic carries a denormalised subscriber count
+#### Scenario: Only an upload carries a key
 
-The `topics` table SHALL carry `subscriber_count` (integer, default zero), holding the number of effective subscribers to that Topic — direct subscribers and audience-inherited members, never the owner's own subscription.
-
-It SHALL be maintained by the write paths that change it rather than recomputed on read, and it is the column the public follower count and the popular ranking both read.
-
-#### Scenario: The column defaults to zero
-
-- **WHEN** a Topic is created
-- **THEN** its `subscriber_count` is zero
-
-#### Scenario: The count excludes the owner
-
-- **WHEN** a Topic's owner holds their own subscription row
-- **THEN** it is not reflected in `subscriber_count`
+- **WHEN** a user's `avatar_source` is `generated` or `oauth`
+- **THEN** their `avatar_key` is null
 
 ### Requirement: The change includes the social identity migration and the count backfill
 
@@ -567,4 +558,104 @@ The change SHALL include a generated Drizzle migration that adds `podcast` to th
 
 - **WHEN** the migration runs against a database at the current schema
 - **THEN** `source_kind` accepts `podcast`, `resources.transcript_url` exists and is null on every existing row, and no other table is altered
+
+### Requirement: Invites are token rows targeting a Topic or a Team
+
+The schema SHALL record invite access in an `invites` table: its own `id` as the primary key, a nullable `topic_id` referencing `topics` with cascade delete, a nullable `team_id` referencing `teams` with cascade delete, a unique `token`, a nullable `email`, a nullable `invited_user_id` referencing `users` with cascade delete, a nullable `invited_by_user_id` referencing `users` with set-null delete, `max_uses`, `used_count`, a nullable `expires_at`, a nullable `revoked_at`, a nullable `declined_at`, and an `invited_at` timestamp. A check SHALL require exactly one target set. The email records which identifier the sender used and the invited user its resolved recipient, so a resolved email invite holds both, each creation path sets its own column, and a link invite holds neither. `(topic_id, email)`, `(team_id, email)`, `(topic_id, invited_user_id)`, and `(team_id, invited_user_id)` SHALL each keep a unique index so re-inviting the same address or person is a no-op, across modes included, and because Postgres treats nulls as distinct, any number of link rows coexist under them.
+
+An invite row is one grant reached three ways. An email invite SHALL have its address and a `max_uses` of one, and when that address already belongs to an account, `invited_user_id` SHALL name it too. A username invite SHALL have the invited user and a `max_uses` of one, and never an address. A link invite SHALL have neither and a limited `max_uses`, and whoever holds its token may accept it until the uses are spent, the expiry passes, or `revoked_at` is set. `invited_by_user_id` is nullable for the rows that predate tokens, and its set-null delete means closing a sender's account leaves the invitation standing with no sender. `declined_at` records a recipient turning an invitation down, kept instead of deleted so sender reputation can be measured.
+
+Invites reference what the sender knew: an email for someone who may hold no account, a user for someone named by username. A topic invite SHALL grant topic-page view access and stand as a pending subscription offer, with no subscription until acceptance or acceptance. A Subscription row's `created_at` SHALL be its activation time — rows are created at self-subscribe, invite acceptance, token acceptance, or team join — and the invite-topic Finding visibility gate compares Scan start times against it. A team invite SHALL grant membership on acceptance or acceptance, as the teams capability specifies.
+
+#### Scenario: An address is unique per topic and an invite follows its topic
+
+- **WHEN** the same email is invited to a Topic twice and the Topic is later deleted
+- **THEN** exactly one invite row existed for that address and Topic, and deleting the Topic removed every invite on it
+
+#### Scenario: Many link invites coexist on one topic
+
+- **WHEN** several address-free invites are created for the same Topic
+- **THEN** every one is stored, because the unique index on the topic and address pair treats their null addresses as distinct
+
+#### Scenario: Pending needs no schema of its own
+
+- **WHEN** an invited email's user has no subscription row on the Topic
+- **THEN** that state is the pending invite, and accepting creates the subscription row whose `created_at` is the activation time
+
+#### Scenario: An invite has exactly one target
+
+- **WHEN** an invite row sets both a Topic and a Team, or neither
+- **THEN** the database rejects the row
+
+#### Scenario: Re-inviting a person is a no-op in either mode
+
+- **WHEN** the same account is invited to one Topic twice, whether by username both times or by username after a resolved email invite
+- **THEN** exactly one invite row exists for that person and Topic, enforced by the unique index on the target and invited user
+
+#### Scenario: A accepted token is spent against its limit
+
+- **WHEN** a token is accepted
+- **THEN** its `used_count` increases, and a token whose count has reached its `max_uses` no longer accepts
+
+#### Scenario: Visibility gains no link value
+
+- **WHEN** the schema is inspected after link and team invites ship
+- **THEN** `topics.visibility` still holds only public, invite, and private, because what a link grants is recorded on the invite row, not on the Topic
+
+### Requirement: Topic includes a denormalised subscriber count
+
+The `topics` table SHALL include `subscriber_count` (integer, default zero), holding the number of the Topic's subscribers — every active subscribing user, never the owner's own subscription.
+
+It SHALL be maintained by the write paths that change it instead of recomputed on read, and it is the column the public follower count and the popular ranking both read.
+
+#### Scenario: The column defaults to zero
+
+- **WHEN** a Topic is created
+- **THEN** its `subscriber_count` is zero
+
+#### Scenario: The count excludes the owner
+
+- **WHEN** a Topic's owner holds their own subscription row
+- **THEN** it is not reflected in `subscriber_count`
+
+### Requirement: Room messages are an ordered, encrypted log
+
+A room message table SHALL include an ordered bigint identity id (the SSE cursor needs ordering a uuid cannot give), the Topic, the holding team as a NOT NULL `team_id` — each holding team's room keeps its own log — a nullable author reference cleared when the account closes, the author name recorded at post time (Carl's rows record his name with no account reference), a nullable reply reference to a prior message, encrypted content using the chat text helper, and created_at. A companion table SHALL hold one running summary per room, its primary key the `(topic_id, team_id)` pair that names the room, with the message id it is summarized through. The room attachments table SHALL name its team the same way, NOT NULL.
+
+#### Scenario: Ids order the log
+
+- **WHEN** messages are written concurrently
+- **THEN** their ids give one total order a cursor can resume from
+
+#### Scenario: Attribution survives the author
+
+- **WHEN** an author's account closes
+- **THEN** the message keeps the recorded name with the account reference cleared, and never reads as Carl's
+
+### Requirement: Signal capture columns and tables exist and stay inert
+
+`findings` SHALL gain nullable `rated_by_user_id`, `rated_team_id`, and `rated_role`, written when a rating is cast and cleared with it. A feedback table SHALL store verbatim text against a Finding, its Topic, and its author. A view-event table SHALL record per-user opens and dismissals. No read path in scoring, ranking, retrieval, or the feed SHALL touch any of them.
+
+#### Scenario: The captures write and nothing reads them
+
+- **WHEN** ratings, feedback, and view events accumulate
+- **THEN** the rows exist as specified and no query outside their own writes selects them
+
+### Requirement: The change includes the teams migrations
+
+The change SHALL include generated migrations that, in order: add the unique index on `users.username_normalized`; create `teams` with its caseless unique name index, `team_members`, `topics.team_id` for the owning team, and the `team_topics` share join — team, topic, and created_at, a primary key on the pair, and an index on the topic; drop the audiences scaffolding and make `subscriber_user_id` NOT NULL; rename the invites table with its target columns and checks; add the signal capture columns and tables; and create the room tables with their NOT NULL `team_id` columns. Applying them to a database at the current schema MUST succeed without altering any other table.
+
+#### Scenario: No deploy window lacks usernames
+
+- **WHEN** the usernames migration completes
+- **THEN** every existing user already holds a username row, backfilled inside the same migration
+
+### Requirement: Users carry a invite-access setting
+
+The `users` table SHALL have a `invite_access` column with the values anyone, connected, and nobody, not null, defaulting to anyone. It gates nothing but invite creation, and the Account page's settings read and write it.
+
+#### Scenario: The default is open
+
+- **WHEN** an account is created
+- **THEN** its invite-access value is anyone, so invitations work without setup
 

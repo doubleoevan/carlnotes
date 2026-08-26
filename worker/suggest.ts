@@ -1,5 +1,4 @@
-// proposes Sources a Topic could follow, read from its own title, prompt, and attachments.
-// every proposal is fetched the way its ingester will fetch it before the user sees it, so nothing the model invented reaches the editor
+// proposes Sources a Topic could follow, read from its own title, prompt, and attachments
 import { customSourceKeys, toGoogleNewsPublisherFeedUrl, toPublisherDomain } from "@shared/sources"
 import { generateText, Output } from "ai"
 import { z } from "zod"
@@ -15,17 +14,17 @@ import { fetchPromptTemplate, promptTelemetry } from "./prompts/fetch"
 import { writePrompt } from "./prompts/write"
 import { fetchPublicUrl } from "./scrape"
 
-// one suggested Source: the custom source option it is added through, and its value.
-// name is the display name resolution learned, a show's title or a channel's handle, and is absent when it learned none
+// one suggested Source: the custom source option it is added through, and its value
 export type SuggestedSource = { sourceOption: (typeof customSourceKeys)[number]; value: string; name?: string }
 
-// what one suggestion request reads. excludeSources are sources that the editor already holds, staged and stored alike
+// what one suggestion request reads
 export type SuggestionContext = {
 	name: string
 	prompt: string
 	attachmentContext: string
 	excludeSources: SuggestedSource[]
 	limit: number
+	litellmApiKey?: string
 }
 
 // how much of the topic's own text reaches the model, so a very long prompt cannot inflate the model call
@@ -34,11 +33,10 @@ const MAX_CONTEXT_CHARS = 4000
 // how long a verification fetch may run. a slow suggested source is dropped instead of holding up the reply
 const VERIFY_TIMEOUT_MS = 8000
 
-// how many extra sources to ask for beyond what the topic can hold,
-// so that filtered suggestions do not leave the user with an empty list
+// how many extra sources to ask for beyond what the topic can hold
 const SUGGESTION_HEADROOM = 3
 
-// the model's answer. every field is required, so a candidate missing its value is filtered out
+// the model's answer. every field is required, so a namedSource missing its value is filtered out
 const suggestionSchema = z.object({
 	sources: z.array(z.object({ sourceOption: z.enum(customSourceKeys), value: z.string() })),
 })
@@ -60,17 +58,16 @@ export async function suggestSources(suggestionContext: SuggestionContext): Prom
 	const resolvedSources = await Promise.all(suggestedSources.map(toResolvedSource))
 	const namedSources = resolvedSources.filter((source) => source !== null)
 
-	// drop what the topic already follows before wasting a fetch to confirm it. each kept candidate excludes
-	// its own key too, so two suggestions resolving onto one source collapse to the first
+	// drop what the topic already follows before wasting a fetch to confirm it
 	const excludedKeys = new Set(suggestionContext.excludeSources.map(toSourceKey))
-	const filteredSources = namedSources.filter((candidate) => {
-		const candidateKey = toSourceKey(candidate)
-		if (excludedKeys.has(candidateKey)) {
+	const filteredSources = namedSources.filter((namedSource) => {
+		const sourceKey = toSourceKey(namedSource)
+		if (excludedKeys.has(sourceKey)) {
 			return false
 		}
 
-		// new key, so this candidate stays and any later duplicate of it is dropped
-		excludedKeys.add(candidateKey)
+		// new key, so this namedSource stays and any later duplicate of it is dropped
+		excludedKeys.add(sourceKey)
 		return true
 	})
 
@@ -80,11 +77,9 @@ export async function suggestSources(suggestionContext: SuggestionContext): Prom
 	return readableSources.slice(0, suggestionContext.limit)
 }
 
-// the suggestion as its ingester will store it. YouTube and podcast are the kinds that need resolving, because a
-// channel is known by its handle and a show by its name, while both are stored by an id. every other kind is
-// already written the way that it is read
+// the suggestion as its ingester will store it
 async function toResolvedSource(suggestedSource: SuggestedSource): Promise<SuggestedSource | null> {
-	// a value naming no channel or playlist is dropped, since there is nothing to store or to fetch
+	// a value naming no channel or playlist is dropped
 	if (suggestedSource.sourceOption === "youtube") {
 		const youtubeId = await toYoutubeSourceId(suggestedSource.value)
 
@@ -94,13 +89,12 @@ async function toResolvedSource(suggestedSource: SuggestedSource): Promise<Sugge
 			return null
 		}
 
-		// a handle is what the channel is called, so it stands in as the name until a scan stores the real title
-		const handle = suggestedSource.value.trim()
-		return { ...suggestedSource, value: youtubeId, name: handle.startsWith("@") ? handle : undefined }
+		// a username is what the channel is called, so it stands in as the name until a scan stores the real title
+		const username = suggestedSource.value.trim()
+		return { ...suggestedSource, value: youtubeId, name: username.startsWith("@") ? username : undefined }
 	}
 
-	// a show is suggested by name, since a podcast id is a number a model would invent instead of know.
-	// searching iTunes for that name both checks that it exists and yields the id a podcast Source stores
+	// a show is suggested by name
 	if (suggestedSource.sourceOption === "podcast") {
 		const [podcast] = await searchPodcasts(suggestedSource.value).catch(() => [])
 		if (!podcast?.feedUrl) {
@@ -119,8 +113,7 @@ async function toResolvedSource(suggestedSource: SuggestedSource): Promise<Sugge
  * so a topic already following a publication is not offered a second feed from it under a different path.
  */
 export function toSourceKey(source: SuggestedSource): string {
-	// a subreddit reads the same no matter how it was written, and a YouTube id is exact.
-	// a name the ingester would reject keys to itself, so it still dedupes before being dropped as unreadable
+	// a subreddit reads the same no matter how it was written, and a YouTube id is exact
 	if (source.sourceOption === "reddit") {
 		return `reddit:${(toSubredditName(source.value) ?? source.value).toLowerCase()}`
 	}
@@ -128,8 +121,7 @@ export function toSourceKey(source: SuggestedSource): string {
 		return `youtube:${source.value}`
 	}
 
-	// a show is identified by its podcast id, which is exact. a suggestion is keyed by its show name
-	// until iTunes resolves it, so a name and the id it becomes are two different keys on purpose
+	// a show is identified by its podcast id, which is exact
 	if (source.sourceOption === "podcast") {
 		return `podcast:${source.value.trim().toLowerCase()}`
 	}
@@ -139,13 +131,12 @@ export function toSourceKey(source: SuggestedSource): string {
 		return `rss:${toPublisherDomain(source.value) ?? source.value.trim().toLowerCase()}`
 	}
 
-	// a bluesky account is named by its handle, which is a domain name and reads the same in any case.
-	// it is keyed apart from a feed so that following a publication's site and its account are not read as the same source
+	// a bluesky account is named by its username, which is a domain name and reads the same in any case
 	if (source.sourceOption === "bluesky") {
 		return `bluesky:${source.value.replace(/^@/, "").toLowerCase()}`
 	}
 
-	// an x handle is case-insensitive, and people write it with or without its @
+	// an x username is case-insensitive, and people write it with or without its @
 	if (source.sourceOption === "x") {
 		return `x:${source.value.replace(/^@/, "").toLowerCase()}`
 	}
@@ -162,7 +153,7 @@ export function toSourceKey(source: SuggestedSource): string {
  * The topic's own words for the model to read: its title, its prompt, and what its attachments say.
  */
 export function toTopicContext(suggestionContext: SuggestionContext): string {
-	// the attachment context is included, since what the owner uploaded says as much about the topic as the prompt
+	// the attachment context is included, which says as much about the topic as the prompt
 	const attachedWords = suggestionContext.attachmentContext
 		? `\n\nFrom the reader's attachments:\n${suggestionContext.attachmentContext}`
 		: ""
@@ -192,7 +183,7 @@ async function generateSourceSuggestions(suggestionContext: SuggestionContext): 
 	// a model that fails suggests nothing, which the editor reports as nothing found
 	try {
 		const { output } = await generateText({
-			model: cheapModel(),
+			model: cheapModel(suggestionContext.litellmApiKey),
 			output: Output.object({ schema: suggestionSchema }),
 			prompt: builtPrompt.prompt,
 			...promptTelemetry(builtPrompt),
@@ -204,15 +195,19 @@ async function generateSourceSuggestions(suggestionContext: SuggestionContext): 
 	}
 }
 
-// whether a candidate can actually be read, fetched the way its own ingester reads it.
-// a source the host says is not there is dropped. one the host would not answer for is kept
+// whether a namedSource can actually be read, fetched the way its own ingester reads it
 async function isReadable(suggestedSource: SuggestedSource): Promise<boolean> {
 	try {
-		await readSuggestedSource(suggestedSource)
+		// a host that hangs counts as temporarily unconfirmed instead of holding the response open
+		await Promise.race([
+			readSuggestedSource(suggestedSource),
+			new Promise((_, reject) =>
+				setTimeout(() => reject(new DOMException("verification timed out", "TimeoutError")), VERIFY_TIMEOUT_MS),
+			),
+		])
 		return true
 	} catch (error) {
-		// a rate limit or a server error is the host saying "not now", not "no such source".
-		// reddit throttles its keyless feed hard, so treating that as unreadable would discard subreddits that do exist.
+		// a rate limit or a server error is the host saying "not now", not "no such source"
 		if (isTemporaryFailure(error, suggestedSource.sourceOption)) {
 			console.log(`kept a ${suggestedSource.sourceOption} suggestion the host would not confirm: ${String(error)}`)
 			return true
@@ -231,20 +226,16 @@ export function isTemporaryFailure(error: unknown, sourceOption: SuggestedSource
 		return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
 	}
 
-	// reddit returns 403 to every request from an IP range it blocks, so where a deployment is blocked, it rejects subreddits that exist.
-	// a subreddit that is not there returns 404 instead, so reading 403 as "not now" keeps a real subreddit without letting an invented one through
+	// reddit returns 403 to every request from an IP range it blocks
 	if (sourceOption === "reddit" && error.status === 403) {
 		return true
 	}
 	return error.status === 429 || error.status >= 500
 }
 
-// read the suggested source through the same helper its ingester uses, so a confirmed suggestion is one that will ingest.
-// a podcast needs nothing here: resolving its name already proved iTunes knows the show and that it publishes a feed
+// read the suggested source through the same helper its ingester uses
 async function readSuggestedSource(suggestedSource: SuggestedSource): Promise<void> {
-	// a subreddit is confirmed through the keyless feed the reddit ingester falls back to.
-	// a name that reddit would not accept is refused here instead of fetched,
-	// so a suggestion that could never ingest is dropped instead of being kept on a throttled host's silence
+	// a subreddit is confirmed through the keyless feed the reddit ingester falls back to
 	if (suggestedSource.sourceOption === "reddit") {
 		const subreddit = toSubredditName(suggestedSource.value)
 		if (!subreddit) {
@@ -272,10 +263,10 @@ async function readSuggestedSource(suggestedSource: SuggestedSource): Promise<vo
 			throw new Error(`a google news suggestion named no publisher domain: ${suggestedSource.value}`)
 		}
 
-		// Google answers for a publisher it never heard of with an empty feed, so an empty one is a publisher that isn't there
+		// Google returns an empty feed for a publisher it never heard of, so an empty one is a publisher that isn't there
 		const publisherArticles = await fetchFeed(publisherFeedUrl)
 		if (publisherArticles.length === 0) {
-			throw new Error(`google news carries nothing from ${suggestedSource.value}`)
+			throw new Error(`google news has nothing from ${suggestedSource.value}`)
 		}
 		return
 	}
@@ -286,21 +277,19 @@ async function readSuggestedSource(suggestedSource: SuggestedSource): Promise<vo
 		return
 	}
 
-	// a bluesky account is confirmed through the same keyless appview its ingester uses, asking for one post.
-	// a model inventing a plausible handle is the failure this catches, since the appview refuses one that does not exist
+	// a bluesky account is confirmed through the same keyless appview its ingester uses, asking for one post
 	if (suggestedSource.sourceOption === "bluesky") {
 		await fetchAuthorFeed(suggestedSource.value.replace(/^@/, ""), 1)
 		return
 	}
 
-	// an x handle is confirmed by looking the account up instead of reading its tweets,
-	// so an account that posts rarely is not mistaken for one that does not exist
+	// an x username is confirmed by looking the account up instead of reading its tweets
 	if (suggestedSource.sourceOption === "x") {
 		await readHandle(suggestedSource.value)
 		return
 	}
 
-	// a page only has to answer. the scan can read its content later, so a throttled host does not read as a page that isn't there
+	// a page only has to answer
 	const response = await fetchPublicUrl(suggestedSource.value, { signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS) })
 	if (!response.ok) {
 		throw new FeedStatusError(suggestedSource.value, response.status)

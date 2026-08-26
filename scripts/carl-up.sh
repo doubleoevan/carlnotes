@@ -70,7 +70,7 @@ fi
 # start docker desktop if the daemon is down, wait until it answers
 if ! docker info >/dev/null 2>&1; then
   open -a Docker
-  # bail after ~60s rather than hang forever if Docker never comes up
+  # bail after ~60s instead of hanging forever if Docker never comes up
   for _ in $(seq 30); do docker info >/dev/null 2>&1 && break; sleep 2; done
   docker info >/dev/null 2>&1 || { echo "docker did not start within 60s: open Docker Desktop and retry" >&2; exit 1; }
 fi
@@ -79,7 +79,7 @@ fi
 $COMPOSE up -d
 
 # wait for temporal to accept connections: compose returns once the container is created, well before the server binds 7233
-# without this, the worker started right after carl-up races the server and dies on a refused connection
+# without this, the worker started right after carl-up races the server and dies on ECONNREFUSED
 for _ in $(seq 30); do nc -z localhost 7233 >/dev/null 2>&1 && break; sleep 1; done
 nc -z localhost 7233 >/dev/null 2>&1 || { echo "temporal did not bind 7233 within 30s: check 'docker compose logs temporal'" >&2; exit 1; }
 

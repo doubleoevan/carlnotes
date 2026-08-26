@@ -1,14 +1,9 @@
-// prompt templates are Markdown files in this directory with YAML frontmatter for humans and a {{variable}} body for the model
-// writing a prompt strips the frontmatter and template comments, then replaces each {{variable}} with its runtime value
-//
-// the first variable map is untrusted and gets wrapped in a delimiter, so that page content, uploaded documents, and topic text
-// read as data instead of as instructions. the second map is the app's own numbers and dates
+// prompt templates are Markdown files in this directory with YAML frontmatter for humans and a {{variable}}
 
-// the frontmatter block at the top of every template. documentation only, never parsed at runtime.
-// exported so that sync.ts can read individual fields from it without re-typing this pattern
+// the frontmatter block at the top of every template
 export const FRONTMATTER_PATTERN = /^---\r?\n[\s\S]*?\r?\n---\r?\n/
 
-// author-facing template comments, like the premium-tier markers. they never reach the model
+// author-facing template comments. they never reach the model
 const TEMPLATE_COMMENT_PATTERN = /<!--[\s\S]*?-->\r?\n?/g
 
 // the premium-tier span with its markers and wording. not added to the prompt for the cheap tier
@@ -52,9 +47,7 @@ export function writePrompt(
 		return values[name]
 	})
 
-	// a placeholder the caller has no value for means the template and the code that fills it have drifted apart,
-	// which a registry holding an older template is enough to cause. it throws instead of sending the model a
-	// prompt with a hole in it, since what comes back reads as a real answer about whatever the hole left out
+	// a placeholder the caller has no value for means the template and the code that fills it have drifted apart
 	if (unfilledNames.length > 0) {
 		throw new Error(
 			`prompt template has no value for ${unfilledNames.join(", ")}. the caller passed ${Object.keys(values).sort().join(", ")}`,

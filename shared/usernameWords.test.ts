@@ -29,7 +29,6 @@ test("no username noun collides with the domain vocabulary", () => {
 		"Finding",
 		"Feed",
 		"Subscription",
-		"Audience",
 		"Integration",
 		"Bookmark",
 	])

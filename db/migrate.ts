@@ -1,5 +1,4 @@
-// applies every pending migration in db/migrations, then exits. run it as a deploy job, never from the container's
-// start command, which would race once the service scales past one instance
+// applies every pending migration in db/migrations, then exits
 import { join } from "node:path"
 import { migrate } from "drizzle-orm/neon-serverless/migrator"
 import { connectionPool, db } from "./index"

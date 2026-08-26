@@ -1,37 +1,53 @@
 import { ArrowUpDown, Check, Clock, Flame, type LucideIcon, Target } from "lucide-react"
 import { useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { FINDING_SORTS, type FindingSort, MENU_BUTTON_CLASS } from "@/lib/utils"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
+import { TOPIC_FINDING_SORTS, type TopicFindingSort } from "@/lib/topicFindingSorts"
+import { useTopicFeed } from "@/providers/TopicFeedProvider"
 
 // each sort mode's display label and icon
-const SORT_ROWS: Record<FindingSort, { label: string; Icon: LucideIcon }> = {
+const SORT_OPTIONS: Record<TopicFindingSort, { label: string; Icon: LucideIcon }> = {
 	relevant: { label: "Relevance", Icon: Target },
 	newest: { label: "Newest", Icon: Clock },
 	trending: { label: "Trending", Icon: Flame },
 }
 
 /**
- * The Sort menu: a button matching the Tag Filters control, opening the relevant / newest / trending modes.
- * Picking a mode closes the menu, since exactly one mode is ever active.
+ * The Sort menu at the end of the search bar, beside Filters: the relevant / newest / trending modes.
+ * Selecting a mode closes the menu, and exactly one mode is ever active.
  */
-export function TopicFeedSort({ sort, onChange }: { sort: FindingSort; onChange: (sort: FindingSort) => void }) {
+export function TopicFeedSort() {
+	// the sort lives in the topic feed context, shared by the home page and the topic page
+	const { sort, setSort, hasTopicFeed } = useTopicFeed()
 	const [isOpen, setIsOpen] = useState(false)
+	// a page with no findings has nothing to order, so the control leaves the bar rather than sitting inert
+	if (!hasTopicFeed) {
+		return null
+	}
 	return (
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
-			<PopoverTrigger className={MENU_BUTTON_CLASS}>
-				<ArrowUpDown className="size-4" />
-				Sort
-			</PopoverTrigger>
-			<PopoverContent align="start" className="w-40 p-1">
+			<Tooltip>
+				{/* the span keeps the tooltip and the popover from both writing the trigger's state */}
+				<TooltipTrigger asChild>
+					<span className="inline-flex">
+						<PopoverTrigger className={SEARCH_BAR_ICON_CLASS} aria-label="Sort">
+							<ArrowUpDown className="size-4" />
+						</PopoverTrigger>
+					</span>
+				</TooltipTrigger>
+				<TooltipContent>Sort</TooltipContent>
+			</Tooltip>
+			<PopoverContent align="end" sideOffset={13} className="w-40 p-1">
 				{/* one row per sort mode with a check on the active one */}
-				{FINDING_SORTS.map((sortOption) => {
-					const { label, Icon } = SORT_ROWS[sortOption]
+				{TOPIC_FINDING_SORTS.map((sortOption) => {
+					const { label, Icon } = SORT_OPTIONS[sortOption]
 					return (
 						<button
 							key={sortOption}
 							type="button"
 							onClick={() => {
-								onChange(sortOption)
+								setSort(sortOption)
 								setIsOpen(false)
 							}}
 							aria-pressed={sortOption === sort}

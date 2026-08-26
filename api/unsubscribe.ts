@@ -1,10 +1,9 @@
-// the one-click unsubscribe target for the topic-scan email. the token in the link is the auth: it is verified, the
-// recipient's direct subscription is deactivated, and the topic is looked up so the confirmation page can name it and link to it
+// the one-click unsubscribe target for the topic-scan email
 import { and, eq } from "drizzle-orm"
 import { db } from "../db"
 import { subscriptions, topics } from "../db/schema"
 import { verifyUnsubscribeToken } from "../worker"
-import { recountTopicSubscribers } from "./topic/subscriberCounts"
+import { updateTopicSubscriberCount } from "./topic/subscriberCounts"
 
 /**
  * Verifies the token, deactivates the recipient's direct subscription, and returns the unsubscribed topic (null when the token is bad).
@@ -16,9 +15,7 @@ export async function unsubscribe(unsubscribeToken: string | undefined): Promise
 		return null
 	}
 
-	// deactivate the user's direct subscription and turn its emails off, keeping the row.
-	// an audience-only subscriber has no direct row, so this does not reach them
-	// update the denormalized subscriber count in the topics table
+	// deactivate the subscription and turn its emails off, keeping the row, then update the denormalized subscriber
 	await db.transaction(async (transaction) => {
 		await transaction
 			.update(subscriptions)
@@ -29,7 +26,7 @@ export async function unsubscribe(unsubscribeToken: string | undefined): Promise
 					eq(subscriptions.subscriberUserId, unsubscribePayload.userId),
 				),
 			)
-		await recountTopicSubscribers(unsubscribePayload.topicId, transaction)
+		await updateTopicSubscriberCount(unsubscribePayload.topicId, transaction)
 	})
 
 	// the topic id and name for the confirmation page, falling back when the topic has since been deleted
@@ -61,13 +58,12 @@ export function invalidUnsubscribePage(appUrl?: string): string {
 	`)
 }
 
-// a link to the url with the given label, rendered only when the url is known. escaped so a topic name or url can't break the markup
+// a link to the url with the given label, rendered only when the url is known
 function backLink(url: string | undefined, label: string): string {
 	return url ? `<p class="back"><a href="${Bun.escapeHTML(url)}">${Bun.escapeHTML(label)}</a></p>` : ""
 }
 
-// TODO: redirect to a page in the app instead. this palette is a third copy of one already in the ui and the email template
-// the served page's css: a centered, coffee-toned card
+// TODO: redirect to a page in the app instead
 const PAGE_STYLE = `
 	body { margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
 	       background:#f4f1ea; color:#2b2b2b; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif }
@@ -82,7 +78,7 @@ const PAGE_STYLE = `
 	a     { color:#7c4a1e }
 `
 
-// a served web page can use a style block, unlike an email. the card carries the CarlNotes mark and the page content
+// a served web page can use a style block, unlike an email. the card holds the CarlNotes mark and the page content
 function renderPage(cardContent: string): string {
 	return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>CarlNotes</title><style>${PAGE_STYLE}</style></head><body><div class="card"><div class="mark">☕ CarlNotes</div>${cardContent}</div></body></html>`
 }

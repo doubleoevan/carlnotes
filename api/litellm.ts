@@ -1,16 +1,13 @@
-// the LiteLLM proxy admin api: minting per-user virtual keys, retiring them, and reading their spend.
-// callers pass a budget in cents and this module converts to the proxy's dollars
+// the LiteLLM proxy admin api: creating per-user virtual keys, retiring them, and reading their spend
 
-// a 30-day budget resets on the 1st of every month at midnight utc, which is the calendar month the app
-// reports spend against everywhere else. it is not a rolling window counted from the key's own creation
+// a 30-day budget resets on the 1st of every month at midnight utc
 const LITELLM_BUDGET_DURATION = "30d"
 
 /**
- * Mint a budgeted virtual key for a user. budgetCents is their effective monthly limit.
+ * Create a budgeted virtual key for a user. budgetCents is their effective monthly limit.
  */
 export async function provisionLiteLLMKey(email: string, budgetCents: number): Promise<string> {
-	// ask the proxy to mint a budgeted key aliased to the user's email. the alias carries the mint time too,
-	// since replacing a key mints the new one while the old still exists and an alias may only be used once
+	// ask the proxy to create a budgeted key aliased to the user's email and the creation time
 	const { baseURL, masterKey } = litellmConfig()
 	const response = await fetch(`${baseURL}/key/generate`, {
 		method: "POST",

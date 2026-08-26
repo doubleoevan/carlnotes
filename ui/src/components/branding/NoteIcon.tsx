@@ -2,7 +2,7 @@ import { NotebookPen } from "lucide-react"
 import { cn } from "@/lib/utils"
 
 /**
- * The pen-on-a-notebook tile every "a note from Carl" control shows.
+ * The pen-on-a-notebook tile that everything labeled "a note from Carl" shows.
  */
 export function NoteIcon({ className }: { className?: string }) {
 	return (

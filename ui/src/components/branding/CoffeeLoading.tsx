@@ -2,8 +2,8 @@ import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { cn } from "@/lib/utils"
 
 /**
- * The loading state: a steaming coffee mug next to "Loading…". It fills half the viewport for a page
- * with a className shortens it for a smaller surface.
+ * The loading state: a steaming coffee mug next to "Steeping…". It fills half the viewport for a page,
+ * and a className shortens it for a smaller surface.
  */
 export function CoffeeLoading({ className }: { className?: string }) {
 	return (
@@ -14,7 +14,7 @@ export function CoffeeLoading({ className }: { className?: string }) {
 			)}
 		>
 			<CoffeeMug className="size-5" />
-			Loading…
+			Steeping…
 		</div>
 	)
 }

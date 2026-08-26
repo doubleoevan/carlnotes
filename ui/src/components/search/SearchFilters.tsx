@@ -1,15 +1,38 @@
 import { resourceKinds as allResourceKinds } from "@shared/enums"
-import { Check, CircleUserRound, FileText, Hash, type LucideIcon, SlidersHorizontal } from "lucide-react"
-import { useState } from "react"
+import {
+	Ban,
+	Blend,
+	Check,
+	CircleUserRound,
+	CircleX,
+	FileText,
+	Hash,
+	type LucideIcon,
+	SlidersHorizontal,
+	Target,
+	Users,
+} from "lucide-react"
+import { Fragment, useState } from "react"
+import { authClient } from "@/clients/authClient"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { authClient } from "@/lib/authClient"
-import { FEED_VIEWS, RESOURCE_KIND_ICON } from "@/lib/utils"
-import { type ResourceKind, useTopicFeed } from "@/providers/TopicFeedProvider"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
+import { TOPIC_FINDING_FILTERS } from "@/lib/topicFindingFilters"
+import { RESOURCE_KIND_ICON } from "@/lib/utils"
+import { type ResourceKind, type TagMatchMode, tagMatchModes, useTopicFeed } from "@/providers/TopicFeedProvider"
+import { usePageActions } from "@/stores/pageActionsStore"
 
-// which kinds of result the typeahead offers, all on until the user turns one off. these narrow the dropdown
-// only: topics and findings also answer to the feed's own filters, and a profile never appears in the feed at all
-export const SEARCH_RESULT_TYPES = ["topics", "profiles", "findings"] as const
+// which kinds of results the typeahead offers, all on until the user turns one off
+export const SEARCH_RESULT_TYPES = ["topics", "findings", "teams", "users"] as const
 export type SearchResultType = (typeof SEARCH_RESULT_TYPES)[number]
+
+// how the selected tags narrow the feed, one mode at a time
+const TAG_MATCH_OPTIONS: Record<TagMatchMode, { label: string; Icon: LucideIcon }> = {
+	any: { label: "Any Match", Icon: Blend },
+	all: { label: "All Match", Icon: Target },
+	none: { label: "Exclude Tags", Icon: Ban },
+	off: { label: "Off", Icon: CircleX },
+}
 
 /**
  * The Filters dropdown at the end of the search bar.
@@ -24,51 +47,117 @@ export function SearchFilters({
 	searchResultTypes: Set<SearchResultType>
 	onToggleSearchResultType: (resultType: SearchResultType) => void
 }) {
-	// the view and resource kind filters live in the topic feed context, shared by the home page and the topic page
-	const { resourceKinds, toggleResourceKind, view, setView } = useTopicFeed()
+	// the finding, resource kind, and tag filters live in the topic feed context, shared by the home page and the topic page
+	const {
+		resourceKinds,
+		toggleResourceKind,
+		findingFilter,
+		setFindingFilter,
+		tagMatchMode,
+		setTagMatchMode,
+		bookmarkScope,
+		setBookmarkScope,
+		hasTopicFeed,
+	} = useTopicFeed()
+	// a team topic's page supports team bookmark filtering
+	const hasTeamBookmarks = Boolean(usePageActions()?.hasTeamBookmarks)
 	const { data: session } = authClient.useSession()
-	const viewOptions = FEED_VIEWS.filter((viewOption) => viewOption !== "bookmarked" || Boolean(session))
-	// controlled so picking a view closes the menu, since exactly one view is ever active. resource kind
-	// checks below leave the menu open, since several of those can be toggled in a row
+	const topicFindingFilterOptions = TOPIC_FINDING_FILTERS.filter(
+		(filterOption) => filterOption !== "bookmarked" || Boolean(session),
+	)
+	// the dropdown is controlled so selection an option can close the menu
 	const [isOpen, setIsOpen] = useState(false)
 	return (
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
-			<PopoverTrigger
-				className="text-muted-foreground hover:text-foreground inline-flex min-h-11 items-center gap-1.5 rounded-md px-2 text-sm sm:min-h-9"
-				aria-label="Filters"
-			>
-				<SlidersHorizontal className="size-4" />
-				Filters
-			</PopoverTrigger>
-			{/* the trigger sits inset in the search bar's padded row, not flush with its own border. the offsets
-			    cancel that inset so the gap matches Tag Filters' */}
+			<Tooltip>
+				{/* the span keeps the tooltip and the popover from both controlling the trigger's state */}
+				<TooltipTrigger asChild>
+					<span className="inline-flex">
+						<PopoverTrigger className={SEARCH_BAR_ICON_CLASS} aria-label="Filters">
+							<SlidersHorizontal className="size-4" />
+						</PopoverTrigger>
+					</span>
+				</TooltipTrigger>
+				<TooltipContent>Filters</TooltipContent>
+			</Tooltip>
+			{/* the trigger sits inset in the search bar's padded row, not flush with its own border.
+			    the offsets cancel that inset, so the menu aligns with the search bar's edge */}
 			<PopoverContent align="end" alignOffset={-9} sideOffset={13} className="w-44 p-1">
-				{/* the kinds lead as checks, since several can be on at once. the view below the divider is one
-				    at a time, so its rows are radios */}
-				{allResourceKinds.map((resourceKind) => (
-					<ResourceKindFilter
-						key={resourceKind}
-						resourceKind={resourceKind}
-						isActive={resourceKinds.has(resourceKind)}
-						onClick={() => toggleResourceKind(resourceKind)}
-					/>
-				))}
-				<hr className="border-border my-1" />
-				<div role="radiogroup" aria-label="View">
-					{viewOptions.map((viewOption) => (
-						<ViewRow
-							key={viewOption}
-							label={viewOption}
-							isActive={view === viewOption}
-							onChange={() => {
-								setView(viewOption)
-								setIsOpen(false)
-							}}
-						/>
-					))}
-				</div>
-				<hr className="border-border my-1" />
-				{/* a fieldset, so its rows announce under the "Search for" label as one group */}
+				{/* the resource kind, view, and tag filters all narrow topic scan findings,
+				    so a page without a topic feed does not show the topic scan findings filters */}
+				{hasTopicFeed && (
+					<>
+						{allResourceKinds.map((resourceKind) => (
+							<ResourceKindFilter
+								key={resourceKind}
+								resourceKind={resourceKind}
+								isActive={resourceKinds.has(resourceKind)}
+								onClick={() => toggleResourceKind(resourceKind)}
+							/>
+						))}
+						<hr className="border-border my-1" />
+						<div role="radiogroup" aria-label="View">
+							{topicFindingFilterOptions.map((filterOption) =>
+								// a team topic splits the bookmarked filter in two: the user's own bookmarks filter, or the team's
+								filterOption === "bookmarked" && hasTeamBookmarks ? (
+									<Fragment key={filterOption}>
+										<RadioRow
+											radioGroupName="feed-findingFilter"
+											label="My bookmarked"
+											isActive={findingFilter === "bookmarked" && bookmarkScope === "mine"}
+											onChange={() => {
+												setFindingFilter("bookmarked")
+												setBookmarkScope("mine")
+												setIsOpen(false)
+											}}
+										/>
+										<RadioRow
+											radioGroupName="feed-findingFilter"
+											label="Team bookmarked"
+											isActive={findingFilter === "bookmarked" && bookmarkScope === "team"}
+											onChange={() => {
+												setFindingFilter("bookmarked")
+												setBookmarkScope("team")
+												setIsOpen(false)
+											}}
+										/>
+									</Fragment>
+								) : (
+									<RadioRow
+										key={filterOption}
+										radioGroupName="feed-findingFilter"
+										label={filterOption}
+										isActive={findingFilter === filterOption}
+										onChange={() => {
+											setFindingFilter(filterOption)
+											setIsOpen(false)
+										}}
+									/>
+								),
+							)}
+						</div>
+						<hr className="border-border my-1" />
+						{/* how the tags selected on the home page filter, one mode at a time */}
+						<div role="radiogroup" aria-label="Tags">
+							<div className="text-muted-foreground px-2 py-1 text-xs">Tags</div>
+							{tagMatchModes.map((matchMode) => (
+								<RadioRow
+									key={matchMode}
+									radioGroupName="tag-match"
+									label={TAG_MATCH_OPTIONS[matchMode].label}
+									Icon={TAG_MATCH_OPTIONS[matchMode].Icon}
+									isActive={tagMatchMode === matchMode}
+									onChange={() => {
+										setTagMatchMode(matchMode)
+										setIsOpen(false)
+									}}
+								/>
+							))}
+						</div>
+						<hr className="border-border my-1" />
+					</>
+				)}
+				{/* a fieldset, so its rows announce under the "Search for" label as one group for the search results filters */}
 				<fieldset aria-labelledby="search-result-type-label">
 					<div id="search-result-type-label" className="text-muted-foreground px-2 py-1 text-xs">
 						Search for
@@ -87,15 +176,30 @@ export function SearchFilters({
 	)
 }
 
-// one view row. a screen-reader-only radio input includes the keyboard and accessibility semantics, and a custom dot renders beside it
-function ViewRow({ label, isActive, onChange }: { label: string; isActive: boolean; onChange: () => void }) {
+// one select-one radio row used by the topic finding and the tag match filters
+function RadioRow({
+	radioGroupName,
+	label,
+	Icon,
+	isActive,
+	onChange,
+}: {
+	// the radio group this option belongs to, so the topic finding and the tag match filters stay separate groups
+	radioGroupName: string
+	label: string
+	// the leading icon a tag match option shows. the topic finding options have none
+	Icon?: LucideIcon
+	isActive: boolean
+	onChange: () => void
+}) {
 	return (
 		<label className="hover:bg-accent flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-sm sm:min-h-9">
-			{/* the input includes the semantics but renders nothing, so the custom dot shows its keyboard focus */}
-			<input type="radio" name="feed-view" checked={isActive} onChange={onChange} className="peer sr-only" />
+			{/* the radio input includes the semantics but renders nothing, so the custom dot shows its keyboard focus */}
+			<input type="radio" name={radioGroupName} checked={isActive} onChange={onChange} className="peer sr-only" />
 			<span className="border-muted-foreground peer-focus-visible:ring-ring/50 grid size-4 place-items-center rounded-full border peer-focus-visible:ring-[3px]">
 				{isActive ? <span className="bg-primary size-2 rounded-full" /> : null}
 			</span>
+			{Icon ? <Icon className="text-muted-foreground size-4" /> : null}
 			<span className="flex-1 text-left capitalize">{label}</span>
 		</label>
 	)
@@ -104,8 +208,9 @@ function ViewRow({ label, isActive, onChange }: { label: string; isActive: boole
 // the icon mapped to each kind of search result
 const SEARCH_RESULT_TYPE_ICON: Record<SearchResultType, LucideIcon> = {
 	topics: Hash,
-	profiles: CircleUserRound,
 	findings: FileText,
+	teams: Users,
+	users: CircleUserRound,
 }
 
 // one clickable search result filter row, checked if active

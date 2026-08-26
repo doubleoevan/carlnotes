@@ -24,6 +24,7 @@ function topicFinding(isConsumed: boolean): TopicFinding {
 		engagement: null,
 		isConsumed,
 		isBookmarked: false,
+		teamBookmarks: [],
 	}
 }
 

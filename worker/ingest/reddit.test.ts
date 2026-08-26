@@ -1,4 +1,4 @@
-// reddit ingester self-checks. what a Source fetches, which access modes the ingester tries, and how a payload maps to Resources,
+// reddit ingester self-checks
 import { expect, test } from "bun:test"
 import type { Source } from "./ingester"
 import {
@@ -53,8 +53,7 @@ test("toRedditRequest refuses an invalid subreddit", () => {
 	)
 })
 
-// the Source config and a suggested subreddit both read a written name through here,
-// so what a Scan will read and what a suggestion offers can never disagree about which names are acceptable
+// the Source config and a suggested subreddit both read a written name through here
 test("toSubredditName drops a leading r/ and keeps the name reddit would accept", () => {
 	expect(toSubredditName("r/LocalLLaMA")).toBe("LocalLLaMA")
 	expect(toSubredditName("  r/mcp  ")).toBe("mcp")
@@ -76,8 +75,7 @@ test("toRedditAccessModes prefers OAuth and keeps the rss feeds as the fallback"
 	expect(toRedditAccessModes(false)).toEqual(["rss"])
 })
 
-// the OAuth url includes the sort, the post cap, and the subreddit restriction a search needs.
-// the site-wide form has no Source behind it, since a Source names a subreddit. it is how one is found
+// the OAuth url includes the sort, the post limit, and the subreddit restriction a search needs
 test("toOauthUrl builds the listing, site-wide search, and in-subreddit search urls", () => {
 	expect(toOauthUrl({ kind: "listing", subreddit: "mcp", sort: "top" })).toBe(
 		"https://oauth.reddit.com/r/mcp/top?limit=25",
@@ -90,8 +88,7 @@ test("toOauthUrl builds the listing, site-wide search, and in-subreddit search u
 	)
 })
 
-// the keyless url reads the rss feeds that reddit still serves. a listing feed has no sort,
-// which is the loss it records, and the site-wide search feed is the keyless half of finding a subreddit
+// the keyless url reads the rss feeds that reddit still serves
 test("toRssUrl builds the feed urls and drops the sort", () => {
 	expect(toRssUrl({ kind: "listing", subreddit: "mcp", sort: "top" })).toBe("https://www.reddit.com/r/mcp/.rss")
 	expect(toRssUrl({ kind: "search", subreddit: "", query: "agent memory" })).toBe(
@@ -102,8 +99,7 @@ test("toRssUrl builds the feed urls and drops the sort", () => {
 	)
 })
 
-// a Scan runs its Sources at once, and reddit refuses the second request that arrives with the first,
-// so the queue has to serialize them. the oauth gap is the short one, which keeps this check quick
+// a Scan runs its Sources at once, and reddit refuses the second request that arrives with the first
 test("queueRedditRequest runs requests one at a time, even after one fails", async () => {
 	// each request records when it started and ended, so an overlap would show as a start before the previous end
 	const events: string[] = []

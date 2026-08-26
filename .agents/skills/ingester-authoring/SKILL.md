@@ -19,4 +19,4 @@ An ingester turns one kind of Source into Resources. One ingester per source kin
 - Errors: a failing Source degrades that Scan only. Never let one ingester's failure abort a whole Scan batch.
 
 ## Interface
-The shared ingester interface is defined by the source-ingestion OpenSpec change. Until it lands, match the shape of the most recently merged ingester rather than inventing a variant.
+The shared ingester interface is `worker/ingest/ingester.ts` (`SourceIngester` in, `IngestResult` out). Implement it exactly instead of inventing a variant.

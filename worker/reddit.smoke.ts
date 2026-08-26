@@ -1,7 +1,5 @@
-// a live smoke test that the owner runs by hand for the reddit ingester. it seeds a topic with a subreddit Source and a
-// search Source, runs each access mode against both, and reports which access mode answered and which one reddit refused.
-// run it with: bun run smoke:reddit. run it from the deployed environment to settle the datacenter-IP question,
-// since the keyless endpoints serve a home internet connection but often return 403 to a hosting provider's IP range
+// a live smoke test that the owner runs by hand for the reddit ingester
+// run it with: bun run smoke:reddit. run it from the deployed environment to settle the datacenter-IP
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { sources, topics, users } from "../db/schema"
@@ -58,7 +56,7 @@ async function seedTestData(): Promise<{ subredditSource: Source; searchSource: 
 
 // run one Source and report what came back, or the reason each access mode refused it
 async function checkSource(label: string, source: Source): Promise<boolean> {
-	// the ingester picks its own access modes from the environment, so this is exactly what a Scan would do
+	// the ingester selects its own access modes from the environment, so this is exactly what a Scan would do
 	try {
 		const { resources, fallbackMode } = await redditIngester(source)
 
@@ -86,7 +84,7 @@ async function check(subredditSource: Source, searchSource: Source): Promise<boo
 	console.log("\n=== reddit smoke report ===")
 	console.log(`credentials   : ${Bun.env.REDDIT_CLIENT_ID && Bun.env.REDDIT_CLIENT_SECRET ? "set" : "absent"}`)
 
-	// each Source is run in turn instead of together, so the report reads as two separate answers
+	// each Source is run in turn instead of together, so the report reads as two separate results
 	const isSubredditOk = await checkSource(`subreddit r/${SMOKE_SUBREDDIT}`, subredditSource)
 	const isSearchOk = await checkSource(`search for "${SMOKE_QUERY}" in r/${SMOKE_SUBREDDIT}`, searchSource)
 
@@ -102,7 +100,7 @@ async function check(subredditSource: Source, searchSource: Source): Promise<boo
 	return allPass
 }
 
-// seed the test data and run the checks, then always delete the fake owner. the delete cascades to the topic and its sources
+// seed the test data and run the checks, then always delete the fake owner
 async function smokeTest(): Promise<number> {
 	const { subredditSource, searchSource, userId } = await seedTestData()
 	// run the checks, then delete the owner regardless of outcome

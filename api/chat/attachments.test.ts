@@ -87,8 +87,7 @@ test("resolveChatAttachments extracts a pdf into a text attachment", async () =>
 	].join("\n")
 	const dataUrl = `data:application/pdf;base64,${Buffer.from(minimalPdf).toString("base64")}`
 
-	// the PDF becomes text under its own name, and the neighboring text attachment passes through untouched.
-	// this is an extraction test, so it runs with the llm-guard scanner off instead of asserting on redacted text
+	// the PDF becomes text under its own name, and the neighboring text attachment passes through untouched
 	await withoutScanner(async () => {
 		const chatAttachments = await resolveChatAttachments([
 			{ kind: "pdf", name: "hello.pdf", dataUrl: dataUrl, keep: false },
@@ -103,7 +102,7 @@ test("resolveChatAttachments extracts a pdf into a text attachment", async () =>
 
 // an attachment is a document the user handed us, so it is screened by llm-guard before it reaches the model
 test("resolveChatAttachments screens attachment text", async () => {
-	// an accepted document gets the llm-guard scanner's redactions, since it rewrites personal details in place
+	// an accepted document gets the llm-guard scanner's redactions, which rewrite personal details in place
 	await withScanner(
 		{ scanners: { PromptInjection: 0.1 }, sanitized_prompt: "call [REDACTED_PHONE_NUMBER]" },
 		async () => {
@@ -149,10 +148,10 @@ test("chatTurnPayload checks that a pdf has a pdf data url", () => {
 })
 
 // a clipped attachment tells the model where the cut happened, and a short attachment passes through untouched
-test("clipAttachmentText marks the cut inside the cap", () => {
+test("clipAttachmentText marks the cut inside the limit", () => {
 	expect(clipAttachmentText("short")).toBe("short")
 
-	// an over-cap document stays inside the payload bound and ends on the marker with both totals
+	// an over-limit document stays inside the payload bound and ends on the marker with both totals
 	const clippedAttachment = clipAttachmentText("x".repeat(80_000))
 	expect(clippedAttachment.length).toBeLessThanOrEqual(CHAT_ATTACHMENT_TEXT_CHARS)
 	expect(clippedAttachment).toContain("The attachment is cut here.")
@@ -160,8 +159,7 @@ test("clipAttachmentText marks the cut inside the cap", () => {
 	expect(clippedAttachment).toContain("50,000")
 })
 
-// a kept attachment is stored, summarized by a paid call, and gets added into every later chat turn.
-// only keep attachments that are explicitly asked for
+// a kept attachment is stored, summarized by a paid call, and gets added into every later chat turn
 test("an attachment is only kept when the payload asks for it", () => {
 	const chatTurn = chatTurnPayload.safeParse({
 		question: "q",

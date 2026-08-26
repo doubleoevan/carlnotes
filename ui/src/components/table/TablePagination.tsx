@@ -9,7 +9,7 @@ const PAGE_SIZES = [5, 10, 25, 50] as const
 // the smallest page a table can be cut into. below this, the pagination controls are hidden
 export const SMALLEST_PAGE_SIZE = PAGE_SIZES[0]
 
-// the state that the usePagination hook returns for sorting and pagination
+// the state the usePagination hook returns
 type PaginationState = {
 	page: number
 	pageCount: number
@@ -57,7 +57,7 @@ export function usePaginatedRowSort<Row>(
  * The pagination footer under a table: the page-size select on the left and the pager on the right.
  */
 export function TablePagination({ page, pageCount, pageSize, rowCount, setPage, setPageSize }: PaginationState) {
-	// the whole row hides until there are more rows than the smallest page size and the table can be more than one page
+	// the whole row hides until there are more rows than the smallest page size
 	if (rowCount <= PAGE_SIZES[0]) {
 		return null
 	}
@@ -80,7 +80,6 @@ export function TablePagination({ page, pageCount, pageSize, rowCount, setPage, 
 					))}
 				</select>
 			</label>
-			{/* the pager appears only when there is more than one page */}
 			{pageCount > 1 && (
 				<div className="flex items-center gap-1.5">
 					<button

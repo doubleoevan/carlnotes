@@ -5,17 +5,18 @@ import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { BrandIcon } from "@/components/common/BrandIcon"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
-import { TopicShareButton } from "@/components/topic/ShareTopic"
+import { ShareTopicButton } from "@/components/share/ShareTopic"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
 import {
-	type AllowedNoteUrls,
+	type AllowedScanNoteUrls,
 	NumberedTopicFindingList,
 	SafeNoteText,
 	ScrollNote,
 	TopicScanNote,
 	toNotesMarkdown,
 } from "@/components/topic/TopicScanRecap"
-import { cn, MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS } from "@/lib/utils"
+import { MENU_BUTTON_CLASS, POPOVER_HEADING_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
 // each source's icon, keyed by the label the line renders. a default source is keyed by its own label instead of its kind
 const SOURCE_ICON: Record<string, SourceIcon> = {
@@ -25,15 +26,14 @@ const SOURCE_ICON: Record<string, SourceIcon> = {
 	podcast: AudioLines,
 	composio: Plug,
 	plugin: Puzzle,
-	// the four that are somebody's brand use that brand's own logo, since a stand-in glyph reads as the
-	// wrong thing entirely: reddit as a robot, x as a close button, bluesky as the bird x stopped using
+	// the four that are somebody's brand use that brand's own logo
 	reddit: (props) => <BrandIcon brand="reddit" {...props} />,
 	youtube: (props) => <BrandIcon brand="youtube" {...props} />,
 	x: (props) => <BrandIcon brand="x" {...props} />,
 	bluesky: (props) => <BrandIcon brand="bluesky" {...props} />,
 }
 
-// a source's icon is either a lucide glyph or one of the brand logos, and both take just a class
+// a source's icon is either a lucide icon or one of the brand logos, and both take just a class
 type SourceIcon = (props: { className?: string }) => React.ReactNode
 
 // the card variant includes the full topic response for its scan history
@@ -69,7 +69,7 @@ export function TopicInfo(props: TopicInfoProps) {
 			{!props.isCard && <h2 className={POPOVER_HEADING_CLASS}>Topic roast</h2>}
 			<div className="divide-separator divide-y divide-dashed">
 				{/* a failed newest scan is stated plainly, so a topic whose sources are dead doesn't read as one that
-				    found nothing. card only, since the feed payload carries no scan history */}
+				    found nothing. card only, since the feed payload has no scan history */}
 				{props.isCard && <FailedBrewSection scans={props.topic.scans} />}
 
 				{/* who tuned this topic, leading the roast because it frames everything under it */}
@@ -77,9 +77,10 @@ export function TopicInfo(props: TopicInfoProps) {
 					<InfoSection label="Carl's Barista">
 						<div className="flex items-center justify-between gap-3">
 							<UserProfileLink user={topic.owner} />
-							<TopicShareButton
+							<ShareTopicButton
 								topic={topic}
-								className={MENU_BUTTON_CLASS}
+								// the card is already bg-card, so the button takes the muted surface to stand off it
+								className={cn(MENU_BUTTON_CLASS, "bg-muted hover:bg-accent")}
 								onMakeTopicPublic={props.onMakeTopicPublic}
 							/>
 						</div>
@@ -119,21 +120,24 @@ export function TopicInfo(props: TopicInfoProps) {
 					</InfoSection>
 				)}
 
-				{/* the topic sources are only in the popover, since the topic page has its own sources card */}
+				{/* the topic sources are only in the popover */}
 				{!props.isCard && <TopicSourcesSection sources={topic.sources} />}
 
 				{/* who may see the topic, directly above the follower count. the card always says, and the popup
-				    speaks up only when it is not public, since public is what a topic already starts on and
+				    speaks up only when it is not public, since most feed topics are public and
 				    repeating that on every row says nothing */}
 				{(props.isCard || topic.visibility !== "public") && <TopicVisibility visibility={topic.visibility} />}
 
 				<InfoSection label="Followers">{topic.subscriberCount.toLocaleString()}</InfoSection>
+
+				{/* the teams that have this topic, the owning one and every team it was shared into */}
+				<InfoSection label="Teams">{topic.teamCount.toLocaleString()}</InfoSection>
 			</div>
 		</>
 	)
 }
 
-// the newest scan's failure called out plainly, whatever came before it. the sections below still describe the last succeeded scan
+// the newest scan's failure called out plainly, whatever came before it
 function FailedBrewSection({ scans }: { scans: TopicResponse["scans"] }) {
 	// the newest scan whatever its outcome, so a failed one can be called out
 	const latestScan = scans[0]
@@ -150,12 +154,12 @@ function FailedBrewSection({ scans }: { scans: TopicResponse["scans"] }) {
 	)
 }
 
-// the urls a recap may cite and render as real links other urls can not be injected
-function toFindingUrls(topic: TopicFeed | TopicResponse): AllowedNoteUrls {
+// the urls a recap may cite and render as real links. no other url can be injected
+function toFindingUrls(topic: TopicFeed | TopicResponse): AllowedScanNoteUrls {
 	return new Set(topic.findings.map((finding) => finding.url))
 }
 
-// one attachment row. a url links out to its page, a file downloads for the owner. the label truncates and underlines on hover
+// one attachment row
 function AttachmentPill({
 	attachment,
 	isDownloadable,
@@ -233,7 +237,7 @@ function TopicVisibility({ visibility }: { visibility: TopicResponse["visibility
 	)
 }
 
-// a labeled section, padded by default so the dashed rules sit evenly between sections. className overrides that padding
+// a labeled section, padded by default so the dashed dividers sit evenly between sections
 export function InfoSection({
 	label,
 	children,
@@ -254,8 +258,7 @@ export function InfoSection({
 
 // the sources section: a line per default source first, then one line per custom source
 export function TopicSourcesSection({ sources }: { sources: TopicFeed["sources"] }) {
-	// which default sources the topic has on
-	// and custom sources, which are sources with the default ones filtered out
+	// the default sources that are on, and the custom ones left after them
 	const defaultSourceKeys = new Set(sources.flatMap((source) => toDefaultSource(source.sourceKind)?.key ?? []))
 	const customSources = sources.filter((source) => !toDefaultSource(source.sourceKind))
 	return (
@@ -282,8 +285,7 @@ export function TopicSourcesSection({ sources }: { sources: TopicFeed["sources"]
 	)
 }
 
-// one line in the sources section: the source icon, the source kind, its config summary,
-// and why it is not yet being read when it has not passed its llm-guard screen
+// one line in the sources section
 function TopicSource({
 	sourceKind,
 	summary,
@@ -299,7 +301,7 @@ function TopicSource({
 	const SourceIcon = SOURCE_ICON[sourceKind] ?? Diamond
 	return (
 		<div className={cn("flex min-w-0 items-baseline gap-1.5", (isMuted || screening) && "text-muted-foreground")}>
-			{/* an svg has no baseline of its own, so it aligns by its box bottom and lands high.
+			{/* an svg has no baseline of its own, so it aligns by its box bottom and sits high.
 			    the nudge drops it down to the text */}
 			<SourceIcon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0 translate-y-0.5" />
 			<span className="min-w-0 truncate">
@@ -312,7 +314,6 @@ function TopicSource({
 }
 
 // what a source that has not passed its llm-guard screen reads as. only its owner ever sees this.
-// a ready source says nothing here. a failed source names its reason.
 export function toScreeningNote(source: { status: string; error: string | null }): string | null {
 	if (source.status === "pending") {
 		return "checking"

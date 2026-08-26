@@ -19,12 +19,10 @@ function PopoverAnchor({ ...props }: React.ComponentProps<typeof PopoverPrimitiv
 	return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />
 }
 
-// how far the panel stays clear of the viewport edges. nothing in the app is pinned to the top,
-// so this is breathing room instead of clearance for a header, and it keeps the panel off the very edge on a small screen
+// how far the panel stays clear of the viewport edges
 const COLLISION_PADDING = 8
 
-// the portalled, animated panel. it is a fixed-height shell around a scrolling viewport instead of one growing box,
-// so a panel taller than the room available scrolls instead of running off the top of the screen
+// the portalled, animated panel
 function PopoverContent({
 	className,
 	align = "center",
@@ -70,7 +68,7 @@ function PopoverCloseButton() {
 	)
 }
 
-// the raw radix close, for callers styling their own closing control
+// the raw radix close, for callers styling their own close button
 const PopoverClose = PopoverPrimitive.Close
 
 export { Popover, PopoverAnchor, PopoverClose, PopoverCloseButton, PopoverContent, PopoverTrigger }

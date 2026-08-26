@@ -1,11 +1,8 @@
-// the attachment processing workflow. it decides the order and calls activities, never doing I/O itself.
-// extract and chunk, summarize the chunks in parallel, then finalize and mark ready. a failure marks the attachment failed
+// the attachment processing workflow
 import { proxyActivities } from "@temporalio/workflow"
 import type * as activities from "./process-attachment-activities"
 
-// activity proxies with a generous timeout for extraction and the per-chunk model calls.
-// the attempt cap is what stops a permanently failing attachment from retrying for the life of the worker.
-// an attachment that no longer exists gives up on the first attempt
+// activity proxies with a generous timeout for extraction and the per-chunk model calls
 const { extractAttachmentText, summarizeChunk, finalizeAttachment, failAttachment } = proxyActivities<
 	typeof activities
 >({

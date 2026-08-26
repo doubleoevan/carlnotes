@@ -97,12 +97,12 @@ function AlertDialogDescription({
 	)
 }
 
-// the confirming button, styled like the default solid button
+// the confirming button
 function AlertDialogAction({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Action>) {
 	return <AlertDialogPrimitive.Action className={cn(buttonVariants(), className)} {...props} />
 }
 
-// the dismissing button, styled like the outline button. closes without running the action
+// the dismissing button, which closes without running the action
 function AlertDialogCancel({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Cancel>) {
 	return <AlertDialogPrimitive.Cancel className={cn(buttonVariants({ variant: "outline" }), className)} {...props} />
 }

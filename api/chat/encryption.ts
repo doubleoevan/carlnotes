@@ -14,8 +14,7 @@ const TAG_BYTES = 16
  * With no key configured, the text stores as plaintext.
  */
 export function encryptChatText(plainText: string): string {
-	// no key means no encryption, which keeps a keyless self-host working. outside of dev that would write every
-	// chat conversation to the database, so it throws an error instead of storing plaintext quietly
+	// no key means no encryption, which keeps a keyless self-host working
 	const key = chatTextKey()
 	if (!key) {
 		if (Bun.env.DOPPLER_ENVIRONMENT && Bun.env.DOPPLER_ENVIRONMENT !== "dev") {

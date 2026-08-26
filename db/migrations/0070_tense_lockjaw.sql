@@ -1,0 +1,1 @@
+ALTER TYPE "public"."team_role" RENAME VALUE 'lead' TO 'leader';

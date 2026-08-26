@@ -56,7 +56,7 @@ test("toCanonicalUrl folds twitter.com onto x.com", () => {
 	expect(toCanonicalUrl("https://x.com/sama/status/123")).toBe("https://x.com/sama/status/123")
 })
 
-// a url that cannot be parsed still has to come back, since a wrong dedupe key is worse than none
+// a url that cannot be parsed still has to come back
 test("toCanonicalUrl returns an unparseable url untouched", () => {
 	expect(toCanonicalUrl("not a url")).toBe("not a url")
 })

@@ -34,6 +34,7 @@ export default defineConfig({
 				},
 				{ label: "Topics", items: [{ autogenerate: { directory: "topics" } }] },
 				{ label: "Your topic feed", items: [{ autogenerate: { directory: "feed" } }] },
+				{ label: "Teams", items: [{ autogenerate: { directory: "teams" } }] },
 				{ label: "Account", items: [{ autogenerate: { directory: "account" } }] },
 			],
 		}),

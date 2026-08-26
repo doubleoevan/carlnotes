@@ -1,15 +1,12 @@
-// the Temporal client that the api and the sweep use to start durable workflows.
-// one lazily built connection is reused, so a request starts a workflow without opening a fresh connection each time
+// the Temporal client that the api and the sweep use to start durable workflows
 import { Client, Connection, WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from "@temporalio/client"
 import type { ScanTrigger } from "./workflows/run-topic-scan-activities"
 
-// the task queue the attachment worker polls, and the workflow it runs
-// started by name so that the client never imports workflow code
+// the task queue the attachment worker polls, and the workflow it runs started by name
 export const ATTACHMENT_TASK_QUEUE = "attachment-processing"
 const ATTACHMENT_WORKFLOW = "processAttachment"
 
-// scans poll their own queue instead of sharing the attachment one. a Scan holds an activity slot for up to half an hour,
-// and a shared queue would let a run of scan jobs starve the seconds-long attachment jobs
+// scans poll their own queue instead of sharing the attachment one
 export const SCAN_TASK_QUEUE = "topic-scans"
 const SCAN_WORKFLOW = "runTopicScanWorkflow"
 
@@ -17,15 +14,14 @@ const SCAN_WORKFLOW = "runTopicScanWorkflow"
 export const SOURCE_TASK_QUEUE = "source-screening"
 const SOURCE_WORKFLOW = "screenSourceWorkflow"
 
-// how long a task queue description may take before the scan sweep gives up on it and carries on
+// how long a task queue description may take before the scan sweep gives up on it and continues
 const QUEUE_DESCRIBE_TIMEOUT_MS = 10_000
 
-// whether the Scan was handed to Temporal, and a promise that settles when it ends.
-// "running" means the Topic already had a scan in flight, and the workflow id is what rejected this new start
+// whether the Scan was handed to Temporal, and a promise that settles when it ends
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type ScanStart = { status: "started"; whenFinished: Promise<void> } | { status: "running" }
 
-// whether a cancel reached a running Scan. "idle" means the Topic didn't have one, which is a valid response instead of a failure
+// whether a cancel reached a running Scan
 export type ScanCancel = { status: "cancelled" } | { status: "idle" }
 
 // the reused client promise, built on first use from the TEMPORAL_ADDRESS endpoint
@@ -33,7 +29,7 @@ let clientPromise: Promise<Client> | undefined
 
 // start the durable processing workflow for a freshly stored attachment
 export async function startAttachmentWorkflow(attachmentId: string): Promise<void> {
-	// the workflow id is derived from the attachment id, so that an attachment never has a duplicate workflow running at the same time
+	// the workflow id is derived from the attachment id
 	const client = await getClient()
 	await client.workflow.start(ATTACHMENT_WORKFLOW, {
 		taskQueue: ATTACHMENT_TASK_QUEUE,
@@ -74,16 +70,13 @@ export async function startTopicScanWorkflow(
 ): Promise<ScanStart> {
 	const client = await getClient()
 	try {
-		// the workflow id is derived from the topic,
-		// so Temporal itself rejects a second Scan for a Topic that already has one running
+		// the workflow id is derived from the topic
 		const workflowHandle = await client.workflow.start(SCAN_WORKFLOW, {
 			taskQueue: SCAN_TASK_QUEUE,
 			workflowId: `scan-${topicId}`,
 			args: [scanId, topicId, ownerId, trigger],
 		})
-		// the sweep starts a Scan and moves on without awaiting this, so an uncaught failure would surface as an
-		// unhandled rejection and take the process down. the handler makes it safe to ignore,
-		// and the promise still rejects for a caller that does await it
+		// the sweep starts a Scan and moves on without waiting for this
 		const whenFinished = workflowHandle.result()
 		whenFinished.catch(() => {})
 		return { status: "started", whenFinished }
@@ -98,7 +91,7 @@ export async function startTopicScanWorkflow(
 
 /**
  * Cancel the Scan a Topic is running. The workflow id is derived from the Topic, so the caller needs no stored id.
- * A Topic with nothing running anymore answers "idle", since a Scan that already completed is not a failed cancel.
+ * A Topic with nothing running anymore returns "idle".
  */
 export async function cancelTopicScanWorkflow(topicId: string): Promise<ScanCancel> {
 	const client = await getClient()

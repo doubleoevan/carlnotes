@@ -1,12 +1,13 @@
-// a user flagging a Topic or profile. the report is mailed to the SUPPORT_EMAIL address
+// a user flagging a Topic, profile, or Team. the report is mailed to the SUPPORT_EMAIL address
 import { zValidator } from "@hono/zod-validator"
 import { type FlagContentPayload, flagContentPayload } from "@shared/contracts"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
-import { topics, users } from "../db/schema"
+import { teams, topics, users } from "../db/schema"
 import { sendEmail } from "../worker/email"
 import { type AppEnv, currentUser } from "./currentUser"
+import { toTeamRole } from "./team/members"
 import { canSeeTopic } from "./topic/permissions"
 
 // how many flags one user may send in a day
@@ -35,13 +36,13 @@ export async function flagContent(userId: string, payload: FlagContentPayload): 
 		return "limitReached"
 	}
 
-	// check what is being flagged, refusing anything the sender could not have been looking at
+	// check what is being flagged, rejecting anything the sender could not have been looking at
 	const subject = await toFlaggedSubject(userId, payload)
 	if (!subject) {
 		return "unknownSubject"
 	}
 
-	// send the user's their username for the moderator to act on
+	// look up the sender's username for the moderator to act on
 	const [sender] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId))
 	await sendEmail({
 		to: supportEmail,
@@ -60,10 +61,29 @@ async function toFlaggedSubject(
 	if (payload.subjectKind === "topic") {
 		// the same visibility rule the Topic page uses, so anyone who can open a Topic can flag it
 		const [topic] = await db
-			.select({ id: topics.id, name: topics.name, ownerId: topics.ownerId, visibility: topics.visibility })
+			.select({
+				id: topics.id,
+				name: topics.name,
+				ownerId: topics.ownerId,
+				visibility: topics.visibility,
+				teamId: topics.teamId,
+			})
 			.from(topics)
 			.where(eq(topics.id, payload.subjectId))
 		return topic && (await canSeeTopic(userId, topic)) ? { label: topic.name, path: `/topics/${topic.id}` } : null
+	}
+
+	// a team follows its visibility rule: members can always flag, anyone can flag once it is public
+	if (payload.subjectKind === "team") {
+		const [team] = await db
+			.select({ id: teams.id, name: teams.name, isPublic: teams.isPublic })
+			.from(teams)
+			.where(eq(teams.id, payload.subjectId))
+		// a private team a non-member flags returns null because the sender cannot see it
+		if (!team || (!team.isPublic && (await toTeamRole(userId, team.id)) === null)) {
+			return null
+		}
+		return { label: team.name, path: `/teams/${team.id}` }
 	}
 
 	// a profile is flagged by user id
@@ -84,18 +104,18 @@ function toFlagHtml(subject: { label: string; path: string }, sender: string, re
 // whether this user can still flag content. limited to avoid getting spammed.
 function canFlag(userId: string): boolean {
 	const now = Date.now()
-	const spent = flagCounts.get(userId)
+	const userFlagCount = flagCounts.get(userId)
 	// the first flag, or one after the day has run out resets the counter
-	if (!spent || now - spent.windowStartedAt > FLAG_WINDOW_MS) {
+	if (!userFlagCount || now - userFlagCount.windowStartedAt > FLAG_WINDOW_MS) {
 		flagCounts.set(userId, { count: 1, windowStartedAt: now })
 		return true
 	}
 
-	// check if the user has hit the limit or increment the count and return true
-	if (spent.count >= DAILY_FLAG_LIMIT) {
+	// check this flag against the day's limit
+	if (userFlagCount.count >= DAILY_FLAG_LIMIT) {
 		return false
 	}
-	spent.count += 1
+	userFlagCount.count += 1
 	return true
 }
 
@@ -115,7 +135,7 @@ export const flagContentRoute = new Hono<AppEnv>().post(
 		if (flagResult === "sent") {
 			return context.json({ ok: true })
 		}
-		// each rejection answers in its own terms, so the dialog can say what actually went wrong
+		// each rejection reports in its own terms, so the dialog can say what actually went wrong
 		if (flagResult === "limitReached") {
 			return context.json({ error: "you have sent enough reports for one day" }, 429)
 		}

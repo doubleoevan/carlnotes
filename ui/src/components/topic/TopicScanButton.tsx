@@ -1,16 +1,18 @@
 import { ADMIN_QUOTA } from "@shared/plans"
 import { CirclePause, Coffee } from "lucide-react"
-import { AnchorLink } from "@/components/common/AnchorLink"
+import { useNavigate } from "react-router-dom"
+import { toast } from "sonner"
 import { IconButton } from "@/components/common/IconButton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { ScanQuotaLink } from "@/components/topic/ScanQuotaLink"
-import { cn, MENU_BUTTON_CLASS, RAIL_ICON_INSET } from "@/lib/utils"
+import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS, RAIL_ICON_INSET } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
 /**
- * The topic page's "Brew" control: the trigger in its running, blocked, or ready state, with the day's remaining scans below it.
+ * The topic page's Brew button in its running, blocked, or ready state, with the day's remaining scans in its tooltip.
  */
 export function TopicScanButton({
 	remainingScans,
+	scanLimit,
 	isSpendExhausted,
 	isRunning,
 	isCancelling,
@@ -18,36 +20,28 @@ export function TopicScanButton({
 	onCancelScan,
 }: {
 	remainingScans: number | null
+	// the plan's daily limit, which the tooltip pairs with what is left
+	scanLimit: number | null
 	isSpendExhausted: boolean
 	isRunning: boolean
 	isCancelling: boolean
 	onManualScan: () => void
 	onCancelScan?: () => void
 }) {
-	// an empty daily quota and a spent budget both stop the brew, and Activity is where either one is explained
+	// an empty daily quota and a spent budget both stop the brew
 	const isScanBlocked = remainingScans !== null && (remainingScans <= 0 || isSpendExhausted)
 	return (
-		<div className="flex shrink-0 flex-col items-end gap-0.5">
-			<TopicScanTrigger
-				isScanRunning={isRunning}
-				isScanBlocked={isScanBlocked}
-				isScanDisabled={remainingScans === null}
-				isSpendExhausted={isSpendExhausted}
-				isScanCancelling={isCancelling}
-				onManualScan={onManualScan}
-				onCancelScan={onCancelScan}
-			/>
-			{/* the quota line hydrates in once the payload lands. a blocked scan points at the account page like the trigger above,
-			    otherwise the count links to the plans page */}
-			<ScanQuotaLink
-				isLoading={remainingScans === null}
-				// an unlimited daily quota still says so, unless the month's budget is what ran out
-				isUnlimited={remainingScans !== null && remainingScans >= ADMIN_QUOTA && !isSpendExhausted}
-				label={isSpendExhausted ? "Out of budget" : `${remainingScans} left today`}
-				href={isScanBlocked ? "/account" : "/plans"}
-				tooltip={isScanBlocked ? "Pick up some coffee" : "Upgrade for more"}
-			/>
-		</div>
+		<TopicScanTrigger
+			isScanRunning={isRunning}
+			isScanBlocked={isScanBlocked}
+			isScanDisabled={remainingScans === null}
+			isSpendExhausted={isSpendExhausted}
+			isScanCancelling={isCancelling}
+			remainingScans={remainingScans}
+			scanLimit={scanLimit}
+			onManualScan={onManualScan}
+			onCancelScan={onCancelScan}
+		/>
 	)
 }
 
@@ -58,6 +52,8 @@ function TopicScanTrigger({
 	isScanDisabled,
 	isSpendExhausted,
 	isScanCancelling,
+	remainingScans,
+	scanLimit,
 	onManualScan,
 	onCancelScan,
 }: {
@@ -66,12 +62,13 @@ function TopicScanTrigger({
 	isScanDisabled: boolean
 	isSpendExhausted: boolean
 	isScanCancelling: boolean
+	remainingScans: number | null
+	scanLimit: number | null
 	onManualScan: () => void
 	onCancelScan?: () => void
 }) {
-	// while a scan runs, the trigger becomes a bigger shimmering "Carl is Brewing" with the cancel icon to the right,
-	// held at the button's height so the row never jumps. the row ends in an icon here, so it takes the icon inset
-	// and the glyph lands on the same line as the quota below it
+	const navigate = useNavigate()
+	// while a scan runs, the trigger becomes a bigger shimmering "Carl is Brewing" with the cancel icon to the right
 	if (isScanRunning) {
 		return (
 			<div className={cn(RAIL_ICON_INSET, "flex min-h-11 items-center gap-1 sm:min-h-9")}>
@@ -86,21 +83,29 @@ function TopicScanTrigger({
 		)
 	}
 
-	// if the scan blocked, the trigger stays live but leads to the account page instead of starting a scan
+	// a blocked brew stays clickable and says what ran out, with the way to fix it in the toast's action
 	if (isScanBlocked) {
+		const blockedLine = isSpendExhausted ? "You are out of budget this month." : "You have used today's brews."
 		return (
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<AnchorLink href="/account" className={MENU_BUTTON_CLASS}>
+					<button
+						type="button"
+						onClick={() =>
+							toast(blockedLine, {
+								action: {
+									label: isSpendExhausted ? "See account" : "See plans",
+									onClick: () => navigate(isSpendExhausted ? "/account" : "/plans"),
+								},
+							})
+						}
+						className={cn(MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS)}
+					>
 						<Coffee className="size-4 fill-none" />
 						Brew
-					</AnchorLink>
+					</button>
 				</TooltipTrigger>
-				<TooltipContent side="bottom">
-					{isSpendExhausted
-						? "Out of budget this month. Pick up some coffee"
-						: "Out of brews today. Pick up some coffee"}
-				</TooltipContent>
+				<TooltipContent side="bottom">{blockedLine}</TooltipContent>
 			</Tooltip>
 		)
 	}
@@ -113,13 +118,24 @@ function TopicScanTrigger({
 					type="button"
 					onClick={onManualScan}
 					disabled={isScanDisabled}
-					className={cn(MENU_BUTTON_CLASS, "disabled:pointer-events-none disabled:opacity-50")}
+					className={cn(
+						MENU_BUTTON_CLASS,
+						MENU_BUTTON_HIGHLIGHT_CLASS,
+						"disabled:pointer-events-none disabled:opacity-50",
+					)}
 				>
 					<Coffee className="size-4 fill-none" />
 					Brew
 				</button>
 			</TooltipTrigger>
-			<TooltipContent side="bottom">Scan this topic for new findings</TooltipContent>
+			<TooltipContent side="bottom">
+				Scan this topic for new findings
+				{remainingScans !== null && scanLimit !== null && (
+					<span className="block">
+						{scanLimit >= ADMIN_QUOTA ? "Unlimited scans" : `${remainingScans} of ${scanLimit} daily scans left`}
+					</span>
+				)}
+			</TooltipContent>
 		</Tooltip>
 	)
 }

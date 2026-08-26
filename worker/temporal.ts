@@ -1,5 +1,4 @@
-// the Temporal worker process: it bundles the workflows, registers the activities, and polls all three task queues.
-// run it as its own process (bun run dev:temporal). it needs a reachable Temporal server at TEMPORAL_ADDRESS
+// the Temporal worker process
 import { shutdownAnalytics } from "@shared/analytics"
 import { shutdownMonitoring, startMonitoring } from "@shared/monitoring"
 import { NativeConnection, Worker } from "@temporalio/worker"
@@ -9,11 +8,11 @@ import * as attachmentActivities from "./workflows/process-attachment-activities
 import * as scanActivities from "./workflows/run-topic-scan-activities"
 import * as sourceActivities from "./workflows/screen-source-activities"
 
-// the SDK shuts a Worker down on its own on SIGINT/SIGTERM, but gives an in-flight activity zero time to
-// finish unless told to wait. review has no retry, so a shutdown mid-review otherwise abandons it outright.
-// this only covers an activity that is nearly done: one just starting when the signal arrives still exceeds
-// it and gets abandoned, and the deploy platform's own kill timeout can still cut this short regardless
+// the SDK shuts a Worker down on its own on SIGINT/SIGTERM, but gives an in-flight activity zero time to finish
 const SHUTDOWN_GRACE_MS = 2 * 60 * 1000
+
+// how many scan activities may run at once
+const MAX_CONCURRENT_SCAN_ACTIVITIES = 8
 
 // connect to Temporal, build a worker per queue, and poll until the process stops
 async function run(): Promise<void> {
@@ -21,8 +20,7 @@ async function run(): Promise<void> {
 	startTelemetry()
 	startMonitoring()
 
-	// a Worker polls exactly one queue and takes one workflowsPath, so the attachment, topic scan, and source screen
-	// each get their own Worker instead of sharing one. they share this process and its connection, so it stays one process to run and supervise
+	// a Worker polls exactly one queue and takes one workflowsPath
 	const connection = await NativeConnection.connect({ address: Bun.env.TEMPORAL_ADDRESS })
 	const workers = await Promise.all([
 		// extracts an attachment's text, screens it with llm-guard, and generates its context
@@ -40,6 +38,7 @@ async function run(): Promise<void> {
 			activities: scanActivities,
 			taskQueue: SCAN_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: MAX_CONCURRENT_SCAN_ACTIVITIES,
 		}),
 		// fetches a url Source's page and screens it with llm-guard
 		Worker.create({
@@ -56,17 +55,14 @@ async function run(): Promise<void> {
 	try {
 		await Promise.race(runningWorkers)
 	} finally {
-		// the other workers still polling on the shared connection are stopped and drained before that connection closes.
-		// a worker that already stopped rejects a second shutdown
+		// the other workers still polling on the shared connection are stopped and drained before that connection closes
 		for (const worker of workers) {
 			try {
 				worker.shutdown()
 			} catch {}
 		}
 
-		// drain every worker before the connection and everything they report go away.
-		// this process records the activation event and its own errors, and both batch,
-		// so an exit that skips the flush drops whatever was still queued
+		// drain every worker before the connection and everything they report go away
 		await Promise.allSettled(runningWorkers)
 		await connection.close()
 		await shutdownTelemetry()

@@ -1,4 +1,4 @@
-// the bag deals every line once before any repeat
+// the shuffle deals every line once before any repeat
 import { expect, test } from "bun:test"
 import { randomThinkingLine, THINKING_LINES } from "./thinkingLines"
 

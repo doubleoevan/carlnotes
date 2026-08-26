@@ -1,9 +1,7 @@
-// review turns a Scan's discovered Resources into topic findings: filter down to what is worth paying for,
-// rank it, score the top of that ranking under the Scan's limits, then summarize what happened.
-// the free filter stages run first, so the paid stages only ever spend money on candidates that survived them
-import { eq, inArray } from "drizzle-orm"
+// review turns a Scan's discovered Resources into topic findings
+import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"
-import { bookmarks, findings, resources, type scans, topics } from "../../db/schema"
+import { bookmarks, findings, resources, type scans, teamMembers, teamTopics, topics } from "../../db/schema"
 import type { Budget } from "../budget"
 import type { NewResource } from "../ingest/ingester"
 import { traceStage } from "../telemetry"
@@ -32,8 +30,7 @@ export async function reviewScan(
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
 ): Promise<ReviewSummary> {
-	// a Scan stopped during ingestion reaches the review already cancelled, and a review's first act is a paid embedding,
-	// so it stops immediately instead of paying for a topic context it will never score against
+	// a Scan stopped during ingestion reaches the review already cancelled
 	if (stopSignal?.aborted) {
 		return emptyReviewSummary()
 	}
@@ -49,27 +46,26 @@ export async function reviewScan(
 	// the running totals for this review. each stage below traces as its own span with what it spent
 	const reviewOutcome = emptyReviewOutcome()
 
-	// embed the topic's effective context once for the relevance gate, keeping its name and text for the scorer and the report.
-	// a stop that landed while the candidates were being read buys no context, since nothing is left to measure against it
+	// embed the topic's effective context once for the relevance gate
 	if (stopSignal?.aborted) {
 		return emptyReviewSummary()
 	}
 	const topicContext = await loadTopicContext(topicId, budget, litellmApiKey)
 
-	// the first pass embeds every candidate and keeps the ones relevant to the topic
+	// the first pass embeds every unscored resource and keeps the ones relevant to the topic
 	const survivingResources = await traceStage(
 		"embed-filter",
 		budget,
 		() => gateResources(unscoredResources, topicContext, reviewOutcome, budget, litellmApiKey, stopSignal),
-		(survivors) => ({ candidateCount: unscoredResources.length, survivorCount: survivors.length }),
+		(survivors) => ({ unscoredCount: unscoredResources.length, survivorCount: survivors.length }),
 	)
 
 	// the second pass dedupes the surviving resources best-first, so a limit defers the least relevant resources
-	const candidateIds = unscoredResources.map((resource) => resource.id)
+	const unscoredResourceIds = unscoredResources.map((resource) => resource.id)
 	const admittedResources = await traceStage(
 		"dedupe",
 		budget,
-		() => admitResources(rankBySimilarity(survivingResources), candidateIds, reviewOutcome),
+		() => admitResources(rankBySimilarity(survivingResources), unscoredResourceIds, reviewOutcome),
 		(admitted) => ({ survivorCount: survivingResources.length, admittedCount: admitted.length }),
 	)
 
@@ -91,13 +87,11 @@ export async function reviewScan(
 		(scoredIds) => ({ admittedCount: admittedResources.length, scoredCount: scoredIds.length }),
 	)
 
-	// keep only the topic's top max_results findings now that this scan's findings are written.
-	// narrow the kept findings list to what survived. the recap and the email's link allowlist are both written from it
+	// keep only the topic's top max_results findings now that this scan's findings are written
 	const survivingUrls = await filterTopicFindings(topicId)
 	reviewOutcome.keptFindings = reviewOutcome.keptFindings.filter((finding) => survivingUrls.has(finding.url))
 
-	// summarize the scan, unless the user stopped it. the recap is a paid model call and a stop means stop spending,
-	// so a stopped Scan keeps its Findings and goes without a recap, which the topic page has its own line for
+	// summarize the scan, unless the user stopped it
 	const scanSummary = stopSignal?.aborted
 		? ""
 		: await traceStage(
@@ -110,7 +104,7 @@ export async function reviewScan(
 				(report) => ({ isReportWritten: report.length > 0 }),
 			)
 
-	// fold the totals into the summary that the Scan records. the caller reads spend and fetch counts off the Budget
+	// merge the totals into the summary that the Scan records. the caller reads spend and fetch counts off the Budget
 	return {
 		keptCount: reviewOutcome.keptFindings.length,
 		filteredCount: countFilteredResources(reviewOutcome),
@@ -119,11 +113,13 @@ export async function reviewScan(
 	}
 }
 
-// keep only the topic's top max_results findings by relevance score, sparing bookmarked ones.
-// returns the urls that survive for the recap and the email's link allowlist
+// keep only the topic's top max_results findings by relevance score, except bookmarked ones
 async function filterTopicFindings(topicId: string): Promise<Set<string>> {
-	// the topic's cap on kept findings
-	const [topic] = await db.select({ maxResults: topics.maxResults }).from(topics).where(eq(topics.id, topicId))
+	// the topic's limit on kept findings, and what the access check below needs
+	const [topic] = await db
+		.select({ maxResults: topics.maxResults, ownerId: topics.ownerId, teamId: topics.teamId })
+		.from(topics)
+		.where(eq(topics.id, topicId))
 	if (!topic) {
 		return new Set()
 	}
@@ -140,15 +136,35 @@ async function filterTopicFindings(topicId: string): Promise<Set<string>> {
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
 		.where(eq(findings.topicId, topicId))
 
-	// the finding ids anyone bookmarked on this topic
+	// the finding ids bookmarked by someone who still has access
+	const holderHasAccess = or(
+		eq(bookmarks.userId, topic.ownerId),
+		topic.teamId
+			? inArray(
+					bookmarks.userId,
+					db
+						.select({ userId: teamMembers.userId })
+						.from(teamMembers)
+						.where(and(eq(teamMembers.teamId, topic.teamId), eq(teamMembers.isActive, true))),
+				)
+			: sql`false`,
+		inArray(
+			bookmarks.userId,
+			db
+				.select({ userId: teamMembers.userId })
+				.from(teamMembers)
+				.innerJoin(teamTopics, eq(teamTopics.teamId, teamMembers.teamId))
+				.where(and(eq(teamTopics.topicId, topicId), eq(teamMembers.isActive, true))),
+		),
+	)
 	const bookmarkedRows = await db
 		.selectDistinct({ findingId: bookmarks.findingId })
 		.from(bookmarks)
 		.innerJoin(findings, eq(bookmarks.findingId, findings.id))
-		.where(eq(findings.topicId, topicId))
+		.where(and(eq(findings.topicId, topicId), holderHasAccess))
 
-	// decide which findings fall outside the cap, then delete them in one statement
-	const bookmarkedIds = new Set(bookmarkedRows.map((row) => row.findingId))
+	// decide which findings fall outside the limit, then delete them in one statement
+	const bookmarkedIds = new Set(bookmarkedRows.map((bookmarkRow) => bookmarkRow.findingId))
 	const filteredIds = findingIdsToFilter(
 		findingRows.map((findingRow) => ({ ...findingRow, isBookmarked: bookmarkedIds.has(findingRow.id) })),
 		topic.maxResults,
@@ -172,7 +188,7 @@ export function findingIdsToFilter(
 	findingRows: { id: string; relevanceScore: number; createdAt: Date; isBookmarked: boolean }[],
 	maxResults: number,
 ): string[] {
-	// rank the unbookmarked rows and drop everything past the cap
+	// rank the unbookmarked rows and drop everything past the limit
 	const rankedUnbookmarkedRows = findingRows
 		.filter((findingRow) => !findingRow.isBookmarked)
 		.sort(

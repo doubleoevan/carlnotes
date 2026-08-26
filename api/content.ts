@@ -1,6 +1,4 @@
-// the server-rendered blog pages: Markdown under content/blog/,
-// rendered to HTML in Hono so the pages are readable without JS execution.
-// the docs are a Starlight site built to static files, served from api/index.ts, and never reach this renderer.
+// the server-rendered blog pages: Markdown under content/blog/, rendered to HTML in Hono
 import { readdirSync, readFileSync } from "node:fs"
 import { Hono } from "hono"
 import Markdown from "markdown-to-jsx"
@@ -114,7 +112,7 @@ function serveIndex(surface: Surface): string {
 
 // one page by its slug with its structured data, or null for a slug matching no file
 function servePage(surface: Surface, slug: string): string | null {
-	const page = loadPages(surface).find((candidate) => candidate.slug === slug)
+	const page = loadPages(surface).find((page) => page.slug === slug)
 	if (!page) {
 		return null
 	}

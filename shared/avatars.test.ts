@@ -1,4 +1,4 @@
-// the avatar image: which letters a username draws, which tint a user id picks, and the contrast the palette can hold
+// the avatar image: which letters a username draws, which tint a user id selects, and the contrast the palette can hold
 import { describe, expect, it } from "bun:test"
 import { AVATAR_COLOR, AVATAR_TINT_MAX_LUMINANCE, AVATAR_TINTS, toAvatarInitials, toAvatarTint } from "./avatars"
 
@@ -21,6 +21,14 @@ function toContrastRatio(first: string, second: string): number {
 }
 
 describe("toAvatarInitials", () => {
+	// a team name is spaced instead of hyphenated, and reads its first two words the same way
+	it("reads a spaced team name", () => {
+		expect(toAvatarInitials("Agent Infra Crew")).toBe("AI")
+		expect(toAvatarInitials("My reading team")).toBe("MR")
+		// one word still has only its own first letter to give
+		expect(toAvatarInitials("Raccoons")).toBe("R")
+	})
+
 	it("takes one letter from each half of the username", () => {
 		expect(toAvatarInitials("Bright-Macchiato")).toBe("BM")
 		expect(toAvatarInitials("Slow-Postscript")).toBe("SP")
@@ -67,7 +75,7 @@ describe("toAvatarTint", () => {
 
 describe("the palette", () => {
 	// a tint added later must stay inside the range
-	it("keeps every tint at or below the luminance ceiling", () => {
+	it("keeps every tint at or below the luminance limit", () => {
 		for (const tint of AVATAR_TINTS) {
 			expect(toRelativeLuminance(tint)).toBeLessThanOrEqual(AVATAR_TINT_MAX_LUMINANCE)
 		}

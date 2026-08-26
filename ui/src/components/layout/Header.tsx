@@ -1,6 +1,7 @@
 import { Columns3Cog, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
 import { useState } from "react"
 import { useLocation } from "react-router-dom"
+import { authClient } from "@/clients/authClient"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { CoffeeRings } from "@/components/branding/CoffeeRings"
 import { NoteIcon } from "@/components/branding/NoteIcon"
@@ -13,10 +14,12 @@ import { buttonVariants } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SignOutDialog } from "@/components/session/SignOutDialog"
+import { ChatMentionCount } from "@/components/topic/TopicMentionBadge"
+import { useRememberedSignedIn } from "@/hooks/useRememberedSignedIn"
 import { useTheme } from "@/hooks/useTheme"
-import { authClient } from "@/lib/authClient"
 import { cn, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { useAllChatMentions } from "@/stores/chatRoomStore"
 
 // the hover treatment shared by the header's menu buttons, tuned for the dark hero banner
 const HERO_BUTTON_HOVER = "hover:bg-white/10 hover:text-hero-foreground dark:hover:bg-white/10"
@@ -40,10 +43,9 @@ export function Header() {
 	const isSignedIn = Boolean(session)
 	// the admin link renders only for admins. the api re-checks the role on every admin call
 	const isAdmin = session?.user.role === "admin"
-	// the headline shimmers on every route change: keying the wrapper by pathname remounts it to replay
+	// the headline shimmers on every route change. keying the wrapper by pathname remounts it to replay
 	const { pathname } = useLocation()
-	// a click on a link that is already home reloads the feed instead of navigating.
-	// a click from a link on another page navigates home
+	// a click on a link that is already home reloads the feed instead of navigating
 	const { reheat } = useTopicFeed()
 	function handleHomeClick(event: React.MouseEvent): void {
 		if (pathname !== "/" || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
@@ -52,10 +54,13 @@ export function Header() {
 		event.preventDefault()
 		void reheat()
 	}
+
+	// the hero pitches the app to a visitor who has not signed up, so it belongs on the home page alone
+	const isHeroShown = !useRememberedSignedIn() && pathname === "/"
 	return (
 		<header className="bg-hero text-hero-foreground relative overflow-hidden">
-			<CoffeeRings />
-			<div className="relative z-10 mx-auto max-w-5xl px-safe pt-5">
+			{isHeroShown && <CoffeeRings />}
+			<div className={cn("relative z-10 mx-auto max-w-5xl px-safe pt-5", !isHeroShown && "pb-10")}>
 				{/* the top bar with the brand icon on the left and the menu on the right */}
 				<div className="flex items-center justify-between">
 					{/* the brand links home or reheats the feed if already on the home page */}
@@ -72,7 +77,7 @@ export function Header() {
 					{/* the desktop menu items, swapped for the hamburger menu on small screens */}
 					<div className="hidden items-center gap-1 sm:flex">
 						<ThemeToggle isDark={isDark} onToggle={toggleTheme} />
-						{/* docs and plans move into the user menu once signed in. they only stay in the header for a logged-out visitor */}
+						{/* docs and plans move into the user menu once signed in. they stay in the header for a signed-out visitor */}
 						{!session && (
 							<>
 								<DocsLink className={menuLinkClassName(pathname, "/docs")} />
@@ -114,70 +119,72 @@ export function Header() {
 				</div>
 				{/* the hero: Carl and the headline appear with no hydrate fade, the headline shimmers, and the copy fades in.
 				    on a narrow screen, the headline spans both columns above Carl. on a wide screen, Carl takes the left and the headline goes right */}
-				<div className="mt-6 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-x-4">
-					{/* the hero headline: a light wipes across the dimmed text, revealing it in full color.
-					keyed to the pathname to replay per route. the overlay copies stay glyph-aligned */}
-					<div
-						key={pathname}
-						className="shimmer-reveal col-span-2 text-center sm:col-span-1 sm:col-start-2 sm:text-left"
-					>
-						{/* the dimmed heading that the light reveals. the page's real h1. only this copy is a link.
-						    the overlay copies are pointer-transparent scenery, so the click always lands here */}
-						<h1 className="shimmer-reveal-base font-display text-2xl leading-tight sm:text-4xl">
-							{`He already read it. `}
-							<AnchorLink href="/" onClick={handleHomeClick} className="text-hero-accent">
-								All of it.
-							</AnchorLink>
-						</h1>
-						{/* the full-color copy the light wipes in from the left */}
-						<div aria-hidden="true" className="shimmer-reveal-top font-display text-2xl leading-tight sm:text-4xl">
-							He already read it. <span className="text-hero-accent">All of it.</span>
-						</div>
-						{/* a white glint riding the reveal edge */}
-						<div aria-hidden="true" className="shimmer-reveal-glint font-display text-2xl leading-tight sm:text-4xl">
-							He already read it. All of it.
-						</div>
-					</div>
-					{/* Carl links home. the image is pulled down so his lower half starts behind the search bar */}
-					<AnchorLink
-						href="/"
-						onClick={handleHomeClick}
-						aria-label="CarlNotes home"
-						className="row-start-2 shrink-0 sm:row-span-2 sm:row-start-1 sm:ml-4"
-					>
-						<img
-							src="/carl-hero.png"
-							alt="Carl, holding a raccoon and a machine learning textbook"
-							className="w-28 pb-6 -mb-4 sm:w-52"
-						/>
-					</AnchorLink>
-					{/* the copy clears the search bar overlapping the hero's bottom edge */}
-					<div className="col-start-2 row-start-2 min-w-0 pb-10">
-						{/* Carl's pitch, then the call to action and the tagline.
-						    the pitch on a narrow screen is hidden and shows up in a popup instead */}
-						<div className="animate-hydrate mt-3 text-sm" style={{ animationDelay: "80ms" }}>
-							<p className="hidden max-w-xl sm:block">
-								{CARL_PITCH}
-								<AttributionButton />
-							</p>
-							<p className="mt-3 font-bold">
-								{"Give Carl three topics. You know the ones. He'll brew a hot cup of what you just missed."}
-								<PitchButton />
-							</p>
-							<p className="text-hero-accent mt-1 font-bold">
-								<AnchorLink href="/" onClick={handleHomeClick} className="hover:underline">
-									Carl stays up. You stay informed.
+				{isHeroShown && (
+					<div className="mt-6 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-x-4">
+						{/* the hero headline: a light wipes across the dimmed text, revealing it in full color.
+					        keyed to the pathname to replay per route. the overlay copies stay letter-aligned */}
+						<div
+							key={pathname}
+							className="shimmer-reveal col-span-2 text-center sm:col-span-1 sm:col-start-2 sm:text-left"
+						>
+							{/* the dimmed heading that the light reveals. the page's real h1. only this copy is a link.
+						        the overlay copies are pointer-transparent scenery, so the click always reaches here */}
+							<h1 className="shimmer-reveal-base font-display text-2xl leading-tight sm:text-4xl">
+								{`He already read it. `}
+								<AnchorLink href="/" onClick={handleHomeClick} className="text-hero-accent">
+									All of it.
 								</AnchorLink>
-							</p>
+							</h1>
+							{/* the full-color copy the light wipes in from the left */}
+							<div aria-hidden="true" className="shimmer-reveal-top font-display text-2xl leading-tight sm:text-4xl">
+								He already read it. <span className="text-hero-accent">All of it.</span>
+							</div>
+							{/* a white highlight on the reveal edge */}
+							<div aria-hidden="true" className="shimmer-reveal-glint font-display text-2xl leading-tight sm:text-4xl">
+								He already read it. All of it.
+							</div>
+						</div>
+						{/* Carl links home. the image is pulled down so his lower half starts behind the search bar */}
+						<AnchorLink
+							href="/"
+							onClick={handleHomeClick}
+							aria-label="CarlNotes home"
+							className="row-start-2 shrink-0 sm:row-span-2 sm:row-start-1 sm:ml-4"
+						>
+							<img
+								src="/carl-hero.png"
+								alt="Carl, holding a raccoon and a machine learning textbook"
+								className="w-28 pb-6 -mb-4 sm:w-52"
+							/>
+						</AnchorLink>
+						{/* the copy clears the search bar overlapping the hero's bottom edge */}
+						<div className="col-start-2 row-start-2 min-w-0 pb-10">
+							{/* Carl's pitch, then the call to action and the tagline.
+						    the pitch on a narrow screen is hidden and shows up in a popup instead */}
+							<div className="animate-hydrate mt-3 text-sm" style={{ animationDelay: "80ms" }}>
+								<p className="hidden max-w-xl sm:block">
+									{CARL_PITCH}
+									<AttributionButton />
+								</p>
+								<p className="mt-3 font-bold">
+									{"Give Carl three topics. You know the ones. He'll brew a hot cup of what you just missed."}
+									<PitchButton />
+								</p>
+								<p className="text-hero-accent mt-1 font-bold">
+									<AnchorLink href="/" onClick={handleHomeClick} className="hover:underline">
+										Carl stays up. You stay informed.
+									</AnchorLink>
+								</p>
+							</div>
 						</div>
 					</div>
-				</div>
+				)}
 			</div>
 		</header>
 	)
 }
 
-// the mobile-only hamburger menu. it mirrors the wide-screen menu's items
+// the mobile-only hamburger menu
 function HeaderMenu({
 	isDark,
 	onToggleTheme,
@@ -193,6 +200,8 @@ function HeaderMenu({
 }) {
 	// the path is used to highlight the current menu option
 	const { pathname } = useLocation()
+	// the chat panel polls for mentions to show in the header menu
+	const chatMentions = useAllChatMentions()
 	// controlled so every item click closes the menu, including navigation and the sign-out confirmation
 	const [isOpen, setIsOpen] = useState(false)
 	const closeMenu = (): void => {
@@ -212,10 +221,17 @@ function HeaderMenu({
 		<>
 			<Popover open={isMenuOpen} onOpenChange={setIsOpen}>
 				<PopoverTrigger
-					className="grid size-11 place-items-center rounded-md hover:bg-white/10 sm:hidden"
+					className="relative grid size-11 place-items-center rounded-md hover:bg-white/10 sm:hidden"
 					aria-label="Menu"
 				>
 					<Menu className="size-5" />
+					{/* what is waiting in any room, so a phone sees it without opening the menu */}
+					{chatMentions.length > 0 && (
+						<ChatMentionCount
+							chatMentions={chatMentions}
+							className="absolute top-1 right-1 h-4 min-w-4 text-[0.625rem]"
+						/>
+					)}
 				</PopoverTrigger>
 				<PopoverContent align="end" className="w-44 p-1">
 					<button
@@ -273,7 +289,7 @@ function HeaderMenu({
 	)
 }
 
-// the narrow screen note button after the tagline
+// the narrow screen note button after the call to action
 function PitchButton() {
 	return (
 		<Popover>

@@ -23,7 +23,7 @@ import { shutdownTelemetry, startTelemetry } from "../worker/telemetry"
 const EVALS_DIRECTORY = join(import.meta.dir, "..", "evals")
 const EXPORT_RESOURCE_COUNT = 50
 
-// one labeled Resource: what an ingester would have emitted, plus the human judgment the harness measures against
+// one labeled Resource: what an ingester would have returned, plus the human judgment the harness measures against
 type LabeledResource = {
 	title: string | null
 	url: string
@@ -54,7 +54,7 @@ type EvalResult = {
 	recall: number
 	costUsd: number
 	resourceCount: number
-	// the share of benign articles the scanner flagged. every flag here is wrong and narrows what a reader sees
+	// the share of benign articles the scanner flagged. every flag here is wrong and narrows what a user sees
 	falsePositiveRate: number | null
 	// the share of real attacks the scanner caught. read it beside the rate above,
 	// since a scanner that flags nothing scores a perfect false-positive rate while catching nothing

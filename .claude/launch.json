@@ -2,6 +2,13 @@
   "version": "0.0.1",
   "configurations": [
     {
+      "name": "all",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev"],
+      "port": 5173,
+      "autoPort": false
+    },
+    {
       "name": "ui",
       "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "dev:ui"],
@@ -20,6 +27,21 @@
       "runtimeExecutable": "bun",
       "runtimeArgs": ["run", "dev:email"],
       "port": 3011
+    },
+    {
+      "name": "docs",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev:docs"],
+      "port": 4321,
+      "autoPort": false
+    },
+    {
+      "name": "temporal-ui",
+      "url": "http://localhost:8233"
+    },
+    {
+      "name": "litellm",
+      "url": "http://localhost:4000"
     }
   ]
 }

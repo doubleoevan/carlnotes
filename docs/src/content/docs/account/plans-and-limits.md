@@ -20,11 +20,12 @@ they brew, and how many brews you can run by hand in a day.
 | Topics | 3 | 10 | 25 |
 | Topics on a daily schedule | 1 | 3 monthly · 4 yearly | 6 monthly · 7 yearly |
 | Brews a day | 5 | 15 monthly · 20 yearly | 30 monthly · 40 yearly |
+| Members per team you lead | 10 | Unlimited | Unlimited |
 
 Yearly billing is ten times the monthly price instead of twelve: two months for free. Yearly plans get higher daily limits
 instead of overage, because a yearly subscription has no monthly invoice to bill overage to.
 
-"Topics on a daily schedule" caps how many of your topics run **Daily** or **Weekdays**. Weekly
+"Topics on a daily schedule" limits how many of your topics run **Daily** or **Weekdays**. Weekly
 topics don't count against the daily limit. "Brews a day" is the shared pool for scheduled and manual brews, and
 it resets at midnight UTC.
 
@@ -40,22 +41,22 @@ account page says it directly: "Extra scans beyond your daily limit are billed b
 Without a card, and on the free plan, the daily limit is a hard stop until midnight UTC. Yearly
 plans don't bill overage; their higher daily limits are the tradeoff.
 
-There is a ceiling. Your account page shows **Carl's coffee fund**: the month's AI model spend against
-your plan's monthly cap. The plans page states each cap as an estimate, "About 30, 100, or 200 Brews
+There is a monthly limit. Your account page shows **Carl's coffee fund**: the month's AI model spend against
+your plan's monthly limit. The plans page states each limit as an estimate, "About 30, 100, or 200 Brews
 a month" for **Free**, **Plus**, and **Premium** plans. If your coffee fund budget fills up, 
 your brews are paused until it resets on the first of the month, UTC.
 
+![Carl's coffee fund on the account page: the month's spend against the plan's monthly limit, split
+into brews and Coffee Talk, with the day's brews and the current plan
+below](../../../assets/screenshots/account-coffee-fund.png)
+
 ## Track your budget
 
-Go to the **Activity** page. Your topics table has a **Cost** column with a per-topic total for the
-month, expandable to show the brews that charged it. The **Cost** column answers "which topics spent the most."
+Go to your own **Profile** page. Your topics table has a **Cost** column with a per-topic total for
+the month, expandable to show the brews that charged it, and a monthly total on the last row. The
+**Cost** column answers "which topics spent the most."
 
-More sources cost more on a **Daily** schedule. Ten sources brewed daily takes
-around 300 fetches a month before reviewing even gets started. To fix an expensive topic, move
-it to **Weekdays** or **Weekly**, or drop sources whose findings you never open. The Brew
-diary's "read N · kept N" counts show which sources earn their keep.
-
-![The activity page's topics table, scrolled to the per-topic Cost column and the monthly
+![Your profile's topics table, with the per-topic Cost column and the month's
 total](../../../assets/screenshots/activity-spend-bar.png)
 
 ## Upgrade, downgrade, cancel
@@ -66,11 +67,11 @@ have. Canceling puts you back on the free plan's limits.
 Downgrading never deletes anything. Every topic, finding, and subscription stays. Two limits
 tighten:
 
-- If you're over the topic cap, you can't create new topics until you're back under it. Existing topics keep
+- If you're over the topic limit, you can't create new topics until you're back under it. Existing topics keep
   working.
-- If you're over the new daily-schedule cap, your oldest daily topics keep their schedule and the newer ones
+- If you're over the new daily-schedule limit, your oldest daily topics keep their schedule and the newer ones
   stop brewing automatically. They keep their findings and still brew manually. A **Weekly**
-  schedule removes them from the daily cap entirely.
+  schedule removes them from the daily limit entirely.
 
 ## Closing your account
 

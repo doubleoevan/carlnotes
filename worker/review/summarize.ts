@@ -14,10 +14,7 @@ const MAX_TOPIC_SCAN_REPORT_FINDINGS = 20
 // how many times the report call retries before it gives up
 const REPORT_MAX_RETRIES = 4
 
-// one Source's ingestion outcome, as the report's sources section lists it
-// "fallback" means the Source ran without erroring but found nothing,
-// which the report names so a dead feed is visible instead of reading as a quiet one
-// a failed Source includes the reason it failed, so a blocked Source can read as blocked
+// one Source's ingestion outcome, as the report's sources section lists it "fallback" means the Source ran
 export type ScannedSource = {
 	sourceKind: string
 	status: "ok" | "fallback" | "failed" | "skipped"
@@ -37,7 +34,7 @@ type ScanPromptData = {
 }
 
 /**
- * Runs the given summarize callback, returning an empty summary if it throws.
+ * Runs the given summarize callback, returning an empty summary if it throws an error.
  */
 export async function toTopicScanSummary(scanId: string, summarize: () => Promise<string>): Promise<string> {
 	try {
@@ -80,7 +77,7 @@ export async function summarizeTopicScan(
 	})
 	charge(budget, "scoringCheap", tokenCost(usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS))
 
-	// a blank answer is a failed call, so it throws instead of returning an empty report
+	// a blank answer is a failed call, so it throws an error instead of returning an empty report
 	const reportText = text.trim()
 	if (reportText.length === 0) {
 		throw new Error(`scan report came back empty after ${usage.totalTokens ?? 0} tokens`)
@@ -94,8 +91,7 @@ export async function summarizeTopicScan(
 export async function buildScanReportPrompt(promptData: ScanPromptData): Promise<BuiltPrompt> {
 	const { template, name, registryPrompt } = await fetchPromptTemplate("summarize-topic-scan")
 
-	// fill the template. the topic text, the kept block, and the sources block are reachable by an attacker.
-	// a failed Source's reason can include a host's own response text, so all three get fenced as untrusted
+	// fill the template
 	const prompt = writePrompt(
 		template,
 		{
@@ -147,8 +143,7 @@ function toSourcesBlock(scannedSources: ScannedSource[]): string {
 		return "none recorded"
 	}
 
-	// one bullet per Source. a failed Source states its reason, so the report can say it was blocked.
-	// a Source that could not be reached would otherwise read as one that found nothing
+	// one bullet per Source
 	return scannedSources
 		.map((scannedSource) => {
 			const fallbackNote = scannedSource.fallbackMode ? ` — fell back to ${scannedSource.fallbackMode}` : ""
@@ -158,7 +153,7 @@ function toSourcesBlock(scannedSources: ScannedSource[]): string {
 		.join("\n")
 }
 
-// the Scan's total spend with its per-stage breakdown, ingestion first since it is charged first
+// the Scan's total spend with its per-stage breakdown, ingestion first as it is charged
 function toCostLine(budget: Budget): string {
 	const { ingestion, embedding, fetch, scoringCheap, scoringPremium } = budget.stageCosts
 	return `total $${budget.spentDollars.toFixed(4)} — ingestion $${ingestion.toFixed(4)}, embedding $${embedding.toFixed(4)}, fetch $${fetch.toFixed(4)}, cheap scoring $${scoringCheap.toFixed(4)}, premium scoring $${scoringPremium.toFixed(4)}`

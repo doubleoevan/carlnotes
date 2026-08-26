@@ -5,21 +5,24 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { cn } from "@/lib/utils"
 
 /**
- * A user's credit: their image and username, linking to their profile.
+ * The user's avatar and username, linking to their profile.
  */
 export function UserProfileLink({
 	user,
 	avatarClassName = "size-6",
 	className,
 	label,
+	displayName,
 	isNewTab,
 	...props
 }: {
 	user: ProfileIdentity
 	avatarClassName?: string
 	className?: string
-	// the words before the username, like the topic byline's "Brewed by". omitted, the username stands alone
+	// the words before the username. omitted, the username stands alone
 	label?: string
+	// what the link says instead of the username
+	displayName?: string
 	// opens the profile in a new tab, for a link inside a table the user is still working in
 	isNewTab?: boolean
 } & React.ComponentProps<"a">) {
@@ -27,6 +30,7 @@ export function UserProfileLink({
 	return (
 		<AnchorLink
 			href={`/profiles/${user.userId}`}
+			aria-label={displayName && displayName !== user.username ? `${displayName} (@${user.username})` : undefined}
 			{...(isNewTab ? { target: "_blank", rel: "noreferrer" } : {})}
 			{...props}
 			className={cn("inline-flex items-center gap-2 hover:underline", className)}
@@ -39,10 +43,10 @@ export function UserProfileLink({
 			/>
 			{label ? (
 				<span className="text-muted-foreground">
-					{label} <span className="text-link">{user.username}</span>
+					{label} <span className="text-link">{displayName ?? user.username}</span>
 				</span>
 			) : (
-				<span className="text-link">{user.username}</span>
+				<span className="text-link">{displayName ?? user.username}</span>
 			)}
 		</AnchorLink>
 	)

@@ -21,6 +21,7 @@ export {
 	getAttachmentBytes,
 	putAttachment,
 	toChatAttachmentKey,
+	toChatRoomAttachmentKey,
 } from "./store"
 export { type SuggestedSource, suggestSources, toSourceKey } from "./suggest"
 // trace the model-calls that the scheduled worker does

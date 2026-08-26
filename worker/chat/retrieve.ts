@@ -1,44 +1,44 @@
-// the read side of topic chat. one question picks the topic's most similar findings
-// and assembles the context a reply is written from
+// the read side of topic chat
 import { reportError } from "@shared/monitoring"
 import { toSourceSummary } from "@shared/sources"
-import { and, desc, eq, isNotNull, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { db } from "../../db"
 import {
 	attachments,
 	chatAttachments,
+	docsChunks,
 	EMBED_MODEL_NAME,
 	findings,
 	resources,
 	scans,
 	sources,
+	teams,
+	teamTopics,
 	topics,
 } from "../../db/schema"
 import { embedVector } from "../models"
 import { getResourceContent } from "../store"
 
-// how many findings a chat turn sends to the model. the topic's finding set is already trimmed to its max-results.
-// this is a top-ranked subset of those findings, reranked based on the question
+// how many findings a chat turn sends to the model
 const MAX_RETRIEVED_FINDINGS = 8
 
-// how much of one resource's text a chat turn includes. enough to answer from, small enough that several fit in one prompt.
-// it stays at or under MAX_SCORE_CHARS since llm-guard screened nothing past that prefix
+// how much of one resource's text a chat turn includes
 const MAX_RESOURCE_CHARS = 2000
 
 // how many recent scan summaries a chat turn includes, newest first
 const MAX_SCAN_SUMMARIES = 3
 
-// how close two findings' question-similarity has to be before recency is used to break their tie. cosine distance
-// runs 0 to 2, so the band is narrow: it only reorders findings that answer the question equally well.
-// widen it to lean harder on recency, narrow it to lean harder on question-similarity
+// how close two findings' question-similarity has to be before recency is used to break their tie
 const SIMILARITY_TIE_BAND = 0.05
 
-// qwen3 is instruction-aware, so the question is wrapped as the query side while stored resource vectors stay plain.
-// the instruction describes a user's question, since that is what chat embeds
+// qwen3 is instruction-aware
 const EMBED_QUERY_INSTRUCTION = "Given a user's question about a topic, retrieve web resources that answer it"
 
-// one finding as the model sees it: what it points at, when this topic found it, why the pipeline kept it,
-// and the text behind it
+// how many docs sections one chat turn may quote and how relevant they have to be
+const MAX_RETRIEVED_DOCS_SECTIONS = 3
+const DOCS_MATCH_MAX_DISTANCE = 0.5
+
+// one finding as the model sees it
 export type RetrievedFinding = {
 	title: string | null
 	url: string
@@ -46,6 +46,8 @@ export type RetrievedFinding = {
 	relevanceScore: number
 	relevanceExplanation: string
 	text: string
+	// the topic the finding belongs to, set on a team chat turn whose findings span topics
+	topicName?: string
 }
 
 // everything one chat turn puts in front of the model, assembled from what the topic already holds
@@ -59,6 +61,8 @@ export type ChatContext = {
 	attachmentContext: string
 	// this user's own kept chat attachments for this topic. scoped to the chat use
 	chatAttachmentContext: string
+	// the docs sections close enough to the question to quote, empty for an ordinary topic question
+	docsBlock: string
 }
 
 /**
@@ -70,6 +74,7 @@ export async function retrieveChatContext(
 	userId: string,
 	isOwner: boolean,
 	litellmApiKey?: string,
+	includeKeptAttachments = true,
 ): Promise<ChatContext | null> {
 	// a missing topic has nothing to chat about
 	const [topic] = await db
@@ -80,14 +85,18 @@ export async function retrieveChatContext(
 		return null
 	}
 
-	// re-rank the findings against the question, then read the sources, scan summaries, and attachment contexts.
-	// the topic's own attachments are owner-only
-	const retrievedFindings = await retrieveFindings(topicId, question, litellmApiKey)
-	const [topicSources, scanSummaries, attachmentContext, chatAttachmentContext] = await Promise.all([
+	// embed the question once through the same helper review uses. the findings and the docs both rank against it
+	const questionVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${question}`, litellmApiKey)
+
+	// re-rank the findings against the question, then read the sources, scan summaries, attachment contexts
+	const retrievedFindings = await retrieveFindings([topicId], questionVector)
+	const [topicSources, scanSummaries, attachmentContext, chatAttachmentContext, docsBlock] = await Promise.all([
 		readSources(topicId),
 		readScanSummaries(topicId),
-		isOwner ? readAttachmentContext(topicId) : Promise.resolve(""),
-		readChatAttachmentContext(userId, topicId),
+		// a room turn's answer posts publicly, so the owner's attachments and the poster's kept chat attachments both stay out
+		isOwner && includeKeptAttachments ? readAttachmentContext(topicId) : Promise.resolve(""),
+		includeKeptAttachments ? readChatAttachmentContext(userId, topicId) : Promise.resolve(""),
+		readDocsBlock(questionVector),
 	])
 	return {
 		topicName: topic.name,
@@ -97,22 +106,20 @@ export async function retrieveChatContext(
 		scanSummaries,
 		attachmentContext,
 		chatAttachmentContext,
+		docsBlock,
 	}
 }
 
-// the topic's findings ranked by how close their resource is to the question
+// the topics' findings ranked by how close their resource is to the question
 async function retrieveFindings(
-	topicId: string,
-	question: string,
-	litellmApiKey?: string,
+	topicIds: string[],
+	questionVector: number[],
+	topicNameById?: Map<string, string>,
 ): Promise<RetrievedFinding[]> {
-	// embed the question through the same helper review uses, which truncates and normalizes it
-	const questionVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${question}`, litellmApiKey)
-
-	// order by cosine distance against the question, keeping only rows this model embedded.
-	// the distance is also returned, so recency can break a tie between two findings that answer equally well
+	// order by cosine distance against the question, keeping only rows this model embedded
 	const rows = await db
 		.select({
+			topicId: findings.topicId,
 			title: resources.title,
 			url: resources.url,
 			foundAt: findings.createdAt,
@@ -126,7 +133,7 @@ async function retrieveFindings(
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
 		.where(
 			and(
-				eq(findings.topicId, topicId),
+				inArray(findings.topicId, topicIds),
 				isNotNull(resources.embedding),
 				eq(resources.embeddingModel, EMBED_MODEL_NAME),
 			),
@@ -143,8 +150,30 @@ async function retrieveFindings(
 			relevanceScore: row.relevanceScore,
 			relevanceExplanation: row.relevanceExplanation,
 			text: (await readResourceText(row.contentKey, row.snippet)).slice(0, MAX_RESOURCE_CHARS),
+			topicName: topicNameById?.get(row.topicId),
 		})),
 	)
+}
+
+// the docs sections close enough to the question to quote, composed into one block
+async function readDocsBlock(questionVector: number[]): Promise<string> {
+	// keep only the sections within the cutoff, closest first, and limit how many one turn quotes
+	const rows = await db
+		.select({ page: docsChunks.page, content: docsChunks.content })
+		.from(docsChunks)
+		.where(
+			and(
+				eq(docsChunks.embeddingModel, EMBED_MODEL_NAME),
+				sql`${docsChunks.embedding} <=> ${JSON.stringify(questionVector)}::vector < ${DOCS_MATCH_MAX_DISTANCE}`,
+			),
+		)
+		.orderBy(sql`${docsChunks.embedding} <=> ${JSON.stringify(questionVector)}::vector`)
+		.limit(MAX_RETRIEVED_DOCS_SECTIONS)
+
+	// label each section with the docs url it came from, so a reply can point the user at the page
+	return rows
+		.map((docsRow) => `[carlnotes.com/docs${docsRow.page === "index" ? "" : `/${docsRow.page}`}]\n${docsRow.content}`)
+		.join("\n\n")
 }
 
 /**
@@ -152,8 +181,7 @@ async function retrieveFindings(
  * The set never changes, only its order.
  */
 export function toRecencyOrdered<Row extends { distance: number; foundAt: Date }>(rows: Row[]): Row[] {
-	// banding the distance makes this a real ordering. comparing each pair for closeness instead would not be
-	// transitive, so three findings could sort into an order none of the pairwise answers asked for
+	// banding the distance makes this a real ordering
 	const toBand = (distance: number): number => Math.floor(distance / SIMILARITY_TIE_BAND)
 	return [...rows].sort(
 		(row, otherRow) =>
@@ -161,8 +189,7 @@ export function toRecencyOrdered<Row extends { distance: number; foundAt: Date }
 	)
 }
 
-// a resource's stored Markdown, falling back to its native snippet.
-// an unreadable object is a cache miss and not a failure, so the snippet still gets returned
+// a resource's stored Markdown, falling back to its native snippet
 async function readResourceText(contentKey: string | null, snippet: string | null): Promise<string> {
 	// a resource that was never offloaded has only its snippet
 	if (!contentKey) {
@@ -180,8 +207,7 @@ async function readResourceText(contentKey: string | null, snippet: string | nul
 	}
 }
 
-// the topic's ready sources, summarized the same way the topic page shows them.
-// a source that has not passed its llm-guard screen is left out
+// the topic's ready sources, summarized the same way the topic page shows them
 async function readSources(topicId: string): Promise<string[]> {
 	const sourceRows = await db
 		.select({ sourceKind: sources.kind, config: sources.config })
@@ -243,4 +269,97 @@ async function readChatAttachmentContext(userId: string, topicId: string): Promi
 		.map((attachmentRow) => attachmentRow.context)
 		.filter((chatAttachmentContext) => chatAttachmentContext.trim().length > 0)
 		.join("\n\n")
+}
+
+// everything one team room turn puts in front of the model, drawn from every topic the team holds
+export type TeamChatContext = {
+	teamName: string
+	// each held topic's name and prompt, for the prompt's topics block
+	topics: { name: string; prompt: string }[]
+	findings: RetrievedFinding[]
+	// the held topics' sources, each line naming its topic
+	sources: string[]
+	scanSummaries: string[]
+	docsBlock: string
+}
+
+/**
+ * Assembles one team room turn's context from every topic the team holds, or null when the team does not exist.
+ * Owner attachments and kept chat material stay out of an answer that posts to the whole room.
+ */
+export async function retrieveTeamChatContext(
+	teamId: string,
+	question: string,
+	litellmApiKey?: string,
+): Promise<TeamChatContext | null> {
+	// a missing team has nothing to chat about
+	const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId))
+	if (!team) {
+		return null
+	}
+
+	// the team's owned topics
+	const ownedTopicRows = await db
+		.select({ id: topics.id, name: topics.name, prompt: topics.prompt })
+		.from(topics)
+		.where(eq(topics.teamId, teamId))
+	// the team's shared topics
+	const sharedTopicRows = await db
+		.select({ id: topics.id, name: topics.name, prompt: topics.prompt })
+		.from(teamTopics)
+		.innerJoin(topics, eq(topics.id, teamTopics.topicId))
+		.where(eq(teamTopics.teamId, teamId))
+	// the id list drives every read below, and the name map labels each finding and source line
+	const teamTopicRows = [...ownedTopicRows, ...sharedTopicRows]
+	const topicIds = teamTopicRows.map((topicRow) => topicRow.id)
+	const topicNameByTopicId = new Map(teamTopicRows.map((topicRow) => [topicRow.id, topicRow.name]))
+
+	// embed the question once, then rank every held topic's findings against it together
+	const questionVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${question}`, litellmApiKey)
+	const [retrievedFindings, teamSources, scanSummaries, docsBlock] = await Promise.all([
+		topicIds.length > 0 ? retrieveFindings(topicIds, questionVector, topicNameByTopicId) : Promise.resolve([]),
+		topicIds.length > 0 ? readTeamSources(topicIds, topicNameByTopicId) : Promise.resolve([]),
+		topicIds.length > 0 ? readTeamScanSummaries(topicIds) : Promise.resolve([]),
+		readDocsBlock(questionVector),
+	])
+	return {
+		teamName: team.name,
+		topics: teamTopicRows.map((topicRow) => ({ name: topicRow.name, prompt: topicRow.prompt })),
+		findings: retrievedFindings,
+		sources: teamSources,
+		scanSummaries,
+		docsBlock,
+	}
+}
+
+// every topic's ready sources in one query, each line prefixed with its topic's name
+async function readTeamSources(topicIds: string[], topicNameById: Map<string, string>): Promise<string[]> {
+	const sourceRows = await db
+		.select({ topicId: sources.topicId, sourceKind: sources.kind, config: sources.config })
+		.from(sources)
+		.where(and(inArray(sources.topicId, topicIds), eq(sources.status, "ready")))
+
+	// the built-in web search stores nothing worth summarizing, so it names itself
+	return sourceRows.map((sourceRow) => {
+		const topicName = topicNameById.get(sourceRow.topicId) ?? "a topic"
+		if (sourceRow.sourceKind === "search") {
+			return `${topicName}: web search — Carl searches the live web for this topic`
+		}
+		// every other source keeps the topic page's own summary line
+		const sourceSummary = toSourceSummary(sourceRow.sourceKind, sourceRow.config)
+		return `${topicName}: ${sourceSummary ? `${sourceRow.sourceKind} — ${sourceSummary}` : sourceRow.sourceKind}`
+	})
+}
+
+// the held topics' most recent scan summaries together, newest first
+async function readTeamScanSummaries(topicIds: string[]): Promise<string[]> {
+	const summaryRows = await db
+		.select({ scanSummary: scans.scanSummary })
+		.from(scans)
+		.where(and(inArray(scans.topicId, topicIds), isNotNull(scans.scanSummary)))
+		.orderBy(desc(scans.startedAt))
+		.limit(MAX_SCAN_SUMMARIES)
+
+	// drop the empty summaries so a blank summary adds no noise
+	return summaryRows.map((summaryRow) => summaryRow.scanSummary ?? "").filter((summary) => summary.length > 0)
 }

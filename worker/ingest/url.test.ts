@@ -1,5 +1,4 @@
-// url ingester tests: what one url Source contributes, which links off its page count as material,
-// and what it still contributes when the page cannot be read
+// url ingester tests: what one url Source contributes
 import { expect, test } from "bun:test"
 import type { Source } from "./ingester"
 import { MAX_RESULTS, type PageBody, toPageLinks, toUrlSourceResources, urlIngester } from "./url"
@@ -62,7 +61,7 @@ test("a body that could not be read still finds the page alone", () => {
 const toUrlSource = (config: Record<string, unknown>): Source => ({ id: "src_1", config }) as Source
 
 // a Source with no url is misconfigured, and the Scan isolates the failure instead of scanning nothing
-test("a Source with no string config.url throws", async () => {
+test("a Source with no string config.url throws an error", async () => {
 	await expect(urlIngester(toUrlSource({}))).rejects.toThrow("no string config.url")
 })
 
@@ -115,7 +114,7 @@ test("fragments, non-http schemes, and the page's own url are dropped", () => {
 	expect(toPageLinks(markdown, PAGE_URL)).toEqual([{ url: "https://a.com/real", anchorText: "Real" }])
 })
 
-// the page's own url is recognized however it was written, since canonicalization is what decides sameness
+// the page's own url is recognized however it was written, where canonicalization decides sameness
 test("the page's own url is dropped even when it is written differently", () => {
 	const markdown = "[Home](https://news.example.com/front?utm_source=x#section)"
 	expect(toPageLinks(markdown, PAGE_URL)).toEqual([])
@@ -127,8 +126,8 @@ test("repeated links collapse to the first one seen", () => {
 	expect(toPageLinks(markdown, PAGE_URL)).toEqual([{ url: "https://a.com/x", anchorText: "First" }])
 })
 
-// one page cannot dominate a Scan's candidate set, and what it does contribute is the top of the page
-test("a page past the cap contributes exactly the cap, in document order", () => {
+// one page cannot dominate a Scan's named source set, and what it does contribute is the top of the page
+test("a page past the limit contributes exactly the limit, in document order", () => {
 	const markdown = Array.from({ length: MAX_RESULTS + 10 }, (_, index) => `[L${index}](https://a.com/${index})`)
 	const links = toPageLinks(markdown.join("\n"), PAGE_URL)
 	expect(links).toHaveLength(MAX_RESULTS)

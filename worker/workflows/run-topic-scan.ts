@@ -1,5 +1,4 @@
-// the durable Scan: it runs the pipeline's three stages as activities, so a Scan outlives whatever process asked for it
-// and resumes at the stage after the last stage that finished instead of paying twice to redo a stage
+// the durable Scan: it runs the pipeline's three stages as activities
 import { CancellationScope, isCancellation, proxyActivities } from "@temporalio/workflow"
 import type * as scanActivities from "./run-topic-scan-activities"
 // the attempt counts the retry policies that the temporal activities read
@@ -16,8 +15,7 @@ import {
 	REVIEW_TOTAL_TIMEOUT_MS,
 } from "./stage-timeouts"
 
-// ingest activity may be retried: it dedupes on canonical url, so a second attempt converges on the same Resources.
-// it heartbeats, so a dead worker is caught in the heartbeat timeout
+// ingest activity may be retried: it dedupes on canonical url
 const { ingestForScan } = proxyActivities<typeof scanActivities>({
 	startToCloseTimeout: INGEST_TIMEOUT_MS,
 	scheduleToCloseTimeout: INGEST_TOTAL_TIMEOUT_MS,
@@ -25,9 +23,7 @@ const { ingestForScan } = proxyActivities<typeof scanActivities>({
 	retry: { maximumAttempts: INGEST_ATTEMPTS },
 })
 
-// review pays for the fetches and the model calls, so it gets one retry and no more. a second attempt skips every
-// Resource that already has a Finding for the Topic and reuses the stored embeddings and content.
-// review isolates its own per-Resource failures, so a failure reaching here is systemic
+// review pays for the fetches and the model calls, so it gets one retry and no more
 const { reviewForScan } = proxyActivities<typeof scanActivities>({
 	startToCloseTimeout: REVIEW_TIMEOUT_MS,
 	scheduleToCloseTimeout: REVIEW_TOTAL_TIMEOUT_MS,
@@ -52,12 +48,10 @@ export async function runTopicScanWorkflow(
 	ownerId: string,
 	trigger: scanActivities.ScanTrigger,
 ): Promise<void> {
-	// the Budget is built by the first stage and rides between stages as a value. it includes the Scan's limits,
-	// which come from the environment, so it is made where an activity can read it, instead of in the workflow
+	// the Budget is built by the first stage and goes between stages as a value
 	let spentBudget: scanActivities.IngestStageResult["budget"] | undefined
 
-	// a stage that throws ends the Scan as failed with whatever it had already spent.
-	// rethrowing after would only mark the workflow failed for a Scan already closed
+	// a stage that throws an error ends the Scan as failed with whatever it had already spent
 	try {
 		const ingestResult = await ingestForScan(scanId, topicId)
 		spentBudget = ingestResult.budget
@@ -65,15 +59,14 @@ export async function runTopicScanWorkflow(
 		const reviewResult = await reviewForScan(scanId, topicId, ownerId, ingestResult, ingestResult.budget)
 		spentBudget = reviewResult.budget
 
-		// a cancelled stage returns what it had instead of throwing an error, so a Scan cancelled late arrives here
-		// with every stage finished. saving it as stopped is what keeps it out of the day's scan count
+		// a cancelled stage returns what it had instead of throwing an error
 		if (CancellationScope.current().consideredCancelled) {
 			await stopCancelledScan(scanId)
 			return
 		}
 		await finishScan(scanId, topicId, ownerId, trigger, ingestResult, reviewResult)
 	} catch (error) {
-		// a cancel that landed while a stage was awaiting rejects that stage instead of returning through it
+		// a cancel that lands while a stage is waiting rejects that stage instead of returning through it
 		if (isCancellation(error)) {
 			await stopCancelledScan(scanId)
 			return
@@ -82,9 +75,7 @@ export async function runTopicScanWorkflow(
 	}
 }
 
-// save a Scan the user cancelled. it keeps the Findings it wrote and the dollars its stages recorded,
-// and gives its daily scan back, so it is stopped instead of failed. the write runs where cancellation cannot reach it,
-// since every activity a cancelled workflow starts is cancelled the moment it starts, which would leave the row running for the sweep
-function stopCancelledScan(scanId: string) {
+// save a Scan the user cancelled
+function stopCancelledScan(scanId: string): Promise<void> {
 	return CancellationScope.nonCancellable(() => stopScan(scanId))
 }

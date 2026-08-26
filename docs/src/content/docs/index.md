@@ -8,7 +8,7 @@ description: >-
 Carl reads the internet so you don't have to. You give him a topic you care about. He researches it, keeps what matters, 
 and writes a note about each new finding that made the cut. You read the notes. You stay informed.
 
-![The CarlNotes home page: the hero, search, and your topics with their newest
+![The CarlNotes home page signed in: search, and your topics with their newest
 findings](../../assets/screenshots/home-topic-feed.png)
 
 This is how Carl takes his coffee.

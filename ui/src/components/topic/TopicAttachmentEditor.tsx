@@ -9,7 +9,7 @@ import { ScrollNote } from "@/components/topic/TopicScanRecap"
 import { FILE_PICKER_ACCEPT } from "@/lib/utils"
 
 // one stored attachment, whose context the owner can read and correct
-type KeptAttachment = TopicResponse["attachments"][number]
+type StoredAttachment = TopicResponse["attachments"][number]
 
 // the stored attachments, the staged files, and their change callbacks
 type AttachmentEditorProps = {
@@ -20,8 +20,7 @@ type AttachmentEditorProps = {
 }
 
 /**
- * The attachments editor with the stored attachments, their context, and the control that stages more.
- * A staged file shows as a chip on the prompt instead of here, so one staging list has one place it renders.
+ * The attachments editor with the stored attachments, their context, the staged files, and the add link that stages more.
  */
 export function TopicAttachmentEditor({
 	keptAttachments,
@@ -33,7 +32,7 @@ export function TopicAttachmentEditor({
 	const fileInputRef = useRef<HTMLInputElement>(null)
 
 	// stage the attachment files to upload on Save
-	const handleFilesPicked = (event: React.ChangeEvent<HTMLInputElement>): void => {
+	const handleFilesSelected = (event: React.ChangeEvent<HTMLInputElement>): void => {
 		stageFiles(pendingFiles, Array.from(event.target.files ?? []), onPendingChange)
 		event.target.value = ""
 	}
@@ -86,21 +85,20 @@ export function TopicAttachmentEditor({
 				type="file"
 				multiple
 				accept={FILE_PICKER_ACCEPT}
-				onChange={handleFilesPicked}
+				onChange={handleFilesSelected}
 				className="hidden"
 			/>
 		</div>
 	)
 }
 
-// an attachment row with a ✕ remove control on the left, aligned with the + add controls below.
-// children hold whatever belongs under the row, which for a stored attachment is its context
+// an attachment row with a ✕ remove button on the left, aligned with the add-an-attachment link below
 function AttachmentRow({
 	attachment,
 	onRemove,
 	children,
 }: {
-	attachment: KeptAttachment
+	attachment: StoredAttachment
 	onRemove: () => void
 	children?: React.ReactNode
 }) {
@@ -153,7 +151,7 @@ function PendingAttachmentRow({ file, onRemove }: { file: File; onRemove: () => 
 }
 
 // the row's name: a url links out to its page, and a file downloads
-function AttachmentLink({ attachment }: { attachment: KeptAttachment }) {
+function AttachmentLink({ attachment }: { attachment: StoredAttachment }) {
 	if (attachment.status === "failed") {
 		return <span className="min-w-0 flex-1 truncate">{attachment.filename}</span>
 	}
@@ -185,13 +183,12 @@ function AttachmentLink({ attachment }: { attachment: KeptAttachment }) {
 	)
 }
 
-// a stored attachment's context, rendered as the Markdown the model wrote it in. it is editable because every
-// later scan for the topic reads it, so this is where the owner corrects what the model made of the file
+// a stored attachment's context, rendered as the Markdown the model wrote it in
 function AttachmentContext({
 	attachment,
 	onContextChange,
 }: {
-	attachment: KeptAttachment
+	attachment: StoredAttachment
 	onContextChange: (context: string) => void
 }) {
 	const [isEditing, setIsEditing] = useState(false)
@@ -203,8 +200,7 @@ function AttachmentContext({
 		return <div className="text-muted-foreground text-xs italic">{statusLabel}</div>
 	}
 
-	// a native <details> reveals a long context. its own marker is replaced with a chevron sized like the row's ✕ above,
-	// so the two line up along the left edge
+	// a native <details> reveals a long context
 	return (
 		<details className="group">
 			<summary className="text-link flex cursor-pointer list-none items-center gap-1.5 text-xs hover:underline [&::-webkit-details-marker]:hidden">

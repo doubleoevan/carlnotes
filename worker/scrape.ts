@@ -1,6 +1,4 @@
 // fill a Resource's content: a published transcript or a video's caption track read straight from the origin,
-// any other page as Markdown through Firecrawl. plus a credit-free conditional GET that checks whether stored
-// content changed. only the scrape is keyed, by FIRECRAWL_API_KEY
 import type { resourceKinds } from "@shared/enums"
 import { FIRECRAWL_COST_PER_FETCH } from "./budget"
 
@@ -8,17 +6,14 @@ const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v1/scrape"
 // scraping a live page is slower than a feed fetch, so allow a longer timeout
 const FETCH_TIMEOUT_MS = 30_000
 
-// a body read straight from its url is bounded by its own timeout and byte cap,
-// so a slow or endless response never holds up a scan or is held in memory whole
+// a body read straight from its url is bounded by its own timeout and byte limit
 const DIRECT_TIMEOUT_MS = 10_000
 const MAX_DIRECT_BYTES = 5_000_000
 
-// how long stored content stands in for a fetch. past it, content is revalidated or fetched again
-// ingest and review both read this, so a page is fresh or stale to both of them
+// how long stored content stands in for a fetch
 export const CONTENT_TTL_MS = toTtlMs(Bun.env.CONTENT_TTL_MS)
 
-// the ttl that a setting names, or the one-day default when it names nothing usable,
-// so stored content is reused until it's refetched after the ttl expires
+// the ttl that a setting names, or the one-day default when it names nothing usable
 function toTtlMs(setting: string | undefined): number {
 	const ttlMs = Number(setting)
 	return setting && Number.isFinite(ttlMs) && ttlMs >= 0 ? ttlMs : 24 * 60 * 60 * 1000
@@ -42,8 +37,7 @@ const YOUTUBE_ID_PATHS = new Set(["shorts", "embed", "live"])
 const PLAYER_ENDPOINT = "https://www.youtube.com/youtubei/v1/player"
 const YOUTUBE_CAPTION_DOMAIN = "youtube.com"
 
-// the client the track list is requested as. the caption urls the web client hands out serve an empty body,
-// so a track has to be asked for as a mobile client. this version will eventually age out and need raising
+// the client the track list is requested as
 const PLAYER_CLIENT = { clientName: "IOS", clientVersion: "20.10.4", deviceModel: "iPhone16,2" }
 
 // the Vimeo hostnames a video url can have, and the domain its caption files are served from
@@ -58,8 +52,7 @@ const DAILYMOTION_CAPTION_DOMAIN = "dmcdn.net"
 // how long the revalidation request may run before it aborts, so a slow origin never holds up a scan
 const REVALIDATE_TIMEOUT_MS = Number(Bun.env.REVALIDATE_TIMEOUT_MS ?? "5000")
 
-// hosts that resolve to an internal address. a Source or attachment url is owner-supplied, so fetching one of
-// these would let a Topic reach the cloud metadata service or anything else not exposed to the internet
+// hosts that resolve to an internal address
 const INTERNAL_HOST_PATTERN =
 	/^(?:localhost|0\.0\.0\.0|\[?::1\]?|10\.\d+\.\d+\.\d+|127\.\d+\.\d+\.\d+|169\.254\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|.+\.(?:local|internal))$/i
 
@@ -97,8 +90,7 @@ const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
  * Throws an error when a hop is malformed, not http(s), internal, or the chain runs too long.
  */
 export async function fetchPublicUrl(url: string, init: RequestInit = {}): Promise<Response> {
-	// follow redirects by hand. letting fetch follow them would check the first url and then jump anywhere,
-	// so a public page could bounce the worker to the cloud metadata service
+	// follow redirects by hand
 	let parsedUrl = toFetchableUrl(url)
 	for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
 		const response = await fetch(parsedUrl, { ...init, redirect: "manual" })
@@ -115,7 +107,7 @@ export async function fetchPublicUrl(url: string, init: RequestInit = {}): Promi
 	throw new Error(`url redirected more than ${MAX_REDIRECTS} times: ${url}`)
 }
 
-// a fetch's text and what it spent, plus the etag and last-modified for a later conditional GET. either validator may be absent
+// a fetch's text and what it spent, plus the etag and last-modified for a later conditional GET
 export type FetchResult = { text: string; cost: number; etag: string | null; lastModified: string | null }
 
 // the stored etag and last-modified a conditional GET is built from. either may be null
@@ -127,8 +119,7 @@ type ResourceKind = (typeof resourceKinds)[number]
 // one caption track, however the host that published it, described its own payload
 export type CaptionTrack = { languageCode: string; url: string }
 
-// the hosts that publish a video's captions without a key. each names its videos its own way and lists its
-// tracks at its own endpoint, so a url that matches none of them is scraped through Firecrawl instead
+// the hosts that publish a video's captions without a key
 const CAPTION_HOSTS = [
 	{ toVideoId: toYoutubeVideoId, fetchTranscript: fetchYoutubeTranscript },
 	{ toVideoId: toVimeoVideoId, fetchTranscript: fetchVimeoTranscript },
@@ -136,7 +127,7 @@ const CAPTION_HOSTS = [
 ]
 
 /**
- * Fetch one Resource's content by the path its kind and url select. A transcript or caption path that produces no text throws.
+ * Fetch one Resource's content by the path its kind and url select. A transcript or caption path that produces no text throws an error.
  * An episode that declares no transcript returns empty text at no cost.
  */
 export async function fetchContent(
@@ -149,8 +140,7 @@ export async function fetchContent(
 		return fetchDeclaredTranscript(transcriptUrl)
 	}
 
-	// an episode that declared none is a player and its show notes, and the notes are already in the snippet,
-	// so scraping the page would spend a credit on nothing. no text here scores the snippet instead
+	// an episode that declared none is a player and its show notes, and the notes are already in the snippet
 	if (resourceKind === "listen") {
 		return { text: "", cost: 0, etag: null, lastModified: null }
 	}
@@ -160,7 +150,7 @@ export async function fetchContent(
 		return fetchFirecrawlMarkdown(url)
 	}
 
-	// a video's words are published as its caption track, so the url picks which host to ask for it
+	// a video's words are published as its caption track, so the url selects which host to ask for it
 	for (const captionHost of CAPTION_HOSTS) {
 		const videoId = captionHost.toVideoId(url)
 		if (videoId) {
@@ -170,9 +160,9 @@ export async function fetchContent(
 	return fetchFirecrawlMarkdown(url)
 }
 
-// scrape one url to Markdown via Firecrawl. a missing key or failed scrape throws, and review falls back to the Resource's native snippet
+// scrape one url to Markdown via Firecrawl
 async function fetchFirecrawlMarkdown(url: string): Promise<FetchResult> {
-	// Firecrawl requires a key. throw when it isn't set so the review can fall back to the snippet
+	// Firecrawl requires a key. throw an error when it isn't set so the review can fall back to the snippet
 	const apiKey = Bun.env.FIRECRAWL_API_KEY
 	if (!apiKey) {
 		throw new Error("FIRECRAWL_API_KEY is not set")
@@ -191,22 +181,21 @@ async function fetchFirecrawlMarkdown(url: string): Promise<FetchResult> {
 		throw new Error(`firecrawl scrape ${url} returned ${response.status}`)
 	}
 
-	// Firecrawl wraps the page under data.markdown. an empty or whitespace body means the scrape failed, so throw
+	// Firecrawl wraps the page under data.markdown. an empty or whitespace body means the scrape failed, so throw an error
 	const payload = (await response.json()) as { data?: { markdown?: string; metadata?: Record<string, unknown> } }
 	const markdown = payload.data?.markdown ?? ""
 	if (!markdown.trim()) {
 		throw new Error(`firecrawl scrape ${url} returned no content`)
 	}
 
-	// read the etag and last-modified from Firecrawl's page metadata when present, so a later scan can revalidate instead of re-scrape
+	// read the etag and last-modified from Firecrawl's page metadata when present
 	const metadata = payload.data?.metadata ?? {}
 	const etag = typeof metadata.etag === "string" ? metadata.etag : null
 	const lastModified = typeof metadata["last-modified"] === "string" ? metadata["last-modified"] : null
 	return { text: markdown, cost: FIRECRAWL_COST_PER_FETCH, etag, lastModified }
 }
 
-// fetch a video's published caption track as plain text. it goes straight to YouTube and spends no vendor credit, so it costs nothing.
-// no captions, a caption url outside YouTube's own endpoint, or an empty transcript all throw
+// fetch a video's published caption track as plain text
 async function fetchYoutubeTranscript(videoId: string): Promise<FetchResult> {
 	// ask the player endpoint which caption tracks the video publishes. it needs no key, only a client to answer as
 	const playerResponse = await fetch(PLAYER_ENDPOINT, {
@@ -231,8 +220,7 @@ async function fetchYoutubeTranscript(videoId: string): Promise<FetchResult> {
 		throw new Error(`youtube caption track for ${videoId} returned ${captionResponse.status}`)
 	}
 
-	// a transcript that joins to nothing is a failed fetch. the caption endpoint publishes no validators,
-	// so etag and lastModified stay null
+	// a transcript that joins to nothing is a failed fetch
 	const text = toTranscriptText((await captionResponse.json()) as CaptionEvents)
 	if (!text) {
 		throw new Error(`youtube caption track for ${videoId} is empty`)
@@ -240,8 +228,7 @@ async function fetchYoutubeTranscript(videoId: string): Promise<FetchResult> {
 	return { text, cost: 0, etag: null, lastModified: null }
 }
 
-// fetch a Vimeo video's published captions. the player config needs no key,
-// and a video whose owner restricted embedding returns 403, which falls back to the snippet like any other failed fetch
+// fetch a Vimeo video's published captions
 async function fetchVimeoTranscript(videoId: string): Promise<FetchResult> {
 	// the player config lists the text tracks the video publishes
 	const configResponse = await fetch(`https://player.vimeo.com/video/${videoId}/config`, {
@@ -256,8 +243,7 @@ async function fetchVimeoTranscript(videoId: string): Promise<FetchResult> {
 	return fetchCueTrack(tracks, VIMEO_CAPTION_DOMAIN, `vimeo video ${videoId}`)
 }
 
-// fetch a Dailymotion video's published subtitles. the player metadata needs no key, and most videos publish
-// nothing, which falls back to the snippet like any other failed fetch
+// fetch a Dailymotion video's published subtitles
 async function fetchDailymotionTranscript(videoId: string): Promise<FetchResult> {
 	// the player metadata lists the subtitle tracks, keyed by language
 	const metadataResponse = await fetch(`https://www.dailymotion.com/player/metadata/video/${videoId}`, {
@@ -272,10 +258,9 @@ async function fetchDailymotionTranscript(videoId: string): Promise<FetchResult>
 	return fetchCueTrack(tracks, DAILYMOTION_CAPTION_DOMAIN, `dailymotion video ${videoId}`)
 }
 
-// fetch a cue-file caption track and join it to plain text. WEBVTT and SRT differ only in their headers and
-// their timestamp punctuation, so one parser reads both
+// fetch a cue-file caption track and join it to plain text
 async function fetchCueTrack(tracks: CaptionTrack[], captionDomain: string, label: string): Promise<FetchResult> {
-	// pick the track and refuse a url pointing anywhere but the host's own caption domain
+	// select the track and refuse a url pointing anywhere but the host's own caption domain
 	const track = toCaptionTrack(tracks, captionDomain, label)
 	const trackResponse = await fetch(track.url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 	if (!trackResponse.ok) {
@@ -290,10 +275,9 @@ async function fetchCueTrack(tracks: CaptionTrack[], captionDomain: string, labe
 	return { text, cost: 0, etag: null, lastModified: null }
 }
 
-// the track to fetch, preferring English. throws when the video published none, or when the url it published
-// points outside the host's own caption domain, since that url comes out of a remote payload
+// the track to fetch, preferring English
 function toCaptionTrack(tracks: CaptionTrack[], captionDomain: string, label: string): CaptionTrack {
-	// the tracks come back in the host's own order instead of preference order, so English is picked out by hand
+	// the tracks come back in the host's own order instead of preference order, so English is selected out by hand
 	const englishTrack = tracks.find((track) => track.languageCode.toLowerCase().startsWith("en"))
 	const track = englishTrack ?? tracks[0]
 	if (!track) {
@@ -307,8 +291,7 @@ function toCaptionTrack(tracks: CaptionTrack[], captionDomain: string, label: st
 	return track
 }
 
-// whether an https url points at the domain or one of its subdomains, which is what keeps a remote payload
-// from pointing the caption fetch at a host of its choosing
+// whether an https url points at the domain or one of its subdomains
 function isUrlWithinDomain(url: string, domain: string): boolean {
 	// a url that will not parse, or one that is not https, is never followed
 	const parsedUrl = URL.parse(url)
@@ -354,8 +337,7 @@ export function toVimeoVideoId(url: string): string | null {
 		return null
 	}
 
-	// a Vimeo id is all digits, and it is the last such segment whether the url is a plain link,
-	// a channel or group link, or a player embed
+	// a Vimeo id is all digits, and it is the last such segment whether the url is a plain link, a channel or group
 	const digitSegments = parsedUrl.pathname.split("/").filter((segment) => /^\d+$/.test(segment))
 	return digitSegments.at(-1) ?? null
 }
@@ -370,8 +352,7 @@ export function toDailymotionVideoId(url: string): string | null {
 		return null
 	}
 
-	// a dai.ly short link has the id as its first path segment, and a full link has it after /video.
-	// either may put a title slug after the id behind an underscore, which the metadata endpoint does not want
+	// a dai.ly short link has the id as its first path segment, and a full link has it after /video
 	const [, firstSegment, secondSegment] = parsedUrl.pathname.split("/")
 	if (DAILYMOTION_SHORT_HOSTS.has(parsedUrl.hostname)) {
 		return toDailymotionId(firstSegment)
@@ -438,8 +419,7 @@ type CaptionEvents = { events?: { segs?: { utf8?: string }[] }[] }
  * The spoken text of a json3 caption response, joined into one line of plain prose.
  */
 export function toTranscriptText(captions: CaptionEvents | null): string {
-	// an event is one caption line, and its segments are the words within that line. the lines join on a space,
-	// because a line ends without one and gluing them directly would run the last word into the next line's first
+	// an event is one caption line, and its segments are the words within that line
 	const captionLines = (captions?.events ?? []).map((event) =>
 		(event.segs ?? []).map((segment) => segment.utf8 ?? "").join(""),
 	)
@@ -450,8 +430,7 @@ export function toTranscriptText(captions: CaptionEvents | null): string {
  * The spoken text of a WEBVTT or SRT caption file, joined into one line of plain prose.
  */
 export function toCueText(cueFile: string): string {
-	// a cue file is blocks of an optional cue number, a timing line, then the words. only the words are wanted,
-	// and WEBVTT and SRT differ only in their header and their timestamp punctuation, so one filter reads both
+	// a cue file is blocks of an optional cue number, a timing line, then the words
 	const spokenLines = cueFile.split(/\r?\n/).filter(isSpokenLine)
 
 	// WEBVTT marks up speakers and emphasis inline, which would otherwise reach a model as markup
@@ -475,17 +454,15 @@ function toCollapsedText(text: string): string {
 	return text.replace(/\s+/g, " ").trim()
 }
 
-// read the transcript a publisher declared for its own episode, which podcast feeds publish as WEBVTT or SRT.
-// it goes straight to the origin, so it spends no scrape credit, and the url came out of a feed, so every redirect is checked
+// read the transcript a publisher declared for its own episode, which podcast feeds publish as WEBVTT or SRT
 async function fetchDeclaredTranscript(transcriptUrl: string): Promise<FetchResult> {
 	const response = await fetchPublicUrl(transcriptUrl, { signal: AbortSignal.timeout(DIRECT_TIMEOUT_MS) })
 	if (!response.ok) {
 		throw new Error(`transcript ${transcriptUrl} returned ${response.status}`)
 	}
 
-	// the same cue parser the caption tracks use, since a declared transcript is the same two formats.
-	// a transcript publishes no validators of its own, so etag and lastModified stay null
-	const text = toCueText(await readCappedBody(response, transcriptUrl))
+	// the same cue parser the caption tracks use, in the same two formats
+	const text = toCueText(await readLimitedBody(response, transcriptUrl))
 	if (!text) {
 		throw new Error(`transcript ${transcriptUrl} is empty`)
 	}
@@ -493,15 +470,15 @@ async function fetchDeclaredTranscript(transcriptUrl: string): Promise<FetchResu
 }
 
 /**
- * Read a response body up to the byte cap, cancelling anything longer so an endless response is dropped instead of buffered whole.
+ * Read a response body up to the byte limit, cancelling anything longer so an endless response is dropped instead of buffered whole.
  */
-export async function readCappedBody(response: Response, url: string): Promise<string> {
+export async function readLimitedBody(response: Response, url: string): Promise<string> {
 	const reader = response.body?.getReader()
 	if (!reader) {
 		return ""
 	}
 
-	// chunks are collected instead of being decoded as they arrive, since a character can span two of them
+	// chunks are collected instead of being decoded as they arrive. a character can span two of them
 	const chunks: Uint8Array[] = []
 	let byteCount = 0
 	while (true) {
@@ -519,7 +496,7 @@ export async function readCappedBody(response: Response, url: string): Promise<s
 		chunks.push(value)
 	}
 
-	// join the chunks once, since a decoder cannot span them safely
+	// join the chunks once, which is what the decoder reads
 	const body = new Uint8Array(byteCount)
 	let offset = 0
 	for (const chunk of chunks) {
@@ -529,8 +506,7 @@ export async function readCappedBody(response: Response, url: string): Promise<s
 	return new TextDecoder().decode(body)
 }
 
-// check with a conditional GET whether the stored content is still current, bounded by its own timeout.
-// it never throws: a non-304, a network error, or a timeout all report back "failed" so the caller can fetch instead
+// check with a conditional GET whether the stored content is still current, bounded by its own timeout
 export async function revalidateContent(
 	url: string,
 	validators: FetchValidators,

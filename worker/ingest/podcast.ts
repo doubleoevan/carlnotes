@@ -1,5 +1,4 @@
-// the podcast ingester. a Source names a show by its podcast id, and that show's RSS feed provides the episodes,
-// since a podcast is really an RSS feed
+// the podcast ingester. a Source names a show by its podcast id, and that show's RSS feed provides the episodes
 
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
@@ -13,8 +12,7 @@ const ITUNES_SEARCH_ENDPOINT = "https://itunes.apple.com/search"
 // how many shows a search returns, and how long a request may run before it aborts
 const MAX_SEARCH_RESULTS = 10
 const FETCH_TIMEOUT_MS = 10_000
-// how many of a show's episodes are read, taken in the order the feed lists them, which podcast feeds put newest first. a show archive runs to hundreds of entries and the relevance
-// gate embeds each one, so a show is read only as deeply as the YouTube ingester reads a channel
+// how many of a show's episodes are read, taken in the order the feed lists them
 const MAX_EPISODES = 25
 
 // read the show the Source names and turn its recent episodes into "listen" Resources
@@ -31,8 +29,7 @@ export const podcastIngester: SourceIngester = async (source: Source) => {
 		throw new Error(`podcast ${podcastId} is unknown or publishes no feed`)
 	}
 
-	// the lookup knows what the show is called, so keep it on the Source for the editor and the topic page to render.
-	// a bare id names nothing on its own, and re-reading it with each scan would only pick up a show that renamed itself
+	// the lookup knows what the show is called, so keep it on the Source for the editor and the topic page to render
 	if (source.config.name !== podcast.name) {
 		await db
 			.update(sources)
@@ -40,14 +37,12 @@ export const podcastIngester: SourceIngester = async (source: Source) => {
 			.where(eq(sources.id, source.id))
 	}
 
-	// read the show's recent episodes. iTunes and the feed both need no key, so the cost is 0,
-	// and there is no keyed path to fall back from, so fallbackMode stays unset
+	// read the show's recent episodes
 	const episodes = await fetchFeed(podcast.feedUrl, { resourceKind: "listen" })
 	return { resources: episodes.slice(0, MAX_EPISODES), costDollars: 0 }
 }
 
-// a show as iTunes returns it. every field is optional because the JSON is unvalidated,
-// and a show that syndicates nowhere publishes no feed
+// a show as iTunes returns it
 type ItunesShow = { collectionId?: number; collectionName?: string; artistName?: string; feedUrl?: string }
 type ItunesResponse = { results?: ItunesShow[] }
 

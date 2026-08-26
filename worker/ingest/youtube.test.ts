@@ -26,7 +26,7 @@ test("parseVideos maps youtube videos to deduped 'watch' Resources", () => {
 	expect(resources[1]?.snippet).toBeNull()
 })
 
-// an incomplete payload never throws. a missing items array and videos with no videoId, like deleted or private ones, are skipped
+// an incomplete payload never throws an error
 test("parseVideos skips a missing items array and videos with no videoId", () => {
 	// no items key at all yield no Resources instead of a TypeError
 	expect(parseVideos({})).toEqual([])
@@ -45,8 +45,7 @@ test("playlistIdFromUrl extracts the id from playlist urls and rejects the rest"
 	expect(playlistIdFromUrl("https://youtube.com/playlist?list=PL123")).toBe("PL123")
 	expect(playlistIdFromUrl("https://m.youtube.com/playlist?list=PL123&si=abc")).toBe("PL123")
 
-	// a /watch url still yields null even if it has the "list" param.
-	// so do a non-YouTube host, a /playlist with no list param, and junk
+	// a /watch url still yields null even if it has the "list" param
 	expect(playlistIdFromUrl("https://www.youtube.com/watch?v=abc&list=PL123")).toBeNull()
 	expect(playlistIdFromUrl("https://example.com/playlist?list=PL123")).toBeNull()
 	expect(playlistIdFromUrl("https://www.youtube.com/playlist")).toBeNull()
@@ -70,8 +69,7 @@ test("toAtomUrl reads the kind from the id when the caller does not say", () => 
 	}
 })
 
-// a suggestion names a channel, however the model wrote it, and only an id can be fetched.
-// a handle costs a lookup, so the offline forms are what this covers
+// a suggestion names a channel, however the model wrote it, and only an id can be fetched
 test("toYoutubeSourceId reads the id out of every form that already carries one", async () => {
 	// a raw channel id and every playlist prefix are already what the feed reads
 	expect(await toYoutubeSourceId("UCHnyfMqiRRG1u-2MsSQLbXA")).toBe("UCHnyfMqiRRG1u-2MsSQLbXA")

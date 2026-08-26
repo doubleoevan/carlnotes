@@ -69,9 +69,9 @@ test("toFetchableUrl rejects an internal url", () => {
 	}
 })
 
-// a public page that redirects inward must not call fetch on it, since the first url is the only one fetch itself checks
+// a public page that redirects inward must not call fetch on it. the first url is the only one fetch itself checks
 test("fetchPublicUrl checks every redirect hop, not just the first url", async () => {
-	// stand in for the network so the test never leaves the machine. each url answers the way the case under test needs
+	// stand in for the network so the test never leaves the machine. each url responds the way the case under test needs
 	const originalFetch = globalThis.fetch
 	const requestedUrls: string[] = []
 	globalThis.fetch = (async (input: string | URL | Request) => {

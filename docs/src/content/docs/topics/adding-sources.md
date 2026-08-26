@@ -7,11 +7,11 @@ sidebar:
   order: 2
 ---
 
-Sources are what Carl conducts his research with. A topic holds up to 10, and when you hit the cap the app tells you:
+Sources are what Carl conducts his research with. A topic holds up to 10, and when you hit the limit, you'll know:
 "Carl reads 10 sources per topic. Drop one to add another."
 
 ![The sources editor: the web source and three subreddits, under the 10-source
-cap](../../../assets/screenshots/sources-list.png)
+limit](../../../assets/screenshots/sources-list.png)
 
 ## The source kinds
 
@@ -29,17 +29,14 @@ search. Press **+ add a source** for the more:
 - **podcast**: a show. Carl reads episode transcripts.
 - **bluesky** and **x**: an account on either network, for tracking a specific user.
 
-If a site you care about publishes a feed, prefer **rss** over pointing **url** at its homepage. The
-feed gets you every new post with none of the fetch failures.
-
 ## Let Carl recommend sources
 
 Press **Recommend** in the source editor, and Carl proposes sources based on your topic's title,
 prompt, and attachments. He proposes three at a time, up to as many as the topic has open slots. Every proposal
-is fetched live before you see it, so a source that doesn't work is not suggested. 
+is fetched live before you see it, so a source that doesn't work is never recommended.
 
 ![The Recommend button below the source list, next to add a
-source](../../../assets/screenshots/sources-suggest-button.png)
+source](../../../assets/screenshots/sources-recommend-button.png)
 
 Recommendations are based on the prompt. After rewriting a prompt, delete your sources and run **Recommend** again: a sharper prompt
 gets better source proposals.
@@ -58,8 +55,8 @@ A smaller set makes Carl's more selective, which raises the quality of what gets
 ## Schedule
 
 **Frequency** is **Daily**, **Weekdays**, or **Weekly**, at the time you pick, with a day of the
-week for weekly topics. Your plan caps how many topics run daily or on weekdays; the editor shows the
-count as "N daily Brews left". Weekly topics don't count against that cap. Brews also run on demand
+week for weekly topics. Your plan limits how many topics run daily or on weekdays; the editor shows the
+count as "N daily Brews left". Weekly topics don't count against that limit. Brews also run on demand
 with the **Brew** button, up to your plan's daily brew count.
 
 ## When a topic goes quiet

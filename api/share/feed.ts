@@ -1,5 +1,4 @@
-// a public Topic's RSS feed: the Findings Carl kept, in the format a reader app understands.
-// it is built by hand instead of with a library, because RSS is a handful of tags and a dependency would be larger than the markup it writes
+// a public Topic's RSS feed: the Findings Carl kept, in the format a reader app understands
 import { desc, eq } from "drizzle-orm"
 import { db } from "../../db"
 import { findings, resources, topics, users } from "../../db/schema"
@@ -51,7 +50,7 @@ export async function toTopicFeedXml(topicId: string, appUrl: string): Promise<s
 		description: `${topic.prompt || "What Carl found for this topic."}${topicOwner}`,
 		topicUrl,
 		feedUrl: `${topicUrl}/feed.xml`,
-		items: findingRows.map((row) => ({ ...row, title: row.title ?? row.url })),
+		items: findingRows.map((findingRow) => ({ ...findingRow, title: findingRow.title ?? findingRow.url })),
 	})
 }
 
@@ -77,7 +76,7 @@ function toRssXml(feed: {
 	return `${openingTags}\n${channel}\n${feedItems}</channel>\n</rss>`
 }
 
-// one entry. the url is the guid, since it globally deduplicates a Resource
+// one entry. the url is the guid, which globally deduplicates a Resource
 function toRssItem(item: FeedItem): string {
 	// the relevance explanation is the description when there is one
 	const tags = [

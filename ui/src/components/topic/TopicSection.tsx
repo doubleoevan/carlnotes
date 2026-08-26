@@ -1,15 +1,14 @@
 import type { TopicFeedResponse } from "@shared/contracts"
 import type { MouseEvent } from "react"
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
-import { cn, RAIL_TEXT_INSET } from "@/lib/utils"
+import { RAIL_TEXT_INSET } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 import { Topic } from "./Topic"
 
-// how long the jump waits for the accordion to settle. the open and close animations in animations.css run
-// 200ms, and the rest is margin, since a jump fired mid-animation aims at a position that is still moving
+// how long the jump waits for the accordion to settle
 const SCROLL_SETTLE_DELAY_MS = 300
 
-// snap the clicked trigger to the top of the viewport, but only when the click opens the section.
-// data-state still holds the pre-click value here, since Radix flips it on a later re-render
+// snap the clicked trigger to the top of the viewport, but only when the click opens the section
 function scrollTriggerToTop(event: MouseEvent<HTMLButtonElement>): void {
 	const trigger = event.currentTarget
 	const isOpenBeforeClick = trigger.getAttribute("data-state") === "open"
@@ -35,7 +34,7 @@ type TopicSectionProps = { section: TopicFeedResponse["sections"][number]; onNew
 export function TopicSection({ section, onNewTopic }: TopicSectionProps) {
 	return (
 		<AccordionItem value={section.key}>
-			<AccordionTrigger onClick={scrollTriggerToTop}>
+			<AccordionTrigger onClick={scrollTriggerToTop} className="pb-1">
 				<span className="font-display flex-1 text-xl">{SECTION_TITLE[section.key]}</span>
 				{/* the topic count, inset to end on the same line as the quota line above it */}
 				<span className={cn("text-muted-foreground text-sm", RAIL_TEXT_INSET)}>

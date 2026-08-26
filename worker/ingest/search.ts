@@ -1,5 +1,4 @@
-// the search ingester. a model converts the topic's context into search queries, Exa runs them, and each
-// result becomes a Resource of the kind its host implies — a video, a podcast, or an article
+// the search ingester
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { buildTopicScanContext } from "../attach"
@@ -14,10 +13,10 @@ import { fetchVideos, playlistIdFromUrl } from "./youtube"
 // query and fetch limits
 const MAX_QUERIES = 5
 const RESULTS_PER_QUERY = 10
-// cap the user-controlled context sent to the model so a huge context cannot inflate token spend
+// limit the user-controlled context sent to the model so a huge context cannot inflate token spend
 const MAX_CONTEXT_CHARS = 8000
 const FETCH_TIMEOUT_MS = 10_000
-// Exa is the current search provider and may be swapped later. EXA_ENDPOINT and EXA_API_KEY are the only Exa-specific names
+// Exa is the current search provider and may be swapped later
 const EXA_ENDPOINT = "https://api.exa.ai/search"
 
 // read the topic's context, generate queries from it, search per query, and merge the deduped Resources
@@ -58,8 +57,7 @@ type SearchResponse = {
 
 // build the search prompt from search-topic.md. an empty context falls back to the topic name
 export async function buildSearchPrompt(context: string, name: string): Promise<BuiltPrompt> {
-	// the name states the subject and the prompt says what to do about it, so the name is labeled and leads.
-	// a prompt like "I want the best ones!" names no subject at all, and searching on it alone finds nothing
+	// the name states the subject and the prompt says what to do about it, so the name is labeled and leads
 	const namedContext = context.trim() ? `Subject: ${name}\n\nWhat the reader is looking for:\n${context.trim()}` : name
 	const topicContext = namedContext.slice(0, MAX_CONTEXT_CHARS)
 	const { template, name: promptName, registryPrompt } = await fetchPromptTemplate("search-topic")
@@ -69,7 +67,7 @@ export async function buildSearchPrompt(context: string, name: string): Promise<
 	return { prompt, name: promptName, registryPrompt }
 }
 
-// generate a capped list of search queries from the topic context using the cheap model
+// generate a limited list of search queries from the topic context using the cheap model
 async function generateSearchQueries(context: string, name: string): Promise<string[]> {
 	// fetch and write the prompt
 	const searchPrompt = await buildSearchPrompt(context, name)
@@ -82,7 +80,7 @@ async function generateSearchQueries(context: string, name: string): Promise<str
 		...promptTelemetry(searchPrompt),
 	})
 
-	// trim, drop blanks, and dedupe the model output, then cap it so a chatty model doesn't inflate the search call count
+	// trim, drop blanks, and dedupe the model output, then limit it so a chatty model doesn't inflate the search call count
 	const queries = [...new Set(output.queries.map((query) => query.trim()).filter(Boolean))]
 	return queries.slice(0, MAX_QUERIES)
 }
@@ -97,8 +95,7 @@ export function parseResults(response: SearchResponse): { resources: NewResource
 			continue
 		}
 
-		// map a url to a Resource, its resource kind is determined by the link host. the snippet joins Exa's highlights together,
-		// and the contentHash stays null for review to fill
+		// map a url to a Resource, its resource kind is determined by the link host
 		resourceByUrl.set(result.url, {
 			url: result.url,
 			title: result.title ?? null,
@@ -108,7 +105,7 @@ export function parseResults(response: SearchResponse): { resources: NewResource
 		})
 	}
 
-	// a missing costDollars.total counts as 0, so the Scan cost tracking is best-effort. LiteLLM meters the authoritative spend
+	// a missing costDollars.total counts as 0, so the Scan cost tracking is best-effort
 	return { resources: [...resourceByUrl.values()], costDollars: response.costDollars?.total ?? 0 }
 }
 
@@ -134,16 +131,15 @@ async function runSearches(searchQueries: string[]): Promise<SearchResponse[]> {
 	return searchResponses
 }
 
-// run one query using Exa search. the API key is required, so a missing key or a failed response throws
+// run one query using Exa search. the API key is required, so a missing key or a failed response throws an error
 async function runSearch(query: string): Promise<SearchResponse> {
-	// Exa requires an API key. without one this Source cannot run at all, so throw
+	// Exa requires an API key. without one this Source cannot run at all, so throw an error
 	const apiKey = Bun.env.EXA_API_KEY
 	if (!apiKey) {
 		throw new Error("EXA_API_KEY is not set")
 	}
 
-	// POST the query with the API key header, bounded by the fetch timeout.
-	// moderation: true asks Exa itself to filter unsafe results before they ever reach the app
+	// POST the query with the API key header, bounded by the fetch timeout
 	const response = await fetch(EXA_ENDPOINT, {
 		method: "POST",
 		headers: { "x-api-key": apiKey, "content-type": "application/json" },
@@ -157,7 +153,7 @@ async function runSearch(query: string): Promise<SearchResponse> {
 		signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
 	})
 
-	// a failed response throws. runSearches keeps the queries that succeeded
+	// a failed response throws an error. runSearches keeps the queries that succeeded
 	if (!response.ok) {
 		throw new Error(`exa search returned ${response.status}`)
 	}
@@ -186,7 +182,7 @@ async function expandYouTubePlaylists(resources: NewResource[]): Promise<NewReso
 	return [...resourceByUrl.values()]
 }
 
-// expand a single Resource into its playlist's videos when its url is a playlist page. return the original link if it fails
+// expand a single Resource into its playlist's videos when its url is a playlist page
 async function expandYouTubePlaylist(resource: NewResource, apiKey: string): Promise<NewResource[]> {
 	// a non-playlist url has nothing to expand
 	const playlistId = playlistIdFromUrl(resource.url)

@@ -1,5 +1,4 @@
-// error monitoring, imported by the api and the worker. off unless SENTRY_DSN is set,
-// nothing here should fail a request, a Scan, or a process
+// error monitoring, imported by the api and the worker
 import * as Sentry from "@sentry/bun"
 
 // the fraction of traces sampled when tracing is on. the environment can override it
@@ -9,8 +8,7 @@ const DEFAULT_TRACES_SAMPLE_RATE = 0.1
 const SHUTDOWN_FLUSH_MS = 2000
 
 /**
- * Starts error monitoring, or no-ops when `SENTRY_DSN` is unset.
- * The environment tag comes from DOPPLER_ENVIRONMENT, the variable Doppler already injects.
+ * Starts error monitoring in production when `SENTRY_DSN` is set, and no-ops everywhere else.
  */
 export function startMonitoring(): void {
 	// no dsn means no monitoring, which is the self-hosted default
@@ -18,10 +16,16 @@ export function startMonitoring(): void {
 		return
 	}
 
+	// the sentry quota is shared across environments, so only production reports its errors
+	const environment = Bun.env.DOPPLER_ENVIRONMENT ?? "dev"
+	if (environment !== "prd") {
+		return
+	}
+
 	// scrub content before send instead of trusting the caller, and keep pii off by default
 	Sentry.init({
 		dsn: Bun.env.SENTRY_DSN,
-		environment: Bun.env.DOPPLER_ENVIRONMENT ?? "dev",
+		environment,
 		tracesSampleRate: Number(Bun.env.SENTRY_TRACES_SAMPLE_RATE ?? DEFAULT_TRACES_SAMPLE_RATE),
 		sendDefaultPii: false,
 		beforeSend: scrubContent,
@@ -40,7 +44,7 @@ export function scrubContent<Event extends { extra?: Record<string, unknown>; co
 	return { ...event, extra: withoutContent(event.extra), contexts: withoutContent(event.contexts) }
 }
 
-// event fields that could carry a context doc or a page's content. they are dropped before an event is sent.
+// event fields that could include a context doc or a page's content. they are dropped before an event is sent.
 const CONTENT_FIELD_PATTERN = /content|context|document|snippet|prompt|markdown|text/i
 
 // an identifier is short and content is long, so any string past this length is treated as content wherever it hides
@@ -52,8 +56,7 @@ function withoutContent(attached: Record<string, unknown> | undefined): Record<s
 		return attached
 	}
 
-	// the name filter removes what is labeled as content, and the length cap catches what is content.
-	// if an object was already seen, a field pointing back at it is named instead of being copied
+	// the name filter removes what is labeled as content, and the length limit catches what is content
 	const seen = new WeakSet<object>([attached])
 	const keptEntries = Object.entries(attached)
 		.filter(([field]) => !CONTENT_FIELD_PATTERN.test(field))
@@ -61,10 +64,9 @@ function withoutContent(attached: Record<string, unknown> | undefined): Record<s
 	return Object.fromEntries(keptEntries)
 }
 
-// cap every string in a value, walking nested objects so a body can't hide a level down.
-// `seen` does cycle detection, since a stack overflow here would crash the process reporting the error
+// truncate every string in a value, walking nested objects so a body can't hide a level down
 function truncateLongStrings(value: unknown, seen = new WeakSet<object>()): unknown {
-	// cut and marked, so the report says something was here without carrying it
+	// truncated and marked, so the error report can say something was here without including it
 	if (typeof value === "string" && value.length > MAX_REPORT_STRING_CHARS) {
 		return `${value.slice(0, MAX_REPORT_STRING_CHARS)}…[truncated]`
 	}
@@ -95,7 +97,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 export type ReportedStage = "ingest" | "embed-filter" | "fetch" | "score" | "object-storage" | "scan-report" | "scanner" | "scheduled-scan" | "manual-scan" | "first-scan" | "source-screen" | "email" | "chat" | "prompt-registry"
 
 /**
- * Reports a failure the caller is already handling, so a failure that never throws is still visible.
+ * Reports a failure the caller is already handling, so a failure that never throws an error is still visible.
  */
 export function reportError(error: unknown, stage: ReportedStage, extra?: Record<string, string>): void {
 	Sentry.captureException(error, { tags: { stage }, extra })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test"
 import { toSortedRows } from "./SortableHeader"
 
-// rows carrying one sortable field, as the table accessors produce
+// rows with one sortable field, as the table accessors produce
 const byValue = (row: { value: string | number | null }): string | number | null => row.value
 
 describe("toSortedRows", () => {

@@ -1,5 +1,4 @@
-// object storage for topic attachments through Bun's built-in S3 client
-// the S3_* env values alone pick the target, whether R2, MinIO, or AWS S3
+// object storage for topic attachments through Bun's built-in S3 client the S3_* env values alone select
 
 // upload an attachment's bytes to object storage under the given key, tagged with its content type
 export async function putAttachment(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
@@ -11,10 +10,7 @@ export const MAX_KEY_FILENAME_CHARS = 200
 
 // the object key for an attachment, namespaced by topic and attachment id so keys never collide
 export function toAttachmentKey(topicId: string, attachmentId: string, filename: string): string {
-	// sanitize the untrusted filename into one safe key segment
-	// anything but letters, digits, and dots becomes a dash,
-	// the length caps at MAX_KEY_FILENAME_CHARS,
-	// and an empty or all-dots name becomes "file"
+	// sanitize the untrusted filename into one safe key segment anything but letters, digits
 	const safeFilename = filename
 		.replace(/[^a-z0-9.]+/gi, "-")
 		.slice(0, MAX_KEY_FILENAME_CHARS)
@@ -42,6 +38,14 @@ export async function getAttachmentBytes(attachmentKey: string): Promise<Uint8Ar
 	return new Uint8Array(await bucket().file(attachmentKey).arrayBuffer())
 }
 
+// sanitize an untrusted filename into one safe key segment before it joins an object key
+function toSafeFilename(filename: string): string {
+	return filename
+		.replace(/[^a-z0-9.]+/gi, "-")
+		.slice(0, 200)
+		.replace(/^\.*$/, "file")
+}
+
 // the object key for a chat attachment, namespaced by the user who sent it as well as by the topic.
 export function toChatAttachmentKey(
 	userId: string,
@@ -49,12 +53,12 @@ export function toChatAttachmentKey(
 	chatAttachmentId: string,
 	filename: string,
 ): string {
-	// sanitize the untrusted filename into one safe key segment before appending it to the object key
-	const safeFilename = filename
-		.replace(/[^a-z0-9.]+/gi, "-")
-		.slice(0, 200)
-		.replace(/^\.*$/, "file")
-	return `topics/${topicId}/chat-attachments/${userId}/${chatAttachmentId}/${safeFilename}`
+	return `topics/${topicId}/chat-attachments/${userId}/${chatAttachmentId}/${toSafeFilename(filename)}`
+}
+
+// the object key for a room's shared attachment, namespaced by the topic whose room holds it
+export function toChatRoomAttachmentKey(topicId: string, roomAttachmentId: string, filename: string): string {
+	return `topics/${topicId}/room-attachments/${roomAttachmentId}/${toSafeFilename(filename)}`
 }
 
 // the object key for a Resource's fetched content, namespaced by resource id, mirroring toAttachmentKey
@@ -84,7 +88,7 @@ export async function deleteResourceContent(contentKey: string): Promise<void> {
 	await bucket().delete(contentKey)
 }
 
-// build the S3 client from env, throwing if any value is unset so a misconfigured upload never writes to a wrong or default endpoint
+// build the S3 client from env, throwing if any value is unset
 function bucket(): Bun.S3Client {
 	// every S3_* value is required. a missing one fails loudly
 	const { S3_ENDPOINT, S3_REGION, S3_BUCKET, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY } = Bun.env

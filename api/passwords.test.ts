@@ -1,5 +1,4 @@
-// the breach check tests against the real corpus. the lookup is the thing under test, so it is not mocked,
-// but it is skipped instead of failed if the service is unreachable.
+// the breach check tests against the real corpus
 import { expect, test } from "bun:test"
 import { isBreachedPassword } from "./passwords"
 

@@ -27,7 +27,7 @@ export type AnalyticsProperties = {
  * The plan comes from the session instead of the users table, so an event does not take an extra query.
  */
 export function toAnalyticsProperties(context: AppContext): AnalyticsProperties {
-	// one user agent answers all three device properties, so it is read once
+	// one user agent gives all three device properties, so it is read once
 	const userAgent = context.req.header("user-agent")
 	return {
 		plan: context.get("user")?.plan ?? "free",

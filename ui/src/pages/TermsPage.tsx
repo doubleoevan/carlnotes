@@ -1,8 +1,9 @@
 import Markdown from "markdown-to-jsx"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { usePageTitle } from "@/hooks/usePageTitle"
+import { PAGE_CLASS } from "@/lib/styleClasses"
 
-// map the terms markdown to a readable legal-page typography: display-font section headings, foreground body.
-// auto-linking stays off so bare domains stay plain text. the contact emails are explicit mailto links via AnchorLink
+// map the terms markdown to a readable legal-page typography: display-font section headings, foreground body
 const TERMS_MARKDOWN_OPTIONS = {
 	disableAutoLink: true,
 	overrides: {
@@ -144,8 +145,9 @@ These terms plus the Privacy Policy are the entire agreement between us. If a pr
  * CarlNotes' terms of service for the hosted service.
  */
 export function TermsPage() {
+	usePageTitle("Terms")
 	return (
-		<main className="mx-auto max-w-3xl px-4 py-8">
+		<main className={PAGE_CLASS}>
 			{/* the title and the effective / last-updated dates */}
 			<h1 className="font-display text-2xl">Terms of Service</h1>
 			<p className="text-muted-foreground mt-2 text-sm">Effective date: July 24, 2026 · Last updated: July 24, 2026</p>

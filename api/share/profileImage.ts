@@ -1,5 +1,4 @@
-// the link-preview card a pasted profile url renders as: the user's avatar and username, and their public figures.
-// it renders with the frame and the shared pieces in previewImage.ts
+// the link-preview card a pasted profile url renders as
 import type { PublishedAvatar } from "../avatars"
 import {
 	CARD_MUTED_COLOR,
@@ -17,7 +16,7 @@ import {
 // how wide the avatar renders, filling the slot a topic card gives its title
 const AVATAR_SIZE = 120
 
-// what the profile card says about a user. the avatar is named, not loaded, like the topic card's
+// what the profile card says about a user. the avatar is named, not loaded
 export type ProfilePreview = {
 	userId: string
 	username: string

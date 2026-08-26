@@ -12,9 +12,7 @@ import { loadScan } from "./scan"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/run-topic-scan-activities"
 
-// a real feed that is reliably up, plus a topic context that matches it so relevant resources pass the relevance gate.
-// the feed is Simon Willison's blog, and the podcast id names Hard Fork, the New York Times tech and AI show.
-// both publish weekly on the topic's subject, so a run always has recent entries to score
+// a real feed that is reliably up, plus a topic context that matches it so relevant resources pass the relevance gate
 const FEED_URL = "https://simonwillison.net/atom/everything/"
 const PODCAST_ID = "1528594034"
 const TOPIC_CONTEXT =
@@ -53,9 +51,7 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 		throw new Error("failed to seed topic")
 	}
 
-	// an RSS source with no API key pointing at the feed, plus a podcast source naming one show,
-	// so the smoke covers both the feed path and the iTunes lookup behind it.
-	// both store as ready because ingestion skips a Source that has not passed an llm-guard screen, and nothing screens it here
+	// an RSS source with no API key pointing at the feed, plus a podcast source naming one show
 	await db.insert(sources).values([
 		{ topicId: topic.id, kind: "rss" as const, config: { url: FEED_URL }, status: "ready" as const },
 		{ topicId: topic.id, kind: "podcast" as const, config: { podcastId: PODCAST_ID }, status: "ready" as const },
@@ -69,7 +65,6 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 // run the topic scan pipeline, check the smoke assertions, and print a report. returns true when every check passes
 async function check(topicId: string, ownerId: string): Promise<boolean> {
 	// run the full pipeline for the topic, ingestion then review, driving the workflow's own stages in order
-	// so the smoke test exercises the real activity code instead of a copy of it, and without needing a Temporal server
 	const [openScan] = await db.insert(scans).values({ topicId, ownerId }).returning()
 	if (!openScan) {
 		throw new Error("could not open a scan for the smoke topic")
@@ -78,19 +73,17 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	const reviewResult = await reviewForScan(openScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
 	await finishScan(openScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
 
-	// re-read the scan row, since the counts and cost were written by the closing stage
+	// re-read the scan row, whose counts and cost the closing stage wrote
 	const topicScan = await loadScan(openScan.id)
 	if (!topicScan) {
 		throw new Error("the scan row vanished mid-smoke")
 	}
 
 	// read this topic's findings and one embedded resource from this scan, joined through the findings
-	// so the length assertion can't pass on an unrelated topic's vector left in the shared resources table
 	const topicFindings = await db.select().from(findings).where(eq(findings.topicId, topicId))
 	const [topic] = await db.select({ maxResults: topics.maxResults }).from(topics).where(eq(topics.id, topicId))
 
-	// the scan's kept_count is what review wrote, and the topic is then trimmed to its max_results,
-	// so the rows that survive must be the smaller of the two
+	// the scan's kept_count is what review wrote, and the topic is then trimmed to its max_results
 	const expectedFindingCount = Math.min(topicScan.keptCount, topic?.maxResults ?? 0)
 	const [embedded] = await db
 		.select({ embedding: resources.embedding, model: resources.embeddingModel })
@@ -133,7 +126,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	console.log(`\nepisodes ingested  : ${episodes.length} (with transcripts: ${countWithTranscripts(episodes)})`)
 	console.log(`episodes scraped   : ${scrapedEpisodes} (a stored body without a transcript means Firecrawl ran)`)
 
-	// the smoke assertions. a real scan produced embeddings, findings, relevance explanations, summed stage costs, and the report
+	// the smoke assertions
 	const results: [string, boolean][] = [
 		// topic scan checks
 		["scan succeeded", topicScan.status === "succeeded"],
@@ -141,7 +134,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 		["embedding is 1024-dim", embeddingLength === 1024],
 
 		// topic findings checks
-		["findings match kept_count capped by max_results", topicFindings.length === expectedFindingCount],
+		["findings match kept_count limited by max_results", topicFindings.length === expectedFindingCount],
 		["stage_costs sum to cost", Math.abs(totalCost - totalStageCosts) < 1e-6],
 		["at least one finding", topicFindings.length > 0],
 		["a finding has a relevance explanation", findingsWithExplanations.length > 0],
@@ -178,7 +171,7 @@ async function scrapedEpisodeCount(episodeUrls: string[]): Promise<number> {
 		return 0
 	}
 
-	// read back what this scan's episodes stored, since the fetch stage writes the key and review scores in memory
+	// read back what this scan's episodes stored. the fetch stage writes the key, and review scores in memory
 	const storedEpisodes = await db
 		.select({ contentKey: resources.contentKey, transcriptUrl: resources.transcriptUrl })
 		.from(resources)
@@ -186,8 +179,7 @@ async function scrapedEpisodeCount(episodeUrls: string[]): Promise<number> {
 	return storedEpisodes.filter((episode) => episode.contentKey && !episode.transcriptUrl).length
 }
 
-// write each extracted prompt with sample inputs and report whether the registry served them.
-// a non-empty result proves that the Markdown loaded and interpolated
+// write each extracted prompt with sample inputs and report whether the registry served them
 async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	// the four single-purpose prompts
 	const scoreResult = await buildScorePrompt("sample content", "sample topic context", true)
@@ -230,8 +222,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	)
 	console.log(`registry serving  : ${servedFromRegistry ? "prompts served from Langfuse" : "bundled markdown only"}`)
 
-	// each prompt renders to a non-empty string, and each one fences its untrusted inputs and closes with our own words.
-	// the registry serves these bodies too, so this is what catches a prompt edited in the Langfuse ui without the fence
+	// each prompt renders to a non-empty string
 	const builtPrompts: [string, string][] = [
 		["score prompt", scoreResult.prompt],
 		["search prompt", searchResult.prompt],

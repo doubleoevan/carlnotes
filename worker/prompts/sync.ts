@@ -1,9 +1,5 @@
-// this script pushes each prompt's bundled template up to Langfuse. git stays canonical.
-// this script is the only writer, so a prompt edited in the Langfuse UI is an experiment that the next run overwrites
+// this script pushes each prompt's bundled template up to Langfuse
 // run this with bun run prompts:sync. it needs LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY set to work
-//
-// --candidate uploads under the candidate label instead of production, which is what the deploy runs by default,
-// so the registry always holds what the code expects while promotion stays a deliberate step
 import { LangfuseClient } from "@langfuse/client"
 import { FALLBACK_PROMPT_TEMPLATES, type PromptName } from "./fetch.ts"
 import { FRONTMATTER_PATTERN, stripFrontmatter } from "./write.ts"
@@ -61,8 +57,7 @@ async function syncPrompt(name: PromptName): Promise<"created" | "updated" | "un
 	// what this label currently holds, or null if this prompt has never been synced under it
 	const labeledPrompt = await fetchLabeledPrompt(name)
 
-	// the prompt is unchanged only when both the body text and the config (version, model tier) match
-	// a config-only bump requires a new version even if the wording didn't change
+	// the prompt is unchanged only when both the body text and the config (version, model tier) match a config-only
 	const isUnchanged =
 		labeledPrompt !== null &&
 		labeledPrompt.prompt === body &&

@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { findingIdsToFilter } from "./index"
 
-// a finding row with just the fields that findingIdsToFilter reads. foundAt is a day offset, so a larger one is the newer finding
+// a finding row with just the fields that findingIdsToFilter reads
 function findingRow(
 	id: string,
 	relevanceScore: number,
@@ -12,7 +12,7 @@ function findingRow(
 	return { id, relevanceScore, createdAt: new Date(2026, 0, 1 + foundAt), isBookmarked }
 }
 
-// under the cap nothing filters. over it the lowest-ranked unbookmarked findings go
+// under the limit nothing filters. over it the lowest-ranked unbookmarked findings go
 test("findingIdsToFilter keeps the top maxResults by relevance", () => {
 	// three rows under a limit of five keep everything
 	expect(findingIdsToFilter([findingRow("a", 0.9), findingRow("b", 0.5), findingRow("c", 0.7)], 5)).toEqual([])

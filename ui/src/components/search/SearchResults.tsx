@@ -1,8 +1,9 @@
-import type { TopicFeed, TopicFinding, UserSearchResult } from "@shared/contracts"
+import type { TeamSearchResult, TopicFeed, TopicFinding, UserSearchResult } from "@shared/contracts"
 import { Hash } from "lucide-react"
+import { sendTopicFindingOpened } from "@/clients/topicClient"
+import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { sendTopicFindingOpened } from "@/lib/topicClient"
 import { cn, RESOURCE_KIND_ICON } from "@/lib/utils"
 
 // what every suggestion row needs to be an announced listbox option that clears the search when clicked
@@ -21,10 +22,29 @@ export function TopicResult({ suggestionId, topic, isActive, onOpen }: Suggestio
 			onClick={onOpen}
 			className={cn("hover:bg-accent flex items-center gap-2.5 rounded-md px-2 py-2 text-sm", isActive && "bg-accent")}
 		>
-			{/* decorative, since the trailing "Topic" text already names the kind */}
+			{/* decorative. the trailing "Topic" text names the kind */}
 			<Hash className="text-muted-foreground size-4 shrink-0" aria-hidden="true" />
 			<span className="min-w-0 flex-1 truncate">{topic.name}</span>
 			<span className="text-muted-foreground shrink-0 text-xs">Topic</span>
+		</AnchorLink>
+	)
+}
+
+/**
+ * A team result with its avatar and name, linking to the team page.
+ */
+export function TeamResult({ suggestionId, team, isActive, onOpen }: SuggestionRowProps & { team: TeamSearchResult }) {
+	return (
+		<AnchorLink
+			href={`/teams/${team.teamId}`}
+			id={suggestionId}
+			role="option"
+			aria-selected={isActive}
+			onClick={onOpen}
+			className={cn("hover:bg-accent flex items-center gap-2.5 rounded-md px-2 py-2 text-sm", isActive && "bg-accent")}
+		>
+			<TeamAvatar team={team} className="size-6" />
+			<span className="min-w-0 flex-1 truncate">{team.name}</span>
 		</AnchorLink>
 	)
 }

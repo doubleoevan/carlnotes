@@ -1,8 +1,7 @@
 import { Button } from "@/components/primitives/button"
 import { cn } from "@/lib/utils"
 
-// the "+ # more / show less" toggle shared by the topic feed and the topic page's findings and history sections.
-// className gets used to set the left padding, since each section indents its rows differently
+// the "+ # more / show less" toggle shared by the topic feed and the topic page's findings and history sections
 export function MoreButton({
 	isExpanded,
 	moreLabel,
@@ -24,7 +23,7 @@ export function MoreButton({
 				className,
 			)}
 		>
-			{/* the label carries the underline on hover, the larger arrow stays outside it, so the line is not stepped */}
+			{/* the label has the underline on hover, and the larger arrow stays outside it so the line stays flat */}
 			<span className="underline-offset-4 group-hover:underline">{isExpanded ? "show less " : moreLabel}</span>
 			<span className="text-lg leading-none">{isExpanded ? "▴" : "▾"}</span>
 		</Button>

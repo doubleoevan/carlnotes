@@ -1,0 +1,8 @@
+# test coverage settings. coverage itself stays opt-in: the preflight gate passes --coverage per invocation
+[test]
+coverageReporter = ["text", "lcov"]
+coverageDir = "coverage"
+# test files are not measured
+coverageSkipTestFiles = true
+# generated migration SQL, doppler-run smoke checks, and the eval and tooling scripts are not unit-covered surface
+coveragePathIgnorePatterns = ["db/migrations/**", "**/*.smoke.ts", "evals/**", "scripts/**"]

@@ -1,6 +1,4 @@
-// a live smoke test for chat retrieval against a real topic:
-// rank its findings against a question, check the embedding-model filter, and prove the owner-only attachment rule.
-// run it with: bun run smoke:chat, needs LiteLLM
+// a live smoke test for chat retrieval against a real topic run it with: bun run smoke:chat, needs LiteLLM
 import { and, count, eq, isNotNull, ne } from "drizzle-orm"
 import { db } from "../db"
 import { EMBED_MODEL_NAME, findings, resources } from "../db/schema"
@@ -9,7 +7,7 @@ import { retrieveChatContext } from "./chat/retrieve"
 // the question the smoke test asks of whichever topic it finds
 const SMOKE_QUESTION = "What is the most important thing here?"
 
-// pick a topic with findings, retrieve against it, and verify the filter and the owner gate
+// select a topic with findings, retrieve against it, and verify the filter and the owner gate
 async function smokeTest(): Promise<number> {
 	// the first topic that has findings
 	const [topicWithFindings] = await db
@@ -44,8 +42,7 @@ async function smokeTest(): Promise<number> {
 			),
 	])
 
-	// retrieve twice, once as the owner and once as a non-owner, so the attachment rule is visible.
-	// the non-owner id should have no kept chat attachments
+	// retrieve twice, once as the owner and once as a non-owner, so the attachment rule is visible
 	const ownerContext = await retrieveChatContext(topicWithFindings.topicId, SMOKE_QUESTION, "chat-smoke-user", true)
 	const nonOwnerContext = await retrieveChatContext(topicWithFindings.topicId, SMOKE_QUESTION, "chat-smoke-user", false)
 	if (!ownerContext || !nonOwnerContext) {
@@ -71,7 +68,7 @@ async function smokeTest(): Promise<number> {
 	console.log(`current-model rows : ${currentModelRow?.count ?? 0}`)
 	console.log(`stale-model rows   : ${staleModelRow?.count ?? 0} (excluded from ranking)`)
 	console.log(`retrieved findings : ${ownerContext.findings.length}`)
-	console.log(`scan notes         : ${ownerContext.scanSummaries.length}`)
+	console.log(`scan summaries     : ${ownerContext.scanSummaries.length}`)
 	console.log(`owner attachments  : ${ownerContext.attachmentContext.length} chars`)
 	console.log(`ready sources      : ${ownerContext.sources.join(", ") || "none"}`)
 

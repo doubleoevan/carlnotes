@@ -1,4 +1,4 @@
-// a live smoke test the owner runs by hand for the search ingester. it seeds a topic and a search source, runs searchIngester, and checks that it discovered Resources
+// a live smoke test the owner runs by hand for the search ingester
 // run it with: bun run smoke:search. it needs EXA_API_KEY set, the LiteLLM proxy reachable at LITELLM_BASE_URL, the latest migration applied, and Doppler secrets injected
 import { eq } from "drizzle-orm"
 import { db } from "../db"
@@ -14,8 +14,7 @@ const TOPIC_CONTEXT =
 // append a stamp for the database to persist a unique identifier for fixture data
 const smokeTestStamp = Date.now()
 
-// seed a fake owner, a topic with a real context, and a search source
-// search needs no config because the topic context is its input
+// seed a fake owner, a topic with a real context
 async function seedTestData(): Promise<{ source: Source; userId: string }> {
 	// a fake owner. deleting it on cleanup cascades to the topic and source
 	const [user] = await db
@@ -40,8 +39,7 @@ async function seedTestData(): Promise<{ source: Source; userId: string }> {
 		throw new Error("failed to seed topic")
 	}
 
-	// store a search source with no config. the topic context drives the search ingester
-	// the status is ready because ingest skips a Source that has not passed an llm-guard screen, and nothing screens one here
+	// store a search source with no config
 	const [source] = await db
 		.insert(sources)
 		.values({ topicId: topic.id, kind: "search", config: {}, status: "ready" })
@@ -55,8 +53,7 @@ async function seedTestData(): Promise<{ source: Source; userId: string }> {
 
 // run the search ingester, check the smoke assertions, and print a report. returns true when every check passes
 async function check(source: Source): Promise<boolean> {
-	// run the search ingester. it turns the topic context into queries, searches with the queries,
-	// and returns Resources, with playlists expanded into "watch" Resources
+	// run the search ingester
 	const { resources, costDollars } = await searchIngester(source)
 
 	// summarize the discovered Resources: their resource kinds, titles, and whether they all have a url
@@ -96,8 +93,7 @@ async function check(source: Source): Promise<boolean> {
 	return allPass
 }
 
-// seed the test data and run the checks, then always delete the fake owner
-// the delete cascades to the topic and source
+// seed the test data and run the checks, then always delete the fake owner the delete cascades to the topic and source
 async function smokeTest(): Promise<number> {
 	const { source, userId } = await seedTestData()
 	// run the checks, then delete the owner regardless of outcome

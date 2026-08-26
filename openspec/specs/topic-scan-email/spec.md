@@ -29,31 +29,28 @@ After a scheduled Scan finishes `succeeded`, the worker SHALL email that Scan's 
 
 ### Requirement: Recipients are the Topic's frequency-matched subscribers
 
-Recipients SHALL be the distinct email addresses of the Topic's subscribers whose `subscriptions.frequency` matches the Topic's frequency, resolving both direct user subscriptions (`subscriber_user_id`) and the members of subscribed audiences (`subscriber_audience_id`). A subscriber reached by more than one path SHALL be emailed once — duplicate addresses SHALL be collapsed. A Topic with no matched subscribers SHALL send no email.
+Recipients SHALL be the distinct email addresses of the Topic's directly subscribed users whose `subscriptions.frequency` matches the Topic's frequency, whose subscription is active, and whose email preference is on. A subscriber reached more than once SHALL be emailed once — duplicate addresses SHALL be collapsed. A Topic with no matched subscribers SHALL send no email.
+
+A team member's delivery goes through their own Subscription row like anyone else's: written muted at join, it makes them a recipient only after they turn the email preference on.
 
 #### Scenario: A direct subscriber at the matching frequency is a recipient
 
-- **WHEN** a user is directly subscribed to the Topic with `frequency` equal to the Topic's frequency
+- **WHEN** a user is subscribed to the Topic with `frequency` equal to the Topic's frequency, active, and email on
 - **THEN** that user's email is a recipient
-
-#### Scenario: An audience member is a recipient
-
-- **WHEN** an audience is subscribed to the Topic at the matching frequency and a user is a member of that audience
-- **THEN** that member's email is a recipient
 
 #### Scenario: A mismatched-frequency subscriber is excluded
 
 - **WHEN** a subscriber's `frequency` does not match the Topic's frequency
 - **THEN** that subscriber is not a recipient
 
-#### Scenario: A subscriber reached by two paths is emailed once
+#### Scenario: A muted team member is not a recipient
 
-- **WHEN** a user is both directly subscribed and a member of a subscribed audience at the matching frequency
-- **THEN** that user's address appears once in the recipient set and receives one email
+- **WHEN** a team member's Subscription on a team Topic still has its email preference off
+- **THEN** no scan email reaches them, and turning the preference on makes them a recipient from the next send
 
 #### Scenario: No matched subscribers means no send
 
-- **WHEN** a Topic has no subscribers whose frequency matches its frequency
+- **WHEN** a Topic has no active, email-enabled subscriber at its frequency
 - **THEN** no email is sent
 
 ### Requirement: The email lists each new Finding grounded in the Scan's data

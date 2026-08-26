@@ -1,5 +1,4 @@
-// a scan recap is model-written from pages we don't control, so it renders through a limited Markdown subset.
-// formatting is allowed, but a link only works when it points at a kept Finding's url. everything else is plain text
+// a scan recap is model-written from pages we don't control, so it renders through a limited Markdown subset
 import type { TopicFinding } from "@shared/contracts"
 import type { scanStatuses } from "@shared/enums"
 import { isBudgetError } from "@shared/scanFailure"
@@ -8,16 +7,11 @@ import type * as React from "react"
 import { useLayoutEffect, useRef, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { CopyMarkdownButton } from "@/components/common/CopyMarkdownButton"
-import {
-	cn,
-	durationMsBetween,
-	POPOVER_HEADING_CLASS,
-	THIN_SCROLLBAR_CLASS,
-	toDollarLabel,
-	toDurationLabel,
-} from "@/lib/utils"
+import { durationMsBetween, toDollarLabel, toDurationLabel } from "@/lib/labels"
+import { POPOVER_HEADING_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
-// the fields a scan recap popover reads, shared by the topic page's scan history and the Activity drill-down
+// the fields a scan recap popover reads, shared by the topic page's scan history and the Activity subtable
 export type ScanRecapFields = {
 	// the outcome and, for a failed scan, its recorded reason, so the diary line matches what happened
 	status: (typeof scanStatuses)[number]
@@ -33,10 +27,10 @@ export type ScanRecapFields = {
 /**
  * The diary line standing in for a missing recap, in Carl's own voice: still reading while the scan runs,
  * what stopped a failed one, what a user's cancel interrupted, and for a scan that finished without notes,
- * that the findings still landed.
+ * that the findings are still there.
  */
 export function toScanRecapPlaceholder(scan: Pick<ScanRecapFields, "status" | "error" | "stoppedAt">): string {
-	// a failed scan says what stopped it, naming the wall Carl hits most often
+	// a failed scan says what stopped it, naming the limit Carl hits most often
 	if (scan.status === "failed") {
 		return isBudgetError(scan.error) ? "Today I ran out of coffee." : "This one didn't brew."
 	}
@@ -51,7 +45,7 @@ export function toScanRecapPlaceholder(scan: Pick<ScanRecapFields, "status" | "e
 		return "I'm on my fifteenth mug.\nThe internet was busy today…"
 	}
 
-	// it succeeded, so the findings are real even though writing them up failed. saying "still reading" here would be a lie
+	// it succeeded, so the findings are real even though writing them up failed
 	return "No entry for this one.\nThe raccoon stole my keyboard.\nFindings are there though."
 }
 
@@ -59,10 +53,9 @@ export function toScanRecapPlaceholder(scan: Pick<ScanRecapFields, "status" | "e
 const COLLAPSED_MAX_HEIGHT = 132
 
 // the destinations a note may actually link to: the kept Findings' stored urls, pages the feed already links to
-export type AllowedNoteUrls = ReadonlySet<string>
+export type AllowedScanNoteUrls = ReadonlySet<string>
 
-// a finding link in a note. it renders as an anchor only for the Scan's own kept Finding urls,
-// and otherwise prints its label and destination as plain text
+// a finding link in a note
 function FindingLink({
 	children,
 	href,
@@ -70,7 +63,7 @@ function FindingLink({
 }: {
 	children?: React.ReactNode
 	href?: string
-	allowedUrls?: AllowedNoteUrls
+	allowedUrls?: AllowedScanNoteUrls
 }) {
 	// an allowed url renders as a link
 	if (href && allowedUrls?.has(href)) {
@@ -92,14 +85,13 @@ function FindingLink({
 	)
 }
 
-// a heading at any level renders as one compact display-font line, since a model's chosen level is arbitrary here
+// a heading at any level renders as one compact display-font line
 function NoteHeading({ children }: { children?: React.ReactNode }) {
 	return <div className="font-display text-foreground mt-2.5 mb-1 text-[13px] font-semibold first:mt-0">{children}</div>
 }
 
-// the Markdown subset a note may use. headings and lists get compact typography, anchors go through NoteLink
-// with the kept urls, images render nothing, and disableParsingRawHTML leaves any embedded html as plain characters
-function toSafeNoteOptions(allowedUrls?: AllowedNoteUrls) {
+// the Markdown subset a note may use
+function toSafeNoteOptions(allowedUrls?: AllowedScanNoteUrls) {
 	return {
 		disableParsingRawHTML: true,
 		overrides: {
@@ -122,13 +114,13 @@ function toSafeNoteOptions(allowedUrls?: AllowedNoteUrls) {
 /**
  * Renders model-written Markdown through the safe subset of elements. Only a url in allowedUrls becomes a link
  */
-export function SafeNoteText({ note, allowedUrls }: { note: string; allowedUrls?: AllowedNoteUrls }) {
+export function SafeNoteText({ note, allowedUrls }: { note: string; allowedUrls?: AllowedScanNoteUrls }) {
 	return <Markdown options={toSafeNoteOptions(allowedUrls)}>{note}</Markdown>
 }
 
 /**
  * A bordered box that scrolls when its content overflows, with a thin visible scrollbar to indicate that it is scrollable.
- * With copyMarkdown set, a copy control floats on the corner instead of scrolling away, offering the box's content as Markdown for an AI.
+ * With copyMarkdown set, a copy button floats on the corner instead of scrolling away, offering the box's content as Markdown for an AI.
  */
 export function ScrollBox({ children, copyMarkdown }: { children: React.ReactNode; copyMarkdown?: string }) {
 	return (
@@ -149,7 +141,7 @@ export function ScrollNote({
 	children,
 }: {
 	note: string
-	allowedUrls?: AllowedNoteUrls
+	allowedUrls?: AllowedScanNoteUrls
 	copyMarkdown?: string
 	children?: React.ReactNode
 }) {
@@ -218,7 +210,7 @@ export function TopicScanRecap({
 	copyMarkdown,
 }: {
 	scan: ScanRecapFields
-	allowedUrls?: AllowedNoteUrls
+	allowedUrls?: AllowedScanNoteUrls
 	findings?: TopicFinding[]
 	copyMarkdown?: string
 }) {
@@ -257,22 +249,20 @@ export function TopicScanNote({
 	children,
 }: {
 	note: string
-	allowedUrls?: AllowedNoteUrls
+	allowedUrls?: AllowedScanNoteUrls
 	copyMarkdown?: string
 	children?: React.ReactNode
 }) {
 	const contentRef = useRef<HTMLDivElement>(null)
-	const [isOverflowing, setisOverflowing] = useState(false)
+	const [isOverflowing, setIsOverflowing] = useState(false)
 	const [isExpanded, setIsExpanded] = useState(false)
 
-	// measure the rendered output against the collapsed height. overflow-hidden keeps scrollHeight at the full height,
-	// and any children have rendered below the note by the time this measures. while expanded the clipped div is not mounted,
-	// so the measurement keeps its last answer, and the toggle stays
+	// measure the rendered output against the collapsed height
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the note drives the rendered height we re-measure, not a value read here
 	useLayoutEffect(() => {
 		const element = contentRef.current
 		if (element) {
-			setisOverflowing(element.scrollHeight > COLLAPSED_MAX_HEIGHT + 4)
+			setIsOverflowing(element.scrollHeight > COLLAPSED_MAX_HEIGHT + 4)
 		}
 	}, [note])
 

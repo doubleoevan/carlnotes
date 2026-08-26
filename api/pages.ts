@@ -1,6 +1,4 @@
-// the pages this origin serves as paths with a custom app shell and page-specific header preview tags.
-// each page route gives a crawler a title, a canonical url, preview tags, and structured data.
-// a crawler runs no script and the SPA can only add those once React has mounted, so these pages must be customized for seo.
+// the pages this origin serves as paths with a custom app shell and page-specific header preview tags
 import { Hono } from "hono"
 import { loadPages } from "./content"
 import {
@@ -19,17 +17,17 @@ import {
 	toProfilePreview,
 	toProfilePreviewHtml,
 	toShellWithHeadTags,
+	toTeamPreview,
+	toTeamPreviewHtml,
 	toTopicDescription,
 	toTopicPreview,
 	toTopicPreviewHtml,
 } from "./share/preview"
 
-// where build:ui writes the bundle, relative to the repo root the server runs from.
-// the page routes read the shell from it, and the server serves the rest of it as static files
+// where build:ui writes the bundle, relative to the repo root the server runs from
 export const UI_BUNDLE_ROOT = "./ui/dist"
 
-// the pages the SPA draws entirely on its own, named here with the title that each one serves.
-// they hold no server-loaded content, so their route only has to answer with a title and a canonical url
+// the pages the SPA draws entirely on its own, named here with the title that each one serves
 const SPA_PAGE_TITLES: Record<string, string> = {
 	"/plans": "Plans",
 	"/terms": "Terms",
@@ -45,22 +43,27 @@ export function appUrl(): string {
 
 // the page routes, mounted on the server ahead of the static bundle so that each can inject its own tags first.
 export const pagesRoute = new Hono()
-	// a public Topic's RSS feed, appended to the Topic's path instead of under /api
-	// it is a document that a user pastes into their feed reader
+	// a public Topic's RSS feed, appended to the Topic's path
 	.get("/topics/:id/feed.xml", async (context) => {
 		const topicFeedXml = await toTopicFeedXml(context.req.param("id"), appUrl())
 		if (!topicFeedXml) {
 			return context.text("not found", 404)
 		}
-		return context.body(topicFeedXml, 200, { "Content-Type": "application/rss+xml; charset=utf-8" })
+		// a public feed may be held briefly
+		return context.body(topicFeedXml, 200, {
+			"Content-Type": "application/rss+xml; charset=utf-8",
+			"Cache-Control": "public, max-age=900",
+		})
 	})
 	// the plans page moved from /pricing. the redirect covers any link or crawl of the old path
 	.get("/pricing", (context) => context.redirect("/plans", 301))
 	// the crawler map of every public page, generated from live data on each request
 	.get("/sitemap.xml", async (context) => {
 		const contentPaths = ["/blog", ...loadPages("blog").map((page) => `/blog/${page.slug}`)]
+		// a crawler may hold the map for an hour, which spares the live queries behind each build
 		return context.body(await toSitemapXml(appUrl(), contentPaths), 200, {
 			"Content-Type": "application/xml; charset=utf-8",
+			"Cache-Control": "public, max-age=3600",
 		})
 	})
 	// the homepage shell with the app's structured data, its own title and canonical url intact
@@ -82,8 +85,7 @@ export const pagesRoute = new Hono()
 		}
 		return next()
 	})
-	// the SPA-drawn pages, each answering with its own title and canonical url,
-	// so a crawler reads the page it asked for instead of the shell's homepage defaults
+	// the SPA-drawn pages, each answering with its own title and canonical url
 	.on("GET", Object.keys(SPA_PAGE_TITLES), async (context, next) => {
 		// a dev machine with no bundle built falls through to the plain shell handling
 		try {
@@ -101,9 +103,7 @@ export const pagesRoute = new Hono()
 		}
 		return next()
 	})
-	// a topic's page path gets the app shell with its topic-specific preview tags hydrated.
-	// one response serves every client: a browser runs the SPA, a social platform reads the preview tags,
-	// and a crawler reads the title, canonical url, structured data, and noscript body
+	// a topic's page path gets the app shell with its topic-specific preview tags hydrated
 	.get("/topics/:id", async (context, next) => {
 		// a failed topic preview tags lookup falls through to the preview tags in the global layout
 		try {
@@ -115,8 +115,7 @@ export const pagesRoute = new Hono()
 				if (topicPreview.visibility !== "public") {
 					return context.html(toTopicPreviewHtml(await appShell.text(), topicPreview, appUrl()))
 				}
-				// a public topic's seo content also carries its last brew's findings as a ranked hasPart list in CreativeWork structured data,
-				// as well as a noscript body for crawlers that run no script
+				// a public topic's seo content also includes its last scan's findings as a ranked hasPart list in CreativeWork
 				const scan = await lastScan(topicPreview.topicId)
 				const findingRows = scan ? await scanFindings(scan.id) : []
 				const creativeWork = toJsonLdTag(
@@ -140,9 +139,21 @@ export const pagesRoute = new Hono()
 		}
 		return next()
 	})
-	// a profile's page path gets the app shell with its profile-specific preview tags hydrated.
-	// one response serves every client: a browser runs the SPA, a social platform reads the preview tags,
-	// and a crawler reads the title, canonical url, structured data, and noscript body
+	// a team's page path gets the app shell with its team-specific preview tags hydrated
+	.get("/teams/:teamId", async (context, next) => {
+		try {
+			const teamPreview = await toTeamPreview(context.req.param("teamId"))
+			const appShell = Bun.file(`${UI_BUNDLE_ROOT}/index.html`)
+			// a private or missing team, or an unbuilt bundle, falls through to the plain shell
+			if (teamPreview && (await appShell.exists())) {
+				return context.html(toTeamPreviewHtml(await appShell.text(), teamPreview, appUrl()))
+			}
+		} catch (error) {
+			console.error("team preview tags skipped", error)
+		}
+		return next()
+	})
+	// a profile's page path gets the app shell with its profile-specific preview tags hydrated
 	.get("/profiles/:userId", async (context, next) => {
 		try {
 			const profilePreview = await toProfilePreview(context.req.param("userId"))

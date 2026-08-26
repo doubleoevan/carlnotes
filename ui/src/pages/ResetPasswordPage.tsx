@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { useSearchParams } from "react-router-dom"
+import { authClient, passSignupGate } from "@/clients/authClient"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
@@ -7,13 +8,14 @@ import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
 import { PasswordInput } from "@/components/session/PasswordInput"
 import { TurnstileWidget } from "@/components/session/TurnstileWidget"
-import { authClient, passSignupGate } from "@/lib/authClient"
+import { usePageTitle } from "@/hooks/usePageTitle"
 
 /**
  * Password reset and recovery, both on one route: without a token it asks for an email address to send the token to,
  * and with a token it takes a new password. The token count is incremented when a token is spent to issue a new one.
  */
 export function ResetPasswordPage() {
+	usePageTitle("Reset password")
 	const [searchParams] = useSearchParams()
 	const token = searchParams.get("token")
 	return (
@@ -60,8 +62,7 @@ function ResetRequestForm() {
 				failAndRenewChallenge("That check didn't pass. Try again.")
 				return
 			}
-			// the reply is the same either way, so nothing here learns whether the email address has an account
-			// the token is on a link from a valid email address
+			// the reply is the same either way
 			await authClient.requestPasswordReset({ email, redirectTo: "/reset-password" })
 			setSent(true)
 		} catch (requestError) {
@@ -133,7 +134,7 @@ function NewPasswordForm({ token }: { token: string }) {
 				setError(resetError.message ?? "That link has expired or already been used.")
 				return
 			}
-			// full navigation, not client-side to clear session client's cache
+			// full navigation, not client-side. the session client's cache otherwise still shows signed-out
 			window.location.href = "/"
 		} catch (resetFailure) {
 			console.error("password reset failed", resetFailure)
@@ -153,7 +154,6 @@ function NewPasswordForm({ token }: { token: string }) {
 				onChange={setPassword}
 				autoComplete="new-password"
 			/>
-			{/* setting a new password gets updated on all devices */}
 			<p className="text-muted-foreground text-xs">Setting a new password signs you out everywhere else.</p>
 			{error && <p className="text-destructive text-sm">{error}</p>}
 			<Button type="submit" disabled={isSubmitting} className="w-full">

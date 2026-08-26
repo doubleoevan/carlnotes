@@ -1,12 +1,8 @@
-// the Reddit ingester. it reads a subreddit listing or a search, preferring the app-only OAuth API and falling back
-// to the keyless public feeds. reddit refuses its keyless .json endpoints outright while still serving the rss feeds,
-// so the fallback reads those, at the cost of the post score and the configured sort
-
+// the Reddit ingester
 import { fetchFeed } from "./feed"
 import type { NewResource, Source, SourceIngester } from "./ingester"
 
-// fetch limits. the post cap is sent as the OAuth call's limit parameter,
-// since an rss feed returns whatever length reddit serves
+// fetch limits
 const MAX_POSTS = 25
 const DEFAULT_SORT = "hot"
 const FETCH_TIMEOUT_MS = 10_000
@@ -18,18 +14,14 @@ const SUBREDDIT_SORTS = ["hot", "new", "top", "rising"]
 // reddit rejects generic or missing User-Agents. send a descriptive one on every request, both OAuth and keyless
 const REDDIT_USER_AGENT = "carlnotes/0.1 (source-ingestion; +https://carlnotes.com)"
 
-// the OAuth host takes the token and returns the full listing JSON. the public host needs no credentials
-// and serves the rss feeds, which is the only keyless reading that reddit still allows
+// the OAuth host takes the token and returns the full listing JSON
 const OAUTH_HOST = "https://oauth.reddit.com"
 const PUBLIC_HOST = "https://www.reddit.com"
 
 // what the Scan records for a Source the keyless feeds served
 const RSS_FALLBACK_MODE = "reddit-rss"
 
-// reddit refuses a burst from one address, and a Scan runs its Sources at once, so two reddit Sources would
-// otherwise fetch in the same instant, and the second would be throttled. every request waits out its gap
-// behind the one before it. the keyless gap is measured: 30 seconds apart is served, 15 seconds apart is refused.
-// an authorized app has far more headroom, so the OAuth gap only keeps a Scan's Sources from arriving together.
+// reddit refuses a burst from one address, and a Scan runs its Sources at once
 const MIN_REQUEST_GAP_MS = { oauth: 1_000, rss: 30_000 }
 let lastRequest: Promise<unknown> = Promise.resolve()
 
@@ -49,7 +41,7 @@ export const redditIngester: SourceIngester = async (source: Source) => {
 	// what the Source asked for, which is a subreddit it must name and a query it may add
 	const request = toRedditRequest(source)
 
-	// try each access mode in order and keep the first that answers, recording the keyless feeds as a fallback
+	// try each access mode in order and keep the first that responds, recording the keyless feeds as a fallback
 	const clientId = Bun.env.REDDIT_CLIENT_ID
 	const clientSecret = Bun.env.REDDIT_CLIENT_SECRET
 	const failures: string[] = []
@@ -71,8 +63,7 @@ export const redditIngester: SourceIngester = async (source: Source) => {
 	throw new Error(`reddit ${toRequestLabel(request)} failed in every access mode: ${failures.join("; ")}`)
 }
 
-// how a request reads in a failure message. it names what the Source asked for instead of one access mode's url,
-// since the access modes that refused it are listed after it
+// how a request reads in a failure message
 function toRequestLabel(request: RedditRequest): string {
 	if (request.kind === "listing") {
 		return `r/${request.subreddit}/${request.sort}`
@@ -112,7 +103,7 @@ export function toRedditRequest(source: Source): RedditRequest {
 		throw new Error(`reddit source ${source.id} needs a valid config.subreddit`)
 	}
 
-	// an unrecognized sort falls back instead of throwing, since it only sets the order posts come back in
+	// an unrecognized sort falls back instead of throwing. it only sets the order posts come back in
 	const configuredSort = source.config.sort
 	const sort =
 		typeof configuredSort === "string" && SUBREDDIT_SORTS.includes(configuredSort) ? configuredSort : DEFAULT_SORT
@@ -133,7 +124,7 @@ export function toRedditAccessModes(hasCredentials: boolean): AccessMode[] {
 
 /**
  * The OAuth url for a request, which returns the listing JSON including each post's selftext and score.
- * A search with no subreddit is the site-wide one: no Source builds that, since a Source must name a subreddit,
+ * A search with no subreddit is the site-wide one, which no Source builds because a Source names a subreddit,
  * but searching reddit at large is how a subreddit is found in the first place, so both forms are built here.
  */
 export function toOauthUrl(request: RedditRequest): string {
@@ -183,15 +174,13 @@ export function parsePosts(json: RedditListing): NewResource[] {
 	// keep the first Resource per permalink so a repeated post collapses to one
 	const resourceByUrl = new Map<string, NewResource>()
 	for (const child of json.data.children) {
-		// the comments permalink is the canonical url in both OAuth and fallback access modes,
-		// so an access mode switch never re-keys a post
+		// the comments permalink is the canonical url in both OAuth and fallback access modes
 		const url = `${PUBLIC_HOST}${child.data.permalink}`
 		if (resourceByUrl.has(url)) {
 			continue
 		}
 
-		// map the url to a "read" Resource. the snippet is the post selftext and the score is the engagement field.
-		// contentHash stays null for review to fill
+		// map the url to a "read" Resource
 		resourceByUrl.set(url, {
 			url,
 			title: child.data.title ?? null,
@@ -215,8 +204,7 @@ export function queueRedditRequest<T>(accessMode: AccessMode, sendRequest: () =>
 	return queuedRequest
 }
 
-// fetch the request in one access mode and parse what it returns. the rss access mode goes through the shared feed parser,
-// which already dedupes a feed by canonical url and returns "read" Resources
+// fetch the request in one access mode and parse what it returns
 async function fetchPosts(
 	accessMode: AccessMode,
 	request: RedditRequest,

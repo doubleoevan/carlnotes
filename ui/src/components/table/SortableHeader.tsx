@@ -3,7 +3,7 @@ import { useState } from "react"
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 
-// one column's sort value: numbers compare numerically, strings case-insensitively, null sinks last
+// a table column's sort value. numbers compare numerically, strings case-insensitively, and null sorts last
 export type SortValue = string | number | null
 
 // the sort state a SortableHeader needs from the hook

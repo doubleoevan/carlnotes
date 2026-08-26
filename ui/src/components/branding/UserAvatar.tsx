@@ -1,11 +1,12 @@
 import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@shared/avatars"
+import { useState } from "react"
+import { useAvatarVersion } from "@/hooks/useAvatarVersion"
+import { AVATAR_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
-
-const AVATAR_CLASS =
-	"inline-block shrink-0 overflow-hidden rounded-full border shadow-lift outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]"
 
 /**
  * A user's avatar: their stored image, or their initials on a tinted circle.
+ * The avatar route resolves which image the user publishes, so the img only asks by id.
  */
 export function UserAvatar({
 	userId,
@@ -15,27 +16,35 @@ export function UserAvatar({
 }: {
 	userId: string
 	username: string
-	// where the image comes from. anything but "generated" is served by the avatar route
+	// where the image comes from. anything but "generated" means the avatar route serves one
 	avatarSource?: string | null
 	className?: string
 }) {
+	// the version changes when an upload arrives, which is what re-fetches an image the url already named
+	const avatarVersion = useAvatarVersion()
+	const [isImageBroken, setImageBroken] = useState(false)
+	const hasAvatar = Boolean(avatarSource) && avatarSource !== "generated" && !isImageBroken
 	return (
 		<span className={cn(AVATAR_CLASS, "size-8", className)}>
-			{toAvatarImage(userId, toAvatarInitials(username), avatarSource)}
+			{hasAvatar ? (
+				<img
+					src={`/api/avatars/${userId}?v=${avatarVersion}`}
+					alt=""
+					onError={() => setImageBroken(true)}
+					className="size-full object-cover"
+				/>
+			) : (
+				<AvatarInitials userId={userId} username={username} />
+			)}
 		</span>
 	)
 }
 
-// the stored image when there is one, otherwise the initials on a tinted circle
-function toAvatarImage(userId: string, initials: string, avatarSource?: string | null) {
-	// the source is in the url, so switching between an upload and a provider photo asks for the other source type
-	if (avatarSource && avatarSource !== "generated") {
-		return <img src={`/api/avatars/${userId}?source=${avatarSource}`} alt="" className="size-full object-cover" />
-	}
-	const avatarTint = toAvatarTint(userId)
+// the initials on a tinted circle, drawn from the same id and name everywhere
+function AvatarInitials({ userId, username }: { userId: string; username: string }) {
 	return (
 		<svg viewBox="0 0 32 32" className="size-full" role="presentation">
-			<circle cx="16" cy="16" r="16" fill={avatarTint} />
+			<circle cx="16" cy="16" r="16" fill={toAvatarTint(userId)} />
 			<text
 				x="16"
 				y="16"
@@ -45,7 +54,7 @@ function toAvatarImage(userId: string, initials: string, avatarSource?: string |
 				dominantBaseline="central"
 				className="font-display"
 			>
-				{initials}
+				{toAvatarInitials(username)}
 			</text>
 		</svg>
 	)

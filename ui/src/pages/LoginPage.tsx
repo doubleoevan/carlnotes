@@ -1,14 +1,16 @@
 import { useState } from "react"
 import { useSearchParams } from "react-router-dom"
+import { authClient } from "@/clients/authClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { SessionLayout } from "@/components/session/SessionLayout"
-import { authClient } from "@/lib/authClient"
+import { usePageTitle } from "@/hooks/usePageTitle"
 import { toSafeRedirectPath } from "@/lib/utils"
 
 /**
  * The login page. oauth is one click, and email is a step, revealed on request
  */
 export function LoginPage() {
+	usePageTitle("Log in")
 	const [error, setError] = useState<string | null>(null)
 	const [isSubmitting, setSubmitting] = useState(false)
 	// where a link that sent the visitor here should return to
@@ -25,7 +27,7 @@ export function LoginPage() {
 			setSubmitting(false)
 			return
 		}
-		// full navigation, not client-side: the session client's cache otherwise still shows signed-out
+		// full navigation, not client-side. the session client's cache otherwise still shows signed-out
 		window.location.href = redirectPath
 	}
 

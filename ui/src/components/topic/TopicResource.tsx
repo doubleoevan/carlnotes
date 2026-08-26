@@ -2,18 +2,22 @@ import type { TopicFinding } from "@shared/contracts"
 import { Bookmark, Check, Circle, ThumbsDown, ThumbsUp } from "lucide-react"
 import type * as React from "react"
 import { useState } from "react"
+import { sendFindingFeedback } from "@/clients/topicClient"
 import { NoteIcon } from "@/components/branding/NoteIcon"
+import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button } from "@/components/primitives/button"
+import { Input } from "@/components/primitives/input"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { InfoSection } from "@/components/topic/TopicInfo"
 import { ScrollBox, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
-import { cn, POPOVER_HEADING_CLASS, RESOURCE_KIND_ICON, toAgeLabel } from "@/lib/utils"
+import { toAgeLabel } from "@/lib/labels"
+import { POPOVER_HEADING_CLASS, POPOVER_WIDTH_CLASS } from "@/lib/styleClasses"
+import { cn, RESOURCE_KIND_ICON } from "@/lib/utils"
 import { type TopicFeedHandlers, useIsSignedIn, useTopicFeedActions } from "@/providers/TopicFeedProvider"
 
-// the row's topic finding, its rank among the topic's auto-kept findings (null when a bookmark pins it instead),
-// whether this user may rate and bookmark it, and optional handlers that override the topic feed provider's handlers
+// the row's topic finding, its rank among the topic's auto-kept findings (null when a bookmark pins it
 type TopicResourceProps = {
 	resource: TopicFinding
 	rank: number | null
@@ -40,12 +44,14 @@ export function TopicResource({
 	const providerHandlers = useTopicFeedActions()
 	const { openTopicFinding, consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding } =
 		resourceHandlers ?? providerHandlers
-	// signed-out visitors don't get the per-user read and rating controls
+	// signed-out visitors don't get the per-user read and rating buttons
 	const isSignedIn = useIsSignedIn()
 	const ResourceIcon = RESOURCE_KIND_ICON[resource.resourceKind]
-	// the whole row opens the note popup for the topic finding and hovering it shows the hint, so both states live here.
-	// the note button stays the popover's trigger, which is what anchors the note and the hint to the icon
+	// the whole row opens the note popup for the topic finding and hovering it shows the hint
 	const [isNoteOpen, setIsNoteOpen] = useState(false)
+	const handleNoteOpenChange = (isOpen: boolean): void => {
+		setIsNoteOpen(isOpen)
+	}
 	const [isHintOpen, setIsHintOpen] = useState(false)
 	// unread rows are bold. consumed rows go muted. the underline is the link's own, so it only appears over the title itself
 	const titleClass = cn(
@@ -58,15 +64,14 @@ export function TopicResource({
 	)
 	// the bookmark mark's label and tooltip, shared so the two never drift apart
 	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
-	// the hover highlight paints on a rounded under-layer, so the separator above the row stays straight.
-	// the separator is the row's own after element, inset so it sits inside the highlight's rounded corners
+	// the hover highlight paints on a rounded under-layer, so the separator above the row stays straight
 	return (
-		<Popover open={isNoteOpen} onOpenChange={setIsNoteOpen}>
+		<Popover open={isNoteOpen} onOpenChange={handleNoteOpenChange}>
 			{/* the row is a pointer shortcut to the note popup. only the title link opens the resource, the note button opens this popover */}
 			{/* biome-ignore lint/a11y/useKeyWithClickEvents: reachable by keyboard through the link and the note button */}
-			{/* biome-ignore lint/a11y/noStaticElementInteractions: a pointer shortcut over children that carry the semantics */}
+			{/* biome-ignore lint/a11y/noStaticElementInteractions: a pointer shortcut over children that have the semantics */}
 			<div
-				onClick={() => setIsNoteOpen(true)}
+				onClick={() => handleNoteOpenChange(true)}
 				onMouseEnter={() => setIsHintOpen(true)}
 				onMouseLeave={() => setIsHintOpen(false)}
 				className="group after:border-separator-strong relative isolate flex cursor-pointer before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden hover:before:bg-accent-foreground/20"
@@ -128,8 +133,28 @@ export function TopicResource({
 								{resource.title ?? resource.url}
 							</AnchorLink>
 						</div>
-						<div className={metadataClass}>
+						<div className={cn(metadataClass, "flex items-center gap-1.5")}>
 							{[resource.source, toAgeLabel(resource.publishedAt)].filter(Boolean).join(" · ")}
+							{/* the teammates who kept this finding */}
+							{resource.teamBookmarks.length > 0 && (
+								<span className="flex items-center gap-0.5">
+									{resource.teamBookmarks.map((saver) => (
+										<Tooltip key={saver.userId}>
+											<TooltipTrigger asChild>
+												<span>
+													<UserAvatar
+														userId={saver.userId}
+														username={saver.username}
+														avatarSource={saver.avatarSource}
+														className="size-4"
+													/>
+												</span>
+											</TooltipTrigger>
+											<TooltipContent>{`${saver.username} kept this`}</TooltipContent>
+										</Tooltip>
+									))}
+								</span>
+							)}
 						</div>
 					</div>
 				</div>
@@ -151,8 +176,7 @@ export function TopicResource({
 	)
 }
 
-// the resource info popover. it shows the relevance explanation, the fetch date, the view count,
-// and, for a signed-in user, the bookmark and read toggles with the rating buttons
+// the resource info popover
 function ResourceInfo({
 	resource,
 	topic,
@@ -166,7 +190,6 @@ function ResourceInfo({
 	onBookmark,
 }: {
 	topic: TopicResourceProps["topic"]
-	// the topic finding, whether this user is signed in and may rate or bookmark it, and the consume, rate, and bookmark handlers
 	resource: TopicFinding
 	isRatable: boolean
 	isBookmarkable: boolean
@@ -180,10 +203,9 @@ function ResourceInfo({
 }) {
 	// the bookmark button's label, flipping with the finding's bookmark state
 	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
-	// only a topic's owner bookmarks its findings, and a bookmark held from before that rule stays removable
+	// only a topic's owner bookmarks its findings, and an existing bookmark stays removable
 	const isBookmarkShown = isBookmarkable || resource.isBookmarked
-	// the row owns the popover's open state, so this holds only the trigger the note anchors to and the content.
-	// the trigger stops the click so it toggles instead of the row also setting it open
+	// the row owns the popover's open state, so this holds only the trigger the note anchors to and the content
 	return (
 		<>
 			<Tooltip open={isHintOpen} onOpenChange={onHintChange}>
@@ -199,12 +221,8 @@ function ResourceInfo({
 				<TooltipContent side="top">A topic finding note from Carl</TooltipContent>
 			</Tooltip>
 			{/* the content renders through a portal, but a react event bubbles the react tree instead of the dom one,
-			    so without intercepting a click in here reaches the row and reopens what the close button just closed */}
-			<PopoverContent
-				onClick={(event) => event.stopPropagation()}
-				align="end"
-				className="w-[calc(100vw-2rem)] max-w-lg text-sm"
-			>
+			    so the click is stopped here instead of reaching the row */}
+			<PopoverContent onClick={(event) => event.stopPropagation()} align="end" className={POPOVER_WIDTH_CLASS}>
 				<PopoverCloseButton />
 				<h2 className={POPOVER_HEADING_CLASS}>Topic Finding</h2>
 
@@ -229,7 +247,7 @@ function ResourceInfo({
 						{resource.viewCount.toLocaleString()}
 					</InfoSection>
 				</div>
-				{/* the bookmark, read, and rating controls, only shown to a signed-in user */}
+				{/* the bookmark, read, and rating buttons, only shown to a signed-in user */}
 				{isSignedIn && (
 					<div className="mt-3 border-t pt-2">
 						{/* the bookmark and read toggles share one row, and a user who cannot bookmark gets the read toggle alone */}
@@ -257,7 +275,7 @@ function ResourceInfo({
 						{/* the rating row, shown only on topics this user owns or subscribes to */}
 						{isRatable && (
 							<div className="mt-2 flex min-h-11 items-center justify-between border-t px-2 pt-2 sm:min-h-9">
-								<span className="text-muted-foreground text-xs">Rate this find</span>
+								<span className="text-muted-foreground text-xs">Rate this finding</span>
 								<div className="flex gap-1">
 									<ThumbButton
 										isActive={resource.rating === "up"}
@@ -276,6 +294,8 @@ function ResourceInfo({
 								</div>
 							</div>
 						)}
+						{/* freeform words about the finding. stored as written and never fed to scoring */}
+						{isRatable && <FindingFeedbackField findingId={resource.findingId} />}
 					</div>
 				)}
 			</PopoverContent>
@@ -285,6 +305,50 @@ function ResourceInfo({
 
 // a thumbs up or down toggle for the rating row
 type ThumbButtonProps = { isActive: boolean; label: string; onClick: () => void; children: React.ReactNode }
+// the freeform words input in the note popover. sent once, then confirmed in place
+function FindingFeedbackField({ findingId }: { findingId: string }) {
+	const [feedback, setFeedback] = useState("")
+	const [isSent, setIsSent] = useState(false)
+	const [isSending, setIsSending] = useState(false)
+
+	// send the words as written, then say so where the input was
+	const handleSend = async (): Promise<void> => {
+		if (!feedback.trim() || isSending) {
+			return
+		}
+		setIsSending(true)
+		try {
+			await sendFindingFeedback(findingId, feedback.trim())
+			setIsSent(true)
+		} catch (error) {
+			// the words stay in the input, so a failed send can be retried
+			console.error("finding feedback send failed", error)
+		} finally {
+			setIsSending(false)
+		}
+	}
+
+	// one line of thanks replaces the input once sent
+	if (isSent) {
+		return <p className="text-muted-foreground mt-2 border-t px-2 pt-2 text-xs">Noted. Carl reads these later.</p>
+	}
+	return (
+		<div className="mt-2 flex items-center gap-2 border-t px-2 pt-2">
+			<Input
+				aria-label="Feedback for Carl"
+				placeholder="Tell Carl why this finding was good or bad…"
+				value={feedback}
+				onChange={(event) => setFeedback(event.target.value)}
+				onKeyDown={(event) => event.key === "Enter" && void handleSend()}
+				className="h-8 text-xs"
+			/>
+			<Button size="sm" onClick={() => void handleSend()} className="h-8 shrink-0 px-3 text-xs">
+				Send
+			</Button>
+		</div>
+	)
+}
+
 function ThumbButton({ isActive, label, onClick, children }: ThumbButtonProps) {
 	return (
 		<Button

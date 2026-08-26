@@ -29,7 +29,7 @@ export const THINKING_LINES = [
 	"doing the math",
 	"dusting for fingerprints",
 	"consulting the coffee grounds",
-	"on a journey",
+	"on a mission",
 	"on a quest",
 	"on a great adventure",
 	"ignoring the raccoon's legal advice",
@@ -67,7 +67,8 @@ export const THINKING_LINES = [
 	"applying game theory",
 	"applying chaos theory",
 	"opening Pandora's box",
-	"asking for a second opinion",
+	"getting a second opinion",
+	"working the night shift",
 ]
 
 // what is left of the current shuffle, refilled once the last line is dealt

@@ -1,6 +1,7 @@
-import { cn, RESOURCE_LIST_CARD_CLASS } from "@/lib/utils"
+import { RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
-// placeholder sections mirroring "Your topics", "Featured topics" and "Popular topics". the strings exist only as stable react keys
+// placeholder sections mirroring "Your topics", "Featured topics" and "Popular topics"
 const SECTION_SKELETONS = [
 	{ key: "yours", topics: ["a", "b"] },
 	{ key: "featured", topics: ["c", "d"] },
@@ -22,8 +23,7 @@ export function TopicFeedSkeleton() {
 	)
 }
 
-// one section skeleton mirroring the TopicSection. a chevron and title header, then the topic placeholders.
-// the first header drops its top padding the way the real first section does
+// one section skeleton mirroring the TopicSection
 function TopicSectionSkeleton({ topics, isFirst }: { topics: string[]; isFirst: boolean }) {
 	return (
 		<div className="border-b last:border-b-0">
@@ -42,14 +42,14 @@ function TopicSectionSkeleton({ topics, isFirst }: { topics: string[]; isFirst: 
 	)
 }
 
-// one topic skeleton mirroring a Topic. a header, then the resource rows in the same card they land in
+// one topic skeleton mirroring a Topic. a header, then the resource rows in the same card they sit in
 function TopicSkeleton() {
 	return (
 		<div className="py-2">
 			{/* header: title, info button and a tag pill, with a "# new" count on the right */}
 			<div className="flex items-start justify-between gap-3">
 				<div className="min-w-0 flex-1">
-					{/* title and info button, indented the way the real title is */}
+					{/* title and info button */}
 					<div className="flex items-center gap-2">
 						<div className="bg-muted my-1 ml-4 h-5 w-52 animate-pulse rounded" />
 						<div className="bg-muted size-4 shrink-0 animate-pulse rounded-full" />
@@ -71,9 +71,7 @@ function TopicSkeleton() {
 	)
 }
 
-// one resource skeleton mirroring TopicResource: the rank slot, an icon, then title and metadata lines.
-// the dashed separator is the row's own, inset to match the real row's.
-// the topic page's skeleton shows the same rows, so it shares this skeleton
+// one resource skeleton mirroring TopicResource: the rank slot, an icon, then title and metadata lines
 export function ResourceSkeleton() {
 	return (
 		<div className="after:border-separator-strong relative flex after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden">

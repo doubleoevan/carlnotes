@@ -2,14 +2,17 @@ import { plans } from "@shared/enums"
 import { type BillingInterval, PLANS, type Plan, SCAN_COST_CENTS } from "@shared/plans"
 import { Check } from "lucide-react"
 import { useEffect, useState } from "react"
+import { authClient } from "@/clients/authClient"
+import { fetchBillingState, openBillingPortal, startCheckout } from "@/clients/billingClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
-import { authClient } from "@/lib/authClient"
-import { fetchBillingState, openBillingPortal, startCheckout } from "@/lib/billingClient"
+import { usePageTitle } from "@/hooks/usePageTitle"
+import { toBrewsWord } from "@/lib/labels"
 import { isUsersPlan, toPlanBadge } from "@/lib/planCards"
-import { cn, toBrewsWord } from "@/lib/utils"
+import { PAGE_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
 // the recommended plan that a signed-out visitor sees highlighted
 const RECOMMENDED_PLAN: Plan = "plus"
@@ -27,8 +30,7 @@ function toWholeDollarLabel(cents: number): string {
 	return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`
 }
 
-// the plan's monthly budget stated in Brews, rounded up to ten so it reads as the estimate it is.
-// how many Brews a month depends on how the user schedules their topics
+// the plan's monthly budget stated in Brews, rounded up to ten as an estimate
 function toMonthlyScanEstimate(monthlyBudgetCents: number): number {
 	return Math.ceil(monthlyBudgetCents / SCAN_COST_CENTS / 10) * 10
 }
@@ -39,6 +41,7 @@ function toMonthlyScanEstimate(monthlyBudgetCents: number): number {
  * recommended plan is.
  */
 export function PlansPage() {
+	usePageTitle("Plans")
 	const { data: session } = authClient.useSession()
 	const [isYearly, setIsYearly] = useState(false)
 	const [billingInterval, setBillingInterval] = useState<BillingInterval | null>(null)
@@ -62,7 +65,7 @@ export function PlansPage() {
 				setBillingInterval(billing.billingInterval)
 				setIsYearly(billing.billingInterval === "yearly")
 			})
-			// a failed read settles on monthly, since a null interval holds the page on its loading state
+			// a failed read settles on monthly. a null interval holds the page on its loading state
 			.catch((error) => {
 				console.error("billing state load failed", error)
 				setBillingInterval("monthly")
@@ -97,12 +100,12 @@ export function PlansPage() {
 	}
 
 	return (
-		<main className="mx-auto max-w-5xl px-safe py-10">
+		<main className={PAGE_CLASS}>
 			{/* the heading and the billing interval toggle */}
 			<div className="text-center">
 				<h1 className="font-display text-3xl">Plans</h1>
 				<p className="text-muted-foreground mt-2">Carl turns caffeine into notes. Choose how much coffee to buy him.</p>
-				{/* the toggle billing interval button is initialized with the signed-in user's plan */}
+				{/* the toggle starts at the interval the subscriber bills on */}
 				{!isLoadingInterval && (
 					<div className="mt-6 inline-flex items-center gap-2 text-sm">
 						Monthly
@@ -179,7 +182,7 @@ function PlanCard({
 	const isCurrentPlan = isUsersPlan(plan, signedInPlan, billingInterval, subscribedInterval)
 	const planBadge = toPlanBadge(isCurrentPlan, signedInPlan, isHighlighted)
 
-	// the plans limits based on the billing interval
+	// the plan's limits at the selected billing interval
 	const dailyTopicLimitForInterval = dailyTopicLimit[billingInterval]
 	const dailyScanLimitForInterval = dailyScanLimit[billingInterval]
 	const monthlyScanEstimate = toMonthlyScanEstimate(planConfig.monthlyBudgetCents)
@@ -190,7 +193,7 @@ function PlanCard({
 				isHighlighted && "border-primary ring-primary/40 ring-2",
 			)}
 		>
-			{/* the plan badge rides the top edge of the highlighted card */}
+			{/* the plan badge sits on the top edge of the highlighted card */}
 			{planBadge && (
 				<span className="bg-primary text-primary-foreground absolute -top-3 left-1/2 -translate-x-1/2 rounded-full px-3 py-0.5 text-xs font-semibold whitespace-nowrap">
 					{planBadge}
@@ -210,7 +213,7 @@ function PlanCard({
 						? `Billed ${toWholeDollarLabel(planConfig.priceYearlyCents)} yearly`
 						: "Billed monthly"}
 			</p>
-			{/* the quotas, straight from the plans catalog. each line answers the question the one above it raises */}
+			{/* the quotas, straight from the plans catalog */}
 			<ul className="mt-4 flex-1 space-y-2 text-sm">
 				<QuotaLink label={`${planConfig.topicLimit} topics`} />
 				<QuotaLink
@@ -269,7 +272,7 @@ function PlanButton({
 	onCheckout: (plan: Plan) => void
 	onPortal: () => void
 }) {
-	// a visitor starts at signup whichever card they pick
+	// a logged-out visitor goes to the signup no matter which card they select
 	if (signedInPlan === null) {
 		return (
 			<AnchorLink href="/signup?cta=pricing" className={cn(buttonVariants({ variant: "default" }), "mt-6 w-full")}>

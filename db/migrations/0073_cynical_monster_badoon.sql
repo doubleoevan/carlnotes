@@ -1,0 +1,1 @@
+ALTER TABLE "finding_views" DROP COLUMN "dwell_ms";

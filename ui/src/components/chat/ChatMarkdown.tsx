@@ -29,8 +29,7 @@ export function isSafeHref(href: string | undefined): href is string {
 	return typeof href === "string" && (href.startsWith("https://") || href.startsWith("http://"))
 }
 
-// a web-scheme link renders through the shared link component. any other scheme renders as plain text,
-// so a javascript: or data: href the model wrote can never be clicked
+// a web-scheme link renders through the shared link component
 function ReplyLink({ href, children }: { href?: string; children?: React.ReactNode }) {
 	if (!isSafeHref(href)) {
 		return <span>{children}</span>
@@ -42,8 +41,7 @@ function ReplyLink({ href, children }: { href?: string; children?: React.ReactNo
 	)
 }
 
-// an image renders as a link to itself instead of loading inline
-// because an image url the browser fetches on its own can leak data to whoever hosts it
+// an image renders as a link to itself
 function ReplyImage({ src, alt }: { src?: string; alt?: string }) {
 	if (!isSafeHref(src)) {
 		return <span>{alt ?? ""}</span>

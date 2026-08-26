@@ -1,5 +1,4 @@
-// the paid stages: fetch each admitted Resource's content, score it against the topic context with tiered
-// models, and write the Finding. every Resource checks the Scan's limits before it starts
+// the paid stages: fetch each admitted Resource's content, score it against the topic context with tiered models
 import { reportError } from "@shared/monitoring"
 import { generateText, type LanguageModel, Output } from "ai"
 import { eq } from "drizzle-orm"
@@ -31,19 +30,16 @@ import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track
 // the cheap model score that earns a premium model re-score and a relevance explanation. the environment can override it
 const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? "0.6")
 
-// how many resources the paid fetch-and-scoring section works concurrently. it stays bounded because Firecrawl
-// enforces a per-plan concurrency and responds to a burst with 429s, which fall back to the snippet.
-// the environment can override it, and a value of 1 restores the original serial behavior
+// how many resources the paid fetch-and-scoring section works concurrently
 const REVIEW_CONCURRENCY = Number(Bun.env.REVIEW_CONCURRENCY ?? "4")
 
-// the text cap that bounds scoring tokens and spend. it also bounds what the scanner screens, so a model never
-// reads a character the scanner did not see. reading stored content past this point needs its own screen first
+// the text limit that bounds scoring tokens and spend
 const MAX_SCORE_CHARS = 8000
 
-// how a tweet's canonical url always starts, since ingestion folds twitter.com onto x.com and lowercases the host
+// how a tweet's canonical url always starts, where ingestion folds twitter.com onto x.com and lowercases the host
 const X_URL_PREFIX = "https://x.com/"
 
-// the model's structured output. a relevance score from 0 to 1, plus a relevance explanation that only the premium model is asked to write
+// the model's structured output
 const scoreSchema = z.object({ score: z.number(), relevanceExplanation: z.string().optional() })
 
 // a persisted Scan record
@@ -70,8 +66,7 @@ export async function fetchAndScoreResources(
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
 ): Promise<string[]> {
-	// each Resource checks the limit before it starts, so work already in flight when the limit is reached
-	// can overshoot it by up to one less than the concurrency. that overshoot is accepted, and costs a few cents
+	// each Resource checks the limit before it starts
 	const paidOutcomes = await runWithConcurrency(admittedResources, REVIEW_CONCURRENCY, (resource) =>
 		fetchAndScoreResource(resource, scan, topicId, topicContext, budget, litellmApiKey, stopSignal),
 	)
@@ -79,8 +74,7 @@ export async function fetchAndScoreResources(
 		trackOutcomes(reviewOutcome, paidOutcome)
 	}
 
-	// the Resources this stage admitted that the limit did not defer.
-	// the outcomes come back by index, so a Resource is matched to its own outcome
+	// the Resources this stage admitted that the limit did not defer
 	return admittedResources
 		.filter((_, index) => paidOutcomes[index]?.status !== "deferred")
 		.map((resource) => resource.id)
@@ -112,8 +106,7 @@ export async function runWithConcurrency<Item, Result>(
 	return results
 }
 
-// the paid stages for one admitted Resource: fetch its content, score it, and write the Finding.
-// failures are isolated here too, so one bad Resource never aborts the others in flight
+// the paid stages for one admitted Resource: fetch its content, score it, and write the Finding
 async function fetchAndScoreResource(
 	resource: Resource,
 	scan: Scan,
@@ -123,27 +116,22 @@ async function fetchAndScoreResource(
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
 ): Promise<ResourceOutcome> {
-	// defer the Resource once the Scan hits its dollar limit or its scored-resource limit,
-	// or once the user stops the Scan. a stop processes the rest of the Resources through the same path a spent budget uses,
-	// so the review returns what it scored instead of throwing away the stage's work
+	// defer the Resource once the Scan hits its dollar limit or its scored-resource limit, or once the user stops the Scan
 	if (!canScoreResource(budget, stopSignal)) {
 		return { status: "deferred" }
 	}
 
 	try {
-		// get the content by reuse, revalidation, or a paid fetch, then increment the FetchOutcome, which advances the scored-resource count
+		// get the content by reuse, revalidation, or a paid fetch, then increment the FetchOutcome
 		const { content, fetchOutcome } = await fetchResourceContent(resource, budget)
 		budget.fetchCounts[toFetchCountField(fetchOutcome)]++
 
-		// a Resource that resolved to no text at all, an episode with no transcript and no show notes, is dropped
-		// here, so neither the scanner nor a scoring model is paid to read nothing
+		// a Resource that resolved to no text at all, an episode with no transcript and no show notes, is dropped here
 		if (!content.trim()) {
 			return { status: "filtered", reason: "no text to score" }
 		}
 
-		// screen the fetched page before any model reads it. a flagged page is dropped under its own cause and never scored.
-		// only the scored prefix is sent, which is every character a model ever reads. a transcript runs to tens of thousands
-		// of characters, and sending all of them risks the scanner's timeout, which would drop the screening entirely
+		// screen the fetched page before any model reads it
 		const screenVerdict = await screenText(content.slice(0, MAX_SCORE_CHARS), "page")
 		if (screenVerdict.isFlagged) {
 			console.error(`resource ${resource.id} ${toFlaggedReason(screenVerdict)}`)
@@ -171,8 +159,7 @@ async function fetchAndScoreResource(
 	}
 }
 
-// get the survivor's content: reuse it if fresh, revalidate stale content with a cheap conditional GET, else fetch it fresh.
-// reuse and a 304 cost no fetch credit. only the Firecrawl scrape is billed, and a failed fetch falls back to the snippet
+// get the survivor's content
 async function fetchResourceContent(
 	resource: Resource,
 	budget: Budget,
@@ -204,8 +191,7 @@ async function fetchResourceContent(
 	return fetchAndStoreContent(resource, budget)
 }
 
-// read a Resource's stored text or null when the object is gone or unreadable.
-// a missing object is a cache miss, not a Resource failure, so the caller falls through and fetches the page again
+// read a Resource's stored text or null when the object is gone or unreadable
 async function readStoredContent(contentKey: string, resourceId: string): Promise<string | null> {
 	try {
 		return await getResourceContent(contentKey)
@@ -217,16 +203,13 @@ async function readStoredContent(contentKey: string, resourceId: string): Promis
 	}
 }
 
-// fetch the content by the path the Resource's kind selects, write it to object storage, and record its key, size,
-// and validators on the resource row. a failed fetch or a failed object-storage write falls back to the native snippet,
-// never failing the Resource or the Scan
+// fetch the content by the path the Resource's kind selects, write it to object storage
 async function fetchAndStoreContent(
 	resource: Resource,
 	budget: Budget,
 ): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
 	try {
-		// fetch the content, charge what that fetch spent, then write the body to object storage.
-		// a transcript goes straight to YouTube, so it charges zero into the same fetch bucket a scrape charges
+		// fetch the content, charge what that fetch spent, then write the body to object storage
 		const { text, cost, etag, lastModified } = await fetchContent(resource.url, resource.kind, resource.transcriptUrl)
 		charge(budget, "fetch", cost)
 		const stored = text ? await storeResourceContent(resource.id, text) : null
@@ -246,8 +229,7 @@ async function fetchAndStoreContent(
 	}
 }
 
-// write the fetched text to object storage, returning its key and size, or null when the write fails.
-// a failed write best-effort deletes the object so it leaves no orphan, and review falls back to the snippet
+// write the fetched text to object storage, returning its key and size, or null when the write fails
 async function storeResourceContent(
 	resourceId: string,
 	text: string,
@@ -255,8 +237,7 @@ async function storeResourceContent(
 	try {
 		return await uploadResourceContent(resourceId, text)
 	} catch (error) {
-		// the write failed. delete any partial object, then return null so scoring falls back to the snippet.
-		// nothing is stored, so a later Scan refetches this page
+		// the write failed
 		console.error(`object-storage write failed for resource ${resourceId}`, error)
 		reportError(error, "object-storage", { resourceId, operation: "write" })
 		await deleteResourceContent(toResourceContentKey(resourceId)).catch(() => {})
@@ -282,8 +263,7 @@ export async function scoreResource(
 	}
 	const cheapOutcome = await scoreResourceContent(cheapTier, resourceContent, topicContext, budget)
 
-	// only Resources with a high enough cheap model score earn a premium model re-score
-	// and only while the Scan is still under its spend cap
+	// only Resources with a high enough cheap model score earn a premium model re-score and only while the Scan is
 	if (!isPromoted(cheapOutcome.score) || !canSpend(budget)) {
 		return cheapOutcome
 	}
@@ -317,8 +297,7 @@ async function scoreResourceContent(
 		...promptTelemetry(scorePrompt),
 	})
 
-	// track the estimated cost, then return the clamped score and the relevance explanation
-	// the cheap model leaves the relevance explanation empty
+	// track the estimated cost, then return the clamped score and the relevance explanation the cheap model leaves
 	charge(budget, scoreTier.stage, tokenCost(usage.totalTokens ?? 0, scoreTier.ratePerMillion))
 	return { score: clampScore(output.score), relevanceExplanation: output.relevanceExplanation ?? "" }
 }
@@ -334,8 +313,7 @@ export async function buildScorePrompt(
 	// fetch the registry version first
 	const { template, name, registryPrompt } = await fetchPromptTemplate("summarize-resource")
 
-	// the cheap tier drops the premium-tier wording, then the content is capped to bound tokens and spend.
-	// both are user-supplied text, not app-generated, so they get fenced in the prompt as untrusted
+	// the cheap tier drops the premium-tier wording, then the content is limited to bound tokens and spend
 	const scoreTemplate = shouldWriteRelevanceExplanation ? template : filterPremiumPrompt(template)
 	const prompt = writePrompt(scoreTemplate, {
 		topicContext,

@@ -1,5 +1,4 @@
-// the JSON endpoints the ui fetches, served under /api by the basePath.
-// the ui builds its typed client from this tree, so every route's shape is part of that contract.
+// the JSON endpoints the ui fetches, served under /api by the basePath
 import { zValidator } from "@hono/zod-validator"
 import { signupGatePayload } from "@shared/contracts"
 import { Hono } from "hono"
@@ -15,15 +14,27 @@ import {
 	verifyGateToken,
 	verifyTurnstileToken,
 } from "./auth"
-import { loadDailyTopicQuota, topicsRemaining } from "./authorization"
+import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "./authorization"
 import { avatarsRoute } from "./avatars"
 import { billingRoute } from "./billing"
 import { chatAttachmentsRoute } from "./chat/attachments"
+import { chatRoomRoute } from "./chat/room"
+import { countUnseenChatMentions, loadChatRooms } from "./chat/rooms"
 import { chatRoute } from "./chat/turns"
 import { type AppEnv, currentUser } from "./currentUser"
 import { flagContentRoute } from "./flagContent"
+import { invitesRoute } from "./invite/invites"
+import { userInvitesRoute } from "./invite/userInvites"
 import { profilesRoute } from "./profiles"
-import { toCachedProfilePreviewPng, toCachedTopicPreviewPng, toProfilePreview, toTopicPreview } from "./share/preview"
+import {
+	toCachedProfilePreviewPng,
+	toCachedTeamPreviewPng,
+	toCachedTopicPreviewPng,
+	toProfilePreview,
+	toTeamPreview,
+	toTopicPreview,
+} from "./share/preview"
+import { teamsRoute } from "./team/teams"
 import { topicAttachmentsRoute } from "./topic/attachments"
 import { featuringRoute } from "./topic/featuring"
 import { buildTopicFeeds } from "./topic/feeds"
@@ -87,20 +98,32 @@ export const apiRoute = new Hono<AppEnv>()
 		await unsubscribe(context.req.query("token"))
 		return context.body(null, 200)
 	})
+	// every chat room the user may open, for the chat panel that the app shell mounts once
+	.get("/rooms", async (context) => {
+		const userId = currentUser(context)
+		return context.json({ rooms: userId ? await loadChatRooms(userId) : [] })
+	})
+	// the unseen mention count alone, which is one indexed select
+	.get("/rooms/mention-count", async (context) => {
+		const userId = currentUser(context)
+		return context.json({ count: userId ? await countUnseenChatMentions(userId) : 0 })
+	})
 	// public: a signed-out visitor gets featured and popular, just no "yours"
 	.get("/topic-feed", zValidator("query", topicFeedQuery), async (context) => {
 		const userId = currentUser(context)
-		// only include consumed topic findings unless the client asks for the "All" view
+		// only include consumed topic findings unless the api client asks for the "All" view
 		const includeConsumed = context.req.valid("query").all === "true"
 		// merge in the topic-creation quota. a signed-out visitor has none so gets zero
-		const [topicFeeds, remainingNewTopics, dailyTopicQuota] = await Promise.all([
+		const [topicFeeds, remainingNewTopics, ownedTopicLimit, dailyTopicQuota] = await Promise.all([
 			buildTopicFeeds(userId, includeConsumed),
 			userId ? topicsRemaining(userId) : Promise.resolve(0),
+			userId ? topicLimit(userId) : Promise.resolve(0),
 			userId ? loadDailyTopicQuota(userId) : Promise.resolve({ limit: 0, remainingTopics: 0 }),
 		])
 		return context.json({
 			...topicFeeds,
 			topicsRemaining: remainingNewTopics,
+			topicLimit: ownedTopicLimit,
 			dailyTopicLimit: dailyTopicQuota.limit,
 			dailyTopicsRemaining: dailyTopicQuota.remainingTopics,
 		})
@@ -115,10 +138,17 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", scansRoute)
 	// the chat routes
 	.route("/", chatRoute)
+	// the team chat routes
+	.route("/", chatRoomRoute)
 	// the kept chat attachment routes
 	.route("/", chatAttachmentsRoute)
 	// the subscription routes
 	.route("/", subscriptionsRoute)
+	// creating, revoking, and accepting invite links
+	.route("/", invitesRoute)
+	.route("/", userInvitesRoute)
+	// the team routes
+	.route("/", teamsRoute)
 	// the activity page route
 	.route("/", activityRoute)
 	// the topic attachment routes
@@ -148,6 +178,19 @@ export const apiRoute = new Hono<AppEnv>()
 		}
 		// rendered once per distinct card and read from storage after
 		const { bytes, cacheControl } = await toCachedProfilePreviewPng(profilePreviewCard)
+		return context.body(bytes as unknown as ArrayBuffer, 200, {
+			"Content-Type": "image/png",
+			"Cache-Control": cacheControl,
+		})
+	})
+	// the link-preview card that a social platform fetches for team links
+	.get("/teams/:teamId/preview.png", async (context) => {
+		const teamPreviewCard = await toTeamPreview(context.req.param("teamId"))
+		if (!teamPreviewCard) {
+			return context.json({ error: "not found" }, 404)
+		}
+		// rendered once per distinct card and read from storage after
+		const { bytes, cacheControl } = await toCachedTeamPreviewPng(teamPreviewCard)
 		return context.body(bytes as unknown as ArrayBuffer, 200, {
 			"Content-Type": "image/png",
 			"Cache-Control": cacheControl,

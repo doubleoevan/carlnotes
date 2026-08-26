@@ -1,5 +1,4 @@
-// starting a Scan by hand from the topic page. the scan itself runs in the worker, so this only authorizes it,
-// rejects a duplicate, and hands it off without blocking the request
+// starting a Scan by hand from the topic page
 import { trackEvent } from "@shared/analytics"
 import { reportError } from "@shared/monitoring"
 import { eq } from "drizzle-orm"
@@ -45,19 +44,16 @@ export async function runManualScan(
 	// close out any hung scans first, so a stuck scan row doesn't block a new manual scan indefinitely
 	await failStaleScans()
 
-	// hand the scan to Temporal. a topic already scanning is rejected by the workflow id,
-	// a scan is charged to whoever fired it, so an admin's scan never draws down the owner's quota or budget
+	// hand the scan to Temporal
 	const started = await startTopicScan(topicId, userId, "manual")
 	if (started.status === "running") {
 		return { status: "running" }
 	}
 
-	// an overage bills only once the scan finished, so it waits on the workflow with a promise instead of on this request with an await.
-	// the email is sent by the workflow itself, which means a scan that resumed after a crash still sends one
+	// an overage bills only once the scan finished
 	started.whenFinished
 		.then(async () => {
-			// a Scan the user stopped gave its daily scan back, so the limit the overage bills for is no longer exceeded.
-			// what it spent before the stop is still tracked against the month
+			// a Scan the user stopped gave its daily scan back, so the limit the overage bills for is no longer exceeded
 			const finishedScan = await loadScan(started.scan.id)
 			if (authorization.isOverage && !finishedScan?.stoppedAt) {
 				await reportManualScanOverage(userId)
@@ -98,14 +94,14 @@ export const scansRoute = new Hono<AppEnv>()
 			.from(scans)
 			.innerJoin(topics, eq(topics.id, scans.topicId))
 			.where(eq(scans.id, context.req.param("id")))
-		// a scan on a topic this caller may not see answers the same way a missing one does
+		// a scan on a topic this user may not see returns the same as a missing one
 		if (!(scanRow && (await isAllowed(currentUser(context), "topic:view", scanRow.topic)))) {
 			return context.json({ error: "not found" }, 404)
 		}
 		return context.json({ scanSummary: scanRow.scanSummary })
 	})
 	.post("/topics/:id/scan", async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -121,19 +117,19 @@ export const scansRoute = new Hono<AppEnv>()
 			return context.json({ error: "a scan is already running" }, 409)
 		}
 
-		// an exhausted quota and a non-owner topic scan fail differently, so the ui should tell them apart
+		// an exhausted quota and a non-owner topic scan fail differently
 		return scanResult.status === "quota"
 			? context.json({ error: "quota exhausted" }, 429)
 			: context.json({ error: "forbidden" }, 403)
 	})
 	.post("/topics/:id/scan/stop", async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
 
-		// stop the Topic's running Scan. a Topic with none running answers the same way as one that was stopped
+		// stop the Topic's running Scan. a Topic with none running returns the same as one that was stopped
 		const stopResult = await stopManualScan(userId, context.req.param("id"))
 		if (stopResult.status === "forbidden") {
 			return context.json({ error: "forbidden" }, 403)

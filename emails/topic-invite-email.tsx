@@ -1,7 +1,7 @@
 // the invitation email a newly invited address receives when a topic owner adds it to a public or invite topic.
 // it reuses the one-link auth-email template with the invitation's own words: who invited, to what,
-// and that the invitation is tied to this address. the link leads to the topic page.
-// an invite topic's gate walks a signed-out invitee through login or signup and back.
+// and which address it was sent to. the link is the invitee's own invite url, which includes a one-use token.
+// the join page walks a signed-out invitee through login or signup and back to itself.
 // authored as a react-email template like the others, so it previews with `bun run dev:email`
 import { Link } from "@react-email/components"
 import { render } from "@react-email/render"
@@ -13,9 +13,10 @@ import { summaryLink } from "./topic-scan-email"
 export type TopicInviteEmailProps = {
 	inviterUsername: string
 	topicName: string
-	// the invited address, named in the email because topic access is keyed to it
+	// the invited address, named in the email so the recipient knows which of their addresses was invited
 	inviteeEmail: string
-	topicUrl: string
+	// the invitee's own invite url, which redeems their invitation whatever address they sign in with
+	inviteUrl: string
 	appUrl?: string
 }
 
@@ -26,33 +27,33 @@ export function toTopicInviteSubject({ inviterUsername, topicName }: TopicInvite
 	return `${inviterUsername} invited you to follow ${topicName} on CarlNotes`
 }
 
-// the invitation's words for the shared one-link template. the lead is built twice from the same
+// the invitation's words for the shared one-link template. the leader is built twice from the same
 // pieces: plain for the inbox preheader, and with the topic name linking to its page for the body
 function toAuthEmailProps({
 	inviterUsername,
 	topicName,
 	inviteeEmail,
-	topicUrl,
+	inviteUrl,
 	appUrl,
 }: TopicInviteEmailProps): AuthEmailProps {
-	const invitedYou = `${inviterUsername} invited you to follow `
+	const inviteNote = `${inviterUsername} invited you to follow `
 	const carlNote = ". Carl reads its sources on a schedule and takes notes, so the people on the list don't have to."
 	return {
 		heading: "You're invited",
-		lead: `${invitedYou}${topicName}${carlNote}`,
+		lead: `${inviteNote}${topicName}${carlNote}`,
 		leadContent: (
 			<>
-				{invitedYou}
-				<Link href={topicUrl} style={summaryLink}>
+				{inviteNote}
+				<Link href={inviteUrl} style={summaryLink}>
 					{topicName}
 				</Link>
 				{carlNote}
 			</>
 		),
 		buttonLabel: "See the topic",
-		url: topicUrl,
-		linkNote: `This invitation is for ${inviteeEmail}. Sign up or log in with this address and the topic opens for you. Subscribing is your call once you've had a look.`,
-		closingNote: "Not interested? You can ignore this email and nothing will change.",
+		url: inviteUrl,
+		linkNote: `This invitation was sent to ${inviteeEmail}. Sign up or log in and the topic opens for you. Subscribing is your call once you've had a look.`,
+		closingNote: "Not interested? Ignore this email and nothing will change.",
 		appUrl,
 	}
 }
@@ -67,7 +68,7 @@ TopicInviteEmail.PreviewProps = {
 	inviterUsername: "doubleoevan",
 	topicName: "Raccoons in the News",
 	inviteeEmail: "friend@example.com",
-	topicUrl: "https://carlnotes.com/topics/preview",
+	inviteUrl: "https://carlnotes.com/invite/preview-token",
 	appUrl: "https://carlnotes.com",
 } satisfies TopicInviteEmailProps
 

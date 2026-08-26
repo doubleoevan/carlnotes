@@ -14,6 +14,31 @@ If the diff touches `skills-lock.json`, `.agents/`, `openspec/`,
 and resolve its findings before proceeding. Skip silently when none of those
 paths changed.
 
+## 0b. Module docs match the tree
+
+Always runs. AGENTS.md says structure changes update the docs in the same
+change; this is where that gets checked, in both directions.
+
+Forward, from the diff: `git diff --cached --name-status main` names every path
+the change adds, moves, renames, or deletes. For each one that is a folder, an
+entry point, or a `package.json` script, confirm the module's own AGENTS.md
+says so, and that the root module map and routing table still read true. A new
+file inside a folder those docs already describe generically needs nothing; a
+new folder, a moved or renamed entry point, and a deleted script always do. A
+changed script also updates the README's Development section, and a moved
+generated or archived path also updates the root "Never read" list.
+
+Backward, from the docs: every path named in an AGENTS.md still has to exist.
+
+    grep -rnoE '`[a-zA-Z0-9_./-]+/`' AGENTS.md */AGENTS.md | tr -d '`'
+
+Each hit prints as `file:line:path`, and the path reads relative to that
+module, so `pages/` in `ui/AGENTS.md` is `ui/src/pages/`. Resolve each one
+against its own module. A path that no longer resolves is drift the change
+introduced or left behind.
+
+Fix the docs in this change. Never file it as follow-up work.
+
 ## 1. Verify the spec
 
 Follow the /opsx:verify workflow: check the implementation against the
@@ -66,14 +91,20 @@ The `code-style` skill is the reference for naming rules, not this file. Where t
 introduces a term that already exists under another name, adopt the existing
 one.
 
-Every comment earns its place or gets deleted:
+Every comment justifies itself or gets deleted:
 - Keep: a short sentence explaining why a non-obvious choice was made.
 - Delete: restatements of the code, decision history, "NOT X" notes, migration
   narrative, and anything a reader would skip.
+- Delete the trailing justification, the definition by negation, and the
+  downstream narrative: a clause after "since" or "because" that argues for the
+  fact before it, a comment saying what the thing is not instead of what it is,
+  and any note about what some other module does with the value. Sweep `//`,
+  `/** */`, and `{/* */}` alike — a JSX comment hides from a grep written for
+  the other two.
 
 Comments are current documentation, not a record of how the code got here.
 They should be clear, concise, human-readable sentences that are genuinely helpful.
-Rename and rewrite in this pass rather than filing follow-up work. Report what
+Rename and rewrite in this pass instead of filing follow-up work. Report what
 you changed and why.
 
 ## 4. Manual review handoff
@@ -87,7 +118,7 @@ Do not proceed without it.
 Determine the name yourself: run `openspec list`. If exactly one change is
 open, use it without asking. If several are open, ask which one to archive.
 Then run: openspec archive <change-name> --yes
-Always the CLI, never /opsx:archive. The archive lands in the same push as
+Always the CLI, never /opsx:archive. The archive is included in the same push as
 the code.
 
 ## 6. Commit

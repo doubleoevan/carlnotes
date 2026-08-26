@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { toast } from "sonner"
+import { authClient } from "@/clients/authClient"
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -12,7 +13,6 @@ import {
 	AlertDialogTrigger,
 } from "@/components/primitives/alert-dialog"
 import { buttonVariants } from "@/components/primitives/button"
-import { authClient } from "@/lib/authClient"
 import { cn } from "@/lib/utils"
 
 /**
@@ -31,7 +31,7 @@ export function SignOutDialog({
 }) {
 	return (
 		<AlertDialog open={open} onOpenChange={onOpenChange}>
-			{/* a caller that opens this from its own state passes no trigger. the phone menu does exactly that,
+			{/* a caller that opens this from its own state passes no trigger. the mobile menu does exactly that,
 			    since a dialog nested inside a menu is dismissed by the same tap that opened it */}
 			{children === undefined ? null : <AlertDialogTrigger className={className}>{children}</AlertDialogTrigger>}
 			<AlertDialogContent>

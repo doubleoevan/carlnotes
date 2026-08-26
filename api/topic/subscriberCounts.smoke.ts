@@ -1,9 +1,9 @@
-// a live smoke test for the denormalized subscriber count, covering both subscription paths
+// a live smoke test for the denormalized subscriber count
 // run it with: bun run smoke:subscribers. needs Doppler secrets
 import { eq } from "drizzle-orm"
 import { connectionPool, db } from "../../db"
-import { audienceMembers, audiences, subscriptions, topics, users } from "../../db/schema"
-import { recountTopicSubscribers } from "./subscriberCounts"
+import { subscriptions, topics, users } from "../../db/schema"
+import { updateTopicSubscriberCount } from "./subscriberCounts"
 
 // the transaction each case runs inside, so no fixture ever escapes it
 type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -65,19 +65,9 @@ type Fixture = {
 
 // recount, then read back what a profile or feed would read
 async function toStoredCount(topicId: string, transaction: DbTransaction): Promise<number> {
-	await recountTopicSubscribers(topicId, transaction)
+	await updateTopicSubscriberCount(topicId, transaction)
 	const [row] = await transaction.select({ count: topics.subscriberCount }).from(topics).where(eq(topics.id, topicId))
 	return row?.count ?? -1
-}
-
-// give a topic an audience that follows it, and put one person in that audience
-async function addAudienceFollower(fixture: Fixture, transaction: DbTransaction, memberId: string): Promise<void> {
-	const [audience] = await transaction
-		.insert(audiences)
-		.values({ ownerId: fixture.owner?.id ?? "", name: "readers" })
-		.returning()
-	await transaction.insert(audienceMembers).values({ audienceId: audience?.id ?? "", userId: memberId })
-	await transaction.insert(subscriptions).values({ topicId: fixture.topicId, subscriberAudienceId: audience?.id })
 }
 
 // each case: what it checks, and the count it should produce
@@ -86,7 +76,9 @@ const cases: [string, number, (fixture: Fixture, transaction: DbTransaction) => 
 		"a direct subscriber counts once",
 		1,
 		async (fixture, transaction) => {
-			await transaction.insert(subscriptions).values({ topicId: fixture.topicId, subscriberUserId: fixture.direct?.id })
+			await transaction
+				.insert(subscriptions)
+				.values({ topicId: fixture.topicId, subscriberUserId: fixture.direct?.id ?? "" })
 			return toStoredCount(fixture.topicId, transaction)
 		},
 	],
@@ -94,25 +86,22 @@ const cases: [string, number, (fixture: Fixture, transaction: DbTransaction) => 
 		"the owner's own subscription never counts",
 		0,
 		async (fixture, transaction) => {
-			await transaction.insert(subscriptions).values({ topicId: fixture.topicId, subscriberUserId: fixture.owner?.id })
+			await transaction
+				.insert(subscriptions)
+				.values({ topicId: fixture.topicId, subscriberUserId: fixture.owner?.id ?? "" })
 			return toStoredCount(fixture.topicId, transaction)
 		},
 	],
 	[
-		"an audience member counts through their audience",
-		1,
+		"a second subscriber counts alongside the first",
+		2,
 		async (fixture, transaction) => {
-			await addAudienceFollower(fixture, transaction, fixture.member?.id ?? "")
-			return toStoredCount(fixture.topicId, transaction)
-		},
-	],
-	[
-		"a person on both paths counts once",
-		1,
-		async (fixture, transaction) => {
-			await addAudienceFollower(fixture, transaction, fixture.both?.id ?? "")
-			// the same person again, this time following directly
-			await transaction.insert(subscriptions).values({ topicId: fixture.topicId, subscriberUserId: fixture.both?.id })
+			await transaction
+				.insert(subscriptions)
+				.values({ topicId: fixture.topicId, subscriberUserId: fixture.direct?.id ?? "" })
+			await transaction
+				.insert(subscriptions)
+				.values({ topicId: fixture.topicId, subscriberUserId: fixture.member?.id ?? "" })
 			return toStoredCount(fixture.topicId, transaction)
 		},
 	],
@@ -122,7 +111,7 @@ const cases: [string, number, (fixture: Fixture, transaction: DbTransaction) => 
 		async (fixture, transaction) => {
 			await transaction
 				.insert(subscriptions)
-				.values({ topicId: fixture.topicId, subscriberUserId: fixture.direct?.id, isActive: false })
+				.values({ topicId: fixture.topicId, subscriberUserId: fixture.direct?.id ?? "", isActive: false })
 			return toStoredCount(fixture.topicId, transaction)
 		},
 	],

@@ -49,7 +49,7 @@ web search. That alone is enough to start.
 
 To aim him at specific places, press **+ add a source** and pick a kind: **url**, **rss**, **Google
 News**, **Reddit**, **YouTube**, **Podcast**, **Bluesky**, or **X**. Or press **Recommend** and Carl
-suggests sources based on your title and prompt. A topic can have up to 10 sources to read from.
+recommends sources based on your title and prompt. A topic can have up to 10 sources to read from.
 
 Set the **Frequency** to how often the topic brews: **Daily**, **Weekdays**, or **Weekly**, at a time
 you pick. New topics default to Weekly on Monday at 9:00 AM. Then press **Save**.

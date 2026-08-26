@@ -1,5 +1,4 @@
-// the generation side of topic chat. one question becomes a streamed reply written from the topic's own material,
-// and the caller meters what it cost once the stream finishes
+// the generation side of topic chat
 import {
 	CHAT_HISTORY_TURNS,
 	type ChatAttachment,
@@ -11,19 +10,29 @@ import { type ImagePart, type ModelMessage, stepCountIs, streamText, type TextPa
 import { chatModel } from "../models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
 import { writePrompt } from "../prompts/write"
-import { type ChatContext, retrieveChatContext } from "./retrieve"
+import {
+	type ChatContext,
+	type RetrievedFinding,
+	retrieveChatContext,
+	retrieveTeamChatContext,
+	type TeamChatContext,
+} from "./retrieve"
 import { type SearchTotal, webSearchTool } from "./search"
 
-// how many model steps one chat turn search may take. this is a loop backstop,
-// since the monthly budget already meters what a chat turn's searches cost
+// how many model steps one chat turn search may take
 const MAX_TURN_STEPS = 8
+
+// the reply's token limit, bounding what one turn can spend on expensive output tokens
+const MAX_TURN_OUTPUT_TOKENS = 3000
 
 // one earlier chat turn, replayed so the model can resolve what "that" and "the second one" point back to
 export type HistoryTurn = { question: string; answer: string }
 
-// everything one chat turn needs to answer a user's question about a topic
+// everything one chat turn needs to answer a user's question about a topic, or about a team's whole topic set
 export type ChatTurnInput = {
-	topicId: string
+	topicId?: string
+	// the team whose own room is asking, which reads across every topic the team holds
+	teamId?: string
 	question: string
 	history: HistoryTurn[]
 	attachments?: ChatAttachment[]
@@ -32,6 +41,10 @@ export type ChatTurnInput = {
 	// whether this user owns the topic, resolved by the authorization gate before the call
 	isOwner: boolean
 	litellmApiKey?: string
+	// false for a room turn, whose answer posts publicly, so the poster's kept chat attachments stay out
+	includeAttachments?: boolean
+	// what retrieval embeds instead of the question, for a room turn whose question is composed from the chat messages
+	retrievalQuestion?: string
 }
 
 // the streamed reply plus what it cost, resolved once the stream is fully read
@@ -44,36 +57,52 @@ export type ChatReplyStream = {
  * Streams one reply to a user's question about a topic, or null when the topic does not exist.
  */
 export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplyStream | null> {
-	// assemble what the topic already holds, then write the prompt over it
-	const chatContext = await retrieveChatContext(
-		input.topicId,
-		input.question,
-		input.userId,
-		input.isOwner,
-		input.litellmApiKey,
-	)
+	// assemble what the topic already holds, or every held topic for a team room, then write the prompt over it
+	let chatContext: ChatContext | TeamChatContext | null
+	if (input.teamId) {
+		chatContext = await retrieveTeamChatContext(
+			input.teamId,
+			input.retrievalQuestion ?? input.question,
+			input.litellmApiKey,
+		)
+	} else {
+		// the topic path keeps its per-user reads, which the public team room never includes
+		chatContext = await retrieveChatContext(
+			input.topicId ?? "",
+			input.retrievalQuestion ?? input.question,
+			input.userId,
+			// the owner flag scopes the topic's own attachments, and the keep flag the user's chat material
+			input.isOwner,
+			input.litellmApiKey,
+			input.includeAttachments ?? true,
+		)
+	}
+	// a missing topic or team has nothing to chat about
 	if (!chatContext) {
 		return null
 	}
-	// a template drift here throws, and nothing downstream would otherwise report it: chat never runs as a
-	// Temporal activity, so there is no workflow history to catch this the way a scan or attachment would
+	// a template drift here throws an error, and nothing downstream would otherwise report it
 	let chatPrompt: BuiltPrompt
 	try {
-		chatPrompt = await buildChatPrompt(chatContext)
+		// the team room writes over its own template, every other turn over the topic's
+		chatPrompt = input.teamId
+			? await buildTeamChatPrompt(chatContext as TeamChatContext)
+			: await buildTopicChatPrompt(chatContext as ChatContext)
 	} catch (error) {
-		console.error(`chat prompt failed for topic ${input.topicId}`, error)
-		reportError(error, "chat", { topicId: input.topicId })
+		console.error(`chat prompt failed for ${input.teamId ? `team ${input.teamId}` : `topic ${input.topicId}`}`, error)
+		reportError(error, "chat", { topicId: input.topicId ?? input.teamId ?? "" })
 		throw error
 	}
 
-	// the system prompt is interpolated with the conversation carried as real messages.
-	// every chat turn gets the search tool, and the total counts what it spends
+	// the system prompt is interpolated with the conversation sent as real messages
 	const searchTotal: SearchTotal = { count: 0 }
+	// one streamed completion over the assembled system prompt
 	const replyStream = streamText({
 		model: chatModel(input.litellmApiKey),
 		system: chatPrompt.prompt,
 		messages: toModelMessages(input.history, input.question, input.attachments ?? []),
 		tools: { searchWeb: webSearchTool(searchTotal) },
+		maxOutputTokens: MAX_TURN_OUTPUT_TOKENS,
 		stopWhen: stepCountIs(MAX_TURN_STEPS),
 		...promptTelemetry(chatPrompt),
 	})
@@ -91,11 +120,10 @@ export function toModelMessages(
 	question: string,
 	attachments: ChatAttachment[] = [],
 ): ModelMessage[] {
-	// cap the client-included history here, so no user can inflate what one chat turn costs
+	// limit the history the api client sends, so no user can inflate what one chat turn costs
 	const includedHistory = history.slice(-CHAT_HISTORY_TURNS)
 
-	// the newest chat is returned verbatim, and older answers are trimmed to their openings,
-	// budgeted by characters so a verbose conversation compacts sooner than a terse one
+	// the newest chat is returned word for word
 	const uncompactedChatTurnStart = toUncompactedChatTurnStart(includedHistory)
 	const conversation = includedHistory.flatMap((chatTurn, index): ModelMessage[] => [
 		{ role: "user", content: chatTurn.question },
@@ -107,14 +135,12 @@ export function toModelMessages(
 	return [...conversation, { role: "user", content: toUserContent(question, attachments) }]
 }
 
-// an attachment name flattened onto one line. the name becomes the header its contents sit under,
-// so newlines are stripped to avoid closing that header early
+// an attachment name flattened onto one line
 function toAttachmentName(name: string): string {
 	return name.replace(/\s+/g, " ").trim()
 }
 
-// the newest message's content. a question with no attachments is a bare string,
-// otherwise the question includes its text attachments in one part, with every image as a part of its own
+// the newest message's content
 function toUserContent(question: string, attachments: ChatAttachment[]): string | (TextPart | ImagePart)[] {
 	if (attachments.length === 0) {
 		return question
@@ -130,7 +156,7 @@ function toUserContent(question: string, attachments: ChatAttachment[]): string 
 	return [{ type: "text" as const, text: [question, ...textBlocks].join("\n\n") }, ...images]
 }
 
-// the assembled reply with its token and search counts, all of which settle only once the chat stream is drained
+// the assembled reply with its token and search counts, all of which resolve only once the chat stream is drained
 async function toCompletion(
 	replyStream: { text: PromiseLike<string>; usage: PromiseLike<{ totalTokens?: number }> },
 	searchTotal: SearchTotal,
@@ -142,35 +168,61 @@ async function toCompletion(
 /**
  * Builds the system prompt from the 'chat-topic.md' template, with everything a user could have written fenced as data.
  */
-export async function buildChatPrompt(chatContext: ChatContext): Promise<BuiltPrompt> {
+export async function buildTopicChatPrompt(chatContext: ChatContext): Promise<BuiltPrompt> {
 	const { template, name, registryPrompt } = await fetchPromptTemplate("chat-topic")
 
-	// fill the template, composing each list block first since the templates carry no loops
+	// fill the template, composing each list block first
 	const prompt = writePrompt(template, {
 		topicName: chatContext.topicName,
 		topicPrompt: chatContext.topicPrompt || "Nothing written down yet.",
-		findingsBlock: toFindingsBlock(chatContext),
-		sourcesBlock: toSourcesBlock(chatContext),
-		scanSummariesBlock: toScanSummariesBlock(chatContext),
+		findingsBlock: toFindingsBlock(chatContext.findings),
+		sourcesBlock: toSourcesBlock(chatContext.sources),
+		scanSummariesBlock: toScanSummariesBlock(chatContext.scanSummaries),
 		attachmentContext: chatContext.attachmentContext || "None.",
 		chatAttachmentContext: chatContext.chatAttachmentContext || "None.",
+		docsBlock: chatContext.docsBlock || "None.",
 	})
 	return { prompt, name, registryPrompt }
 }
 
-// the findings as the model reads them, best-match first with recency breaking the near-ties.
-// an empty set says so in words, so the model never invents an answer for a topic with nothing indexed
-function toFindingsBlock(chatContext: ChatContext): string {
-	if (chatContext.findings.length === 0) {
+/**
+ * Builds the team room's system prompt from the 'chat-team.md' template, reading across every
+ * topic the team holds.
+ */
+export async function buildTeamChatPrompt(teamContext: TeamChatContext): Promise<BuiltPrompt> {
+	const { template, name, registryPrompt } = await fetchPromptTemplate("chat-team")
+
+	// fill the template, composing each list block first
+	const prompt = writePrompt(template, {
+		teamName: teamContext.teamName,
+		topicsBlock: toTopicsBlock(teamContext.topics),
+		findingsBlock: toFindingsBlock(teamContext.findings),
+		sourcesBlock: toSourcesBlock(teamContext.sources),
+		scanSummariesBlock: toScanSummariesBlock(teamContext.scanSummaries),
+		docsBlock: teamContext.docsBlock || "None.",
+	})
+	return { prompt, name, registryPrompt }
+}
+
+// each team topic's name with the prompt its owner wrote, or a plain line for a team with none
+function toTopicsBlock(teamTopics: TeamChatContext["topics"]): string {
+	if (teamTopics.length === 0) {
+		return "This team holds no topics yet."
+	}
+	return teamTopics.map((topic) => `### ${topic.name}\n${topic.prompt || "Nothing written down yet."}`).join("\n\n")
+}
+
+// the findings as the model reads them, best-match first with recency breaking the near-ties
+function toFindingsBlock(retrievedFindings: RetrievedFinding[]): string {
+	if (retrievedFindings.length === 0) {
 		return "No findings are indexed for this topic yet."
 	}
 
-	// each finding includes its own url so a reply can link what it cites, and the date this topic found it
-	// so the reply can prefer the newer of two that answer equally well and tell the user how old it is
-	return chatContext.findings
+	// each finding includes its own url
+	return retrievedFindings
 		.map((finding) =>
 			[
-				`### ${finding.title ?? finding.url}`,
+				`### ${finding.topicName ? `[${finding.topicName}] ` : ""}${finding.title ?? finding.url}`,
 				finding.url,
 				`Found: ${finding.foundAt.toISOString().slice(0, 10)}`,
 				`Relevance: ${finding.relevanceScore.toFixed(2)} — ${finding.relevanceExplanation}`,
@@ -181,17 +233,17 @@ function toFindingsBlock(chatContext: ChatContext): string {
 }
 
 // the places this topic reads, one per line, or a plain line saying it has no sources
-function toSourcesBlock(chatContext: ChatContext): string {
-	if (chatContext.sources.length === 0) {
+function toSourcesBlock(topicSources: string[]): string {
+	if (topicSources.length === 0) {
 		return "No sources are set up for this topic yet."
 	}
-	return chatContext.sources.join("\n")
+	return topicSources.join("\n")
 }
 
-// the recent scan notes, newest first, or a plain line saying there are none
-function toScanSummariesBlock(chatContext: ChatContext): string {
-	if (chatContext.scanSummaries.length === 0) {
+// the recent scan summaries, newest first, or a plain line saying there are none
+function toScanSummariesBlock(scanSummaries: string[]): string {
+	if (scanSummaries.length === 0) {
 		return "No scan notes yet."
 	}
-	return chatContext.scanSummaries.join("\n\n")
+	return scanSummaries.join("\n\n")
 }

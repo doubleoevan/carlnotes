@@ -52,8 +52,7 @@ test("parseFeed parses Atom entries", async () => {
 	expect(resources.map((resource) => resource.url)).toEqual(["https://example.com/x"])
 })
 
-// a show that repeats its own link on every episode identifies each one by its enclosure instead,
-// so the episodes don't collapse into a single Resource
+// a show that repeats its own link on every episode identifies each one by its enclosure instead
 test("parseFeed keeps episodes apart when a feed repeats the show link", async () => {
 	const resources = await parseFeed(SHOW_LINK_FEED, "listen")
 	expect(resources.map((resource) => resource.url)).toEqual([
@@ -71,7 +70,7 @@ test("toFeedItemUrl prefers a per-entry address over a repeated show link", () =
 	)
 	expect(toFeedItemUrl({ link: showLink, guid: "https://example.com/ep1" }, showLink)).toBe("https://example.com/ep1")
 
-	// a show link with nothing else named is kept, since dropping it would lose the entry altogether
+	// a show link with nothing else named is kept
 	expect(toFeedItemUrl({ link: showLink, guid: "tag:example,1" }, showLink)).toBe(showLink)
 	expect(toFeedItemUrl({ guid: "tag:example,1" }, showLink)).toBeUndefined()
 })
@@ -83,7 +82,7 @@ test("parseFeed captures a podcast entry's transcript url", async () => {
 	expect(resources[1]?.transcriptUrl).toBeNull()
 })
 
-// a plain text or WebVTT transcript is preferred, since its bytes are the words themselves
+// a plain text or WebVTT transcript is preferred, whose bytes are the words themselves
 test("toTranscriptUrl prefers a readable transcript format", () => {
 	const transcripts = [
 		{ $: { url: "https://example.com/a.html", type: "text/html" } },

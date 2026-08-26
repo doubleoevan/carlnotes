@@ -10,9 +10,40 @@ export const USERNAME_MAX_LENGTH = 32
  */
 export const USERNAME_COMBINATIONS = USERNAME_ADJECTIVES.length * USERNAME_NOUNS.length
 
-// the names no username may take to avoid confusion
-// checked against the normalized form, so c-a-r-l is caught too
-const RESERVED_USERNAMES = new Set(["carl", "carlnotes", "notesofcarl", "admin", "support"])
+// the names no username may take
+export const RESERVED_USERNAMES = new Set([
+	// names that would pass someone off as the site or its staff
+	"carl",
+	// the room-wide mention, so @all can never name a person
+	"all",
+	"carlnotes",
+	"notesofcarl",
+	"admin",
+	"support",
+	// the root routes the app serves
+	"login",
+	"signup",
+	"join",
+	"invite",
+	"resetpassword",
+	"api",
+	"topics",
+	"teams",
+	"activity",
+	"account",
+	"plans",
+	"privacy",
+	"profiles",
+	"terms",
+	"blog",
+	"docs",
+	"pricing",
+	"assets",
+	"screenshots",
+	// reserved ahead of need
+	"settings",
+	"t",
+])
 
 // the suffixes that turn one word into another form of itself. strip them when checking for duplicates
 const WORD_SUFFIXES = ["ed", "ing", "er", "s"]
@@ -31,23 +62,23 @@ export function toNormalizedUsername(username: string): string {
  * Why a username is rejected or null if it is well-formed
  */
 export function toUsernameRejection(username: string): UsernameRejection | null {
-	const canonicalUsername = username.normalize("NFKC")
-	if (canonicalUsername.length < USERNAME_MIN_LENGTH || canonicalUsername.length > USERNAME_MAX_LENGTH) {
+	const nfkcUsername = username.normalize("NFKC")
+	if (nfkcUsername.length < USERNAME_MIN_LENGTH || nfkcUsername.length > USERNAME_MAX_LENGTH) {
 		return "length"
 	}
 
 	// ascii letters, digits, and the two separators. everything else, confusables included, stops here
-	if (!/^[a-zA-Z0-9_-]+$/.test(canonicalUsername)) {
+	if (!/^[a-zA-Z0-9_-]+$/.test(nfkcUsername)) {
 		return "charset"
 	}
 
 	// a leading or trailing separator reads as a typo and makes -carl- look different from carl
-	if (/^[-_]|[-_]$/.test(canonicalUsername)) {
+	if (/^[-_]|[-_]$/.test(nfkcUsername)) {
 		return "separator"
 	}
 
 	// the reserved username list is checked on the normalized form, so c-a-r-l and CARL are rejected alongside carl
-	return RESERVED_USERNAMES.has(toNormalizedUsername(canonicalUsername)) ? "reserved" : null
+	return RESERVED_USERNAMES.has(toNormalizedUsername(nfkcUsername)) ? "reserved" : null
 }
 
 /**
@@ -60,30 +91,31 @@ export function hasSharedStem(first: string, second: string): boolean {
 }
 
 /**
- * A batch of candidate usernames in the shape Adjective-Noun, for checking against the ones already taken.
- * Reserved and stem-sharing pairs are filtered out here, so a caller only sees candidates it could assign.
+ * A batch of suggested usernames in the shape Adjective-Noun, for checking against the ones already taken.
+ * Reserved and stem-sharing pairs are filtered out here, so a caller only sees suggestions it could assign.
  */
-export function toUsernameCandidates(limit: number): string[] {
-	// create candidate usernames until we reach the limit, deduplicating so that one query does not check the same candidate twice.
-	const usernameCandidates = new Set<string>()
-	for (let attempt = 0; attempt < limit * 20 && usernameCandidates.size < limit; attempt++) {
+export function toProposedUsernames(limit: number): string[] {
+	// create suggested usernames until we reach the limit, deduplicating
+	const suggestedUsernames = new Set<string>()
+	for (let attempt = 0; attempt < limit * 20 && suggestedUsernames.size < limit; attempt++) {
 		const adjective = toRandomWord(USERNAME_ADJECTIVES)
 		const noun = toRandomWord(USERNAME_NOUNS)
-		// a stem-sharing pair is re-rolled instead of offered, since it reads as an error
+		// a stem-sharing pair is re-rolled instead of offered
 		if (hasSharedStem(adjective, noun)) {
 			continue
 		}
-		const candidate = `${adjective}-${noun}`
-		if (!toUsernameRejection(candidate)) {
-			usernameCandidates.add(candidate)
+		// only a name the validator accepts is offered
+		const username = `${adjective}-${noun}`
+		if (!toUsernameRejection(username)) {
+			suggestedUsernames.add(username)
 		}
 	}
-	return [...usernameCandidates]
+	return [...suggestedUsernames]
 }
 
 /**
  * The same username with four random digits appended.
- * Digits are used to break ties between candidates.
+ * Digits are used to break ties between proposals.
  */
 export function toUsernameWithDigits(username: string): string {
 	return `${username}-${Math.floor(Math.random() * 10_000)
@@ -96,7 +128,7 @@ function toWordStem(word: string): string {
 	const lowered = word.toLowerCase()
 	// the longest matching suffix wins, so "roasted" reduces past "ed" instead of stopping at "d"
 	const suffix = WORD_SUFFIXES.filter(
-		(candidate) => lowered.endsWith(candidate) && lowered.length - candidate.length >= 3,
+		(proposal) => lowered.endsWith(proposal) && lowered.length - proposal.length >= 3,
 	).sort((first, second) => second.length - first.length)[0]
 	return suffix ? lowered.slice(0, -suffix.length) : lowered
 }

@@ -1,20 +1,17 @@
-// the bluesky ingester. a Source names one account, and what it finds is the articles that the account links to
-// instead of the posts themselves. a post is mostly a pointer. an article is the result worth reading
+// the bluesky ingester
 
 import { FeedStatusError } from "./feed"
 import type { IngestedResource, Source, SourceIngester } from "./ingester"
 import { toResourceKind } from "./normalize"
 
-// reads go to the AppView, the aggregated index the network is read through.
-// it serves an account's posts to anyone, so the bluesky ingester needs no credentials
+// reads go to the AppView, the aggregated index the network is read through
 const PUBLIC_APPVIEW_URL = "https://public.api.bsky.app"
 
 // fetch limits. bluesky meters by points per hour (about 5000 for one account), so one Source is one call
 const AUTHOR_FEED_LIMIT = 50
 const FETCH_TIMEOUT_MS = 10_000
 
-// how long to wait out a 429 that names no interval, and the cap on any interval it does name.
-// a reset time a week out would otherwise keep the Scan sleeping for a week, so it waits 30 seconds and moves on
+// how long to wait out a 429 that names no interval, and the limit on any interval it does name
 const DEFAULT_BACKOFF_MS = 5_000
 const MAX_BACKOFF_MS = 30_000
 
@@ -36,8 +33,7 @@ type AuthorFeedResponse = { feed?: { post: BlueskyPost }[] }
 
 // read one account's recent posts and return the articles they link to
 export const blueskyIngester: SourceIngester = async (source: Source) => {
-	// the Source names the account whose links to follow. without one there is nothing to read,
-	// and a handle typed with the leading @ is the same account, so the @ comes off instead of 400ing
+	// the Source names the account whose links to follow
 	const configuredHandle = source.config.handle
 	if (typeof configuredHandle !== "string" || !configuredHandle.trim()) {
 		throw new Error(`bluesky source ${source.id} has no string config.handle`)
@@ -62,15 +58,14 @@ export function parseLinks(posts: BlueskyPost[]): IngestedResource[] {
 			continue
 		}
 
-		// the link card names and describes the page it points at, so the article titles and summarizes itself.
-		// its resource kind is based on the host, so a video an account links to shows as "watch" instead of as "read"
+		// the link card names and describes the page it points at, so the article titles and summarizes itself
 		resourceByUrl.set(url, {
 			url,
 			title: external?.title?.trim() || null,
 			kind: toResourceKind(url),
 			snippet: external?.description?.trim() || null,
 			contentHash: null,
-			// the sharing post's likes are used as the article's engagement, since the article itself has none
+			// the sharing post's likes are used as the article's engagement
 			engagement: post.likeCount ?? null,
 		})
 	}
@@ -80,7 +75,7 @@ export function parseLinks(posts: BlueskyPost[]): IngestedResource[] {
 
 /**
  * How long to wait out a 429 "Too Many Requests" code:
- * the reset time the response names, else its retry-after, else the default. Always capped.
+ * the reset time the response names, otherwise its retry-after, otherwise the default. Always limited.
  */
 export function toBackoffMs(headers: Headers): number {
 	// ratelimit-reset is a unix time in seconds, while retry-after counts seconds from now
@@ -127,8 +122,7 @@ function fetchXrpc(url: string): Promise<Response> {
 	return fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 }
 
-// read a response body, failing the Source on any status the endpoint did not serve. the status is included
-// so a caller can tell a host refusing to answer apart from an account that isn't there
+// read a response body, failing the Source on any status the endpoint did not serve
 async function readJson<T>(response: Response, label: string): Promise<T> {
 	if (!response.ok) {
 		throw new FeedStatusError(label, response.status)

@@ -18,17 +18,14 @@ export type ExtractedAttachment = { chunks: string[]; charCount: number; flagged
 
 // extract the stored file's text, screen it, and split it into bounded chunks for parallel summarization
 export async function extractAttachmentText(attachmentId: string): Promise<ExtractedAttachment> {
-	// load the row for its object key and content type, then read and extract the stored bytes.
-	// a deleted attachment is never coming back, so the failure is marked non-retryable
-	// instead of letting the workflow ask for it repeatedly on a schedule forever
+	// load the row for its object key and content type, then read and extract the stored bytes
 	const [attachment] = await db.select().from(attachments).where(eq(attachments.id, attachmentId))
 	if (!attachment) {
 		throw ApplicationFailure.nonRetryable(`attachment ${attachmentId} not found`, "AttachmentNotFound")
 	}
 	const bytes = await getAttachmentBytes(attachment.objectKey)
 
-	// an image has no text to extract, so the model describes it, and that description takes the place of the extracted text.
-	// it goes through the same screening and chunking as a document from here on
+	// an image has no text to extract
 	const extractedText = isImageAttachmentType(attachment.contentType)
 		? await generateImageContext(toDataUrl(attachment.contentType, bytes), await topicOwnerModelKey(attachmentId))
 		: await extractText(attachment.contentType, bytes)
@@ -39,14 +36,12 @@ export async function extractAttachmentText(attachmentId: string): Promise<Extra
 		return { chunks: [], charCount: extractedText.length, flaggedReason: toFlaggedReason(screenVerdict) }
 	}
 
-	// chunk the screened text, not the original, so any personal details it redacted never reach a model.
-	// charCount stays the full extracted length, so it reports the upload's real size instead of what was chunked
+	// chunk the screened text, not the original, so any personal details it redacted never reach a model
 	const chunks = chunk(screenVerdict.text, MAX_CHUNKS, CHUNK_CHARS)
 	return { chunks, charCount: extractedText.length, flaggedReason: null }
 }
 
-// summarize one chunk into a context note with the cheap model, billed to the topic owner's key.
-// the attachment id is passed through the workflow instead of the LiteLLM key so it doesn't persist in Temporal's history
+// summarize one chunk into a context note with the cheap model, billed to the topic owner's key
 export async function summarizeChunk(attachmentId: string, chunkText: string): Promise<string> {
 	return generateContext(chunkText, await topicOwnerModelKey(attachmentId))
 }
@@ -63,14 +58,14 @@ async function topicOwnerModelKey(attachmentId: string): Promise<string | undefi
 	return owner?.litellmVirtualKey ?? undefined
 }
 
-// merge the chunk summaries into one capped context, mark the attachment ready, and record its counts
+// merge the chunk summaries into one limited context, mark the attachment ready, and record its counts
 export async function finalizeAttachment(
 	attachmentId: string,
 	summaries: string[],
 	charCount: number,
 	chunkCount: number,
 ): Promise<void> {
-	// join the per-chunk notes and cap the merged context, then flip the attachment to ready
+	// join the per-chunk notes and limit the merged context, then flip the attachment to ready
 	const context = summaries.join("\n\n").slice(0, MAX_CONTEXT_CHARS)
 	await db
 		.update(attachments)

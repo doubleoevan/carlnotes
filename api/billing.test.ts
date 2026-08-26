@@ -23,8 +23,7 @@ test("toPaidSubscription maps an active paid subscription", () => {
 	})
 })
 
-// the billing interval is stamped at checkout, and it decides which of the plan's limits apply,
-// and whether metered overage is supported
+// the billing interval is stamped at checkout, and it decides
 test("toPaidSubscription records a yearly subscription's billing interval", () => {
 	const yearlySubscription = toPaidSubscription({
 		id: "sub_1",
@@ -62,7 +61,7 @@ test("toPaidSubscription clears on every status that is not paid up", () => {
 	}
 })
 
-// a trial and the dunning window for late payments both still earn the plan, so a retried card doesn't drop the user mid-cycle
+// a trial and the dunning window for late payments both still earn the plan
 test("toPaidSubscription projects a trialing or past_due subscription", () => {
 	for (const status of ["trialing", "past_due"]) {
 		const lateOrTrialSubscription = toPaidSubscription({

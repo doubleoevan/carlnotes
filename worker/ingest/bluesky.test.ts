@@ -2,8 +2,7 @@
 import { expect, test } from "bun:test"
 import { parseLinks, toBackoffMs } from "./bluesky"
 
-// a post that links to an article, one that links to the same article again, one with an image alongside its link,
-// one that links to a video, one that links back into bluesky, and one that links nowhere
+// a post that links to an article, one that links to the same article again, one with an image alongside its link
 const posts = [
 	{
 		author: { handle: "theverge.com" },
@@ -76,7 +75,7 @@ test("parseLinks skips posts that link nowhere or back into bluesky, and dedupes
 	expect(resources[0]?.engagement).toBe(12)
 })
 
-test("toBackoffMs prefers the reset time, falls back to retry-after, and caps the wait", () => {
+test("toBackoffMs prefers the reset time, falls back to retry-after, and limits the wait", () => {
 	// a reset two seconds out is honored as an interval instead of as a timestamp
 	const resetAt = Math.floor((Date.now() + 2_000) / 1000)
 	expect(toBackoffMs(new Headers({ "ratelimit-reset": String(resetAt) }))).toBeGreaterThan(500)
@@ -85,6 +84,6 @@ test("toBackoffMs prefers the reset time, falls back to retry-after, and caps th
 	expect(toBackoffMs(new Headers({ "retry-after": "3" }))).toBe(3_000)
 	expect(toBackoffMs(new Headers())).toBe(5_000)
 
-	// a header naming next week is capped, so it cannot pause a Scan
+	// a header naming next week is limited, so it cannot pause a Scan
 	expect(toBackoffMs(new Headers({ "retry-after": "999999" }))).toBe(30_000)
 })

@@ -1,5 +1,4 @@
-// each billing plan's topic cap, daily topic cap, daily scan cap, monthly spend backstop, and price.
-// scheduled and manual scans share the daily scan pool
+// each billing plan's topic limit, daily topic limit, daily scan limit, monthly spend backstop, and price
 import type { billingIntervals, plans } from "./enums"
 
 export type Plan = (typeof plans)[number]
@@ -12,8 +11,11 @@ type PlanConfig = {
 	// a higher rank inherits every capability of the plans below it. free is 0, premium is highest
 	rank: number
 	topicLimit: number
-	// how many of those topics may run on a daily frequency, which is what actually decides the monthly spend.
-	// a daily topic scans about 30 times a month against a weekly topic's 4
+	// how many members one of their led teams may hold, null for unlimited. the best plan among a team's leaders wins
+	teamMemberLimit: number | null
+	// the daily invite-limit base, scaled by account age and reputation before it applies
+	inviteLimit: number
+	// how many of those topics may run on a daily frequency, which is what actually decides the monthly spend
 	dailyTopicLimit: BillingIntervalLimit
 	dailyScanLimit: BillingIntervalLimit
 	// the monthly spend backstop in cents. a limit on our cost to serve the user, not the user's price
@@ -22,28 +24,27 @@ type PlanConfig = {
 	priceYearlyCents: number
 }
 
-// the "remaining" count an admin sees for a quota they bypass. the api reports it and the ui renders it as "Unlimited".
-// well above any real plan's limits, so a genuine remaining count never reaches it
+// the "remaining" count an admin sees for a quota they bypass
 export const ADMIN_QUOTA = 999
 
-// an admin's monthly spend backstop in cents. admins bypass the topic and scan limits,
-// but it stays a real number, since this bills a real card and a runaway scan loop should still hit a wall
+// an admin's monthly spend backstop in cents
 export const ADMIN_BUDGET_CENTS = 100_000
 
 // what one scan costs on average, in cents
 export const SCAN_COST_CENTS = 10
 
-// yearly is a flat 10x monthly on every plan — two months free,
-// computed here, so the discount can never drift out of sync if a monthly price changes later
+// yearly is a flat 10x monthly on every plan, two months free, computed here
 const YEARLY_MONTHS = 10
 const MONTHLY_PRICE_CENTS = { free: 0, plus: 1500, premium: 2900 } as const satisfies Record<Plan, number>
 
 // the yearly billing interval has higher limits because it can't include metered overage.
 export const PLANS = {
-	// $0 — capped low since there's no revenue to offset the cost
+	// $0, has low limits to offset the cost
 	free: {
 		rank: 0,
 		topicLimit: 3,
+		teamMemberLimit: 10,
+		inviteLimit: 10,
 		dailyTopicLimit: { monthly: 1, yearly: 1 },
 		dailyScanLimit: { monthly: 5, yearly: 5 },
 		monthlyBudgetCents: 300,
@@ -54,6 +55,8 @@ export const PLANS = {
 	plus: {
 		rank: 1,
 		topicLimit: 10,
+		teamMemberLimit: null,
+		inviteLimit: 30,
 		dailyTopicLimit: { monthly: 3, yearly: 4 },
 		dailyScanLimit: { monthly: 15, yearly: 20 },
 		monthlyBudgetCents: 1000,
@@ -64,6 +67,8 @@ export const PLANS = {
 	premium: {
 		rank: 2,
 		topicLimit: 25,
+		teamMemberLimit: null,
+		inviteLimit: 50,
 		dailyTopicLimit: { monthly: 6, yearly: 7 },
 		dailyScanLimit: { monthly: 30, yearly: 40 },
 		monthlyBudgetCents: 2000,

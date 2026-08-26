@@ -1,5 +1,4 @@
-// scans every Topic scheduled by its frequency and emails its new Findings to subscribers.
-// whether a Topic is scheduled is computed from its frequency and its Scans, so a sweep is safe to repeat
+// scans every Topic scheduled by its frequency and emails its new Findings to subscribers
 import { shutdownAnalytics } from "@shared/analytics"
 import { isDailyFrequency } from "@shared/enums"
 import { reportError, shutdownMonitoring, startMonitoring } from "@shared/monitoring"
@@ -16,9 +15,7 @@ import { MAX_SCAN_DURATION_MS } from "./workflows/stage-timeouts"
 // one day in milliseconds, the daily frequency window and the base that the weekly window multiplies
 const DAY_MS = 24 * 60 * 60 * 1000
 
-// how long past its stages' own limit a dispatched Scan may stay running before it counts as gone.
-// derived from the stage timeouts instead of being set alongside them, so raising a timeout cannot start closing out Scans that are slow.
-// the environment can still override it
+// how long past its stages' own limit a dispatched Scan may stay running before it counts as gone
 const STALE_SCAN_MARGIN_MS = 15 * 60 * 1000
 const STALE_SCAN_MS = Number(Bun.env.STALE_SCAN_MS ?? String(MAX_SCAN_DURATION_MS + STALE_SCAN_MARGIN_MS))
 
@@ -29,27 +26,21 @@ export function staleScanWindowMs(): number {
 	return STALE_SCAN_MS
 }
 
-// a persisted Topic, and what one topic sweep did: how many Topics were scheduled, started, skipped over quota,
-// or could not be started. the sweep hands each Scan to Temporal and does not wait, so it counts starts instead of outcomes.
-// how a Scan ended is on its own persisted row, and its failures report from the workflow
+// a persisted Topic, and what one topic sweep did
 type Topic = typeof topics.$inferSelect
 // biome-ignore format: one line keeps the summary's fields under the comment-density hook's limit
 export type TopicSweepSummary = { scheduled: number; started: number; skippedOverQuota: number; skippedOverDailyLimit: number; failed: number }
 
-// a scheduled topic sweep: scan every scheduled Topic under its owner's daily quota, then email its new Findings, isolating failures.
-// wrapped with `toExclusiveTask` so a sweep that fires while a sweep is still going is skipped
+// a scheduled topic sweep: scan every scheduled Topic under its owner's daily quota, then email its new
 export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSweepSummary> => {
-	// start anything that was opened and never dispatched, then close out anything dispatched that has gone quiet.
-	// the first is a recovery, the second a failure, and only the dispatchedAt field tells them apart
+	// start anything that was opened and never dispatched, then close out anything dispatched that has gone quiet
 	await startUndispatchedScans()
 	await failStaleScans()
 
-	// a Source row is written before its llm-guard screen starts, so this picks up a topic scan whose start never happened.
-	// a Source already being screened is rejected by its workflow id, so this is safe to repeat every sweep
+	// a Source row is written before its llm-guard screen starts
 	await screenPendingSources()
 
-	// scans run on Temporal, so a queue with no worker behind it means nothing is scanning while every caller still succeeds.
-	// the sweep is the one thing that runs on a timer, so it checks whether a reachable server has a worker behind the queue
+	// scans run on Temporal, so a queue with no worker behind it means nothing is scanning while every caller still
 	await reportUnpolledScanQueue()
 
 	// the Topics scheduled for this sweep, and a summary of what the sweep does for logging
@@ -62,8 +53,7 @@ export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSwe
 		failed: 0,
 	}
 
-	// which of each owner's daily Topics their plan still runs. read once per owner, since a sweep can hold multiple Topics,
-	// but the answer is the same for each owner
+	// which of each owner's daily Topics their plan still runs
 	const dailyTopicIdsByOwner = await loadDailyTopicIdsByOwner(scheduledTopics)
 
 	// scan each scheduled Topic whose owner still has a quota, then email its subscribers
@@ -111,8 +101,7 @@ export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSwe
  * so a scan row is only ever retried until it is genuinely dispatched.
  */
 async function startUndispatchedScans(): Promise<void> {
-	// only rows still open and still attached to a Topic. a Scan that reached a terminal status needs no workflow,
-	// and one whose Topic was deleted has nothing left to scan
+	// only rows still open and still attached to a Topic
 	const undispatchedScans = await db
 		.select()
 		.from(scans)
@@ -124,8 +113,7 @@ async function startUndispatchedScans(): Promise<void> {
 	// one failing Scan never stops the others
 	console.log(`dispatching ${undispatchedScans.length} scans that were opened but never started`)
 
-	// the scan row records what it was opened for, so the sweep starts it the way its original caller would have.
-	// startedAt is refreshed first, the same way taking an open scan row does.
+	// the scan row records what it was opened for, so the sweep starts it the way its original caller would have
 	for (const scan of undispatchedScans) {
 		try {
 			await db.update(scans).set({ startedAt: new Date() }).where(eq(scans.id, scan.id))
@@ -179,10 +167,9 @@ export function toExclusiveTask<Result>(task: () => Promise<Result>): () => Prom
 	}
 }
 
-// mark every topic scan that has been running past the stale window as failed, and report how many were closed out.
-// a stale topic scan reads as one that is still going, so nothing surfaces to the owner until it is settled
+// mark every topic scan that has been running past the stale window as failed
 export async function failStaleScans(topicId?: string, now = new Date()): Promise<number> {
-	// only a dispatched Scan can be stale. one that was never dispatched has not failed at all, and the sweeper starts it instead.
+	// only a dispatched Scan can be stale
 	const isScanStale = and(
 		eq(scans.status, "running"),
 		isNotNull(scans.dispatchedAt),
@@ -196,8 +183,7 @@ export async function failStaleScans(topicId?: string, now = new Date()): Promis
 		.where(topicId ? and(isScanStale, eq(scans.topicId, topicId)) : isScanStale)
 		.returning({ id: scans.id })
 
-	// a Scan reaching here was dispatched and then stopped reporting past a window longer than its stages allow,
-	// so this is an incident instead of routine cleanup and is reported
+	// a Scan reaching here was dispatched and then stopped reporting past a window longer than its stages allow
 	if (staleScanIds.length > 0) {
 		console.log(`closed out ${staleScanIds.length} dispatched scans that stopped reporting after ${STALE_SCAN_MS}ms`)
 		reportError(new Error(`closed out ${staleScanIds.length} hung scans`), "scheduled-scan", {
@@ -241,8 +227,7 @@ async function loadScheduledTopics(now = new Date()): Promise<Topic[]> {
 		lastScanStarts.map((scanRow) => [scanRow.topicId, new Date(scanRow.lastStartedAt)]),
 	)
 
-	// a Topic already scanning is rejected by the workflow id when the sweep tries to start it, so it is not filtered out here.
-	// a rejection reads the live workflow instead of a topic row, which may be stale
+	// a Topic already scanning is rejected by the workflow id when the sweep tries to start it
 	const topicRows = await db.select().from(topics)
 	return topicRows.filter((topicRow) => isTopicScheduled(topicRow, lastScanStartByTopic.get(topicRow.id), now))
 }
@@ -270,14 +255,13 @@ export function frequencyWindowMs(frequency: Topic["frequency"]): number {
 	return frequency === "weekly" ? 7 * DAY_MS : DAY_MS
 }
 
-// Saturday or Sunday, UTC. the app has no per-user timezone yet, so the sweep judges the weekend against the server's own clock
+// Saturday or Sunday, UTC
 function isWeekend(now: Date): boolean {
 	const utcDay = now.getUTCDay()
 	return utcDay === 0 || utcDay === 6
 }
 
-// run one sweep and exit, so a platform cron can invoke this file on a schedule.
-// locally, set SCHEDULE_INTERVAL_MS to keep sweeping on an interval instead of exiting
+// run one sweep and exit, so a platform cron can invoke this file on a schedule
 if (import.meta.main) {
 	// trace and monitor the scan path. both no-op without their keys
 	startTelemetry()

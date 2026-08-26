@@ -1,4 +1,4 @@
-// track what became of each finding candidate a review looked at
+// track what became of each finding reviewed finding a review looked at
 
 // the reasons a Resource is filtered out
 export type FilterReason =
@@ -11,14 +11,14 @@ export type FilterReason =
 // a kept resource finding's details, collected for the scan report
 export type KeptFinding = { title: string | null; url: string; relevanceScore: number; relevanceExplanation: string }
 
-// the outcome of one Resource's pipeline. whether it was kept, filtered out, deferred by the spend cap, or failed
+// the outcome of one Resource's pipeline. whether it was kept, filtered out, deferred by the spend limit, or failed
 export type ResourceOutcome =
 	| { status: "kept"; finding: KeptFinding }
 	| { status: "filtered"; reason: FilterReason }
 	| { status: "deferred" }
 	| { status: "failed" }
 
-// the review outcome the scan report reads: kept resource finding details, per-reason filter counts, and the deferred and failed counts
+// the review outcome the scan report reads
 export type ReviewOutcome = {
 	keptFindings: KeptFinding[]
 	filteredCounts: Record<FilterReason, number>
@@ -26,8 +26,7 @@ export type ReviewOutcome = {
 	failedCount: number
 }
 
-// the summary returned to the scan by the review. scoredResourceIds names what the paid stage actually paid for to score,
-// including the ones that were trimmed to the topic's max_results after the review
+// the summary returned to the scan by the review
 // biome-ignore format: one line keeps the type under the comment-density hook's limit
 export type ReviewSummary = { keptCount: number; filteredCount: number; scanSummary: string; scoredResourceIds: string[] }
 

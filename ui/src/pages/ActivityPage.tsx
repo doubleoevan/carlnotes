@@ -1,31 +1,34 @@
 import type { ActivityResponse } from "@shared/contracts"
+import { Activity, Plus } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
+import { fetchActivity } from "@/clients/activityClient"
+import { authClient } from "@/clients/authClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
-import { InvitesTable } from "@/components/table/InvitesTable"
-import { SubscriptionsTable } from "@/components/table/SubscriptionsTable"
-import { TopicsTable } from "@/components/table/TopicsTable"
+import { Button } from "@/components/primitives/button"
+import { TopicInvitesTable } from "@/components/table/TopicInvitesTable.tsx"
+import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTable"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { fetchActivity } from "@/lib/activityClient"
-import { authClient } from "@/lib/authClient"
+import { usePageTitle } from "@/hooks/usePageTitle"
+import { PAGE_CLASS } from "@/lib/styleClasses"
 
 /**
- * The Activity page: the signed-in user's topics with month-to-date scan spend, their subscriptions, and the invitations they sent.
+ * The Activity page: the signed-in user's topic subscriptions and the invitations they sent.
  */
 export function ActivityPage() {
+	usePageTitle("Activity")
 	const navigate = useNavigate()
 	const { data: session } = authClient.useSession()
 	const [activity, setActivity] = useState<ActivityResponse | null>(null)
-	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
-	// a load the api refused or could not answer
+	// a load the api rejected or could not answer
 	const [isLoadFailed, setIsLoadFailed] = useState(false)
+	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
 
-	// an admin may open another user's activity. everyone else sees only their own.
-	// another user's activity page renders read-only.
+	// an admin may open another user's activity
 	const [searchParams] = useSearchParams()
 	const viewedUserId = searchParams.get("userId") ?? undefined
 	const isOwnView = !viewedUserId || viewedUserId === session?.user.id
@@ -40,7 +43,7 @@ export function ActivityPage() {
 		if (!session) {
 			return
 		}
-		// switching users clears the last one's rows, and the flag drops a reply that lands after the switch
+		// switching users clears the last one's rows, and the flag ignores a response that arrives after the switch
 		let isViewCurrent = true
 		setActivity(null)
 		setIsLoadFailed(false)
@@ -52,28 +55,35 @@ export function ActivityPage() {
 		}
 	}, [session, viewedUserId])
 
-	// close the add topic modal and forward to the topic page
+	// a saved topic closes the modal and opens the topic it created
 	const handleTopicCreated = async (topicId: string): Promise<void> => {
 		setIsNewTopicOpen(false)
 		navigate(`/topics/${topicId}`)
 	}
 
 	if (!session) {
-		return <main className="mx-auto max-w-4xl px-safe py-10">Please log in to see your activity.</main>
+		return <main className={PAGE_CLASS}>Please log in to see your activity.</main>
 	}
 
 	return (
-		<main className="mx-auto max-w-4xl px-safe py-10">
-			<h1 className="font-display text-2xl">Activity</h1>
+		<main className={PAGE_CLASS}>
+			{/* the page title with the same icon as its header menu item, and the new topic button to the right */}
+			<div className="flex items-center justify-between gap-4">
+				<h1 className="font-display flex items-center gap-2 text-2xl">
+					<Activity className="size-6" />
+					Activity
+				</h1>
+				{isOwnView && (
+					<Button className="shrink-0" onClick={() => setIsNewTopicOpen(true)}>
+						<Plus className="size-4" />
+						New Topic
+					</Button>
+				)}
+			</div>
 			{/* the target user's profile link */}
 			{activity && <UserProfileLink user={activity.user} className="mt-2 text-sm" />}
 			{activity ? (
-				<ActivitySections
-					activity={activity}
-					isOwnView={isOwnView}
-					onReload={reloadActivity}
-					onNewTopic={() => setIsNewTopicOpen(true)}
-				/>
+				<ActivitySections activity={activity} isOwnView={isOwnView} onReload={reloadActivity} />
 			) : isLoadFailed ? (
 				<p className="text-muted-foreground mt-6 text-sm">{"Carl couldn't find this activity. He checked twice."}</p>
 			) : (
@@ -87,48 +97,27 @@ export function ActivityPage() {
 // the add topic call-to-action link
 const ADD_TOPIC_CLASS = "text-link hover:underline"
 
-// the loaded page: the topics, subscriptions, and invites sections, each in an accordion that starts open.
-// an admin reading somebody else's activity page does not get the call-to-action links
+// the loaded page
 function ActivitySections({
 	activity,
 	isOwnView,
 	onReload,
-	onNewTopic,
 }: {
 	activity: ActivityResponse
 	isOwnView: boolean
 	onReload: () => void
-	onNewTopic: () => void
 }) {
-	// the empty-state's call-to-action links do not show up for an admin viewing another user's activity
+	// the plain empty line an admin sees in place of a call-to-action link
 	const emptyLine = (line: string) => <p className="text-muted-foreground pb-4 pl-4 text-sm">{line}</p>
 	return (
-		<div className="mt-6">
-			<Accordion type="multiple" defaultValue={["topics", "subscriptions", "invites"]}>
-				{/* the user's topics with their monthly spend. an owner with none starts one from here */}
-				<AccordionItem value="topics">
-					<AccordionTrigger className="font-semibold">Your topics</AccordionTrigger>
-					<AccordionContent>
-						{activity.topics.length > 0 ? (
-							<TopicsTable topics={activity.topics} onReloadPage={onReload} isEmailEditable={isOwnView} />
-						) : isOwnView ? (
-							<EmptyActivitySection>
-								<button type="button" onClick={onNewTopic} className={ADD_TOPIC_CLASS}>
-									Give Carl a topic.
-								</button>
-							</EmptyActivitySection>
-						) : (
-							emptyLine("No topics.")
-						)}
-					</AccordionContent>
-				</AccordionItem>
-
+		<div className="mt-2">
+			<Accordion type="multiple" defaultValue={["subscriptions", "invites"]}>
 				{/* the user's subscriptions with their active and email preferences */}
 				<AccordionItem value="subscriptions">
-					<AccordionTrigger className="font-semibold">Your subscriptions</AccordionTrigger>
+					<AccordionTrigger className="font-semibold">Your topic subscriptions</AccordionTrigger>
 					<AccordionContent>
 						{activity.subscriptions.length > 0 ? (
-							<SubscriptionsTable
+							<TopicSubscriptionsTable
 								subscriptions={activity.subscriptions}
 								onReloadPage={onReload}
 								isReadOnly={!isOwnView}
@@ -145,12 +134,13 @@ function ActivitySections({
 					</AccordionContent>
 				</AccordionItem>
 
-				{/* the user's invitations with their status */}
+				{/* the invitations the user sent. the ones that were sent to them are subscriptions that are not active yet,
+				    so they sit in the subscriptions table above */}
 				<AccordionItem value="invites">
-					<AccordionTrigger className="font-semibold">Your invitations</AccordionTrigger>
+					<AccordionTrigger className="font-semibold">Your topic invitations</AccordionTrigger>
 					<AccordionContent>
 						{activity.invites.length > 0 ? (
-							<InvitesTable invites={activity.invites} onReload={onReload} isReadOnly={!isOwnView} />
+							<TopicInvitesTable invites={activity.invites} onReload={onReload} isReadOnly={!isOwnView} />
 						) : isOwnView ? (
 							<EmptyActivitySection>
 								<AnchorLink href="/" className={ADD_TOPIC_CLASS}>

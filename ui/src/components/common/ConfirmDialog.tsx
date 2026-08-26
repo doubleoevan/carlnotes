@@ -3,8 +3,7 @@ import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 
 /**
- * The confirmation dialog an action opens before it commits: a question, a body with what the action entails, and an onConfirm callback.
- * The consumer supplies every label so that each confirmation can describe itself.
+ * The confirmation dialog an action opens before it commits, with a question, a body saying what the action does, and an onConfirm callback.
  */
 export function ConfirmDialog({
 	title,
@@ -19,7 +18,7 @@ export function ConfirmDialog({
 	cancelLabel: string
 	onConfirm: () => void
 	onClose: () => void
-	// what the action entails, as prose the caller writes
+	// what the action does, as prose the caller writes
 	children: React.ReactNode
 }) {
 	return (

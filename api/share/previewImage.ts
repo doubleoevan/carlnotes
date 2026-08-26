@@ -1,7 +1,5 @@
-// the shared link-preview card image methods. JSX to SVG with Satori, SVG to PNG with resvg.
-// Satori cannot use system fonts, so the font is added beside this file and passed in as bytes.
-// the cards themselves live in topicImage.ts and profileImage.ts
-import { Resvg } from "@resvg/resvg-js"
+// the shared link-preview card image methods
+import { renderAsync } from "@resvg/resvg-js"
 import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@shared/avatars"
 import satori from "satori"
 import { getAttachmentBytes } from "../../worker"
@@ -23,22 +21,21 @@ const PROVIDER_PHOTO_TIMEOUT_MS = 3000
 // the brand font, read once at boot. Satori takes font bytes, not a font-family name or a stylesheet
 const displayFont = await Bun.file(new URL("./fonts/ArchitectsDaughter-Regular.ttf", import.meta.url)).arrayBuffer()
 
-// the rest of the card's palette, taken from the dark theme so a preview can look like the app
+// the rest of the card's palette, taken from the dark theme
 const CARD_BACKGROUND = "#2a1f14"
 const CARD_COLOR = "#f0e6d6"
 const CARD_ACCENT = "#f09050"
 
-// one node of the card's markup tree, which is the shape satori reads instead of React elements.
-// svg nodes carry their attributes as extra props beside style and children
+// one node of the card's markup tree, which is the shape satori reads instead of React elements
 export type CardNode = {
 	type: string
 	props: { style?: Record<string, unknown>; children?: (CardNode | string)[] | string } & Record<string, unknown>
 }
 
 /**
- * What the rendered avatar's ID in a card's stored key.
+ * The rendered avatar's identity in a card's stored key.
  *
- * A stored upload's avatar key already carries its own stamp, and a provider photo's url changes when the photo does,
+ * A stored upload's avatar key already includes its own stamp, and a provider photo's url changes when the photo does,
  * so either one changing is enough to give the preview card a new url.
  */
 export function toAvatarIdentity(avatar: PublishedAvatar): string {
@@ -76,7 +73,9 @@ export async function toCardPng(rows: CardNode[]): Promise<Uint8Array> {
 		height: PREVIEW_HEIGHT,
 		fonts: [{ name: "Architects Daughter", data: displayFont, weight: 400, style: "normal" }],
 	})
-	return new Resvg(previewSvg, { fitTo: { mode: "width", value: PREVIEW_WIDTH } }).render().asPng()
+	// renderAsync rasterizes on a worker thread, so a burst of preview fetches never stalls the event loop
+	const renderedImage = await renderAsync(previewSvg, { fitTo: { mode: "width", value: PREVIEW_WIDTH } })
+	return renderedImage.asPng()
 }
 
 /**
@@ -106,14 +105,13 @@ export async function toOwnerImageDataUri(avatar: PublishedAvatar): Promise<stri
 		const contentType = response.headers.get("content-type") ?? "image/jpeg"
 		return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
 	} catch (error) {
-		// an unreadable image draws the initials instead, since a card with no avatar still beats no card
+		// an unreadable image draws the initials instead
 		console.error("preview avatar load failed", error)
 		return null
 	}
 }
 
-// a response's bytes, or null once it runs past the size an avatar can be. read chunk by chunk rather than
-// buffered whole, since the url belongs to the provider and nothing about the response is ours to trust
+// a response's bytes, or null once it runs past the size an avatar can be
 async function toAvatarBytes(response: Response): Promise<Uint8Array | null> {
 	if (!response.body) {
 		return null
@@ -121,13 +119,13 @@ async function toAvatarBytes(response: Response): Promise<Uint8Array | null> {
 	const reader = response.body.getReader()
 	const chunks: Uint8Array[] = []
 	let byteLength = 0
-	// the running total is checked before a chunk is kept, so nothing past the cap is ever held
+	// the running total is checked before a chunk is kept, so nothing past the limit is ever held
 	while (true) {
 		const { done, value } = await reader.read()
 		if (done) {
 			break
 		}
-		// past the cap the rest is never asked for, so an endless response cannot keep the render open
+		// past the limit the rest is never asked for, so an endless response cannot keep the render open
 		byteLength += value.byteLength
 		if (byteLength > MAX_AVATAR_BYTES) {
 			await reader.cancel()
@@ -135,7 +133,7 @@ async function toAvatarBytes(response: Response): Promise<Uint8Array | null> {
 		}
 		chunks.push(value)
 	}
-	// one image, joined back together now that its whole size is known to be within the cap
+	// one image, joined back together now that its whole size is known to be within the limit
 	return Buffer.concat(chunks)
 }
 
@@ -192,10 +190,10 @@ export function toBrandIcon(): CardNode {
 
 // the coffee mug icon, drawn from the same paths CoffeeMug.tsx renders
 function toMug(): CardNode {
-	const steamWisps = [11.5, 15, 18.5].map((x) => ({
+	const steamWisps = [11.5, 15, 18.5].map((offset) => ({
 		type: "path",
 		props: {
-			d: `M${x} 10.5 q-2 -1.6 0 -3.2 q2 -1.6 0 -3.2`,
+			d: `M${offset} 10.5 q-2 -1.6 0 -3.2 q2 -1.6 0 -3.2`,
 			stroke: CARD_ACCENT,
 			strokeWidth: 1.5,
 			strokeLinecap: "round",

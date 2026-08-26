@@ -1,8 +1,6 @@
-// whether a password has turned up in a known breach. the password never leaves this server.
-// a range of matched breached passwords are returned for the first five characters and checked.
-// there are no composition rules by design. NIST 800-63B advises against them, and a breach list is what stops the real attack
+// whether a password has turned up in a known breach
 
-// haveibeenpwned's range endpoint, which answers with every hash suffix sharing a prefix
+// haveibeenpwned's range endpoint, which returns every hash suffix sharing a prefix
 const BREACH_RANGE_URL = "https://api.pwnedpasswords.com/range"
 
 // how long to wait on the range lookup. a slow third party must not hold up a signup

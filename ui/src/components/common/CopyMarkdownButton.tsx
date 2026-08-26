@@ -1,18 +1,18 @@
 import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { cn, copyThroughSelection } from "@/lib/utils"
+import { cn, copyWithDocument } from "@/lib/utils"
 
 // how long the copied checkmark stays before the button offers to copy again
 const COPIED_FEEDBACK_MS = 1500
 
 /**
- * The hover copy control on a notes scroll box: it copies the box's content to the clipboard as Markdown ready to paste into an AI,
+ * The hover copy button on a notes scroll box: it copies the box's content to the clipboard as Markdown ready to paste into an AI,
  * and confirms with a checkmark before reverting. It floats on the corner of a `group` container, appearing on hover or keyboard focus.
  */
 export function CopyMarkdownButton({ markdown }: { markdown: string }) {
 	const [isCopied, setIsCopied] = useState(false)
-	// controlled so the copied confirmation survives the click, since a tooltip closes when its trigger is clicked
+	// controlled so the copied confirmation survives the click. a tooltip closes when its trigger is clicked
 	const [isTooltipOpen, setIsTooltipOpen] = useState(false)
 
 	// copy, then confirm on the button. a browser that refuses the clipboard api falls back to a selection copy
@@ -21,7 +21,7 @@ export function CopyMarkdownButton({ markdown }: { markdown: string }) {
 		try {
 			await navigator.clipboard.writeText(markdown)
 		} catch {
-			isWritten = copyThroughSelection(markdown)
+			isWritten = copyWithDocument(markdown)
 		}
 		if (isWritten) {
 			setIsCopied(true)

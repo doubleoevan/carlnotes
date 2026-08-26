@@ -23,9 +23,7 @@ export type DefaultSource = {
 	toConfig: () => Record<string, unknown>
 }
 
-// an option in the custom source picker. an option is not always a source kind of its own,
-// since Google News saves as an rss feed built from a publisher's domain.
-// toConfig returns null for a value it cannot build from
+// an option in the custom source picker
 export type CustomSourceOption = {
 	key: CustomSourceKey
 	sourceKind: EditableSourceKind
@@ -123,9 +121,9 @@ const SOURCE_VALUE_FIELDS: Record<string, string[]> = {
 }
 
 /**
- * What a source is identified by: the id, handle, subreddit, or url its ingester reads. Never the display
- * name a Scan wrote back, since a suggestion resolves to this same value before it is deduped, and keying
- * on the name would offer a source the topic already follows.
+ * What a source is identified by: the id, handle, subreddit, or url its ingester reads.
+ * Never the display name a Scan wrote back. A suggestion resolves to this same value before it is deduped,
+ * and keying on the name would offer a source the topic already follows.
  */
 export function toSourceValue(sourceKind: string, config: Record<string, unknown>): string {
 	const fields = SOURCE_VALUE_FIELDS[sourceKind] ?? ["url"]

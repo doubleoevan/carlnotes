@@ -1,7 +1,6 @@
 import { zValidator } from "@hono/zod-validator"
 import { attachmentContextPayload, attachmentUrlPayload } from "@shared/contracts"
-// the attachment actions behind the api routes. deleting and downloading, and updating the generated context,
-// which the topic:edit gate authorizes so an admin can edit attachments as well as a topic owner.
+// the attachment actions behind the api routes
 import { and, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
@@ -56,6 +55,7 @@ export async function updateTopicAttachmentContext(
 			topicId: topics.id,
 			ownerId: topics.ownerId,
 			visibility: topics.visibility,
+			teamId: topics.teamId,
 		})
 		.from(attachments)
 		.innerJoin(topics, eq(attachments.topicId, topics.id))
@@ -67,7 +67,8 @@ export async function updateTopicAttachmentContext(
 	}
 
 	// check if this user can edit the attachment's topic
-	const attachmentTopic = { id: attachment.topicId, ownerId: attachment.ownerId, visibility: attachment.visibility }
+	// biome-ignore format: one line keeps the shape under the comment-density hook's limit
+	const attachmentTopic = { id: attachment.topicId, ownerId: attachment.ownerId, visibility: attachment.visibility, teamId: attachment.teamId }
 	if (!(await isAllowed(userId, "topic:edit", attachmentTopic))) {
 		return false
 	}
@@ -109,9 +110,7 @@ export async function loadDownloadableAttachment(
 	return { objectKey: attachment.objectKey, filename: attachment.filename, contentType: attachment.contentType }
 }
 
-// the headers that send a stored file back as a download.
-// the ascii name is stripped of anything that could inject header bytes, with a utf-8 copy beside it,
-// and nosniff stops the browser running the file as script
+// the headers that send a stored file back as a download
 export function toDownloadHeaders(filename: string, contentType: string): Record<string, string> {
 	const asciiFilename = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "")
 	return {
@@ -124,7 +123,7 @@ export function toDownloadHeaders(filename: string, contentType: string): Record
 // a topic attachment's routes: adding one by url, editing its context, removing it, and downloading it
 export const topicAttachmentsRoute = new Hono<AppEnv>()
 	.post("/topics/:id/attachments/url", zValidator("json", attachmentUrlPayload), async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -141,7 +140,7 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 			const attachment = await ingestUrlAttachment(context.req.param("id"), url)
 			return context.json({ id: attachment.id, filename: attachment.filename })
 		} catch (error) {
-			// a validation error names the caller's own url, so it shows verbatim. anything else is internal
+			// a validation error names the user's own url, so it shows as written. anything else is internal
 			if (error instanceof AttachmentValidationError) {
 				return context.json({ error: error.message }, 400)
 			}
@@ -150,7 +149,7 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 		}
 	})
 	.patch("/attachments/:id/context", zValidator("json", attachmentContextPayload), async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -165,7 +164,7 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 		return isContextUpdated ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.delete("/attachments/:id", async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -175,7 +174,7 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 		return isDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.get("/attachments/:id/download", async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -194,8 +193,7 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 	})
 	.post(
 		"/topics/:id/attachments",
-		// cap the upload body before it's fully buffered into memory. the multipart envelope adds a little over the file limit,
-		// and ingestAttachment re-checks the exact per-file limit on the decoded bytes
+		// limit the upload body before it's fully buffered into memory
 		bodyLimit({
 			maxSize: MAX_ATTACHMENT_BYTES + 1024 * 1024,
 			onError: (context) =>
@@ -205,7 +203,7 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 				),
 		}),
 		async (context) => {
-			// reject a signed-out caller
+			// reject a signed-out visitor
 			const userId = currentUser(context)
 			if (!userId) {
 				return context.json({ error: "unauthorized" }, 401)
@@ -223,8 +221,7 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 				return context.json({ error: "file field required" }, 400)
 			}
 
-			// run the synchronous part of attachment ingestion:
-			// size and type validation, object storage, a pending row, and starting the processing workflow
+			// run the synchronous part of attachment ingestion
 			try {
 				const bytes = new Uint8Array(await file.arrayBuffer())
 				const attachment = await ingestAttachment({
@@ -237,8 +234,7 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 				// hand the persisted attachment identity back to the modal
 				return context.json({ id: attachment.id, filename: attachment.filename })
 			} catch (error) {
-				// a validation error names the user's own mistake, so it shows verbatim.
-				// anything else is internal: log the real cause and keep it out of the response
+				// a validation error names the user's own mistake, so it shows as written
 				if (error instanceof AttachmentValidationError) {
 					return context.json({ error: error.message }, 400)
 				}

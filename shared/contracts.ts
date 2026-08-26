@@ -1,16 +1,19 @@
-// zod wired contracts for the topic feed payload and its mutations. the api validates with them and the ui parses with them
+// zod wired contracts shared by the api and ui. the api validates with them and the ui parses with them
 import { z } from "zod"
 import {
 	attachmentStatuses,
+	avatarSources,
 	type chatAttachmentKinds,
 	daysOfWeek,
 	editableSourceKinds,
 	frequencies,
+	inviteAccesses,
 	maxResultsOptions,
 	ratings,
 	resourceKinds,
 	scanStatuses,
 	sourceKinds,
+	teamRoles,
 	topicSectionKeys,
 	visibilities,
 } from "./enums"
@@ -25,11 +28,40 @@ export type RatingPayload = z.infer<typeof ratingPayload>
 export const consumedPayload = z.object({ isConsumed: z.boolean() })
 export type ConsumedPayload = z.infer<typeof consumedPayload>
 
-// the bookmark mutation body. true sets the topic finding bookmark for the current user and false releases it
+// the bookmark mutation body. true sets the topic finding bookmark for the current user and false clears it
 export const bookmarkPayload = z.object({ isBookmarked: z.boolean() })
 export type BookmarkPayload = z.infer<typeof bookmarkPayload>
 
-// the signup-gate body. oauth never calls this endpoint at all — only the password path needs turnstile
+// a message in a team topic's room, decrypted for the member viewing it
+export type ChatRoomMessage = {
+	id: number
+	// the author's account if it still exists, and the name recorded at post-time
+	authorUserId: string | null
+	authorUsername: string
+	// the author's current avatar, null for carl or for a departed member
+	authorAvatarSource: (typeof avatarSources)[number] | null
+	replyToMessageId: number | null
+	content: string
+	createdAt: string
+	// the files this message shared with the room, oldest first, empty when it shared none
+	attachments: { id: string; kind: (typeof chatAttachmentKinds)[number]; name: string }[]
+}
+
+// the chat room post body, limited because every participant's words are paid for by the next mention
+export const CHAT_ROOM_MESSAGE_MAX_CHARS = 4000
+export const chatRoomMessagePayload = z.object({
+	content: z.string().trim().min(1).max(CHAT_ROOM_MESSAGE_MAX_CHARS),
+	replyToMessageId: z.number().int().positive().nullable().optional(),
+	// the shared files going with the message, under the per-message limit
+	get attachments() {
+		return z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([])
+	},
+})
+
+// a user's own words about a finding to use for tuning later
+export const findingFeedbackPayload = z.object({ feedback: z.string().trim().min(1).max(2000) })
+
+// the signup-gate body. oauth never calls this endpoint, only the password path needs turnstile
 export const signupGatePayload = z.object({ turnstileToken: z.string() })
 export type SignupGatePayload = z.infer<typeof signupGatePayload>
 
@@ -47,23 +79,155 @@ export type UsernamePayload = z.infer<typeof usernamePayload>
 // how long a flag's reason may run. it is a note to a person, not a case file
 export const FLAG_REASON_MAX_CHARS = 1000
 
-// the flag content body. the subject is a Topic id or a username, named by which kind it is so the api can look it up
+// the flag issue body. the subject is a topic, profile, or team id, named by which kind it is so the api can look it up
 export const flagContentPayload = z.object({
-	subjectKind: z.enum(["topic", "profile"]),
+	subjectKind: z.enum(["topic", "profile", "team"]),
 	subjectId: z.string().min(1),
 	reason: z.string().trim().min(1).max(FLAG_REASON_MAX_CHARS),
 })
 export type FlagContentPayload = z.infer<typeof flagContentPayload>
 
-// the invite-revoke body. which invitee the topic owner is withdrawing, named by the address they invited
-export const inviteRevokePayload = z.object({ email: z.string() })
-export type InviteRevokePayload = z.infer<typeof inviteRevokePayload>
+// the invite-delete body, named by its invite id. the owner's subscriber list removes the row whole
+export const inviteDeletePayload = z.object({ inviteId: z.string() })
+export type InviteDeletePayload = z.infer<typeof inviteDeletePayload>
+
+// one pending invite to a topic or a team, as its sender sees it
+export const invite = z.object({
+	id: z.string(),
+	email: z.string().nullable(),
+	// what an invite url includes. the ui builds the url from it against its own origin
+	token: z.string(),
+	maxUses: z.number(),
+	usedCount: z.number(),
+	expiresAt: z.string().nullable(),
+})
+export type Invite = z.infer<typeof invite>
+
+// the create-team body from the shared create modal
+export const createTeamPayload = z.object({
+	name: z.string().trim().min(1).max(80),
+	topicIds: z.array(z.string()).max(50),
+	// the description the same modal writes on an edit, optional at both ends
+	description: z.string().trim().max(500).nullable().optional(),
+	// whether the page opens to anyone from the start. absent stays private, the default
+	isPublic: z.boolean().optional(),
+})
+export type CreateTeamPayload = z.infer<typeof createTeamPayload>
+
+// the leader's team edits. the public toggle's confirmation lives in the ui
+export const updateTeamPayload = z.object({
+	name: z.string().trim().min(1).max(80).optional(),
+	description: z.string().trim().max(500).nullable().optional(),
+	isPublic: z.boolean().optional(),
+})
+export type UpdateTeamPayload = z.infer<typeof updateTeamPayload>
+
+// attaching one topic to a team, setting one member's role, and a member's own member-visibility opt-out
+export const addTopicPayload = z.object({ topicId: z.string() })
+export const memberRolePayload = z.object({ role: z.enum(teamRoles) })
+export const memberVisibilityPayload = z.object({ isMemberVisible: z.boolean() })
+
+// the fields every teams page row shows, shared by memberships and received invitations
+export type TeamRowFields = TeamIdentity & {
+	isPublic: boolean
+	// the description, which the table truncates into its own column
+	description: string | null
+	// the active members and held topics, whose counts open the row's subtables
+	memberCount: number
+	topicCount: number
+	// this month's spend in cents across the team's topics, split by what produced it
+	scanSpendCents: number
+	chatSpendCents: number
+}
+
+// one row of the teams summary: a team the user belongs to and their role
+export type TeamSummary = TeamRowFields & {
+	role: (typeof teamRoles)[number]
+	// whether the user is the team's only active leader, whose leave toggle points at the members instead
+	isOnlyLeader: boolean
+	// who invited the user onto the team, for the summary's Invited by column. null joined on their own
+	invitedBy: ProfileIdentity | null
+	// the user's unseen mentions in the team's own room, newest first, counted on the name's badge
+	mentions: ChatMention[]
+}
+
+// the team page payload
+export type TeamPageResponse = {
+	teamId: string
+	name: string
+	description: string | null
+	isPublic: boolean
+	// its own uploaded image, otherwise the initials and tint its name and id draw
+	hasAvatar: boolean
+	// what the user is to this team, which decides the leader controls and the full team
+	role: (typeof teamRoles)[number] | null
+	// whether the user has asked to join, which flips the join button to a withdraw
+	hasRequestedToJoin: boolean
+	members: {
+		userId: string
+		username: string
+		avatarSource: (typeof avatarSources)[number] | null
+		role: (typeof teamRoles)[number]
+		isMemberVisible: boolean
+		// false is a request to join, shown to team leaders who can activate a new member
+		isActive: boolean
+	}[]
+	// how many members opted out of the public members list, so the team never appears smaller than it is
+	hiddenMemberCount: number
+	// the user's unseen chat mentions in the team's chat room, newest first, for the title badge and the pill
+	mentions: ChatMention[]
+	// the same profile-shaped rows the profile page's topic table renders
+	topics: Topic[]
+}
+
+// the invite-access settings body
+export const inviteAccessPayload = z.object({ inviteAccess: z.enum(inviteAccesses) })
+
+// the user-invite body: exactly one identifier, a username or an email address
+export const userInvitePayload = z
+	.object({
+		username: z.string().trim().min(1).optional(),
+		email: z.string().trim().toLowerCase().pipe(z.email()).optional(),
+	})
+	.refine((payload) => (payload.username === undefined) !== (payload.email === undefined), {
+		message: "exactly one of username or email",
+	})
+export type UserInvitePayload = z.infer<typeof userInvitePayload>
+
+// which control created an invite. it names one of our own sources, not where the invite was sent.
+export const inviteSources = ["compose", "copy-link", "share-sheet"] as const
+export const inviteCreatePayload = z.object({ source: z.enum(inviteSources) })
+export type InviteSource = (typeof inviteSources)[number]
+
+// what creating an invite returns: the invite whose url goes into a composer or onto the clipboard
+export const inviteCreateResponse = z.object({ invite })
+
+// the invite acceptance body. the turnstile bot check the join page passes along with the token in its path
+export const inviteAcceptPayload = z.object({ turnstileToken: z.string() })
+export type InviteAcceptPayload = z.infer<typeof inviteAcceptPayload>
+
+// the ways an invite join token can fail, each one its own reason so the page can say which it was
+export const inviteRefusals = ["revoked", "expired", "exhausted", "unknown"] as const
+export type InviteRefusal = (typeof inviteRefusals)[number]
+
+// what accepting an invite returns: the topic to open, or which way the token failed
+export const inviteAcceptResponse = z.discriminatedUnion("status", [
+	z.object({ status: z.literal("joined"), topicId: z.string(), topicName: z.string() }),
+	z.object({ status: z.literal("joinedTeam"), teamId: z.string(), teamName: z.string() }),
+	z.object({ status: z.literal("requestedTeam"), teamId: z.string(), teamName: z.string() }),
+	z.object({ status: z.enum(inviteRefusals) }),
+])
+export type InviteAcceptResponse = z.infer<typeof inviteAcceptResponse>
 
 // the subscription email-preference mutation body which is independent of the subscription's active state
-export const subscriptionEmailPayload = z.object({ isEmailEnabled: z.boolean() })
+export const subscriptionEmailPayload = z.object({
+	isEmailEnabled: z.boolean(),
+	// whose subscription to write, for an admin acting on somebody else's. absent means the caller's own
+	subscriberUserId: z.string().optional(),
+})
 export type SubscriptionEmailPayload = z.infer<typeof subscriptionEmailPayload>
 
-// one Scan row in an Activity topic's drill-down. finishedAt and scanSummary for the scan-notes popover
+// one Scan row in an Activity topic's subtable
 export type ActivityScan = {
 	id: string
 	// the outcome and, for a failed scan, the recorded reason
@@ -79,74 +243,133 @@ export type ActivityScan = {
 	costCents: number
 }
 
-// one owned-Topic row on the Activity page, carrying its month Scans for the sub-table
-export type ActivityTopic = {
+// one chat mention still waiting for the user in a chat room
+export const chatMention = z.object({
+	// the chat room's team, so the badge's link can open that room
+	teamId: z.string(),
+	authorUsername: z.string(),
+	// whether the message replied to the user's own, which selects the tooltip's verb
+	isReply: z.boolean(),
+	// the opening of the message, enough to know whether to go read it
+	excerpt: z.string(),
+})
+export type ChatMention = z.infer<typeof chatMention>
+
+// one room the chat panel's menu offers: a team's own conversation, or one about a topic it has
+export const chatRoom = z.object({
+	teamId: z.string(),
+	// null on a team's own room, which belongs to no topic
+	topicId: z.string().nullable(),
+	// the team's name, or the topic's on a topic's room
+	name: z.string(),
+	// the team the room belongs to, which tells two rooms of one topic apart
+	teamName: z.string(),
+	// its own uploaded image, otherwise the initials and tint its name and id draw
+	teamHasAvatar: z.boolean(),
+	// the user's unseen mentions in this room, badged on the menu row
+	mentions: z.array(chatMention),
+})
+export type ChatRoom = z.infer<typeof chatRoom>
+
+// one owned-Topic row on the Activity page, including its month Scans for the sub-table
+export type OwnerTopic = {
 	id: string
 	name: string
-	// who may see the topic, shown with the same glyph the topic page's info card uses
+	// who may see the topic, shown with the same icon the topic page's info card uses
 	visibility: (typeof visibilities)[number]
 	// the topic scan schedule: daily, weekdays, or weekly
 	frequency: (typeof frequencies)[number]
 	// the month-to-date figures and dates the row renders
 	monthScanCount: number
-	// active subscribers, counted the same way the feed and topic page count them: the owner's own row never counts
+	// active subscribers, counted the same way the feed and topic page count them. the owner's own row never counts
 	subscriberCount: number
 	createdAt: string
 	updatedAt: string
 	monthCostCents: number
 	// how many emails the topic sent this month that resend accepted
 	monthEmailCount: number
+	// who owns the topic, and so whose subscription the Emails switch writes
+	ownerUserId: string
 	// the owner's own subscription decides whether this topic emails them
 	isEmailEnabled: boolean
 	scans: ActivityScan[]
+	// the user's unseen room mentions, newest first, counted on the name's badge. empty with none
+	mentions: ChatMention[]
 }
 
-// one row of the Activity page's subscriptions table, kept until manually deleted. an invite stays inactive until the recipient activates it
+// one row of the Activity page's subscriptions table, kept until manually deleted
 export type SubscriptionRow = {
 	topicId: string
 	name: string
-	ownerName: string
+	// the byline: the owning team where one exists, otherwise the topic's owner
+	owner: ProfileIdentity
+	team: TeamIdentity | null
 	// an invite topic only shows findings from the next scan onward, which reactivating has to say out loud
 	visibility: (typeof visibilities)[number]
 	subscribedAt: string
 	isActive: boolean
 	isEmailEnabled: boolean
-	// the audience that granted this subscription, or null when the user subscribed directly. an audience-held
-	// row is read-only, since every subscription write is scoped to the caller's own direct row
-	audienceName: string | null
+	// the invite this row stands for, when the user was invited and has not answered
+	inviteId: string | null
 }
 
-// an invitation the user sent on a topic they own. subscribedAt is null until the invitee subscribes,
-// which they can do from their own subscriptions table
+// an invite the user sent on a topic they own
 export type InviteRow = {
+	inviteId: string
 	topicId: string
 	name: string
-	inviteeEmail: string
-	// the invitee's account if the invited address has one, for the table's avatar and profile link
+	// the address the sender used, null on a username invite that renders its username instead
+	inviteeEmail: string | null
+	// the invitee's account when the invite resolved to one, for the avatar and profile link
 	invitee: ProfileIdentity | null
 	invitedAt: string
 	subscribedAt: string | null
 }
 
+// the teams index: memberships and both directions of invitations
+export type TeamsPageResponse = {
+	teams: TeamSummary[]
+	// the team invitations waiting for an answer, each naming its sender. the page links only where it opens
+	receivedInvites: (TeamRowFields & {
+		inviteId: string
+		sender: ProfileIdentity | null
+		invitedAt: string
+	})[]
+	// the invitations the user sent, each naming who it reached and whether they joined
+	sentInvites: (TeamIdentity & {
+		inviteId: string
+		// the email address it was sent to, or the account for a username invite
+		inviteeEmail: string | null
+		invitee: ProfileIdentity | null
+		invitedAt: string
+		joinedAt: string | null
+	})[]
+}
+
 // the user identity for a profile page link
 export type ProfileIdentity = { userId: string; username: string; avatarSource: string | null }
 
+// how a Team is shown with its name, avatar and id to link
+export type TeamIdentity = {
+	teamId: string
+	name: string
+	hasAvatar: boolean
+}
+
 // the Activity payload: whose it is, metered variable spend against the effective budget, owned topics,
-// subscriptions, and invites
 export type ActivityResponse = {
 	// whose activity this is: the user's own, or the user an admin is viewing
 	user: ProfileIdentity
-	// this month's spend in cents, split by what scans and chat so that the meter can show the two apart.
+	// this month's spend in cents, split between scans and chat so that the meter can show the two apart
 	scanSpendCents: number
 	chatSpendCents: number
 	budgetCents: number
-	topics: ActivityTopic[]
+	topics: OwnerTopic[]
 	subscriptions: SubscriptionRow[]
 	invites: InviteRow[]
 }
 
-// how much conversation the model holds word for word, about twenty typical chat turns
-// it is a character budget that the count of chat turns cannot price
+// how much conversation the model holds word for word, about twenty typical chat turns it is a character budget
 export const CHAT_MEMORY_CHARS = 40_000
 
 /**
@@ -167,10 +390,10 @@ export function toUncompactedChatTurnStart(history: { question: string; answer: 
 	return 0
 }
 
-// how many chat turns a send posts to the llm: the limit is what the model can read before our code compacts
+// how many chat turns a send posts to the llm. it limits what the model reads before our code compacts the older ones
 export const CHAT_HISTORY_TURNS = 100
 
-// how much of a compacted older answer survives: enough to carry its summary, cheap enough to keep many
+// how much of a compacted older answer survives: enough to include its summary, cheap enough to keep many
 const COMPACT_ANSWER_CHARS = 280
 
 /**
@@ -183,31 +406,30 @@ export function compactChatAnswer(answer: string): string {
 	return `${answer.slice(0, COMPACT_ANSWER_CHARS).trimEnd()}…`
 }
 
-// how many attachments one chat turn may carry, and how large each may run.
-// an image is stored as a data url, whose character cap works out to about 4.5MB of binary, and text is clipped to the same cap
+// how many attachments one chat turn may include, and how large each may run
 export const CHAT_MAX_ATTACHMENTS = 4
 export const CHAT_ATTACHMENT_TEXT_CHARS = 50_000
 export const CHAT_IMAGE_DATA_CHARS = 6_000_000
 
-// how long a question may run, shared by the payload cap and the draft box.
-// a copy-paste that would push the draft past it becomes a text attachment chip instead
+// how long a question may run, shared by the payload limit and the draft box
 export const CHAT_QUESTION_CHARS = 1_000
 
 // how long a topic prompt may grow before a copy-paste is treated as an attachment
 export const TOPIC_PROMPT_CHARS = 2_000
 
-// how many attachments one user may keep durably against one topic.
-// a keep past the cap is skipped silently, because it runs after the chat turn that asked for it has already finished
+// how many attachments one user may keep durably against one topic
 export const CHAT_ATTACHMENT_KEEP_LIMIT = 20
 
-// the shape that every chat attachment includes whatever its kind. keep is only set to false beyond the chat attachment keep limit
+// how many files one member may have shared with one room at a time
+export const CHAT_ROOM_ATTACHMENT_LIMIT = 20
+
+// the shape that every chat attachment includes whatever its kind
 const chatAttachmentFields = {
 	name: z.string().trim().min(1).max(200),
 	keep: z.boolean().default(false),
 }
 
 // one attachment on a chat turn. each kind has its own field requirements
-// a caller holding a validated attachment never has to guess whether a field is present
 export const chatAttachmentPayload = z.discriminatedUnion("kind", [
 	z.strictObject({
 		...chatAttachmentFields,
@@ -228,7 +450,7 @@ export const chatAttachmentPayload = z.discriminatedUnion("kind", [
 export type ChatAttachment = z.infer<typeof chatAttachmentPayload>
 
 /**
- * Attachment text is held to a cap, with a marker naming the cut so that a reply does not invent a reason the document ends early.
+ * Attachment text is held to a limit, with a marker naming the cut so that a reply does not invent a reason the document ends early.
  */
 export function clipAttachmentText(text: string): string {
 	if (text.length <= CHAT_ATTACHMENT_TEXT_CHARS) {
@@ -248,8 +470,7 @@ export function withAttachmentNote(question: string, attachments: { name: string
 	return `${question}\n\n[attached: ${attachments.map((attachment) => attachment.name).join(", ")}]`
 }
 
-// a chat turn's question plus the conversation so far.
-// the client sends the history and every string is capped so that one request cannot inflate the prompt
+// a chat turn's question plus the conversation so far
 export const chatTurnPayload = z.object({
 	question: z.string().trim().min(1).max(CHAT_QUESTION_CHARS),
 	history: z
@@ -260,15 +481,13 @@ export const chatTurnPayload = z.object({
 })
 export type ChatTurnPayload = z.infer<typeof chatTurnPayload>
 
-// one persisted chat turn of a stored conversation, replayed on a later page load.
-// `at` is when the chat turn ran. it is returned by a response but absent on the history that a send posts
+// one persisted chat turn of a stored conversation, replayed on a later page load
 export type ChatTurnRow = { question: string; answer: string; at?: string }
 
 // an attachment the user keeps durably for a topic
 export type KeptChatAttachment = { id: string; name: string; kind: (typeof chatAttachmentKinds)[number] }
 
-// the stored conversation for a topic. canChat gates sending and isSignupRequired flags a signed-out visitor
-// the kept attachments are what the chat composer lists and counts against the cap
+// the stored conversation for a topic
 export type ChatConversation = {
 	chatTurns: ChatTurnRow[]
 	canChat: boolean
@@ -286,7 +505,7 @@ export type SetRolePayload = z.infer<typeof setRolePayload>
 export const budgetOverridePayload = z.object({ budgetOverrideCents: z.number().int().nonnegative().nullable() })
 export type BudgetOverridePayload = z.infer<typeof budgetOverridePayload>
 
-// an admin-console user row: the user's standing plus their attributed storage and month-to-date variable cost against budget
+// an admin-console user row: the user's status plus their attributed storage and month-to-date variable cost
 export type AdminUserRow = {
 	id: string
 	email: string
@@ -297,6 +516,8 @@ export type AdminUserRow = {
 	plan: Plan
 	createdAt: string
 	topicCount: number
+	// how many teams the user actively belongs to, opening the table row's teams subtable
+	teamCount: number
 	// attributed storage in bytes over globally-deduplicated Resources
 	attributedBytes: number
 	// month-to-date variable cost in cents. null when the proxy is unreachable
@@ -309,6 +530,21 @@ export type AdminUserRow = {
 	effectiveBudgetCents: number
 }
 
+// an admin-console team row: the team's status, who leads it, and month-to-date spend on its topics
+export type AdminTeamRow = {
+	teamId: string
+	name: string
+	isPublic: boolean
+	createdAt: string
+	// its own uploaded image, otherwise the initials and tint its name and id draw
+	hasAvatar: boolean
+	memberCount: number
+	topicCount: number
+	// month-to-date spend in cents across the team's topics, split by what produced it
+	scanSpendCents: number
+	chatSpendCents: number
+}
+
 // the admin-console totals: platform-wide storage and variable cost, Stripe net revenue, and the derived contribution
 export type AdminTotals = {
 	attributedBytes: number
@@ -319,11 +555,11 @@ export type AdminTotals = {
 	contributionCents: number | null
 }
 
-// the admin-console payload: the users table and the totals summary
-export type AdminConsoleResponse = { users: AdminUserRow[]; totals: AdminTotals }
+// the admin-console payload: the users and teams tables with the totals summary
+export type AdminConsoleResponse = { users: AdminUserRow[]; teams: AdminTeamRow[]; totals: AdminTotals }
 
-// one row in a profile page's topic table. subscriberCount is by Topic, which the footer sums
-export type ProfileTopic = {
+// one row in a profile or team page's topic table. subscriberCount is by Topic, which the footer sums
+export type Topic = {
 	id: string
 	name: string
 	// who may see the topic
@@ -335,6 +571,8 @@ export type ProfileTopic = {
 	keptCount: number
 	seenCount: number
 	subscriberCount: number
+	// whether the user's own subscription emails them, null where they hold no subscription to switch
+	isEmailEnabled: boolean | null
 }
 
 // a user profile search result
@@ -342,6 +580,13 @@ export type UserSearchResult = {
 	userId: string
 	username: string
 	avatarSource: string
+}
+
+// a public team the search bar found, in the shape its avatar and link both read
+export type TeamSearchResult = {
+	teamId: string
+	name: string
+	hasAvatar: boolean
 }
 
 // how long a query must be before it can search users, and how many matches can be returned
@@ -355,15 +600,16 @@ export type ProfileResponse = {
 	// where the avatar comes from. oauth provider, uploaded by user, or generated username initials
 	avatarSource: string
 	joinedAt: string
-	// distinct people, not summed rows. the same person following multiple Topics counts once here
+	// distinct people, not summed rows. the same person subscribed to multiple Topics counts once here
 	subscriberCount: number
 	// whether the topics below include the user's private and invite ones, which only the owner and an admin view
 	includesNonPublicTopics: boolean
-	topics: ProfileTopic[]
+	topics: Topic[]
+	// the teams this user belongs to. their own profile lists them all
+	teams: TeamSummary[]
 }
 
-// the account page's billing state: the current plan and how often it bills,
-// payment status for retrying a failed payment, card-on-file, and daily scan usage
+// the account page's billing state
 export type BillingState = {
 	plan: Plan
 	// how often the subscription bills. a free user has none and reads monthly for limit lookups
@@ -378,14 +624,14 @@ export type BillingState = {
 // a topic finding. the AI judgment about one Resource under a Topic, plus the user's consumed and bookmarked state
 export const topicFinding = z.object({
 	findingId: z.string(),
-	// the topic scan that produced the finding, so a topic scan's diary can list its own findings
+	// the topic scan that produced the finding, so the scan history can list each scan's own findings
 	scanId: z.string(),
 	resourceId: z.string(),
 	url: z.string(),
 	// the kind of the resource this finding points at, not a kind of finding
 	resourceKind: z.enum(resourceKinds),
 	title: z.string().nullable(),
-	// shown in the metadata. source is the url's host, and publishedAt is the resource's creation time standing in for a publish date
+	// shown in the metadata
 	source: z.string().nullable(),
 	publishedAt: z.string().nullable(),
 	// when the resource was fetched, and how many times it's been opened
@@ -398,6 +644,10 @@ export const topicFinding = z.object({
 	rating: z.enum(ratings).nullable(),
 	isConsumed: z.boolean(),
 	isBookmarked: z.boolean(),
+	// the teammates who bookmarked this finding, for the Bookmarked view's Team scope. empty off a team
+	teamBookmarks: z
+		.array(z.object({ userId: z.string(), username: z.string(), avatarSource: z.enum(avatarSources).nullable() }))
+		.default([]),
 	// the resource's captured engagement score, like a reddit score. null when no ingester recorded one
 	engagement: z.number().nullable(),
 })
@@ -421,12 +671,29 @@ export const topicFeed = z.object({
 	// isOwner gates attachment downloads. newCount is the user's unconsumed count for the "# new" badge
 	isOwner: z.boolean(),
 	newCount: z.number(),
-	// canRate hides the rating control on a topic the user only reads, so it never offers a click the api rejects
+	// whether a team owns the topic
+	isOnTeam: z.boolean(),
+	// each holding team the user belongs to, one room each, ordered by name
+	roomTeams: z.array(z.object({ teamId: z.string(), name: z.string() })),
+	// the user's unseen room mentions, newest first, counted on the name's badge. empty with none
+	mentions: z.array(chatMention),
+	// the byline a team topic derives: the team itself, for anyone who can open its page. the owner otherwise
+	teamLink: z
+		.object({
+			teamId: z.string(),
+			name: z.string(),
+			// its own uploaded image, otherwise the initials and tint its name and id draw
+			hasAvatar: z.boolean(),
+		})
+		.nullable(),
+	// canRate hides the rating row on a topic the user only reads, so it never offers a click the api rejects
 	canRate: z.boolean(),
 	// whether the requesting user subscribes to this topic
 	isSubscribed: z.boolean(),
 	// how many subscribers the topic has, shown in the info popover
 	subscriberCount: z.number(),
+	// how many teams hold this topic, shown in the info popover under the follower count
+	teamCount: z.number(),
 	// the topic visibility which determines whether to show the share button
 	visibility: z.enum(visibilities),
 	// schedule shown in the info popover
@@ -438,19 +705,18 @@ export const topicFeed = z.object({
 	monthCostDollars: z.number().nullable(),
 	// an AI generated recap of the latest scan. null until a scan has succeeded
 	scanSummary: z.string().nullable(),
-	// the attachments and sources shown in the info popover. a file attachment downloads for the owner, a url attachment links out to its page
+	// the attachments and sources shown in the info popover
 	attachments: z.array(
 		z.object({
 			id: z.string(),
 			filename: z.string(),
 			sourceUrl: z.string().nullable(),
 			status: z.enum(attachmentStatuses),
-			// the generated context that steers every later scan, for the owner and admins to edit. null for anyone else
+			// the generated context that every later scan uses, for the owner and admins to edit. null for anyone else
 			context: z.string().nullable(),
 		}),
 	),
-	// topic sources with a display summary derived server side from each source's config.
-	// only the owner can see a pending or failed attachment status
+	// topic sources with a display summary derived server side from each source's config
 	sources: z.array(
 		z.object({
 			id: z.string(),
@@ -479,13 +745,13 @@ export const topicScan = z.object({
 	foundCount: z.number(),
 	keptCount: z.number(),
 	filteredCount: z.number(),
-	// the scan cost in dollars. null unless the viewer owns the topic or holds the platform admin role
+	// the scan cost in dollars. null unless the user owns the topic or holds the platform admin role
 	costDollars: z.number().nullable(),
 	// why the scan failed, so a topic whose sources all fail does not read as one that simply found nothing
 	error: z.string().nullable(),
 })
 
-// one scan's recap, loaded per scan instead of riding along with the history
+// one scan's recap, loaded per scan instead of returned with the history
 export const scanNote = z.object({ scanSummary: z.string().nullable() })
 export type TopicScan = z.infer<typeof topicScan>
 
@@ -494,18 +760,25 @@ export const topicResponse = topicFeed.extend({
 	visibility: z.enum(visibilities),
 	// the scan history, newest first
 	scans: z.array(topicScan),
-	// the invited emails. empty for anyone but the owner
-	invitees: z.array(z.string()),
+	// the topic's pending invites, both the addresses it named and the links it created. empty for anyone but the owner
+	invites: z.array(invite),
 	// number of manual scans left today. null for topics the user does not own
 	manualScansRemaining: z.number().nullable(),
+	// the plan's daily scan limit, which the Brew tooltip pairs with what is left
+	manualScanLimit: z.number().nullable(),
 	// whether the owner has spent their monthly budget, which blocks a scan the same way a used up daily quota does
 	isSpendExhausted: z.boolean(),
 	// whether this user may edit or delete the topic. true for the owner and for any admin
 	canEdit: z.boolean(),
+	// the team owning this topic, null on a topic no team owns. the page links the team only when reachable
+	team: z.object({ teamId: z.string(), name: z.string(), isPublic: z.boolean() }).nullable(),
+	// whether the user already asked to join the owning team, which the Join Team button reads
+	hasRequestedToJoin: z.boolean(),
+	// whether the user is a member of the owning team, for the Team Up button
+	isTeamMember: z.boolean(),
 	// whether the owner holds more daily topics than their plan runs
 	isDailyFrequencyPaused: z.boolean(),
-	// this topic's position in the Featured section as well as all featured topics,
-	// both are null on the topic page for anyone but an admin, who is the only one who can see or set them
+	// this topic's position in the Featured section as well as all featured topics, both are null on the topic page
 	featureOrder: z.number().nullable(),
 	featuredTopics: z.array(z.object({ id: z.string(), name: z.string(), featureOrder: z.number() })).nullable(),
 })
@@ -514,18 +787,16 @@ export type TopicResponse = z.infer<typeof topicResponse>
 // how many Sources one topic may hold, the same on every plan.
 export const MAX_TOPIC_SOURCES = 10
 
-// a source in the update payload. an id keeps that stored source as is, without updating its sourceKind.
-// a new source includes its sourceKind and config, limited to the kinds the editor can add
+// a source in the update payload
 export const updateTopicSource = z.union([
 	z.object({ id: z.string() }),
 	z.object({ sourceKind: z.enum(editableSourceKinds), config: z.record(z.string(), z.unknown()) }),
 ])
 
-// the cap the worker applies to a generated attachment context, so an edit can't inflate scan tokens
+// the limit the worker applies to a generated attachment context, so an edit can't inflate scan tokens
 export const MAX_ATTACHMENT_CONTEXT_CHARS = 8000
 
-// the source suggestions body. the topic's context is included in the request.
-// excludeSources are sources that the editor already has
+// the source suggestions body
 export const suggestSourcesPayload = z.object({
 	name: z.string().trim(),
 	prompt: z.string().trim(),
@@ -545,7 +816,7 @@ export const suggestSourcesResponse = z.object({
 })
 export type SuggestSourcesResponse = z.infer<typeof suggestSourcesResponse>
 
-// the topic update body the edit modal saves. invitees and sources are lists that the api reconciles
+// the topic update body the edit modal saves. invites and sources are lists that the api reconciles
 export const updateTopicPayload = z.object({
 	// the editable topic fields
 	name: z.string().trim().min(1),
@@ -557,8 +828,8 @@ export const updateTopicPayload = z.object({
 	visibility: z.enum(visibilities),
 	// how many findings a scan is set to keep for this topic
 	maxResults: z.number().refine((value) => (maxResultsOptions as readonly number[]).includes(value)),
-	// the full list of a topic's invitees
-	invitees: z.array(z.string().trim().toLowerCase().pipe(z.email())),
+	// the full list of a topic's invited email addresses
+	inviteEmails: z.array(z.string().trim().toLowerCase().pipe(z.email())),
 	// stored, staged, and prompt-derived Sources are combined into one array and limited to MAX_TOPIC_SOURCES
 	sources: z.array(updateTopicSource).max(MAX_TOPIC_SOURCES),
 })
@@ -568,14 +839,14 @@ export type UpdateTopicPayload = z.infer<typeof updateTopicPayload>
 export const subscriptionPayload = z.object({ isSubscribed: z.boolean() })
 export type SubscriptionPayload = z.infer<typeof subscriptionPayload>
 
-// which signup button converted, kept in a cookie so it survives the oauth round-trip. the ui writes it, so it cannot live in shared/analytics
+// which signup button converted for posthog, kept in a cookie, so it survives the oauth round-trip
 export const SIGNUP_CTA_COOKIE_NAME = "signup_cta"
 
 // the allowed shape of a cta tag: a short slug, so nothing user-typed or tampered ever becomes an event property
 const CTA_TAG_PATTERN = /^[a-z0-9-]{1,40}$/
 
 /**
- * The cta value when it is a well-formed tag, else null, so a garbled cookie never reaches analytics.
+ * The cta value when it is a well-formed tag, otherwise null, so a garbled cookie never reaches analytics.
  */
 export function toCtaTag(value: string | null | undefined): string | null {
 	return value && CTA_TAG_PATTERN.test(value) ? value : null
@@ -585,8 +856,7 @@ export function toCtaTag(value: string | null | undefined): string | null {
 export const attachmentContextPayload = z.object({ context: z.string().trim().max(MAX_ATTACHMENT_CONTEXT_CHARS) })
 export type AttachmentContextPayload = z.infer<typeof attachmentContextPayload>
 
-// the payload for attaching a page by url. the shape is checked here and the url itself
-// which rejects a malformed, non-http, or internal url and names the reason
+// the payload for attaching a page by url
 export const attachmentUrlPayload = z.object({ url: z.string().trim().min(1).max(2000) })
 export type AttachmentUrlPayload = z.infer<typeof attachmentUrlPayload>
 
@@ -607,8 +877,10 @@ export const topicFeedResponse = z.object({
 			topics: z.array(topicFeed),
 		}),
 	),
-	// how topics the user can still create under their plan's topic limit
+	// how many topics the user can still create under their plan's topic limit
 	topicsRemaining: z.number(),
+	// the plan's topic limit, which the New Topic button pairs with what is left
+	topicLimit: z.number(),
 	// how many topics the plan can run on a daily frequency, and how many of those slots are still free
 	dailyTopicLimit: z.number(),
 	dailyTopicsRemaining: z.number(),

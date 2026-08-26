@@ -1,5 +1,4 @@
-// the unpaid stages that decide which discovered Resources are worth paying to score: embed each candidate,
-// measure it against the topic's context, drop the irrelevant and duplicate resources, and rank the survivors best-first
+// the unpaid stages that decide
 import { reportError } from "@shared/monitoring"
 import { cosineSimilarity } from "ai"
 import { and, cosineDistance, eq, inArray, isNotNull, lt, notInArray, or } from "drizzle-orm"
@@ -8,7 +7,7 @@ import { EMBED_MODEL_NAME, findings, resources, sources } from "../../db/schema"
 import { buildTopicScanContext } from "../attach"
 import { type Budget, canSpend, charge, EMBED_COST_PER_MILLION_TOKENS, tokenCost } from "../budget"
 import type { NewResource } from "../ingest/ingester"
-import { embedVector } from "../models"
+import { embedVector, embedVectors } from "../models"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
 // how close two embeddings must be for the later Resource to count as a duplicate of the earlier one
@@ -17,27 +16,32 @@ const NEAR_DUPLICATE_DISTANCE = 0.05
 // the relevance bar each resource kind is measured against
 const RELEVANCE_THRESHOLDS: Record<Resource["kind"], number> = { read: 0.35, watch: 0.24, listen: 0.24 }
 
-// the text cap that bounds embedding tokens and spend
+// the text limit that bounds embedding tokens and spend
 const MAX_EMBED_CHARS = 8000
 
-// qwen3 is instruction-aware, so the query side is wrapped with this task instruction while documents stay plain.
-// omitting the query instruction costs some retrieval quality
+// qwen3 is instruction-aware, so the query side is wrapped with this task instruction while documents stay plain
 const EMBED_QUERY_INSTRUCTION = "Given a topic's interest description, retrieve web resources relevant to it"
 
 // a persisted Resource record
 export type Resource = typeof resources.$inferSelect
 
-// the topic's derived context loaded once per Scan: its name, its embedded text, and the embedding the relevance gate compares against
+// the topic's derived context loaded once per Scan
 export type TopicContext = { name: string; text: string; embedding: number[] }
 
 // a Resource that cleared the relevance gate, with the embedding and the similarity score that ranks it
 export type SurvivingResource = { resource: Resource; embedding: number[]; similarity: number }
 
-// the dedupe keys for what this Scan has admitted. kept in memory because the rows also hold embeddings for candidates it dropped
+// the dedupe keys for what this Scan has admitted
 export type AdmittedResources = { contentHashes: Set<string>; embeddings: number[][] }
 
 // what the relevance gate makes of one Resource: a survivor for the ranked pass, or an outcome to record now
 type RelevanceGateOutcome = { status: "survived"; survivor: SurvivingResource } | ResourceOutcome
+
+// the outcome of the batch embed pass: the vectors it produced by resource id, and the candidates whose batch failed
+type EmbeddedBatchOutcome = { embeddings: Map<string, number[]>; failedIds: Set<string> }
+
+// how many candidates go into one embed batch. embedMany splits further if the provider's own per-call limit is lower
+const EMBED_BATCH_SIZE = 100
 
 /**
  * The stored Resource rows this Scan discovered that are worth scoring. A Resource already scored for this Topic is excluded,
@@ -50,7 +54,7 @@ export async function loadUnscoredResources(topicId: string, discoveredResources
 		return []
 	}
 
-	// the addresses this Topic watches, which a Finding pulls for every Scan
+	// the addresses this Topic watches, which every Scan pulls again
 	const urlSources = await db
 		.select({ config: sources.config })
 		.from(sources)
@@ -79,7 +83,7 @@ export async function loadUnscoredResources(topicId: string, discoveredResources
  * Embed the topic's context for the relevance gate: its name, its prompt, and its attachments' contexts.
  */
 export async function loadTopicContext(topicId: string, budget: Budget, litellmApiKey?: string): Promise<TopicContext> {
-	// always include the topic name in the scan context. leading also keeps the name whole when a long prompt or attachment runs into the embed limit
+	// always include the topic name in the scan context
 	const { name, context } = await buildTopicScanContext(topicId)
 	const text = [name, context.trim()].filter(Boolean).join("\n\n").slice(0, MAX_EMBED_CHARS)
 
@@ -101,6 +105,9 @@ export async function gateResources(
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
 ): Promise<SurvivingResource[]> {
+	// embed the candidates with no stored vector in batched calls first, one HTTP request per chunk
+	const embeddedBatchOutcome = await embedMissingVectors(unscoredResources, budget, litellmApiKey, stopSignal)
+
 	// a survivor goes on to the ranked pass. anything else is already a finished outcome
 	const survivors: SurvivingResource[] = []
 	for (const resource of unscoredResources) {
@@ -108,7 +115,7 @@ export async function gateResources(
 		if (stopSignal?.aborted) {
 			break
 		}
-		const gateOutcome = await gateResource(resource, topicContext, budget, litellmApiKey, stopSignal)
+		const gateOutcome = gateResource(resource, embeddedBatchOutcome, topicContext)
 		if (gateOutcome.status === "survived") {
 			survivors.push(gateOutcome.survivor)
 			continue
@@ -155,54 +162,99 @@ export function rankBySimilarity(survivors: SurvivingResource[]): SurvivingResou
 	return [...survivors].sort((first, second) => second.similarity - first.similarity)
 }
 
-// embed one candidate and measure it against the topic context, isolating a failure so it only affects itself
-async function gateResource(
+// measure one candidate against the topic context, using its stored vector or the one the batch pass just embedded
+function gateResource(
 	resource: Resource,
+	embeddedBatch: EmbeddedBatchOutcome,
 	topicContext: TopicContext,
+): RelevanceGateOutcome {
+	// reuse a Resource's existing global embedding
+	const embedding = resource.embedding ?? embeddedBatch.embeddings.get(resource.id)
+	if (!embedding) {
+		return embeddedBatch.failedIds.has(resource.id) ? { status: "failed" } : { status: "deferred" }
+	}
+
+	// the relevance gate, measured against this resource kind's own bar
+	const similarity = cosineSimilarity(embedding, topicContext.embedding)
+	if (!isRelevant(similarity, resource.kind)) {
+		return { status: "filtered", reason: "below relevance threshold" }
+	}
+
+	// the survivor includes its vector too, which the ranked pass dedupes against
+	return { status: "survived", survivor: { resource, embedding, similarity } }
+}
+
+// embed every candidate with no stored vector, a chunk at a time, stopping when finished or the budget runs out
+async function embedMissingVectors(
+	unscoredResources: Resource[],
 	budget: Budget,
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
-): Promise<RelevanceGateOutcome> {
+): Promise<EmbeddedBatchOutcome> {
+	// only a candidate with no stored vector costs anything to embed
+	const embeddedBatchOutcome: EmbeddedBatchOutcome = { embeddings: new Map(), failedIds: new Set() }
+	const resourcesWithoutEmbeddings = unscoredResources.filter((resource) => !resource.embedding)
+	for (let start = 0; start < resourcesWithoutEmbeddings.length; start += EMBED_BATCH_SIZE) {
+		// embedding costs money, so check the limit before each chunk
+		if (!canSpend(budget, stopSignal)) {
+			break
+		}
+		const resourcesBatch = resourcesWithoutEmbeddings.slice(start, start + EMBED_BATCH_SIZE)
+		await embedResourcesBatch(resourcesBatch, embeddedBatchOutcome, budget, litellmApiKey)
+	}
+	return embeddedBatchOutcome
+}
+
+// embed one batch of resources in a single call, storing each vector and charging its estimated cost
+async function embedResourcesBatch(
+	resourcesBatch: Resource[],
+	embeddedBatch: EmbeddedBatchOutcome,
+	budget: Budget,
+	litellmApiKey?: string,
+): Promise<void> {
 	try {
-		// embedding costs money, so check the limit first. a deferred resource candidate stays eligible for the next Scan,
-		// which is also what a stopped Scan leaves behind for the next scan
-		if (!resource.embedding && !canSpend(budget, stopSignal)) {
-			return { status: "deferred" }
-		}
+		// embed the batch's document texts in one call, returned in the batch's order
+		const documentTexts = resourcesBatch.map(embedText)
+		const vectors = await embedVectors(documentTexts, litellmApiKey)
 
-		// reuse a Resource's existing global embedding. a candidate the limit later defers keeps its vector,
-		// so the next Scan never re-embeds it
-		const embedding = resource.embedding ?? (await embedResource(resource, budget, litellmApiKey))
-
-		// the relevance gate, measured against this resource kind's own bar.
-		// the similarity it measures also ranks the paid section
-		const similarity = cosineSimilarity(embedding, topicContext.embedding)
-		if (!isRelevant(similarity, resource.kind)) {
-			return { status: "filtered", reason: "below relevance threshold" }
-		}
-
-		// the survivor includes its vector too, since the ranked pass dedupes against it
-		return { status: "survived", survivor: { resource, embedding, similarity } }
+		// store each vector and charge its own estimated cost, the same writes the one-at-a-time path made
+		await Promise.all(
+			resourcesBatch.map(async (resource, index) => {
+				// a missing vector means the batch and its results can no longer be paired up
+				const embedding = vectors[index]
+				if (!embedding) {
+					throw new Error(`embed batch returned ${vectors.length} vectors for ${resourcesBatch.length} texts`)
+				}
+				charge(
+					budget,
+					"embedding",
+					tokenCost(estimateEmbedTokens(documentTexts[index] ?? ""), EMBED_COST_PER_MILLION_TOKENS),
+				)
+				await saveResourceEmbedding(resource.id, embedding)
+				embeddedBatch.embeddings.set(resource.id, embedding)
+			}),
+		)
 	} catch (error) {
 		// a candidate that never got measured is a Finding the user silently never sees
-		console.error(`relevance gate failed for resource ${resource.id}`, error)
-		reportError(error, "embed-filter", { resourceId: resource.id, url: resource.url })
-		return { status: "failed" }
+		for (const resource of resourcesBatch) {
+			embeddedBatch.failedIds.add(resource.id)
+		}
+		console.error(`relevance gate embed batch of ${resourcesBatch.length} failed`, error)
+		reportError(error, "embed-filter", { batchSize: String(resourcesBatch.length) })
 	}
 }
 
-// run one survivor through both dedupe stages, returning a filtered outcome or null when it is admitted
+// run one surviving resource through both dedupe stages, returning a filtered outcome or null when it is admitted
 async function admitResource(
-	survivor: SurvivingResource,
+	survivingResource: SurvivingResource,
 	candidateIds: string[],
 	admitted: AdmittedResources,
 ): Promise<ResourceOutcome | null> {
-	const { resource, embedding } = survivor
+	const { resource, embedding } = survivingResource
 	// the content hash over the native text, only when the Resource has content. empty rows must not collapse to one hash
 	const contentHash = hasNativeText(resource) ? toContentHash(resource.title, resource.snippet) : null
 
-	// stage 1 — a content-level duplicate, of a sibling this Scan admitted or of a Resource an earlier Scan stored.
-	// the in-memory check runs first, so a sibling match costs no query
+	// stage 1 checks for a content-level duplicate, of a sibling this Scan admitted or of a Resource an earlier
 	if (contentHash !== null) {
 		const isHashDuplicate = admitted.contentHashes.has(contentHash) || (await hasStoredHash(contentHash, candidateIds))
 		if (isHashDuplicate) {
@@ -210,7 +262,7 @@ async function admitResource(
 		}
 	}
 
-	// stage 2 — a near-duplicate, of a sibling this Scan admitted or of a Resource an earlier Scan stored
+	// stage 2 checks for a near-duplicate, of a sibling this Scan admitted or of a Resource an earlier Scan stored
 	if (hasAdmittedNearDuplicate(admitted, embedding) || (await hasNearDuplicate(embedding, candidateIds))) {
 		return { status: "filtered", reason: "near-duplicate" }
 	}
@@ -224,8 +276,7 @@ async function admitResource(
 	return null
 }
 
-// a Resource outside this Scan that already has this content hash makes this a content-level duplicate.
-// excluding the current Scan's candidates stops a re-discovered candidate from matching the hash it stored itself and dropping both
+// a Resource outside this Scan that already has this content hash makes this a content-level duplicate
 async function hasStoredHash(hash: string, candidateIds: string[]): Promise<boolean> {
 	// look for a stored Resource with the same hash
 	const [duplicate] = await db
@@ -236,15 +287,9 @@ async function hasStoredHash(hash: string, candidateIds: string[]): Promise<bool
 	return duplicate !== undefined
 }
 
-// embed a Resource's native text with the embedding model, storing the vector and the model name that produced it
-async function embedResource(resource: Resource, budget: Budget, litellmApiKey?: string): Promise<number[]> {
-	// embed the title and snippet as a document, falling back to the url when both are empty, then track the estimated cost
-	const documentText = embedText(resource)
-	const embedding = await embedVector(documentText, litellmApiKey)
-	charge(budget, "embedding", tokenCost(estimateEmbedTokens(documentText), EMBED_COST_PER_MILLION_TOKENS))
-	// stamp the vector space so a later model or dimension change is a detectable backfill
-	await db.update(resources).set({ embedding, embeddingModel: EMBED_MODEL_NAME }).where(eq(resources.id, resource.id))
-	return embedding
+// store a Resource's new vector, stamped with the model name so a later model or dimension change is a detectable backfill
+async function saveResourceEmbedding(resourceId: string, embedding: number[]): Promise<void> {
+	await db.update(resources).set({ embedding, embeddingModel: EMBED_MODEL_NAME }).where(eq(resources.id, resourceId))
 }
 
 // whether this embedding has a resource outside of these resource ids close enough to be considered a duplicate
@@ -258,7 +303,6 @@ async function hasNearDuplicate(embedding: number[], resourceIds: string[]): Pro
 		.orderBy(distanceExpression)
 		.limit(resourceIds.length + 1)
 
-	// return true if any of the resource neighbors is not already in the set of passed in resource ids
 	const resourceIdSet = new Set(resourceIds)
 	return nearestResourceNeighbors.some((nearestNeighbor) => !resourceIdSet.has(nearestNeighbor.id))
 }
@@ -278,9 +322,9 @@ function hasNativeText(resource: Resource): boolean {
 	return Boolean(resource.title?.trim() || resource.snippet?.trim())
 }
 
-// the document text to embed: the capped title and snippet, falling back to the url when both are empty
+// the document text to embed: the limited title and snippet, falling back to the url when both are empty
 function embedText(resource: Pick<Resource, "title" | "snippet" | "url">): string {
-	// join title and snippet, then cap the text to bound token limits
+	// join title and snippet, then limit the text to bound token limits
 	const text = `${resource.title ?? ""}\n${resource.snippet ?? ""}`.trim()
 	return (text || resource.url).slice(0, MAX_EMBED_CHARS)
 }
@@ -292,7 +336,7 @@ export async function embedQuery(text: string, litellmApiKey?: string): Promise<
 	return embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${text}`, litellmApiKey)
 }
 
-// a rough token estimate for the embedding cost, since the truncating helper returns only the vector. about four chars per token
+// a rough token estimate for the embedding cost
 function estimateEmbedTokens(text: string): number {
 	return Math.ceil(text.length / 4)
 }

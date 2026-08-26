@@ -19,6 +19,10 @@ model_list:
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/kimi-k3
       api_key: os.environ/FIREWORKS_API_KEY
+      # Fireworks Standard serving path: $3/M input, $0.30/M cached input, $15/M output
+      input_cost_per_token: 0.000003
+      cache_read_input_token_cost: 0.0000003
+      output_cost_per_token: 0.000015
     model_info:
       friendly_name: "Kimi K3"
       supports_function_calling: true
@@ -78,15 +82,20 @@ model_list:
   # chat-model: topic rag chat over findings, accepts image attachments
   - model_name: chat-model
     litellm_params:
-      model: fireworks_ai/accounts/fireworks/models/qwen3p7-plus
+      model: fireworks_ai/accounts/fireworks/models/kimi-k3
       api_key: os.environ/FIREWORKS_API_KEY
+      reasoning_effort: medium
+      # Fireworks Standard serving path: $3/M input, $0.30/M cached input, $15/M output
+      input_cost_per_token: 0.000003
+      cache_read_input_token_cost: 0.0000003
+      output_cost_per_token: 0.000015
     model_info:
-      friendly_name: "Qwen3.7 Plus"
+      friendly_name: "Kimi K3"
       supports_function_calling: true
       supports_vision: true
       supports_prompt_caching: true
-      max_input_tokens: 262144
-      max_output_tokens: 8192
+      max_input_tokens: 1048576
+      max_output_tokens: 32768
 
 # drop provider-unsupported params instead of erroring (Fireworks embeddings reject encoding_format the AI SDK sends).
 # no proxy-wide max_budget: spend is capped per virtual key, minted per user at signup and managed in litellm itself.

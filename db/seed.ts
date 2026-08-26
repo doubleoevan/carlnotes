@@ -1,8 +1,8 @@
-// dev-only seed with idempotent stub data so the homepage renders before real scans run. it only runs against the dev Doppler environment
+// dev-only seed with idempotent stub data so the homepage renders before real scans run
 import { toNormalizedUsername } from "@shared/usernames"
 import { eq, isNotNull, sql } from "drizzle-orm"
 import { db } from "./index"
-import { findings, resources, scans, sources, subscriptions, topicInvites, topics, users } from "./schema"
+import { findings, invites, resources, scans, sources, subscriptions, topics, users } from "./schema"
 
 // the community owner whose public topics fill the Featured and Popular sections
 const COMMUNITY_USER_ID = "usr_community"
@@ -52,9 +52,9 @@ function buildSeedTopics(devUserId: string): SeedTopic[] {
 			{ resourceKind: "read", title: "A field guide to agent memory backends", url: "https://arxiv.org/abs/2607.01234", why: "Benchmarks four memory stores; append-only wins on recall.", score: 0.94 },
 			{ resourceKind: "read", title: "Why your tool-calling loop stalls at step 3", url: "https://interconnects.ai/p/tool-loops", why: "Names the exact failure your retries paper over.", score: 0.91 },
 			{ resourceKind: "watch", title: "Building durable agents with Temporal", url: "https://www.youtube.com/watch?v=agent-temporal", why: "The retry/signal model you keep reinventing, done right.", score: 0.88 },
-			// these push the topic past the five-row cap so the expander shows
+			// these push the topic past the five-row limit so the expander shows
 			{ resourceKind: "read", title: "Structured outputs beat function calling for extraction", url: "https://eugeneyan.com/writing/structured", why: "Receipts, not vibes: a 12-point accuracy gap.", score: 0.86 },
-			{ resourceKind: "listen", title: "Latent Space: the agent runtime wars", url: "https://latent.space/p/agent-runtimes", why: "Two runtime authors argue; you'll pick a side.", score: 0.83 },
+			{ resourceKind: "listen", title: "Latent Space: the agent runtime wars", url: "https://latent.space/p/agent-runtimes", why: "Two runtime authors argue; you'll select a side.", score: 0.83 },
 			{ resourceKind: "read", title: "Sandboxing untrusted agent code with microVMs", url: "https://fly.io/blog/sandboxing-agents", why: "E2B vs Firecracker, cost per run tabulated.", score: 0.8 },
 			{ resourceKind: "watch", title: "Prompt injection in tool registries", url: "https://www.youtube.com/watch?v=tool-injection", why: "A live demo of the boundary you're building.", score: 0.77 },
 		],
@@ -162,8 +162,7 @@ function buildSeedTopics(devUserId: string): SeedTopic[] {
 
 // no real subscribers exist before auth, so seed a pool of stub members whose Subscriptions give topics real counts
 const MEMBER_COUNT = 48
-// how many of the stub members subscribe to each topic. the counts vary to look like a real community and never exceed MEMBER_COUNT
-// only public topics appear here. a private topic has no subscribers, which is what gates who may act on its findings
+// how many of the stub members subscribe to each topic
 const SUBSCRIBER_COUNTS: Record<string, number> = {
 	top_llm_evals: 44,
 	top_mcp_watch: 27,
@@ -171,8 +170,7 @@ const SUBSCRIBER_COUNTS: Record<string, number> = {
 	top_longevity: 31,
 }
 
-// the hard-coded Featured section. it maps topic id to ascending feature order, and topics without an entry are
-// not featured. seeding clears every feature order first, so these positions become the Featured section
+// the hard-coded Featured section
 const FEATURE_ORDER: Record<string, number> = {
 	top_llm_evals: 1,
 	top_longevity: 2,
@@ -184,8 +182,7 @@ function toSeedUsername(username: string): { username: string; usernameNormalize
 	return { username, usernameNormalized: toNormalizedUsername(username) }
 }
 
-// seeds the dev branch with demo topics, stub members, and subscriptions under the given dev user.
-// the dev user already exists — api/seed.ts creates it through a real signup before calling this
+// seeds the dev branch with demo topics, stub members, and subscriptions under the given dev user
 export async function seed(devUserId: string): Promise<void> {
 	// reject outside the dev Doppler environment so the seed can never touch staging or production
 	if (process.env.DOPPLER_ENVIRONMENT !== "dev") {
@@ -217,10 +214,7 @@ export async function seed(devUserId: string): Promise<void> {
 		.onConflictDoNothing()
 	// the dev user operates the instance, so they hold the admin role. the update keeps re-seeding idempotent
 	await db.update(users).set({ role: "admin" }).where(eq(users.id, devUserId))
-	// each topic and everything it owns
-	// clear every feature order before the seeded ones are written. the map below assigns fixed positions, so a
-	// topic ranked by hand since the last seed would end up sharing a position with a seeded one, and the column
-	// has nothing stopping that. after a seed the Featured section is exactly what the map says, and nothing else
+	// each topic and everything it owns clear every feature order before the seeded ones are written
 	await db.update(topics).set({ featureOrder: null }).where(isNotNull(topics.featureOrder))
 
 	for (const topic of seedTopics) {
@@ -234,30 +228,22 @@ export async function seed(devUserId: string): Promise<void> {
 			subscriberUserId: `usr_member_${i}`,
 		})),
 	)
-	// idempotent by stable id. guard the empty case because .values with an empty array throws
+	// idempotent by stable id. guard the empty case because .values with an empty array throws an error
 	if (subscriptionRows.length > 0) {
 		await db.insert(subscriptions).values(subscriptionRows).onConflictDoNothing()
 	}
 
-	// bring the stored counts up to what was just seeded. the feed and the profile both read this column,
-	// so a seed that skipped it would show every seeded topic with no subscribers.
+	// bring the stored counts up to what was just seeded
 	await db.execute(sql`
 		update topics set subscriber_count = (
-			select count(*) from (
-				select subscriptions.subscriber_user_id as subscriber_id
-					from subscriptions
-					where subscriptions.topic_id = topics.id
-						and subscriptions.is_active
-						and subscriptions.subscriber_user_id is not null
-				union
-				select audience_members.user_id as subscriber_id
-					from subscriptions
-					join audience_members on audience_members.audience_id = subscriptions.subscriber_audience_id
-					where subscriptions.topic_id = topics.id and subscriptions.is_active
-			) as effective_subscribers
-			where subscriber_id is distinct from topics.owner_id
+			select count(*) from subscriptions
+			where subscriptions.topic_id = topics.id
+				and subscriptions.is_active
+				and subscriptions.subscriber_user_id is distinct from topics.owner_id
 		)
 	`)
+
+	// say what was seeded
 	console.log(`seeded ${seedTopics.length} topics and ${subscriptionRows.length} subscriptions for ${devUserId}`)
 }
 
@@ -286,7 +272,7 @@ async function seedTopic(topic: SeedTopic): Promise<void> {
 	const invitees = topic.invitees ?? []
 	if (invitees.length > 0) {
 		await db
-			.insert(topicInvites)
+			.insert(invites)
 			.values(invitees.map((email) => ({ topicId: topic.id, email })))
 			.onConflictDoNothing()
 	}

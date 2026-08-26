@@ -1,5 +1,5 @@
 // the emails sent for one link: confirming an address, resetting a password, changing an address.
-// one template for all of them, since they differ only in what they say and what the link is for.
+// one template for all of them, differing only in what they say and what the link is for.
 // the topic invitation email reuses it too, through its own wrapper in topic-invite-email.tsx.
 // authored as a react-email template like the scan emails, so it previews with `bun run dev:email`
 import { Link, Section, Text } from "@react-email/components"
@@ -14,7 +14,7 @@ export type AuthEmailProps = {
 	// and renders in the body too, unless leadContent stands in for it there
 	lead: string
 	// the same sentence with markup: a link on a name, rendered in the body in place of lead.
-	// the preheader stays on the plain lead, since an inbox renders no markup there
+	// the preheader stays on the plain lead, where an inbox renders no markup
 	leadContent?: ReactNode
 	buttonLabel: string
 	url: string
@@ -45,7 +45,7 @@ export default function AuthEmail({
 					{buttonLabel}
 				</Link>
 			</Section>
-			{/* the same link in full, since some clients strip a styled anchor and some users want to see where it goes */}
+			{/* the same link in full. some clients strip a styled anchor */}
 			<Section style={fallbackSection}>
 				<Text style={fallbackText}>Or paste this into your browser:</Text>
 				<Link href={url} style={fallbackLink}>

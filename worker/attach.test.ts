@@ -9,8 +9,7 @@ test("extractText decodes text and markdown to a string", async () => {
 	expect(await extractText("text/markdown", bytes)).toContain("Senior engineer")
 })
 
-// an unsupported content type has no extractor and gets rejected before anything is stored.
-// it must throw the validation-error type, since the api route trusts that type to decide what's safe to show the user
+// an unsupported content type has no extractor and gets rejected before anything is stored
 test("extractText rejects an unsupported content type with a validation error", async () => {
 	await expect(extractText("application/zip", new Uint8Array())).rejects.toThrow(AttachmentValidationError)
 	await expect(extractText("application/zip", new Uint8Array())).rejects.toThrow(/unsupported/)
@@ -23,14 +22,14 @@ test("extractText sends an image to the model instead of extracting it", async (
 
 // an oversized upload is rejected before any storage or model call, as a validation error
 test("ingestAttachment rejects an oversized file before touching storage or the model", async () => {
-	// one byte past the 10 MB cap. the size check runs first, so nothing is stored or sent to the model
+	// one byte past the 10 MB limit. the size check runs first, so nothing is stored or sent to the model
 	const bytes = new Uint8Array(10 * 1024 * 1024 + 1)
 	await expect(
 		ingestAttachment({ topicId: "t1", filename: "big.pdf", contentType: "application/pdf", bytes }),
 	).rejects.toThrow(AttachmentValidationError)
 })
 
-// an empty upload is rejected, since it would otherwise store as a ready attachment that downloads to nothing
+// an empty upload is rejected instead of storing as a ready attachment that downloads to nothing
 test("ingestAttachment rejects an empty file before touching storage or the model", async () => {
 	await expect(
 		ingestAttachment({ topicId: "t1", filename: "empty.pdf", contentType: "application/pdf", bytes: new Uint8Array() }),
@@ -58,7 +57,7 @@ test("toAttachmentKey sanitizes a traversal-y filename", () => {
 	expect(key).toContain("topics/t1/attachments/a1/")
 })
 
-// a dot-only filename would leave a "." or ".." segment for a downstream filesystem sync to resolve. it falls back to a fixed name instead
+// a dot-only filename would leave a "." or ".." segment for a downstream filesystem sync to resolve
 test("toAttachmentKey rejects a dot-only filename", () => {
 	expect(toAttachmentKey("t1", "a1", "..")).toBe("topics/t1/attachments/a1/file")
 })
@@ -70,9 +69,9 @@ test("toPageFilename names a page by its host and path", () => {
 	expect(toPageFilename(new URL("https://example.com/"))).toBe("example.com.md")
 })
 
-// the extension survives a url long enough to hit the cap, since a name cut mid-suffix reads as a different file type
+// the extension survives a url long enough to hit the limit. a name cut mid-suffix reads as a different file type
 test("toPageFilename keeps its extension on a very long url", () => {
-	// a path far past the cap, so the whole budget is spent before the extension is added
+	// a path far past the limit, so the whole budget is spent before the extension is added
 	const filename = toPageFilename(new URL(`https://example.com/${"a".repeat(400)}`))
 	expect(filename).toEndWith(".md")
 	expect(filename.length).toBe(200)

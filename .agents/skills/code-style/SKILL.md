@@ -13,7 +13,7 @@ description: >
 
 This codebase is read by one human. Optimize every line for the reader.
 
-Mechanical rules (curly braces, formatting, import order, complexity caps) live
+Mechanical rules (curly braces, formatting, import order, complexity limits) live
 in `biome.json` and CI, not here. This file holds only the judgment rules a
 linter cannot check.
 
@@ -61,7 +61,52 @@ Wording example:
     // right — two plain sentences
     // the scan status. running until it succeeds or fails, and error holds the failure reason
 
-### 2. Top-down file order
+### 2. A comment earns its place
+
+A comment says what the code is. Anything that argues for it, describes what it
+is not, or narrates what happens elsewhere is cut. All three read as filler, and
+all three drift as soon as the code around them moves.
+
+**The trailing justification.** A factual clause followed by "since" or "because"
+is a fact plus an argument for the fact. Keep the fact.
+
+    // wrong — the clause defends the line above it
+    // only the topic owner may delete, since the team never owned the topic
+
+    // right
+    // only the topic owner may delete
+
+**Defining by what it is not.** Say what the thing is.
+
+    // wrong
+    // the tooltip is the button's accessible name, since the icon has no text of its own
+
+    // right
+    // the tooltip is the button's accessible name
+
+**Downstream narrative.** A comment stops at the file it lives in. What some
+other module does with the value belongs to that module, which is free to change
+without anyone thinking to come back here.
+
+    // wrong — an api file describing the ui
+    // role and plan are included in the session so the ui can render the admin link
+
+    // right
+    // role and plan are included in the session
+
+Keep a constraint the code cannot show: an external system's behavior, an
+ordering the compiler will not enforce, an api that destroys its input. State it
+as a plain sentence beside the fact, never as a defense of it.
+
+    // wrong — the constraint arrives as an argument
+    // only LISTEN needs the direct connection string, since neon's pooler endpoint
+    // does not deliver notifications to a listener
+
+    // right — two facts, and the second is why the first cannot change
+    // LISTEN needs the direct connection string. neon's pooler drops notifications
+    // to a listener
+
+### 3. Top-down file order
 
 The file reads like a newspaper: headline first, details after. The exported
 or public function comes first; helpers follow below it in call order.
@@ -76,20 +121,20 @@ or public function comes first; helpers follow below it in call order.
     function normalizeTitle(raw: string) { ... }
     function scoreArticle(article: Article) { ... }
 
-### 3. Fewest files possible
+### 4. Fewest files possible
 
 - A helper lives in its consumer's file until a **third** consumer appears. Extract on the third, not the second.
 - No barrel files (`index.ts` re-exports). No one-function-per-file.
 - Growing an existing file beats creating a new one.
 - Creating a new file requires stating why in the change description, and new files only appear in an approved file tree.
 
-### 4. Screen-sized functions
+### 5. Screen-sized functions
 
 A function should fit on one screen, roughly 40 lines. When it grows past
 that, comment groups become the section markers first; split into a helper
 only when the groups stop fitting, and split **within the same file**.
 
-### 5. Early returns, nesting cap of 2
+### 6. Early returns, nesting limit of 2
 
 Handle failure and edge cases first with guard clauses, then write the happy
 path flat. More than two levels of nesting means restructure.
@@ -115,7 +160,7 @@ path flat. More than two levels of nesting means restructure.
     }
     return renderFeed(subscription)
 
-### 6. Named intermediates over clever chains
+### 7. Named intermediates over clever chains
 
 No chained pipeline past two steps, no nested ternaries, no dense
 destructuring tricks. Each meaningful step gets a named variable, and the
@@ -129,14 +174,14 @@ decodes at 3am.
     // keep only articles above the relevance cutoff
     const relevantArticles = articles.filter((article) => article.score > cutoff)
 
-    // rank best-first and cap to the feed size
+    // rank best-first and limit to the feed size
     const rankedArticles = relevantArticles.sort((a, b) => b.score - a.score)
     const topArticles = rankedArticles.slice(0, limit)
 
     // shape for the feed
     const feedItems = topArticles.map(toFeedItem)
 
-### 7. No abbreviations in variable names
+### 8. No abbreviations in variable names
 
 Write the full word, always.
 
@@ -152,13 +197,13 @@ Exceptions that are clearer than the spelled-out version: `url`, `id`, `api`,
 `html`, `css`, `sdk`. Common substitutions: `btn` → `button`, `val` → `value`,
 `cb` → `callback`, `tmp` → a descriptive name for what it actually holds.
 
-### 8. Boolean prefix
+### 9. Boolean prefix
 
 Boolean variables and props are prefixed with `is`, `has`, `can`, `should`,
 or `will`. Examples: `isActive`, `isLoading`, `hasError`, `canSubmit`,
 `shouldRetry`, `willExpire`.
 
-### 9. Meaningful variable names
+### 10. Meaningful variable names
 
 Names describe what the value represents, not its position or freshness.
 `existing`, `latest`, `current`, `result`, `data`, `value`, `item` are not
@@ -172,7 +217,7 @@ self-documenting.
     const existingUser = await db.findUser(id)
     const reportPayload = await response.json()
 
-### 10. JSDoc for exported functions
+### 11. JSDoc for exported functions
 
 Double-star `/** */` block above every exported function. One line only.
 Describe what it does, not how.
@@ -182,7 +227,7 @@ Describe what it does, not how.
      */
     export function scoreArticle(article: Article, profile: ReaderProfile): number { ... }
 
-### 11. Discriminated unions
+### 12. Discriminated unions
 
 When a type has a status or kind field and other fields that only apply to
 certain variants, model each variant as its own union member. Never use
@@ -200,7 +245,7 @@ optional fields to paper over structural differences.
       | { status: 'success'; articles: Article[] }
       | { status: 'failed'; error: unknown }
 
-### 12. Branded types
+### 13. Branded types
 
 Use branded types for semantically distinct strings that TypeScript would
 otherwise treat as interchangeable. Apply the brand at the validation
@@ -214,7 +259,7 @@ Good candidates: entity IDs, validated emails, tokens. Poor candidates:
 strings used immediately in one place and never mixed with other string
 types.
 
-### 13. Alias imports over deep relatives
+### 14. Alias imports over deep relatives
 
 Use the project's path alias (`@/` unless the project defines otherwise) for
 any import that climbs two or more parent directories. Same-folder `./` and a
@@ -227,7 +272,7 @@ specifiers.
     // right — the alias reads as an absolute address
     import { cn } from "@/lib/utils"
 
-### 14. Explicit return types
+### 15. Explicit return types
 
 Every named function declares its return type. The annotation is the
 contract: a body edit can't silently change what callers receive, and the
@@ -245,7 +290,13 @@ value is not visible from the signature.
     // right — the contract lives in the signature
     export async function runScan(scan: Scan): Promise<ScanResult> { ... }
 
-### 15. Ordinary words, and words already here
+    // fine in a .tsx file — the component renders, nothing to restate
+    export function FeedItem({ finding }: FeedItemProps) { ... }
+
+    // still typed in a .tsx file — the hook returns a value the reader can't see
+    function useTopicFeed(topicId: TopicId): TopicFeedState { ... }
+
+### 16. Ordinary words, and words already here
 
 Two checks before naming anything or writing any comment.
 
@@ -276,19 +327,10 @@ reader parse vocabulary instead of reading the sentence.
 Accuracy beats both rules. When the swap changes the meaning, rewrite instead of
 substituting.
 
-    // wrong — "includes" says the caps are contents, not an attribute
-    // the yearly interval includes the higher caps
+    // wrong — "includes" says the limits are contents, not an attribute
+    // the yearly interval includes the higher limits
 
     // right
-    // the yearly interval has the higher caps
+    // the yearly interval has the higher limits
 
 Applies to comments, test names, and identifiers alike.
-
-    // fine in a .tsx file — the component renders, nothing to restate
-    export function FeedItem({ finding }: FeedItemProps) { ... }
-
-    // still typed in a .tsx file — the hook returns a value the reader can't see
-    function useTopicFeed(topicId: TopicId): TopicFeedState { ... }
-
-    // right — the contract lives in the signature
-    export async function runScan(scan: Scan): Promise<ScanResult> { ... }

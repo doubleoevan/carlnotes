@@ -21,8 +21,7 @@ export function AnchorLink({ href, children, ...props }: React.ComponentProps<"a
 		)
 	}
 
-	// a server-rendered path exits the SPA, so it navigates as a traditional anchor with a full page load.
-	// the query and fragment come off first, so /docs?from=header matches the same way /docs does
+	// a server-rendered path exits the SPA, so it navigates as a traditional anchor with a full page load
 	const path = href.split(/[?#]/, 1)[0] ?? href
 	if (SERVER_RENDERED_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
 		return (
@@ -41,7 +40,7 @@ export function AnchorLink({ href, children, ...props }: React.ComponentProps<"a
 		)
 	}
 
-	// everything else is external. noopener denies the opened page a handle back to this one
+	// everything else is external. noopener denies the opened page a way back to this one
 	return (
 		<a href={href} target="_blank" rel="noopener noreferrer" {...props}>
 			{children}

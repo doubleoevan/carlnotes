@@ -1,10 +1,12 @@
 import { CHAT_QUESTION_CHARS, type ChatAttachment, type KeptChatAttachment } from "@shared/contracts"
 import { ArrowUp, FileText, FileX2, Image, Minus, Paperclip, Square, X } from "lucide-react"
 import { useEffect, useRef } from "react"
+import { ChatAttachmentChips } from "@/components/chat/ChatAttachmentChips"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { FILE_PICKER_ACCEPT } from "@/lib/utils"
+import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
+import { FILE_PICKER_ACCEPT, isWideScreen } from "@/lib/utils"
 
 // how tall the question box may grow before it scrolls inside itself
 const MAX_QUESTION_BOX_HEIGHT_PX = 120
@@ -12,6 +14,9 @@ const MAX_QUESTION_BOX_HEIGHT_PX = 120
 /**
  * The chat composer: the question box, its attachment chips, and the send button that becomes a stop button while a reply streams.
  */
+// what the private chat's question box says while it is empty
+export const CHAT_QUESTION_PLACEHOLDER = "Hand-crafted notes are richer…"
+
 export function ChatComposer({
 	question,
 	attachments,
@@ -41,9 +46,11 @@ export function ChatComposer({
 }) {
 	const questionBoxRef = useRef<HTMLTextAreaElement>(null)
 
-	// focus the composer as soon as the panel opens, so the user can just start typing
+	// a wide screen focuses the composer as soon as the panel opens, so the user can just start typing
 	useEffect(() => {
-		questionBoxRef.current?.focus()
+		if (isWideScreen()) {
+			questionBoxRef.current?.focus()
+		}
 	}, [])
 
 	// grow the input box with the question and shrink it back when a send clears it
@@ -52,7 +59,7 @@ export function ChatComposer({
 		if (!questionBox) {
 			return
 		}
-		// expand the question box to hold its content up to a maxiumum height before scrolling
+		// expand the question box to hold its content up to a maximum height before scrolling
 		questionBox.style.height = "auto"
 		if (question !== "") {
 			questionBox.style.height = `${Math.min(questionBox.scrollHeight, MAX_QUESTION_BOX_HEIGHT_PX)}px`
@@ -67,7 +74,7 @@ export function ChatComposer({
 		}
 	}
 
-	// pasted files become attachments, and a paste too long for the box folds into a text chip instead
+	// pasted files become attachments, and a paste too long for the box becomes a text chip instead
 	function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>): void {
 		const files = Array.from(event.clipboardData.files)
 		if (files.length > 0) {
@@ -76,7 +83,7 @@ export function ChatComposer({
 			return
 		}
 
-		// a paste that would run past the question cap becomes a chip
+		// a paste that would run past the question limit becomes a chip
 		const text = event.clipboardData.getData("text")
 		if (question.length + text.length > CHAT_QUESTION_CHARS) {
 			event.preventDefault()
@@ -85,31 +92,48 @@ export function ChatComposer({
 	}
 
 	return (
-		<FileDropZone
-			onDropFiles={(files) => {
-				// a visitor's file drop routes to the signup
-				if (isSignupRequired) {
-					onSend()
-					return
-				}
-				void onAddFiles(files)
+		<form
+			autoComplete="off"
+			className="shrink-0 border-t px-3 py-2.5"
+			onSubmit={(event) => {
+				event.preventDefault()
+				onSend()
 			}}
 		>
-			<form
-				className="border-t px-3 py-2.5"
-				onSubmit={(event) => {
-					event.preventDefault()
-					onSend()
+			{/* attachments show as chips in the input, each is removable until the send */}
+			{<ChatAttachmentChips attachments={attachments} onRemove={onRemoveAttachment} />}
+			<FileDropZone
+				className="bg-background rounded-2xl border px-3 py-2"
+				onDropFiles={(files) => {
+					// a visitor's file drop routes to the signup
+					if (isSignupRequired) {
+						onSend()
+						return
+					}
+					void onAddFiles(files)
 				}}
 			>
-				{/* attachments show as chips in the input, each is removable until the send */}
-				{attachments.length > 0 && <AttachmentChips attachments={attachments} onRemove={onRemoveAttachment} />}
-				<div className="flex items-end gap-2">
+				{/* the input box is 16px to keep the panel on the screen. autocomplete is off,
+						so a phone offers no passwords, cards, or addresses over a chat field */}
+				<textarea
+					ref={questionBoxRef}
+					rows={1}
+					value={question}
+					maxLength={CHAT_QUESTION_CHARS}
+					onChange={(event) => onChange(event.target.value)}
+					onKeyDown={handleQuestionKeyDown}
+					onPaste={handlePaste}
+					placeholder={CHAT_QUESTION_PLACEHOLDER}
+					aria-label="Ask about this topic"
+					autoComplete="off"
+					className="placeholder:text-muted-foreground w-full resize-none bg-transparent py-1 text-base leading-relaxed outline-none sm:text-sm"
+				/>
+				{/* the buttons sit under the question: attachments to the left, clear and send to the right */}
+				<div className="mt-1 flex items-center gap-2">
 					{/* the add and remove attachment buttons sit next to each other */}
 					<div className="flex shrink-0 items-center">
 						{/* a visitor's attachment routes to the signup page */}
-						<AttachButton isSignupRequired={isSignupRequired} onPick={onAddFiles} onSignup={onSend} />
-						{/* the remove attachemnts button only shows if there are attachments kept */}
+						<AttachButton isSignupRequired={isSignupRequired} onSelect={onAddFiles} onSignup={onSend} />
 						{keptAttachments.length > 0 && (
 							<KeptAttachmentsButton
 								keptAttachments={keptAttachments}
@@ -117,69 +141,59 @@ export function ChatComposer({
 							/>
 						)}
 					</div>
-					{/* the input box is 16px to keep the panel on the screen */}
-					<textarea
-						ref={questionBoxRef}
-						rows={1}
-						value={question}
-						maxLength={CHAT_QUESTION_CHARS}
-						onChange={(event) => onChange(event.target.value)}
-						onKeyDown={handleQuestionKeyDown}
-						onPaste={handlePaste}
-						placeholder="Hand-crafted notes are richer…"
-						aria-label="Ask about this topic"
-						className="placeholder:text-muted-foreground min-w-0 flex-1 resize-none bg-transparent py-2 text-base leading-relaxed outline-none sm:py-1 sm:text-sm"
-					/>
-					{/* an X button clears the input and hands focus back, only appearing when there is content */}
-					{question !== "" && (
-						<button
-							type="button"
-							aria-label="Clear draft"
-							onClick={() => {
-								onChange("")
-								questionBoxRef.current?.focus()
-							}}
-							className="text-muted-foreground hover:text-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
-						>
-							<X className="size-4" />
-						</button>
-					)}
-					{/* the stop button ends a response stream. the arrow button sends the question or forwards a visitor to the signpu page */}
-					{isStreaming ? (
-						<button
-							type="button"
-							aria-label="Stop"
-							onClick={onStop}
-							className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
-						>
-							<Square className="size-3 fill-current" />
-						</button>
-					) : isSignupRequired ? (
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="submit"
-									aria-label="Sign up to chit-chat"
-									className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
-								>
-									<ArrowUp className="size-4" />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent>Sign up to chit-chat</TooltipContent>
-						</Tooltip>
-					) : (
-						<button
-							type="submit"
-							aria-label="Send"
-							disabled={question.trim() === ""}
-							className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8 disabled:opacity-40"
-						>
-							<ArrowUp className="size-4" />
-						</button>
-					)}
+					{/* the clear and send buttons sit to the right of the attachment buttons */}
+					<div className="ml-auto flex items-center gap-2">
+						{/* an X button clears the input and hands focus back, only appearing when there is content */}
+						{question !== "" && (
+							<button
+								type="button"
+								aria-label="Clear draft"
+								onClick={() => {
+									onChange("")
+									questionBoxRef.current?.focus()
+								}}
+								className={ICON_BUTTON_CLASS}
+							>
+								<X className="size-4" />
+							</button>
+						)}
+						{/* the stop button ends a response stream. the arrow button sends the question or forwards a visitor to the signup page */}
+						{isStreaming ? (
+							<button
+								type="button"
+								aria-label="Stop"
+								onClick={onStop}
+								className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
+							>
+								<Square className="size-3 fill-current" />
+							</button>
+						) : isSignupRequired ? (
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<button
+										type="submit"
+										aria-label="Sign up to chit-chat"
+										className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
+									>
+										<ArrowUp className="size-4" />
+									</button>
+								</TooltipTrigger>
+								<TooltipContent>Sign up to chit-chat</TooltipContent>
+							</Tooltip>
+						) : (
+							<button
+								type="submit"
+								aria-label="Send"
+								disabled={question.trim() === ""}
+								className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8 disabled:opacity-40"
+							>
+								<ArrowUp className="size-4" />
+							</button>
+						)}
+					</div>
 				</div>
-			</form>
-		</FileDropZone>
+			</FileDropZone>
+		</form>
 	)
 }
 
@@ -195,10 +209,7 @@ function KeptAttachmentsButton({
 		<Popover>
 			<Tooltip>
 				<TooltipTrigger asChild>
-					<PopoverTrigger
-						aria-label="Clear files or photos"
-						className="text-muted-foreground hover:text-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
-					>
+					<PopoverTrigger aria-label="Clear files or photos" className={ICON_BUTTON_CLASS}>
 						<FileX2 className="size-4" />
 					</PopoverTrigger>
 				</TooltipTrigger>
@@ -252,7 +263,9 @@ function KeptAttachmentsButton({
 									<X className="size-3.5" />
 								</button>
 							</TooltipTrigger>
-							<TooltipContent>{`Delete ${keptAttachment.name}`}</TooltipContent>
+							<TooltipContent>
+								Delete <span className="font-semibold">{keptAttachment.name}</span>
+							</TooltipContent>
 						</Tooltip>
 					</div>
 				))}
@@ -264,11 +277,11 @@ function KeptAttachmentsButton({
 // the paperclip and its hidden file picker. a visitor's click routes to signup page
 function AttachButton({
 	isSignupRequired,
-	onPick,
+	onSelect,
 	onSignup,
 }: {
 	isSignupRequired: boolean
-	onPick: (files: File[]) => Promise<void>
+	onSelect: (files: File[]) => Promise<void>
 	onSignup: () => void
 }) {
 	const inputRef = useRef<HTMLInputElement>(null)
@@ -281,7 +294,7 @@ function AttachButton({
 				accept={FILE_PICKER_ACCEPT}
 				className="hidden"
 				onChange={(event) => {
-					void onPick(Array.from(event.target.files ?? []))
+					void onSelect(Array.from(event.target.files ?? []))
 					event.target.value = ""
 				}}
 			/>
@@ -291,7 +304,7 @@ function AttachButton({
 						type="button"
 						aria-label={isSignupRequired ? "Sign up to add files" : "Add files or photos"}
 						onClick={() => (isSignupRequired ? onSignup() : inputRef.current?.click())}
-						className="text-muted-foreground hover:text-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
+						className={ICON_BUTTON_CLASS}
 					>
 						<Paperclip className="size-4" />
 					</button>
@@ -300,53 +313,4 @@ function AttachButton({
 			</Tooltip>
 		</>
 	)
-}
-
-// this question's attachments as removable chips. an image gets a thumbnail and everything else gets a named chip
-function AttachmentChips({
-	attachments,
-	onRemove,
-}: {
-	attachments: ChatAttachment[]
-	onRemove: (index: number) => void
-}) {
-	return (
-		<div className="mb-2 flex flex-wrap gap-1.5">
-			{attachments.map((attachment, index) => (
-				<div
-					// biome-ignore lint/suspicious/noArrayIndexKey: two pastes share a name, and chips are stateless rows a shift repaints identically
-					key={`${attachment.name}-${index}`}
-					className="bg-muted flex items-center gap-1.5 rounded-lg border px-1.5 py-1 text-xs"
-				>
-					{attachment.kind === "image" ? (
-						<img src={attachment.dataUrl} alt={attachment.name} className="size-6 rounded object-cover" />
-					) : (
-						<FileText className="text-muted-foreground size-3.5 shrink-0" />
-					)}
-					<span className="max-w-32 truncate">{attachment.name}</span>
-					{attachment.kind === "text" && (
-						<span className="text-muted-foreground shrink-0">{toCharacterCountLabel(attachment.text)}</span>
-					)}
-					<Tooltip>
-						<TooltipTrigger asChild>
-							<button
-								type="button"
-								aria-label={`Delete ${attachment.name}`}
-								onClick={() => onRemove(index)}
-								className="text-muted-foreground hover:text-foreground grid size-7 shrink-0 place-items-center sm:size-4"
-							>
-								<X className="size-3" />
-							</button>
-						</TooltipTrigger>
-						<TooltipContent>{`Delete ${attachment.name}`}</TooltipContent>
-					</Tooltip>
-				</div>
-			))}
-		</div>
-	)
-}
-
-// the number of characters in a large copy-paste text block that is turned into an attachment
-function toCharacterCountLabel(text: string): string {
-	return text.length < 1000 ? `${text.length} chars` : `${Math.round(text.length / 1000)}k chars`
 }

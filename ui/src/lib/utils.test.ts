@@ -3,18 +3,11 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test"
 import type { TopicFinding } from "@shared/contracts"
 import { toScanRecapPlaceholder } from "@/components/topic/TopicScanRecap"
-import {
-	cn,
-	durationMsBetween,
-	matchesFeedView,
-	toAgeLabel,
-	toDurationLabel,
-	toPossibleSourceUrls,
-	toSafeRedirectPath,
-	toScheduleLabel,
-	toSortedFindings,
-	toTimeLabel,
-} from "./utils"
+import { durationMsBetween, toAgeLabel, toDurationLabel, toScheduleLabel, toTimeLabel } from "./labels"
+import { matchesTopicFindingFilter } from "./topicFindingFilters"
+import { toSortedTopicFindings } from "./topicFindingSorts"
+import { toPossibleSourceUrls } from "./topicPromptUrls"
+import { cn, toSafeRedirectPath } from "./utils"
 
 // twMerge makes later tailwind classes win over earlier conflicting ones
 test("cn merges conflicting tailwind classes", () => {
@@ -75,6 +68,18 @@ test("toScheduleLabel names the day only for weekly", () => {
 	expect(toScheduleLabel("weekly", "09:00", "friday")).toBe("Weekly on Friday at 9:00 AM")
 })
 
+// the team scope widens bookmarked to every member's saves, and mine keeps only the user's own
+test("matchesTopicFindingFilter's team scope includes a teammate's bookmark and mine excludes it", () => {
+	const teammateSaved = topicFinding({
+		isBookmarked: false,
+		teamBookmarks: [{ userId: "u2", username: "teammate", avatarSource: null }],
+	})
+	expect(matchesTopicFindingFilter(teammateSaved, "bookmarked", "team")).toBe(true)
+	expect(matchesTopicFindingFilter(teammateSaved, "bookmarked", "mine")).toBe(false)
+	// the user's own bookmark shows under either scope
+	expect(matchesTopicFindingFilter(topicFinding({ isBookmarked: true }), "bookmarked", "team")).toBe(true)
+})
+
 // a topic finding fixture for the view and sort helpers. overrides set the fields that a test case exercises
 function topicFinding(overrides: Partial<TopicFinding>): TopicFinding {
 	return {
@@ -96,53 +101,53 @@ function topicFinding(overrides: Partial<TopicFinding>): TopicFinding {
 		engagement: null,
 		isConsumed: false,
 		isBookmarked: false,
+		teamBookmarks: [],
 		...overrides,
 	}
 }
 
 // each view keeps its own slice: all keeps everything, unread drops consumed, bookmarked keeps bookmarks only
-test("matchesFeedView filters by the active view", () => {
-	const consumed = topicFinding({ isConsumed: true })
-	const bookmarked = topicFinding({ isBookmarked: true })
-	expect(matchesFeedView(consumed, "all")).toBe(true)
-	expect(matchesFeedView(consumed, "unread")).toBe(false)
-	expect(matchesFeedView(consumed, "bookmarked")).toBe(false)
-	expect(matchesFeedView(bookmarked, "bookmarked")).toBe(true)
+test("matchesTopicFindingFilter filters by the active view", () => {
+	const consumedTopicFinding = topicFinding({ isConsumed: true })
+	const bookmarkedTopicFinding = topicFinding({ isBookmarked: true })
+	expect(matchesTopicFindingFilter(consumedTopicFinding, "all")).toBe(true)
+	expect(matchesTopicFindingFilter(consumedTopicFinding, "unread")).toBe(false)
+	expect(matchesTopicFindingFilter(consumedTopicFinding, "bookmarked")).toBe(false)
+	expect(matchesTopicFindingFilter(bookmarkedTopicFinding, "bookmarked")).toBe(true)
 })
 
 // bookmarked findings pin first in every mode, and each group orders internally by the active sort
-test("toSortedFindings pins bookmarks and sorts each group", () => {
+test("toSortedTopicFindings pins bookmarks and sorts each group", () => {
 	const pinnedLow = topicFinding({ findingId: "pinned-low", relevanceScore: 0.1, isBookmarked: true })
 	const keptHigh = topicFinding({ findingId: "kept-high", relevanceScore: 0.9 })
 	const keptLow = topicFinding({ findingId: "kept-low", relevanceScore: 0.5 })
 	// the pinned row leads despite its lower relevance, and the unbookmarked group sorts among itself
-	const relevantOrder = toSortedFindings([keptLow, keptHigh, pinnedLow], "relevant")
+	const relevantOrder = toSortedTopicFindings([keptLow, keptHigh, pinnedLow], "relevant")
 	expect(relevantOrder.map((finding) => finding.findingId)).toEqual(["pinned-low", "kept-high", "kept-low"])
 })
 
-// the homepage and the topic page build a topic's list from separately queried rows, so ties have to
-// settle the same way on both no matter what order the rows arrived in
-test("toSortedFindings breaks relevance ties the same way no matter what the incoming order", () => {
+// the homepage and the topic page build a topic's list from separately queried rows
+test("toSortedTopicFindings breaks relevance ties the same way no matter what the incoming order", () => {
 	const tiedFindings = [
 		topicFinding({ findingId: "b", relevanceScore: 1, publishedAt: "2026-07-01T00:00:00.000Z" }),
 		topicFinding({ findingId: "a", relevanceScore: 1, publishedAt: "2026-07-01T00:00:00.000Z" }),
 		topicFinding({ findingId: "c", relevanceScore: 1, publishedAt: "2026-07-20T00:00:00.000Z" }),
 	]
-	// the newest of the tied findings leads, and the two sharing a date settle by id instead of by arrival
-	const relevantIds = toSortedFindings(tiedFindings, "relevant").map((finding) => finding.findingId)
+	// the newest of the tied findings leads, and the two sharing a date sort by id instead of by arrival
+	const relevantIds = toSortedTopicFindings(tiedFindings, "relevant").map((finding) => finding.findingId)
 	expect(relevantIds).toEqual(["c", "a", "b"])
-	const reversedIds = toSortedFindings([...tiedFindings].reverse(), "relevant").map((finding) => finding.findingId)
+	const reversedIds = toSortedTopicFindings([...tiedFindings].reverse(), "relevant").map((finding) => finding.findingId)
 	expect(reversedIds).toEqual(relevantIds)
 })
 
-// trending ranks sort by engagement value first, and value-less findings fall back to recency
-test("toSortedFindings trending falls back to newest without an engagement value", () => {
+// trending ranks sort by engagement value first, and findings without one fall back to recency
+test("toSortedTopicFindings trending falls back to newest without an engagement value", () => {
 	const hot = topicFinding({ findingId: "hot", engagement: 500, publishedAt: "2026-07-01T00:00:00.000Z" })
 	const mild = topicFinding({ findingId: "mild", engagement: 20, publishedAt: "2026-07-10T00:00:00.000Z" })
 	const newer = topicFinding({ findingId: "newer", publishedAt: "2026-07-20T00:00:00.000Z" })
 	const older = topicFinding({ findingId: "older", publishedAt: "2026-07-05T00:00:00.000Z" })
-	// engagement values rank first by size, then the value-less order by recency
-	const trendingOrder = toSortedFindings([older, newer, mild, hot], "trending")
+	// engagement values rank first by size, then the rest order by recency
+	const trendingOrder = toSortedTopicFindings([older, newer, mild, hot], "trending")
 	expect(trendingOrder.map((finding) => finding.findingId)).toEqual(["hot", "mild", "newer", "older"])
 })
 
@@ -183,14 +188,14 @@ test("trailing sentence punctuation is not part of the url", () => {
 })
 
 // a bracket the url opened belongs to it, and one the sentence opened does not
-test("brackets settle by whether the url opened them", () => {
+test("brackets are kept or dropped by whether the url opened them", () => {
 	expect(toPossibleSourceUrls("see https://en.wikipedia.org/wiki/Ruby_(gem)", [], [])).toEqual([
 		"https://en.wikipedia.org/wiki/Ruby_(gem)",
 	])
 	expect(toPossibleSourceUrls("(see https://example.com/post)", [], [])).toEqual(["https://example.com/post"])
 })
 
-// a pasted address may carry an upper-case scheme
+// a pasted address may have an upper-case scheme
 test("an upper-case scheme still matches", () => {
 	expect(toPossibleSourceUrls("read HTTPS://example.com/post", [], [])).toEqual(["HTTPS://example.com/post"])
 })
@@ -210,14 +215,13 @@ test("a repeated url is offered once", () => {
 	])
 })
 
-// a redirect path stays on this site: absolute urls, protocol-relative, backslash, and control tricks all fall home
+// a redirect path stays on this site: absolute urls, protocol-relative, backslash, and control tricks all return "/"
 test("toSafeRedirectPath keeps a plain path and rejects everything that could leave the site", () => {
 	expect(toSafeRedirectPath("/topics/top_longevity")).toBe("/topics/top_longevity")
 	expect(toSafeRedirectPath(null)).toBe("/")
 	// every way out of the site comes home instead
 	expect(toSafeRedirectPath("https://evil.com")).toBe("/")
 
-	// every spelling of another site, however it is disguised, lands back on the homepage
 	expect(toSafeRedirectPath("//evil.com")).toBe("/")
 	expect(toSafeRedirectPath("/\\evil.com")).toBe("/")
 	expect(toSafeRedirectPath("\\/evil.com")).toBe("/")

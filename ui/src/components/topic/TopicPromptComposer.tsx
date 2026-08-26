@@ -4,12 +4,13 @@ import type * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
 import { FILE_PICKER_ACCEPT } from "@/lib/utils"
 
 // how tall the prompt box may grow before it scrolls
 const MAX_PROMPT_BOX_HEIGHT_PX = 200
 
-// what a folded copy-paste is named, so its chip and its uploaded file read the same
+// what a long pasted text is named, so its chip and its uploaded file read the same
 const PASTED_TEXT_FILENAME = "Pasted text.txt"
 
 /**
@@ -32,7 +33,6 @@ export function TopicPromptComposer({
 }) {
 	const promptBoxRef = useRef<HTMLTextAreaElement>(null)
 
-	// the textarea placeholder
 	const placeholder = `Describe your topic.\n${topicName.trim() || "You know the one."}`
 
 	// grow the box with the prompt and shrink it back when it is cleared
@@ -70,7 +70,7 @@ export function TopicPromptComposer({
 			{/* what is staged shows as chips above the box, each is removable until Save uploads it */}
 			{pendingFiles.length > 0 && <PendingAttachmentChips pendingFiles={pendingFiles} onRemoveFile={onRemoveFile} />}
 			<div className="flex items-end gap-2">
-				<AttachButton onPick={onAddFiles} />
+				<AttachButton onSelect={onAddFiles} />
 				<textarea
 					ref={promptBoxRef}
 					rows={2}
@@ -90,7 +90,7 @@ export function TopicPromptComposer({
 							onPromptChange("")
 							promptBoxRef.current?.focus()
 						}}
-						className="text-muted-foreground hover:text-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
+						className={ICON_BUTTON_CLASS}
 					>
 						<X className="size-4" />
 					</button>
@@ -101,7 +101,7 @@ export function TopicPromptComposer({
 }
 
 // the paperclip and its hidden file picker. resetting the input's value lets the same file attach again
-function AttachButton({ onPick }: { onPick: (files: File[]) => void }) {
+function AttachButton({ onSelect }: { onSelect: (files: File[]) => void }) {
 	const fileInputRef = useRef<HTMLInputElement>(null)
 	return (
 		<>
@@ -112,7 +112,7 @@ function AttachButton({ onPick }: { onPick: (files: File[]) => void }) {
 				accept={FILE_PICKER_ACCEPT}
 				className="hidden"
 				onChange={(event) => {
-					onPick(Array.from(event.target.files ?? []))
+					onSelect(Array.from(event.target.files ?? []))
 					event.target.value = ""
 				}}
 			/>
@@ -122,7 +122,7 @@ function AttachButton({ onPick }: { onPick: (files: File[]) => void }) {
 						type="button"
 						aria-label="Add files or photos"
 						onClick={() => fileInputRef.current?.click()}
-						className="text-muted-foreground hover:text-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
+						className={ICON_BUTTON_CLASS}
 					>
 						<Paperclip className="size-4" />
 					</button>
@@ -170,8 +170,7 @@ function PendingAttachmentChips({
 	)
 }
 
-// a staged image's thumbnail, read from the file itself. the object url is released when the chip goes away,
-// since a staged file that is never saved would otherwise hold its bytes for the life of the page
+// a staged image's thumbnail, read from the file itself. the object url is released when the chip goes away
 function FilePreview({ file }: { file: File }) {
 	const [previewUrl, setPreviewUrl] = useState("")
 	useEffect(() => {

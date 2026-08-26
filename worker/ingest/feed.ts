@@ -1,9 +1,9 @@
-// the shared helper for feeds that don't require an API key. it fetches an RSS or Atom url and parses it into deduped Resources
+// the shared helper for feeds that don't require an API key
 import Parser from "rss-parser"
-import { fetchPublicUrl, readCappedBody } from "../scrape"
+import { fetchPublicUrl, readLimitedBody } from "../scrape"
 import type { NewResource } from "./ingester"
 
-// how long a feed fetch may run before it aborts. an oversized body is rejected by the shared read cap
+// how long a feed fetch may run before it aborts. an oversized body is rejected by the shared read limit
 const FETCH_TIMEOUT_MS = 10_000
 
 // the transcript element a podcast feed publishes for an episode. rss-parser exposes an element's attributes under $
@@ -12,12 +12,10 @@ type FeedTranscript = { $?: { url?: string; type?: string } }
 // the three places an entry item can name an address, in the order they are preferred
 type FeedItemAddresses = { link?: string; guid?: string; enclosure?: { url?: string } }
 
-// the transcript formats worth preferring, since their bytes are the words themselves.
-// the alternatives are HTML and JSON wrappers that would score with their markup in the way
+// the transcript formats worth preferring, whose bytes are the words themselves
 const READABLE_TRANSCRIPT_TYPES = ["text/plain", "text/vtt"]
 
-// one reusable parser handles both RSS 2.0 and Atom. an entry's transcript elements are kept as an array,
-// since a feed may publish the same episode's transcript in several formats
+// one reusable parser handles both RSS 2.0 and Atom
 const parser = new Parser<unknown, { transcripts?: FeedTranscript[] }>({
 	customFields: { item: [["podcast:transcript", "transcripts", { keepArray: true }]] },
 })
@@ -32,7 +30,7 @@ export class FeedStatusError extends Error {
 	}
 }
 
-// fetch a feed url within the timeout, reject error responses and oversized bodies, then parse it into Resources of the given kind
+// fetch a feed url within the timeout, reject error responses and oversized bodies
 export async function fetchFeed(
 	url: string,
 	options: { userAgent?: string; resourceKind?: NewResource["kind"] } = {},
@@ -51,15 +49,14 @@ export async function fetchNamedFeed(
 	const headers = options.userAgent ? { "user-agent": options.userAgent } : undefined
 	const response = await fetchPublicUrl(url, { headers, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 
-	// reject error responses before reading the body.
-	// include the status, so a caller can tell a feed that does not exist from a feed that is only rate limiting us
+	// reject error responses before reading the body
 	if (!response.ok) {
 		throw new FeedStatusError(url, response.status)
 	}
-	return parseNamedFeed(await readCappedBody(response, url), options.resourceKind ?? "read")
+	return parseNamedFeed(await readLimitedBody(response, url), options.resourceKind ?? "read")
 }
 
-// parsing is separate from fetching so it can be tested without a network. entries are deduped within the feed by canonical url
+// parsing is separate from fetching so it can be tested without a network
 export async function parseFeed(xml: string, resourceKind: NewResource["kind"] = "read"): Promise<NewResource[]> {
 	return (await parseNamedFeed(xml, resourceKind)).resources
 }
@@ -108,15 +105,14 @@ export function toTranscriptUrl(transcripts: FeedTranscript[] = []): string | nu
 }
 
 /**
- * Pick an entry's canonical url: its own link, an absolute guid, or the address of what it encloses.
+ * Select an entry's canonical url: its own link, an absolute guid, or the address of what it encloses.
  */
 export function toFeedItemUrl(feedItem: FeedItemAddresses, feedLink?: string): string | undefined {
 	// the address the entry names for itself. an absolute guid wins, and an enclosure names its audio file
 	const guid = feedItem.guid?.trim()
 	const entryUrl = guid?.startsWith("http") ? guid : feedItem.enclosure?.url?.trim()
 
-	// a podcast feed often repeats the show's link on every episode, so a link equal to the feed's own names
-	// the show instead of the episode. the entry's own address keeps those episodes from collapsing into one
+	// a podcast feed often repeats the show's link on every episode
 	const link = feedItem.link?.trim()
 	if (link && link === feedLink?.trim() && entryUrl) {
 		return entryUrl

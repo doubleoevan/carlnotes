@@ -57,7 +57,7 @@ export default function ManualScanEmail(props: ManualScanEmailProps): ReactEleme
 				</Section>
 			)}
 
-			{/* no unsubscribe link, since this email reports a scan the user triggered instead of a scheduled subscription */}
+			{/* no unsubscribe link. this email reports a scan the user triggered */}
 			<EmailFooter>
 				{`You're receiving this because you started this brew yourself on `}
 				<LinkOrText href={appUrl} style={footerBrandLink}>

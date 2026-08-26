@@ -3,39 +3,71 @@ import type * as React from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
-import { ChatPanel } from "@/components/chat/ChatPanel"
-import { AnchorLink } from "@/components/common/AnchorLink"
-import { Button, buttonVariants } from "@/components/primitives/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
-import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
-import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { TopicShareButton } from "@/components/topic/ShareTopic"
-import { TopicFeedSort } from "@/components/topic/TopicFeedSort"
-import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
-import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
-import { SubscribeButton, TopicHeader } from "@/components/topic/TopicPageHeader"
-import { TopicRankButton } from "@/components/topic/TopicRankButton"
-import { TopicScanButton } from "@/components/topic/TopicScanButton"
-import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
-import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
-import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
-import { useIsVisible } from "@/hooks/useIsVisible"
-import { useManualScanProgress, usePollWhileScanning } from "@/hooks/useTopicScan"
-import { authClient } from "@/lib/authClient"
+import { authClient } from "@/clients/authClient"
 import {
 	fetchTopicPage,
-	type GatedVisibility,
 	sendManualScan,
-	sendScanStop,
+	sendStopScan,
 	sendTopicFeatureOrder,
 	sendTopicFindingBookmark,
 	sendTopicFindingConsumed,
 	sendTopicFindingOpened,
 	sendTopicFindingRating,
 	sendTopicSubscription,
-} from "@/lib/topicClient"
-import { cn, MENU_BUTTON_CLASS, matchesFeedView, NEXT_SCAN_DISCLAIMER, toSortedFindings } from "@/lib/utils"
+} from "@/clients/topicClient"
+import { AnchorLink } from "@/components/common/AnchorLink"
+import { Button, buttonVariants } from "@/components/primitives/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
+import { ShareTopicButton } from "@/components/share/ShareTopic"
+import { JoinTeamButton } from "@/components/team/JoinTeamButton"
+import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
+import { EditTopicModal } from "@/components/topic/EditTopicModal"
+import { NewCountInfo } from "@/components/topic/Topic"
+import { TopicActionBar, toTopicActionBar, toTopicActionOptions } from "@/components/topic/TopicActions"
+import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
+import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
+import { TopicHeader } from "@/components/topic/TopicPageHeader"
+import { TopicRankDialog } from "@/components/topic/TopicRankDialog"
+import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
+import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
+import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
+import { useIsVisible } from "@/hooks/useIsVisible"
+import { usePageTitle } from "@/hooks/usePageTitle"
+import { useManualScanProgress, usePollWhileScanning } from "@/hooks/useTopicScan"
+import { matchesTopicFindingFilter } from "@/lib/topicFindingFilters"
+import { toSortedTopicFindings } from "@/lib/topicFindingSorts"
+import { cn, NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
 import { type TopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
+import { setChatPanelState, useRegisterChatContext } from "@/stores/chatPanelStore"
+import { useRegisterPageActions } from "@/stores/pageActionsStore"
+
+/**
+ * One scan control's send, shared by starting a scan and stopping one. The caller flips its optimistic
+ * state first, and a rejected send puts that state back with a toast the user can read.
+ */
+async function runScanControl({
+	send,
+	reload,
+	revert,
+	logLabel,
+	fallbackMessage,
+}: {
+	send: () => Promise<unknown>
+	reload: () => Promise<void>
+	revert: () => void
+	logLabel: string
+	// what the toast says when the rejection has no message of its own
+	fallbackMessage: string
+}): Promise<void> {
+	try {
+		await send()
+		await reload()
+	} catch (error) {
+		console.error(logLabel, error)
+		toast.error(error instanceof Error ? error.message : fallbackMessage)
+		revert()
+	}
+}
 
 /**
  * The page for a single topic at /topics/:id: header with owner actions, findings, scan history, and the info card.
@@ -43,18 +75,82 @@ import { type TopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvi
 export function TopicPage() {
 	const { id = "" } = useParams()
 	const navigate = useNavigate()
-	// the session gates the subscribe control. a visitor's click is sent to signup instead
+	// the session gates the Follow button. a visitor's click is sent to signup instead
 	const { data: session } = authClient.useSession()
-	// the shared feed state includes the homepage reload plus the view, sort, and resource filters
-	const { reload: reloadHomePage, view, sort, setSort, resourceKinds } = useTopicFeed()
+	// the shared feed state includes the homepage reload plus the finding filter, sort, and resource filters
+	const { reload: reloadHomePage, findingFilter, sort, resourceKinds, bookmarkScope } = useTopicFeed()
 	// the topic page payload. undefined while loading, null when missing or not visible
 	const [topicResponse, setTopicResponse] = useState<TopicResponse | null | undefined>(undefined)
-	// how the topic is gated if this user may not see it, an invite topic's gate shows its name, a private topic shows nothing.
-	const [gatedTopic, setGatedTopic] = useState<{ visibility: GatedVisibility; topicName: string | null } | null>(null)
-	// which dialog is open, and whether a manual scan request is in-flight
-	// how the edit modal opened, or null while it is closed. "make-public" stages the topic's visibility switch to "public" for review
+	// how the topic is gated if this user may not see it, an invite topic's gate shows its name, a private topic
+	const [gatedTopic, setGatedTopic] = useState<{ topicName: string | null } | null>(null)
+	// how the edit modal opened, or null while it is closed
 	const [editMode, setEditMode] = useState<"edit" | "make-public" | null>(null)
 	const [isDeleteOpen, setIsDeleteOpen] = useState(false)
+	const [isRankOpen, setIsRankOpen] = useState(false)
+	const [isSharing, setIsSharing] = useState(false)
+	usePageTitle(topicResponse?.name ?? null)
+
+	// the manual scan block belongs to an owner with a quota, known only once the payload arrives
+	const isManualScanShown = topicResponse?.manualScansRemaining != null
+
+	// the owning team a user on none of the topic's teams could join
+	const joinTeam = topicResponse?.roomTeams.length === 0 ? topicResponse.teamLink : null
+	const {
+		isJoinCallToAction,
+		isFollowCallToAction,
+		isFollowInMenu,
+		isTeamUpInRow,
+		isTeamUpCallToAction,
+		isShareInRow,
+	} = toTopicActionBar({
+		topic: topicResponse,
+		isSignedIn: Boolean(session),
+		isManualScanShown,
+		isBookmarkedView: findingFilter === "bookmarked",
+		isJoinable: Boolean(joinTeam),
+	})
+
+	// what the shell's chat panel opens on while this topic is on screen
+	useRegisterChatContext(
+		topicResponse
+			? {
+					topicId: topicResponse.id,
+					teamId: null,
+					name: topicResponse.name,
+					joinTeam: joinTeam
+						? {
+								teamId: joinTeam.teamId,
+								name: joinTeam.name,
+								hasAvatar: joinTeam.hasAvatar,
+								hasRequestedToJoin: topicResponse.hasRequestedToJoin,
+							}
+						: null,
+					// the page names its own topic
+					pageTopicIds: [topicResponse.id],
+				}
+			: null,
+	)
+
+	// the search bar's menu includes this page's report row while the topic is on screen
+	useRegisterPageActions(
+		topicResponse
+			? {
+					page: "Topic",
+					hasTeamBookmarks: topicResponse.isTeamMember,
+					options: toTopicActionOptions({
+						topic: topicResponse,
+						isAdmin: session?.user.role === "admin",
+						isFollowInMenu,
+						onShare: () => setIsSharing(true),
+						onToggleFollow: () => void handleSubscriptionToggle(),
+						onRank: () => setIsRankOpen(true),
+						onEdit: () => setEditMode("edit"),
+						onDelete: () => setIsDeleteOpen(true),
+					}),
+					report: { subjectKind: "topic", subjectId: topicResponse.id, subjectLabel: topicResponse.name },
+				}
+			: null,
+	)
 	const { isScanning, isRunningScan, isCancellingScan, startScan, stopScan, cancelScan, stopCancelling } =
 		useManualScanProgress(topicResponse?.scans)
 
@@ -63,16 +159,13 @@ export function TopicPage() {
 		try {
 			const topicPage = await fetchTopicPage(id)
 			setTopicResponse(topicPage.status === "visible" ? topicPage.topic : null)
-			setGatedTopic(
-				topicPage.status === "gated" ? { visibility: topicPage.visibility, topicName: topicPage.topicName } : null,
-			)
+			setGatedTopic(topicPage.status === "gated" ? { topicName: topicPage.topicName } : null)
 		} catch (error) {
 			console.error("topic page load failed", error)
 			setTopicResponse(null)
 		}
 	}, [id])
-	// clearing first falls back to the skeleton, so moving between topics never leaves the previous topic's
-	// findings on screen. only the id changes this, so a reload after a handler updates in place instead
+	// clearing first falls back to the skeleton
 	useEffect(() => {
 		setTopicResponse(undefined)
 		setGatedTopic(null)
@@ -103,7 +196,7 @@ export function TopicPage() {
 		[runThenReload],
 	)
 
-	// toggle this user's subscription. show a toast to notify a user that they will see "invite" findings only after the next scan.
+	// toggle this user's subscription
 	const handleSubscriptionToggle = async (): Promise<void> => {
 		if (!topicResponse) {
 			return
@@ -113,35 +206,32 @@ export function TopicPage() {
 			navigate("/signup?cta=subscribe")
 			return
 		}
-		const isJoining = !topicResponse.isSubscribed
-		await runThenReload(() => sendTopicSubscription(topicResponse.id, isJoining))
-		if (isJoining && topicResponse.visibility === "invite") {
-			toast(`You are subscribed.\n${NEXT_SCAN_DISCLAIMER}`)
-		}
+		const isSubscribing = !topicResponse.isSubscribed
+		await runThenReload(() => sendTopicSubscription(topicResponse.id, isSubscribing))
+		// an invite topic only shows findings from the next scan onward, which the toast says out loud
+		const disclaimer = isSubscribing && topicResponse.visibility === "invite" ? `\n${NEXT_SCAN_DISCLAIMER}` : ""
+		toast(isSubscribing ? `Following ${topicResponse.name}.${disclaimer}` : `Unfollowed ${topicResponse.name}.`)
 	}
 
-	// ranking a topic shifts the other featured topic orders. the homepage feed reloads alongside this page's own control
+	// ranking a topic shifts the other featured topic orders
 	const handleTopicRank = async (topicId: string, position: number): Promise<void> => {
 		await runThenReload(() => sendTopicFeatureOrder(topicId, position))
 		await reloadHomePage()
 	}
 
-	// trigger a manual scan. isRunningScan shows the state until the new scan row appears in a reload.
+	// trigger a manual scan. isRunningScan shows the state until the new scan row appears in a reload
 	const handleManualScan = async (): Promise<void> => {
 		if (!topicResponse) {
 			return
 		}
 		startScan()
-		try {
-			await sendManualScan(topicResponse.id)
-			await reloadTopicPage()
-		} catch (error) {
-			console.error("manual scan failed", error)
-			toast.error(
-				error instanceof Error ? error.message : "The raccoon got that one. Carl suggests you put another pot on.",
-			)
-			stopScan()
-		}
+		await runScanControl({
+			send: () => sendManualScan(topicResponse.id),
+			reload: reloadTopicPage,
+			revert: stopScan,
+			logLabel: "manual scan failed",
+			fallbackMessage: "The raccoon got that one. Carl suggests you put another pot on.",
+		})
 	}
 
 	// cancel the running scan. The scan keeps what was already collected, and the scan limit slot is given back
@@ -150,15 +240,14 @@ export function TopicPage() {
 			return
 		}
 		cancelScan()
-		try {
-			await sendScanStop(topicResponse.id)
-			await reloadTopicPage()
-		} catch (error) {
-			// the scan is still going, so the control comes back instead of leaving a running scan with no way to stop it
-			console.error("stopping the scan failed", error)
-			toast.error(error instanceof Error ? error.message : "Carl didn't catch that. That brew is still going.")
-			stopCancelling()
-		}
+		await runScanControl({
+			send: () => sendStopScan(topicResponse.id),
+			reload: reloadTopicPage,
+			// the scan is still going, so the stop icon comes back instead of leaving a running scan with no way to stop it
+			revert: stopCancelling,
+			logLabel: "stopping the scan failed",
+			fallbackMessage: "Carl didn't catch that. That brew is still going.",
+		})
 	}
 
 	// a saved edit reloads this page and the homepage feed behind it
@@ -168,67 +257,51 @@ export function TopicPage() {
 		await reloadHomePage()
 	}
 
-	// the findings this user sees: narrowed by resource kind and the active view, bookmarked rows pinned first
-	const visibleFindings = toSortedFindings(
+	// the findings this user sees
+	const visibleFindings = toSortedTopicFindings(
 		(topicResponse?.findings ?? []).filter(
-			(finding) => resourceKinds.has(finding.resourceKind) && matchesFeedView(finding, view),
+			(finding) =>
+				resourceKinds.has(finding.resourceKind) && matchesTopicFindingFilter(finding, findingFilter, bookmarkScope),
 		),
 		sort,
 	)
-	// a filter change remounts the findings section so its hydrate entrance replays using a view key
-	const viewKey = `${view}-${sort}-${[...resourceKinds].sort().join()}`
+	// a filter change remounts the findings section so its hydrate entrance replays using a findingFilter key
+	const viewKey = `${findingFilter}-${sort}-${bookmarkScope}-${[...resourceKinds].sort().join()}`
 
-	// poll starts on the click itself, not just once the row is visible, so a reload that misses the
-	// brand-new row still gets a retry a few seconds later instead of going quiet
+	// poll starts on the click itself, not just once the row is visible
 	usePollWhileScanning(isScanning || isRunningScan, reloadTopicPage)
 
-	// the manual scan block belongs to an owner with a quota, known only once the payload lands
-	const isManualScanShown = topicResponse?.manualScansRemaining != null
+	// one join control serves both the action row and the room's way in
+	const joinButton = joinTeam && topicResponse && (
+		<JoinTeamButton
+			teamId={joinTeam.teamId}
+			teamName={joinTeam.name}
+			hasJoinRequest={topicResponse.hasRequestedToJoin}
+			isSignedIn={Boolean(session)}
+			onChangeRequest={() => void reloadTopicPage()}
+		/>
+	)
 
 	// the bottom padding clears the docked chat panel, so the last card can scroll out from under it
 	return (
 		<main className="mx-auto max-w-5xl px-safe pt-3 pb-28">
-			{/* the static control row: it renders before the payload, so the chrome never jumps or animates in. wraps when the screen is too narrow */}
-			<div className="flex flex-wrap items-start justify-between gap-3">
-				<TopicFeedSort sort={sort} onChange={setSort} />
-				{/* an admin arranges the Featured section from inside the topic itself. it only shows to an admin on a public topic */}
-				{topicResponse && (
-					<TopicRankButton topic={topicResponse} isAdmin={session?.user.role === "admin"} onRank={handleTopicRank} />
-				)}
-				{/* the right side holds the user's subscribe control and the owner's manual scan control.
-				    while the page loads, a skeleton holds the slot */}
-				<div className="flex items-start gap-2">
-					{topicResponse === undefined && (
-						<div
-							aria-hidden="true"
-							className="bg-muted h-11 w-28 animate-pulse rounded-lg motion-reduce:animate-none sm:h-9"
-						/>
-					)}
-					{topicResponse && (
-						<SubscribeButton topic={topicResponse} isSignedIn={Boolean(session)} onToggle={handleSubscriptionToggle} />
-					)}
-					{/* the share topic button */}
-					{topicResponse && (
-						<TopicShareButton
-							topic={topicResponse}
-							className={MENU_BUTTON_CLASS}
-							onMakeTopicPublic={() => setEditMode("make-public")}
-						/>
-					)}
-					{/* the scan topic Brew button */}
-					{isManualScanShown && (
-						<TopicScanButton
-							remainingScans={topicResponse?.manualScansRemaining ?? null}
-							isSpendExhausted={topicResponse?.isSpendExhausted ?? false}
-							isRunning={isRunningScan || isScanning}
-							isCancelling={isCancellingScan}
-							onManualScan={handleManualScan}
-							// only a scan that has a row to cancel can be cancelled, so the optimistic click gap has no icon
-							onCancelScan={isScanning ? handleCancelScan : undefined}
-						/>
-					)}
-				</div>
-			</div>
+			<TopicActionBar
+				topic={topicResponse}
+				isSignedIn={Boolean(session)}
+				isShareInRow={isShareInRow}
+				isJoinCallToAction={isJoinCallToAction}
+				joinButton={joinButton}
+				isFollowCallToAction={isFollowCallToAction}
+				isTeamUpInRow={isTeamUpInRow}
+				isTeamUpCallToAction={isTeamUpCallToAction}
+				isManualScanShown={isManualScanShown}
+				isRunning={isRunningScan || isScanning}
+				isCancellable={isScanning}
+				isCancelling={isCancellingScan}
+				onSubscriptionToggle={handleSubscriptionToggle}
+				onManualScan={handleManualScan}
+				onCancelScan={handleCancelScan}
+			/>
 
 			{/* the loading skeleton, the not-found or not visible line, or the hydrating topic sections */}
 			{!topicResponse && (
@@ -240,77 +313,133 @@ export function TopicPage() {
 				/>
 			)}
 			{topicResponse && (
-				<>
-					{/* the topic header: the title with its unread count and owner actions, then the tags */}
-					<HydrateSection index={0}>
-						<TopicHeader
-							topic={topicResponse}
-							onEdit={() => setEditMode("edit")}
-							onDelete={() => setIsDeleteOpen(true)}
-						/>
-					</HydrateSection>
-
-					{/* findings, full width, narrowed by the view filters. the view key replays the entrance when they change */}
-					<HydrateSection key={viewKey} index={1}>
-						<TopicFindingsSection
-							topicFindings={visibleFindings}
-							hasAnyFindings={topicResponse.findings.length > 0}
-							isRatable={topicResponse.canRate}
-							isBookmarkable={topicResponse.isOwner}
-							handlers={handlers}
-							topic={{ id: topicResponse.id, name: topicResponse.name, prompt: topicResponse.prompt }}
-						/>
-					</HydrateSection>
-
-					{/* scan history over the blend on the left, the topic info card right */}
-					<HydrateSection index={2}>
-						<div className="grid gap-x-8 lg:grid-cols-[minmax(0,1fr)_32rem]">
-							{/* a grid item sizes to its widest content unless told not to, so long urls inside these cards
-							    would push the column past the viewport instead of truncating */}
-							<div className="min-w-0">
-								<TopicScanHistory
-									scans={topicResponse.scans}
-									allowedUrls={new Set(topicResponse.findings.map((finding) => finding.url))}
-									findings={topicResponse.findings}
-									topic={{ id: topicResponse.id, name: topicResponse.name, prompt: topicResponse.prompt }}
-								/>
-								<TopicSettingsCard topic={topicResponse} />
-							</div>
-							<TopicInfoCard topic={topicResponse} onMakeTopicPublic={() => setEditMode("make-public")} />
-						</div>
-					</HydrateSection>
-
-					{/* the owner dialogs, mounted only while open so their state resets each time */}
-					{editMode && (
-						<EditTopicModal
-							topic={topicResponse}
-							isMakingTopicPublic={editMode === "make-public"}
-							onClose={() => setEditMode(null)}
-							onTopicSaved={handleTopicSaved}
-						/>
-					)}
-					{isDeleteOpen && (
-						<DeleteTopicDialog
-							topic={topicResponse}
-							onClose={() => setIsDeleteOpen(false)}
-							onTopicDeleted={async () => {
-								await reloadHomePage()
-								navigate("/")
-							}}
-						/>
-					)}
-
-					{/* the docked chat panel */}
-					<ChatPanel topicId={topicResponse.id} topicName={topicResponse.name} />
-				</>
+				<TopicPageBody
+					topic={topicResponse}
+					viewKey={viewKey}
+					visibleFindings={visibleFindings}
+					handlers={handlers}
+					editMode={editMode}
+					isSharing={isSharing}
+					isRankOpen={isRankOpen}
+					isDeleteOpen={isDeleteOpen}
+					onOpenChat={() => setChatPanelState("open")}
+					onEditModeChange={setEditMode}
+					onCloseShare={() => setIsSharing(false)}
+					onCloseRank={() => setIsRankOpen(false)}
+					onCloseDelete={() => setIsDeleteOpen(false)}
+					onTopicSaved={handleTopicSaved}
+					onTopicRank={handleTopicRank}
+					onTopicDeleted={async () => {
+						await reloadHomePage()
+						navigate("/")
+					}}
+				/>
 			)}
 		</main>
 	)
 }
 
-// what stands in for the topic: the skeleton while it loads,
-// the skeleton behind the notice when this user may not see it,
-// and a plain line when there is no such topic at all
+/**
+ * The page once the payload has arrived: the header, the findings, the two cards, the owner dialogs,
+ * and the docked chat panel. Each dialog mounts only while open so its state resets every time.
+ */
+function TopicPageBody({
+	topic,
+	viewKey,
+	visibleFindings,
+	handlers,
+	editMode,
+	isSharing,
+	isRankOpen,
+	isDeleteOpen,
+	onOpenChat,
+	onEditModeChange,
+	onCloseShare,
+	onCloseRank,
+	onCloseDelete,
+	onTopicSaved,
+	onTopicRank,
+	onTopicDeleted,
+}: {
+	topic: TopicResponse
+	// remounting on this key replays the findings entrance whenever a filter changes
+	viewKey: string
+	visibleFindings: TopicResponse["findings"]
+	handlers: TopicFeedHandlers
+	editMode: "edit" | "make-public" | null
+	isSharing: boolean
+	isRankOpen: boolean
+	isDeleteOpen: boolean
+	onOpenChat: () => void
+	onEditModeChange: (editMode: "edit" | "make-public" | null) => void
+	onCloseShare: () => void
+	onCloseRank: () => void
+	onCloseDelete: () => void
+	onTopicSaved: () => Promise<void>
+	onTopicRank: (topicId: string, position: number) => Promise<void>
+	onTopicDeleted: () => Promise<void>
+}) {
+	return (
+		<>
+			{/* the topic header: the title with its mention badge, then the tags */}
+			<HydrateSection index={0}>
+				<TopicHeader topic={topic} onOpenChat={onOpenChat} />
+			</HydrateSection>
+
+			{/* findings, full width, narrowed by the findingFilter filters */}
+			<HydrateSection key={viewKey} index={1}>
+				<TopicFindingsSection
+					topicFindings={visibleFindings}
+					hasAnyFindings={topic.findings.length > 0}
+					isRatable={topic.canRate}
+					isBookmarkable={topic.isOwner || topic.isTeamMember}
+					handlers={handlers}
+					topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
+					newCountInfo={topic.newCount > 0 ? <NewCountInfo topic={topic} /> : undefined}
+				/>
+			</HydrateSection>
+
+			{/* the topic info card on the left, scan history and settings on the right */}
+			<HydrateSection index={2}>
+				<div className="grid gap-x-8 lg:grid-cols-[32rem_minmax(0,1fr)]">
+					<TopicInfoCard topic={topic} onMakeTopicPublic={() => onEditModeChange("make-public")} />
+					{/* a grid item sizes to its widest content unless told not to, so long urls inside these cards
+					    would push the column past the viewport instead of truncating */}
+					<div className="min-w-0">
+						<TopicScanHistory
+							scans={topic.scans}
+							allowedUrls={new Set(topic.findings.map((finding) => finding.url))}
+							findings={topic.findings}
+							topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
+						/>
+						<TopicSettingsCard topic={topic} />
+					</div>
+				</div>
+			</HydrateSection>
+
+			{editMode && (
+				<EditTopicModal
+					topic={topic}
+					isMakingTopicPublic={editMode === "make-public"}
+					onClose={() => onEditModeChange(null)}
+					onTopicSaved={onTopicSaved}
+				/>
+			)}
+			{isSharing && (
+				<ShareTopicButton
+					topic={topic}
+					isDialog
+					onClose={onCloseShare}
+					onMakeTopicPublic={() => onEditModeChange("make-public")}
+				/>
+			)}
+			{isRankOpen && <TopicRankDialog topic={topic} onRank={onTopicRank} onClose={onCloseRank} />}
+			{isDeleteOpen && <DeleteTopicDialog topic={topic} onClose={onCloseDelete} onTopicDeleted={onTopicDeleted} />}
+		</>
+	)
+}
+
+// what stands in for the topic
 function TopicPagePlaceholder({
 	isLoading,
 	gatedTopic,
@@ -318,7 +447,7 @@ function TopicPagePlaceholder({
 	topicId,
 }: {
 	isLoading: boolean
-	gatedTopic: { visibility: GatedVisibility; topicName: string | null } | null
+	gatedTopic: { topicName: string | null } | null
 	isSignedIn: boolean
 	topicId: string
 }) {
@@ -332,7 +461,7 @@ function TopicPagePlaceholder({
 	return (
 		<>
 			<TopicSkeleton topicTitle={gatedTopic.topicName ?? undefined} />
-			<TopicGateNotice visibility={gatedTopic.visibility} isSignedIn={isSignedIn} topicId={topicId} />
+			<TopicGateNotice isSignedIn={isSignedIn} topicId={topicId} />
 		</>
 	)
 }
@@ -340,38 +469,28 @@ function TopicPagePlaceholder({
 /**
  * What a user sees when they open a topic they don't have access to: the page's skeleton behind a notice.
  */
-function TopicGateNotice({
-	visibility,
-	isSignedIn,
-	topicId,
-}: {
-	visibility: GatedVisibility
-	isSignedIn: boolean
-	topicId: string
-}) {
+function TopicGateNotice({ isSignedIn, topicId }: { isSignedIn: boolean; topicId: string }) {
 	const navigate = useNavigate()
-	// the visibility notice for a topic that a user does not have access to
-	const title = visibility === "invite" ? "This topic is invite-only" : "This topic is private"
 
-	// offer the signup to a visitor who is logged-out
+	// where a visitor returns after signing up
 	const returnPath = `?next=${encodeURIComponent(`/topics/${topicId}`)}`
 	// which arrival a signup gets attributed to for analytics
 	const [searchParams] = useSearchParams()
 	const ctaTag = toCtaTag(searchParams.get("src")) ?? "gate"
 	return (
 		<Dialog open onOpenChange={() => navigate("/")}>
-			{/* no ✕: the gate's own actions are the ways out, logging in, signing up, or going back */}
+			{/* the gate's own actions are the only ways out, so there is no ✕ */}
 			<DialogContent className="sm:max-w-md" hideCloseButton>
-				<DialogTitle>{title}</DialogTitle>
+				<DialogTitle>This topic is invite-only</DialogTitle>
 				<DialogDescription>
-					{isSignedIn ? <GatedAskOwner visibility={visibility} /> : <GatedSignedOutLead visibility={visibility} />}
+					{isSignedIn ? "Ask the topic owner for an invite to see it." : "Sign up to see it."}
 				</DialogDescription>
 				<DialogFooter>
 					{isSignedIn ? (
 						// the only action a signed-in user has here is leaving
 						<Button onClick={() => navigate("/")}>Back to CarlNotes</Button>
 					) : (
-						<GatedSignedOutActions visibility={visibility} returnPath={returnPath} ctaTag={ctaTag} />
+						<GatedSignedOutActions returnPath={returnPath} ctaTag={ctaTag} />
 					)}
 				</DialogFooter>
 			</DialogContent>
@@ -379,41 +498,14 @@ function TopicGateNotice({
 	)
 }
 
-// what a signed-in user is told for a topic they don't have access to
-function GatedAskOwner({ visibility }: { visibility: GatedVisibility }) {
-	return visibility === "invite"
-		? "Ask the topic owner for an invite to see it."
-		: "Ask the topic owner to invite you to see it."
-}
-
-// what a signed-out user is told for a topic they don't have access to
-function GatedSignedOutLead({ visibility }: { visibility: GatedVisibility }) {
-	return visibility === "invite" ? "Sign up to see it." : "Log in to see it, if it's yours."
-}
-
-// the signed-out visitors call-to-action links returning back to this topic.
-function GatedSignedOutActions({
-	visibility,
-	returnPath,
-	ctaTag,
-}: {
-	visibility: GatedVisibility
-	returnPath: string
-	ctaTag: string
-}) {
-	if (visibility === "private") {
-		return (
-			<AnchorLink href={`/login${returnPath}`} className={buttonVariants({ variant: "default" })}>
-				Log in
-			</AnchorLink>
-		)
-	}
+// the signed-out visitor's call-to-action links, which return to this topic after login or signup
+function GatedSignedOutActions({ returnPath, ctaTag }: { returnPath: string; ctaTag: string }) {
 	return (
 		<>
 			<AnchorLink href={`/login${returnPath}`} className={buttonVariants({ variant: "outline" })}>
 				Log in
 			</AnchorLink>
-			{/* cta names the arrival for the signup_completed event, the way the header and plans buttons do */}
+			{/* cta names the arrival for the signup_completed event */}
 			<AnchorLink href={`/signup${returnPath}&cta=${ctaTag}`} className={buttonVariants({ variant: "default" })}>
 				Sign up
 			</AnchorLink>
@@ -421,7 +513,7 @@ function GatedSignedOutActions({
 	)
 }
 
-// a section that stays hidden until scrolled into view, then plays the staggered hydrate animation
+// a section that stays hidden until scrolled into findingFilter, then plays the staggered hydrate animation
 function HydrateSection({ index, children }: { index: number; children: React.ReactNode }) {
 	const { ref, isVisible } = useIsVisible<HTMLDivElement>()
 	return (

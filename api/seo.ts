@@ -2,7 +2,7 @@
 import { PLANS } from "@shared/plans"
 import { and, desc, eq } from "drizzle-orm"
 import { db } from "../db"
-import { findings, resources, scans, topics } from "../db/schema"
+import { findings, resources, scans, teams, topics } from "../db/schema"
 import { isShown } from "./topic/permissions"
 
 // the SPA routes the sitemap always lists
@@ -18,7 +18,7 @@ const ORGANIZATION_PROFILES = [
 /**
  * The sitemap, built from live data on each request: the static routes, the blog pages, and every public Topic.
  * Profile pages keep their canonical url and preview card but are too thin to promote to a crawler.
- * The docs are absent because they are statically built files rather than anything this route can read, and the docs site emits its own sitemap.
+ * The docs are absent because they are statically built files instead of anything this route can read, and the docs site emits its own sitemap.
  */
 export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Promise<string> {
 	// the public topics, each one added to the sitemap as its own page
@@ -27,11 +27,15 @@ export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Pr
 		.from(topics)
 		.where(and(eq(topics.visibility, "public"), isShown))
 
-	// one entry per url. topics carry a lastmod, the rest are plain locations
+	// the public teams, each with its own page
+	const teamRows = await db.select({ id: teams.id }).from(teams).where(eq(teams.isPublic, true))
+
+	// one entry per url. topics have a lastmod, the rest are plain locations
 	const entries = [
 		...STATIC_ROUTES.map((path) => toSitemapEntry(`${appUrl}${path === "/" ? "" : path}`)),
 		...blogPaths.map((path) => toSitemapEntry(`${appUrl}${path}`)),
-		...topicRows.map((row) => toSitemapEntry(`${appUrl}/topics/${row.id}`, row.updatedAt)),
+		...topicRows.map((topicRow) => toSitemapEntry(`${appUrl}/topics/${topicRow.id}`, topicRow.updatedAt)),
+		...teamRows.map((teamRow) => toSitemapEntry(`${appUrl}/teams/${teamRow.id}`)),
 	]
 	return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${entries.join("")}</urlset>`
 }
@@ -115,7 +119,7 @@ export function toCreativeWorkLd(work: {
 
 /**
  * The Topic's last succeeded Scan, or null before its first.
- * It dates the page's CreativeWork and names the Scan whose Findings the hasPart list carries.
+ * It dates the page's CreativeWork and names the Scan whose Findings the hasPart list includes.
  */
 export async function lastScan(topicId: string): Promise<{ id: string; startedAt: Date } | null> {
 	// use the newest succeeded scan for this topic
@@ -128,7 +132,7 @@ export async function lastScan(topicId: string): Promise<{ id: string; startedAt
 	return row ?? null
 }
 
-// one finding as the scan email carries it: the resource's title and link, and the relevance explanation
+// one finding as the scan email shows it: the resource's title and link, and the relevance explanation
 export type ScanFinding = { title: string | null; url: string; relevanceExplanation: string }
 
 /**
@@ -159,12 +163,12 @@ export function toFindingListLd(findingRows: ScanFinding[]): object | null {
 	return {
 		"@type": "ItemList",
 		name: `Carl's Top ${findingRows.length}`,
-		itemListElement: findingRows.map((row, index) => ({
+		itemListElement: findingRows.map((findingRow, index) => ({
 			"@type": "ListItem",
 			position: index + 1,
-			name: row.title ?? row.url,
-			url: row.url,
-			description: row.relevanceExplanation,
+			name: findingRow.title ?? findingRow.url,
+			url: findingRow.url,
+			description: findingRow.relevanceExplanation,
 		})),
 	}
 }

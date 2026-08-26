@@ -7,8 +7,7 @@ const RING_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
  * Rings of coffee steam that grow and fade behind the page
  */
 export function CoffeeSteam() {
-	// keyed on the url path so that each route change remounts the canvas,
-	// otherwise a visible ring would snap to a position recomputed against the new page height instead of restarting cleanly
+	// keyed on the url path so each route change remounts the canvas
 	const { pathname } = useLocation()
 	return (
 		<div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">

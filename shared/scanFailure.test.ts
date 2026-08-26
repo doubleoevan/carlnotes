@@ -11,7 +11,7 @@ test("isBudgetError matches the litellm spend-limit error", () => {
 
 // a stored failure renders as plain words, never the raw retry wrapper or provider class name
 test("toScanFailureLabel humanizes known failures and strips wrapper noise", () => {
-	// the budget wall reads as a bare fact, since the caller follows it with an inline upgrade link
+	// the budget wall reads as a bare fact, which the caller follows with an inline upgrade link
 	const budgetError =
 		"Failed after 3 attempts. Last error: AI_APICallError: Budget has been exceeded! Current cost: 3.003135784000001, Max budget: 3.0"
 	expect(toScanFailureLabel(budgetError)).toBe("Carl hit this month's budget.")

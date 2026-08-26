@@ -2,6 +2,7 @@ import { Suspense, useEffect } from "react"
 import { Outlet, useLocation } from "react-router-dom"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { CoffeeSteam } from "@/components/branding/CoffeeSteam"
+import { AppChatPanel } from "@/components/chat/AppChatPanel"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
 import { Toaster } from "@/components/primitives/sonner"
@@ -14,6 +15,7 @@ export function Layout() {
 	return (
 		<div className="min-h-dvh">
 			<ScrollToTop />
+			<CanonicalLink />
 			<Header />
 			{/* everything below the hero shares one ambient steam backdrop that restarts fresh on each route change.
 			    flow-root pins the backdrop's top edge to the hero's bottom edge, so rings clip there instead of leaving a bare strip */}
@@ -32,14 +34,29 @@ export function Layout() {
 				</div>
 			</div>
 			<Footer />
-			{/* the toast host for transient notification alerts */}
+			{/* the shared chat panel instance, mounted here so a route change doesn't remove it */}
+			<AppChatPanel />
+			{/* the toast host */}
 			<Toaster />
 		</div>
 	)
 }
 
+// keep the canonical link on the page the reader is actually on
+function CanonicalLink() {
+	const { pathname } = useLocation()
+	useEffect(() => {
+		const link = document.querySelector<HTMLLinkElement>('link[rel="canonical"]') ?? document.createElement("link")
+		link.rel = "canonical"
+		link.href = `${window.location.origin}${pathname}`
+		if (!link.isConnected) {
+			document.head.append(link)
+		}
+	}, [pathname])
+	return null
+}
+
 // scroll back to the top whenever the route changes
-// so that opening a topic from low on the homepage does not land mid-page
 function ScrollToTop() {
 	const { pathname } = useLocation()
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the pathname is the effect's trigger, not an input

@@ -1,32 +1,34 @@
 import type { TopicResponse } from "@shared/contracts"
-import { PawPrint, Pencil, Trash2 } from "lucide-react"
+import { PawPrint } from "lucide-react"
 import { useState } from "react"
-import { IconButton } from "@/components/common/IconButton"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { NewCountInfo, TopicInfoPopover } from "@/components/topic/Topic"
-import { cn, MENU_BUTTON_CLASS, RAIL_ICON_INSET, RAIL_TEXT_INSET, toSubscribeTooltip } from "@/lib/utils"
+import { TeamLink } from "@/components/team/TeamLink"
+import { TopicInfoPopover } from "@/components/topic/Topic"
+import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
+import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
+import { cn, toSubscribeTooltip } from "@/lib/utils"
 
 /**
- * the topic header: the title with its unread count and the owner's actions, then its tags
+ * the topic header: the title with its mention badge, then its tags
  */
 export function TopicHeader({
 	topic,
-	onEdit,
-	onDelete,
+	onOpenChat,
 }: {
 	topic: TopicResponse
-	onEdit: () => void
-	onDelete: () => void
+	// the mention badge's click opens the page's chat panel
+	onOpenChat: () => void
 }) {
-	// the heading opens the note and shows its tooltip as well as the icon in it, so the title holds the state the icon reads
+	// both the heading and its note icon open the note and show the hint, so the title holds the state the icon reads
 	const [isNoteOpen, setNoteOpen] = useState(false)
 	const [isNoteHintOpen, setNoteHintOpen] = useState(false)
 	return (
 		<>
-			{/* title row. the note icon sits in the heading's own text, so a title that wraps keeps the icon beside its last word */}
-			<div className="mt-6 flex items-start justify-between gap-3">
+			{/* title row. the heading takes the whole width and wraps instead of truncating, and the note
+			    icon sits in its own text so a wrapped title keeps the icon beside its last word */}
+			<div className="mt-3">
 				{/* biome-ignore lint/a11y/useKeyWithClickEvents: the note icon in the heading is the keyboard path */}
 				<h1
 					onClick={() => setNoteOpen(true)}
@@ -34,7 +36,21 @@ export function TopicHeader({
 					onMouseLeave={() => setNoteHintOpen(false)}
 					className="font-display min-w-0 cursor-pointer text-2xl leading-tight"
 				>
-					{topic.name}
+					{/* the mention count sits on the name, and its click opens the chat instead of the title's note */}
+					<span className="relative">
+						{topic.name}
+						<TopicMentionBadge
+							topicId={topic.id}
+							onClick={(event) => {
+								// the click opens the chat in place, never the link or the title's note
+								event.preventDefault()
+								event.stopPropagation()
+								onOpenChat()
+							}}
+							onMouseEnter={() => setTimeout(() => setNoteHintOpen(false), 0)}
+							className="-right-2"
+						/>
+					</span>
 					<TopicInfoPopover
 						topic={topic}
 						isInline
@@ -44,16 +60,16 @@ export function TopicHeader({
 						onHintOpenChange={setNoteHintOpen}
 					/>
 				</h1>
-				{/* the unread count and the owner's actions share the far right of the title line. only an owner
-				    gets the action icons, so a user's row ends in the count and takes the text inset instead */}
-				<div className={cn(topic.isOwner ? RAIL_ICON_INSET : RAIL_TEXT_INSET, "flex shrink-0 items-center gap-1")}>
-					{topic.newCount > 0 && <NewCountInfo topic={topic} />}
-					<TopicActions topic={topic} onEdit={onEdit} onDelete={onDelete} />
-				</div>
 			</div>
-			{/* the topic owner's avatar, username and profile link */}
-			{topic.owner && <UserProfileLink user={topic.owner} label="Brewed by" className="mt-2 text-sm" />}
-			{/* tags row, left out entirely by an untagged topic so it includes no empty gap */}
+			{/* the credit is derived: the team for anyone who can open its page, the creator otherwise */}
+			<div className="mt-2">
+				{topic.teamLink ? (
+					<TeamLink team={topic.teamLink} className="text-sm" />
+				) : (
+					topic.owner && <UserProfileLink user={topic.owner} label="Brewed by" className="text-sm" />
+				)}
+			</div>
+			{/* tags row, left out entirely by an untagged topic so there is no empty gap */}
 			{topic.tags.length > 0 && (
 				<div className="mt-2 flex flex-wrap gap-1">
 					{topic.tags.map((tag) => (
@@ -67,42 +83,39 @@ export function TopicHeader({
 	)
 }
 
-// the edit and delete actions, shown to whoever the gate says may use them
-function TopicActions({ topic, onEdit, onDelete }: { topic: TopicResponse; onEdit: () => void; onDelete: () => void }) {
-	if (!topic.canEdit) {
-		return null
-	}
-	return (
-		<div className="flex items-center gap-0.5">
-			<IconButton tooltip="Edit this topic" onClick={onEdit}>
-				<Pencil className="size-3.75" />
-			</IconButton>
-			<IconButton tooltip="Delete this topic" onClick={onDelete}>
-				<Trash2 className="size-3.75" />
-			</IconButton>
-		</div>
-	)
+/**
+ * Whether the Follow button renders: an owner has nothing to follow, and a private topic has no followers.
+ */
+export function isFollowShown(topic: Pick<TopicResponse, "isOwner" | "visibility">): boolean {
+	return !topic.isOwner && topic.visibility !== "private"
 }
 
-// the subscribe control, worded "Follow" on the button. it renders for a user on a public or invite topic,
-// and the page's toggle handler routes a visitor to signup
+// the Follow button, subscribe in every identifier
 export function SubscribeButton({
 	topic,
 	isSignedIn,
+	isHighlighted,
 	onToggle,
 }: {
 	topic: TopicResponse
 	isSignedIn: boolean
+	// whether this button is the page's one call to action, which decides its fill
+	isHighlighted?: boolean
 	onToggle: () => void
 }) {
-	if (topic.isOwner || topic.visibility === "private") {
+	if (!isFollowShown(topic)) {
 		return null
 	}
 	const tooltip = toSubscribeTooltip(isSignedIn, topic.isSubscribed, topic.visibility === "invite")
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<button type="button" aria-pressed={topic.isSubscribed} onClick={onToggle} className={MENU_BUTTON_CLASS}>
+				<button
+					type="button"
+					aria-pressed={topic.isSubscribed}
+					onClick={onToggle}
+					className={cn(MENU_BUTTON_CLASS, isHighlighted && MENU_BUTTON_HIGHLIGHT_CLASS)}
+				>
 					{/* the paw is an outline until subscribed, then fills, matching the homepage topic row */}
 					<PawPrint className={cn("size-4", topic.isSubscribed && "text-primary fill-current")} />
 					{topic.isSubscribed ? "Unfollow" : "Follow"}

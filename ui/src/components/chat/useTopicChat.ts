@@ -10,14 +10,13 @@ import {
 } from "@shared/contracts"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
+import { fetchChatConversation, sendChatTurn, sendClearChat, sendDeleteKeptAttachment } from "@/clients/chatClient"
 import type { ChatTurn } from "@/components/chat/ChatMessages"
-import { fetchChatConversation, sendChatTurn, sendClearChat, sendDeleteKeptAttachment } from "@/lib/chatClient"
 
 // the file suffixes read as text attachments when the browser reports no text/* media type
 const TEXT_FILE_SUFFIXES = [".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".log"]
 
-// a stand-in id for a kept attachment that the server has not returned yet, replaced by the row's real id on the
-// next conversation load. a counter, since browsers withhold crypto.randomUUID outside a secure context
+// a stand-in id for a kept attachment that the server has not returned yet
 let placeholderCount = 0
 function toPlaceholderId(): string {
 	placeholderCount += 1
@@ -29,7 +28,7 @@ export type TopicChat = {
 	chatTurns: ChatTurn[]
 	question: string
 	setQuestion: (value: string) => void
-	// the draft's attachments: files picked or dropped in, images pasted, and long copy pastes folded into chips
+	// the draft's attachments: files selected or dropped in, images pasted, and long copy pastes turned into chips
 	attachments: ChatAttachment[]
 	addFiles: (files: File[]) => Promise<void>
 	addPastedText: (text: string) => void
@@ -42,13 +41,13 @@ export type TopicChat = {
 	isSignupRequired: boolean
 	// an exhausted monthly budget keeps the panel open showing the upgrade link instead of the composer
 	isBudgetExhausted: boolean
-	// true once the conversation load settles, so the panel can pick its opening state from what came back
+	// true once the conversation load finishes, so the panel can select its opening state from what came back
 	isLoaded: boolean
 	isStreaming: boolean
-	// send streams the draft's reply, stop cuts it keeping whatever arrived, and clear deletes the conversation and its attachments
-	send: () => Promise<void>
+	// send streams the draft's reply, stop cuts it keeping whatever arrived
+	send: (retryQuestion?: string) => Promise<void>
 	stop: () => void
-	clear: () => Promise<void>
+	clear: () => Promise<boolean>
 }
 
 /**
@@ -68,14 +67,13 @@ export function useTopicChat(topicId: string): TopicChat {
 	const [isLoaded, setIsLoaded] = useState(false)
 	const [isStreaming, setIsStreaming] = useState(false)
 	const abortRef = useRef<AbortController | null>(null)
-	// the live attachment and draft-keep counts, readable mid-await where the state snapshot goes stale.
-	// a multi-file add awaits between files, so reading keeps off state would let a whole batch pass the cap
+	// the live attachment and draft-keep counts, readable mid-await where the state snapshot goes stale
 	const attachmentCountRef = useRef(0)
 	const draftKeepCountRef = useRef(0)
 
 	// load the stored conversation. every signed-in user's chat turns persist server-side
 	useEffect(() => {
-		// moving to another topic must not let the previous topic's conversation land in this one
+		// moving to another topic must not let the previous topic's conversation load into this one
 		let isCurrentTopic = true
 		fetchChatConversation(topicId)
 			.then((conversation) => {
@@ -90,7 +88,7 @@ export function useTopicChat(topicId: string): TopicChat {
 						at: chatTurn.at ? Date.parse(chatTurn.at) : undefined,
 					})),
 				)
-				// the gates and the kept attachments settle together, so the panel opens in one finished state
+				// the gates and the kept attachments update together, so the panel opens in one finished state
 				setCanChat(conversation.canChat)
 				setIsSignupRequired(conversation.isSignupRequired)
 				setIsBudgetExhausted(conversation.isBudgetExhausted)
@@ -98,8 +96,7 @@ export function useTopicChat(topicId: string): TopicChat {
 				setIsLoaded(true)
 			})
 			.catch((error) => {
-				// a failed load still settles, or the panel waits forever on a load that already failed.
-				// the failure reason goes to the browser console
+				// a failed load still finishes, so the panel never waits on a load that already failed
 				if (!isCurrentTopic) {
 					return
 				}
@@ -108,14 +105,13 @@ export function useTopicChat(topicId: string): TopicChat {
 				setIsLoaded(true)
 			})
 
-		// leaving this topic retires any request in flight for it
+		// leaving this topic discards any request in flight for it
 		return () => {
 			isCurrentTopic = false
 		}
 	}, [topicId])
 
-	// whether a new attachment may default to kept, with a toast when the full memory forces it off.
-	// a kept attachment that is granted is counted here, so the next file in the same batch sees it
+	// whether a new attachment may default to kept, with a toast when the keep limit forces it off
 	function shouldKeepAttachment(): boolean {
 		if (keptAttachments.length + draftKeepCountRef.current >= CHAT_ATTACHMENT_KEEP_LIMIT) {
 			toast(
@@ -127,11 +123,10 @@ export function useTopicChat(topicId: string): TopicChat {
 		return true
 	}
 
-	// take in picked or pasted attachment files. images and PDFs become data urls, text files save as clipped text,
-	// and each rejection explains itself so a rejected file never just vanishes
+	// take in selected or pasted attachment files
 	async function addAttachmentFiles(files: File[]): Promise<void> {
 		for (const file of files) {
-			// one chat turn's attachment cap is checked first, so a big multi-select fails loudly at the boundary
+			// one chat turn's attachment limit is checked first, so a big multi-select stops with a toast
 			if (attachmentCountRef.current >= CHAT_MAX_ATTACHMENTS) {
 				toast(`${CHAT_MAX_ATTACHMENTS} attachments max per question.`)
 				return
@@ -146,7 +141,7 @@ export function useTopicChat(topicId: string): TopicChat {
 		}
 	}
 
-	// fold a long copy-paste into a text chip, so the draft box holds the question instead of the material
+	// turn a long copy-paste into a text chip, so the draft box holds the question instead of the material
 	function addPastedText(text: string): void {
 		if (attachmentCountRef.current >= CHAT_MAX_ATTACHMENTS) {
 			toast(`${CHAT_MAX_ATTACHMENTS} attachments max per question.`)
@@ -169,9 +164,10 @@ export function useTopicChat(topicId: string): TopicChat {
 		setAttachments((previousAttachments) => previousAttachments.filter((_, position) => position !== index))
 	}
 
-	// send the user question, appending the reply to the newest chat turn as each chunk lands
-	async function send(): Promise<void> {
-		const askedQuestion = question.trim()
+	// send the user question, appending the reply to the newest chat turn as each chunk arrives
+	async function send(retryQuestion?: string): Promise<void> {
+		// a retry re-asks a finished turn's question, stripped of its attachment note
+		const askedQuestion = (retryQuestion ?? question).replace(/\n\n\[attached: [^\]]*\]$/, "").trim()
 		if (!askedQuestion || isStreaming) {
 			return
 		}
@@ -181,19 +177,20 @@ export function useTopicChat(topicId: string): TopicChat {
 			.filter((chatTurn) => chatTurn.rejection === null && chatTurn.answer !== "")
 			.map((chatTurn) => ({ question: chatTurn.question, answer: chatTurn.answer }))
 
-		// the attachments get posted with this chat turn, and the kept attachments join the manage list right away.
-		// the server persists the attachments as the reply lands. their ids are placeholders until the next load includes the real attachment rows
-		const sentAttachments = attachments
-		setQuestion("")
-		setAttachments([])
-		attachmentCountRef.current = 0
-		draftKeepCountRef.current = 0
-		setKeptAttachments((previousAttachments) => [
-			...previousAttachments,
-			...sentAttachments
-				.filter((attachment) => attachment.keep)
-				.map((attachment) => ({ id: toPlaceholderId(), name: attachment.name, kind: attachment.kind })),
-		])
+		// the attachments get posted with this chat turn, and the kept attachments join the manage list right away
+		const sentAttachments = retryQuestion === undefined ? attachments : []
+		if (retryQuestion === undefined) {
+			setQuestion("")
+			setAttachments([])
+			attachmentCountRef.current = 0
+			draftKeepCountRef.current = 0
+			setKeptAttachments((previousAttachments) => [
+				...previousAttachments,
+				...sentAttachments
+					.filter((attachment) => attachment.keep)
+					.map((attachment) => ({ id: toPlaceholderId(), name: attachment.name, kind: attachment.kind })),
+			])
+		}
 		setChatTurns((previousChatTurns) => [
 			...previousChatTurns,
 			{ question: withAttachmentNote(askedQuestion, sentAttachments), answer: "", rejection: null },
@@ -217,8 +214,7 @@ export function useTopicChat(topicId: string): TopicChat {
 		)
 		abortRef.current = null
 
-		// a stop before any text drops the whole entire chat turn, so the empty bubble never lingers.
-		// everything else settles the chat turn with its outcome and its time
+		// a stop before any text drops the whole chat turn, so the empty bubble never lingers
 		setChatTurns((previousChatTurns) => {
 			if (chatSendResult === "stopped" && previousChatTurns.at(-1)?.answer === "") {
 				return previousChatTurns.slice(0, -1)
@@ -238,11 +234,13 @@ export function useTopicChat(topicId: string): TopicChat {
 	}
 
 	// wipe the conversation and chat attachments server-side, then locally once the server confirms
-	async function clear(): Promise<void> {
+	async function clear(): Promise<boolean> {
 		if (await sendClearChat(topicId)) {
 			setChatTurns([])
 			setKeptAttachments([])
+			return true
 		}
+		return false
 	}
 
 	// delete one kept attachment, dropping it from the list once the server confirms so its slot frees
@@ -273,15 +271,14 @@ export function useTopicChat(topicId: string): TopicChat {
 	}
 }
 
-// a picked or pasted file as a chat attachment: an image or a PDF reads to a data url and a text file to clipped text.
-// anything else is rejected with an explanation, and null means the file became nothing
-async function toAttachment(file: File): Promise<ChatAttachment | null> {
+// a selected or pasted file as a chat attachment
+export async function toAttachment(file: File): Promise<ChatAttachment | null> {
 	// images and PDFs post as data urls. the PDF's text is extracted server-side, so only its words ever reach the model
 	const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
 	if (file.type.startsWith("image/") || isPdf) {
 		return toDataUrlAttachment(file, isPdf)
 	}
-	// text files post as raw text, clipped to the cap with the cut point marked for the model
+	// text files post as raw text, clipped to the limit with the cut point marked for the model
 	if (file.type.startsWith("text/") || TEXT_FILE_SUFFIXES.some((suffix) => file.name.toLowerCase().endsWith(suffix))) {
 		const text = await file.text()
 		return { kind: "text", name: file.name || "text", text: clipAttachmentText(text), keep: false }
@@ -291,8 +288,7 @@ async function toAttachment(file: File): Promise<ChatAttachment | null> {
 	return null
 }
 
-// an image or PDF as a data url, rejected by name when it runs past the shared size limit —
-// both kinds share the image cap, since both post base64 inside the chat turn's JSON
+// an image or PDF as a data url, rejected by name when it runs past the shared size limit
 async function toDataUrlAttachment(file: File, isPdf: boolean): Promise<ChatAttachment | null> {
 	const dataUrl = await toDataUrl(file)
 	if (dataUrl.length > CHAT_IMAGE_DATA_CHARS) {

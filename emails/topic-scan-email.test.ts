@@ -66,7 +66,7 @@ test("renderTopicScanEmail renders the recap with formatting and only kept-findi
 	// the allowed formatting renders as real markup
 	expect(html).toContain("<strong")
 
-	// the kept finding's citation is a real anchor, since the finding card below already links there
+	// the kept finding's citation is a real anchor, which the finding card below links to
 	expect(html).toContain("the agent piece</a>")
 
 	// the attacker's link keeps its label, shows its destination as text, and no anchor points at it

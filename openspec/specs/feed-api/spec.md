@@ -56,16 +56,18 @@ The Feed API SHALL export an `AppType` describing its routes so the UI drives it
 
 ### Requirement: The Feed API assembles the homepage in a bounded number of queries
 
-The Feed API SHALL assemble a user's Feed using a number of database round trips that is fixed and independent of the number of Topics in the response, and SHALL bound the number of Topics whose per-Topic data is loaded. For the public sections it SHALL load only the featured Topics and the top-N non-featured Topics ranked by the denormalised `topics.subscriber_count` column — never loading feed data for public Topics that will not render — alongside the owner's own Topics for a signed-in user. It SHALL fetch each per-Topic dataset — Findings joined to their Resources, Sources, Attachments, the most recent succeeded Scan, and the subscriber count — across every loaded Topic id at once, then stitch the results back to each Topic in memory. Rating-eligibility (`canRate`) for a signed-in user SHALL be resolved from one batched query returning the Topic ids the user may rate as a subscriber — a direct `subscriptions.subscriber_user_id` match OR an audience membership, matching `hasSubscription` — passed as a set into a synchronous `buildTopicFeed`, never one subscription query per Topic. The owner SHALL stay eligible to rate their own Topic without a subscription row. This SHALL NOT change the per-user consumed status that sets each Finding's `isConsumed`, the `canRate` result, the owner "Yours" section, or the signed-out path. Featured and Popular SHALL be disjoint sections, and both SHALL draw only from public Topics holding the Finding minimum, filtered before any ranking or top-N cut.
+The Feed API SHALL assemble a user's Feed using a number of database round trips that is fixed and independent of the number of Topics in the response, and SHALL bound the number of Topics whose per-Topic data is loaded. For the public sections it SHALL load only the featured Topics and the top-N non-featured Topics ranked by the denormalised `topics.subscriber_count` column — never loading feed data for public Topics that will not render — alongside the owner's own Topics for a signed-in user. It SHALL fetch each per-Topic dataset — Findings joined to their Resources, Sources, Attachments, the most recent succeeded Scan, the subscriber count, and the holding-Team count — across every loaded Topic id at once, then stitch the results back to each Topic in memory. Rating-eligibility (`canRate`) for a signed-in user SHALL be resolved from one batched query returning the Topic ids the user may rate as a subscriber — a direct `subscriptions.subscriber_user_id` match, matching `hasSubscription` — passed as a set into a synchronous `buildTopicFeed`, never one subscription query per Topic. The owner SHALL stay eligible to rate their own Topic without a subscription row. This SHALL NOT change the per-user consumed status that sets each Finding's `isConsumed`, the `canRate` result, the owner "Yours" section, or the signed-out path. Featured and Popular SHALL be disjoint sections, and both SHALL draw only from public Topics holding the Finding minimum, filtered before any ranking or top-N cut.
 
-The subscriber count SHALL be read from the stored column rather than recomputed by subquery, so ranking and the public follower figure read the same number and the read cost does not grow with the number of subscribers. The column's definition — direct subscribers plus audience-inherited members, never the owner's own subscription — is the one stated in `public-profiles`, and the ranking inherits it.
+The subscriber count SHALL be read from the stored column instead of recomputed by subquery, so ranking and the public follower figure read the same number and the read cost does not grow with the number of subscribers. The column's definition — the Topic's active subscribing users, never the owner's own subscription — is the one stated in `public-profiles`, and the ranking inherits it.
 
-The wire response SHALL gain the owner byline for each public Topic — the owner's user id, username, and public avatar source, never Better Auth's private `image` — so Featured can credit its owner without a request per Topic. No other field SHALL change shape.
+The feed response SHALL gain the owner byline for each public Topic — the owner's user id, username, and public avatar source, never Better Auth's private `image` — so Featured can credit its owner without a request per Topic. No other field SHALL change shape.
+
+Every Topic payload SHALL include the number of Teams holding it, and the Topic roast SHALL show that count as a Teams line directly under the follower count, wherever the roast renders. Because the first Team to hold a Topic takes the owning `topics.team_id` column and every later one gets a `team_topics` row, the count SHALL be the `team_topics` rows plus one for an owning Team, so the figure means holding Teams and not shared-in rows alone. The Feed API SHALL read it as one grouped query across every loaded Topic id, and the Topic page SHALL read it in the Team facts it already loads, so the two surfaces cannot disagree.
 
 #### Scenario: Feed assembly does not scale round trips with Topic count
 
 - **WHEN** a signed-in user requests their Feed and the number of Topics across the Your, Featured, and Popular sections grows
-- **THEN** the number of database queries stays fixed, and rating-eligibility is resolved from one batched query rather than one subscription query per Topic
+- **THEN** the number of database queries stays fixed, and rating-eligibility is resolved from one batched query instead of one subscription query per Topic
 
 #### Scenario: Only featured and top-N popular public Topics are loaded
 
@@ -77,20 +79,35 @@ The wire response SHALL gain the owner byline for each public Topic — the owne
 - **WHEN** the popular section is ranked
 - **THEN** it orders by the `topics.subscriber_count` column, and runs no per-Topic subscriber subquery
 
-#### Scenario: Rate-eligibility stays correct for both subscriber paths
+#### Scenario: Rate-eligibility follows subscriptions
 
-- **WHEN** a signed-in non-owner is subscribed to one public Topic directly and to another through an audience they belong to
-- **THEN** `canRate` is true for both Topics and false for a public Topic they are not subscribed to, matching the prior owner-or-subscriber rule
+- **WHEN** a signed-in non-owner is subscribed to one public Topic and not another
+- **THEN** `canRate` is true for the subscribed Topic and false for the other, matching the owner-or-subscriber rule
 
 #### Scenario: The signed-out path is preserved
 
-- **WHEN** a request carries no session
+- **WHEN** a request has no session
 - **THEN** the API returns the Featured and Popular sections with no "Yours" section, loading no owner data and reading no user's private data
 
 #### Scenario: Batched assembly preserves the response shape and per-user state
 
 - **WHEN** a user with Findings consumed across several Topics requests their Feed
-- **THEN** each Topic carries the same fields as before plus the owner byline (identity, metadata, latest Scan, Sources, Attachments, subscriber count, owner byline, and Findings joined to their Resources), and each Finding's `isConsumed` reflects that user's own consumed rows
+- **THEN** each Topic has the same fields as before plus the owner byline (identity, metadata, latest Scan, Sources, Attachments, subscriber count, owner byline, and Findings joined to their Resources), and each Finding's `isConsumed` reflects that user's own consumed rows
+
+#### Scenario: The payload includes the owner byline
+
+- **WHEN** the feed returns a public Topic
+- **THEN** it includes that Topic owner's username and avatar inputs, and the ui renders the byline without a further request
+
+#### Scenario: The roast counts holding Teams
+
+- **WHEN** a Topic is held by an owning Team and shared into two more, and its roast is opened from the feed, the Topic page, or a profile's topic table
+- **THEN** every one of them reads a Teams count of three under the follower count, and the feed resolves it from one grouped query instead of one per Topic
+
+#### Scenario: A Topic no Team holds counts zero
+
+- **WHEN** a Topic has no owning Team and no shared-in row
+- **THEN** its Teams count is zero, and the roast shows the line instead of hiding it
 
 #### Scenario: The payload carries the owner byline
 

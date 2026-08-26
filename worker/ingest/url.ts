@@ -7,20 +7,16 @@ import { getResourceContent } from "../store"
 import type { FetchedBody, IngestedResource, IngestResult, Source, SourceIngester } from "./ingester"
 import { toCanonicalUrl, toResourceKind } from "./normalize"
 
-// how many links a page may contribute. index pages lead with their strongest material,
-// so the limit keeps the first ones in document order
+// how many links a page may contribute
 export const MAX_RESULTS = 25
 
-// a Markdown inline link. the label runs to the first closing bracket and the target to the closing paren
-// or the space before a title, which is how a link with a "quoted title" is written
+// a Markdown inline link
 const MARKDOWN_LINK = /\[([^\]]*)\]\(\s*<?([^\s<>)]+)>?[^)]*\)/g
 
-// a Markdown image. it is written like a link but points at a picture instead of a page, and a picture
-// wrapped in a link leaves its own brackets inside the link's label, so images come out before links go in
+// a Markdown image
 const MARKDOWN_IMAGE = /!\[([^\]]*)\]\([^)]*\)/g
 
-// the page's body and what it cost to get. a body already stored costs nothing,
-// and one that could not be read at all leaves the page to review, which fetches it on its own terms
+// the page's body and what it cost to get
 export type PageBody = { markdown: string; costDollars: number; fetchedBody?: FetchedBody }
 
 // one link the page lists, with the words it was written as
@@ -37,8 +33,7 @@ export const urlIngester: SourceIngester = async (source: Source): Promise<Inges
 		throw new Error(`url source ${source.id} has no string config.url`)
 	}
 
-	// reject a malformed, non-http, or internal url before it reaches the fetch.
-	// the canonical url is what a stored resource row is keyed by, so looking up by anything else would miss
+	// reject a malformed, non-http, or internal url before it reaches the fetch
 	const fetchableUrl = toCanonicalUrl(toFetchableUrl(pageUrl).toString())
 
 	// read the page, then map it and its links to Resources
@@ -51,11 +46,10 @@ export const urlIngester: SourceIngester = async (source: Source): Promise<Inges
  * An empty body yields no links, so a page whose fetch failed still arrives as a Resource on its own.
  */
 export function toUrlSourceResources(pageUrl: string, pageBody: PageBody): IngestedResource[] {
-	// the page's title is left unset, since the page isn't fetched yet and the body could be from a previously stored Resource
+	// the page's title is left unset. the page is not fetched yet, and the body could be from a previously stored Resource
 	const pageResource: IngestedResource = { url: pageUrl, kind: "read", fetchedBody: pageBody.fetchedBody }
 
-	// each link on the page becomes a Resource of the with the resourceKind determined by its host,
-	// so a linked video goes to the YouTube ingester, for example
+	// each link on the page becomes a Resource of the with the resourceKind determined by its host
 	const linkResources = toPageLinks(pageBody.markdown, pageUrl).map(
 		(link): IngestedResource => ({ url: link.url, kind: toResourceKind(link.url), snippet: link.anchorText }),
 	)
@@ -63,8 +57,8 @@ export function toUrlSourceResources(pageUrl: string, pageBody: PageBody): Inges
 }
 
 /**
- * The links a page's Markdown lists, canonical and deduped, in document order and capped.
- * Same-page anchors, non-http schemes, and the page's own url are dropped, since none of them is a new page.
+ * The links a page's Markdown lists, canonical and deduped, in document order and limited.
+ * Same-page anchors, non-http schemes, and the page's own url are dropped.
  */
 export function toPageLinks(markdown: string, pageUrl: string): PageLink[] {
 	// filter out a page's links to itself
@@ -89,8 +83,7 @@ export function toPageLinks(markdown: string, pageUrl: string): PageLink[] {
 	return [...linkByUrl.values()]
 }
 
-// the page's Markdown, from storage if it isn't stale and from a paid scrape otherwise.
-// a body that cannot be read at all comes back empty, which yields no links and charges nothing
+// the page's Markdown, from storage if it isn't stale and from a paid scrape otherwise
 async function readPageBody(pageUrl: string): Promise<PageBody> {
 	// a Resource stored by an earlier Scan and still inside the ttl window is the same page, so return it for free
 	const storedMarkdown = await readStoredPage(pageUrl)
@@ -98,8 +91,7 @@ async function readPageBody(pageUrl: string): Promise<PageBody> {
 		return { markdown: storedMarkdown, costDollars: 0 }
 	}
 
-	// scrape the page and send back the body, so ingestion can store it and review can reuse it instead of scraping again.
-	// a url Source names a page to read, so it takes the scrape instead of the caption path a video would
+	// scrape the page and send back the body
 	try {
 		const { text: markdown, cost, etag, lastModified } = await fetchContent(pageUrl, "read")
 		return { markdown, costDollars: cost, fetchedBody: { markdown, etag, lastModified } }
@@ -110,8 +102,7 @@ async function readPageBody(pageUrl: string): Promise<PageBody> {
 	}
 }
 
-// return the page's stored Markdown when a Resource already holds it, and it has not gone stale, otherwise null.
-// a cache miss falls back to a paid scrape
+// return the page's stored Markdown when a Resource already holds it, and it has not gone stale, otherwise null
 async function readStoredPage(pageUrl: string): Promise<string | null> {
 	const [storedResource] = await db
 		.select({ contentKey: resources.contentKey, fetchedAt: resources.fetchedAt })
@@ -129,8 +120,7 @@ async function readStoredPage(pageUrl: string): Promise<string | null> {
 	}
 }
 
-// a link target as a canonical http(s) url, or null if it doesn't point to a page.
-// a relative target resolves against the page that wrote it, the same way a browser would
+// a link target as a canonical http(s) url, or null if it doesn't point to a page
 function toLinkUrl(target: string, pageUrl: string): string | null {
 	// a fragment-only target names a place inside this page, so there is nothing to fetch
 	if (!target || target.startsWith("#")) {
@@ -145,8 +135,7 @@ function toLinkUrl(target: string, pageUrl: string): string | null {
 		return null
 	}
 
-	// a page can link anywhere, including at an internal address, and every link here becomes a Resource
-	// that review later fetches. toFetchableUrl rejects a non-http scheme and an internal address alike
+	// a page can link anywhere, including at an internal address
 	try {
 		return toCanonicalUrl(toFetchableUrl(resolvedUrl.toString()).toString())
 	} catch {

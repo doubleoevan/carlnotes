@@ -12,8 +12,7 @@ import {
 	isAdminRole,
 } from "./authorization"
 
-// an authorizeManualScan input for a non-admin owner within the daily limit for test cases to override.
-// it bills yearly, so a test case has to opt into monthly to get the billing interval that supports overage
+// an authorizeManualScan input for a non-admin owner within the daily limit for test cases to override
 function scanInput(
 	overrides: Partial<Parameters<typeof authorizeManualScan>[0]>,
 ): Parameters<typeof authorizeManualScan>[0] {
@@ -42,12 +41,12 @@ test("effectiveBudgetCents uses the override when set, otherwise it's the plan b
 	expect(effectiveBudgetCents({ isAdmin: false, plan: "premium", budgetOverrideCents: 100 })).toBe(100)
 })
 
-// an admin bypasses the topic and scan caps, so their spend backstop has to clear their plan's too
+// an admin bypasses the topic and scan limits, so their spend backstop has to clear their plan's too
 test("effectiveBudgetCents gives an admin the admin backstop overriding their plan", () => {
 	// an admin on the lowest plan still gets the admin backstop, well above that plan's limit
 	expect(effectiveBudgetCents({ isAdmin: true, plan: "free", budgetOverrideCents: null })).toBe(ADMIN_BUDGET_CENTS)
 	expect(ADMIN_BUDGET_CENTS).toBeGreaterThan(PLANS.premium.monthlyBudgetCents)
-	// an override is deliberate, so it caps an admin too
+	// an override is deliberate, so it limits an admin too
 	expect(effectiveBudgetCents({ isAdmin: true, plan: "free", budgetOverrideCents: 500 })).toBe(500)
 })
 
@@ -70,7 +69,7 @@ test("authorizeManualScan enforces owner authority and the daily limit", () => {
 	// a non-owner who is not an admin is rejected before any quota check
 	expect(authorizeManualScan(scanInput({ isOwner: false }))).toEqual({ status: "forbidden" })
 
-	// the monthly and yearly intervals are read as separate allowances, so a yearly subscriber is never held to the monthly number
+	// the monthly and yearly intervals are read as separate allowances
 	const plusAtMonthlyLimit = { plan: "plus", scansUsedToday: PLANS.plus.dailyScanLimit.monthly } as const
 	expect(authorizeManualScan(scanInput({ ...plusAtMonthlyLimit, billingInterval: "monthly" }))).toEqual({
 		status: "quota",
@@ -82,15 +81,13 @@ test("authorizeManualScan enforces owner authority and the daily limit", () => {
 	})
 })
 
-// the daily scan limit is only soft when the extra scan can actually be billed with a card on file,
-// and a subscription that includes the metered overage price for the charge to land on
+// the daily scan limit is only soft when the extra scan can actually be billed with a card on file
 test("authorizeManualScan only makes the daily limit soft when the extra scan can be billed", () => {
 	const atLimit = { scansUsedToday: PLANS.free.dailyScanLimit.yearly }
 	// at the daily limit without a payment method, the scan is rejected
 	expect(authorizeManualScan(scanInput(atLimit))).toEqual({ status: "quota" })
 
-	// a yearly subscription includes no overage price, so a card alone does not soften the limit.
-	// allowing it would meter usage in Stripe that no subscription item ever bills
+	// a yearly subscription includes no overage price, so a card alone does not soften the limit
 	expect(authorizeManualScan(scanInput({ ...atLimit, hasPaymentMethod: true }))).toEqual({ status: "quota" })
 
 	// a monthly subscription includes the overage price, but without a card there is nothing to charge
@@ -114,8 +111,7 @@ test("authorizeManualScan lets an admin bypass every limit", () => {
 	})
 })
 
-// the daily topic limit is what determines whether the monthly budget survives the month
-// the gate holds the count of topics already on a daily frequency against the plan's limit for monthly or yearly
+// the daily topic limit is what determines whether the monthly budget survives the month the gate holds the count
 test("authorizeDailyFrequency holds daily topics to the plan's limit at the user's billingInterval", () => {
 	// under the limit one more topic may go daily, and at the limit it may not
 	const freeMonthly = { isAdmin: false, plan: "free", billingInterval: "monthly" } as const
@@ -129,11 +125,11 @@ test("authorizeDailyFrequency holds daily topics to the plan's limit at the user
 	expect(authorizeDailyFrequency({ ...atPlusMonthlyLimit, isAdmin: false, billingInterval: "monthly" })).toBe(false)
 	expect(authorizeDailyFrequency({ ...atPlusMonthlyLimit, isAdmin: false, billingInterval: "yearly" })).toBe(true)
 
-	// an admin bypasses the cap like every other quota
+	// an admin bypasses the limit like every other quota
 	expect(authorizeDailyFrequency({ ...freeMonthly, isAdmin: true, dailyTopicsUsed: 999 })).toBe(true)
 })
 
-// weekdays draws on the same cap as daily
+// weekdays draws on the same limit as daily
 test("isDailyFrequency counts daily and weekdays, never weekly", () => {
 	expect(isDailyFrequency("daily")).toBe(true)
 	expect(isDailyFrequency("weekdays")).toBe(true)
@@ -146,7 +142,7 @@ test("the capability union covers chat send and persist", () => {
 	expect(chatCapabilities).toHaveLength(2)
 })
 
-// no api file outside authorization.ts compares role or plan with ===, so authority can't scatter across the api
+// no api file outside authorization.ts compares role or plan with ===
 test("role and plan === checks live only in the authorization gate module", () => {
 	// every api source file, minus the gate itself, its build output, and the tests
 	const files = readdirSync(import.meta.dir, { recursive: true })

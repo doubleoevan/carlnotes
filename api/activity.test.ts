@@ -1,5 +1,4 @@
-// activity tests for the payload assembly: cents conversion, the per-topic grouping with its sums,
-// and the subscription dedupe that decides which rows the user can edit
+// activity tests for the payload assembly
 import { expect, test } from "bun:test"
 import { toActivityTopics, toCents, toSubscriptionRows } from "./activity"
 
@@ -11,11 +10,12 @@ test("toCents converts the dollars string and zeroes malformed values", () => {
 	expect(toCents("not a number")).toBe(0)
 })
 
-// each owned topic carries its month scan count, cost sum, and drill-down rows
+// each owned topic includes its month scan count, cost sum, and subtable rows
 test("toActivityTopics groups scans per topic and sums their cents", () => {
 	const topicRows = [
 		{
 			id: "t1",
+			ownerId: "owner-1",
 			name: "Agents",
 			visibility: "public" as const,
 			frequency: "daily" as const,
@@ -24,6 +24,7 @@ test("toActivityTopics groups scans per topic and sums their cents", () => {
 		},
 		{
 			id: "t2",
+			ownerId: "owner-1",
 			name: "Quiet",
 			visibility: "private" as const,
 			frequency: "weekly" as const,
@@ -45,7 +46,7 @@ test("toActivityTopics groups scans per topic and sums their cents", () => {
 			costDollars: "0.10",
 			scanSummary: "Found a few things.",
 		},
-		// a still-running scan carries no finish time or recap yet
+		// a still-running scan has no finish time or recap yet
 		{
 			id: "s2",
 			topicId: "t1",
@@ -81,46 +82,23 @@ test("toActivityTopics groups scans per topic and sums their cents", () => {
 	expect(quiet?.scans).toEqual([])
 })
 
-// a subscription row with an optional audience name
-function subscriptionRow(
-	topicId: string,
-	audienceName: string | null,
-): Parameters<typeof toSubscriptionRows>[0][number] {
+// a subscription row for one topic, or the pending invitation that stands in for one
+function subscriptionRow(topicId: string): Parameters<typeof toSubscriptionRows>[0][number] {
 	return {
 		topicId,
 		name: `topic ${topicId}`,
-		ownerName: "Owner",
+		owner: { userId: "owner-1", username: "Owner", avatarSource: null },
+		team: null,
 		visibility: "public",
 		subscribedAt: new Date("2026-07-01T00:00:00Z"),
 		isActive: true,
 		isEmailEnabled: true,
-		audienceName,
+		inviteId: null,
 	}
 }
 
-// a user can reach one topic both ways. the direct row is the only one their controls can write, so it must win
-test("toSubscriptionRows keeps the direct row over an audience-held one", () => {
-	// audience subscriber first, then direct subscriber: the later direct subscriber row displaces it
-	const audienceFirstSubscriptions = toSubscriptionRows([subscriptionRow("t1", "Team"), subscriptionRow("t1", null)])
-	expect(audienceFirstSubscriptions).toHaveLength(1)
-	expect(audienceFirstSubscriptions[0]?.audienceName).toBeNull()
-
-	// direct subscriber first, then audience subscriber: the audience subscriber row must not displace the direct subscriber one
-	const directFirstSubscriptions = toSubscriptionRows([subscriptionRow("t1", null), subscriptionRow("t1", "Team")])
-	expect(directFirstSubscriptions).toHaveLength(1)
-	expect(directFirstSubscriptions[0]?.audienceName).toBeNull()
-})
-
-// an audience-only subscription keeps its audience name, which is what renders the row read-only
-test("toSubscriptionRows keeps the audience name when there is no direct row", () => {
-	const subscriptionRows = toSubscriptionRows([subscriptionRow("t1", "Team"), subscriptionRow("t2", null)])
-	expect(subscriptionRows).toHaveLength(2)
-	expect(subscriptionRows.find((subscriptionRow) => subscriptionRow.topicId === "t1")?.audienceName).toBe("Team")
-	expect(subscriptionRows.find((subscriptionRow) => subscriptionRow.topicId === "t2")?.audienceName).toBeNull()
-})
-
 // the dates serialize to strings for a JSON payload
 test("toSubscriptionRows serializes the subscribed date", () => {
-	const [row] = toSubscriptionRows([subscriptionRow("t1", null)])
+	const [row] = toSubscriptionRows([subscriptionRow("t1")])
 	expect(row?.subscribedAt).toBe("2026-07-01T00:00:00.000Z")
 })

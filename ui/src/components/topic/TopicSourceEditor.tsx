@@ -10,13 +10,13 @@ import { Lightbulb, X } from "lucide-react"
 import type * as React from "react"
 import { useState } from "react"
 import { toast } from "sonner"
+import { fetchSourceSuggestions } from "@/clients/topicClient"
 import { randomThinkingLine } from "@/components/chat/thinkingLines"
 import { Badge } from "@/components/primitives/badge"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { fetchSourceSuggestions } from "@/lib/topicClient"
 import { cn } from "@/lib/utils"
 import { toScreeningNote } from "./TopicInfo"
 
@@ -26,7 +26,7 @@ export type AddedSource = { optionKey: string; value: string; name?: string }
 // how many sources one suggestion request asks for at most
 const MAX_SUGGESTIONS = 3
 
-// what the source controls say once the topic has reached its source limit
+// what the add-source buttons say once the topic has reached its source limit
 export const FULL_SOURCES_NOTE = `Carl reads ${MAX_TOPIC_SOURCES} sources per topic. Drop one to add another.`
 
 // a staged row reads as its resolved name, then as its config summary, then as what was typed
@@ -39,9 +39,7 @@ function toStagedSummary(added: AddedSource): string {
 	return (option && config && toSourceSummary(option.sourceKind, config)) || added.value
 }
 
-// the source editor props: the default sources switched on by key, the kept stored sources, the pending new ones,
-// and their change callbacks. the topic's own words and its prompt urls come along too,
-// since suggesting reads the first and the cap counts the second
+// the source editor props: the default sources switched on by key, the kept stored sources, the pending new ones
 type TopicSourceEditorProps = {
 	defaultSourceKeys: string[]
 	keptSources: TopicResponse["sources"]
@@ -79,8 +77,7 @@ export function TopicSourceEditor({
 
 	// the option the picker is on, which names the value input's placeholder
 	const newOption = toCustomSourceOption(newOptionKey)
-	// a topic needs somewhere to look, so the last remaining source cannot be removed.
-	// urls written into the prompt become sources on save, so they take a sources slot the same as any other
+	// a topic needs somewhere to look, so the last remaining source cannot be removed
 	const totalSources = defaultSourceKeys.length + keptSources.length + addedSources.length + promptSourceUrls.length
 	const sourceSlotsLeft = MAX_TOPIC_SOURCES - totalSources
 	const isFull = sourceSlotsLeft <= 0
@@ -88,7 +85,7 @@ export function TopicSourceEditor({
 	// suggesting a source reads the topic's own words, so a topic that describes nothing yet has nothing to read
 	const hasTopicWords = Boolean(topicName.trim() || topicPrompt.trim())
 
-	// ask for what the topic can hold, and tell the api everything it already follows so nothing repeats
+	// ask for what the topic can hold, and tell the api everything it already reads so nothing repeats
 	const handleSuggestSources = async (): Promise<void> => {
 		setIsSuggestingSources(true)
 		try {
@@ -104,7 +101,7 @@ export function TopicSourceEditor({
 				return
 			}
 
-			// a suggestion names the option it is added through, which is what stages it and includes the display name
+			// a suggestion names the option it is added through, which stages it with its display name
 			const suggestedSources = suggestions.map((suggestion) => ({
 				optionKey: suggestion.sourceOption,
 				value: suggestion.value,
@@ -133,7 +130,7 @@ export function TopicSourceEditor({
 	const handleRemoveDefaultSource = (key: string): void =>
 		removeSource(() => onDefaultKeysChange(defaultSourceKeys.filter((defaultKey) => defaultKey !== key)))
 
-	// stage the picked source and reset the picker, skipping an exact duplicate
+	// stage the selected source and reset the picker, skipping an exact duplicate
 	const handleAddSource = (): void => {
 		const value = newValue.trim()
 		const isDuplicateSource = addedSources.some((added) => added.optionKey === newOptionKey && added.value === value)
@@ -243,15 +240,13 @@ export function TopicSourceEditor({
 	)
 }
 
-// everything the topic already follows, in the shape the api compares by. a kept source is named by its summary,
-// which is the publisher or the feed's host or the subreddit or the id, and that is what identity is decided on
+// everything the topic already reads, in the shape the api compares by. a kept source is identified by its value
 function toExcludedSources(
 	keptSources: TopicResponse["sources"],
 	addedSources: AddedSource[],
 	promptSourceUrls: string[],
 ): SuggestSourcesPayload["excludeSources"] {
-	// a staged source already names its option, and a stored one names the kind that option saves as.
-	// the web scout is left out, since it is a default source and never suggested
+	// a staged source already names its option, and a stored one names the kind that option saves as
 	const storedSources = keptSources.flatMap((source) => {
 		const optionKey = toCustomSourceKey(source.sourceKind)
 		return optionKey ? [{ sourceOption: optionKey, value: source.value }] : []
@@ -299,7 +294,7 @@ function AddSourceLink({ isFull, onClick }: { isFull: boolean; onClick: () => vo
 	)
 }
 
-// the button that asks Carl to suggest sources. its tooltip shows how many sources it can be added
+// the button that asks Carl to suggest sources. its tooltip shows how many sources it can add
 function RecommendButton({
 	isFull,
 	isDisabled,
@@ -333,7 +328,7 @@ function ThinkingLine() {
 	return <span className="shimmer-text text-sm">{`Carl is ${thinkingLine}…`}</span>
 }
 
-// one default source row. it removes like any other source when on, and reads as a turn-on control when off
+// one default source row. it removes like any other source when on, and reads as a + turn-on button when off
 function TopicDefaultSource({
 	label,
 	summary,
@@ -362,7 +357,7 @@ function TopicSourceSectionLabel({ children, className }: { children: React.Reac
 	return <div className={cn("text-muted-foreground/80 mb-1 text-[11px] tracking-wide", className)}>{children}</div>
 }
 
-// one source row in the editor: the source kind pill, the config text, it's llm-guard screening status, and the ✕ remove control
+// one source row in the editor
 function TopicSource({
 	sourceKind,
 	summary,

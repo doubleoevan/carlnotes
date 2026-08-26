@@ -1,4 +1,4 @@
-// oauth provider icons. GitHub's icon comes from simple-icons, and Google's icon stays drawn here
+// oauth provider icons. GitHub's icon comes from simple-icons, and Google's icon is drawn here
 import { BrandIcon } from "@/components/common/BrandIcon"
 
 /**

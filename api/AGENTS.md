@@ -1,0 +1,11 @@
+# api/
+
+Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregates the `/api` routes.
+
+- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `share/`. Root files are cross-domain surfaces
+  (auth, billing, admin, avatars, profiles, SEO pages).
+- Every authority answer routes through `authorization.ts` and the role helpers; inline
+  `role ===` / `plan ===` comparisons are banned outside it (`authorization.test.ts` greps).
+- Request bodies validate with zod payloads from `shared/contracts.ts` via `zValidator`.
+- A private or team read the user may not see answers 404, never 403; the invite gate keeps its 403.
+- Dev: `bun run dev:api` (doppler, port 3000). Tests: `bun test api`; `*.smoke.ts` run under `doppler run`.

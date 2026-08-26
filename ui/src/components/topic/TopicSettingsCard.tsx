@@ -1,13 +1,13 @@
 import type { TopicResponse } from "@shared/contracts"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { INFO_CARD_CLASS, toAgeLabel, toDollarLabel, toDurationLabel, toScheduleLabel } from "@/lib/utils"
+import { toAgeLabel, toDollarLabel, toDurationLabel, toScheduleLabel } from "@/lib/labels"
+import { INFO_CARD_CLASS } from "@/lib/styleClasses"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { InfoSection, TopicSourcesSection } from "./TopicInfo"
 
 /**
  * The topic page's card for how the topic is brewed: where Carl looks, when he looks, and how much he keeps.
- * Who may see it reads as part of the topic itself, so visibility sits in the Topic roast card instead.
  */
 export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 	// how long the last scan took, shown under the last scan age
@@ -28,7 +28,7 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 						{lastScanDuration && <div className="text-muted-foreground text-xs">{lastScanDuration} taken</div>}
 					</InfoSection>
 
-					{/* how many findings a scan keeps, worded exactly like the edit modal's select */}
+					{/* how many findings a scan keeps */}
 					<InfoSection label="Max results">{`Carl's top ${topic.maxResults}`}</InfoSection>
 
 					{/* this month's total scan spend, visible to the owner or an admin */}
@@ -41,7 +41,7 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 	)
 }
 
-// says that the schedule above is paused because the plan is past its limit with a call to action to upgrade on the plans page
+// says that the schedule above is paused because the plan is past its limit with a call to action to upgrade
 function PausedFrequencyNote() {
 	return (
 		<Tooltip>

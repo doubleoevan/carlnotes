@@ -1,15 +1,13 @@
-// the url, title, and kind normalization a Resource gets before it is stored. the canonical url is the key that Scans dedupes on,
+// the url, title, and kind normalization a Resource gets before it is stored
 import type { NewResource } from "./ingester"
 
 // the query parameters that name a referrer instead of the page. filter them out of the url
 const TRACKING_PARAMETERS = /^(utm_|fbclid$|gclid$|mc_[ce]id$|igshid$|si$|ref$|ref_src$|source$|spm$)/i
 
-// paths are case-sensitive in general. reddit's are not, since a subreddit name reads the same either way
-// and a post-id is already lowercase base36. x serves the same tweet whatever the handle's case, and a status id is digits
+// paths are case-sensitive in general
 const CASE_INSENSITIVE_PATH_HOSTS = ["reddit.com", "x.com"]
 
-// a host renamed to another one, which serves the same page under both names. only a rename belongs here,
-// so a tweet found as twitter.com and the same tweet read from x.com store once
+// a host renamed to another one, which serves the same page under both names
 const RENAMED_HOSTS: Record<string, string> = { "twitter.com": "x.com", "mobile.twitter.com": "x.com" }
 
 // a YouTube channel named by its handle, which ignores case, optionally followed by a tab like /videos
@@ -18,13 +16,11 @@ const YOUTUBE_HANDLE_PATH = /^\/(@[^/]+|c\/[^/]+|user\/[^/]+)(\/|$)/
 // YouTube's older channel url, which is the handle alone with no @ or /c/ in front
 const YOUTUBE_LEGACY_HANDLE_PATH = /^\/[^/@]+\/?$/
 
-// what a line has to measure to pass as a title. shorter is a fragment like a year or a rule,
-// and longer is the page's opening paragraph instead of its name
+// what a line has to measure to pass as a title
 const MIN_TITLE_CHARS = 3
 const MAX_TITLE_CHARS = 120
 
-// one snippet line reduced to the text, a title would be. Markdown heading, quote, and bullet marks are stripped from the front,
-// and the surrounding whitespace with them
+// one snippet line reduced to the text, a title would be
 function toTitleLine(line: string): string {
 	return line
 		.trim()
@@ -34,8 +30,7 @@ function toTitleLine(line: string): string {
 		.trim()
 }
 
-// whether a cleaned line reads like a page's name instead of a piece of its body.
-// a title runs between the lengths above, opens on a capital or a number, and says at least one word
+// whether a cleaned line reads like a page's name instead of a piece of its body
 function isTitleLine(line: string): boolean {
 	// the length bounds first, then the shape
 	if (line.length < MIN_TITLE_CHARS || line.length > MAX_TITLE_CHARS) {
@@ -45,8 +40,7 @@ function isTitleLine(line: string): boolean {
 }
 
 /**
- * A url reduced to the one form every variant of it shares. A url that does not parse comes back untouched,
- * since there is nothing safe to normalize.
+ * A url reduced to the one form every variant of it shares. A url that does not parse comes back untouched.
  */
 export function toCanonicalUrl(url: string): string {
 	let parsedUrl: URL
@@ -56,8 +50,7 @@ export function toCanonicalUrl(url: string): string {
 		return url
 	}
 
-	// the host never distinguishes case. the port is left alone, since URL already drops the scheme's default one
-	// and a non-default port addresses a different server instead of the same page
+	// the host never distinguishes case
 	parsedUrl.hostname = parsedUrl.hostname.toLowerCase()
 
 	// a renamed host folds to its current name, matched with and without the www prefix
@@ -83,8 +76,7 @@ export function toCanonicalUrl(url: string): string {
 		(knownHost) => hostWithoutWww === knownHost || hostWithoutWww.endsWith(`.${knownHost}`),
 	)
 
-	// YouTube folds case only on its handle forms. its other paths use exact ids: /channel/UC…, /shorts/…,
-	// lowercasing one points the url at a page that is not there
+	// YouTube folds case only on its handle forms
 	const isYouTube = hostWithoutWww === "youtube.com" || hostWithoutWww.endsWith(".youtube.com")
 	const isYouTubeHandle =
 		isYouTube && (YOUTUBE_HANDLE_PATH.test(parsedUrl.pathname) || YOUTUBE_LEGACY_HANDLE_PATH.test(parsedUrl.pathname))
@@ -100,7 +92,7 @@ export function toCanonicalUrl(url: string): string {
  * Search providers sometimes return an empty title, and a row printing only its host reads as broken.
  */
 export function toFallbackTitle(url: string, snippet: string | null | undefined): string | null {
-	// the first snippet line that reads like a title, since a scraped page often opens with body text
+	// the first snippet line that reads like a title
 	const titleLine = (snippet ?? "").split("\n").map(toTitleLine).find(isTitleLine)
 	if (titleLine) {
 		return titleLine

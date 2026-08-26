@@ -7,10 +7,10 @@ import { Input } from "@/components/primitives/input"
 import { Label } from "@/components/primitives/label"
 import { GithubIcon, GoogleIcon } from "@/components/session/OAuthProviderIcons"
 import { PasswordInput } from "@/components/session/PasswordInput"
-import { toChromeIntentUrl } from "@/lib/userAgent"
+import { toChromeIntentUrl } from "@/lib/chromeIntentUrl"
 import { cn } from "@/lib/utils"
 
-// the oauth buttons dark hero background, which leaves the email path reading as the quieter option
+// the oauth buttons' dark hero background, which leaves the email path reading as the quieter option
 const OAUTH_BUTTON_CLASS =
 	"bg-hero text-hero-foreground hover:bg-[color-mix(in_oklab,var(--hero)_88%,white)] hover:ring-2 hover:ring-ring w-full gap-2"
 
@@ -42,7 +42,7 @@ export function SessionLayout({
 	// an embedded webview rejects Google's oauth
 	const [isBrowserInApp] = useState(() => isInAppBrowser(navigator.userAgent))
 
-	// an embedded webview determines whether to show the email form or the oauth buttons first
+	// both blocks, ordered below by whether the browser is embedded
 	const oauthButtons = <OauthButtons isBrowserInApp={isBrowserInApp} onOAuth={onOAuth} />
 	const emailForm = (
 		<EmailForm
@@ -125,8 +125,7 @@ function OauthButtons({
 	)
 }
 
-// only show the normal Google sign-in button if the user is in a standalone browser
-// otherwise disable the button on ios or show it with a link to chrome on android
+// only show the normal Google sign-in button if the user is in a standalone browser otherwise disable the button
 function GoogleOauthButton({
 	isBrowserInApp,
 	onOAuth,
@@ -160,7 +159,7 @@ function GoogleOauthButton({
 	)
 }
 
-// the email login form
+// the email form for login or signup
 function EmailForm({
 	isBrowserInApp,
 	onSubmit,

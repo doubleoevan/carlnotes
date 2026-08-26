@@ -12,7 +12,7 @@ const SEARCH_RESPONSE = {
 	costDollars: { total: 0.005 },
 }
 
-// each result becomes one "read" Resource mapped to its url, deduped within the payload. the provider's cost is also returned
+// each result becomes one "read" Resource mapped to its url, deduped within the payload
 test("parseResults maps search results to deduped read Resources and reports cost", () => {
 	const { resources, costDollars } = parseResults(SEARCH_RESPONSE)
 	expect(resources.map((resource) => resource.url)).toEqual(["https://a.com/1", "https://b.com/2"])

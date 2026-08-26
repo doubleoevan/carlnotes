@@ -1,17 +1,17 @@
 import { ResourceSkeleton } from "@/components/topic/TopicFeedSkeleton"
-import { cn, RESOURCE_LIST_CARD_CLASS } from "@/lib/utils"
+import { RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
 // placeholder keys for the skeleton's finding rows, history rows, and info card sections
 const FINDING_SKELETONS = ["f1", "f2", "f3", "f4", "f5"]
 const SCAN_SKELETONS = ["s1", "s2"]
 const CARD_SKELETONS = ["prompt", "sources", "schedule", "visibility"]
 
-// the loading state for the topic below the static controls: header, findings, then history and the card.
-// an invite topic's gate displays the title when passed in.
+// the loading state for the topic below the static button row: header, findings, then history and the card
 export function TopicSkeleton({ topicTitle }: { topicTitle?: string }) {
 	return (
 		<div>
-			{/* title row with the unread count, seated where the real title lands */}
+			{/* title row with the unread count, where the real title sits */}
 			<div className="mt-6 flex items-start justify-between gap-3">
 				{topicTitle ? (
 					<h1 className="font-display min-w-0 text-2xl leading-tight">{topicTitle}</h1>
@@ -23,7 +23,7 @@ export function TopicSkeleton({ topicTitle }: { topicTitle?: string }) {
 
 			{/* everything below the title is decorative pulse, hidden from assistive tech as one block */}
 			<div aria-hidden="true">
-				{/* the owner byline placeholder where "Brewed by" lands: the avatar circle, then the credit bar */}
+				{/* the owner byline placeholder where "Brewed by" sits: the avatar circle, then the credit bar */}
 				<div className="mt-2 flex items-center gap-2">
 					<div className="bg-muted size-6 shrink-0 animate-pulse rounded-full" />
 					<div className="bg-muted h-4 w-40 animate-pulse rounded" />
@@ -35,8 +35,8 @@ export function TopicSkeleton({ topicTitle }: { topicTitle?: string }) {
 					<div className="bg-muted h-7 w-24 animate-pulse rounded" />
 				</div>
 				<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
-					{FINDING_SKELETONS.map((row) => (
-						<ResourceSkeleton key={row} />
+					{FINDING_SKELETONS.map((skeletonKey) => (
+						<ResourceSkeleton key={skeletonKey} />
 					))}
 				</div>
 				<div className="mt-1 flex min-h-9 items-center">
@@ -50,11 +50,11 @@ export function TopicSkeleton({ topicTitle }: { topicTitle?: string }) {
 							<div className="bg-muted size-4 animate-pulse rounded" />
 							<div className="bg-muted h-7 w-20 animate-pulse rounded" />
 						</div>
-						{/* the brew diary rows in the card they land in: a timestamp, a stat, and the note the row opens */}
+						{/* the brew diary rows in the card they sit in: a timestamp, a stat, and the note the row opens */}
 						<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
-							{SCAN_SKELETONS.map((row) => (
+							{SCAN_SKELETONS.map((skeletonKey) => (
 								<div
-									key={row}
+									key={skeletonKey}
 									className="after:border-separator-strong relative flex items-center gap-3 py-2.5 pr-1 pl-2 after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden"
 								>
 									<div className="bg-muted h-4 w-28 shrink-0 animate-pulse rounded" />
@@ -66,7 +66,7 @@ export function TopicSkeleton({ topicTitle }: { topicTitle?: string }) {
 							))}
 						</div>
 					</div>
-					{/* the info card outline with its label and text bars, split by dashed rules */}
+					{/* the info card outline with its label and text bars, split by dashed dividers */}
 					<div className="divide-separator border-separator mt-2 h-fit divide-y divide-dashed rounded-lg border p-5">
 						{CARD_SKELETONS.map((block) => (
 							<div key={block} className="py-3 first:pt-0 last:pb-0">

@@ -1,5 +1,4 @@
-// starting a Scan. the row is opened here and the work itself runs as a Temporal workflow, so a Scan survives
-// the death of whatever process asked for it. the stages live in workflows/run-topic-scan-activities.ts
+// starting a Scan
 import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "../db"
 import { scans } from "../db/schema"
@@ -9,21 +8,19 @@ import type { ScanTrigger } from "./workflows/run-topic-scan-activities"
 // a persisted Scan row
 type Scan = typeof scans.$inferSelect
 
-// the scan row this opened and a promise that settles when the workflow ends.
-// "running" means the Topic already had a Scan in flight and this one was never opened
+// the scan row this opened and a promise that settles when the workflow ends. "running" means one was already in flight
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type TopicScanStart = { status: "started"; scan: Scan; whenFinished: Promise<void> } | { status: "running" }
 
 /**
  * Open a Scan for a Topic and hand it to Temporal. Returns "running" when the Topic already has one in flight —
- * the workflow id catches that, not a query, since a query could still read a stale row.
+ * the workflow id catches that, and a query could still read a stale row.
  * the trigger holds what asked for the Scan, which decides what its conclusion announces.
- * The daily quota counts scheduled and manual Scans the same way, so the trigger is not a quota distinction.
+ * The daily quota counts scheduled and manual Scans the same way.
  * ownerId is saved to the Scan so its spend and quota attribution survive the topic being deleted.
  */
 export async function startTopicScan(topicId: string, ownerId: string, trigger: ScanTrigger): Promise<TopicScanStart> {
-	// a Topic can already have an open scan row with no workflow behind it yet
-	// a missing dispatchedAt field is exactly that state
+	// a Topic can already have an open scan row with no workflow behind it yet a missing dispatchedAt field is
 	const [openScan] = await db
 		.select()
 		.from(scans)
@@ -31,9 +28,7 @@ export async function startTopicScan(topicId: string, ownerId: string, trigger: 
 		.orderBy(desc(scans.startedAt))
 		.limit(1)
 
-	// the scan row is written before the workflow starts, so the Topic page shows a Scan already under way.
-	// a scan row taken this way gets this call's owner and trigger.
-	// its spend, quota, and reporting all follow what the scan row says.
+	// the scan row is written before the workflow starts, so the topic page shows a scan already under way
 	const scanFields = { ownerId, isManual: trigger === "manual" }
 	const takenFields = { ...scanFields, startedAt: new Date() }
 	const [scan] = openScan
@@ -61,9 +56,7 @@ export async function scanTopic(
 	trigger: ScanTrigger,
 	isExistingRow = false,
 ): Promise<TopicScanStart> {
-	// a start that throws an error leaves the row with nothing running,
-	// and an unreachable Temporal service throws for every Scan at once.
-	// a scan row that this call opened runs instead of being deleted
+	// a start that throws leaves the row with nothing running. a row this call opened runs instead of being deleted
 	let scanStart: ScanStart
 	try {
 		scanStart = await startTopicScanWorkflow(scan.id, topicId, ownerId, trigger)
@@ -72,9 +65,7 @@ export async function scanTopic(
 		throw error
 	}
 
-	// a rejection means this Topic already has a Scan in flight. a row this call opened will never run, so it's deleted.
-	// a row that already existed is has a dispatchedAt saved instead, which heals the case where a start succeeded and
-	// only its dispatchedAt write failed. a scan row that is truly orphaned is started on the next sweep
+	// a rejection means a scan is already in flight. a row this call opened is deleted, an existing one gets a dispatchedAt
 	if (scanStart.status === "running") {
 		if (!isExistingRow) {
 			await db.delete(scans).where(eq(scans.id, scan.id))

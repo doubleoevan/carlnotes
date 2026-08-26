@@ -1,5 +1,4 @@
-// a Source that runs clean and brings back nothing is reported as a fallback instead of an ok
-// a dead feed still responds 200 and would otherwise read as a healthy Source
+// a Source that runs clean and brings back nothing is reported as a fallback
 import { expect, test } from "bun:test"
 import { type SourceOutcome, toScanSummary } from "./index"
 
@@ -38,8 +37,7 @@ test("a Scan fails when every Source errored", () => {
 	expect(toScanSummary([outcome]).status).toBe("failed")
 })
 
-// a body an ingester already fetched has to survive the dedupe to reach the store step,
-// or the page would be scraped a second time by review and billed twice
+// a body an ingester already fetched has to survive the dedupe to reach the store step, or the page would be
 test("a Resource keeps its fetched body through the dedupe", () => {
 	const fetchedBody = { markdown: "# The page", etag: 'W/"abc"', lastModified: null }
 	const scanSummary = toScanSummary([
@@ -54,8 +52,7 @@ test("a Resource with no fetched body keeps none", () => {
 	expect(scanSummary.resources[0]?.fetchedBody).toBeUndefined()
 })
 
-// the first Resource seen per canonical url wins, so a page found twice keeps the body of whichever ingester
-// paid to fetch it, instead of being overwritten
+// the first Resource seen per canonical url wins
 test("a page found twice keeps the body of the first sighting", () => {
 	const fetchedBody = { markdown: "# The page", etag: null, lastModified: null }
 	const scanSummary = toScanSummary([

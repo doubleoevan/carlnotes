@@ -1,10 +1,9 @@
-// signed one-click unsubscribe tokens for the topic-scan email. the signature stops anyone from unsubscribing someone else.
-// HMAC-SHA256 over a base64url payload keyed on the app auth secret, mirroring the signup-gate token in api/auth.ts
+// signed one-click unsubscribe tokens for the topic-scan email
 
-// an unsubscribe token carries the recipient and the topic to drop them from
+// an unsubscribe token includes the recipient and the topic to drop them from
 type UnsubscribePayload = { userId: string; topicId: string }
 
-// sign a token that unsubscribes this user from this topic. the worker mints one per recipient at email-send time
+// sign a token that unsubscribes this user from this topic. the worker creates one per recipient at email-send time
 export async function signUnsubscribeToken(unsubscribePayload: UnsubscribePayload): Promise<string> {
 	// a base64url payload plus its signature, joined by a dot
 	const encodedPayload = Buffer.from(JSON.stringify(unsubscribePayload)).toString("base64url")

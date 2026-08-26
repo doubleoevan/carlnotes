@@ -54,8 +54,7 @@ test("isTopicScheduled gates on the frequency window", () => {
 	expect(isTopicScheduled({ frequency: "weekly" }, new Date("2026-07-18T12:00:00Z"), now)).toBe(false)
 })
 
-// a failed scan spends the frequency window like any other,
-// so a Topic whose sources keep failing waits out the frequency window instead of being picked up by every sweep.
+// a failed scan spends the frequency window like any other
 test("isTopicScheduled holds a Topic back after a failed scan until the window elapses", () => {
 	const now = new Date("2026-07-24T12:00:00Z")
 	// a daily Topic whose scan failed an hour ago should not get scheduled again yet
@@ -81,8 +80,7 @@ test("isTopicScheduled still schedules a new weekdays Topic on a weekend", () =>
 	expect(isTopicScheduled({ frequency: "weekdays" }, undefined, new Date("2026-07-25T12:00:00Z"))).toBe(true)
 })
 
-// a running Scan never spends the window: isTopicScheduled reads completed Scans only,
-// so a new topic holding just the pending scan its creation scheduled reaches isTopicScheduled with no completed date and is due immediately
+// a running Scan never spends the window: isTopicScheduled reads completed Scans only
 test("isTopicScheduled treats a topic with only a pending running scan as due", () => {
 	const now = new Date("2026-07-24T12:00:00Z")
 	expect(isTopicScheduled({ frequency: "daily" }, undefined, now)).toBe(true)
@@ -97,7 +95,7 @@ test("toExclusiveTask skips a call made while the previous call is still running
 		return deferredTask.promise
 	})
 
-	// the first call starts the task and is still awaiting it when the second call arrives
+	// the first call starts the task and is still waiting for it when the second call arrives
 	const firstCall = exclusiveTask()
 	const secondCall = await exclusiveTask()
 	expect(secondCall).toBeNull()
@@ -110,8 +108,7 @@ test("toExclusiveTask skips a call made while the previous call is still running
 	expect(callCount).toBe(2)
 })
 
-// the sweep hands each Scan to Temporal and does not wait, so its summary count starts.
-// how a Scan ended is on its own row, and there is no outcome for the sweep to fold in
+// the sweep hands each Scan to Temporal and does not wait, so its summary count starts
 test("a topic sweep summary counts starts instead of outcomes", () => {
 	const summary = emptyTopicSweepSummary()
 	expect(Object.keys(summary).sort()).toEqual([
@@ -123,7 +120,7 @@ test("a topic sweep summary counts starts instead of outcomes", () => {
 	])
 })
 
-// the stale scan window waits out the longest a Scan may legally run, which is every stage using every attempt it is allowed.
+// the stale scan window waits out the longest a Scan may legally run
 test("the stale scan window clears the longest a Scan may legally run", () => {
 	// each stage's total covers its own retries, so the sum below cannot fall behind a retry policy that changes
 	expect(INGEST_TOTAL_TIMEOUT_MS).toBe(INGEST_TIMEOUT_MS * INGEST_ATTEMPTS)
@@ -135,8 +132,7 @@ test("the stale scan window clears the longest a Scan may legally run", () => {
 	expect(staleScanWindowMs()).toBeGreaterThan(MAX_SCAN_DURATION_MS)
 })
 
-// the daily topic limit binds the Topics already there, not only the ones being written,
-// so a plan downgrade actually takes the frequency back
+// the daily topic limit binds the Topics already there, not only the ones being written
 test("the sweep runs only the daily Topics inside their owner's allowance", () => {
 	const allowance = new Set(["kept"])
 

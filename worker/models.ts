@@ -1,14 +1,11 @@
-// the app's LLM model tiers, all routed through LiteLLM.
-// each client is built lazily so a missing proxy config throws when a model is used
-// instead of silently falling back to OpenAI
+// the app's LLM model tiers, all routed through LiteLLM
 import { createOpenAI } from "@ai-sdk/openai"
-import { type EmbeddingModel, embed, type LanguageModel } from "ai"
+import { type EmbeddingModel, embed, embedMany, type LanguageModel } from "ai"
 import { EMBED_DIMENSIONS } from "../db/schema"
 
 // litellmApiKey bills a scan to its topic owner's key. callers with no user context use the master key
 
-// how long one model request may run before it aborts. without this a stalled proxy request never returns
-// and pins its Scan in "running" forever, which reads as a scan that is still going instead of one that broke
+// how long one model request may run before it aborts
 const MODEL_TIMEOUT_MS = Number(Bun.env.MODEL_TIMEOUT_MS ?? "120000")
 
 // the cheap model handles high-volume inference like query generation and first-pass scoring
@@ -26,17 +23,30 @@ export function chatModel(litellmApiKey?: string): LanguageModel {
 	return createModelProxyClient(litellmApiKey).chat("chat-model")
 }
 
-// the embedding model routes through LiteLLM's embed-model alias (qwen3-embedding-8b).
-// callers go through embedVector, which truncates the proxy's full-width vector to the schema dimension
+// the embedding model routes through LiteLLM's embed-model alias (qwen3-embedding-8b)
 export function embedModel(litellmApiKey?: string): EmbeddingModel {
 	return createModelProxyClient(litellmApiKey).embeddingModel("embed-model")
 }
 
-// the single place raw embeddings are produced, so no caller can skip truncation. the proxy drops the dimensions param and
-// returns qwen3's full 4096-wide vector, so keep the first EMBED_DIMENSIONS (MRL front-loads the important dims) and re-normalize, or cosine distance breaks
+// the single place raw embeddings are produced, so no caller can skip truncation
 export async function embedVector(text: string, litellmApiKey?: string): Promise<number[]> {
 	// embed through the proxy, then reduce to the schema's width
 	const { embedding } = await embed({ model: embedModel(litellmApiKey), value: text })
+	return toSchemaVector(embedding)
+}
+
+/**
+ * Embed many texts in one call through embedMany, which batches the proxy requests instead of making one per text.
+ * Each vector gets the same truncation and normalization as embedVector does, returned in the input order.
+ */
+export async function embedVectors(texts: string[], litellmApiKey?: string): Promise<number[][]> {
+	// embed through the proxy, then reduce each vector to the schema's width
+	const { embeddings } = await embedMany({ model: embedModel(litellmApiKey), values: texts })
+	return embeddings.map(toSchemaVector)
+}
+
+// reduce one raw proxy vector to the schema's width
+function toSchemaVector(embedding: number[]): number[] {
 	// a shorter vector than the target means a model or config change. fail loud instead of silently padding
 	if (embedding.length < EMBED_DIMENSIONS) {
 		throw new Error(`embedding model returned ${embedding.length} dimensions, need at least ${EMBED_DIMENSIONS}`)
@@ -54,8 +64,7 @@ function toUnitVector(vector: number[]): number[] {
 	return vector.map((value) => value / magnitude)
 }
 
-// build the OpenAI-compatible LLM client on demand
-// the proxy env is required explicitly, so an unset base url cannot default the provider to api.openai.com
+// build the OpenAI-compatible LLM client on demand the proxy env is required explicitly
 function createModelProxyClient(litellmApiKey?: string): ReturnType<typeof createOpenAI> {
 	// LiteLLM is OpenAI-compatible. the proxy url is always required
 	const baseURL = Bun.env.LITELLM_BASE_URL

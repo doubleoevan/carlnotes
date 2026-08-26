@@ -1,4 +1,4 @@
-// the app's core database tables, one per domain concept. a topic feed has no table. it gets built from a topic's findings at runtime.
+// the app's core database tables, one per domain concept
 
 // enum value sets that live in @shared so that db pgEnums, api validation, and ui rendering can read one source
 import {
@@ -8,6 +8,7 @@ import {
 	chatAttachmentKinds,
 	daysOfWeek,
 	frequencies,
+	inviteAccesses,
 	maxResultsOptions,
 	plans,
 	ratings,
@@ -15,10 +16,12 @@ import {
 	scanStatuses,
 	sourceKinds,
 	sourceVisibilities,
+	teamRoles,
 	visibilities,
 } from "@shared/enums"
 import { sql } from "drizzle-orm"
 import {
+	bigint,
 	boolean,
 	check,
 	index,
@@ -58,16 +61,17 @@ export const sourceStatus = pgEnum("source_status", attachmentStatuses)
 export const chatAttachmentKind = pgEnum("chat_attachment_kind", chatAttachmentKinds)
 // where a user's public avatar image comes from. only oauth and upload have a stored object behind them
 export const avatarSource = pgEnum("avatar_source", avatarSources)
+// a member's team role, and who may address an invite to a user
+export const teamRole = pgEnum("team_role", teamRoles)
+export const inviteAccess = pgEnum("invite_access", inviteAccesses)
 
-// the review embedding's vector width. the resources.embedding column and the worker's embed helper share this one constant
+// the review embedding's vector width
 export const EMBED_DIMENSIONS = 1024
 
-// the embedding's vector space, stamped onto embedding_model so a row names its model and dimension instead of
-// the routing alias. review writes it and chat retrieval filters on it, so a changed model or dimension needs a backfill
+// the embedding's vector space, stamped onto embedding_model
 export const EMBED_MODEL_NAME = `qwen3-embedding-8b/${EMBED_DIMENSIONS}`
 
-// the users table. its columns match Better Auth's user schema, plus one app-specific field.
-// the plural name comes from Better Auth's usePlural option.
+// the users table
 export const users = pgTable(
 	"users",
 	{
@@ -80,15 +84,16 @@ export const users = pgTable(
 		username: text("username").notNull(),
 		// the normalized username to search for already taken ones
 		usernameNormalized: text("username_normalized").notNull(),
-		// where the public avatar comes from, and the stored object behind it.
-		// avatar_key is null for the generated username initials.
+		// where the public avatar comes from, and the stored object behind it
 		avatarSource: avatarSource("avatar_source").notNull().default("generated"),
 		avatarKey: text("avatar_key"),
 		// this user's litellm virtual key, provisioned with a spend budget at signup. null only before signup completes
 		litellmVirtualKey: text("litellm_virtual_key"),
 		// the platform role: "admin" or "user". plain text to match Better Auth's admin plugin shape
 		role: text("role").notNull().default("user"),
-		// the billing plan. the Stripe webhook projects it from the user's active billing subscription, and free means there is none
+		// who may address an invite to this user, enforced at invite creation and nowhere else
+		inviteAccess: inviteAccess("invite_access").notNull().default("anyone"),
+		// the billing plan
 		plan: plan("plan").notNull().default("free"),
 		// a per-user monthly spend override in cents. an admin can raise or lower it, and null falls back to the plan's backstop
 		budgetOverrideCents: integer("budget_override_cents"),
@@ -99,7 +104,7 @@ export const users = pgTable(
 			.$onUpdate(() => new Date())
 			.notNull(),
 	},
-	// this index is what the available username lookup reads
+	// enforces username uniqueness, compared on the normalized form
 	(table) => [uniqueIndex("users_username_normalized_unique").on(table.usernameNormalized)],
 )
 
@@ -128,7 +133,7 @@ export const sessions = pgTable(
 	(table) => [index("sessions_user_id_idx").on(table.userId)],
 )
 
-// the accounts table. a sign-in identity, either a password credential or an oauth grant. a connected external account is an Integration
+// the accounts table
 export const accounts = pgTable(
 	"accounts",
 	{
@@ -211,14 +216,15 @@ export const topics = pgTable(
 		// the day a weekly scan runs on. ignored for every other frequency
 		scheduledDayOfWeek: dayOfWeek("scheduled_day_of_week").notNull().default("monday"),
 		visibility: visibility("visibility").notNull().default("private"),
+		// the team that holds this topic, or null for a topic on no team
+		teamId: text("team_id").references(() => teams.id, { onDelete: "set null" }),
 		// free-form category labels, empty by default
 		tags: text("tags").array().notNull().default([]),
 		// an admin can feature this topic and set its order
 		featureOrder: integer("feature_order"),
 		// how many findings a scan keeps for this topic, one of the shared allowed sizes
 		maxResults: integer("max_results").notNull().default(10),
-		// the unique subscriber count for direct and audience-inherited topic subscribers, not including the owner.
-		// denormalized to save an extra query per topic
+		// the unique subscriber count for the topic's active subscribers, not including the owner
 		subscriberCount: integer("subscriber_count").notNull().default(0),
 		// created and updated timestamps
 		...timestamps(),
@@ -226,6 +232,9 @@ export const topics = pgTable(
 	// the generalized inverted index for topic tag filtering, and the allowed kept-set sizes
 	(table) => [
 		index("topics_tags_gin").using("gin", table.tags),
+		// covers the owner and team topic lists
+		index("topics_owner_id_idx").on(table.ownerId),
+		index("topics_team_id_idx").on(table.teamId),
 		check("topics_max_results_allowed", sql.raw(`max_results in (${maxResultsOptions.join(", ")})`)),
 	],
 )
@@ -237,13 +246,12 @@ export const sources = pgTable("sources", {
 	topicId: text("topic_id")
 		.notNull()
 		.references(() => topics.id, { onDelete: "cascade" }),
-	// the source kind: url, rss, reddit, YouTube, podcast, search, bluesky, x, composio, or plugin. config holds its per-kind settings
+	// the source kind: url, rss, reddit, YouTube, podcast, search, bluesky, x, composio, or plugin
 	kind: sourceKind("kind").notNull(),
 	config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
 	// credentials resolve through an integration when present
 	integrationId: text("integration_id").references(() => integrations.id, { onDelete: "set null" }),
-	// the async screening status and its failure reason. a source is ignored until it is ready:
-	// hidden from anyone but the owner, and skipped by scans. a kind that is not screened is saved ready
+	// the async screening status and its failure reason
 	status: sourceStatus("status").notNull().default("pending"),
 	error: text("error"),
 	// created and updated timestamps
@@ -276,53 +284,58 @@ export const attachments = pgTable("attachments", {
 })
 
 // a scan is the record for a single execution of the topic's pipeline
-export const scans = pgTable("scans", {
-	id: primaryId(),
-	// the topic scanned, cleared instead of being cascaded so that a deleted topic's scans keep their spend history
-	topicId: text("topic_id").references(() => topics.id, { onDelete: "set null" }),
-	// who the scan bills and counts against. it is set at creation and never cleared,
-	// so the spend and the daily count survive a topic being deleted
-	ownerId: text("owner_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	// the scan status. running until it succeeds or fails. error holds a failure reason
-	status: scanStatus("status").notNull().default("running"),
-	error: text("error"),
-	// when the scan pipeline ran
-	startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
-	finishedAt: timestamp("finished_at", { withTimezone: true }),
-	// when the scan's workflow was accepted. null means it was never started
-	dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
-	// when the user stopped the scan. a stopped scan still saves as succeeded and still charges what it spent,
-	// so this is what removes it from the daily scan count while leaving it in the monthly spend
-	stoppedAt: timestamp("stopped_at", { withTimezone: true }),
-	// true when the owner triggered this scan by hand with "Run now". scheduled and seeded scans stay false
-	isManual: boolean("is_manual").notNull().default(false),
-	// what it cost and how many resources the scan found, kept, and filtered
-	cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
-	foundCount: integer("found_count").notNull().default(0),
-	keptCount: integer("kept_count").notNull().default(0),
-	filteredCount: integer("filtered_count").notNull().default(0),
-	// how many of the scan's resources had their content reused within the ttl, revalidated via a 304, or freshly fetched
-	reused: integer("reused").notNull().default(0),
-	revalidated: integer("revalidated").notNull().default(0),
-	fetched: integer("fetched").notNull().default(0),
-	// per-stage breakdown of costs: embedding, fetch, cheap/premium scoring. `cost` holds the total
-	stageCosts: jsonb("stage_costs").$type<Record<string, number>>().notNull().default({}),
-	// an AI written recap of what the scan did
-	scanSummary: text("scan_summary"),
-	// sources that did not deliver normally: one that fell back to a keyless path, or one that failed outright.
-	// empty means every source ran its primary path and succeeded
-	problemSources: jsonb("problem_sources")
-		.$type<
-			(
-				| { sourceId: string; status: "fallback"; fallbackMode: string }
-				| { sourceId: string; status: "failed"; reason: string }
-			)[]
-		>()
-		.notNull()
-		.default([]),
-})
+export const scans = pgTable(
+	"scans",
+	{
+		id: primaryId(),
+		// the topic scanned, cleared instead of being cascaded so that a deleted topic's scans keep their spend history
+		topicId: text("topic_id").references(() => topics.id, { onDelete: "set null" }),
+		// who the scan bills and counts against
+		ownerId: text("owner_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// the scan status. running until it succeeds or fails. error holds a failure reason
+		status: scanStatus("status").notNull().default("running"),
+		error: text("error"),
+		// when the scan pipeline ran
+		startedAt: timestamp("started_at", { withTimezone: true }).defaultNow().notNull(),
+		finishedAt: timestamp("finished_at", { withTimezone: true }),
+		// when the scan's workflow was accepted. null means it was never started
+		dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+		// when the user stopped the scan
+		stoppedAt: timestamp("stopped_at", { withTimezone: true }),
+		// true when the owner triggered this scan by hand with "Run now". scheduled and seeded scans stay false
+		isManual: boolean("is_manual").notNull().default(false),
+		// what it cost and how many resources the scan found, kept, and filtered
+		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
+		foundCount: integer("found_count").notNull().default(0),
+		keptCount: integer("kept_count").notNull().default(0),
+		filteredCount: integer("filtered_count").notNull().default(0),
+		// how many of the scan's resources had their content reused within the ttl, revalidated via a 304, or freshly fetched
+		reused: integer("reused").notNull().default(0),
+		revalidated: integer("revalidated").notNull().default(0),
+		fetched: integer("fetched").notNull().default(0),
+		// per-stage breakdown of costs: embedding, fetch, cheap/premium scoring. `cost` holds the total
+		stageCosts: jsonb("stage_costs").$type<Record<string, number>>().notNull().default({}),
+		// an AI written recap of what the scan did
+		scanSummary: text("scan_summary"),
+		// sources that did not deliver normally: one that fell back to a keyless path, or one that failed outright
+		problemSources: jsonb("problem_sources")
+			.$type<
+				(
+					| { sourceId: string; status: "fallback"; fallbackMode: string }
+					| { sourceId: string; status: "failed"; reason: string }
+				)[]
+			>()
+			.notNull()
+			.default([]),
+	},
+	// covers the topic history read and the per-owner daily count and monthly spend sums
+	(table) => [
+		index("scans_topic_started_idx").on(table.topicId, table.startedAt),
+		index("scans_owner_started_idx").on(table.ownerId, table.startedAt),
+	],
+)
 
 // a resource is an external artifact discovered by a scan, shared globally across topics
 export const resources = pgTable(
@@ -335,11 +348,9 @@ export const resources = pgTable(
 		// the type of resource ("read", "watch", "listen"), and its display title
 		kind: resourceKind("kind").notNull(),
 		title: text("title"),
-		// a short excerpt provided by the source, small enough to stay in postgres since every list path reads it
+		// a short excerpt provided by the source, small enough to stay in postgres
 		snippet: text("snippet"),
-		// the page's full Markdown. content holds it inline for rows written before object storage.
-		// content_key references it in object storage and content_bytes sizes it.
-		// it is counted toward storage totals.
+		// the page's full Markdown. content is inline for old rows, content_key points into object storage
 		content: text("content"),
 		contentKey: text("content_key"),
 		contentBytes: integer("content_bytes"),
@@ -350,19 +361,16 @@ export const resources = pgTable(
 		engagement: integer("engagement"),
 		// when review last fetched this resource's content. defaults to the resource row creation
 		fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
-		// the etag and last-modified returned by the last fetch, used to check whether the content changed before refetching.
-		// null until a fetch provides them
+		// the etag and last-modified returned by the last fetch, used to check whether the content changed before
 		etag: text("etag"),
 		lastModified: text("last_modified"),
-		// where the source published a transcript of this resource, like a podcast feed's transcript link.
-		// the address only. review fetches the text into content_key like any other body. null when the source published none
+		// where the source published a transcript of this resource, like a podcast feed's transcript link
 		transcriptUrl: text("transcript_url"),
 		// created and updated timestamps
 		...timestamps(),
 	},
 	(table) => [
-		// speeds up the duplicate check, which otherwise reads and sorts every stored resource. cosine matches the
-		// distance the check measures. the lookup is approximate, so it can occasionally let a duplicate through
+		// speeds up the duplicate check, which otherwise reads and sorts every stored resource
 		index("resources_embedding_hnsw").using("hnsw", table.embedding.op("vector_cosine_ops")),
 	],
 )
@@ -391,6 +399,10 @@ export const findings = pgTable(
 		sourceVisibility: sourceVisibility("source_visibility").notNull().default("public"),
 		// the owner's optional rating
 		rating: rating("rating"),
+		// who cast the current thumb and the role held then. nothing reads these for scoring
+		ratedByUserId: text("rated_by_user_id"),
+		ratedTeamId: text("rated_team_id"),
+		ratedRole: text("rated_role"),
 		// the number of times this finding's resource has been opened
 		viewCount: integer("view_count").notNull().default(0),
 		// created and updated timestamps
@@ -440,72 +452,190 @@ export const bookmarks = pgTable(
 	(table) => [unique("bookmarks_user_finding_unique").on(table.userId, table.findingId)],
 )
 
-// a topic invite grants an email address view and subscribe access to an "invite" topic.
-// it references an email, not a user row, so a topic can be shared before the invitee has an account
-export const topicInvites = pgTable(
-	"topic_invites",
+// a user's own words about a finding
+export const findingFeedback = pgTable("finding_feedback", {
+	id: primaryId(),
+	// the finding and topic the words are about
+	findingId: text("finding_id")
+		.notNull()
+		.references(() => findings.id, { onDelete: "cascade" }),
+	topicId: text("topic_id")
+		.notNull()
+		.references(() => topics.id, { onDelete: "cascade" }),
+	// who wrote it
+	userId: text("user_id")
+		.notNull()
+		.references(() => users.id, { onDelete: "cascade" }),
+	feedback: text("feedback").notNull(),
+	createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+})
+
+// one view event per open or dismissal of a finding, written and never read
+export const findingViews = pgTable(
+	"finding_views",
 	{
-		// the topic the invite opens
-		topicId: text("topic_id")
+		id: primaryId(),
+		// the finding and the user
+		findingId: text("finding_id")
 			.notNull()
-			.references(() => topics.id, { onDelete: "cascade" }),
-		// the invited email address and when it was invited
-		email: text("email").notNull(),
-		invitedAt: timestamp("invited_at", { withTimezone: true }).defaultNow().notNull(),
+			.references(() => findings.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// exactly one of the two is set by the writer: an open, or a dismissal
+		openedAt: timestamp("opened_at", { withTimezone: true }),
+		dismissedAt: timestamp("dismissed_at", { withTimezone: true }),
+		// how long the user spent on the note, reported when they leave it
 	},
-	// one invite per topic and email, so re-inviting is a no-op
-	(table) => [primaryKey({ columns: [table.topicId, table.email] })],
+	// covers the view lookup by user and finding
+	(table) => [index("finding_views_user_finding_idx").on(table.userId, table.findingId)],
 )
 
-// an email that a topic sent that resend accepted to be tracked by the admin page.
-// rows are deleted with their topic when it's deleted
+// an invite grants access to one target, a topic or a team. it names an address, a resolved user, or nobody for a link
+export const invites = pgTable(
+	"invites",
+	{
+		id: primaryId(),
+		// the invite's one target: the topic it opens, or the team it joins
+		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
+		teamId: text("team_id").references(() => teams.id, { onDelete: "cascade" }),
+		// what the invite's invite url includes. whoever holds it can accept it, so it is not the row's id
+		token: text("token")
+			.notNull()
+			.$defaultFn(() => crypto.randomUUID()),
+		// the invited email address, null on a link invite that names nobody
+		email: text("email"),
+		// the resolved recipient: set alone by a username invite, set beside the email when an email invite's address
+		invitedUserId: text("invited_user_id").references(() => users.id, { onDelete: "cascade" }),
+		// who created the invite, null when no creator is on record
+		invitedByUserId: text("invited_by_user_id").references(() => users.id, { onDelete: "set null" }),
+		// how many acceptances the token allows, and how many of them are spent
+		maxUses: integer("max_uses").notNull().default(1),
+		usedCount: integer("used_count").notNull().default(0),
+		// when the token stops working on its own, and when the owner withdrew it. both null means neither has happened
+		expiresAt: timestamp("expires_at", { withTimezone: true }),
+		revokedAt: timestamp("revoked_at", { withTimezone: true }),
+		// when the recipient turned the invitation down. kept instead of deleted so reputation can read it
+		declinedAt: timestamp("declined_at", { withTimezone: true }),
+		invitedAt: timestamp("invited_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// exactly one target, enforced where a race cannot slip past it
+		check("invites_target_xor", sql`(${table.topicId} is not null) <> (${table.teamId} is not null)`),
+		// an invite url has the token alone, so it has to be unique across every target
+		unique("invites_token_unique").on(table.token),
+		// one invite per target and address, so re-inviting is a no-op
+		unique("invites_topic_email_unique").on(table.topicId, table.email),
+		unique("invites_team_email_unique").on(table.teamId, table.email),
+		// the same rule per resolved person, so re-inviting an account is a no-op across both addressings
+		unique("invites_topic_invited_user_unique").on(table.topicId, table.invitedUserId),
+		unique("invites_team_invited_user_unique").on(table.teamId, table.invitedUserId),
+		// covers the inviter quota read, and the lookups by recipient and by address
+		index("invites_invited_by_invited_at_idx").on(table.invitedByUserId, table.invitedAt),
+		index("invites_invited_user_id_idx").on(table.invitedUserId),
+		index("invites_email_idx").on(table.email),
+	],
+)
+
+// an email that a topic sent that resend accepted to be tracked by the admin page
 export const topicEmailSends = pgTable("topic_email_sends", {
 	id: primaryId(),
 	// the topic the email was about
 	topicId: text("topic_id")
 		.notNull()
 		.references(() => topics.id, { onDelete: "cascade" }),
-	// who received the email, null for an invitee with no account yet. the user id instead of the address,
-	// so no address is duplicated here, and a closed account leaves the send on record without naming anyone
+	// who received the email, null for an invitee with no account yet
 	recipientUserId: text("recipient_user_id").references(() => users.id, { onDelete: "set null" }),
 	// which kind of email went out: topic-scan, manual-scan, or topic-invite
 	emailKind: text("email_kind").notNull(),
 	sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
 })
 
-// an audience is a named set of users that subscribes to topics as one
-export const audiences = pgTable("audiences", {
-	id: primaryId(),
-	// the owner of the audience
-	ownerId: text("owner_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	// display name for the audience
-	name: text("name").notNull(),
-	// created and updated timestamps
-	...timestamps(),
-})
-
-// an audience member maps a user to an audience
-export const audienceMembers = pgTable(
-	"audience_members",
+// a team is a named set of people that holds topics together. it is a permissions and identity object
+export const teams = pgTable(
+	"teams",
 	{
-		// the audience
-		audienceId: text("audience_id")
+		id: primaryId(),
+		// the name and description the team page shows
+		name: text("name").notNull(),
+		description: text("description"),
+		// the stored object behind an uploaded team avatar, null for generated initials
+		avatarKey: text("avatar_key"),
+		// a private team's page returns a 404 to outsiders. public renders it to anyone
+		isPublic: boolean("is_public").notNull().default(false),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		// one team per name, compared in lowercase, so two teams never read as the same one
+		uniqueIndex("teams_name_lower_unique").on(sql`lower(${table.name})`),
+	],
+)
+
+// the additional teams a topic is shared into. the owning team lives on topics.team_id alone
+export const teamTopics = pgTable(
+	"team_topics",
+	{
+		teamId: text("team_id")
 			.notNull()
-			.references(() => audiences.id, { onDelete: "cascade" }),
-		// the member user
+			.references(() => teams.id, { onDelete: "cascade" }),
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [
+		primaryKey({ columns: [table.teamId, table.topicId] }),
+		// the topic side covers "which teams hold this topic"
+		index("team_topics_topic_id_idx").on(table.topicId),
+	],
+)
+
+// one embedded section of the documentation, retrieved into chat when a question asks about the app
+export const docsChunks = pgTable(
+	"docs_chunks",
+	{
+		id: primaryId(),
+		// the docs page and section heading the words came from
+		page: text("page").notNull(),
+		heading: text("heading").notNull(),
+		content: text("content").notNull(),
+		// the content's hash, so the sync only re-embeds what changed
+		contentHash: text("content_hash").notNull(),
+		embedding: vector("embedding", { dimensions: EMBED_DIMENSIONS }).notNull(),
+		embeddingModel: text("embedding_model").notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	(table) => [unique("docs_chunks_page_heading_unique").on(table.page, table.heading)],
+)
+
+// a team member and their role. a leader manages the team, a member edits its topics and chats
+export const teamMembers = pgTable(
+	"team_members",
+	{
+		// the team and the member
+		teamId: text("team_id")
+			.notNull()
+			.references(() => teams.id, { onDelete: "cascade" }),
 		userId: text("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		// when the user joined the audience
+		role: teamRole("role").notNull().default("member"),
+		// false is a request to join: the row grants nothing until a leader activates it
+		isActive: boolean("is_active").notNull().default(true),
+		// the per-team member-visibility opt-out. a hidden member leaves the public page only, never other members' view
+		isMemberVisible: boolean("is_member_visible").notNull().default(true),
+		// who invited them, shown in the members table's Invited by column
+		invitedByUserId: text("invited_by_user_id").references(() => users.id, { onDelete: "set null" }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// a user belongs to an audience at most once
-	(table) => [primaryKey({ columns: [table.audienceId, table.userId] })],
+	// one membership per team and user, plus the lookup by user alone, where the key starts with team
+	(table) => [
+		primaryKey({ columns: [table.teamId, table.userId] }),
+		index("team_members_user_id_idx").on(table.userId),
+	],
 )
 
-// a subscription maps a topic to its subscriber, either a user or an audience
+// a subscription maps a topic to its subscribing user
 export const subscriptions = pgTable(
 	"subscriptions",
 	{
@@ -514,9 +644,10 @@ export const subscriptions = pgTable(
 		topicId: text("topic_id")
 			.notNull()
 			.references(() => topics.id, { onDelete: "cascade" }),
-		// exactly one subscriber: a user or an audience, never both and never neither
-		subscriberUserId: text("subscriber_user_id").references(() => users.id, { onDelete: "cascade" }),
-		subscriberAudienceId: text("subscriber_audience_id").references(() => audiences.id, { onDelete: "cascade" }),
+		// the subscribing user. a team reaches a topic through its members' own rows, never a row of its own
+		subscriberUserId: text("subscriber_user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
 		// unsubscribing toggles is_active off and keeps the row. only an explicit delete removes it
 		isActive: boolean("is_active").notNull().default(true),
 		// email cascades off whenever active turns off. it does not cascade back on when active does
@@ -526,19 +657,78 @@ export const subscriptions = pgTable(
 		// created and updated timestamps
 		...timestamps(),
 	},
-	// enforce exactly-one-subscriber at the database level, and one row per user and topic so a concurrent
-	// double subscribe cannot insert twice. audience rows have a null user id, which the index treats as distinct
+	// one row per user and topic
 	(table) => [
-		check(
-			"subscriptions_subscriber_xor",
-			sql`(${table.subscriberUserId} is not null) <> (${table.subscriberAudienceId} is not null)`,
-		),
 		uniqueIndex("subscriptions_topic_subscriber_unique").on(table.topicId, table.subscriberUserId),
+		index("subscriptions_subscriber_active_idx").on(table.subscriberUserId, table.isActive),
 	],
 )
 
-// a chat turn is one question and its reply. each one writes a row,
-// because each one spends money that the monthly meter has to see,
+// one message in a team topic's shared room. the id is an ordered bigint so a stream reconnect resumes from a cursor
+export const chatRoomMessages = pgTable(
+	"room_messages",
+	{
+		id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
+		// the topic whose room this is, and the team whose members are in it.
+		// a null topic is the team's own room on its team page
+		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
+		teamId: text("team_id")
+			.notNull()
+			.references(() => teams.id, { onDelete: "cascade" }),
+		// who wrote it, and the name recorded at post time
+		authorUserId: text("author_user_id").references(() => users.id, { onDelete: "set null" }),
+		authorUsername: text("author_username").notNull(),
+		// the message this one answers, which is how a reply to carl continues without a fresh mention
+		replyToMessageId: bigint("reply_to_message_id", { mode: "number" }),
+		// the message text, encrypted at the application layer like the private chat's messages
+		content: text("content").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// the stream and the chat messages both read one room in id order
+	(table) => [index("room_messages_topic_id_idx").on(table.topicId, table.teamId, table.id)],
+)
+
+// who a room message mentioned or replied to, extracted at write time, where the content itself is encrypted
+export const chatRoomMentions = pgTable(
+	"room_mentions",
+	{
+		// the message and the member it named
+		messageId: bigint("message_id", { mode: "number" })
+			.notNull()
+			.references(() => chatRoomMessages.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// stamped when the member loads the room, which clears the badge. null is unseen
+		seenAt: timestamp("seen_at", { withTimezone: true }),
+	},
+	// one row per message and member, plus the by-user lookup the mention badges read, where the key starts with message
+	(table) => [
+		primaryKey({ columns: [table.messageId, table.userId] }),
+		index("room_mentions_user_id_idx").on(table.userId),
+	],
+)
+
+// one running summary per room, holding what rolled out of the context window and how far it reaches
+export const chatRoomSummaries = pgTable(
+	"room_summaries",
+	{
+		id: primaryId(),
+		// the room is a topic and the team whose members talk in it. a null topic is the team's own room
+		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
+		teamId: text("team_id")
+			.notNull()
+			.references(() => teams.id, { onDelete: "cascade" }),
+		summary: text("summary").notNull(),
+		// the last message id the summary covers, so the window starts after it
+		summarizedThroughMessageId: bigint("summarized_through_message_id", { mode: "number" }).notNull(),
+		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// one summary per room. nulls compare equal here so the team room's upsert finds its row
+	(table) => [unique("room_summaries_room_unique").on(table.topicId, table.teamId).nullsNotDistinct()],
+)
+
+// a chat turn is one question and its reply
 export const chatTurns = pgTable(
 	"chat_turns",
 	{
@@ -547,25 +737,31 @@ export const chatTurns = pgTable(
 		userId: text("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		// the topic the chat turn is about
-		topicId: text("topic_id")
-			.notNull()
-			.references(() => topics.id, { onDelete: "cascade" }),
+		// the topic the chat turn is about. null on a team room's turn, which names the team instead
+		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
+		// the team whose own room billed the turn, so team spend still counts it. null on a topic turn
+		teamId: text("team_id").references(() => teams.id, { onDelete: "cascade" }),
 		// what the chat turn cost, in the same dollars scans record, summed into the user's monthly spend
 		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
-		// the chat turn's text, stored only when the gate grants the sender chat:persist.
-		// null on a chat turn whose row exists to meter its spend and nothing else
+		// the chat turn's text, stored only when the gate grants the sender chat:persist
 		question: text("question"),
 		answer: text("answer"),
+		// the room message this turn answered, for a room completion. null on a private chat turn
+		roomMessageId: bigint("room_message_id", { mode: "number" }),
+		// what the completion spent in tokens, kept beside the cost it produced
+		totalTokens: integer("total_tokens"),
 		// when the chat turn ran. the monthly spend sum uses it and the chat messages replay in its order
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// covers a user's persisted conversation read, which filters by topic and orders by time
-	(table) => [index("chat_turns_topic_created_idx").on(table.topicId, table.createdAt)],
+	// covers a user's persisted conversation read by topic and time, and the monthly spend sum by user and time
+	(table) => [
+		index("chat_turns_topic_created_idx").on(table.topicId, table.createdAt),
+		index("chat_turns_team_created_idx").on(table.teamId, table.createdAt),
+		index("chat_turns_user_created_idx").on(table.userId, table.createdAt),
+	],
 )
 
-// a chat attachment a user chose to keep: durable, scoped to one user's conversation with on a topic,
-// re-delivered to every future chat turn they take there.
+// a chat attachment a user chose to keep
 export const chatAttachments = pgTable(
 	"chat_attachments",
 	{
@@ -583,8 +779,7 @@ export const chatAttachments = pgTable(
 		objectKey: text("object_key"),
 		contentType: text("content_type"),
 		byteSize: integer("byte_size"),
-		// a kept paste or text file's own words, encrypted like a chat turn's text. null for image and PDF,
-		// whose original lives in object storage
+		// a kept paste or text file's own words, encrypted like a chat turn's text
 		rawText: text("raw_text"),
 		// the summary that is included in every future chat turn, generated once. empty until the background job finishes
 		context: text("context").notNull().default(""),
@@ -594,6 +789,35 @@ export const chatAttachments = pgTable(
 	},
 	// the read path always filters by exactly this pair
 	(table) => [index("chat_attachments_user_topic_idx").on(table.userId, table.topicId)],
+)
+
+// a file a member shared with the room. the uploader clears on account deletion and a leader may still delete it
+export const chatRoomAttachments = pgTable(
+	"room_attachments",
+	{
+		id: primaryId(),
+		// the room the file belongs to, and the message it came with. a message may share several, each its own row
+		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
+		teamId: text("team_id")
+			.notNull()
+			.references(() => teams.id, { onDelete: "cascade" }),
+		messageId: bigint("message_id", { mode: "number" }).notNull(),
+		// who shared it, and the name recorded at post time, which outlives the account
+		uploaderUserId: text("uploader_user_id").references(() => users.id, { onDelete: "set null" }),
+		uploaderUsername: text("uploader_username").notNull(),
+		kind: chatAttachmentKind("kind").notNull(),
+		name: text("name").notNull(),
+		// where an image or PDF's original bytes live in object storage. null for shared text, which has no file
+		objectKey: text("object_key"),
+		contentType: text("content_type"),
+		byteSize: integer("byte_size"),
+		// what carl reads on every room turn: the document's words or the described image, encrypted like the chat messages
+		context: text("context").notNull().default(""),
+		status: attachmentStatus("status").notNull().default("pending"),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// the room turn and the chat messages both read one room's files at once
+	(table) => [index("room_attachments_topic_id_idx").on(table.topicId)],
 )
 
 // a billing subscription is a user's active paid Stripe subscription.
@@ -611,9 +835,7 @@ export const billingSubscriptions = pgTable("billing_subscriptions", {
 	plan: plan("plan").notNull(),
 	status: text("status").notNull(),
 	currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
-	// whether Stripe has a payment method to charge, and how often this subscription bills.
-	// the billing interval decides both the plan's limits and whether a scan past the daily one can be billed at all.
-	// only a monthly billing interval includes the metered overage price.
+	// whether Stripe has a payment method, and how often this subscription bills. only monthly includes metered overage
 	hasPaymentMethod: boolean("has_payment_method").notNull().default(false),
 	billingInterval: billingInterval("interval").notNull().default("monthly"),
 	// created and updated timestamps
@@ -627,7 +849,7 @@ function primaryId() {
 		.$defaultFn(() => crypto.randomUUID())
 }
 
-// created and updated timestamps with time zones, used by every table except users
+// the created and updated pair with time zones, for the app tables that keep both
 function timestamps() {
 	return {
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),

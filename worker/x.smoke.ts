@@ -1,7 +1,5 @@
-// a live smoke test the owner runs by hand for X. it seeds a topic and an x source on a real handle, runs xIngester,
-// and checks that it read that account for a real cost. it then runs the context-driven search that handle suggestion is built on,
+// a live smoke test the owner runs by hand for X
 // so both halves stay proven. run it with: bun run smoke:x. it needs TWITTERAPI_IO_API_KEY set, the LiteLLM proxy reachable at LITELLM_BASE_URL,
-// the latest migration applied, and Doppler secrets injected
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { sources, topics, users } from "../db/schema"
@@ -16,8 +14,7 @@ const TOPIC_CONTEXT =
 // an account that posts about the topic often enough that a seven-day window is not empty
 const X_HANDLE = "OpenAI"
 
-// a real account that has never posted, which a model can invent its way onto. it confirms as an account
-// and would then return nothing on every Scan, so the lookup has to drop it
+// a real account that has never posted, which a model can invent its way onto
 const DORMANT_HANDLE = "notarealacct99"
 
 // one request per Source at the provider's twenty per response. the report fails if the ingester read past it
@@ -69,24 +66,22 @@ async function check(source: Source): Promise<boolean> {
 	// run the ingester. it reads the configured handle's recent tweets as "read" Resources
 	const { resources, costDollars, fallbackMode } = await xIngester(source)
 
-	// confirm the lookup that source suggestion leans on tells a real posting account
-	// from one that nobody holds and one that has never posted
+	// confirm the lookup that source suggestion leans on tells a real posting account from one that nobody holds
 	const isRealHandleKept = await isConfirmed(X_HANDLE)
 	const isMissingHandleDropped = !(await isConfirmed("zzznosuchacct"))
 	const isDormantHandleDropped = !(await isConfirmed(DORMANT_HANDLE))
 
-	// summarize what came back: the urls, the titles, and the engagement counts the tweets carried
+	// summarize what came back: the urls, the titles, and the engagement counts the tweets included
 	const tweetUrlPattern = /^https:\/\/x\.com\/[^/]+\/status\/\d+$/
 	const resourcesAreTweetUrls = resources.every((resource) => tweetUrlPattern.test(resource.url))
 	const resourcesAreReadKind = resources.every((resource) => resource.kind === "read")
 	const resourcesWithSnippet = resources.filter((resource) => (resource.snippet ?? "").trim().length > 0)
 	const resourcesWithEngagement = resources.filter((resource) => resource.engagement !== null)
 
-	// print the smoke test report. the cost line is what the change's spend claims rest on,
-	// so compare it against the provider's own dashboard for this run
+	// print the smoke test report
 	console.log("\n=== x smoke report ===")
 	console.log(`handle          : @${X_HANDLE}`)
-	console.log(`resources       : ${resources.length} (cap ${MAX_READS_PER_SOURCE})`)
+	console.log(`resources       : ${resources.length} (limit ${MAX_READS_PER_SOURCE})`)
 	console.log(`with snippet    : ${resourcesWithSnippet.length}`)
 	console.log(`with engagement : ${resourcesWithEngagement.length}`)
 	console.log(`cost (reads $)  : ${costDollars}`)
@@ -99,13 +94,12 @@ async function check(source: Source): Promise<boolean> {
 		console.log(`sample snippet  : ${resources[0].snippet?.slice(0, 120)}`)
 	}
 
-	// the smoke test assertions. the handle read well-formed tweets for a real cost, and the lookup
-	// that suggestion leans on keeps a real posting account while dropping the two that would never produce one
+	// the smoke test assertions
 	const results: [string, boolean][] = [
 		["read the handle's tweets", resources.length > 0],
 		["every resource is a tweet url", resourcesAreTweetUrls],
 		["every resource is a read kind", resourcesAreReadKind],
-		["held the per-source read cap", resources.length <= MAX_READS_PER_SOURCE],
+		["held the per-source read limit", resources.length <= MAX_READS_PER_SOURCE],
 		["cost is positive", costDollars > 0],
 		["no fallback mode", fallbackMode === undefined],
 		["a real posting handle is confirmed", isRealHandleKept],

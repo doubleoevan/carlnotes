@@ -1,4 +1,4 @@
-// the YouTube ingester. it uses the Data API when a key is set, otherwise it falls back to the public channel or a playlist Atom feed
+// the YouTube ingester
 
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
@@ -13,27 +13,25 @@ const FETCH_TIMEOUT_MS = 10_000
 // the YouTube hosts whose playlist pages can be expanded. the search ingester reuses this
 const YOUTUBE_HOSTS = new Set(["youtube.com", "www.youtube.com", "m.youtube.com"])
 
-// fetch a channel or playlist's recent videos as "watch" Resources.
-// use the Data API when an API key is set, otherwise use the Atom feed
+// fetch a channel or playlist's recent videos as "watch" Resources
 export const youtubeIngester: SourceIngester = async (source: Source) => {
-	// resolve what to pull from config, then pick the keyed API or the keyless Atom fallback
+	// resolve what to pull from config, then select the keyed API or the keyless Atom fallback
 	const { apiPlaylistId, atomUrl } = toPlaylistIdAndAtomUrl(source)
 	const apiKey = Bun.env.YOUTUBE_API_KEY
 	if (apiKey) {
 		const { channelTitle, resources } = await fetchVideos(apiPlaylistId, apiKey)
-		await storeSourceName(source, channelTitle)
+		await saveSourceName(source, channelTitle)
 		return { resources, costDollars: 0 }
 	}
 
 	// fall back to the keyless Atom feed, tagged so the Scan records the fallback
 	const { feedName, resources } = await fetchNamedFeed(atomUrl, { resourceKind: "watch" })
-	await storeSourceName(source, feedName)
+	await saveSourceName(source, feedName)
 	return { resources, costDollars: 0, fallbackMode: "youtube-atom" }
 }
 
-// keep what the channel or playlist is called on the Source, so it reads by name instead of by id.
-// re-reading it each scan picks up a channel that renamed itself
-async function storeSourceName(source: Source, name: string | null): Promise<void> {
+// keep what the channel or playlist is called on the Source, so it reads by name instead of by id
+async function saveSourceName(source: Source, name: string | null): Promise<void> {
 	// an unknown name, or one already stored, isn't saved
 	if (!name || source.config.name === name) {
 		return
@@ -46,7 +44,7 @@ async function storeSourceName(source: Source, name: string | null): Promise<voi
 		.where(eq(sources.id, source.id))
 }
 
-// the fields parseVideos reads from a playlistItems response. every field is optional because the JSON is unvalidated and deleted videos have no videoId
+// the fields parseVideos reads from a playlistItems response
 type YoutubePlaylist = {
 	items?: {
 		snippet?: { title?: string; description?: string; channelTitle?: string; resourceId?: { videoId?: string } }
@@ -55,7 +53,7 @@ type YoutubePlaylist = {
 
 // pull the playlist id from a YouTube playlist page url. any other url returns null
 export function playlistIdFromUrl(url: string): string | null {
-	// only the playlist page on a YouTube host counts. a /watch url with a list param is already one video, so it is not a match
+	// only the playlist page on a YouTube host counts
 	const playlistUrl = URL.parse(url)
 	if (!playlistUrl || !YOUTUBE_HOSTS.has(playlistUrl.hostname) || playlistUrl.pathname !== "/playlist") {
 		return null
@@ -65,7 +63,7 @@ export function playlistIdFromUrl(url: string): string | null {
 	return playlistUrl.searchParams.get("list")
 }
 
-// the config has either a channel id or a playlist id. throws when it has neither
+// the config has either a channel id or a playlist id. throws an error when it has neither
 function toPlaylistIdAndAtomUrl(source: Source): { apiPlaylistId: string; atomUrl: string } {
 	// read whichever id the config has
 	const channelId = typeof source.config.channelId === "string" ? source.config.channelId : undefined
@@ -95,15 +93,13 @@ export function toAtomUrl(youtubeId: string, youtubeKind: YoutubeIdKind = toYout
 	return `https://www.youtube.com/feeds/videos.xml?${atomQuery}`
 }
 
-// the id forms that the Atom feed reads directly: a channel id, and the playlist ids a channel or a user builds.
-// a real playlist id runs at least 12 characters past its prefix, so a word like LLM never reads as one
+// the id forms that the Atom feed reads directly: a channel id, and the playlist ids a channel or a user builds
 const YOUTUBE_ID_PATTERN = /^(?:UC[\w-]{22}|(?:PL|UU|RD|OL|LL|FL)[\w-]{12,})$/
 
 // a channel handle, which is what a channel is known by and the one form that has to be looked up
 const YOUTUBE_HANDLE_PATTERN = /^@[\w.-]+$/
 
-// a channel page names its own channel in its canonical link. the page mentions other channels too,
-// so nothing else on it can be read as the channel's id
+// a channel page names its own channel in its canonical link
 const CANONICAL_CHANNEL_PATTERN = /<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/(UC[\w-]{22})">/
 
 /**
@@ -154,8 +150,7 @@ function toChannelUrlId(value: string): string | null {
 	return firstSegment === "channel" && YOUTUBE_ID_PATTERN.test(secondSegment ?? "") ? (secondSegment ?? null) : null
 }
 
-// ask the channel page which channel it is. a handle nobody has returns 404,
-// and a lookup that fails drops the suggestion instead of failing the request that asked for it
+// ask the channel page which channel it is
 async function fetchChannelId(handle: string): Promise<string | null> {
 	// a page that does not answer names no channel
 	try {
@@ -215,7 +210,7 @@ export function parseVideos(playlist: YoutubePlaylist): NewResource[] {
 	// keep the first Resource per video url so that a repeated video collapses to one
 	const resourceByUrl = new Map<string, NewResource>()
 	for (const video of playlist.items ?? []) {
-		// skip a deleted or private video or any malformed entry with no video id, so that one bad entry never throws
+		// skip a deleted or private video or any malformed entry with no video id, so that one bad entry never throws an error
 		const videoId = video.snippet?.resourceId?.videoId
 		if (!videoId) {
 			continue

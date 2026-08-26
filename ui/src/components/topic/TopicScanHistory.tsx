@@ -1,5 +1,6 @@
 import type { TopicFinding, TopicScan } from "@shared/contracts"
 import { useState } from "react"
+import { fetchScanNote } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { randomThinkingLine } from "@/components/chat/thinkingLines"
@@ -12,9 +13,9 @@ import {
 } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
-import { type AllowedNoteUrls, TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
-import { fetchScanNote } from "@/lib/topicClient"
-import { cn, RESOURCE_LIST_CARD_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/utils"
+import { type AllowedScanNoteUrls, TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
+import { POPOVER_WIDTH_CLASS, RESOURCE_LIST_CARD_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { MoreButton } from "./MoreButton"
 
@@ -24,9 +25,7 @@ const MAX_HISTORY_SCANS = 5
 // how tall the expanded history list grows before it scrolls, about ten rows at 64px each.
 const EXPANDED_HISTORY_CLASS = "max-h-160 overflow-y-auto"
 
-// the collapsible scan history, newest first, capped until expanded.
-// allowedUrls lets a recap cite the topic's still-kept findings as real links. a dropped finding's link renders as plain text.
-// each diary entry lists only the findings its own scan produced.
+// the collapsible scan history, newest first, limited until expanded
 export function TopicScanHistory({
 	scans,
 	allowedUrls,
@@ -34,20 +33,24 @@ export function TopicScanHistory({
 	topic,
 }: {
 	scans: TopicScan[]
-	allowedUrls?: AllowedNoteUrls
+	allowedUrls?: AllowedScanNoteUrls
 	findings?: TopicFinding[]
 	// names the topic in each diary's copied Markdown
 	topic: { id: string; name: string; prompt: string }
 }) {
 	const [isExpanded, setIsExpanded] = useState(false)
-	// cap the rows unless expanded
+	// limit the rows unless expanded
 	const scansShown = isExpanded ? scans : scans.slice(0, MAX_HISTORY_SCANS)
 	const olderCount = scans.length - MAX_HISTORY_SCANS
 	return (
 		<CollapsibleSection value="history" title="Brew diary">
 			{/* one row per scan, each drawing its own dashed separator */}
 			<div
-				className={cn(RESOURCE_LIST_CARD_CLASS, "p-1", isExpanded && [EXPANDED_HISTORY_CLASS, THIN_SCROLLBAR_CLASS])}
+				className={cn(
+					RESOURCE_LIST_CARD_CLASS,
+					"bg-card p-1 dark:bg-card",
+					isExpanded && [EXPANDED_HISTORY_CLASS, THIN_SCROLLBAR_CLASS],
+				)}
 			>
 				{scansShown.map((scan) => (
 					<ScanRow
@@ -73,9 +76,7 @@ export function TopicScanHistory({
 	)
 }
 
-// one history scan row, the whole of which opens that brew's note. the note still anchors the popover, so the panel
-// comes out of the icon the user is looking at instead of from wherever they happened to click.
-// the hover highlight paints on a rounded under-layer, matching the resource rows above it
+// one history scan row, the whole of which opens that brew's note
 function ScanRow({
 	scan,
 	allowedUrls,
@@ -83,7 +84,7 @@ function ScanRow({
 	topic,
 }: {
 	scan: TopicScan
-	allowedUrls?: AllowedNoteUrls
+	allowedUrls?: AllowedScanNoteUrls
 	findings?: TopicFinding[]
 	topic: { id: string; name: string; prompt: string }
 }) {
@@ -134,8 +135,7 @@ function ScanRow({
 	)
 }
 
-// the scan's one-line stat: kept and found counts when succeeded, a shimmering thinking line while running, otherwise the failed message.
-// a cancelled scan never reaches here, since the page's api filters those out
+// the scan's one-line stat: kept and found counts when succeeded, a shimmering thinking line while running,
 function ScanStat({ scan }: { scan: TopicScan }) {
 	if (scan.status === "succeeded") {
 		return (
@@ -150,7 +150,7 @@ function ScanStat({ scan }: { scan: TopicScan }) {
 	return <ScanThinkingLine />
 }
 
-// a thinking line while a scan runs, picked once so the poll's re-renders don't swap it mid-scan
+// a thinking line while a scan runs, selected once so the poll's re-renders don't swap it mid-scan
 function ScanThinkingLine() {
 	const [thinkingLine] = useState(randomThinkingLine)
 	return <span className="shimmer-text min-w-0 flex-1 truncate text-xs">{`Carl is ${thinkingLine}…`}</span>
@@ -168,14 +168,14 @@ function ScanNote({
 	scan: TopicScan
 	scanSummary: string | null
 	isNoteLoaded: boolean
-	allowedUrls?: AllowedNoteUrls
+	allowedUrls?: AllowedScanNoteUrls
 	findings?: TopicFinding[]
 	topic: { id: string; name: string; prompt: string }
 }) {
 	// the note is fetched on click, and a loading mug brews in its place until it loads
 	if (!isNoteLoaded) {
 		return (
-			<PopoverContent align="end" className="w-[calc(100vw-2rem)] max-w-lg text-sm">
+			<PopoverContent align="end" className={POPOVER_WIDTH_CLASS}>
 				<PopoverCloseButton />
 				<CoffeeLoading className="min-h-24 text-base" />
 			</PopoverContent>
@@ -183,9 +183,9 @@ function ScanNote({
 	}
 
 	return (
-		<PopoverContent align="end" className="w-[calc(100vw-2rem)] max-w-lg text-sm">
+		<PopoverContent align="end" className={POPOVER_WIDTH_CLASS}>
 			<PopoverCloseButton />
-			{/* why a failed scan failed, above the recap, since a failed scan has no recap to show */}
+			{/* why a failed scan failed, above the recap */}
 			{scan.status === "failed" && (
 				<div className="mb-3">
 					<div className="text-muted-foreground font-display mb-1 text-xs tracking-wide uppercase">Failed</div>

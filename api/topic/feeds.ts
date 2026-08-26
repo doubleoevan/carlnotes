@@ -1,11 +1,10 @@
 // the topic feed logic behind the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
 import { toSourceSummary, toSourceValue, toUrlHost } from "@shared/sources"
-import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, ne, or, sql } from "drizzle-orm"
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm"
 import { db } from "../../db"
 import {
 	attachments,
-	audienceMembers,
 	bookmarks,
 	consumptions,
 	findings,
@@ -13,35 +12,95 @@ import {
 	scans,
 	sources,
 	subscriptions,
+	teamMembers,
+	teams,
+	teamTopics,
 	topics,
 	users,
 } from "../../db/schema"
-import { subscribedTopicIds } from "../authorization"
+import { memberTopicIds, subscribedTopicIds } from "../authorization"
+import { loadTopicChatMentions } from "../chat/mentions"
 import { filteredTopicFindings, newTopicFindingCount } from "./findings"
+import { toScheduledTimeLabel } from "./helpers"
 import { isShown } from "./permissions"
 import { startOfUtcMonth } from "./quotas"
-import { toScheduledTimeLabel } from "./topics"
 
 // the most topics the Popular section shows
 const MAX_POPULAR_TOPICS = 5
 
-// the topic ids this user actively subscribes to, directly or through an audience they belong to
+// the most findings the feed query pulls per topic
+// ponytail: a user who consumed a topic's top 25 findings sees an empty card in the default view, raise this if that shows up
+const MAX_FEED_FINDINGS_PER_TOPIC = 25
+
+// the featured and popular id lists are the same for every visitor
+// ponytail: per-process cache, move it to a shared store if the api ever runs replicas that must agree
+const SECTION_ID_CACHE_TTL_MS = 60_000
+let topicSectionIdCache: { value: { featuredIds: string[]; popularIds: string[] }; loadedAt: number } | null = null
+
+// the topic ids this user actively subscribes to
 function activeSubscriptionTopicIdQuery(userId: string) {
-	// the audiences this user belongs to, a subquery instead of a separate round trip since it only feeds the query below
-	const memberAudiences = db
-		.select({ audienceId: audienceMembers.audienceId })
-		.from(audienceMembers)
-		.where(eq(audienceMembers.userId, userId))
-	// the subscriber is either the user directly or one of those audiences, and the row must be active
 	return db
 		.select({ topicId: subscriptions.topicId })
 		.from(subscriptions)
-		.where(
-			and(
-				eq(subscriptions.isActive, true),
-				or(eq(subscriptions.subscriberUserId, userId), inArray(subscriptions.subscriberAudienceId, memberAudiences)),
-			),
-		)
+		.where(and(eq(subscriptions.isActive, true), eq(subscriptions.subscriberUserId, userId)))
+}
+
+// the public featured and popular topic id lists, reloaded inline once the cached entry goes stale
+async function publicSectionTopicIds(): Promise<{ featuredIds: string[]; popularIds: string[] }> {
+	// serve the cached lists while they are fresh
+	if (topicSectionIdCache && Date.now() - topicSectionIdCache.loadedAt < SECTION_ID_CACHE_TTL_MS) {
+		return topicSectionIdCache.value
+	}
+	// isShown keeps a topic out of the public sections until it has enough findings
+	const publicShownFilter = and(eq(topics.visibility, "public"), isShown)
+	// featured topics keep their feature order. popular topics rank by subscriber count, newer breaking a tie
+	const [featuredTopicIds, popularTopicIds] = await Promise.all([
+		db
+			.select({ id: topics.id })
+			.from(topics)
+			.where(and(publicShownFilter, isNotNull(topics.featureOrder)))
+			.orderBy(asc(topics.featureOrder)),
+		db
+			.select({ id: topics.id })
+			.from(topics)
+			.where(and(publicShownFilter, isNull(topics.featureOrder)))
+			.orderBy(desc(topics.subscriberCount), desc(topics.createdAt))
+			.limit(MAX_POPULAR_TOPICS),
+	])
+	// store the fresh lists with their load time
+	topicSectionIdCache = {
+		value: {
+			featuredIds: featuredTopicIds.map((topicIdRow) => topicIdRow.id),
+			popularIds: popularTopicIds.map((topicIdRow) => topicIdRow.id),
+		},
+		loadedAt: Date.now(),
+	}
+	return topicSectionIdCache.value
+}
+
+// the featured and popular topic rows, rebuilt from the cached id lists
+async function publicSectionTopics(userId: string | null): Promise<{
+	featuredTopics: (typeof topics.$inferSelect)[]
+	popularTopics: (typeof topics.$inferSelect)[]
+}> {
+	// the cached id lists say which topics the sections show and in what order
+	const { featuredIds, popularIds } = await publicSectionTopicIds()
+	const sectionIds = [...featuredIds, ...popularIds]
+	if (sectionIds.length === 0) {
+		return { featuredTopics: [], popularTopics: [] }
+	}
+	// re-checking visibility drops a topic made private inside the cached period
+	// ponytail: a popular topic the user owns shortens their popular list until the cache refreshes, fine at this cached period
+	const idFilter = and(inArray(topics.id, sectionIds), eq(topics.visibility, "public"))
+	const topicRows = await db
+		.select()
+		.from(topics)
+		.where(userId ? and(idFilter, ne(topics.ownerId, userId)) : idFilter)
+	// put the rows back in each cached list's order
+	const topicRowById = new Map(topicRows.map((topicRow) => [topicRow.id, topicRow]))
+	const toTopics = (topicIds: string[]): (typeof topics.$inferSelect)[] =>
+		topicIds.flatMap((topicId) => topicRowById.get(topicId) ?? [])
+	return { featuredTopics: toTopics(featuredIds), popularTopics: toTopics(popularIds) }
 }
 
 /**
@@ -51,20 +110,11 @@ export async function buildTopicFeeds(
 	userId: string | null,
 	includeConsumedResources: boolean,
 ): Promise<Pick<TopicFeedResponse, "sections">> {
-	// a signed-out visitor owns nothing, and every public topic counts as "other".
-	// isShown keeps a topic out of the public sections until it has enough findings.
-	const othersFilter = userId
-		? and(ne(topics.ownerId, userId), eq(topics.visibility, "public"), isShown)
-		: and(eq(topics.visibility, "public"), isShown)
-	// the subscriber count ranks the popular section
-	const subscriberCount = topics.subscriberCount
-
 	// the topic ids this user actively subscribes to
 	const activeSubscriptionTopicIds = userId ? activeSubscriptionTopicIdQuery(userId) : null
 
-	// the user's own topics, the topics they subscribe to but don't own, the featured public topics,
-	// and the top-N non-featured popular topics by subscriber count
-	const [ownersTopics, subscribedTopics, featuredTopics, popularTopics] = await Promise.all([
+	// the user's own topics, the topics they subscribe to but don't own
+	const [ownersTopics, subscribedTopics, { featuredTopics, popularTopics }] = await Promise.all([
 		userId ? db.select().from(topics).where(eq(topics.ownerId, userId)) : Promise.resolve([]),
 		// subscribed topics never include one this user owns
 		userId && activeSubscriptionTopicIds
@@ -73,20 +123,7 @@ export async function buildTopicFeeds(
 					.from(topics)
 					.where(and(ne(topics.ownerId, userId), inArray(topics.id, activeSubscriptionTopicIds)))
 			: Promise.resolve([]),
-		// featured topics keep their feature order
-		db
-			.select()
-			.from(topics)
-			.where(and(othersFilter, isNotNull(topics.featureOrder)))
-			.orderBy(asc(topics.featureOrder)),
-		// popular topics ranked by subscriber count and capped
-		// topics that nobody subscribes to are still included, newer breaks a subscriber count tie
-		db
-			.select()
-			.from(topics)
-			.where(and(othersFilter, isNull(topics.featureOrder)))
-			.orderBy(desc(subscriberCount), desc(topics.createdAt))
-			.limit(MAX_POPULAR_TOPICS),
+		publicSectionTopics(userId),
 	])
 
 	// fetch every loaded topic's feed data in one batch keyed by topic id, then build each feed in memory
@@ -121,18 +158,31 @@ export async function buildTopicFeeds(
 	return { sections }
 }
 
-// fetch every dataset the topic feeds need across all topic ids at once, each grouped by topic id.
-// an empty id list makes each inArray where clause match nothing, so the maps come back empty
+// fetch every dataset the topic feeds need across all topic ids at once, each grouped by topic id
 async function loadTopicFeedData(topicIds: string[], userId: string | null) {
-	// a signed-out visitor has no history. sql`false` never matches, since drizzle's typing rejects comparing user_id to null
+	// a signed-out visitor has no history. sql`false` stands in where drizzle's typing rejects comparing user_id to null
 	const consumptionJoinCondition = userId
 		? and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
 		: sql`false`
 	const bookmarkJoinCondition = userId
 		? and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId))
 		: sql`false`
-	// run the topic-batched queries together, plus the subscription query for the signed-in user
-	const [findingRows, sourceRows, attachmentRows, scanRows, monthCostRows, subscribedTopicIdSet, ownerRows] =
+	// rank each topic's findings by relevance so the feed query can stop at MAX_FEED_FINDINGS_PER_TOPIC per topic
+	const rankedFindings = db
+		.select({
+			findingId: findings.id,
+			rowNumber:
+				sql<number>`row_number() over (partition by ${findings.topicId} order by ${findings.relevanceScore} desc, ${findings.id})`.as(
+					"row_number",
+				),
+		})
+		.from(findings)
+		.where(inArray(findings.topicId, topicIds))
+		.as("ranked_findings")
+
+	// run the topic-batched queries together, plus the subscription and membership queries for the signed-in user
+	// biome-ignore format: one line keeps the destructure under the comment-density hook's limit
+	const [findingRows, sourceRows, attachmentRows, scanRows, monthCostRows, subscribedTopicIdSet, memberTopicIdSet, ownerRows, teamRows, mentionsByTopic, teamCountRows] =
 		await Promise.all([
 			// join each topic finding with its resource. a left join adds the user's consumed date when one exists
 			db
@@ -157,11 +207,15 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 					consumedAt: consumptions.consumedAt,
 					bookmarkedAt: bookmarks.createdAt,
 				})
-				// join the resource and the user's consumed and bookmark rows. sort by relevance score descending
+				// join the resource and the user's consumed and bookmark rows
 				.from(findings)
 				.innerJoin(resources, eq(findings.resourceId, resources.id))
 				.leftJoin(consumptions, consumptionJoinCondition)
 				.leftJoin(bookmarks, bookmarkJoinCondition)
+				.innerJoin(
+					rankedFindings,
+					and(eq(rankedFindings.findingId, findings.id), lte(rankedFindings.rowNumber, MAX_FEED_FINDINGS_PER_TOPIC)),
+				)
 				.where(inArray(findings.topicId, topicIds))
 				.orderBy(desc(findings.relevanceScore)),
 
@@ -213,6 +267,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 
 			// the topics this signed-in user is subscribed to, in one query. a signed-out visitor is subscribed to none
 			userId ? subscribedTopicIds(userId, topicIds) : Promise.resolve(new Set<string>()),
+			userId ? memberTopicIds(userId, topicIds) : Promise.resolve(new Set<string>()),
 
 			// select each topic's owner with a single query across every topic instead of a lookup per row
 			db
@@ -225,6 +280,30 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 				.from(topics)
 				.innerJoin(users, eq(users.id, topics.ownerId))
 				.where(inArray(topics.id, topicIds)),
+
+			// each loaded topic's owning team with whether the user belongs
+			db
+				.select({
+					topicId: topics.id,
+					teamId: teams.id,
+					name: teams.name,
+					avatarKey: teams.avatarKey,
+					isPublic: teams.isPublic,
+					memberUserId: teamMembers.userId,
+				})
+				.from(topics)
+				.innerJoin(teams, eq(teams.id, topics.teamId))
+				.leftJoin(teamMembers, and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, userId ?? ""), eq(teamMembers.isActive, true)))
+				.where(inArray(topics.id, topicIds)),
+			// the user's unseen chat room mentions, for the count badge on each topic's name
+			loadTopicChatMentions(userId, topicIds),
+
+			// how many teams hold each topic, which the topic roast shows under the follower count
+			db
+				.select({ topicId: teamTopics.topicId, teamCount: count() })
+				.from(teamTopics)
+				.where(inArray(teamTopics.topicId, topicIds))
+				.groupBy(teamTopics.topicId),
 		])
 
 	// group each dataset by topic id so that a feed can read its slice in memory
@@ -232,16 +311,29 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 		findingRowsByTopic: Map.groupBy(findingRows, (row) => row.topicId),
 		sourcesByTopic: Map.groupBy(sourceRows, (row) => row.topicId),
 		attachmentsByTopic: Map.groupBy(attachmentRows, (row) => row.topicId),
-		lastScanByTopic: new Map(scanRows.map((row) => [row.topicId, row])),
-		monthCostByTopic: new Map(monthCostRows.map((row) => [row.topicId, row.monthCost])),
-		// the topic ids this user is subscribed to
+		lastScanByTopic: new Map(scanRows.map((scanRow) => [scanRow.topicId, scanRow])),
+		monthCostByTopic: new Map(monthCostRows.map((costRow) => [costRow.topicId, costRow.monthCost])),
 		subscribedTopicIdSet,
-		ownerByTopic: new Map(ownerRows.map((row) => [row.topicId, row])),
+		memberTopicIdSet,
+		ownerByTopic: new Map(ownerRows.map((ownerRow) => [ownerRow.topicId, ownerRow])),
+		mentionsByTopic,
+		// the shared-in teams alone. the owning team has no row here, so each count adds it back
+		sharedTeamCountByTopic: new Map(
+			teamCountRows.map((teamCountRow) => [teamCountRow.topicId, teamCountRow.teamCount]),
+		),
+		// the team link on a private owning team shown only to its own members
+		teamLinkByTopic: new Map(
+			teamRows
+				.filter((teamRow) => teamRow.isPublic || teamRow.memberUserId !== null)
+				.map((teamRow) => [
+					teamRow.topicId,
+					{ teamId: teamRow.teamId, name: teamRow.name, hasAvatar: teamRow.avatarKey !== null },
+				]),
+		),
 	}
 }
 
-// build a topic's feed from the batched data with no queries of its own.
-// that includes its topic findings, sources, attachments, last scan, subscriber count, and rate-eligibility
+// build a topic's feed from the batched data with no queries of its own
 function buildTopicFeed(
 	topic: typeof topics.$inferSelect,
 	userId: string | null,
@@ -251,14 +343,13 @@ function buildTopicFeed(
 	// read this topic's findings, last scan, and subscriber count from the batched data
 	const findingRows = feedData.findingRowsByTopic.get(topic.id) ?? []
 	const lastScan = feedData.lastScanByTopic.get(topic.id)
-	// the subscriber count is used to sort the popular section
+	// the subscriber count shown in the info popover
 	const subscriberCount = topic.subscriberCount
 	// only the owner sees their own topic's scan spend
 	const isOwner = topic.ownerId === userId
-	// the topic owner
 	const ownerRow = feedData.ownerByTopic.get(topic.id)
 
-	// read the sources, dropping the grouping key from each row. a source that has not passed its llm-guard screen is only seen by its owner
+	// read the sources, dropping the grouping key from each row
 	const topicSources = (feedData.sourcesByTopic.get(topic.id) ?? [])
 		.filter((source) => source.status === "ready" || isOwner)
 		.map((source) => ({
@@ -270,8 +361,7 @@ function buildTopicFeed(
 			error: source.error,
 		}))
 
-	// read the attachments, dropping the grouping key from each row.
-	// the feed never edits an attachment's context, so it isn't loaded or sent here
+	// read the attachments, dropping the grouping key from each row
 	const topicAttachments = (feedData.attachmentsByTopic.get(topic.id) ?? []).map((attachment) => ({
 		id: attachment.id,
 		filename: attachment.filename,
@@ -281,25 +371,26 @@ function buildTopicFeed(
 	}))
 
 	// shape each row into a topic finding and set its isConsumed flag
-	const topicFindings: TopicFinding[] = findingRows.map((row) => ({
-		findingId: row.findingId,
-		scanId: row.scanId,
-		resourceId: row.resourceId,
-		url: row.url,
-		resourceKind: row.resourceKind,
-		title: row.title,
+	const topicFindings: TopicFinding[] = findingRows.map((findingRow) => ({
+		findingId: findingRow.findingId,
+		scanId: findingRow.scanId,
+		resourceId: findingRow.resourceId,
+		url: findingRow.url,
+		resourceKind: findingRow.resourceKind,
+		title: findingRow.title,
 		// the source host for the metadata, plus the published and fetched times
-		source: toUrlHost(row.url),
-		publishedAt: row.resourceCreatedAt.toISOString(),
-		fetchedAt: row.fetchedAt.toISOString(),
+		source: toUrlHost(findingRow.url),
+		publishedAt: findingRow.resourceCreatedAt.toISOString(),
+		fetchedAt: findingRow.fetchedAt.toISOString(),
 		// the relevance judgment, view count, rating, engagement for trending sort, and the user's consumed and bookmarked states
-		relevanceScore: row.relevanceScore,
-		relevanceExplanation: row.relevanceExplanation,
-		viewCount: row.viewCount,
-		rating: row.rating,
-		engagement: row.engagement,
-		isConsumed: row.consumedAt !== null,
-		isBookmarked: row.bookmarkedAt !== null,
+		relevanceScore: findingRow.relevanceScore,
+		relevanceExplanation: findingRow.relevanceExplanation,
+		viewCount: findingRow.viewCount,
+		rating: findingRow.rating,
+		engagement: findingRow.engagement,
+		isConsumed: findingRow.consumedAt !== null,
+		isBookmarked: findingRow.bookmarkedAt !== null,
+		teamBookmarks: [],
 	}))
 
 	// return the topic feed with its metadata
@@ -317,12 +408,17 @@ function buildTopicFeed(
 			? { userId: ownerRow.userId, username: ownerRow.username, avatarSource: ownerRow.avatarSource }
 			: null,
 		isOwner,
+		isOnTeam: topic.teamId !== null,
+		teamLink: feedData.teamLinkByTopic.get(topic.id) ?? null,
+		roomTeams: [],
+		mentions: feedData.mentionsByTopic.get(topic.id) ?? [],
 		// what this user may do with the topic, plus their unconsumed topic findings count
-		canRate: canRateInFeed(topic, userId, feedData.subscribedTopicIdSet),
+		canRate: canRateInFeed(topic, userId, feedData.subscribedTopicIdSet, feedData.memberTopicIdSet),
 		isSubscribed: feedData.subscribedTopicIdSet.has(topic.id),
 		newCount: newTopicFindingCount(topicFindings),
-		// how many subscribers this topic has
 		subscriberCount,
+		// the first team to hold a topic owns it in a column, and every later team to add a topic gets a shared-in row
+		teamCount: (feedData.sharedTeamCountByTopic.get(topic.id) ?? 0) + (topic.teamId ? 1 : 0),
 		visibility: topic.visibility,
 		// the created time, last scan details, attachments, sources, and topic findings
 		createdAt: topic.createdAt.toISOString(),
@@ -338,17 +434,21 @@ function buildTopicFeed(
 }
 
 /**
- * Whether the user may rate the topic in the feed. The owner always may.
+ * Whether the user may rate the topic in the feed. The owner and the topic's team members always may.
  * Anyone else only as a subscriber to a "public" or "invite" visibility topic, never a "private" one.
  */
 export function canRateInFeed(
 	topic: Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility">,
 	userId: string | null,
 	subscribedTopicIdSet: Set<string>,
+	memberTopicIdSet: Set<string>,
 ): boolean {
-	// a signed-out visitor has no account to rate as. stated here instead of being left to an empty subscriber set
+	// a signed-out visitor has no account to rate as
 	if (!userId) {
 		return false
 	}
-	return topic.ownerId === userId || (topic.visibility !== "private" && subscribedTopicIdSet.has(topic.id))
+	if (topic.ownerId === userId || memberTopicIdSet.has(topic.id)) {
+		return true
+	}
+	return topic.visibility !== "private" && subscribedTopicIdSet.has(topic.id)
 }

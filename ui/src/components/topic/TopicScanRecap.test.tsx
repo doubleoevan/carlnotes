@@ -1,5 +1,4 @@
-// render tests for allowed urls: formatting survives, untrusted links do not
-// renderToStaticMarkup gives the exact HTML the browser would build, so anchors and images are asserted, not assumed
+// render tests for allowed urls
 import { expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 import { ScrollNote } from "./TopicScanRecap"
@@ -37,7 +36,7 @@ test("a note renders formatting but nothing clickable or embedded", () => {
 })
 
 // a kept Finding's own url is allowed
-test("a link to a kept finding's url renders as an anchor while others stay inert", () => {
+test("a link to a kept finding's url renders as an anchor while others stay plain text", () => {
 	// one citation of a kept finding and one of an attacker's choosing, in the same note
 	const note = "Findings:\n\n- [the agent piece](https://kept.example/post)\n- [click me](https://evil.test)"
 	const html = renderToStaticMarkup(<ScrollNote note={note} allowedUrls={new Set(["https://kept.example/post"])} />)

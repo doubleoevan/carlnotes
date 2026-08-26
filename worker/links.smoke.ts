@@ -1,7 +1,5 @@
-// a live smoke test for the links a url Source finds: seed a topic and two url Sources, ingest twice,
-// and check what the page contributed, what it was billed, and what a page that cannot be fetched still leaves behind.
+// a live smoke test for the links a url Source finds
 // run it with: bun run smoke:links. needs FIRECRAWL_API_KEY, object storage, and the latest migration.
-// it stops after ingestion, since finding the links is entirely an ingest-stage behavior and review costs real money
 import { eq, inArray } from "drizzle-orm"
 import { db } from "../db"
 import { resources, scans, sources, topics, users } from "../db/schema"
@@ -10,11 +8,10 @@ import { ingestForScan } from "./workflows/run-topic-scan-activities"
 
 // a page that lists links to other sites
 const INDEX_URL = "https://news.ycombinator.com/"
-// a reserved tld that never resolves, to prove a page that cannot be read still returns a Resource for review to attempt to fetch
+// a reserved tld that never resolves, to prove a page that cannot be read still returns a Resource for review
 const UNFETCHABLE_URL = "https://carlnotes-smoke-no-such-host.invalid/page"
 
-// seed an owner, a topic, and the two url Sources. ready, since ingest skips a Source that has not been screened
-// append a stamp for the database to persist a unique identifier for fixture data
+// seed an owner, a topic, and the two url Sources, ready
 const smokeTestStamp = Date.now()
 
 async function seedTestData(): Promise<{ topicId: string; userId: string }> {
@@ -136,25 +133,25 @@ function countResourceKinds(foundLinks: (typeof resources.$inferSelect)[]): Reco
 }
 
 // returns every Resource url stored right now
-async function readStoredUrls(): Promise<Set<string>> {
-	const storedRows = await db.select({ url: resources.url }).from(resources)
-	return new Set(storedRows.map((row) => row.url))
+async function readStoredResourceUrls(): Promise<Set<string>> {
+	const resourceRows = await db.select({ url: resources.url }).from(resources)
+	return new Set(resourceRows.map((resourceRow) => resourceRow.url))
 }
 
-// delete the seeded owner, which cascades to the topic, its Sources, its Scans, and its Findings,
-// then delete only the Resources this run introduced
+// delete the seeded owner, which cascades to the topic, its Sources, its Scans
 async function cleanUp(userId: string, urlsBefore: Set<string>): Promise<void> {
 	await db.delete(users).where(eq(users.id, userId))
-	const addedUrls = [...(await readStoredUrls())].filter((url) => !urlsBefore.has(url))
+	const addedUrls = [...(await readStoredResourceUrls())].filter((url) => !urlsBefore.has(url))
 	if (addedUrls.length > 0) {
 		await db.delete(resources).where(inArray(resources.url, addedUrls))
 	}
 }
 
 // snapshot what was already stored, seed, check, then clean up only what this run added
-const urlsBefore = await readStoredUrls()
+const urlsBefore = await readStoredResourceUrls()
 const { topicId, userId } = await seedTestData()
 try {
+	// a thrown check still cleans up, so a failed run leaves the database as it found it
 	const isPassing = await check(topicId, userId)
 	await cleanUp(userId, urlsBefore)
 	process.exit(isPassing ? 0 : 1)

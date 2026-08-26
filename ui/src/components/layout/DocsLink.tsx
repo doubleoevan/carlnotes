@@ -3,7 +3,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 
 /**
- * The link to the docs, which every piece of chrome offering it renders through here.
+ * The link to the docs, used everywhere the docs are linked from.
  * The docs are their own server-rendered site, so it opens in a new tab instead of navigating away from the app.
  */
 export function DocsLink({

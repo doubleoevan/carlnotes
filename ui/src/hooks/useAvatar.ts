@@ -1,13 +1,14 @@
 // the avatar setting, read from the session and updated through it
-import { authClient } from "@/lib/authClient"
-import { sendAvatarSource, uploadAvatar } from "@/lib/profileClient"
+import { authClient } from "@/clients/authClient"
+import { sendAvatarSource, uploadAvatar } from "@/clients/profileClient"
+import { refreshAvatars } from "@/hooks/useAvatarVersion"
 
 // the current image, whether there is a provider photo to offer, and the two ways to change it
 type AvatarSetting = {
 	avatarSource: string
 	hasProviderPhoto: boolean
 	setAvatarSource: (nextSource: "generated" | "oauth") => Promise<void>
-	uploadPhoto: (file: File) => Promise<string | null>
+	uploadAvatarFile: (file: File) => Promise<string | null>
 }
 
 // the signal that better-auth's own plugins raise to make every useSession re-fetch
@@ -23,12 +24,13 @@ export function useAvatar(): AvatarSetting {
 	const { data: session } = authClient.useSession()
 	const providerImageUrl = session?.user.image ?? null
 
-	// swap between the generated image and the oauth provider's photo.
-	// a failed change skips the refresh, so the page keeps showing the source the server still holds
+	// swap between the generated image and the oauth provider's photo
 	async function setAvatarSource(nextSource: "generated" | "oauth"): Promise<void> {
 		try {
+			// the session and every drawn avatar re-read after the change lands
 			await sendAvatarSource(nextSource)
 			refreshAuthSession()
+			refreshAvatars()
 		} catch (error) {
 			console.error("avatar source change failed", error)
 		}
@@ -39,6 +41,7 @@ export function useAvatar(): AvatarSetting {
 		const rejection = await uploadAvatar(file)
 		if (!rejection) {
 			refreshAuthSession()
+			refreshAvatars()
 		}
 		return rejection
 	}
@@ -47,6 +50,6 @@ export function useAvatar(): AvatarSetting {
 		avatarSource: session?.user.avatarSource ?? "generated",
 		hasProviderPhoto: Boolean(providerImageUrl),
 		setAvatarSource,
-		uploadPhoto,
+		uploadAvatarFile: uploadPhoto,
 	}
 }

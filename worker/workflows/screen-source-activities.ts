@@ -1,5 +1,4 @@
-// source llm-guard screening activities: fetch the page a url Source names and screen it before anyone sees the url.
-// a Source is not ready until this passes, so this is what decides whether its url is ever shown or ever scanned
+// source llm-guard screening activities
 import { ApplicationFailure } from "@temporalio/activity"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
@@ -27,8 +26,7 @@ export async function screenSource(sourceId: string): Promise<void> {
 		return
 	}
 
-	// reject a malformed, non-http, or internal url before any request goes out, then fetch the page.
-	// a page that never loads marks the Source failed instead of being left to yield nothing on every Scan
+	// reject a malformed, non-http, or internal url before any request goes out, then fetch the page
 	const fetched = await fetchPage(pageUrl)
 	if (fetched instanceof Error) {
 		await failSource(sourceId, `this page could not be read: ${fetched.message}`)

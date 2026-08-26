@@ -2,7 +2,7 @@ import type { RefObject } from "react"
 import { useEffect, useRef, useState } from "react"
 
 /**
- * A hook to use to reveal elements on scroll.
+ * Reveals an element once it scrolls into view.
  * returns a ref and whether its element has scrolled into view. it stays true once seen
  */
 export function useIsVisible<T extends HTMLElement>(): { ref: RefObject<T | null>; isVisible: boolean } {
@@ -15,8 +15,7 @@ export function useIsVisible<T extends HTMLElement>(): { ref: RefObject<T | null
 			return
 		}
 
-		// without the observer there is nothing to reveal on, so the element counts as seen instead of
-		// staying hidden behind a callback that will never arrive
+		// without the observer there is nothing to reveal on
 		if (typeof IntersectionObserver === "undefined") {
 			setIsVisible(true)
 			return
@@ -29,8 +28,7 @@ export function useIsVisible<T extends HTMLElement>(): { ref: RefObject<T | null
 					setIsVisible(true)
 				}
 			},
-			// the negative bottom margin raises the trigger line to 10% of the viewport height above the bottom,
-			// so the element must scroll 10% up from the bottom before it counts as visible
+			// the negative bottom margin raises the trigger line to 10% of the viewport height above the bottom
 			{ rootMargin: "0px 0px -10% 0px" },
 		)
 

@@ -1,8 +1,6 @@
 import { zValidator } from "@hono/zod-validator"
 import { topicFeatureOrderPayload } from "@shared/contracts"
-// the Featured section's ordering is whole numbers from 1 to the number of featured topics.
-// every change is the same two steps, take the topic out of the ordering and then put it back at a new position,
-// so the numbers stay contiguous whether the caller is ranking, deleting, or making a topic private
+// the Featured section's ordering is whole numbers from 1 to the number of featured topics
 import { and, asc, count, eq, gt, gte, isNotNull, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
@@ -10,8 +8,7 @@ import { topics } from "../../db/schema"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
 
-// the database, or a transaction on it, so a caller can release a feature order inside the transaction
-// that is deleting the topic or changing its visibility
+// the database, or a transaction on it
 type DbHandle = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 // whether the feature order was applied, and if not, which rule rejected it
@@ -23,7 +20,7 @@ export type FeatureOrderResult = "ranked" | "missing" | "notPublic"
  * A topic that is already featured moves: it leaves its old position, and the gap closes before it is inserted into its new position.
  */
 export async function setTopicFeatureOrder(topicId: string, position: number): Promise<FeatureOrderResult> {
-	// only a public topic can be featured, since the Featured section can be viewed by a signed-out visitor
+	// only a public topic can be featured. the Featured section is visible to a signed-out visitor
 	const [topic] = await db.select({ visibility: topics.visibility }).from(topics).where(eq(topics.id, topicId))
 	if (!topic) {
 		return "missing"
@@ -64,7 +61,7 @@ export function toTargetPosition(position: number, featuredCount: number): numbe
 }
 
 /**
- * Clear a topic's feature order and close the gap it by moving everything below it up one.
+ * Clear a topic's feature order and close the gap it leaves by moving everything below it up one.
  */
 export async function releaseFeatureOrder(topicId: string, handle: DbHandle = db): Promise<void> {
 	// a topic with no order has nothing to release and nothing below it to move
@@ -92,7 +89,11 @@ export async function loadFeaturedTopics(): Promise<{ id: string; name: string; 
 		.orderBy(asc(topics.featureOrder))
 
 	// the column is nullable, and the filter above is what rules the nulls out
-	return featuredRows.map((row) => ({ id: row.id, name: row.name, featureOrder: row.featureOrder ?? 0 }))
+	return featuredRows.map((featuredRow) => ({
+		id: featuredRow.id,
+		name: featuredRow.name,
+		featureOrder: featuredRow.featureOrder ?? 0,
+	}))
 }
 
 // the Featured section's order route, admin only
@@ -100,7 +101,7 @@ export const featuringRoute = new Hono<AppEnv>().patch(
 	"/topics/:id/feature-order",
 	zValidator("json", topicFeatureOrderPayload),
 	async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -111,8 +112,7 @@ export const featuringRoute = new Hono<AppEnv>().patch(
 			return context.json({ error: "forbidden" }, 403)
 		}
 
-		// position zero clears the topic's order. any other position inserts it and shifts the rest.
-		// a topic that isn't public is rejected
+		// position zero clears the topic's order
 		const featureOrderResult = await setTopicFeatureOrder(context.req.param("id"), context.req.valid("json").position)
 		if (featureOrderResult === "missing") {
 			return context.json({ error: "not found" }, 404)

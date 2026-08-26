@@ -15,7 +15,7 @@ import { sendEmail } from "../worker/email"
 import { effectiveBudgetCents } from "./authorization"
 import { provisionLiteLLMKey } from "./litellm"
 import { isBreachedPassword } from "./passwords"
-import { toAssignedUsername } from "./usernames"
+import { ensureUsername, toAssignedUsername } from "./usernames"
 
 // how long a signup-gate token stays valid
 const GATE_TOKEN_LIFETIME_MS = 15 * 60 * 1000
@@ -32,17 +32,16 @@ const PASSWORD_SIGNUP_PATH = "/sign-up/email"
 // the paths that set a password, which are the only ones a breach check belongs on. sign-in is deliberately absent.
 const PASSWORD_SETTING_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/reset-password", "/change-password", "/set-password"])
 
-// the paths carrying an address better auth then looks a user up by or stores. each one of them is canonicalized,
-// since matching a stored address against an incoming one only works when both sides were written the same way
+// the paths whose body includes an address that better auth looks up a user by or stores
 const EMAIL_BODY_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/sign-in/email", "/request-password-reset", "/change-email"])
 
 // how long a password-reset link stays valid. it is a bearer token sitting in an inbox, so the window is short
 const RESET_TOKEN_LIFETIME_SECONDS = 60 * 60
 
-// the password floor. above Better Auth's default of 8
+// the minimum password length. above Better Auth's default of 8
 const MIN_PASSWORD_LENGTH = 12
 
-// how hard the credential endpoints are rate-limited. ten guesses a second.
+// how hard the credential endpoints are rate-limited. ten guesses a minute.
 const CREDENTIAL_RATE_WINDOW_SECONDS = 60
 const CREDENTIAL_RATE_MAX = 10
 
@@ -54,12 +53,12 @@ const isLanDevOriginTrusted = Boolean(Bun.env.LAN_DEV_URL) && Bun.env.DOPPLER_EN
 
 // the hook that better auth takes, running both of the checks before a credential request
 const beforeCredentialRequest = createAuthMiddleware(async (context) => {
-	await refuseBreachedPassword(context.path, context.body)
+	await rejectBreachedPassword(context.path, context.body)
 	return toCanonicalEmailBody(context.path, context.body)
 })
 
-// refuse a breached password that was leaked
-async function refuseBreachedPassword(path: string, body: Record<string, unknown> | undefined): Promise<void> {
+// reject a breached password
+async function rejectBreachedPassword(path: string, body: Record<string, unknown> | undefined): Promise<void> {
 	const password = body?.newPassword ?? body?.password
 	if (!PASSWORD_SETTING_PATHS.has(path) || typeof password !== "string") {
 		return
@@ -71,8 +70,7 @@ async function refuseBreachedPassword(path: string, body: Record<string, unknown
 	}
 }
 
-// the request body with its email address canonicalized. better auth merges what our beforeCredentialRequest hook returns
-// with the request, so the lookup and the insert both see the canonical email address
+// the request body with its email address canonicalized
 function toCanonicalEmailBody(
 	path: string,
 	body: Record<string, unknown> | undefined,
@@ -89,8 +87,7 @@ function toCanonicalEmailBody(
 	return { context: { body: { ...body, [emailField]: toCanonicalEmail(email) } } }
 }
 
-// a provider can return any gmail variant of one mailbox,
-// so the address better auth matches on is canonicalized first for the profile email
+// a provider can return any gmail variant of one mailbox
 function toCanonicalProfileEmail(profile: { email?: string | null }): { email?: string } {
 	return profile.email ? { email: toCanonicalEmail(profile.email) } : {}
 }
@@ -101,8 +98,7 @@ export const auth = betterAuth({
 	baseURL: Bun.env.BETTER_AUTH_URL,
 	// these are appended to that derived origin, so only the lan address belongs here
 	trustedOrigins: isLanDevOriginTrusted ? [Bun.env.LAN_DEV_URL ?? ""] : undefined,
-	// the reset link is a bearer token in someone's inbox, so it is short-lived.
-	// completing a password reset ends every session that existed before it.
+	// the reset link is a bearer token in someone's inbox, so it is short-lived
 	emailAndPassword: {
 		enabled: true,
 		minPasswordLength: MIN_PASSWORD_LENGTH,
@@ -129,13 +125,12 @@ export const auth = betterAuth({
 	},
 	// implicit linking keeps its safe default: a verified email on both the incoming oauth side and the local row
 	account: { accountLinking: { enabled: true } },
-	// refuse a breached password wherever one is being set, and canonicalize the address wherever one arrives
+	// reject a breached password wherever one is being set, and canonicalize the address wherever one arrives
 	hooks: { before: beforeCredentialRequest },
 	// rate limiting for credential endpoints
 	rateLimit: {
 		enabled: true,
-		// the paths where a request is a login attempt or sends mail
-		// everything else keeps the default rate-limit ceiling
+		// the paths where a request is a login attempt or sends mail everything else keeps the default rate limit
 		customRules: {
 			"/sign-in/email": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 			"/sign-up/email": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
@@ -152,10 +147,8 @@ export const auth = betterAuth({
 		sendOnSignUp: true,
 	},
 	// the litellm virtual key stays server-only. role and plan are included in the session
-	// so the ui can render the admin link and the account page
 	user: {
-		// changing an address takes two links: the link to the current address authorizes the move,
-		// the other link proves the email is valid.
+		// changing an address takes two links
 		changeEmail: {
 			enabled: true,
 			sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
@@ -166,14 +159,15 @@ export const auth = betterAuth({
 			litellmVirtualKey: { type: "string", required: false, input: false, returned: false },
 			role: { type: "string", required: false, input: false, returned: true },
 			plan: { type: "string", required: false, input: false, returned: true },
-			// the username and avatar source are included, so the header can display the user's own avatar without making a request.
-			// required narrows the session type to string. the empty default only passes create-time validation, which runs
-			// before the create hook writes the real name
+			// the username and avatar source are included, so the header can display the user's own avatar without making a
+			// request
 			username: { type: "string", required: true, defaultValue: "", input: false, returned: true },
 			// include the generated username with the signup
 			usernameNormalized: { type: "string", required: false, input: false, returned: false },
 			avatarSource: { type: "string", required: false, input: false, returned: true },
 			avatarKey: { type: "string", required: false, input: false, returned: true },
+			// the access requirements to send an invite to this user, set in the Invitations section of the account page
+			inviteAccess: { type: "string", required: false, input: false, returned: true },
 		},
 	},
 	// provision the key for every new user. the password path also requires a passing turnstile check
@@ -190,7 +184,7 @@ export const auth = betterAuth({
 						}
 					}
 
-					// mint a litellm key for the new user, budgeted at the free plan they start on
+					// create a litellm key for the new user, budgeted at the free plan they start on
 					const litellmVirtualKey = await provisionLiteLLMKey(
 						user.email,
 						effectiveBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: null }),
@@ -202,8 +196,11 @@ export const auth = betterAuth({
 						data: { ...user, litellmVirtualKey, username, usernameNormalized: toNormalizedUsername(username) },
 					}
 				},
-				// track the signup funnel's terminal event
+				// track the signup funnel's final event
 				after: async (user, context) => {
+					// the unique index on the normalized username is what really reserves the name
+					const { username } = user as { username?: string }
+					await ensureUsername(user.id, username ?? (await toAssignedUsername()))
 					const ctaTag = toCtaTag(context?.getCookie(SIGNUP_CTA_COOKIE_NAME) ?? null)
 					const userAgent = context?.headers?.get("user-agent")
 					trackEvent("signup_completed", user.id, {
@@ -280,8 +277,7 @@ async function sendResetPasswordEmail(email: string, url: string): Promise<void>
 	})
 }
 
-// sends the link that authorizes a change of address to the current address instead of the new one.
-// once confirmed, a second email is sent to the new address to make sure it is valid.
+// sends the link that authorizes a change of address to the current address instead of the new one
 async function sendChangeEmailConfirmationEmail(currentEmail: string, newEmail: string, url: string): Promise<void> {
 	const emailProps = {
 		heading: "Confirm your new email",

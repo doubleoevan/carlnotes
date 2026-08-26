@@ -36,7 +36,7 @@ test("toSourceSummary strips a leading @ from a bluesky handle", () => {
 	expect(toSourceSummary("bluesky", {})).toBe("")
 })
 
-// the search ingester ignores its config and web search from the topic prompt, so the summary stays empty for the caller to fill
+// the search ingester ignores its config and web search from the topic prompt
 test("toSourceSummary is empty for the web search source even when a query is stored", () => {
 	expect(toSourceSummary("search", { query: "production LLM agents" })).toBe("")
 })
@@ -117,6 +117,7 @@ test("a stored source matches only the default it belongs to", () => {
 test("each custom option names its config field", () => {
 	const toOptionConfig = (key: string, value: string): Record<string, unknown> | null | undefined =>
 		CUSTOM_SOURCE_OPTIONS.find((option) => option.key === key)?.toConfig(value)
+	// each stored shape matches what the matching ingester reads
 	expect(toOptionConfig("url", "https://a.test/page")).toEqual({ url: "https://a.test/page" })
 	expect(toOptionConfig("rss", "https://a.test/feed")).toEqual({ url: "https://a.test/feed" })
 	expect(toOptionConfig("reddit", "r/mcp")).toEqual({ subreddit: "mcp" })
@@ -125,15 +126,14 @@ test("each custom option names its config field", () => {
 	expect(toOptionConfig("podcast", "1528594034")).toEqual({ podcastId: "1528594034" })
 })
 
-// a handle reads the same with or without its @, so the stored one never keeps it
-test("the bluesky option stores a handle without its leading @", () => {
+// a username reads the same with or without its @, so the stored one never keeps it
+test("the bluesky option stores a username without its leading @", () => {
 	const blueskyOption = CUSTOM_SOURCE_OPTIONS.find((option) => option.key === "bluesky")
 	expect(blueskyOption?.toConfig("@alice.bsky.social")).toEqual({ handle: "alice.bsky.social" })
 	expect(blueskyOption?.toConfig("alice.bsky.social")).toEqual({ handle: "alice.bsky.social" })
 })
 
-// a suggestion resolves a show name to its id before it is deduped, so the exclusion has to carry
-// the id too. keying on the summary re-suggests a source the topic already follows once a scan names it
+// a suggestion resolves a show name to its id before it is deduped, so the exclusion has to include the id too
 test("toSourceValue reads what the ingester stores, not the display name", () => {
 	expect(toSourceValue("podcast", { podcastId: "1528594034", name: "Hard Fork" })).toBe("1528594034")
 	expect(toSourceValue("youtube", { channelId: "UC123", name: "@veritasium" })).toBe("UC123")

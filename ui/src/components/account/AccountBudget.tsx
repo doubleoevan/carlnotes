@@ -1,12 +1,16 @@
 import type { ActivityResponse, BillingState } from "@shared/contracts"
+import { Settings } from "lucide-react"
 import { useState } from "react"
+import { openBillingPortal } from "@/clients/billingClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
-import { openBillingPortal } from "@/lib/billingClient"
-import { cn, SECTION_CARD_CLASS, toCentsLabel } from "@/lib/utils"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { toCentsLabel } from "@/lib/labels"
+import { CARD_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
 /**
- * The budget section on the account page. The payment notice the spend meter, scan usage, and the plan card.
+ * The budget section on the account page: the payment notice, the spend meter, the scan usage, and the plan card.
  */
 export function AccountBudget({
 	billing,
@@ -15,7 +19,7 @@ export function AccountBudget({
 }: {
 	billing: BillingState
 	activity: ActivityResponse | null
-	// an admin viewing another user's account does not see the upgrade button
+	// an admin viewing another user's account does not see the payment notice
 	isReadOnly?: boolean
 }) {
 	// past_due and unpaid are the failed-payment statuses Stripe reports
@@ -23,15 +27,19 @@ export function AccountBudget({
 	return (
 		<>
 			{isPastDue && !isReadOnly ? <PaymentNotice /> : null}
-			{activity && (
-				<SpendSection
-					scanSpendCents={activity.scanSpendCents}
-					chatSpendCents={activity.chatSpendCents}
-					budgetCents={activity.budgetCents}
-				/>
-			)}
-			<ScanUsageSection billing={billing} />
-			<PlanSection billing={billing} isReadOnly={isReadOnly} />
+			{/* the fund, today's brews, and the plan all say what this account is spending, so one card
+			    holds them, spaced apart rather than ruled off */}
+			<section className={cn(CARD_CLASS, "space-y-4")}>
+				{activity && (
+					<SpendSection
+						scanSpendCents={activity.scanSpendCents}
+						chatSpendCents={activity.chatSpendCents}
+						budgetCents={activity.budgetCents}
+					/>
+				)}
+				<ScanUsageSection billing={billing} />
+				<PlanSection billing={billing} />
+			</section>
 		</>
 	)
 }
@@ -79,7 +87,7 @@ function SpendSection({
 		BUDGET_MESSAGES.find((message) => budgetUsedPercent >= message.budgetUsedPercent) ?? BUDGET_MESSAGES[0]
 
 	return (
-		<section className={SECTION_CARD_CLASS}>
+		<div>
 			<div className="flex items-baseline justify-between">
 				<h2 className="font-semibold">Carl's coffee fund</h2>
 				<span className="text-muted-foreground text-sm">
@@ -116,15 +124,15 @@ function SpendSection({
 					</>
 				)}
 			</p>
-		</section>
+		</div>
 	)
 }
 
-// scan usage against the daily limit, plus the overage or hard-cap note once at the limit
+// scan usage against the daily limit, plus the overage or limit-reached note once at the limit
 function ScanUsageSection({ billing }: { billing: BillingState }) {
 	const isAtLimit = billing.dailyScansUsed >= billing.dailyScanLimit
 	return (
-		<section className={SECTION_CARD_CLASS}>
+		<div>
 			<h2 className="font-semibold">Brews today</h2>
 			<p className="text-muted-foreground">
 				{billing.dailyScansUsed} of {billing.dailyScanLimit} used
@@ -136,14 +144,14 @@ function ScanUsageSection({ billing }: { billing: BillingState }) {
 						: "You have reached your daily limit."}
 				</p>
 			) : null}
-		</section>
+		</div>
 	)
 }
 
-// the current plan, how often it bills, and the upgrade button
-function PlanSection({ billing, isReadOnly }: { billing: BillingState; isReadOnly: boolean }) {
+// the current plan and how often it bills
+function PlanSection({ billing }: { billing: BillingState }) {
 	return (
-		<section className={SECTION_CARD_CLASS}>
+		<div>
 			<p>
 				<span className="font-semibold">{"Plan "}</span>
 				<span className="text-muted-foreground capitalize">{billing.plan}</span>
@@ -152,18 +160,12 @@ function PlanSection({ billing, isReadOnly }: { billing: BillingState; isReadOnl
 					<span className="text-muted-foreground">{`, billed ${billing.billingInterval}`}</span>
 				)}
 			</p>
-			{/* an admin does not see the upgrade button */}
-			{!isReadOnly && (
-				<div className="mt-4">
-					<UpgradeButton billing={billing} />
-				</div>
-			)}
-		</section>
+		</div>
 	)
 }
 
-// a subscribed user manages billing through the portal, and a free user picks a plan on the plans page
-function UpgradeButton({ billing }: { billing: BillingState }) {
+// a subscribed user manages billing through the portal, and a free user selects a plan on the plans page.
+export function PlanButton({ billing }: { billing: BillingState }) {
 	const [isRedirecting, setIsRedirecting] = useState(false)
 
 	// send the user to the Stripe billing portal
@@ -177,15 +179,27 @@ function UpgradeButton({ billing }: { billing: BillingState }) {
 
 	if (billing.plan !== "free") {
 		return (
-			<Button onClick={handleManage} disabled={isRedirecting}>
-				Manage plan
-			</Button>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<Button onClick={handleManage} disabled={isRedirecting}>
+						<Settings className="size-4" />
+						Manage plan
+					</Button>
+				</TooltipTrigger>
+				<TooltipContent>Manage your plan</TooltipContent>
+			</Tooltip>
 		)
 	}
 
 	return (
-		<AnchorLink href="/plans" className={cn(buttonVariants({ variant: "default" }))}>
-			Upgrade
-		</AnchorLink>
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<AnchorLink href="/plans" className={cn(buttonVariants({ variant: "default" }))}>
+					<Settings className="size-4" />
+					Upgrade
+				</AnchorLink>
+			</TooltipTrigger>
+			<TooltipContent>Manage your plan</TooltipContent>
+		</Tooltip>
 	)
 }

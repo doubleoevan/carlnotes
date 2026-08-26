@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # blocking hook: fails any .ts edit with too many consecutive uncommented lines
-# .tsx/JSX is exempt — declarative markup isn't the statement-groups this rule targets
+# .tsx/JSX is exempt. Declarative markup isn't the statement-groups this rule targets
 MAX=8
 
 # file path from $1 (opencode plugin) or from hook stdin json (claude code, requires jq)

@@ -1,0 +1,1 @@
+ALTER TABLE "room_attachments" DROP CONSTRAINT "room_attachments_message_id_unique";

@@ -1,6 +1,7 @@
 import * as SelectPrimitive from "@radix-ui/react-select"
 import { Select, SelectContent, SelectTrigger, SelectValue } from "@/components/primitives/select"
-import { cn, toTimeLabel } from "@/lib/utils"
+import { toTimeLabel } from "@/lib/labels"
+import { cn } from "@/lib/utils"
 
 // every half-hour of the day, paired as an AM slot and its PM counterpart
 const TIME_ROWS = Array.from({ length: 24 }, (_, index) => {
@@ -37,8 +38,7 @@ export function TimePicker({
 	)
 }
 
-// one selectable time slot, half the width of the list, so an AM and a PM slot share a row.
-// Radix Item skips SelectItem's checkmark indicator, which is redundant next to the trigger's value
+// one selectable time slot, half the width of the list, so an AM and a PM slot share a row
 function TimeSlot({ time }: { time: string }) {
 	return (
 		<SelectPrimitive.Item

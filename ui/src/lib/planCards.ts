@@ -13,8 +13,7 @@ export function isUsersPlan(
 	return plan === signedInPlan && (plan === "free" || billingInterval === subscribedInterval)
 }
 
-// the plans page plan card's top-edge badge: the viewer's own subscription is the current plan,
-// the recommended badge is for a visitor who has not yet signed in
+// the plans page plan card's top-edge badge
 export function toPlanBadge(isCurrentPlan: boolean, signedInPlan: Plan | null, isHighlighted: boolean): string | null {
 	if (isCurrentPlan) {
 		return "Current plan"

@@ -108,12 +108,34 @@ Check for:
      both a Source that fell back and one that failed, so neither arm's name could stand for it. `fallbackMode`
      is a different thing and keeps its name). `degraded_sources` is the original name migration 0028 renamed
      away from, and is not to be returned to
-   - `SORT_LABELS` (now `SORT_ROWS`), `TAG_MATCH_LABEL` (now `TAG_MATCH_ROWS`); both map a mode to its label
-     and its icon rather than to a label alone
+   - `SORT_LABELS` (then `SORT_ROWS`, now `SORT_OPTIONS`), `TAG_MATCH_LABEL` (then `TAG_MATCH_ROWS`, now
+     `TAG_MATCH_OPTIONS`); both map a mode to its label and its icon instead of to a label alone
+   - `cap` in every form (now `limit`, `limited`, `limiting`, `unlimited`), extending the `ceiling` rename
+     above. `recap`, `capture`, `capacity`, `capital` and `strokeLinecap` keep the letters and are not the word
+   - a menu item is an `option`, never a `row`; a `row` comes from the database. `ROW_CLASS`/`MENU_ROW_CLASS`/
+     `CHAT_MENU_ROW_CLASS`/`ACTION_ROW_CLASS` are now `*_OPTION_CLASS`, and `TeamMenuRow`/`NewTeamMenuRow`/
+     `TeamUpMenuRow`/`TopicActionRow` are now `TeamOption`/`NewTeamOption`/`TeamUpMenuOption`/`TopicActionBar`
+   - `TopicsTable` named the owner's table and now names the public one. the owner's is `OwnerTopicsTable`,
+     so a grep for the old name lands on a different component with a different row type
+   - `ActivityTopic` (now `OwnerTopic`) and `ProfileTopic` (now `Topic`); `permissions.ts` renamed its local
+     `Topic` alias to `TopicRow` so the contract could take the bare name
+   - `TABLE_CARD_CLASS` and `SECTION_CARD_CLASS` held the same string and are now one `CARD_CLASS`
+   - `isOwnersTable` is gone rather than renamed: it gated a visibility tooltip the Visibility column
+     already stated, so the prop and the tooltip both went
    - `carries` / `carrying` in comments (now `includes` when one thing holds another, `has` for an attribute,
      `sends` for something transmitted), `rather than` (now `instead of`), `rides with` (now `goes with`),
-     `steers` (say what it sets or bounds), `lands in` (now `is included in`), and em dashes in comments
-     (use a comma or a second sentence)
+     `steers` (say what it sets or bounds), `lands in` (now `is included in`), `wears` (now `shows`),
+     and em dashes in comments (use a comma or a second sentence). figurative words for a UI surface
+     are out too: `chrome` and `furniture` both named the title bar and are now just what it is
+   - `viewer` for the person on the page (now `user` when signed in, `visitor` when not; the
+     domain-model skill owns the split). `viewerRole`/`viewerUserId`/`isViewerLeader`/`viewerId`/
+     `isViewerMember`/`viewerTeams`/`viewerRequest`/`loadViewerRooms` are now `role`/`userId`/
+     `isLeader`/`userId`/`isMember`/`userTeams`/`joinRequest`/`loadChatRooms`, and `loadProfile`'s
+     subject took the `profileUserId` name so `userId` could mean the signed-in caller
+   - a bare `the client` for the code calling our own api (now `the api client`, matching the
+     `ui/src/clients/*Client.ts` modules and the `apiClient` each one builds). a third-party client
+     keeps the bare word, since it is that library's own name for the thing: the Temporal, Langfuse,
+     Sentry, OTel, and database clients, and OAuth's client credentials grant
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
@@ -136,9 +158,15 @@ Check for:
    delete with a one-line reason.
 8. **skills-lock.json integrity**: every skill it records exists on disk in
    `.agents/skills/`, and every vendored skill on disk is recorded.
-9. **Always-on context matches canonical skills**: the domain nouns and
-   rejected terms in `AGENTS.md` match `domain-model/SKILL.md` exactly, and
-   the AGENTS.md skills index lists every skill present in `.agents/skills/`.
+9. **Always-on context matches canonical skills**: `domain-model/SKILL.md` is
+   the single source for domain nouns and rejected terms; `AGENTS.md` points at
+   it and repeats no noun list of its own. The AGENTS.md skills index lists
+   every skill present in `.agents/skills/`, and every module AGENTS.md states
+   only what is true of that module alone.
+10. **AGENTS.md matches the tree**: every folder, entry point, and script the
+    root AGENTS.md and each module AGENTS.md name exists as described, and no
+    module has grown a subsystem its AGENTS.md omits. Spot-check by listing
+    each module's folders against its doc's layout bullet.
 
 Report as a table: finding, file(s), which rule it violates, proposed fix.
 Then stop.

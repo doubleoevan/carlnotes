@@ -1,4 +1,4 @@
-// Stripe Billing: Checkout, the Customer Portal, and the subscription webhook that keeps billing_subscriptions and users.plan in sync.
+// Stripe Billing: Checkout, the Customer Portal
 // SETUP: create plus and premium products with monthly and yearly prices, plus a metered manual-scan overage price in Stripe
 import { zValidator } from "@hono/zod-validator"
 import type { BillingState } from "@shared/contracts"
@@ -42,7 +42,7 @@ type SubscriptionProjection = {
 
 /**
  * Start a Stripe Checkout Session for the plan's price and return its URL. Checkout creates the customer from customer_email.
- * The subscription carries the userId and plan in metadata, so the webhook can update the user's billing state without a reverse price lookup.
+ * The subscription stores the userId and plan in metadata, so the webhook can update the user's billing state without a reverse price lookup.
  */
 export async function createCheckoutSession(
 	userId: string,
@@ -50,9 +50,7 @@ export async function createCheckoutSession(
 	plan: PaidPlan,
 	billingInterval: "monthly" | "yearly",
 ): Promise<string> {
-	// the base plan price, plus the metered overage item on a monthly plan so its manual-scan overage bills on the
-	// same subscription. the overage price bills monthly, and Stripe rejects one subscription whose prices
-	// disagree about their billing interval, so a yearly plan checks out on its own and includes no overage
+	// the base plan price, plus the metered overage item on a monthly plan
 	const overageItems = billingInterval === "monthly" ? [{ price: overagePriceId() }] : []
 	const checkoutSession = await stripe().checkout.sessions.create({
 		mode: "subscription",
@@ -132,14 +130,13 @@ export async function handleStripeWebhook(rawBody: string, signature: string | u
 	}
 	const event = await stripe().webhooks.constructEventAsync(rawBody, signature, secret)
 
-	// every subscription lifecycle event carries the full subscription, so one handler covers create/update/delete
+	// every subscription lifecycle event includes the full subscription, so one handler covers create/update/delete
 	if (event.type.startsWith("customer.subscription.")) {
 		await applySubscriptionState(event.data.object as Stripe.Subscription)
 	}
 }
 
-// the Stripe statuses that earn paid entitlements. past_due keeps them while Stripe retries the card, while
-// "incomplete" must not, or an abandoned checkout would upgrade the user for free
+// the Stripe statuses that earn paid entitlements
 const ENTITLED_STRIPE_STATUSES = new Set(["active", "trialing", "past_due"])
 
 /**
@@ -170,10 +167,7 @@ export function toPaidSubscription(subscription: StripeSubscriptionFields): Subs
 	}
 }
 
-// how a subscription bills, read from the price it includes instead of from what checkout stamped on it.
-// changing plan in the Customer Portal swaps the price and leaves our own metadata behind, so the price is the
-// only field that stays true. the metered overage price always bills monthly, so a subscription counts as
-// yearly when any of its prices does, and falls back to the stamped billing interval when no price came with the event
+// how a subscription bills, read from the price it includes instead of from what checkout stamped on it
 function toBillingInterval(subscription: StripeSubscriptionFields): BillingInterval {
 	const priceIntervals = subscription.items?.data.map((item) => item.price?.recurring?.interval)
 	if (priceIntervals?.length) {
@@ -272,7 +266,7 @@ export async function cancelUserSubscription(userId: string): Promise<void> {
 	if (!subscription) {
 		return
 	}
-	// cancel immediately rather than at the period end, since the account it belongs to is going away
+	// cancel immediately instead of at the period end. the account it belongs to is going away
 	await stripe().subscriptions.cancel(subscription.stripeSubscriptionId)
 }
 
@@ -312,7 +306,7 @@ function appUrl(): string {
 // the billing routes: checkout, the portal, the account page state, and the stripe webhook
 export const billingRoute = new Hono<AppEnv>()
 	.post("/billing/checkout", zValidator("json", checkoutPayload), async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const user = context.get("user")
 		if (!user) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -323,7 +317,7 @@ export const billingRoute = new Hono<AppEnv>()
 		return context.json({ url })
 	})
 	.post("/billing/portal", async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -333,7 +327,7 @@ export const billingRoute = new Hono<AppEnv>()
 		return url ? context.json({ url }) : context.json({ error: "no subscription" }, 404)
 	})
 	.get("/billing/state", async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)

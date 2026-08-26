@@ -38,3 +38,9 @@ jobs:
       - run: bun install --frozen-lockfile
       # the exact gate the .githooks/pre-push hook runs, so local and CI cannot diverge
       - run: bash scripts/preflight.sh
+      # publish the test coverage that the gate wrote. an upload failure or a Codecov outage never blocks a push
+      - uses: codecov/codecov-action@v5
+        with:
+          files: ./coverage/lcov.info
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

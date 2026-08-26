@@ -12,18 +12,21 @@ Carl stays up. You stay informed.
 
 <br clear="left" />
 
+[![codecov](https://codecov.io/gh/doubleoevan/carlnotes/graph/badge.svg)](https://codecov.io/gh/doubleoevan/carlnotes)
+
 ## Stack
 
 Bun + TypeScript · React SPA (Vite + Tailwind + shadcn) · TanStack Query · Hono · Better Auth · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl + TwitterAPI.io · Langfuse · LLM Guard · Sentry + PostHog
 
 ## Architecture
 
-CarlNotes is a modular monolith with boundaries enforced by TypeScript: one repository, one `package.json`, four modules.
+CarlNotes is a modular monolith with boundaries enforced by TypeScript: one repository, one `package.json`, five modules.
 
 1. `ui/` is a React SPA.
 2. `api/` is a Hono server that serves the built SPA and every `/api` route.
 3. `worker/` holds the scan pipeline and the Temporal workflows.
 4. `db/` holds the Drizzle schema.
+5. `shared/` holds the zod contracts, enums, plans, and Source definitions.
 
 That list is the dependency order: each module imports only from the ones below it. `tsconfig` project references make an illegal import a compile error.
 
@@ -62,7 +65,7 @@ flowchart
 
 Each step costs more but handles fewer Resources. Embeddings filter and rank what the Sources found. A cheap model scores what passes. A more expensive model re-scores the best Findings and writes each Finding's relevance explanation. The cheap model then writes the scan report.
 
-Temporal persists every step and retries failed activities. That is why there is no outbox table: the subscriber email is the workflow's last activity, so a crash before it sends resumes there instead of losing it. Emails outside workflows (verification, password reset, reports) send directly through Resend. A failure is reported to Sentry rather than replayed.
+Temporal persists every step and retries failed activities. That is why there is no outbox table: the subscriber email is the workflow's last activity, so a crash before it sends resumes there instead of losing it. Emails outside workflows (verification, password reset, reports) send directly through Resend. A failure is reported to Sentry instead of replayed.
 
 ### Chat
 
@@ -76,11 +79,11 @@ flowchart
     Search[Exa web search] -.-> Reply
 ```
 
-Chat is signed-in only. Every chat turn writes a row, because every chat turn is metered. The model spend lands on the asker's own LiteLLM key, sharing the same budget a topic scan charges. Chat text is encrypted. A chat that outgrows its context budget is compacted. The newest turns stay whole. Older answers are clipped to their opening characters.
+Chat is signed-in only. Every chat turn writes a row, because every chat turn is metered. The model spend is charged to the asker's own LiteLLM key, sharing the same budget a topic scan charges. Chat text is encrypted. A chat that outgrows its context budget is compacted. The newest turns stay whole. Older answers are clipped to their opening characters.
 
 ### Content screening (LLM Guard)
 
-LLM Guard screens untrusted text before any model reads it, protecting the app from prompt injection. A fetched page or an uploaded document carries instructions aimed at the model. LLM Guard runs in Python, so it is its own container: the official `llm-guard-api` image, pinned to one version in `docker-compose.yml` and checked weekly for updates by [a GitHub Action](.github/workflows/llm-guard-update.yml). Locally it is only reachable from your own machine, since it accepts arbitrary text with no auth of its own. In production it is its own Northflank service. The app finds it through one value, `LLM_GUARD_URL`. Unset it and screening turns off while everything else behaves the same.
+LLM Guard screens untrusted text before any model reads it, protecting the app from prompt injection. A fetched page or an uploaded document may include instructions aimed at the model. LLM Guard runs in Python, so it is its own container: the official `llm-guard-api` image, pinned to one version in `docker-compose.yml` and checked weekly for updates by [a GitHub Action](.github/workflows/llm-guard-update.yml). Locally it is only reachable from your own machine, since it accepts arbitrary text with no auth of its own. In production it is its own Northflank service. The app finds it through one value, `LLM_GUARD_URL`. Unset it and screening turns off while everything else behaves the same.
 
 Two kinds of text are screened, each at its entry point:
 
@@ -102,7 +105,7 @@ Feature work lands change-by-change through [OpenSpec](https://github.com/Fissio
 ```bash
 bun install
 bun run dev          # api, ui, temporal, and worker together (concurrently, colored per process); run carl-up first for the Docker infra
-bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server) and mint a capped dev key; carl-down stops it
+bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server) and create a limited dev key; carl-down stops it
                      # scans run as Temporal workflows, so dev:temporal must be up for any scan to happen, not just for attachments
 bun run dev:ui       # Vite dev server (UI); wraps itself in doppler run
 bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; the Vite dev server proxies /api here
@@ -110,8 +113,11 @@ bun run dev:worker   # scheduled-scan sweep loop (set SCHEDULE_INTERVAL_MS); `bu
 bun run dev:temporal # Temporal worker for topic scans and attachment processing; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
 bun run dev:temporal:watch # the same worker, restarted on save; what `bun run dev` uses. a restart mid-review leaves that scan waiting out its 30-minute activity timeout before it fails
 bun run dev:email    # react-email preview server for the templates in emails/ (localhost:3011); no doppler needed
-bun run dev:docs     # Starlight dev server on localhost:4321/docs, with hot reload; also shows draft pages that the production build leaves out
+bun run dev:docs     # Starlight dev server on localhost:4321/docs, reachable on the LAN, with hot reload; also shows draft pages that the production build leaves out
                      # it runs in the background: `cd docs && astro dev stop` ends it, `astro dev logs` tails it
+bun run test:coverage # the test suite with bun's built-in line and function coverage table
+bun run docs:embed   # chunk the docs markdown by section and embed the changed sections into docs_chunks, which chat quotes; run it after editing docs
+bun run docs:embed:prd # the same sync against the production database, the owner-run escape hatch until the deploy job runs it
 bun run build:ui     # production build (no doppler, so it runs in CI and deploys)
 bun run build:docs   # build static docs to docs/dist, which the api serves under /docs
                      # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload
@@ -163,12 +169,16 @@ bun run smoke:store        # just the resource-content object-storage round-trip
 bun run smoke:attach       # just the URL-attachment smoke test (Firecrawl → store → Temporal workflow → ready)
 bun run smoke:search       # just the web search smoke test (context → LLM queries → Exa → Resources)
 bun run smoke:reddit       # just the reddit access smoke test: a subreddit and a search Source through each mode, reporting which one answered
-bun run smoke:x            # just the X smoke test: one handle's tweets and what they cost, plus the lookup that vets a suggested account
-bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its ceiling
+bun run smoke:x            # just the X smoke test: one account's tweets and what they cost, plus the lookup that vets a suggested account
+bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its limit
 bun run smoke:subscribers  # just the subscriber-count smoke test: both subscription paths against real rows, rolled back after
 bun run smoke:profile      # just the profile smoke test: the header's distinct people against the footer's summed rows
 bun run smoke:chat         # just the topic chat retrieval smoke test (question → ranked findings → assembled context)
 bun run smoke:eval         # just the eval-harness smoke test: one tiny labeled fixture through the real gate and scoring
+bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, and detach succession
+bun run smoke:room         # just the team-room smoke test: the access matrix, isolation, budget refusal, mention rows, and the room lock
+bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a viewer may open, one per holding team, and the unseen count
+bun run smoke:invites      # just the invite smoke test: link authority and races, resolution, who-may-invite, connections, and accept-equals-redeem
 ```
 
 Run the reddit smoke test from the deployed environment, not just a laptop: 
@@ -189,9 +199,9 @@ bun run eval --export <topicId>   # write an unlabeled fixture from a real Topic
 bun run eval --guard-only         # only LLM Guard's false-positive and attack-catch rates; no model spend
 ```
 
-A weekly GitHub Action (`.github/workflows/llm-guard-update.yml`) watches Docker Hub for new LLM Guard releases, boots the candidate on the runner, runs the guard-only eval against it, and files an issue carrying both measured rates, so a scanner upgrade arrives as a pre-measured decision, never an unchecked version bump. Read the two rates together: a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate.
+A weekly GitHub Action (`.github/workflows/llm-guard-update.yml`) watches Docker Hub for new LLM Guard releases, boots the candidate on the runner, runs the guard-only eval against it, and files an issue with both measured rates, so a scanner upgrade arrives as a pre-measured decision, never an unchecked version bump. Read the two rates together: a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate.
 
-Prompt registry (owner-run): git is canonical for prompt wording (`worker/prompts/*.md`); this pushes it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set.
+Prompt registry (owner-run): git is the source of truth for prompt wording (`worker/prompts/*.md`); this pushes it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set. `--candidate` uploads under the `candidate` label instead, leaving the served `production` label untouched until someone promotes the version in Langfuse by hand — the deploy job runs that form, while these two scripts write `production` directly.
 
 Each Doppler config points at its own Langfuse project, so the environment is chosen at the `doppler run` call and there is one script per target. The script names the environment it wrote to in its summary line, since a run against dev otherwise reads exactly like a run against production:
 
@@ -221,12 +231,20 @@ doppler run -- bun db/migrate.ts
 bun run db:migrate
 ```
 
-Prompts are a deploy job too, uploaded as candidates rather than promoted. Without this the registry keeps serving the wording it already had while the repo moves on, and a scan reads stale prompts:
+Prompts are a deploy job too, uploaded as candidates instead of promoted. Without this the registry keeps serving the wording it already had while the repo moves on, and a scan reads stale prompts:
 
 ```bash
 doppler run -- bun worker/prompts/sync.ts --candidate
 # or
 bun run prompts:sync --candidate
+```
+
+The docs embeddings are a deploy job too. It re-embeds only the sections whose words changed, so a push that leaves the docs alone costs nothing:
+
+```bash
+doppler run -- bun worker/docsSync.ts
+# or
+bun run docs:embed
 ```
 
 Promote a candidate to production in Langfuse once a real scan's note reads right. The runtime falls back to the bundled template whenever a registry template asks for variables the code does not fill, so a stale label can never break a prompt. A prompt whose live wording differs from the bundled one is logged once per process.

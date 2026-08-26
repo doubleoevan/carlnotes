@@ -13,7 +13,7 @@
 @source "../../node_modules/streamdown/dist/*.js";
 
 /* the site's one elevation, under every raised surface: cards, tables, the search bar, popups, buttons, and tiles.
-   both layers are offset and tight rather than a wide even glow, so a surface reads as raised instead of haloed,
+   both layers are offset and tight instead of a wide even glow, so a surface reads as raised instead of haloed,
    and its 1px border stays the only edge */
 @utility shadow-lift {
 	box-shadow:
@@ -27,6 +27,7 @@
 	--font-display: "Architects Daughter", ui-sans-serif, cursive;
 	/* shadcn semantic tokens, mapped to the CarlNotes palette below */
 	--color-background: var(--background);
+	--color-sunken: var(--sunken);
 	--color-foreground: var(--foreground);
 	--color-card: var(--card);
 	--color-card-foreground: var(--card-foreground);
@@ -37,6 +38,7 @@
 	--color-secondary: var(--secondary);
 	--color-secondary-foreground: var(--secondary-foreground);
 	--color-muted: var(--muted);
+	--color-bubble: var(--bubble);
 	--color-muted-foreground: var(--muted-foreground);
 	--color-accent: var(--accent);
 	--color-accent-foreground: var(--accent-foreground);
@@ -53,6 +55,7 @@
 	--color-link: var(--link);
 	--color-separator: var(--separator);
 	--color-separator-strong: var(--separator-strong);
+	--color-separator-sunken: var(--separator-sunken);
 	--color-spend-chat: var(--spend-chat);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
@@ -64,6 +67,9 @@
 :root {
 	--radius: 0.625rem;
 	--background: #e2d8c4;
+	/* the inset a subtable sits on, quieter than the card holding it. it is a step darker than the page
+	   behind the card, which a near-white card needs to read against */
+	--sunken: #d6c9ad;
 	--foreground: #332a22;
 	--card: #fffdf9;
 	--card-foreground: #332a22;
@@ -75,6 +81,8 @@
 	--secondary-foreground: #75604a;
 	--muted: #efe6d8;
 	--muted-foreground: #7a6449;
+	/* the other party's chat bubble */
+	--bubble: #e2d8c4;
 	--accent: #e9dcc8;
 	--accent-foreground: #75604a;
 	--destructive: #b5433a;
@@ -91,6 +99,10 @@
 	/* the quiet dashes inside cards and popovers, and the stronger cut for row separators on the page itself */
 	--separator: #dcccb6;
 	--separator-strong: #c9b28b;
+	/* the rules inside a subtable. the border above is lighter than the sunken fill it would be drawn on,
+	   so it reads as no line at all. this is darker than that fill by about what the dark theme's border is
+	   lighter than its own */
+	--separator-sunken: #a68d64;
 	--ring-line: rgba(120, 96, 72, 0.18);
 	/* the budget's chat segment. espresso against the light theme's orange brews segment,
 	   cream against the dark theme's, so the two segments differ in hue and luminance in both */
@@ -101,6 +113,8 @@
    so the two surfaces separate without a border doing the work */
 .dark {
 	--background: #584532;
+	/* a step darker than the page and the cards on it, so a subtable reads as sunk into its row */
+	--sunken: #241a10;
 	--foreground: #f0e6d6;
 	--card: #302417;
 	--card-foreground: #f0e6d6;
@@ -108,11 +122,13 @@
 	--popover-foreground: #f0e6d6;
 	--primary: #f09050;
 	--primary-foreground: #1a1511;
-	/* the pair carries small badge text, so it clears the 4.5:1 body-text ratio rather than the 3:1 large-text one */
+	/* the pair includes small badge text, so it clears the 4.5:1 body-text ratio instead of the 3:1 large-text one */
 	--secondary: #75593e;
 	--secondary-foreground: #eadfc6;
 	--muted: #54422f;
 	--muted-foreground: #c2b494;
+	/* the other party's chat bubble */
+	--bubble: #584532;
 	--accent: #5d4a35;
 	--accent-foreground: #c9ba99;
 	--destructive: #e0674f;
@@ -128,6 +144,8 @@
 	/* quiet inside cards and popovers, stronger between rows on the page, same split as light mode */
 	--separator: #614e39;
 	--separator-strong: #7b6449;
+	/* the dark border already stands well off the sunken fill, so a subtable's rules keep it */
+	--separator-sunken: #69553f;
 	--ring-line: rgba(201, 186, 153, 0.18);
 	/* cream, since the dark theme's badge and primary are the same orange and the two segments blurred together */
 	--spend-chat: #f0e6d6;

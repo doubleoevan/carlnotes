@@ -1,4 +1,4 @@
-// topic attachments. the upload stores the file and inserts a pending row, a durable workflow extracts its text and generates its context, and scans read every ready attachment's context
+// topic attachments
 import { generateText } from "ai"
 import { and, eq } from "drizzle-orm"
 import { extractText as extractPdfText } from "unpdf"
@@ -12,7 +12,7 @@ import { fetchContent, toFetchableUrl } from "./scrape"
 import { deleteAttachment, MAX_KEY_FILENAME_CHARS, putAttachment, toAttachmentKey } from "./store"
 import { startAttachmentWorkflow } from "./temporal-client"
 
-// a rejection safe to show the user verbatim: their file or url, not an infra failure like a misconfigured llm proxy
+// a rejection safe to show the user as written: their file or url, not an infra failure like a misconfigured llm proxy
 export class AttachmentValidationError extends Error {}
 
 // a persisted attachment row, and the upload ingestAttachment input
@@ -25,20 +25,18 @@ type AttachmentUpload = {
 	sourceUrl?: string
 }
 
-// reject uploads larger than this before any storage or model work. this bounds storage and inference cost at the trust boundary
+// reject uploads larger than this before any storage or model work
 export const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024
-// cap the extracted text fed to the model
+// limit the extracted text fed to the model
 const MAX_EXTRACT_CHARS = 8000
-// a fetched page is stored as markdown, and its name leaves room for the extension inside the cap
-// the object key applies, so the whole filename survives that key's own truncation with its extension intact
+// a fetched page is stored as markdown
 const PAGE_EXTENSION = ".md"
 const MAX_PAGE_NAME_CHARS = MAX_KEY_FILENAME_CHARS - PAGE_EXTENSION.length
 
-// the synchronous half of ingestion: validate, store the bytes, insert a pending row, and start the processing workflow.
-// extraction and context generation run later in the durable workflow, so a long document does not block the upload
+// the synchronous half of ingestion
 export async function ingestAttachment(attachmentUpload: AttachmentUpload): Promise<Attachment> {
 	const { topicId, filename, contentType, bytes, sourceUrl = null } = attachmentUpload
-	// validate the size and type of the payload before touching storage. an unsupported type never extracts, so reject it up front
+	// validate the size and type of the payload before touching storage
 	if (bytes.byteLength > MAX_ATTACHMENT_BYTES) {
 		throw new AttachmentValidationError(`attachment exceeds ${MAX_ATTACHMENT_BYTES} bytes`)
 	}
@@ -58,7 +56,7 @@ export async function ingestAttachment(attachmentUpload: AttachmentUpload): Prom
 	const objectKey = toAttachmentKey(topicId, attachmentId, filename)
 	await putAttachment(objectKey, bytes, contentType)
 
-	// from here the object exists, so any failure must delete both the object and its row to avoid persisting an invalid attachment
+	// from here the object exists
 	try {
 		const attachmentRow = {
 			id: attachmentId,
@@ -100,8 +98,7 @@ export async function ingestUrlAttachment(topicId: string, url: string): Promise
 		throw new AttachmentValidationError(error instanceof Error ? error.message : String(error))
 	}
 
-	// an attached url names a page to read, so it takes the scrape instead of the caption path a video would.
-	// a missing key or a dead page both land here, and the rejection names the url and nothing else
+	// an attached url names a page to read, so it takes the scrape instead of the caption path a video would
 	const fetchResult = await fetchContent(fetchableUrl.toString(), "read").catch(() => {
 		throw new AttachmentValidationError(`this page could not be read: ${url}`)
 	})
@@ -126,12 +123,12 @@ export function toPageFilename(pageUrl: URL): string {
 	return `${pageName.slice(0, MAX_PAGE_NAME_CHARS)}${PAGE_EXTENSION}`
 }
 
-// whether an attachment's content type has an extractor (text or PDF), checked synchronously so that an unsupported type is rejected at upload
+// whether an attachment's content type has an extractor (text or PDF), checked synchronously
 function isSupportedAttachmentType(contentType: string): boolean {
 	return contentType.startsWith("text/") || contentType === "application/pdf" || isImageAttachmentType(contentType)
 }
 
-// throw if the topic doesn't exist, so both ingestion paths reject a misaddressed upload before spending storage, inference, or a fetch
+// throw an error if the topic doesn't exist
 async function isExistingTopic(topicId: string): Promise<void> {
 	// the foreign key would only catch a bad topic at insert, after the work is done. check up front instead
 	const [topic] = await db.select({ id: topics.id }).from(topics).where(eq(topics.id, topicId))
@@ -176,17 +173,15 @@ export function toDataUrl(contentType: string, bytes: Uint8Array): string {
 	return `data:${contentType};base64,${Buffer.from(bytes).toString("base64")}`
 }
 
-// build the context-generation prompt over attach-context.md, capped so a huge document can't blow the token budget
+// build the context-generation prompt over attach-context.md, limited so a huge document can't blow the token budget
 export async function buildContextPrompt(text: string): Promise<BuiltPrompt> {
-	// fetch the registry version first, then cap the document length to bound the token spend.
-	// the document is user-supplied text, not app-generated, so it gets fenced in the prompt as untrusted
+	// fetch the registry version first, then limit the document length to bound the token spend
 	const { template, name, registryPrompt } = await fetchPromptTemplate("attach-context")
 	const prompt = writePrompt(template, { document: text.slice(0, MAX_EXTRACT_CHARS) })
 	return { prompt, name, registryPrompt }
 }
 
-// generate a context string from the file's text with the cheap model through LiteLLM,
-// billed to the given key, or to the master key when there is none.
+// generate a context string from the file's text with the cheap model through LiteLLM, billed to the given key,
 export async function generateContext(text: string, litellmApiKey?: string): Promise<string> {
 	// fetch and write the prompt
 	const contextPrompt = await buildContextPrompt(text)
@@ -200,10 +195,9 @@ export async function generateContext(text: string, litellmApiKey?: string): Pro
 	return context.trim()
 }
 
-// describe an attached image with the chat model, billed to the user's own key.
-// the description is what later gets read, never the image itself
+// describe an attached image with the chat model, billed to the user's own key
 export async function generateImageContext(dataUrl: string, litellmApiKey?: string): Promise<string> {
-	// fetch and write the prompt. it takes no variables, since the image includes everything the model reads
+	// fetch and write the prompt. it takes no variables, and the image includes everything the model reads
 	const { template, name, registryPrompt } = await fetchPromptTemplate("attach-image-context")
 	const prompt = writePrompt(template, {})
 
@@ -226,7 +220,7 @@ export async function generateImageContext(dataUrl: string, litellmApiKey?: stri
 
 // the context a scan reads for a topic. the topic's prompt merged with every attachment's context
 export async function buildTopicScanContext(topicId: string): Promise<{ name: string; context: string }> {
-	// read the topic's name and prompt. throw if the topic does not exist
+	// read the topic's name and prompt. throw an error if the topic does not exist
 	const [topic] = await db
 		.select({ name: topics.name, prompt: topics.prompt })
 		.from(topics)
@@ -242,7 +236,7 @@ export async function buildTopicScanContext(topicId: string): Promise<{ name: st
 		.where(and(eq(attachments.topicId, topicId), eq(attachments.status, "ready")))
 
 	// merge the topic prompt and attachment contexts, dropping empties, into one context string
-	const context = [topic.prompt, ...attachmentContexts.map((row) => row.context)]
+	const context = [topic.prompt, ...attachmentContexts.map((contextRow) => contextRow.context)]
 		.map((part) => part.trim())
 		.filter(Boolean)
 		.join("\n\n")

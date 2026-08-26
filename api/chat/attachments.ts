@@ -47,26 +47,23 @@ export async function resolveChatAttachments(attachments: ChatAttachment[]): Pro
 			text = attachment.text
 		}
 
-		// the screened text is what gets posted, since even an unflagged verdict can carry redactions.
-		// a flagged attachment becomes a note in its place, so the chat turn still gets an answer
+		// the screened text is what gets posted
 		const screenVerdict = await screenText(text, "document")
 		const screenedText = screenVerdict.isFlagged
 			? `[This attachment was withheld: ${toFlaggedReason(screenVerdict)}.]`
 			: screenVerdict.text
-		// keep stays false on this copy. what gets stored is read from the raw attachments,
-		// so a withheld note is never what the chat persists
+		// keep stays false on this copy
 		chatAttachments.push({ kind: "text", name: attachment.name, text: screenedText, keep: false })
 	}
 	return chatAttachments
 }
 
-// the words that a kept attachment stores, or null when the scanner flags it.
-// a flagged attachment is dropped instead of remembered
-async function screenKeptText(text: string, topicId: string): Promise<string | null> {
+// the words that a kept attachment stores, or null when the scanner flags it
+export async function screenAttachmentText(text: string, sourceLabel: string, topicId: string): Promise<string | null> {
 	// clip before screening. the scanner fails once it runs past its own deadline. an unbounded body should not skip the check
 	const screenVerdict = await screenText(clipAttachmentText(text), "document")
 	if (screenVerdict.isFlagged) {
-		console.error(`a kept chat attachment for topic ${topicId} was ${toFlaggedReason(screenVerdict)}`)
+		console.error(`a ${sourceLabel} for topic ${topicId} was ${toFlaggedReason(screenVerdict)}`)
 		reportError(new Error(toFlaggedReason(screenVerdict)), "chat", { topicId })
 		return null
 	}
@@ -74,19 +71,19 @@ async function screenKeptText(text: string, topicId: string): Promise<string | n
 }
 
 // a data url's base64 tail, decoded to the bytes it encodes
-function decodeDataUrl(dataUrl: string): Uint8Array {
+export function decodeDataUrl(dataUrl: string): Uint8Array {
 	return Uint8Array.from(Buffer.from(dataUrl.split(",")[1] ?? "", "base64"))
 }
 
 // the media type a data url declares, read from its own prefix instead of being assumed by the attachment kind
-function contentTypeFromDataUrl(dataUrl: string): string {
+export function contentTypeFromDataUrl(dataUrl: string): string {
 	return dataUrl.slice("data:".length, dataUrl.indexOf(";")) || "application/octet-stream"
 }
 
 /**
  * Store the attachments a user marked to keep on the chat turn that just finished.
- * Best-effort, since that chat turn already has its answer.
- * a failure is logged instead of being surfaced, and a kept attachment past the attachments cap is skipped.
+ * Best-effort.
+ * a failure is logged instead of being surfaced, and a kept attachment past the attachments limit is skipped.
  */
 export async function keepChatAttachments(
 	userId: string,
@@ -100,7 +97,7 @@ export async function keepChatAttachments(
 		return
 	}
 
-	// how many attachment slots are left under the cap
+	// how many attachment slots are left under the limit
 	const keptAttachments = await db
 		.select({ id: chatAttachments.id })
 		.from(chatAttachments)
@@ -113,7 +110,7 @@ export async function keepChatAttachments(
 		}
 		// one failed kept attachment never stops the rest
 		try {
-			// only a kept attachment that actually stored uses up a cap slot
+			// only a kept attachment that actually stored uses up a limit slot
 			if (await keepOneChatAttachment(userId, topicId, attachment, litellmApiKey)) {
 				remainingAttachmentSlots -= 1
 			}
@@ -125,8 +122,7 @@ export async function keepChatAttachments(
 	}
 }
 
-// one kept attachment, stored and summarized. text stores its own encrypted words, an image or PDF stores its original bytes,
-// and every attachment kind ends in one insert carrying the summary that later chat turns read
+// one kept attachment, stored and summarized
 async function keepOneChatAttachment(
 	userId: string,
 	topicId: string,
@@ -135,12 +131,12 @@ async function keepOneChatAttachment(
 ): Promise<boolean> {
 	// a text attachment has no file, so its own words are what gets stored, encrypted like a chat turn's text
 	if (attachment.kind === "text") {
-		const text = await screenKeptText(attachment.text, topicId)
+		const text = await screenAttachmentText(attachment.text, "kept chat attachment", topicId)
 		if (text === null) {
 			return false
 		}
 
-		// summarize the attachment and store the row, since later chat turns read the summary instead of the words
+		// summarize the attachment and store the row
 		const context = await generateContext(text, litellmApiKey)
 		await db.insert(chatAttachments).values({
 			userId,
@@ -154,26 +150,27 @@ async function keepOneChatAttachment(
 		return true
 	}
 
-	// a kept PDF is read and screened before any of it is stored, so a flagged one leaves no object behind.
-	// the extractor reads a copy, since reading a PDF empties the array it was given, and the original is what gets stored
+	// a kept PDF is read and screened before any of it is stored, so a flagged one leaves no object behind
 	const bytes = decodeDataUrl(attachment.dataUrl)
 	const pdfText =
 		attachment.kind === "pdf"
-			? await screenKeptText(await extractText("application/pdf", new Uint8Array(bytes)), topicId)
+			? await screenAttachmentText(
+					await extractText("application/pdf", new Uint8Array(bytes)),
+					"kept chat attachment",
+					topicId,
+				)
 			: ""
 	if (pdfText === null) {
 		return false
 	}
 
-	// image and PDF attachments keep their original bytes under a key namespaced to the user,
-	// the same way a topic attachment's file lives in storage while only its summary gets posted to the model
+	// image and PDF attachments keep their original bytes under a key namespaced to the user, the file lives in
 	const attachmentId = crypto.randomUUID()
 	const contentType = attachment.kind === "pdf" ? "application/pdf" : contentTypeFromDataUrl(attachment.dataUrl)
 	const objectKey = toChatAttachmentKey(userId, topicId, attachmentId, attachment.name)
 	await putAttachment(objectKey, bytes, contentType)
 
-	// summarize what was kept and store the chat attachment row. the object is already stored,
-	// so a summary or insert that fails deletes the object from storage
+	// summarize what was kept and store the chat attachment row
 	try {
 		const context =
 			attachment.kind === "pdf"
@@ -200,7 +197,7 @@ async function keepOneChatAttachment(
 
 /**
  * The attachments that this user keeps for the topic, oldest first.
- * The composer ui lists them for deletion and counts them against the cap.
+ * The composer ui lists them for deletion and counts them against the limit.
  */
 export async function loadKeptAttachments(
 	userId: string | null,
@@ -264,7 +261,7 @@ export async function loadDownloadableKeptAttachment(
 }
 
 /**
- * Delete one kept attachment, scoped to its keeper, freeing its cap slot and best-effort deleting its stored object.
+ * Delete one kept attachment, scoped to its keeper, freeing its limit slot and best-effort deleting its stored object.
  * False when the attachment's user id is not this user's, so a user can never delete another's attachment.
  */
 export async function deleteKeptAttachment(userId: string, keptAttachmentId: string): Promise<boolean> {
@@ -332,7 +329,7 @@ export async function deleteStoredChatAttachments(userId: string): Promise<void>
 // a kept chat attachment's routes, both scoped to whoever kept it
 export const chatAttachmentsRoute = new Hono<AppEnv>()
 	.delete("/chat-attachments/:id", async (context) => {
-		// deleting a kept attachment is signed-in only and scoped to its keeper, freeing its cap slot
+		// deleting a kept attachment is signed-in only and scoped to its keeper, freeing its limit slot
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "sign up required" }, 401)

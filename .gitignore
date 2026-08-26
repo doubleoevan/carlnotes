@@ -49,3 +49,6 @@ coverage
 !.vscode/settings.json
 !.vscode/extensions.json
 .cursor/
+
+# the playwright mcp server's screenshot and console cache
+.playwright-mcp/

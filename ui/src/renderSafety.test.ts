@@ -1,18 +1,15 @@
-// a guard over the whole ui tree: model-written text renders through one of two filtered Markdown subsets,
-// so nothing a model read off a web page can become a link, an image, or embedded markup in the browser
+// a guard over the whole ui tree: model-written text renders through one of two filtered Markdown subsets
 
 import { expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 
-// the files that allowed to render Markdown: our own static legal copy, which no model writes,
-// and the one safety renderer every model-written note routes through
+// the files that allowed to render Markdown: our own static legal copy
 const STATIC_COPY_PAGES = ["pages/TermsPage.tsx", "pages/PrivacyPage.tsx"]
 const SAFETY_RENDERER = "components/topic/TopicScanRecap.tsx"
 
-// the streaming renderer, the only file allowed to load streamdown.
-// a chat reply arrives a token at a time and needs a parser that closes half-open blocks
-const STREAMING_RENDERER = "components/chat/ChatMarkdown.tsx"
+// the streaming chat renderer, the only file allowed to load streamdown
+const STREAMING_CHAT_RENDERER = "components/chat/ChatMarkdown.tsx"
 
 // every ui source file, minus the build output and the tests
 function uiSourceFiles(): string[] {
@@ -44,11 +41,10 @@ test("only the static copy pages and the sanitizing renderer use markdown", () =
 
 // streaming is the only reason to reach for the streamdown library, so only the chat renderer can
 test("only the streaming renderer uses streamdown", () => {
-	expect(rendererOffenders("streamdown", [STREAMING_RENDERER])).toEqual([])
+	expect(rendererOffenders("streamdown", [STREAMING_CHAT_RENDERER])).toEqual([])
 })
 
-// the safety renderer keeps its policy: raw HTML stays text and every anchor routes through the allowlist.
-// a source-level pin, so removing either line fails here before it ships an unvetted anchor
+// the safety renderer keeps its policy: raw HTML stays text and every anchor routes through the allowlist
 test("the safety renderer disables raw html and routes anchors through the allowlist", () => {
 	const rendererSource = readFileSync(join(import.meta.dir, SAFETY_RENDERER), "utf8")
 	expect(rendererSource).toContain("disableParsingRawHTML: true")
@@ -58,7 +54,7 @@ test("the safety renderer disables raw html and routes anchors through the allow
 
 // the streaming renderer scheme-checks anchors and images
 test("the streaming renderer disables raw html and scheme-checks every destination", () => {
-	const rendererSource = readFileSync(join(import.meta.dir, STREAMING_RENDERER), "utf8")
+	const rendererSource = readFileSync(join(import.meta.dir, STREAMING_CHAT_RENDERER), "utf8")
 	expect(rendererSource).toContain("[defaultRehypePlugins.sanitize, defaultRehypePlugins.harden]")
 	expect(rendererSource).not.toContain("defaultRehypePlugins.raw")
 	expect(rendererSource).toContain("rehypePlugins={SAFE_REHYPE_PLUGINS}")
@@ -69,7 +65,7 @@ test("the streaming renderer disables raw html and scheme-checks every destinati
 	expect(rendererSource).toContain('href.startsWith("https://") || href.startsWith("http://")')
 })
 
-// nothing in the ui injects raw HTML, which would defeat escaping wherever model-written text lands
+// nothing in the ui injects raw HTML
 test("no ui file injects raw html", () => {
 	const unsafeSourceFiles = uiSourceFiles().filter((name) =>
 		readFileSync(join(import.meta.dir, name), "utf8").includes("dangerouslySetInnerHTML"),

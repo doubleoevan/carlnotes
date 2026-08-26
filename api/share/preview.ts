@@ -1,13 +1,13 @@
-// link previews for a public Topic: the image a platform fetches, and the meta tags it reads to find it.
-// a crawler runs no JavaScript, so the tags have to be in the HTML the server sends, instead of added by the SPA
+// link previews for a public Topic: the image a platform fetches, and the meta tags it reads to find it
 import { and, count, eq } from "drizzle-orm"
 import { db } from "../../db"
-import { findings, sources, topics, users } from "../../db/schema"
+import { findings, sources, teamMembers, teams, topics, users } from "../../db/schema"
 import { attachmentExists, getAttachmentBytes, putAttachment } from "../../worker"
 import { toPublishedAvatar } from "../avatars"
 import { countDistinctSubscribers } from "../profiles"
 import { isShown } from "../topic/permissions"
 import { type ProfilePreview, toProfilePreviewKey, toProfilePreviewPng } from "./profileImage"
+import { type TeamPreview, toTeamPreviewKey, toTeamPreviewPng } from "./teamImage"
 import { type TopicPreview, toTopicPreviewKey, toTopicPreviewPng } from "./topicImage"
 
 // how long a crawler and a browser may hold a preview. the key only changes when the preview does.
@@ -40,8 +40,7 @@ export async function toTopicPreview(topicId: string): Promise<TopicPreview | nu
 		.select({ sources: count() })
 		.from(sources)
 		.where(and(eq(sources.topicId, topicId), eq(sources.status, "ready")))
-	// which image the owner publishes, named instead of loaded. the topic preview key is built from this,
-	// so a cache hit never pays to fetch the image itself. changing the avatar still gives the card a new url
+	// which image the owner publishes, named instead of loaded
 	return {
 		topicId: row.topicId,
 		title: row.title,
@@ -74,6 +73,9 @@ export async function toCachedProfilePreviewPng(
 	return toCachedPng(toProfilePreviewKey(preview), () => toProfilePreviewPng(preview))
 }
 
+// track pending render by their preview key
+const pendingRenderByPreviewKey = new Map<string, Promise<Uint8Array>>()
+
 // the stored bytes for the key, or a render and store on the first request for this exact preview
 async function toCachedPng(
 	previewKey: string,
@@ -83,10 +85,21 @@ async function toCachedPng(
 		return { bytes: await getAttachmentBytes(previewKey), cacheControl: PREVIEW_CACHE_CONTROL }
 	}
 
-	// a miss renders and stores, so the next fetch of this exact preview is a read
+	// a miss joins the render already running for this key, or starts one and drops the entry once settled
+	let render = pendingRenderByPreviewKey.get(previewKey)
+	if (!render) {
+		render = renderAndStorePng(previewKey, renderPng)
+		pendingRenderByPreviewKey.set(previewKey, render)
+		render.finally(() => pendingRenderByPreviewKey.delete(previewKey)).catch(() => {})
+	}
+	return { bytes: await render, cacheControl: PREVIEW_CACHE_CONTROL }
+}
+
+// render the png and store it, so the next fetch of this exact preview is a storage read
+async function renderAndStorePng(previewKey: string, renderPng: () => Promise<Uint8Array>): Promise<Uint8Array> {
 	const bytes = await renderPng()
 	await putAttachment(previewKey, bytes, "image/png")
-	return { bytes, cacheControl: PREVIEW_CACHE_CONTROL }
+	return bytes
 }
 
 /**
@@ -113,8 +126,7 @@ export function toTopicPreviewHtml(
 	const description = toTopicDescription(preview)
 	const previewUrl = `${appUrl}/api/topics/${preview.topicId}/preview.png`
 	const title = Bun.escapeHTML(preview.title)
-	// X reads the Twitter tags before the og ones, so a topic that only set og:title
-	// would still be shared with whatever title the shell has
+	// X reads the Twitter tags before the og ones
 	const tags = [
 		`<title>${title} — CarlNotes</title>`,
 		`<link rel="canonical" href="${appUrl}/topics/${preview.topicId}">`,
@@ -155,6 +167,75 @@ export async function toProfilePreview(userId: string): Promise<ProfilePreview |
 }
 
 /**
+ * What a team's card says, or null when there is no public team at that id.
+ * A private team renders no card, and its page shows an outsider its name and nothing else.
+ */
+export async function toTeamPreview(teamId: string): Promise<TeamPreview | null> {
+	// the id resolves the team, and a private one reads as no team at all
+	const [team] = await db
+		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey })
+		.from(teams)
+		.where(and(eq(teams.id, teamId), eq(teams.isPublic, true)))
+	if (!team) {
+		return null
+	}
+
+	// what the team page itself shows a stranger: how many members it has, and how many public topics it holds
+	const [teamMembersRow] = await db
+		.select({ members: count() })
+		.from(teamMembers)
+		.where(and(eq(teamMembers.teamId, team.teamId), eq(teamMembers.isActive, true)))
+	const [topicRow] = await db
+		.select({ topics: count() })
+		.from(topics)
+		.where(and(eq(topics.teamId, team.teamId), eq(topics.visibility, "public"), isShown))
+
+	// the avatar is named instead of loaded, so the card's key changes when the image does
+	return {
+		teamId: team.teamId,
+		name: team.name,
+		avatar: team.avatarKey ? { avatarKey: team.avatarKey } : null,
+		memberCount: teamMembersRow?.members ?? 0,
+		topicCount: topicRow?.topics ?? 0,
+	}
+}
+
+/**
+ * A team's preview image bytes, rendered on the first request and read from storage after.
+ */
+export async function toCachedTeamPreviewPng(
+	preview: TeamPreview,
+): Promise<{ bytes: Uint8Array; cacheControl: string }> {
+	return toCachedPng(toTeamPreviewKey(preview), () => toTeamPreviewPng(preview))
+}
+
+/**
+ * The app shell with a team's preview tags, title, and canonical URL.
+ */
+export function toTeamPreviewHtml(appShell: string, teamPreview: TeamPreview, appUrl: string): string {
+	const name = Bun.escapeHTML(teamPreview.name)
+	const membersWord = teamPreview.memberCount === 1 ? "member" : "members"
+	const topicsWord = teamPreview.topicCount === 1 ? "public topic" : "public topics"
+	const description = `${name} on CarlNotes. ${teamPreview.memberCount} ${membersWord}, ${teamPreview.topicCount} ${topicsWord}.`
+	// the team's own rendered card, the image a platform unfurls beside the link
+	const previewUrl = `${appUrl}/api/teams/${teamPreview.teamId}/preview.png`
+	const tags = [
+		`<title>${name} — CarlNotes</title>`,
+		`<link rel="canonical" href="${appUrl}/teams/${teamPreview.teamId}">`,
+		`<meta property="og:title" content="${name} — CarlNotes">`,
+		`<meta property="og:description" content="${description}">`,
+		`<meta property="og:image" content="${previewUrl}">`,
+		`<meta property="og:image:alt" content="${name} — CarlNotes">`,
+		`<meta property="og:url" content="${appUrl}/teams/${teamPreview.teamId}">`,
+		`<meta name="twitter:card" content="summary_large_image">`,
+		`<meta name="twitter:title" content="${name} — CarlNotes">`,
+		`<meta name="twitter:description" content="${description}">`,
+		`<meta name="twitter:image" content="${previewUrl}">`,
+	].join("")
+	return toShellWithHeadTags(appShell, tags)
+}
+
+/**
  * The app shell with a profile's preview tags, title, and canonical URL, the treatment Topic pages get.
  */
 export function toProfilePreviewHtml(appShell: string, preview: ProfilePreview, appUrl: string): string {
@@ -162,7 +243,7 @@ export function toProfilePreviewHtml(appShell: string, preview: ProfilePreview, 
 	const topicsWord = preview.publicTopicCount === 1 ? "public topic" : "public topics"
 	const followersWord = preview.followerCount === 1 ? "follower" : "followers"
 	const description = `${username} on CarlNotes. ${preview.publicTopicCount} ${topicsWord}, ${preview.followerCount} ${followersWord}.`
-	// the profile's own rendered card, the image a platform unfurls beside the link
+	// the rendered card a platform unfurls beside the link
 	const previewUrl = `${appUrl}/api/profiles/${preview.userId}/preview.png`
 	const tags = [
 		`<title>${username} — CarlNotes</title>`,

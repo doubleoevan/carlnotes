@@ -1,9 +1,15 @@
-// the admin console data: a per-user table of standing and cost, and platform totals with a contribution figure.
-// storage is attributed over globally-deduplicated Resources, and contribution is net revenue minus tracked cost
+// the admin console data: a per-user table of status and cost, and platform totals with a contribution figure
 import { zValidator } from "@hono/zod-validator"
-import type { ActivityTopic, AdminTotals, AdminUserRow } from "@shared/contracts"
+import type {
+	AdminTeamRow,
+	AdminTotals,
+	AdminUserRow,
+	OwnerTopic,
+	TeamPageResponse,
+	TeamSummary,
+} from "@shared/contracts"
 import { budgetOverridePayload, setRolePayload } from "@shared/contracts"
-import { count, eq, gte, sql } from "drizzle-orm"
+import { and, count, eq, gte, isNotNull, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
 import {
@@ -14,6 +20,8 @@ import {
 	findings,
 	resources,
 	scans,
+	teamMembers,
+	teams,
 	topics,
 	users,
 } from "../db/schema"
@@ -22,6 +30,7 @@ import { effectiveBudgetCents, isAdminRole, isAllowed, replaceUserLiteLLMKey } f
 import { readStripeTotalRevenueCents } from "./billing"
 import { type AppEnv, currentUser } from "./currentUser"
 import { readLiteLLMKeySpend } from "./litellm"
+import { loadAdminTeamTopics, loadTeamSummaries, toSpendByTeamId } from "./team/helpers"
 import { startOfUtcMonth } from "./topic/quotas"
 
 // the bytes one embedded Resource attributes. a float4 dimension is four bytes wide
@@ -30,23 +39,22 @@ const EMBED_BYTES = EMBED_DIMENSIONS * 4
 /**
  * A user's owned topics as their own Activity page would show them for the subtable in an admin's users table
  */
-export async function loadAdminUserTopics(userId: string): Promise<ActivityTopic[] | null> {
+export async function loadAdminUserTopics(userId: string): Promise<OwnerTopic[] | null> {
 	// the loader keys off the user, so an admin reads exactly what that user reads, with no second query to drift
 	const [user] = await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.id, userId))
 	if (!user) {
 		return null
 	}
-	return (await loadActivity(user)).topics
+	return (await loadActivity(user, false)).topics
 }
 
 /**
- * One row per user for the admin table: status, topic count, attributed storage, and month-to-date variable cost against their effective budget.
+ * One row per user for the admin table: status, topic and team counts, attributed storage, and month-to-date variable cost against their effective budget.
  */
 export async function loadAdminUsers(): Promise<AdminUserRow[]> {
-	// the base user rows, the per-user topic counts, the attributed storage, and this month's scan and chat spend,
-	// all in parallel and each as one grouped query
+	// the base user rows, the per-user topic and team counts, the attributed storage
 	const monthStart = startOfUtcMonth(new Date())
-	const [userRows, topicCountRows, storageByUser, scanSpendRows, chatSpendRows] = await Promise.all([
+	const [userRows, topicCountRows, teamCountRows, storageByUser, scanSpendRows, chatSpendRows] = await Promise.all([
 		db
 			.select({
 				// identity and status
@@ -63,6 +71,11 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			})
 			.from(users),
 		db.select({ ownerId: topics.ownerId, count: count() }).from(topics).groupBy(topics.ownerId),
+		db
+			.select({ userId: teamMembers.userId, count: count() })
+			.from(teamMembers)
+			.where(eq(teamMembers.isActive, true))
+			.groupBy(teamMembers.userId),
 		loadAttributedStorage(),
 		db
 			.select({ ownerId: scans.ownerId, dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
@@ -76,8 +89,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			.groupBy(chatTurns.userId),
 	])
 
-	// read each user's observed spend in parallel, best-effort, keyed by user id
-	// one proxy call per user, batch this read if the admin page starts dragging
+	// read each user's observed spend in parallel, best-effort, keyed by user id one proxy call per user, batch
 	const userSpends = await Promise.all(
 		userRows.map(async (user) => {
 			const spendDollars = user.litellmVirtualKey ? await readLiteLLMKeySpend(user.litellmVirtualKey) : null
@@ -86,6 +98,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 	)
 	const spendByUser = new Map(userSpends)
 	const topicCountByUser = new Map(topicCountRows.map((topicCountRow) => [topicCountRow.ownerId, topicCountRow.count]))
+	const teamCountByUser = new Map(teamCountRows.map((teamCountRow) => [teamCountRow.userId, teamCountRow.count]))
 
 	// the app's own totals keyed by user, in cents
 	const scanSpendByUser = new Map(
@@ -99,7 +112,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 	return userRows.map((user) => {
 		const spendDollars = spendByUser.get(user.id) ?? null
 		return {
-			// identity and standing
+			// identity and status
 			id: user.id,
 			email: user.email,
 			username: user.username,
@@ -108,6 +121,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			plan: user.plan,
 			createdAt: user.createdAt.toISOString(),
 			topicCount: topicCountByUser.get(user.id) ?? 0,
+			teamCount: teamCountByUser.get(user.id) ?? 0,
 			// the attributed storage, observed monthly cost, the app's own split totals, and budget
 			attributedBytes: storageByUser.get(user.id) ?? 0,
 			monthVariableCostCents: spendDollars === null ? null : Math.round(spendDollars * 100),
@@ -119,6 +133,92 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 				plan: user.plan,
 				budgetOverrideCents: user.budgetOverrideCents,
 			}),
+		}
+	})
+}
+
+/**
+ * One team's active members in the team page's members table shape, for the admin console's expandable row.
+ */
+export async function loadAdminTeamMembers(teamId: string): Promise<TeamPageResponse["members"] | null> {
+	const [team] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId))
+	if (!team) {
+		return null
+	}
+
+	// the same columns the team page's members table reads, so the same table renders them
+	return db
+		.select({
+			userId: users.id,
+			username: users.username,
+			avatarSource: users.avatarSource,
+			role: teamMembers.role,
+			isMemberVisible: teamMembers.isMemberVisible,
+			isActive: teamMembers.isActive,
+		})
+		.from(teamMembers)
+		.innerJoin(users, eq(users.id, teamMembers.userId))
+		.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true)))
+}
+
+/**
+ * The teams a user actively belongs to, in the teams table shape, for the admin console's expandable row.
+ */
+export async function loadAdminUserTeams(userId: string): Promise<TeamSummary[] | null> {
+	const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId))
+	return user ? loadTeamSummaries(userId) : null
+}
+
+/**
+ * One row per team for the admin table: the team's status, its member and topic counts, and month-to-date spend across its topics.
+ * Teams are never billed: each cost here was already billed to its topic's owner or chatting member.
+ */
+export async function loadAdminTeams(): Promise<AdminTeamRow[]> {
+	// the team rows, the active member count, and each team's topic count, all in parallel
+	const [teamRows, memberCountRows, topicCountRows] = await Promise.all([
+		db
+			.select({
+				teamId: teams.id,
+				name: teams.name,
+				isPublic: teams.isPublic,
+				createdAt: teams.createdAt,
+				avatarKey: teams.avatarKey,
+			})
+			.from(teams),
+		// each team's active member count
+		db
+			.select({ teamId: teamMembers.teamId, count: count() })
+			.from(teamMembers)
+			.where(eq(teamMembers.isActive, true))
+			.groupBy(teamMembers.teamId),
+		db
+			.select({ teamId: topics.teamId, count: count() })
+			.from(topics)
+			.where(isNotNull(topics.teamId))
+			.groupBy(topics.teamId),
+	])
+
+	// spend is summed over the team's topics by the same loader the teams page reads
+	const spendByTeam = await toSpendByTeamId(teamRows.map((team) => team.teamId))
+
+	// member and topic counts are mapped to team id
+	const memberCountByTeam = new Map(
+		memberCountRows.map((memberCountRow) => [memberCountRow.teamId, memberCountRow.count]),
+	)
+	const topicCountByTeam = new Map(topicCountRows.map((topicCountRow) => [topicCountRow.teamId, topicCountRow.count]))
+
+	// return the rows of the teams table
+	return teamRows.map((team) => {
+		return {
+			teamId: team.teamId,
+			name: team.name,
+			isPublic: team.isPublic,
+			createdAt: team.createdAt.toISOString(),
+			hasAvatar: team.avatarKey !== null,
+			memberCount: memberCountByTeam.get(team.teamId) ?? 0,
+			topicCount: topicCountByTeam.get(team.teamId) ?? 0,
+			scanSpendCents: spendByTeam.get(team.teamId)?.scanCents ?? 0,
+			chatSpendCents: spendByTeam.get(team.teamId)?.chatCents ?? 0,
 		}
 	})
 }
@@ -170,7 +270,7 @@ export async function setUserRole(
 		return "selfDemotion"
 	}
 
-	// the role carries its own spend backstop, so the key follows with the promotion or demotion
+	// the role has its own spend backstop, so the litellm key follows with their role change
 	const [updated] = await db.update(users).set({ role }).where(eq(users.id, targetUserId)).returning({ id: users.id })
 	if (!updated) {
 		return "missing"
@@ -192,7 +292,7 @@ export async function setUserBudgetOverride(
 	targetUserId: string,
 	budgetOverrideCents: number | null,
 ): Promise<boolean> {
-	// the update reports whether it matched a row, so a made-up user id answers missing instead of ok
+	// the update reports whether it matched a row, so a made-up user id returns missing instead of ok
 	const [updated] = await db
 		.update(users)
 		.set({ budgetOverrideCents })
@@ -215,8 +315,7 @@ async function loadAttributedStorage(): Promise<Map<string, number>> {
 		.innerJoin(findings, eq(findings.topicId, topics.id))
 		.as("user_resources")
 
-	// content bytes summed per user, and how many of those distinct resources carry an embedding.
-	// the inline column is the fallback for a resource stored before content moved to object storage
+	// content bytes summed per user, and how many of those distinct resources have an embedding
 	const contentRows = await db
 		.select({
 			userId: userResources.userId,
@@ -264,7 +363,7 @@ async function loadAttributedStorage(): Promise<Map<string, number>> {
 // the admin console routes, each re-checking the role through the gate
 export const adminRoute = new Hono<AppEnv>()
 	.get("/admin/console", async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -274,11 +373,11 @@ export const adminRoute = new Hono<AppEnv>()
 			return context.json({ error: "forbidden" }, 403)
 		}
 		const users = await loadAdminUsers()
-		const totals = await loadAdminTotals(users)
-		return context.json({ users, totals })
+		const [teams, totals] = await Promise.all([loadAdminTeams(), loadAdminTotals(users)])
+		return context.json({ users, teams, totals })
 	})
 	.post("/admin/users/:id/role", zValidator("json", setRolePayload), async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -287,7 +386,7 @@ export const adminRoute = new Hono<AppEnv>()
 		if (!(await isAllowed(userId, "admin:setRole"))) {
 			return context.json({ error: "forbidden" }, 403)
 		}
-		// each rejection answers in its own terms: a self-demotion is refused, a made-up user id is not found
+		// each rejection gives a reason: a self-demotion is rejected, a made-up user id is not found
 		const roleResult = await setUserRole(userId, context.req.param("id"), context.req.valid("json").role)
 		if (roleResult === "selfDemotion") {
 			return context.json({ error: "cannot remove your own admin role" }, 409)
@@ -295,7 +394,7 @@ export const adminRoute = new Hono<AppEnv>()
 		return roleResult === "set" ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
 	})
 	.get("/admin/users/:id/topics", async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
@@ -307,8 +406,47 @@ export const adminRoute = new Hono<AppEnv>()
 		const topics = await loadAdminUserTopics(context.req.param("id"))
 		return topics ? context.json({ topics }) : context.json({ error: "not found" }, 404)
 	})
+	.get("/admin/teams/:id/members", async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// one team's members, as the admin console's expandable row shows it, admin only
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const members = await loadAdminTeamMembers(context.req.param("id"))
+		return members ? context.json({ members }) : context.json({ error: "not found" }, 404)
+	})
+	.get("/admin/users/:id/teams", async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// one user's teams, as the admin console's expandable row shows them, admin only
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const userTeams = await loadAdminUserTeams(context.req.param("id"))
+		return userTeams ? context.json({ teams: userTeams }) : context.json({ error: "not found" }, 404)
+	})
+	.get("/admin/teams/:id/topics", async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		// one team's topics, as the admin console's expandable row shows them, admin only
+		if (!(await isAllowed(userId, "admin:console"))) {
+			return context.json({ error: "forbidden" }, 403)
+		}
+		const teamTopics = await loadAdminTeamTopics(context.req.param("id"))
+		return teamTopics ? context.json({ topics: teamTopics }) : context.json({ error: "not found" }, 404)
+	})
 	.post("/admin/users/:id/budget", zValidator("json", budgetOverridePayload), async (context) => {
-		// reject a signed-out caller
+		// reject a signed-out visitor
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)

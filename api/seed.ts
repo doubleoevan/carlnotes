@@ -1,5 +1,4 @@
-// entry point for `bun run db:seed`. creates the dev demo user through a real Better Auth signup,
-// passing the same turnstile-gate cookie that any password signup would, then it seeds demo topics for it
+// entry point for `bun run db:seed`
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { users } from "../db/schema"
@@ -23,21 +22,19 @@ export async function seed(): Promise<void> {
 		throw new Error(`db:seed refuses to run: DOPPLER_ENVIRONMENT is "${seen}", expected "dev"`)
 	}
 
-	// capture the role before seeding, since the seed promotes the dev user to admin with a plain row update
+	// capture the role before seeding, which promotes the dev user to admin with a plain row update
 	const devUserId = await ensureDevUser()
 	const [devUser] = await db.select({ role: users.role }).from(users).where(eq(users.id, devUserId))
 	const wasAdminBeforeSeed = isAdminRole(devUser?.role)
 	await seedTopics(devUserId)
 
-	// a signup-minted key carries the free budget, so a fresh promotion reissues it at the admin limit.
-	// an already-admin dev user keeps their key, so re-seeding never rotates it or resets its spend
+	// a key created at signup has the free budget, so a fresh promotion reissues it at the admin limit
 	if (!wasAdminBeforeSeed) {
 		await replaceUserLiteLLMKey(devUserId)
 	}
 }
 
-// looks up the dev user by email, signing up for real if it doesn't exist yet.
-// local dev then exercises the same signup and session path as production
+// looks up the dev user by email, signing up for real if it doesn't exist yet
 async function ensureDevUser(): Promise<string> {
 	const [existing] = await db.select({ id: users.id }).from(users).where(eq(users.email, DEV_USER_EMAIL))
 	if (existing) {

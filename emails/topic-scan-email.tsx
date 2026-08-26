@@ -18,7 +18,7 @@ export type TopicScanEmailProps = {
 	// Carl's recap of this scan as plain text, omitted when the scan never wrote one
 	scanSummary?: string
 	// the urls the recap may link: the Topic's own Findings, which is a wider set than this scan's new ones
-	// because the recap is written before the Topic is trimmed to its result cap. anything else stays plain text
+	// because the recap is written before the Topic is trimmed to its result limit. anything else stays plain text
 	allowedSummaryUrls?: string[]
 	// the app's home and this topic's page. both omitted when the app base url isn't configured, and the labels render as plain text
 	appUrl?: string

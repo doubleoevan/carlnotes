@@ -3,20 +3,21 @@ import { resourceKinds as allResourceKinds } from "@shared/enums"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react"
 import { useLocation } from "react-router-dom"
-import { authClient } from "@/lib/authClient"
+import { authClient } from "@/clients/authClient"
 import {
 	fetchTopicFeed,
 	sendTopicFindingBookmark,
 	sendTopicFindingConsumed,
 	sendTopicFindingOpened,
 	sendTopicFindingRating,
-} from "@/lib/topicClient"
-import { type FeedView, type FindingSort, matchesFeedView, toSortedFindings } from "@/lib/utils"
+} from "@/clients/topicClient"
+import { matchesTopicFindingFilter, type TopicFindingFilter } from "@/lib/topicFindingFilters"
+import { type TopicFindingSort, toSortedTopicFindings } from "@/lib/topicFindingSorts"
 
 // the resource kinds that the Filters menu toggles
 export type ResourceKind = (typeof allResourceKinds)[number]
 
-// how selected tag filters match a topic: carrying any of them, all of them, none of them, or off to ignore tag filtering
+// how selected tag filters match a topic. it has any of them, all of them, none of them, or off to ignore tag filtering
 export const tagMatchModes = ["any", "all", "none", "off"] as const
 export type TagMatchMode = (typeof tagMatchModes)[number]
 
@@ -38,7 +39,7 @@ export function TopicFeedProvider({ children }: { children: ReactNode }) {
 	return <TopicFeedContext.Provider value={useTopicFeedState()}>{children}</TopicFeedContext.Provider>
 }
 
-// returns the shared topic feed context value. throws if used outside of the provider
+// returns the shared topic feed context value. throws an error if used outside of the provider
 export function useTopicFeed(): TopicFeedValue {
 	const contextValue = useContext(TopicFeedContext)
 	if (!contextValue) {
@@ -47,33 +48,33 @@ export function useTopicFeed(): TopicFeedValue {
 	return contextValue
 }
 
-// returns the topic feed handlers. throws if used outside the provider
+// returns the topic feed handlers. throws an error if used outside the provider
 export function useTopicFeedActions(): TopicFeedHandlers {
 	return useTopicFeed().handlers
 }
 
-// whether the viewer is signed in, used to hide per-user finding controls from signed-out visitors
+// whether anyone is signed in, used to hide the per-user finding buttons from a visitor
 export function useIsSignedIn(): boolean {
 	return useTopicFeed().isSignedIn
 }
 
-// the topic feed state the provider owns: data, the view and sort toggles, the resource kind filters, the tag filters, and the topic finding handlers
+// the topic feed state the provider owns
 function useTopicFeedState() {
 	// like Gmail, shows everything by default with consumed rows muted. Unread narrows to unconsumed, Bookmarked to bookmarks
-	const [view, setView] = useState<FeedView>("all")
+	const [findingFilter, setFindingFilter] = useState<TopicFindingFilter>("all")
 	// how findings order within the pinned and unbookmarked groups. read-side only, never persisted
-	const [sort, setSort] = useState<FindingSort>("relevant")
+	const [sort, setSort] = useState<TopicFindingSort>("relevant")
 	const [resourceKinds, setResourceKinds] = useState<Set<ResourceKind>>(new Set(allResourceKinds))
-	// the feed watches the session itself — no route guard unmounts it, so "yours" would otherwise go stale on sign-out
+	// whose bookmarks the bookmarked filter shows: the reader's own, or every member's on a team topic
+	const [bookmarkScope, setBookmarkScope] = useState<"mine" | "team">("mine")
+	// the feed watches the session itself
 	const { data: session } = authClient.useSession()
 	const isSignedIn = Boolean(session)
-	// selected tag filters and how they match: topics carrying any, all, or none of them
+	// selected tag filters and how they match. a topic has any, all, or none of them
 	const [tagFilters, setTagFilters] = useState<string[]>([])
 	const [tagMatchMode, setTagMatchMode] = useState<TagMatchMode>("any")
 
-	// tanstack caches the topic feed keyed by the signed-in user, so each identity holds its own feed,
-	// and a sign-in or sign-out never renders the last one's.
-	// the fetch asks for every finding, read or not, since the view, sort, resource kind, and tag filters run client-side
+	// tanstack caches the topic feed keyed by the signed-in user
 	const queryClient = useQueryClient()
 	const { data: topicFeed = null, refetch } = useQuery({
 		queryKey: ["topic-feed", session?.user.id ?? null],
@@ -88,7 +89,7 @@ function useTopicFeedState() {
 		},
 	})
 
-	// re-fetch the feed, reporting whether fresh data landed
+	// re-fetch the feed, reporting whether fresh data arrived
 	const reload = useCallback(async () => {
 		return (await refetch()).isSuccess
 	}, [refetch])
@@ -99,8 +100,7 @@ function useTopicFeedState() {
 	const reheat = useCallback(async () => {
 		setIsReheating(true)
 		try {
-			// the key bump replays the entrance animation over new content, so a reload that failed leaves it alone
-			// instead of animating the feed again
+			// the key only bumps on a reload that arrived
 			if (await reload()) {
 				setReheatKey((previousKey) => previousKey + 1)
 			}
@@ -109,18 +109,22 @@ function useTopicFeedState() {
 		}
 	}, [reload])
 
-	// clear filters on route navigation
+	// clear filters on route navigation, so a page that offers none of them never leaves one applied
 	const { pathname } = useLocation()
 	// biome-ignore lint/correctness/useExhaustiveDependencies: pathname isn't read in the body, it's the reset trigger
 	useEffect(() => {
-		setView("all")
+		setFindingFilter("all")
 		setSort("relevant")
 		setResourceKinds(new Set(allResourceKinds))
 		setTagFilters([])
 		setTagMatchMode("any")
+		setBookmarkScope("mine")
 	}, [pathname])
 
-	// re-fetch the topic feed after a new finding is written, in place of each handler awaiting its own reload
+	// the home feed and a topic's page are where findings render
+	const hasTopicFeed = pathname === "/" || pathname.startsWith("/topics/")
+
+	// re-fetch the topic feed after a new finding is written, in place of each handler waiting for its own reload
 	const invalidateTopicFeed = useCallback(() => {
 		void queryClient.invalidateQueries({ queryKey: ["topic-feed"] })
 	}, [queryClient])
@@ -198,14 +202,14 @@ function useTopicFeedState() {
 		[openTopicFinding, consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding],
 	)
 	const filteredTopicFeed = useMemo(
-		() => filterTopicFeed(topicFeed, resourceKinds, view, sort, tagFilters, tagMatchMode),
-		[topicFeed, resourceKinds, view, sort, tagFilters, tagMatchMode],
+		() => filterTopicFeed(topicFeed, resourceKinds, findingFilter, sort, tagFilters, tagMatchMode),
+		[topicFeed, resourceKinds, findingFilter, sort, tagFilters, tagMatchMode],
 	)
 	return {
-		// the filtered feed and the view and sort state behind it
+		// the filtered feed and the finding filter and sort state behind it
 		topicFeed: filteredTopicFeed,
-		view,
-		setView,
+		findingFilter,
+		setFindingFilter,
 		sort,
 		setSort,
 		resourceKinds,
@@ -215,14 +219,18 @@ function useTopicFeedState() {
 		setTagFilters,
 		tagMatchMode,
 		setTagMatchMode,
+		bookmarkScope,
+		setBookmarkScope,
 		knownTags,
 		reload,
 		reheat,
 		reheatKey,
 		isReheating,
 		handlers,
-		// whether the viewer is signed in, so per-user finding controls hide for signed-out visitors
+		// whether anyone is signed in, so the per-user finding buttons hide for a visitor
 		isSignedIn,
+		// whether this page renders findings, which is what the kind, view, tag, and sort controls narrow
+		hasTopicFeed,
 	}
 }
 
@@ -230,8 +238,8 @@ function useTopicFeedState() {
 function filterTopicFeed(
 	topicFeed: TopicFeedResponse | null,
 	resourceKinds: Set<ResourceKind>,
-	view: FeedView,
-	sort: FindingSort,
+	findingFilter: TopicFindingFilter,
+	sort: TopicFindingSort,
 	tagFilters: string[],
 	tagMatchMode: TagMatchMode,
 ): TopicFeedResponse | null {
@@ -239,20 +247,18 @@ function filterTopicFeed(
 		return null
 	}
 
-	// rebuild the topic feed sections, dropping topics that miss the tag filters,
-	// and replacing each topic's findings with the filtered and sorted set
+	// rebuild the topic feed sections, dropping topics that miss the tag filters
 	return {
 		...topicFeed,
 		sections: topicFeed.sections.map((section) => ({
 			key: section.key,
-			// keep the matching topics, replacing their findings with the filtered set
 			topics: section.topics
 				.filter((topic) => matchesTagFilters(topic.tags, tagFilters, tagMatchMode))
 				.map((topic) => ({
 					...topic,
-					findings: toSortedFindings(
+					findings: toSortedTopicFindings(
 						topic.findings.filter(
-							(finding) => resourceKinds.has(finding.resourceKind) && matchesFeedView(finding, view),
+							(finding) => resourceKinds.has(finding.resourceKind) && matchesTopicFindingFilter(finding, findingFilter),
 						),
 						sort,
 					),
@@ -261,14 +267,13 @@ function filterTopicFeed(
 	}
 }
 
-// whether a topic's tags satisfy the selected filters based on the tag match mode.
-// "off" or an empty selection matches everything
+// whether a topic's tags satisfy the selected filters based on the tag match mode
 function matchesTagFilters(topicTags: string[], tagFilters: string[], tagMatchMode: TagMatchMode): boolean {
 	if (tagMatchMode === "off" || tagFilters.length === 0) {
 		return true
 	}
 
-	// count the selected tags the topic carries, then judge per mode
+	// count the selected tags the topic has, then judge per mode
 	const matchedTagCount = tagFilters.filter((tag) => topicTags.includes(tag)).length
 	if (tagMatchMode === "any") {
 		return matchedTagCount > 0

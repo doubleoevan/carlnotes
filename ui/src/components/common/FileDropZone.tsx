@@ -10,21 +10,23 @@ function hasDraggedFiles(event: React.DragEvent): boolean {
 
 /**
  * A container that attaches whatever files are dropped on it, showing an overlay while a file drag is over it.
- * Wraps a composer so the whole box is the target instead of the text area alone.
+ * Wraps its children so the whole box is the target instead of the input alone.
  */
 export function FileDropZone({
 	onDropFiles,
+	overlay,
 	className,
 	children,
 }: {
 	onDropFiles: (files: File[]) => void
+	// replaces the paperclip overlay, for a target that is not a composer box, like a round avatar
+	overlay?: React.ReactNode
 	className?: string
 	children: React.ReactNode
 }) {
 	const [isDraggingFiles, setIsDraggingFiles] = useState(false)
 
-	// the browser fires dragleave on this container the moment the pointer crosses into a child,
-	// so the depth counter is what keeps the overlay up until the drag has actually left every level of it
+	// the browser fires dragleave on this container the moment the pointer crosses into a child
 	const dragDepth = useRef(0)
 
 	const handleDragEnter = (event: React.DragEvent): void => {
@@ -76,15 +78,16 @@ export function FileDropZone({
 			onDrop={handleDrop}
 		>
 			{children}
-			{/* the overlay covers the composer while a file is over it, so the whole box reads as the target */}
-			{isDraggingFiles && (
-				<div className="bg-background/90 border-primary text-primary pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-md border-2 border-dashed">
-					<span className="flex items-center gap-2 text-sm font-medium">
-						<Paperclip aria-hidden="true" className="size-4" />
-						Drop to attach
-					</span>
-				</div>
-			)}
+			{/* the overlay covers the target while a file is over it, so the whole box reads as the target */}
+			{isDraggingFiles &&
+				(overlay ?? (
+					<div className="bg-background/90 border-primary text-primary pointer-events-none absolute inset-0 z-10 grid place-items-center rounded-md border-2 border-dashed">
+						<span className="flex items-center gap-2 text-sm font-medium">
+							<Paperclip aria-hidden="true" className="size-4" />
+							Drop to attach
+						</span>
+					</div>
+				))}
 		</div>
 	)
 }

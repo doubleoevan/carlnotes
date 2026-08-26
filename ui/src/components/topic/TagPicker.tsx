@@ -91,7 +91,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 					</PopoverTrigger>
 				)}
 				<PopoverContent align="start" className="w-64 p-2">
-					{/* the search box with its magnifying glass icon and clear control */}
+					{/* the search box with its magnifying glass icon and clear button */}
 					<div className="border-input flex items-center gap-1.5 rounded-md border pl-2">
 						<Search className="text-muted-foreground size-3.5 shrink-0" />
 						<Input
@@ -146,7 +146,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 }
 
 /**
- * A tag pill with an "x" remove control
+ * A tag pill with an "x" remove button
  */
 export function TagPill({ label, onRemove }: { label: string; onRemove: () => void }) {
 	return (

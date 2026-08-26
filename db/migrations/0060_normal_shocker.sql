@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "teams_name_lower_unique" ON "teams" USING btree (lower("name"));

@@ -1,5 +1,4 @@
-// starts and stops LLM call tracing to Langfuse, and wraps each pipeline stage in its own span on the Scan's trace.
-// a no-op without both Langfuse keys set, so the worker behaves identically with or without observability configured
+// starts and stops LLM call tracing to Langfuse
 import { LangfuseSpanProcessor } from "@langfuse/otel"
 import { startActiveObservation } from "@langfuse/tracing"
 import { LangfuseVercelAiSdkIntegration } from "@langfuse/vercel-ai-sdk"
@@ -32,7 +31,7 @@ export function startTelemetry(): void {
 
 /**
  * Runs one pipeline stage inside its own Langfuse span on the Scan's trace, recording what it cost and what it decided.
- * Token counts are not added here, since the model calls that the stage makes already report their own.
+ * Token counts are not added here. The model calls that the stage makes report their own.
  * Without Langfuse keys, the stage still runs, just untraced.
  */
 export async function traceStage<Result>(

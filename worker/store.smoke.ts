@@ -1,4 +1,4 @@
-// a live smoke test for the resource-content object-storage round-trip: upload Markdown, read it back, verify, then delete.
+// a live smoke test for the resource-content object-storage round-trip
 // run it with: bun run smoke:store. needs the S3_* bucket config and Doppler secrets
 import { deleteResourceContent, getResourceContent, toResourceContentKey, uploadResourceContent } from "./store"
 
