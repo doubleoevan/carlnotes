@@ -53,9 +53,14 @@ The webhook route SHALL verify the request's HMAC signature against a configured
 before reading the payload. When no signing secret is configured the route SHALL reject the request
 rather than skip verification.
 
-The route SHALL act only on a `release` event whose action is `published`. Every other action,
-including `created`, `edited`, `deleted`, `unpublished`, and `prereleased`, SHALL be acknowledged and
-ignored, so that correcting a typo in a published release does not re-fire anything downstream.
+The route SHALL act on a `release` event whose action is `published` or `released`. `published` fires
+when a release or prerelease is first published; `released` also fires when a prerelease is promoted
+to a full release, which `published` does not, so a promotion would otherwise keep its prerelease flag
+and stay off the page until somebody ran the sync.
+
+Every other action, including `created`, `edited`, `deleted`, `unpublished`, and `prereleased`, SHALL
+be acknowledged and ignored, so that correcting a typo in a published release does not re-fire
+anything downstream.
 
 #### Scenario: An unsigned request is rejected
 
@@ -76,6 +81,11 @@ ignored, so that correcting a typo in a published release does not re-fire anyth
 
 - **WHEN** a correctly signed `release` event arrives with action `published`
 - **THEN** the release is upserted by its tag
+
+#### Scenario: A promoted prerelease is stored
+
+- **WHEN** a correctly signed `release` event arrives with action `released`
+- **THEN** the release is upserted by its tag, and its cleared prerelease flag puts it on the page
 
 ### Requirement: The releases page renders stored markdown on our own domain
 
