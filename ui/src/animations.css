@@ -314,11 +314,11 @@
 		display: none;
 	}
 	/* the mug's wisps cost almost nothing per frame, but an animation that never ends holds the
-	   compositor at refresh rate, which is what stops a phone idling. hidden the same way reduced
-	   motion hides them, so the logo has one settled look wherever the steam is off */
+	   compositor at refresh rate, which is what stops a phone idling. the wisps stay on screen at the
+	   opacity the animation peaks at, so the logo still steams, it just holds still */
 	.coffee-mug-steam {
 		animation: none;
-		opacity: 0;
+		opacity: 0.5;
 	}
 }
 
