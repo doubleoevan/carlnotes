@@ -298,6 +298,8 @@ export type NoteBadge = {
 	// the page the note sits on, exactly one of the two
 	topicId: string | null
 	teamId: string | null
+	// every team the page belongs to, so a team badge counts its topics' notes as well as its own
+	teamIds: string[]
 	// the note's own name, and the topic or team holding it, both named in the badge's tooltip
 	noteName: string
 	pageName: string

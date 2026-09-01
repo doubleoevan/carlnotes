@@ -63,10 +63,15 @@ function toCount(matches: (badge: NoteBadge) => boolean): number {
 		.reduce((total, badge) => total + badge.unreadEdits + badge.unreadComments, 0)
 }
 
-// the unread badges waiting on one page. a topic id picks its topic, otherwise the team's own notes
-function toPageNoteBadges(topicId: string | null, teamId: string | undefined): NoteBadge[] {
+/**
+ * The unread badges waiting on one page. A topic id picks its topic, otherwise the team's own notes
+ * and the notes on every topic the team holds.
+ */
+export function toPageNoteBadges(topicId: string | null, teamId: string | undefined): NoteBadge[] {
 	return noteBadges.filter(
-		(badge) => !openedNoteIds.has(badge.noteId) && (topicId ? badge.topicId === topicId : badge.teamId === teamId),
+		(badge) =>
+			!openedNoteIds.has(badge.noteId) &&
+			(topicId ? badge.topicId === topicId : teamId !== undefined && badge.teamIds.includes(teamId)),
 	)
 }
 

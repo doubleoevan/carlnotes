@@ -21,8 +21,8 @@ export async function loadNoteBadges(userId: string | null): Promise<NoteBadge[]
 		return []
 	}
 
-	// the pages the badged notes show up on
-	const { topicIds, teamIds } = await loadBadgedPages(userId)
+	// the pages the badged notes show up on, and the teams each of those topics sits on
+	const { topicIds, teamIds, teamIdsByTopicId } = await loadBadgedPages(userId)
 	if (topicIds.length === 0 && teamIds.length === 0) {
 		return []
 	}
@@ -69,6 +69,7 @@ export async function loadNoteBadges(userId: string | null): Promise<NoteBadge[]
 			noteId: viewableNote.id,
 			topicId: viewableNote.topicId,
 			teamId: viewableNote.teamId,
+			teamIds: toPageTeamIds(viewableNote, teamIdsByTopicId),
 			noteName: viewableNote.name,
 			pageName: viewableNote.topicName ?? viewableNote.teamName ?? "",
 			unreadEdits,
@@ -110,8 +111,21 @@ export function toUnreadEdits(
 	return !note.readAt || note.bodyEditedAt > note.readAt ? 1 : 0
 }
 
+// the teams a note's page belongs to. a team note has its own, a topic note has every team holding the topic
+function toPageTeamIds(
+	note: { topicId: string | null; teamId: string | null },
+	teamIdsByTopicId: Map<string, string[]>,
+): string[] {
+	if (note.topicId) {
+		return teamIdsByTopicId.get(note.topicId) ?? []
+	}
+	return note.teamId ? [note.teamId] : []
+}
+
 // the pages whose notes a user is badged for: their teams, and the topics those teams own or hold
-async function loadBadgedPages(userId: string): Promise<{ topicIds: string[]; teamIds: string[] }> {
+async function loadBadgedPages(
+	userId: string,
+): Promise<{ topicIds: string[]; teamIds: string[]; teamIdsByTopicId: Map<string, string[]> }> {
 	// the teams the user is an active member of
 	const memberRows = await db
 		.select({ teamId: teamMembers.teamId })
@@ -119,17 +133,28 @@ async function loadBadgedPages(userId: string): Promise<{ topicIds: string[]; te
 		.where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)))
 	const teamIds = memberRows.map((memberRow) => memberRow.teamId)
 	if (teamIds.length === 0) {
-		return { topicIds: [], teamIds: [] }
+		return { topicIds: [], teamIds: [], teamIdsByTopicId: new Map() }
 	}
 
 	// the topics those teams own, plus the ones shared with them
-	const ownedRows = await db.select({ id: topics.id }).from(topics).where(inArray(topics.teamId, teamIds))
+	const ownedRows = await db
+		.select({ topicId: topics.id, teamId: topics.teamId })
+		.from(topics)
+		.where(inArray(topics.teamId, teamIds))
 	const sharedRows = await db
-		.select({ topicId: teamTopics.topicId })
+		.select({ topicId: teamTopics.topicId, teamId: teamTopics.teamId })
 		.from(teamTopics)
 		.where(inArray(teamTopics.teamId, teamIds))
-	const topicIds = [...new Set([...ownedRows.map((row) => row.id), ...sharedRows.map((row) => row.topicId)])]
-	return { topicIds, teamIds }
+
+	// one topic can sit on several teams, so each team it reaches is collected under it
+	const teamIdsByTopicId = new Map<string, string[]>()
+	for (const row of [...ownedRows, ...sharedRows]) {
+		const topicTeamIds = teamIdsByTopicId.get(row.topicId) ?? []
+		if (row.teamId && !topicTeamIds.includes(row.teamId)) {
+			teamIdsByTopicId.set(row.topicId, [...topicTeamIds, row.teamId])
+		}
+	}
+	return { topicIds: [...teamIdsByTopicId.keys()], teamIds, teamIdsByTopicId }
 }
 
 // how many comments each note received since the user last read it, their own and the deleted ones left out

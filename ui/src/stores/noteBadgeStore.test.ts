@@ -8,6 +8,7 @@ import {
 	toAllNoteCount,
 	toAllTeamNoteCount,
 	toNoteBadge,
+	toPageNoteBadges,
 	toTopicNoteCount,
 } from "./noteBadgeStore"
 
@@ -16,6 +17,7 @@ const TOPIC_EDIT: NoteBadge = {
 	noteId: "n1",
 	topicId: "topic-a",
 	teamId: null,
+	teamIds: ["team-a"],
 	noteName: "Roast log",
 	pageName: "Ethiopian naturals",
 	unreadEdits: 1,
@@ -25,6 +27,7 @@ const TOPIC_COMMENTS: NoteBadge = {
 	noteId: "n2",
 	topicId: "topic-a",
 	teamId: null,
+	teamIds: ["team-a"],
 	noteName: "Cupping sheet",
 	pageName: "Ethiopian naturals",
 	unreadEdits: 0,
@@ -34,6 +37,7 @@ const TEAM_NOTE: NoteBadge = {
 	noteId: "n3",
 	topicId: null,
 	teamId: "team-a",
+	teamIds: ["team-a"],
 	noteName: "Team notes",
 	pageName: "Agent Infra Crew",
 	unreadEdits: 1,
@@ -46,6 +50,13 @@ test("a topic sums its notes' two numbers", () => {
 	expect(toTopicNoteCount("topic-a")).toBe(3)
 	expect(toAllTeamNoteCount()).toBe(4)
 	expect(toAllNoteCount()).toBe(7)
+})
+
+// a team badge covers its own notes and the notes on the topics it holds
+test("a team's badge includes the notes on its topics", () => {
+	setNoteBadges([TOPIC_EDIT, TOPIC_COMMENTS, TEAM_NOTE])
+	expect(toPageNoteBadges(null, "team-a").map((badge) => badge.noteId)).toEqual(["n1", "n2", "n3"])
+	expect(toPageNoteBadges(null, "team-b")).toEqual([])
 })
 
 // the note's own row keeps them apart, which is what the page counts sum
