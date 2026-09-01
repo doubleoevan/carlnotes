@@ -2,9 +2,9 @@
 
 Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregates the `/api` routes.
 
-- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `share/`. Root files are cross-domain surfaces
+- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `share/`. Root files serve more than one domain
   (auth, billing, admin, avatars, profiles, SEO pages, and `content.ts` for the blog under `content/blog/`).
-- `releases.ts` — the release notes surface: the `/releases` index and each release's own page, both
+- `releases.ts` — the `/releases` index and each release's own page, both
   rendered through `content.ts`, plus the signed GitHub webhook that upserts the rows they read.
   `releases.sync.ts` (`bun run sync:releases`) re-reads the GitHub API through the same write, which
   seeds history and repairs a missed delivery. The convention for writing one is `docs/release-notes.md`.

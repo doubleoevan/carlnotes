@@ -126,6 +126,10 @@ Check for:
      now, not width alone
    - `isOwnersTable` is gone rather than renamed: it gated a visibility tooltip the Visibility column
      already stated, so the prop and the tooltip both went
+   - `surface` as a noun for a page or a feature (now the page's own name: `/releases`, the team page,
+     the webhook route). `content.ts`'s `Surface`/`SURFACES` are now `Section`/`SECTIONS`, since the value
+     is the folder under `content/` a group of pages is read from. the verb (an error is surfaced) and the
+     visual noun (a card on a sunken surface) are different words and stay
    - `carries` / `carrying` in comments (now `includes` when one thing holds another, `has` for an attribute,
      `sends` for something transmitted), `rather than` (now `instead of`), `rides with` (now `goes with`),
      `steers` (say what it sets or bounds), `lands in` (now `is included in`), `wears` (now `shows`),

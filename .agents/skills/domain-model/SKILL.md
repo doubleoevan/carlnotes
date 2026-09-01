@@ -77,6 +77,13 @@ which already means an email's subject line and the target of a flagged report. 
 ## Follow and subscribe are one concept: follow is the client-facing word, subscribe is the code word
 Client-facing copy says **follow**, **follower**, and **following**. Every identifier says **subscribe**, **subscription**, and **subscriber** — tables, columns, types, functions, routes, and analytics events alike. The boundary is crossed exactly once, where a string is written for a user to read. Never rename a table toward the copy, and never let `follow` reach an identifier: a codebase that says both has two names for one thing and no way to tell which a given `follower_count` means.
 
+## Never "surface" for a page or a feature
+A **page** is a page. Say `/releases`, the team page, the topic editor, the webhook route: name the
+thing. "Surface" says only that a reader might encounter it, which is true of everything and tells the
+next reader nothing. It also invites lumping unlike things together, as in a "release notes surface"
+that included an inbound webhook nobody looks at. The verb keeps its meaning — an error is surfaced to
+a caller — and so does the visual noun, where a card sits on a sunken surface.
+
 ## Rules
 - Singular entity names in code (`Finding`), plural tables (`findings`).
 - New domain nouns get a row in the table above before they appear in code, a table, or a route.

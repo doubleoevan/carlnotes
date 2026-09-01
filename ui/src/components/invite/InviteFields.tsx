@@ -50,7 +50,7 @@ export function InviteFields({
 	onRemoveInvite: (chip: string) => void
 	// the invite-by-link menu, shown once the target is saved and has something to link to
 	inviteLink?: InviteLink
-	// whatever the surface shows under the fields, like a topic's live link rows
+	// whatever the page shows under the fields, like a topic's live link rows
 	children?: React.ReactNode
 }) {
 	return (

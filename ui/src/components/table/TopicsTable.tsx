@@ -32,7 +32,7 @@ const topicSortValues = {
 }
 
 /**
- * The one topic table the profile page and the team surfaces share: each topic with its dates,
+ * The one topic table the profile page and the team pages share: each topic with its dates,
  * visibility, follower count, and kept-over-seen figures. The team page adds the Active column by
  * passing a detach handler, and each page owns its card and its empty state.
  */
@@ -48,7 +48,7 @@ export function TopicsTable({
 	includesNonPublicTopics: boolean
 	// what the topic column header's tooltip says
 	topicTooltip?: string
-	// removing a topic from the team, a leader's power on team surfaces alone
+	// removing a topic from the team, a leader's power on a team page alone
 	onRemoveTopic?: (topic: Topic) => void
 	// the card styles a caller overrides, like the sunken surface a subtable sits on
 	className?: string

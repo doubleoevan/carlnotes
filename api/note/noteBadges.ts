@@ -21,7 +21,7 @@ export async function loadNoteBadges(userId: string | null): Promise<NoteBadge[]
 		return []
 	}
 
-	// the pages the badged notes show up on, and the teams each of those topics sits on
+	// the pages the note badges show up on, with the teams that each of those topics are in
 	const { topicIds, teamIds, teamIdsByTopicId } = await loadBadgedPages(userId)
 	if (topicIds.length === 0 && teamIds.length === 0) {
 		return []
@@ -111,7 +111,7 @@ export function toUnreadEdits(
 	return !note.readAt || note.bodyEditedAt > note.readAt ? 1 : 0
 }
 
-// the teams a note's page belongs to. a team note has its own, a topic note has every team holding the topic
+// the teams a note's page belongs to. a team note has its own, a topic note goes into team holding the topic
 function toPageTeamIds(
 	note: { topicId: string | null; teamId: string | null },
 	teamIdsByTopicId: Map<string, string[]>,
@@ -137,21 +137,21 @@ async function loadBadgedPages(
 	}
 
 	// the topics those teams own, plus the ones shared with them
-	const ownedRows = await db
+	const ownedTopicRows = await db
 		.select({ topicId: topics.id, teamId: topics.teamId })
 		.from(topics)
 		.where(inArray(topics.teamId, teamIds))
-	const sharedRows = await db
+	const sharedTopicRows = await db
 		.select({ topicId: teamTopics.topicId, teamId: teamTopics.teamId })
 		.from(teamTopics)
 		.where(inArray(teamTopics.teamId, teamIds))
 
-	// one topic can sit on several teams, so each team it reaches is collected under it
+	// one topic can be in several teams, so each team it that has it is collected
 	const teamIdsByTopicId = new Map<string, string[]>()
-	for (const row of [...ownedRows, ...sharedRows]) {
-		const topicTeamIds = teamIdsByTopicId.get(row.topicId) ?? []
-		if (row.teamId && !topicTeamIds.includes(row.teamId)) {
-			teamIdsByTopicId.set(row.topicId, [...topicTeamIds, row.teamId])
+	for (const topicRow of [...ownedTopicRows, ...sharedTopicRows]) {
+		const topicTeamIds = teamIdsByTopicId.get(topicRow.topicId) ?? []
+		if (topicRow.teamId && !topicTeamIds.includes(topicRow.teamId)) {
+			teamIdsByTopicId.set(topicRow.topicId, [...topicTeamIds, topicRow.teamId])
 		}
 	}
 	return { topicIds: [...teamIdsByTopicId.keys()], teamIds, teamIdsByTopicId }

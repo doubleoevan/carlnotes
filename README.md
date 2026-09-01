@@ -83,7 +83,7 @@ Chat is signed-in only. Every chat turn writes a row, because every chat turn is
 
 ### Live updates
 
-Two surfaces update while you watch them: a team chat room, and a Tasting Note several people are editing. Both push over Server-Sent Events, and neither runs a WebSocket server.
+Two pages update while you watch them: a team chat room, and a Tasting Note several people are editing. Both push over Server-Sent Events, and neither runs a WebSocket server.
 
 The fan-out between instances is Postgres `LISTEN/NOTIFY`. Each process holds one dedicated listen connection and re-broadcasts to its own subscribers through an in-process `EventEmitter`, so a second instance costs a connection rather than a service. There is no Redis and no socket tier to operate.
 

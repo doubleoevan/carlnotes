@@ -46,7 +46,7 @@ export function TeamMembersTable({
 	// how many opted out of the public members list, so the totals never read smaller than the team is
 	hiddenMemberCount: number
 	isLeader: boolean
-	// a surface that only reads the team, like the admin console, where no row acts as the viewer's own
+	// a page that only reads the team, like the admin console, where no row acts as the viewer's own
 	isReadOnly?: boolean
 	onChanged: () => void
 }) {
