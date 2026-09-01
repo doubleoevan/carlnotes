@@ -312,11 +312,14 @@ export function ChatRoomComposer({
 							}}
 						/>
 					</label>
+					{/* the mousedown guard keeps the caret in the chat message box, so a phone's keyboard never
+					    closes under the tap and moves the button out from under the finger before the click lands */}
 					<button
 						type="submit"
 						aria-label="Send"
 						className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full disabled:opacity-50 sm:size-8"
 						disabled={chatMessage.trim() === ""}
+						onMouseDown={(event) => event.preventDefault()}
 					>
 						<ArrowUp className="size-4" />
 					</button>

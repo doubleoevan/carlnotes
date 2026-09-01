@@ -307,6 +307,21 @@
 	animation-delay: 6s;
 }
 
+/* a phone gpu re-rasterizes each ring's 12px blur every frame, and the rings are wider than the screen
+   anyway. display:none drops the layers outright, where animation:none would still leave them to paint */
+@media (width < 48rem) {
+	.coffee-steam {
+		display: none;
+	}
+	/* the mug's wisps cost almost nothing per frame, but an animation that never ends holds the
+	   compositor at refresh rate, which is what stops a phone idling. hidden the same way reduced
+	   motion hides them, so the logo has one settled look wherever the steam is off */
+	.coffee-mug-steam {
+		animation: none;
+		opacity: 0;
+	}
+}
+
 /* honor a user's reduced-motion preference: no hydrate animation, no steam, no rings, no shimmer */
 @media (prefers-reduced-motion: reduce) {
 	.animate-hydrate {

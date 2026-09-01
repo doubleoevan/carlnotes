@@ -1,8 +1,26 @@
 import type { TopicResponse } from "@shared/contracts"
 import { useEffect, useState } from "react"
 
-// how often to re-fetch the page while a scan is running, so history and the manual scan button follow it live
-const SCAN_POLL_MS = 3000
+// how often to re-fetch the page while a scan is running, so history and the manual scan button follow it
+// live. a watched scan shows its first findings within seconds, and a long one is not worth a refetch every
+// three seconds for minutes on end, so the rate steps down the longer the scan runs
+const FAST_POLL_MS = 3000
+const MEDIUM_POLL_MS = 10_000
+const SLOW_POLL_MS = 30_000
+
+// how long the poll holds each of the first two rates before stepping down
+const FAST_POLL_UNTIL_MS = 30_000
+const MEDIUM_POLL_UNTIL_MS = 120_000
+
+/**
+ * The delay before the next refetch, from how long this scan has been watched.
+ */
+export function toScanPollMs(watchedMs: number): number {
+	if (watchedMs < FAST_POLL_UNTIL_MS) {
+		return FAST_POLL_MS
+	}
+	return watchedMs < MEDIUM_POLL_UNTIL_MS ? MEDIUM_POLL_MS : SLOW_POLL_MS
+}
 
 // re-fetch the topic page on a timer while any of its scans are running
 export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<void>): void {
@@ -11,11 +29,38 @@ export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<
 			return
 		}
 
-		// poll until the running scan resolves, then the cleared timer lets the page rest
-		const pollTimer = setInterval(() => {
-			void reload()
-		}, SCAN_POLL_MS)
-		return () => clearInterval(pollTimer)
+		// the timer reschedules itself so the delay can grow, which one interval could not do
+		const startedAt = Date.now()
+		let pollTimer: ReturnType<typeof setTimeout> | undefined
+		const schedule = (): void => {
+			pollTimer = setTimeout(
+				() => {
+					void reload()
+					schedule()
+				},
+				toScanPollMs(Date.now() - startedAt),
+			)
+		}
+
+		// a hidden tab polls nothing at all. coming back refetches once and picks the timer up again,
+		// so a phone in a pocket costs nothing and the page is still current when it is looked at
+		const handleVisibility = (): void => {
+			clearTimeout(pollTimer)
+			if (document.visibilityState === "visible") {
+				void reload()
+				schedule()
+			}
+		}
+		document.addEventListener("visibilitychange", handleVisibility)
+		if (document.visibilityState === "visible") {
+			schedule()
+		}
+
+		// the cleared timer lets the page rest once the scan resolves
+		return () => {
+			clearTimeout(pollTimer)
+			document.removeEventListener("visibilitychange", handleVisibility)
+		}
 	}, [isScanning, reload])
 }
 

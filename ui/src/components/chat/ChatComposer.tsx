@@ -125,13 +125,16 @@ export function ChatComposer({
 							/>
 						)}
 					</div>
-					{/* the clear and send buttons sit to the right of the attachment buttons */}
+					{/* the clear and send buttons sit to the right of the attachment buttons. each one guards its
+					    mousedown to keep the caret in the question box, so a phone's keyboard never closes under
+					    the tap and moves the button out from under the finger before the click lands */}
 					<div className="ml-auto flex items-center gap-2">
 						{/* an X button clears the input and hands focus back, only appearing when there is content */}
 						{question !== "" && (
 							<button
 								type="button"
 								aria-label="Clear draft"
+								onMouseDown={(event) => event.preventDefault()}
 								onClick={() => {
 									chat.setQuestion("")
 									questionBoxRef.current?.focus()
@@ -146,6 +149,7 @@ export function ChatComposer({
 							<button
 								type="button"
 								aria-label="Stop"
+								onMouseDown={(event) => event.preventDefault()}
 								onClick={chat.stop}
 								className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
 							>
@@ -157,6 +161,7 @@ export function ChatComposer({
 									<button
 										type="submit"
 										aria-label="Sign up to chit-chat"
+										onMouseDown={(event) => event.preventDefault()}
 										className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
 									>
 										<ArrowUp className="size-4" />
@@ -169,6 +174,7 @@ export function ChatComposer({
 								type="submit"
 								aria-label="Send"
 								disabled={question.trim() === ""}
+								onMouseDown={(event) => event.preventDefault()}
 								className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8 disabled:opacity-40"
 							>
 								<ArrowUp className="size-4" />
