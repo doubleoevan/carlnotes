@@ -81,6 +81,26 @@ flowchart
 
 Chat is signed-in only. Every chat turn writes a row, because every chat turn is metered. The model spend is charged to the asker's own LiteLLM key, sharing the same budget a topic scan charges. Chat text is encrypted. A chat that outgrows its context budget is compacted. The newest turns stay whole. Older answers are clipped to their opening characters.
 
+### Live updates
+
+Two surfaces update while you watch them: a team chat room, and a Tasting Note several people are editing. Both push over Server-Sent Events, and neither runs a WebSocket server.
+
+The fan-out between instances is Postgres `LISTEN/NOTIFY`. Each process holds one dedicated listen connection and re-broadcasts to its own subscribers through an in-process `EventEmitter`, so a second instance costs a connection rather than a service. There is no Redis and no socket tier to operate.
+
+```mermaid
+flowchart
+    Writer[Writer's browser] -->|POST| App1["app instance A"]
+    App1 --> Postgres[(Postgres)]
+    App1 -->|pg_notify| Postgres
+    Postgres -->|LISTEN| App2["app instance B"]
+    App1 -->|SSE| ReaderA[Reader on A]
+    App2 -->|SSE| ReaderB[Reader on B]
+```
+
+A chat room notifies the new message's id and subscribers read the row. A note cannot: a Yjs update is larger than a notify payload, so the instance that merged it delivers the bytes to its own subscribers directly and the notify is only a poke telling the other instances to resync. The note's ydoc stays the source of truth and its `html` column is regenerated on save, so a plain page load never starts the editor.
+
+One deployment detail is load-bearing: `LISTEN` needs the direct Neon connection string, because the pooler drops notifications to a listener. `pg_notify` itself goes through the pooler like any other statement. A listen connection that drops reconnects with a backoff from one second to thirty, and a note's stream pauses while its tab is hidden.
+
 ### Content screening (LLM Guard)
 
 LLM Guard screens untrusted text before any model reads it, protecting the app from prompt injection. A fetched page or an uploaded document may include instructions aimed at the model. LLM Guard runs in Python, so it is its own container: the official `llm-guard-api` image, pinned to one version in `docker-compose.yml` and checked weekly for updates by [a GitHub Action](.github/workflows/llm-guard-update.yml). Locally it is only reachable from your own machine, since it accepts arbitrary text with no auth of its own. In production it is its own Northflank service. The app finds it through one value, `LLM_GUARD_URL`. Unset it and screening turns off while everything else behaves the same.
