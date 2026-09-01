@@ -322,7 +322,8 @@
 	}
 }
 
-/* honor a user's reduced-motion preference: no hydrate animation, no steam, no rings, no shimmer */
+/* honor a user's reduced-motion preference: no hydrate animation, no rings, no shimmer, and the
+   mug's steam held still rather than taken away */
 @media (prefers-reduced-motion: reduce) {
 	.animate-hydrate {
 		animation: none;
@@ -330,11 +331,14 @@
 		filter: none;
 		transform: none;
 	}
-	.coffee-mug-steam,
-	.coffee-ring {
+	/* the mug keeps its steam, held still. a reader who asked for less motion did not ask for a
+	   different logo, and a wisp that never moves is not motion */
+	.coffee-mug-steam {
 		animation: none;
-		opacity: 0;
+		opacity: 0.5;
 	}
+	/* both ring sets are invisible at rest by design, so stopping them is the same as hiding them */
+	.coffee-ring,
 	.coffee-steam {
 		animation: none;
 		opacity: 0;
