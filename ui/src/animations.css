@@ -307,29 +307,24 @@
 	animation-delay: 6s;
 }
 
-/* a phone gpu re-rasterizes each ring's 12px blur every frame, and the rings are wider than the screen
-   anyway. display:none drops the layers outright, where animation:none would still leave them to paint */
+/* don't show coffee steam rings on the phone to save battery */
 @media (width < 48rem) {
 	.coffee-steam {
 		display: none;
 	}
-	/* the mug's wisps cost almost nothing per frame, but an animation that never ends holds the
-	   compositor at refresh rate, which is what stops a phone idling. the wisps stay on screen at the
-	   opacity the animation peaks at, so the logo still steams, it just holds still */
+	/* don't animate the coffee mug's steam on a phone */
 	.coffee-mug-steam {
 		animation: none;
 		opacity: 0.5;
 	}
-	/* a mug marked coffee-loading is the exception: it says work is happening, and it stops when that
-	   work lands, so it never holds the compositor awake the way the logo's steam did */
+	/* do animate a loading mug, which stops on its own when its work completes */
 	.coffee-loading .coffee-mug-steam {
 		animation: coffee-mug-steam 2.4s ease-in-out infinite;
 		opacity: 1;
 	}
 }
 
-/* honor a user's reduced-motion preference: no hydrate animation, no rings, no shimmer, and the
-   mug's steam held still rather than taken away */
+/* honor a user's reduced-motion preference: no hydrate animation, no rings, no shimmer, and the coffee mug's steam held still */
 @media (prefers-reduced-motion: reduce) {
 	.animate-hydrate {
 		animation: none;
@@ -337,13 +332,12 @@
 		filter: none;
 		transform: none;
 	}
-	/* the mug keeps its steam, held still. a reader who asked for less motion did not ask for a
-	   different logo, and a wisp that never moves is not motion */
+	/* don't animate the coffee mug's steam for reduced-motion preference */
 	.coffee-mug-steam {
 		animation: none;
 		opacity: 0.5;
 	}
-	/* both ring sets are invisible at rest by design, so stopping them is the same as hiding them */
+	/* don't animate the coffe steam rings for reduced-motion preference */
 	.coffee-ring,
 	.coffee-steam {
 		animation: none;

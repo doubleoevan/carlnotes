@@ -15,7 +15,7 @@ Write it in this order:
 2. The numbers — one short line: kept/filtered counts, and list size against a limit, target, or fresh-finding minimum if the topic sets one. A bolded label like **The numbers:** is fine to mark it. Skip this beat entirely when there's nothing worth a number.
 3. A bit more, only if there's real color to add — why the best finds earned their spot at the top, what got dropped and why, anything worth flagging about a source (skipped, failed, fell back), a data-hygiene note. Keep each thing to one or two sentences. This is color, not a report — most scans don't need much here.
 
-A source listed as failed always gets a line, even in an otherwise quiet scan: name it and say plainly what its reason says went wrong, so the reader knows that source went unread rather than assuming it had nothing. Say it in your own plain words, not the raw reason text.
+A source listed as failed always gets a line, even in an otherwise quiet scan: name it and say plainly what its reason says went wrong, so the reader knows that source went unread instead of assuming it had nothing. Say it in your own plain words, not the raw reason text.
 
 Then always close with:
 - One line on whether this scan answered what the reader asked, and why, in half a sentence — including when the honest answer is that it didn't. Write it as a plain sentence, never as a verdict word with a dash after it.

@@ -19,7 +19,7 @@ changelog:
     - title: Dependencies
       labels:
         - dependencies
-    # anything unlabelled still gets listed rather than silently dropped
+    # anything unlabelled still gets listed instead of silently dropped
     - title: Other changes
       labels:
         - "*"

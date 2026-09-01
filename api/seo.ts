@@ -38,7 +38,7 @@ export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Pr
 	// the public teams, each with its own page
 	const teamRows = await db.select({ id: teams.id }).from(teams).where(eq(teams.isPublic, true))
 
-	// the releases index and every published release's own page, each dated by when it went out
+	// the releases index and every published release's own page, each release dated by when it went out
 	const releaseRows = await loadReleases()
 
 	// one entry per url. topics have a lastmod, the rest are plain locations
@@ -56,7 +56,7 @@ export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Pr
 }
 
 /**
- * Every topic the discovery surfaces may name. The sitemap and llms.txt read this one query.
+ * Every topic the sitemap and llms.txt may name, from the one query they share.
  */
 export async function publicTopicRows(): Promise<{ id: string; name: string; visibility: string; updatedAt: Date }[]> {
 	return db

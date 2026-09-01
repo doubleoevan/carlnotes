@@ -22,7 +22,7 @@ linter cannot check.
 
 Every logical group of lines gets a comment on the line above it: a single line whenever possible.
 
-- One comment per group. Prefer one line; when one line genuinely can't carry it, stack `//` lines rather than using `/* */` blocks. Never inline at the end of a line.
+- One comment per group. Prefer one line; when one line genuinely can't carry it, stack `//` lines instead of using `/* */` blocks. Never inline at the end of a line.
 - No blank line between the comment and its group; one blank line before the next group starts.
 - Write short plain sentences, lowercase, for a reader who did not write the code. Two short sentences separated by a period beat one clause-chained line.
 - Never use a semicolon in a comment. Use a colon only right before a short list of literal values ("the source kind: rss, reddit, youtube").

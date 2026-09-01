@@ -312,8 +312,8 @@ export function ChatRoomComposer({
 							}}
 						/>
 					</label>
-					{/* the mousedown guard keeps the caret in the chat message box, so a phone's keyboard never
-					    closes under the tap and moves the button out from under the finger before the click lands */}
+					{/* the mouse handler keeps the focus in the message box. losing it closes a phone's keyboard,
+						which moves the button before the click lands */}
 					<button
 						type="submit"
 						aria-label="Send"

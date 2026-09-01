@@ -1,5 +1,6 @@
-// the release notes surface: the rows a published GitHub release upserts, the pages that read them,
-// and the signed webhook that keeps them current. release notes are authored on GitHub and read here
+// the releases table's reads and writes, the two pages rendered from them, and the routes that serve
+// those: /releases, each release's own page, the /changelog redirect, and the signed GitHub webhook.
+// a release is authored on GitHub and read here
 
 import { desc, eq } from "drizzle-orm"
 import { Hono } from "hono"
@@ -12,10 +13,9 @@ import { appUrl } from "./pages"
 // sits above it, and a body written without it renders whole
 const SUMMARY_SENTINEL = "<!-- more -->"
 
-// the actions that mean a release is now readable. published covers a first publish; released also
-// fires when a prerelease is promoted, which published does not, and without it a promoted release
-// would keep its prerelease flag and stay off the page until somebody ran the sync
-const STORING_ACTIONS = new Set(["published", "released"])
+// the actions that put a release on the page. published fires on a first publish,
+// released fires on a prerelease promoted to a full release
+const STORE_RELEASE_ACTIONS = new Set(["published", "released"])
 
 // the header GitHub signs its webhook payload with, and the prefix that signature includes
 const SIGNATURE_HEADER = "x-hub-signature-256"
@@ -35,8 +35,8 @@ export type ReleaseUpsert = {
 }
 
 /**
- * Store one release under its tag. The one write path the webhook and the sync script share, so a
- * re-delivery and a re-run both land on the existing row instead of adding a second.
+ * Store one release under its tag. The one write path the webhook and the sync script share,
+ * so a re-delivery and a re-run both land on the existing row instead of adding a second.
  */
 export async function saveRelease(release: ReleaseUpsert): Promise<void> {
 	await db
@@ -59,8 +59,8 @@ export async function saveRelease(release: ReleaseUpsert): Promise<void> {
 }
 
 /**
- * Every release the pages may show, newest first. A prerelease is stored but never read, and a draft
- * never reaches the table at all.
+ * Every release the pages may show, newest first. A prerelease is stored but never read,
+ * and a draft never reaches the table at all.
  */
 export async function loadReleases(): Promise<ReleaseRow[]> {
 	return db.select().from(releases).where(eq(releases.isPrerelease, false)).orderBy(desc(releases.releasedAt))
@@ -85,31 +85,34 @@ export async function isSignedByGitHub(body: string, signature: string | undefin
 	}
 
 	// the same HMAC GitHub computed over the raw body
-	const key = await crypto.subtle.importKey(
+	const signingKey = await crypto.subtle.importKey(
 		"raw",
 		new TextEncoder().encode(secret),
 		{ name: "HMAC", hash: "SHA-256" },
 		false,
 		["sign"],
 	)
-	const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body))
+	const bodyDigest = await crypto.subtle.sign("HMAC", signingKey, new TextEncoder().encode(body))
 
 	// the compare is constant time, so a wrong signature leaks nothing by how long it takes to refuse.
 	// the lengths are checked first because timingSafeEqual throws on a mismatched pair
-	const expected = SIGNATURE_PREFIX + Buffer.from(digest).toString("hex")
-	return expected.length === signature.length && crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature))
+	const expectedSignature = SIGNATURE_PREFIX + Buffer.from(bodyDigest).toString("hex")
+	return (
+		expectedSignature.length === signature.length &&
+		crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))
+	)
 }
 
 // the release payload GitHub sends, narrowed to what a row needs
 type ReleasePayload = {
 	action?: string
 	release?: {
-		// what a row keys and titles on
+		// the tag a row is keyed by, the title, and the body Markdown
 		tag_name?: string
 		name?: string | null
 		body?: string | null
-		// when it went out, where it lives, and the two flags that decide whether it is read at all.
-		// created_at is the target commit's date, which is the day the work shipped
+		// created_at is the target commit's date, which is the day the work shipped.
+		// a draft never reaches the table, and a prerelease is stored but filtered out of every read
 		created_at?: string | null
 		html_url?: string
 		prerelease?: boolean
@@ -145,13 +148,13 @@ function toReleaseCard(release: ReleaseRow): string {
  * The releases index: every published release newest first, each linking to its own page.
  */
 export async function serveReleaseIndex(): Promise<string> {
-	const cards = (await loadReleases()).map(toReleaseCard).join("")
+	const releaseCards = (await loadReleases()).map(toReleaseCard).join("")
 	return toContentHtml({
 		title: "Releases",
 		description: "What shipped, and what changed.",
 		canonicalUrl: `${appUrl()}/releases`,
 		jsonLd: "",
-		bodyHtml: `<h1>Releases</h1>${cards}`,
+		bodyHtml: `<h1>Releases</h1>${releaseCards}`,
 	})
 }
 
@@ -164,7 +167,7 @@ export async function serveRelease(tag: string): Promise<string | null> {
 		return null
 	}
 
-	// the whole body renders here, generated list included, since a reader came for this one release
+	// the whole body renders here, generated list included, to show a reader this one release
 	const releasedOn = release.releasedAt.toISOString().slice(0, 10)
 	return toContentHtml({
 		title: release.name,
@@ -193,8 +196,8 @@ export const releasesRoute = new Hono()
 			return context.json({ rejected: "signature" }, 401)
 		}
 
-		// a webhook set to form encoding sends payload=<encoded>, which parses as nothing useful. saying
-		// so beats the 500 a bare parse would raise, since the content type is the setting most often wrong
+		// a webhook set to form encoding sends payload=<encoded>, which is not json. the reply names the
+		// content type to change
 		let payload: ReleasePayload
 		try {
 			payload = JSON.parse(body) as ReleasePayload
@@ -207,7 +210,7 @@ export const releasesRoute = new Hono()
 
 		// only a publication writes. every other action is acknowledged and dropped, so editing a
 		// typo in a published release never re-fires anything downstream
-		if (!payload.action || !STORING_ACTIONS.has(payload.action)) {
+		if (!payload.action || !STORE_RELEASE_ACTIONS.has(payload.action)) {
 			return context.json({ ignored: payload.action ?? "unknown" })
 		}
 		const release = toReleaseUpsert(payload.release)

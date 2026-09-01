@@ -21,7 +21,7 @@ export const INVITE_LABEL = "Invite"
 // the platforms a page gets posted to
 export const POST_PLATFORM_TARGETS = [
 	{
-		// the label is "x.com" rather than the single letter, which no icon distinguishes
+		// the label is "x.com" instead of the single letter, which no icon distinguishes
 		label: "x.com",
 		icon: <BrandIcon brand="x" className={SHARE_OPTION_ICON_CLASS} />,
 		toUrl: (url: string, title: string) => `https://x.com/intent/post?url=${url}&text=${title}`,

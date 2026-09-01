@@ -124,7 +124,7 @@ Check for:
    - `TABLE_CARD_CLASS` and `SECTION_CARD_CLASS` held the same string and are now one `CARD_CLASS`
    - `POPOVER_WIDTH_CLASS` (now `POPOVER_PANEL_CLASS`); it carries the panel's height and mobile-sheet marker
      now, not width alone
-   - `isOwnersTable` is gone rather than renamed: it gated a visibility tooltip the Visibility column
+   - `isOwnersTable` is gone instead of renamed: it gated a visibility tooltip the Visibility column
      already stated, so the prop and the tooltip both went
    - `surface` as a noun for a page or a feature (now the page's own name: `/releases`, the team page,
      the webhook route). `content.ts`'s `Surface`/`SURFACES` are now `Section`/`SECTIONS`, since the value
@@ -155,7 +155,7 @@ Check for:
      `handleSendMessage`, `handleReplyMessage`, `scrollToMessage`, `toChangedMentionMessage`,
      `isMessageThread`, `messageBox`/`messageBoxRef`, `carlMessage`, `promptMessage`,
      `chatWindowMessages` (now `windowChatMessages`), and `VIRTUALIZE_FROM_MESSAGES`.
-     `repliedMessage` held the whole list rather than a replied message and is now
+     `repliedMessage` held the whole list instead of a replied message and is now
      `currentChatMessages`. the database keeps every column name, so code writing one maps
      explicitly, as in `{ messageId: chatMessageId }`, and the SSE event name, the route paths,
      and the UI's own "Delete message" copy all keep the bare word. an Error's `.message`,

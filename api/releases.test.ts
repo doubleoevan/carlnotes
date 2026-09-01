@@ -1,5 +1,5 @@
-// the release notes rules that hold without a database: the summary split, the webhook's signature
-// check, and what a GitHub release object becomes as a row
+// the release notes rules that hold without a database: the summary split, the webhook's signature check,
+// and what a GitHub release object becomes as a row
 import { expect, test } from "bun:test"
 import { isSignedByGitHub, releasesRoute, toReleaseSummary, toReleaseUpsert } from "./releases"
 
@@ -17,8 +17,7 @@ async function toSignature(body: string): Promise<string> {
 	return `sha256=${Buffer.from(digest).toString("hex")}`
 }
 
-// put the secret back as it was. assigning undefined would store the string "undefined", which every
-// truthiness check then reads as a configured secret
+// put the GitHub webhook secret back as it was
 function restoreSecret(previousSecret: string | undefined): void {
 	if (previousSecret === undefined) {
 		delete Bun.env.GITHUB_WEBHOOK_SECRET
@@ -27,8 +26,8 @@ function restoreSecret(previousSecret: string | undefined): void {
 	Bun.env.GITHUB_WEBHOOK_SECRET = previousSecret
 }
 
-// one published release as GitHub sends it
-const PUBLISHED = {
+// a published release as GitHub sends it
+const PUBLISHED_RELEASE = {
 	tag_name: "v0.4.0",
 	name: "v0.4.0 — The topic feed",
 	body: "The summary.\n\n<!-- more -->\n\n<details>the list</details>",
@@ -40,7 +39,7 @@ const PUBLISHED = {
 
 // the index shows what leads a body, never the generated list folded under the sentinel
 test("the summary is what sits above the sentinel", () => {
-	expect(toReleaseSummary(PUBLISHED.body).trim()).toBe("The summary.")
+	expect(toReleaseSummary(PUBLISHED_RELEASE.body).trim()).toBe("The summary.")
 })
 
 // a body written without the sentinel is still readable instead of empty
@@ -50,7 +49,7 @@ test("a body with no sentinel is its own summary", () => {
 
 // a row is dated by the commit the tag points at, not by when someone pressed publish
 test("a published release becomes a row", () => {
-	const row = toReleaseUpsert(PUBLISHED)
+	const row = toReleaseUpsert(PUBLISHED_RELEASE)
 	expect(row?.tag).toBe("v0.4.0")
 	expect(row?.isPrerelease).toBe(false)
 	expect(row?.releasedAt).toEqual(new Date("2026-07-21T00:00:00Z"))
@@ -58,17 +57,17 @@ test("a published release becomes a row", () => {
 
 // a draft never appears on the page, so it never reaches the table either
 test("a draft is not a row", () => {
-	expect(toReleaseUpsert({ ...PUBLISHED, draft: true })).toBeNull()
+	expect(toReleaseUpsert({ ...PUBLISHED_RELEASE, draft: true })).toBeNull()
 })
 
 // an untitled release still needs something to show, and GitHub shows the tag
 test("an untitled release falls back to its tag", () => {
-	expect(toReleaseUpsert({ ...PUBLISHED, name: null })?.name).toBe("v0.4.0")
+	expect(toReleaseUpsert({ ...PUBLISHED_RELEASE, name: null })?.name).toBe("v0.4.0")
 })
 
 // a prerelease is stored with its flag, so promoting it later takes no special write
 test("a prerelease is stored as one", () => {
-	expect(toReleaseUpsert({ ...PUBLISHED, prerelease: true })?.isPrerelease).toBe(true)
+	expect(toReleaseUpsert({ ...PUBLISHED_RELEASE, prerelease: true })?.isPrerelease).toBe(true)
 })
 
 // an unsigned request is rejected, and so is one that arrives with no secret configured
@@ -107,12 +106,12 @@ test("a form encoded body is refused with the reason", async () => {
 	}
 })
 
-// promoting a prerelease fires released rather than published, and the promoted release has to land
+// promoting a prerelease fires released instead of published, and the promoted release has to land
 test("a promoted prerelease is stored", async () => {
 	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
-		const body = JSON.stringify({ action: "released", release: { ...PUBLISHED, prerelease: false } })
+		const body = JSON.stringify({ action: "released", release: { ...PUBLISHED_RELEASE, prerelease: false } })
 		const response = await releasesRoute.request("/api/webhooks/github", {
 			method: "POST",
 			body,
@@ -131,7 +130,7 @@ test("an edit is still ignored", async () => {
 	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
-		const body = JSON.stringify({ action: "edited", release: PUBLISHED })
+		const body = JSON.stringify({ action: "edited", release: PUBLISHED_RELEASE })
 		const response = await releasesRoute.request("/api/webhooks/github", {
 			method: "POST",
 			body,

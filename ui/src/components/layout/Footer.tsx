@@ -26,7 +26,7 @@ function FooterLegal() {
 				<span>AGPL-3.0 licensed.</span>
 				<span>Take the code. Leave the raccoon.</span>
 			</div>
-			{/* the docs, what shipped, the source, the license, and the legal pages */}
+			{/* the docs, the releases, the source, the license, and the legal pages */}
 			<div className="flex flex-wrap justify-center gap-x-6 gap-y-1">
 				<DocsLink className="text-link hover:underline" />
 				<AnchorLink

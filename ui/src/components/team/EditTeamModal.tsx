@@ -127,7 +127,7 @@ export function EditTeamModal({
 	// the team the invite-link button created. the modal edits that team instead of creating a second one on Save
 	const [createdTeam, setCreatedTeam] = useState<EditedTeam | null>(null)
 	const editedTeam = team ?? createdTeam ?? undefined
-	// the topics made from the picker's New topic row, which the picker offers alongside the rest
+	// the topics made from the picker's New topic row
 	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
 	const [createdTopics, setCreatedTopics] = useState<TopicOption[]>([])
 
@@ -204,10 +204,10 @@ export function EditTeamModal({
 		}
 	}
 
-	// what the topic select shows: the team's own topics, the user's topics, and any made here
+	// what the topic select shows: the team's own topics, the user's topics, and any created topics from the team modal
 	const topicOptions = [...(currentTopics ?? []), ...(userTopics ?? []), ...createdTopics]
 
-	// a topic made from the picker joins the list already selected
+	// a topic made from the picker joins the list of selected topics
 	const handleTopicCreated = async (topicId: string, topicName: string): Promise<void> => {
 		setCreatedTopics([...createdTopics, { id: topicId, name: topicName }])
 		setSelectedTopicIds([...selectedTopicIds, topicId])
@@ -316,7 +316,7 @@ export function EditTeamModal({
 					</Button>
 				</DialogFooter>
 			</DialogContent>
-			{/* the new topic modal, opened from the picker's New topic row and stacked over this one */}
+			{/* the new topic modal, opened from the picker's New topic row, and stacked over the team modal */}
 			{isNewTopicOpen && (
 				<EditTopicModal
 					initialTeam={editedTeam ? { teamId: editedTeam.teamId, name: name.trim() || editedTeam.name } : undefined}

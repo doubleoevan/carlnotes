@@ -23,7 +23,7 @@ input_scanners:
   - type: Secrets
     params:
       redact_mode: all
-  # personal details in an uploaded document, replaced in place rather than rejecting the whole file.
+  # personal details in an uploaded document, replaced in place instead of rejecting the whole file.
   # PERSON is deliberately absent from the entity list: detecting them would flag nearly every attachment.
   # only flag entities that are damaging to store
   - type: Anonymize

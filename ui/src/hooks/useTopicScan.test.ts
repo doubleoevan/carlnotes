@@ -1,15 +1,15 @@
-// the scan poll's rate: fast while a scan is young, slower the longer it has been watched
+// the topic scan's poll rate: fast while a scan is new, slower the longer it has been watched
 import { expect, test } from "bun:test"
 import { toScanPollMs } from "./useTopicScan"
 
 // a scan that just started refetches quickly, so the first findings land on screen without a wait
-test("a young scan polls fast", () => {
+test("a new scan polls fast", () => {
 	expect(toScanPollMs(0)).toBe(3000)
 	expect(toScanPollMs(29_999)).toBe(3000)
 })
 
-// past the first half minute the rate steps down, then down again
-test("a longer scan steps the rate down", () => {
+// past the first half-minute the poll rate slows down, then down again
+test("a longer scan slows the poll rate down", () => {
 	expect(toScanPollMs(30_000)).toBe(10_000)
 	expect(toScanPollMs(119_999)).toBe(10_000)
 	expect(toScanPollMs(120_000)).toBe(30_000)

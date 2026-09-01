@@ -1,19 +1,19 @@
 import type { TopicResponse } from "@shared/contracts"
 import { useEffect, useState } from "react"
 
-// how often to re-fetch the page while a scan is running, so history and the manual scan button follow it
-// live. a watched scan shows its first findings within seconds, and a long one is not worth a refetch every
-// three seconds for minutes on end, so the rate steps down the longer the scan runs
+// how often to re-fetch the page while a scan is running. the history and the manual scan button follow it live.
+// a polled scan shows its first findings within seconds, and a long one is not worth as fast of a refetch.
+// the rate steps down the longer the scan runs.
 const FAST_POLL_MS = 3000
 const MEDIUM_POLL_MS = 10_000
 const SLOW_POLL_MS = 30_000
 
-// how long the poll holds each of the first two rates before stepping down
+// how long the topic scan poll holds each of the first two poll rates before slowing down
 const FAST_POLL_UNTIL_MS = 30_000
 const MEDIUM_POLL_UNTIL_MS = 120_000
 
 /**
- * The delay before the next refetch, from how long this scan has been watched.
+ * The delay before the next refetch, based on how long this scan has been watched.
  */
 export function toScanPollMs(watchedMs: number): number {
 	if (watchedMs < FAST_POLL_UNTIL_MS) {
@@ -29,7 +29,7 @@ export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<
 			return
 		}
 
-		// the timer reschedules itself so the delay can grow, which one interval could not do
+		// the timer reschedules itself so the delay can grow, which a single interval can't do
 		const startedAt = Date.now()
 		let pollTimer: ReturnType<typeof setTimeout> | undefined
 		const schedule = (): void => {
@@ -42,16 +42,15 @@ export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<
 			)
 		}
 
-		// a hidden tab polls nothing at all. coming back refetches once and picks the timer up again,
-		// so a phone in a pocket costs nothing and the page is still current when it is looked at
-		const handleVisibility = (): void => {
+		// only poll the page when it is visible
+		const handleChangeVisibility = (): void => {
 			clearTimeout(pollTimer)
 			if (document.visibilityState === "visible") {
 				void reload()
 				schedule()
 			}
 		}
-		document.addEventListener("visibilitychange", handleVisibility)
+		document.addEventListener("visibilitychange", handleChangeVisibility)
 		if (document.visibilityState === "visible") {
 			schedule()
 		}
@@ -59,7 +58,7 @@ export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<
 		// the cleared timer lets the page rest once the scan resolves
 		return () => {
 			clearTimeout(pollTimer)
-			document.removeEventListener("visibilitychange", handleVisibility)
+			document.removeEventListener("visibilitychange", handleChangeVisibility)
 		}
 	}, [isScanning, reload])
 }

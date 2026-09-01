@@ -67,7 +67,7 @@ export function MultiCombobox({
 				</div>
 			)}
 			{/* modal so the popover brings its own scroll lock. inside a dialog, the dialog's lock blocks touchmove
-		    on everything portalled outside it, which leaves the list unscrollable on a phone */}
+		        on everything portalled outside it, which leaves the list unscrollable on a phone */}
 			<Popover open={isOpen} onOpenChange={setIsOpen} modal>
 				<PopoverTrigger asChild>
 					<button
@@ -123,7 +123,7 @@ export function MultiCombobox({
 							{values.includes(pinnedOption.value) && <Check className="text-primary size-4 shrink-0" />}
 						</button>
 					)}
-					{/* the new-option row closes the list, leaving the caller to open whatever makes one */}
+					{/* the new-option row completes the list, allowing the caller to click it */}
 					{onNewOption && (
 						<button
 							type="button"

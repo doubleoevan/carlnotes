@@ -21,7 +21,7 @@ export async function loadNoteBadges(userId: string | null): Promise<NoteBadge[]
 		return []
 	}
 
-	// the pages the note badges show up on, with the teams that each of those topics are in
+	// the pages a badge can name, and the teams holding each of those topics
 	const { topicIds, teamIds, teamIdsByTopicId } = await loadBadgedPages(userId)
 	if (topicIds.length === 0 && teamIds.length === 0) {
 		return []
@@ -111,7 +111,7 @@ export function toUnreadEdits(
 	return !note.readAt || note.bodyEditedAt > note.readAt ? 1 : 0
 }
 
-// the teams a note's page belongs to. a team note has its own, a topic note goes into team holding the topic
+// the teams a note's page belongs to. a team note has its own, a topic note has every team holding the topic
 function toPageTeamIds(
 	note: { topicId: string | null; teamId: string | null },
 	teamIdsByTopicId: Map<string, string[]>,
@@ -146,7 +146,7 @@ async function loadBadgedPages(
 		.from(teamTopics)
 		.where(inArray(teamTopics.teamId, teamIds))
 
-	// one topic can be in several teams, so each team it that has it is collected
+	// one topic can be on several teams, so every team holding it is collected under it
 	const teamIdsByTopicId = new Map<string, string[]>()
 	for (const topicRow of [...ownedTopicRows, ...sharedTopicRows]) {
 		const topicTeamIds = teamIdsByTopicId.get(topicRow.topicId) ?? []

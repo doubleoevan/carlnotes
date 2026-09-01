@@ -83,9 +83,9 @@ Chat is signed-in only. Every chat turn writes a row, because every chat turn is
 
 ### Live updates
 
-Two pages update while you watch them: a team chat room, and a Tasting Note several people are editing. Both push over Server-Sent Events, and neither runs a WebSocket server.
+Two components update while you watch them: a team chat room, and a Tasting Note several people are editing. Both push over Server-Sent Events, and neither runs a WebSocket server.
 
-The fan-out between instances is Postgres `LISTEN/NOTIFY`. Each process holds one dedicated listen connection and re-broadcasts to its own subscribers through an in-process `EventEmitter`, so a second instance costs a connection rather than a service. There is no Redis and no socket tier to operate.
+The fan-out between instances is Postgres `LISTEN/NOTIFY`. Each process holds one dedicated listen connection and re-broadcasts to its own subscribers through an in-process `EventEmitter`, so a second instance costs a connection instead of a service. There is no Redis and no socket tier to operate.
 
 ```mermaid
 flowchart
@@ -97,9 +97,9 @@ flowchart
     App2 -->|SSE| ReaderB[Reader on B]
 ```
 
-A chat room notifies the new message's id and subscribers read the row. A note cannot: a Yjs update is larger than a notify payload, so the instance that merged it delivers the bytes to its own subscribers directly and the notify is only a poke telling the other instances to resync. The note's ydoc stays the source of truth and its `html` column is regenerated on save, so a plain page load never starts the editor.
+A chat room notifies the new message's id and subscribers read the row. A note cannot: a Yjs update is larger than a notify payload, so the instance that merged it delivers the bytes to its own subscribers directly and the notify is only an alert telling the other instances to resync. The note's ydoc stays the source of truth and its `html` column is regenerated on save, so a plain page load never starts the editor.
 
-One deployment detail is load-bearing: `LISTEN` needs the direct Neon connection string, because the pooler drops notifications to a listener. `pg_notify` itself goes through the pooler like any other statement. A listen connection that drops reconnects with a backoff from one second to thirty, and a note's stream pauses while its tab is hidden.
+One deployment detail is load-bearing: `LISTEN` needs the direct Neon connection string, because the pooler never delivers notifications to a listener. `pg_notify` itself goes through the pooler like any other statement. A listen connection that drops reconnects with a backoff from one second to thirty. A note's stream pauses while its tab is hidden.
 
 ### Content screening (LLM Guard)
 
@@ -138,8 +138,8 @@ bun run dev:docs     # Starlight dev server on localhost:4321/docs, reachable on
 bun run test:coverage # the test suite with bun's built-in line and function coverage table
 bun run docs:embed   # chunk the docs markdown by section and embed the changed sections into docs_chunks, which chat quotes; run it after editing docs
 bun run docs:embed:prd # the same sync against the production database, the owner-run escape hatch until the deploy job runs it
-bun run sync:releases # re-read every published GitHub release into the releases table /releases serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
-bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty and the webhook only fills it going forward
+bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
+bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty. the webhook writes it going forward
 bun run build:ui     # production build (no doppler, so it runs in CI and deploys)
 bun run build:docs   # build static docs to docs/dist, which the api serves under /docs
                      # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload

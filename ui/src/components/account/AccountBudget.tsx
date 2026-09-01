@@ -28,7 +28,7 @@ export function AccountBudget({
 		<>
 			{isPastDue && !isReadOnly ? <PaymentNotice /> : null}
 			{/* the fund, today's brews, and the plan all say what this account is spending, so one card
-			    holds them, spaced apart rather than ruled off */}
+			    holds them, spaced apart instead of ruled off */}
 			<section className={cn(CARD_CLASS, "space-y-4")}>
 				{activity && (
 					<SpendSection

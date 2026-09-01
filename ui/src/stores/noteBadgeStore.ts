@@ -64,8 +64,8 @@ function toCount(matches: (badge: NoteBadge) => boolean): number {
 }
 
 /**
- * The unread badges waiting on one page. A topic id picks its topic, otherwise the team's own notes
- * and the notes on every topic the team holds.
+ * The unread badges waiting on one page. A topic id shows its topic badges.
+ * A team id shows its team's notes and the notes on every topic the team holds.
  */
 export function toPageNoteBadges(topicId: string | null, teamId: string | undefined): NoteBadge[] {
 	return noteBadges.filter(

@@ -125,9 +125,8 @@ export function ChatComposer({
 							/>
 						)}
 					</div>
-					{/* the clear and send buttons sit to the right of the attachment buttons. each one guards its
-					    mousedown to keep the caret in the question box, so a phone's keyboard never closes under
-					    the tap and moves the button out from under the finger before the click lands */}
+					{/* the clear and send buttons. each keeps focus in the message box.
+						losing it closes a phone's keyboard, which moves the button before the click lands */}
 					<div className="ml-auto flex items-center gap-2">
 						{/* an X button clears the input and hands focus back, only appearing when there is content */}
 						{question !== "" && (

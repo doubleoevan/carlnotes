@@ -8,8 +8,7 @@ export const NEW_TEAM_CHOICE = "new"
 export const NEW_TEAM_OPTION: ComboboxOption = { value: NEW_TEAM_CHOICE, label: "New team…" }
 
 /**
- * What the teams field offers: every team the user leads. A non-private topic must keep at least one team,
- * either one of these or the pinned New team row.
+ * What the teams field shows: every team the user leads. A non-private topic must keep at least one team.
  */
 export function toTeamChoices(offeredTeams: { teamId: string; name: string }[] | null): ComboboxOption[] {
 	return (offeredTeams ?? []).map((team) => ({ value: team.teamId, label: team.name }))

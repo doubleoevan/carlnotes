@@ -49,7 +49,7 @@ comments pane beside it](../../../assets/screenshots/notes-note-open.png)
 ## Comments
 
 Select any text in a note and comment on it. Comment threads hang off the passage they were written
-about rather than piling up at the bottom, so a disagreement about one sentence stays attached to
+about instead of piling up at the bottom, so a disagreement about one sentence stays attached to
 that sentence. The speech-bubble button toggles between **Show comments** and **Hide comments** when
 you want the prose on its own.
 

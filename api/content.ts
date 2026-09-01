@@ -9,8 +9,8 @@ import { toJsonLdTag } from "./seo"
 // the content directories, resolved from this file so the api serves them from any working directory
 const CONTENT_ROOT = `${import.meta.dir}/../content`
 
-// the one section: the folder under content/ it reads, the path it serves at, its index title,
-// and the JSON-LD type it gives its pages
+// each section: the folder under content/ it reads, the path it serves at, its index title, and
+// the JSON-LD type it gives its pages. the blog is the only one
 const SECTIONS = {
 	blog: { title: "Blog", description: "Notes of Carl.", jsonLdType: "BlogPosting" },
 } as const

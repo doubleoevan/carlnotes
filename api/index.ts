@@ -24,7 +24,7 @@ startTelemetry()
 // the policy every response includes. img-src limits images to this origin,
 // and blob: is the local file a composer previews before it is uploaded. raw.githubusercontent.com
 // is there for the screenshots in a release body, which are the repository's own files: release notes
-// are authored on GitHub, so their images live beside them rather than being copied into the app
+// are authored on GitHub, so their images live beside them instead of being copied into the app
 const CONTENT_SECURITY_POLICY =
 	"img-src 'self' blob: data: https://raw.githubusercontent.com; frame-src 'self' https://www.youtube-nocookie.com; object-src 'none'; frame-ancestors 'none'"
 
