@@ -107,6 +107,42 @@ test("a form encoded body is refused with the reason", async () => {
 	}
 })
 
+// promoting a prerelease fires released rather than published, and the promoted release has to land
+test("a promoted prerelease is stored", async () => {
+	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
+	try {
+		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
+		const body = JSON.stringify({ action: "released", release: { ...PUBLISHED, prerelease: false } })
+		const response = await releasesRoute.request("/api/webhooks/github", {
+			method: "POST",
+			body,
+			headers: { [SIGNATURE_HEADER]: await toSignature(body) },
+		})
+
+		// the route acts on it instead of dropping it as an action it does not know
+		expect(await response.text()).not.toContain("ignored")
+	} finally {
+		restoreSecret(previousSecret)
+	}
+})
+
+// an action that changes nothing a reader sees is acknowledged and dropped
+test("an edit is still ignored", async () => {
+	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
+	try {
+		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
+		const body = JSON.stringify({ action: "edited", release: PUBLISHED })
+		const response = await releasesRoute.request("/api/webhooks/github", {
+			method: "POST",
+			body,
+			headers: { [SIGNATURE_HEADER]: await toSignature(body) },
+		})
+		expect(await response.json()).toEqual({ ignored: "edited" })
+	} finally {
+		restoreSecret(previousSecret)
+	}
+})
+
 // the signature GitHub actually sends is accepted
 test("a correctly signed request passes", async () => {
 	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
