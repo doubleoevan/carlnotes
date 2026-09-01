@@ -320,6 +320,12 @@
 		animation: none;
 		opacity: 0.5;
 	}
+	/* a mug marked coffee-loading is the exception: it says work is happening, and it stops when that
+	   work lands, so it never holds the compositor awake the way the logo's steam did */
+	.coffee-loading .coffee-mug-steam {
+		animation: coffee-mug-steam 2.4s ease-in-out infinite;
+		opacity: 1;
+	}
 }
 
 /* honor a user's reduced-motion preference: no hydrate animation, no rings, no shimmer, and the

@@ -421,7 +421,9 @@ export function ModelThinkingBubble() {
 		<ChatAuthor authorUserId={null} authorUsername="Carl">
 			<div className="flex flex-col items-start">
 				<div className="bg-bubble text-foreground max-w-[92%] rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm @lg:max-w-[75%]">
-					<span className="text-muted-foreground flex items-center gap-2">
+					{/* coffee-loading keeps the mug steaming where the logo's steam is held still, since a
+					    reply in progress is a progress signal rather than decoration */}
+					<span className="coffee-loading text-muted-foreground flex items-center gap-2">
 						<CoffeeMug className="size-4" />
 						<ThinkingLine />
 					</span>
