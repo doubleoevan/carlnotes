@@ -22,6 +22,7 @@ import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/p
 import { Input } from "@/components/primitives/input"
 import { Switch } from "@/components/primitives/switch"
 import { Textarea } from "@/components/primitives/textarea"
+import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { refreshAvatars } from "@/hooks/useAvatarVersion"
 import { useObjectUrl } from "@/hooks/useObjectUrl"
 import { cn } from "@/lib/utils"
@@ -126,6 +127,9 @@ export function EditTeamModal({
 	// the team the invite-link button created. the modal edits that team instead of creating a second one on Save
 	const [createdTeam, setCreatedTeam] = useState<EditedTeam | null>(null)
 	const editedTeam = team ?? createdTeam ?? undefined
+	// the topics made from the picker's New topic row, which the picker offers alongside the rest
+	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
+	const [createdTopics, setCreatedTopics] = useState<TopicOption[]>([])
 
 	// the name is what someone opens this to change, so it takes the focus the dialog hands out
 	const nameRef = useRef<HTMLInputElement>(null)
@@ -200,8 +204,15 @@ export function EditTeamModal({
 		}
 	}
 
-	// what the topic select shows: the team's own topics and the user's topics combined
-	const topicOptions = [...(currentTopics ?? []), ...(userTopics ?? [])]
+	// what the topic select shows: the team's own topics, the user's topics, and any made here
+	const topicOptions = [...(currentTopics ?? []), ...(userTopics ?? []), ...createdTopics]
+
+	// a topic made from the picker joins the list already selected
+	const handleTopicCreated = async (topicId: string, topicName: string): Promise<void> => {
+		setCreatedTopics([...createdTopics, { id: topicId, name: topicName }])
+		setSelectedTopicIds([...selectedTopicIds, topicId])
+		setIsNewTopicOpen(false)
+	}
 
 	// the avatar the team shows: the file just uploaded, otherwise whatever the team has today
 	const previewTeam = { teamId: editedTeam?.teamId ?? "", name: name || "Team", hasAvatar: false }
@@ -275,6 +286,8 @@ export function EditTeamModal({
 						onUpdateValues={setSelectedTopicIds}
 						placeholder="pick topics..."
 						emptyLabel="No topics to add yet."
+						newOptionLabel="New topic"
+						onNewOption={() => setIsNewTopicOpen(true)}
 					/>
 				</div>
 				{/* a leader's invite fields in both modes: the email and username invitations,
@@ -303,6 +316,14 @@ export function EditTeamModal({
 					</Button>
 				</DialogFooter>
 			</DialogContent>
+			{/* the new topic modal, opened from the picker's New topic row and stacked over this one */}
+			{isNewTopicOpen && (
+				<EditTopicModal
+					initialTeam={editedTeam ? { teamId: editedTeam.teamId, name: name.trim() || editedTeam.name } : undefined}
+					onClose={() => setIsNewTopicOpen(false)}
+					onTopicSaved={handleTopicCreated}
+				/>
+			)}
 		</Dialog>
 	)
 }

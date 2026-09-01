@@ -46,7 +46,7 @@ export function EditTopicModal({
 	// the team a new topic starts with, when opened from the team page.
 	initialTeam?: { teamId: string; name: string }
 	onClose: () => void
-	onTopicSaved: (topicId: string) => Promise<void>
+	onTopicSaved: (topicId: string, topicName: string) => Promise<void>
 }) {
 	// the title input ref to focus it on open
 	const titleInputRef = useRef<HTMLInputElement>(null)
@@ -95,8 +95,9 @@ export function EditTopicModal({
 		setMissingField(null)
 		setIsSaving(true)
 		try {
+			const topicName = fields.name
 			const topicId = await saveTopic({ topic, fields, topicTeam })
-			await onTopicSaved(topicId)
+			await onTopicSaved(topicId, topicName)
 		} catch (error) {
 			// surface an error as a toast. the modal stays open so a failed upload retries on the next Save
 			console.error("topic save failed", error)
