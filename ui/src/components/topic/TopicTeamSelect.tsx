@@ -14,7 +14,7 @@ import { MultiCombobox } from "@/components/common/MultiCombobox"
 import { type PendingInvite, sendPendingInvites, TeamInviteFields } from "@/components/invite/TeamInviteFields"
 import { Input } from "@/components/primitives/input"
 import { Switch } from "@/components/primitives/switch"
-import { NEW_TEAM_CHOICE, toTeamChoices } from "@/lib/topicTeamChoices"
+import { NEW_TEAM_CHOICE, NEW_TEAM_OPTION, toTeamChoices } from "@/lib/topicTeamChoices"
 
 // the teams choice with the writes that apply it
 export type TopicTeamField = ReturnType<typeof useTopicTeamChoice>
@@ -171,6 +171,7 @@ export function TopicTeamSelect({ teamField, isTeamMissing }: { teamField: Topic
 					onUpdateValues={teamField.setSelectedTeamIds}
 					placeholder="Pick teams…"
 					emptyLabel="No teams to pick."
+					pinnedOption={NEW_TEAM_OPTION}
 				/>
 				{/* the note names the field a blocked save stopped on */}
 				{isTeamMissing && (

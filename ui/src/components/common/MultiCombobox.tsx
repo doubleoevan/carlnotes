@@ -1,4 +1,4 @@
-import { Check, ChevronsUpDown, X } from "lucide-react"
+import { Check, ChevronsUpDown, Plus, X } from "lucide-react"
 import { useState } from "react"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
@@ -17,12 +17,20 @@ export function MultiCombobox({
 	onUpdateValues,
 	placeholder = "Select a few…",
 	emptyLabel = "Nothing to select.",
+	newOptionLabel,
+	onNewOption,
+	pinnedOption,
 }: {
 	options: ComboboxOption[]
 	values: string[]
 	onUpdateValues: (values: string[]) => void
 	placeholder?: string
 	emptyLabel?: string
+	// the row under the list that makes an option instead of picking one, left out when nothing handles it
+	newOptionLabel?: string
+	onNewOption?: () => void
+	// an option that sits under the scrolling list instead of in it, so a long list never hides it
+	pinnedOption?: ComboboxOption
 }) {
 	const [isOpen, setIsOpen] = useState(false)
 	const [filter, setFilter] = useState("")
@@ -34,9 +42,11 @@ export function MultiCombobox({
 		)
 	}
 
-	// the options narrowed by the filter text, case-insensitively
+	// the options narrowed by the filter text, case-insensitively. the pinned option is never filtered out
 	const shownOptions = options.filter((option) => option.label.toLowerCase().includes(filter.trim().toLowerCase()))
-	const selectedOptions = options.filter((option) => values.includes(option.value))
+	const selectedOptions = [...options, ...(pinnedOption ? [pinnedOption] : [])].filter((option) =>
+		values.includes(option.value),
+	)
 	return (
 		<div>
 			{/* the selected options as pills, each removable without opening the list */}
@@ -56,7 +66,9 @@ export function MultiCombobox({
 					))}
 				</div>
 			)}
-			<Popover open={isOpen} onOpenChange={setIsOpen}>
+			{/* modal so the popover brings its own scroll lock. inside a dialog, the dialog's lock blocks touchmove
+		    on everything portalled outside it, which leaves the list unscrollable on a phone */}
+			<Popover open={isOpen} onOpenChange={setIsOpen} modal>
 				<PopoverTrigger asChild>
 					<button
 						type="button"
@@ -95,6 +107,36 @@ export function MultiCombobox({
 					</div>
 					{/* show a message if there are no options left after filtering */}
 					{shownOptions.length === 0 && <p className="text-muted-foreground px-2 py-2 text-sm">{emptyLabel}</p>}
+					{/* the pinned option toggles like any other row, from under the list where it always shows */}
+					{pinnedOption && (
+						<button
+							type="button"
+							onClick={() => handleUpdateValues(pinnedOption.value)}
+							className={cn(
+								MENU_OPTION_CLASS,
+								"text-link",
+								values.includes(pinnedOption.value) && MENU_OPTION_SELECTED_CLASS,
+							)}
+						>
+							<Plus className="size-4 shrink-0" />
+							<span className="min-w-0 flex-1 truncate">{pinnedOption.label}</span>
+							{values.includes(pinnedOption.value) && <Check className="text-primary size-4 shrink-0" />}
+						</button>
+					)}
+					{/* the new-option row closes the list, leaving the caller to open whatever makes one */}
+					{onNewOption && (
+						<button
+							type="button"
+							onClick={() => {
+								setIsOpen(false)
+								onNewOption()
+							}}
+							className={cn(MENU_OPTION_CLASS, "text-link")}
+						>
+							<Plus className="size-4 shrink-0" />
+							{newOptionLabel ?? "New"}
+						</button>
+					)}
 				</PopoverContent>
 			</Popover>
 		</div>

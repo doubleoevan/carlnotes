@@ -57,7 +57,9 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 
 	return (
 		<div className="flex flex-wrap items-center gap-1.5">
-			<Popover open={isOpen} onOpenChange={setIsOpen}>
+			{/* modal so the popover brings its own scroll lock, which the topic modal's lock would otherwise
+			    block on a phone, leaving the tag list unscrollable */}
+			<Popover open={isOpen} onOpenChange={setIsOpen} modal>
 				{/* the optional link-styled label anchors and opens the picker */}
 				{openPickerLabel && (
 					<PopoverTrigger asChild>
