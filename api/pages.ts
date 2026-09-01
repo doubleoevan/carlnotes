@@ -1,6 +1,7 @@
 // the pages this origin serves as paths with a custom app shell and page-specific header preview tags
 import { Hono } from "hono"
 import { loadPages } from "./content"
+import { loadReleases, toReleaseSummary } from "./releases"
 import {
 	lastScan,
 	loadDocsPages,
@@ -78,15 +79,31 @@ export const pagesRoute = new Hono()
 			"Cache-Control": "public, max-age=900",
 		})
 	})
-	// the site-wide feed: the blog
-	.get("/feed.xml", (context) => {
+	// the site-wide feed: the blog and what shipped
+	.get("/feed.xml", async (context) => {
 		const blogItems = loadPages("blog").map((page) => ({
 			title: page.title,
 			url: `${appUrl()}/blog/${page.slug}`,
 			explanation: page.description,
 			publishedAt: new Date(page.date),
 		}))
-		return context.body(toSiteFeedXml(appUrl(), blogItems), 200, {
+
+		// each release reads as its own item, pointing at its own page and dated by when it went out.
+		// a feed reader is better served the blog alone than a 500, so a failed read is logged and dropped
+		const releaseItems = await loadReleases()
+			.then((releases) =>
+				releases.map((release) => ({
+					title: release.name,
+					url: `${appUrl()}/releases/${encodeURIComponent(release.tag)}`,
+					explanation: toReleaseSummary(release.body).trim(),
+					publishedAt: release.releasedAt,
+				})),
+			)
+			.catch((error) => {
+				console.error("feed releases read failed", error)
+				return []
+			})
+		return context.body(toSiteFeedXml(appUrl(), [...blogItems, ...releaseItems]), 200, {
 			"Content-Type": "application/rss+xml; charset=utf-8",
 			"Cache-Control": "public, max-age=900",
 		})

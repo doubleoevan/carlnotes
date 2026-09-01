@@ -28,6 +28,7 @@ Each module has its own AGENTS.md with entry points, layout, and commands.
 | API route or permission | `api/<domain>/`, `api/authorization.ts` | domain-model | `worker/` except `worker/index.ts` exports |
 | Temporal workflow change | `worker/workflows/`, `worker/temporal.ts` | — | `ui/`, `api/` route files |
 | Email template or send | `emails/*.tsx`, `worker/email.ts`, `worker/notify.ts` | — | `ui/` |
+| Release notes | `api/releases.ts`, the convention in `docs/release-notes.md` | domain-model | `ui/` except the footer link |
 | Docs page | `docs/src/content/`, its shared pieces in `docs/src/components/`, then `bun run docs:embed` | — | `docs/dist/` (built) |
 | Eval work | `evals/README.md`, `.github/workflows/llm-guard-update.yml` | — | app modules |
 

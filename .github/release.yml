@@ -1,0 +1,25 @@
+# how GitHub groups the pull request list it generates for a release. the generated list goes inside the
+# <details> block below the summary, so these headings are what a reader sees when they open it
+changelog:
+  exclude:
+    # a dependency bot's pull requests are noise in a release a person reads
+    authors:
+      - dependabot
+      - renovate
+      - github-actions
+  categories:
+    - title: Features
+      labels:
+        - feature
+        - enhancement
+    - title: Fixes
+      labels:
+        - fix
+        - bug
+    - title: Dependencies
+      labels:
+        - dependencies
+    # anything unlabelled still gets listed rather than silently dropped
+    - title: Other changes
+      labels:
+        - "*"

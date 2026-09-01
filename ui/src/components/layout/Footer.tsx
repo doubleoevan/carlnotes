@@ -26,9 +26,15 @@ function FooterLegal() {
 				<span>AGPL-3.0 licensed.</span>
 				<span>Take the code. Leave the raccoon.</span>
 			</div>
-			{/* the docs, the source, the license, and the legal pages */}
+			{/* the docs, what shipped, the source, the license, and the legal pages */}
 			<div className="flex flex-wrap justify-center gap-x-6 gap-y-1">
 				<DocsLink className="text-link hover:underline" />
+				<AnchorLink
+					href="/releases"
+					className={cn("text-link hover:underline", pathname === "/releases" && "underline")}
+				>
+					Releases
+				</AnchorLink>
 				<AnchorLink
 					href="https://github.com/doubleoevan/carlnotes/blob/main/README.md"
 					className="text-link hover:underline"

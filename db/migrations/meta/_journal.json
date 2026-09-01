@@ -561,6 +561,13 @@
       "when": 1788231140142,
       "tag": "0079_lumpy_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1788267516954,
+      "tag": "0080_awesome_switch",
+      "breakpoints": true
     }
   ]
 }

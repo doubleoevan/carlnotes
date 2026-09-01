@@ -138,6 +138,8 @@ bun run dev:docs     # Starlight dev server on localhost:4321/docs, reachable on
 bun run test:coverage # the test suite with bun's built-in line and function coverage table
 bun run docs:embed   # chunk the docs markdown by section and embed the changed sections into docs_chunks, which chat quotes; run it after editing docs
 bun run docs:embed:prd # the same sync against the production database, the owner-run escape hatch until the deploy job runs it
+bun run sync:releases # re-read every published GitHub release into the releases table /releases serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
+bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty and the webhook only fills it going forward
 bun run build:ui     # production build (no doppler, so it runs in CI and deploys)
 bun run build:docs   # build static docs to docs/dist, which the api serves under /docs
                      # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload

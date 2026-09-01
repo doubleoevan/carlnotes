@@ -6,6 +6,7 @@ import { PLANS } from "@shared/plans"
 import { and, desc, eq } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, scans, teams, topics } from "../db/schema"
+import { loadReleases } from "./releases"
 import { isShown } from "./topic/permissions"
 
 // the SPA routes the sitemap always lists, and the discovery files this module generates
@@ -37,12 +38,19 @@ export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Pr
 	// the public teams, each with its own page
 	const teamRows = await db.select({ id: teams.id }).from(teams).where(eq(teams.isPublic, true))
 
+	// the releases index and every published release's own page, each dated by when it went out
+	const releaseRows = await loadReleases()
+
 	// one entry per url. topics have a lastmod, the rest are plain locations
 	const entries = [
 		...STATIC_ROUTES.map((path) => toSitemapEntry(`${appUrl}${path === "/" ? "" : path}`)),
 		...blogPaths.map((path) => toSitemapEntry(`${appUrl}${path}`)),
 		...topicRows.map((topicRow) => toSitemapEntry(`${appUrl}/topics/${topicRow.id}`, topicRow.updatedAt)),
 		...teamRows.map((teamRow) => toSitemapEntry(`${appUrl}/teams/${teamRow.id}`)),
+		toSitemapEntry(`${appUrl}/releases`),
+		...releaseRows.map((release) =>
+			toSitemapEntry(`${appUrl}/releases/${encodeURIComponent(release.tag)}`, release.releasedAt),
+		),
 	]
 	return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${entries.join("")}</urlset>`
 }

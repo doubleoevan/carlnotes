@@ -36,6 +36,8 @@
 		"smoke:rooms": "doppler run -- bun api/chat/rooms.smoke.ts",
 		"smoke:invites": "doppler run -- bun api/invite/invites.smoke.ts",
 		"eval": "doppler run -- bun scripts/eval-pipeline.ts",
+		"sync:releases": "doppler run -- bun api/releases.sync.ts",
+		"sync:releases:prd": "doppler run --config prd -- bun api/releases.sync.ts",
 		"db:generate": "drizzle-kit generate",
 		"db:migrate": "doppler run -- bun db/migrate.ts",
 		"db:seed": "doppler run -- bun api/seed.ts",

@@ -14,7 +14,7 @@ export default defineConfig({
 		// force a single React copy so hooks work. duplicate copies cause "invalid hook call"
 		dedupe: ["react", "react-dom"],
 	},
-	// proxy /api plus the server-rendered docs and blog to the Hono dev server, so the browser sees one origin
+	// proxy /api plus the server-rendered docs, blog, and releases to the Hono dev server, so the browser sees one origin
 	// (prod serves them all together). host: true exposes the dev server beyond loopback for browser-preview tooling
 	server: {
 		host: true,
@@ -22,6 +22,8 @@ export default defineConfig({
 			"/api": "http://localhost:3000",
 			"/docs": "http://localhost:3000",
 			"/blog": "http://localhost:3000",
+			"/releases": "http://localhost:3000",
+			"/changelog": "http://localhost:3000",
 		},
 	},
 })

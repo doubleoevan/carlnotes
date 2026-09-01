@@ -59,3 +59,7 @@ coverage
 # one-off migrations and probes run by hand from a developer's machine.
 # a script here never joins the build graph. biome reads these files as skipped too.
 *.local.ts
+
+# release note drafts, written here and passed to `gh release create --notes-file`.
+# the published copy lives on the release and in the releases table, never in the repo
+*.local.md

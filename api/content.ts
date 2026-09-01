@@ -67,8 +67,10 @@ const PAGE_STYLE = `
 	.post-card { margin-top: 1.5rem; }
 `
 
-// one full blog page: the head a crawler reads, the coffee-toned page frame, and the given body HTML
-function toContentHtml({
+/**
+ * One full content page: the head a crawler reads, the coffee-toned page frame, and the given body HTML.
+ */
+export function toContentHtml({
 	title,
 	description,
 	canonicalUrl,
@@ -87,8 +89,10 @@ function toContentHtml({
 	return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapedTitle} — CarlNotes</title><meta name="description" content="${Bun.escapeHTML(description)}"><link rel="canonical" href="${canonicalUrl}">${jsonLd}<style>${PAGE_STYLE}</style></head><body><main><header><a href="/">☕ CarlNotes</a></header>${bodyHtml}</main></body></html>`
 }
 
-// a page's Markdown rendered to static HTML with the renderer the app already ships
-function toPageHtml(markdown: string): string {
+/**
+ * Markdown rendered to static HTML with the renderer the app already ships.
+ */
+export function toPageHtml(markdown: string): string {
 	return renderToStaticMarkup(createElement(Markdown, null, markdown))
 }
 

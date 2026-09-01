@@ -4,8 +4,8 @@ import { Link } from "react-router-dom"
 // the schemes that open in the same tab with no target or rel, like a mail client or dialer
 const SCHEME_PREFIXES = ["mailto:", "tel:", "sms:"]
 
-// the paths the server renders itself: the docs site and the blog. the client router has no routes for them
-const SERVER_RENDERED_PREFIXES = ["/docs", "/blog"]
+// the paths the server renders itself: the docs site, the blog, and the releases. the client router has no routes for them
+const SERVER_RENDERED_PREFIXES = ["/docs", "/blog", "/releases"]
 
 /**
  * The component that every link in feature code goes through

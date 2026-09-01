@@ -9,6 +9,7 @@ import { apiRoute } from "./api"
 import { reportForwardedChain } from "./auth"
 import { contentRoute } from "./content"
 import { pagesRoute, UI_BUNDLE_ROOT } from "./pages"
+import { releasesRoute } from "./releases"
 
 // where build:docs writes the Starlight site, relative to the repo root the server runs from
 const DOCS_BUNDLE_ROOT = "./docs/dist"
@@ -42,6 +43,9 @@ const server = new Hono()
 	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
 	.get("/api/health", (context) => context.json({ status: "ok" }))
 	.route("/", apiRoute)
+	// the release pages and the GitHub webhook that fills them. the webhook sits under /api, so it is
+	// mounted ahead of the catch-all below instead of beside the other page routes
+	.route("/", releasesRoute)
 	// an unmatched /api path is an api failure. a fetch client must read a 404, not fail parsing an HTML page
 	.all("/api/*", (context) => context.json({ error: "not found" }, 404))
 	// the server-rendered blog and docs pages
