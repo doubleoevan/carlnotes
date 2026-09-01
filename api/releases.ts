@@ -175,7 +175,7 @@ export async function serveRelease(tag: string): Promise<string | null> {
 	})
 }
 
-// the release routes: the index, one release's page, and the webhook that fills the table
+// the release routes: the index, one release's page, and the webhook that writes the table
 export const releasesRoute = new Hono()
 	.get("/releases", async (context) => {
 		return context.html(await serveReleaseIndex())

@@ -79,7 +79,7 @@ export const pagesRoute = new Hono()
 			"Cache-Control": "public, max-age=900",
 		})
 	})
-	// the site-wide feed: the blog and what shipped
+	// the site-wide feed: the blog posts and the release notes
 	.get("/feed.xml", async (context) => {
 		const blogItems = loadPages("blog").map((page) => ({
 			title: page.title,
