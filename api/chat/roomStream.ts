@@ -4,7 +4,7 @@ import { Client } from "@neondatabase/serverless"
 import { sql } from "drizzle-orm"
 import { db } from "../../db"
 
-// the one channel every instance listens on. the payload names the topic, the team, and the message id
+// the one channel every instance listens on. the payload names the topic, the team, and the chat message id
 export const CHAT_ROOM_CHANNEL = "room_messages"
 
 // this instance's subscribers, keyed by topic and team id through the emitter's event names
@@ -20,12 +20,12 @@ const LISTEN_RETRY_MAX_MS = 30_000
 let listenRetryMs = LISTEN_RETRY_MIN_MS
 
 /**
- * Subscribe this instance to a room's new-message ids. Returns the unsubscribe.
+ * Subscribe this instance to a chat room's new-chat message ids. Returns the unsubscribe.
  */
 export function onChatRoomMessage(
 	topicId: string | null,
 	teamId: string,
-	handler: (messageId: number) => void,
+	handler: (chatMessageId: number) => void,
 ): () => void {
 	startChatRoomListener()
 	// the team's own chat room keys on the literal "team" where a topic id would sit
@@ -34,11 +34,15 @@ export function onChatRoomMessage(
 }
 
 /**
- * Tell every instance a message was stored. Called after the insert commits.
+ * Tell every instance a chat message was stored. Called after the insert commits.
  */
-export async function notifyChatRoomMessage(topicId: string | null, teamId: string, messageId: number): Promise<void> {
+export async function notifyChatRoomMessage(
+	topicId: string | null,
+	teamId: string,
+	chatMessageId: number,
+): Promise<void> {
 	// the notify goes through the pooled db. pg_notify works through the pooler, and only LISTEN needs the direct connection
-	const payload = `${topicId ?? "team"}:${teamId}:${messageId}`
+	const payload = `${topicId ?? "team"}:${teamId}:${chatMessageId}`
 	// best-effort delivery: a failed notify is logged, and the cursor catch-up covers the gap
 	try {
 		await db.execute(sql`select pg_notify(${CHAT_ROOM_CHANNEL}, ${payload})`)
@@ -69,9 +73,9 @@ function startChatRoomListener(): void {
 	// each notification re-emits to this instance's subscribers for that topic
 	client.on("notification", (notification) => {
 		// the payload is topicId:teamId:messageId
-		const [topicId, teamId, messageId] = (notification.payload ?? "").split(":")
-		if (topicId && teamId && messageId) {
-			chatRoomEvents.emit(`${topicId}:${teamId}`, Number(messageId))
+		const [topicId, teamId, chatMessageId] = (notification.payload ?? "").split(":")
+		if (topicId && teamId && chatMessageId) {
+			chatRoomEvents.emit(`${topicId}:${teamId}`, Number(chatMessageId))
 		}
 	})
 

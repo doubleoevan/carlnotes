@@ -38,13 +38,13 @@ export function TimePicker({
 	)
 }
 
-// one selectable time slot, half the width of the list, so an AM and a PM slot share a row
+// one selectable time slot, half the width of the list
 function TimeSlot({ time }: { time: string }) {
 	return (
 		<SelectPrimitive.Item
 			value={time}
 			className={cn(
-				"focus:bg-accent focus:text-accent-foreground",
+				"focus:bg-accent focus:text-accent-foreground data-[state=checked]:bg-primary/15",
 				"flex min-h-9 w-1/2 cursor-default items-center rounded-sm px-2 text-sm outline-hidden select-none",
 			)}
 		>

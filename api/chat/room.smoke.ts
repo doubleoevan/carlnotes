@@ -1,4 +1,4 @@
-// a live smoke test for the team room's access and write guarantees
+// a live smoke test for the team chat room's access and write guarantees
 // run it with: doppler run -- bun api/chat/room.smoke.ts. needs Doppler secrets
 import type { PoolClient } from "@neondatabase/serverless"
 import { toNormalizedUsername } from "@shared/usernames"
@@ -20,26 +20,27 @@ import type { SessionUser } from "../auth"
 import type { AppEnv } from "../currentUser"
 import { removeTeamMember } from "../team/members"
 import { loadTopicChatMentions } from "./mentions"
-import { chatRoomRoute, loadChatRoomMessages, postChatRoomMessage } from "./room"
+import { chatRoomRoute, postChatRoomMessage } from "./room"
+import { loadChatRoomMessages } from "./roomMessages"
 
-// one stamp per run, and every fixture id derives from it, so a parallel run never collides
-const stamp = `room-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
+// one id per run, and every fixture id derives from it, so a parallel run never collides
+const runId = `room-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
 
 // the two teams and the two topics: the shared topic both teams hold, and one no team holds
-const topicId = `${stamp}-topic`
-const unheldTopicId = `${stamp}-unheld`
-const teamAId = `${stamp}-team-a`
-const teamBId = `${stamp}-team-b`
+const topicId = `${runId}-topic`
+const unheldTopicId = `${runId}-unheld`
+const teamAId = `${runId}-team-a`
+const teamBId = `${runId}-team-b`
 
 // the six users: a non-member owner, team A's leader, a removal target
-const ownerId = `${stamp}-owner`
-const memberAId = `${stamp}-member-a`
-const memberA2Id = `${stamp}-member-a2`
-const memberBId = `${stamp}-member-b`
-const subscriberId = `${stamp}-subscriber`
-const spenderId = `${stamp}-spender`
+const ownerId = `${runId}-owner`
+const memberAId = `${runId}-member-a`
+const memberA2Id = `${runId}-member-a2`
+const memberBId = `${runId}-member-b`
+const subscriberId = `${runId}-subscriber`
+const spenderId = `${runId}-spender`
 
-// the room routes behind a session shim that signs each request in as the chosen user
+// the chat room routes behind a session shim that signs each request in as the chosen user
 let routeUserId: string | null = null
 const routeApp = new Hono<AppEnv>()
 	.use("*", async (context, next) => {
@@ -48,7 +49,7 @@ const routeApp = new Hono<AppEnv>()
 	})
 	.route("/", chatRoomRoute)
 
-// the chat messages route's status for one user reading team A's room on the shared topic
+// the chat messages route's status for one user reading team A's chat room on the shared topic
 async function readRoomStatus(userId: string): Promise<number> {
 	routeUserId = userId
 	const response = await routeApp.request(`/topics/${topicId}/rooms/${teamAId}`)
@@ -63,17 +64,17 @@ function check(isPassed: boolean, label: string): void {
 	console.log(`PASS  ${label}`)
 }
 
-// post into a room on the shared topic and hand back the stored message id, failing loud on a denial
+// post into a chat room on the shared topic and hand back the stored chat message id, failing loud on a denial
 async function postAsMember(userId: string, roomTeamId: string, content: string): Promise<number> {
 	const posted = await postChatRoomMessage(userId, topicId, roomTeamId, content, null, [])
 	if (posted === null || posted === "attachmentRefused" || posted.refusalReason !== null) {
 		throw new Error(`FAIL  the post as ${userId} did not store: ${JSON.stringify(posted)}`)
 	}
-	return posted.messageId
+	return posted.chatMessageId
 }
 
-// how many room messages the shared topic has stored, across both of its rooms
-async function countRoomMessages(): Promise<number> {
+// how many chat room messages the shared topic has stored, across both of its chat rooms
+async function countChatRoomMessages(): Promise<number> {
 	const [messageCountRow] = await db
 		.select({ count: count() })
 		.from(chatRoomMessages)
@@ -83,23 +84,23 @@ async function countRoomMessages(): Promise<number> {
 
 // seed the people, the teams, the shared topic both teams hold, and a topic no team holds
 async function seedFixtures(): Promise<void> {
-	// six people sharing the stamp. the spender's one-cent override lets one cost row exhaust them
+	// six people sharing the run id. the spender's one-cent override lets one cost row exhaust them
 	const labels = ["owner", "member-a", "member-a2", "member-b", "subscriber", "spender"] as const
 	await db.insert(users).values(
 		labels.map((label) => ({
-			id: `${stamp}-${label}`,
+			id: `${runId}-${label}`,
 			name: label,
-			email: `${stamp}-${label}@carlnotes.test`,
-			username: `${stamp}-${label}`,
-			usernameNormalized: toNormalizedUsername(`${stamp}-${label}`),
+			email: `${runId}-${label}@carlnotes.test`,
+			username: `${runId}-${label}`,
+			usernameNormalized: toNormalizedUsername(`${runId}-${label}`),
 			budgetOverrideCents: label === "spender" ? 1 : null,
 		})),
 	)
 
-	// two teams, each with the shared topic through a share row, so each has its own room on it
+	// two teams, each with the shared topic through a share row, so each has its own chat room on it
 	await db.insert(teams).values([
-		{ id: teamAId, name: `${stamp}-a` },
-		{ id: teamBId, name: `${stamp}-b` },
+		{ id: teamAId, name: `${runId}-a` },
+		{ id: teamBId, name: `${runId}-b` },
 	])
 
 	// team A has a leader, the removal target, and the spender. team B has one leader
@@ -125,7 +126,7 @@ async function seedFixtures(): Promise<void> {
 	await db.insert(chatTurns).values({ userId: spenderId, topicId, cost: "100" })
 }
 
-// section 1: the access matrix through the real functions. membership alone opens a held topic's room
+// section 1: the access matrix through the real functions. membership alone opens a held topic's chat room
 async function checkAccessMatrix(): Promise<void> {
 	console.log("\n=== 1. access matrix ===")
 
@@ -134,54 +135,56 @@ async function checkAccessMatrix(): Promise<void> {
 	check(subscriberPost === null, "a non-member subscriber's post answers null")
 	check((await readRoomStatus(subscriberId)) === 404, "a non-member subscriber's read answers 404")
 
-	// a member of team A has no room on team B's side of the shared topic
+	// a member of team A has no chat room on team B's side of the shared topic
 	const crossTeamPost = await postChatRoomMessage(memberAId, topicId, teamBId, "hi", null, [])
 	check(crossTeamPost === null, "a team A member's post to team B's room answers null")
 
-	// a topic no team holds has no room at all
+	// a topic no team holds has no chat room at all
 	const unheldTopicPost = await postChatRoomMessage(memberAId, unheldTopicId, teamAId, "hi", null, [])
 	check(unheldTopicPost === null, "a post on a topic no team holds answers null")
 
-	// ownership grants no room. the owner belongs to neither team
+	// ownership grants no chat room. the owner belongs to neither team
 	const ownerPost = await postChatRoomMessage(ownerId, topicId, teamAId, "hi", null, [])
 	check(ownerPost === null, "the owner's post without membership answers null")
 	check((await readRoomStatus(ownerId)) === 404, "the owner's read without membership answers 404")
 
-	// a member posts into their own room and reads it back decrypted
+	// a member posts into their own chat room and reads it back decrypted
 	await postAsMember(memberAId, teamAId, "hello room a")
 	check((await readRoomStatus(memberAId)) === 200, "a member's read answers 200")
-	const roomAMessages = await loadChatRoomMessages(topicId, teamAId, 0)
+	const roomAChatMessages = await loadChatRoomMessages(topicId, teamAId, 0)
 	check(
-		roomAMessages.some((message) => message.content === "hello room a" && message.authorUserId === memberAId),
-		"the member's message reads back decrypted",
+		roomAChatMessages.some(
+			(chatMessage) => chatMessage.content === "hello room a" && chatMessage.authorUserId === memberAId,
+		),
+		"the member's chat message reads back decrypted",
 	)
 }
 
-// section 2: each team's room on the topic is its own. a message in one never shows in the other
+// section 2: each team's chat room on the topic is its own. a chat message in one never shows in the other
 async function checkRoomIsolation(): Promise<void> {
 	console.log("\n=== 2. room isolation ===")
 
-	// team B's member posts into team B's room on the same shared topic
+	// team B's member posts into team B's chat room on the same shared topic
 	await postAsMember(memberBId, teamBId, "hello room b")
 
-	// each room reads back only its own messages
-	const roomAMessages = await loadChatRoomMessages(topicId, teamAId, 0)
-	const roomBMessages = await loadChatRoomMessages(topicId, teamBId, 0)
+	// each chat room reads back only its own chat messages
+	const roomAChatMessages = await loadChatRoomMessages(topicId, teamAId, 0)
+	const roomBChatMessages = await loadChatRoomMessages(topicId, teamBId, 0)
 	check(
-		roomAMessages.every((message) => message.content !== "hello room b"),
-		"team B's message never shows in team A's room",
+		roomAChatMessages.every((chatMessage) => chatMessage.content !== "hello room b"),
+		"team B's chat message never shows in team A's room",
 	)
 	check(
-		roomBMessages.every((message) => message.content !== "hello room a"),
-		"team A's message never shows in team B's room",
+		roomBChatMessages.every((chatMessage) => chatMessage.content !== "hello room a"),
+		"team A's chat message never shows in team B's room",
 	)
 	check(
-		roomBMessages.some((message) => message.content === "hello room b"),
-		"team B's room reads back its own message",
+		roomBChatMessages.some((chatMessage) => chatMessage.content === "hello room b"),
+		"team B's room reads back its own chat message",
 	)
 }
 
-// section 3: removal denies the removed member on the next request while their stored messages remain
+// section 3: removal denies the removed member on the next request while their stored chat messages remain
 async function checkRemovalNextRequest(): Promise<void> {
 	console.log("\n=== 3. removal on the next request ===")
 
@@ -194,11 +197,11 @@ async function checkRemovalNextRequest(): Promise<void> {
 	check(removedPost === null, "the removed member's post answers null")
 	check((await readRoomStatus(memberA2Id)) === 404, "the removed member's read answers 404")
 
-	// the room keeps their message for the members left, who still read it
-	const roomAMessages = await loadChatRoomMessages(topicId, teamAId, 0)
+	// the chat room keeps their chat message for the members left, who still read it
+	const roomAChatMessages = await loadChatRoomMessages(topicId, teamAId, 0)
 	check(
-		roomAMessages.some((message) => message.content === "posted before leaving"),
-		"the removed member's message remains stored",
+		roomAChatMessages.some((chatMessage) => chatMessage.content === "posted before leaving"),
+		"the removed member's chat message remains stored",
 	)
 	check((await readRoomStatus(memberAId)) === 200, "a remaining member still reads the room")
 }
@@ -207,18 +210,18 @@ async function checkRemovalNextRequest(): Promise<void> {
 async function checkBudgetRefusal(): Promise<void> {
 	console.log("\n=== 4. budget refusal ===")
 
-	// the room's stored row count before the refused post
-	const messagesBefore = await countRoomMessages()
+	// the chat room's stored row count before the refused post
+	const messagesBefore = await countChatRoomMessages()
 
 	// the seeded cost row exhausts the spender's one-cent override, so addressing carl refuses
 	const refused = await postChatRoomMessage(spenderId, topicId, teamAId, "@carl hello", null, [])
 	const isRefusal = typeof refused === "object" && refused !== null
-	check(isRefusal && refused.messageId === 0, "the refusal answers message id 0")
+	check(isRefusal && refused.chatMessageId === 0, "the refusal answers chat message id 0")
 	check(isRefusal && (refused.refusalReason ?? "") !== "", "the refusal includes its reason")
-	check((await countRoomMessages()) === messagesBefore, "the refused post stored no room message")
+	check((await countChatRoomMessages()) === messagesBefore, "the refused post stored no room chat message")
 }
 
-// section 5: mention rows. a named member gets one row, and the author and a plain post get none
+// section 5: chat mention rows. a named member gets one row, and the author and a plain post get none
 async function checkChatRoomMentions(): Promise<void> {
 	console.log("\n=== 5. mention rows ===")
 
@@ -236,16 +239,16 @@ async function checkChatRoomMentions(): Promise<void> {
 	check(plainRows.length === 0, "a plain unaddressed post writes no mention rows")
 }
 
-// section 7: the mention badge lifecycle: a reply notifies its author, the badge returns unseen rows alone
+// section 7: the chat mention badge lifecycle: a reply notifies its author, the badge returns unseen rows alone
 async function checkMentionBadges(): Promise<void> {
 	console.log("\n=== 7. mention badges ===")
 
 	// a plain reply notifies the replied-to author without naming them
 	const parentId = await postAsMember(memberAId, teamAId, "what does the room think")
 	const replied = await postChatRoomMessage(spenderId, topicId, teamAId, "replying to that", parentId, [])
-	check(typeof replied === "object" && replied !== null && replied.messageId > 0, "the reply stored")
+	check(typeof replied === "object" && replied !== null && replied.chatMessageId > 0, "the reply stored")
 
-	// the badge reports the reply with its reply flag, its room team, and the decrypted opening
+	// the badge reports the reply with its reply flag, its chat room team, and the decrypted opening
 	const badge = (await loadTopicChatMentions(memberAId, [topicId])).get(topicId)?.at(0)
 	check(badge?.isReply === true && badge.teamId === teamAId, "the badge answers the reply with its room team")
 	check(badge?.excerpt === "replying to that", "the excerpt is the decrypted opening")
@@ -257,14 +260,14 @@ async function checkMentionBadges(): Promise<void> {
 		"the chat messages read leaves the badge standing",
 	)
 
-	// opening the panel posts the seen stamp through the route, which clears the badge
+	// opening the panel posts the seen time through the route, which clears the badge
 	routeUserId = memberAId
-	const stamped = await routeApp.request(`/topics/${topicId}/rooms/${teamAId}/mentions-seen`, { method: "POST" })
-	check(stamped.status === 200, "the seen stamp answers 200 for a member")
+	const saved = await routeApp.request(`/topics/${topicId}/rooms/${teamAId}/mentions-seen`, { method: "POST" })
+	check(saved.status === 200, "saving seen answers 200 for a member")
 	check((await loadTopicChatMentions(memberAId, [topicId])).size === 0, "the open cleared the badge")
 }
 
-// section 6: the per-room advisory lock, on the same hashtext key the room turn takes
+// section 6: the per-room advisory lock, on the same hashtext key the chat room turn takes
 async function checkAdvisoryLock(): Promise<void> {
 	console.log("\n=== 6. advisory lock ===")
 
@@ -272,7 +275,7 @@ async function checkAdvisoryLock(): Promise<void> {
 	const holdingClient = await connectionPool.connect()
 	const contendingClient = await connectionPool.connect()
 	try {
-		// the first transaction takes team A's room key and holds it open
+		// the first transaction takes team A's chat room key and holds it open
 		await holdingClient.query("begin")
 		await holdingClient.query("select pg_advisory_xact_lock(hashtext($1))", [`${topicId}:${teamAId}`])
 
@@ -283,7 +286,7 @@ async function checkAdvisoryLock(): Promise<void> {
 		await contendingClient.query("rollback")
 		check(isSameKeyBlocked, "the same room key blocks while held")
 
-		// a different room's key acquires immediately under the same timeout
+		// a different chat room's key acquires immediately under the same timeout
 		await contendingClient.query("begin")
 		await contendingClient.query("set local statement_timeout = 1500")
 		const isOtherKeyBlocked = await isLockAcquireTimedOut(contendingClient, `${topicId}:${teamBId}`)
@@ -299,7 +302,7 @@ async function checkAdvisoryLock(): Promise<void> {
 	}
 }
 
-// whether acquiring the room key times out inside the client's open transaction. a timeout means the key is held
+// whether acquiring the chat room key times out inside the client's open transaction. a timeout means the key is held
 async function isLockAcquireTimedOut(client: PoolClient, roomKey: string): Promise<boolean> {
 	try {
 		await client.query("select pg_advisory_xact_lock(hashtext($1))", [roomKey])
@@ -313,16 +316,16 @@ async function isLockAcquireTimedOut(client: PoolClient, roomKey: string): Promi
 	}
 }
 
-// delete the people, whose rows cascade to the topics, rooms, mentions, turns
+// delete the people, whose rows cascade to the topics, chat rooms, chat mentions, chat turns
 async function cleanupFixtures(): Promise<void> {
 	console.log("\n=== cleanup ===")
 	await db.delete(users).where(inArray(users.id, [ownerId, memberAId, memberA2Id, memberBId, subscriberId, spenderId]))
 	await db.delete(teams).where(inArray(teams.id, [teamAId, teamBId]))
-	check((await countRoomMessages()) === 0, "no room message survives the fixture delete")
+	check((await countChatRoomMessages()) === 0, "no room chat message survives the fixture delete")
 }
 
 // seed, run every section in order, and always clean up. any failed check throws an error and fails the run
-console.log(`\n=== team room smoke (stamp ${stamp}) ===`)
+console.log(`\n=== team room smoke (run ${runId}) ===`)
 let exitCode = 0
 try {
 	// the fixtures first, then the seven sections

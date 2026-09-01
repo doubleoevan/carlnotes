@@ -1,39 +1,43 @@
-// carl's turn in a team room
+// carl's chat turn in a team chat room
+
+import type { ChatAttachment } from "@shared/contracts"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, type SQL, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 import { db } from "../../db"
 import { chatRoomAttachments, chatRoomMessages, chatRoomSummaries, type topics, users } from "../../db/schema"
+import { getAttachmentBytes } from "../../worker"
 import { streamChatReply } from "../../worker/chat"
 import { fetchPromptTemplate } from "../../worker/prompts/fetch"
 import { writePrompt } from "../../worker/prompts/write"
 import { decryptChatText, encryptChatText } from "./encryption"
+import { saveLinkPreviews } from "./linkPreviews"
 import { notifyChatRoomMessage } from "./roomStream"
 import { recordChatRoomTurn } from "./turns"
 
-// how many messages the window includes before the summary takes over
+// how many chat messages the window includes before the summary takes over
 const CHAT_ROOM_WINDOW_MESSAGES = 30
 
-// how much of each rolled-out message the running summary keeps
+// how much of each rolled-out chat message the running summary keeps
 const SUMMARY_MESSAGE_CHARS = 200
 const SUMMARY_MAX_CHARS = 8000
 
 type ChatRoomTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
-// the room's topic side of a filter: one topic's room, or the team's own room stored with no topic
+// the chat room's topic side of a filter: one topic's chat room, or the team's own chat room stored with no topic
 export function toTopicFilter(column: PgColumn, topicId: string | null): SQL {
 	return topicId === null ? isNull(column) : eq(column, topicId)
 }
 
 /**
- * Carl's completion: billed through the chat ledger to the member whose message addressed him,
+ * Carl's completion: billed through the chat ledger to the member whose chat message addressed him,
  * including the window plus the running summary plus the topic's retrieved findings.
  */
-export async function runCarlChatRoomTurn(
+export async function runModelChatRoomTurn(
 	billedUserId: string,
-	// null is the team's own room, whose reply reads across every topic the team holds
+	// null is the team's own chat room, whose reply reads across every topic the team holds
 	topic: typeof topics.$inferSelect | null,
 	teamId: string,
-	promptMessageId: number,
+	promptChatMessageId: number,
 ): Promise<void> {
 	// the billed member's LiteLLM key. carl's completion spends on their account
 	const [billedMember] = await db
@@ -48,14 +52,17 @@ export async function runCarlChatRoomTurn(
 	// the lock serializes the chat messages read and the summary roll
 	const question = await db.transaction(async (transaction) => {
 		await transaction.execute(sql`select pg_advisory_xact_lock(hashtext(${`${topic?.id ?? "team"}:${teamId}`}))`)
-		return buildCarlRoomQuestion(transaction, topic?.id ?? null, teamId)
+		return buildModelRoomQuestion(transaction, topic?.id ?? null, teamId)
 	})
 
-	// retrieval embeds the mentioning message alone. the composed question above would dilute its similarity
-	const [promptMessage] = await db
+	// retrieval embeds the mentioning chat message alone. the composed question above would dilute its similarity
+	const [promptChatMessage] = await db
 		.select({ content: chatRoomMessages.content })
 		.from(chatRoomMessages)
-		.where(eq(chatRoomMessages.id, promptMessageId))
+		.where(eq(chatRoomMessages.id, promptChatMessageId))
+
+	// the images shared with the prompt chat message, read back for carl's reply
+	const promptImages = await loadPromptMessageImages(promptChatMessageId)
 
 	// the same reply path the private chat uses
 	const replyStream = await streamChatReply({
@@ -65,16 +72,17 @@ export async function runCarlChatRoomTurn(
 		isOwner: topic ? topic.ownerId === billedUserId : false,
 		litellmApiKey,
 		question,
-		retrievalQuestion: promptMessage ? (decryptChatText(promptMessage.content) ?? undefined) : undefined,
+		retrievalQuestion: promptChatMessage ? (decryptChatText(promptChatMessage.content) ?? undefined) : undefined,
 		history: [],
-		// the billed member's privately kept attachments stay out. this answer posts to the whole room
+		attachments: promptImages,
+		// the billed member's privately kept attachments stay out. this answer posts to the whole chat room
 		includeAttachments: false,
 	})
 	if (!replyStream) {
 		return
 	}
 
-	// drain the stream into the one message the room posts
+	// drain the stream into the one chat message the chat room posts
 	let answer = ""
 	for await (const chunk of replyStream.textStream) {
 		answer += chunk
@@ -82,50 +90,112 @@ export async function runCarlChatRoomTurn(
 	const completion = await replyStream.completion
 
 	// carl's answer is stored once the completion is done
-	const [carlMessage] = await db
+	const [modelChatMessage] = await db
 		.insert(chatRoomMessages)
 		.values({
 			topicId: topic?.id ?? null,
 			teamId,
 			authorUsername: "Carl",
-			replyToMessageId: promptMessageId,
+			replyToMessageId: promptChatMessageId,
 			content: encryptChatText(answer.trim()),
 		})
 		.returning({ id: chatRoomMessages.id })
-	if (!carlMessage) {
+	if (!modelChatMessage) {
 		return
 	}
 
-	// the ledger is updated after carl's answer is stored, naming the message carl answered
-	await recordChatRoomTurn(billedUserId, topic?.id ?? null, teamId, promptMessageId, completion)
-	// the fan-out runs only after the insert commits, so every listener's re-read finds the message
-	await notifyChatRoomMessage(topic?.id ?? null, teamId, carlMessage.id)
+	// carl's first link fetches its link preview card in the background, like a member's chat message
+	void saveLinkPreviews(answer, teamId).catch((error) => console.error("chat room link preview failed", error))
+
+	// the ledger is updated after carl's answer is stored, naming the chat message carl answered
+	await recordChatRoomTurn(billedUserId, topic?.id ?? null, teamId, promptChatMessageId, completion)
+	// the fan-out runs only after the insert commits. every listener's re-read finds the chat message
+	await notifyChatRoomMessage(topic?.id ?? null, teamId, modelChatMessage.id)
+}
+
+// the images stored with one chat room message, rebuilt as the data urls the model reads
+async function loadPromptMessageImages(promptChatMessageId: number): Promise<ChatAttachment[]> {
+	// only an image with stored bytes can be shown to the model
+	const imageRows = await db
+		.select({
+			name: chatRoomAttachments.name,
+			objectKey: chatRoomAttachments.objectKey,
+			contentType: chatRoomAttachments.contentType,
+		})
+		.from(chatRoomAttachments)
+		.where(and(eq(chatRoomAttachments.messageId, promptChatMessageId), eq(chatRoomAttachments.kind, "image")))
+
+	// each image reads back from storage into the data url shape the shared reply path takes
+	const promptImages: ChatAttachment[] = []
+	for (const imageRow of imageRows) {
+		if (!imageRow.objectKey) {
+			continue
+		}
+		// a failed read skips that image instead of failing carl's whole chat turn
+		try {
+			const imageBytes = await getAttachmentBytes(imageRow.objectKey)
+			const dataUrl = `data:${imageRow.contentType ?? "image/png"};base64,${Buffer.from(imageBytes).toString("base64")}`
+			promptImages.push({ kind: "image", name: imageRow.name, keep: false, dataUrl })
+		} catch (error) {
+			console.error(`room image read failed for chat message ${promptChatMessageId}`, error)
+		}
+	}
+
+	// an image that failed to read is left out, so the chat turn goes on without it
+	return promptImages
+}
+
+/**
+ * Post Carl's own refusal into the chat room, so a chat turn that failed mid-flight still answers the chat room.
+ */
+export async function postModelRefusal(
+	topicId: string | null,
+	teamId: string,
+	promptChatMessageId: number,
+	refusalReason: string,
+): Promise<void> {
+	const [modelChatMessage] = await db
+		.insert(chatRoomMessages)
+		.values({
+			topicId,
+			teamId,
+			authorUsername: "Carl",
+			replyToMessageId: promptChatMessageId,
+			content: encryptChatText(refusalReason),
+		})
+		.returning({ id: chatRoomMessages.id })
+	if (!modelChatMessage) {
+		return
+	}
+
+	// the fan-out runs only after the insert commits. every listener's re-read finds the chat message
+	await notifyChatRoomMessage(topicId, teamId, modelChatMessage.id)
 }
 
 // carl's question for one chat turn
-async function buildCarlRoomQuestion(
+async function buildModelRoomQuestion(
 	transaction: ChatRoomTransaction,
 	topicId: string | null,
 	teamId: string,
 ): Promise<string> {
-	// the window reads newest first under its limit, so a turn never loads the entire history
-	const newestChatWindowMessages = await transaction
+	// the window reads newest first under its limit, so a chat turn never loads the entire history
+	const newestWindowChatMessages = await transaction
 		.select()
 		.from(chatRoomMessages)
 		.where(and(toTopicFilter(chatRoomMessages.topicId, topicId), eq(chatRoomMessages.teamId, teamId)))
 		.orderBy(desc(chatRoomMessages.id))
 		.limit(CHAT_ROOM_WINDOW_MESSAGES)
-	const chatWindowMessages = newestChatWindowMessages.reverse()
+	const windowChatMessages = newestWindowChatMessages.reverse()
 
-	// everything older than the window joins the running summary before the turn reads it
-	await addChatRoomSummary(transaction, topicId, teamId, chatWindowMessages[0]?.id ?? 0)
+	// everything older than the window joins the running summary before the chat turn reads it
+	await addChatRoomSummary(transaction, topicId, teamId, windowChatMessages[0]?.id ?? 0)
 	const [summaryRow] = await transaction
 		.select({ summary: chatRoomSummaries.summary })
 		.from(chatRoomSummaries)
 		.where(and(toTopicFilter(chatRoomSummaries.topicId, topicId), eq(chatRoomSummaries.teamId, teamId)))
 
-	// the chat messages and the room's attachments, in the shapes the template reads
-	const chatMessages = await toChatRoomMessages(transaction, topicId, chatWindowMessages)
+	// the chat messages and the chat room's attachments, in the shapes that the template reads
+	const chatMessages = await toChatRoomMessages(transaction, topicId, windowChatMessages)
 	const chatRoomAttachmentsBlock = await toChatRoomAttachmentsBlock(transaction, topicId, teamId)
 
 	// one question through the versioned template: the summary, the attachments, and the chat messages
@@ -141,13 +211,15 @@ async function buildCarlRoomQuestion(
 async function toChatRoomMessages(
 	transaction: ChatRoomTransaction,
 	topicId: string | null,
-	chatWindowMessages: (typeof chatRoomMessages.$inferSelect)[],
+	windowChatMessages: (typeof chatRoomMessages.$inferSelect)[],
 ): Promise<string> {
 	// the replied-to ids the window itself does not include
-	const messageRowByMessageId = new Map(chatWindowMessages.map((messageRow) => [messageRow.id, messageRow]))
-	const answeredMessageIds = chatWindowMessages
-		.map((messageRow) => messageRow.replyToMessageId)
-		.filter((messageId): messageId is number => messageId !== null && !messageRowByMessageId.has(messageId))
+	const messageRowByMessageId = new Map(windowChatMessages.map((chatMessageRow) => [chatMessageRow.id, chatMessageRow]))
+	const answeredMessageIds = windowChatMessages
+		.map((chatMessageRow) => chatMessageRow.replyToMessageId)
+		.filter(
+			(chatMessageId): chatMessageId is number => chatMessageId !== null && !messageRowByMessageId.has(chatMessageId),
+		)
 
 	// a reply may answer a line older than the window, so those rows are read by id in one batch
 	const answeredMessageRows =
@@ -161,26 +233,27 @@ async function toChatRoomMessages(
 					)
 
 	// the fetched rows join the window's map, so every reference resolves the same way
-	for (const answeredMessageRow of answeredMessageRows) {
-		messageRowByMessageId.set(answeredMessageRow.id, answeredMessageRow)
+	for (const answeredChatMessageRow of answeredMessageRows) {
+		messageRowByMessageId.set(answeredChatMessageRow.id, answeredChatMessageRow)
 	}
 
 	// each line names its author, then quotes whichever earlier line it answers
-	return chatWindowMessages
-		.map((messageRow) => {
-			// the answered messageRow still names itself when it sits past newer chatter or before the window
-			const answeredMessageRow = messageRow.replyToMessageId
-				? messageRowByMessageId.get(messageRow.replyToMessageId)
+	return windowChatMessages
+		.map((chatMessageRow) => {
+			// the answered chatMessageRow still names itself when it sits past newer chatter or before the window
+			const answeredChatMessageRow = chatMessageRow.replyToMessageId
+				? messageRowByMessageId.get(chatMessageRow.replyToMessageId)
 				: undefined
-			const replyMessageDetails = answeredMessageRow
-				? ` (replying to ${answeredMessageRow.authorUsername}: "${toClippedLine(decryptChatText(answeredMessageRow.content) ?? "")}")`
+			const replyMessageDetails = answeredChatMessageRow
+				? ` (replying to ${answeredChatMessageRow.authorUsername}: "${toClippedLine(decryptChatText(answeredChatMessageRow.content) ?? "")}")`
 				: ""
-			return `${messageRow.authorUsername}${replyMessageDetails}: ${decryptChatText(messageRow.content) ?? ""}`
+			// one transcript line: the author, who they answered, and what they said
+			return `${chatMessageRow.authorUsername}${replyMessageDetails}: ${decryptChatText(chatMessageRow.content) ?? ""}`
 		})
 		.join("\n")
 }
 
-// the room's attachments, each with the words or description carl reads them by
+// the chat room's attachments, each with the words or description carl reads them by
 async function toChatRoomAttachmentsBlock(
 	transaction: ChatRoomTransaction,
 	topicId: string | null,
@@ -198,7 +271,7 @@ async function toChatRoomAttachmentsBlock(
 		)
 		.orderBy(asc(chatRoomAttachments.createdAt))
 
-	// a room with nothing shared says so in the template's slot
+	// a chat room with nothing shared says so in the template's slot
 	if (chatRoomAttachmentRows.length === 0) {
 		return "None yet."
 	}
@@ -219,14 +292,14 @@ function toClippedLine(content: string): string {
 	return singleLine.length > 100 ? `${singleLine.slice(0, 100)}…` : singleLine
 }
 
-// add the messages that left the window to the running summary, each clipped, the whole limited
+// add the chat messages that left the window to the running summary, each clipped, the whole limited
 async function addChatRoomSummary(
 	transaction: ChatRoomTransaction,
 	topicId: string | null,
 	teamId: string,
 	endMessageId: number,
 ): Promise<void> {
-	// an empty room has nothing before the window to roll
+	// an empty chat room has nothing before the window to roll
 	if (endMessageId === 0) {
 		return
 	}
@@ -239,7 +312,7 @@ async function addChatRoomSummary(
 	const startMessageId = storedSummaryRows?.summarizedThroughMessageId ?? 0
 
 	// the rolled-out rows read by id range, so the roll never loads the window or the covered stretch
-	const earlierMessageRows = await transaction
+	const earlierChatMessageRows = await transaction
 		.select()
 		.from(chatRoomMessages)
 		.where(
@@ -251,28 +324,28 @@ async function addChatRoomSummary(
 			),
 		)
 		.orderBy(asc(chatRoomMessages.id))
-	if (earlierMessageRows.length === 0) {
+	if (earlierChatMessageRows.length === 0) {
 		return
 	}
 
-	// each rolled-out message keeps its opening, and the whole summary keeps its newest end
-	const earlierMessages = earlierMessageRows
+	// each rolled-out chat message keeps its opening, and the whole summary keeps its newest end
+	const earlierChatMessages = earlierChatMessageRows
 		.map(
-			(messageRow) =>
-				`${messageRow.authorUsername}: ${(decryptChatText(messageRow.content) ?? "").slice(0, SUMMARY_MESSAGE_CHARS)}`,
+			(chatMessageRow) =>
+				`${chatMessageRow.authorUsername}: ${(decryptChatText(chatMessageRow.content) ?? "").slice(0, SUMMARY_MESSAGE_CHARS)}`,
 		)
 		.join("\n")
-	const summary = `${storedSummaryRows?.summary ? `${storedSummaryRows.summary}\n` : ""}${earlierMessages}`.slice(
+	const summary = `${storedSummaryRows?.summary ? `${storedSummaryRows.summary}\n` : ""}${earlierChatMessages}`.slice(
 		-SUMMARY_MAX_CHARS,
 	)
-	const summarizedThroughMessageId = earlierMessageRows[earlierMessageRows.length - 1]?.id ?? startMessageId
+	const summarizedThroughChatMessageId = earlierChatMessageRows[earlierChatMessageRows.length - 1]?.id ?? startMessageId
 
 	// save one row per chat room summary, moved forward with what the chat window covers
 	await transaction
 		.insert(chatRoomSummaries)
-		.values({ topicId, teamId, summary, summarizedThroughMessageId })
+		.values({ topicId, teamId, summary, summarizedThroughMessageId: summarizedThroughChatMessageId })
 		.onConflictDoUpdate({
 			target: [chatRoomSummaries.topicId, chatRoomSummaries.teamId],
-			set: { summary, summarizedThroughMessageId },
+			set: { summary, summarizedThroughMessageId: summarizedThroughChatMessageId },
 		})
 }

@@ -16,7 +16,7 @@ export async function startCheckout(plan: "plus" | "premium", billingInterval: "
 	window.location.href = url
 }
 
-// open the Stripe Customer Portal, redirecting the browser returns false when there is no subscription to manage
+// open the Stripe Customer Portal, redirecting the browser returns false if there is no subscription to manage
 export async function openBillingPortal(): Promise<boolean> {
 	const response = await apiClient.api.billing.portal.$post()
 	if (!response.ok) {
@@ -90,9 +90,22 @@ export async function fetchAdminTeamTopics(teamId: string): Promise<OwnerTopic[]
 	return ((await response.json()) as { topics: OwnerTopic[] }).topics
 }
 
-// set or clear a user's budget override in cents from the admin table
-export async function sendUserBudgetOverride(userId: string, budgetOverrideCents: number | null): Promise<void> {
-	await apiClient.api.admin.users[":id"].budget.$post({ param: { id: userId }, json: { budgetOverrideCents } })
+/**
+ * Set or clear a user's budget override in cents from the admin table.
+ * Throws on a rejection, and returns whether the proxy key was resized to the new budget.
+ */
+export async function sendUserBudgetOverride(
+	userId: string,
+	budgetOverrideCents: number | null,
+): Promise<{ isKeyResized: boolean }> {
+	const response = await apiClient.api.admin.users[":id"].budget.$post({
+		param: { id: userId },
+		json: { budgetOverrideCents },
+	})
+	if (!response.ok) {
+		throw new Error(`budget override failed: ${response.status}`)
+	}
+	return (await response.json()) as { isKeyResized: boolean }
 }
 
 // close another user's account from the admin console. throws an error on a rejection, so the table can say it failed

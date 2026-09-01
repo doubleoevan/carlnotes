@@ -1,4 +1,4 @@
-// the topic logic behind the api routes
+// the topic logic for the api routes
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import type { TopicResponse, UpdateTopicPayload } from "@shared/contracts"
@@ -69,7 +69,7 @@ export type UpdateTopicResult =
 type InviteeRejection = { status: "inviteeRefused"; email: string } | { status: "inviteLimit" }
 
 /**
- * Load one topic's page or null when the topic is missing or not visible to this user.
+ * Load one topic's page or null if the topic is missing or not visible to this user.
  * A signed-out visitor may view a public topic, with no consumed state and no owner extras.
  */
 export async function loadTopicPage(userId: string | null, topicId: string): Promise<TopicResponse | null> {
@@ -187,8 +187,8 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		isOwner,
 		isDailyFrequencyPaused,
 		isSubscribed,
-		// the user's unseen room mentions, for the count badge on the page's title
-		mentions: (await loadTopicChatMentions(userId, [topic.id])).get(topic.id) ?? [],
+		// the user's unseen chat room mentions, for the count badge on the page's title
+		chatMentions: (await loadTopicChatMentions(userId, [topic.id])).get(topic.id) ?? [],
 		canRate,
 		canEdit,
 		newCount: newTopicFindingCount(topicFindings),
@@ -453,7 +453,7 @@ export async function deleteTopic(
 	await Promise.all(attachmentRows.map((attachmentRow) => deleteAttachment(attachmentRow.objectKey).catch(() => {})))
 	await deleteChatAttachments(topicId)
 
-	// the room's shared files leave object storage too. a pending upload has no object yet
+	// the chat room's shared files leave object storage too. a pending upload has no object yet
 	const roomAttachmentRows = await db
 		.select({ objectKey: chatRoomAttachments.objectKey })
 		.from(chatRoomAttachments)

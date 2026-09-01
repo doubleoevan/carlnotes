@@ -4,8 +4,9 @@ import { reportError } from "@shared/monitoring"
 // the score at or above which a detector counts as a hit
 const DEFAULT_INJECTION_THRESHOLD = 0.8
 
-// the network timeout, short like the prompt registry's, so a slow scanner never stalls a scan
-const SCREEN_TIMEOUT_MS = 2500
+// the network timeout. a page the scanner cannot finish inside it passes unscreened.
+// raise LLM_GUARD_TIMEOUT_MS if real pages run past the default
+const SCREEN_TIMEOUT_MS = Number(Bun.env.LLM_GUARD_TIMEOUT_MS ?? "2500")
 
 // the detectors that reject each type of text
 const SCREEN_TYPES = {

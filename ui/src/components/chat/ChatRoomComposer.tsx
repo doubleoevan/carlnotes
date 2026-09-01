@@ -1,4 +1,4 @@
-import { ALL_USERNAME, CARL_USERNAME, isCarlMessage, toChatMentions } from "@shared/chatMentions"
+import { ALL_USERNAME, CARL_USERNAME, isModelChatMessage, toChatMentions } from "@shared/chatMentions"
 import {
 	CHAT_MAX_ATTACHMENTS,
 	CHAT_ROOM_MESSAGE_MAX_CHARS,
@@ -8,20 +8,21 @@ import {
 import { ArrowUp, ChevronDown, Paperclip, Reply } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { ChatAttachmentChips } from "@/components/chat/ChatAttachmentChips"
-import { toAttachment } from "@/components/chat/useTopicChat"
+import { toAttachment } from "@/components/chat/useChatAttachments"
+import type { ChatRoomReply } from "@/components/chat/useRoomReply"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { cn, FILE_PICKER_ACCEPT, isWideScreen } from "@/lib/utils"
+import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
+import { CHAT_FILE_PICKER_ACCEPT, cn, isWideScreen } from "@/lib/utils"
 
-// how tall the message box may grow before it scrolls inside itself, matching the private chat's composer
+// how tall the chat message box may grow before it scrolls inside itself, matching the private chat's composer
 const MAX_MESSAGE_BOX_HEIGHT_PX = 120
 
-// the active username mention token behind the caret: an @ at a word start and whatever prefix follows it
+// the active username chat mention token behind the caret: an @ at a word start and whatever prefix follows it
 const ACTIVE_CHAT_MENTION_PATTERN = /(^|[^\w@.-])@([\w-]*)$/
 
 /**
- * What the @ autocomplete suggests: Carl pinned first, then the room's members, narrowed by the
- * typed prefix. Nobody outside the chat members is ever suggested, so a departed chat member doesn't appear.
+ * What the @ autocomplete username suggests: Carl pinned first, then the room's members, filtered by the typed-in prefix.
  */
 export function toChatMentionSuggestions(mentionQuery: string, memberUsernames: string[]): string[] {
 	return [CARL_USERNAME, ...memberUsernames.filter((username) => username.toLowerCase() !== CARL_USERNAME)].filter(
@@ -54,32 +55,26 @@ export function DisabledRoomComposer({ placeholder }: { placeholder?: string }) 
 }
 
 /**
- * The chat room composer: the message box with the @ autocomplete and the reply selector.
- * The placeholder shows the reply target's mention.
+ * The chat room composer: the chat message box with the @ autocomplete and the reply selector.
+ * The placeholder shows the reply target's chat mention.
  */
 export function ChatRoomComposer({
 	memberUsernames,
-	replyTo,
-	isAutoReply,
-	replyMessages,
-	onSelectReplyMessage,
-	onSendMessage,
+	reply,
+	onPostChatMessage,
 }: {
 	// the current members the autocomplete suggests after Carl, never the current user or a departed member
 	memberUsernames: string[]
-	replyTo: ChatRoomMessage | null
-	// whether the reply user was chosen automatically instead of by the user, which a typed mention may override
-	isAutoReply: boolean
-	// each other author's latest message, newest first, for the composer's suggestion list
-	replyMessages: { username: string; message: ChatRoomMessage }[]
-	onSelectReplyMessage: (message: ChatRoomMessage) => void
-	onSendMessage: (content: string, replyToMessageId: number | null, attachments: ChatAttachment[]) => void
+	// which chat message this composer answers
+	reply: ChatRoomReply
+	onPostChatMessage: (content: string, replyToChatMessageId: number | null, attachments: ChatAttachment[]) => void
 }) {
-	const [message, setMessage] = useState("")
-	// the attachment file waiting to send with the next message, removable until sent
+	const { replyTo, isAutoReply, replyChatMessages } = reply
+	const [chatMessage, setChatMessage] = useState("")
+	// the attachment files waiting to send with the next chat message, removable until sent
 	const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([])
 
-	// selected and dropped files are read the same way, and the limit is what a message may carry at once
+	// selected and dropped files are read the same way. the limit is how many files one chat message may include
 	const attachSelectedFiles = (selected: File[]): void => {
 		for (const file of selected.slice(0, CHAT_MAX_ATTACHMENTS - pendingAttachments.length)) {
 			void toAttachment(file)
@@ -87,68 +82,81 @@ export function ChatRoomComposer({
 				.catch((error) => console.error("attachment read failed", error))
 		}
 	}
-	// the username mention prefix being typed, null while nothing matches
+	// pasted files become attachments. pasted text types as usual
+	function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>): void {
+		const files = Array.from(event.clipboardData.files)
+		if (files.length > 0) {
+			event.preventDefault()
+			attachSelectedFiles(files)
+		}
+	}
+
+	// the username chat mention prefix being typed, null while nothing matches
 	const [mentionQuery, setMentionQuery] = useState<string | null>(null)
 	const [highlightMentionIndex, setHighlightMentionIndex] = useState(0)
-	const messageBoxRef = useRef<HTMLTextAreaElement>(null)
+	const chatMessageBoxRef = useRef<HTMLTextAreaElement>(null)
 
-	// tapping Reply focus the input if the user selected a reply user on desktop
+	// focus the chat message box when a reply target is picked, and always on a wide-screen
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the target changing is the trigger, not the flag
 	useEffect(() => {
 		if ((replyTo && !isAutoReply) || isWideScreen()) {
-			messageBoxRef.current?.focus()
+			chatMessageBoxRef.current?.focus()
 		}
 	}, [replyTo])
 
-	// grow the message box with the message and shrink it back when a send clears it
+	// grow the chat message box with the chat message and shrink it back when a send clears it
 	useEffect(() => {
-		const messageBox = messageBoxRef.current
-		if (!messageBox) {
+		const chatMessageBox = chatMessageBoxRef.current
+		if (!chatMessageBox) {
 			return
 		}
-		// expand the box to hold its message up to a maximum height before scrolling
-		messageBox.style.height = "auto"
-		if (message !== "") {
-			messageBox.style.height = `${Math.min(messageBox.scrollHeight, MAX_MESSAGE_BOX_HEIGHT_PX)}px`
+		// expand the box to hold its chat message up to a maximum height before scrolling
+		chatMessageBox.style.height = "auto"
+		if (chatMessage !== "") {
+			chatMessageBox.style.height = `${Math.min(chatMessageBox.scrollHeight, MAX_MESSAGE_BOX_HEIGHT_PX)}px`
 		}
-	}, [message])
+	}, [chatMessage])
 
 	// carl is suggested first, then the chat members, narrowed by the typed prefix
 	const usernameSuggestions = mentionQuery === null ? [] : toChatMentionSuggestions(mentionQuery, memberUsernames)
 
-	// who the message is sent to, updated as the message is typed
-	const chatMentions = toChatMentions(message, [CARL_USERNAME, ALL_USERNAME, ...memberUsernames])
+	// who the chat message is sent to, updated as the chat message is typed
+	const chatMentions = toChatMentions(chatMessage, [CARL_USERNAME, ALL_USERNAME, ...memberUsernames])
 	const mentionedUser = chatMentions[0] ?? null
 	const hasMention = mentionedUser !== null && (replyTo === null || isAutoReply)
 	const replyUser = hasMention
 		? mentionedUser
 		: replyTo
-			? isCarlMessage(replyTo)
+			? isModelChatMessage(replyTo)
 				? CARL_USERNAME
 				: replyTo.authorUsername
 			: ALL_USERNAME
 	const replyUserLabel = toMentionLabel(replyUser)
 
-	// selecting a user replies to their latest message.
-	// selecting @all or a carl with no messages writes the mention instead
+	// selecting a user replies to their latest chat message.
+	// selecting @all or a carl with no chat messages writes the chat mention instead
 	const handleSelectReplyUser = (
-		selectedUser: { username: string; message: ChatRoomMessage } | "all" | "carl",
+		selectedUser: { username: string; chatMessage: ChatRoomMessage } | "all" | "carl",
 	): void => {
 		if (selectedUser === "all" || selectedUser === "carl") {
-			setMessage(
-				toChangedMentionMessage(message, selectedUser === "all" ? ALL_USERNAME : CARL_USERNAME, memberUsernames),
+			setChatMessage(
+				toChangedMentionChatMessage(
+					chatMessage,
+					selectedUser === "all" ? ALL_USERNAME : CARL_USERNAME,
+					memberUsernames,
+				),
 			)
-			messageBoxRef.current?.focus()
+			chatMessageBoxRef.current?.focus()
 			return
 		}
-		setMessage(toMessage(message, memberUsernames))
-		onSelectReplyMessage(selectedUser.message)
-		messageBoxRef.current?.focus()
+		setChatMessage(toChatMessage(chatMessage, memberUsernames))
+		reply.selectChatMessage(selectedUser.chatMessage)
+		chatMessageBoxRef.current?.focus()
 	}
 
 	// each keystroke re-reads the token behind the caret to suggest the users to mention
 	function handleMessageChange(event: React.ChangeEvent<HTMLTextAreaElement>): void {
-		setMessage(event.target.value)
+		setChatMessage(event.target.value)
 		const selectedMentionQuery = event.target.value.slice(0, event.target.selectionStart ?? 0)
 		const activeMentionQuery = selectedMentionQuery.match(ACTIVE_CHAT_MENTION_PATTERN)
 		setMentionQuery(activeMentionQuery ? (activeMentionQuery[2] ?? "") : null)
@@ -157,31 +165,31 @@ export function ChatRoomComposer({
 
 	// selecting a username replaces the typed prefix and puts the caret after it
 	function selectMentionedUsername(username: string): void {
-		const messageBox = messageBoxRef.current
-		if (!messageBox) {
+		const chatMessageBox = chatMessageBoxRef.current
+		if (!chatMessageBox) {
 			return
 		}
 
 		// selecting a username replaces the typed prefix with the full one
-		const caret = messageBox.selectionStart ?? message.length
-		const messageStart = message.slice(0, caret).replace(ACTIVE_CHAT_MENTION_PATTERN, `$1@${username} `)
-		setMessage(messageStart + message.slice(caret))
+		const caret = chatMessageBox.selectionStart ?? chatMessage.length
+		const chatMessageStart = chatMessage.slice(0, caret).replace(ACTIVE_CHAT_MENTION_PATTERN, `$1@${username} `)
+		setChatMessage(chatMessageStart + chatMessage.slice(caret))
 		setMentionQuery(null)
-		messageBox.focus()
+		chatMessageBox.focus()
 	}
 
-	// post the trimmed message and reset the composer and the reply user
-	function handleSendMessage(): void {
-		const content = message.trim()
+	// post the trimmed chat message and reset the composer and the reply user
+	function handlePostChatMessage(): void {
+		const content = chatMessage.trim()
 		if (content === "") {
 			return
 		}
-		// a mention addresses itself, a previous reply target starts a message thread
-		const isMessageThread = !hasMention && replyTo !== null
-		const sentContent = hasMention || isMessageThread ? content : `@${ALL_USERNAME} ${content}`
-		onSendMessage(sentContent, isMessageThread ? (replyTo?.id ?? null) : null, pendingAttachments)
+		// a chat mention addresses itself, a previous reply target starts a chat message thread
+		const isChatMessageThread = !hasMention && replyTo !== null
+		const sentContent = hasMention || isChatMessageThread ? content : `@${ALL_USERNAME} ${content}`
+		onPostChatMessage(sentContent, isChatMessageThread ? (replyTo?.id ?? null) : null, pendingAttachments)
 		setPendingAttachments([])
-		setMessage("")
+		setChatMessage("")
 		setMentionQuery(null)
 	}
 
@@ -204,7 +212,7 @@ export function ChatRoomComposer({
 			return true
 		}
 
-		// escape closes the list without touching the message
+		// escape closes the list without touching the chat message
 		if (event.key === "Escape") {
 			event.stopPropagation()
 			setMentionQuery(null)
@@ -220,7 +228,7 @@ export function ChatRoomComposer({
 		}
 		if (event.key === "Enter" && !event.shiftKey) {
 			event.preventDefault()
-			handleSendMessage()
+			handlePostChatMessage()
 		}
 	}
 
@@ -230,7 +238,7 @@ export function ChatRoomComposer({
 			className="relative shrink-0 border-t px-3 py-2.5"
 			onSubmit={(event) => {
 				event.preventDefault()
-				handleSendMessage()
+				handlePostChatMessage()
 			}}
 		>
 			{/* the username suggestions autocomplete floats above the input, carl pinned first then the chat members */}
@@ -256,11 +264,11 @@ export function ChatRoomComposer({
 				</ul>
 			)}
 
-			{/* the username reply dropdown names who the message answers */}
+			{/* the username reply dropdown names who the chat message answers */}
 			{replyUserLabel && (
 				<ReplyToDropdown
 					currentReplyUser={replyUserLabel}
-					replyMessages={replyMessages}
+					replyChatMessages={replyChatMessages}
 					onSelectReplyTo={handleSelectReplyUser}
 				/>
 			)}
@@ -268,24 +276,25 @@ export function ChatRoomComposer({
 				attachments={pendingAttachments}
 				onRemove={(index) => setPendingAttachments((waiting) => waiting.filter((_, at) => at !== index))}
 			/>
-			{/* the message field owns its own line, with the send below it, so a long line won't get squeezed */}
+			{/* the chat message field owns its own line, with the send button below it */}
 			<FileDropZone className="bg-background rounded-2xl border px-3 py-2" onDropFiles={attachSelectedFiles}>
-				{/* the box is 16px on touch screens to keep the panel on the screen.
-					autocomplete is off, so a phone offers no passwords, cards, or addresses on the message field */}
+				{/* the box is 16px on touch screens. smaller text makes a phone zoom on focus.
+					autocomplete off keeps a phone's password, card, and address fill off the chat message field */}
 				<textarea
-					ref={messageBoxRef}
+					ref={chatMessageBoxRef}
 					rows={1}
-					value={message}
+					value={chatMessage}
 					maxLength={CHAT_ROOM_MESSAGE_MAX_CHARS}
 					onChange={handleMessageChange}
 					onKeyDown={handleMessageKeyDown}
+					onPaste={handlePaste}
 					placeholder={toComposerPlaceholder(replyUser)}
 					aria-label="Message the room"
 					autoComplete="off"
 					className="placeholder:text-muted-foreground w-full resize-none bg-transparent py-1 text-base leading-relaxed outline-none sm:text-sm"
 				/>
 				<div className="mt-1 flex items-center justify-between">
-					{/* only one attachment file can be sent with the message */}
+					{/* the hidden file picker for attachments */}
 					<label
 						aria-label="Attach a file"
 						className="text-muted-foreground hover:text-foreground grid size-11 cursor-pointer place-items-center rounded-full sm:size-8"
@@ -293,7 +302,7 @@ export function ChatRoomComposer({
 						<Paperclip className="size-4" />
 						<input
 							type="file"
-							accept={FILE_PICKER_ACCEPT}
+							accept={CHAT_FILE_PICKER_ACCEPT}
 							className="sr-only"
 							multiple
 							onChange={(event) => {
@@ -307,7 +316,7 @@ export function ChatRoomComposer({
 						type="submit"
 						aria-label="Send"
 						className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full disabled:opacity-50 sm:size-8"
-						disabled={message.trim() === ""}
+						disabled={chatMessage.trim() === ""}
 					>
 						<ArrowUp className="size-4" />
 					</button>
@@ -320,21 +329,21 @@ export function ChatRoomComposer({
 // the reply to user dropdown menu
 function ReplyToDropdown({
 	currentReplyUser,
-	replyMessages,
+	replyChatMessages,
 	onSelectReplyTo,
 }: {
 	currentReplyUser: string
-	replyMessages: { username: string; message: ChatRoomMessage }[]
-	onSelectReplyTo: (selectedMessage: { username: string; message: ChatRoomMessage } | "all" | "carl") => void
+	replyChatMessages: { username: string; chatMessage: ChatRoomMessage }[]
+	onSelectReplyTo: (selectedChatMessage: { username: string; chatMessage: ChatRoomMessage } | "all" | "carl") => void
 }) {
 	const [isOpen, setIsOpen] = useState(false)
 
-	// selecting closes the menu and passes the message to the callback
+	// selecting closes the menu and passes the chat message to the callback
 	const handleSelectReplyTo = (
-		selectedMessage: { username: string; message: ChatRoomMessage } | "all" | "carl",
+		selectedChatMessage: { username: string; chatMessage: ChatRoomMessage } | "all" | "carl",
 	): void => {
 		setIsOpen(false)
-		onSelectReplyTo(selectedMessage)
+		onSelectReplyTo(selectedChatMessage)
 	}
 
 	return (
@@ -350,24 +359,33 @@ function ReplyToDropdown({
 					<ChevronDown className="size-3" />
 				</button>
 			</PopoverTrigger>
-			<PopoverContent align="start" className="w-44 p-1">
+			{/* the current reply target's row shows the selected tint */}
+			<PopoverContent align="start" className="w-44" bodyClassName="p-1">
 				{/* @all reaches the whole room and starts carl's turn beside it */}
-				<button type="button" onClick={() => handleSelectReplyTo("all")} className={REPLY_OPTION_CLASS}>
+				<button
+					type="button"
+					onClick={() => handleSelectReplyTo("all")}
+					className={cn(MENU_OPTION_CLASS, currentReplyUser === "@all" && MENU_OPTION_SELECTED_CLASS)}
+				>
 					@all
 				</button>
-				{!replyMessages.some((message) => message.username === "Carl") && (
-					<button type="button" onClick={() => handleSelectReplyTo("carl")} className={REPLY_OPTION_CLASS}>
+				{!replyChatMessages.some((chatMessage) => chatMessage.username === "Carl") && (
+					<button
+						type="button"
+						onClick={() => handleSelectReplyTo("carl")}
+						className={cn(MENU_OPTION_CLASS, currentReplyUser === "Carl" && MENU_OPTION_SELECTED_CLASS)}
+					>
 						Carl
 					</button>
 				)}
-				{replyMessages.map((message) => (
+				{replyChatMessages.map((chatMessage) => (
 					<button
-						key={message.username}
+						key={chatMessage.username}
 						type="button"
-						onClick={() => handleSelectReplyTo(message)}
-						className={REPLY_OPTION_CLASS}
+						onClick={() => handleSelectReplyTo(chatMessage)}
+						className={cn(MENU_OPTION_CLASS, currentReplyUser === chatMessage.username && MENU_OPTION_SELECTED_CLASS)}
 					>
-						{message.username}
+						{chatMessage.username}
 					</button>
 				))}
 			</PopoverContent>
@@ -375,15 +393,12 @@ function ReplyToDropdown({
 	)
 }
 
-// the placeholder starts with the selected target's mention
+// the placeholder starts with the selected target's chat mention
 function toComposerPlaceholder(replyUsername: string): string {
 	return `@${replyUsername}, penny for your thoughts…`
 }
 
-// an option row inside the reply menu selector
-const REPLY_OPTION_CLASS = "hover:bg-accent flex min-h-9 w-full items-center rounded-md px-2 text-sm"
-
-// what the menu calls a mention: carl by name, @all as typed, anyone else by their username
+// what the menu calls a chat mention: carl by name, @all as typed, anyone else by their username
 function toMentionLabel(username: string): string {
 	if (username === CARL_USERNAME) {
 		return "Carl"
@@ -391,21 +406,21 @@ function toMentionLabel(username: string): string {
 	return username === ALL_USERNAME ? "@all" : username
 }
 
-// swap the current mention for the selected mention if there is one
-export function toChangedMentionMessage(message: string, username: string, memberUsernames: string[]): string {
-	return `@${username} ${toMessage(message, memberUsernames)}`
+// swap the current chat mention for the selected chat mention if there is one
+export function toChangedMentionChatMessage(chatMessage: string, username: string, memberUsernames: string[]): string {
+	return `@${username} ${toChatMessage(chatMessage, memberUsernames)}`
 }
 
-// the message without its current mention, so a new mention updates
-export function toMessage(message: string, memberUsernames: string[]): string {
-	const currentMentions = message.match(/^@([\w-]+)\s*/)
+// the chat message without its leading chat mention
+export function toChatMessage(chatMessage: string, memberUsernames: string[]): string {
+	const currentMentions = chatMessage.match(/^@([\w-]+)\s*/)
 	const chatUsernames = [
 		CARL_USERNAME,
 		ALL_USERNAME,
 		...memberUsernames.map((memberUsername) => memberUsername.toLowerCase()),
 	]
 	if (currentMentions && chatUsernames.includes((currentMentions[1] ?? "").toLowerCase())) {
-		return message.slice(currentMentions[0].length)
+		return chatMessage.slice(currentMentions[0].length)
 	}
-	return message
+	return chatMessage
 }

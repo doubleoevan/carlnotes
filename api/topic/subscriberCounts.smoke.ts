@@ -18,25 +18,25 @@ async function withFixtures(
 	let storedCount = -1
 	try {
 		await db.transaction(async (transaction) => {
-			// four people sharing one stamp, so a parallel run never collides on an id
-			const stamp = `smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
+			// four people share one run id, so a parallel run never collides on an id
+			const runId = `smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
 			const people = await transaction
 				.insert(users)
 				.values(
 					// one row per role the cases need, each with the name columns the users table requires
 					["owner", "direct", "member", "both"].map((role) => ({
-						id: `${stamp}-${role}`,
+						id: `${runId}-${role}`,
 						name: role,
-						email: `${stamp}-${role}@carlnotes.test`,
-						username: `${stamp}-${role}`,
-						usernameNormalized: `${stamp}${role}`.replaceAll("-", "").toLowerCase(),
+						email: `${runId}-${role}@carlnotes.test`,
+						username: `${runId}-${role}`,
+						usernameNormalized: `${runId}${role}`.replaceAll("-", "").toLowerCase(),
 					})),
 				)
 				.returning()
 			// the topic the count is about, owned by the first of them
 			const [topic] = await transaction
 				.insert(topics)
-				.values({ id: `${stamp}-topic`, ownerId: people[0]?.id ?? "", name: "counted topic" })
+				.values({ id: `${runId}-topic`, ownerId: people[0]?.id ?? "", name: "counted topic" })
 				.returning()
 			// the case sets its rows up and hands back what the recount stored
 			storedCount = await runCase(

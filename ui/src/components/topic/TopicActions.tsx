@@ -4,11 +4,46 @@ import type * as React from "react"
 import { ShareTopicButton } from "@/components/share/ShareTopic"
 import { isTeamUpShown, TeamUpButton } from "@/components/team/TeamUpButton"
 import { isFollowShown, SubscribeButton } from "@/components/topic/TopicPageHeader"
-import { TopicScanButton } from "@/components/topic/TopicScanButton"
+import { isManualScanShown } from "@/components/topic/TopicScanButton.tsx"
 import { MENU_BUTTON_CLASS } from "@/lib/styleClasses"
 import type { PageActionOption } from "@/stores/pageActionsStore"
 
-// what actions a topic offers: the rows its page hands the search bar's menu
+// what the action bar's layout depends on
+type TopicActionContext = {
+	// undefined while the payload loads. the call-to-action skeleton stands in for it
+	topic: TopicResponse | null | undefined
+	isSignedIn: boolean
+	isBookmarkedView: boolean
+	// whether a team owns this topic and the user is on none of the teams that have it
+	isJoinable: boolean
+}
+
+/**
+ * Which control the topic's action bar highlights. Exactly one is the call to action, and share
+ * takes the left when nothing else claims it. The bar reads as one control on each end.
+ */
+function toActionLayout({ topic, isSignedIn, isBookmarkedView, isJoinable }: TopicActionContext) {
+	const canScan = isManualScanShown(topic)
+	const isFollowCallToAction = !canScan && !isJoinable && !isSignedIn
+	const isTeamUpCallToAction = !canScan && !isJoinable && isSignedIn
+
+	// either show the call to action or a menu row, and team up is either the row or the call to action
+	const isTeamUpInRow = Boolean(topic && isTeamUpShown(topic, isSignedIn) && !isTeamUpCallToAction)
+	const isBookmarkScopeShown = isBookmarkedView && Boolean(topic?.isTeamMember)
+	return {
+		isJoinCallToAction: !canScan && isJoinable,
+		isFollowCallToAction,
+		isFollowInMenu: Boolean(topic && isFollowShown(topic) && !isFollowCallToAction),
+		isTeamUpInRow,
+		isTeamUpCallToAction,
+		isShareInRow: Boolean(topic) && !isBookmarkScopeShown && !isTeamUpInRow,
+	}
+}
+
+// whether the follow row goes in the page's actions menu instead of the bar
+export function isFollowInMenu(context: TopicActionContext): boolean {
+	return toActionLayout(context).isFollowInMenu
+}
 
 // the rows this page hands the search bar's actions menu, in the order they read
 export function toTopicActionOptions({
@@ -58,88 +93,25 @@ export function toTopicActionOptions({
 }
 
 /**
- * Which control the topic's action bar highlights. Exactly one is the call to action, and share
- * takes the left when nothing else claims it, so the bar reads as one control on each end.
- */
-export function toTopicActionBar({
-	topic,
-	isSignedIn,
-	isManualScanShown,
-	isBookmarkedView,
-	isJoinable,
-}: {
-	topic: TopicResponse | null | undefined
-	isSignedIn: boolean
-	isManualScanShown: boolean
-	isBookmarkedView: boolean
-	// whether a team owns this topic and the user is on none of the teams that have it
-	isJoinable: boolean
-}): {
-	isJoinCallToAction: boolean
-	isFollowCallToAction: boolean
-	isFollowInMenu: boolean
-	isTeamUpInRow: boolean
-	isTeamUpCallToAction: boolean
-	isShareInRow: boolean
-} {
-	const isJoinCallToAction = !isManualScanShown && isJoinable
-	const isFollowCallToAction = !isManualScanShown && !isJoinable && !isSignedIn
-	const isTeamUpCallToAction = !isManualScanShown && !isJoinable && isSignedIn
-	const isBookmarkScopeShown = isBookmarkedView && Boolean(topic?.isTeamMember)
-
-	// following is either the call to action or a menu row
-	const isFollowInMenu = Boolean(topic && isFollowShown(topic) && !isFollowCallToAction)
-	const isTeamUpInRow = Boolean(topic && isTeamUpShown(topic, isSignedIn) && !isTeamUpCallToAction)
-	return {
-		isJoinCallToAction,
-		isFollowCallToAction,
-		isFollowInMenu,
-		isTeamUpInRow,
-		isTeamUpCallToAction,
-		isShareInRow: Boolean(topic) && !isBookmarkScopeShown && !isTeamUpInRow,
-	}
-}
-
-/**
  * The static button bar above the payload, so the buttons never jump or animate in. Every control sits
  * left but the page's one call to action, which holds the right. The bar wraps when the screen is narrow.
  */
 export function TopicActionBar({
 	topic,
 	isSignedIn,
-	isShareInRow,
-	isJoinCallToAction,
+	isBookmarkedView,
+	isJoinable,
 	joinButton,
-	isFollowCallToAction,
-	isTeamUpInRow,
-	isTeamUpCallToAction,
-	isManualScanShown,
-	isRunning,
-	isCancellable,
-	isCancelling,
+	scanControl,
 	onSubscriptionToggle,
-	onManualScan,
-	onCancelScan,
-}: {
-	// undefined while the payload loads, which is what the call-to-action skeleton stands in for
-	topic: TopicResponse | null | undefined
-	isSignedIn: boolean
-	isShareInRow: boolean
-	// the topic's owning team is the call to action where the user could join it
-	isJoinCallToAction: boolean
+}: TopicActionContext & {
+	// the join and scan controls own their own sends. the bar only decides where they sit
 	joinButton: React.ReactNode
-	isFollowCallToAction: boolean
-	isTeamUpInRow: boolean
-	isTeamUpCallToAction: boolean
-	isManualScanShown: boolean
-	isRunning: boolean
-	// only a scan that has a row to cancel can be cancelled, so the optimistic click gap has no icon
-	isCancellable: boolean
-	isCancelling: boolean
+	scanControl: React.ReactNode
 	onSubscriptionToggle: () => Promise<void>
-	onManualScan: () => Promise<void>
-	onCancelScan: () => Promise<void>
 }) {
+	const { isJoinCallToAction, isFollowCallToAction, isTeamUpInRow, isTeamUpCallToAction, isShareInRow } =
+		toActionLayout({ topic, isSignedIn, isBookmarkedView, isJoinable })
 	return (
 		<div className="flex flex-wrap items-start justify-between gap-3">
 			<div className="flex flex-wrap items-start gap-2">
@@ -164,17 +136,8 @@ export function TopicActionBar({
 						className="bg-muted h-11 w-28 animate-pulse rounded-lg motion-reduce:animate-none sm:h-9"
 					/>
 				)}
-				{topic && isManualScanShown && (
-					<TopicScanButton
-						remainingScans={topic.manualScansRemaining}
-						scanLimit={topic.manualScanLimit}
-						isSpendExhausted={topic.isSpendExhausted}
-						isRunning={isRunning}
-						isCancelling={isCancelling}
-						onManualScan={onManualScan}
-						onCancelScan={isCancellable ? onCancelScan : undefined}
-					/>
-				)}
+				{/* the scan control mounts for every user to keep its poll running, and shows nothing to the rest */}
+				{scanControl}
 				{isJoinCallToAction && joinButton}
 				{topic && isFollowCallToAction && (
 					<SubscribeButton topic={topic} isSignedIn={isSignedIn} isHighlighted onToggle={onSubscriptionToggle} />

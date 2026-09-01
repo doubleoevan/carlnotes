@@ -1,5 +1,7 @@
 // the durable Scan: it runs the pipeline's three stages as activities
 import { CancellationScope, isCancellation, proxyActivities } from "@temporalio/workflow"
+// a relative import. temporal bundles workflow code with webpack, which has no @shared alias
+import { toScanFailureReason } from "../../shared/scanFailure"
 import type * as scanActivities from "./run-topic-scan-activities"
 // the attempt counts the retry policies that the temporal activities read
 import {
@@ -71,7 +73,7 @@ export async function runTopicScanWorkflow(
 			await stopCancelledScan(scanId)
 			return
 		}
-		await failScan(scanId, error instanceof Error ? error.message : String(error), spentBudget)
+		await failScan(scanId, toScanFailureReason(error), spentBudget)
 	}
 }
 

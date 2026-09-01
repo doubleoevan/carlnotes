@@ -39,6 +39,7 @@ async function setNewTeamLeaders(userId: string): Promise<void> {
 			.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true), ne(teamMembers.userId, userId)))
 			.orderBy(asc(teamMembers.createdAt))
 			.limit(1)
+		// the longest-standing remaining team member becomes the next leader of the team
 		if (nextTeamLeaderRow) {
 			await db
 				.update(teamMembers)
@@ -53,9 +54,8 @@ async function setNewTeamLeaders(userId: string): Promise<void> {
 }
 
 /**
- * Close an account and everything it owns. "missing" rejection when there is no such user.
- *
- * Whatever can still spend money is canceled first, so a user cannot get charged with no row to explain it.
+ * Close an account and everything it owns. "missing" rejection if there is no such user.
+ * Whatever can still spend money is canceled first, so a user cannot get charged without a row to explain it.
  */
 export async function deleteUser(
 	actingUserId: string,

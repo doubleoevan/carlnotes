@@ -2,8 +2,9 @@
 import { trackEvent } from "@shared/analytics"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
 import { toCanonicalEmail } from "@shared/emails"
+import { reportError } from "@shared/monitoring"
 import { isInAppBrowser, toBrowserPlatform, toPlatform } from "@shared/userAgent"
-import { toNormalizedUsername } from "@shared/usernames"
+import { toNormalizedUsername, toProviderUsername } from "@shared/usernames"
 import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { createAuthMiddleware } from "better-auth/api"
@@ -15,7 +16,8 @@ import { sendEmail } from "../worker/email"
 import { effectiveBudgetCents } from "./authorization"
 import { provisionLiteLLMKey } from "./litellm"
 import { isBreachedPassword } from "./passwords"
-import { ensureUsername, toAssignedUsername } from "./usernames"
+import { saveDefaultUserTeam } from "./team/teams"
+import { saveDefaultUsername, toAssignedUsername, toFreeUsernames } from "./usernames"
 
 // how long a signup-gate token stays valid
 const GATE_TOKEN_LIFETIME_MS = 15 * 60 * 1000
@@ -29,27 +31,30 @@ export const GATE_COOKIE_NAME = "signup_gate"
 // the better auth endpoint path for password signup, the only path the gate cookie is required on
 const PASSWORD_SIGNUP_PATH = "/sign-up/email"
 
-// the paths that set a password, which are the only ones a breach check belongs on. sign-in is deliberately absent.
+// the paths that set a password, the only ones the breach check runs on
 const PASSWORD_SETTING_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/reset-password", "/change-password", "/set-password"])
 
 // the paths whose body includes an address that better auth looks up a user by or stores
 const EMAIL_BODY_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/sign-in/email", "/request-password-reset", "/change-email"])
 
-// how long a password-reset link stays valid. it is a bearer token sitting in an inbox, so the window is short
+// how long a password-reset link stays valid
 const RESET_TOKEN_LIFETIME_SECONDS = 60 * 60
 
 // the minimum password length. above Better Auth's default of 8
 const MIN_PASSWORD_LENGTH = 12
 
-// how hard the credential endpoints are rate-limited. ten guesses a minute.
+// how hard the credential endpoints are rate-limited
 const CREDENTIAL_RATE_WINDOW_SECONDS = 60
 const CREDENTIAL_RATE_MAX = 10
 
 // the signed-in user that the session middleware sets on Hono's request context
 export type SessionUser = typeof auth.$Infer.Session.user
 
-// whether a phone on the same network may sign in against this server, which is a dev-only convenience
+// whether a phone on the same network may sign in against this server. dev only
 const isLanDevOriginTrusted = Boolean(Bun.env.LAN_DEV_URL) && Bun.env.DOPPLER_ENVIRONMENT === "dev"
+
+// the private lan ranges, trusted as patterns. isLanDevOriginTrusted turns them on
+const LAN_DEV_ORIGINS = ["http://192.168.*.*:*", "http://10.*.*.*:*"]
 
 // the hook that better auth takes, running both of the checks before a credential request
 const beforeCredentialRequest = createAuthMiddleware(async (context) => {
@@ -92,13 +97,65 @@ function toCanonicalProfileEmail(profile: { email?: string | null }): { email?: 
 	return profile.email ? { email: toCanonicalEmail(profile.email) } : {}
 }
 
+// GitHub sends its handle as login, proposed as the signup username. Google sends only a real name, never proposed
+function toGithubProfileUser(profile: { email?: string | null; login: string }): {
+	email?: string
+	username?: string
+} {
+	const providerUsername = toProviderUsername(profile.login)
+	return { ...toCanonicalProfileEmail(profile), ...(providerUsername ? { username: providerUsername } : {}) }
+}
+
+// an oauth signup arrives with the provider's photo already on image. a password signup never has one
+export function toSignupAvatarSource(image: string | null | undefined): "oauth" | "generated" {
+	return image ? "oauth" : "generated"
+}
+
+// the proxies from TRUSTED_PROXIES whose x-forwarded-for may be trusted, as comma-separated IPs or CIDR ranges.
+// until it is set, the forwarded header is ignored and rate limiting shares one bucket
+const trustedProxies = (Bun.env.TRUSTED_PROXIES ?? "")
+	.split(",")
+	.map((proxy) => proxy.trim())
+	.filter(Boolean)
+
+// set already when the proxies are configured, so nothing is reported
+let hasReportedForwardedChain = trustedProxies.length > 0
+
+/**
+ * Log the first request's forwarded chain once, naming the proxy hops TRUSTED_PROXIES should be set to.
+ */
+export function reportForwardedChain(forwardedFor: string | null): void {
+	// one report per boot, and none at all once the proxies are configured
+	if (hasReportedForwardedChain) {
+		return
+	}
+	hasReportedForwardedChain = true
+
+	// the header's comma-separated hops, cleaned of padding and empties
+	const hops = (forwardedFor ?? "")
+		.split(",")
+		.map((hop) => hop.trim())
+		.filter(Boolean)
+
+	// no header at all means the platform is not forwarding, and there is no address to read
+	if (hops.length === 0) {
+		console.warn("no x-forwarded-for on the first request, so no client address can be resolved at all")
+		return
+	}
+	// everything after the leading address is a proxy, and those are what TRUSTED_PROXIES names
+	console.warn(
+		`TRUSTED_PROXIES is unset and x-forwarded-for arrived with ${hops.length} hop(s). ` +
+			`Set it to the proxy hop(s) behind the user: ${hops.slice(1).join(", ") || "(none, the header holds only the user)"}`,
+	)
+}
+
 export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: "pg", schema, usePlural: true }),
-	// better auth derives trustedOrigins from baseURL itself, so BETTER_AUTH_URL alone is enough
+	// better auth derives trustedOrigins from baseURL itself
 	baseURL: Bun.env.BETTER_AUTH_URL,
-	// these are appended to that derived origin, so only the lan address belongs here
-	trustedOrigins: isLanDevOriginTrusted ? [Bun.env.LAN_DEV_URL ?? ""] : undefined,
-	// the reset link is a bearer token in someone's inbox, so it is short-lived
+	// these are appended to that derived origin
+	trustedOrigins: isLanDevOriginTrusted ? LAN_DEV_ORIGINS : undefined,
+	// email and password sign-in. the reset link is short-lived and a reset revokes every session
 	emailAndPassword: {
 		enabled: true,
 		minPasswordLength: MIN_PASSWORD_LENGTH,
@@ -111,6 +168,7 @@ export const auth = betterAuth({
 			await clearResetPasswordTokens(user.id)
 		},
 	},
+	// each provider maps its profile onto the user row, and github's proposes its handle as the username
 	socialProviders: {
 		google: {
 			clientId: Bun.env.GOOGLE_CLIENT_ID ?? "",
@@ -120,17 +178,20 @@ export const auth = betterAuth({
 		github: {
 			clientId: Bun.env.GITHUB_CLIENT_ID ?? "",
 			clientSecret: Bun.env.GITHUB_CLIENT_SECRET ?? "",
-			mapProfileToUser: toCanonicalProfileEmail,
+			mapProfileToUser: toGithubProfileUser,
 		},
 	},
-	// implicit linking keeps its safe default: a verified email on both the incoming oauth side and the local row
+	// account linking requires a verified email on both the incoming oauth side and the local row
 	account: { accountLinking: { enabled: true } },
 	// reject a breached password wherever one is being set, and canonicalize the address wherever one arrives
 	hooks: { before: beforeCredentialRequest },
+	// resolve the client address through the named proxies
+	advanced:
+		trustedProxies.length > 0 ? { ipAddress: { trustedProxies, ipAddressHeaders: ["x-forwarded-for"] } } : undefined,
 	// rate limiting for credential endpoints
 	rateLimit: {
 		enabled: true,
-		// the paths where a request is a login attempt or sends mail everything else keeps the default rate limit
+		// the paths where a request is a login attempt or sends mail. everything else keeps the default rate limit
 		customRules: {
 			"/sign-in/email": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 			"/sign-up/email": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
@@ -139,7 +200,7 @@ export const auth = betterAuth({
 			"/change-password": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 		},
 	},
-	// a non-blocking verification email on signup, so a password account can later link to an oauth one
+	// a non-blocking verification email on signup
 	emailVerification: {
 		sendVerificationEmail: async ({ user, url }) => {
 			await sendVerificationEmail(user.email, url)
@@ -159,14 +220,13 @@ export const auth = betterAuth({
 			litellmVirtualKey: { type: "string", required: false, input: false, returned: false },
 			role: { type: "string", required: false, input: false, returned: true },
 			plan: { type: "string", required: false, input: false, returned: true },
-			// the username and avatar source are included, so the header can display the user's own avatar without making a
-			// request
+			// return the username and avatar source with the session
 			username: { type: "string", required: true, defaultValue: "", input: false, returned: true },
-			// include the generated username with the signup
+			// the normalized username for the unique index
 			usernameNormalized: { type: "string", required: false, input: false, returned: false },
 			avatarSource: { type: "string", required: false, input: false, returned: true },
 			avatarKey: { type: "string", required: false, input: false, returned: true },
-			// the access requirements to send an invite to this user, set in the Invitations section of the account page
+			// the access requirements to send an invite to this user
 			inviteAccess: { type: "string", required: false, input: false, returned: true },
 		},
 	},
@@ -190,17 +250,37 @@ export const auth = betterAuth({
 						effectiveBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: null }),
 					)
 
-					// generate a username during signup
-					const username = await toAssignedUsername()
+					// the provider's own handle is kept when it is well-formed and nobody holds it. GitHub's
+					// mapper proposes it on the user, and everything else falls back to a generated name
+					const providerUsername = toProviderUsername((user as { username?: unknown }).username)
+					const isProviderUsernameFree =
+						providerUsername !== null && (await toFreeUsernames([providerUsername])).length > 0
+					const username = isProviderUsernameFree && providerUsername ? providerUsername : await toAssignedUsername()
+					const avatarSource = toSignupAvatarSource(user.image)
 					return {
-						data: { ...user, litellmVirtualKey, username, usernameNormalized: toNormalizedUsername(username) },
+						data: {
+							...user,
+							litellmVirtualKey,
+							username,
+							usernameNormalized: toNormalizedUsername(username),
+							avatarSource,
+						},
 					}
 				},
 				// track the signup funnel's final event
 				after: async (user, context) => {
-					// the unique index on the normalized username is what really reserves the name
+					// the unique index on the normalized username reserves the name
 					const { username } = user as { username?: string }
-					await ensureUsername(user.id, username ?? (await toAssignedUsername()))
+					const settledUsername = await saveDefaultUsername(user.id, username ?? (await toAssignedUsername()))
+
+					// the team named after them, made once the username is settled. a failure here must not fail the signup
+					if (settledUsername) {
+						await saveDefaultUserTeam(user.id, settledUsername).catch((error) => {
+							console.error(`could not create the signup team for user ${user.id}`, error)
+							reportError(error, "chat", { userId: user.id })
+						})
+					}
+					// the signup funnel's final event, tagged with what converted and from where
 					const ctaTag = toCtaTag(context?.getCookie(SIGNUP_CTA_COOKIE_NAME) ?? null)
 					const userAgent = context?.headers?.get("user-agent")
 					trackEvent("signup_completed", user.id, {
@@ -240,7 +320,6 @@ export async function verifyTurnstileToken(token: string): Promise<boolean> {
 }
 
 // verifies a signup-gate token's signature and expiry
-// exported so the reset password request can use the same verification
 export async function verifyGateToken(token: string): Promise<boolean> {
 	const [payload, signature] = token.split(".")
 	if (!payload || !signature || signature !== (await toSignature(payload))) {
@@ -314,7 +393,7 @@ async function sendVerificationEmail(email: string, url: string): Promise<void> 
 	})
 }
 
-// the value's signature, keyed on the app's auth secret so a tampered token can't verify. HMAC-SHA256, base64url-encoded
+// the value's signature, keyed on the app's auth secret. HMAC-SHA256, base64url-encoded
 async function toSignature(value: string): Promise<string> {
 	const secret = Bun.env.BETTER_AUTH_SECRET
 	if (!secret) {

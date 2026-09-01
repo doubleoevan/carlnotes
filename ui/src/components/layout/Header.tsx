@@ -6,10 +6,11 @@ import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { CoffeeRings } from "@/components/branding/CoffeeRings"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { CountPill } from "@/components/common/CountPill"
 import { Attribution } from "@/components/layout/Attribution"
 import { DocsLink } from "@/components/layout/DocsLink"
 import { ThemeToggle } from "@/components/layout/ThemeToggle"
-import { MENU_ITEM_CLASS, menuItemClassName, UserMenu, UserMenuItems } from "@/components/layout/UserMenu"
+import { UserMenu, UserMenuItems } from "@/components/layout/UserMenu"
 import { buttonVariants } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -17,20 +18,25 @@ import { SignOutDialog } from "@/components/session/SignOutDialog"
 import { ChatMentionCount } from "@/components/topic/TopicMentionBadge"
 import { useRememberedSignedIn } from "@/hooks/useRememberedSignedIn"
 import { useTheme } from "@/hooks/useTheme"
+import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { useAllChatMentions } from "@/stores/chatRoomStore"
+import { useAllNoteCount } from "@/stores/noteBadgeStore"
 
 // the hover treatment shared by the header's menu buttons, tuned for the dark hero banner
 const HERO_BUTTON_HOVER = "hover:bg-white/10 hover:text-hero-foreground dark:hover:bg-white/10"
+
+// the size the count pills shrink to in the hamburger menu's corner
+const MENU_BADGE_CLASS = "h-4 min-w-4 text-[0.625rem]"
 
 // Carl's pitch, shown inline on wide screens and inside the phone's note popover
 const CARL_PITCH =
 	"Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes."
 
-// the desktop nav link's classes: the current page gets the same background tint as hover, so it reads as selected
+// the desktop nav link's classes on the dark hero band. the current page is marked with a white wash at twice the hover fill
 function menuLinkClassName(pathname: string, href: string): string {
-	return cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER, pathname === href && "bg-white/10")
+	return cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER, pathname === href && "bg-white/20")
 }
 
 /**
@@ -41,11 +47,11 @@ export function Header() {
 	// drives the menu items in both the desktop menu and the mobile menu
 	const { data: session } = authClient.useSession()
 	const isSignedIn = Boolean(session)
-	// the admin link renders only for admins. the api re-checks the role on every admin call
+	// the admin link renders only for admins
 	const isAdmin = session?.user.role === "admin"
 	// the headline shimmers on every route change. keying the wrapper by pathname remounts it to replay
 	const { pathname } = useLocation()
-	// a click on a link that is already home reloads the feed instead of navigating
+	// a click on a home link while already on the home page reloads the feed
 	const { reheat } = useTopicFeed()
 	function handleHomeClick(event: React.MouseEvent): void {
 		if (pathname !== "/" || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
@@ -55,7 +61,7 @@ export function Header() {
 		void reheat()
 	}
 
-	// the hero pitches the app to a visitor who has not signed up, so it belongs on the home page alone
+	// the hero pitches the app to a visitor. it only shows on the home page to logged-out visitors.
 	const isHeroShown = !useRememberedSignedIn() && pathname === "/"
 	return (
 		<header className="bg-hero text-hero-foreground relative overflow-hidden">
@@ -77,17 +83,22 @@ export function Header() {
 					{/* the desktop menu items, swapped for the hamburger menu on small screens */}
 					<div className="hidden items-center gap-1 sm:flex">
 						<ThemeToggle isDark={isDark} onToggle={toggleTheme} />
-						{/* docs and plans move into the user menu once signed in. they stay in the header for a signed-out visitor */}
+						{/* docs and plans move into the user menu once signed in */}
 						{!session && (
 							<>
-								<DocsLink className={menuLinkClassName(pathname, "/docs")} />
-								<AnchorLink href="/plans" className={menuLinkClassName(pathname, "/plans")}>
+								{/* the docs open in their own tab */}
+								<DocsLink className={cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER)} />
+								<AnchorLink
+									href="/plans"
+									aria-current={pathname === "/plans" ? "page" : undefined}
+									className={menuLinkClassName(pathname, "/plans")}
+								>
 									Plans
 								</AnchorLink>
 							</>
 						)}
 						{session ? (
-							// the user items live below the avatar dropdown instead of the primary navigation
+							// the user items live in the avatar dropdown
 							<UserMenu
 								userId={session.user.id}
 								username={session.user.username}
@@ -117,7 +128,7 @@ export function Header() {
 						userId={session?.user.id ?? ""}
 					/>
 				</div>
-				{/* the hero: Carl and the headline appear with no hydrate fade, the headline shimmers, and the copy fades in.
+				{/* the hero: the headline shimmers and the copy fades in.
 				    on a narrow screen, the headline spans both columns above Carl. on a wide screen, Carl takes the left and the headline goes right */}
 				{isHeroShown && (
 					<div className="mt-6 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-x-4">
@@ -128,7 +139,7 @@ export function Header() {
 							className="shimmer-reveal col-span-2 text-center sm:col-span-1 sm:col-start-2 sm:text-left"
 						>
 							{/* the dimmed heading that the light reveals. the page's real h1. only this copy is a link.
-						        the overlay copies are pointer-transparent scenery, so the click always reaches here */}
+						        the overlay copies are pointer-transparent */}
 							<h1 className="shimmer-reveal-base font-display text-2xl leading-tight sm:text-4xl">
 								{`He already read it. `}
 								<AnchorLink href="/" onClick={handleHomeClick} className="text-hero-accent">
@@ -160,7 +171,7 @@ export function Header() {
 						{/* the copy clears the search bar overlapping the hero's bottom edge */}
 						<div className="col-start-2 row-start-2 min-w-0 pb-10">
 							{/* Carl's pitch, then the call to action and the tagline.
-						    the pitch on a narrow screen is hidden and shows up in a popup instead */}
+						    the pitch on a narrow screen is hidden and shows up in a popup */}
 							<div className="animate-hydrate mt-3 text-sm" style={{ animationDelay: "80ms" }}>
 								<p className="hidden max-w-xl sm:block">
 									{CARL_PITCH}
@@ -198,10 +209,12 @@ function HeaderMenu({
 	isAdmin: boolean
 	userId: string
 }) {
-	// the path is used to highlight the current menu option
+	// the path highlights the open page's row, and sends the login back to where the visitor started
 	const { pathname } = useLocation()
-	// the chat panel polls for mentions to show in the header menu
+	// the chat panel polls for chat mentions to show in the header menu
 	const chatMentions = useAllChatMentions()
+	// every unread note change the user has, across their topics and teams
+	const noteCount = useAllNoteCount()
 	// controlled so every item click closes the menu, including navigation and the sign-out confirmation
 	const [isOpen, setIsOpen] = useState(false)
 	const closeMenu = (): void => {
@@ -215,7 +228,7 @@ function HeaderMenu({
 		closeMenu()
 	}
 
-	// the menu cannot be open while the confirmation is, so it won't overlap the dialog
+	// the menu cannot be open while the confirmation is
 	const isMenuOpen = isOpen && !isConfirmingSignOut
 	return (
 		<>
@@ -225,22 +238,20 @@ function HeaderMenu({
 					aria-label="Menu"
 				>
 					<Menu className="size-5" />
-					{/* what is waiting in any room, so a phone sees it without opening the menu */}
-					{chatMentions.length > 0 && (
-						<ChatMentionCount
-							chatMentions={chatMentions}
-							className="absolute top-1 right-1 h-4 min-w-4 text-[0.625rem]"
-						/>
-					)}
+					{/* the unread counts badged on the menu trigger. the chat mention pill sits left of the note pill */}
+					<span className="absolute top-1 right-1 flex items-center gap-1">
+						{chatMentions.length > 0 && <ChatMentionCount chatMentions={chatMentions} className={MENU_BADGE_CLASS} />}
+						{noteCount > 0 && <CountPill count={noteCount} variant="outline" className={MENU_BADGE_CLASS} />}
+					</span>
 				</PopoverTrigger>
-				<PopoverContent align="end" className="w-44 p-1">
+				<PopoverContent align="end" className="w-44" bodyClassName="p-1">
 					<button
 						type="button"
 						onClick={() => {
 							onToggleTheme()
 							closeMenu()
 						}}
-						className={MENU_ITEM_CLASS}
+						className={MENU_OPTION_CLASS}
 					>
 						{isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
 						{isDark ? "Light mode" : "Dark mode"}
@@ -248,8 +259,14 @@ function HeaderMenu({
 					{/* docs and plans move into the user menu once signed in */}
 					{!isSignedIn && (
 						<>
-							<DocsLink className={MENU_ITEM_CLASS} hasIcon onNavigate={closeMenu} />
-							<AnchorLink href="/plans" onClick={closeMenu} className={menuItemClassName(pathname, "/plans")}>
+							{/* the docs open in their own tab */}
+							<DocsLink className={MENU_OPTION_CLASS} hasIcon onNavigate={closeMenu} />
+							<AnchorLink
+								href="/plans"
+								onClick={closeMenu}
+								aria-current={pathname === "/plans" ? "page" : undefined}
+								className={cn(MENU_OPTION_CLASS, pathname === "/plans" && MENU_OPTION_SELECTED_CLASS)}
+							>
 								<Columns3Cog className="size-4" />
 								Plans
 							</AnchorLink>
@@ -266,7 +283,7 @@ function HeaderMenu({
 							<AnchorLink
 								href={`/login?next=${encodeURIComponent(toSafeRedirectPath(pathname))}`}
 								onClick={closeMenu}
-								className={MENU_ITEM_CLASS}
+								className={MENU_OPTION_CLASS}
 							>
 								<LogIn className="size-4" />
 								Log in
@@ -275,7 +292,7 @@ function HeaderMenu({
 							<AnchorLink
 								href="/signup?cta=menu"
 								onClick={closeMenu}
-								className={cn(MENU_ITEM_CLASS, "bg-primary text-primary-foreground hover:bg-primary/90")}
+								className={cn(MENU_OPTION_CLASS, "bg-primary text-primary-foreground hover:bg-primary/90")}
 							>
 								<UserPlus className="size-4" />
 								Sign up
@@ -299,7 +316,7 @@ function PitchButton() {
 						className="hover:opacity-75 ml-1 inline-grid size-5 translate-y-0.5 place-items-center align-text-bottom sm:hidden"
 						aria-label="Meet Carl"
 					>
-						{/* the tile fills this inline box exactly, so the line keeps its height */}
+						{/* the tile fills this inline box exactly */}
 						<NoteIcon className="size-5 rounded-sm" />
 					</PopoverTrigger>
 				</TooltipTrigger>
@@ -307,7 +324,7 @@ function PitchButton() {
 			</Tooltip>
 			<PopoverContent align="end" className="w-72 text-sm font-normal">
 				<PopoverCloseButton />
-				{/* the title, under a label so the first line clears the close button */}
+				{/* the title label. the first line clears the close button */}
 				<div className="text-muted-foreground font-display mb-2 text-center text-xs tracking-wide uppercase">
 					Meet Carl
 				</div>
@@ -327,7 +344,7 @@ function AttributionButton() {
 						className="hover:opacity-75 ml-1 inline-grid size-5 translate-y-0.5 place-items-center align-text-bottom"
 						aria-label="About the CarlNotes persona"
 					>
-						{/* the tile fills this inline box exactly, so the line keeps its height */}
+						{/* the tile fills this inline box exactly */}
 						<NoteIcon className="size-5 rounded-sm" />
 					</PopoverTrigger>
 				</TooltipTrigger>
@@ -335,7 +352,7 @@ function AttributionButton() {
 			</Tooltip>
 			<PopoverContent align="start" className="w-80 text-sm">
 				<PopoverCloseButton />
-				{/* the persona credit, under a label so the first line clears the close button */}
+				{/* the persona credit's label. the first line clears the close button */}
 				<div className="text-muted-foreground font-display mb-1 text-center text-xs tracking-wide uppercase">
 					The Real Carl
 				</div>

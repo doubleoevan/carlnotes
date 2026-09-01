@@ -1,5 +1,5 @@
 import { zValidator } from "@hono/zod-validator"
-// the topic finding logic behind the api routes
+// the topic finding logic for the api routes
 import { trackEvent } from "@shared/analytics"
 import type { TopicFinding } from "@shared/contracts"
 import { bookmarkPayload, consumedPayload, findingFeedbackPayload, ratingPayload } from "@shared/contracts"
@@ -17,6 +17,7 @@ import {
 	scans,
 	topics,
 } from "../../db/schema"
+import { loadOrFetchLinkPreview } from "../chat/linkPreviews"
 import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { canBookmarkFinding, canRateFinding, isTopicFindingVisible, toTopicRole } from "./permissions"
@@ -295,8 +296,31 @@ export function newTopicFindingCount(topicFindings: TopicFinding[]): number {
 	return topicFindings.filter((finding) => !finding.isConsumed).length
 }
 
-// the per-finding routes a signed-in user drives: rating, consumed, bookmarked, and the view an open records
+// the per-finding routes a signed-in user can do: rating, consume, bookmark, record a view,
+// and the link preview card the topic finding popup shows
 export const findingsRoute = new Hono<AppEnv>()
+	.get("/topic-findings/:id/link-preview", async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		if (!(await isTopicFindingVisible(userId, context.req.param("id")))) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// the topic finding's page resolves through the shared link preview cache
+		const [findingRow] = await db
+			.select({ url: resources.url })
+			.from(findings)
+			.innerJoin(resources, eq(resources.id, findings.resourceId))
+			.where(eq(findings.id, context.req.param("id")))
+		// a topic finding whose resource is gone has no page to preview
+		if (!findingRow) {
+			return context.json({ error: "not found" }, 404)
+		}
+		return context.json({ linkPreview: await loadOrFetchLinkPreview(findingRow.url) })
+	})
 	.post("/topic-findings/:id/rating", zValidator("json", ratingPayload), async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)

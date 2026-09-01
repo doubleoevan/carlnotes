@@ -3,16 +3,21 @@ import { Hono } from "hono"
 import { loadPages } from "./content"
 import {
 	lastScan,
+	loadDocsPages,
+	publicTopicRows,
 	scanFindings,
 	toCreativeWorkLd,
 	toFindingListHtml,
 	toFindingListLd,
 	toJsonLdTag,
+	toLlmsFullTxt,
+	toLlmsTxt,
 	toOrganizationLd,
+	toSecurityTxt,
 	toSitemapXml,
 	toSoftwareApplicationLd,
 } from "./seo"
-import { toTopicFeedXml } from "./share/feed"
+import { toSiteFeedXml, toTopicFeedXml } from "./share/feed"
 import {
 	toProfilePreview,
 	toProfilePreviewHtml,
@@ -57,10 +62,46 @@ export const pagesRoute = new Hono()
 	})
 	// the plans page moved from /pricing. the redirect covers any link or crawl of the old path
 	.get("/pricing", (context) => context.redirect("/plans", 301))
+	// the llms.txt index: what this site is, its docs and blog, and the newest public topics. it reads the sitemap's own public-topic query
+	.get("/llms.txt", async (context) => {
+		const llmsTxt = toLlmsTxt(appUrl(), loadDocsPages(), loadPages("blog"), await publicTopicRows())
+		// cached for fifteen minutes
+		return context.body(llmsTxt, 200, {
+			"Content-Type": "text/plain; charset=utf-8",
+			"Cache-Control": "public, max-age=900",
+		})
+	})
+	// the long form: the docs and blog bodies whole, for a model that wants the text and not just the links
+	.get("/llms-full.txt", (context) => {
+		return context.body(toLlmsFullTxt(appUrl(), loadDocsPages(), loadPages("blog")), 200, {
+			"Content-Type": "text/plain; charset=utf-8",
+			"Cache-Control": "public, max-age=900",
+		})
+	})
+	// the site-wide feed: the blog
+	.get("/feed.xml", (context) => {
+		const blogItems = loadPages("blog").map((page) => ({
+			title: page.title,
+			url: `${appUrl()}/blog/${page.slug}`,
+			explanation: page.description,
+			publishedAt: new Date(page.date),
+		}))
+		return context.body(toSiteFeedXml(appUrl(), blogItems), 200, {
+			"Content-Type": "application/rss+xml; charset=utf-8",
+			"Cache-Control": "public, max-age=900",
+		})
+	})
+	// the vulnerability contact file, served from the route. no dot-directory sits in the static bundle
+	.get("/.well-known/security.txt", (context) => {
+		return context.body(toSecurityTxt(appUrl()), 200, {
+			"Content-Type": "text/plain; charset=utf-8",
+			"Cache-Control": "public, max-age=3600",
+		})
+	})
 	// the crawler map of every public page, generated from live data on each request
 	.get("/sitemap.xml", async (context) => {
 		const contentPaths = ["/blog", ...loadPages("blog").map((page) => `/blog/${page.slug}`)]
-		// a crawler may hold the map for an hour, which spares the live queries behind each build
+		// a crawler may hold the map for an hour, which spares the live queries for each build
 		return context.body(await toSitemapXml(appUrl(), contentPaths), 200, {
 			"Content-Type": "application/xml; charset=utf-8",
 			"Cache-Control": "public, max-age=3600",

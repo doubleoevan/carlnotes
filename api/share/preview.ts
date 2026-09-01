@@ -2,7 +2,7 @@
 import { and, count, eq } from "drizzle-orm"
 import { db } from "../../db"
 import { findings, sources, teamMembers, teams, topics, users } from "../../db/schema"
-import { attachmentExists, getAttachmentBytes, putAttachment } from "../../worker"
+import { attachmentExists, getAttachmentBytes, uploadAttachment } from "../../worker"
 import { toPublishedAvatar } from "../avatars"
 import { countDistinctSubscribers } from "../profiles"
 import { isShown } from "../topic/permissions"
@@ -14,7 +14,7 @@ import { type TopicPreview, toTopicPreviewKey, toTopicPreviewPng } from "./topic
 const PREVIEW_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 /**
- * What a Topic's preview says, or null when no Topic has that id.
+ * What a Topic's preview says, or null if no Topic has that id.
  * Every Topic gets a preview whatever its visibility, so a pasted link never looks broken.
  */
 export async function toTopicPreview(topicId: string): Promise<TopicPreview | null> {
@@ -98,7 +98,7 @@ async function toCachedPng(
 // render the png and store it, so the next fetch of this exact preview is a storage read
 async function renderAndStorePng(previewKey: string, renderPng: () => Promise<Uint8Array>): Promise<Uint8Array> {
 	const bytes = await renderPng()
-	await putAttachment(previewKey, bytes, "image/png")
+	await uploadAttachment(previewKey, bytes, "image/png")
 	return bytes
 }
 
@@ -144,7 +144,7 @@ export function toTopicPreviewHtml(
 }
 
 /**
- * What a profile's preview says, or null when no user has that id.
+ * What a profile's preview says, or null if no user has that id.
  */
 export async function toProfilePreview(userId: string): Promise<ProfilePreview | null> {
 	const [user] = await db.select({ id: users.id, username: users.username }).from(users).where(eq(users.id, userId))
@@ -167,7 +167,7 @@ export async function toProfilePreview(userId: string): Promise<ProfilePreview |
 }
 
 /**
- * What a team's card says, or null when there is no public team at that id.
+ * What a team's card says, or null if there is no public team at that id.
  * A private team renders no card, and its page shows an outsider its name and nothing else.
  */
 export async function toTeamPreview(teamId: string): Promise<TeamPreview | null> {

@@ -4,9 +4,10 @@ description: >
   TypeScript and JavaScript readability rules. Use when writing,
   editing, reviewing, or refactoring ANY TypeScript, JavaScript, or JSX code:
   every new function, every fix, every generated file, even one-line changes.
-  Covers mandatory comment groups, top-down file order, file-count discipline,
-  naming, import paths, early returns, and type modeling. If code is being
-  produced or changed, this skill applies.
+  Covers mandatory comment groups, comment voice, top-down file order,
+  file-count discipline, naming, import paths, early returns, object
+  parameters, and type modeling. If code is being produced or changed, this
+  skill applies.
 ---
 
 # Code Style
@@ -28,7 +29,7 @@ Every logical group of lines gets a comment on the line above it: a single line 
 - No dense parentheticals and no unexplained shorthand. Spell it out: "without time zone", never "(no tz)".
 - Keep the why when it is not obvious from the code. Cut detail, not clarity — one line preferred, never more than two.
 - A comment must be true. Verify it against the code it describes before writing it, and fix it when the code changes.
-- Describe what the group does, not how.
+- Name what the group does, not how.
 - A reader must be able to skim only the comments and understand the full flow of the file.
 - Never record how the code got here. No "every caller", no "this used to", no note on what was tried or ruled out. A comment describes the code as it is now.
 - JSX section comments use `{/* section name */}`.
@@ -53,7 +54,27 @@ statements without a comment above it fails this rule.
 
     return Response.json({ success: true })
 
-Wording example:
+**Imperative voice.** A `//` comment names the action the group performs. Lead
+with a bare verb: no `-s` ending, no `-ing` ending, no subject, no "this".
+
+    // wrong — narrates the code instead of naming the action
+    // parses the request body
+    // parsing of the request body
+    // this parses the request body
+
+    // right
+    // parse the request body
+
+A group that declares instead of acting — a type, a schema field, a constant, a
+config object — has no action to name. State the fact instead.
+
+    // right — a constant declaration, so a plain statement
+    // the source kinds carl can scan
+    export const sourceKinds = ['web', 'rss', 'youtube'] as const
+
+JSDoc runs the other way: third person, never imperative. See rule 11.
+
+**Wording.** Two short sentences beat one clause-chained line.
 
     // wrong — clause-chained, the reader has to decode it
     // lifecycle status; running until it succeeds or fails, with the failure reason if it fails
@@ -67,44 +88,44 @@ A comment says what the code is. Anything that argues for it, describes what it
 is not, or narrates what happens elsewhere is cut. All three read as filler, and
 all three drift as soon as the code around them moves.
 
-**The trailing justification.** A factual clause followed by "since" or "because"
-is a fact plus an argument for the fact. Keep the fact.
+**The trailing justification.** An action followed by "since" or "because" is a
+fact plus an argument for the fact. Keep the fact.
 
     // wrong — the clause defends the line above it
-    // only the topic owner may delete, since the team never owned the topic
+    // reject deletes from anyone but the topic owner, since the team never owned the topic
 
     // right
-    // only the topic owner may delete
+    // reject deletes from anyone but the topic owner
 
-**Defining by what it is not.** Say what the thing is.
+**Defining by what it is not.** Say what the code does.
 
     // wrong
-    // the tooltip is the button's accessible name, since the icon has no text of its own
+    // use the tooltip as the button's accessible name, since the icon has no text of its own
 
     // right
-    // the tooltip is the button's accessible name
+    // use the tooltip as the button's accessible name
 
 **Downstream narrative.** A comment stops at the file it lives in. What some
 other module does with the value belongs to that module, which is free to change
 without anyone thinking to come back here.
 
     // wrong — an api file describing the ui
-    // role and plan are included in the session so the ui can render the admin link
+    // include role and plan in the session so the ui can render the admin link
 
     // right
-    // role and plan are included in the session
+    // include role and plan in the session
 
 Keep a constraint the code cannot show: an external system's behavior, an
 ordering the compiler will not enforce, an api that destroys its input. State it
-as a plain sentence beside the fact, never as a defense of it.
+as a plain sentence beside the action, never as a defense of it.
 
     // wrong — the constraint arrives as an argument
-    // only LISTEN needs the direct connection string, since neon's pooler endpoint
+    // open LISTEN on the direct connection string, since neon's pooler endpoint
     // does not deliver notifications to a listener
 
-    // right — two facts, and the second is why the first cannot change
-    // LISTEN needs the direct connection string. neon's pooler drops notifications
-    // to a listener
+    // right — the action, then the constraint that makes it the only option
+    // open LISTEN on the direct connection string. neon's pooler drops
+    // notifications to a listener
 
 ### 3. Top-down file order
 
@@ -178,7 +199,7 @@ decodes at 3am.
     const rankedArticles = relevantArticles.sort((a, b) => b.score - a.score)
     const topArticles = rankedArticles.slice(0, limit)
 
-    // shape for the feed
+    // shape the items for the feed
     const feedItems = topArticles.map(toFeedItem)
 
 ### 8. No abbreviations in variable names
@@ -222,10 +243,32 @@ self-documenting.
 Double-star `/** */` block above every exported function. One line only.
 Describe what it does, not how.
 
+**Third person, not imperative** — the inverse of rule 1. A `//` comment names
+an action the reader follows down the file; a JSDoc block describes a function
+that already exists. The verb takes the `-s` and the line ends in a period.
+
+    // wrong — imperative, reads like a step in a procedure
+    /**
+     * Score an article against the reader profile.
+     */
+
+    // wrong — no verb, so the reader learns nothing the name did not say
+    /**
+     * Article scoring.
+     */
+
+    // right
     /**
      * Scores an article against the reader profile.
      */
     export function scoreArticle(article: Article, profile: ReaderProfile): number { ... }
+
+The two voices side by side:
+
+| Comment | Voice | Example |
+| --- | --- | --- |
+| `//` | imperative, no period | `// parse the request body` |
+| `/** */` | third person, period | `/** Parses the request body. */` |
 
 ### 12. Discriminated unions
 
@@ -296,7 +339,65 @@ value is not visible from the signature.
     // still typed in a .tsx file — the hook returns a value the reader can't see
     function useTopicFeed(topicId: TopicId): TopicFeedState { ... }
 
-### 16. Ordinary words, and words already here
+### 16. Object parameters over long signatures
+
+Three or more parameters take a single options object. A positional call site is
+a row of unlabeled values the reader has to match against the signature, and
+every added parameter is a chance to break argument order.
+
+Two parameters also take an object when they share a type or when either one is
+a boolean. `store(userId, topicId)` is two strings a caller can swap with nothing
+to catch it, and a bare `true` at a call site says nothing about what it turns on.
+
+- Name the type after the function with an `Options` suffix.
+- Destructure in the signature so the body reads the same as before.
+- Required fields first, optional fields last.
+
+Leave one or two parameters of distinct types positional, and leave inline
+callbacks alone.
+
+    // wrong — the call site is six values in a fixed order
+    async function storeTopicChatAttachment(
+      userId: string,
+      topicId: string,
+      chatTurnId: string | null,
+      attachment: ChatAttachment,
+      isAttachmentKept: boolean,
+      litellmApiKey?: string,
+    ): Promise<boolean> { ... }
+
+    await storeTopicChatAttachment(userId, topicId, null, attachment, true, litellmApiKey)
+
+    // right — every value arrives labeled
+    interface StoreTopicChatAttachmentOptions {
+      userId: UserId
+      topicId: TopicId
+      chatTurnId: ChatTurnId | null
+      attachment: ChatAttachment
+      isAttachmentKept: boolean
+      litellmApiKey?: string
+    }
+
+    // store one attachment, and summarize it only when it is kept
+    async function storeTopicChatAttachment({
+      userId,
+      topicId,
+      chatTurnId,
+      attachment,
+      isAttachmentKept,
+      litellmApiKey,
+    }: StoreTopicChatAttachmentOptions): Promise<boolean> { ... }
+
+    await storeTopicChatAttachment({
+      userId,
+      topicId,
+      chatTurnId: null,
+      attachment,
+      isAttachmentKept: true,
+      litellmApiKey,
+    })
+
+### 17. Ordinary words, and words already here
 
 Two checks before naming anything or writing any comment.
 
@@ -332,5 +433,3 @@ substituting.
 
     // right
     // the yearly interval has the higher limits
-
-Applies to comments, test names, and identifiers alike.

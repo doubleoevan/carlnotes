@@ -7,7 +7,7 @@ import { screenText, toFlaggedReason } from "../guard"
 import { type FetchResult, fetchContent, toFetchableUrl } from "../scrape"
 
 /**
- * Fetch and screen the page behind a url Source, then mark it ready or failed with the reason.
+ * Fetch and screen the page for a url Source, then mark it ready or failed with the reason.
  * A url that cannot be fetched is a rejection, not a warning: its page produces nothing on every future Scan,
  * and the owner should be told so.
  */

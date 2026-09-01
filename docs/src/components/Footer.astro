@@ -1,0 +1,34 @@
+---
+// the docs footer: starlight's own rows with the copyright and the way back to the app below them
+// biome-ignore lint/correctness/noUnusedImports: rendered in the template below, which biome does not read
+import Default from "@astrojs/starlight/components/Footer.astro"
+---
+
+<Default><slot /></Default>
+<div class="site-line">
+	<p class="copyright">© 2026 CarlNotes</p>
+	<a href="https://carlnotes.com">carlnotes.com</a>
+</div>
+
+<style>
+	/* the same muted small print the footer's own rows use, held clear of the pagination above it.
+	   copyright left and the app link right, wrapping onto two lines if a phone runs out of width */
+	.site-line {
+		display: flex;
+		flex-wrap: wrap;
+		justify-content: space-between;
+		gap: 0.25rem 1rem;
+		margin-top: 1rem;
+		color: var(--sl-color-gray-3);
+		font-size: var(--sl-text-xs);
+	}
+
+	.site-line a {
+		color: var(--sl-color-text-accent);
+		text-decoration: none;
+	}
+
+	.site-line a:hover {
+		text-decoration: underline;
+	}
+</style>

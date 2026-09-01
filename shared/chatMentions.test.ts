@@ -1,8 +1,8 @@
 // chat mention parser tests: username targets, separator spellings, and the false positives that must stay silent
 import { expect, test } from "bun:test"
-import { CARL_USERNAME, hasCarlMention, isCarlMessage, toChatMentions, toMentionedUserIds } from "./chatMentions"
+import { CARL_USERNAME, hasModelMention, isModelChatMessage, toChatMentions, toMentionedUserIds } from "./chatMentions"
 
-// the members the room hands the parser
+// the members the chat room hands the parser
 const MEMBERS = [CARL_USERNAME, "hirecarl", "Seeded-Member-1"]
 
 // a chat mention inside a longer sentence finds its username, for carl and for a member alike
@@ -25,10 +25,10 @@ test("toChatMentions dedupes and keeps order", () => {
 })
 
 // the carl check is the same parse narrowed to his reserved username
-test("chatMentionsCarl answers only for carl", () => {
-	expect(hasCarlMention("@carl what do you think")).toBe(true)
-	expect(hasCarlMention("carl thinks this is fine")).toBe(false)
-	expect(hasCarlMention("mail carl@carlnotes.dev today")).toBe(false)
+test("hasModelMention answers only for carl", () => {
+	expect(hasModelMention("@carl what do you think")).toBe(true)
+	expect(hasModelMention("carl thinks this is fine")).toBe(false)
+	expect(hasModelMention("mail carl@carlnotes.dev today")).toBe(false)
 })
 
 // the selection the chat room notifies from: @all fans out to everyone, carl never gets a row
@@ -44,8 +44,8 @@ test("toMentionedUserIds selects the named members, fans out @all, and skips car
 })
 
 // a closed account keeps the name its messages were written under while losing its author reference
-test("isCarlMessage tells carl from a departed member", () => {
-	expect(isCarlMessage({ authorUserId: null, authorUsername: "Carl" })).toBe(true)
-	expect(isCarlMessage({ authorUserId: null, authorUsername: "hirecarl" })).toBe(false)
-	expect(isCarlMessage({ authorUserId: "user_1", authorUsername: "Carl" })).toBe(false)
+test("isModelChatMessage tells carl from a departed member", () => {
+	expect(isModelChatMessage({ authorUserId: null, authorUsername: "Carl" })).toBe(true)
+	expect(isModelChatMessage({ authorUserId: null, authorUsername: "hirecarl" })).toBe(false)
+	expect(isModelChatMessage({ authorUserId: "user_1", authorUsername: "Carl" })).toBe(false)
 })

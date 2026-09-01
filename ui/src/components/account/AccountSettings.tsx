@@ -1,7 +1,7 @@
 import { Check, Info, Settings } from "lucide-react"
 import { type SubmitEvent, useState } from "react"
 import { authClient } from "@/clients/authClient"
-import { sendDeleteAccount, sendInviteAccess, sendUsername } from "@/clients/profileClient"
+import { sendDeleteAccount, sendInviteAccess } from "@/clients/profileClient"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 import { Button } from "@/components/primitives/button"
@@ -10,6 +10,7 @@ import { Label } from "@/components/primitives/label"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { PasswordInput } from "@/components/session/PasswordInput"
 import { useAvatar } from "@/hooks/useAvatar"
+import { type UsernameChange, useUsernameChange } from "@/hooks/useUsernameChange"
 import { CARD_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
@@ -34,21 +35,43 @@ export function AccountSettings() {
 	)
 }
 
-// error messages for username updates
-const USERNAME_REJECTIONS: Record<string, string> = {
-	length: "Between 3 and 32 characters.",
-	charset: "Letters, numbers, hyphens and underscores only.",
-	separator: "It can't start or end with a hyphen or underscore.",
-	reserved: "That one's taken by the site itself.",
-	taken: "Someone already has that one.",
-}
-
 // the user profile settings
 function ProfileSection() {
-	const { data: session, refetch: refreshSession } = authClient.useSession()
-	const [username, setUsername] = useState("")
-	const [updateRejection, setUpdateRejection] = useState<string | null>(null)
-	const [isSaving, setSaving] = useState(false)
+	const { data: session } = authClient.useSession()
+
+	// only a signed-in user has an account page
+	if (!session) {
+		return null
+	}
+	return (
+		<section className={CARD_CLASS}>
+			<h3 className="font-semibold">Profile</h3>
+			<ProfileFields userId={session.user.id} username={session.user.username} className="mt-3" />
+		</section>
+	)
+}
+
+/**
+ * The profile's editable fields: the avatar picker with the provider-photo toggle, and the username form.
+ */
+export function ProfileFields({
+	userId,
+	username,
+	className,
+	usernameChange,
+	onUsernameChanged,
+}: {
+	userId: string
+	username: string
+	className?: string
+	// a username-change state the caller owns. when set, the form hides its own submit button
+	usernameChange?: UsernameChange
+	// runs after a username change saves
+	onUsernameChanged?: () => void
+}) {
+	// a hook cannot be called conditionally, so this fallback is always created
+	const fallbackUsernameChange = useUsernameChange(onUsernameChanged)
+	const accountUsernameChange = usernameChange ?? fallbackUsernameChange
 
 	// the avatar comes from the session, which the header reads too, so toggling its source updates both at once
 	const { avatarSource, hasProviderPhoto, setAvatarSource } = useAvatar()
@@ -56,42 +79,19 @@ function ProfileSection() {
 		void setAvatarSource(avatarSource === "oauth" ? "generated" : "oauth")
 	}
 
-	// update the username, letting the api apply validation rules
+	// stop the event and save the username
 	async function handleUpdateUsername(event: SubmitEvent): Promise<void> {
 		event.preventDefault()
-		setSaving(true)
-		setUpdateRejection(null)
-		try {
-			const usernameRejection = await sendUsername(username)
-			if (usernameRejection) {
-				setUpdateRejection(USERNAME_REJECTIONS[usernameRejection] ?? "That didn't work. Try again.")
-				return
-			}
-			// refresh the session so the name on this page and the one in the header change together
-			await refreshSession()
-			setUsername("")
-		} catch (error) {
-			console.error("username change failed", error)
-			setUpdateRejection("That didn't reach Carl. Try again.")
-		} finally {
-			setSaving(false)
-		}
+		await accountUsernameChange.saveUsername()
 	}
-
-	// only a signed-in user has an account page
-	if (!session) {
-		return null
-	}
-	const currentUsername = session.user.username
 
 	return (
-		<section className={CARD_CLASS}>
-			<h3 className="font-semibold">Profile</h3>
-			<div className="mt-3 flex items-center gap-4">
-				<UserAvatarPicker userId={session.user.id} username={currentUsername} />
+		<div className={className}>
+			<div className="flex items-center gap-4">
+				<UserAvatarPicker userId={userId} username={username} />
 				<div className="text-sm">
-					<p className="font-display text-lg">{currentUsername}</p>
-					{/* the provider photo avatar is opt-in. the default avatar is username initials */}
+					<p className="font-display text-lg">{username}</p>
+					{/* an oauth signup defaults to the provider photo, which is opt-out. this toggle switches it back. */}
 					{hasProviderPhoto && (
 						<button
 							type="button"
@@ -106,32 +106,37 @@ function ProfileSection() {
 				</div>
 			</div>
 
-			{/* username is display only, so it can be changed as often as the user likes */}
-			<form onSubmit={handleUpdateUsername} className="mt-3 max-w-sm space-y-3">
+			{/* username is display only, so it can be changed as often as the user likes.
+			    a caller that owns the save is a modal, where the field runs the full width */}
+			<form onSubmit={handleUpdateUsername} className={cn("mt-3 space-y-3", !usernameChange && "max-w-sm")}>
 				<div className="space-y-1.5">
 					<Label htmlFor="username">New username</Label>
 					<Input
 						id="username"
-						value={username}
-						onChange={(event) => setUsername(event.target.value)}
-						placeholder={currentUsername}
-						aria-describedby={updateRejection ? "username-rejection" : undefined}
+						value={accountUsernameChange.username}
+						onChange={(event) => accountUsernameChange.setUsername(event.target.value)}
+						placeholder={username}
+						aria-describedby={accountUsernameChange.rejection ? "username-rejection" : undefined}
 						className="bg-card dark:bg-card"
-						// a field named "username" reads as a login to password managers so set the autocomplete to nickname
-						autoComplete="nickname"
 						required
 					/>
 				</div>
-				{updateRejection && (
+				{accountUsernameChange.rejection && (
 					<p id="username-rejection" className="text-destructive text-sm">
-						{updateRejection}
+						{accountUsernameChange.rejection}
 					</p>
 				)}
-				<Button type="submit" disabled={isSaving || username.length === 0}>
-					Change username
-				</Button>
+				{/* a caller that owns the state saves it from its own button instead */}
+				{!usernameChange && (
+					<Button
+						type="submit"
+						disabled={accountUsernameChange.isSaving || accountUsernameChange.username.length === 0}
+					>
+						Change username
+					</Button>
+				)}
 			</form>
-		</section>
+		</div>
 	)
 }
 
@@ -319,7 +324,7 @@ function InvitationsSection() {
 								<Tooltip>
 									<TooltipTrigger asChild>
 										<Info
-											className="text-muted-foreground stroke-card size-3.5 fill-current"
+											className="text-primary stroke-card size-4.5 fill-current"
 											aria-label="What counts as interacting"
 										/>
 									</TooltipTrigger>

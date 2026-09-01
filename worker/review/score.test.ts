@@ -74,7 +74,7 @@ test("toFetchedContentFields keeps the key and scores content when stored, other
 		contentKey: "resources/r1/content.md",
 		contentBytes: 12,
 	})
-	// a failed or skipped store keeps no key and scores the snippet, or leaves the content empty when there is no snippet
+	// a failed or skipped store keeps no key and scores the snippet, or leaves the content empty if there is no snippet
 	expect(toFetchedContentFields(null, "body", "snip")).toEqual({
 		scoringText: "snip",
 		contentKey: null,

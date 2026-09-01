@@ -1,6 +1,7 @@
 import { lazy, Suspense, useState } from "react"
 import { useNavigate } from "react-router-dom"
 import { authClient } from "@/clients/authClient"
+import type { ChatPage } from "@/clients/chatClient"
 import { ChatBudgetNotice } from "@/components/chat/ChatBudgetNotice"
 import { CHAT_QUESTION_PLACEHOLDER, ChatComposer } from "@/components/chat/ChatComposer"
 import type { ChatRoomOption } from "@/components/chat/ChatOptionsMenu"
@@ -10,34 +11,36 @@ import { ClearChatDialog } from "@/components/chat/ClearChatDialog"
 import { useTopicChat } from "@/components/chat/useTopicChat"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
 
-// the message list is lazy-loaded on the first open instead of with the page
+// the chat message list is lazy-loaded on the first open instead of in the initial bundle
 const ChatMessages = lazy(() =>
-	import("@/components/chat/ChatMessages").then((messages) => ({ default: messages.ChatMessages })),
+	import("@/components/chat/ChatMessages").then((chatMessages) => ({ default: chatMessages.ChatMessages })),
 )
 
 // the private chat panel: one user, one persisted conversation with Carl, clearable
 export function PrivateChatPanel({
-	topicId,
-	topicName,
+	page,
+	chatName,
 	panelState,
 	onPanelState,
 	chatRoomOptions,
-	onOpenMenu,
+	onOpenMenu: onOpenChatRoomMenu,
 }: {
-	topicId: string
-	topicName: string
-	// how much of the screen the panel takes, owned by the shell so it survives a room switch
+	// the conversation's page: one topic, or a whole team read across its topics
+	page: ChatPage
+	// what the empty conversation's opening line names: the topic, or the team
+	chatName: string
+	// how much of the screen the panel takes, owned by the shell so it survives a chat room switch
 	panelState: Exclude<ChatPanelState, "collapsed">
 	onPanelState: (next: ChatPanelState) => void
-	// the rooms the menu offers beside this conversation
+	// the chat rooms the menu offers beside this conversation
 	chatRoomOptions?: ChatRoomOption[]
-	// re-reads the room list when the options menu opens
+	// re-reads the chat room list when the options menu opens
 	onOpenMenu?: () => void
 }) {
 	// the router a visitor's send to signup needs, and the conversation state the hook owns
 	const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
 	const navigate = useNavigate()
-	const chat = useTopicChat(topicId)
+	const chat = useTopicChat(page)
 	// the user authors every question bubble
 	const { data: session } = authClient.useSession()
 
@@ -58,10 +61,10 @@ export function PrivateChatPanel({
 				isEnlarged={isPanelEnlarged}
 				onToggleSize={() => onPanelState(isPanelEnlarged ? "open" : "enlarged")}
 				onCollapse={() => onPanelState("collapsed")}
-				chatPanelTooltip={{ chatRoomName: "Private chat", isPrivate: true }}
+				currentChatRoom={{ name: "Private chat", isPrivate: true }}
 				chatRoomMenu={{
 					chatRoomOptions,
-					onOpenMenu,
+					onOpenChatRoomMenu,
 					onClear: isClearable ? () => setIsClearConfirmOpen(true) : undefined,
 					clearLabel: "Clear private chat",
 				}}
@@ -73,7 +76,7 @@ export function PrivateChatPanel({
 						isEnlarged={isPanelEnlarged}
 						chatTurns={chat.chatTurns}
 						isStreaming={chat.isStreaming}
-						topicName={topicName}
+						chatName={chatName}
 						isBudgetExhausted={chat.isBudgetExhausted}
 						onRetry={(question) => void chat.send(question)}
 						author={{
@@ -94,20 +97,7 @@ export function PrivateChatPanel({
 					<ChatBudgetNotice />
 				</div>
 			) : (
-				<ChatComposer
-					question={chat.question}
-					attachments={chat.attachments}
-					keptAttachments={chat.keptAttachments}
-					isStreaming={chat.isStreaming}
-					isSignupRequired={chat.isSignupRequired}
-					onChange={chat.setQuestion}
-					onAddFiles={chat.addFiles}
-					onAddPastedText={chat.addPastedText}
-					onRemoveAttachment={chat.removeAttachment}
-					onRemoveKeptAttachment={chat.removeKeptAttachment}
-					onSend={handleSendChat}
-					onStop={chat.stop}
-				/>
+				<ChatComposer chat={chat} onSendQuestion={handleSendChat} />
 			)}
 
 			{/* the clear confirmation is only mounted while open, so its state resets each time */}

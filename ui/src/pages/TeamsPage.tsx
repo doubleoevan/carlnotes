@@ -7,6 +7,7 @@ import { fetchTeams, sendDeleteTeam, sendRemoveTeamMember } from "@/clients/team
 import { fetchAddableTopics } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
+import { CountPill } from "@/components/common/CountPill"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
@@ -18,6 +19,7 @@ import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useAllTeamMentions } from "@/stores/chatRoomStore"
+import { useAllTeamNoteCount } from "@/stores/noteBadgeStore"
 
 /**
  * The teams page: the teams the user belongs to with their role in each, the New Team button, and the
@@ -27,9 +29,11 @@ export function TeamsPage() {
 	usePageTitle("Teams")
 	const { data: session } = authClient.useSession()
 	const [teamsPage, setTeamsIndex] = useState<TeamsPageResponse | null>(null)
-	// the chat panel's poll feeds this, so the title counts without this page fetching again
+	// the chat panel's poll feeds this
 	const teamMentions = useAllTeamMentions()
-	// the page is about the teams themselves, so its panel leads with a team's own room and falls back to a topic's
+	// every unread change on the teams' notes
+	const teamNoteCount = useAllTeamNoteCount()
+	// the panel leads with a team's own chat room and falls back to a topic's
 	useRegisterChatContext({
 		topicId: null,
 		teamId: null,
@@ -57,8 +61,21 @@ export function TeamsPage() {
 		setIsCreating(true)
 	}
 
+	// deleting is confirmed, and the only team they lead is rejected with the reason
+	const handleDeleteTeam = async (): Promise<void> => {
+		if (!teamToDelete) {
+			return
+		}
+		const isDeleted = await sendDeleteTeam(teamToDelete.teamId)
+		if (!isDeleted) {
+			toast.error("Create another team before you delete this one.\nYou always lead at least one team.")
+		}
+		setTeamToDelete(null)
+		reloadTeams()
+	}
+
 	// leaving is confirmed, and the last leader is rejected with the reason
-	const handleLeave = async (): Promise<void> => {
+	const handleLeaveTeam = async (): Promise<void> => {
 		if (!teamToLeave || !session) {
 			return
 		}
@@ -77,8 +94,9 @@ export function TeamsPage() {
 				<h1 className="font-display flex items-center gap-2 text-2xl">
 					<Users className="size-6" />
 					Teams
-					{/* what is waiting across every room, counted beside the title */}
+					{/* the unread chat mentions across every chat room, with the note count after them */}
 					{teamMentions.length > 0 && <ChatMentionCount chatMentions={teamMentions} className="h-6 min-w-6 text-sm" />}
+					{teamNoteCount > 0 && <CountPill count={teamNoteCount} variant="outline" className="h-6 min-w-6 text-sm" />}
 				</h1>
 				<Button className="shrink-0" onClick={() => void handleCreateOpen()}>
 					<Plus className="size-4" />
@@ -98,7 +116,7 @@ export function TeamsPage() {
 			)}
 			{/* mt-2 plus the first accordion trigger's own padding matches the account page's mt-6 gap */}
 			<div className="mt-2">
-				{/* the two sections, each an accordion */}
+				{/* the loading state, then the two accordion sections */}
 				{teamsPage === null ? (
 					<CoffeeLoading />
 				) : (
@@ -138,7 +156,7 @@ export function TeamsPage() {
 					</Accordion>
 				)}
 			</div>
-			{/* the shared create modal, index variant: no prefill, the multiselect instead */}
+			{/* the shared create modal with invites and the topic multiselect */}
 			{isCreating && <EditTeamModal userTopics={addableTopics} onClose={() => setIsCreating(false)} />}
 			{/* deleting the team hands every topic back to whoever created it */}
 			{teamToDelete && (
@@ -146,12 +164,7 @@ export function TeamsPage() {
 					title={`Delete ${teamToDelete.name}?`}
 					confirmLabel="Delete team"
 					cancelLabel="Keep it"
-					onConfirm={() =>
-						void sendDeleteTeam(teamToDelete.teamId).then(() => {
-							setTeamToDelete(null)
-							reloadTeams()
-						})
-					}
+					onConfirm={() => void handleDeleteTeam()}
 					onClose={() => setTeamToDelete(null)}
 				>
 					{`Its ${teamToDelete.topicCount} topic${teamToDelete.topicCount === 1 ? "" : "s"} go back to whoever created them, and the room goes with the team.`}
@@ -162,7 +175,7 @@ export function TeamsPage() {
 					title="Leave this team?"
 					confirmLabel="Leave team"
 					cancelLabel="Stay"
-					onConfirm={() => void handleLeave()}
+					onConfirm={() => void handleLeaveTeam()}
 					onClose={() => setTeamToLeave(null)}
 				>
 					{`You lose access to ${teamToLeave.name}'s topics and its Coffee talk.`}

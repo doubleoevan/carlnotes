@@ -8,6 +8,9 @@ Vite React SPA. Entry `ui/src/main.tsx` → `App.tsx` holds the routes.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team surfaces.
 - `components/share/` — the share menus for a topic and a team, over the options they both use.
 - `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use.
+- `components/note/` — the Tasting Notes section, table, and dialog, and the lazily imported
+  BlockNote editor with its yjs SSE provider, comment threads, and the comment "@" mention menu.
+  The editor chunk loads only when a note dialog opens.
 - `clients/` — one typed API client per domain (`hc<AppType>`), named `<domain>Client.ts`.
 - `stores/` — app state one module owns and any component may read, named `<thing>Store.ts`. Each keeps
   its value in module scope, publishes to a listener set, and exposes `useSyncExternalStore` hooks, so

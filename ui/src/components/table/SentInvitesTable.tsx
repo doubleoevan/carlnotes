@@ -73,7 +73,7 @@ export function SentInvitesTable({
 		isDescending: true,
 	})
 
-	// the invitation waiting for withdraw confirmation, or null when no dialog is open
+	// the invitation waiting for withdraw confirmation, or null if no dialog is open
 	const [deleteInvite, setDeleteInvite] = useState<SentInviteRow | null>(null)
 	const handleDeleteInvite = async (): Promise<void> => {
 		if (deleteInvite && onDeleteInvite) {

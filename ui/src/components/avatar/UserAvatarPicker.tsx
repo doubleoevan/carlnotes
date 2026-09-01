@@ -1,6 +1,12 @@
 import { Camera } from "lucide-react"
 import { useState } from "react"
-import { AVATAR_REJECTIONS, AvatarDropOverlay, toDroppedImage } from "@/components/avatar/AvatarUpload"
+import {
+	AVATAR_ACCEPT,
+	AVATAR_REJECTIONS,
+	AvatarDropOverlay,
+	toDroppedImage,
+	toUploadableAvatar,
+} from "@/components/avatar/AvatarUpload"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { useAvatar } from "@/hooks/useAvatar"
@@ -29,7 +35,8 @@ export function UserAvatarPicker({
 		setUploading(true)
 		setUpdateRejection(null)
 		try {
-			const avatarRejection = await uploadAvatarFile(avatarFile)
+			// a phone photo is cut to the stored size before it is sent
+			const avatarRejection = await uploadAvatarFile(await toUploadableAvatar(avatarFile))
 			if (avatarRejection) {
 				setUpdateRejection(AVATAR_REJECTIONS[avatarRejection] ?? "That didn't reach Carl. Try again.")
 			}
@@ -71,7 +78,7 @@ export function UserAvatarPicker({
 					</span>
 					<input
 						type="file"
-						accept="image/png,image/jpeg,image/webp,image/gif"
+						accept={AVATAR_ACCEPT}
 						onChange={handleFileChange}
 						disabled={isUploading}
 						className="sr-only"

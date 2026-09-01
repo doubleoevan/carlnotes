@@ -45,7 +45,7 @@ test("toScanSummary reports failed when every Source that ran threw", () => {
 test("toScanSummary treats skipped Sources as non-failures", () => {
 	const summary = toScanSummary([{ status: "skipped", sourceKind: "composio" }])
 
-	// a skipped Source has no ingester behind it, so it counts as neither a failure nor a fallback
+	// a skipped Source has no ingester for it, so it counts as neither a failure nor a fallback
 	expect(summary.status).toBe("succeeded")
 	expect(summary.problemSources).toEqual([])
 })

@@ -1,7 +1,7 @@
 // the user profile api client
 import type { ProfileResponse, UserSearchResult } from "@shared/contracts"
 
-// a user's public profile by id, or null when there is no such user
+// a user's public profile by id, or null if there is no such user
 export async function fetchProfile(userId: string): Promise<ProfileResponse | null> {
 	const response = await fetch(`/api/profiles/${encodeURIComponent(userId)}`)
 	return response.ok ? ((await response.json()) as ProfileResponse) : null

@@ -98,7 +98,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 ]
 
 /**
- * The default Source for a source kind, or null when it is a custom source kind.
+ * The default Source for a source kind, or null if it is a custom source kind.
  */
 export function toDefaultSource(sourceKind: string): DefaultSource | null {
 	return DEFAULT_SOURCES.find((defaultSource) => defaultSource.sourceKind === sourceKind) ?? null
@@ -202,7 +202,7 @@ export function toUrlHost(url: string): string | null {
 }
 
 /**
- * The Google News RSS search feed for a query, or null when the query is blank.
+ * The Google News RSS search feed for a query, or null if the query is blank.
  */
 export function toGoogleNewsFeedUrl(query: string): string | null {
 	// a blank query has nothing to search for
@@ -214,7 +214,7 @@ export function toGoogleNewsFeedUrl(query: string): string | null {
 }
 
 /**
- * The publisher a Google News feed is scoped to, or null when the url is not a publisher feed.
+ * The publisher a Google News feed is scoped to, or null if the url is not a publisher feed.
  */
 export function toGoogleNewsPublisher(feedUrl: string): string | null {
 	// only a Google News feed names a publisher, and it names it in the search query
@@ -231,7 +231,7 @@ export function toGoogleNewsPublisher(feedUrl: string): string | null {
 }
 
 /**
- * The Google News feed covering one publisher, or null when the value has no domain.
+ * The Google News feed covering one publisher, or null if the value has no domain.
  */
 export function toGoogleNewsPublisherFeedUrl(publisher: string): string | null {
 	const publisherDomain = toPublisherDomain(publisher)
@@ -239,7 +239,7 @@ export function toGoogleNewsPublisherFeedUrl(publisher: string): string | null {
 }
 
 /**
- * The bare domain a pasted publisher value holds, or null when it has none.
+ * The bare domain a pasted publisher value holds, or null if it has none.
  */
 export function toPublisherDomain(value: string): string | null {
 	// drop the scheme, then everything from the path on and a leading www, so a pasted article url still names its publisher

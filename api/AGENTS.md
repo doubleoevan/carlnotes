@@ -2,8 +2,11 @@
 
 Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregates the `/api` routes.
 
-- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `share/`. Root files are cross-domain surfaces
-  (auth, billing, admin, avatars, profiles, SEO pages).
+- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `share/`. Root files are cross-domain surfaces
+  (auth, billing, admin, avatars, profiles, SEO pages, and `content.ts` for the blog under `content/blog/`).
+- `note/` — the tasting-notes routes and their yjs sync: `notes.ts` (page payload, snapshot, updates, stream),
+  `noteCommentThreads.ts` (comment writes), `noteStream.ts` (fan-out), `permissions.ts` (visibility access),
+  `noteBadges.ts` (the unread edit and comment counts, and the read time that clears them).
 - Every authority answer routes through `authorization.ts` and the role helpers; inline
   `role ===` / `plan ===` comparisons are banned outside it (`authorization.test.ts` greps).
 - Request bodies validate with zod payloads from `shared/contracts.ts` via `zValidator`.

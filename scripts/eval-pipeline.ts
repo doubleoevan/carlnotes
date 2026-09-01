@@ -47,7 +47,7 @@ export type EvalFixture = {
 	injectionAttacks: string[]
 }
 
-// what one fixture's run produced. the two scanner rates are null together, only when no scanner is configured
+// what one fixture's run produced. the two scanner rates are null together, only if no scanner is configured
 type EvalResult = {
 	name: string
 	precision: number
@@ -229,7 +229,7 @@ async function measureGuardOnly(): Promise<void> {
 	console.log(`scanner attack catch rate: ${caughtCount}/${attacks.length} known attacks caught`)
 }
 
-// the share of the given texts the scanner flags, or null when there is no scanner to ask. both rates use this:
+// the share of the given texts the scanner flags, or null if there is no scanner to ask. both rates use this:
 // on benign articles a flag is wrong, on real attacks a miss is wrong, but the measurement is the same
 async function toFlaggedRate(texts: string[]): Promise<number | null> {
 	// with no scanner or nothing to measure, report null instead of a zero that looks like a result

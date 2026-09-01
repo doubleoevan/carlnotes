@@ -14,7 +14,7 @@ import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePa
 import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
 import { durationMsBetween, toCentsLabel, toCountLabel, toDurationLabel, toMonthYearLabel } from "@/lib/labels"
-import { POPOVER_WIDTH_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { POPOVER_PANEL_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 // the icon and label each visibility reads as, matching the topic page's own info card
@@ -222,7 +222,7 @@ export function OwnerTopicsTable({
 	)
 }
 
-// the topic's name, linking to its page, with the user's mention count at its corner
+// the topic's name, linking to its page, with the user's chat mention count at its corner
 function TopicNameLink({ topic }: { topic: OwnerTopic }) {
 	return (
 		<span className="relative inline-block">
@@ -349,7 +349,7 @@ function ScanNotesCell({ scan, topic }: { scan: ActivityScan; topic: Pick<OwnerT
 	return (
 		<Popover onOpenChange={handleOpenScanNote}>
 			<PopoverTrigger className="text-link hover:underline">{duration || "—"}</PopoverTrigger>
-			<PopoverContent align="start" className={POPOVER_WIDTH_CLASS}>
+			<PopoverContent align="start" className={POPOVER_PANEL_CLASS}>
 				<PopoverCloseButton />
 				{isNoteLoaded ? (
 					<TopicScanRecap

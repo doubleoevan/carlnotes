@@ -1,6 +1,5 @@
 import { useLocation } from "react-router-dom"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { Attribution } from "@/components/layout/Attribution"
 import { DocsLink } from "@/components/layout/DocsLink"
 import { cn } from "@/lib/utils"
 
@@ -10,7 +9,6 @@ import { cn } from "@/lib/utils"
 export function Footer() {
 	return (
 		<footer className="text-muted-foreground border-separator mx-auto max-w-5xl border-t px-safe py-6 text-center text-sm">
-			<Attribution isFooter />
 			<FooterLegal />
 			<p className="mt-2">Carl read all of it.</p>
 		</footer>
@@ -31,7 +29,10 @@ function FooterLegal() {
 			{/* the docs, the source, the license, and the legal pages */}
 			<div className="flex flex-wrap justify-center gap-x-6 gap-y-1">
 				<DocsLink className="text-link hover:underline" />
-				<AnchorLink href="https://github.com/doubleoevan/carlnotes" className="text-link hover:underline">
+				<AnchorLink
+					href="https://github.com/doubleoevan/carlnotes/blob/main/README.md"
+					className="text-link hover:underline"
+				>
 					Source Code
 				</AnchorLink>
 				<AnchorLink

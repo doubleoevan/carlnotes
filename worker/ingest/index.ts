@@ -166,18 +166,18 @@ export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
 	return { resources: ingestedResources, foundCount: ingestedResources.length, costDollars, status, problemSources }
 }
 
-// the problem one Source hit, or null when it delivered normally
-function toProblemSource(outcome: SourceOutcome): ProblemSource | null {
+// the problem a Source hit, or null if it delivered normally
+function toProblemSource(sourceOutcome: SourceOutcome): ProblemSource | null {
 	// a failed Source is traced with the reason it gave
-	if (outcome.status === "failed") {
-		return { sourceId: outcome.sourceId, status: "failed", reason: outcome.reason }
+	if (sourceOutcome.status === "failed") {
+		return { sourceId: sourceOutcome.sourceId, status: "failed", reason: sourceOutcome.reason }
 	}
 
 	// a skip ran no ingester at all, and a Source that ran its primary path hit no problem
-	if (outcome.status === "skipped" || !outcome.fallbackMode) {
+	if (sourceOutcome.status === "skipped" || !sourceOutcome.fallbackMode) {
 		return null
 	}
-	return { sourceId: outcome.sourceId, status: "fallback", fallbackMode: outcome.fallbackMode }
+	return { sourceId: sourceOutcome.sourceId, status: "fallback", fallbackMode: sourceOutcome.fallbackMode }
 }
 
 // run a Source through its registered ingester, turning any failure into an isolated outcome

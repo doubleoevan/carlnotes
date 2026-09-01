@@ -3,7 +3,7 @@ import { ApplicationFailure } from "@temporalio/activity"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { attachments, topics, users } from "../../db/schema"
-import { extractText, generateContext, generateImageContext, isImageAttachmentType, toDataUrl } from "../attach"
+import { extractText, generateImageContext, generatePdfContext, isImageAttachmentType, toDataUrl } from "../attach"
 import { CHUNK_CHARS, chunk, MAX_CHUNKS } from "../chunk"
 import { screenText, toFlaggedReason } from "../guard"
 import { deleteAttachment, getAttachmentBytes } from "../store"
@@ -43,7 +43,7 @@ export async function extractAttachmentText(attachmentId: string): Promise<Extra
 
 // summarize one chunk into a context note with the cheap model, billed to the topic owner's key
 export async function summarizeChunk(attachmentId: string, chunkText: string): Promise<string> {
-	return generateContext(chunkText, await topicOwnerModelKey(attachmentId))
+	return generatePdfContext(chunkText, await topicOwnerModelKey(attachmentId))
 }
 
 // the LiteLLM key of the owner of the attachment's topic, or undefined when they have none and the master key bills it

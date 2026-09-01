@@ -11,8 +11,8 @@ import { shutdownTelemetry, startTelemetry } from "./telemetry"
 const TOPIC_CONTEXT =
 	"Large language models and LLM tooling: building applications with models like Claude and GPT, prompt engineering, embeddings, retrieval, agents, and AI engineering practices."
 
-// append a stamp for the database to persist a unique identifier for fixture data
-const smokeTestStamp = Date.now()
+// one id per run, so fixture rows never collide with an earlier run's
+const runId = Date.now()
 
 // seed a fake owner, a topic with a real context
 async function seedTestData(): Promise<{ source: Source; userId: string }> {
@@ -21,9 +21,9 @@ async function seedTestData(): Promise<{ source: Source; userId: string }> {
 		.insert(users)
 		.values({
 			name: "search-smoke",
-			email: `search-smoke+${smokeTestStamp}@example.test`,
-			username: `search-smoke-${smokeTestStamp}`,
-			usernameNormalized: `searchsmoke${smokeTestStamp}`,
+			email: `search-smoke+${runId}@example.test`,
+			username: `search-smoke-${runId}`,
+			usernameNormalized: `searchsmoke${runId}`,
 		})
 		.returning()
 	if (!user) {
@@ -51,7 +51,7 @@ async function seedTestData(): Promise<{ source: Source; userId: string }> {
 	return { source, userId: user.id }
 }
 
-// run the search ingester, check the smoke assertions, and print a report. returns true when every check passes
+// run the search ingester, check the smoke assertions, and print a report. returns true if every check passes
 async function check(source: Source): Promise<boolean> {
 	// run the search ingester
 	const { resources, costDollars } = await searchIngester(source)

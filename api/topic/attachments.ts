@@ -1,6 +1,6 @@
 import { zValidator } from "@hono/zod-validator"
 import { attachmentContextPayload, attachmentUrlPayload } from "@shared/contracts"
-// the attachment actions behind the api routes
+// the attachment actions for the api routes
 import { and, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
@@ -110,12 +110,25 @@ export async function loadDownloadableAttachment(
 	return { objectKey: attachment.objectKey, filename: attachment.filename, contentType: attachment.contentType }
 }
 
-// the headers that send a stored file back as a download
-export function toDownloadHeaders(filename: string, contentType: string): Record<string, string> {
+// the image types a stored file may be served inline as. svg is intentionally left out for security.
+// it can hold script that would run in this origin
+const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"])
+
+// the video types a stored file may be served inline as
+const INLINE_VIDEO_TYPES = new Set(["video/mp4", "video/quicktime", "video/webm"])
+
+/**
+ * The headers that send a stored file back, shown in place for an image or video a browser renders safely and downloaded otherwise.
+ */
+export function toStoredFileHeaders(filename: string, contentType: string): Record<string, string> {
+	// a stored content type may include parameters, and only the media type before them decides the disposition
+	const mediaType = contentType.split(";")[0]?.trim().toLowerCase() ?? ""
+	const disposition = INLINE_IMAGE_TYPES.has(mediaType) || INLINE_VIDEO_TYPES.has(mediaType) ? "inline" : "attachment"
+
 	const asciiFilename = filename.replace(/[^\x20-\x7e]/g, "_").replace(/["\\]/g, "")
 	return {
 		"Content-Type": contentType,
-		"Content-Disposition": `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
+		"Content-Disposition": `${disposition}; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
 		"X-Content-Type-Options": "nosniff",
 	}
 }
@@ -188,7 +201,7 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 		return context.body(
 			attachmentStream(attachment.objectKey),
 			200,
-			toDownloadHeaders(attachment.filename, attachment.contentType),
+			toStoredFileHeaders(attachment.filename, attachment.contentType),
 		)
 	})
 	.post(

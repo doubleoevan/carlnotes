@@ -23,7 +23,7 @@ test("toPaidSubscription maps an active paid subscription", () => {
 	})
 })
 
-// the billing interval is stamped at checkout, and it decides
+// the billing interval is saved at checkout, and it decides
 test("toPaidSubscription records a yearly subscription's billing interval", () => {
 	const yearlySubscription = toPaidSubscription({
 		id: "sub_1",
@@ -76,7 +76,7 @@ test("toPaidSubscription projects a trialing or past_due subscription", () => {
 })
 
 // the price is what a plan change in the Customer Portal rewrites, and our metadata is not, so the price wins.
-test("toPaidSubscription reads the billing interval off the price, not the stamped metadata", () => {
+test("toPaidSubscription reads the billing interval off the price, not the saved metadata", () => {
 	const switchedToYearly = toPaidSubscription({
 		id: "sub_1",
 		status: "active",
@@ -110,7 +110,7 @@ test("toPaidSubscription reads a monthly subscription including its overage pric
 })
 
 // every subscription created before the billing interval column existed is monthly
-test("toPaidSubscription reads a subscription with no stamped billing interval as monthly", () => {
+test("toPaidSubscription reads a subscription with no saved billing interval as monthly", () => {
 	const legacySubscription = toPaidSubscription({
 		id: "sub_1",
 		status: "active",

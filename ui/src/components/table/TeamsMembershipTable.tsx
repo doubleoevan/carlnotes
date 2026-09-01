@@ -196,7 +196,7 @@ function TeamMembershipRow({
 		<>
 			<tr className="border-b">
 				<td className="py-2 pr-4">
-					{/* the team's avatar and name link to its page, with the team room's mention badge on top */}
+					{/* the team's avatar and name link to its page, with the team chat room's mention badge on top */}
 					<span className="relative inline-block">
 						<AnchorLink href={`/teams/${team.teamId}`} className="text-link flex items-center gap-2 hover:underline">
 							<TeamAvatar team={team} className="size-6" />

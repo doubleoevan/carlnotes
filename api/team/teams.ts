@@ -1,4 +1,4 @@
-// the team routes and the logic behind them: creating a team, attaching and detaching topics, the public toggle,
+// the team routes and the logic for them: creating a team, attaching and detaching topics, the public toggle,
 // deletion
 import { zValidator } from "@hono/zod-validator"
 import {
@@ -8,7 +8,8 @@ import {
 	memberVisibilityPayload,
 	updateTeamPayload,
 } from "@shared/contracts"
-import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
+import { toUsernameWithDigits } from "@shared/usernames"
+import { and, count, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
 import { canCreateTeamToday, loadUserAccess } from "../../db/quotas"
@@ -69,6 +70,56 @@ export async function createTeam(
 		throw error
 	}
 	return { status: "created", teamId }
+}
+
+// the team every account gets, named after the person who holds it
+export function toUserTeamName(username: string): string {
+	return `Team ${username}`
+}
+
+/**
+ * Create a default user team named after them, with them leading it. A user who already leads one keeps it.
+ * Returns the team's id, or null if the name could not be settled.
+ */
+export async function saveDefaultUserTeam(userId: string, username: string): Promise<string | null> {
+	const teamName = toUserTeamName(username)
+
+	// the team this user already leads by that name
+	const [existingTeam] = await db
+		.select({ teamId: teams.id })
+		.from(teams)
+		.innerJoin(teamMembers, eq(teamMembers.teamId, teams.id))
+		.where(
+			and(
+				sql`lower(${teams.name}) = lower(${teamName})`,
+				eq(teamMembers.userId, userId),
+				eq(teamMembers.role, "leader"),
+			),
+		)
+	if (existingTeam) {
+		return existingTeam.teamId
+	}
+
+	// the plain name first, then a digits variant for the rare case where someone else already holds it
+	return (await insertUserTeam(userId, teamName)) ?? (await insertUserTeam(userId, toUsernameWithDigits(teamName)))
+}
+
+// one attempt to add a team and its leader row, returning null if the name is already taken
+async function insertUserTeam(userId: string, teamName: string): Promise<string | null> {
+	const teamId = crypto.randomUUID()
+	try {
+		await db.transaction(async (transaction) => {
+			await transaction.insert(teams).values({ id: teamId, name: teamName })
+			await transaction.insert(teamMembers).values({ teamId, userId, role: "leader" })
+		})
+	} catch (error) {
+		// the case-insensitive unique index reports a name someone else already holds
+		if (isUniqueViolation(error)) {
+			return null
+		}
+		throw error
+	}
+	return teamId
 }
 
 /**
@@ -288,9 +339,14 @@ export async function updateTeam(
 /**
  * Delete the team. Its topics return to their owners through the set-null and member delivery ends.
  */
-export async function deleteTeam(userId: string, teamId: string): Promise<boolean> {
+export async function deleteTeam(userId: string, teamId: string): Promise<"deleted" | "forbidden" | "lastLedTeam"> {
 	if ((await toTeamRole(userId, teamId)) !== "leader") {
-		return false
+		return "forbidden"
+	}
+
+	// every user leads a team of their own, so the only one they lead stays
+	if ((await ledTeamCount(userId)) <= 1) {
+		return "lastLedTeam"
 	}
 
 	// delivery ends before the row goes, while the membership list still says who to deactivate
@@ -306,7 +362,16 @@ export async function deleteTeam(userId: string, teamId: string): Promise<boolea
 		)
 		await transaction.delete(teams).where(eq(teams.id, teamId))
 	})
-	return true
+	return "deleted"
+}
+
+// how many teams the user leads. belonging to a team somebody else leads does not count
+async function ledTeamCount(userId: string): Promise<number> {
+	const [ledTeamRow] = await db
+		.select({ count: count() })
+		.from(teamMembers)
+		.where(and(eq(teamMembers.userId, userId), eq(teamMembers.role, "leader"), eq(teamMembers.isActive, true)))
+	return ledTeamRow?.count ?? 0
 }
 
 // the team routes. reads return a 404 for anything the user may not know exists
@@ -359,7 +424,7 @@ export const teamsRoute = new Hono<AppEnv>()
 		if (teamPage) {
 			return context.json(teamPage)
 		}
-		// no team behind the id at all still reads as nothing existing
+		// no team for the id at all still reads as nothing existing
 		const gatedTeam = await toGatedTeam(userId, context.req.param("id"))
 		return gatedTeam
 			? context.json(
@@ -420,8 +485,15 @@ export const teamsRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		const isDeleted = await deleteTeam(userId, context.req.param("id"))
-		return isDeleted ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
+		const deleteTeamResponse = await deleteTeam(userId, context.req.param("id"))
+		if (deleteTeamResponse === "deleted") {
+			return context.json({ ok: true })
+		}
+
+		// the last team they lead stays until they lead another
+		return deleteTeamResponse === "lastLedTeam"
+			? context.json({ error: "create another team first" }, 409)
+			: context.json({ error: "not found" }, 404)
 	})
 	.post("/teams/:id/topics", zValidator("json", addTopicPayload), async (context) => {
 		// reject a signed-out visitor

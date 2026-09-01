@@ -1,27 +1,39 @@
 // the attachments a user sends with a chat turn, different from the topic attachments that an owner uploads
-import { CHAT_ATTACHMENT_KEEP_LIMIT, type ChatAttachment, clipAttachmentText } from "@shared/contracts"
+import {
+	CHAT_ATTACHMENT_KEEP_LIMIT,
+	type ChatAttachment,
+	type ChatMessageAttachment,
+	clipAttachmentText,
+	type KeptChatAttachment,
+} from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
 import { and, eq, inArray } from "drizzle-orm"
-import { Hono } from "hono"
+import { type Context, Hono } from "hono"
 import { db } from "../../db"
 import { chatAttachments } from "../../db/schema"
 import {
+	attachmentRangeStream,
 	attachmentStream,
 	deleteAttachment,
 	extractText,
-	generateContext,
 	generateImageContext,
-	putAttachment,
+	generatePdfContext,
 	toChatAttachmentKey,
+	uploadAttachment,
 } from "../../worker"
 import { screenText, toFlaggedReason } from "../../worker/guard"
 import { type AppEnv, currentUser } from "../currentUser"
-import { toDownloadHeaders } from "../topic/attachments"
+import { toStoredFileHeaders } from "../topic/attachments"
 import { decryptChatText, encryptChatText } from "./encryption"
+import { toVideoRange } from "./videoRange"
+
+// what stands in for a video's content wherever carl reads attachments
+export const VIDEO_ATTACHMENT_CONTEXT = "A video Carl can't watch yet."
 
 /**
  * Resolves a chat turn's attachments into what the model takes. A PDF becomes its extracted text, an image passes through,
- * and text is screened by llm-guard first. Null when a PDF cannot be read, so the route can reject the chat turn.
+ * a video becomes a line saying it can't be watched, and text is screened by llm-guard first.
+ * Null if a PDF cannot be read, so the route can reject the chat turn.
  */
 export async function resolveChatAttachments(attachments: ChatAttachment[]): Promise<ChatAttachment[] | null> {
 	const chatAttachments: ChatAttachment[] = []
@@ -29,6 +41,12 @@ export async function resolveChatAttachments(attachments: ChatAttachment[]): Pro
 		// an image includes no text to screen and already has the shape the worker takes
 		if (attachment.kind === "image") {
 			chatAttachments.push(attachment)
+			continue
+		}
+
+		// a video has no words and carl can't watch it, so the model reads only that a clip was attached
+		if (attachment.kind === "video") {
+			chatAttachments.push({ kind: "text", name: attachment.name, text: VIDEO_ATTACHMENT_CONTEXT, keep: false })
 			continue
 		}
 
@@ -58,7 +76,7 @@ export async function resolveChatAttachments(attachments: ChatAttachment[]): Pro
 	return chatAttachments
 }
 
-// the words that a kept attachment stores, or null when the scanner flags it
+// the words that a kept attachment stores, or null if the scanner flags it
 export async function screenAttachmentText(text: string, sourceLabel: string, topicId: string): Promise<string | null> {
 	// clip before screening. the scanner fails once it runs past its own deadline. an unbounded body should not skip the check
 	const screenVerdict = await screenText(clipAttachmentText(text), "document")
@@ -81,54 +99,69 @@ export function contentTypeFromDataUrl(dataUrl: string): string {
 }
 
 /**
- * Store the attachments a user marked to keep on the chat turn that just finished.
- * Best-effort.
- * a failure is logged instead of being surfaced, and a kept attachment past the attachments limit is skipped.
+ * Store the topic chat attachments that went with the chat turn that just finished.
+ * A failure is logged instead of being surfaced.
  */
-export async function keepChatAttachments(
+export async function storeTopicChatAttachments(
 	userId: string,
 	topicId: string,
+	chatTurnId: string | null,
 	attachments: ChatAttachment[],
 	litellmApiKey?: string,
 ): Promise<void> {
-	// most chat turns mark nothing, and those cost no queries at all
-	const attachmentsToKeep = attachments.filter((attachment) => attachment.keep)
-	if (attachmentsToKeep.length === 0) {
+	// most chat turns dont sent an attachment
+	if (attachments.length === 0) {
 		return
 	}
 
-	// how many attachment slots are left under the limit
+	// calculate how many attachment slots are left under the limit, which only kept attachments take
 	const keptAttachments = await db
 		.select({ id: chatAttachments.id })
 		.from(chatAttachments)
-		.where(and(eq(chatAttachments.userId, userId), eq(chatAttachments.topicId, topicId)))
+		.where(
+			and(eq(chatAttachments.userId, userId), eq(chatAttachments.topicId, topicId), eq(chatAttachments.isKept, true)),
+		)
 	let remainingAttachmentSlots = CHAT_ATTACHMENT_KEEP_LIMIT - keptAttachments.length
 
-	for (const attachment of attachmentsToKeep) {
-		if (remainingAttachmentSlots <= 0) {
-			break
-		}
-		// one failed kept attachment never stops the rest
+	for (const attachment of attachments) {
+		// a kept attachment past the limit does not get stored
+		const isAttachmentKept = attachment.keep && remainingAttachmentSlots > 0
+
+		// one failed attachment never stops the rest
 		try {
 			// only a kept attachment that actually stored uses up a limit slot
-			if (await keepOneChatAttachment(userId, topicId, attachment, litellmApiKey)) {
+			if (
+				(await storeTopicChatAttachment(userId, topicId, chatTurnId, attachment, isAttachmentKept, litellmApiKey)) &&
+				isAttachmentKept
+			) {
 				remainingAttachmentSlots -= 1
 			}
 		} catch (error) {
-			// a failed keep never surfaces to the user, so the log and the report are the only sign of it
-			console.error(`keeping a chat attachment failed for topic ${topicId}`, error)
+			// a failed store never surfaces to the user, so the log and the report are the only record of it
+			console.error(`storing a chat attachment failed for topic ${topicId}`, error)
 			reportError(error, "chat", { topicId, attachmentKind: attachment.kind })
 		}
 	}
 }
 
-// one kept attachment, stored and summarized
-async function keepOneChatAttachment(
+// one attachment, stored and summarized only when it is kept
+async function storeTopicChatAttachment(
 	userId: string,
 	topicId: string,
+	chatTurnId: string | null,
 	attachment: ChatAttachment,
+	isAttachmentKept: boolean,
 	litellmApiKey?: string,
 ): Promise<boolean> {
+	// an unkept PDF or paste is already in the question's own words, so only an image is worth its bytes
+	if (!isAttachmentKept && attachment.kind !== "image") {
+		return false
+	}
+	// an unkept image is stored only under its own chat turn
+	if (!isAttachmentKept && chatTurnId === null) {
+		return false
+	}
+
 	// a text attachment has no file, so its own words are what gets stored, encrypted like a chat turn's text
 	if (attachment.kind === "text") {
 		const text = await screenAttachmentText(attachment.text, "kept chat attachment", topicId)
@@ -137,10 +170,12 @@ async function keepOneChatAttachment(
 		}
 
 		// summarize the attachment and store the row
-		const context = await generateContext(text, litellmApiKey)
+		const context = await generatePdfContext(text, litellmApiKey)
 		await db.insert(chatAttachments).values({
 			userId,
 			topicId,
+			chatTurnId,
+			isKept: isAttachmentKept,
 			kind: "text",
 			name: attachment.name,
 			rawText: encryptChatText(text),
@@ -164,28 +199,27 @@ async function keepOneChatAttachment(
 		return false
 	}
 
-	// image and PDF attachments keep their original bytes under a key namespaced to the user, the file lives in
+	// image, PDF, and video attachments keep their original bytes under a key namespaced to the user
 	const attachmentId = crypto.randomUUID()
 	const contentType = attachment.kind === "pdf" ? "application/pdf" : contentTypeFromDataUrl(attachment.dataUrl)
 	const objectKey = toChatAttachmentKey(userId, topicId, attachmentId, attachment.name)
-	await putAttachment(objectKey, bytes, contentType)
+	await uploadAttachment(objectKey, bytes, contentType)
 
-	// summarize what was kept and store the chat attachment row
+	// summarize a kept attachment and store the chat attachment row
 	try {
-		const context =
-			attachment.kind === "pdf"
-				? await generateContext(pdfText, litellmApiKey)
-				: await generateImageContext(attachment.dataUrl, litellmApiKey)
+		const attachmentContext = isAttachmentKept ? await toKeptAttachmentContext(attachment, pdfText, litellmApiKey) : ""
 		await db.insert(chatAttachments).values({
 			id: attachmentId,
 			userId,
 			topicId,
+			chatTurnId,
+			isKept: isAttachmentKept,
 			kind: attachment.kind,
 			name: attachment.name,
 			objectKey,
 			contentType,
 			byteSize: bytes.byteLength,
-			context,
+			context: attachmentContext,
 			status: "ready",
 		})
 	} catch (error) {
@@ -195,15 +229,30 @@ async function keepOneChatAttachment(
 	return true
 }
 
+// what future chat turns read for a kept attachment file. a PDF gives its extracted words, an image generated notes, a video a fixed line
+async function toKeptAttachmentContext(
+	attachment: Exclude<ChatAttachment, { kind: "text" }>,
+	pdfText: string,
+	litellmApiKey?: string,
+): Promise<string> {
+	// a PDF summarizes from the words already screened by llm-guard
+	if (attachment.kind === "pdf") {
+		return generatePdfContext(pdfText, litellmApiKey)
+	}
+
+	// a video's line only names the file
+	if (attachment.kind === "video") {
+		return `The reader attached a video named "${attachment.name}". Carl can't watch videos yet.`
+	}
+	return generateImageContext(attachment.dataUrl, litellmApiKey)
+}
+
 /**
  * The attachments that this user keeps for the topic, oldest first.
  * The composer ui lists them for deletion and counts them against the limit.
  */
-export async function loadKeptAttachments(
-	userId: string | null,
-	topicId: string,
-): Promise<{ id: string; name: string; kind: "image" | "pdf" | "text" }[]> {
-	// a visitor keeps nothing
+export async function loadKeptTopicAttachments(userId: string | null, topicId: string): Promise<KeptChatAttachment[]> {
+	// a logged-out visitor keeps nothing
 	if (!userId) {
 		return []
 	}
@@ -211,65 +260,117 @@ export async function loadKeptAttachments(
 	return db
 		.select({ id: chatAttachments.id, name: chatAttachments.name, kind: chatAttachments.kind })
 		.from(chatAttachments)
-		.where(and(eq(chatAttachments.userId, userId), eq(chatAttachments.topicId, topicId)))
+		.where(
+			and(eq(chatAttachments.userId, userId), eq(chatAttachments.topicId, topicId), eq(chatAttachments.isKept, true)),
+		)
 		.orderBy(chatAttachments.createdAt)
 }
 
-// what a kept attachment sends back. an image or PDF comes from its stored object, and text from its own words
-export type DownloadableKeptAttachment =
-	| { kind: "text"; name: string; text: string }
-	| { kind: "image" | "pdf"; name: string; objectKey: string; contentType: string }
+/**
+ * The attachments this user sent on the topic, grouped under the chat turn each one went with, oldest first.
+ */
+export async function loadTopicChatTurnAttachments(
+	userId: string,
+	topicId: string,
+): Promise<Map<string, ChatMessageAttachment[]>> {
+	// every attachment this user sent on the topic, in one query
+	const attachmentRows = await db
+		.select({
+			id: chatAttachments.id,
+			chatTurnId: chatAttachments.chatTurnId,
+			kind: chatAttachments.kind,
+			name: chatAttachments.name,
+		})
+		.from(chatAttachments)
+		.where(and(eq(chatAttachments.userId, userId), eq(chatAttachments.topicId, topicId)))
+		.orderBy(chatAttachments.createdAt)
+	return toAttachmentsByChatTurnId(attachmentRows)
+}
 
 /**
- * One kept attachment ready to download, scoped to its keeper. Null when the id is not this user's,
- * when an image or PDF has no stored object, or when the raw text no longer decrypts.
+ * Groups attachments under the chat turn each one went with, dropping the ones no chat turn owns.
  */
-export async function loadDownloadableKeptAttachment(
+export function toAttachmentsByChatTurnId(
+	attachmentRows: (ChatMessageAttachment & { chatTurnId: string | null })[],
+): Map<string, ChatMessageAttachment[]> {
+	// each attachment joins its chat turn's list in the order it was stored
+	const attachmentsByChatTurnId = new Map<string, ChatMessageAttachment[]>()
+	for (const attachmentRow of attachmentRows) {
+		if (attachmentRow.chatTurnId === null) {
+			continue
+		}
+		const { id, kind, name } = attachmentRow
+		attachmentsByChatTurnId.set(attachmentRow.chatTurnId, [
+			...(attachmentsByChatTurnId.get(attachmentRow.chatTurnId) ?? []),
+			{ id, kind, name },
+		])
+	}
+	return attachmentsByChatTurnId
+}
+
+// what a chat attachment sends back. an image, PDF, or video comes from its stored object, and text from its own words
+export type DownloadableChatAttachment =
+	| { kind: "text"; name: string; text: string }
+	| { kind: "image" | "pdf" | "video"; name: string; objectKey: string; contentType: string; byteSize: number | null }
+
+/**
+ * One of the user's own chat attachments ready to download, kept or not. Null if the id is not this user's,
+ * when a stored file has no object key, or when the raw text no longer decrypts.
+ */
+export async function loadDownloadableChatAttachment(
 	userId: string,
-	keptAttachmentId: string,
-): Promise<DownloadableKeptAttachment | null> {
-	const [keptAttachment] = await db
+	chatAttachmentId: string,
+): Promise<DownloadableChatAttachment | null> {
+	const [chatAttachment] = await db
 		.select({
 			kind: chatAttachments.kind,
 			name: chatAttachments.name,
 			objectKey: chatAttachments.objectKey,
 			contentType: chatAttachments.contentType,
+			byteSize: chatAttachments.byteSize,
 			rawText: chatAttachments.rawText,
 		})
 		.from(chatAttachments)
-		.where(and(eq(chatAttachments.id, keptAttachmentId), eq(chatAttachments.userId, userId)))
-	if (!keptAttachment) {
+		.where(and(eq(chatAttachments.id, chatAttachmentId), eq(chatAttachments.userId, userId)))
+	if (!chatAttachment) {
 		return null
 	}
 
 	// a text attachment has no file, so its stored words are what comes back
-	if (keptAttachment.kind === "text") {
-		const text = keptAttachment.rawText ? decryptChatText(keptAttachment.rawText) : null
-		return text === null ? null : { kind: "text", name: keptAttachment.name, text }
+	if (chatAttachment.kind === "text") {
+		const text = chatAttachment.rawText ? decryptChatText(chatAttachment.rawText) : null
+		return text === null ? null : { kind: "text", name: chatAttachment.name, text }
 	}
 
-	// an image or PDF streams from the object it was stored under
-	if (!keptAttachment.objectKey) {
+	// an image, PDF, or video streams from the object it was stored under
+	if (!chatAttachment.objectKey) {
 		return null
 	}
 	return {
-		kind: keptAttachment.kind,
-		name: keptAttachment.name,
-		objectKey: keptAttachment.objectKey,
-		contentType: keptAttachment.contentType ?? "application/octet-stream",
+		kind: chatAttachment.kind,
+		name: chatAttachment.name,
+		objectKey: chatAttachment.objectKey,
+		contentType: chatAttachment.contentType ?? "application/octet-stream",
+		byteSize: chatAttachment.byteSize,
 	}
 }
 
 /**
  * Delete one kept attachment, scoped to its keeper, freeing its limit slot and best-effort deleting its stored object.
- * False when the attachment's user id is not this user's, so a user can never delete another's attachment.
+ * False if the attachment is not this user's kept one.
  */
 export async function deleteKeptAttachment(userId: string, keptAttachmentId: string): Promise<boolean> {
 	// load the row first for its object key and the ownership check
 	const [keptAttachment] = await db
 		.select({ id: chatAttachments.id, objectKey: chatAttachments.objectKey })
 		.from(chatAttachments)
-		.where(and(eq(chatAttachments.id, keptAttachmentId), eq(chatAttachments.userId, userId)))
+		.where(
+			and(
+				eq(chatAttachments.id, keptAttachmentId),
+				eq(chatAttachments.userId, userId),
+				eq(chatAttachments.isKept, true),
+			),
+		)
 	if (!keptAttachment) {
 		return false
 	}
@@ -326,7 +427,7 @@ export async function deleteStoredChatAttachments(userId: string): Promise<void>
 	await Promise.all(objectKeys.map((objectKey) => deleteAttachment(objectKey as string).catch(() => {})))
 }
 
-// a kept chat attachment's routes, both scoped to whoever kept it
+// a chat attachment's routes, both scoped to the user who sent it
 export const chatAttachmentsRoute = new Hono<AppEnv>()
 	.delete("/chat-attachments/:id", async (context) => {
 		// deleting a kept attachment is signed-in only and scoped to its keeper, freeing its limit slot
@@ -338,23 +439,58 @@ export const chatAttachmentsRoute = new Hono<AppEnv>()
 		return isDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.get("/chat-attachments/:id/download", async (context) => {
-		// downloading a kept attachment is signed-in only and scoped to its keeper
+		// downloading a chat attachment is signed-in only and scoped to the user who sent it
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		const keptAttachment = await loadDownloadableKeptAttachment(userId, context.req.param("id"))
-		if (!keptAttachment) {
+		const chatAttachment = await loadDownloadableChatAttachment(userId, context.req.param("id"))
+		if (!chatAttachment) {
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// kept text has no stored file, so its words download back directly
-		if (keptAttachment.kind === "text") {
-			return context.body(keptAttachment.text, 200, toDownloadHeaders(keptAttachment.name, "text/plain; charset=utf-8"))
+		// text has no stored file, so its words download back directly
+		if (chatAttachment.kind === "text") {
+			return context.body(
+				chatAttachment.text,
+				200,
+				toStoredFileHeaders(chatAttachment.name, "text/plain; charset=utf-8"),
+			)
+		}
+
+		// a video serves inline so the bubble's player can stream it. everything else stays a download
+		if (chatAttachment.kind === "video") {
+			return streamVideoAttachment(context, chatAttachment)
 		}
 		return context.body(
-			attachmentStream(keptAttachment.objectKey),
+			attachmentStream(chatAttachment.objectKey),
 			200,
-			toDownloadHeaders(keptAttachment.name, keptAttachment.contentType),
+			toStoredFileHeaders(chatAttachment.name, chatAttachment.contentType),
 		)
 	})
+
+/**
+ * Stream a stored video inline, honoring one byte range. Safari's player reads nothing from a server that ignores ranges.
+ */
+export function streamVideoAttachment(
+	context: Context,
+	video: { name: string; objectKey: string; contentType: string; byteSize: number | null },
+): Response {
+	const headers = { ...toStoredFileHeaders(video.name, video.contentType), "Accept-Ranges": "bytes" }
+
+	// the parsed range decides between the whole file, one slice of it, and a 416 naming the size
+	const videoRange = toVideoRange(context.req.header("Range"), video.byteSize)
+	if (videoRange.kind === "whole") {
+		return context.body(attachmentStream(video.objectKey), 200, headers)
+	}
+	if (videoRange.kind === "unsatisfiable") {
+		return context.body(null, 416, { "Content-Range": `bytes */${videoRange.byteSize}` })
+	}
+
+	// the asked-for piece streams back with the range headers that let the player keep seeking
+	return context.body(attachmentRangeStream(video.objectKey, videoRange.start, videoRange.end + 1), 206, {
+		...headers,
+		"Content-Range": `bytes ${videoRange.start}-${videoRange.end}/${videoRange.byteSize}`,
+		"Content-Length": String(videoRange.end - videoRange.start + 1),
+	})
+}

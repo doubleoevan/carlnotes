@@ -89,6 +89,8 @@ Check for:
    - `REVIEW_SCAN_BUDGET_USD` (now `SCAN_BUDGET_USD`; the ceiling covers ingestion too, so the
      `REVIEW_` prefix named the wrong scope)
    - `worker/ingest/canonical.ts` (now `normalize.ts`), `canonicalUrl` (now `toCanonicalUrl`)
+   - `keepChatAttachments` (now `storeTopicChatAttachments`); it stores every attachment a topic chat turn
+     sent, not only the kept ones, and a team chat stores none
    - `runTopicScan`/`processTopicScan` (now `startTopicScan`/`startScanFor` in `worker/scan.ts`;
      the pipeline itself is `worker/workflows/run-topic-scan-activities.ts`)
    - `toFilteredFindings` (now `toSortedFindings`)
@@ -120,6 +122,8 @@ Check for:
    - `ActivityTopic` (now `OwnerTopic`) and `ProfileTopic` (now `Topic`); `permissions.ts` renamed its local
      `Topic` alias to `TopicRow` so the contract could take the bare name
    - `TABLE_CARD_CLASS` and `SECTION_CARD_CLASS` held the same string and are now one `CARD_CLASS`
+   - `POPOVER_WIDTH_CLASS` (now `POPOVER_PANEL_CLASS`); it carries the panel's height and mobile-sheet marker
+     now, not width alone
    - `isOwnersTable` is gone rather than renamed: it gated a visibility tooltip the Visibility column
      already stated, so the prop and the tooltip both went
    - `carries` / `carrying` in comments (now `includes` when one thing holds another, `has` for an attribute,
@@ -136,6 +140,30 @@ Check for:
      `ui/src/clients/*Client.ts` modules and the `apiClient` each one builds). a third-party client
      keeps the bare word, since it is that library's own name for the thing: the Temporal, Langfuse,
      Sentry, OTel, and database clients, and OAuth's client credentials grant
+   - `stamp` as the verb for writing a value (now `save`: `stamped as edited by its creator`,
+     `stamps the thread`, `what checkout stamped on it`). the noun `stamp` for a saved time is now
+     `time`, so `the read stamp` is `the read time` and `the seen stamp` is `the seen time`. where it
+     named a uniqueness suffix instead of a time it says what it holds: the smoke tests'
+     `stamp`/`smokeTestStamp` are now `runId`, and `uploadAvatar`'s `stamp` parameter, a random uuid
+     in the object key, is now `keyId`. `timestamp` is a different word and keeps it
+   - a bare `message` for a chat message (now `chatMessage`), with every compound taking the
+     qualifier: `isCarlMessage`, `isOwnMessage`, `onReplyMessage`, `onSendMessage`,
+     `handleSendMessage`, `handleReplyMessage`, `scrollToMessage`, `toChangedMentionMessage`,
+     `isMessageThread`, `messageBox`/`messageBoxRef`, `carlMessage`, `promptMessage`,
+     `chatWindowMessages` (now `windowChatMessages`), and `VIRTUALIZE_FROM_MESSAGES`.
+     `repliedMessage` held the whole list rather than a replied message and is now
+     `currentChatMessages`. the database keeps every column name, so code writing one maps
+     explicitly, as in `{ messageId: chatMessageId }`, and the SSE event name, the route paths,
+     and the UI's own "Delete message" copy all keep the bare word. an Error's `.message`,
+     `MessageEvent`, `EmailMessage`, and `toModelMessages` are other things entirely
+   - a bare `turn` for a chat turn (now `chatTurn`): `isCarlTurn` and `HistoryTurn`, the latter
+     now `ChatHistoryTurn`. `Turnstile`, `ReturnType`, and "turns X into Y" keep the letters
+   - `ensureUsername` (now `saveDefaultUsername`, beside `saveDefaultUserTeam` at the one call
+     site). `saveUsername` is the account-settings rename and stays a different function
+   - names that said nothing: `ChatRoomState.send` (now `postChatMessage`, matching
+     `postChatRoomMessage`), `useChatRoom.refresh` (now `reloadChatMessages`),
+     `TopicFeedProvider.reload` (now `reloadTopicFeed`), and `loadUserAccess`'s local `access`
+     (now `userAccess`). `useTopicChat.send` asks a question and keeps its name
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

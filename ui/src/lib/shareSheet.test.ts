@@ -1,4 +1,4 @@
-// share sheet tests: what the browser returns, and when a row may be drawn at all
+// share sheet tests: what the browser returns, and if a row may be drawn at all
 import { afterEach, expect, test } from "bun:test"
 import { canOpenShareSheet, openShareSheet } from "./shareSheet"
 

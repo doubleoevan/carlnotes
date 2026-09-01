@@ -22,17 +22,17 @@ async function withOwner(runCase: (fixture: Fixture, transaction: DbTransaction)
 	let counts: Counts = { header: -1, footer: -1 }
 	try {
 		await db.transaction(async (transaction) => {
-			// an owner and two other people, sharing one smoke test stamp so a parallel run does not collide on an id
-			const smokeTestStamp = `smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
+			// an owner and two other people, sharing one run id so a parallel run does not collide on an id
+			const runId = `smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
 			const people = await transaction
 				.insert(users)
 				.values(
 					["owner", "subscriber", "other"].map((role) => ({
-						id: `${smokeTestStamp}-${role}`,
+						id: `${runId}-${role}`,
 						name: role,
-						email: `${smokeTestStamp}-${role}@carlnotes.test`,
-						username: `${smokeTestStamp}-${role}`,
-						usernameNormalized: `${smokeTestStamp}${role}`.toLowerCase(),
+						email: `${runId}-${role}@carlnotes.test`,
+						username: `${runId}-${role}`,
+						usernameNormalized: `${runId}${role}`.toLowerCase(),
 					})),
 				)
 				.returning()
@@ -42,7 +42,7 @@ async function withOwner(runCase: (fixture: Fixture, transaction: DbTransaction)
 				.insert(topics)
 				.values(
 					[0, 1, 2].map((position) => ({
-						id: `${smokeTestStamp}-topic-${position}`,
+						id: `${runId}-topic-${position}`,
 						ownerId: people[0]?.id ?? "",
 						name: `topic ${position}`,
 						visibility: "public" as const,

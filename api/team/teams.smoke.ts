@@ -16,11 +16,11 @@ import {
 } from "./members"
 import { createTeam, deleteTeam, removeTopicFromTeam } from "./teams"
 
-// one stamp per run, so a re-run's ids, names, and emails never collide with an earlier run's
-const stamp = Date.now()
+// one id per run, so a re-run's ids, names, and emails never collide with an earlier run's
+const runId = Date.now()
 
-// every fixture id includes the stamp
-const toId = (name: string): string => `smoke-${stamp}-${name}`
+// every fixture id includes the run id
+const toId = (name: string): string => `smoke-${runId}-${name}`
 
 // the people the scenarios need, created in one insert. the nine fillers pad the limit team to ten members
 const personNames = [
@@ -55,19 +55,19 @@ const teamNames = [
 
 // create the users, teams, memberships, topics, shares, and the owner's own subscription row
 async function seedFixtures(): Promise<void> {
-	// the people, one row each with the stamp in every unique column
+	// the people, one row each with the run id in every unique column
 	await db.insert(users).values(
 		personNames.map((name) => ({
 			id: toId(name),
 			name,
-			email: `smoke-${stamp}-${name}@carlnotes.test`,
-			username: `smoke-${stamp}-${name}`,
-			usernameNormalized: `smoke${stamp}${name}`.replaceAll("-", ""),
+			email: `smoke-${runId}-${name}@carlnotes.test`,
+			username: `smoke-${runId}-${name}`,
+			usernameNormalized: `smoke${runId}${name}`.replaceAll("-", ""),
 		})),
 	)
 
-	// the teams, each named with the stamp so the case-insensitive unique name index never collides
-	await db.insert(teams).values(teamNames.map((name) => ({ id: toId(name), name: `smoke ${name} ${stamp}` })))
+	// the teams, each named with the run id so the case-insensitive unique name index never collides
+	await db.insert(teams).values(teamNames.map((name) => ({ id: toId(name), name: `smoke ${name} ${runId}` })))
 
 	// the memberships. every owning team is led by the topics' owner, matching the app's own invariant
 	await db.insert(teamMembers).values([
@@ -104,8 +104,8 @@ async function seedFixtures(): Promise<void> {
 	await db.insert(teamTopics).values([
 		{ teamId: toId("team-hold"), topicId: toId("topic-shared") },
 		{ teamId: toId("team-del"), topicId: toId("topic-shared") },
-		{ teamId: toId("team-detach-b"), topicId: toId("topic-detach"), createdAt: new Date(stamp - 120000) },
-		{ teamId: toId("team-detach-c"), topicId: toId("topic-detach"), createdAt: new Date(stamp - 60000) },
+		{ teamId: toId("team-detach-b"), topicId: toId("topic-detach"), createdAt: new Date(runId - 120000) },
+		{ teamId: toId("team-detach-c"), topicId: toId("topic-detach"), createdAt: new Date(runId - 60000) },
 		{ teamId: toId("team-multi-e"), topicId: toId("topic-multi") },
 	])
 
@@ -117,7 +117,7 @@ async function seedFixtures(): Promise<void> {
 async function checkCreateTeam(createdTeamIds: string[]): Promise<void> {
 	console.log("\n=== 1. createTeam ===")
 	// the first create wins the name
-	const created = await createTeam(toId("creator"), { name: `Smoke Created ${stamp}`, topicIds: [] })
+	const created = await createTeam(toId("creator"), { name: `Smoke Created ${runId}`, topicIds: [] })
 	check(created.status === "created", "createTeam answers created")
 	createdTeamIds.push(created.teamId)
 
@@ -129,7 +129,7 @@ async function checkCreateTeam(createdTeamIds: string[]): Promise<void> {
 	check(membership !== undefined && isLeaderRole(membership.role), "the creator is the new team's leader")
 
 	// the same name in a different case returns name-taken
-	const retaken = await createTeam(toId("creator"), { name: `SMOKE CREATED ${stamp}`, topicIds: [] })
+	const retaken = await createTeam(toId("creator"), { name: `SMOKE CREATED ${runId}`, topicIds: [] })
 	check(retaken.status === "name-taken", "a same-name create returns name-taken")
 }
 
@@ -224,7 +224,13 @@ async function checkLastLeaderRule(): Promise<void> {
 // 6. deleting the team returns its owned topic to the creator and drops its share rows
 async function checkTeamDeletion(): Promise<void> {
 	console.log("\n=== 6. team deletion ===")
-	check(await deleteTeam(toId("owner"), toId("team-del")), "deleteTeam answers true for the leader")
+	check((await deleteTeam(toId("owner"), toId("team-del"))) === "deleted", "deleteTeam answers deleted for the leader")
+
+	// every user leads a team of their own, so the only one they lead stays
+	check(
+		(await deleteTeam(toId("limit-leader"), toId("team-limit"))) === "lastLedTeam",
+		"the only team a leader leads is not deletable",
+	)
 
 	// the owned topic returned through the set-null, and the share rows went with the team
 	const topic = await loadTopic(toId("topic-del"))

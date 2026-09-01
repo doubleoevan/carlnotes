@@ -6,6 +6,7 @@ import { serveStatic } from "hono/bun"
 import { compress } from "hono/compress"
 import { startTelemetry } from "../worker"
 import { apiRoute } from "./api"
+import { reportForwardedChain } from "./auth"
 import { contentRoute } from "./content"
 import { pagesRoute, UI_BUNDLE_ROOT } from "./pages"
 
@@ -19,10 +20,25 @@ export type AppType = typeof apiRoute
 startMonitoring()
 startTelemetry()
 
+// the policy every response includes. img-src limits images to this origin,
+// and blob: is the local file a composer previews before it is uploaded
+const CONTENT_SECURITY_POLICY =
+	"img-src 'self' blob: data:; frame-src 'self' https://www.youtube-nocookie.com; object-src 'none'; frame-ancestors 'none'"
+
 // one server serves the api, the pages, and the built ui
 const server = new Hono()
 	// gzip every text response over a kilobyte. the defaults skip images and anything already compressed
 	.use(compress())
+	// the content security policy, set on the way back out so every route includes it
+	.use(async (context, next) => {
+		await next()
+		context.header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+	})
+	// one report of the forwarded chain, which names the proxies TRUSTED_PROXIES needs. a no-op once this is set
+	.use(async (context, next) => {
+		reportForwardedChain(context.req.header("x-forwarded-for") ?? null)
+		await next()
+	})
 	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
 	.get("/api/health", (context) => context.json({ status: "ok" }))
 	.route("/", apiRoute)

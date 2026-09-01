@@ -1,13 +1,10 @@
 import { Check, Flag, Link, Rss, Share, Share2 } from "lucide-react"
 import { useState } from "react"
-import { toast } from "sonner"
-import { sendCreateTopicInvite, toInviteUrl } from "@/clients/topicClient"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog.tsx"
 import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import {
-	COPIED_FEEDBACK_MS,
 	CopyLinkOption,
 	DisabledShareOption,
 	INVITE_LABEL,
@@ -17,12 +14,22 @@ import {
 	SHARE_OPTION_ICON_CLASS,
 	ShareTargetOptions,
 } from "@/components/share/ShareOptions"
-import { canOpenShareSheet, openShareSheet } from "@/lib/shareSheet"
-import { copyWithDocument } from "@/lib/utils"
+import { useShareTopicActions } from "@/components/share/useShareTopicActions"
+import { canOpenShareSheet } from "@/lib/shareSheet"
 
 // what a disabled share option says, which names the owner's way to fix it
 function toDisabledReason(isTopicOwner?: boolean): string {
 	return isTopicOwner ? "Make this topic public to post it" : "This topic must be public to post it"
+}
+
+// the row that shares an invite link, relabeled once a clipboard copy lands
+function InviteShareOption({ isCopied, onShare }: { isCopied: boolean; onShare: () => Promise<void> }) {
+	return (
+		<button type="button" onClick={() => void onShare()} className={SHARE_OPTION_CLASS}>
+			{isCopied ? <Check className={SHARE_OPTION_ICON_CLASS} /> : <Share className={SHARE_OPTION_ICON_CLASS} />}
+			{isCopied ? "Link copied" : INVITE_LABEL}
+		</button>
+	)
 }
 
 /**
@@ -31,34 +38,28 @@ function toDisabledReason(isTopicOwner?: boolean): string {
  * A topic subscriber also gets the invite row, which provides a link to subscribe to the topic.
  */
 export function ShareTopic({
-	topicId,
-	topicName,
+	topic,
 	className,
 	isIcon,
-	isPublic,
-	isTopicOwner,
-	canInvite,
 	isDialog,
 	onClose,
 	onMakeTopicPublic,
 }: {
-	topicId: string
-	topicName: string
+	// the topic being shared. only a public topic can be posted, and only its owner can make it public
+	topic: { id: string; name: string; visibility: string; isOwner?: boolean }
 	className?: string
 	// the homepage topic card shows the share icon alone instead of the labeled button
 	isIcon?: boolean
 	// the topic page opens these options as a dialog from its actions menu, which has no trigger of its own
 	isDialog?: boolean
 	onClose?: () => void
-	// only a public topic can be shared
-	isPublic: boolean
-	// the owner gets a call-to-action tooltip and a button to make the topic public
-	isTopicOwner?: boolean
-	// whether this user may provide an invite to this topic, which is the topic owner or an admin
-	canInvite?: boolean
 	// the callback that the owner gets to save the topic as public
 	onMakeTopicPublic?: () => void
 }) {
+	const { id: topicId, name: topicName, isOwner: isTopicOwner } = topic
+	const isPublic = topic.visibility === "public"
+	// only the owner of a non-private topic can offer an invite link
+	const canInvite = isTopicOwner && topic.visibility !== "private"
 	// controlled so the report issue option can close the menu
 	const [isOpen, setIsOpen] = useState(false)
 	const [isReportingIssue, setIsReportingIssue] = useState(false)
@@ -67,7 +68,6 @@ export function ShareTopic({
 		setIsReportingIssue(true)
 	}
 
-	const [copiedLabel, setCopiedLabel] = useState<string | null>(null)
 	// read once on mount, so the share sheet is only shown if available
 	const [isShareSheetAvailable] = useState(canOpenShareSheet)
 
@@ -75,59 +75,10 @@ export function ShareTopic({
 	const topicUrl = `${window.location.origin}/topics/${topicId}`
 	const feedUrl = `${topicUrl}/feed.xml`
 	const [encodedUrl, encodedTitle] = [encodeURIComponent(topicUrl), encodeURIComponent(topicName)]
-
-	// copy a link to the topic to the clipboard and show a confirmation label
-	async function handleCopyLink(label: string, text: string): Promise<void> {
-		let isCopied = true
-		try {
-			await navigator.clipboard.writeText(text)
-		} catch {
-			isCopied = copyWithDocument(text)
-		}
-		if (isCopied) {
-			setCopiedLabel(label)
-			setTimeout(() => setCopiedLabel(null), COPIED_FEEDBACK_MS)
-		}
-	}
-
-	// pass the topic's url to the device's sheet. a rejected gesture falls back to the clipboard copy
-	async function handleShareSheet(): Promise<void> {
-		const shared = await openShareSheet({ title: topicName, text: `${topicName} on CarlNotes`, url: topicUrl })
-		if (shared === "unavailable") {
-			await handleCopyLink("Copy link", topicUrl)
-			return
-		}
-		if (shared === "shared") {
-			setIsOpen(false)
-		}
-	}
-
-	// create the invite token inside the click handler and pass its invite url to the share sheet
-	async function handleShareInvite(): Promise<void> {
-		let invite: Awaited<ReturnType<typeof sendCreateTopicInvite>>
-		try {
-			invite = await sendCreateTopicInvite(topicId, "share-sheet")
-		} catch (error) {
-			console.error("invite create failed", error)
-			toast.error("That invite didn't get made. Try again.")
-			return
-		}
-
-		// a dismissed sheet is a decision, so only a rejected one falls back to the clipboard
-		const inviteUrl = toInviteUrl(invite.token)
-		const shared = await openShareSheet({
-			title: topicName,
-			text: `Join ${topicName} on CarlNotes`,
-			url: inviteUrl,
-		})
-		if (shared === "unavailable") {
-			await handleCopyLink(INVITE_LABEL, inviteUrl)
-			return
-		}
-		if (shared === "shared") {
-			setIsOpen(false)
-		}
-	}
+	// the topic actions for the rows below, which close this menu once a share actually lands
+	const { copiedLabel, copyLink, shareTopic, shareInvite } = useShareTopicActions(topicId, topicName, topicUrl, () =>
+		setIsOpen(false),
+	)
 
 	// a disabled option shows the user why and offers the owner a call-to-action
 	const disabledReason = toDisabledReason(isTopicOwner)
@@ -158,20 +109,11 @@ export function ShareTopic({
 			{/* a divider above the options that share the topic to one person instead of posting it */}
 			<div className="bg-border my-1 h-px" />
 			{/* the only option providing an invite link that subscribes to the topic instead of the topic's url */}
-			{isInviteRowShown && (
-				<button type="button" onClick={() => void handleShareInvite()} className={SHARE_OPTION_CLASS}>
-					{copiedLabel === INVITE_LABEL ? (
-						<Check className={SHARE_OPTION_ICON_CLASS} />
-					) : (
-						<Share className={SHARE_OPTION_ICON_CLASS} />
-					)}
-					{copiedLabel === INVITE_LABEL ? "Link copied" : INVITE_LABEL}
-				</button>
-			)}
+			{isInviteRowShown && <InviteShareOption isCopied={copiedLabel === INVITE_LABEL} onShare={shareInvite} />}
 			{/* the device's share sheet is above the send options if one can open */}
 			{isShareSheetAvailable &&
 				(isPublic ? (
-					<button type="button" onClick={() => void handleShareSheet()} className={SHARE_OPTION_CLASS}>
+					<button type="button" onClick={() => void shareTopic()} className={SHARE_OPTION_CLASS}>
 						<Share className={SHARE_OPTION_ICON_CLASS} />
 						Share…
 					</button>
@@ -191,7 +133,7 @@ export function ShareTopic({
 				icon={<Link className="size-4" />}
 				className={SHARE_OPTION_CLASS}
 				isCopied={copiedLabel === "Copy link"}
-				onCopy={() => handleCopyLink("Copy link", topicUrl)}
+				onCopy={() => copyLink("Copy link", topicUrl)}
 			/>
 			{/* an rss feed can only be served for a public topic */}
 			{isPublic ? (
@@ -200,7 +142,7 @@ export function ShareTopic({
 					icon={<Rss className="size-4" />}
 					className={SHARE_OPTION_CLASS}
 					isCopied={copiedLabel === "Copy RSS"}
-					onCopy={() => handleCopyLink("Copy RSS", feedUrl)}
+					onCopy={() => copyLink("Copy RSS", feedUrl)}
 				/>
 			) : (
 				<DisabledShareOption
@@ -259,7 +201,7 @@ export function ShareTopic({
 				<TooltipContent>Share this topic</TooltipContent>
 			</Tooltip>
 			{/* nothing takes focus on open, so no option starts with the browser's focus ring */}
-			<PopoverContent align="end" className="w-52 p-1" onOpenAutoFocus={(event) => event.preventDefault()}>
+			<PopoverContent align="end" className="w-52" bodyClassName="p-1">
 				{shareOptions}
 			</PopoverContent>
 			{isReportingIssue && (
@@ -296,11 +238,7 @@ export function ShareTopicButton({
 }) {
 	return (
 		<ShareTopic
-			topicId={topic.id}
-			topicName={topic.name}
-			isPublic={topic.visibility === "public"}
-			isTopicOwner={topic.isOwner}
-			canInvite={topic.isOwner && topic.visibility !== "private"}
+			topic={topic}
 			isIcon={isCompact}
 			className={className}
 			isDialog={isDialog}

@@ -38,7 +38,7 @@ export async function sendDeleteTeamInvite(teamId: string, inviteId: string): Pr
 	}
 }
 
-// fetch one team page by id. return gated or missing when there is no page to show
+// fetch one team page by id. return gated or missing if there is no page to show
 export type TeamPageResult =
 	| { status: "visible"; team: TeamPageResponse }
 	| { status: "gated"; teamName: string; hasRequestedToJoin: boolean }
@@ -86,12 +86,13 @@ export async function fetchTeamNameTaken(name: string): Promise<boolean> {
 	return ((await response.json()) as { isTaken: boolean }).isTaken
 }
 
-// delete the team, returning its topics to their creators
-export async function sendDeleteTeam(teamId: string): Promise<void> {
-	await apiClient.api.teams[":id"].$delete({ param: { id: teamId } })
+// delete the team, returning its topics to their creators. false if it is the only team the user leads
+export async function sendDeleteTeam(teamId: string): Promise<boolean> {
+	const response = await apiClient.api.teams[":id"].$delete({ param: { id: teamId } })
+	return response.ok
 }
 
-// add a user's topic to a team, returning the conflict message when it is already on a team
+// add a user's topic to a team, returning the conflict message if it is already on a team
 export async function sendAddTopicTeam(teamId: string, topicId: string): Promise<string | null> {
 	const response = await apiClient.api.teams[":id"].topics.$post({ param: { id: teamId }, json: { topicId } })
 	if (response.ok) {
@@ -106,7 +107,7 @@ export async function sendRemoveTopicFromTeam(teamId: string, topicId: string): 
 	await apiClient.api.teams[":id"].topics[":topicId"].$delete({ param: { id: teamId, topicId } })
 }
 
-// set a team member's role, returning false when the last-leader rule held it
+// set a team member's role, returning false if the last-leader rule held it
 export async function sendTeamMemberRole(teamId: string, userId: string, role: "leader" | "member"): Promise<boolean> {
 	const response = await apiClient.api.teams[":id"].members[":userId"].role.$post({
 		param: { id: teamId, userId },
@@ -115,7 +116,7 @@ export async function sendTeamMemberRole(teamId: string, userId: string, role: "
 	return response.ok
 }
 
-// remove a team member or leave, returning false when the last-leader rule held it
+// remove a team member or leave, returning false if the last-leader rule held it
 export async function sendRemoveTeamMember(teamId: string, userId: string): Promise<boolean> {
 	const response = await apiClient.api.teams[":id"].members[":userId"].$delete({ param: { id: teamId, userId } })
 	return response.ok

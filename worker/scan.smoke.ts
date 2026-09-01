@@ -23,8 +23,8 @@ function vectorLength(value: unknown): number {
 	return Array.isArray(value) ? value.length : 0
 }
 
-// append a stamp for the database to persist a unique identifier for fixture data
-const smokeTestStamp = Date.now()
+// one id per run, so fixture rows never collide with an earlier run's
+const runId = Date.now()
 
 // seed a fake owner, a topic whose context matches the feed, and an RSS source with no API key
 async function seedTestData(): Promise<{ topicId: string; userId: string }> {
@@ -33,9 +33,9 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 		.insert(users)
 		.values({
 			name: "scan-smoke",
-			email: `scan-smoke+${smokeTestStamp}@example.test`,
-			username: `scan-smoke-${smokeTestStamp}`,
-			usernameNormalized: `scansmoke${smokeTestStamp}`,
+			email: `scan-smoke+${runId}@example.test`,
+			username: `scan-smoke-${runId}`,
+			usernameNormalized: `scansmoke${runId}`,
 		})
 		.returning()
 	if (!user) {
@@ -62,7 +62,7 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 	return { topicId: topic.id, userId: user.id }
 }
 
-// run the topic scan pipeline, check the smoke assertions, and print a report. returns true when every check passes
+// run the topic scan pipeline, check the smoke assertions, and print a report. returns true if every check passes
 async function check(topicId: string, ownerId: string): Promise<boolean> {
 	// run the full pipeline for the topic, ingestion then review, driving the workflow's own stages in order
 	const [openScan] = await db.insert(scans).values({ topicId, ownerId }).returning()

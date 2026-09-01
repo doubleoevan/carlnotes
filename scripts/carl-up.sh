@@ -24,7 +24,7 @@ set_secret() {
   if [[ "$HAS_DOPPLER" == true ]]; then
     doppler secrets set "$1=$2" --silent
   else
-    # append-only: safe because mint runs only when get_secret is empty and reads head -1; add dedup if .env writes ever expand
+    # append-only: safe because the write runs only when get_secret is empty and reads head -1; add dedup if .env writes ever expand
     echo "$1=$2" >> .env
   fi
 }
@@ -43,9 +43,9 @@ else
   exit 1
 fi
 
-# ensure jq: dev key minting and the stdin-mode enforcement hooks both need it
+# ensure jq: dev key creation and the stdin-mode enforcement hooks both need it
 if ! command -v jq >/dev/null 2>&1; then
-  echo "installing jq (required by the enforcement hooks and dev-key mint)..."
+  echo "installing jq (required by the enforcement hooks and dev-key creation)..."
   brew install jq
 fi
 
@@ -83,16 +83,16 @@ $COMPOSE up -d
 for _ in $(seq 30); do nc -z localhost 7233 >/dev/null 2>&1 && break; sleep 1; done
 nc -z localhost 7233 >/dev/null 2>&1 || { echo "temporal did not bind 7233 within 30s: check 'docker compose logs temporal'" >&2; exit 1; }
 
-# first boot: mint the capped litellm dev key so that agents never hold the master key
+# first boot: create the limited litellm dev key so that agents never hold the master key
 if [[ -z "$(get_secret LITELLM_DEV_KEY)" ]]; then
   # announce, since the health-check wait can take a few seconds on a cold proxy
-  echo "no LITELLM_DEV_KEY found: minting a capped dev key (waiting for the proxy)..."
+  echo "no LITELLM_DEV_KEY found: creating a limited dev key (waiting for the proxy)..."
 
-  # wait for the proxy to answer before talking to its admin api; bail after ~60s rather than hang forever
+  # wait for the proxy to answer before talking to its admin api; bail after ~60s instead of hanging forever
   for _ in $(seq 30); do curl -s http://localhost:4000/health/liveliness >/dev/null 2>&1 && break; sleep 2; done
   curl -s http://localhost:4000/health/liveliness >/dev/null 2>&1 || { echo "proxy did not become healthy within 60s: check 'docker compose logs litellm'" >&2; exit 1; }
 
-  # generate a budget-capped key
+  # generate a budget-limited key
   MASTER_KEY="$(get_secret LITELLM_MASTER_KEY)"
 
   # reclaim the alias first: with the stored secret gone, any proxy-side dev key is an orphan
@@ -106,15 +106,15 @@ if [[ -z "$(get_secret LITELLM_DEV_KEY)" ]]; then
     -H "Content-Type: application/json" \
     -d '{"key_alias":"dev","max_budget":25,"budget_duration":"30d"}' | jq -r '.key')"
 
-  # refuse to store a failed mint, or the empty check above never fires again
+  # refuse to store a failed request, or the empty check above never fires again
   if [[ -z "$DEV_KEY" || "$DEV_KEY" == "null" ]]; then
-    echo "dev key mint failed: check the proxy logs (docker compose logs litellm)" >&2
+    echo "dev key request failed: check the proxy logs (docker compose logs litellm)" >&2
     exit 1
   fi
 
   # store it as the agent credential in the active source
   set_secret LITELLM_DEV_KEY "$DEV_KEY"
-  echo "minted the capped dev key and stored it as LITELLM_DEV_KEY"
+  echo "created the limited dev key and stored it as LITELLM_DEV_KEY"
 fi
 
 # hand agent tokens to gui apps and new terminals (macos; skipped when absent)

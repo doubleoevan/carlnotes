@@ -32,7 +32,7 @@ export function loadPages(surface: Surface): ContentPage[] {
 	return pages.sort((first, second) => second.date.localeCompare(first.date))
 }
 
-// parse one file into a page, or null when its frontmatter is incomplete
+// parse one file into a page, or null if its frontmatter is incomplete
 function toPage(surface: Surface, filename: string): ContentPage | null {
 	const source = readFileSync(`${CONTENT_ROOT}/${surface}/${filename}`, "utf8")
 	const match = source.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
@@ -67,7 +67,7 @@ const PAGE_STYLE = `
 	.post-card { margin-top: 1.5rem; }
 `
 
-// one full blog page: the head a crawler reads, the coffee-toned chrome, and the given body HTML
+// one full blog page: the head a crawler reads, the coffee-toned page frame, and the given body HTML
 function toContentHtml({
 	title,
 	description,

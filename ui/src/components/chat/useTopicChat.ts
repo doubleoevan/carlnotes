@@ -1,20 +1,11 @@
 // the chat panel's conversation state, owned by one hook so the panel components stay pure view
-import {
-	CHAT_ATTACHMENT_KEEP_LIMIT,
-	CHAT_IMAGE_DATA_CHARS,
-	CHAT_MAX_ATTACHMENTS,
-	type ChatAttachment,
-	clipAttachmentText,
-	type KeptChatAttachment,
-	withAttachmentNote,
-} from "@shared/contracts"
+import { type ChatAttachment, type KeptChatAttachment, withAttachmentNote } from "@shared/contracts"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { fetchChatConversation, sendChatTurn, sendClearChat, sendDeleteKeptAttachment } from "@/clients/chatClient"
+import { type ChatPage, fetchChatConversation, sendChatTurn, sendClearChat } from "@/clients/chatClient"
 import type { ChatTurn } from "@/components/chat/ChatMessages"
-
-// the file suffixes read as text attachments when the browser reports no text/* media type
-const TEXT_FILE_SUFFIXES = [".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".log"]
+import { useChatAttachments } from "@/components/chat/useChatAttachments"
+import { hasPreviewableLink } from "@/components/common/LinkPreviewCard"
 
 // a stand-in id for a kept attachment that the server has not returned yet
 let placeholderCount = 0
@@ -51,14 +42,11 @@ export type TopicChat = {
 }
 
 /**
- * One topic's conversation: loading it, sending a chat turn, streaming the reply, stopping, and clearing.
+ * One topic's chat conversation: loading it, sending a chat turn, streaming the reply, stopping, and clearing.
  */
-export function useTopicChat(topicId: string): TopicChat {
+export function useTopicChat(page: ChatPage): TopicChat {
 	const [chatTurns, setChatTurns] = useState<ChatTurn[]>([])
 	const [question, setQuestion] = useState("")
-	const [attachments, setAttachments] = useState<ChatAttachment[]>([])
-	// what this user already keeps for the topic. it is both the manage list and what the keep limit measures
-	const [keptAttachments, setKeptAttachments] = useState<KeptChatAttachment[]>([])
 
 	// the gates the conversation load resolves, and the streaming flag an in-flight chat turn holds
 	const [canChat, setCanChat] = useState(false)
@@ -67,32 +55,45 @@ export function useTopicChat(topicId: string): TopicChat {
 	const [isLoaded, setIsLoaded] = useState(false)
 	const [isStreaming, setIsStreaming] = useState(false)
 	const abortRef = useRef<AbortController | null>(null)
-	// the live attachment and draft-keep counts, readable mid-await where the state snapshot goes stale
-	const attachmentCountRef = useRef(0)
-	const draftKeepCountRef = useRef(0)
+	// the draft's files and the topic's kept ones, held together with the two limits that bound them
+	const {
+		attachments,
+		addFiles,
+		addPastedText,
+		removeAttachment,
+		keptAttachments,
+		setKeptAttachments,
+		removeKeptAttachment,
+		clearDraft,
+	} = useChatAttachments()
 
-	// load the stored conversation. every signed-in user's chat turns persist server-side
+	// load the stored conversation. every signed-in user's chat turns persist server-side.
+	// the page object is rebuilt each render, so its two ids stand in for it
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the page's ids identify the conversation
 	useEffect(() => {
 		// moving to another topic must not let the previous topic's conversation load into this one
 		let isCurrentTopic = true
-		fetchChatConversation(topicId)
-			.then((conversation) => {
+		fetchChatConversation(page)
+			.then((chatConversation) => {
 				if (!isCurrentTopic) {
 					return
 				}
 				setChatTurns(
-					conversation.chatTurns.map((chatTurn) => ({
+					chatConversation.chatTurns.map((chatTurn) => ({
 						question: chatTurn.question,
 						answer: chatTurn.answer,
 						rejection: null,
 						at: chatTurn.at ? Date.parse(chatTurn.at) : undefined,
+						attachments: chatTurn.attachments,
+						linkPreviews: chatTurn.linkPreviews,
+						answerLinkPreviews: chatTurn.answerLinkPreviews,
 					})),
 				)
 				// the gates and the kept attachments update together, so the panel opens in one finished state
-				setCanChat(conversation.canChat)
-				setIsSignupRequired(conversation.isSignupRequired)
-				setIsBudgetExhausted(conversation.isBudgetExhausted)
-				setKeptAttachments(conversation.keptAttachments ?? [])
+				setCanChat(chatConversation.canChat)
+				setIsSignupRequired(chatConversation.isSignupRequired)
+				setIsBudgetExhausted(chatConversation.isBudgetExhausted)
+				setKeptAttachments(chatConversation.keptAttachments ?? [])
 				setIsLoaded(true)
 			})
 			.catch((error) => {
@@ -109,64 +110,75 @@ export function useTopicChat(topicId: string): TopicChat {
 		return () => {
 			isCurrentTopic = false
 		}
-	}, [topicId])
+	}, [page.topicId, page.teamId, setKeptAttachments])
 
-	// whether a new attachment may default to kept, with a toast when the keep limit forces it off
-	function shouldKeepAttachment(): boolean {
-		if (keptAttachments.length + draftKeepCountRef.current >= CHAT_ATTACHMENT_KEEP_LIMIT) {
-			toast(
-				`Carl's already keeping ${CHAT_ATTACHMENT_KEEP_LIMIT} files for this topic. He'll read this one, but it won't get stored.`,
-			)
-			return false
-		}
-		draftKeepCountRef.current += 1
-		return true
-	}
+	// how many background refreshes a chat turn with a link gets before its loading note gives up
+	const linkPreviewAttemptsRef = useRef(0)
+	const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-	// take in selected or pasted attachment files
-	async function addAttachmentFiles(files: File[]): Promise<void> {
-		for (const file of files) {
-			// one chat turn's attachment limit is checked first, so a big multi-select stops with a toast
-			if (attachmentCountRef.current >= CHAT_MAX_ATTACHMENTS) {
-				toast(`${CHAT_MAX_ATTACHMENTS} attachments max per question.`)
-				return
+	// one refresh: read the conversation again and land the newest chat turn's cards when they are ready
+	const refreshLinkPreview = async (): Promise<void> => {
+		linkPreviewTimerRef.current = null
+
+		// read the newest chat turn back from the server, spending one of the tries
+		const chatConversation = await fetchChatConversation(page).catch(() => null)
+		const serverChatTurn = chatConversation?.chatTurns.at(-1)
+		linkPreviewAttemptsRef.current -= 1
+		const linkPreviewAttemptsLeft = linkPreviewAttemptsRef.current
+
+		// only a chat turn still marked pending takes the answer
+		setChatTurns((chatTurns) => {
+			const newestChatTurn = chatTurns.at(-1)
+			if (!newestChatTurn?.linkPreviewsPending) {
+				return chatTurns
 			}
-			// convert, then append kept by default. a rejected file already explained itself in the conversion
-			const attachment = await toAttachment(file)
-			if (attachment) {
-				attachmentCountRef.current += 1
-				const keepAttachment = shouldKeepAttachment()
-				setAttachments((previous) => [...previous, { ...attachment, keep: keepAttachment }])
+
+			// a chat turn still loading after this refresh books the next one
+			// a chat turn still pending after this try goes back on the timer
+			const refreshedChatTurn = toRefreshedChatTurn(newestChatTurn, serverChatTurn, linkPreviewAttemptsLeft)
+			if (refreshedChatTurn.linkPreviewsPending) {
+				scheduleLinkPreviewRefresh()
+			}
+			return replaceNewestChatTurn(chatTurns, () => refreshedChatTurn)
+		})
+	}
+
+	// the one timer, started only when nothing is already waiting
+	const scheduleLinkPreviewRefresh = (): void => {
+		linkPreviewTimerRef.current ??= setTimeout(() => void refreshLinkPreview(), 2500)
+	}
+
+	// a finished chat turn that mentioned a link loads until its cards land
+	const startLinkPreviewRefresh = (): void => {
+		setChatTurns((chatTurns) => {
+			// only the newest chat turn can still be waiting on a link preview, and a rejected turn never is
+			const newestChatTurn = chatTurns.at(-1)
+			if (!newestChatTurn || newestChatTurn.rejection !== null) {
+				return chatTurns
+			}
+			if (!hasPreviewableLink(newestChatTurn.question) && !hasPreviewableLink(newestChatTurn.answer)) {
+				return chatTurns
+			}
+
+			// a link is worth polling for, so the chat turn shows its card as pending until one arrives
+			linkPreviewAttemptsRef.current = 6
+			scheduleLinkPreviewRefresh()
+			return replaceNewestChatTurn(chatTurns, (chatTurn) => ({ ...chatTurn, linkPreviewsPending: true }))
+		})
+	}
+
+	// a conversation left behind stops refreshing for it
+	useEffect(() => {
+		return () => {
+			if (linkPreviewTimerRef.current) {
+				clearTimeout(linkPreviewTimerRef.current)
 			}
 		}
-	}
-
-	// turn a long copy-paste into a text chip, so the draft box holds the question instead of the material
-	function addPastedText(text: string): void {
-		if (attachmentCountRef.current >= CHAT_MAX_ATTACHMENTS) {
-			toast(`${CHAT_MAX_ATTACHMENTS} attachments max per question.`)
-			return
-		}
-		attachmentCountRef.current += 1
-		const keepAttachment = shouldKeepAttachment()
-		setAttachments((previousAttachments) => [
-			...previousAttachments,
-			{ kind: "text", name: "Pasted text", text: clipAttachmentText(text), keep: keepAttachment },
-		])
-	}
-
-	// drop one chip from the draft, giving its slot back when it was one of the kept ones
-	function removeAttachment(index: number): void {
-		attachmentCountRef.current -= 1
-		if (attachments[index]?.keep) {
-			draftKeepCountRef.current -= 1
-		}
-		setAttachments((previousAttachments) => previousAttachments.filter((_, position) => position !== index))
-	}
+	}, [])
 
 	// send the user question, appending the reply to the newest chat turn as each chunk arrives
 	async function send(retryQuestion?: string): Promise<void> {
-		// a retry re-asks a finished turn's question, stripped of its attachment note
+		// a retry re-asks a finished chat turn's question, stripped of its attachment note
 		const askedQuestion = (retryQuestion ?? question).replace(/\n\n\[attached: [^\]]*\]$/, "").trim()
 		if (!askedQuestion || isStreaming) {
 			return
@@ -181,9 +193,7 @@ export function useTopicChat(topicId: string): TopicChat {
 		const sentAttachments = retryQuestion === undefined ? attachments : []
 		if (retryQuestion === undefined) {
 			setQuestion("")
-			setAttachments([])
-			attachmentCountRef.current = 0
-			draftKeepCountRef.current = 0
+			clearDraft()
 			setKeptAttachments((previousAttachments) => [
 				...previousAttachments,
 				...sentAttachments
@@ -191,9 +201,23 @@ export function useTopicChat(topicId: string): TopicChat {
 					.map((attachment) => ({ id: toPlaceholderId(), name: attachment.name, kind: attachment.kind })),
 			])
 		}
+		// a fresh chat turn shows what it sent: an image or a clip on its own bytes until the reload hands it a stored id
+		const savedAttachments = sentAttachments.map((attachment) => ({
+			id: toPlaceholderId(),
+			kind: attachment.kind,
+			name: attachment.name,
+			...(attachment.kind === "image" || attachment.kind === "video" ? { dataUrl: attachment.dataUrl } : {}),
+		}))
 		setChatTurns((previousChatTurns) => [
 			...previousChatTurns,
-			{ question: withAttachmentNote(askedQuestion, sentAttachments), answer: "", rejection: null },
+			{
+				question: withAttachmentNote(askedQuestion, sentAttachments),
+				answer: "",
+				rejection: null,
+				attachments: savedAttachments,
+				linkPreviews: [],
+				answerLinkPreviews: [],
+			},
 		])
 		setIsStreaming(true)
 
@@ -201,7 +225,7 @@ export function useTopicChat(topicId: string): TopicChat {
 		const controller = new AbortController()
 		abortRef.current = controller
 		const chatSendResult = await sendChatTurn(
-			topicId,
+			page,
 			askedQuestion,
 			historyChatTurns,
 			sentAttachments,
@@ -226,6 +250,7 @@ export function useTopicChat(topicId: string): TopicChat {
 			}))
 		})
 		setIsStreaming(false)
+		startLinkPreviewRefresh()
 	}
 
 	// cut the in-flight chat turn. the text already on screen stays there
@@ -235,7 +260,7 @@ export function useTopicChat(topicId: string): TopicChat {
 
 	// wipe the conversation and chat attachments server-side, then locally once the server confirms
 	async function clear(): Promise<boolean> {
-		if (await sendClearChat(topicId)) {
+		if (await sendClearChat(page)) {
 			setChatTurns([])
 			setKeptAttachments([])
 			return true
@@ -243,19 +268,12 @@ export function useTopicChat(topicId: string): TopicChat {
 		return false
 	}
 
-	// delete one kept attachment, dropping it from the list once the server confirms so its slot frees
-	async function removeKeptAttachment(keptAttachmentId: string): Promise<void> {
-		if (await sendDeleteKeptAttachment(keptAttachmentId)) {
-			setKeptAttachments((previous) => previous.filter((keptAttachment) => keptAttachment.id !== keptAttachmentId))
-		}
-	}
-
 	return {
 		chatTurns,
 		question,
 		setQuestion,
 		attachments,
-		addFiles: addAttachmentFiles,
+		addFiles,
 		addPastedText,
 		removeAttachment,
 		keptAttachments,
@@ -271,46 +289,25 @@ export function useTopicChat(topicId: string): TopicChat {
 	}
 }
 
-// a selected or pasted file as a chat attachment
-export async function toAttachment(file: File): Promise<ChatAttachment | null> {
-	// images and PDFs post as data urls. the PDF's text is extracted server-side, so only its words ever reach the model
-	const isPdf = file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")
-	if (file.type.startsWith("image/") || isPdf) {
-		return toDataUrlAttachment(file, isPdf)
-	}
-	// text files post as raw text, clipped to the limit with the cut point marked for the model
-	if (file.type.startsWith("text/") || TEXT_FILE_SUFFIXES.some((suffix) => file.name.toLowerCase().endsWith(suffix))) {
-		const text = await file.text()
-		return { kind: "text", name: file.name || "text", text: clipAttachmentText(text), keep: false }
-	}
-	// every other kind of attachment is rejected with a toast
-	toast("Carl reads images, PDFs, and text files for now.")
-	return null
-}
+// the newest chat turn with whatever cards the server holds for it. loading ends when every chat turn with a link
+// has a card or the attempts run out
+function toRefreshedChatTurn(
+	newestChatTurn: ChatTurn,
+	serverChatTurn:
+		| { question: string; linkPreviews: ChatTurn["linkPreviews"]; answerLinkPreviews: ChatTurn["answerLinkPreviews"] }
+		| undefined,
+	attemptsLeft: number,
+): ChatTurn {
+	// the newest server chat turn is this one when its stored question matches
+	const isSameChatTurn = serverChatTurn !== undefined && serverChatTurn.question === newestChatTurn.question
+	const linkPreviews = isSameChatTurn ? serverChatTurn.linkPreviews : newestChatTurn.linkPreviews
+	const answerLinkPreviews = isSameChatTurn ? serverChatTurn.answerLinkPreviews : newestChatTurn.answerLinkPreviews
 
-// an image or PDF as a data url, rejected by name when it runs past the shared size limit
-async function toDataUrlAttachment(file: File, isPdf: boolean): Promise<ChatAttachment | null> {
-	const dataUrl = await toDataUrl(file)
-	if (dataUrl.length > CHAT_IMAGE_DATA_CHARS) {
-		toast(`That ${isPdf ? "PDF" : "image"} is too large. About 4 MB is the limit.`)
-		return null
-	}
-	return {
-		kind: isPdf ? "pdf" : "image",
-		name: file.name || (isPdf ? "document.pdf" : "image"),
-		dataUrl,
-		keep: false,
-	}
-}
-
-// a file's bytes as a data url, through the browser's own reader
-function toDataUrl(file: File): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const fileReader = new FileReader()
-		fileReader.onload = () => resolve(String(fileReader.result))
-		fileReader.onerror = () => reject(fileReader.error)
-		fileReader.readAsDataURL(file)
-	})
+	// a chat turn without a link needs no card of its own
+	const isQuestionDone = !hasPreviewableLink(newestChatTurn.question) || linkPreviews.length > 0
+	const isAnswerDone = !hasPreviewableLink(newestChatTurn.answer) || answerLinkPreviews.length > 0
+	const isChatTurnDone = (isQuestionDone && isAnswerDone) || attemptsLeft <= 0
+	return { ...newestChatTurn, linkPreviews, answerLinkPreviews, linkPreviewsPending: !isChatTurnDone }
 }
 
 // replace the newest chat turn, which is the one a streaming reply is filling in

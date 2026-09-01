@@ -222,6 +222,6 @@ test("attachments fold into the newest message as parts", () => {
 // an earlier chat turn's attachment note stands for a real reading, so the model never denies it
 test("the chat prompt explains attachment notes so a real reading is never denied", async () => {
 	const { prompt } = await buildTopicChatPrompt(chatContext())
-	expect(prompt).toContain("a file truly went with that turn")
+	expect(prompt).toContain("a file truly went with that chat turn")
 	expect(prompt).toContain("Never conclude the file failed to arrive")
 })

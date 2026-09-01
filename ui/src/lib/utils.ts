@@ -73,9 +73,14 @@ export function isWideScreen(): boolean {
 }
 
 /**
- * What a file picker offers, shared by the chat composer and the topic prompt.
+ * What the topic prompt's file picker shows.
  */
 export const FILE_PICKER_ACCEPT = "image/*,application/pdf,.pdf,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.log"
+
+/**
+ * What the chat composers' file pickers offer: the topic prompt's list plus the video types a chat can play back.
+ */
+export const CHAT_FILE_PICKER_ACCEPT = `${FILE_PICKER_ACCEPT},video/mp4,video/quicktime,video/webm`
 
 /**
  * Merges class names, resolving Tailwind conflicts.

@@ -11,7 +11,7 @@ and writes a note about each new finding that made the cut. You read the notes. 
 ![The CarlNotes home page signed in: search, and your topics with their newest
 findings](../../assets/screenshots/home-topic-feed.png)
 
-This is how Carl takes his coffee.
+Carl keeps only what's relevant to your prompt. He filters out everything else for you. This is how he takes his coffee.
 
 ## Topic
 

@@ -14,7 +14,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
 import { type AllowedScanNoteUrls, TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
-import { POPOVER_WIDTH_CLASS, RESOURCE_LIST_CARD_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
+import { POPOVER_PANEL_CLASS, RESOURCE_LIST_CARD_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { MoreButton } from "./MoreButton"
@@ -175,7 +175,7 @@ function ScanNote({
 	// the note is fetched on click, and a loading mug brews in its place until it loads
 	if (!isNoteLoaded) {
 		return (
-			<PopoverContent align="end" className={POPOVER_WIDTH_CLASS}>
+			<PopoverContent align="end" className={POPOVER_PANEL_CLASS}>
 				<PopoverCloseButton />
 				<CoffeeLoading className="min-h-24 text-base" />
 			</PopoverContent>
@@ -183,7 +183,7 @@ function ScanNote({
 	}
 
 	return (
-		<PopoverContent align="end" className={POPOVER_WIDTH_CLASS}>
+		<PopoverContent align="end" className={POPOVER_PANEL_CLASS}>
 			<PopoverCloseButton />
 			{/* why a failed scan failed, above the recap */}
 			{scan.status === "failed" && (

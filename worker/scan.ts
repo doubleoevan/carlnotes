@@ -13,14 +13,14 @@ type Scan = typeof scans.$inferSelect
 export type TopicScanStart = { status: "started"; scan: Scan; whenFinished: Promise<void> } | { status: "running" }
 
 /**
- * Open a Scan for a Topic and hand it to Temporal. Returns "running" when the Topic already has one in flight —
- * the workflow id catches that, and a query could still read a stale row.
+ * Open a Scan for a Topic and pass it to Temporal. Returns "running" if the Topic already has one in flight.
+ * The workflow id catches that, and a query could still read a stale row.
  * the trigger holds what asked for the Scan, which decides what its conclusion announces.
  * The daily quota counts scheduled and manual Scans the same way.
  * ownerId is saved to the Scan so its spend and quota attribution survive the topic being deleted.
  */
 export async function startTopicScan(topicId: string, ownerId: string, trigger: ScanTrigger): Promise<TopicScanStart> {
-	// a Topic can already have an open scan row with no workflow behind it yet a missing dispatchedAt field is
+	// a Topic can already have an open scan row with no workflow for it yet a missing dispatchedAt field is
 	const [openScan] = await db
 		.select()
 		.from(scans)

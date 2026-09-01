@@ -1,5 +1,5 @@
-// the api client for a team topic's chat room and a team's own chat room: the messages, the post, and the stream url
-import type { ChatAttachment, ChatRoom, ChatRoomMessage } from "@shared/contracts"
+// the api client for a team topic's chat room and a team's own chat room: the chat messages, the post, and the stream url
+import type { ChatAttachment, ChatLinkPreview, ChatRoom, ChatRoomMessage } from "@shared/contracts"
 import { hc } from "hono/client"
 import type { AppType } from "../../../api"
 
@@ -7,7 +7,7 @@ import type { AppType } from "../../../api"
 const apiClient = hc<AppType>("")
 
 /**
- * Load the chat room's newest messages, up to the server's load limit. Any error status returns null,
+ * Load the chat room's newest chat messages, up to the server's load limit. Any error status returns null,
  * meaning there is no chat room here.
  */
 export async function fetchChatRoomMessages(topicId: string | null, teamId: string): Promise<ChatRoomMessage[] | null> {
@@ -16,16 +16,35 @@ export async function fetchChatRoomMessages(topicId: string | null, teamId: stri
 		return null
 	}
 
-	// the payload is the decrypted messages in id order
-	const { messages } = (await response.json()) as { messages: ChatRoomMessage[] }
-	return messages
+	// the payload is the decrypted chat messages in id order
+	const { chatMessages } = (await response.json()) as { chatMessages: ChatRoomMessage[] }
+	return chatMessages
+}
+
+/**
+ * Load only the link preview cards for a few loading chat messages by id.
+ * Returns an empty map on any error, which the caller reads as no cards yet.
+ */
+export async function fetchChatRoomMessageLinkPreviews(
+	topicId: string | null,
+	teamId: string,
+	chatMessageIds: number[],
+): Promise<Record<number, ChatLinkPreview[]>> {
+	const response = await fetch(`${toChatRoomPath(topicId, teamId)}/link-previews?ids=${chatMessageIds.join(",")}`)
+	if (!response.ok) {
+		return {}
+	}
+
+	// the payload is a card list per chat message id
+	const { linkPreviews } = (await response.json()) as { linkPreviews: Record<number, ChatLinkPreview[]> }
+	return linkPreviews
 }
 
 /**
  * The stream url that the chat room's EventSource connects to, resuming past the cursor after a chat message id.
  */
-export function toChatRoomEventsUrl(topicId: string | null, teamId: string, afterMessageId: number): string {
-	return `${toChatRoomPath(topicId, teamId)}/events?after=${afterMessageId}`
+export function toChatRoomEventsUrl(topicId: string | null, teamId: string, afterChatMessageId: number): string {
+	return `${toChatRoomPath(topicId, teamId)}/events?after=${afterChatMessageId}`
 }
 
 // the chat room's base path: a topic's or team's room api
@@ -34,25 +53,25 @@ function toChatRoomPath(topicId: string | null, teamId: string): string {
 }
 
 /**
- * Post a message. The message itself arrives back through the stream.
+ * Post a chat message. The chat message itself arrives back through the stream.
  * The response includes the budget refusal when there is one.
  */
 export async function sendChatRoomMessage(
 	topicId: string | null,
 	teamId: string,
-	message: string,
-	replyToMessageId: number | null,
+	chatMessage: string,
+	replyToChatMessageId: number | null,
 	attachments: ChatAttachment[],
 ): Promise<{ refusalReason: string | null } | "attachmentRefused" | null> {
 	const response =
 		topicId === null
 			? await apiClient.api.teams[":id"].room.$post({
 					param: { id: teamId },
-					json: { content: message, replyToMessageId, attachments },
+					json: { content: chatMessage, replyToChatMessageId, attachments },
 				})
 			: await apiClient.api.topics[":id"].rooms[":teamId"].$post({
 					param: { id: topicId, teamId },
-					json: { content: message, replyToMessageId, attachments },
+					json: { content: chatMessage, replyToChatMessageId, attachments },
 				})
 	if (response.status === 400) {
 		return "attachmentRefused"
@@ -115,7 +134,26 @@ export async function sendDeleteChatRoomAttachment(
 }
 
 /**
- * Every room the signed-in user may open, newest first. A rejected fetch returns an empty list,
+ * Remove one of the sender's own chat messages, which takes its shared files with it. Returns false if the api rejected it.
+ */
+export async function sendDeleteChatRoomMessage(
+	topicId: string | null,
+	teamId: string,
+	chatMessageId: number,
+): Promise<boolean> {
+	const response =
+		topicId === null
+			? await apiClient.api.teams[":id"].room.messages[":messageId"].$delete({
+					param: { id: teamId, messageId: String(chatMessageId) },
+				})
+			: await apiClient.api.topics[":id"].room.messages[":messageId"].$delete({
+					param: { id: topicId, messageId: String(chatMessageId) },
+				})
+	return response.ok
+}
+
+/**
+ * Every chat room the signed-in user may open, newest first. A rejected fetch returns an empty list,
  * so the chat panel shows its call to action instead of an empty menu.
  */
 export async function fetchChatRooms(): Promise<ChatRoom[]> {
@@ -127,7 +165,8 @@ export async function fetchChatRooms(): Promise<ChatRoom[]> {
 }
 
 /**
- * The total unviewed chat mentions that the user has summed over every room. The panel polls this for its badge display.
+ * The total unviewed chat mentions that the user has summed over every chat room.
+ * The panel polls this for its badge display.
  */
 export async function fetchChatMentionCount(): Promise<number> {
 	const response = await apiClient.api.rooms["mention-count"].$get()

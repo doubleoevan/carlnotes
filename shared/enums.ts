@@ -32,7 +32,7 @@ export const scanStatuses = ["running", "succeeded", "failed"] as const
 // an attachment's async processing status: pending === stored and queued, ready === processed, or failed
 export const attachmentStatuses = ["pending", "ready", "failed"] as const
 // what a kept chat attachment originally was, shared by the db enum and the chat payload's zod schema
-export const chatAttachmentKinds = ["image", "pdf", "text"] as const
+export const chatAttachmentKinds = ["image", "pdf", "text", "video"] as const
 export const sourceVisibilities = ["public", "private"] as const
 export const ratings = ["up", "down"] as const
 // the keys for the homepage's topic feed sections. yours and subscribed require a signed-in visitor
@@ -51,3 +51,5 @@ export const billingIntervals = ["monthly", "yearly"] as const
 export const avatarSources = ["generated", "oauth", "upload"] as const
 // how many findings a topic scan may keep
 export const maxResultsOptions = [5, 10, 15, 20] as const
+// who may see a note: its owner alone, the page's team, or everyone
+export const noteVisibilities = ["private", "team", "public"] as const

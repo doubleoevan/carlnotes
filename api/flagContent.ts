@@ -53,7 +53,7 @@ export async function flagContent(userId: string, payload: FlagContentPayload): 
 	return "sent"
 }
 
-// what is being flagged. null when it doesn't exist or the sender cannot see it.
+// what is being flagged. null if it doesn't exist or the sender cannot see it.
 async function toFlaggedSubject(
 	userId: string,
 	payload: FlagContentPayload,

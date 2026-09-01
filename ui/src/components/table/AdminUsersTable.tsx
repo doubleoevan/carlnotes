@@ -199,7 +199,19 @@ function UserRow({
 			return
 		}
 		const budgetOverrideCents = dollars === "" ? null : Math.round(Number(dollars) * 100)
-		await sendUserBudgetOverride(user.id, budgetOverrideCents)
+		try {
+			// save the budget on its own, and resize the proxy key to match it separately
+			const { isKeyResized } = await sendUserBudgetOverride(user.id, budgetOverrideCents)
+			if (!isKeyResized) {
+				toast.error(
+					`${user.username}'s budget saved, but their key still enforces the old one, so model calls may still fail.`,
+				)
+			}
+		} catch (error) {
+			console.error("budget override failed", error)
+			toast.error(`${user.username}'s budget didn't save.`)
+			return
+		}
 		onReloadPage()
 	}
 

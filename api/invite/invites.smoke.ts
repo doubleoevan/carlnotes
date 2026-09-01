@@ -18,8 +18,8 @@ delete Bun.env.RESEND_API_KEY
 delete Bun.env.POSTHOG_API_KEY
 delete Bun.env.BETTER_AUTH_URL
 
-// one stamp per run, so emails, usernames, and team names don't collide with an earlier run's rows
-const stamp = `invsmoke-${Date.now()}`
+// one id per run, so emails, usernames, and team names don't collide with an earlier run's rows
+const runId = `invsmoke-${Date.now()}`
 
 // every account and team created here, deleted at the end. topics and invites cascade off the accounts
 const createdUserIds: string[] = []
@@ -57,10 +57,10 @@ async function checkLinkCreateAuthority(): Promise<void> {
 	assert.equal(created.maxUses, 25, "the owner's link does not have the link use limit")
 	assert.equal(toInviteRefusal(await loadInvite(created.id), new Date()), null, "the fresh link is not live")
 
-	// revoking stamps the row, and the refusal reads revoked
+	// revoking saves the row, and the refusal reads revoked
 	assert.ok(await revokeTopicInvite(owner.id, topic.id, created.id), "the owner could not revoke their link")
 	const revoked = await loadInvite(created.id)
-	assert.ok(revoked.revokedAt, "the revocation left no stamp")
+	assert.ok(revoked.revokedAt, "the revocation saved no time")
 	assert.equal(toInviteRefusal(revoked, new Date()), "revoked", "a revoked link does not answer revoked")
 	console.log("PASS  the stranger is refused, the owner's link lives, revocation answers revoked")
 
@@ -179,7 +179,7 @@ async function checkResolution(): Promise<void> {
 	assert.equal(emailRow.invitedUserId, byEmail.id, "the account email invite did not resolve the account")
 
 	// an email invite to an address nobody holds stores the address alone
-	const strangerAddress = `${stamp}-stranger5@example.com`
+	const strangerAddress = `${runId}-stranger5@example.com`
 	const strangerInvite = toCreatedInvite(
 		await createUserInvite(sender.id, { topicId: topic.id }, { email: strangerAddress }),
 		"the stranger email invite",
@@ -201,7 +201,7 @@ async function checkResolution(): Promise<void> {
 		"the reopening username invite",
 	)
 	assert.equal(reopened.id, declinedRow.id, "the re-invite inserted a second row instead of reopening")
-	assert.equal((await loadInvite(declinedRow.id)).declinedAt, null, "the reopened row kept its declined stamp")
+	assert.equal((await loadInvite(declinedRow.id)).declinedAt, null, "the reopened row kept its declined time")
 	// still exactly one row for this person on the topic
 	const slotRows = await db
 		.select()
@@ -341,7 +341,7 @@ async function checkAcceptAndDecline(): Promise<void> {
 	assert.equal(teamSubscription?.isActive, true, "the join fanned out no subscription on the held topic")
 	assert.equal(teamSubscription?.isEmailEnabled, false, "the fanned-out subscription is not muted")
 
-	// declining stamps the row, and the declined invitation returns unknown ever after
+	// declining saves the row, and the declined invitation returns unknown ever after
 	const laterTopic = await createTopic(sender.id, "declined topic")
 	const declinedInvite = await insertInvite({
 		topicId: laterTopic.id,
@@ -349,7 +349,7 @@ async function checkAcceptAndDecline(): Promise<void> {
 		invitedByUserId: sender.id,
 	})
 	assert.ok(await declineInvite(recipient.id, declinedInvite.id), "the recipient could not decline")
-	assert.ok((await loadInvite(declinedInvite.id)).declinedAt, "the decline left no stamp")
+	assert.ok((await loadInvite(declinedInvite.id)).declinedAt, "the decline saved no time")
 	const declinedOutcome = await acceptInvite(recipient.id, declinedInvite.id)
 	assert.equal(declinedOutcome.status, "unknown", "a declined invitation could still be accepted")
 	console.log("PASS  accepting joins both targets, and a declined invitation no longer answers")
@@ -381,7 +381,7 @@ async function checkDailyCount(): Promise<void> {
 	await db.insert(invites).values(
 		Array.from({ length: limit }, (_, index) => ({
 			topicId: topic.id,
-			email: `${stamp}-daily9-${index}@example.com`,
+			email: `${runId}-daily9-${index}@example.com`,
 			invitedByUserId: sender.id,
 		})),
 	)
@@ -394,11 +394,11 @@ function toUserValues(
 	label: string,
 	options: { inviteAccess?: (typeof users.$inferSelect)["inviteAccess"]; isFresh?: boolean } = {},
 ): typeof users.$inferInsert {
-	// the stamp keeps the email and username unique, and the normalized form lets invites resolve them
-	const username = `${stamp}-${label}`
+	// the run id keeps the email and username unique, and the normalized form lets invites resolve them
+	const username = `${runId}-${label}`
 	return {
 		name: label,
-		email: `${stamp}-${label}@example.com`,
+		email: `${runId}-${label}@example.com`,
 		username,
 		usernameNormalized: toNormalizedUsername(username),
 		inviteAccess: options.inviteAccess ?? "anyone",
@@ -432,10 +432,10 @@ async function createTopic(ownerId: string, name: string, teamId?: string): Prom
 
 // insert one team with its leader membership. teams have no owner cascade, so their ids are kept for cleanup
 async function createTeam(label: string, leaderUserId: string): Promise<typeof teams.$inferSelect> {
-	// the team row, named with the stamp to keep team names unique
+	// the team row, named with the run id to keep team names unique
 	const [team] = await db
 		.insert(teams)
-		.values({ name: `${stamp} ${label}` })
+		.values({ name: `${runId} ${label}` })
 		.returning()
 	if (!team) {
 		throw new Error(`could not seed the team ${label}`)
@@ -455,7 +455,7 @@ async function insertInvite(values: typeof invites.$inferInsert): Promise<typeof
 	return invite
 }
 
-// reload one invite row, for the assertions that read what a call stamped or spent
+// reload one invite row, for the assertions that read what a call saved or spent
 async function loadInvite(inviteId: string): Promise<typeof invites.$inferSelect> {
 	const [invite] = await db.select().from(invites).where(eq(invites.id, inviteId))
 	if (!invite) {

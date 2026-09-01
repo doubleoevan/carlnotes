@@ -1,8 +1,8 @@
 ---
-title: Room turn
+title: Chat room turn
 version: 3
 model tier: chat
-description: The user-message wrapper for a team room turn, framing the chat messages as a group thread with reply references resolved, the rolled summary ahead of it, and who to answer after it.
+description: The user-message wrapper for a team chat room turn, framing the chat messages as a group thread with reply references resolved, the rolled summary ahead of it, and who to answer after it.
 updated: 2026-08-19
 ---
 

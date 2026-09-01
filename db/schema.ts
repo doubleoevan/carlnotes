@@ -10,6 +10,7 @@ import {
 	frequencies,
 	inviteAccesses,
 	maxResultsOptions,
+	noteVisibilities,
 	plans,
 	ratings,
 	resourceKinds,
@@ -24,6 +25,7 @@ import {
 	bigint,
 	boolean,
 	check,
+	customType,
 	index,
 	integer,
 	jsonb,
@@ -59,16 +61,18 @@ export const attachmentStatus = pgEnum("attachment_status", attachmentStatuses)
 export const sourceStatus = pgEnum("source_status", attachmentStatuses)
 // what a kept chat attachment originally was
 export const chatAttachmentKind = pgEnum("chat_attachment_kind", chatAttachmentKinds)
-// where a user's public avatar image comes from. only oauth and upload have a stored object behind them
+// where a user's public avatar image comes from. only oauth and upload have a stored object
 export const avatarSource = pgEnum("avatar_source", avatarSources)
 // a member's team role, and who may address an invite to a user
 export const teamRole = pgEnum("team_role", teamRoles)
 export const inviteAccess = pgEnum("invite_access", inviteAccesses)
+// who may see a note
+export const noteVisibility = pgEnum("note_visibility", noteVisibilities)
 
 // the review embedding's vector width
 export const EMBED_DIMENSIONS = 1024
 
-// the embedding's vector space, stamped onto embedding_model
+// the embedding's vector space, saved onto embedding_model
 export const EMBED_MODEL_NAME = `qwen3-embedding-8b/${EMBED_DIMENSIONS}`
 
 // the users table
@@ -84,7 +88,7 @@ export const users = pgTable(
 		username: text("username").notNull(),
 		// the normalized username to search for already taken ones
 		usernameNormalized: text("username_normalized").notNull(),
-		// where the public avatar comes from, and the stored object behind it
+		// where the public avatar comes from, and the stored object for it
 		avatarSource: avatarSource("avatar_source").notNull().default("generated"),
 		avatarKey: text("avatar_key"),
 		// this user's litellm virtual key, provisioned with a spend budget at signup. null only before signup completes
@@ -304,7 +308,7 @@ export const scans = pgTable(
 		dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
 		// when the user stopped the scan
 		stoppedAt: timestamp("stopped_at", { withTimezone: true }),
-		// true when the owner triggered this scan by hand with "Run now". scheduled and seeded scans stay false
+		// true if the owner triggered this scan by hand with "Run now". scheduled and seeded scans stay false
 		isManual: boolean("is_manual").notNull().default(false),
 		// what it cost and how many resources the scan found, kept, and filtered
 		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
@@ -507,7 +511,7 @@ export const invites = pgTable(
 		email: text("email"),
 		// the resolved recipient: set alone by a username invite, set beside the email when an email invite's address
 		invitedUserId: text("invited_user_id").references(() => users.id, { onDelete: "cascade" }),
-		// who created the invite, null when no creator is on record
+		// who created the invite, null if no creator is on record
 		invitedByUserId: text("invited_by_user_id").references(() => users.id, { onDelete: "set null" }),
 		// how many acceptances the token allows, and how many of them are spent
 		maxUses: integer("max_uses").notNull().default(1),
@@ -559,7 +563,7 @@ export const teams = pgTable(
 		// the name and description the team page shows
 		name: text("name").notNull(),
 		description: text("description"),
-		// the stored object behind an uploaded team avatar, null for generated initials
+		// the stored object for an uploaded team avatar, null for generated initials
 		avatarKey: text("avatar_key"),
 		// a private team's page returns a 404 to outsiders. public renders it to anyone
 		isPublic: boolean("is_public").notNull().default(false),
@@ -664,13 +668,14 @@ export const subscriptions = pgTable(
 	],
 )
 
-// one message in a team topic's shared room. the id is an ordered bigint so a stream reconnect resumes from a cursor
+// one message in a team topic's shared chat room.
+// the id is an ordered bigint so a stream reconnect resumes from a cursor
 export const chatRoomMessages = pgTable(
 	"room_messages",
 	{
 		id: bigint("id", { mode: "number" }).primaryKey().generatedAlwaysAsIdentity(),
-		// the topic whose room this is, and the team whose members are in it.
-		// a null topic is the team's own room on its team page
+		// the topic whose chat room this is, and the team whose members are in it.
+		// a null topic is the team's own chat room on its team page
 		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
 		teamId: text("team_id")
 			.notNull()
@@ -678,17 +683,17 @@ export const chatRoomMessages = pgTable(
 		// who wrote it, and the name recorded at post time
 		authorUserId: text("author_user_id").references(() => users.id, { onDelete: "set null" }),
 		authorUsername: text("author_username").notNull(),
-		// the message this one answers, which is how a reply to carl continues without a fresh mention
+		// the message this one answers, which is how a reply to carl continues without a fresh chat mention
 		replyToMessageId: bigint("reply_to_message_id", { mode: "number" }),
 		// the message text, encrypted at the application layer like the private chat's messages
 		content: text("content").notNull(),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// the stream and the chat messages both read one room in id order
+	// the stream and the chat messages both read one chat room in id order
 	(table) => [index("room_messages_topic_id_idx").on(table.topicId, table.teamId, table.id)],
 )
 
-// who a room message mentioned or replied to, extracted at write time, where the content itself is encrypted
+// who a chat room message mentioned or replied to, extracted at write time, where the content itself is encrypted
 export const chatRoomMentions = pgTable(
 	"room_mentions",
 	{
@@ -699,22 +704,23 @@ export const chatRoomMentions = pgTable(
 		userId: text("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		// stamped when the member loads the room, which clears the badge. null is unseen
+		// saved when the member loads the chat room, which clears the badge. null is unseen
 		seenAt: timestamp("seen_at", { withTimezone: true }),
 	},
-	// one row per message and member, plus the by-user lookup the mention badges read, where the key starts with message
+	// one row per message and member, plus the by-user lookup the chat mention badges read,
+	// where the key starts with message
 	(table) => [
 		primaryKey({ columns: [table.messageId, table.userId] }),
 		index("room_mentions_user_id_idx").on(table.userId),
 	],
 )
 
-// one running summary per room, holding what rolled out of the context window and how far it reaches
+// one running summary per chat room, holding what rolled out of the context window and how far it reaches
 export const chatRoomSummaries = pgTable(
 	"room_summaries",
 	{
 		id: primaryId(),
-		// the room is a topic and the team whose members talk in it. a null topic is the team's own room
+		// the chat room is a topic and the team whose members talk in it. a null topic is the team's own chat room
 		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
 		teamId: text("team_id")
 			.notNull()
@@ -724,7 +730,7 @@ export const chatRoomSummaries = pgTable(
 		summarizedThroughMessageId: bigint("summarized_through_message_id", { mode: "number" }).notNull(),
 		updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// one summary per room. nulls compare equal here so the team room's upsert finds its row
+	// one summary per chat room. nulls compare equal here so the team chat room's upsert finds its row
 	(table) => [unique("room_summaries_room_unique").on(table.topicId, table.teamId).nullsNotDistinct()],
 )
 
@@ -737,16 +743,16 @@ export const chatTurns = pgTable(
 		userId: text("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		// the topic the chat turn is about. null on a team room's turn, which names the team instead
+		// the topic the chat turn is about. null on a team chat room's turn, which names the team instead
 		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
-		// the team whose own room billed the turn, so team spend still counts it. null on a topic turn
+		// the team whose own chat room billed the chat turn, so team spend still counts it. null on a topic chat turn
 		teamId: text("team_id").references(() => teams.id, { onDelete: "cascade" }),
 		// what the chat turn cost, in the same dollars scans record, summed into the user's monthly spend
 		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
 		// the chat turn's text, stored only when the gate grants the sender chat:persist
 		question: text("question"),
 		answer: text("answer"),
-		// the room message this turn answered, for a room completion. null on a private chat turn
+		// the chat room message this turn answered, for a chat room completion. null on a private chat turn
 		roomMessageId: bigint("room_message_id", { mode: "number" }),
 		// what the completion spent in tokens, kept beside the cost it produced
 		totalTokens: integer("total_tokens"),
@@ -761,21 +767,25 @@ export const chatTurns = pgTable(
 	],
 )
 
-// a chat attachment a user chose to keep
+// an attachment a user sent with a chat turn, whether or not they kept it for the topic
 export const chatAttachments = pgTable(
 	"chat_attachments",
 	{
 		id: primaryId(),
-		// who kept it, and for which topic's conversation. either deletion takes the kept attachment with it
+		// who sent it, and for which topic's conversation. either deletion takes the attachment with it
 		userId: text("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
 		topicId: text("topic_id")
 			.notNull()
 			.references(() => topics.id, { onDelete: "cascade" }),
+		// the chat turn it was sent with, which shows it again in that question's bubble
+		chatTurnId: text("chat_turn_id").references(() => chatTurns.id, { onDelete: "set null" }),
+		// whether the user kept it. a kept attachment counts against the keep limit and carl reads it on later chat turns
+		isKept: boolean("is_kept").notNull().default(true),
 		kind: chatAttachmentKind("kind").notNull(),
 		name: text("name").notNull(),
-		// where an image or PDF's original bytes live in object storage. null for kept text, which has no file
+		// where an image or PDF's original bytes live in object storage. null for text, which has no file
 		objectKey: text("object_key"),
 		contentType: text("content_type"),
 		byteSize: integer("byte_size"),
@@ -791,12 +801,12 @@ export const chatAttachments = pgTable(
 	(table) => [index("chat_attachments_user_topic_idx").on(table.userId, table.topicId)],
 )
 
-// a file a member shared with the room. the uploader clears on account deletion and a leader may still delete it
+// a file a member shared with the chat room. the uploader clears on account deletion and a leader may still delete it
 export const chatRoomAttachments = pgTable(
 	"room_attachments",
 	{
 		id: primaryId(),
-		// the room the file belongs to, and the message it came with. a message may share several, each its own row
+		// the chat room the file belongs to, and the message it came with. a message may share several, each its own row
 		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
 		teamId: text("team_id")
 			.notNull()
@@ -811,13 +821,137 @@ export const chatRoomAttachments = pgTable(
 		objectKey: text("object_key"),
 		contentType: text("content_type"),
 		byteSize: integer("byte_size"),
-		// what carl reads on every room turn: the document's words or the described image, encrypted like the chat messages
+		// what carl reads on every chat room turn: the document's words or the described image,
+		// encrypted like the chat messages
 		context: text("context").notNull().default(""),
 		status: attachmentStatus("status").notNull().default("pending"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// the room turn and the chat messages both read one room's files at once
+	// the chat room turn and the chat messages both read one chat room's files at once
 	(table) => [index("room_attachments_topic_id_idx").on(table.topicId)],
+)
+
+// the yjs document bytes column. postgres bytea, which drizzle has no built-in column for
+const bytea = customType<{ data: Uint8Array; driverData: Buffer }>({
+	dataType() {
+		return "bytea"
+	},
+	// the driver returns a Buffer, which is already a Uint8Array view
+	fromDriver(value: Buffer): Uint8Array {
+		return value
+	},
+	toDriver(value: Uint8Array): Buffer {
+		return Buffer.from(value)
+	},
+})
+
+// a note is one named rich-text note on a page, with a visibility: the topic page or the team page it lives on.
+// the ydoc is the source of truth for content and comment threads, and the HTML is regenerated from it on save
+export const notes = pgTable(
+	"notes",
+	{
+		id: primaryId(),
+		// the page, exactly one of the two. deleting the page takes every note with it
+		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
+		teamId: text("team_id").references(() => teams.id, { onDelete: "cascade" }),
+		// the note's name in the notes table, and who may see it
+		name: text("name").notNull(),
+		visibility: noteVisibility("visibility").notNull(),
+		// the creator, who alone changes its visibility or deletes it. a private note is visible to this user only
+		ownerUserId: text("owner_user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// the yjs document bytes and the stored HTML the static state serves
+		ydoc: bytea("ydoc").notNull(),
+		html: text("html").notNull().default(""),
+		// who wrote the last edit, so a user is never badged for their own
+		lastEditorUserId: text("last_editor_user_id").references(() => users.id, { onDelete: "set null" }),
+		// when the readable body last changed. updated_at also moves on a comment write and on the HTML regeneration
+		bodyEditedAt: timestamp("body_edited_at", { withTimezone: true }),
+		...timestamps(),
+	},
+	(table) => [
+		// exactly one page, and one lookup per page
+		check("notes_one_page", sql`(${table.topicId} is null) <> (${table.teamId} is null)`),
+		index("notes_topic_id_idx").on(table.topicId),
+		index("notes_team_id_idx").on(table.teamId),
+	],
+)
+
+// the sql mirror of a note ydoc's comment threads, for counts and notifications. the ydoc stays the source of truth
+export const noteCommentThreads = pgTable(
+	"note_comment_threads",
+	{
+		// the thread id the ydoc's threads map uses
+		id: text("id").primaryKey(),
+		noteId: text("note_id")
+			.notNull()
+			.references(() => notes.id, { onDelete: "cascade" }),
+		// whether the thread is resolved
+		isResolved: boolean("is_resolved").notNull().default(false),
+		...timestamps(),
+	},
+	(table) => [index("note_comment_threads_note_id_idx").on(table.noteId)],
+)
+
+// the sql mirror of one note comment. the body is the comment's blocknote json
+export const noteComments = pgTable(
+	"note_comments",
+	{
+		// the comment id the ydoc thread uses
+		id: text("id").primaryKey(),
+		threadId: text("thread_id")
+			.notNull()
+			.references(() => noteCommentThreads.id, { onDelete: "cascade" }),
+		// who wrote it. the row outlives a closed account
+		authorUserId: text("author_user_id").references(() => users.id, { onDelete: "set null" }),
+		body: jsonb("body"),
+		// saved instead of deleting when the ui soft-deletes a comment
+		deletedAt: timestamp("deleted_at", { withTimezone: true }),
+		...timestamps(),
+	},
+	(table) => [index("note_comments_thread_id_idx").on(table.threadId)],
+)
+
+// when a user last opened a note. opening clears the note's unread edit and comment counts
+export const noteReads = pgTable(
+	"note_reads",
+	{
+		// the note and the user who opened it
+		noteId: text("note_id")
+			.notNull()
+			.references(() => notes.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// restamped on every open. no row means the note was never opened, so all of it is unread
+		readAt: timestamp("read_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// one row per note and user, plus the by-user index
+	(table) => [primaryKey({ columns: [table.noteId, table.userId] }), index("note_reads_user_id_idx").on(table.userId)],
+)
+
+// one link's fetched link preview, keyed by its normalized url so the same link in many chat rooms is fetched once
+export const linkPreviews = pgTable(
+	"link_previews",
+	{
+		id: primaryId(),
+		// the normalized url this link preview describes
+		url: text("url").notNull().unique(),
+		// the page's own title and description, encrypted like the message the url was pasted into
+		title: text("title"),
+		description: text("description"),
+		// where the page's proxied image lives in object storage
+		imageObjectKey: text("image_object_key"),
+		imageContentType: text("image_content_type"),
+		// ready holds a fetched link preview. failed records a url that could not be previewed, which stops it being refetched on every post
+		status: attachmentStatus("status").notNull(),
+		// the team whose message paid for the fetch
+		fetchedByTeamId: text("fetched_by_team_id").references(() => teams.id, { onDelete: "set null" }),
+		fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// the hourly limit counts one team's recent fetches
+	(table) => [index("link_previews_team_fetched_idx").on(table.fetchedByTeamId, table.fetchedAt)],
 )
 
 // a billing subscription is a user's active paid Stripe subscription.

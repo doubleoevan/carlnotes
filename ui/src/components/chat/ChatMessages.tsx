@@ -1,34 +1,53 @@
-import { CHAT_HISTORY_TURNS, toUncompactedChatTurnStart } from "@shared/contracts"
+import {
+	CHAT_HISTORY_TURNS,
+	type ChatLinkPreview,
+	type ChatMessageAttachment,
+	toUncompactedChatTurnStart,
+} from "@shared/contracts"
 import { Check, Copy } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
-import type { ChatRejection } from "@/clients/chatClient"
+import { type ChatRejection, toChatAttachmentUrl } from "@/clients/chatClient"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { ChatAuthor } from "@/components/chat/ChatAuthor"
 import { ChatBudgetNotice } from "@/components/chat/ChatBudgetNotice"
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown"
 import { ScrollDownButton, useAtBottom } from "@/components/chat/ScrollDownButton.tsx"
 import { randomThinkingLine } from "@/components/chat/thinkingLines"
+import { hasPreviewableLink, LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useNow } from "@/hooks/useNow"
 import { cn } from "@/lib/utils"
 
-// one chat turn in the message list
-export type ChatTurn = { question: string; answer: string; rejection: ChatRejection | null; at?: number }
+// one chat turn in the chat message list, with whatever was attached to its question
+export type ChatTurn = {
+	question: string
+	answer: string
+	rejection: ChatRejection | null
+	at?: number
+	// a just-sent image or clip holds its data url until the reload hands it a stored id to read from
+	attachments: (ChatMessageAttachment & { dataUrl?: string })[]
+	// the cards for the question's first links, empty if it holds none or no link preview is stored yet
+	linkPreviews: ChatLinkPreview[]
+	// the cards for the answer's first links, under the same rules
+	answerLinkPreviews: ChatLinkPreview[]
+	// true while a just-sent chat turn's cards are still loading in the background
+	linkPreviewsPending?: boolean
+}
 
-// virtualize the chat messages window after this many turns
+// virtualize the chat messages window after this many chat turns
 const VIRTUALIZE_FROM_CHAT_TURNS = 30
 
 // who a chat message renders as: the account when one exists, and the recorded name either way
 export type ChatMessageAuthor = { userId: string | null; username: string; avatarSource: string | null }
 
 /**
- * The scrollable message list. It starts short and grows with the conversation, then it scrolls inside its own box.
+ * The scrollable chat message list. It starts short and grows with the conversation, then it scrolls inside its own box.
  */
 export function ChatMessages({
 	chatTurns,
 	isStreaming,
-	topicName,
+	chatName,
 	isBudgetExhausted,
 	author,
 	onRetry,
@@ -38,18 +57,18 @@ export function ChatMessages({
 	isStreaming: boolean
 	// whether the panel expands to fill the screen
 	isEnlarged: boolean
-	topicName: string
-	// a conversation with no turns left in the budget does not show an input to add more
+	chatName: string
+	// a conversation with no chat turns left in the budget does not show an input to add more
 	isBudgetExhausted?: boolean
 	// the current user
 	author: ChatMessageAuthor
-	// re-asks a failed turn's question on the failure notice
+	// re-asks a failed chat turn's question on the failure notice
 	onRetry?: (question: string) => void
 }) {
 	// one scroll handle per list
 	const bottomRef = useRef<HTMLDivElement>(null)
 	const virtuosoRef = useRef<VirtuosoHandle>(null)
-	// use a ref to check whether the message list is at the bottom
+	// use a ref to check whether the chat message list is at the bottom
 	const isAtBottomRef = useRef(false)
 
 	// whether the user is at the newest chat turn or has scrolled up from it
@@ -84,7 +103,7 @@ export function ChatMessages({
 	const historyStart = Math.max(0, chatTurns.length - CHAT_HISTORY_TURNS)
 	const uncompactedChatTurnStart = historyStart + toUncompactedChatTurnStart(chatTurns.slice(-CHAT_HISTORY_TURNS))
 
-	// past a long conversation window, the message list virtualizes
+	// past a long conversation window, the chat message list virtualizes
 	if (chatTurns.length >= VIRTUALIZE_FROM_CHAT_TURNS) {
 		return (
 			// the virtualizer has no natural height of its own
@@ -120,7 +139,7 @@ export function ChatMessages({
 	return (
 		<div className="relative flex min-h-24 flex-1 flex-col">
 			<div onScroll={handleScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3">
-				{chatTurns.length === 0 && !isBudgetExhausted && <ChatInputPlaceholder topicName={topicName} />}
+				{chatTurns.length === 0 && !isBudgetExhausted && <ChatInputPlaceholder chatName={chatName} />}
 				{chatTurns.map((chatTurn, index) => (
 					<ChatTurnBlock
 						// biome-ignore lint/suspicious/noArrayIndexKey: chat turns are append-only and never reordered
@@ -141,7 +160,7 @@ export function ChatMessages({
 	)
 }
 
-// one chat turn as the message list renders it. the compaction line comes above the uncompacted chat turn if it exists
+// one chat turn as the chat message list renders it. the compaction line comes above the uncompacted chat turn if it exists
 function ChatTurnBlock({
 	chatTurn,
 	index,
@@ -207,25 +226,62 @@ function CompactionNotice() {
 }
 
 // the placeholder line for an empty conversation, naming the topic
-function ChatInputPlaceholder({ topicName }: { topicName: string }) {
+function ChatInputPlaceholder({ chatName }: { chatName: string }) {
+	return <p className="text-muted-foreground py-2 text-sm">{`Ask me for a hot take on ${chatName || "this chat"}.`}</p>
+}
+
+/**
+ * A chat video clip sent with a question, played in place with the browser's own controls.
+ */
+export function ChatVideo({ src, name }: { src: string; name: string }) {
 	return (
-		<p className="text-muted-foreground py-2 text-sm">{`Ask me for a hot take on ${topicName || "this topic"}.`}</p>
+		// biome-ignore lint/a11y/useMediaCaption: a sent clip includes no caption track to offer
+		<video
+			src={src}
+			controls
+			preload="metadata"
+			aria-label={name}
+			className="mt-1 max-h-64 max-w-[92%] rounded-xl @lg:max-w-[75%]"
+		/>
 	)
 }
 
-// the user's own question to the right, with their avatar and name like every message
+// the user's own question to the right, with their avatar and name like every chat message
 function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: number; author: ChatMessageAuthor }) {
 	return (
 		<ChatAuthor
 			authorUserId={author.userId}
 			authorUsername={author.username}
 			avatarSource={author.avatarSource}
-			isOwnMessage
+			isOwnChatMessage
 		>
 			<div className="group flex flex-col items-end">
-				<p className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2 text-sm whitespace-pre-wrap lg:max-w-[36rem]">
+				<p className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2 text-sm whitespace-pre-wrap @lg:max-w-[75%]">
 					{chatTurn.question}
 				</p>
+				{/* the images and clips sent with the question, each shown under it in place */}
+				{chatTurn.attachments.map((attachment) => {
+					if (attachment.kind === "image") {
+						return <ChatImage key={attachment.id} attachment={attachment} />
+					}
+					if (attachment.kind === "video") {
+						return (
+							<ChatVideo
+								key={attachment.id}
+								src={attachment.dataUrl ?? toChatAttachmentUrl(attachment.id)}
+								name={attachment.name}
+							/>
+						)
+					}
+					return null
+				})}
+				{/* the cards for the question's first links */}
+				{chatTurn.linkPreviews.map((linkPreview) => (
+					<LinkPreviewCard key={linkPreview.url} linkPreview={linkPreview} />
+				))}
+				{chatTurn.linkPreviewsPending &&
+					chatTurn.linkPreviews.length === 0 &&
+					hasPreviewableLink(chatTurn.question) && <LinkPreviewLoading />}
 				{/* the footer shows the time ago and copy button to the right */}
 				<div className="text-muted-foreground -mr-1 mt-1 flex items-center gap-2 text-xs">
 					{chatTurn.at !== undefined && <span>{toTimeAgoLabel(chatTurn.at, now)}</span>}
@@ -236,7 +292,26 @@ function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: nu
 	)
 }
 
-// the llm reply on the left. it shows the CoffeeMug and thinking message shimmer before the response starts streaming.
+/**
+ * A chat image sent with a question, shown at a size that keeps the bubble readable. Clicking it opens the full file.
+ */
+function ChatImage({ attachment }: { attachment: ChatMessageAttachment & { dataUrl?: string } }) {
+	// a plain anchor. the router would take an /api path as one of its own routes
+	const imageUrl = attachment.dataUrl ?? toChatAttachmentUrl(attachment.id)
+	return (
+		<a href={imageUrl} target="_blank" rel="noopener noreferrer" className="mt-1 block w-fit">
+			<img
+				src={imageUrl}
+				alt={attachment.name}
+				loading="lazy"
+				decoding="async"
+				className="max-h-60 max-w-full rounded-lg object-contain"
+			/>
+		</a>
+	)
+}
+
+// the llm reply on the left. it shows the CoffeeMug and thinking chat message shimmer before the response starts streaming.
 function AnswerBubble({
 	chatTurn,
 	isLast,
@@ -248,14 +323,14 @@ function AnswerBubble({
 	isLast: boolean
 	isStreaming: boolean
 	now: number
-	// re-asks a failed turn's question, offered on the failure notice
+	// re-asks a failed chat turn's question, offered on the failure notice
 	onRetry?: (question: string) => void
 }) {
-	// the two live states, waiting while showing the thinking message and streaming the response
+	// the two live states, waiting while showing the thinking chat message and streaming the response
 	const isWaitingForAnswer = isLast && isStreaming && chatTurn.answer === ""
 	const isStreamingAnswer = isLast && isStreaming && chatTurn.answer !== ""
 	if (isWaitingForAnswer && !chatTurn.rejection) {
-		return <CarlThinkingBubble />
+		return <ModelThinkingBubble />
 	}
 
 	// a rejected chat turn shows the failure or a call to action instead of an empty bubble
@@ -268,11 +343,20 @@ function AnswerBubble({
 	return (
 		<ChatAuthor authorUserId={null} authorUsername="Carl">
 			<div className="group flex flex-col items-start">
-				<div className="bg-bubble text-foreground max-w-[92%] rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm lg:max-w-[36rem]">
+				<div className="bg-bubble text-foreground max-w-[92%] rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm @lg:max-w-[75%]">
 					<div className={cn(isStreamingAnswer && "shimmer-text")}>
 						<ChatMarkdown markdown={chatTurn.answer} />
 					</div>
 				</div>
+				{/* the cards for the answer's first links, shown once the reply has finished streaming */}
+				{!isStreamingAnswer &&
+					chatTurn.answerLinkPreviews.map((linkPreview) => (
+						<LinkPreviewCard key={linkPreview.url} linkPreview={linkPreview} />
+					))}
+				{!isStreamingAnswer &&
+					chatTurn.linkPreviewsPending &&
+					chatTurn.answerLinkPreviews.length === 0 &&
+					hasPreviewableLink(chatTurn.answer) && <LinkPreviewLoading />}
 				{!isWaitingForAnswer && !isStreamingAnswer && chatTurn.answer !== "" && (
 					<AnswerFooter answer={chatTurn.answer} answerTime={chatTurn.at} now={now} />
 				)}
@@ -332,11 +416,11 @@ export function ThinkingLine() {
 }
 
 // carl's bubble while he thinks: the avatar, the mug, and the shimmer
-export function CarlThinkingBubble() {
+export function ModelThinkingBubble() {
 	return (
 		<ChatAuthor authorUserId={null} authorUsername="Carl">
 			<div className="flex flex-col items-start">
-				<div className="bg-bubble text-foreground max-w-[92%] rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm lg:max-w-[36rem]">
+				<div className="bg-bubble text-foreground max-w-[92%] rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm @lg:max-w-[75%]">
 					<span className="text-muted-foreground flex items-center gap-2">
 						<CoffeeMug className="size-4" />
 						<ThinkingLine />

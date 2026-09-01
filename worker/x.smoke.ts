@@ -20,8 +20,8 @@ const DORMANT_HANDLE = "notarealacct99"
 // one request per Source at the provider's twenty per response. the report fails if the ingester read past it
 const MAX_READS_PER_SOURCE = 20
 
-// one stamp per run, so the seeded owner's email and username cannot collide with an earlier run's
-const smokeTestStamp = Date.now()
+// one id per run, so the seeded owner's email and username cannot collide with an earlier run's
+const runId = Date.now()
 
 // seed a fake owner, a topic with a real context, and an x source naming the handle to follow
 async function seedTestData(): Promise<{ source: Source; userId: string }> {
@@ -30,9 +30,9 @@ async function seedTestData(): Promise<{ source: Source; userId: string }> {
 		.insert(users)
 		.values({
 			name: "x-smoke",
-			email: `x-smoke+${smokeTestStamp}@example.test`,
-			username: `x-smoke-${smokeTestStamp}`,
-			usernameNormalized: `xsmoke${smokeTestStamp}`,
+			email: `x-smoke+${runId}@example.test`,
+			username: `x-smoke-${runId}`,
+			usernameNormalized: `xsmoke${runId}`,
 		})
 		.returning()
 	if (!user) {
@@ -61,7 +61,7 @@ async function seedTestData(): Promise<{ source: Source; userId: string }> {
 	return { source, userId: user.id }
 }
 
-// run the X ingester and the handle check behind source suggestion, then print a report
+// run the X ingester and the handle check for source suggestion, then print a report
 async function check(source: Source): Promise<boolean> {
 	// run the ingester. it reads the configured handle's recent tweets as "read" Resources
 	const { resources, costDollars, fallbackMode } = await xIngester(source)

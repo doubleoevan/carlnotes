@@ -66,7 +66,7 @@ export type ChatContext = {
 }
 
 /**
- * Assembles one chat turn's context from what the topic holds, or null when the topic does not exist.
+ * Assembles one chat turn's context from what the topic holds, or null if the topic does not exist.
  */
 export async function retrieveChatContext(
 	topicId: string,
@@ -93,7 +93,7 @@ export async function retrieveChatContext(
 	const [topicSources, scanSummaries, attachmentContext, chatAttachmentContext, docsBlock] = await Promise.all([
 		readSources(topicId),
 		readScanSummaries(topicId),
-		// a room turn's answer posts publicly, so the owner's attachments and the poster's kept chat attachments both stay out
+		// a chat room turn's answer posts publicly, so the owner's attachments and the poster's kept chat attachments both stay out
 		isOwner && includeKeptAttachments ? readAttachmentContext(topicId) : Promise.resolve(""),
 		includeKeptAttachments ? readChatAttachmentContext(userId, topicId) : Promise.resolve(""),
 		readDocsBlock(questionVector),
@@ -157,7 +157,7 @@ async function retrieveFindings(
 
 // the docs sections close enough to the question to quote, composed into one block
 async function readDocsBlock(questionVector: number[]): Promise<string> {
-	// keep only the sections within the cutoff, closest first, and limit how many one turn quotes
+	// keep only the sections within the cutoff, closest first, and limit how many one chat turn quotes
 	const rows = await db
 		.select({ page: docsChunks.page, content: docsChunks.content })
 		.from(docsChunks)
@@ -260,6 +260,7 @@ async function readChatAttachmentContext(userId: string, topicId: string): Promi
 			and(
 				eq(chatAttachments.userId, userId),
 				eq(chatAttachments.topicId, topicId),
+				eq(chatAttachments.isKept, true),
 				eq(chatAttachments.status, "ready"),
 			),
 		)
@@ -271,7 +272,7 @@ async function readChatAttachmentContext(userId: string, topicId: string): Promi
 		.join("\n\n")
 }
 
-// everything one team room turn puts in front of the model, drawn from every topic the team holds
+// everything one team chat room turn puts in front of the model, drawn from every topic the team holds
 export type TeamChatContext = {
 	teamName: string
 	// each held topic's name and prompt, for the prompt's topics block
@@ -284,8 +285,8 @@ export type TeamChatContext = {
 }
 
 /**
- * Assembles one team room turn's context from every topic the team holds, or null when the team does not exist.
- * Owner attachments and kept chat material stay out of an answer that posts to the whole room.
+ * Assembles one team chat room turn's context from every topic the team holds, or null if the team does not exist.
+ * Owner attachments and kept chat material stay out of an answer that posts to the whole chat room.
  */
 export async function retrieveTeamChatContext(
 	teamId: string,

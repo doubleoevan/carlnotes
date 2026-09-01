@@ -7,6 +7,7 @@ import { UserAvatar } from "@/components/branding/UserAvatar"
 import { IconButton } from "@/components/common/IconButton"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
+import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
 
 /**
  * The modal for an admin to add and remove other admins.
@@ -121,38 +122,34 @@ function AddAdminMenu({ users, onAddAdmin }: { users: AdminUserRow[]; onAddAdmin
 					<ChevronsUpDown className="size-4 shrink-0 opacity-50" />
 				</button>
 			</PopoverTrigger>
-			<PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-1">
-				{/* the user search filter, then dropdown of filtered users */}
+			<PopoverContent align="start" className="w-(--radix-popover-trigger-width)" bodyClassName="p-1">
+				{/* the search filter, then the filtered users. the popover does not move focus when it opens */}
 				<input
+					// biome-ignore lint/a11y/noAutofocus: this field is why the panel opens
+					autoFocus
 					value={userFilter}
 					onChange={(event) => setUserFilter(event.target.value)}
 					placeholder="Search…"
 					aria-label="Filter the accounts"
 					className="placeholder:text-muted-foreground mb-1 w-full bg-transparent px-2 py-1.5 text-sm outline-none"
 				/>
-				<ul className="max-h-56 overflow-y-auto">
+				<div className="max-h-56 overflow-y-auto">
 					{filteredUsers.map((user) => (
-						<li key={user.id}>
-							<button
-								type="button"
-								onClick={() => handleSelectAdmin(user)}
-								className="hover:bg-accent flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm"
-							>
-								<UserAvatar
-									userId={user.id}
-									username={user.username}
-									avatarSource={user.avatarSource}
-									className="size-5 shrink-0"
-								/>
-								<span className="min-w-0 flex-1 truncate">
-									{user.username}
-									<span className="text-muted-foreground">{` · ${user.email}`}</span>
-								</span>
-							</button>
-						</li>
+						<button key={user.id} type="button" onClick={() => handleSelectAdmin(user)} className={MENU_OPTION_CLASS}>
+							<UserAvatar
+								userId={user.id}
+								username={user.username}
+								avatarSource={user.avatarSource}
+								className="size-5 shrink-0"
+							/>
+							<span className="min-w-0 flex-1 truncate">
+								{user.username}
+								<span className="text-muted-foreground">{` · ${user.email}`}</span>
+							</span>
+						</button>
 					))}
-				</ul>
-				{/* nothing left after the filter */}
+				</div>
+				{/* nothing left after filtering */}
 				{filteredUsers.length === 0 && <p className="text-muted-foreground px-2 py-2 text-sm">No matching user.</p>}
 			</PopoverContent>
 		</Popover>

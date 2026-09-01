@@ -49,11 +49,6 @@ export function SearchBar() {
 	const [isFocused, setFocused] = useState(false)
 	// the highlighted suggestion index, or -1 when the user hasn't selected one with the arrow keys
 	const [suggestionIndex, setSuggestionIndex] = useState(-1)
-	// topics and findings are already loaded, but teams and users are not, so both are searched as the typing pauses
-	const [userMatches, setUserMatches] = useState<UserSearchResult[]>([])
-	const [teamMatches, setTeamMatches] = useState<TeamSearchResult[]>([])
-	const [isSearchingUsers, setSearchingUsers] = useState(false)
-	const [isSearchingTeams, setSearchingTeams] = useState(false)
 	// the search's result kinds filter
 	const [searchResultTypes, setSearchResultTypes] = useState<Set<SearchResultType>>(new Set(SEARCH_RESULT_TYPES))
 	const handleToggleSearchResultType = (searchResultType: SearchResultType): void => {
@@ -86,57 +81,17 @@ export function SearchBar() {
 				.slice(0, MAX_RESOURCE_SUGGESTIONS)
 		: []
 
-	// search for users once the typing pauses
-	useEffect(() => {
-		// a filtered-out users row stops the users search
-		if (!searchResultTypes.has("users") || searchQuery.length < USER_SEARCH_MIN_CHARS) {
-			setUserMatches([])
-			setSearchingUsers(false)
-			return
-		}
-		let isCurrent = true
-		setSearchingUsers(true)
-		const timer = setTimeout(() => {
-			searchUsers(searchQuery)
-				.catch(() => [])
-				.then((users) => {
-					if (isCurrent) {
-						setUserMatches(users)
-						setSearchingUsers(false)
-					}
-				})
-		}, SEARCH_DEBOUNCE_MS)
-		return () => {
-			isCurrent = false
-			clearTimeout(timer)
-		}
-	}, [searchQuery, searchResultTypes])
-
-	// search for teams once the typing pauses
-	useEffect(() => {
-		// a filtered-out team row stops the teams search
-		if (!searchResultTypes.has("teams") || searchQuery.length < USER_SEARCH_MIN_CHARS) {
-			setTeamMatches([])
-			setSearchingTeams(false)
-			return
-		}
-		let isCurrent = true
-		setSearchingTeams(true)
-		const timer = setTimeout(() => {
-			searchTeams(searchQuery)
-				.catch(() => [])
-				.then((teams) => {
-					if (isCurrent) {
-						setTeamMatches(teams)
-						setSearchingTeams(false)
-					}
-				})
-		}, SEARCH_DEBOUNCE_MS)
-		return () => {
-			isCurrent = false
-			clearTimeout(timer)
-		}
-	}, [searchQuery, searchResultTypes])
+	// topics and findings are already loaded. teams and users are not, and both are searched as the typing pauses
+	const { matches: userMatches, isSearching: isSearchingUsers } = useDebouncedSearch(
+		searchQuery,
+		searchResultTypes.has("users"),
+		searchUsers,
+	)
+	const { matches: teamMatches, isSearching: isSearchingTeams } = useDebouncedSearch(
+		searchQuery,
+		searchResultTypes.has("teams"),
+		searchTeams,
+	)
 
 	// topics, then teams, then users, then findings, so the arrow keys walk one combined search suggestions list
 	const searchSuggestions: SearchResultSuggestion[] = [
@@ -300,6 +255,45 @@ export function SearchBar() {
 			)}
 		</div>
 	)
+}
+
+/**
+ * One remote search that waits for the typing to pause. The bar runs it once for users and once for teams,
+ * and a search that is filtered out or too short clears its matches without fetching.
+ */
+function useDebouncedSearch<Match>(
+	searchQuery: string,
+	isEnabled: boolean,
+	search: (searchQuery: string) => Promise<Match[]>,
+): { matches: Match[]; isSearching: boolean } {
+	const [matches, setMatches] = useState<Match[]>([])
+	const [isSearching, setIsSearching] = useState(false)
+	useEffect(() => {
+		if (!isEnabled || searchQuery.length < USER_SEARCH_MIN_CHARS) {
+			setMatches([])
+			setIsSearching(false)
+			return
+		}
+
+		// only the newest search may write. a result that lands after the query moved on is dropped
+		let isCurrent = true
+		setIsSearching(true)
+		const timer = setTimeout(() => {
+			search(searchQuery)
+				.catch(() => [])
+				.then((found) => {
+					if (isCurrent) {
+						setMatches(found)
+						setIsSearching(false)
+					}
+				})
+		}, SEARCH_DEBOUNCE_MS)
+		return () => {
+			isCurrent = false
+			clearTimeout(timer)
+		}
+	}, [searchQuery, isEnabled, search])
+	return { matches, isSearching }
 }
 
 // keep the highlight suggestion index inside the list

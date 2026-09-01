@@ -8,6 +8,41 @@ import { EMBED_DIMENSIONS } from "../db/schema"
 // how long one model request may run before it aborts
 const MODEL_TIMEOUT_MS = Number(Bun.env.MODEL_TIMEOUT_MS ?? "120000")
 
+// what a spent budget tells the user, whether the gate caught it up front or the proxy rejected the call partway through a chat turn
+export const SPENT_BUDGET_REFUSAL = "Carl is staring at an empty mug. Top up to keep chatting."
+
+/**
+ * Whether the proxy rejected this call because the caller's key has spent its budget.
+ * LiteLLM returns 429 with a budget_exceeded body on every tier, for scans, chat, and embeddings alike.
+ */
+export function isBudgetRejection(error: unknown): boolean {
+	// the AI sdk wraps the proxy's answer, and a retry wrapper may wrap that again. the whole chain is read
+	for (const errorCause of toErrorCause(error)) {
+		const { statusCode, responseBody } = errorCause as { statusCode?: unknown; responseBody?: unknown }
+		if (statusCode !== 429) {
+			continue
+		}
+		// only a budget rejection named in the body counts. any other 429 stays a plain rate limit
+		const body = typeof responseBody === "string" ? responseBody : ""
+		if (body.includes("budget_exceeded") || body.includes("Budget has been exceeded")) {
+			return true
+		}
+	}
+	return false
+}
+
+// the error itself, whatever it wraps, and whatever a retry collected. a nested rejection is still found
+function toErrorCause(error: unknown, seenErrors = new Set<unknown>()): unknown[] {
+	if (typeof error !== "object" || error === null || seenErrors.has(error)) {
+		return []
+	}
+	seenErrors.add(error)
+	// the error cause follows cause and fans out through an AggregateError's list
+	const { cause, errors } = error as { cause?: unknown; errors?: unknown }
+	const nestedErrors = Array.isArray(errors) ? errors : []
+	return [error, ...toErrorCause(cause, seenErrors), ...nestedErrors.flatMap((one) => toErrorCause(one, seenErrors))]
+}
+
 // the cheap model handles high-volume inference like query generation and first-pass scoring
 export function cheapModel(litellmApiKey?: string): LanguageModel {
 	return createModelProxyClient(litellmApiKey).chat("cheap-model")

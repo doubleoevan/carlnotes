@@ -7,10 +7,12 @@ by tsconfig project references (`bunx tsc -b`): ui never imports api, worker, or
 import db; every module imports shared; shared imports nothing app-level.
 
 - `ui/` — the Vite React SPA: pages, components, typed API clients, and the stores behind them.
-- `api/` — the Hono server: routes, authorization, billing, chat rooms, teams, invites, share cards, SEO pages.
-- `worker/` — Temporal workflows, the scan pipeline, ingesters, chat replies, prompts, email delivery.
+- `api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards, SEO pages.
+- `worker/` — Temporal workflows, the scan pipeline, ingesters, chat replies, link previews, prompts, email delivery.
 - `db/` — Drizzle schema, migrations, quotas. Neon Postgres.
 - `shared/` — what every module may import: the zod contracts, enums, plans, and Source definitions.
+- `infra/` — the service configs the app runs beside: litellm, llm-guard, and the Northflank pipelines.
+- `content/blog/` — the blog posts `api/content.ts` serves.
 
 Each module has its own AGENTS.md with entry points, layout, and commands.
 
@@ -22,10 +24,11 @@ Each module has its own AGENTS.md with entry points, layout, and commands.
 | Model-facing prompt | `worker/prompts/*.md` + its thin builder | prompt-authoring | everything outside `worker/` |
 | Schema or migration | `db/schema.ts`, then `bun run db:generate` | domain-model | `db/migrations/` (generated) |
 | UI screen or component | `ui/src/pages/`, `ui/src/components/<area>/` | jsx-conventions | `api/` except `shared/contracts.ts` types |
+| Tasting note or sync change | `api/note/`, `ui/src/components/note/` | domain-model | `worker/` |
 | API route or permission | `api/<domain>/`, `api/authorization.ts` | domain-model | `worker/` except `worker/index.ts` exports |
 | Temporal workflow change | `worker/workflows/`, `worker/temporal.ts` | — | `ui/`, `api/` route files |
 | Email template or send | `emails/*.tsx`, `worker/email.ts`, `worker/notify.ts` | — | `ui/` |
-| Docs page | `docs/src/content/`, then `bun run docs:embed` | — | `docs/dist/` (built) |
+| Docs page | `docs/src/content/`, its shared pieces in `docs/src/components/`, then `bun run docs:embed` | — | `docs/dist/` (built) |
 | Eval work | `evals/README.md`, `.github/workflows/llm-guard-update.yml` | — | app modules |
 
 Domain vocabulary is canonical and enforced, so grepping a domain noun reliably finds its code.
@@ -44,7 +47,8 @@ Generated or archived paths that burn context:
 
 ## Verification
 
-`bun run check` is the gate: Biome, `tsc -b`, and the test suite. Green before any hand-off.
+`bun run check` is the gate: Biome, `tsc -b`, the Temporal workflow bundle check, and the test suite.
+Green before any hand-off.
 
 ## Rules (always-on)
 

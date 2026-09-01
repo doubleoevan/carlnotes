@@ -6,7 +6,7 @@ import { bodyLimit } from "hono/body-limit"
 import { stream } from "hono/streaming"
 import { db } from "../db"
 import { teams, users } from "../db/schema"
-import { attachmentStream, deleteAttachment, putAttachment } from "../worker"
+import { attachmentStream, deleteAttachment, uploadAttachment } from "../worker"
 import { type AppEnv, currentUser } from "./currentUser"
 import { toTeamRole } from "./team/members"
 
@@ -47,13 +47,13 @@ function toAvatarRejection(bytes: Uint8Array, contentType: string): AvatarReject
 
 /**
  * Store an uploaded avatar and point the user at it.
- * The key includes a stamp, so a replacement doesn't reuse the previous object's path.
+ * The key includes a random id, so a replacement doesn't reuse the previous object's path.
  */
 export async function uploadAvatar(
 	userId: string,
 	bytes: Uint8Array,
 	contentType: string,
-	stamp: string,
+	keyId: string,
 ): Promise<AvatarRejection | null> {
 	// the shape checks run before anything is written, so a rejected upload touches no storage
 	const rejection = toAvatarRejection(bytes, contentType)
@@ -62,8 +62,8 @@ export async function uploadAvatar(
 	}
 
 	// write the new object first, so a failed upload leaves the user on the avatar they already had
-	const avatarKey = `avatars/${userId}/${stamp}.${AVATAR_EXTENSIONS[contentType]}`
-	await putAttachment(avatarKey, bytes, contentType)
+	const avatarKey = `avatars/${userId}/${keyId}.${AVATAR_EXTENSIONS[contentType]}`
+	await uploadAttachment(avatarKey, bytes, contentType)
 	await replaceAvatar(userId, "upload", avatarKey)
 	return null
 }
@@ -77,7 +77,7 @@ export async function uploadTeamAvatar(
 	teamId: string,
 	bytes: Uint8Array,
 	contentType: string,
-	stamp: string,
+	keyId: string,
 ): Promise<AvatarRejection | null> {
 	// the same shape checks that a user's upload must pass before anything is written
 	const rejection = toAvatarRejection(bytes, contentType)
@@ -87,8 +87,8 @@ export async function uploadTeamAvatar(
 
 	// write the new object first, so a failed upload leaves the team on the avatar it already had
 	const [previous] = await db.select({ avatarKey: teams.avatarKey }).from(teams).where(eq(teams.id, teamId))
-	const avatarKey = `avatars/teams/${teamId}/${stamp}.${AVATAR_EXTENSIONS[contentType]}`
-	await putAttachment(avatarKey, bytes, contentType)
+	const avatarKey = `avatars/teams/${teamId}/${keyId}.${AVATAR_EXTENSIONS[contentType]}`
+	await uploadAttachment(avatarKey, bytes, contentType)
 	await db.update(teams).set({ avatarKey }).where(eq(teams.id, teamId))
 
 	// the row already points at the new object. a failed delete leaves an unused file, never a broken avatar
@@ -100,7 +100,6 @@ export async function uploadTeamAvatar(
 
 /**
  * Point a user at their oauth provider photo or back at the username initials.
- * The oauth provider photo is opt-in only.
  */
 export async function saveAvatarSource(userId: string, avatarSource: "generated" | "oauth"): Promise<void> {
 	await replaceAvatar(userId, avatarSource, null)
@@ -117,14 +116,14 @@ export async function toPublishedAvatar(userId: string): Promise<PublishedAvatar
 		.select({ avatarSource: users.avatarSource, avatarKey: users.avatarKey, image: users.image })
 		.from(users)
 		.where(eq(users.id, userId))
+	// an uploaded image is served from this app's own storage, an oauth photo comes from its provider
 	if (user?.avatarSource === "upload" && user.avatarKey) {
 		return { avatarKey: user.avatarKey }
 	}
-	// the oauth provider photo is opt-in only
 	return user?.avatarSource === "oauth" && user.image ? { imageUrl: user.image } : null
 }
 
-// the object key behind a user's uploaded avatar, or null when they have none stored
+// the object key for a user's uploaded avatar, or null when they have none stored
 async function toAvatarKey(userId: string): Promise<string | null> {
 	const [user] = await db.select({ avatarKey: users.avatarKey }).from(users).where(eq(users.id, userId))
 	return user?.avatarKey ?? null
@@ -145,7 +144,7 @@ async function replaceAvatar(
 	}
 }
 
-// serve a stored avatar with its stamped key as the cache validator
+// serve a stored avatar with its unique key as the cache validator
 function serveAvatar(context: Context<AppEnv>, avatarKey: string): Response {
 	context.header("ETag", `"${avatarKey}"`)
 	context.header("Cache-Control", "public, max-age=300")
@@ -154,7 +153,7 @@ function serveAvatar(context: Context<AppEnv>, avatarKey: string): Response {
 	if (context.req.header("if-none-match") === `"${avatarKey}"`) {
 		return context.body(null, 304)
 	}
-	// the content type is read from the key's extension, stamped at upload time
+	// the content type is read from the key's extension, saved at upload time
 	context.header("Content-Type", toAvatarContentType(avatarKey))
 	return stream(context, (responseStream) => responseStream.pipe(attachmentStream(avatarKey)))
 }
@@ -242,7 +241,7 @@ export const avatarsRoute = new Hono<AppEnv>()
 				return context.json({ ok: true })
 			}
 
-			// store the bytes, stamping the key so a replacement never reuses the previous object's path
+			// store the bytes under a random key id, so a replacement never reuses the previous object's path
 			const rejection = await uploadAvatar(
 				userId,
 				new Uint8Array(await uploaded.arrayBuffer()),

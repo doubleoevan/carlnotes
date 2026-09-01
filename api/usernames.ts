@@ -105,18 +105,20 @@ async function saveChosenUsername(userId: string, username: string): Promise<"ta
 }
 
 /**
- * Write a new user's assigned name after signup. Losing a race for it retries with digits
- * and moves the user row to the name that actually stuck.
+ * Write the name a new account starts with and return the name that stuck, or null when the digits retry also lost the race.
  */
-export async function ensureUsername(userId: string, username: string): Promise<void> {
+export async function saveDefaultUsername(userId: string, username: string): Promise<string | null> {
 	if ((await saveChosenUsername(userId, username)) === null) {
-		return
+		return username
 	}
 
 	// the name was taken between assignment and here, so a digits variant takes its place
-	if ((await saveChosenUsername(userId, toUsernameWithDigits(username))) !== null) {
+	const usernameWithDigits = toUsernameWithDigits(username)
+	if ((await saveChosenUsername(userId, usernameWithDigits)) !== null) {
 		console.error(`could not assign a username for user ${userId}`)
+		return null
 	}
+	return usernameWithDigits
 }
 
 /**

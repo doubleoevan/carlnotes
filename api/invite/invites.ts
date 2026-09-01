@@ -202,7 +202,7 @@ export async function acceptTeamInvite(
 	return joinedTeam
 }
 
-// one use spent from the token, conditional on the limit. false when the link had none left
+// one use spent from the token, conditional on the limit. false if the link had none left
 async function spendInviteUse(inviteId: string): Promise<boolean> {
 	const spent = await db
 		.update(invites)

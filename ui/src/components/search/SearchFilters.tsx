@@ -16,9 +16,9 @@ import { Fragment, useState } from "react"
 import { authClient } from "@/clients/authClient"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
+import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
 import { TOPIC_FINDING_FILTERS } from "@/lib/topicFindingFilters"
-import { RESOURCE_KIND_ICON } from "@/lib/utils"
+import { cn, RESOURCE_KIND_ICON } from "@/lib/utils"
 import { type ResourceKind, type TagMatchMode, tagMatchModes, useTopicFeed } from "@/providers/TopicFeedProvider"
 import { usePageActions } from "@/stores/pageActionsStore"
 
@@ -65,7 +65,7 @@ export function SearchFilters({
 	const topicFindingFilterOptions = TOPIC_FINDING_FILTERS.filter(
 		(filterOption) => filterOption !== "bookmarked" || Boolean(session),
 	)
-	// the dropdown is controlled so selection an option can close the menu
+	// the dropdown is controlled so selecting an option closes the menu
 	const [isOpen, setIsOpen] = useState(false)
 	return (
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -80,11 +80,11 @@ export function SearchFilters({
 				</TooltipTrigger>
 				<TooltipContent>Filters</TooltipContent>
 			</Tooltip>
-			{/* the trigger sits inset in the search bar's padded row, not flush with its own border.
-			    the offsets cancel that inset, so the menu aligns with the search bar's edge */}
-			<PopoverContent align="end" alignOffset={-9} sideOffset={13} className="w-44 p-1">
-				{/* the resource kind, view, and tag filters all narrow topic scan findings,
-				    so a page without a topic feed does not show the topic scan findings filters */}
+			{/* the trigger sits inset in the search bar's padded row.
+			    the offsets cancel that inset and align the menu with the search bar's edge */}
+			<PopoverContent align="end" alignOffset={-9} sideOffset={13} className="w-44" bodyClassName="p-1">
+				{/* the resource kind, view, and tag filters all narrow topic scan findings.
+				    a page without a topic feed hides them */}
 				{hasTopicFeed && (
 					<>
 						{allResourceKinds.map((resourceKind) => (
@@ -157,7 +157,7 @@ export function SearchFilters({
 						<hr className="border-border my-1" />
 					</>
 				)}
-				{/* a fieldset, so its rows announce under the "Search for" label as one group for the search results filters */}
+				{/* a fieldset. its rows announce under the "Search for" label as one group */}
 				<fieldset aria-labelledby="search-result-type-label">
 					<div id="search-result-type-label" className="text-muted-foreground px-2 py-1 text-xs">
 						Search for
@@ -184,7 +184,7 @@ function RadioRow({
 	isActive,
 	onChange,
 }: {
-	// the radio group this option belongs to, so the topic finding and the tag match filters stay separate groups
+	// the radio group this option belongs to. the topic finding and the tag match filters use separate groups
 	radioGroupName: string
 	label: string
 	// the leading icon a tag match option shows. the topic finding options have none
@@ -193,8 +193,8 @@ function RadioRow({
 	onChange: () => void
 }) {
 	return (
-		<label className="hover:bg-accent flex min-h-11 w-full cursor-pointer items-center gap-2 rounded-md px-2 text-sm sm:min-h-9">
-			{/* the radio input includes the semantics but renders nothing, so the custom dot shows its keyboard focus */}
+		<label className={cn(MENU_OPTION_CLASS, "cursor-pointer", isActive && MENU_OPTION_SELECTED_CLASS)}>
+			{/* the radio input is screen-reader only. the custom dot shows its keyboard focus */}
 			<input type="radio" name={radioGroupName} checked={isActive} onChange={onChange} className="peer sr-only" />
 			<span className="border-muted-foreground peer-focus-visible:ring-ring/50 grid size-4 place-items-center rounded-full border peer-focus-visible:ring-[3px]">
 				{isActive ? <span className="bg-primary size-2 rounded-full" /> : null}
@@ -229,7 +229,7 @@ function SearchResultTypeFilter({
 			type="button"
 			onClick={onClick}
 			aria-pressed={isActive}
-			className="hover:bg-accent flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-sm sm:min-h-9"
+			className={cn(MENU_OPTION_CLASS, isActive && MENU_OPTION_SELECTED_CLASS)}
 		>
 			<Icon className="text-muted-foreground size-4" />
 			<span className="flex-1 text-left capitalize">{resultType}</span>
@@ -247,7 +247,7 @@ function ResourceKindFilter({ resourceKind, isActive, onClick }: ResourceKindFil
 			type="button"
 			onClick={onClick}
 			aria-pressed={isActive}
-			className="hover:bg-accent flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-sm sm:min-h-9"
+			className={cn(MENU_OPTION_CLASS, isActive && MENU_OPTION_SELECTED_CLASS)}
 		>
 			<Icon className="text-muted-foreground size-4" />
 			<span className="flex-1 text-left capitalize">{resourceKind}</span>

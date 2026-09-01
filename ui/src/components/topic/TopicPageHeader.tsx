@@ -9,18 +9,12 @@ import { TopicInfoPopover } from "@/components/topic/Topic"
 import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
 import { cn, toSubscribeTooltip } from "@/lib/utils"
+import { setChatPanelState } from "@/stores/chatPanelStore"
 
 /**
- * the topic header: the title with its mention badge, then its tags
+ * the topic header: the title with its chat mention badge, then its tags
  */
-export function TopicHeader({
-	topic,
-	onOpenChat,
-}: {
-	topic: TopicResponse
-	// the mention badge's click opens the page's chat panel
-	onOpenChat: () => void
-}) {
+export function TopicHeader({ topic }: { topic: TopicResponse }) {
 	// both the heading and its note icon open the note and show the hint, so the title holds the state the icon reads
 	const [isNoteOpen, setNoteOpen] = useState(false)
 	const [isNoteHintOpen, setNoteHintOpen] = useState(false)
@@ -36,7 +30,7 @@ export function TopicHeader({
 					onMouseLeave={() => setNoteHintOpen(false)}
 					className="font-display min-w-0 cursor-pointer text-2xl leading-tight"
 				>
-					{/* the mention count sits on the name, and its click opens the chat instead of the title's note */}
+					{/* the chat mention count sits on the name, and its click opens the chat instead of the title's note */}
 					<span className="relative">
 						{topic.name}
 						<TopicMentionBadge
@@ -45,7 +39,7 @@ export function TopicHeader({
 								// the click opens the chat in place, never the link or the title's note
 								event.preventDefault()
 								event.stopPropagation()
-								onOpenChat()
+								setChatPanelState("open")
 							}}
 							onMouseEnter={() => setTimeout(() => setNoteHintOpen(false), 0)}
 							className="-right-2"

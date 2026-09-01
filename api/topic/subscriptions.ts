@@ -1,4 +1,4 @@
-// the subscription writes behind the topic routes
+// the subscription writes for the topic routes
 import { zValidator } from "@hono/zod-validator"
 import { inviteDeletePayload, subscriptionEmailPayload, subscriptionPayload } from "@shared/contracts"
 import { and, eq, inArray, or } from "drizzle-orm"
@@ -113,15 +113,19 @@ export async function setSubscriptionEmailEnabled(
  * Reactivate an existing subscription row or insert a new one. Accepting an invite token joins through here too.
  */
 export async function activateSubscription(userId: string, topicId: string): Promise<void> {
+	// the subscription delivers at the topic's own frequency
+	const [topic] = await db.select({ frequency: topics.frequency }).from(topics).where(eq(topics.id, topicId))
+	const frequency = topic ? { frequency: topic.frequency } : {}
+
 	// the row and the count move together, so a subscriber is never counted before the row exists or after it goes
 	await db.transaction(async (transaction) => {
-		// one upsert against the unique index
+		// one upsert against the unique index. a re-subscribe re-syncs the frequency and keeps the email choice
 		await transaction
 			.insert(subscriptions)
-			.values({ topicId, subscriberUserId: userId })
+			.values({ topicId, subscriberUserId: userId, ...frequency })
 			.onConflictDoUpdate({
 				target: [subscriptions.topicId, subscriptions.subscriberUserId],
-				set: { isActive: true },
+				set: { isActive: true, ...frequency },
 			})
 		// the count is recomputed instead of nudged, so it cannot drift from the rows it summarizes
 		await updateTopicSubscriberCount(topicId, transaction)

@@ -15,7 +15,7 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 	return (
 		<CollapsibleSection value="blend" title="Artisanal Blend">
 			<div className={INFO_CARD_CLASS}>
-				<div className="divide-separator divide-y divide-dashed">
+				<div className="divide-separator divide-y">
 					<TopicSourcesSection sources={topic.sources} />
 
 					{/* the frequency, its time and (weekly only) day, the last scan age, and how long that scan took */}

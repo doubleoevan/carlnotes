@@ -9,6 +9,7 @@ import {
 	frequencies,
 	inviteAccesses,
 	maxResultsOptions,
+	noteVisibilities,
 	ratings,
 	resourceKinds,
 	scanStatuses,
@@ -32,7 +33,10 @@ export type ConsumedPayload = z.infer<typeof consumedPayload>
 export const bookmarkPayload = z.object({ isBookmarked: z.boolean() })
 export type BookmarkPayload = z.infer<typeof bookmarkPayload>
 
-// a message in a team topic's room, decrypted for the member viewing it
+// one chat message attachment shown with a chat message
+export type ChatMessageAttachment = { id: string; kind: (typeof chatAttachmentKinds)[number]; name: string }
+
+// a chat message in a team topic's chat room, decrypted for the member viewing it
 export type ChatRoomMessage = {
 	id: number
 	// the author's account if it still exists, and the name recorded at post-time
@@ -40,19 +44,32 @@ export type ChatRoomMessage = {
 	authorUsername: string
 	// the author's current avatar, null for carl or for a departed member
 	authorAvatarSource: (typeof avatarSources)[number] | null
-	replyToMessageId: number | null
+	replyToChatMessageId: number | null
 	content: string
 	createdAt: string
-	// the files this message shared with the room, oldest first, empty when it shared none
-	attachments: { id: string; kind: (typeof chatAttachmentKinds)[number]; name: string }[]
+	// the files this chat message shared with the chat room, oldest first, empty if it shared none
+	attachments: ChatMessageAttachment[]
+	// the cards for the chat message's first links, empty if it holds none or no link preview is stored
+	linkPreviews: ChatLinkPreview[]
 }
 
-// the chat room post body, limited because every participant's words are paid for by the next mention
+// the link preview card a link in a chat message renders as, below the chat message's own text
+export type ChatLinkPreview = {
+	url: string
+	title: string | null
+	description: string | null
+	// the path this origin serves the page's image from, null if the page offered none
+	imagePath: string | null
+	// set when the link is a youtube video, which the card offers to play in place
+	youtubeVideoId: string | null
+}
+
+// the chat room post body
 export const CHAT_ROOM_MESSAGE_MAX_CHARS = 4000
 export const chatRoomMessagePayload = z.object({
 	content: z.string().trim().min(1).max(CHAT_ROOM_MESSAGE_MAX_CHARS),
-	replyToMessageId: z.number().int().positive().nullable().optional(),
-	// the shared files going with the message, under the per-message limit
+	replyToChatMessageId: z.number().int().positive().nullable().optional(),
+	// the shared files going with the chat message, under the per-chat message limit
 	get attachments() {
 		return z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([])
 	},
@@ -76,7 +93,7 @@ export type CheckoutPayload = z.infer<typeof checkoutPayload>
 export const usernamePayload = z.object({ username: z.string() })
 export type UsernamePayload = z.infer<typeof usernamePayload>
 
-// how long a flag's reason may run. it is a note to a person, not a case file
+// how long a flag's reason can be
 export const FLAG_REASON_MAX_CHARS = 1000
 
 // the flag issue body. the subject is a topic, profile, or team id, named by which kind it is so the api can look it up
@@ -87,7 +104,7 @@ export const flagContentPayload = z.object({
 })
 export type FlagContentPayload = z.infer<typeof flagContentPayload>
 
-// the invite-delete body, named by its invite id. the owner's subscriber list removes the row whole
+// the invite-delete body, named by its invite id
 export const inviteDeletePayload = z.object({ inviteId: z.string() })
 export type InviteDeletePayload = z.infer<typeof inviteDeletePayload>
 
@@ -147,8 +164,8 @@ export type TeamSummary = TeamRowFields & {
 	isOnlyLeader: boolean
 	// who invited the user onto the team, for the summary's Invited by column. null joined on their own
 	invitedBy: ProfileIdentity | null
-	// the user's unseen mentions in the team's own room, newest first, counted on the name's badge
-	mentions: ChatMention[]
+	// the user's unseen mentions in the team's own chat room, newest first, counted on the name's badge
+	chatMentions: ChatMention[]
 }
 
 // the team page payload
@@ -175,7 +192,7 @@ export type TeamPageResponse = {
 	// how many members opted out of the public members list, so the team never appears smaller than it is
 	hiddenMemberCount: number
 	// the user's unseen chat mentions in the team's chat room, newest first, for the title badge and the pill
-	mentions: ChatMention[]
+	chatMentions: ChatMention[]
 	// the same profile-shaped rows the profile page's topic table renders
 	topics: Topic[]
 }
@@ -194,7 +211,7 @@ export const userInvitePayload = z
 	})
 export type UserInvitePayload = z.infer<typeof userInvitePayload>
 
-// which control created an invite. it names one of our own sources, not where the invite was sent.
+// which control created an invite
 export const inviteSources = ["compose", "copy-link", "share-sheet"] as const
 export const inviteCreatePayload = z.object({ source: z.enum(inviteSources) })
 export type InviteSource = (typeof inviteSources)[number]
@@ -206,7 +223,7 @@ export const inviteCreateResponse = z.object({ invite })
 export const inviteAcceptPayload = z.object({ turnstileToken: z.string() })
 export type InviteAcceptPayload = z.infer<typeof inviteAcceptPayload>
 
-// the ways an invite join token can fail, each one its own reason so the page can say which it was
+// the ways an invite join token can fail, each one its own reason
 export const inviteRefusals = ["revoked", "expired", "exhausted", "unknown"] as const
 export type InviteRefusal = (typeof inviteRefusals)[number]
 
@@ -219,7 +236,7 @@ export const inviteAcceptResponse = z.discriminatedUnion("status", [
 ])
 export type InviteAcceptResponse = z.infer<typeof inviteAcceptResponse>
 
-// the subscription email-preference mutation body which is independent of the subscription's active state
+// the subscription email-preference mutation body, independent of the subscription's active state
 export const subscriptionEmailPayload = z.object({
 	isEmailEnabled: z.boolean(),
 	// whose subscription to write, for an admin acting on somebody else's. absent means the caller's own
@@ -245,31 +262,50 @@ export type ActivityScan = {
 
 // one chat mention still waiting for the user in a chat room
 export const chatMention = z.object({
-	// the chat room's team, so the badge's link can open that room
+	// the chat room's team, so the badge's link can open that chat room
 	teamId: z.string(),
 	authorUsername: z.string(),
-	// whether the message replied to the user's own, which selects the tooltip's verb
+	// whether the chat message replied to the user's own, which selects the tooltip's verb
 	isReply: z.boolean(),
-	// the opening of the message, enough to know whether to go read it
+	// the opening of the chat message, enough to know whether to go read it
 	excerpt: z.string(),
 })
 export type ChatMention = z.infer<typeof chatMention>
 
-// one room the chat panel's menu offers: a team's own conversation, or one about a topic it has
+// one chat room the chat panel's menu offers: a team's own conversation, or one about a topic it has
 export const chatRoom = z.object({
 	teamId: z.string(),
-	// null on a team's own room, which belongs to no topic
+	// null on a team's own chat room, which belongs to no topic
 	topicId: z.string().nullable(),
-	// the team's name, or the topic's on a topic's room
+	// the team's name, or the topic's on a topic's chat room
 	name: z.string(),
-	// the team the room belongs to, which tells two rooms of one topic apart
+	// the team the chat room belongs to, which tells two chat rooms of one topic apart
 	teamName: z.string(),
 	// its own uploaded image, otherwise the initials and tint its name and id draw
 	teamHasAvatar: z.boolean(),
-	// the user's unseen mentions in this room, badged on the menu row
-	mentions: z.array(chatMention),
+	// the user's unseen mentions in this chat room, badged on the menu row
+	chatMentions: z.array(chatMention),
+	// the holding team's active members, listed in the switcher row's hover tooltip
+	chatRoomMembers: z.array(
+		z.object({ userId: z.string(), username: z.string(), avatarSource: z.enum(avatarSources).nullable() }),
+	),
 })
 export type ChatRoom = z.infer<typeof chatRoom>
+
+// one note's unread counts for the signed-in user
+export type NoteBadge = {
+	noteId: string
+	// the page the note sits on, exactly one of the two
+	topicId: string | null
+	teamId: string | null
+	// the note's own name, and the topic or team holding it, both named in the badge's tooltip
+	noteName: string
+	pageName: string
+	// 1 when somebody else changed the body since the user last opened it, however many edits it took
+	unreadEdits: number
+	// the comments written since then by somebody else, soft-deleted ones left out
+	unreadComments: number
+}
 
 // one owned-Topic row on the Activity page, including its month Scans for the sub-table
 export type OwnerTopic = {
@@ -293,8 +329,8 @@ export type OwnerTopic = {
 	// the owner's own subscription decides whether this topic emails them
 	isEmailEnabled: boolean
 	scans: ActivityScan[]
-	// the user's unseen room mentions, newest first, counted on the name's badge. empty with none
-	mentions: ChatMention[]
+	// the user's unseen chat room mentions, newest first, counted on the name's badge. empty with none
+	chatMentions: ChatMention[]
 }
 
 // one row of the Activity page's subscriptions table, kept until manually deleted
@@ -304,7 +340,7 @@ export type SubscriptionRow = {
 	// the byline: the owning team where one exists, otherwise the topic's owner
 	owner: ProfileIdentity
 	team: TeamIdentity | null
-	// an invite topic only shows findings from the next scan onward, which reactivating has to say out loud
+	// an invite topic only shows findings from the next scan onward
 	visibility: (typeof visibilities)[number]
 	subscribedAt: string
 	isActive: boolean
@@ -369,7 +405,7 @@ export type ActivityResponse = {
 	invites: InviteRow[]
 }
 
-// how much conversation the model holds word for word, about twenty typical chat turns it is a character budget
+// how much conversation the model holds word for word. a character budget, about twenty typical chat turns
 export const CHAT_MEMORY_CHARS = 40_000
 
 /**
@@ -390,10 +426,10 @@ export function toUncompactedChatTurnStart(history: { question: string; answer: 
 	return 0
 }
 
-// how many chat turns a send posts to the llm. it limits what the model reads before our code compacts the older ones
+// how many chat turns a send posts to the llm. the older turns beyond the memory budget are compacted
 export const CHAT_HISTORY_TURNS = 100
 
-// how much of a compacted older answer survives: enough to include its summary, cheap enough to keep many
+// how much of a compacted older answer survives
 const COMPACT_ANSWER_CHARS = 280
 
 /**
@@ -411,6 +447,9 @@ export const CHAT_MAX_ATTACHMENTS = 4
 export const CHAT_ATTACHMENT_TEXT_CHARS = 50_000
 export const CHAT_IMAGE_DATA_CHARS = 6_000_000
 
+// a video data url's limit. about 18 MB of file under base64, inside the api's request body limit
+export const CHAT_VIDEO_DATA_CHARS = 25_000_000
+
 // how long a question may run, shared by the payload limit and the draft box
 export const CHAT_QUESTION_CHARS = 1_000
 
@@ -420,7 +459,7 @@ export const TOPIC_PROMPT_CHARS = 2_000
 // how many attachments one user may keep durably against one topic
 export const CHAT_ATTACHMENT_KEEP_LIMIT = 20
 
-// how many files one member may have shared with one room at a time
+// how many files one member may have shared with one chat room at a time
 export const CHAT_ROOM_ATTACHMENT_LIMIT = 20
 
 // the shape that every chat attachment includes whatever its kind
@@ -446,11 +485,16 @@ export const chatAttachmentPayload = z.discriminatedUnion("kind", [
 		kind: z.literal("text"),
 		text: z.string().max(CHAT_ATTACHMENT_TEXT_CHARS),
 	}),
+	z.strictObject({
+		...chatAttachmentFields,
+		kind: z.literal("video"),
+		dataUrl: z.string().max(CHAT_VIDEO_DATA_CHARS).startsWith("data:video/"),
+	}),
 ])
 export type ChatAttachment = z.infer<typeof chatAttachmentPayload>
 
 /**
- * Attachment text is held to a limit, with a marker naming the cut so that a reply does not invent a reason the document ends early.
+ * Attachment text is held to a limit, with a marker naming the cut.
  */
 export function clipAttachmentText(text: string): string {
 	if (text.length <= CHAT_ATTACHMENT_TEXT_CHARS) {
@@ -461,7 +505,7 @@ export function clipAttachmentText(text: string): string {
 }
 
 /**
- * A question with its attachments named in a trailing note, so a later replay reads like the original version
+ * A question with its attachments named in a trailing note.
  */
 export function withAttachmentNote(question: string, attachments: { name: string }[]): string {
 	if (attachments.length === 0) {
@@ -482,7 +526,16 @@ export const chatTurnPayload = z.object({
 export type ChatTurnPayload = z.infer<typeof chatTurnPayload>
 
 // one persisted chat turn of a stored conversation, replayed on a later page load
-export type ChatTurnRow = { question: string; answer: string; at?: string }
+export type ChatTurnRow = {
+	question: string
+	answer: string
+	at?: string
+	attachments: ChatMessageAttachment[]
+	// the cards for the question's first links, empty if it holds none or no link preview is stored
+	linkPreviews: ChatLinkPreview[]
+	// the cards for the answer's first links, under the same rules
+	answerLinkPreviews: ChatLinkPreview[]
+}
 
 // an attachment the user keeps durably for a topic
 export type KeptChatAttachment = { id: string; name: string; kind: (typeof chatAttachmentKinds)[number] }
@@ -520,7 +573,7 @@ export type AdminUserRow = {
 	teamCount: number
 	// attributed storage in bytes over globally-deduplicated Resources
 	attributedBytes: number
-	// month-to-date variable cost in cents. null when the proxy is unreachable
+	// month-to-date variable cost in cents. null if the proxy is unreachable
 	monthVariableCostCents: number | null
 	// the app's own month-to-date totals in cents, split by what produced them
 	scanSpendCents: number
@@ -549,7 +602,7 @@ export type AdminTeamRow = {
 export type AdminTotals = {
 	attributedBytes: number
 	monthVariableCostCents: number
-	// Stripe's reporting/balance figure that already nets refunds, proration, and fees. null when unavailable
+	// Stripe's reporting/balance figure that already nets refunds, proration, and fees. null if unavailable
 	netRevenueCents: number | null
 	// net revenue minus tracked variable cost and an optional fixed cost
 	contributionCents: number | null
@@ -648,7 +701,7 @@ export const topicFinding = z.object({
 	teamBookmarks: z
 		.array(z.object({ userId: z.string(), username: z.string(), avatarSource: z.enum(avatarSources).nullable() }))
 		.default([]),
-	// the resource's captured engagement score, like a reddit score. null when no ingester recorded one
+	// the resource's captured engagement score, like a reddit score. null if no ingester recorded one
 	engagement: z.number().nullable(),
 })
 export type TopicFinding = z.infer<typeof topicFinding>
@@ -673,10 +726,10 @@ export const topicFeed = z.object({
 	newCount: z.number(),
 	// whether a team owns the topic
 	isOnTeam: z.boolean(),
-	// each holding team the user belongs to, one room each, ordered by name
+	// each holding team the user belongs to, one chat room each, ordered by name
 	roomTeams: z.array(z.object({ teamId: z.string(), name: z.string() })),
-	// the user's unseen room mentions, newest first, counted on the name's badge. empty with none
-	mentions: z.array(chatMention),
+	// the user's unseen chat room mentions, newest first, counted on the name's badge. empty with none
+	chatMentions: z.array(chatMention),
 	// the byline a team topic derives: the team itself, for anyone who can open its page. the owner otherwise
 	teamLink: z
 		.object({
@@ -686,7 +739,7 @@ export const topicFeed = z.object({
 			hasAvatar: z.boolean(),
 		})
 		.nullable(),
-	// canRate hides the rating row on a topic the user only reads, so it never offers a click the api rejects
+	// canRate hides the rating row on a topic the user only reads
 	canRate: z.boolean(),
 	// whether the requesting user subscribes to this topic
 	isSubscribed: z.boolean(),
@@ -747,7 +800,7 @@ export const topicScan = z.object({
 	filteredCount: z.number(),
 	// the scan cost in dollars. null unless the user owns the topic or holds the platform admin role
 	costDollars: z.number().nullable(),
-	// why the scan failed, so a topic whose sources all fail does not read as one that simply found nothing
+	// why the scan failed
 	error: z.string().nullable(),
 })
 
@@ -770,7 +823,7 @@ export const topicResponse = topicFeed.extend({
 	isSpendExhausted: z.boolean(),
 	// whether this user may edit or delete the topic. true for the owner and for any admin
 	canEdit: z.boolean(),
-	// the team owning this topic, null on a topic no team owns. the page links the team only when reachable
+	// the team owning this topic, null on a topic no team owns. the page links the team only if reachable
 	team: z.object({ teamId: z.string(), name: z.string(), isPublic: z.boolean() }).nullable(),
 	// whether the user already asked to join the owning team, which the Join Team button reads
 	hasRequestedToJoin: z.boolean(),
@@ -793,7 +846,7 @@ export const updateTopicSource = z.union([
 	z.object({ sourceKind: z.enum(editableSourceKinds), config: z.record(z.string(), z.unknown()) }),
 ])
 
-// the limit the worker applies to a generated attachment context, so an edit can't inflate scan tokens
+// the limit the worker applies to a generated attachment context
 export const MAX_ATTACHMENT_CONTEXT_CHARS = 8000
 
 // the source suggestions body
@@ -839,14 +892,14 @@ export type UpdateTopicPayload = z.infer<typeof updateTopicPayload>
 export const subscriptionPayload = z.object({ isSubscribed: z.boolean() })
 export type SubscriptionPayload = z.infer<typeof subscriptionPayload>
 
-// which signup button converted for posthog, kept in a cookie, so it survives the oauth round-trip
+// which signup button converted for posthog, kept in a cookie across the oauth round-trip
 export const SIGNUP_CTA_COOKIE_NAME = "signup_cta"
 
-// the allowed shape of a cta tag: a short slug, so nothing user-typed or tampered ever becomes an event property
+// the allowed shape of a cta tag, a short slug
 const CTA_TAG_PATTERN = /^[a-z0-9-]{1,40}$/
 
 /**
- * The cta value when it is a well-formed tag, otherwise null, so a garbled cookie never reaches analytics.
+ * The cta value when it is a well-formed tag, otherwise null.
  */
 export function toCtaTag(value: string | null | undefined): string | null {
 	return value && CTA_TAG_PATTERN.test(value) ? value : null
@@ -890,3 +943,58 @@ export type TopicFeedResponse = z.infer<typeof topicFeedResponse>
 // the create-topic response which is the new topic's id
 export const topicCreateResponse = z.object({ id: z.string() })
 export type TopicCreateResponse = z.infer<typeof topicCreateResponse>
+
+// one base64 yjs update posted from a note editor, size-limited
+export const NOTE_UPDATE_MAX_CHARS = 512 * 1024
+export const noteSyncPayload = z.object({ update: z.string().min(1).max(NOTE_UPDATE_MAX_CHARS) })
+export type NoteSyncPayload = z.infer<typeof noteSyncPayload>
+
+// the create body for a note on a page
+export const NOTE_NAME_MAX_CHARS = 120
+export const noteCreatePayload = z.object({
+	name: z.string().trim().min(1).max(NOTE_NAME_MAX_CHARS),
+	visibility: z.enum(noteVisibilities),
+})
+export type NoteCreatePayload = z.infer<typeof noteCreatePayload>
+
+// the note update body. a rename takes edit access, a visibility change is the owner's alone
+export const noteUpdatePayload = z.object({
+	name: z.string().trim().min(1).max(NOTE_NAME_MAX_CHARS).optional(),
+	visibility: z.enum(noteVisibilities).optional(),
+})
+export type NoteUpdatePayload = z.infer<typeof noteUpdatePayload>
+
+// one note as the notes table lists it
+export type Note = {
+	id: string
+	name: string
+	visibility: (typeof noteVisibilities)[number]
+	createdAt: string
+	updatedAt: string
+	canEdit: boolean
+	// whether the user created it, which alone allows changing its visibility
+	isOwner: boolean
+	// whether the user may delete it: its owner, or an admin
+	canDelete: boolean
+}
+
+// the notes payload for one page
+export type NotesResponse = {
+	// the page's display name, substituted into the empty state
+	pageName: string
+	// the visibilities the user may create a note in. empty for a visitor
+	creatableVisibilities: (typeof noteVisibilities)[number][]
+	// the usernames a comment's "@" menu offers: the holding team's members, empty without one
+	mentionableUsernames: string[]
+	notes: Note[]
+}
+
+// one note opened in its dialog. the stored HTML is what a read-only open renders
+export type NoteResponse = Note & { html: string }
+
+// a comment author as the note comment ui renders it
+export type NoteCommentUser = {
+	id: string
+	username: string
+	avatarUrl: string
+}

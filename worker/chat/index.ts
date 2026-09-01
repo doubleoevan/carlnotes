@@ -22,28 +22,28 @@ import { type SearchTotal, webSearchTool } from "./search"
 // how many model steps one chat turn search may take
 const MAX_TURN_STEPS = 8
 
-// the reply's token limit, bounding what one turn can spend on expensive output tokens
+// the reply's token limit, bounding what one chat turn can spend on expensive output tokens
 const MAX_TURN_OUTPUT_TOKENS = 3000
 
 // one earlier chat turn, replayed so the model can resolve what "that" and "the second one" point back to
-export type HistoryTurn = { question: string; answer: string }
+export type ChatHistoryTurn = { question: string; answer: string }
 
 // everything one chat turn needs to answer a user's question about a topic, or about a team's whole topic set
 export type ChatTurnInput = {
 	topicId?: string
-	// the team whose own room is asking, which reads across every topic the team holds
+	// the team whose own chat room is asking, which reads across every topic the team holds
 	teamId?: string
 	question: string
-	history: HistoryTurn[]
+	history: ChatHistoryTurn[]
 	attachments?: ChatAttachment[]
 	// who is asking. chat is signed-in only, and this scopes their kept chat attachments
 	userId: string
 	// whether this user owns the topic, resolved by the authorization gate before the call
 	isOwner: boolean
 	litellmApiKey?: string
-	// false for a room turn, whose answer posts publicly, so the poster's kept chat attachments stay out
+	// false for a chat room turn, whose answer posts publicly, so the poster's kept chat attachments stay out
 	includeAttachments?: boolean
-	// what retrieval embeds instead of the question, for a room turn whose question is composed from the chat messages
+	// what retrieval embeds instead of the question, for a chat room turn whose question is composed from the chat messages
 	retrievalQuestion?: string
 }
 
@@ -54,10 +54,10 @@ export type ChatReplyStream = {
 }
 
 /**
- * Streams one reply to a user's question about a topic, or null when the topic does not exist.
+ * Streams one reply to a user's question about a topic, or null if the topic does not exist.
  */
 export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplyStream | null> {
-	// assemble what the topic already holds, or every held topic for a team room, then write the prompt over it
+	// assemble what the topic already holds, or every held topic for a team chat room, then write the prompt over it
 	let chatContext: ChatContext | TeamChatContext | null
 	if (input.teamId) {
 		chatContext = await retrieveTeamChatContext(
@@ -66,7 +66,7 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 			input.litellmApiKey,
 		)
 	} else {
-		// the topic path keeps its per-user reads, which the public team room never includes
+		// the topic path keeps its per-user reads, which the public team chat room never includes
 		chatContext = await retrieveChatContext(
 			input.topicId ?? "",
 			input.retrievalQuestion ?? input.question,
@@ -84,7 +84,7 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 	// a template drift here throws an error, and nothing downstream would otherwise report it
 	let chatPrompt: BuiltPrompt
 	try {
-		// the team room writes over its own template, every other turn over the topic's
+		// the team chat room writes over its own template, every other chat turn over the topic's
 		chatPrompt = input.teamId
 			? await buildTeamChatPrompt(chatContext as TeamChatContext)
 			: await buildTopicChatPrompt(chatContext as ChatContext)
@@ -116,7 +116,7 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
  * The conversation as model messages, ending on the user's latest question and whatever they attached to it.
  */
 export function toModelMessages(
-	history: HistoryTurn[],
+	history: ChatHistoryTurn[],
 	question: string,
 	attachments: ChatAttachment[] = [],
 ): ModelMessage[] {
@@ -186,8 +186,7 @@ export async function buildTopicChatPrompt(chatContext: ChatContext): Promise<Bu
 }
 
 /**
- * Builds the team room's system prompt from the 'chat-team.md' template, reading across every
- * topic the team holds.
+ * Builds the team chat room's system prompt from the 'chat-team.md' template, reading across every topic the team holds.
  */
 export async function buildTeamChatPrompt(teamContext: TeamChatContext): Promise<BuiltPrompt> {
 	const { template, name, registryPrompt } = await fetchPromptTemplate("chat-team")

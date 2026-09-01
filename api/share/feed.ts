@@ -7,10 +7,10 @@ import { findings, resources, topics, users } from "../../db/schema"
 const FEED_ITEM_LIMIT = 50
 
 // what an entry in the feed says
-type FeedItem = { title: string; url: string; explanation: string | null; publishedAt: Date }
+export type FeedItem = { title: string; url: string; explanation: string | null; publishedAt: Date }
 
 /**
- * A public Topic's feed as RSS or null when the Topic is not public.
+ * A public Topic's feed as RSS or null if the Topic is not public.
  */
 export async function toTopicFeedXml(topicId: string, appUrl: string): Promise<string | null> {
 	const [topic] = await db
@@ -48,9 +48,26 @@ export async function toTopicFeedXml(topicId: string, appUrl: string): Promise<s
 	return toRssXml({
 		title: `${topic.name} · CarlNotes`,
 		description: `${topic.prompt || "What Carl found for this topic."}${topicOwner}`,
-		topicUrl,
+		linkUrl: topicUrl,
 		feedUrl: `${topicUrl}/feed.xml`,
 		items: findingRows.map((findingRow) => ({ ...findingRow, title: findingRow.title ?? findingRow.url })),
+	})
+}
+
+/**
+ * The site-wide feed of whatever feed items it is handed, newest first.
+ */
+export function toSiteFeedXml(appUrl: string, feedItems: FeedItem[]): string {
+	// newest first across every section it is handed
+	const orderedItems = [...feedItems].sort(
+		(first, second) => second.publishedAt.getTime() - first.publishedAt.getTime(),
+	)
+	return toRssXml({
+		title: "CarlNotes",
+		description: "Notes of Carl: the blog, and what ships.",
+		linkUrl: appUrl,
+		feedUrl: `${appUrl}/feed.xml`,
+		items: orderedItems,
 	})
 }
 
@@ -58,14 +75,14 @@ export async function toTopicFeedXml(topicId: string, appUrl: string): Promise<s
 function toRssXml(feed: {
 	title: string
 	description: string
-	topicUrl: string
+	linkUrl: string
 	feedUrl: string
 	items: FeedItem[]
 }): string {
 	// what the RSS reader shows about the channel
 	const channel = [
 		`<title>${toXmlText(feed.title)}</title>`,
-		`<link>${toXmlText(feed.topicUrl)}</link>`,
+		`<link>${toXmlText(feed.linkUrl)}</link>`,
 		`<description>${toXmlText(feed.description)}</description>`,
 		`<atom:link href="${toXmlText(feed.feedUrl)}" rel="self" type="application/rss+xml"/>`,
 	].join("\n")

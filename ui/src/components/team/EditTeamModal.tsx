@@ -1,7 +1,8 @@
 import type { TeamIdentity } from "@shared/contracts"
 import { Users } from "lucide-react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { useNavigate } from "react-router"
+import { toast } from "sonner"
 import {
 	type CreateTeamRejection,
 	fetchTeamNameTaken,
@@ -22,6 +23,8 @@ import { Input } from "@/components/primitives/input"
 import { Switch } from "@/components/primitives/switch"
 import { Textarea } from "@/components/primitives/textarea"
 import { refreshAvatars } from "@/hooks/useAvatarVersion"
+import { useObjectUrl } from "@/hooks/useObjectUrl"
+import { cn } from "@/lib/utils"
 
 // what each rejection tells the person saving a team
 const REJECTION_REASONS: Record<CreateTeamRejection, string> = {
@@ -38,10 +41,50 @@ type EditedTeam = Pick<TeamIdentity, "teamId" | "name" | "hasAvatar"> & {
 	isPublic: boolean
 }
 
+// the editable team fields, seeded from the team being edited or left empty for a new one
+function useTeamFields(
+	team: EditedTeam | undefined,
+	currentTopics: TopicOption[] | undefined,
+	initialTopicIds: string[] | undefined,
+	initialInvites: PendingInvite[] | undefined,
+) {
+	const [name, setName] = useState(team?.name ?? "")
+	const [description, setDescription] = useState(team?.description ?? "")
+	// the team page's visibility
+	const [isPublic, setIsPublic] = useState(team?.isPublic ?? false)
+	const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>(
+		team ? (currentTopics ?? []).map((topic) => topic.id) : (initialTopicIds ?? []),
+	)
+	// the invitations to send once the team is saved.
+	const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>(initialInvites ?? [])
+	// the selected image, uploaded once the team is saved
+	const [avatarFile, setAvatarFile] = useState<File | null>(null)
+	return {
+		name,
+		setName,
+		description,
+		setDescription,
+		isPublic,
+		setIsPublic,
+		selectedTopicIds,
+		setSelectedTopicIds,
+		pendingInvites,
+		setPendingInvites,
+		avatarFile,
+		setAvatarFile,
+		// what a save writes, with an empty description stored as nothing at all
+		savedFields: {
+			name,
+			description: description.trim() === "" ? null : description,
+			topicIds: selectedTopicIds,
+			isPublic,
+		},
+	}
+}
+
 /**
  * The modal for creating and for editing a team.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: optional props with defaults, not branching logic
 export function EditTeamModal({
 	team,
 	currentTopics,
@@ -64,32 +107,33 @@ export function EditTeamModal({
 	onSaveTeam?: () => void
 }) {
 	const navigate = useNavigate()
+	// the editable fields, held beside the payload a save writes from them
+	const {
+		name,
+		setName,
+		description,
+		setDescription,
+		isPublic,
+		setIsPublic,
+		selectedTopicIds,
+		setSelectedTopicIds,
+		pendingInvites,
+		setPendingInvites,
+		avatarFile,
+		setAvatarFile,
+		savedFields,
+	} = useTeamFields(team, currentTopics, initialTopicIds, initialInvites)
 	// the team the invite-link button created. the modal edits that team instead of creating a second one on Save
 	const [createdTeam, setCreatedTeam] = useState<EditedTeam | null>(null)
 	const editedTeam = team ?? createdTeam ?? undefined
-	const [name, setName] = useState(team?.name ?? "")
-	const [description, setDescription] = useState(team?.description ?? "")
-	// the team page's visibility
-	const [isPublic, setIsPublic] = useState(team?.isPublic ?? false)
-	const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>(
-		team ? (currentTopics ?? []).map((topic) => topic.id) : (initialTopicIds ?? []),
-	)
-	// the invitations to send once the team is saved.
-	const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>(initialInvites ?? [])
-	// the selected image, uploaded once the team is saved
-	const [avatarFile, setAvatarFile] = useState<File | null>(null)
 
 	// the name is what someone opens this to change, so it takes the focus the dialog hands out
 	const nameRef = useRef<HTMLInputElement>(null)
+
+	// set by a save click that found the name empty
+	const [wasNameMissed, setWasNameMissed] = useState(false)
 	const [rejection, setRejection] = useState<string | null>(null)
 	const [isSaving, setIsSaving] = useState(false)
-	// what a save writes, with an empty description stored as nothing at all
-	const savedFields = {
-		name,
-		description: description.trim() === "" ? null : description,
-		topicIds: selectedTopicIds,
-		isPublic,
-	}
 
 	// the invite-link button needs a team to point a token at, so the team is saved before sending invites
 	const handleCreateTeam = async (): Promise<string | null> => {
@@ -120,6 +164,13 @@ export function EditTeamModal({
 
 	// saving creates or updates and uploads the selected image, or reports a rejection reason
 	const handleSaveTeam = async (): Promise<void> => {
+		// a missing name stops the save
+		if (!name.trim()) {
+			setWasNameMissed(true)
+			nameRef.current?.focus()
+			toast.error("Please give the team a name.")
+			return
+		}
 		setIsSaving(true)
 		setRejection(null)
 		try {
@@ -154,15 +205,7 @@ export function EditTeamModal({
 
 	// the avatar the team shows: the file just uploaded, otherwise whatever the team has today
 	const previewTeam = { teamId: editedTeam?.teamId ?? "", name: name || "Team", hasAvatar: false }
-	const avatarUrl = useMemo(() => (avatarFile ? URL.createObjectURL(avatarFile) : null), [avatarFile])
-	useEffect(
-		() => () => {
-			if (avatarUrl) {
-				URL.revokeObjectURL(avatarUrl)
-			}
-		},
-		[avatarUrl],
-	)
+	const avatarUrl = useObjectUrl(avatarFile)
 	const previewAvatarUrl = avatarUrl ?? (editedTeam?.hasAvatar ? `/api/team-avatars/${editedTeam.teamId}` : null)
 
 	// a team rename is checked as the field is left, so a taken name is refused before Save
@@ -204,13 +247,14 @@ export function EditTeamModal({
 					className="size-14"
 				/>
 				<div>
-					<FieldLabel>Name</FieldLabel>
+					<FieldLabel isRequired>Name</FieldLabel>
 					<Input
 						ref={nameRef}
 						value={name}
 						placeholder="what to call it…"
 						onChange={(event) => setName(event.target.value)}
 						onBlur={handleNameBlur}
+						className={cn(wasNameMissed && !name.trim() && "border-destructive")}
 					/>
 				</div>
 				<div>
@@ -254,7 +298,7 @@ export function EditTeamModal({
 					<Button variant="outline" onClick={onClose}>
 						Cancel
 					</Button>
-					<Button onClick={() => void handleSaveTeam()} disabled={isSaving || !name.trim()}>
+					<Button onClick={() => void handleSaveTeam()} disabled={isSaving}>
 						Save
 					</Button>
 				</DialogFooter>

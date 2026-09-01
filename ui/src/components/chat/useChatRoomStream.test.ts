@@ -1,6 +1,6 @@
 // checks for the stream reconnect backoff: exponential growth, the jitter range, and the limit
 import { expect, test } from "bun:test"
-import { toReconnectDelayMs } from "./useChatRoom"
+import { toReconnectDelayMs } from "./useChatRoomStream"
 
 // each failed attempt doubles the wait, jittered down by up to half
 test("the wait grows exponentially inside the jitter range", () => {

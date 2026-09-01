@@ -19,7 +19,7 @@ function AlertDialogPortal({ ...props }: React.ComponentProps<typeof AlertDialog
 	return <AlertDialogPrimitive.Portal data-slot="alert-dialog-portal" {...props} />
 }
 
-// the dimmed backdrop behind the dialog
+// the dimmed backdrop for the dialog
 function AlertDialogOverlay({ className, ...props }: React.ComponentProps<typeof AlertDialogPrimitive.Overlay>) {
 	return (
 		<AlertDialogPrimitive.Overlay

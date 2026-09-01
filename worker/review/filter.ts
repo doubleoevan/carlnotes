@@ -244,7 +244,7 @@ async function embedResourcesBatch(
 	}
 }
 
-// run one surviving resource through both dedupe stages, returning a filtered outcome or null when it is admitted
+// run one surviving resource through both dedupe stages, returning a filtered outcome or null if it is admitted
 async function admitResource(
 	survivingResource: SurvivingResource,
 	candidateIds: string[],
@@ -287,7 +287,7 @@ async function hasStoredHash(hash: string, candidateIds: string[]): Promise<bool
 	return duplicate !== undefined
 }
 
-// store a Resource's new vector, stamped with the model name so a later model or dimension change is a detectable backfill
+// store a Resource's new vector, saved with the model name so a later model or dimension change is a detectable backfill
 async function saveResourceEmbedding(resourceId: string, embedding: number[]): Promise<void> {
 	await db.update(resources).set({ embedding, embeddingModel: EMBED_MODEL_NAME }).where(eq(resources.id, resourceId))
 }

@@ -6,9 +6,9 @@ import { useState } from "react"
 const AT_BOTTOM_RANGE_PX = 48
 
 /**
- * Whether the user is at the end of a message list, shared by the private chat and the chat room.
+ * Whether the user is at the end of a chat message list, shared by the private chat and the chat room.
  * The plain list reports through onScroll and the virtualized one through atBottomStateChange.
- * Both lists answer the same question. It decides whether a new message scrolls the view and whether the ScrollDownButton shows.
+ * Both lists answer the same question. It decides whether a new chat message scrolls the view and whether the ScrollDownButton shows.
  */
 export function useAtBottom() {
 	const [isAtBottom, setIsAtBottom] = useState(true)
@@ -22,7 +22,7 @@ export function useAtBottom() {
 }
 
 /**
- * The jump back down to the newest message button, floating over the end of a message list.
+ * The jump back down to the newest chat message button, floating over the end of a chat message list.
  * It only shows once the user has scrolled away from the bottom.
  */
 export function ScrollDownButton({

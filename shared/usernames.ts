@@ -14,7 +14,7 @@ export const USERNAME_COMBINATIONS = USERNAME_ADJECTIVES.length * USERNAME_NOUNS
 export const RESERVED_USERNAMES = new Set([
 	// names that would pass someone off as the site or its staff
 	"carl",
-	// the room-wide mention, so @all can never name a person
+	// the chat room-wide mention, so @all can never name a person
 	"all",
 	"carlnotes",
 	"notesofcarl",
@@ -48,7 +48,7 @@ export const RESERVED_USERNAMES = new Set([
 // the suffixes that turn one word into another form of itself. strip them when checking for duplicates
 const WORD_SUFFIXES = ["ed", "ing", "er", "s"]
 
-// why a username was rejected, or null when it is valid
+// why a username was rejected, or null if it is valid
 export type UsernameRejection = "length" | "charset" | "separator" | "reserved"
 
 /**
@@ -82,6 +82,19 @@ export function toUsernameRejection(username: string): UsernameRejection | null 
 }
 
 /**
+ * A sign-in provider's handle as a username proposal, or null if there is none or it breaks the app's rules.
+ * GitHub sends one as login. Google sends only a real name, which is never proposed.
+ */
+export function toProviderUsername(login: unknown): string | null {
+	if (typeof login !== "string") {
+		return null
+	}
+	// the provider's handle plays by the same rules a chosen username does
+	const proposedUsername = login.trim()
+	return proposedUsername !== "" && !toUsernameRejection(proposedUsername) ? proposedUsername : null
+}
+
+/**
  * Whether two words share a stem like`Roasted-Roast` and `WellRead-Reader`
  * the first by containment, the second after both words are reduced past their suffixes.
  */
@@ -104,8 +117,8 @@ export function toProposedUsernames(limit: number): string[] {
 		if (hasSharedStem(adjective, noun)) {
 			continue
 		}
-		// only a name the validator accepts is offered
-		const username = `${adjective}-${noun}`
+		// only a name the validator accepts is offered. the words join bare, and their capitals mark the boundary
+		const username = `${adjective}${noun}`
 		if (!toUsernameRejection(username)) {
 			suggestedUsernames.add(username)
 		}
@@ -118,7 +131,7 @@ export function toProposedUsernames(limit: number): string[] {
  * Digits are used to break ties between proposals.
  */
 export function toUsernameWithDigits(username: string): string {
-	return `${username}-${Math.floor(Math.random() * 10_000)
+	return `${username}${Math.floor(Math.random() * 10_000)
 		.toString()
 		.padStart(4, "0")}`
 }

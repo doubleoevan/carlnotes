@@ -10,12 +10,10 @@ import { Button } from "@/components/primitives/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { TagPill } from "@/components/topic/TagPicker"
 import { type EmailProvider, toEmailProviders } from "@/lib/emailProviders"
+import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
 import { copyWithDocument } from "@/lib/utils"
 
-// an email provider option inside the invite-by-link dropdown menu
-const EMAIL_PROVIDER_OPTION_CLASS = "hover:bg-accent flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-sm"
-
-// what the invite-by-link menu needs from its owner
+// what the invite-by-link menu needs from its caller
 export type InviteLink = {
 	subjectName: string
 	// the sentence the composer opens with, around the invite url
@@ -46,7 +44,7 @@ export function InviteFields({
 	// what the section is called: Invites on a topic, Members on a team
 	label: string
 	invites: string[]
-	// a returned string is the refusal shown under the field, null when the address was staged
+	// a returned string is the rejection shown under the field, null if the address was staged
 	onAddEmail: (email: string) => string | null
 	onAddUsername: (username: string) => void
 	onRemoveInvite: (chip: string) => void
@@ -77,10 +75,10 @@ export function InviteFields({
 // the invite-by-link button and its menu: one row per webmail composer, then a plain copy
 function InviteLinkMenu({ inviteLink }: { inviteLink: InviteLink }) {
 	const { data: session } = authClient.useSession()
-	// the menu is controlled so selecting a row closes the menu
+	// open state, closed by each row's handler
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
 
-	// the words the invitation puts into whichever composer opens
+	// the subject line for the email composer
 	const subject = `Join ${inviteLink.subjectName} on CarlNotes`
 
 	// close the menu and open the email composer in a new tab with the invite link
@@ -92,7 +90,7 @@ function InviteLinkMenu({ inviteLink }: { inviteLink: InviteLink }) {
 			emailComposer?.close()
 			return
 		}
-		// the mail client takes over this tab, and every webmail composer opens in the blank tab from the click
+		// a webmail composer loads into the blank tab opened by the click. a mail client takes over this tab
 		const composeEmailUrl = emailProvider.toUrl(
 			subject,
 			inviteLink.toBody(toInviteUrl(token)),
@@ -112,12 +110,12 @@ function InviteLinkMenu({ inviteLink }: { inviteLink: InviteLink }) {
 		if (!token) {
 			return
 		}
-		// some browsers refuse the clipboard api even over https, so a rejected copy falls back
+		// some browsers reject the clipboard api even over https
 		const inviteUrl = toInviteUrl(token)
 		try {
 			await navigator.clipboard.writeText(inviteUrl)
 		} catch {
-			// fallback to copy using an off-screen textarea if the clipboard fails
+			// copy with an off-screen textarea instead
 			copyWithDocument(inviteUrl)
 		}
 		inviteLink.onCopied?.()
@@ -131,22 +129,22 @@ function InviteLinkMenu({ inviteLink }: { inviteLink: InviteLink }) {
 						Invite by link
 					</Button>
 				</PopoverTrigger>
-				<PopoverContent align="start" className="w-52 p-1">
+				<PopoverContent align="start" className="w-52" bodyClassName="p-1">
 					{/* one dropdown row per email provider */}
 					{toEmailProviders(session?.user.email).map((emailProvider) => (
 						<button
 							key={emailProvider.key}
 							type="button"
 							onClick={() => void handleComposeEmail(emailProvider)}
-							className={EMAIL_PROVIDER_OPTION_CLASS}
+							className={MENU_OPTION_CLASS}
 						>
 							<Mail className="size-4 shrink-0" />
 							{emailProvider.label}
 						</button>
 					))}
-					{/* copy to clipboard sits below a divider */}
+					{/* the Copy link row below a divider */}
 					<div className="bg-border my-1 h-px" />
-					<button type="button" onClick={() => void handleCopyLink()} className={EMAIL_PROVIDER_OPTION_CLASS}>
+					<button type="button" onClick={() => void handleCopyLink()} className={MENU_OPTION_CLASS}>
 						<Link className="size-4 shrink-0" />
 						Copy link
 					</button>

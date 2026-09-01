@@ -67,7 +67,7 @@ export async function joinTeam(userId: string, teamId: string, invitedByUserId: 
 
 /**
  * Ask to join the team, writes a team member row that isn't active for a team leader to toggle on.
- * False when there is no such team or the user already belongs, and a repeat ask is the same single row.
+ * False if there is no such team or the user already belongs, and a repeat ask is the same single row.
  */
 export async function requestToJoinTeam(userId: string, teamId: string): Promise<boolean> {
 	// the team must exist, and the user must not already be an active team member
@@ -92,12 +92,12 @@ export async function deleteJoinTeamRequest(userId: string, teamId: string): Pro
  * A team leader can approve a join request by toggling the user's team member status to active.
  */
 export async function approveJoinTeamRequest(
+	userId: string,
 	teamId: string,
-	teamUserId: string,
 	joinUserId: string,
 ): Promise<"joined" | "forbidden" | "limited"> {
 	// only a leader can approve a join request
-	if ((await toTeamRole(teamUserId, teamId)) !== "leader") {
+	if ((await toTeamRole(userId, teamId)) !== "leader") {
 		return "forbidden"
 	}
 
@@ -111,7 +111,7 @@ export async function approveJoinTeamRequest(
 	}
 
 	// accepting a join request activates the team member row or writes an error message if the team is at its limit
-	return (await joinTeam(joinUserId, teamId, teamUserId)) ? "joined" : "limited"
+	return (await joinTeam(joinUserId, teamId, userId)) ? "joined" : "limited"
 }
 
 // the topics the team has: its own plus the ones it shares
@@ -199,12 +199,12 @@ export async function removeTeamMember(
 			.delete(teamMembers)
 			.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, removeUserId)))
 		await deactivateTeamTopicSubscriptions(transaction, teamId, [removeUserId])
-		// the mentions still waiting for them, found through the team's own room messages
+		// the chat mentions still waiting for them, found through the team's own chat room messages
 		const teamMessageIds = transaction
 			.select({ id: chatRoomMessages.id })
 			.from(chatRoomMessages)
 			.where(eq(chatRoomMessages.teamId, teamId))
-		// drop only their mentions, leaving the messages themselves for the rest of the room
+		// drop only their chat mentions, leaving the messages themselves for the rest of the chat room
 		await transaction
 			.delete(chatRoomMentions)
 			.where(and(eq(chatRoomMentions.userId, removeUserId), inArray(chatRoomMentions.messageId, teamMessageIds)))

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."chat_attachment_kind" ADD VALUE IF NOT EXISTS 'video';

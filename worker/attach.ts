@@ -9,7 +9,7 @@ import { chatModel, cheapModel } from "./models.ts"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "./prompts/fetch.ts"
 import { writePrompt } from "./prompts/write.ts"
 import { fetchContent, toFetchableUrl } from "./scrape"
-import { deleteAttachment, MAX_KEY_FILENAME_CHARS, putAttachment, toAttachmentKey } from "./store"
+import { deleteAttachment, MAX_KEY_FILENAME_CHARS, toAttachmentKey, uploadAttachment } from "./store"
 import { startAttachmentWorkflow } from "./temporal-client"
 
 // a rejection safe to show the user as written: their file or url, not an infra failure like a misconfigured llm proxy
@@ -54,7 +54,7 @@ export async function ingestAttachment(attachmentUpload: AttachmentUpload): Prom
 	// store the raw bytes under a key that is namespaced by topic and attachment
 	const attachmentId = crypto.randomUUID()
 	const objectKey = toAttachmentKey(topicId, attachmentId, filename)
-	await putAttachment(objectKey, bytes, contentType)
+	await uploadAttachment(objectKey, bytes, contentType)
 
 	// from here the object exists
 	try {
@@ -182,7 +182,7 @@ export async function buildContextPrompt(text: string): Promise<BuiltPrompt> {
 }
 
 // generate a context string from the file's text with the cheap model through LiteLLM, billed to the given key,
-export async function generateContext(text: string, litellmApiKey?: string): Promise<string> {
+export async function generatePdfContext(text: string, litellmApiKey?: string): Promise<string> {
 	// fetch and write the prompt
 	const contextPrompt = await buildContextPrompt(text)
 

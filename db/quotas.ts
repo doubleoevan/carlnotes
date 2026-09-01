@@ -26,7 +26,7 @@ let dayStartTime = ""
 const suggestionCountsByUserId = new Map<string, number>()
 
 /**
- * Increment the suggestion count today. return false when none are left. Admins bypass the limit.
+ * Increment the suggestion count today. return false if none are left. Admins bypass the limit.
  */
 export async function incrementDaySuggestionCount(userId: string): Promise<boolean> {
 	// an admin is not limited, so their count is never incremented
@@ -109,7 +109,7 @@ export async function dailyScanLimit(userId: string): Promise<number> {
 export function toInviteLimit(input: {
 	plan: Plan
 	accountAgeDays: number
-	// the accepted share among week-old user invitations, null when there are none to measure
+	// the accepted share among week-old user invitations, null if there are none to measure
 	acceptedShare: number | null
 	isConnectedRecipient: boolean
 }): number {

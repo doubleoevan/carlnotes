@@ -25,6 +25,8 @@ import { type AppEnv, currentUser } from "./currentUser"
 import { flagContentRoute } from "./flagContent"
 import { invitesRoute } from "./invite/invites"
 import { userInvitesRoute } from "./invite/userInvites"
+import { noteCommentThreadsRoute } from "./note/noteCommentThreads"
+import { notesRoute } from "./note/notes"
 import { profilesRoute } from "./profiles"
 import {
 	toCachedProfilePreviewPng,
@@ -103,7 +105,7 @@ export const apiRoute = new Hono<AppEnv>()
 		const userId = currentUser(context)
 		return context.json({ rooms: userId ? await loadChatRooms(userId) : [] })
 	})
-	// the unseen mention count alone, which is one indexed select
+	// the unseen chat mention count alone, which is one indexed select
 	.get("/rooms/mention-count", async (context) => {
 		const userId = currentUser(context)
 		return context.json({ count: userId ? await countUnseenChatMentions(userId) : 0 })
@@ -140,6 +142,9 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", chatRoute)
 	// the team chat routes
 	.route("/", chatRoomRoute)
+	// the note routes and their comment threads
+	.route("/", notesRoute)
+	.route("/", noteCommentThreadsRoute)
 	// the kept chat attachment routes
 	.route("/", chatAttachmentsRoute)
 	// the subscription routes

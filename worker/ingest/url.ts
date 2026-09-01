@@ -102,7 +102,7 @@ async function readPageBody(pageUrl: string): Promise<PageBody> {
 	}
 }
 
-// return the page's stored Markdown when a Resource already holds it, and it has not gone stale, otherwise null
+// return the page's stored Markdown if a Resource already holds it, and it has not gone stale, otherwise null
 async function readStoredPage(pageUrl: string): Promise<string | null> {
 	const [storedResource] = await db
 		.select({ contentKey: resources.contentKey, fetchedAt: resources.fetchedAt })

@@ -128,7 +128,7 @@ test("invites have per-target unique indexes on the invited user", () => {
 test("a link invite row names nobody", () => {
 	expect(schema.invites.email.notNull).toBe(false)
 	expect(schema.invites.invitedUserId.notNull).toBe(false)
-	// the decline stamp and the recipient setting round out the user-invite lifecycle
+	// the decline time and the recipient setting round out the user-invite lifecycle
 	expect(schema.invites.declinedAt.notNull).toBe(false)
 	expect(allMigrationsSql()).toContain(`"invite_access" "invite_access" DEFAULT 'anyone' NOT NULL`)
 })
@@ -260,7 +260,7 @@ test("finding feedback and views are written and displayed, never read into rank
 	expect(readers.sort()).toEqual(["api/topic/findings.ts"])
 })
 
-// the room's chat messages are the team's conversation. it never reaches scoring, retrieval, or embeddings
+// the chat room's chat messages are the team's conversation. it never reaches scoring, retrieval, or embeddings
 test("room messages and summaries never reach the worker pipeline", () => {
 	const readers = sourceFilesUnder(["worker"])
 		.filter((file) => /chatRoomMessages|chatRoomSummaries/.test(file.text))

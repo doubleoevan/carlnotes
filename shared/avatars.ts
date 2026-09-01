@@ -17,7 +17,15 @@ export const AVATAR_TINT_MAX_LUMINANCE = 0.15
  */
 export function toAvatarInitials(username: string): string {
 	// both separators the username rules allow split words, and so does the space a team name may include
-	const [first, second] = username.trim().split(/[-_\s]+/)
+	let [first, second] = username.trim().split(/[-_\s]+/)
+
+	// a generated name joins its capitalized words bare, so a lone word splits again on its inner capitals
+	if (first && !second) {
+		const segments = first.split(/(?<=[a-z0-9])(?=[A-Z])/)
+		first = segments[0]
+		second = segments.length > 1 ? segments[segments.length - 1] : undefined
+	}
+
 	// a name someone typed is often one word, which has only its own first letter to display
 	return `${first?.[0] ?? ""}${second?.[0] ?? ""}`.toUpperCase()
 }

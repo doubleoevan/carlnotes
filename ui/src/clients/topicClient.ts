@@ -1,5 +1,6 @@
 // the typed Hono RPC api client for every topic route
 import {
+	type ChatLinkPreview,
 	type Invite,
 	type InviteAcceptResponse,
 	type InviteSource,
@@ -109,6 +110,15 @@ export async function fetchAddableTopics(excludeTeamId?: string): Promise<{ id: 
 	return ((await response.json()) as { topics: { id: string; name: string }[] }).topics
 }
 
+// the link preview card for a topic finding's page, null if the page offers none or the visitor is signed out
+export async function fetchTopicFindingLinkPreview(findingId: string): Promise<ChatLinkPreview | null> {
+	const response = await apiClient.api["topic-findings"][":id"]["link-preview"].$get({ param: { id: findingId } })
+	if (!response.ok) {
+		return null
+	}
+	return ((await response.json()) as { linkPreview: ChatLinkPreview | null }).linkPreview
+}
+
 // set or clear a topic finding's thumbs up or thumbs down rating
 export async function sendTopicFindingRating(findingId: string, rating: "up" | "down" | null): Promise<void> {
 	await reportFailedWrite(
@@ -163,7 +173,7 @@ export async function fetchTopicPage(topicId: string): Promise<TopicPageResult> 
 }
 
 /**
- * One scan's recap, or null when the scan is gone or the topic is not visible.
+ * One scan's recap, or null if the scan is gone or the topic isn't visible.
  */
 export async function fetchScanNote(scanId: string): Promise<string | null> {
 	const response = await apiClient.api.scans[":id"].$get({ param: { id: scanId } })
@@ -208,7 +218,7 @@ export async function sendUpdateTopic(topicId: string, payload: UpdateTopicPaylo
 	}
 }
 
-// how a rejected topic write explains itself, or null when the body included no explanation to show
+// how a rejected topic write explains itself, or null if the body included no explanation to show
 async function toTopicWriteError(response: Response): Promise<Error | null> {
 	const body = (await response.json().catch(() => null)) as { dailyTopicLimit?: number; error?: string } | null
 	// the daily topic limit gets its own error

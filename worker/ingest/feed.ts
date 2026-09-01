@@ -91,7 +91,7 @@ async function parseNamedFeed(
 }
 
 /**
- * The transcript url to store for an entry, preferring a plain text or WebVTT one. Null when the entry names none.
+ * The transcript url to store for an entry, preferring a plain text or WebVTT one. Null if the entry names none.
  */
 export function toTranscriptUrl(transcripts: FeedTranscript[] = []): string | null {
 	// keep only the elements that name a url

@@ -7,7 +7,7 @@ import {
 	clipAttachmentText,
 	withAttachmentNote,
 } from "@shared/contracts"
-import { resolveChatAttachments } from "./attachments"
+import { resolveChatAttachments, toAttachmentsByChatTurnId } from "./attachments"
 
 // the words that a chat attachment includes. everything sent to the model is text, so a chat image reads as empty
 function resolvedText(chatAttachments: ChatAttachment[] | null, index: number): string {
@@ -90,7 +90,7 @@ test("resolveChatAttachments extracts a pdf into a text attachment", async () =>
 	// the PDF becomes text under its own name, and the neighboring text attachment passes through untouched
 	await withoutScanner(async () => {
 		const chatAttachments = await resolveChatAttachments([
-			{ kind: "pdf", name: "hello.pdf", dataUrl: dataUrl, keep: false },
+			{ kind: "pdf", name: "hello.pdf", dataUrl, keep: false },
 			{ kind: "text", name: "notes.md", text: "notes", keep: false },
 		])
 		expect(chatAttachments?.[0]?.kind).toBe("text")
@@ -171,4 +171,28 @@ test("an attachment is only kept when the payload asks for it", () => {
 	expect(chatTurn.success).toBe(true)
 	expect(chatTurn.data?.attachments[0]?.keep).toBe(false)
 	expect(chatTurn.data?.attachments[1]?.keep).toBe(true)
+})
+
+// each chat turn gets back what it was sent with
+test("attachments group under the chat turn they were sent with", () => {
+	const attachmentsByChatTurnId = toAttachmentsByChatTurnId([
+		{ id: "a-1", chatTurnId: "chat-turn-1", kind: "image", name: "latte.png" },
+		{ id: "a-2", chatTurnId: "chat-turn-2", kind: "pdf", name: "paper.pdf" },
+		{ id: "a-3", chatTurnId: "chat-turn-1", kind: "image", name: "mug.png" },
+	])
+
+	// one chat turn holds both of its own, in the order they were stored, each with its name and kind
+	expect(attachmentsByChatTurnId.get("chat-turn-1")).toEqual([
+		{ id: "a-1", kind: "image", name: "latte.png" },
+		{ id: "a-3", kind: "image", name: "mug.png" },
+	])
+	expect(attachmentsByChatTurnId.get("chat-turn-2")).toEqual([{ id: "a-2", kind: "pdf", name: "paper.pdf" }])
+})
+
+// an attachment stored with no chat turn has nothing to group under
+test("an attachment with no chat turn is dropped", () => {
+	const attachmentsByChatTurnId = toAttachmentsByChatTurnId([
+		{ id: "a-1", chatTurnId: null, kind: "text", name: "notes.md" },
+	])
+	expect(attachmentsByChatTurnId.size).toBe(0)
 })

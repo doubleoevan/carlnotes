@@ -65,10 +65,22 @@ test("the streaming renderer disables raw html and scheme-checks every destinati
 	expect(rendererSource).toContain('href.startsWith("https://") || href.startsWith("http://")')
 })
 
-// nothing in the ui injects raw HTML
+// the one renderer of server-sanitized HTML: the note's stored HTML, generated and sanitized in the api
+const SERVER_HTML_RENDERER = "components/note/NoteStatic.tsx"
+
+// nothing in the ui injects raw HTML, except the note HTML which the api sanitizes before storing
 test("no ui file injects raw html", () => {
-	const unsafeSourceFiles = uiSourceFiles().filter((name) =>
-		readFileSync(join(import.meta.dir, name), "utf8").includes("dangerouslySetInnerHTML"),
+	const unsafeSourceFiles = uiSourceFiles().filter(
+		(name) =>
+			name !== SERVER_HTML_RENDERER &&
+			readFileSync(join(import.meta.dir, name), "utf8").includes("dangerouslySetInnerHTML"),
 	)
 	expect(unsafeSourceFiles).toEqual([])
+})
+
+// the HTML the note renderer injects is sanitized where it is generated, in the api
+test("the note html is sanitized server-side", () => {
+	const htmlSource = readFileSync(join(import.meta.dir, "../../api/note/notes.ts"), "utf8")
+	expect(htmlSource).toContain("sanitizeNoteHtml(await serverEditor.blocksToFullHTML(blocks))")
+	expect(htmlSource).toContain('allowedSchemes: ["http", "https", "mailto"]')
 })

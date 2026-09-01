@@ -167,7 +167,7 @@ export function toPaidSubscription(subscription: StripeSubscriptionFields): Subs
 	}
 }
 
-// how a subscription bills, read from the price it includes instead of from what checkout stamped on it
+// how a subscription bills, read from the price it includes instead of from what checkout saved on it
 function toBillingInterval(subscription: StripeSubscriptionFields): BillingInterval {
 	const priceIntervals = subscription.items?.data.map((item) => item.price?.recurring?.interval)
 	if (priceIntervals?.length) {
@@ -178,7 +178,7 @@ function toBillingInterval(subscription: StripeSubscriptionFields): BillingInter
 
 /**
  * Report one metered manual-scan overage unit to Stripe. A reporting failure never blocks the scan.
- * SETUP: the meter behind STRIPE_PRICE_MANUAL_SCAN_OVERAGE must use the event_name in STRIPE_MANUAL_SCAN_OVERAGE_EVENT.
+ * SETUP: the meter for STRIPE_PRICE_MANUAL_SCAN_OVERAGE must use the event_name in STRIPE_MANUAL_SCAN_OVERAGE_EVENT.
  */
 export async function reportManualScanOverage(userId: string): Promise<void> {
 	// only a subscribed user with a card reaches overage, so look up their Stripe customer first
@@ -203,7 +203,7 @@ export async function reportManualScanOverage(userId: string): Promise<void> {
 
 /**
  * Total Stripe revenue in cents since the given time, from balance transactions that already net fees and refunds.
- * Returns null when Stripe is unreachable, so the admin totals still render.
+ * Returns null if Stripe is unreachable, so the admin totals still render.
  */
 export async function readStripeTotalRevenueCents(sinceUnixSeconds: number): Promise<number | null> {
 	try {

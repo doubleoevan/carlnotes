@@ -9,17 +9,33 @@ const renderWithRouter = (node: React.ReactNode): string => renderToStaticMarkup
 // the user whose questions the private chat renders
 const USER = { userId: "user-1", username: "ana", avatarSource: null }
 
-// every message includes its author: the user on each question, carl on each answer
+// every chat message includes its author: the user on each question, carl on each answer
 test("private chat turns each render their author line", () => {
 	const chatTurns = [
-		{ question: "why this brew", answer: "because it holds", at: 1_700_000_000_000, rejection: null },
-		{ question: "and this one", answer: "same reason", at: 1_700_000_060_000, rejection: null },
+		{
+			question: "why this brew",
+			answer: "because it holds",
+			at: 1_700_000_000_000,
+			rejection: null,
+			attachments: [],
+			linkPreviews: [],
+			answerLinkPreviews: [],
+		},
+		{
+			question: "and this one",
+			answer: "same reason",
+			at: 1_700_000_060_000,
+			rejection: null,
+			attachments: [],
+			linkPreviews: [],
+			answerLinkPreviews: [],
+		},
 	]
 	const html = renderWithRouter(
-		<ChatMessages chatTurns={chatTurns} isEnlarged={false} isStreaming={false} topicName="brew" author={USER} />,
+		<ChatMessages chatTurns={chatTurns} isEnlarged={false} isStreaming={false} chatName="brew" author={USER} />,
 	)
 
-	// two questions, two answers, four author lines, never collapsed on consecutive turns
+	// two questions, two answers, four author lines, never collapsed on consecutive chat turns
 	expect(html.split(">ana<").length - 1).toBe(2)
 	expect(html.split(">Carl<").length - 1).toBe(2)
 	// carl's face is the racoon

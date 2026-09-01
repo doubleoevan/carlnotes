@@ -38,7 +38,7 @@ export async function loadTeamsPage(userId: string, email: string): Promise<Team
 			description: teams.description,
 			avatarKey: teams.avatarKey,
 			invitedAt: invites.invitedAt,
-			// the sender's identity, null when their account has closed
+			// the sender's identity or null if their account has closed
 			senderUserId: senders.id,
 			senderUsername: senders.username,
 			senderAvatarSource: senders.avatarSource,
@@ -222,7 +222,7 @@ export async function loadTeamUpMenu(userId: string, profileUserId: string): Pro
 	})
 }
 
-// the name a private team shows an outsider on its page, or null when no team has that id
+// the name a private team shows an outsider on its page, or null if no team has that id
 export async function toGatedTeam(
 	userId: string | null,
 	teamId: string,
@@ -326,7 +326,14 @@ export async function toSpendByTeamId(
 		db
 			.select({ teamId: chatTurns.teamId, dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
 			.from(chatTurns)
-			.where(and(inArray(chatTurns.teamId, teamIds), gte(chatTurns.createdAt, monthStart)))
+			// only chat room turns count. a member's private team conversation spends on their own meter alone
+			.where(
+				and(
+					inArray(chatTurns.teamId, teamIds),
+					isNotNull(chatTurns.roomMessageId),
+					gte(chatTurns.createdAt, monthStart),
+				),
+			)
 			.groupBy(chatTurns.teamId),
 	])
 
@@ -388,7 +395,7 @@ export async function loadTeamSummaries(userId: string): Promise<TeamSummary[]> 
 		teamLeaderRows.map((teamLeaderRow) => [teamLeaderRow.teamId, teamLeaderRow.leaderCount]),
 	)
 
-	// what each team's topics cost this month, and the user's unseen team room mentions
+	// what each team's topics cost this month, and the user's unseen team chat room mentions
 	const spendByTeamId = await toSpendByTeamId(teamIds)
 	const mentionsByTeamId = await loadTeamChatMentions(userId, teamIds)
 	return teamRows.map(({ avatarKey, inviterUserId, inviterUsername, inviterAvatarSource, ...row }) => ({
@@ -403,7 +410,7 @@ export async function loadTeamSummaries(userId: string): Promise<TeamSummary[]> 
 		hasAvatar: avatarKey !== null,
 		scanSpendCents: spendByTeamId.get(row.teamId)?.scanCents ?? 0,
 		chatSpendCents: spendByTeamId.get(row.teamId)?.chatCents ?? 0,
-		mentions: mentionsByTeamId.get(row.teamId) ?? [],
+		chatMentions: mentionsByTeamId.get(row.teamId) ?? [],
 	}))
 }
 
@@ -450,7 +457,7 @@ export async function loadPublicTeams(userId: string): Promise<TeamSummary[]> {
 		role: teamRow.role,
 		isOnlyLeader: false,
 		invitedBy: null,
-		mentions: [],
+		chatMentions: [],
 	}))
 }
 
@@ -561,7 +568,7 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 			isActive: memberRow.isActive,
 		})),
 		hiddenMemberCount: hiddenActiveCount,
-		mentions: (await loadTeamChatMentions(userId, [team.id])).get(team.id) ?? [],
+		chatMentions: (await loadTeamChatMentions(userId, [team.id])).get(team.id) ?? [],
 		topics: await toTopicTableRows(visibleTopics, userId),
 	}
 }

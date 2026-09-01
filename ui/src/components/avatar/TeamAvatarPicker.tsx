@@ -2,7 +2,13 @@
 import type { TeamIdentity } from "@shared/contracts"
 import { Camera } from "lucide-react"
 import { toast } from "sonner"
-import { AVATAR_REJECTIONS, AvatarDropOverlay, toDroppedImage } from "@/components/avatar/AvatarUpload"
+import {
+	AVATAR_ACCEPT,
+	AVATAR_REJECTIONS,
+	AvatarDropOverlay,
+	toDroppedImage,
+	toUploadableAvatar,
+} from "@/components/avatar/AvatarUpload"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { cn } from "@/lib/utils"
@@ -34,7 +40,7 @@ export function TeamAvatarPicker({
 			toast.error(AVATAR_REJECTIONS["unsupported-type"] ?? "PNG, JPEG, WebP or GIF only.")
 			return
 		}
-		onAvatarChange(droppedImage)
+		void toUploadableAvatar(droppedImage).then(onAvatarChange)
 	}
 
 	return (
@@ -51,7 +57,7 @@ export function TeamAvatarPicker({
 				</span>
 				<input
 					type="file"
-					accept="image/png,image/jpeg,image/webp,image/gif"
+					accept={AVATAR_ACCEPT}
 					onChange={(event) => {
 						const chosen = event.target.files?.[0]
 						if (chosen) {

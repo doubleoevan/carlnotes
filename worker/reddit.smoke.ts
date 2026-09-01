@@ -11,8 +11,8 @@ import { shutdownTelemetry, startTelemetry } from "./telemetry"
 const SMOKE_SUBREDDIT = "programming"
 const SMOKE_QUERY = "rust"
 
-// append a stamp for the database to persist a unique identifier for fixture data
-const smokeTestStamp = Date.now()
+// one id per run, so fixture rows never collide with an earlier run's
+const runId = Date.now()
 
 // seed a fake owner, a topic, and the two Source shapes the ingester supports
 async function seedTestData(): Promise<{ subredditSource: Source; searchSource: Source; userId: string }> {
@@ -21,9 +21,9 @@ async function seedTestData(): Promise<{ subredditSource: Source; searchSource: 
 		.insert(users)
 		.values({
 			name: "reddit-smoke",
-			email: `reddit-smoke+${smokeTestStamp}@example.test`,
-			username: `reddit-smoke-${smokeTestStamp}`,
-			usernameNormalized: `redditsmoke${smokeTestStamp}`,
+			email: `reddit-smoke+${runId}@example.test`,
+			username: `reddit-smoke-${runId}`,
+			usernameNormalized: `redditsmoke${runId}`,
 		})
 		.returning()
 	if (!user) {
@@ -79,7 +79,7 @@ async function checkSource(label: string, source: Source): Promise<boolean> {
 	}
 }
 
-// run both Sources and print the smoke report. returns true when both brought back Resources
+// run both Sources and print the smoke report. returns true if both returned Resources
 async function check(subredditSource: Source, searchSource: Source): Promise<boolean> {
 	console.log("\n=== reddit smoke report ===")
 	console.log(`credentials   : ${Bun.env.REDDIT_CLIENT_ID && Bun.env.REDDIT_CLIENT_SECRET ? "set" : "absent"}`)

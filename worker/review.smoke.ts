@@ -44,8 +44,8 @@ async function resetFeedResources(): Promise<number> {
 	return resetResources.length
 }
 
-// append a stamp for the database to persist a unique identifier for fixture data
-const smokeTestStamp = Date.now()
+// one id per run, so fixture rows never collide with an earlier run's
+const runId = Date.now()
 
 // seed a fake owner, a topic whose context matches the feed, and the RSS source
 async function seedTestData(): Promise<{ topicId: string; userId: string }> {
@@ -54,9 +54,9 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 		.insert(users)
 		.values({
 			name: "review-smoke",
-			email: `review-smoke+${smokeTestStamp}@example.test`,
-			username: `review-smoke-${smokeTestStamp}`,
-			usernameNormalized: `reviewsmoke${smokeTestStamp}`,
+			email: `review-smoke+${runId}@example.test`,
+			username: `review-smoke-${runId}`,
+			usernameNormalized: `reviewsmoke${runId}`,
 		})
 		.returning()
 	if (!user) {

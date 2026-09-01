@@ -1,0 +1,99 @@
+{
+	"apiVersion": "v1.2",
+	"name": "release-main",
+	"description": "Build main, run migrate, deploy app and temporal-worker, then embed docs",
+	"spec": {
+		"kind": "Workflow",
+		"spec": {
+			"type": "sequential",
+			"steps": [
+				{
+					"kind": "Build",
+					"ref": "build-image",
+					"spec": {
+						"id": "build",
+						"type": "service",
+						"branch": "main",
+						"reuseExistingBuilds": true,
+						"buildRuleFallThroughHandling": "fail"
+					},
+					"condition": "success"
+				},
+				{
+					"kind": "JobRun",
+					"ref": "run-migrate",
+					"spec": {
+						"jobId": "migrate",
+						"deployment": {
+							"internal": {
+								"id": "${refs.build-image.nfObjectId}",
+								"branch": "${refs.build-image.branch}",
+								"buildId": "${refs.build-image.id}"
+							}
+						}
+					},
+					"condition": "success"
+				},
+				{
+					"kind": "Release",
+					"ref": "deploy-app",
+					"spec": {
+						"type": "build",
+						"origin": {
+							"id": "build",
+							"branch": "${refs.build-image.branch}",
+							"build": "${refs.build-image.id}"
+						},
+						"target": { "id": "app", "type": "service" }
+					},
+					"condition": "running"
+				},
+				{
+					"kind": "Release",
+					"ref": "deploy-worker",
+					"spec": {
+						"type": "build",
+						"origin": {
+							"id": "build",
+							"branch": "${refs.build-image.branch}",
+							"build": "${refs.build-image.id}"
+						},
+						"target": { "id": "temporal-worker", "type": "service" }
+					},
+					"condition": "running"
+				},
+				{
+					"kind": "JobRun",
+					"ref": "run-docs-sync",
+					"spec": {
+						"jobId": "docs-sync",
+						"deployment": {
+							"internal": {
+								"id": "${refs.build-image.nfObjectId}",
+								"branch": "${refs.build-image.branch}",
+								"buildId": "${refs.build-image.id}"
+							}
+						}
+					},
+					"condition": "success"
+				}
+			]
+		}
+	},
+	"arguments": {},
+	"argumentOverrides": {},
+	"options": { "autorun": false, "concurrencyPolicy": "queue" },
+	"triggers": [
+		{
+			"kind": "vcs-push",
+			"spec": {
+				"vcs": {
+					"vcsService": "github",
+					"accountLogin": "doubleoevan",
+					"repoUrl": "https://github.com/doubleoevan/carlnotes"
+				},
+				"branchNamePatterns": ["main"]
+			}
+		}
+	]
+}

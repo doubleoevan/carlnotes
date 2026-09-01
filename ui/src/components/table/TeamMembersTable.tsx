@@ -161,6 +161,8 @@ function MemberRow({
 			toast.error("The team is full. A paying leader lifts the limit.")
 		} else if (outcome === "joined") {
 			toast(`Added ${member.username} to the team.`)
+		} else {
+			toast.error(`${member.username} didn't join. Their request may have been withdrawn.`)
 		}
 		onChanged()
 	}

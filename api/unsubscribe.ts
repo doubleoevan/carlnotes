@@ -6,7 +6,7 @@ import { verifyUnsubscribeToken } from "../worker"
 import { updateTopicSubscriberCount } from "./topic/subscriberCounts"
 
 /**
- * Verifies the token, deactivates the recipient's direct subscription, and returns the unsubscribed topic (null when the token is bad).
+ * Verifies the token, deactivates the recipient's direct subscription, and returns the unsubscribed topic (null if the token is bad).
  */
 export async function unsubscribe(unsubscribeToken: string | undefined): Promise<{ id: string; name: string } | null> {
 	// a missing or forged token unsubscribes nothing

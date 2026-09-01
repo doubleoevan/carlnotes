@@ -11,22 +11,22 @@ import { toTopicFilter } from "./roomTurns"
 const CHAT_MESSAGE_SNIPPET_LENGTH = 120
 
 /**
- * The chat mention rows a chat message writes: one per team member the message names, plus the author of the replied-to message.
+ * The chat mention rows a chat message writes: one per team member the chat message names, plus the author of the replied-to chat message.
  * Carl does not have a team member row, and the room-wide @all reaches every team member without naming them.
  */
 export async function saveChatMentions(
 	teamId: string,
 	senderId: string,
-	messageId: number,
-	message: string,
-	replyToMessageId: number | null,
+	chatMessageId: number,
+	chatMessage: string,
+	replyToChatMessageId: number | null,
 ): Promise<void> {
 	// every notified member becomes one row, inserted in a single statement
 	const teamMembers = await teamMemberUsernames(teamId)
-	const mentionedUserIds = new Set(toMentionedUserIds(message, teamMembers, senderId))
+	const mentionedUserIds = new Set(toMentionedUserIds(chatMessage, teamMembers, senderId))
 
 	// a reply notifies the replied-to user like a chat mention would
-	const repliedToUserId = await toRepliedToUserId(replyToMessageId)
+	const repliedToUserId = await toRepliedToUserId(replyToChatMessageId)
 	if (
 		repliedToUserId &&
 		repliedToUserId !== senderId &&
@@ -39,7 +39,7 @@ export async function saveChatMentions(
 	if (mentionedUserIds.size > 0) {
 		await db
 			.insert(chatRoomMentions)
-			.values([...mentionedUserIds].map((userId) => ({ messageId, userId })))
+			.values([...mentionedUserIds].map((userId) => ({ messageId: chatMessageId, userId })))
 			.onConflictDoNothing()
 	}
 }
@@ -56,7 +56,7 @@ export async function loadTopicChatMentions(
 	}
 
 	// every unseen chat mention row for these topics for this user
-	const repliedMessages = db
+	const repliedChatMessages = db
 		.select({ id: chatRoomMessages.id, authorUserId: chatRoomMessages.authorUserId })
 		.from(chatRoomMessages)
 		.as("replied_to")
@@ -64,14 +64,14 @@ export async function loadTopicChatMentions(
 		.select({
 			topicId: chatRoomMessages.topicId,
 			teamId: chatRoomMessages.teamId,
-			messageId: chatRoomMessages.id,
+			chatMessageId: chatRoomMessages.id,
 			authorUsername: chatRoomMessages.authorUsername,
 			content: chatRoomMessages.content,
-			repliedToUserId: repliedMessages.authorUserId,
+			repliedToUserId: repliedChatMessages.authorUserId,
 		})
 		.from(chatRoomMentions)
 		.innerJoin(chatRoomMessages, eq(chatRoomMentions.messageId, chatRoomMessages.id))
-		.leftJoin(repliedMessages, eq(chatRoomMessages.replyToMessageId, repliedMessages.id))
+		.leftJoin(repliedChatMessages, eq(chatRoomMessages.replyToMessageId, repliedChatMessages.id))
 		.where(
 			and(
 				eq(chatRoomMentions.userId, userId),
@@ -109,7 +109,7 @@ export async function saveSeenChatMentions(userId: string, topicId: string | nul
 		.from(chatRoomMessages)
 		.where(and(toTopicFilter(chatRoomMessages.topicId, topicId), eq(chatRoomMessages.teamId, teamId)))
 
-	// save the seen at date for the chat room mentions that match the message ids
+	// save the seen at date for the chat room mentions that match the chat message ids
 	await db
 		.update(chatRoomMentions)
 		.set({ seenAt: new Date() })
@@ -122,17 +122,17 @@ export async function saveSeenChatMentions(userId: string, topicId: string | nul
 		)
 }
 
-// the user id of the author that a message was replied to or null for @carl
-async function toRepliedToUserId(replyToMessageId: number | null): Promise<string | null> {
-	if (!replyToMessageId) {
+// the user id of the author that a chat message was replied to or null for @carl
+async function toRepliedToUserId(replyToChatMessageId: number | null): Promise<string | null> {
+	if (!replyToChatMessageId) {
 		return null
 	}
 	const [repliedTo] = await db
 		.select({ authorUserId: chatRoomMessages.authorUserId })
 		.from(chatRoomMessages)
-		.where(eq(chatRoomMessages.id, replyToMessageId))
+		.where(eq(chatRoomMessages.id, replyToChatMessageId))
 
-	// return the message author or null for carl
+	// return the chat message author or null for carl
 	return repliedTo?.authorUserId ?? null
 }
 
@@ -156,8 +156,8 @@ export async function loadTeamChatMentions(
 		return new Map()
 	}
 
-	// every unseen row in these teams' own rooms, with the replied-to author resolved like the topic read
-	const repliedMessages = db
+	// every unseen row in these teams' own chat rooms, with the replied-to author resolved like the topic read
+	const repliedChatMessages = db
 		.select({ id: chatRoomMessages.id, authorUserId: chatRoomMessages.authorUserId })
 		.from(chatRoomMessages)
 		.as("replied_to")
@@ -166,11 +166,11 @@ export async function loadTeamChatMentions(
 			teamId: chatRoomMessages.teamId,
 			authorUsername: chatRoomMessages.authorUsername,
 			content: chatRoomMessages.content,
-			repliedToUserId: repliedMessages.authorUserId,
+			repliedToUserId: repliedChatMessages.authorUserId,
 		})
 		.from(chatRoomMentions)
 		.innerJoin(chatRoomMessages, eq(chatRoomMentions.messageId, chatRoomMessages.id))
-		.leftJoin(repliedMessages, eq(chatRoomMessages.replyToMessageId, repliedMessages.id))
+		.leftJoin(repliedChatMessages, eq(chatRoomMessages.replyToMessageId, repliedChatMessages.id))
 		.where(
 			and(
 				eq(chatRoomMentions.userId, userId),

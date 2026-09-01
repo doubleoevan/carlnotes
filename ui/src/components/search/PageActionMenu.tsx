@@ -3,13 +3,9 @@ import { useState } from "react"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog.tsx"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
+import { MENU_OPTION_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { usePageActions } from "@/stores/pageActionsStore"
-
-// one row in the dropdown menu
-const ACTION_OPTION_CLASS =
-	"hover:bg-accent flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-sm disabled:pointer-events-none disabled:opacity-50 sm:min-h-9"
 
 /**
  * The vertical dots menu at the end of the search bar. Each page registers its own options,
@@ -18,7 +14,7 @@ const ACTION_OPTION_CLASS =
 export function PageActionMenu() {
 	const pageActions = usePageActions()
 	const [isOpen, setIsOpen] = useState(false)
-	const [isFlagging, setIsFlagging] = useState(false)
+	const [isReporting, setIsReporting] = useState(false)
 
 	if (!pageActions) {
 		return null
@@ -38,14 +34,8 @@ export function PageActionMenu() {
 					</TooltipTrigger>
 					<TooltipContent>{label}</TooltipContent>
 				</Tooltip>
-				{/* nothing takes focus on open, so no option starts with the browser's focus ring */}
-				<PopoverContent
-					align="end"
-					alignOffset={-9}
-					sideOffset={13}
-					className="w-44 p-1"
-					onOpenAutoFocus={(event) => event.preventDefault()}
-				>
+				{/* nothing takes focus on open */}
+				<PopoverContent align="end" alignOffset={-9} sideOffset={13} className="w-44" bodyClassName="p-1">
 					{pageActions.options?.map((pageAction) => (
 						<button
 							key={pageAction.label}
@@ -54,7 +44,7 @@ export function PageActionMenu() {
 								setIsOpen(false)
 								pageAction.onSelect()
 							}}
-							className={ACTION_OPTION_CLASS}
+							className={MENU_OPTION_CLASS}
 						>
 							<pageAction.Icon
 								className={cn("size-4", pageAction.isActive ? "text-primary fill-current" : "text-muted-foreground")}
@@ -69,9 +59,9 @@ export function PageActionMenu() {
 									type="button"
 									onClick={() => {
 										setIsOpen(false)
-										setIsFlagging(true)
+										setIsReporting(true)
 									}}
-									className={ACTION_OPTION_CLASS}
+									className={MENU_OPTION_CLASS}
 								>
 									<Flag className="text-muted-foreground size-4" />
 									<span className="flex-1 text-left">Report issue</span>
@@ -84,13 +74,13 @@ export function PageActionMenu() {
 					)}
 				</PopoverContent>
 			</Popover>
-			{/* the flag issue dialog is only mounted while open, so its state resets each time */}
-			{isFlagging && pageActions.report && (
+			{/* the report issue dialog mounts only while open. its state resets on each close */}
+			{isReporting && pageActions.report && (
 				<ReportIssueDialog
 					subjectKind={pageActions.report.subjectKind}
 					subjectId={pageActions.report.subjectId}
 					subjectLabel={pageActions.report.subjectLabel}
-					onClose={() => setIsFlagging(false)}
+					onClose={() => setIsReporting(false)}
 				/>
 			)}
 		</>

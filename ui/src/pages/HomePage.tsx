@@ -33,7 +33,7 @@ export function HomePage() {
 		setTagFilters,
 		tagMatchMode,
 		knownTags,
-		reload,
+		reloadTopicFeed,
 		reheat,
 		reheatKey,
 		isReheating,
@@ -52,7 +52,7 @@ export function HomePage() {
 	const handleTopicCreated = async (topicId: string): Promise<void> => {
 		setIsNewTopicOpen(false)
 		navigate(`/topics/${topicId}`)
-		void reload()
+		void reloadTopicFeed()
 	}
 
 	// "+ New Topic" button opens the modal when signed in, otherwise it sends the visitor to sign up first

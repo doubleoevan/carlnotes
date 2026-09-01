@@ -9,4 +9,6 @@ Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker), `sch
   every model call, through LiteLLM.
 - Every scan stage charges the Scan's one Budget (`budget.ts`); nothing spends outside it.
 - Untrusted text is screened by LLM Guard (`guard.ts`) before any model reads it.
+- Every fetch of a user-supplied url goes through `fetchPublicUrl` (`scrape.ts`), which re-checks each
+  redirect hop against the private-address rule. `linkPreview.ts` reads a chat link's preview on that path.
 - Tests: `bun test worker`; `*.smoke.ts` hit real services and run under `doppler run`.

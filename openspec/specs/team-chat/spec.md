@@ -129,6 +129,8 @@ Each completion SHALL write exactly one ledger row through the existing chat spe
 
 Every message SHALL render with the author's avatar beside the bubble and their display name above it, in both the solo Coffee talk and the team room, never collapsed on consecutive messages from the same author — one component serves both rooms with no participant-count branching, and no bubble's author is ever inferred from position. Carl's avatar SHALL be the raccoon, the same art as the social avatar, bundled under the application source and imported by the component so the bundler hashes and caches it — never fetched per message or read from object storage. His display name is Carl.
 
+A message whose first url has a stored preview SHALL render that card below the bubble and above the shared files, showing the page's title, description, and proxied image. The card is an addition and never a replacement: the url SHALL stay in the message text exactly as it was written, so a reader always sees where a link actually goes. A message with no url, or one whose url has no stored preview, renders as it did before.
+
 The Coffee talk panel SHALL keep its docked width, with the expand toggle as the large-view control and the message column limited so a line of text stays in a comfortable reading range. A substantially wider docked panel was tried and rejected for covering too much of the page.
 
 #### Scenario: Consecutive messages keep their author
@@ -140,6 +142,11 @@ The Coffee talk panel SHALL keep its docked width, with the expand toggle as the
 
 - **WHEN** Carl's messages render
 - **THEN** his raccoon avatar loads as a hashed bundled asset with no per-message fetch
+
+#### Scenario: A link renders a card without losing the url
+
+- **WHEN** a message holding a previewed url renders
+- **THEN** the card shows below the bubble with the page's title, description, and an image served from this origin, and the message text still shows the url as written
 
 #### Scenario: Wide screens read comfortably
 
@@ -169,12 +176,22 @@ Messages record an author, and the author's username SHALL be included in the co
 
 ### Requirement: Shared files belong to the room
 
-A member MAY attach one file to a message — an image, a PDF, or text. The file belongs to the room: every member can download it, Carl reads it and may quote it for everyone, and each member may hold at most twenty shared files per room. Deletion belongs to the uploader and to any leader of the Team; deleting removes the file from Carl's future turns while his past answers stand. Downloads and deletion SHALL be gated by room membership at the API, never by the Topic's visibility. A member's privately kept chat material SHALL never enter a room turn, since the answer posts to everyone.
+A member MAY attach one file to a message — an image, a PDF, text, or a video. The file belongs to the room: every member can download it, Carl reads it and may quote it for everyone, and each member may hold at most twenty shared files per room. A video SHALL play in place in the message bubble above its name row, served inline under a video allowlist exactly as strict as the image one and honoring byte ranges, while every other stored kind stays a download; Carl SHALL read a fixed line saying the video cannot be watched, stored ready at post time so no description job runs or fails for it. The room post body SHALL be bounded at the same limit as a private chat turn's. Deletion belongs to the uploader and to any leader of the Team; deleting removes the file from Carl's future turns while his past answers stand. Downloads and deletion SHALL be gated by room membership at the API, never by the Topic's visibility. A member's privately kept chat material SHALL never enter a room turn, since the answer posts to everyone.
 
 #### Scenario: A shared file reaches everyone and only them
 
 - **WHEN** a member shares a file with a message
 - **THEN** every member can download it and Carl can cite it, a non-member's download answers 404, and a plain member who neither uploaded it nor leads the Team cannot delete it
+
+#### Scenario: A shared clip plays in the bubble and stays deletable
+
+- **WHEN** a member shares an mp4 with a message
+- **THEN** the bubble plays it in place from the membership-gated url, its name row still downloads it, the uploader or a leader can delete it, and after deletion the url answers 404
+
+#### Scenario: Carl reads a line instead of watching
+
+- **WHEN** a room turn runs while a shared video is in the room
+- **THEN** the attachments block lists the file by name and uploader with a fixed line saying it cannot be watched, and its row never reaches a failed status for lacking a description
 
 ### Requirement: The context window is budgeted
 

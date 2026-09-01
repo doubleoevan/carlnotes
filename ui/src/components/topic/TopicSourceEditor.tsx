@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { cn } from "@/lib/utils"
 import { toScreeningNote } from "./TopicInfo"
+import type { TopicFields } from "./useTopicFields"
 
 // a source staged by the picker or by a suggestion: the custom source option it came from, and its typed value
 export type AddedSource = { optionKey: string; value: string; name?: string }
@@ -39,35 +40,26 @@ function toStagedSummary(added: AddedSource): string {
 	return (option && config && toSourceSummary(option.sourceKind, config)) || added.value
 }
 
-// the source editor props: the default sources switched on by key, the kept stored sources, the pending new ones
-type TopicSourceEditorProps = {
-	defaultSourceKeys: string[]
-	keptSources: TopicResponse["sources"]
-	addedSources: AddedSource[]
-	topicName: string
-	topicPrompt: string
-	topicAttachmentContext: string
-	promptSourceUrls: string[]
-	onDefaultKeysChange: (keys: string[]) => void
-	onKeptChange: (sources: TopicResponse["sources"]) => void
-	onAddedChange: (sources: AddedSource[]) => void
-}
+// the editor reads and writes the topic being edited, taking its fields whole
+type TopicSourceEditorProps = { fields: TopicFields }
 
 /**
  * The sources editor: a row per default source, then the custom rows with an ✕ to remove, and the source option/value add picker
  */
-export function TopicSourceEditor({
-	defaultSourceKeys,
-	keptSources,
-	addedSources,
-	topicName,
-	topicPrompt,
-	topicAttachmentContext,
-	promptSourceUrls,
-	onDefaultKeysChange,
-	onKeptChange,
-	onAddedChange,
-}: TopicSourceEditorProps) {
+export function TopicSourceEditor({ fields }: TopicSourceEditorProps) {
+	// the fields the editor reads, and the setters it writes through
+	const {
+		defaultSourceKeys,
+		keptSources,
+		addedSources,
+		promptSourceUrls,
+		name: topicName,
+		prompt: topicPrompt,
+		attachmentContext: topicAttachmentContext,
+		setDefaultSourceKeys,
+		setKeptSources,
+		setAddedSources,
+	} = fields
 	// the add-source picker's open state with its pending option and value
 	const [isAdding, setIsAdding] = useState(false)
 	const [newOptionKey, setNewOptionKey] = useState("rss")
@@ -107,7 +99,7 @@ export function TopicSourceEditor({
 				value: suggestion.value,
 				name: suggestion.name,
 			}))
-			onAddedChange([...addedSources, ...suggestedSources])
+			setAddedSources([...addedSources, ...suggestedSources])
 		} catch (error) {
 			console.error("source suggestions failed", error)
 			toast.error("Carl couldn't think of any.\n Try again in a moment.")
@@ -126,16 +118,16 @@ export function TopicSourceEditor({
 	}
 
 	// a default source turns on by adding its key and off by dropping it. the save builds its config from the registry
-	const handleAddDefaultSource = (key: string): void => onDefaultKeysChange([...defaultSourceKeys, key])
+	const handleAddDefaultSource = (key: string): void => setDefaultSourceKeys([...defaultSourceKeys, key])
 	const handleRemoveDefaultSource = (key: string): void =>
-		removeSource(() => onDefaultKeysChange(defaultSourceKeys.filter((defaultKey) => defaultKey !== key)))
+		removeSource(() => setDefaultSourceKeys(defaultSourceKeys.filter((defaultKey) => defaultKey !== key)))
 
 	// stage the selected source and reset the picker, skipping an exact duplicate
 	const handleAddSource = (): void => {
 		const value = newValue.trim()
 		const isDuplicateSource = addedSources.some((added) => added.optionKey === newOptionKey && added.value === value)
 		if (value && !isDuplicateSource) {
-			onAddedChange([...addedSources, { optionKey: newOptionKey, value }])
+			setAddedSources([...addedSources, { optionKey: newOptionKey, value }])
 		}
 		setNewValue("")
 		setIsAdding(false)
@@ -173,7 +165,9 @@ export function TopicSourceEditor({
 						sourceKind={source.sourceKind}
 						summary={source.summary}
 						screening={toScreeningNote(source)}
-						onRemove={() => removeSource(() => onKeptChange(keptSources.filter((kept) => kept.id !== source.id)))}
+						onRemoveTopicSource={() =>
+							removeSource(() => setKeptSources(keptSources.filter((kept) => kept.id !== source.id)))
+						}
 					/>
 				))}
 				{addedSources.map((source, sourceIndex) => (
@@ -181,8 +175,8 @@ export function TopicSourceEditor({
 						key={`${source.optionKey}-${source.value}`}
 						sourceKind={toCustomSourceOption(source.optionKey)?.label ?? source.optionKey}
 						summary={toStagedSummary(source)}
-						onRemove={() =>
-							removeSource(() => onAddedChange(addedSources.filter((_, addedIndex) => addedIndex !== sourceIndex)))
+						onRemoveTopicSource={() =>
+							removeSource(() => setAddedSources(addedSources.filter((_, addedIndex) => addedIndex !== sourceIndex)))
 						}
 					/>
 				))}
@@ -349,7 +343,7 @@ function TopicDefaultSource({
 			</button>
 		)
 	}
-	return <TopicSource sourceKind={label} summary={summary} onRemove={onTurnOff} />
+	return <TopicSource sourceKind={label} summary={summary} onRemoveTopicSource={onTurnOff} />
 }
 
 // a tiny source section label inside the sources field
@@ -362,12 +356,12 @@ function TopicSource({
 	sourceKind,
 	summary,
 	screening,
-	onRemove,
+	onRemoveTopicSource,
 }: {
 	sourceKind: string
 	summary: string
 	screening?: string | null
-	onRemove: () => void
+	onRemoveTopicSource: () => void
 }) {
 	return (
 		<div className="flex items-center gap-2 text-sm">
@@ -383,7 +377,7 @@ function TopicSource({
 					<button
 						type="button"
 						aria-label={`Remove ${sourceKind} source`}
-						onClick={onRemove}
+						onClick={onRemoveTopicSource}
 						className="text-muted-foreground hover:text-foreground shrink-0"
 					>
 						<X className="size-3.5" />

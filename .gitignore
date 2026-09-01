@@ -39,6 +39,9 @@ coverage
 # Claude Code machine-local settings (launch.json and settings.json are committed)
 .claude/settings.local.json
 
+# Claude Code local git worktrees. a worktree is a whole checkout, never repository content
+.claude/worktrees/
+
 # Editor project files
 .idea/
 *.iml
@@ -52,3 +55,7 @@ coverage
 
 # the playwright mcp server's screenshot and console cache
 .playwright-mcp/
+
+# one-off migrations and probes run by hand from a developer's machine.
+# a script here never joins the build graph. biome reads these files as skipped too.
+*.local.ts

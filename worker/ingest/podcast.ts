@@ -64,7 +64,7 @@ export async function searchPodcasts(searchTerm: string): Promise<Podcast[]> {
 }
 
 /**
- * The one show a podcast id names, or null when iTunes doesn't find it.
+ * The one show a podcast id names, or null if iTunes doesn't find it.
  */
 export async function lookupPodcast(podcastId: string): Promise<Podcast | null> {
 	// an unknown id returns an empty result instead of an error, so absence is read from the body, not the status

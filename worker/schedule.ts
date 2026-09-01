@@ -40,7 +40,7 @@ export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSwe
 	// a Source row is written before its llm-guard screen starts
 	await screenPendingSources()
 
-	// scans run on Temporal, so a queue with no worker behind it means nothing is scanning while every caller still
+	// scans run on Temporal, so a queue with no worker for it means nothing is scanning while every caller still
 	await reportUnpolledScanQueue()
 
 	// the Topics scheduled for this sweep, and a summary of what the sweep does for logging
@@ -130,7 +130,7 @@ async function startUndispatchedScans(): Promise<void> {
  * Report when nothing is polling the Scan queue
  */
 async function reportUnpolledScanQueue(): Promise<void> {
-	// this check polls whether a reachable server has a worker behind the queue, so it never fails the sweep itself
+	// this check polls whether a reachable server has a worker for the queue, so it never fails the sweep itself
 	try {
 		// no poller means no scans will run
 		if ((await countScanQueuePollers()) === 0) {

@@ -156,7 +156,7 @@ function ActivitySections({
 		</div>
 	)
 
-	// what an activity section shows when it is empty
+	// what an activity section shows if it is empty
 	function EmptyActivitySection({ children }: { children: React.ReactNode }) {
 		return <p className="text-muted-foreground pb-4 pl-4 text-sm">{children} You know the one.</p>
 	}

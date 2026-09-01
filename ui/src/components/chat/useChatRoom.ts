@@ -1,172 +1,173 @@
-// the room conversation state for one team topic
-import { hasAllMention, hasCarlMention, isCarlMessage } from "@shared/chatMentions"
+// the chat room conversation state for one team topic
+import { hasAllMention, hasModelMention, isModelChatMessage } from "@shared/chatMentions"
 import type { ChatAttachment, ChatRoomMessage } from "@shared/contracts"
 import { useEffect, useRef, useState } from "react"
-import { fetchChatRoomMessages, sendChatRoomMessage, toChatRoomEventsUrl } from "@/clients/chatRoomClient"
-
-// a dropped stream reconnects with exponential backoff from this base
-const RECONNECT_BASE_MS = 1000
-
-// the backoff never waits longer than this
-const RECONNECT_MAX_MS = 30_000
-
-// silence past this long means the stream is dead. the server pings well inside it
-const STALE_STREAM_MS = 60_000
+import { fetchChatRoomMessageLinkPreviews, fetchChatRoomMessages, sendChatRoomMessage } from "@/clients/chatRoomClient"
+import { useChatRoomStream } from "@/components/chat/useChatRoomStream"
+import { hasPreviewableLink } from "@/components/common/LinkPreviewCard"
 
 export type ChatRoomState = {
-	messages: ChatRoomMessage[]
+	chatMessages: ChatRoomMessage[]
 	isLoaded: boolean
-	// true when the room routes answered 404, so the panel can fall back to nothing
+	// true if the chat room routes answered 404, so the panel can fall back to nothing
 	isRefused: boolean
 	// Carl's budget refusal, delivered only to the poster it answered
 	refusalReason: string | null
 	clearRefusalReason: () => void
-	// whether carl owes the room an answer, for the shimmer under the chat messages
-	isCarlThinking: boolean
-	send: (content: string, replyToMessageId: number | null, attachments: ChatAttachment[]) => Promise<void>
+	// whether carl owes the chat room an answer, for the shimmer under the chat messages
+	isMessageLoading: boolean
+	postChatMessage: (
+		content: string,
+		replyToChatMessageId: number | null,
+		attachments: ChatAttachment[],
+	) => Promise<void>
 	// re-read every chat message, for a change the stream never announces, like a removed file
-	refresh: () => Promise<void>
+	reloadChatMessages: () => Promise<void>
+	// the fresh chat messages with links whose link preview cards are still loading in the background
+	loadingChatMessageIds: Set<number>
 }
 
-// a null topic is the team's own room on its team page
+// a null topic is the team's own chat room on its team page
 export function useChatRoom(topicId: string | null, teamId: string): ChatRoomState {
-	const [messages, setMessages] = useState<ChatRoomMessage[]>([])
+	const [chatMessages, setChatMessages] = useState<ChatRoomMessage[]>([])
 	const [isLoaded, setIsLoaded] = useState(false)
 	const [isRefused, setIsRefused] = useState(false)
 	const [refusalReason, setRefusalReason] = useState<string | null>(null)
-	// whether carl owes the room an answer. a send that addressed him sets it, and his reply clears it
-	const [isCarlThinking, setIsCarlThinking] = useState(false)
-	// the highest message id seen, which every reconnect resumes from
-	const cursorRef = useRef(0)
+	// whether carl owes the chat room an answer. a send that addressed him sets it, and his reply clears it
+	const [isMessageLoading, setIsMessageLoading] = useState(false)
 
-	// load the chat messages once, then follow the stream from its end
-	useEffect(() => {
-		let source: EventSource | null = null
-		let retryTimer: ReturnType<typeof setTimeout> | undefined
-		let failedAttempts = 0
-		let lastResponseTime = Date.now()
+	// each loading chat message id with the attempts it has left, the timer for the next one, and the loading ids
+	const linkPreviewAttemptsRef = useRef(new Map<number, number>())
+	const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const [loadingChatMessageIds, setLoadingChatMessageIds] = useState<Set<number>>(new Set())
 
-		// a stream that goes silent past the server's heartbeat is dead, even if no error event fired
-		const staleCheck = setInterval(() => {
-			if (source && Date.now() - lastResponseTime > STALE_STREAM_MS) {
-				clearTimeout(retryTimer)
-				source.close()
-				source = null
-				connect()
-			}
-		}, STALE_STREAM_MS / 4)
-		// whether this effect still owns the room, flipped off by the cleanup
-		let isCurrentRoom = true
+	// one refresh: read just the loading chat messages' cards, merge any that landed, and keep loading the rest
+	const runLinkPreviewRefresh = async (): Promise<void> => {
+		linkPreviewTimerRef.current = null
+		const loadingLinkPreviewIds = [...linkPreviewAttemptsRef.current.keys()]
+		const linkPreviewsById = await fetchChatRoomMessageLinkPreviews(topicId, teamId, loadingLinkPreviewIds)
 
-		// each connect resumes past the cursor, so a drop replays nothing
-		const connect = (): void => {
-			lastResponseTime = Date.now()
-			source = new EventSource(toChatRoomEventsUrl(topicId, teamId, cursorRef.current))
-			source.addEventListener("message", (event) => {
-				// a reconnect can overlap the cursor by one message, so only what is new appends
-				lastResponseTime = Date.now()
-				const message = JSON.parse(event.data) as ChatRoomMessage
-				cursorRef.current = Math.max(cursorRef.current, message.id)
-				setMessages((known) => (known.some((existing) => existing.id === message.id) ? known : [...known, message]))
-				// carl's arriving message ends the wait his mention started
-				if (isCarlMessage(message)) {
-					setIsCarlThinking(false)
-				}
-			})
-
-			// the heartbeat only marks the stream alive
-			source.addEventListener("ping", () => {
-				lastResponseTime = Date.now()
-			})
-
-			// a stream that opens resets the backoff
-			source.addEventListener("open", () => {
-				failedAttempts = 0
-			})
-
-			// the browser's own retry reuses a stale cursor, so the reconnect is ours
-			source.addEventListener("error", () => {
-				source?.close()
-				retryTimer = setTimeout(connect, toReconnectDelayMs(failedAttempts))
-				failedAttempts += 1
-			})
+		// each loading chat message: merge its cards if they landed, else keep loading while tries remain
+		const loadingChatMessageIds = new Set<number>()
+		for (const [chatMessageId, tries] of linkPreviewAttemptsRef.current) {
+			mergeLoadingChatMessage(chatMessageId, tries, linkPreviewsById[chatMessageId] ?? [], loadingChatMessageIds)
 		}
 
-		// the chat messages set the loading state even when the room is empty
-		fetchChatRoomMessages(topicId, teamId).then((chatMessages) => {
-			if (!isCurrentRoom) {
-				return
+		// load again while any chat message is still bare with tries left
+		setLoadingChatMessageIds(loadingChatMessageIds)
+		if (loadingChatMessageIds.size > 0) {
+			scheduleLinkPreviewRefresh()
+		}
+	}
+
+	// merge a chat message's cards if they landed, otherwise decrement its tries and keep it loading
+	const mergeLoadingChatMessage = (
+		chatMessageId: number,
+		tries: number,
+		linkPreviews: ChatRoomMessage["linkPreviews"],
+		stillLoading: Set<number>,
+	): void => {
+		// cards landed: merge them into the chat message and drop it from the loading set
+		if (linkPreviews.length > 0) {
+			linkPreviewAttemptsRef.current.delete(chatMessageId)
+			setChatMessages((known) =>
+				known.map((chatMessage) => (chatMessage.id === chatMessageId ? { ...chatMessage, linkPreviews } : chatMessage)),
+			)
+			return
+		}
+
+		// still bare: keep loading while it has tries, otherwise give up on it
+		if (tries > 1) {
+			linkPreviewAttemptsRef.current.set(chatMessageId, tries - 1)
+			stillLoading.add(chatMessageId)
+		} else {
+			linkPreviewAttemptsRef.current.delete(chatMessageId)
+		}
+	}
+
+	// the next refresh runs once, a beat later, if one is not already booked
+	const scheduleLinkPreviewRefresh = (): void => {
+		linkPreviewTimerRef.current ??= setTimeout(() => void runLinkPreviewRefresh(), 2500)
+	}
+
+	// unmounting cancels the pending refresh
+	useEffect(() => {
+		return () => {
+			if (linkPreviewTimerRef.current) {
+				clearTimeout(linkPreviewTimerRef.current)
 			}
+		}
+	}, [])
+
+	// the stream owns opening, resuming, and reconnecting. this hook only says what to do with what arrives
+	useChatRoomStream(topicId, teamId, {
+		onChatMessagesLoaded: (chatMessages) => {
 			// a failed load means no chat room for this user, and the stream never opens
 			if (chatMessages === null) {
 				setIsRefused(true)
 				setIsLoaded(true)
 				return
 			}
-			// the chat messages arrive, and the stream resumes from its end
-			setMessages(chatMessages)
-			cursorRef.current = chatMessages.at(-1)?.id ?? 0
+			setChatMessages(chatMessages)
 			setIsLoaded(true)
-			connect()
-		})
+		},
+		onChatMessage: (chatMessage) => {
+			setChatMessages((known) =>
+				known.some((existing) => existing.id === chatMessage.id) ? known : [...known, chatMessage],
+			)
+			// a fresh chat message with a link loads under it until its cards land
+			if (hasPreviewableLink(chatMessage.content) && chatMessage.linkPreviews.length === 0) {
+				linkPreviewAttemptsRef.current.set(chatMessage.id, 6)
+				setLoadingChatMessageIds((loading) => new Set(loading).add(chatMessage.id))
+				scheduleLinkPreviewRefresh()
+			}
+			// carl's arriving chat message ends the wait his chat mention started
+			if (isModelChatMessage(chatMessage)) {
+				setIsMessageLoading(false)
+			}
+		},
+	})
 
-		// leaving the topic closes the chat stream and cancels any pending reconnect
-		return () => {
-			isCurrentRoom = false
-			source?.close()
-			clearTimeout(retryTimer)
-			clearInterval(staleCheck)
-		}
-	}, [topicId, teamId])
-
-	// the posted message arrives back through the stream
-	const send = async (
+	// the posted chat message arrives back through the stream
+	const postChatMessage = async (
 		content: string,
-		replyToMessageId: number | null,
+		replyToChatMessageId: number | null,
 		attachments: ChatAttachment[],
 	): Promise<void> => {
-		const postResponse = await sendChatRoomMessage(topicId, teamId, content, replyToMessageId, attachments)
+		const postResponse = await sendChatRoomMessage(topicId, teamId, content, replyToChatMessageId, attachments)
 		if (postResponse === "attachmentRefused") {
 			setRefusalReason("Those files didn't post. One may be unreadable, or you have shared too many files here.")
 			return
 		}
 		setRefusalReason(postResponse?.refusalReason ?? null)
 
-		// a send that gives carl the turn starts the wait his reply or refusal ends
-		const repliedTo = replyToMessageId === null ? undefined : messages.find((known) => known.id === replyToMessageId)
-		const isCarlTurn =
-			hasCarlMention(content) || hasAllMention(content) || (repliedTo !== undefined && isCarlMessage(repliedTo))
-		if (isCarlTurn && postResponse !== null && postResponse.refusalReason === null) {
-			setIsCarlThinking(true)
+		// a post that gives carl the chat turn starts the wait his reply or refusal ends
+		const repliedTo =
+			replyToChatMessageId === null ? undefined : chatMessages.find((known) => known.id === replyToChatMessageId)
+		const isModelChatTurn =
+			hasModelMention(content) || hasAllMention(content) || (repliedTo !== undefined && isModelChatMessage(repliedTo))
+		if (isModelChatTurn && postResponse !== null && postResponse.refusalReason === null) {
+			setIsMessageLoading(true)
 		}
 	}
 
 	// re-read every chat message, for a change the stream never announces, like a removed file
-	const refresh = async (): Promise<void> => {
+	const reloadChatMessages = async (): Promise<void> => {
 		const chatMessages = await fetchChatRoomMessages(topicId, teamId)
 		if (chatMessages !== null) {
-			setMessages(chatMessages)
+			setChatMessages(chatMessages)
 		}
 	}
 
 	return {
-		messages,
+		chatMessages,
 		isLoaded,
 		isRefused,
 		refusalReason,
-		isCarlThinking,
+		isMessageLoading,
 		clearRefusalReason: () => setRefusalReason(null),
-		send,
-		refresh,
+		postChatMessage,
+		reloadChatMessages,
+		loadingChatMessageIds,
 	}
-}
-
-/**
- * The wait before the next reconnect: doubled per failed attempt up to the limit, then jittered
- * down by up to half so reconnecting clients spread apart.
- */
-export function toReconnectDelayMs(failedAttempts: number): number {
-	// double per failed attempt, never past the limit
-	const backoffMs = Math.min(RECONNECT_BASE_MS * 2 ** failedAttempts, RECONNECT_MAX_MS)
-	return backoffMs * (0.5 + Math.random() / 2)
 }

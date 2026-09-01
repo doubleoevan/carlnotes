@@ -90,7 +90,7 @@ function useTopicFeedState() {
 	})
 
 	// re-fetch the feed, reporting whether fresh data arrived
-	const reload = useCallback(async () => {
+	const reloadTopicFeed = useCallback(async () => {
 		return (await refetch()).isSuccess
 	}, [refetch])
 
@@ -101,13 +101,13 @@ function useTopicFeedState() {
 		setIsReheating(true)
 		try {
 			// the key only bumps on a reload that arrived
-			if (await reload()) {
+			if (await reloadTopicFeed()) {
 				setReheatKey((previousKey) => previousKey + 1)
 			}
 		} finally {
 			setIsReheating(false)
 		}
-	}, [reload])
+	}, [reloadTopicFeed])
 
 	// clear filters on route navigation, so a page that offers none of them never leaves one applied
 	const { pathname } = useLocation()
@@ -206,7 +206,7 @@ function useTopicFeedState() {
 		[topicFeed, resourceKinds, findingFilter, sort, tagFilters, tagMatchMode],
 	)
 	return {
-		// the filtered feed and the finding filter and sort state behind it
+		// the filtered feed and the finding filter and sort state for it
 		topicFeed: filteredTopicFeed,
 		findingFilter,
 		setFindingFilter,
@@ -222,7 +222,7 @@ function useTopicFeedState() {
 		bookmarkScope,
 		setBookmarkScope,
 		knownTags,
-		reload,
+		reloadTopicFeed,
 		reheat,
 		reheatKey,
 		isReheating,

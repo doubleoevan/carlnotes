@@ -56,6 +56,33 @@ jobs:
           done
           LLM_GUARD_URL=http://localhost:8001 bun scripts/eval-pipeline.ts --guard-only | tee measurement.txt
 
+      # close upgrade llm-guard GitHub issues that the pinned version has caught up with or a newer release has replaced.
+      # the titles use this workflow's own fixed format. anything not matching the current pair is considered done.
+      # either the bump landed (no update pending) or the pair it named is no longer the one to decide on
+      - if: steps.check.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED: ${{ steps.check.outputs.pinned }}
+          LATEST: ${{ steps.check.outputs.latest }}
+          UPDATE: ${{ steps.check.outputs.update }}
+        run: |
+          current="Upgrade LLM Guard: $PINNED -> $LATEST"
+          gh issue list --state open --json number,title \
+            --jq '.[] | select(.title | startswith("Upgrade LLM Guard: ")) | [.number, .title] | @tsv' |
+          while IFS=$'\t' read -r number title; do
+            # the pair still awaiting a decision stays open
+            if [[ "$UPDATE" == "true" && "$title" == "$current" ]]; then
+              continue
+            fi
+            if [[ "$UPDATE" == "true" ]]; then
+              reason="Superseded: the newest release is now \`$LATEST\` and the pinned tag is \`$PINNED\`. A fresh issue includes the current pair."
+            else
+              reason="The pinned tag is now \`$PINNED\`, so this upgrade has landed. Closed automatically by \`.github/workflows/llm-guard-update.yml\`."
+            fi
+            gh issue close "$number" --comment "$reason"
+            echo "closed #$number: $title"
+          done
+
       # one open issue per version pair, carrying the measurement so the decision arrives pre-made
       - if: steps.check.outputs.update == 'true'
         env:
@@ -77,7 +104,7 @@ jobs:
 
           $measurement
 
-          Upgrade ritual:
+          Upgrade steps:
           1. Bump the tag in \`docker-compose.yml\` and on the Northflank llm-guard service.
           2. Read both rates together — a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate. If either moved from the README's published numbers, retune \`LLM_GUARD_INJECTION_THRESHOLD\` before deploying.
 

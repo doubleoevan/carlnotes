@@ -2,26 +2,37 @@
 export {
 	AttachmentValidationError,
 	extractText,
-	generateContext,
 	generateImageContext,
+	generatePdfContext,
 	ingestAttachment,
 	ingestUrlAttachment,
 	MAX_ATTACHMENT_BYTES,
 } from "./attach"
 export { type ChatReplyStream, type ChatTurnInput, streamChatReply } from "./chat"
 export { lookupPodcast } from "./ingest/podcast"
+export {
+	fetchLinkPreviewImage,
+	fetchLinkPreviewMetadata,
+	type LinkPreviewMetaTags,
+	toLinkPreviewUrls,
+	toNormalizedLinkPreviewUrl,
+} from "./linkPreview"
+export { isBudgetRejection, SPENT_BUDGET_REFUSAL } from "./models"
 export { sendManualScanEmail } from "./notify"
 export { loadScan, scanTopic, startTopicScan, stopTopicScan } from "./scan"
 export { failStaleScans, runScheduledTopicScans } from "./schedule"
+export { toYoutubeVideoId } from "./scrape"
 export { screenPendingSources, screenTopicSources } from "./screen"
 export {
 	attachmentExists,
+	attachmentRangeStream,
 	attachmentStream,
 	deleteAttachment,
 	getAttachmentBytes,
-	putAttachment,
 	toChatAttachmentKey,
 	toChatRoomAttachmentKey,
+	toLinkPreviewImageKey,
+	uploadAttachment,
 } from "./store"
 export { type SuggestedSource, suggestSources, toSourceKey } from "./suggest"
 // trace the model-calls that the scheduled worker does

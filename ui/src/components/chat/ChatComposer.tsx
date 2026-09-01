@@ -1,12 +1,13 @@
-import { CHAT_QUESTION_CHARS, type ChatAttachment, type KeptChatAttachment } from "@shared/contracts"
-import { ArrowUp, FileText, FileX2, Image, Minus, Paperclip, Square, X } from "lucide-react"
+import { CHAT_QUESTION_CHARS, type KeptChatAttachment } from "@shared/contracts"
+import { ArrowUp, FileText, FileX2, Film, Image, Minus, Paperclip, Square, X } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { ChatAttachmentChips } from "@/components/chat/ChatAttachmentChips"
+import type { TopicChat } from "@/components/chat/useTopicChat"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
-import { FILE_PICKER_ACCEPT, isWideScreen } from "@/lib/utils"
+import { CHAT_FILE_PICKER_ACCEPT, isWideScreen } from "@/lib/utils"
 
 // how tall the question box may grow before it scrolls inside itself
 const MAX_QUESTION_BOX_HEIGHT_PX = 120
@@ -18,32 +19,15 @@ const MAX_QUESTION_BOX_HEIGHT_PX = 120
 export const CHAT_QUESTION_PLACEHOLDER = "Hand-crafted notes are richer…"
 
 export function ChatComposer({
-	question,
-	attachments,
-	keptAttachments,
-	isStreaming,
-	isSignupRequired,
-	onChange,
-	onAddFiles,
-	onAddPastedText,
-	onRemoveAttachment,
-	onRemoveKeptAttachment,
-	onSend,
-	onStop,
+	chat,
+	onSendQuestion,
 }: {
-	question: string
-	attachments: ChatAttachment[]
-	keptAttachments: KeptChatAttachment[]
-	isStreaming: boolean
-	isSignupRequired: boolean
-	onChange: (value: string) => void
-	onAddFiles: (files: File[]) => Promise<void>
-	onAddPastedText: (text: string) => void
-	onRemoveAttachment: (index: number) => void
-	onRemoveKeptAttachment: (keptAttachmentId: string) => Promise<void>
-	onSend: () => void
-	onStop: () => void
+	// the conversation the composer writes into, which owns the draft, its attachments, and the stream
+	chat: TopicChat
+	// a visitor's send routes to the signup instead of the conversation
+	onSendQuestion: () => void
 }) {
+	const { question, attachments, keptAttachments, isStreaming, isSignupRequired } = chat
 	const questionBoxRef = useRef<HTMLTextAreaElement>(null)
 
 	// a wide screen focuses the composer as soon as the panel opens, so the user can just start typing
@@ -67,10 +51,10 @@ export function ChatComposer({
 	}, [question])
 
 	// Enter sends the question and Shift+Enter starts a new line
-	function handleQuestionKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
+	function handleSendQuestion(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
 		if (event.key === "Enter" && !event.shiftKey) {
 			event.preventDefault()
-			onSend()
+			onSendQuestion()
 		}
 	}
 
@@ -79,7 +63,7 @@ export function ChatComposer({
 		const files = Array.from(event.clipboardData.files)
 		if (files.length > 0) {
 			event.preventDefault()
-			void onAddFiles(files)
+			void chat.addFiles(files)
 			return
 		}
 
@@ -87,7 +71,7 @@ export function ChatComposer({
 		const text = event.clipboardData.getData("text")
 		if (question.length + text.length > CHAT_QUESTION_CHARS) {
 			event.preventDefault()
-			onAddPastedText(text)
+			chat.addPastedText(text)
 		}
 	}
 
@@ -97,20 +81,20 @@ export function ChatComposer({
 			className="shrink-0 border-t px-3 py-2.5"
 			onSubmit={(event) => {
 				event.preventDefault()
-				onSend()
+				onSendQuestion()
 			}}
 		>
 			{/* attachments show as chips in the input, each is removable until the send */}
-			{<ChatAttachmentChips attachments={attachments} onRemove={onRemoveAttachment} />}
+			{<ChatAttachmentChips attachments={attachments} onRemove={chat.removeAttachment} />}
 			<FileDropZone
 				className="bg-background rounded-2xl border px-3 py-2"
 				onDropFiles={(files) => {
 					// a visitor's file drop routes to the signup
 					if (isSignupRequired) {
-						onSend()
+						onSendQuestion()
 						return
 					}
-					void onAddFiles(files)
+					void chat.addFiles(files)
 				}}
 			>
 				{/* the input box is 16px to keep the panel on the screen. autocomplete is off,
@@ -120,8 +104,8 @@ export function ChatComposer({
 					rows={1}
 					value={question}
 					maxLength={CHAT_QUESTION_CHARS}
-					onChange={(event) => onChange(event.target.value)}
-					onKeyDown={handleQuestionKeyDown}
+					onChange={(event) => chat.setQuestion(event.target.value)}
+					onKeyDown={handleSendQuestion}
 					onPaste={handlePaste}
 					placeholder={CHAT_QUESTION_PLACEHOLDER}
 					aria-label="Ask about this topic"
@@ -133,11 +117,11 @@ export function ChatComposer({
 					{/* the add and remove attachment buttons sit next to each other */}
 					<div className="flex shrink-0 items-center">
 						{/* a visitor's attachment routes to the signup page */}
-						<AttachButton isSignupRequired={isSignupRequired} onSelect={onAddFiles} onSignup={onSend} />
+						<AttachButton isSignupRequired={isSignupRequired} onSelect={chat.addFiles} onSignup={onSendQuestion} />
 						{keptAttachments.length > 0 && (
 							<KeptAttachmentsButton
 								keptAttachments={keptAttachments}
-								onRemoveKeptAttachment={onRemoveKeptAttachment}
+								onRemoveKeptAttachment={chat.removeKeptAttachment}
 							/>
 						)}
 					</div>
@@ -149,7 +133,7 @@ export function ChatComposer({
 								type="button"
 								aria-label="Clear draft"
 								onClick={() => {
-									onChange("")
+									chat.setQuestion("")
 									questionBoxRef.current?.focus()
 								}}
 								className={ICON_BUTTON_CLASS}
@@ -162,7 +146,7 @@ export function ChatComposer({
 							<button
 								type="button"
 								aria-label="Stop"
-								onClick={onStop}
+								onClick={chat.stop}
 								className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
 							>
 								<Square className="size-3 fill-current" />
@@ -215,7 +199,7 @@ function KeptAttachmentsButton({
 				</TooltipTrigger>
 				<TooltipContent>Clear files or photos</TooltipContent>
 			</Tooltip>
-			<PopoverContent align="start" className="w-64 p-2 text-sm">
+			<PopoverContent align="start" className="w-64 text-sm" bodyClassName="p-2">
 				{/* the minimize button in the corner of the panel closes the attachments menu */}
 				<Tooltip>
 					<TooltipTrigger asChild>
@@ -236,6 +220,8 @@ function KeptAttachmentsButton({
 					<div key={keptAttachment.id} className="flex min-w-0 items-center gap-2 rounded-md px-1 py-1">
 						{keptAttachment.kind === "image" ? (
 							<Image aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />
+						) : keptAttachment.kind === "video" ? (
+							<Film aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />
 						) : (
 							<FileText aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0" />
 						)}
@@ -291,7 +277,7 @@ function AttachButton({
 				ref={inputRef}
 				type="file"
 				multiple
-				accept={FILE_PICKER_ACCEPT}
+				accept={CHAT_FILE_PICKER_ACCEPT}
 				className="hidden"
 				onChange={(event) => {
 					void onSelect(Array.from(event.target.files ?? []))

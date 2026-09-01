@@ -9,7 +9,7 @@ export type AppEnv = { Variables: { user: SessionUser | null } }
 // a request context under that environment
 export type AppContext = Context<AppEnv>
 
-// resolves the signed-in user's id from the session set on the request context. null when unauthenticated
+// resolves the signed-in user's id from the session set on the request context. null if unauthenticated
 export function currentUser(context: AppContext): string | null {
 	return context.get("user")?.id ?? null
 }

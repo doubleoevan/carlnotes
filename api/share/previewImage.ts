@@ -35,7 +35,7 @@ export type CardNode = {
 /**
  * The rendered avatar's identity in a card's stored key.
  *
- * A stored upload's avatar key already includes its own stamp, and a provider photo's url changes when the photo does,
+ * A stored upload's avatar key already includes its own random id, and a provider photo's url changes when the photo does,
  * so either one changing is enough to give the preview card a new url.
  */
 export function toAvatarIdentity(avatar: PublishedAvatar): string {

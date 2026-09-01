@@ -18,7 +18,7 @@ import {
 	tokenCost,
 } from "../budget"
 import { screenText, toFlaggedReason } from "../guard"
-import { cheapModel, scoreModel } from "../models"
+import { cheapModel, isBudgetRejection, scoreModel } from "../models"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
 import { filterPremiumPrompt, writePrompt } from "../prompts/write"
@@ -152,6 +152,10 @@ async function fetchAndScoreResource(
 		}
 		return { status: "kept", finding: keptFinding }
 	} catch (error) {
+		// a spent budget ends the whole Scan. every Resource left would meet the same rejection
+		if (isBudgetRejection(error)) {
+			throw error
+		}
 		// this Resource was paid for and produced nothing, so it is worth alerting on
 		console.error(`review failed for resource ${resource.id}`, error)
 		reportError(error, "score", { resourceId: resource.id, url: resource.url })
@@ -191,7 +195,7 @@ async function fetchResourceContent(
 	return fetchAndStoreContent(resource, budget)
 }
 
-// read a Resource's stored text or null when the object is gone or unreadable
+// read a Resource's stored text or null if the object is gone or unreadable
 async function readStoredContent(contentKey: string, resourceId: string): Promise<string | null> {
 	try {
 		return await getResourceContent(contentKey)
@@ -229,7 +233,7 @@ async function fetchAndStoreContent(
 	}
 }
 
-// write the fetched text to object storage, returning its key and size, or null when the write fails
+// write the fetched text to object storage, returning its key and size, or null if the write fails
 async function storeResourceContent(
 	resourceId: string,
 	text: string,

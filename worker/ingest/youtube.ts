@@ -103,7 +103,7 @@ const YOUTUBE_HANDLE_PATTERN = /^@[\w.-]+$/
 const CANONICAL_CHANNEL_PATTERN = /<link rel="canonical" href="https:\/\/www\.youtube\.com\/channel\/(UC[\w-]{22})">/
 
 /**
- * The channel or playlist id a YouTube source names, however it was written. Null when it names neither.
+ * The channel or playlist id a YouTube source names, however it was written. Null if it names neither.
  */
 export async function toYoutubeSourceId(value: string): Promise<string | null> {
 	// an id is already what the feed reads, so it needs no lookup

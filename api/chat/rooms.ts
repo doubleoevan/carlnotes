@@ -1,8 +1,8 @@
-// every chat room one user can open, for the chat panel's switch rooms menu
+// every chat room one user can open, for the chat panel's switch chat rooms menu
 import type { ChatRoom } from "@shared/contracts"
 import { and, count, eq, inArray, isNull } from "drizzle-orm"
 import { db } from "../../db"
-import { chatRoomMentions, teamMembers, teams, teamTopics, topics } from "../../db/schema"
+import { chatRoomMentions, teamMembers, teams, teamTopics, topics, users } from "../../db/schema"
 import { loadTeamChatMentions, loadTopicChatMentions } from "./mentions"
 
 /**
@@ -35,12 +35,13 @@ export async function loadChatRooms(userId: string): Promise<ChatRoom[]> {
 
 	// load the team chat mentions and topic chat mentions for this user
 	const topicRows = [...ownedTopicRows, ...sharedTopicRows]
-	const [teamChatMentions, topicChatMentions] = await Promise.all([
+	const [teamChatMentions, topicChatMentions, membersByTeamId] = await Promise.all([
 		loadTeamChatMentions(userId, teamIds),
 		loadTopicChatMentions(
 			userId,
 			topicRows.map((topicRow) => topicRow.topicId),
 		),
+		loadTeamMembersByTeam(teamIds),
 	])
 
 	// a team's own chat room, then the chat rooms of what it holds, all sorted newest first together
@@ -52,7 +53,8 @@ export async function loadChatRooms(userId: string): Promise<ChatRoom[]> {
 			name: teamRow.name,
 			teamName: teamRow.name,
 			teamHasAvatar: teamRow.avatarKey !== null,
-			mentions: teamChatMentions.get(teamRow.teamId) ?? [],
+			chatMentions: teamChatMentions.get(teamRow.teamId) ?? [],
+			chatRoomMembers: membersByTeamId.get(teamRow.teamId) ?? [],
 			createdAt: teamRow.createdAt,
 		})),
 		...topicRows.flatMap((topicRow) =>
@@ -64,10 +66,11 @@ export async function loadChatRooms(userId: string): Promise<ChatRoom[]> {
 							name: topicRow.name,
 							teamName: teamById.get(topicRow.teamId)?.name ?? "",
 							teamHasAvatar: teamById.get(topicRow.teamId)?.avatarKey != null,
-							// each room counts only what was said in it, so a topic two teams hold never counts twice in a total
-							mentions: (topicChatMentions.get(topicRow.topicId) ?? []).filter(
+							// each chat room counts only what was said in it, so a topic two teams hold never counts twice in a total
+							chatMentions: (topicChatMentions.get(topicRow.topicId) ?? []).filter(
 								(mention) => mention.teamId === topicRow.teamId,
 							),
+							chatRoomMembers: membersByTeamId.get(topicRow.teamId) ?? [],
 							createdAt: topicRow.createdAt,
 						},
 					]
@@ -79,8 +82,32 @@ export async function loadChatRooms(userId: string): Promise<ChatRoom[]> {
 		.map(({ createdAt: _createdAt, ...room }) => room)
 }
 
+// every team's active members in one query, for the chat room rows the teams share
+async function loadTeamMembersByTeam(teamIds: string[]): Promise<Map<string, ChatRoom["chatRoomMembers"]>> {
+	const memberRows = await db
+		.select({
+			teamId: teamMembers.teamId,
+			userId: users.id,
+			username: users.username,
+			avatarSource: users.avatarSource,
+		})
+		.from(teamMembers)
+		.innerJoin(users, eq(users.id, teamMembers.userId))
+		.where(and(inArray(teamMembers.teamId, teamIds), eq(teamMembers.isActive, true)))
+		.orderBy(users.username)
+
+	// each team's list, in the username order the query returned
+	const membersByTeamId = new Map<string, ChatRoom["chatRoomMembers"]>()
+	for (const memberRow of memberRows) {
+		const teamList = membersByTeamId.get(memberRow.teamId) ?? []
+		teamList.push({ userId: memberRow.userId, username: memberRow.username, avatarSource: memberRow.avatarSource })
+		membersByTeamId.set(memberRow.teamId, teamList)
+	}
+	return membersByTeamId
+}
+
 /**
- * How many unseen chat mentions the user has across every room, as one indexed count.
+ * How many unseen chat mentions the user has across every chat room, as one indexed count.
  */
 export async function countUnseenChatMentions(userId: string): Promise<number> {
 	const [chatMentionRow] = await db

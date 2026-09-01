@@ -21,6 +21,16 @@ function toContrastRatio(first: string, second: string): number {
 }
 
 describe("toAvatarInitials", () => {
+	// a generated username joins its capitalized words bare, and the capitals still mark the pair
+	it("reads a bare camel name by its capitals", () => {
+		expect(toAvatarInitials("WarmBean")).toBe("WB")
+		// a half with a capital of its own still reads as one half
+		expect(toAvatarInitials("DarkRoastedBean")).toBe("DB")
+		expect(toAvatarInitials("WarmNightOwl")).toBe("WO")
+		// a lowercase name has no boundary to read
+		expect(toAvatarInitials("hotcup")).toBe("H")
+	})
+
 	// a team name is spaced instead of hyphenated, and reads its first two words the same way
 	it("reads a spaced team name", () => {
 		expect(toAvatarInitials("Agent Infra Crew")).toBe("AI")

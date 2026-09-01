@@ -4,6 +4,7 @@ import {
 	conditionalHeaders,
 	fetchContent,
 	fetchPublicUrl,
+	isInternalAddress,
 	revalidationOutcome,
 	toCueText,
 	toDailymotionCaptionTracks,
@@ -15,6 +16,31 @@ import {
 	toYoutubeCaptionTracks,
 	toYoutubeVideoId,
 } from "./scrape"
+
+// the ssrf address check: internal ranges rejected, public ones allowed
+test("isInternalAddress rejects loopback, private, link-local, cgnat, and their ipv6 forms", () => {
+	for (const internal of [
+		"127.0.0.1",
+		"10.1.2.3",
+		"192.168.0.1",
+		"172.16.0.1",
+		"169.254.169.254",
+		"100.64.0.1",
+		"0.0.0.0",
+		"::1",
+		"::ffff:127.0.0.1",
+		"fd00::1",
+		"fe80::1",
+	]) {
+		expect(isInternalAddress(internal)).toBe(true)
+	}
+})
+
+test("isInternalAddress allows public addresses", () => {
+	for (const external of ["93.184.216.34", "8.8.8.8", "172.15.0.1", "172.32.0.1", "1.1.1.1", "2606:4700:4700::1111"]) {
+		expect(isInternalAddress(external)).toBe(false)
+	}
+})
 
 // one track as the YouTube player endpoint lists it, and the two renderers it nests the list under
 type YoutubeTrack = { baseUrl?: string; languageCode?: string }

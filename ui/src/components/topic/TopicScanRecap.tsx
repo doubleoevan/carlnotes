@@ -8,7 +8,7 @@ import { useLayoutEffect, useRef, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { CopyMarkdownButton } from "@/components/common/CopyMarkdownButton"
 import { durationMsBetween, toDollarLabel, toDurationLabel } from "@/lib/labels"
-import { POPOVER_HEADING_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
+import { HIGHLIGHT_SCROLLBAR_CLASS, POPOVER_HEADING_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 // the fields a scan recap popover reads, shared by the topic page's scan history and the Activity subtable
@@ -124,8 +124,8 @@ export function SafeNoteText({ note, allowedUrls }: { note: string; allowedUrls?
  */
 export function ScrollBox({ children, copyMarkdown }: { children: React.ReactNode; copyMarkdown?: string }) {
 	return (
-		<div className="group border-border relative rounded-md border">
-			<div className={cn("max-h-72 overflow-y-auto p-2", THIN_SCROLLBAR_CLASS)}>{children}</div>
+		<div className="group border-primary/50 relative rounded-md border">
+			<div className={cn("max-h-72 overflow-y-auto p-2", HIGHLIGHT_SCROLLBAR_CLASS)}>{children}</div>
 			{copyMarkdown && <CopyMarkdownButton markdown={copyMarkdown} />}
 		</div>
 	)
@@ -227,11 +227,11 @@ export function TopicScanRecap({
 			) : (
 				<p className="whitespace-pre-line">{toScanRecapPlaceholder(scan)}</p>
 			)}
-			{/* how long it took, and the spend when the api shared it with the owner or an admin */}
+			{/* how long it took on the left, and the spend on the right when the api shared it with the owner or an admin */}
 			{(duration || isCostShown) && (
-				<div className="text-muted-foreground mt-3 space-y-0.5 border-t pt-2 text-xs">
-					{duration && <div>{duration} taken</div>}
-					{isCostShown && <div>cost: {toDollarLabel(scan.costDollars)}</div>}
+				<div className="text-muted-foreground mt-3 flex items-center justify-between gap-3 text-xs">
+					<span>{duration && `${duration} taken`}</span>
+					{isCostShown && <span>cost: {toDollarLabel(scan.costDollars)}</span>}
 				</div>
 			)}
 		</>

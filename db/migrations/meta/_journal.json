@@ -519,6 +519,48 @@
       "when": 1787614272590,
       "tag": "0073_cynical_monster_badoon",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1787892510534,
+      "tag": "0074_certain_thunderbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 75,
+      "version": "7",
+      "when": 1787894548734,
+      "tag": "0075_even_demogoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1787951084598,
+      "tag": "0076_old_hydra",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1788048721161,
+      "tag": "0077_narrow_night_nurse",
+      "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1788151629032,
+      "tag": "0078_secret_steel_serpent",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1788231140142,
+      "tag": "0079_lumpy_jane_foster",
+      "breakpoints": true
     }
   ]
 }

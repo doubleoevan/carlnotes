@@ -1,7 +1,12 @@
 // the chat panel shown when a call to action is shown instead of the conversation
 import type * as React from "react"
 import type { ChatOptionsMenuProps } from "@/components/chat/ChatOptionsMenu"
-import { ChatPanelHeader, type ChatPanelTooltip, ChatPanelWidget, renderOnTop } from "@/components/chat/ChatPanelWidget"
+import {
+	type ChatPanelCurrentRoom,
+	ChatPanelHeader,
+	ChatPanelWidget,
+	renderOnTop,
+} from "@/components/chat/ChatPanelWidget"
 import { DisabledRoomComposer } from "@/components/chat/ChatRoomComposer"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
 
@@ -13,16 +18,16 @@ import type { ChatPanelState } from "@/stores/chatPanelStore"
 export function ChatCallToActionPanel({
 	isEnlarged,
 	onPanelState,
-	chatPanelTooltip,
-	menu,
+	currentChatRoom,
+	chatRoomMenu,
 	actionLine,
 	placeholder,
 	children,
 }: {
 	isEnlarged: boolean
 	onPanelState: (next: ChatPanelState) => void
-	chatPanelTooltip?: ChatPanelTooltip
-	menu?: ChatOptionsMenuProps
+	currentChatRoom?: ChatPanelCurrentRoom
+	chatRoomMenu?: ChatOptionsMenuProps
 	// the one sentence over the call-to-action button
 	actionLine: string
 	// what the composer shows
@@ -37,8 +42,8 @@ export function ChatCallToActionPanel({
 				isRoom
 				onToggleSize={() => onPanelState(isEnlarged ? "open" : "enlarged")}
 				onCollapse={() => onPanelState("collapsed")}
-				chatPanelTooltip={chatPanelTooltip}
-				chatRoomMenu={menu}
+				currentChatRoom={currentChatRoom}
+				chatRoomMenu={chatRoomMenu}
 			/>
 			{/* the padding keeps the action line off the title bar and the call-to-action button off the composer's top border */}
 			<div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 pt-5 pb-4 text-center">

@@ -17,7 +17,7 @@ type TopicRow = {
 	name: string
 	visibility: OwnerTopic["visibility"]
 	frequency: OwnerTopic["frequency"]
-	// the stamps the activity list sorts and dates its rows by
+	// the times the activity list sorts and dates its rows by
 	createdAt: Date
 	updatedAt: Date
 }
@@ -230,7 +230,7 @@ async function loadInvitedTopicSubscriptions(user: {
 	}))
 }
 
-// the owning team's joined columns as the team's identity, null when the topic is not on a team
+// the owning team's joined columns as the team's identity, null if the topic is not on a team
 function toTeamIdentity(team: {
 	// null on a topic no team owns
 	teamId: string | null
@@ -374,7 +374,7 @@ export function toActivityTopics(
 			monthEmailCount: emailCountByTopic.get(topic.id) ?? 0,
 			// the owner holds a subscription to their own topic, and a missing row reads as on, matching the column default
 			isEmailEnabled: emailEnabledByTopic.get(topic.id) ?? true,
-			mentions: mentionByTopic.get(topic.id) ?? [],
+			chatMentions: mentionByTopic.get(topic.id) ?? [],
 			scans: topicScans.map((scan) => ({
 				id: scan.id,
 				status: scan.status,

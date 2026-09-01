@@ -1,6 +1,6 @@
 // username autocomplete tests: carl pinned first, the members narrowed by prefix, and nobody else
 import { expect, test } from "bun:test"
-import { toChangedMentionMessage, toChatMentionSuggestions, toMessage } from "./ChatRoomComposer"
+import { toChangedMentionChatMessage, toChatMentionSuggestions, toChatMessage } from "./ChatRoomComposer"
 
 // the members the chat room gives to the composer
 const CHAT_MEMBERS = ["ana", "bo", "Cara"]
@@ -24,17 +24,17 @@ test("toChatMentionSuggestions only suggests the chat members", () => {
 	expect(toChatMentionSuggestions("carl", ["Carl", "carlos"])).toEqual(["carl", "carlos"])
 })
 
-// stripping removes only a known leading username mention, so retargeting never stacks contradictory addresses
+// stripping removes only a known leading username chat mention, so retargeting never stacks contradictory addresses
 test("toMessageDraft removes a known leading username mention and nothing else", () => {
-	expect(toMessage("@carl hello", [])).toBe("hello")
-	expect(toMessage("@all hi", [])).toBe("hi")
-	expect(toMessage("@Cara hi", ["Cara"])).toBe("hi")
-	expect(toMessage("@stranger hi", [])).toBe("@stranger hi")
-	expect(toMessage("hey @carl", [])).toBe("hey @carl")
+	expect(toChatMessage("@carl hello", [])).toBe("hello")
+	expect(toChatMessage("@all hi", [])).toBe("hi")
+	expect(toChatMessage("@Cara hi", ["Cara"])).toBe("hi")
+	expect(toChatMessage("@stranger hi", [])).toBe("@stranger hi")
+	expect(toChatMessage("hey @carl", [])).toBe("hey @carl")
 })
 
-// changing the mention swaps the leading username mention for the new one instead of stacking a second
+// changing the chat mention swaps the leading username chat mention for the new one instead of stacking a second
 test("toChangedMentionMessageDraft leads with the selected mention exactly once", () => {
-	expect(toChangedMentionMessage("@carl hi", "all", [])).toBe("@all hi")
-	expect(toChangedMentionMessage("plain draft", "carl", [])).toBe("@carl plain draft")
+	expect(toChangedMentionChatMessage("@carl hi", "all", [])).toBe("@all hi")
+	expect(toChangedMentionChatMessage("plain draft", "carl", [])).toBe("@carl plain draft")
 })

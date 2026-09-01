@@ -55,7 +55,7 @@ export function decryptChatText(storedText: string): string | null {
 	}
 }
 
-// the encryption key from the environment, or null when unset. a wrong-sized key throws an error
+// the encryption key from the environment, or null if unset. a wrong-sized key throws an error
 function chatTextKey(): Buffer | null {
 	const encodedKey = Bun.env.CHAT_TEXT_KEY
 	if (!encodedKey) {

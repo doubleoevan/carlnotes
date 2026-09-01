@@ -1,6 +1,6 @@
 // the pending attachment chips both chat composers show above their message box
 import type { ChatAttachment } from "@shared/contracts"
-import { FileText, X } from "lucide-react"
+import { FileText, Film, X } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 
 // the number of characters in a large copy-paste text block that is turned into an attachment
@@ -32,6 +32,8 @@ export function ChatAttachmentChips({
 				>
 					{attachment.kind === "image" ? (
 						<img src={attachment.dataUrl} alt={attachment.name} className="size-6 rounded object-cover" />
+					) : attachment.kind === "video" ? (
+						<Film className="text-muted-foreground size-3.5 shrink-0" />
 					) : (
 						<FileText className="text-muted-foreground size-3.5 shrink-0" />
 					)}

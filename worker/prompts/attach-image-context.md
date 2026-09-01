@@ -2,7 +2,7 @@
 title: Attachment image context
 version: 1
 model tier: chat
-description: Describes an image a reader kept in chat, as context for future turns of that same conversation.
+description: Describes an image a reader kept in chat, as context for future chat turns of that same conversation.
 updated: 2026-07-30
 ---
 

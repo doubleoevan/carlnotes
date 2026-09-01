@@ -1,5 +1,5 @@
 import type { OwnerTopic, ProfileResponse } from "@shared/contracts"
-import { Plus, Users, X } from "lucide-react"
+import { Pencil, Plus, Users, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
@@ -8,11 +8,13 @@ import { authClient } from "@/clients/authClient"
 import { fetchProfile, fetchTeamOptions, type TeamMenuOption } from "@/clients/profileClient"
 import { sendDeleteTeamInvite, sendRemoveTeamMember } from "@/clients/teamClient"
 import { fetchAddableTopics, sendUserInvite } from "@/clients/topicClient"
+import { EditProfileModal } from "@/components/account/EditProfileModal"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { CountPill } from "@/components/common/CountPill"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
@@ -21,20 +23,30 @@ import { OwnerTopicsTable } from "@/components/table/OwnerTopicsTable"
 import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
 import { TopicsTable } from "@/components/table/TopicsTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
-import { MENU_OPTION_CLASS, NewTeamOption, TeamOption } from "@/components/team/TeamUpButton"
+import { NewTeamOption, TeamOption } from "@/components/team/TeamUpButton"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { ChatMentionCount, toChatLabel } from "@/components/topic/TopicMentionBadge"
+import { ChatMentionCount, toChatLabel, toNoteLabel } from "@/components/topic/TopicMentionBadge"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { toCountLabel } from "@/lib/labels"
-import { CARD_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
+import { CARD_CLASS, MENU_OPTION_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useAllChatMentions } from "@/stores/chatRoomStore"
+import { useAllNoteCount } from "@/stores/noteBadgeStore"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
 
-// starting a team is an owner's action, so it sits in the menu. someone else's profile offers no rows
-function toProfileActionOptions(isOwnProfile: boolean, onNewTeam: () => void): PageActionOption[] {
-	return isOwnProfile ? [{ label: "New team", Icon: Plus, onSelect: onNewTeam }] : []
+// editing the profile and starting a team are both owner actions
+function toProfileActionOptions(
+	isOwnProfile: boolean,
+	onEditProfile: () => void,
+	onNewTeam: () => void,
+): PageActionOption[] {
+	return isOwnProfile
+		? [
+				{ label: "Edit profile", Icon: Pencil, onSelect: onEditProfile },
+				{ label: "New team", Icon: Plus, onSelect: onNewTeam },
+			]
+		: []
 }
 
 /**
@@ -48,6 +60,7 @@ export function ProfilePage() {
 	const [profile, setProfile] = useState<ProfileResponse | null>(null)
 	const [isProfileMissing, setIsProfileMissing] = useState(false)
 	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
+	const [isEditingProfile, setIsEditingProfile] = useState(false)
 	const [isTeamingUp, setIsTeamingUp] = useState(false)
 	const [addableTopics, setAddableTopics] = useState<{ id: string; name: string }[]>([])
 	usePageTitle(profile?.username ?? null)
@@ -59,7 +72,7 @@ export function ProfilePage() {
 		setTopics((await fetchActivity()).topics)
 	}, [])
 
-	// reload the profile after a change that updates its teams or topics
+	// reload the profile after a change to its teams or topics
 	const handleReloadProfile = useCallback(async (): Promise<void> => {
 		if (userId) {
 			setProfile(await fetchProfile(userId))
@@ -107,7 +120,11 @@ export function ProfilePage() {
 		profile && session
 			? {
 					page: "Profile",
-					options: toProfileActionOptions(isOwnProfile, () => void handleOpenTeamUpMenu()),
+					options: toProfileActionOptions(
+						isOwnProfile,
+						() => setIsEditingProfile(true),
+						() => void handleOpenTeamUpMenu(),
+					),
 					report: { subjectKind: "profile", subjectId: profile.userId, subjectLabel: profile.username },
 				}
 			: null,
@@ -133,7 +150,7 @@ export function ProfilePage() {
 			})
 	}, [userId])
 
-	// close the add topic modal and forward to the topic page
+	// close the new topic modal and forward to the topic page
 	const handleTopicCreated = async (topicId: string): Promise<void> => {
 		setIsNewTopicOpen(false)
 		navigate(`/topics/${topicId}`)
@@ -169,6 +186,14 @@ export function ProfilePage() {
 				onNewTopic={session?.user.id === profile.userId ? () => setIsNewTopicOpen(true) : undefined}
 				onTeamUp={session?.user.id === profile.userId ? undefined : handleTeamUp}
 			/>
+			{isEditingProfile && (
+				<EditProfileModal
+					userId={profile.userId}
+					username={profile.username}
+					onClose={() => setIsEditingProfile(false)}
+					onUsernameChanged={handleReloadProfile}
+				/>
+			)}
 			{isTeamingUp && (
 				<EditTeamModal
 					userTopics={addableTopics}
@@ -273,8 +298,10 @@ function ProfileHeader({
 	onLoadTeams: () => void
 }) {
 	const { data: session } = authClient.useSession()
-	// unseen chat mentions, for the avatar badge
+	// unread chat mentions, for the avatar badge
 	const chatMentions = useAllChatMentions()
+	// every unread note change the user has, across topics and teams, for the avatar badge
+	const noteChangeCount = useAllNoteCount()
 	// the join month and year label
 	const joinDateLabel = new Date(profile.joinedAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })
 
@@ -284,19 +311,25 @@ function ProfileHeader({
 			<div className="flex items-center gap-4">
 				{isOwnProfile ? (
 					<>
-						{/* the user avatar and unseen chat mentions badge */}
+						{/* the user avatar with its unread chat mention and note badges */}
 						<span className="relative inline-block">
 							<UserAvatarPicker userId={profile.userId} username={profile.username} className="size-16" />
-							{chatMentions.length > 0 && (
-								<span
-									role="status"
-									aria-label={toChatLabel(chatMentions)}
-									className="pointer-events-none absolute -top-1 -right-1"
-								>
-									<ChatMentionCount
-										chatMentions={chatMentions}
-										className="bg-card text-card-foreground h-5 min-w-5 border text-xs"
-									/>
+							{(noteChangeCount > 0 || chatMentions.length > 0) && (
+								<span className="pointer-events-none absolute -top-1 -right-1 flex items-center gap-1">
+									{/* the filled chat mentions badge next to the outline note changes badge */}
+									{chatMentions.length > 0 && (
+										<span role="status" aria-label={toChatLabel(chatMentions)}>
+											<ChatMentionCount
+												chatMentions={chatMentions}
+												className="bg-card text-card-foreground h-5 min-w-5 border text-xs"
+											/>
+										</span>
+									)}
+									{noteChangeCount > 0 && (
+										<span role="status" aria-label={toNoteLabel(noteChangeCount)}>
+											<CountPill count={noteChangeCount} variant="outline" className="h-5 min-w-5 text-xs" />
+										</span>
+									)}
 								</span>
 							)}
 						</span>
@@ -341,7 +374,7 @@ function ProfileHeader({
 						))}
 				</div>
 			</div>
-			{/* the number of unique people subscribed to this user's topics */}
+			{/* when they joined, and the number of unique people subscribed to their topics */}
 			<p className="text-muted-foreground mt-2 text-sm">
 				Joined {joinDateLabel} · {profile.subscriberCount.toLocaleString()} followers
 			</p>
@@ -414,7 +447,7 @@ function ProfileTeamUpButton({
 					Team Up
 				</Button>
 			</PopoverTrigger>
-			<PopoverContent align="end" className="w-64 p-1">
+			<PopoverContent align="end" className="w-64" bodyClassName="p-1">
 				{/* the user's teams, each menu option shaped by this profile's status there */}
 				{teams === null && <CoffeeLoading className="min-h-0 justify-start px-2 py-2 text-sm" />}
 				{(teams ?? []).map((team) =>
@@ -462,7 +495,7 @@ function ProfileTeamUpButton({
 						</div>
 					),
 				)}
-				{/* the new team button is in the teams section */}
+				{/* the new team option, under a divider when teams are listed */}
 				{teams !== null && teams.length > 0 && <div className="bg-border my-1 h-px" />}
 				{teams !== null && (
 					<NewTeamOption

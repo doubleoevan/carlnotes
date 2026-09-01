@@ -71,7 +71,7 @@ function TopicSkeleton() {
 	)
 }
 
-// one resource skeleton mirroring TopicResource: the rank slot, an icon, then title and metadata lines
+// one resource skeleton mirroring TopicResource: the rank slot, the kind icon, then title and metadata lines
 export function ResourceSkeleton() {
 	return (
 		<div className="after:border-separator-strong relative flex after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden">
@@ -86,10 +86,6 @@ export function ResourceSkeleton() {
 					<div className="bg-muted h-4 w-3/4 animate-pulse rounded" />
 					<div className="bg-muted mt-2 h-3 w-2/5 animate-pulse rounded" />
 				</div>
-			</div>
-			{/* the note icon the real row opens its finding note from */}
-			<div className="absolute top-1.5 right-1 grid size-11 place-items-center sm:size-8">
-				<div className="bg-muted size-4 animate-pulse rounded" />
 			</div>
 		</div>
 	)

@@ -243,7 +243,7 @@ export async function loadAdminTotals(userRows: AdminUserRow[]): Promise<AdminTo
 }
 
 /**
- * Contribution in cents: net revenue minus tracked variable cost minus an optional fixed cost. Null when revenue is unavailable.
+ * Contribution in cents: net revenue minus tracked variable cost minus an optional fixed cost. Null if revenue is unavailable.
  */
 export function computeContributionCents(
 	netRevenueCents: number | null,
@@ -286,12 +286,12 @@ export function isSelfDemotion(actingUserId: string, targetUserId: string, role:
 
 /**
  * Set or clear a user's per-user budget override, then reissue their LiteLLM key at the resulting effective budget.
- * Returns false when no such user exists.
+ * Returns false if no such user exists.
  */
 export async function setUserBudgetOverride(
 	targetUserId: string,
 	budgetOverrideCents: number | null,
-): Promise<boolean> {
+): Promise<"applied" | "key-unchanged" | "missing"> {
 	// the update reports whether it matched a row, so a made-up user id returns missing instead of ok
 	const [updated] = await db
 		.update(users)
@@ -299,11 +299,11 @@ export async function setUserBudgetOverride(
 		.where(eq(users.id, targetUserId))
 		.returning({ id: users.id })
 	if (!updated) {
-		return false
+		return "missing"
 	}
-	// the key is sized to the effective budget, so it follows the override
-	await replaceUserLiteLLMKey(targetUserId)
-	return true
+
+	// the key is resized to the effective budget, which includes the override. the user is notified if the proxy refused
+	return (await replaceUserLiteLLMKey(targetUserId)) ? "applied" : "key-unchanged"
 }
 
 // attributed storage in bytes per user: distinct resource content + embedding bytes + attachment bytes across their topics
@@ -455,9 +455,13 @@ export const adminRoute = new Hono<AppEnv>()
 		if (!(await isAllowed(userId, "admin:setBudget"))) {
 			return context.json({ error: "forbidden" }, 403)
 		}
-		const isOverrideSet = await setUserBudgetOverride(
+		const budgetOverrideOutcome = await setUserBudgetOverride(
 			context.req.param("id"),
 			context.req.valid("json").budgetOverrideCents,
 		)
-		return isOverrideSet ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
+		if (budgetOverrideOutcome === "missing") {
+			return context.json({ error: "not found" }, 404)
+		}
+		// the saved budget is reported either way, with a flag if the proxy key did not follow it
+		return context.json({ ok: true, isKeyResized: budgetOverrideOutcome === "applied" })
 	})

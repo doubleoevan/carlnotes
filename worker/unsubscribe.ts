@@ -10,7 +10,7 @@ export async function signUnsubscribeToken(unsubscribePayload: UnsubscribePayloa
 	return `${encodedPayload}.${await toSignature(encodedPayload)}`
 }
 
-// verify a token's signature and shape, returning its payload or null when either is wrong
+// verify a token's signature and shape, returning its payload or null if either is wrong
 export async function verifyUnsubscribeToken(token: string): Promise<UnsubscribePayload | null> {
 	// split the payload from its signature and reject a tampered or malformed token
 	const [encodedPayload, signature] = token.split(".")

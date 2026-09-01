@@ -1,7 +1,7 @@
 // object storage for topic attachments through Bun's built-in S3 client the S3_* env values alone select
 
 // upload an attachment's bytes to object storage under the given key, tagged with its content type
-export async function putAttachment(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
+export async function uploadAttachment(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
 	await bucket().write(key, bytes, { type: contentType })
 }
 
@@ -33,6 +33,11 @@ export function attachmentStream(attachmentKey: string): ReadableStream {
 	return bucket().file(attachmentKey).stream()
 }
 
+// read one byte range of a stored attachment, with the end exclusive
+export function attachmentRangeStream(attachmentKey: string, start: number, end: number): ReadableStream {
+	return bucket().file(attachmentKey).slice(start, end).stream()
+}
+
 // read a stored attachment's raw bytes, for work that needs the whole file
 export async function getAttachmentBytes(attachmentKey: string): Promise<Uint8Array> {
 	return new Uint8Array(await bucket().file(attachmentKey).arrayBuffer())
@@ -56,9 +61,14 @@ export function toChatAttachmentKey(
 	return `topics/${topicId}/chat-attachments/${userId}/${chatAttachmentId}/${toSafeFilename(filename)}`
 }
 
-// the object key for a room's shared attachment, namespaced by the topic whose room holds it
+// the object key for a chat room's shared attachment, namespaced by the topic whose chat room holds it
 export function toChatRoomAttachmentKey(topicId: string, roomAttachmentId: string, filename: string): string {
 	return `topics/${topicId}/room-attachments/${roomAttachmentId}/${toSafeFilename(filename)}`
+}
+
+// the object key for a link preview's proxied image, namespaced by link preview id
+export function toLinkPreviewImageKey(linkPreviewId: string): string {
+	return `link-previews/${linkPreviewId}/image`
 }
 
 // the object key for a Resource's fetched content, namespaced by resource id, mirroring toAttachmentKey

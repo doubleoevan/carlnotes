@@ -45,7 +45,7 @@ export async function deleteLiteLLMKey(key: string): Promise<void> {
 }
 
 /**
- * Read a key's spend this budget period, in dollars. Returns null when the proxy is unreachable or the key is unknown,
+ * Read a key's spend this budget period, in dollars. Returns null if the proxy is unreachable or the key is unknown,
  * so the admin page still renders the rest of a user's row.
  */
 export async function readLiteLLMKeySpend(key: string): Promise<number | null> {

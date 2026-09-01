@@ -1,4 +1,4 @@
-// the helpers behind the topic's reads and writes
+// the helpers for the topic's reads and writes
 import type { Invite, Topic, TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contracts"
 import { isDailyFrequency } from "@shared/enums"
 import { reportError } from "@shared/monitoring"

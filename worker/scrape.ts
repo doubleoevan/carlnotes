@@ -1,4 +1,5 @@
 // fill a Resource's content: a published transcript or a video's caption track read straight from the origin,
+import { lookup } from "node:dns/promises"
 import type { resourceKinds } from "@shared/enums"
 import { FIRECRAWL_COST_PER_FETCH } from "./budget"
 
@@ -72,11 +73,52 @@ export function toFetchableUrl(url: string): URL {
 		throw new Error(`url must be http or https: ${url}`)
 	}
 
-	// a hostname that still resolves privately through DNS gets rejected by the network, not here
+	// the literal internal hosts a string alone can name. a dns name that points inward is caught by assertPublicHost
 	if (INTERNAL_HOST_PATTERN.test(parsedUrl.hostname)) {
 		throw new Error(`url is an internal address: ${url}`)
 	}
 	return parsedUrl
+}
+
+// the ipv4 ranges a fetched host may never resolve to, as [firstOctet, minSecond, maxSecond]:
+// loopback, this-network, private, link-local, cgnat
+const INTERNAL_V4_RANGES: [number, number, number][] = [
+	[0, 0, 255],
+	[10, 0, 255],
+	[127, 0, 255],
+	[169, 254, 254],
+	[172, 16, 31],
+	[192, 168, 168],
+	[100, 64, 127],
+]
+
+// whether an address is one a fetched host may never resolve to
+export function isInternalAddress(address: string): boolean {
+	// an ipv6-mapped ipv4 address is checked as the ipv4 it wraps. a malformed octet defaults to 0, which fails closed
+	const ipv4 = address.startsWith("::ffff:") ? address.slice("::ffff:".length) : address
+	if (/^\d+\.\d+\.\d+\.\d+$/.test(ipv4)) {
+		const [first = 0, second = 0] = ipv4.split(".").map(Number)
+		return INTERNAL_V4_RANGES.some(([octet, min, max]) => first === octet && second >= min && second <= max)
+	}
+
+	// ipv6 loopback, unspecified, unique-local (fc00::/7), and link-local (fe80::/10)
+	const lower = address.toLowerCase()
+	return lower === "::1" || lower === "::" || /^f[cd]/.test(lower) || /^fe[89ab]/.test(lower)
+}
+
+/**
+ * Reject a host that resolves to an internal address. getaddrinfo resolves a dns name and canonicalizes
+ * a legacy ipv4 literal the same way fetch does, so what is checked here is what the fetch would connect to.
+ */
+export async function assertPublicHost(hostname: string): Promise<void> {
+	// a bracketed ipv6 literal keeps its brackets in the hostname, which the resolver does not take
+	const host = hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname
+
+	// a host that does not resolve is harmless and left for the fetch to fail on. only a resolved private address is rejected
+	const addresses = await lookup(host, { all: true }).catch(() => [])
+	if (addresses.some(({ address }) => isInternalAddress(address))) {
+		throw new Error(`url resolves to an internal address: ${hostname}`)
+	}
 }
 
 // how many redirects a public fetch follows before it gives up
@@ -86,13 +128,14 @@ const MAX_REDIRECTS = 5
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 
 /**
- * Fetches an owner-supplied url, checking every redirect hop against the private-host rule.
+ * Fetches a url, checking every redirect hop's host against the private-address rule before connecting.
  * Throws an error when a hop is malformed, not http(s), internal, or the chain runs too long.
  */
 export async function fetchPublicUrl(url: string, init: RequestInit = {}): Promise<Response> {
-	// follow redirects by hand
+	// follow redirects by hand, checking each hop's host resolves to a public address before fetching it
 	let parsedUrl = toFetchableUrl(url)
 	for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
+		await assertPublicHost(parsedUrl.hostname)
 		const response = await fetch(parsedUrl, { ...init, redirect: "manual" })
 
 		// anything that is not a redirect is the answer, and so is a redirect that names nowhere to go

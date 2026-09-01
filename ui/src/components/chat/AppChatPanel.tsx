@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
 import { authClient } from "@/clients/authClient"
 import { fetchChatMentionCount, fetchChatRooms } from "@/clients/chatRoomClient"
+import { fetchNoteBadges } from "@/clients/noteClient"
 import { ChatCallToActionPanel } from "@/components/chat/ChatCallToActionPanel"
 import type { ChatRoomOption } from "@/components/chat/ChatOptionsMenu"
 import { ChatLoadingPanel, ChatPill, renderOnTop } from "@/components/chat/ChatPanelWidget"
@@ -26,14 +27,13 @@ import {
 	useChatPanel,
 } from "@/stores/chatPanelStore"
 import { setChatRooms, useAllChatMentions, useChatRooms } from "@/stores/chatRoomStore"
+import { setNoteBadges } from "@/stores/noteBadgeStore"
 
-// how often the chat mention badge count is polled for, kept under a minute
+// how often the chat mention and note badges are polled, kept under a minute
 const CHAT_MENTION_POLL_MS = 45_000
 
 /**
- * The chat menu's dropdown options. One for each room the user can open, and one for the call to action to join a team,
- * A topic included by multiple teams gets a row for each and is told apart by the team's avatar with a team icon on the right.
- * Private chat and Clear chat are also options if available.
+ * The chat menu's dropdown options, one row for each chat room the user can open plus one to join the page's team.
  */
 function toChatRoomOptions(
 	chatRoomOptions: ChatRoom[],
@@ -47,7 +47,8 @@ function toChatRoomOptions(
 		isHighlighted: isPageChatRoom(chatRoomOption, pageContext),
 		isTeamRoom: chatRoomOption.topicId === null,
 		isActive: isSameChat(chatId, { kind: "room", teamId: chatRoomOption.teamId, topicId: chatRoomOption.topicId }),
-		chatMentions: chatRoomOption.mentions,
+		chatMentions: chatRoomOption.chatMentions,
+		chatRoomMembers: chatRoomOption.chatRoomMembers,
 		onSelect: () => setChatId({ kind: "room", teamId: chatRoomOption.teamId, topicId: chatRoomOption.topicId }),
 	}))
 
@@ -71,9 +72,30 @@ function toChatRoomOptions(
 	return toMenuOrder(chatRoomChoices)
 }
 
-// alphabetical so a topic owned by multiple teams can be told apart. the private chat and clear chat are not sorted.
-function toMenuOrder(choices: ChatRoomOption[]): ChatRoomOption[] {
-	return [...choices].sort((first, second) => first.name.localeCompare(second.name))
+// sort alphabetically so that topic options with the same name can be told apart by their team
+function toMenuOrder(chatRoomOptions: ChatRoomOption[]): ChatRoomOption[] {
+	return [...chatRoomOptions].sort((first, second) => first.name.localeCompare(second.name))
+}
+
+// return the topic or team id for the page to start a private chat with
+function toPrivateChatId(pageContext: ChatPageContext | null, chatId: ChatId | null): ChatId | null {
+	if (pageContext?.topicId) {
+		return { kind: "private", topicId: pageContext.topicId }
+	}
+	const teamId = pageContext?.teamId ?? (chatId?.kind !== "private" ? (chatId?.teamId ?? null) : null)
+	return teamId ? { kind: "private", teamId } : null
+}
+
+// return the placeholder text for a private chat
+function toPrivateChatName(
+	chatId: ChatId & { kind: "private" },
+	chatRooms: ChatRoom[],
+	pageContext: ChatPageContext | null,
+): string {
+	if (chatId.teamId !== undefined) {
+		return chatRooms.find((chatRoom) => chatRoom.teamId === chatId.teamId)?.teamName ?? pageContext?.name ?? "this team"
+	}
+	return pageContext?.name ?? "this topic"
 }
 
 /**
@@ -82,10 +104,10 @@ function toMenuOrder(choices: ChatRoomOption[]): ChatRoomOption[] {
 export function AppChatPanel() {
 	const { data: session } = authClient.useSession()
 	const { panelState, chatId, pageContext } = useChatPanel()
-	// the chat rooms have an array of mentions for showing the badge count and tooltip
+	// the chat rooms, each with the user's unread chat mentions in it
 	const chatRooms = useChatRooms()
 	const [searchParams] = useSearchParams()
-	// whether the room list has answered yet
+	// whether the chat room list has answered yet
 	const [hasLoadedChatRooms, setHasLoadedChatRooms] = useState(false)
 
 	// the chat rooms for the dropdown menu, re-read whenever the badge count says something changed
@@ -102,7 +124,7 @@ export function AppChatPanel() {
 			.finally(() => setHasLoadedChatRooms(true))
 	}, [userId])
 	useEffect(() => {
-		// the list belongs to one user
+		// a user change reloads the list from scratch
 		setHasLoadedChatRooms(false)
 		updateChatRooms()
 	}, [updateChatRooms])
@@ -123,9 +145,20 @@ export function AppChatPanel() {
 				})
 				.catch(() => {})
 		}
-		readCount()
-		const chatMentionTimeout = setInterval(readCount, CHAT_MENTION_POLL_MS)
-		return () => clearInterval(chatMentionTimeout)
+
+		// the note badges are a short list of only what is waiting, read outright on every poll
+		const readNoteBadges = (): void => {
+			fetchNoteBadges()
+				.then(setNoteBadges)
+				.catch(() => {})
+		}
+		const readBadges = (): void => {
+			readCount()
+			readNoteBadges()
+		}
+		readBadges()
+		const badgePollInterval = setInterval(readBadges, CHAT_MENTION_POLL_MS)
+		return () => clearInterval(badgePollInterval)
 	}, [userId, updateChatRooms])
 
 	// a chat mention badge links to its team or topic page
@@ -137,7 +170,7 @@ export function AppChatPanel() {
 		}
 	}, [linkedTeamId, linkedTopicId])
 
-	// nothing selected yet is what chooses a default chat id. a visitor selects nothing unless the page
+	// a default chat id is picked only when nothing is selected yet. a visitor picks nothing unless the page
 	// offers a team to join
 	const pickDefaultChat = useCallback((): void => {
 		if (chatId || !(session || pageContext?.joinTeam)) {
@@ -157,14 +190,14 @@ export function AppChatPanel() {
 		setChatPanelState(isWideScreen() ? "open" : "enlarged")
 	}
 
-	// opening before the rooms answered leaves nothing selected, so the choice is made again once they land
+	// opening before the chat rooms answered leaves nothing selected, so the choice is made again once they land
 	useEffect(() => {
 		if (panelState !== "collapsed" && hasLoadedChatRooms) {
 			pickDefaultChat()
 		}
 	}, [panelState, hasLoadedChatRooms, pickDefaultChat])
 
-	// every mention for a chat that the user hasn't opened
+	// every chat mention for a chat that the user hasn't opened
 	const chatMentions = useAllChatMentions()
 
 	if (panelState === "collapsed") {
@@ -173,16 +206,15 @@ export function AppChatPanel() {
 
 	const chatRoomChoices = toChatRoomOptions(chatRooms, chatId, pageContext)
 
-	// the private chat belongs to a topic, so it is only offered from a topic page
-	const openPrivateChat = pageContext?.topicId
-		? () => setChatId({ kind: "private", topicId: pageContext.topicId ?? "" })
-		: undefined
+	// the private chat opens on the topic this page shows, or on a team when this page or the open chat room names one
+	const privateChatId = toPrivateChatId(pageContext, chatId)
+	const openPrivateChat = privateChatId ? () => setChatId(privateChatId) : undefined
 	if (chatId?.kind === "private") {
 		return (
 			<PrivateChatPanel
-				key={`private:${chatId.topicId}`}
-				topicId={chatId.topicId}
-				topicName={pageContext?.name ?? "this topic"}
+				key={`private:${chatId.topicId ?? chatId.teamId}`}
+				page={chatId.topicId !== undefined ? { topicId: chatId.topicId } : { teamId: chatId.teamId }}
+				chatName={toPrivateChatName(chatId, chatRooms, pageContext)}
 				panelState={panelState}
 				onPanelState={setChatPanelState}
 				chatRoomOptions={chatRoomChoices}
@@ -200,11 +232,13 @@ export function AppChatPanel() {
 				topicId={chatId.topicId}
 				contextName={openChatRoom?.name ?? pageContext?.name ?? "this team"}
 				teamId={chatId.teamId}
-				chatRoomOptions={chatRoomChoices}
+				chatRoomMenu={{
+					chatRoomOptions: chatRoomChoices,
+					onPrivateChat: openPrivateChat,
+					onOpenChatRoomMenu: updateChatRooms,
+				}}
 				panelState={panelState}
 				onPanelState={setChatPanelState}
-				onPrivateChat={openPrivateChat}
-				onOpenMenu={updateChatRooms}
 				onOpenChatRoom={updateChatRooms}
 				joinButton={
 					openChatRoom || !pageContext?.joinTeam ? undefined : (
@@ -221,7 +255,7 @@ export function AppChatPanel() {
 		)
 	}
 
-	// nothing is selected because the chat rooms have not answered yet, so the frame opens and pours until they land
+	// nothing is selected while the chat rooms have not answered yet
 	if (session && !hasLoadedChatRooms) {
 		return <ChatLoadingPanel isEnlarged={panelState === "enlarged"} onPanelStateChange={setChatPanelState} />
 	}

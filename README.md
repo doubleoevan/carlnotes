@@ -12,7 +12,7 @@ Carl stays up. You stay informed.
 
 <br clear="left" />
 
-[![codecov](https://codecov.io/gh/doubleoevan/carlnotes/graph/badge.svg)](https://codecov.io/gh/doubleoevan/carlnotes)
+[![codecov](https://codecov.io/gh/doubleoevan/carlnotes/branch/main/graph/badge.svg)](https://codecov.io/gh/doubleoevan/carlnotes)
 
 ## Stack
 
@@ -149,7 +149,7 @@ Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium
 Checks — run the full gate with one command (enforced on push by `scripts/preflight.sh`):
 
 ```bash
-bun run check       # biome + tsc + bun test
+bun run check       # biome + tsc + workflow bundles + bun test
 ```
 
 Or run them individually:
@@ -158,6 +158,7 @@ Or run them individually:
 bunx biome check .
 bunx tsc -b
 bun test
+bun run check:workflows # every Temporal workflow file still bundles
 ```
 
 Live smoke tests (owner-run) — exercise real flows against live services (LiteLLM proxy, Firecrawl, object storage), so they make paid calls and are **not** part of `bun run check`. Need the LiteLLM proxy up (`docker compose up -d litellm`) and the latest migration applied; the attachment smoke test also needs a Temporal server (`docker compose up -d temporal`) and the running worker (`bun run dev:temporal`):
@@ -223,7 +224,7 @@ docker build --platform=linux/amd64 --build-arg VITE_TURNSTILE_SITE_KEY=<site-ke
 
 `--platform=linux/amd64` matters on Apple Silicon. The Doppler CLI is copied from `dopplerhq/cli:3`, which publishes amd64 only.
 
-Migrations are a deploy job, not a start-up step. A push to `main` runs the `release-main` workflow, which builds the image once, runs this job against it, and only then deploys `app` and `temporal-worker`. So new code never meets an old schema:
+Migrations are a deploy job, not a start-up step. A push to `main` runs the `release-main` pipeline, which builds the image once, runs this job against it, and only then deploys `app` and `temporal-worker`, finishing with the docs embed. It runs in Northflank instead of GitHub Actions, and its definition is [infra/northflank/release-main.json](infra/northflank/release-main.json). `.github/workflows/` holds the offline gate alone. So new code never meets an old schema:
 
 ```bash
 doppler run -- bun db/migrate.ts

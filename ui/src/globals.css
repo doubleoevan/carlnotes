@@ -5,16 +5,13 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* only devices that actually hover. a control revealed on hover is unreachable on a touch screen,
-   so touch keeps it visible instead */
+/* only devices that actually hover */
 @custom-variant can-hover (@media (hover: hover));
 
-/* streamdown styles itself with tailwind classes, so its dist has to be scanned or its markdown renders unstyled */
+/* streamdown styles itself with tailwind classes. tailwind has to scan its dist to emit them */
 @source "../../node_modules/streamdown/dist/*.js";
 
-/* the site's one elevation, under every raised surface: cards, tables, the search bar, popups, buttons, and tiles.
-   both layers are offset and tight instead of a wide even glow, so a surface reads as raised instead of haloed,
-   and its 1px border stays the only edge */
+/* the site's one elevation, under every raised surface: cards, tables, the search bar, popups, buttons, and tiles */
 @utility shadow-lift {
 	box-shadow:
 		0 2px 5px rgba(0, 0, 0, 0.2),
@@ -63,12 +60,11 @@
 	--radius-xl: calc(var(--radius) + 4px);
 }
 
-/* Latte — light mode */
+/* Latte, light mode */
 :root {
 	--radius: 0.625rem;
 	--background: #e2d8c4;
-	/* the inset a subtable sits on, quieter than the card holding it. it is a step darker than the page
-	   behind the card, which a near-white card needs to read against */
+	/* the inset a subtable sits on, quieter than the card holding it. a step darker than the page behind the card */
 	--sunken: #d6c9ad;
 	--foreground: #332a22;
 	--card: #fffdf9;
@@ -92,28 +88,24 @@
 	--hero: #3b2a1d;
 	--hero-foreground: #f3e9db;
 	--hero-muted: #b59c81;
-	/* the hero band stays dark in both themes, so its highlight text stays this same bright orange in both too */
+	/* the hero band stays dark in both themes. its highlight text is this same orange in both */
 	--hero-accent: #f09050;
 	--badge: #b5773a;
 	--link: #a35f2d;
 	/* the quiet dashes inside cards and popovers, and the stronger cut for row separators on the page itself */
 	--separator: #dcccb6;
 	--separator-strong: #c9b28b;
-	/* the rules inside a subtable. the border above is lighter than the sunken fill it would be drawn on,
-	   so it reads as no line at all. this is darker than that fill by about what the dark theme's border is
-	   lighter than its own */
+	/* the rules inside a subtable, dark enough to show on the sunken fill */
 	--separator-sunken: #a68d64;
 	--ring-line: rgba(120, 96, 72, 0.18);
-	/* the budget's chat segment. espresso against the light theme's orange brews segment,
-	   cream against the dark theme's, so the two segments differ in hue and luminance in both */
+	/* the budget's chat segment, espresso against the orange brews segment */
 	--spend-chat: #6b4a26;
 }
 
-/* Dark roast — dark mode. the background sits a step lighter and the cards a step darker,
-   so the two surfaces separate without a border doing the work */
+/* Dark roast, dark mode. the background sits a step lighter and the cards a step darker */
 .dark {
 	--background: #584532;
-	/* a step darker than the page and the cards on it, so a subtable reads as sunk into its row */
+	/* a step darker than the page and the cards on it */
 	--sunken: #241a10;
 	--foreground: #f0e6d6;
 	--card: #302417;
@@ -122,7 +114,7 @@
 	--popover-foreground: #f0e6d6;
 	--primary: #f09050;
 	--primary-foreground: #1a1511;
-	/* the pair includes small badge text, so it clears the 4.5:1 body-text ratio instead of the 3:1 large-text one */
+	/* the pair colors small badge text. the contrast clears the 4.5:1 body-text ratio */
 	--secondary: #75593e;
 	--secondary-foreground: #eadfc6;
 	--muted: #54422f;
@@ -144,10 +136,10 @@
 	/* quiet inside cards and popovers, stronger between rows on the page, same split as light mode */
 	--separator: #614e39;
 	--separator-strong: #7b6449;
-	/* the dark border already stands well off the sunken fill, so a subtable's rules keep it */
+	/* a subtable's rules reuse the border color */
 	--separator-sunken: #69553f;
 	--ring-line: rgba(201, 186, 153, 0.18);
-	/* cream, since the dark theme's badge and primary are the same orange and the two segments blurred together */
+	/* the budget's chat segment, cream against the orange brews segment */
 	--spend-chat: #f0e6d6;
 }
 
@@ -157,10 +149,59 @@
 	padding-right: max(1rem, env(safe-area-inset-right, 0px));
 }
 
-/* the docked chat's distance from the bottom edge, clearing the home indicator's swipe zone on a phone
-   while keeping its usual gap everywhere else */
+/* bottom offset with a 0.75rem floor, raised to clear the home indicator's swipe zone on a phone */
 @utility bottom-safe {
 	bottom: max(0.75rem, env(safe-area-inset-bottom, 0px));
+}
+
+/* a scrolling box that draws no scrollbar */
+@utility scrollbar-none {
+	&::-webkit-scrollbar {
+		display: none;
+	}
+	scrollbar-width: none;
+}
+
+/* the scrollbar in the highlight color, for a box whose scrolling is easy to miss. Chrome prefers the
+   standard properties over the webkit pieces when both are set, and its standard bar hides at rest */
+@utility scrollbar-highlight {
+	&::-webkit-scrollbar {
+		width: 0.5rem;
+		height: 0.5rem;
+	}
+	&::-webkit-scrollbar-track {
+		background: transparent;
+		border-radius: 9999px;
+	}
+	&::-webkit-scrollbar-thumb {
+		background: color-mix(in srgb, var(--primary) 70%, transparent);
+		border-radius: 9999px;
+	}
+	&::-webkit-scrollbar-thumb:hover {
+		background: var(--primary);
+	}
+	@supports not selector(::-webkit-scrollbar) {
+		scrollbar-width: thin;
+		scrollbar-color: var(--primary) transparent;
+	}
+	/* ios matches the webkit pseudos as selectors but never draws them. the standard property
+	   tints its own overlay indicator */
+	@supports (-webkit-touch-callout: none) {
+		scrollbar-color: var(--primary) transparent;
+	}
+}
+
+/* on a phone a wide info popover centers as a sheet. radix's inline position, left, and top
+   already suit a full-screen box, and only its anchor transform has to be dropped */
+@media (max-width: 639px) {
+	[data-radix-popper-content-wrapper]:has(> .popover-panel) {
+		inset: 0;
+		display: grid;
+		place-items: center;
+		padding: 1rem;
+		/* biome-ignore lint/complexity/noImportantStyles: only important beats radix's inline anchor transform */
+		transform: none !important;
+	}
 }
 
 @layer base {
@@ -170,11 +211,348 @@
 	body {
 		@apply bg-background text-foreground font-sans;
 	}
-	/* Tailwind v4 drops the native button pointer; restore it for interactive controls */
+	/* selected text takes the theme's own orange at low strength */
+	::selection {
+		background: color-mix(in srgb, var(--primary) 35%, transparent);
+	}
+
+	/* tailwind v4 drops the native button pointer. restore it for interactive controls */
 	button:not(:disabled),
 	[role="button"]:not(:disabled),
 	a[href],
 	summary {
 		cursor: pointer;
 	}
+}
+
+/* blocknote pads the editor with a 54px drag-handle gutter by default. a phone runs the text flush
+   to the page edge and a wide screen gets document margins */
+.note-editor .bn-editor {
+	padding-inline: 0;
+}
+@media (min-width: 640px) {
+	.note-editor .bn-editor {
+		padding-inline: 1.5rem;
+	}
+}
+
+/* a comment body starts at the same left edge as the author line above it. the card's own padding
+   is the only inset either of them gets */
+.note-editor .bn-comment-editor .bn-editor {
+	padding-inline: 0;
+}
+
+/* the formatting strip takes the app's one elevation and scrolls sideways itself with no bar drawn */
+.note-editor.bn-container .bn-toolbar {
+	@apply shadow-lift scrollbar-none;
+	/* the same corner radius every other raised surface in the app uses */
+	border-radius: var(--radius-md);
+	max-width: 100%;
+	overflow-x: auto;
+}
+
+/* the controls keep their width and the bar scrolls */
+.note-editor.bn-container .bn-toolbar > * {
+	flex-shrink: 0;
+}
+
+/* a comment popup is one of the app's dropdown panels: the popover fill, a border, the one elevation,
+   and the same tight inset. the composer that opens on a selection is a comment card too */
+.note-editor.bn-container .bn-thread {
+	@apply shadow-lift;
+	background-color: color-mix(in srgb, var(--primary) 15%, var(--popover));
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	padding: 0.75rem;
+}
+
+/* blocknote gives a comment a 350px floor. in the margin column it takes the column's own width,
+   and one floating over the note takes a readable width that fits a phone */
+.note-editor.bn-container .bn-threads-sidebar .bn-thread {
+	min-width: 0;
+}
+
+.note-editor:not(.bn-container) .bn-thread {
+	min-width: 0;
+	width: min(22rem, calc(100vw - 3rem));
+}
+
+/* a comment whose highlighted text was deleted has nothing left to quote. its reference line is hidden */
+.note-editor .bn-thread-orphaned .bn-header-text {
+	display: none;
+}
+
+/* the reply field is one of the app's inputs: its border, fill, corner radius and inset.
+   the selector outranks blocknote's own rule, which removes the padding */
+.note-editor.bn-container .bn-thread-composer {
+	background-color: var(--popover);
+	border: 1px solid var(--input);
+	border-radius: var(--radius-md);
+	padding: 0.25rem 0.75rem;
+}
+
+/* the comment the note is scrolled to takes the app's highlight. blocknote marks it with a hardcoded blue */
+.note-editor.bn-container .bn-threads-sidebar .bn-thread.selected {
+	background-color: color-mix(in srgb, var(--primary) 25%, var(--popover));
+	border: 1px solid var(--primary);
+}
+
+/* a link inside a note or a comment reads like every other link in the app */
+.note-editor .bn-editor a,
+.note-editor .bn-inline-content a {
+	color: var(--link);
+	text-decoration: none;
+}
+
+.note-editor .bn-editor a:hover,
+.note-editor .bn-inline-content a:hover {
+	text-decoration: underline;
+}
+
+/* a reaction pill and the button that adds one both sit on the dialog's own background with the same
+   border. blocknote styles only the unreacted pills and leaves the reacted ones mantine's grey */
+.note-editor .bn-badge .mantine-Chip-label,
+.note-editor .bn-badge .mantine-Chip-label[data-checked="true"] {
+	background-color: var(--popover);
+	border: 1px solid var(--border);
+	color: var(--popover-foreground);
+}
+
+/* the comment editor's Save and Cancel take the shape of the app's own buttons. a comment's own
+   action row shares this toolbar class, so the text buttons are the ones holding no icon.
+   mantine's rules load after this file, so the selectors have to outrank them */
+.note-editor .bn-comment-actions .mantine-Button-root:not(:has(svg)) {
+	border: none;
+	border-radius: var(--radius-md);
+	font-size: 0.875rem;
+	font-weight: 500;
+	height: 2.25rem;
+	outline: none;
+	padding-inline: 1rem;
+	transition: all 150ms;
+}
+
+/* Save is the main button, so it takes the primary fill. Cancel is the one mantine gives bn-button */
+.note-editor .bn-comment-actions .mantine-Button-root:not(:has(svg)):not(.bn-button) {
+	@apply shadow-lift;
+	background-color: var(--primary);
+	color: var(--primary-foreground);
+}
+
+.note-editor .bn-comment-actions .mantine-Button-root:not(:has(svg)):not(.bn-button):hover:not([data-disabled]) {
+	background-color: color-mix(in oklab, var(--primary) 90%, transparent);
+}
+
+/* an empty comment box fades its Save the way every disabled button in the app fades */
+.note-editor .bn-comment-actions .mantine-Button-root:not(:has(svg))[data-disabled] {
+	opacity: 0.5;
+	pointer-events: none;
+}
+
+/* a comment's reaction, resolve, and menu controls are icon-sized, on the dialog's background with
+   the border its reaction pills already have */
+.note-editor .bn-comment-actions .mantine-Button-root:has(svg) {
+	background-color: var(--popover);
+	border: 1px solid var(--border);
+	border-radius: var(--radius-md);
+	color: var(--popover-foreground);
+	height: 1.75rem;
+	min-width: 1.75rem;
+	padding-inline: 0.375rem;
+}
+
+.note-editor .bn-comment-actions .mantine-Button-root:has(svg):hover {
+	background-color: var(--accent);
+	color: var(--accent-foreground);
+}
+
+/* the phone's formatting bar shows only while the note text is being edited, rising with the keyboard */
+.note-editor:not(:has(.bn-editor:focus-within)) .bn-mobile-formatting-toolbar {
+	display: none;
+}
+
+/* blocknote takes the app's own palette in both themes. the selector outweighs blocknote's per-scheme
+   variable defaults. each comment body is a nested editor declaring the same variables again, and the
+   descendant selector reaches those too */
+.bn-root.note-editor[data-color-scheme],
+.note-editor .bn-container[data-color-scheme] {
+	/* mantine draws the quiet text inside a comment, its timestamp included, in its own grey */
+	--mantine-color-dimmed: var(--muted-foreground);
+	--bn-colors-editor-background: transparent;
+	--bn-colors-editor-text: var(--popover-foreground);
+	--bn-colors-menu-background: var(--popover);
+	--bn-colors-menu-text: var(--popover-foreground);
+	--bn-colors-tooltip-background: var(--popover);
+	--bn-colors-tooltip-text: var(--popover-foreground);
+	--bn-colors-hovered-background: var(--accent);
+	--bn-colors-hovered-text: var(--accent-foreground);
+	--bn-colors-selected-background: var(--primary);
+	--bn-colors-selected-text: var(--primary-foreground);
+	--bn-colors-disabled-background: var(--muted);
+	--bn-colors-disabled-text: var(--muted-foreground);
+	--bn-colors-border: var(--border);
+	--bn-colors-side-menu: var(--muted-foreground);
+
+	/* mantine's own palette, which the comment box and its controls read */
+	--mantine-primary-color-filled: var(--primary);
+	--mantine-primary-color-filled-hover: var(--primary);
+	--mantine-color-text: var(--popover-foreground);
+	--mantine-color-body: var(--popover);
+	--mantine-color-white: var(--primary-foreground);
+	--mantine-color-error: var(--destructive);
+	--mantine-color-placeholder: var(--muted-foreground);
+	--mantine-color-disabled: var(--muted);
+	--mantine-color-disabled-color: var(--muted-foreground);
+	--mantine-color-gray-0: var(--accent);
+	--mantine-color-gray-2: var(--border);
+	--mantine-color-gray-3: var(--border);
+	--mantine-color-dark-4: var(--border);
+	--mantine-color-dark-6: var(--muted);
+	--mantine-color-dark-7: var(--accent);
+	--mantine-color-dark-8: var(--accent);
+}
+
+/* everything below overrides blocknote, mantine, or emoji-mart, whose stylesheets load after this file.
+   the .note-editor prefix outranks them and keeps all of this inside the editor */
+
+/* a code block is an inset slab on the note page. blocknote paints it near-black with white text
+   in both themes. no syntax highlighter is configured here, and the text is one color */
+.note-editor .bn-block-content[data-content-type="codeBlock"] {
+	background-color: var(--sunken);
+	color: var(--foreground);
+}
+
+/* the language picker floating over a code block, and the names in the list it drops down */
+.note-editor .bn-block-content[data-content-type="codeBlock"] > div > select {
+	color: var(--foreground);
+}
+
+.note-editor .bn-block-content[data-content-type="codeBlock"] > div > select > option {
+	background-color: var(--popover);
+	color: var(--popover-foreground);
+}
+
+/* table gridlines take the app's border. blocknote hardcodes them at #ddd */
+.note-editor .bn-editor [data-content-type="table"] th,
+.note-editor .bn-editor [data-content-type="table"] td {
+	border: 1px solid var(--border);
+}
+
+/* the bar on a column edge while it is being resized, and the line shown while dropping a row or column */
+.note-editor .ProseMirror .column-resize-handle,
+.note-editor .bn-table-drop-cursor {
+	background-color: var(--primary);
+}
+
+/* a multi-cell table selection takes the same orange the page's own ::selection uses */
+.note-editor .ProseMirror .selectedCell:after {
+	background: color-mix(in srgb, var(--primary) 25%, transparent);
+}
+
+/* the tint and 4px ring around a selected image, file, table or equation. :is() takes the specificity of
+   its widest branch, so this one rule outranks all four of blocknote's blue ones */
+.note-editor
+:is(
+	.bn-block-content.ProseMirror-selectednode > *,
+	.ProseMirror-selectednode > .bn-block-content > *,
+	.bn-block-content .ProseMirror-selectednode,
+	.bn-inline-content .ProseMirror-selectednode
+):after {
+	background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+	box-shadow: inset 0 0 0 4px color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+/* the empty "add image / add file" card and the empty equation placeholder are quiet panels in the app's
+   own palette. blocknote gives each a fixed grey per theme */
+.note-editor [data-file-block] .bn-add-file-button,
+.note-editor .bn-preview-placeholder {
+	background-color: var(--muted);
+	color: var(--muted-foreground);
+}
+
+/* their hover, plus the file chip's hover and its selected state. blocknote's rules for these include
+   an extra .bn-editor[contenteditable] hop, and these match that hop and add one more */
+.note-editor .bn-editor[contenteditable="true"] [data-file-block] .bn-add-file-button:hover,
+.note-editor .bn-editor[contenteditable="true"] .bn-preview-placeholder:not(.bn-preview-placeholder-error):hover,
+.note-editor [data-file-block] .bn-file-name-with-icon:hover,
+.note-editor .ProseMirror-selectednode .bn-file-name-with-icon {
+	background-color: var(--accent);
+}
+
+/* the grab handles on an image's left and right edges, drawn black with a white outline in both themes */
+.note-editor [data-file-block] .bn-resize-handle {
+	background-color: var(--primary);
+	border: 1px solid var(--popover);
+}
+
+/* a quote's text and left rule, and the lines a divider or a page break draws. blocknote fixes all of
+   them at one warm grey */
+.note-editor [data-content-type="quote"] blockquote {
+	border-left: 2px solid var(--separator-strong);
+	color: var(--muted-foreground);
+}
+
+.note-editor [data-content-type="divider"] hr {
+	border-top: 1px solid var(--separator-strong);
+}
+
+.note-editor .bn-block-content[data-content-type="pageBreak"] > div {
+	border-top: 2px dotted var(--separator-strong);
+}
+
+/* the confirm button in the equation and code source popup is one of the app's main buttons. blocknote
+   hardcodes a tailwind blue for it */
+.note-editor .bn-code-block-source-popup-ok-button {
+	background-color: var(--primary);
+	color: var(--primary-foreground);
+}
+
+.note-editor .bn-code-block-source-popup-ok-button:hover {
+	background-color: color-mix(in srgb, var(--primary) 90%, transparent);
+}
+
+/* the highlight behind commented text, and the stronger one on the span whose thread is open.
+   blocknote uses a fixed yellow */
+.note-editor .bn-thread-mark:not([data-orphan="true"]) {
+	background: color-mix(in srgb, var(--primary) 20%, transparent);
+}
+
+.note-editor .bn-thread-mark .bn-thread-mark-selected {
+	background: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+/* inline error text in blocknote's link and file forms, plain `red` by default */
+.note-editor .bn-error-text {
+	color: var(--destructive);
+}
+
+/* a block selection made while the editor is unfocused matches the page's own ::selection.
+   blocknote paints it with the OS highlight color */
+.note-editor [data-show-selection] {
+	background-color: color-mix(in srgb, var(--primary) 35%, transparent);
+}
+
+/* the emoji picker is emoji-mart inside a shadow root, themed by custom properties read off an
+   ancestor. it is portalled into the editor root, which has .note-editor, so this still scopes to
+   the editor. --color-border is a tailwind theme name too, but @theme inline never emits it */
+.note-editor .bn-emoji-picker-popover {
+	--color-border: var(--accent);
+	--color-border-over: var(--separator-strong);
+}
+
+/* emoji-mart wraps the other four as rgb(var(--x)) and rgba(var(--x), .9), so they have to be bare
+   comma-separated triplets and cannot be var(--token). these are the popover, popover-foreground and
+   primary values written out, and they have to be edited whenever those change */
+.note-editor[data-color-scheme="light"] .bn-emoji-picker-popover {
+	--rgb-background: 255, 253, 249;
+	--rgb-input: 255, 253, 249;
+	--rgb-color: 51, 42, 34;
+	--rgb-accent: 217, 151, 74;
+}
+
+.note-editor[data-color-scheme="dark"] .bn-emoji-picker-popover {
+	--rgb-background: 48, 36, 23;
+	--rgb-input: 48, 36, 23;
+	--rgb-color: 240, 230, 214;
+	--rgb-accent: 240, 144, 80;
 }

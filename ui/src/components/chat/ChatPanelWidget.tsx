@@ -3,20 +3,23 @@ import type { ChatMention } from "@shared/contracts"
 import { Maximize2, Minimize2, Minus } from "lucide-react"
 import type * as React from "react"
 import { createPortal } from "react-dom"
-import { CarlAvatar } from "@/components/branding/CarlAvatar"
 import { CoffeeCup } from "@/components/branding/CoffeeCup"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { CoffeeMugs } from "@/components/branding/CoffeeMugs"
 import { CoffeePot } from "@/components/branding/CoffeePot"
-import { TeamAvatar } from "@/components/branding/TeamAvatar"
-import { ChatOptionsMenu, type ChatOptionsMenuProps } from "@/components/chat/ChatOptionsMenu"
+import {
+	ChatOptionsMenu,
+	type ChatOptionsMenuProps,
+	type CurrentChatRoomOption,
+	hasChatOptions,
+} from "@/components/chat/ChatOptionsMenu"
 import { DisabledRoomComposer } from "@/components/chat/ChatRoomComposer"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ChatMentionCount, ChatMentionsTooltipBody, toChatLabel } from "@/components/topic/TopicMentionBadge"
 import { cn } from "@/lib/utils"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
 
-// the loading message that the chat panel shows while the chat history is loading
+// the loading chat message that the chat panel shows while the chat history is loading
 export function ChatMessagesLoading() {
 	return (
 		<div className="text-muted-foreground font-display flex min-h-24 flex-1 items-center justify-center gap-2 text-sm">
@@ -27,7 +30,7 @@ export function ChatMessagesLoading() {
 }
 
 /**
- * The panel before the conversation messages load.
+ * The panel before the conversation chat messages load.
  */
 export function ChatLoadingPanel({
 	isEnlarged,
@@ -49,8 +52,8 @@ export function ChatLoadingPanel({
 	)
 }
 
-// the docked chat panel's placement and width
-const DOCKED_CHAT_PANEL_CLASS = "bottom-safe right-3 left-3 max-h-[70dvh] sm:left-auto sm:w-[26rem] md:w-[30rem]"
+// the docked chat panel's placement and width. it fills the full viewport height
+const DOCKED_CHAT_PANEL_CLASS = "top-3 bottom-safe right-3 left-3 sm:left-auto sm:w-[26rem] md:w-[30rem]"
 
 // the chat panel's elevated drop shadow
 const CHAT_PANEL_ELEVATION_CLASS =
@@ -76,7 +79,7 @@ export function ChatPanelWidget({
 				aria-label="Coffee Talk"
 				onKeyDown={(event) => event.key === "Escape" && onMinimizeChat()}
 				className={cn(
-					"bg-popover fixed z-50 flex flex-col overflow-hidden rounded-xl",
+					"bg-popover @container fixed z-50 flex flex-col overflow-hidden rounded-xl",
 					CHAT_PANEL_ELEVATION_CLASS,
 					isEnlarged ? "bottom-safe top-3 right-3 left-3 sm:inset-6" : DOCKED_CHAT_PANEL_CLASS,
 				)}
@@ -118,137 +121,90 @@ export function ChatPill({ onOpenChat, chatMentions }: { onOpenChat: () => void;
 	)
 }
 
-/**
- * What the chat panel title's tooltip shows: the chat room name in the panel and its avatar.
- */
-export type ChatPanelTooltip = {
-	chatRoomName: string
-	team?: { teamId: string; name: string; hasAvatar: boolean }
-	isPrivate?: boolean
-}
+// the chat room open in the panel right now, in the shape the switcher row's menu takes it
+export type { CurrentChatRoomOption as ChatPanelCurrentRoom } from "@/components/chat/ChatOptionsMenu"
 
 // the chat panel title display with coffee cups
-function ChatPanelTitle({
-	isRoom,
-	chatPanelTooltip,
-	onOpenChat,
-}: {
-	// a chat room shows the pair of mugs while a private chat only shows one mug
-	isRoom?: boolean
-	chatPanelTooltip?: ChatPanelTooltip
-	// opens the chat list. if there is no list to open, there is no callback
-	onOpenChat?: () => void
-}) {
-	const title = (
-		<>
+function ChatPanelTitle({ isRoom }: { isRoom?: boolean }) {
+	return (
+		<span className="flex flex-1 items-center gap-2">
 			{isRoom ? (
 				<CoffeeMugs className="h-4 w-auto shrink-0 -translate-y-1" />
 			) : (
 				<CoffeeMug className="size-5 shrink-0" />
 			)}
 			<h2 className="font-display text-lg leading-none">Coffee Talk</h2>
-		</>
-	)
-	if (!onOpenChat) {
-		return <span className="flex flex-1 items-center gap-2">{title}</span>
-	}
-	// the entire chat panel title triggers the tooltip on hover
-	const chatPanelTitle = (
-		<button
-			type="button"
-			aria-label="Open the chat list"
-			onClick={onOpenChat}
-			className="flex flex-1 items-center gap-2"
-		>
-			{title}
-		</button>
-	)
-	if (!chatPanelTooltip) {
-		return chatPanelTitle
-	}
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>{chatPanelTitle}</TooltipTrigger>
-			<TooltipContent className="flex items-center gap-2">
-				{chatPanelTooltip.team ? (
-					<TeamAvatar team={chatPanelTooltip.team} className="size-4" />
-				) : chatPanelTooltip.isPrivate ? (
-					<CarlAvatar className="size-4" />
-				) : null}
-				{chatPanelTooltip.chatRoomName}
-			</TooltipContent>
-		</Tooltip>
+		</span>
 	)
 }
 
-// the chat panel title bar with the options menu, enlarge, and minimize buttons
+// the chat panel title bar: the static title and its buttons, with the chat room switcher as its own row below
 export function ChatPanelHeader({
 	isEnlarged,
 	isRoom,
 	onToggleSize,
 	onCollapse,
 	chatRoomMenu,
-	chatPanelTooltip,
+	currentChatRoom,
 }: {
 	isEnlarged: boolean
 	// a chat room shows the pair of mugs while a private chat only shows one mug
 	isRoom?: boolean
 	onToggleSize: () => void
 	onCollapse: () => void
-	// what the Ellipsis (...) chat options menu shows. absent when it has no row to show
+	// what the chat room switcher row offers to open. no row shows when it is absent or has nothing to offer
 	chatRoomMenu?: ChatOptionsMenuProps
-	// the tooltip for the chat panel title indicating the current chat room's name and avatar
-	chatPanelTooltip?: ChatPanelTooltip
+	// the chat room the switcher row names as open
+	currentChatRoom?: CurrentChatRoomOption
 }) {
 	return (
-		<header className="flex shrink-0 items-center gap-2 border-b px-3 py-2.5">
-			{/* the chat panel title shows the open conversation on hover and opens the chat rooms list on a press */}
-			{chatRoomMenu ? (
-				<ChatOptionsMenu
-					{...chatRoomMenu}
-					renderChatTitle={(onOpen) => (
-						<ChatPanelTitle isRoom={isRoom} chatPanelTooltip={chatPanelTooltip} onOpenChat={onOpen} />
-					)}
-				/>
-			) : (
-				<ChatPanelTitle isRoom={isRoom} chatPanelTooltip={chatPanelTooltip} />
-			)}
-			{/* the buttons are grouped to the right */}
-			<div className="flex items-center gap-0.5">
-				{/* the size toggle reads as an "expand" and "collapse" pair */}
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<button
-							type="button"
-							aria-label={isEnlarged ? "Collapse" : "Expand"}
-							onClick={onToggleSize}
-							className="text-muted-foreground hover:text-foreground grid size-8 place-items-center rounded-md"
-						>
-							{isEnlarged ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-						</button>
-					</TooltipTrigger>
-					<TooltipContent>{isEnlarged ? "Collapse" : "Expand"}</TooltipContent>
-				</Tooltip>
-				{/* the "minimize" dash closes the panel to its pill */}
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<button
-							type="button"
-							aria-label="Minimize"
-							onClick={onCollapse}
-							className="text-muted-foreground hover:text-foreground grid size-8 place-items-center rounded-md"
-						>
-							<Minus className="size-4" />
-						</button>
-					</TooltipTrigger>
-					<TooltipContent>Minimize</TooltipContent>
-				</Tooltip>
+		<header className="flex shrink-0 flex-col border-b">
+			<div className="flex items-center gap-2 px-3 py-2.5">
+				<ChatPanelTitle isRoom={isRoom} />
+				{/* the buttons are grouped to the right */}
+				<div className="flex items-center gap-0.5">
+					{/* the size toggle reads as an "expand" and "collapse" pair. a phone is always full screen.
+					    the toggle only shows up on a wide screen */}
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<button
+								type="button"
+								aria-label={isEnlarged ? "Collapse" : "Expand"}
+								onClick={onToggleSize}
+								className="text-muted-foreground hover:text-foreground hidden size-8 place-items-center rounded-md sm:grid"
+							>
+								{isEnlarged ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
+							</button>
+						</TooltipTrigger>
+						<TooltipContent>{isEnlarged ? "Collapse" : "Expand"}</TooltipContent>
+					</Tooltip>
+					{/* the "minimize" dash closes the panel to its pill */}
+					<Tooltip>
+						<TooltipTrigger asChild>
+							<button
+								type="button"
+								aria-label="Minimize"
+								onClick={onCollapse}
+								className="text-muted-foreground hover:text-foreground grid size-8 place-items-center rounded-md"
+							>
+								<Minus className="size-4" />
+							</button>
+						</TooltipTrigger>
+						<TooltipContent>Minimize</TooltipContent>
+					</Tooltip>
+				</div>
 			</div>
+			{/* the chat room switcher row names what is open and lists the other chat rooms to switch to */}
+			{chatRoomMenu && hasChatOptions(chatRoomMenu) && (
+				<div className="border-t">
+					<ChatOptionsMenu {...chatRoomMenu} currentChatRoom={currentChatRoom} />
+				</div>
+			)}
 		</header>
 	)
 }
 
-// render into the body instead of into the app layout's box for the highest z-index possible
+// render into the body for the highest z-index possible
 export function renderOnTop(children: React.ReactNode): React.ReactPortal {
 	return createPortal(children, document.body)
 }

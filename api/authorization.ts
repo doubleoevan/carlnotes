@@ -1,5 +1,6 @@
 // the authorization gate
 import { dailyFrequencies } from "@shared/enums"
+import { reportError } from "@shared/monitoring"
 import { ADMIN_BUDGET_CENTS, ADMIN_QUOTA, type BillingInterval, PLANS, type Plan } from "@shared/plans"
 import { and, count, eq, gte, inArray, sql } from "drizzle-orm"
 import { db } from "../db"
@@ -28,8 +29,8 @@ export async function isAllowed(userId: string | null, capability: Capability, t
 	}
 
 	// resolve access authority. an admin passes every entitlement and overrides topic view/edit/delete/scan authority
-	const access = userId ? await loadUserAccess(userId) : null
-	if (access?.isAdmin) {
+	const userAccess = userId ? await loadUserAccess(userId) : null
+	if (userAccess?.isAdmin) {
 		return true
 	}
 
@@ -39,7 +40,7 @@ export async function isAllowed(userId: string | null, capability: Capability, t
 	}
 
 	// everything else checks ownership, subscription, or plan
-	return decideTopicCapability(userId, capability, access?.plan ?? "free", topic)
+	return decideTopicCapability(userId, capability, userAccess?.plan ?? "free", topic)
 }
 
 // the per-capability decisions for a non-admin or a signed-out visitor
@@ -131,9 +132,9 @@ export function effectiveBudgetCents({
  */
 export async function isMonthlySpendExhausted(userId: string): Promise<boolean> {
 	// scans and chat draw from one budget pool, so both are summed against the same budget
-	const [access, spend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
+	const [userAccess, spend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
 	const spentCents = Math.round(spend.scanDollars * 100) + Math.round(spend.chatDollars * 100)
-	return spentCents >= effectiveBudgetCents(access)
+	return spentCents >= effectiveBudgetCents(userAccess)
 }
 
 /**
@@ -159,9 +160,9 @@ export async function monthlySpendDollars(userId: string): Promise<{ scanDollars
  * Replace the user's LiteLLM key with a fresh one at their current effective budget,
  * after any update that changes it: a plan change, a role change, or a budget override.
  */
-export async function replaceUserLiteLLMKey(userId: string): Promise<void> {
+export async function replaceUserLiteLLMKey(userId: string): Promise<boolean> {
 	// read the access the budget derives from, plus the email the new key is aliased to and the key it replaces
-	const [access, [user]] = await Promise.all([
+	const [userAccess, [user]] = await Promise.all([
 		loadUserAccess(userId),
 		db
 			.select({ email: users.email, litellmVirtualKey: users.litellmVirtualKey })
@@ -169,14 +170,14 @@ export async function replaceUserLiteLLMKey(userId: string): Promise<void> {
 			.where(eq(users.id, userId)),
 	])
 
-	// a user whose key was never created has nothing to replace
+	// a user whose key was never created has nothing to replace or update
 	if (!user?.litellmVirtualKey) {
-		return
+		return true
 	}
 
 	// a new key starts its spend at zero, so the full new limit is available from the moment it applies
 	try {
-		const replacementKey = await provisionLiteLLMKey(user.email, effectiveBudgetCents(access))
+		const replacementKey = await provisionLiteLLMKey(user.email, effectiveBudgetCents(userAccess))
 		try {
 			await db.update(users).set({ litellmVirtualKey: replacementKey }).where(eq(users.id, userId))
 		} catch (error) {
@@ -185,9 +186,13 @@ export async function replaceUserLiteLLMKey(userId: string): Promise<void> {
 			throw error
 		}
 		await deleteLiteLLMKey(user.litellmVirtualKey)
+		return true
 	} catch (error) {
-		// the proxy is not the source of truth here, so an error must not fail the update that triggered this
+		// the proxy is not the source of truth here, so an error must not fail the update that triggered this.
+		// the key stays sized to the old budget and returns false to the caller.
 		console.error(`litellm key replace failed for user ${userId}`, error)
+		reportError(error, "chat", { userId, budgetCents: String(effectiveBudgetCents(userAccess)) })
+		return false
 	}
 }
 
@@ -220,13 +225,13 @@ export async function topicsRemaining(userId: string): Promise<number> {
  */
 export async function loadDailyTopicQuota(userId: string): Promise<{ limit: number; remainingTopics: number }> {
 	// admins bypass the daily topic limit, as they do every other quota
-	const [access, { billingInterval }] = await Promise.all([loadUserAccess(userId), loadBillingAccess(userId)])
-	if (access.isAdmin) {
+	const [userAccess, { billingInterval }] = await Promise.all([loadUserAccess(userId), loadBillingAccess(userId)])
+	if (userAccess.isAdmin) {
 		return { limit: ADMIN_QUOTA, remainingTopics: ADMIN_QUOTA }
 	}
 
 	// what the plan allows at the user's billing interval, less the topics already on a daily frequency
-	const limit = PLANS[access.plan].dailyTopicLimit[billingInterval]
+	const limit = PLANS[userAccess.plan].dailyTopicLimit[billingInterval]
 	return { limit, remainingTopics: Math.max(0, limit - (await dailyTopicCount(userId))) }
 }
 
@@ -293,11 +298,11 @@ export type ManualScanAuthorization =
  */
 export async function loadManualScanAuthorization(userId: string, topic: GatedTopic): Promise<ManualScanAuthorization> {
 	// load the user's access, today's scan count, and whether they can be billed, then authorize
-	const access = await loadUserAccess(userId)
+	const userAccess = await loadUserAccess(userId)
 	const [scansUsedToday, billingAccess] = await Promise.all([scansToday(userId), loadBillingAccess(userId)])
 	return authorizeManualScan({
-		isAdmin: access.isAdmin,
-		plan: access.plan,
+		isAdmin: userAccess.isAdmin,
+		plan: userAccess.plan,
 		isOwner: topic.ownerId === userId,
 		scansUsedToday,
 		...billingAccess,
@@ -311,14 +316,19 @@ export type DailyFrequencyAuthorization = { status: "allowed" } | { status: "quo
  * Whether the user may put one more topic on a daily frequency, based on their plan's daily topic limit.
  */
 export async function loadDailyFrequencyAuthorization(userId: string): Promise<DailyFrequencyAuthorization> {
-	const [access, { billingInterval }, dailyTopicsUsed] = await Promise.all([
+	const [userAccess, { billingInterval }, dailyTopicsUsed] = await Promise.all([
 		loadUserAccess(userId),
 		loadBillingAccess(userId),
 		dailyTopicCount(userId),
 	])
-	return authorizeDailyFrequency({ isAdmin: access.isAdmin, plan: access.plan, billingInterval, dailyTopicsUsed })
+	return authorizeDailyFrequency({
+		isAdmin: userAccess.isAdmin,
+		plan: userAccess.plan,
+		billingInterval,
+		dailyTopicsUsed,
+	})
 		? { status: "allowed" }
-		: { status: "quota", limit: PLANS[access.plan].dailyTopicLimit[billingInterval] }
+		: { status: "quota", limit: PLANS[userAccess.plan].dailyTopicLimit[billingInterval] }
 }
 
 /**

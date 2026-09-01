@@ -2,6 +2,7 @@ import { Check, ChevronsUpDown, X } from "lucide-react"
 import { useState } from "react"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
+import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 // one choice the combobox offers
@@ -26,14 +27,14 @@ export function MultiCombobox({
 	const [isOpen, setIsOpen] = useState(false)
 	const [filter, setFilter] = useState("")
 
-	// clicking a value option updates the selected values
+	// clicking an option toggles its value in the selection
 	const handleUpdateValues = (value: string): void => {
 		onUpdateValues(
 			values.includes(value) ? values.filter((previousValue) => previousValue !== value) : [...values, value],
 		)
 	}
 
-	// the options list filters as the filter input is typed into, case-insensitively
+	// the options narrowed by the filter text, case-insensitively
 	const shownOptions = options.filter((option) => option.label.toLowerCase().includes(filter.trim().toLowerCase()))
 	const selectedOptions = options.filter((option) => values.includes(option.value))
 	return (
@@ -67,29 +68,31 @@ export function MultiCombobox({
 						<ChevronsUpDown className="size-4 shrink-0 opacity-50" />
 					</button>
 				</PopoverTrigger>
-				<PopoverContent align="start" className="w-(--radix-popover-trigger-width) p-1">
-					{/* the filter input, then the rows it leaves */}
+				<PopoverContent align="start" className="w-(--radix-popover-trigger-width)" bodyClassName="p-1">
+					{/* the filter input, then the rows it leaves. the popover does not move focus when it opens */}
 					<input
+						// biome-ignore lint/a11y/noAutofocus: this field is why the panel opens
+						autoFocus
 						value={filter}
 						onChange={(event) => setFilter(event.target.value)}
 						placeholder="Search…"
 						aria-label="Filter the list"
 						className="placeholder:text-muted-foreground mb-1 w-full bg-transparent px-2 py-1.5 text-sm outline-none"
 					/>
-					<ul className="max-h-56 overflow-y-auto">
+					<div className="max-h-56 overflow-y-auto">
+						{/* a selected row is highlighted, with its check on the right */}
 						{shownOptions.map((option) => (
-							<li key={option.value}>
-								<button
-									type="button"
-									onClick={() => handleUpdateValues(option.value)}
-									className="hover:bg-accent flex min-h-9 w-full items-center gap-2 rounded-md px-2 text-left text-sm"
-								>
-									<Check className={cn("size-4 shrink-0", !values.includes(option.value) && "opacity-0")} />
-									<span className="truncate">{option.label}</span>
-								</button>
-							</li>
+							<button
+								key={option.value}
+								type="button"
+								onClick={() => handleUpdateValues(option.value)}
+								className={cn(MENU_OPTION_CLASS, values.includes(option.value) && MENU_OPTION_SELECTED_CLASS)}
+							>
+								<span className="min-w-0 flex-1 truncate">{option.label}</span>
+								{values.includes(option.value) && <Check className="text-primary size-4 shrink-0" />}
+							</button>
 						))}
-					</ul>
+					</div>
 					{/* show a message if there are no options left after filtering */}
 					{shownOptions.length === 0 && <p className="text-muted-foreground px-2 py-2 text-sm">{emptyLabel}</p>}
 				</PopoverContent>

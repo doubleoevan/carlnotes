@@ -11,6 +11,7 @@ import {
 	type AllowedScanNoteUrls,
 	NumberedTopicFindingList,
 	SafeNoteText,
+	ScrollBox,
 	ScrollNote,
 	TopicScanNote,
 	toNotesMarkdown,
@@ -48,6 +49,9 @@ const VISIBILITY_METADATA = {
 	invite: { icon: Mail, label: "invite" },
 }
 
+// the prompt length that fills the scroll box's max-h-72 limit
+const SCROLLING_PROMPT_CHARS = 900
+
 /**
  * The topic info content shared by the homepage popovers and the topic page card, isCard is used to distinguish the info variant
  */
@@ -64,10 +68,10 @@ export function TopicInfo(props: TopicInfoProps) {
 	})
 	return (
 		<>
-			{/* the card gets its own header from the accordion wrapping it, so this title is popover-only.
-			    it sits outside the divide-y container below so no separator line renders under it */}
+			{/* the card gets its own header from the accordion wrapping it, so this title is popover-only */}
 			{!props.isCard && <h2 className={POPOVER_HEADING_CLASS}>Topic roast</h2>}
-			<div className="divide-separator divide-y divide-dashed">
+			{/* the sections run together. a solid rule stands over Visibility and over the closing row */}
+			<div>
 				{/* a failed newest scan is stated plainly, so a topic whose sources are dead doesn't read as one that
 				    found nothing. card only, since the feed payload has no scan history */}
 				{props.isCard && <FailedBrewSection scans={props.topic.scans} />}
@@ -90,7 +94,7 @@ export function TopicInfo(props: TopicInfoProps) {
 				{/* the topic prompt, through the same sanitized subset the recap uses.
 				    a url the owner typed can only become a link if the scan kept it as a finding */}
 				<InfoSection label="Carl's Prompt">
-					{topic.prompt ? <SafeNoteText note={topic.prompt} allowedUrls={toFindingUrls(topic)} /> : "—"}
+					<TopicPrompt prompt={topic.prompt} allowedUrls={toFindingUrls(topic)} />
 				</InfoSection>
 
 				{/* recap of the latest scan through the sanitized subset, citing only the kept findings' own urls,
@@ -123,15 +127,24 @@ export function TopicInfo(props: TopicInfoProps) {
 				{/* the topic sources are only in the popover */}
 				{!props.isCard && <TopicSourcesSection sources={topic.sources} />}
 
-				{/* who may see the topic, directly above the follower count. the card always says, and the popup
+				{/* who may see the topic, under its own rule. the card always says, and the popup
 				    speaks up only when it is not public, since most feed topics are public and
 				    repeating that on every row says nothing */}
-				{(props.isCard || topic.visibility !== "public") && <TopicVisibility visibility={topic.visibility} />}
+				{(props.isCard || topic.visibility !== "public") && (
+					<>
+						<div className="bg-separator h-px" />
+						<TopicVisibility visibility={topic.visibility} />
+					</>
+				)}
 
-				<InfoSection label="Followers">{topic.subscriberCount.toLocaleString()}</InfoSection>
+				{/* the second rule stands over the closing row */}
+				<div className="bg-separator h-px" />
 
-				{/* the teams that have this topic, the owning one and every team it was shared into */}
-				<InfoSection label="Teams">{topic.teamCount.toLocaleString()}</InfoSection>
+				{/* the team count on the left and the follower count on the right close the roast in one plain row */}
+				<div className="flex items-center justify-between gap-3 pt-3 text-sm">
+					<span>{`${topic.teamCount.toLocaleString()} team${topic.teamCount === 1 ? "" : "s"}`}</span>
+					<span>{`${topic.subscriberCount.toLocaleString()} follower${topic.subscriberCount === 1 ? "" : "s"}`}</span>
+				</div>
 			</div>
 		</>
 	)
@@ -237,7 +250,20 @@ function TopicVisibility({ visibility }: { visibility: TopicResponse["visibility
 	)
 }
 
-// a labeled section, padded by default so the dashed dividers sit evenly between sections
+/**
+ * The topic's prompt. A prompt long enough to run past the scroll box's limit scrolls inside one instead.
+ */
+export function TopicPrompt({ prompt, allowedUrls }: { prompt: string | null; allowedUrls?: AllowedScanNoteUrls }) {
+	if (!prompt) {
+		return "—"
+	}
+
+	// a short prompt reads as its own paragraph. only a long one earns the box's border and scrollbar
+	const promptText = <SafeNoteText note={prompt} allowedUrls={allowedUrls} />
+	return prompt.length > SCROLLING_PROMPT_CHARS ? <ScrollBox>{promptText}</ScrollBox> : promptText
+}
+
+// a labeled section with its uppercase label above its content
 export function InfoSection({
 	label,
 	children,

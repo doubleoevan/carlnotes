@@ -1,4 +1,4 @@
-// the topic feed logic behind the homepage route. it batches every topic's data in one pass and builds each feed in memory
+// the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
 import { toSourceSummary, toSourceValue, toUrlHost } from "@shared/sources"
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm"
@@ -43,6 +43,13 @@ function activeSubscriptionTopicIdQuery(userId: string) {
 		.select({ topicId: subscriptions.topicId })
 		.from(subscriptions)
 		.where(and(eq(subscriptions.isActive, true), eq(subscriptions.subscriberUserId, userId)))
+}
+
+/**
+ * Drop the cached topic section id lists. The next feed build reads them fresh.
+ */
+export function clearTopicSectionIdCache(): void {
+	topicSectionIdCache = null
 }
 
 // the public featured and popular topic id lists, reloaded inline once the cached entry goes stale
@@ -113,15 +120,19 @@ export async function buildTopicFeeds(
 	// the topic ids this user actively subscribes to
 	const activeSubscriptionTopicIds = userId ? activeSubscriptionTopicIdQuery(userId) : null
 
-	// the user's own topics, the topics they subscribe to but don't own
+	// the user's own topics, and the topics they subscribe to but don't own. both read newest first.
+	// an unordered select leaves the order to the database, which moves a row after any update to it
 	const [ownersTopics, subscribedTopics, { featuredTopics, popularTopics }] = await Promise.all([
-		userId ? db.select().from(topics).where(eq(topics.ownerId, userId)) : Promise.resolve([]),
+		userId
+			? db.select().from(topics).where(eq(topics.ownerId, userId)).orderBy(desc(topics.createdAt))
+			: Promise.resolve([]),
 		// subscribed topics never include one this user owns
 		userId && activeSubscriptionTopicIds
 			? db
 					.select()
 					.from(topics)
 					.where(and(ne(topics.ownerId, userId), inArray(topics.id, activeSubscriptionTopicIds)))
+					.orderBy(desc(topics.createdAt))
 			: Promise.resolve([]),
 		publicSectionTopics(userId),
 	])
@@ -411,7 +422,7 @@ function buildTopicFeed(
 		isOnTeam: topic.teamId !== null,
 		teamLink: feedData.teamLinkByTopic.get(topic.id) ?? null,
 		roomTeams: [],
-		mentions: feedData.mentionsByTopic.get(topic.id) ?? [],
+		chatMentions: feedData.mentionsByTopic.get(topic.id) ?? [],
 		// what this user may do with the topic, plus their unconsumed topic findings count
 		canRate: canRateInFeed(topic, userId, feedData.subscribedTopicIdSet, feedData.memberTopicIdSet),
 		isSubscribed: feedData.subscribedTopicIdSet.has(topic.id),

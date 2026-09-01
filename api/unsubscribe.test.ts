@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { invalidUnsubscribePage, unsubscribedPage } from "./unsubscribe"
 
-// the confirmation page states the outcome, names the topic, escapes html-significant characters, and links to the topic
+// the confirmation page states the outcome, names the topic, escapes HTML-significant characters, and links to the topic
 test("unsubscribedPage names the topic and links to it", () => {
 	const page = unsubscribedPage({ id: "t1", name: "A & B <topic>" }, "https://carlnotes.example.com")
 	expect(page).toContain("You're unsubscribed")

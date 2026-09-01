@@ -16,7 +16,7 @@ import { TopicInfo } from "@/components/topic/TopicInfo"
 import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { useIsVisible } from "@/hooks/useIsVisible"
 import {
-	POPOVER_WIDTH_CLASS,
+	POPOVER_PANEL_CLASS,
 	RAIL_BARE_ICON_INSET,
 	RAIL_TEXT_INSET,
 	RESOURCE_LIST_CARD_CLASS,
@@ -56,7 +56,7 @@ export function Topic({ topic, index }: TopicProps) {
 			    the actions sharing the line below it */}
 			<div>
 				<div className="flex items-center gap-2">
-					{/* the mention count sits at the name's top-right corner while the user has unseen mentions */}
+					{/* the chat mention count sits at the name's top-right corner while the user has unseen chat mentions */}
 					<span className="relative inline-block min-w-0">
 						<AnchorLink href={`/topics/${topic.id}`} className="text-link min-w-0 hover:underline">
 							<h3 className="font-display pt-1 pl-4 pb-1 text-lg leading-tight">{topic.name}</h3>
@@ -69,16 +69,9 @@ export function Topic({ topic, index }: TopicProps) {
 					{/* the credit is derived: the team for anyone who can open its page, the creator otherwise */}
 					<div className="min-w-0">
 						{topic.teamLink ? (
-							<TeamLink team={topic.teamLink} className="mt-1 pl-4 text-xs" avatarClassName="size-4" />
+							<TeamLink team={topic.teamLink} className="mt-1 pl-4 text-xs" />
 						) : (
-							topic.owner && (
-								<UserProfileLink
-									user={topic.owner}
-									label="Brewed by"
-									avatarClassName="size-4"
-									className="mt-1 pl-4 text-xs"
-								/>
-							)
+							topic.owner && <UserProfileLink user={topic.owner} label="Brewed by" className="mt-1 pl-4 text-xs" />
 						)}
 					</div>
 					{/* the "# new" count opens the info content, and the subscribe toggle sits to its right.
@@ -93,10 +86,7 @@ export function Topic({ topic, index }: TopicProps) {
 						{!topic.isOwner && <SubscribeToggle topic={topic} />}
 						{topic.visibility !== "private" && (
 							<ShareTopic
-								topicId={topic.id}
-								topicName={topic.name}
-								isPublic={topic.visibility === "public"}
-								canInvite={topic.isOwner}
+								topic={topic}
 								isIcon
 								className="text-muted-foreground hover:text-foreground grid h-11 w-7 shrink-0 place-items-center sm:size-7"
 							/>
@@ -148,7 +138,7 @@ export function Topic({ topic, index }: TopicProps) {
 // the subscribe icon beside the "# new" count
 function SubscribeToggle({ topic }: { topic: TopicFeed }) {
 	const navigate = useNavigate()
-	const { reload } = useTopicFeed()
+	const { reloadTopicFeed } = useTopicFeed()
 	const { data: session } = authClient.useSession()
 
 	// a visitor is sent to signup, a signed-in user toggles their topic subscription and reloads the topic feed
@@ -158,7 +148,7 @@ function SubscribeToggle({ topic }: { topic: TopicFeed }) {
 			return
 		}
 		await sendTopicSubscription(topic.id, !topic.isSubscribed)
-		await reload()
+		await reloadTopicFeed()
 	}
 
 	const tooltip = !session ? "Sign up to follow" : topic.isSubscribed ? "Unfollow" : "Follow"
@@ -225,7 +215,7 @@ export function TopicInfoPopover({
 				</TooltipTrigger>
 				<TooltipContent side="top">A topic note from Carl</TooltipContent>
 			</Tooltip>
-			<PopoverContent onClick={(event) => event.stopPropagation()} align="start" className={POPOVER_WIDTH_CLASS}>
+			<PopoverContent onClick={(event) => event.stopPropagation()} align="start" className={POPOVER_PANEL_CLASS}>
 				<PopoverCloseButton />
 				<TopicInfo topic={topic} />
 			</PopoverContent>
@@ -263,7 +253,7 @@ export function NewCountInfo({ topic }: { topic: TopicFeed }) {
 				</TooltipTrigger>
 				<TooltipContent>A topic note from Carl</TooltipContent>
 			</Tooltip>
-			<PopoverContent align="end" className={POPOVER_WIDTH_CLASS}>
+			<PopoverContent align="end" className={POPOVER_PANEL_CLASS}>
 				<PopoverCloseButton />
 				<TopicInfo topic={topic} />
 			</PopoverContent>

@@ -16,7 +16,7 @@ import { SMALLEST_PAGE_SIZE, TablePagination, usePaginatedRowSort } from "@/comp
 import { TopicInfo } from "@/components/topic/TopicInfo"
 import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { toMonthYearLabel } from "@/lib/labels"
-import { POPOVER_WIDTH_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { POPOVER_PANEL_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 // the sort accessors for the topic columns
@@ -141,7 +141,7 @@ export function TopicsTable({
 						{pageRows.map((topic) => (
 							<tr key={topic.id} className="border-b">
 								<td className="py-2 pr-4">
-									{/* the mention count sits in the name's top-right corner while the user has unseen mentions */}
+									{/* the chat mention count sits in the name's top-right corner while the user has unseen chat mentions */}
 									<span className="relative inline-block">
 										<AnchorLink href={`/topics/${topic.id}`} className="text-link hover:underline">
 											{topic.name}
@@ -272,7 +272,7 @@ function TopicPopover({ topic }: { topic: Topic }) {
 				</TooltipContent>
 			</Tooltip>
 			{/* the topic info popup */}
-			<PopoverContent align="end" className={POPOVER_WIDTH_CLASS}>
+			<PopoverContent align="end" className={POPOVER_PANEL_CLASS}>
 				<PopoverCloseButton />
 				{topicInfo ? <TopicInfo topic={topicInfo} /> : <CoffeeLoading />}
 			</PopoverContent>

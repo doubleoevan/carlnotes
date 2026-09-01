@@ -1,7 +1,6 @@
 import type { TeamSummary, TopicResponse } from "@shared/contracts"
 import { Plus, Users, X } from "lucide-react"
 import { useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { fetchTeams, sendAddTopicTeam, sendRemoveTopicFromTeam } from "@/clients/teamClient"
 import { fetchAddableTopics } from "@/clients/topicClient"
@@ -9,14 +8,11 @@ import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
-import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
+import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS, MENU_OPTION_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
-// one row inside the team menu
-export const MENU_OPTION_CLASS = "hover:bg-accent flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-sm"
-
 /**
- * One team row in a Team Up menu: the avatar and name, doing whatever the caller sends.
+ * One team row in a Team Up menu: the avatar and name.
  */
 export function TeamOption({
 	team,
@@ -46,7 +42,7 @@ export function NewTeamOption({ onCreate }: { onCreate: () => void }) {
 }
 
 /**
- * Whether Team Up renders. It is for signed-in users, and someone else's private topic is not theirs to hand over.
+ * Whether Team Up renders. It shows for signed-in users, and never on someone else's private topic.
  */
 export function isTeamUpShown(topic: Pick<TopicResponse, "isOwner" | "visibility">, isSignedIn: boolean): boolean {
 	return isSignedIn && !(topic.visibility === "private" && !topic.isOwner)
@@ -60,21 +56,20 @@ export function TeamUpButton({
 }: {
 	topic: TopicResponse
 	isSignedIn: boolean
-	// whether this button is the page's one call to action, which decides its fill
+	// whether this button is the page's one call to action
 	isHighlighted: boolean
 	onChanged: () => void
 }) {
-	const _navigate = useNavigate()
 	const [isCreating, setIsCreating] = useState(false)
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
-	// what the create modal offers, gathered when it opens, this topic included
+	// the topics the create modal offers, loaded when it opens
 	const [modalTopics, setModalTopics] = useState<{ id: string; name: string }[]>([])
-	// the teams the user leads, loaded once so the click knows whether it has a menu to show
+	// the teams the user leads, null until they load
 	const [ledTeams, setLedTeams] = useState<TeamSummary[] | null>(null)
 
 	const isHidden = !isTeamUpShown(topic, isSignedIn)
 
-	// the memberships load with the button, which has to answer the click at once
+	// load the teams the user leads when the button shows
 	useEffect(() => {
 		if (isHidden) {
 			return
@@ -87,13 +82,13 @@ export function TeamUpButton({
 		return null
 	}
 
-	// a team holds the topic when it owns it or a share put it in the team's room
+	// a team holds the topic when it owns it or a share put it in the team's chat room
 	const topicTeamIds = new Set(topic.roomTeams.map((held) => held.teamId))
 	if (topic.team) {
 		topicTeamIds.add(topic.team.teamId)
 	}
 
-	// the create modal offers the addable set in the server's order, this topic checked so it comes along
+	// open the create modal with the addable topics, this topic included
 	const openCreateModal = async (): Promise<void> => {
 		const addable = await fetchAddableTopics()
 		const withTopic = addable.some((offered) => offered.id === topic.id)
@@ -103,7 +98,7 @@ export function TeamUpButton({
 		setIsCreating(true)
 	}
 
-	// the filled shape belongs to a leader of a team that has the topic, a user who can change that
+	// the filled button shows for a leader of a team that has the topic
 	const ledTeamsWithTopic = (ledTeams ?? []).filter((team) => topicTeamIds.has(team.teamId))
 	if (topicTeamIds.size > 0 && ledTeams === null) {
 		return null
@@ -119,7 +114,7 @@ export function TeamUpButton({
 					onChanged={onChanged}
 					onCreate={() => void openCreateModal()}
 				/>
-				{/* the shared modal, with this topic checked so teaming up brings it along */}
+				{/* the create modal, with this topic preselected */}
 				{isCreating && (
 					<EditTeamModal userTopics={modalTopics} initialTopicIds={[topic.id]} onClose={() => setIsCreating(false)} />
 				)}
@@ -127,7 +122,7 @@ export function TeamUpButton({
 		)
 	}
 
-	// attaching stays on the topic page, which reloads to show the filled icon
+	// add the topic to the team and refresh the button
 	const handleAttach = async (team: TeamSummary): Promise<void> => {
 		setIsMenuOpen(false)
 		const rejection = await sendAddTopicTeam(team.teamId, topic.id)
@@ -139,7 +134,7 @@ export function TeamUpButton({
 		onChanged()
 	}
 
-	// a user who leads no team has nothing to select from, so the button goes straight to creating one
+	// a user who leads no team goes straight to the create modal
 	const handleClick = async (): Promise<void> => {
 		const led =
 			ledTeams ??
@@ -150,7 +145,7 @@ export function TeamUpButton({
 			await openCreateModal()
 			return
 		}
-		// a click that beat the effect keeps what it fetched, so the menu it opens is never empty
+		// keep the fetched teams. the click can run before the effect has loaded them
 		setLedTeams(led)
 		setIsMenuOpen(true)
 	}
@@ -168,8 +163,8 @@ export function TeamUpButton({
 						Team Up
 					</button>
 				</PopoverTrigger>
-				<PopoverContent align="end" className="w-56 p-1">
-					{/* the teams this topic can join, then the way to make a new one */}
+				<PopoverContent align="end" className="w-56" bodyClassName="p-1">
+					{/* the teams this topic can join, then the New team row */}
 					{(ledTeams ?? []).map((team) => (
 						<Tooltip key={team.teamId}>
 							<TooltipTrigger asChild>
@@ -192,7 +187,7 @@ export function TeamUpButton({
 					/>
 				</PopoverContent>
 			</Popover>
-			{/* the shared modal, with this topic checked so teaming up brings it along */}
+			{/* the create modal, with this topic preselected */}
 			{isCreating && (
 				<EditTeamModal userTopics={modalTopics} initialTopicIds={[topic.id]} onClose={() => setIsCreating(false)} />
 			)}
@@ -200,7 +195,7 @@ export function TeamUpButton({
 	)
 }
 
-// the filled shape a leader of a team with the topic sees
+// the filled Team Up button and its menu, for a leader of a team that has the topic
 function HeldTeamMenu({
 	teamsWithTopic,
 	otherTeams,
@@ -213,15 +208,14 @@ function HeldTeamMenu({
 	// the user's led teams that do not hold the topic yet
 	otherTeams: TeamSummary[]
 	topicId: string
-	// whether this button is the page's one call to action, which decides its fill
+	// whether this button is the page's one call to action
 	isHighlighted: boolean
 	onChanged: () => void
 	onCreate: () => void
 }) {
-	const navigate = useNavigate()
 	const [isOpen, setIsOpen] = useState(false)
 
-	// removing takes the topic off that team, and the reload redraws the button from what is left
+	// remove the topic from the team and refresh the button
 	const handleDetach = async (team: TeamSummary): Promise<void> => {
 		setIsOpen(false)
 		await sendRemoveTopicFromTeam(team.teamId, topicId)
@@ -229,7 +223,7 @@ function HeldTeamMenu({
 		onChanged()
 	}
 
-	// adding shares the topic into the team, and the reload lists the new holding without leaving the page
+	// add the topic to the team and refresh the button
 	const handleAdd = async (team: TeamSummary): Promise<void> => {
 		setIsOpen(false)
 		const rejection = await sendAddTopicTeam(team.teamId, topicId)
@@ -244,70 +238,34 @@ function HeldTeamMenu({
 		<Popover open={isOpen} onOpenChange={setIsOpen}>
 			<PopoverTrigger asChild>
 				<button type="button" className={cn(MENU_BUTTON_CLASS, isHighlighted && MENU_BUTTON_HIGHLIGHT_CLASS)}>
-					{/* the icon fills once a led team holds the topic, in the highlighted button's own color */}
+					{/* the filled icon. it takes the primary color unless the button is highlighted */}
 					<Users className={cn("size-4 fill-current", !isHighlighted && "text-primary")} />
 					Team Up
 				</button>
 			</PopoverTrigger>
-			<PopoverContent align="end" className="w-56 p-1">
-				{/* the teams that have the topic, each with an X button that removes it */}
+			<PopoverContent align="end" className="w-56" bodyClassName="p-1">
+				{/* the teams that have the topic. the whole row removes it, and the X says so */}
 				{teamsWithTopic.map((team) => (
-					<div key={team.teamId} className="flex items-center">
-						<button
-							type="button"
-							onClick={() => navigate(`/teams/${team.teamId}`)}
-							className={cn(MENU_OPTION_CLASS, "min-w-0 flex-1")}
-						>
-							<TeamAvatar team={team} className="size-5" />
-							<span className="truncate">{team.name}</span>
-						</button>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									onClick={() => void handleDetach(team)}
-									aria-label={`Remove topic from ${team.name}`}
-									className="text-muted-foreground hover:text-foreground rounded-md p-2"
-								>
-									<X className="size-4" />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent>
-								Remove topic from <span className="font-semibold">{team.name}</span>
-							</TooltipContent>
-						</Tooltip>
-					</div>
+					<TeamActionRow
+						key={team.teamId}
+						team={team}
+						verb="Remove topic from"
+						Icon={X}
+						onSelect={() => void handleDetach(team)}
+					/>
 				))}
 				{/* the led teams that could still take the topic */}
 				{otherTeams.length > 0 && <div className="bg-border my-1 h-px" />}
 				{otherTeams.map((team) => (
-					<div key={team.teamId} className="flex items-center">
-						<button
-							type="button"
-							onClick={() => navigate(`/teams/${team.teamId}`)}
-							className={cn(MENU_OPTION_CLASS, "min-w-0 flex-1")}
-						>
-							<TeamAvatar team={team} className="size-5" />
-							<span className="truncate">{team.name}</span>
-						</button>
-						<Tooltip>
-							<TooltipTrigger asChild>
-								<button
-									type="button"
-									onClick={() => void handleAdd(team)}
-									aria-label={`Add topic to ${team.name}`}
-									className="text-muted-foreground hover:text-foreground rounded-md p-2"
-								>
-									<Plus className="size-4" />
-								</button>
-							</TooltipTrigger>
-							<TooltipContent>
-								Add topic to <span className="font-semibold">{team.name}</span>
-							</TooltipContent>
-						</Tooltip>
-					</div>
+					<TeamActionRow
+						key={team.teamId}
+						team={team}
+						verb="Add topic to"
+						Icon={Plus}
+						onSelect={() => void handleAdd(team)}
+					/>
 				))}
-				{/* the way to make a new team, offered the topic */}
+				{/* the New team row */}
 				<div className="bg-border my-1 h-px" />
 				<NewTeamOption
 					onCreate={() => {
@@ -317,5 +275,34 @@ function HeldTeamMenu({
 				/>
 			</PopoverContent>
 		</Popover>
+	)
+}
+
+// one team row in the Team Up menu. the whole row acts, and the icon at its end says which way
+function TeamActionRow({
+	team,
+	verb,
+	Icon,
+	onSelect,
+}: {
+	team: TeamSummary
+	// what the row does, read in its tooltip and its accessible name
+	verb: string
+	Icon: typeof Plus
+	onSelect: () => void
+}) {
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<button type="button" onClick={onSelect} aria-label={`${verb} ${team.name}`} className={MENU_OPTION_CLASS}>
+					<TeamAvatar team={team} className="size-5" />
+					<span className="min-w-0 flex-1 truncate">{team.name}</span>
+					<Icon className="text-muted-foreground size-4 shrink-0" />
+				</button>
+			</TooltipTrigger>
+			<TooltipContent>
+				{verb} <span className="font-semibold">{team.name}</span>
+			</TooltipContent>
+		</Tooltip>
 	)
 }

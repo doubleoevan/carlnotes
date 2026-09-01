@@ -72,12 +72,12 @@ function toRequestLabel(request: RedditRequest): string {
 }
 
 /**
- * The subreddit a written value names, with any leading `r/` dropped, or null when reddit itself would not
+ * The subreddit a written value names, with any leading `r/` dropped, or null if reddit itself would not
  * accept the name. Source config and suggested subreddits both come through here, so what a Scan will read and
  * what a suggestion offers can never disagree.
  */
 export function toSubredditName(value: unknown): string | null {
-	// the subreddit name lands in a url path, so anything outside reddit's own charset is rejected instead of encoded
+	// the subreddit name is included in a url path. anything outside reddit's own charset is rejected
 	const subredditName = typeof value === "string" ? value.trim().replace(/^r\//, "") : ""
 	return SUBREDDIT_PATTERN.test(subredditName) ? subredditName : null
 }
@@ -195,7 +195,7 @@ export function parsePosts(json: RedditListing): NewResource[] {
 }
 
 /**
- * Queue one reddit request behind the last one, leaving its access mode's gap between them whether the request succeeded or not
+ * Queue one reddit request after the last one, leaving its access mode's gap between them whether the request succeeded or not
  */
 export function queueRedditRequest<T>(accessMode: AccessMode, sendRequest: () => Promise<T>): Promise<T> {
 	const queuedRequest = lastRequest.then(sendRequest)

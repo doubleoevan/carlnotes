@@ -5,6 +5,7 @@ import {
 	RESERVED_USERNAMES,
 	toNormalizedUsername,
 	toProposedUsernames,
+	toProviderUsername,
 	toUsernameRejection,
 	toUsernameWithDigits,
 	USERNAME_COMBINATIONS,
@@ -112,27 +113,28 @@ describe("hasSharedStem", () => {
 
 describe("toProposedUsernames", () => {
 	// a proposal is offered bare, with digits only ever the last resort
-	it("returns distinct Adjective-Noun proposals with no digits", () => {
+	it("returns distinct AdjectiveNoun proposals with no separator and no digits", () => {
 		const proposals = toProposedUsernames(5)
 		expect(proposals.length).toBe(5)
 		expect(new Set(proposals).size).toBe(5)
+		// two capitalized words joined bare, so the avatar initials can read the boundary
 		for (const proposal of proposals) {
-			expect(proposal).toMatch(/^[A-Za-z]+-[A-Za-z]+$/)
+			expect(proposal).toMatch(/^[A-Z][a-z]*[A-Z][A-Za-z]*$/)
 		}
 	})
 
-	it("never offers a rejected or stem-sharing pair", () => {
+	// the stem rule itself is covered above. a joined name cannot be split back into its true pair,
+	// since either half may hold a capital of its own
+	it("never offers a rejected proposal", () => {
 		for (const proposal of toProposedUsernames(100)) {
-			const [adjective, noun] = proposal.split("-") as [string, string]
 			expect(toUsernameRejection(proposal)).toBeNull()
-			expect(hasSharedStem(adjective, noun)).toBe(false)
 		}
 	})
 })
 
 describe("toUsernameWithDigits", () => {
 	it("appends exactly four digits to break a collision", () => {
-		expect(toUsernameWithDigits("Bright-Macchiato")).toMatch(/^Bright-Macchiato-\d{4}$/)
+		expect(toUsernameWithDigits("BrightMacchiato")).toMatch(/^BrightMacchiato\d{4}$/)
 	})
 })
 
@@ -146,7 +148,7 @@ describe("routes added by later changes", () => {
 })
 
 describe("reserved usernames", () => {
-	// the two names the app speaks with: @carl is Carl himself and @all addresses a whole room
+	// the two names the app speaks with: @carl is Carl himself and @all addresses a whole chat room
 	it("refuses carl and all in every spelling", () => {
 		for (const spelling of ["carl", "CARL", "c-a-r-l", "C_a_R_l", "all", "A_L_L", "a-l-l"]) {
 			expect(toUsernameRejection(spelling)).toBe("reserved")
@@ -156,10 +158,35 @@ describe("reserved usernames", () => {
 	// the generator hands out names without asking the validator, so its own word pairs are checked here
 	it("never generates a name that spells a reserved one", () => {
 		const clashes = USERNAME_ADJECTIVES.flatMap((adjective) =>
-			USERNAME_NOUNS.map((noun) => `${adjective}-${noun}`).filter((name) =>
+			USERNAME_NOUNS.map((noun) => `${adjective}${noun}`).filter((name) =>
 				RESERVED_USERNAMES.has(toNormalizedUsername(name)),
 			),
 		)
 		expect(clashes).toEqual([])
+	})
+})
+
+describe("provider usernames", () => {
+	// github sends its handle as login, and a well-formed one is proposed as written
+	it("keeps a well-formed provider handle", () => {
+		expect(toProviderUsername("doubleoevan")).toBe("doubleoevan")
+		expect(toProviderUsername("Warm-Bean42")).toBe("Warm-Bean42")
+	})
+
+	// a handle that breaks any username rule is dropped, and the signup generates a name instead
+	it("drops a handle the username rules reject", () => {
+		// too short, too long, a reserved name, and a bad character
+		expect(toProviderUsername("ev")).toBeNull()
+		expect(toProviderUsername("a".repeat(39))).toBeNull()
+		expect(toProviderUsername("carl")).toBeNull()
+		expect(toProviderUsername("someone else")).toBeNull()
+	})
+
+	// google sends no handle at all, and nothing else slips through as one
+	it("drops a missing or non-string handle", () => {
+		expect(toProviderUsername(undefined)).toBeNull()
+		expect(toProviderUsername(null)).toBeNull()
+		expect(toProviderUsername("")).toBeNull()
+		expect(toProviderUsername(42)).toBeNull()
 	})
 })

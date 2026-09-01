@@ -36,7 +36,7 @@ export const xIngester: SourceIngester = async (source: Source) => {
 }
 
 /**
- * The handle an x Source follows, or null when the config names none that X would accept.
+ * The handle an x Source follows, or null if the config names none that X would accept.
  * A leading @ is how people write a handle, so it is dropped.
  */
 export function toSourceHandle(config: Record<string, unknown>): string | null {

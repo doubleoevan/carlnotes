@@ -7,6 +7,7 @@ import { db } from "../../db"
 import { topics } from "../../db/schema"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
+import { clearTopicSectionIdCache } from "./feeds"
 
 // the database, or a transaction on it
 type DbHandle = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -50,6 +51,9 @@ export async function setTopicFeatureOrder(topicId: string, position: number): P
 			.where(and(isNotNull(topics.featureOrder), gte(topics.featureOrder, targetPosition)))
 		await transaction.update(topics).set({ featureOrder: targetPosition }).where(eq(topics.id, topicId))
 	})
+
+	// the homepage's cached featured topic section order needs to be refreshed when a topic rank changes
+	clearTopicSectionIdCache()
 	return "ranked"
 }
 

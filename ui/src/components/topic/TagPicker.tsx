@@ -4,8 +4,10 @@ import { useState } from "react"
 import { Badge } from "@/components/primitives/badge"
 import { Input } from "@/components/primitives/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
+import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 
-// canCreate lets typing add a tag that is not in knownTags, and openPickerLabel renders a link that opens the picker
+// canCreate lets typing add a tag that is not in knownTags. openPickerLabel renders a link that opens the picker
 type TagPickerProps = {
 	tags: string[]
 	knownTags: string[]
@@ -32,7 +34,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 	const isKnown = [...knownTags, ...tags].some((tag) => tag.toLowerCase() === newTag.toLowerCase())
 	const canCreateTyped = canCreate && newTag !== "" && !isKnown
 
-	// add a tag and clear the search. the picker stays open so that several tags can be added in a row
+	// add a tag and clear the search. the picker stays open
 	const handleAddTag = (tag: string): void => {
 		if (!tags.includes(tag)) {
 			onTagsChange([...tags, tag])
@@ -90,7 +92,7 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 						</button>
 					</PopoverTrigger>
 				)}
-				<PopoverContent align="start" className="w-64 p-2">
+				<PopoverContent align="start" className="w-64" bodyClassName="p-2">
 					{/* the search box with its magnifying glass icon and clear button */}
 					<div className="border-input flex items-center gap-1.5 rounded-md border pl-2">
 						<Search className="text-muted-foreground size-3.5 shrink-0" />
@@ -115,21 +117,12 @@ export function TagPicker({ tags, knownTags, canCreate = false, openPickerLabel,
 					</div>
 					<div className="mt-1 max-h-48 overflow-y-auto">
 						{suggestedTags.map((tag) => (
-							<button
-								key={tag}
-								type="button"
-								onClick={() => handleAddTag(tag)}
-								className="hover:bg-accent flex w-full items-center rounded px-2 py-1.5 text-left text-sm"
-							>
+							<button key={tag} type="button" onClick={() => handleAddTag(tag)} className={MENU_OPTION_CLASS}>
 								{tag}
 							</button>
 						))}
 						{canCreateTyped && (
-							<button
-								type="button"
-								onClick={() => handleAddTag(newTag)}
-								className="hover:bg-accent text-link flex w-full items-center rounded px-2 py-1.5 text-left text-sm"
-							>
+							<button type="button" onClick={() => handleAddTag(newTag)} className={cn(MENU_OPTION_CLASS, "text-link")}>
 								{`+ Create "${newTag}"`}
 							</button>
 						)}
