@@ -16,7 +16,7 @@ services:
   # the llm-guard scanner that screens an uploaded document and a fetched page before any model reads either.
   # it's a separate service because it runs in python and the app runtime is bun. unset LLM_GUARD_URL to run without it
   llm-guard:
-    image: laiyer/llm-guard-api:0.3.15
+    image: laiyer/llm-guard-api:0.3.16
     # loopback only: the scanner takes arbitrary text and has no auth, so it should not answer the local network
     ports:
       - "127.0.0.1:8001:8000"
