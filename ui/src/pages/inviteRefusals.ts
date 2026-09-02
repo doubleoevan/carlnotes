@@ -1,4 +1,4 @@
-// what each way an invitation can fail says to the person holding the link
+// what each way an invitation can fail shows to the person holding the link
 import type { InviteRefusal } from "@shared/contracts"
 
 export const INVITE_REFUSALS: Record<InviteRefusal, string> = {

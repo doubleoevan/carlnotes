@@ -46,7 +46,7 @@ export function TopicsTable({
 	topics: Topic[]
 	// whether the visibility column renders
 	includesNonPublicTopics: boolean
-	// what the topic column header's tooltip says
+	// what the topic column header's tooltip shows
 	topicTooltip?: string
 	// removing a topic from the team, a leader's power on a team page alone
 	onRemoveTopic?: (topic: Topic) => void

@@ -15,7 +15,7 @@ const MAX_QUESTION_BOX_HEIGHT_PX = 120
 /**
  * The chat composer: the question box, its attachment chips, and the send button that becomes a stop button while a reply streams.
  */
-// what the private chat's question box says while it is empty
+// what the private chat's question box shows while it is empty
 export const CHAT_QUESTION_PLACEHOLDER = "Hand-crafted notes are richer…"
 
 export function ChatComposer({

@@ -35,7 +35,7 @@ export function TopicScanButton({
 
 	// polling starts on the click, before the scan row arrives
 	usePollWhileScanning(isScanning || isRunningScan, onScanned)
-	// a scan that fails while the user is on the page says so
+	// a scan that fails while the user is on the page shows the failure
 	useScanFailureToast(topic?.scans, () => navigate("/plans"))
 
 	// trigger a scan. the optimistic flag holds the running state until the new scan row arrives in a reload
@@ -90,7 +90,7 @@ export function TopicScanButton({
 		)
 	}
 
-	// an empty daily quota and a spent budget both stop the brew, which stays clickable to say what ran out
+	// an empty daily quota and a spent budget both stop the brew, which stays clickable to show what ran out
 	const isScanBlocked = manualScansRemaining !== null && (manualScansRemaining <= 0 || isSpendExhausted)
 	if (isScanBlocked) {
 		const blockedLine = isSpendExhausted ? "You are out of budget this month." : "You have used today's brews."
@@ -195,7 +195,7 @@ async function runTopicScan({
 	reloadTopicFeed: () => Promise<void>
 	revert: () => void
 	logLabel: string
-	// what the toast says if the rejection has no message of its own
+	// what the toast shows if the rejection has no message of its own
 	fallbackMessage: string
 }): Promise<void> {
 	try {

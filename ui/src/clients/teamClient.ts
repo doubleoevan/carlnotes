@@ -16,7 +16,7 @@ import type { AppType } from "../../../api"
 // same-origin api client. in dev vite forwards /api to the Hono server
 const apiClient = hc<AppType>(window.location.origin)
 
-// how creating a team was rejected, for the modal to say which way it went
+// how creating a team was rejected, for the modal to show which way it went
 export type CreateTeamRejection = "quota" | "name-taken"
 
 // fetch the teams the user belongs to, for the teams page
@@ -151,7 +151,7 @@ export async function sendTeamAvatar(teamId: string, avatarFile: File): Promise<
 		return null
 	}
 
-	// the refusal names itself, so the picker can say which way it went
+	// the refusal names itself, so the picker can show which way it went
 	const refusal = ((await response.json().catch(() => null)) as { error?: string } | null)?.error
 	return refusal ?? "failed"
 }

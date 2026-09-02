@@ -30,7 +30,7 @@ export type ScanRecapFields = {
  * that the findings are still there.
  */
 export function toScanRecapPlaceholder(scan: Pick<ScanRecapFields, "status" | "error" | "stoppedAt">): string {
-	// a failed scan says what stopped it, naming the limit Carl hits most often
+	// a failed scan shows what stopped it, naming the limit Carl hits most often
 	if (scan.status === "failed") {
 		return isBudgetError(scan.error) ? "Today I ran out of coffee." : "This one didn't brew."
 	}

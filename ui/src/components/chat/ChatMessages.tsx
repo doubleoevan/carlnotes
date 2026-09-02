@@ -451,7 +451,7 @@ function ChatRejectionNotice({ rejection, onRetry }: { rejection: ChatRejection;
 		)
 	}
 
-	// an exhausted budget shows a call-to-action to upgrade at the plans page. anything forbidden says so.
+	// an exhausted budget shows a call-to-action to upgrade at the plans page. anything forbidden shows a refusal
 	if (rejection === "budget") {
 		return <ChatBudgetNotice />
 	}

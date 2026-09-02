@@ -129,7 +129,7 @@ export function TopicSubscriptionsTable({
 										</AnchorLink>
 										<TopicMentionBadge topicId={subscriptionRow.topicId} />
 									</span>
-									{/* a pending invitation and a switched-off subscription both read inactive, so it says which */}
+									{/* a pending invitation and a switched-off subscription both read inactive, so it shows which */}
 									{subscriptionRow.inviteId && <span className="text-muted-foreground ml-2 text-xs">Invited</span>}
 								</td>
 								<td className="py-2 pr-4">

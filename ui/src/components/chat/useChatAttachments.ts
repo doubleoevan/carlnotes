@@ -52,7 +52,7 @@ export function useChatAttachments(): ChatAttachments {
 		return true
 	}
 
-	// whether this question already holds all it may. a toast says so
+	// whether this question already holds all it may. a toast shows the limit
 	function isQuestionFull(): boolean {
 		if (attachmentCountRef.current >= CHAT_MAX_ATTACHMENTS) {
 			toast(`${CHAT_MAX_ATTACHMENTS} attachments max per question.`)

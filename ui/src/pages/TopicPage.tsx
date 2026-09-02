@@ -166,7 +166,7 @@ export function TopicPage() {
 		}
 		const isSubscribing = !topic.isSubscribed
 		await runThenReload(() => sendTopicSubscription(topic.id, isSubscribing))
-		// an invite topic only shows findings from the next scan onward, which the toast says out loud
+		// an invite topic only shows findings from the next scan onward, which the toast spells out
 		const disclaimer = isSubscribing && topic.visibility === "invite" ? `\n${NEXT_SCAN_DISCLAIMER}` : ""
 		toast(isSubscribing ? `Following ${topic.name}.${disclaimer}` : `Unfollowed ${topic.name}.`)
 	}

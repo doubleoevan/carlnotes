@@ -27,7 +27,7 @@ export function AccountBudget({
 	return (
 		<>
 			{isPastDue && !isReadOnly ? <PaymentNotice /> : null}
-			{/* the fund, today's brews, and the plan all say what this account is spending, so one card
+			{/* the fund, today's brews, and the plan all show what this account is spending, so one card
 			    holds them, spaced apart instead of ruled off */}
 			<section className={cn(CARD_CLASS, "space-y-4")}>
 				{activity && (

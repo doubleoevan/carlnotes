@@ -27,7 +27,7 @@ export type AddedSource = { optionKey: string; value: string; name?: string }
 // how many sources one suggestion request asks for at most
 const MAX_SUGGESTIONS = 3
 
-// what the add-source buttons say once the topic has reached its source limit
+// what the add-source buttons show once the topic has reached its source limit
 export const FULL_SOURCES_NOTE = `Carl reads ${MAX_TOPIC_SOURCES} sources per topic. Drop one to add another.`
 
 // a staged row reads as its resolved name, then as its config summary, then as what was typed

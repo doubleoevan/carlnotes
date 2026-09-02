@@ -314,7 +314,7 @@ async function saveTopic({
 	return topicId
 }
 
-// what the toast says for each required field a save click found empty
+// what the toast shows for each required field a save click found empty
 const MISSING_FIELD_NOTES = {
 	name: "Please give the topic a title.",
 	prompt: "Please write Carl's prompt first.",

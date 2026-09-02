@@ -22,7 +22,7 @@ test("the label walks from just now through days", () => {
 	expect(toTimeAgoLabel(NOW_TIME - 72 * 60 * 60_000, NOW_TIME)).toBe("3 days ago")
 })
 
-// a clock that reads slightly behind a fresh chat turn still says just now instead of something negative
+// a clock that reads slightly behind a fresh chat turn still shows just now instead of something negative
 test("a future timestamp clamps to just now", () => {
 	expect(toTimeAgoLabel(NOW_TIME + 5_000, NOW_TIME)).toBe("just now")
 })

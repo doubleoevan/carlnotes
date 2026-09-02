@@ -570,7 +570,7 @@ export const topicsRoute = new Hono<AppEnv>()
 		if (updateTopicResult.status === "dailyFrequency") {
 			return context.json({ error: "daily topic limit reached", dailyTopicLimit: updateTopicResult.limit }, 429)
 		}
-		// a refused invitee and a spent invite limit each answer by name, so the modal can say which
+		// a refused invitee and a spent invite limit each answer by name, so the modal can show which
 		if (updateTopicResult.status === "inviteeRefused") {
 			return context.json({ error: "invitee-not-accepting", email: updateTopicResult.email }, 409)
 		}

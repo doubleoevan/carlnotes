@@ -138,7 +138,7 @@ function MemberRow({
 	currentUserId: string | null
 	onChanged: () => void
 }) {
-	// the last-leader rejection toast says what to do first
+	// the last-leader rejection toast shows what to do first
 	const handleRoleChange = async (nextRole: string): Promise<void> => {
 		if (!(await sendTeamMemberRole(teamId, member.userId, nextRole === "leader" ? "leader" : "member"))) {
 			toast.error("Promote another leader first. A team can't lose its last one.")

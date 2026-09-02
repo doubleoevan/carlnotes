@@ -135,7 +135,7 @@ export const flagContentRoute = new Hono<AppEnv>().post(
 		if (flagResult === "sent") {
 			return context.json({ ok: true })
 		}
-		// each rejection reports in its own terms, so the dialog can say what actually went wrong
+		// each rejection reports in its own terms, so the dialog can show what actually went wrong
 		if (flagResult === "limitReached") {
 			return context.json({ error: "you have sent enough reports for one day" }, 429)
 		}

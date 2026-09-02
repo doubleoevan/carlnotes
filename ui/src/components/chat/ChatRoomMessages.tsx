@@ -70,7 +70,7 @@ export function ChatRoomMessages({
 	const handleDeleteChatMessage = useStableCallback((chatMessageId: number) => {
 		void sendDeleteChatRoomMessage(topicId, teamId, chatMessageId)
 			.then(async (isDeleted) => {
-				// a toast says what happened either way
+				// a toast shows what happened either way
 				if (!isDeleted) {
 					toast("That message could not be deleted.")
 					return

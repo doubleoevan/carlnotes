@@ -331,7 +331,7 @@ export async function sendDeleteAttachment(attachmentId: string): Promise<void> 
 	}
 }
 
-// how a user invite was rejected, for the field to say inline
+// how a user invite was rejected, for the field to show inline
 export type UserInviteRefusal = "unknown-username" | "not-accepting" | "limited" | "failed"
 
 // create an invite that names a person, by username or email, for a topic or a team

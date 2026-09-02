@@ -244,7 +244,7 @@ function HeldTeamMenu({
 				</button>
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-56" bodyClassName="p-1">
-				{/* the teams that have the topic. the whole row removes it, and the X says so */}
+				{/* the teams that have the topic. the whole row removes it, and the X shows that */}
 				{teamsWithTopic.map((team) => (
 					<TeamActionRow
 						key={team.teamId}
@@ -278,7 +278,7 @@ function HeldTeamMenu({
 	)
 }
 
-// one team row in the Team Up menu. the whole row acts, and the icon at its end says which way
+// one team option in the Team Up menu. the whole option acts, and the icon at its end shows which way
 function TeamActionRow({
 	team,
 	verb,

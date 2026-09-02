@@ -21,7 +21,7 @@ export function UserProfileLink({
 	className?: string
 	// the words before the username. omitted, the username stands alone
 	label?: string
-	// what the link says instead of the username
+	// what the link shows instead of the username
 	displayName?: string
 	// opens the profile in a new tab, for a link inside a table the user is still working in
 	isNewTab?: boolean

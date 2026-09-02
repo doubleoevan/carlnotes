@@ -123,12 +123,12 @@ function UnreadBadge({ count, label }: { count: number; label: string }) {
 	)
 }
 
-// what a note's unread edits badge says
+// what a note's unread edits badge shows
 function toNoteEditsLabel(unreadEdits: number): string {
 	return unreadEdits === 1 ? "1 unread edit" : `${unreadEdits} unread edits`
 }
 
-// what a note's unread comments badge says
+// what a note's unread comments badge shows
 function toNoteCommentsLabel(unreadComments: number): string {
 	return unreadComments === 1 ? "1 unread comment" : `${unreadComments} unread comments`
 }

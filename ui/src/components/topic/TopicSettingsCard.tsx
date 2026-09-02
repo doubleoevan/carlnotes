@@ -41,7 +41,7 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 	)
 }
 
-// says that the schedule above is paused because the plan is past its limit with a call to action to upgrade
+// shows that the schedule above is paused because the plan is past its limit, with a call to action to upgrade
 function PausedFrequencyNote() {
 	return (
 		<Tooltip>

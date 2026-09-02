@@ -108,7 +108,7 @@ export async function sendUserBudgetOverride(
 	return (await response.json()) as { isKeyResized: boolean }
 }
 
-// close another user's account from the admin console. throws an error on a rejection, so the table can say it failed
+// close another user's account from the admin console. throws an error on a rejection, so the table can show it failed
 export async function sendDeleteUser(userId: string): Promise<void> {
 	const response = await apiClient.api.admin.users[":id"].$delete({ param: { id: userId } })
 	if (!response.ok) {

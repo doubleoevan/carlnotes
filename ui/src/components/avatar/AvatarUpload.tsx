@@ -9,7 +9,7 @@ const MAX_AVATAR_PIXELS = 512
 // the jpeg quality a resized avatar re-encodes at
 const AVATAR_JPEG_QUALITY = 0.85
 
-// what a rejected avatar upload says, shared by every avatar picker that sends one
+// what a rejected avatar upload shows, shared by every avatar picker that sends one
 export const AVATAR_REJECTIONS: Record<string, string> = {
 	"too-large": "That image is over 2MB.",
 	empty: "That file was empty.",

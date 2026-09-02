@@ -127,9 +127,9 @@ export function TopicInfo(props: TopicInfoProps) {
 				{/* the topic sources are only in the popover */}
 				{!props.isCard && <TopicSourcesSection sources={topic.sources} />}
 
-				{/* who may see the topic, under its own rule. the card always says, and the popup
-				    speaks up only when it is not public, since most feed topics are public and
-				    repeating that on every row says nothing */}
+				{/* who may see the topic, under its own rule. the card always shows it, and the popup
+				    shows it only when it is not public. most feed topics are public, so showing it
+				    everywhere would add nothing */}
 				{(props.isCard || topic.visibility !== "public") && (
 					<>
 						<div className="bg-separator h-px" />
