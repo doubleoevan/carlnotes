@@ -8,7 +8,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 export function DocsLink({
 	className,
 	hasIcon = false,
-	label = "What CarlNotes is",
+	label = "What CarlNotes Is",
 	onNavigate,
 }: {
 	className: string

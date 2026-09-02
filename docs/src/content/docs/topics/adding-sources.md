@@ -39,7 +39,7 @@ is fetched live before you see it, so a source that doesn't work is never recomm
 source](../../../assets/screenshots/sources-recommend-button.png)
 
 Recommendations are based on the prompt. After rewriting a prompt, delete your sources and run **Recommend** again: a sharper prompt
-gets better source proposals.
+gets better source recommendations.
 
 ## Sources are not attachments
 
@@ -59,7 +59,7 @@ week for weekly topics. Your plan limits how many topics run daily or on weekday
 count as "N daily Brews left". Weekly topics don't count against that limit. Brews also run on demand
 with the **Brew** button, up to your plan's daily brew count.
 
-## When a topic goes quiet
+## If a topic goes quiet
 
 Try these fixes in order:
 

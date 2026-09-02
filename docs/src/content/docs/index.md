@@ -1,5 +1,5 @@
 ---
-title: What CarlNotes is
+title: What CarlNotes Is
 description: >-
   CarlNotes reads your topics' sources on a schedule and writes ranked notes on what matters.
   Start with the five terms the rest of the docs use.
@@ -11,7 +11,7 @@ and writes a note about each new finding that made the cut. You read the notes. 
 ![The CarlNotes home page signed in: search, and your topics with their newest
 findings](../../assets/screenshots/home-topic-feed.png)
 
-Carl keeps only what's relevant to your prompt. He filters out everything else for you. This is how he takes his coffee.
+Carl keeps only what's relevant to your prompt. He filters out everything else. This is how he takes his coffee.
 
 ## Topic
 

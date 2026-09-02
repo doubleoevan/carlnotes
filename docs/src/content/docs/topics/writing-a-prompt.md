@@ -8,7 +8,7 @@ sidebar:
 ---
 
 Everything Carl keeps or discards comes down to the prompt. Sources decide where he reads from. The prompt
-decides what gets kept. When findings are wrong, the prompt is usually why, and rewriting it is the
+decides what he looks for and what gets kept. When findings look wrong, the prompt is usually why, and rewriting it is the
 first thing to try before touching anything else.
 
 ![The Edit your topic dialog with Carl's prompt front and
@@ -21,32 +21,24 @@ him to exclude. Compare:
 
 **Too broad:**
 
-> Keep me up to date on AI coding tools.
+> Keep me up to date on CarlNotes.
 
 **Better:**
 
-> Keep me up to date on AI coding tools. I want releases, benchmarks, and hands-on teardowns. Skip
-> listicles, funding announcements, hot takes about AI replacing programmers, and anything without
-> technical detail.
+> Keep me up to date on CarlNotes. I want releases, documentation changes, and anything the internet says about us. 
+> Exclude everything from the list of URLs that I've attached.
 
-The first prompt puts every blog post about AI in front of Carl. The second gives Carl a way to filter
-the irrelevant ones out. The findings from the second prompt are sharper.
+The first prompt puts every topic on CarlNotes in front of Carl. The second gives Carl a way to filter
+the irrelevant ones out. The findings from the second prompt are better. If you'd like to craft your prompt with an 
+expert, ask Carl. He read the documentation. All of it. See [Coffee Talk](/docs/feed/chat/).
 
-## Read Carl's notes as feedback
-
-Every finding includes a note from Carl explaining why it matters. The app labels it
-**Carl's Notes**. That note is your feedback. When a note reads like a stretch, "this mentions
-coding, and it mentions AI, so", the prompt was too broad for Carl to use discretion. Tighten what to exclude
-and Carl gets better judgement.
-
-![A finding's popover, where Carl's Notes explains why the result made the
-cut](../../../assets/screenshots/prompt-relevance-note.png)
+![A chat conversation, where Carl suggests how to improve a topic prompt](../../../assets/screenshots/prompt-chat-help.png)
 
 ## Name the content, not only the subject
 
 Benchmarks, postmortems, teardowns, changelogs, job listings, papers: these read differently from
 general commentary, and Carl can tell them apart. "Tech job market" gets you commentary. 
-"New full-stack job listings, layoff announcements, and published salary bands" gets you
+"New full-stack job listings, funding rounds, and published salary bands" gets you
 three specific types of relevant content.
 
 ## Say who you are
@@ -63,6 +55,14 @@ list of things you've already seen: attach those documents instead of pasting th
 every brew. Keep the prompt short enough that its rules stay sharp. See
 [Attachments](/docs/topics/attachments/).
 
+## Read Carl's notes as feedback
+
+Every finding includes a note from Carl explaining why it matters. Click on a finding to read Carl's
+summary about the finding and why he picked it.
+
+![A finding's popover, where Carl's Notes explains why the result made the
+cut](../../../assets/screenshots/prompt-relevance-note.png)
+
 ## Edit it any time
 
 The prompt isn't locked. Open the topic's edit dialog with the pencil icon, rewrite
@@ -72,8 +72,8 @@ To check if a rewrite worked, run a brew with the **Brew** button and compare it
 the earlier entries in your **Brew diary** on the topic page. Read counts, kept counts, and the updated
 findings will tell you whether the rewrite helped.
 
-## What thumbs mean today
+## What rating means today
 
-Each finding has a **Rate this find** control with a thumbs up and thumbs down. Ratings feed a topic feed's
-**Trending** order, so that you and other readers can say what matters. They don't change how future
+Each finding has a **Rate this finding** section with thumbs up and thumbs down buttons. Ratings feed a topic feed's
+**Trending** order, so that you and other readers can decide what matters. They don't change how future
 brews are scored. That's on the roadmap. Today, telling Carl what's relevant is in the prompt.

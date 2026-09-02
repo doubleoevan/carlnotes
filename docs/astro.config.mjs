@@ -32,7 +32,7 @@ export default defineConfig({
 			sidebar: [
 				{
 					label: "Start here",
-					items: [{ label: "What CarlNotes is", link: "/" }, { slug: "quickstart" }],
+					items: [{ label: "What CarlNotes Is", link: "/" }, { slug: "quickstart" }],
 				},
 				{ label: "Topics", items: [{ autogenerate: { directory: "topics" } }] },
 				{ label: "Your topic feed", items: [{ autogenerate: { directory: "feed" } }] },
