@@ -1,106 +1,12 @@
-# link-previews Specification
+## REMOVED Requirements
 
-## Purpose
-TBD - created by archiving change add-link-previews. Update Purpose after archive.
-## Requirements
-### Requirement: Cards for a message's first links
+### Requirement: The image is served from this origin, never the page's host
 
-A message SHALL be scanned at post time for the `http` and `https` urls in its text, and its first three distinct urls SHALL each get a preview, in the order they appear. A message with no url SHALL store nothing and stay plain text.
+**Reason**: It carried a signed-in requirement on the image route, and a scenario asserting that a signed-out visitor cannot read a preview image. Lifting that cannot be written as an amendment: the scenario's own heading states the opposite of what the route now does, so editing its body would leave the spec contradicting its headings. Every other rule it held is unchanged.
 
-The url SHALL be taken without the sentence punctuation around it: a trailing period, comma, semicolon, colon, exclamation mark, or question mark is not part of the url, and a trailing bracket is not part of it either unless the url opened one — which is what keeps a link ending in a parenthesized suffix whole.
+**Migration**: Replaced by "A preview image is served from this origin to anyone holding its id" below, which restates the same-origin rule, the SVG rule, and the oversized-image rule word for word.
 
-Detection SHALL run for a member's messages and for Carl's own, in rooms and in the private chat's questions and answers alike. Every fetch, whoever wrote the url, SHALL pass the public-url guard that refuses internal addresses on every redirect hop, and a room fetch SHALL spend from the team's hourly budget.
-
-#### Scenario: The first links each get a card
-
-- **WHEN** a member posts a message holding two urls
-- **THEN** both are fetched and both cards render in the order the links appear
-
-#### Scenario: The links past the limit stay plain
-
-- **WHEN** a member posts a message holding five urls
-- **THEN** only the first three distinct ones are fetched and card
-
-#### Scenario: A sentence's punctuation is not part of the url
-
-- **WHEN** a member posts "read https://example.com/piece." and "see https://example.com/a_(b)"
-- **THEN** the first url is fetched without the trailing period and the second keeps its closing bracket
-
-#### Scenario: A message with no link gets no card
-
-- **WHEN** a member posts a message with no url in it
-- **THEN** no fetch is made, no preview row is written, and the message renders as plain text
-
-#### Scenario: Carl's url cards like a member's
-
-- **WHEN** Carl's reply includes a url that has never been previewed
-- **THEN** it fetches through the public-url guard and its card renders with the reply
-
-### Requirement: Every preview fetch goes through the public-url guard
-
-The page and its image SHALL both be fetched through `fetchPublicUrl` (`worker/scrape.ts`), never through a bare `fetch` and never through the billed Firecrawl path `fetchContent(url, "read")`. A malformed url, a non-http(s) url, an internal address, and a redirect chain arriving at an internal address SHALL each fail closed, leaving the message as plain text.
-
-An image host is held to the same rule as a page host, since an image url redirecting inward is the same hazard as a page doing it.
-
-Authorization SHALL be resolved before the fetch, not after: a message whose poster may not post to the room never reaches the preview path at all.
-
-#### Scenario: An internal address is refused
-
-- **WHEN** a member posts a link to a loopback, private-range, or cloud metadata address
-- **THEN** no request is made to it, a failure is recorded, and the message renders as plain text
-
-#### Scenario: A hostname that resolves inward is refused
-
-- **WHEN** a member posts a link whose hostname resolves to an internal address, in any ip-literal encoding or through DNS
-- **THEN** the resolved address is checked before connecting and the fetch fails closed, leaving the message as plain text
-
-#### Scenario: A redirect chain ending inward is refused
-
-- **WHEN** a member posts a public url that redirects to an internal address
-- **THEN** the chain stops at the internal hop, that address is never requested, and no card renders
-
-#### Scenario: A dead host leaves the message alone
-
-- **WHEN** a member posts a link to a host that does not answer
-- **THEN** the post succeeds, a failure is recorded, and the message renders as plain text
-
-#### Scenario: A broken preview path never breaks posting
-
-- **WHEN** the preview path itself fails, including a database error reading or writing the cache
-- **THEN** the message still posts, the room is still notified, and the message renders as plain text
-
-#### Scenario: The preview never bills a scrape
-
-- **WHEN** any link preview is fetched
-- **THEN** the free path is used and no Firecrawl call is charged
-
-### Requirement: The page's own tags are the preview
-
-The preview SHALL be read from the page's meta tags with Bun's `HTMLRewriter`, adding no html-parsing dependency. `og:title`, `og:description`, and `og:image` SHALL be preferred where the page published them, with `<title>` and `<meta name="description">` standing in where it did not. A meta tag naming no content SHALL be ignored.
-
-Title and description SHALL have their whitespace collapsed and their length limited, so one page cannot store an essay against every room that links it. A page offering neither a title nor a description SHALL be recorded as a failure instead of stored as an empty card.
-
-An `og:image` written relative to its page SHALL be resolved against the page it was named on.
-
-#### Scenario: OpenGraph tags win where the page set them
-
-- **WHEN** a page publishes both `og:title` and a plain `<title>`
-- **THEN** the card shows the OpenGraph value
-
-#### Scenario: A page with no OpenGraph tags still gets a card
-
-- **WHEN** a page publishes only `<title>` and `<meta name="description">`
-- **THEN** the card shows those, with no image
-
-#### Scenario: A page offering nothing is a failure, not an empty card
-
-- **WHEN** a page has neither a title nor a description
-- **THEN** a failure is recorded and no card renders
-
-#### Scenario: A page that is not html has nothing to read
-
-- **WHEN** a previewed url answers with a content type other than html
-- **THEN** the fetch fails closed and no card renders
+## MODIFIED Requirements
 
 ### Requirement: Previews are cached by url and bounded per team
 
@@ -143,6 +49,8 @@ Title and description SHALL be encrypted at rest with `encryptChatText`, the sam
 
 - **WHEN** a preview is stored
 - **THEN** its title and description are written encrypted, like a room message's content
+
+## ADDED Requirements
 
 ### Requirement: A preview image is served from this origin to anyone holding its id
 
@@ -194,4 +102,3 @@ Public Topic chat history remains hidden from a signed-out visitor. This require
 
 - **WHEN** a signed-out visitor opens a public Topic that has chat turns
 - **THEN** no chat turns are served
-

@@ -246,9 +246,9 @@ export async function canBookmarkFinding(userId: string, findingId: string): Pro
 }
 
 /**
- * Whether the user may see a topic finding.
+ * Whether the user may see a topic finding. A signed-out visitor passes it for a public topic alone.
  */
-export async function isTopicFindingVisible(userId: string, findingId: string): Promise<boolean> {
+export async function isTopicFindingVisible(userId: string | null, findingId: string): Promise<boolean> {
 	// a missing finding is invisible to everyone
 	const topic = await loadFindingTopic(findingId)
 	if (!topic) {
@@ -265,6 +265,10 @@ export async function isTopicFindingVisible(userId: string, findingId: string): 
 		case "public":
 			return true
 		case "invite":
+			// an invite topic opens on a subscription, which a signed-out visitor holds none of
+			if (!userId) {
+				return false
+			}
 			return isVisibleAfterActivation(topic.scanStartedAt, await subscriptionActivatedAt(userId, topic.id))
 		case "private":
 			return false

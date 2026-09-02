@@ -296,15 +296,12 @@ export function newTopicFindingCount(topicFindings: TopicFinding[]): number {
 	return topicFindings.filter((finding) => !finding.isConsumed).length
 }
 
-// the per-finding routes a signed-in user can do: rating, consume, bookmark, record a view,
-// and the link preview card the topic finding popup shows
+// the per-finding routes. rating, consume, bookmark, and record a view need a signed-in user.
+// the link preview card the topic finding popup shows is for anyone who can see the finding
 export const findingsRoute = new Hono<AppEnv>()
 	.get("/topic-findings/:id/link-preview", async (context) => {
-		// reject a signed-out visitor
+		// a visitor sees the card wherever they can see a topic finding
 		const userId = currentUser(context)
-		if (!userId) {
-			return context.json({ error: "unauthorized" }, 401)
-		}
 		if (!(await isTopicFindingVisible(userId, context.req.param("id")))) {
 			return context.json({ error: "not found" }, 404)
 		}

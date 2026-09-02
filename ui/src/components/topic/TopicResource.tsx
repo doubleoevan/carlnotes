@@ -195,22 +195,20 @@ function ResourceInfo({
 }) {
 	// signed-out visitors don't get the per-user read and rating buttons
 	const isSignedIn = useIsSignedIn()
-	// the linked page's link preview card, fetched when the row mounts
+	// the linked page's link preview card, fetched when the row mounts for every visitor
 	const [linkPreview, setLinkPreview] = useState<ChatLinkPreview | null>(null)
-	const [isLinkPreviewLoading, setIsLinkPreviewLoading] = useState(isSignedIn)
+	const [isLinkPreviewLoading, setIsLinkPreviewLoading] = useState(true)
 	useEffect(() => {
 		// a row that unmounts mid-fetch must not set state afterward
 		let isTopicFindingOpen = true
-		if (isSignedIn) {
-			fetchTopicFindingLinkPreview(resource.findingId)
-				.then((findingLinkPreview) => isTopicFindingOpen && setLinkPreview(findingLinkPreview))
-				.catch(() => {})
-				.finally(() => isTopicFindingOpen && setIsLinkPreviewLoading(false))
-		}
+		fetchTopicFindingLinkPreview(resource.findingId)
+			.then((findingLinkPreview) => isTopicFindingOpen && setLinkPreview(findingLinkPreview))
+			.catch(() => {})
+			.finally(() => isTopicFindingOpen && setIsLinkPreviewLoading(false))
 		return () => {
 			isTopicFindingOpen = false
 		}
-	}, [isSignedIn, resource.findingId])
+	}, [resource.findingId])
 
 	// the bookmark button's label, flipping with the finding's bookmark state
 	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"

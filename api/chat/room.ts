@@ -413,19 +413,15 @@ async function loadChatRoomAttachment(
 	return chatRoomAttachment
 }
 
-// how long a browser may keep a link preview image. the bytes under one link preview id never change
-const PREVIEW_IMAGE_CACHE_CONTROL = "private, max-age=86400"
+// how long a cache may keep a link preview image. the bytes for one link preview id never change,
+// and one stored image is the same for every viewer
+const PREVIEW_IMAGE_CACHE_CONTROL = "public, max-age=86400"
 
 // the chat room routes. every access rejection is a 404, so a chat room's existence follows the team's
 export const chatRoomRoute = new Hono<AppEnv>()
-	// a link preview's image, served from this origin so no user's browser reaches the page's own host
+	// a link preview's image, served from this origin so no user's browser reaches the page's own host.
+	// the id is a random uuid, only assigned with a finding or message the user was already allowed
 	.get("/link-previews/:linkPreviewId/image", async (context) => {
-		// signed-in users only, which keeps the previewed urls from being probed by a stranger
-		const userId = currentUser(context)
-		if (!userId) {
-			return context.json({ error: "not found" }, 404)
-		}
-
 		// a link preview with no stored image has nothing to serve
 		const linkPreviewImage = await loadLinkPreviewImage(context.req.param("linkPreviewId"))
 		if (!linkPreviewImage) {
