@@ -7,7 +7,7 @@ import { and, eq, isNull, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
 import { canCreateInvitesToday } from "../../db/quotas"
-import { invites, teamMembers, teams, topics } from "../../db/schema"
+import { invites, teamMembers, teams, topics, users } from "../../db/schema"
 import { verifyTurnstileToken } from "../auth"
 import { isAllowed, isLeaderRole } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
@@ -113,6 +113,22 @@ export async function revokeTopicInvite(userId: string, topicId: string, inviteI
 }
 
 /**
+ * Returns the topic or team a live token opens, or null when it is unknown, revoked, expired, or spent.
+ */
+export async function toInviteTarget(token: string): Promise<{ topicId: string } | { teamId: string } | null> {
+	const [invite] = await db.select().from(invites).where(eq(invites.token, token))
+	if (!invite || toInviteRefusal(invite, new Date())) {
+		return null
+	}
+
+	// exactly one of the two is set, and the check constraint on the table is what guarantees it
+	if (invite.teamId) {
+		return { teamId: invite.teamId }
+	}
+	return invite.topicId ? { topicId: invite.topicId } : null
+}
+
+/**
  * Accept a join token for the user. A topic invite subscribes them to the topic it opens.
  * A team invite makes them a team member.
  */
@@ -184,9 +200,16 @@ export async function acceptTeamInvite(
 		return { status: "exhausted" }
 	}
 
-	// a team member's invitation arrives as a join request a team leader activates
+	// a leader's invitation joins the team automatically, and so does one addressed to this person by anyone
 	const creatorRole = invite.invitedByUserId ? await toTeamRole(invite.invitedByUserId, teamRow.id) : null
-	if (!creatorRole || !isLeaderRole(creatorRole)) {
+	const isLeaderInvite = creatorRole !== null && isLeaderRole(creatorRole)
+	const isJoinAutomatically = isLeaderInvite || (await isInviteForUser(invite, userId))
+
+	// an open link admits when some other live invitation already names this person
+	const automaticInvite = isJoinAutomatically ? null : await toAutomaticInvite(userId, teamRow.id, invite.id)
+
+	// an open link from a member arrives as a join request a team leader activates
+	if (!isJoinAutomatically && !automaticInvite) {
 		await db
 			.insert(teamMembers)
 			.values({ teamId: teamRow.id, userId, invitedByUserId: invite.invitedByUserId, isActive: false })
@@ -194,12 +217,83 @@ export async function acceptTeamInvite(
 		return { status: "requestedTeam", teamId: teamRow.id, teamName: teamRow.name }
 	}
 
-	// the team membership with its delivery fan-out, rejected only at the team member limit
-	if (!(await joinTeam(userId, teamRow.id, invite.invitedByUserId))) {
+	// the automatic invitation did its work, so it is spent like any invitation that was accepted.
+	// losing that race refunds the accepted invitation, which nobody joined on
+	if (automaticInvite && !(await spendInviteUse(automaticInvite.id))) {
 		await refundInviteUse(invite.id)
 		return { status: "exhausted" }
 	}
+
+	// the team membership with its delivery fan-out, rejected only at the team member limit
+	if (!(await joinTeam(userId, teamRow.id, invite.invitedByUserId))) {
+		await refundInviteUse(invite.id)
+		if (automaticInvite) {
+			await refundInviteUse(automaticInvite.id)
+		}
+		return { status: "exhausted" }
+	}
 	return joinedTeam
+}
+
+/**
+ * Whether an invitation is addressed to this user: by their resolved account, or by an email they own.
+ */
+export async function isInviteForUser(
+	invite: Pick<typeof invites.$inferSelect, "invitedUserId" | "email">,
+	userId: string,
+): Promise<boolean> {
+	// a username invite and an email invite to an existing account both resolve to the account
+	if (invite.invitedUserId === userId) {
+		return true
+	}
+
+	// an email invite sent before the recipient signed up resolved to nobody, so it matches by address.
+	// signup does not require verifying the address, so only a verified one proves the account owns it
+	if (!invite.email) {
+		return false
+	}
+	const [user] = await db
+		.select({ email: users.email, isEmailVerified: users.emailVerified })
+		.from(users)
+		.where(eq(users.id, userId))
+	return Boolean(user?.isEmailVerified && user.email === invite.email)
+}
+
+/**
+ * Whether a live invitation other than the one being accepted admits the accepter on its own.
+ */
+export function isAutomaticInvite(
+	namedInvite:
+		| Pick<typeof invites.$inferSelect, "id" | "revokedAt" | "expiresAt" | "maxUses" | "usedCount">
+		| undefined,
+	acceptedInviteId: string,
+	now: Date,
+): boolean {
+	// the invitation being accepted cannot vouch for itself, and a dead one vouches for nobody
+	return Boolean(namedInvite && namedInvite.id !== acceptedInviteId && !toInviteRefusal(namedInvite, now))
+}
+
+// a live invitation to this team addressed to this user, or null when none does
+async function toAutomaticInvite(
+	userId: string,
+	teamId: string,
+	acceptedInviteId: string,
+): Promise<typeof invites.$inferSelect | null> {
+	// an invitation addresses a user by their account, or by an address their account verified
+	const [user] = await db
+		.select({ email: users.email, isEmailVerified: users.emailVerified })
+		.from(users)
+		.where(eq(users.id, userId))
+	const isAddressedToUser = user?.isEmailVerified
+		? or(eq(invites.invitedUserId, userId), eq(invites.email, user.email))
+		: eq(invites.invitedUserId, userId)
+
+	// both addressings have their own unique row, so either one may match and the first live one admits
+	const addressedInvites = await db
+		.select()
+		.from(invites)
+		.where(and(eq(invites.teamId, teamId), isAddressedToUser))
+	return addressedInvites.find((invite) => isAutomaticInvite(invite, acceptedInviteId, new Date())) ?? null
 }
 
 // one use spent from the token, conditional on the limit. false if the link had none left
