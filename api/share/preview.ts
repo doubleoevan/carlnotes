@@ -14,7 +14,7 @@ import { type TopicPreview, toTopicPreviewKey, toTopicPreviewPng } from "./topic
 const PREVIEW_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 /**
- * What a Topic's preview says, or null if no Topic has that id.
+ * What a Topic's preview shows, or null if no Topic has that id.
  * Every Topic gets a preview whatever its visibility, so a pasted link never looks broken.
  */
 export async function toTopicPreview(topicId: string): Promise<TopicPreview | null> {
@@ -144,7 +144,7 @@ export function toTopicPreviewHtml(
 }
 
 /**
- * What a profile's preview says, or null if no user has that id.
+ * What a profile's preview shows, or null if no user has that id.
  */
 export async function toProfilePreview(userId: string): Promise<ProfilePreview | null> {
 	const [user] = await db.select({ id: users.id, username: users.username }).from(users).where(eq(users.id, userId))
@@ -167,7 +167,7 @@ export async function toProfilePreview(userId: string): Promise<ProfilePreview |
 }
 
 /**
- * What a team's card says, or null if there is no public team at that id.
+ * What a team's card shows, or null if there is no public team at that id.
  * A private team renders no card, and its page shows an outsider its name and nothing else.
  */
 export async function toTeamPreview(teamId: string): Promise<TeamPreview | null> {
@@ -176,10 +176,44 @@ export async function toTeamPreview(teamId: string): Promise<TeamPreview | null>
 		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey })
 		.from(teams)
 		.where(and(eq(teams.id, teamId), eq(teams.isPublic, true)))
-	if (!team) {
-		return null
+	return team ? toTeamPreviewCounts(team) : null
+}
+
+/**
+ * An invitation's card bytes for the team or topic its token opens, or null if neither renders one.
+ */
+export async function toCachedInvitePreviewPng(
+	target: { teamId: string } | { topicId: string },
+): Promise<{ bytes: Uint8Array; cacheControl: string } | null> {
+	// a team's card ignores the public check here, since the token already opens the team
+	if ("teamId" in target) {
+		const teamPreview = await toInvitedTeamPreview(target.teamId)
+		return teamPreview ? toCachedTeamPreviewPng(teamPreview) : null
 	}
 
+	// a topic's card is shown at any visibility already, so the token does not need a separate loader
+	const topicPreview = await toTopicPreview(target.topicId)
+	return topicPreview ? toCachedTopicPreviewPng(topicPreview) : null
+}
+
+/**
+ * What a team's card shows whatever its visibility, for the holder of an invitation that opens it.
+ */
+export async function toInvitedTeamPreview(teamId: string): Promise<TeamPreview | null> {
+	// the token stands in for the public check: whoever holds it can already join this team
+	const [team] = await db
+		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey })
+		.from(teams)
+		.where(eq(teams.id, teamId))
+	return team ? toTeamPreviewCounts(team) : null
+}
+
+// the counts and avatar that on a team's card, read once the row is resolved
+async function toTeamPreviewCounts(team: {
+	teamId: string
+	name: string
+	avatarKey: string | null
+}): Promise<TeamPreview> {
 	// what the team page itself shows a stranger: how many members it has, and how many public topics it holds
 	const [teamMembersRow] = await db
 		.select({ members: count() })
@@ -217,7 +251,7 @@ export function toTeamPreviewHtml(appShell: string, teamPreview: TeamPreview, ap
 	const membersWord = teamPreview.memberCount === 1 ? "member" : "members"
 	const topicsWord = teamPreview.topicCount === 1 ? "public topic" : "public topics"
 	const description = `${name} on CarlNotes. ${teamPreview.memberCount} ${membersWord}, ${teamPreview.topicCount} ${topicsWord}.`
-	// the team's own rendered card, the image a platform unfurls beside the link
+	// the team's own rendered card, the image a platform shows beside the link
 	const previewUrl = `${appUrl}/api/teams/${teamPreview.teamId}/preview.png`
 	const tags = [
 		`<title>${name} — CarlNotes</title>`,
@@ -236,6 +270,37 @@ export function toTeamPreviewHtml(appShell: string, teamPreview: TeamPreview, ap
 }
 
 /**
+ * The app shell with an invitation card's preview tags.
+ */
+export function toInvitePreviewHtml(
+	appShell: string,
+	invitePreview: { name: string; imageUrl: string; inviteUrl: string; kind: "team" | "topic" },
+): string {
+	const name = Bun.escapeHTML(invitePreview.name)
+	// a team invitation joins the team, and a topic invitation follows the topic
+	const inviteVerb = invitePreview.kind === "team" ? "Join" : "Follow"
+	const inviteTitle = `${inviteVerb} ${name} on CarlNotes`
+	const inviteDescription = `You are invited to ${inviteVerb.toLowerCase()} ${name}. Carl reads its sources and shares the notes.`
+	const tags = [
+		`<title>${inviteTitle}</title>`,
+		// a token is a credential, so the url holding one is never indexed
+		`<meta name="robots" content="noindex, nofollow">`,
+		// og:url is the invitation, not the page. a platform that rewrites a shared link to og:url
+		// would otherwise swap the invitation for a link that lets nobody in
+		`<meta property="og:url" content="${invitePreview.inviteUrl}">`,
+		`<meta property="og:title" content="${inviteTitle}">`,
+		`<meta property="og:description" content="${inviteDescription}">`,
+		`<meta property="og:image" content="${invitePreview.imageUrl}">`,
+		`<meta property="og:image:alt" content="${inviteTitle}">`,
+		`<meta name="twitter:card" content="summary_large_image">`,
+		`<meta name="twitter:title" content="${inviteTitle}">`,
+		`<meta name="twitter:description" content="${inviteDescription}">`,
+		`<meta name="twitter:image" content="${invitePreview.imageUrl}">`,
+	].join("")
+	return toShellWithHeadTags(appShell, tags)
+}
+
+/**
  * The app shell with a profile's preview tags, title, and canonical URL, the treatment Topic pages get.
  */
 export function toProfilePreviewHtml(appShell: string, preview: ProfilePreview, appUrl: string): string {
@@ -243,7 +308,7 @@ export function toProfilePreviewHtml(appShell: string, preview: ProfilePreview, 
 	const topicsWord = preview.publicTopicCount === 1 ? "public topic" : "public topics"
 	const followersWord = preview.followerCount === 1 ? "follower" : "followers"
 	const description = `${username} on CarlNotes. ${preview.publicTopicCount} ${topicsWord}, ${preview.followerCount} ${followersWord}.`
-	// the rendered card a platform unfurls beside the link
+	// the rendered card a platform shows beside the link
 	const previewUrl = `${appUrl}/api/profiles/${preview.userId}/preview.png`
 	const tags = [
 		`<title>${username} — CarlNotes</title>`,

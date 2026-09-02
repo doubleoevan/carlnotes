@@ -6,9 +6,11 @@ import { toInviteUrl } from "@/clients/topicClient"
 import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dialog"
 import {
 	COPIED_FEEDBACK_MS,
+	COPY_PAGE_LABEL,
 	CopyLinkOption,
 	DisabledShareOption,
 	INVITE_LABEL,
+	INVITE_SHARE_LABEL,
 	POST_PLATFORM_TARGETS,
 	SEND_TARGETS,
 	SHARE_OPTION_CLASS,
@@ -20,8 +22,8 @@ import { copyWithDocument } from "@/lib/utils"
 
 /**
  * The Share dialog for a Team, opened from the actions menu. It shares the team's page,
- * which can only be opened by a non-member if the team is public. A private team's rows are disabled with a call to action.
- * A team member also gets the invite row, which provides a link that joins the team.
+ * which can only be opened by a non-member if the team is public. A private team's options are disabled with a call to action.
+ * A team member also gets the invite option, which provides a link that joins the team.
  */
 export function ShareTeam({
 	teamId,
@@ -63,7 +65,7 @@ export function ShareTeam({
 	async function handleShareSheet(): Promise<void> {
 		const shared = await openShareSheet({ title: teamName, text: `${teamName} on CarlNotes`, url: teamUrl })
 		if (shared === "unavailable") {
-			await handleCopyLink("Copy link", teamUrl)
+			await handleCopyLink(COPY_PAGE_LABEL, teamUrl)
 		}
 	}
 
@@ -78,22 +80,20 @@ export function ShareTeam({
 			return
 		}
 
-		// a dismissed sheet is a decision, so only a rejected one falls back to the clipboard
+		// show share sheet if available otherwise show the copy link
 		const inviteUrl = toInviteUrl(invite.token)
-		const shared = await openShareSheet({
-			title: teamName,
-			text: `Join ${teamName} on CarlNotes`,
-			url: inviteUrl,
-		})
-		if (shared === "unavailable") {
+		const shareSheetResult = isShareSheetAvailable
+			? await openShareSheet({ title: teamName, text: `Join ${teamName} on CarlNotes`, url: inviteUrl })
+			: "unavailable"
+		if (shareSheetResult === "unavailable") {
 			await handleCopyLink(INVITE_LABEL, inviteUrl)
 		}
 	}
 
-	// the invite option only shows if a sheet can open, and only for a team member
-	const isInviteOptionShown = canInvite && isShareSheetAvailable
 	const reason = "Make this team public to post it"
 	const targetOptionProps = { isPublic, encodedUrl, encodedTitle, reason }
+	// the invite option opens a sheet where there is one, and copies everywhere else
+	const inviteLabel = isShareSheetAvailable ? INVITE_SHARE_LABEL : INVITE_LABEL
 	return (
 		<Dialog open onOpenChange={onClose}>
 			{/* the tighter padding and gap keep the dialog to the topic share popover's own density */}
@@ -104,15 +104,15 @@ export function ShareTeam({
 					<ShareTargetOptions shareTargets={POST_PLATFORM_TARGETS} {...targetOptionProps} />
 					{/* a divider above the options that share the team to one person instead of posting it */}
 					<div className="bg-border my-1 h-px" />
-					{/* the only option providing an invite link that joins the team instead of the team's url */}
-					{isInviteOptionShown && (
+					{/* the only option that grants access. every other option shares the team's page */}
+					{canInvite && (
 						<button type="button" onClick={() => void handleShareInvite()} className={SHARE_OPTION_CLASS}>
 							{copiedLabel === INVITE_LABEL ? (
 								<Check className={SHARE_OPTION_ICON_CLASS} />
 							) : (
 								<Share className={SHARE_OPTION_ICON_CLASS} />
 							)}
-							{copiedLabel === INVITE_LABEL ? "Link copied" : INVITE_LABEL}
+							{copiedLabel === INVITE_LABEL ? "Link copied" : inviteLabel}
 						</button>
 					)}
 					{/* the device's share sheet is above the send options if one can open */}
@@ -133,11 +133,11 @@ export function ShareTeam({
 					{/* the copy link option sits under a divider */}
 					<div className="bg-border my-1 h-px" />
 					<CopyLinkOption
-						label="Copy link"
+						label={COPY_PAGE_LABEL}
 						icon={<Link className="size-4" />}
 						className={SHARE_OPTION_CLASS}
-						isCopied={copiedLabel === "Copy link"}
-						onCopy={() => handleCopyLink("Copy link", teamUrl)}
+						isCopied={copiedLabel === COPY_PAGE_LABEL}
+						onCopy={() => handleCopyLink(COPY_PAGE_LABEL, teamUrl)}
 					/>
 				</div>
 			</DialogContent>

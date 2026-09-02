@@ -23,12 +23,13 @@ import { countUnseenChatMentions, loadChatRooms } from "./chat/rooms"
 import { chatRoute } from "./chat/turns"
 import { type AppEnv, currentUser } from "./currentUser"
 import { flagContentRoute } from "./flagContent"
-import { invitesRoute } from "./invite/invites"
+import { invitesRoute, toInviteTarget } from "./invite/invites"
 import { userInvitesRoute } from "./invite/userInvites"
 import { noteCommentThreadsRoute } from "./note/noteCommentThreads"
 import { notesRoute } from "./note/notes"
 import { profilesRoute } from "./profiles"
 import {
+	toCachedInvitePreviewPng,
 	toCachedProfilePreviewPng,
 	toCachedTeamPreviewPng,
 	toCachedTopicPreviewPng,
@@ -196,6 +197,25 @@ export const apiRoute = new Hono<AppEnv>()
 		}
 		// rendered once per distinct card and read from storage after
 		const { bytes, cacheControl } = await toCachedTeamPreviewPng(teamPreviewCard)
+		return context.body(bytes as unknown as ArrayBuffer, 200, {
+			"Content-Type": "image/png",
+			"Cache-Control": cacheControl,
+		})
+	})
+	// the card an invitation shows, addressed by its token so a private team still gets one.
+	// the token already opens the team, so its card discloses less than the link it came on
+	.get("/invites/:token/preview.png", async (context) => {
+		const target = await toInviteTarget(context.req.param("token"))
+		if (!target) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// the token's own target decides which card is rendered, at any visibility
+		const invitePreviewPng = await toCachedInvitePreviewPng(target)
+		if (!invitePreviewPng) {
+			return context.json({ error: "not found" }, 404)
+		}
+		const { bytes, cacheControl } = invitePreviewPng
 		return context.body(bytes as unknown as ArrayBuffer, 200, {
 			"Content-Type": "image/png",
 			"Cache-Control": cacheControl,

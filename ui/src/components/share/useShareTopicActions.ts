@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { toast } from "sonner"
 import { sendCreateTopicInvite, toInviteUrl } from "@/clients/topicClient"
-import { COPIED_FEEDBACK_MS, INVITE_LABEL } from "@/components/share/ShareOptions"
-import { openShareSheet } from "@/lib/shareSheet"
+import { COPIED_FEEDBACK_MS, COPY_PAGE_LABEL, INVITE_LABEL } from "@/components/share/ShareOptions"
+import { canOpenShareSheet, openShareSheet } from "@/lib/shareSheet"
 import { copyWithDocument } from "@/lib/utils"
 
 // what the share menu can do, and the label it shows after a copy lands
@@ -44,9 +44,10 @@ export function useShareTopicActions(
 		}
 	}
 
-	// hand a url to the device's sheet, falling back to the clipboard only where there is no sheet to open
+	// hand a url to the device's sheet, falling back to the clipboard only where there is no sheet to open.
+	// the invite option is offered everywhere now, so a sheet only opens where one is worth offering
 	const openSheet = async (text: string, url: string, copiedAs: string): Promise<void> => {
-		const shared = await openShareSheet({ title: topicName, text, url })
+		const shared = canOpenShareSheet() ? await openShareSheet({ title: topicName, text, url }) : "unavailable"
 		if (shared === "unavailable") {
 			await copyLink(copiedAs, url)
 			return
@@ -60,7 +61,7 @@ export function useShareTopicActions(
 	return {
 		copiedLabel,
 		copyLink,
-		shareTopic: () => openSheet(`${topicName} on CarlNotes`, topicUrl, "Copy link"),
+		shareTopic: () => openSheet(`${topicName} on CarlNotes`, topicUrl, COPY_PAGE_LABEL),
 		// the invite token is created inside the click. a menu that is never used creates nothing
 		shareInvite: async () => {
 			// the invite is made first, and a failed create ends in a toast instead of an empty sheet

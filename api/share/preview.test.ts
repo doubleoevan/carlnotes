@@ -1,6 +1,6 @@
 // preview tag tests: a route replaces the shell tags it writes and keeps the site-wide defaults it doesn't
 import { expect, test } from "bun:test"
-import { toShellWithHeadTags, toTeamPreviewHtml } from "./preview"
+import { toInvitePreviewHtml, toShellWithHeadTags, toTeamPreviewHtml } from "./preview"
 
 // a shell with the site-wide preview card, which is what a page that sets no preview of its own should keep
 const APP_SHELL = [
@@ -78,4 +78,21 @@ test("toTeamPreviewHtml writes the team's tags over the shell's", () => {
 	expect(html).toContain("1 member, 3 public topics.")
 	// one of each tag, so the shell's defaults never sit beside the team's
 	expect(html.match(/<meta property="og:title"/g)).toHaveLength(1)
+})
+
+// an invitation names its action. a team is joined and a topic is followed
+test("toInvitePreviewHtml titles a team invitation 'Join' and a topic invitation 'Follow'", () => {
+	const invite = { imageUrl: "https://carlnotes.com/card.png", inviteUrl: "https://carlnotes.com/invite/t0k3n" }
+	const team = toInvitePreviewHtml(APP_SHELL, { ...invite, name: "Raccoon Crew", kind: "team" })
+	const topic = toInvitePreviewHtml(APP_SHELL, { ...invite, name: "Espresso Machines", kind: "topic" })
+
+	// a team is joined, and a topic is followed, in the title and in the description alike
+	expect(team).toContain("<title>Join Raccoon Crew on CarlNotes</title>")
+	expect(team).toContain("You are invited to join Raccoon Crew.")
+	expect(topic).toContain("<title>Follow Espresso Machines on CarlNotes</title>")
+	expect(topic).toContain("You are invited to follow Espresso Machines.")
+
+	// a token is a credential, so its url is never indexed and never rewritten to the page
+	expect(topic).toContain('<meta name="robots" content="noindex, nofollow">')
+	expect(topic).toContain('<meta property="og:url" content="https://carlnotes.com/invite/t0k3n">')
 })

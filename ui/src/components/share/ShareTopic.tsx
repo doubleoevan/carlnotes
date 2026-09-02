@@ -5,9 +5,11 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/primitives/dial
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import {
+	COPY_PAGE_LABEL,
 	CopyLinkOption,
 	DisabledShareOption,
 	INVITE_LABEL,
+	INVITE_SHARE_LABEL,
 	POST_PLATFORM_TARGETS,
 	SEND_TARGETS,
 	SHARE_OPTION_CLASS,
@@ -17,25 +19,33 @@ import {
 import { useShareTopicActions } from "@/components/share/useShareTopicActions"
 import { canOpenShareSheet } from "@/lib/shareSheet"
 
-// what a disabled share option says, which names the owner's way to fix it
+// what a disabled share option shows, which names the owner's way to fix it
 function toDisabledReason(isTopicOwner?: boolean): string {
 	return isTopicOwner ? "Make this topic public to post it" : "This topic must be public to post it"
 }
 
-// the row that shares an invite link, relabeled once a clipboard copy lands
-function InviteShareOption({ isCopied, onShare }: { isCopied: boolean; onShare: () => Promise<void> }) {
+// the option that shares an invite link, relabeled once a clipboard copy lands
+function InviteShareOption({
+	isCopied,
+	label,
+	onShare,
+}: {
+	isCopied: boolean
+	label: string
+	onShare: () => Promise<void>
+}) {
 	return (
 		<button type="button" onClick={() => void onShare()} className={SHARE_OPTION_CLASS}>
 			{isCopied ? <Check className={SHARE_OPTION_ICON_CLASS} /> : <Share className={SHARE_OPTION_ICON_CLASS} />}
-			{isCopied ? "Link copied" : INVITE_LABEL}
+			{isCopied ? "Link copied" : label}
 		</button>
 	)
 }
 
 /**
  * The Share dialog for a Topic, opened from the actions menu or ShareTopicButton. It shares the topic's page,
- * which can only be opened by a non-subscriber if the topic is public. A private topic's rows are disabled with a call to action.
- * A topic subscriber also gets the invite row, which provides a link to subscribe to the topic.
+ * which can only be opened by a non-subscriber if the topic is public. A private topic's options are disabled with a call to action.
+ * A topic subscriber also gets the invite option, which provides a link to subscribe to the topic.
  */
 export function ShareTopic({
 	topic,
@@ -90,9 +100,6 @@ export function ShareTopic({
 				}
 			: undefined
 
-	// the sheet option only exists where a sheet can open, and only for someone who may invite
-	const isInviteRowShown = Boolean(canInvite && isShareSheetAvailable)
-
 	// the props every platform option requires
 	const shareTargetProps = {
 		isPublic,
@@ -109,7 +116,13 @@ export function ShareTopic({
 			{/* a divider above the options that share the topic to one person instead of posting it */}
 			<div className="bg-border my-1 h-px" />
 			{/* the only option providing an invite link that subscribes to the topic instead of the topic's url */}
-			{isInviteRowShown && <InviteShareOption isCopied={copiedLabel === INVITE_LABEL} onShare={shareInvite} />}
+			{canInvite && (
+				<InviteShareOption
+					isCopied={copiedLabel === INVITE_LABEL}
+					label={isShareSheetAvailable ? INVITE_SHARE_LABEL : INVITE_LABEL}
+					onShare={shareInvite}
+				/>
+			)}
 			{/* the device's share sheet is above the send options if one can open */}
 			{isShareSheetAvailable &&
 				(isPublic ? (
@@ -129,11 +142,11 @@ export function ShareTopic({
 			{/* the copy link option sits under a divider */}
 			<div className="bg-border my-1 h-px" />
 			<CopyLinkOption
-				label="Copy link"
+				label={COPY_PAGE_LABEL}
 				icon={<Link className="size-4" />}
 				className={SHARE_OPTION_CLASS}
-				isCopied={copiedLabel === "Copy link"}
-				onCopy={() => copyLink("Copy link", topicUrl)}
+				isCopied={copiedLabel === COPY_PAGE_LABEL}
+				onCopy={() => copyLink(COPY_PAGE_LABEL, topicUrl)}
 			/>
 			{/* an rss feed can only be served for a public topic */}
 			{isPublic ? (

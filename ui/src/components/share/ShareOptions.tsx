@@ -16,7 +16,13 @@ export const SHARE_OPTION_CLASS =
 	"hover:bg-accent focus-visible:bg-accent flex min-h-10 w-full items-center gap-2 rounded-md px-2 text-sm focus-visible:outline-none"
 
 // the invite option's label, which doubles as the key its copied confirmation is held under
-export const INVITE_LABEL = "Invite"
+export const INVITE_LABEL = "Copy invite link"
+
+// the same option where a share sheet opens instead, so the label promises what the tap does
+export const INVITE_SHARE_LABEL = "Share invite link"
+
+// the label for copying a page's own url, distinct from the invite link that grants access
+export const COPY_PAGE_LABEL = "Copy page link"
 
 // the platforms a page gets posted to
 export const POST_PLATFORM_TARGETS = [

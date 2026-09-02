@@ -1,6 +1,7 @@
 // the pages this origin serves as paths with a custom app shell and page-specific header preview tags
 import { Hono } from "hono"
 import { loadPages } from "./content"
+import { toInviteTarget } from "./invite/invites"
 import { loadReleases, toReleaseSummary } from "./releases"
 import {
 	lastScan,
@@ -20,6 +21,8 @@ import {
 } from "./seo"
 import { toSiteFeedXml, toTopicFeedXml } from "./share/feed"
 import {
+	toInvitedTeamPreview,
+	toInvitePreviewHtml,
 	toProfilePreview,
 	toProfilePreviewHtml,
 	toShellWithHeadTags,
@@ -208,6 +211,40 @@ export const pagesRoute = new Hono()
 			}
 		} catch (error) {
 			console.error("team preview tags skipped", error)
+		}
+		return next()
+	})
+	// an invite preview card to show from the team or topic it's token opens
+	.get("/invite/:token", async (context, next) => {
+		try {
+			const target = await toInviteTarget(context.req.param("token"))
+			const appShell = Bun.file(`${UI_BUNDLE_ROOT}/index.html`)
+			if (!target || !(await appShell.exists())) {
+				return next()
+			}
+
+			// the card is addressed by the token, so a private team preview shows the same as a public one
+			const token = context.req.param("token")
+			const inviteUrl = `${appUrl()}/invite/${token}`
+			const imageUrl = `${appUrl()}/api/invites/${token}/preview.png`
+
+			// a team invitation is named by its team, a topic invitation by its topic
+			const invitedTeam = "teamId" in target ? await toInvitedTeamPreview(target.teamId) : null
+			const invitedTopic = "topicId" in target ? await toTopicPreview(target.topicId) : null
+			const name = invitedTeam?.name ?? invitedTopic?.title
+			if (!name) {
+				return next()
+			}
+			return context.html(
+				toInvitePreviewHtml(await appShell.text(), {
+					name,
+					imageUrl,
+					inviteUrl,
+					kind: invitedTeam ? "team" : "topic",
+				}),
+			)
+		} catch (error) {
+			console.error("invite preview tags skipped", error)
 		}
 		return next()
 	})
