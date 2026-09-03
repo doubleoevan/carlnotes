@@ -1,8 +1,9 @@
 name: Smoke
 
-# the smoke suite runs against real services: the dev database, LiteLLM, and the outside APIs.
-# it spends a little real money and writes real rows, so it runs on each push to main or triggered manually,
-# not on the pr path. it needs a DOPPLER_TOKEN repository secret holding a dev-config service token before its first run.
+# the smoke suites that need only remote services: the dev database, the source APIs, and object storage.
+# they write real rows, so they run on each push to main or triggered manually, not on the pr path. the suites
+# that need litellm or temporal are skipped, since both run in local docker and a runner has neither.
+# it needs a DOPPLER_TOKEN repository secret holding a dev-config service token.
 on:
   workflow_dispatch:
   push:
@@ -40,6 +41,7 @@ jobs:
       - run: doppler run -- bash scripts/smoke-coverage.sh
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          SMOKE_SKIP_LOCAL_SERVICES: "1"
       # the smoke coverage joins the unit coverage on Codecov under its own flag
       - uses: codecov/codecov-action@v7
         if: always()

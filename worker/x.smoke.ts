@@ -1,5 +1,5 @@
 // a live smoke test the owner runs by hand for X
-// so both halves stay proven. run it with: bun run smoke:x. it needs TWITTERAPI_IO_API_KEY set, the LiteLLM proxy reachable at LITELLM_BASE_URL,
+// so both halves stay proven. run it with: bun run smoke:x. it needs TWITTERAPI_IO_API_KEY set
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { sources, topics, users } from "../db/schema"
