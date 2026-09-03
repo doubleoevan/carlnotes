@@ -1,6 +1,6 @@
 // the chat room switcher, a row under the title that opens the chat room list
 import type { ChatMention } from "@shared/contracts"
-import { Check, ChevronsUpDown, Trash2, Users } from "lucide-react"
+import { Check, ChevronDown, Trash2, Users } from "lucide-react"
 import { useState } from "react"
 import { CarlAvatar } from "@/components/branding/CarlAvatar"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
@@ -111,7 +111,7 @@ export function ChatOptionsMenu({
 					{chatMentions.length > 0 && (
 						<ChatMentionCount chatMentions={chatMentions} className="h-5 min-w-5 shrink-0 text-xs" />
 					)}
-					<ChevronsUpDown className="text-muted-foreground size-3.5 shrink-0" />
+					<ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
 				</button>
 			</PopoverTrigger>
 			{/* a chat room row holds a topic name and needs more width than the fixed rows */}

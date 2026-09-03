@@ -3,6 +3,7 @@
 import { zValidator } from "@hono/zod-validator"
 import type { BillingState } from "@shared/contracts"
 import { checkoutPayload } from "@shared/contracts"
+import { reportError } from "@shared/monitoring"
 import { type BillingInterval, PLANS, type Plan } from "@shared/plans"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
@@ -11,6 +12,7 @@ import { db } from "../db"
 import { billingSubscriptions, users } from "../db/schema"
 import { isAllowed, replaceUserLiteLLMKey } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
+import { appUrl } from "./pages"
 import { scansToday } from "./topic/quotas"
 
 // a paid plan is any plan but free. only paid plans map to a Stripe price
@@ -139,6 +141,10 @@ export async function handleStripeWebhook(rawBody: string, signature: string | u
 // the Stripe statuses that earn paid entitlements
 const ENTITLED_STRIPE_STATUSES = new Set(["active", "trialing", "past_due"])
 
+// how many times a plan change retries the LiteLLM key before it reports the failure, and the backoff interval
+const MAX_REPLACE_LITELLM_KEY_ATTEMPTS = 3
+const REPLACE_LITELLM_KEY_BACKOFF_MS = 1000
+
 /**
  * The billing_subscriptions values a Stripe subscription maps to, or null to clear the row and revert the user to free.
  * Only a paid-up status can update. A subscription without our plan metadata also gets cleared.
@@ -250,7 +256,15 @@ async function applySubscriptionState(subscription: Stripe.Subscription): Promis
 // set users.plan to the updated plan and reissue the LiteLLM key with the new plan's budget
 async function syncUserPlan(userId: string, plan: Plan): Promise<void> {
 	await db.update(users).set({ plan }).where(eq(users.id, userId))
-	await replaceUserLiteLLMKey(userId)
+
+	// a failed reissue leaves the key sized to the old plan's budget, so retry before reporting the failure
+	for (let attempt = 0; attempt < MAX_REPLACE_LITELLM_KEY_ATTEMPTS; attempt++) {
+		if (await replaceUserLiteLLMKey(userId)) {
+			return
+		}
+		await new Promise((resolve) => setTimeout(resolve, REPLACE_LITELLM_KEY_BACKOFF_MS * (attempt + 1)))
+	}
+	reportError(new Error(`litellm key reissue failed after plan change for user ${userId}`), "billing", { userId })
 }
 
 /**
@@ -296,11 +310,6 @@ function overagePriceId(): string {
 		throw new Error("STRIPE_PRICE_MANUAL_SCAN_OVERAGE must be set for metered manual-scan overage")
 	}
 	return priceId
-}
-
-// the app url for checkout redirects, reusing Better Auth's configured base url
-function appUrl(): string {
-	return Bun.env.BETTER_AUTH_URL ?? "http://localhost:5173"
 }
 
 // the billing routes: checkout, the portal, the account page state, and the stripe webhook

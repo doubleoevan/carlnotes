@@ -34,7 +34,7 @@ zone](../../../assets/screenshots/attachments-drop-to-attach.png)
 - **The attachments section.** Press **add an attachment** under **Attachments** to open a file
   picker.
 
-Files can be text, PDF, or images, up to 10 MB each.
+Files can be text, PDF, Word (.docx), Excel (.xlsx), or images, up to 10 MB each.
 
 ![The attachments section of the topic editor: an uploaded file with its extracted content
 expanded](../../../assets/screenshots/attachments-upload.png)
@@ -45,6 +45,9 @@ A new attachment's row appears at once in a pending state, and fills in after Ca
 For each extracted attachment the row shows a **content** expander: the text
 Carl actually took from the file, which you can read and edit. The editor describes it:
 "What Carl read from the file. Every brew reads it."
+
+A spreadsheet or CSV keeps its rows. Instead of a summary, Carl stores the first 150 rows as they
+are, under a line naming the file, each sheet, and its columns. A longer file notes how many rows were left out.
 
 A URL attachment is fetched as an anonymous visitor. A page behind a login wall gives Carl the login
 page, not your document. Download the file and attach it instead.

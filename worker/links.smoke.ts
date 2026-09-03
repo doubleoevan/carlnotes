@@ -147,16 +147,26 @@ async function cleanUp(userId: string, urlsBefore: Set<string>): Promise<void> {
 	}
 }
 
+// clear any body a killed earlier run left behind. that run's page row is never cleaned, since the next
+// run snapshots it as pre-existing, and its stored content would make this run's first ingest free
+async function resetPageContent(): Promise<void> {
+	await db
+		.update(resources)
+		.set({ contentKey: null, contentBytes: null, etag: null, lastModified: null })
+		.where(inArray(resources.url, [INDEX_URL, UNFETCHABLE_URL]))
+}
+
 // snapshot what was already stored, seed, check, then clean up only what this run added
 const urlsBefore = await readStoredResourceUrls()
+await resetPageContent()
 const { topicId, userId } = await seedTestData()
 try {
 	// a thrown check still cleans up, so a failed run leaves the database as it found it
 	const isPassing = await check(topicId, userId)
 	await cleanUp(userId, urlsBefore)
-	process.exit(isPassing ? 0 : 1)
+	process.exitCode = isPassing ? 0 : 1
 } catch (error) {
 	console.error("url source links smoke failed", error)
 	await cleanUp(userId, urlsBefore)
-	process.exit(1)
+	process.exitCode = 1
 }

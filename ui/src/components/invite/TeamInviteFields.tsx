@@ -10,8 +10,14 @@ export type PendingInvite = { email: string } | { username: string }
 export async function sendPendingInvites(teamId: string, pendingInvites: PendingInvite[]): Promise<void> {
 	for (const invite of pendingInvites) {
 		const label = "email" in invite ? invite.email : `@${invite.username}`
-		const refusal = await sendUserInvite({ teamId }, invite)
-		if (refusal) {
+		const rejection = await sendUserInvite({ teamId }, invite)
+
+		// the daily limit stops the whole batch
+		if (rejection === "limited") {
+			toast.error("Daily invite limit reached. The rest didn't send. Add them again tomorrow.")
+			return
+		}
+		if (rejection) {
 			toast.error(`The invitation to ${label} didn't go through.`)
 		} else {
 			toast(`Invited ${label}.`)
@@ -63,7 +69,12 @@ export function TeamInviteFields({
 								}
 								// the menu closes its own composer tab on a null, so a failed create answers instead of throwing
 								try {
-									return (await sendCreateTeamInvite(linkedTeamId, source)).token
+									const teamInvite = await sendCreateTeamInvite(linkedTeamId, source)
+									if (teamInvite === "limited") {
+										toast.error("Daily invite limit reached. It resets tomorrow.")
+										return null
+									}
+									return teamInvite.token
 								} catch (error) {
 									console.error("invite create failed", error)
 									toast.error("That invite link didn't get made. Try again.")

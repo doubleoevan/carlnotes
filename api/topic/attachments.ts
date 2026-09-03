@@ -13,6 +13,7 @@ import {
 	ingestAttachment,
 	ingestUrlAttachment,
 	MAX_ATTACHMENT_BYTES,
+	toCanonicalContentType,
 } from "../../worker"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
@@ -234,13 +235,14 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 				return context.json({ error: "file field required" }, 400)
 			}
 
-			// run the synchronous part of attachment ingestion
+			// run the synchronous part of attachment ingestion. the browser's reported type resolves by
+			// extension where it is empty or unknown, so a windows csv or a typeless docx still lands
 			try {
 				const bytes = new Uint8Array(await file.arrayBuffer())
 				const attachment = await ingestAttachment({
 					topicId: context.req.param("id"),
 					filename: file.name,
-					contentType: file.type,
+					contentType: toCanonicalContentType(file.type, file.name),
 					bytes,
 				})
 

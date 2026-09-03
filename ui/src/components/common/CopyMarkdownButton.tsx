@@ -8,14 +8,14 @@ const COPIED_FEEDBACK_MS = 1500
 
 /**
  * The hover copy button on a notes scroll box: it copies the box's content to the clipboard as Markdown ready to paste into an AI,
- * and confirms with a checkmark before reverting. It floats on the corner of a `group` container, appearing on hover or keyboard focus.
+ * and confirms with a checkmark before reverting. It sits on the corner of a `group` container, appearing on hover or keyboard focus.
  */
 export function CopyMarkdownButton({ markdown }: { markdown: string }) {
 	const [isCopied, setIsCopied] = useState(false)
 	// controlled so the copied confirmation survives the click. a tooltip closes when its trigger is clicked
 	const [isTooltipOpen, setIsTooltipOpen] = useState(false)
 
-	// copy, then confirm on the button. a browser that refuses the clipboard api falls back to a selection copy
+	// copy, then confirm on the button. a browser that rejects the clipboard api falls back to a selection copy
 	async function handleCopy(): Promise<void> {
 		let isWritten = true
 		try {

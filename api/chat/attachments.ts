@@ -16,8 +16,9 @@ import {
 	attachmentStream,
 	deleteAttachment,
 	extractText,
+	generateAttachmentContext,
 	generateImageContext,
-	generatePdfContext,
+	toCanonicalContentType,
 	toChatAttachmentKey,
 	uploadAttachment,
 } from "../../worker"
@@ -50,14 +51,16 @@ export async function resolveChatAttachments(attachments: ChatAttachment[]): Pro
 			continue
 		}
 
-		// a PDF's words come out of the file here, while a text attachment already includes its own
+		// a pdf, word file, or workbook hands over bytes, so its words come out here. a text attachment has its own
 		let text: string
-		if (attachment.kind === "pdf") {
+		if (attachment.kind === "pdf" || attachment.kind === "document") {
 			try {
-				text = clipAttachmentText(await extractText("application/pdf", decodeDataUrl(attachment.dataUrl)))
+				const bytes = decodeDataUrl(attachment.dataUrl)
+				const contentType = toCanonicalContentType(contentTypeFromDataUrl(attachment.dataUrl), attachment.name)
+				text = clipAttachmentText(await extractText(contentType, bytes))
 			} catch (error) {
-				// an unreadable PDF rejects the whole chat turn instead of sending half of it
-				console.error("chat pdf extraction failed", error)
+				// an unreadable file rejects the whole chat turn instead of sending half of it
+				console.error("chat attachment extraction failed", error)
 				reportError(error, "chat", { attachmentKind: attachment.kind })
 				return null
 			}
@@ -170,7 +173,7 @@ async function storeTopicChatAttachment(
 		}
 
 		// summarize the attachment and store the row
-		const context = await generatePdfContext(text, litellmApiKey)
+		const context = await generateAttachmentContext(text, litellmApiKey)
 		await db.insert(chatAttachments).values({
 			userId,
 			topicId,
@@ -187,27 +190,32 @@ async function storeTopicChatAttachment(
 
 	// a kept PDF is read and screened before any of it is stored, so a flagged one leaves no object behind
 	const bytes = decodeDataUrl(attachment.dataUrl)
-	const pdfText =
-		attachment.kind === "pdf"
+	const documentText =
+		attachment.kind === "pdf" || attachment.kind === "document"
 			? await screenAttachmentText(
-					await extractText("application/pdf", new Uint8Array(bytes)),
+					await extractText(
+						toCanonicalContentType(contentTypeFromDataUrl(attachment.dataUrl), attachment.name),
+						new Uint8Array(bytes),
+					),
 					"kept chat attachment",
 					topicId,
 				)
 			: ""
-	if (pdfText === null) {
+	if (documentText === null) {
 		return false
 	}
 
 	// image, PDF, and video attachments keep their original bytes under a key namespaced to the user
 	const attachmentId = crypto.randomUUID()
-	const contentType = attachment.kind === "pdf" ? "application/pdf" : contentTypeFromDataUrl(attachment.dataUrl)
+	const contentType = toCanonicalContentType(contentTypeFromDataUrl(attachment.dataUrl), attachment.name)
 	const objectKey = toChatAttachmentKey(userId, topicId, attachmentId, attachment.name)
 	await uploadAttachment(objectKey, bytes, contentType)
 
 	// summarize a kept attachment and store the chat attachment row
 	try {
-		const attachmentContext = isAttachmentKept ? await toKeptAttachmentContext(attachment, pdfText, litellmApiKey) : ""
+		const attachmentContext = isAttachmentKept
+			? await toKeptAttachmentContext(attachment, documentText, litellmApiKey)
+			: ""
 		await db.insert(chatAttachments).values({
 			id: attachmentId,
 			userId,
@@ -232,12 +240,12 @@ async function storeTopicChatAttachment(
 // what future chat turns read for a kept attachment file. a PDF gives its extracted words, an image generated notes, a video a fixed line
 async function toKeptAttachmentContext(
 	attachment: Exclude<ChatAttachment, { kind: "text" }>,
-	pdfText: string,
+	documentText: string,
 	litellmApiKey?: string,
 ): Promise<string> {
-	// a PDF summarizes from the words already screened by llm-guard
-	if (attachment.kind === "pdf") {
-		return generatePdfContext(pdfText, litellmApiKey)
+	// a pdf, word file, or workbook summarizes from the words already screened by llm-guard
+	if (attachment.kind === "pdf" || attachment.kind === "document") {
+		return generateAttachmentContext(documentText, litellmApiKey)
 	}
 
 	// a video's line only names the file
@@ -311,7 +319,14 @@ export function toAttachmentsByChatTurnId(
 // what a chat attachment sends back. an image, PDF, or video comes from its stored object, and text from its own words
 export type DownloadableChatAttachment =
 	| { kind: "text"; name: string; text: string }
-	| { kind: "image" | "pdf" | "video"; name: string; objectKey: string; contentType: string; byteSize: number | null }
+	// a stored file answers with the key to stream it from, plus what the response headers need
+	| {
+			kind: "image" | "pdf" | "document" | "video"
+			name: string
+			objectKey: string
+			contentType: string
+			byteSize: number | null
+	  }
 
 /**
  * One of the user's own chat attachments ready to download, kept or not. Null if the id is not this user's,

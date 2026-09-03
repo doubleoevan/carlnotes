@@ -1,5 +1,6 @@
 // a live smoke test for the team lifecycle
 // run it with: doppler run -- bun api/team/teams.smoke.ts. needs Doppler secrets
+import { PLANS } from "@shared/plans"
 import { and, count, eq, inArray } from "drizzle-orm"
 import { connectionPool, db } from "../../db"
 import { subscriptions, teamMembers, teams, teamTopics, topicEmailSends, topics, users } from "../../db/schema"
@@ -13,8 +14,12 @@ import {
 	removeTeamMember,
 	requestToJoinTeam,
 	setTeamMemberRole,
+	toTeamRole,
 } from "./members"
 import { createTeam, deleteTeam, removeTopicFromTeam } from "./teams"
+
+// the free plan's team member limit, which these fills sit exactly at
+const FREE_TEAM_MEMBER_LIMIT = PLANS.free.teamMemberLimit ?? 0
 
 // one id per run, so a re-run's ids, names, and emails never collide with an earlier run's
 const runId = Date.now()
@@ -37,7 +42,7 @@ const personNames = [
 	"member-kept",
 	"limit-leader",
 	"limit-joiner",
-	...Array.from({ length: 9 }, (_, index) => `filler-${index}`),
+	...Array.from({ length: FREE_TEAM_MEMBER_LIMIT - 1 }, (_, index) => `filler-${index}`),
 ]
 
 // the seeded teams
@@ -82,9 +87,9 @@ async function seedFixtures(): Promise<void> {
 		{ teamId: toId("team-detach-c"), userId: toId("other-leader"), role: "leader" as const },
 		{ teamId: toId("team-multi-d"), userId: toId("owner"), role: "leader" as const },
 		{ teamId: toId("team-multi-e"), userId: toId("other-leader"), role: "leader" as const },
-		// the limit team at exactly the free plan's ten: one free-plan leader and nine members
+		// the limit team at exactly the free plan's limit: one free-plan leader and the rest members
 		{ teamId: toId("team-limit"), userId: toId("limit-leader"), role: "leader" as const },
-		...Array.from({ length: 9 }, (_, index) => ({
+		...Array.from({ length: FREE_TEAM_MEMBER_LIMIT - 1 }, (_, index) => ({
 			teamId: toId("team-limit"),
 			userId: toId(`filler-${index}`),
 			role: "member" as const,
@@ -133,16 +138,16 @@ async function checkCreateTeam(createdTeamIds: string[]): Promise<void> {
 	check(retaken.status === "name-taken", "a same-name create returns name-taken")
 }
 
-// 2. joining fans out one muted subscription per held topic, counted, with no email send recorded
+// 2. joining fans out one subscription with email off per held topic, counted, with no email send recorded
 async function checkJoinFanOut(): Promise<void> {
 	console.log("\n=== 2. joinTeam fan-out ===")
 	check(await joinTeam(toId("joiner"), toId("team-hold"), null), "joinTeam answers true under the limit")
 
-	// one muted subscription per held topic: the owned topic and the shared-in one
+	// one subscription with email off per held topic: the owned topic and the shared-in one
 	for (const topicName of ["topic-owned", "topic-shared"]) {
 		const subscription = await loadSubscription(toId("joiner"), toId(topicName))
 		check(subscription?.isActive === true, `${topicName}: the joiner's subscription is active`)
-		check(subscription?.isEmailEnabled === false, `${topicName}: the joiner's subscription is muted`)
+		check(subscription?.isEmailEnabled === false, `${topicName}: the joiner's subscription has email off`)
 		// the stored count includes the joiner and never the owner
 		const topic = await loadTopic(toId(topicName))
 		check(topic.subscriberCount === 1, `${topicName}: the subscriber count includes the joiner`)
@@ -172,7 +177,7 @@ async function checkUnsubscribeKeepsAccess(): Promise<void> {
 	check(topic.subscriberCount === 0, "the recount no longer includes the unsubscribed member")
 }
 
-// 4. a team whose every leader is on the free plan refuses the eleventh join and writes nothing
+// 4. a team whose every leader is on the free plan rejects the join past its limit and writes nothing
 async function checkMemberLimit(): Promise<void> {
 	console.log("\n=== 4. member limit ===")
 	check(
@@ -180,18 +185,18 @@ async function checkMemberLimit(): Promise<void> {
 		"joinTeam answers false at the limit",
 	)
 
-	// the members stayed at ten and the refused joiner gained no subscription
+	// the membership stayed at the limit and the rejected joiner gained no subscription
 	const [memberRow] = await db
 		.select({ count: count() })
 		.from(teamMembers)
 		.where(eq(teamMembers.teamId, toId("team-limit")))
-	check((memberRow?.count ?? 0) === 10, "the team still has ten members")
-	// a refused join writes no subscription rows either
+	check((memberRow?.count ?? 0) === FREE_TEAM_MEMBER_LIMIT, "the team still has its limit of members")
+	// a rejected join writes no subscription rows either
 	const [subscriptionRow] = await db
 		.select({ count: count() })
 		.from(subscriptions)
 		.where(eq(subscriptions.subscriberUserId, toId("limit-joiner")))
-	check((subscriptionRow?.count ?? 0) === 0, "the refused joiner gained no subscriptions")
+	check((subscriptionRow?.count ?? 0) === 0, "the rejected joiner gained no subscriptions")
 }
 
 // 5. the last leader can neither be demoted nor removed until another leader exists
@@ -199,10 +204,10 @@ async function checkLastLeaderRule(): Promise<void> {
 	console.log("\n=== 5. last-leader rule ===")
 	// alone, the leader is held in place
 	const teamId = toId("team-roles")
-	const demotedAlone = await setTeamMemberRole(toId("leader-a"), teamId, toId("leader-a"), "member")
-	check(demotedAlone === "lastLeader", "demoting the only leader is refused")
-	const removedAlone = await removeTeamMember(toId("leader-a"), teamId, toId("leader-a"))
-	check(removedAlone === "lastLeader", "removing the only leader is refused")
+	const demotedOnlyTeamLeader = await setTeamMemberRole(toId("leader-a"), teamId, toId("leader-a"), "member")
+	check(demotedOnlyTeamLeader === "lastLeader", "demoting the only leader is rejected")
+	const removedOnlyTeamLeader = await removeTeamMember(toId("leader-a"), teamId, toId("leader-a"))
+	check(removedOnlyTeamLeader === "lastLeader", "removing the only leader is rejected")
 
 	// a second leader unlocks the demotion
 	check(
@@ -224,13 +229,22 @@ async function checkLastLeaderRule(): Promise<void> {
 // 6. deleting the team returns its owned topic to the creator and drops its share rows
 async function checkTeamDeletion(): Promise<void> {
 	console.log("\n=== 6. team deletion ===")
-	check((await deleteTeam(toId("owner"), toId("team-del"))) === "deleted", "deleteTeam answers deleted for the leader")
-
-	// every user leads a team of their own, so the only one they lead stays
 	check(
-		(await deleteTeam(toId("limit-leader"), toId("team-limit"))) === "lastLedTeam",
-		"the only team a leader leads is not deletable",
+		(await deleteTeam(toId("owner"), toId("team-del"))).status === "deleted",
+		"deleteTeam answers deleted for a leader alone on the team",
 	)
+
+	// a team with other members survives: leadership passes to the oldest member and the caller leaves
+	const deleteTeamResult = await deleteTeam(toId("limit-leader"), toId("team-limit"))
+	check(deleteTeamResult.status === "handedOver", "deleting a populated team hands it over instead")
+	const [leaderRow] = await db
+		.select({ count: count() })
+		.from(teamMembers)
+		.where(
+			and(eq(teamMembers.teamId, toId("team-limit")), eq(teamMembers.role, "leader"), eq(teamMembers.isActive, true)),
+		)
+	check((leaderRow?.count ?? 0) === 1, "the surviving team has exactly one leader")
+	check((await toTeamRole(toId("limit-leader"), toId("team-limit"))) === null, "the deleting leader left the team")
 
 	// the owned topic returned through the set-null, and the share rows went with the team
 	const topic = await loadTopic(toId("topic-del"))
@@ -341,7 +355,7 @@ async function checkJoinRequests(): Promise<void> {
 		"someone who never asked cannot be admitted",
 	)
 
-	// the leader's admission activates the row and writes the muted subscriptions a join gets
+	// the leader's admission activates the row and writes the subscriptions with email off a join gets
 	check(
 		(await approveJoinTeamRequest(toId("hold-leader"), toId("team-hold"), toId("outsider"))) === "joined",
 		"the leader admits the requester",
@@ -351,7 +365,7 @@ async function checkJoinRequests(): Promise<void> {
 	const subscription = await loadSubscription(toId("outsider"), toId("topic-owned"))
 	check(
 		subscription?.isActive === true && subscription.isEmailEnabled === false,
-		"the admission wrote the muted subscription",
+		"the admission wrote the subscription with email off",
 	)
 }
 
@@ -449,4 +463,4 @@ async function smokeTest(): Promise<number> {
 // run the smoke test, then close the pool so the process exits on its own
 const exitCode = await smokeTest()
 await connectionPool.end()
-process.exit(exitCode)
+process.exitCode = exitCode

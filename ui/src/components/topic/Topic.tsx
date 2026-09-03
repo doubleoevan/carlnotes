@@ -75,22 +75,20 @@ export function Topic({ topic, index }: TopicProps) {
 						)}
 					</div>
 					{/* the "# new" count opens the info content, and the subscribe toggle sits to its right.
-					    the inset follows the row's last element: an icon everywhere but an owner's private topic, which ends in the count */}
+					    the row ends in the share icon, so it takes the bare-icon inset */}
 					<div
 						className={cn(
-							topic.isOwner && topic.visibility === "private" ? RAIL_TEXT_INSET : RAIL_BARE_ICON_INSET,
+							topic.isTopicOwner && topic.visibility === "private" ? RAIL_TEXT_INSET : RAIL_BARE_ICON_INSET,
 							"flex shrink-0 items-center gap-1",
 						)}
 					>
 						{topic.newCount > 0 && <NewCountInfo topic={topic} />}
-						{!topic.isOwner && <SubscribeToggle topic={topic} />}
-						{topic.visibility !== "private" && (
-							<ShareTopic
-								topic={topic}
-								isIcon
-								className="text-muted-foreground hover:text-foreground grid h-11 w-7 shrink-0 place-items-center sm:size-7"
-							/>
-						)}
+						{!topic.isTopicOwner && <SubscribeToggle topic={topic} />}
+						<ShareTopic
+							topic={topic}
+							isIcon
+							className="text-muted-foreground hover:text-foreground grid h-11 w-7 shrink-0 place-items-center sm:size-7"
+						/>
 					</div>
 				</div>
 				{/* tags, left-padded to line the text up with the resource icons below them.
@@ -113,7 +111,7 @@ export function Topic({ topic, index }: TopicProps) {
 						resource={resource}
 						rank={resource.isBookmarked ? null : index - pinnedShownCount + 1}
 						isRatable={topic.canRate}
-						isBookmarkable={topic.isOwner || topic.roomTeams.length > 0}
+						isBookmarkable={topic.isTopicOwner || topic.isTeamMember}
 						topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
 					/>
 				))}

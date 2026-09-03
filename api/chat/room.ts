@@ -17,7 +17,13 @@ import {
 	topics,
 	users,
 } from "../../db/schema"
-import { attachmentStream, deleteAttachment, isBudgetRejection, SPENT_BUDGET_REFUSAL } from "../../worker"
+import {
+	attachmentStream,
+	deleteAttachment,
+	isBudgetRejection,
+	MODEL_CHAT_TURN_FAILED_REJECTION,
+	SPENT_BUDGET_REJECTION,
+} from "../../worker"
 import { isLeaderRole, isMonthlySpendExhausted, loadUserAccess } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
 import { toTeamRole } from "../team/members"
@@ -34,7 +40,7 @@ import {
 	toChatMessageIds,
 } from "./roomMessages"
 import { notifyChatRoomMessage, onChatRoomMessage } from "./roomStream"
-import { postModelRefusal, runModelChatRoomTurn, toTopicFilter } from "./roomTurns"
+import { postModelRejection, runModelChatRoomTurn, toTopicFilter } from "./roomTurns"
 import { chatBodyLimit } from "./turns"
 
 // how long one SSE stream may stay open. the api client's cursor resume makes the reconnect free
@@ -90,7 +96,7 @@ async function loadChatRoom(
 
 /**
  * Post a chat message into the chatRoom. Member chat mentions become notification rows, and a chat message that addresses Carl
- * starts his chat turn, unless the poster's budget is spent, in which case the refusal comes back privately in this
+ * starts his chat turn, unless the poster's budget is spent, in which case the rejection comes back privately in this
  * response and nothing posts to the chat room.
  */
 export async function postChatRoomMessage(
@@ -100,7 +106,9 @@ export async function postChatRoomMessage(
 	content: string,
 	replyToChatMessageId: number | null,
 	attachments: ChatAttachment[],
-): Promise<{ chatMessageId: number; refusalReason: string | null } | "attachmentRefused" | null> {
+): Promise<
+	{ chatMessageId: number; rejectionReason: string | null } | "attachmentRejected" | "attachmentLimitReached" | null
+> {
 	const chatRoom = await loadChatRoom(userId, topicId, teamId)
 	if (!chatRoom) {
 		return null
@@ -112,13 +120,13 @@ export async function postChatRoomMessage(
 
 	// the budget gate runs before anything posts, so a spent budget is reported privately and spends nothing
 	if (isModelChatTurn && (await isMonthlySpendExhausted(userId))) {
-		return { chatMessageId: 0, refusalReason: SPENT_BUDGET_REFUSAL }
+		return { chatMessageId: 0, rejectionReason: SPENT_BUDGET_REJECTION }
 	}
 
 	// every shared file is screened and read before the chat message is stored, so one rejected file posts nothing at all
 	const preparedAttachments = await prepareChatRoomAttachments(userId, topicId, teamId, attachments)
-	if (preparedAttachments === null) {
-		return "attachmentRefused"
+	if (preparedAttachments === null || preparedAttachments === "attachmentLimitReached") {
+		return preparedAttachments === null ? "attachmentRejected" : "attachmentLimitReached"
 	}
 
 	// the poster's name is recorded at post-time, which is what keeps attribution and deletes the attachment if the account closes
@@ -164,18 +172,18 @@ export async function postChatRoomMessage(
 		const promptChatMessageId = chatMessageRow.id
 		runModelChatRoomTurn(userId, chatRoom.topic, teamId, promptChatMessageId).catch(async (error) => {
 			console.error("carl chat room turn failed", error)
-			// the app's ledger and the key's own limit can disagree. the proxy settles whether the budget is spent
 			if (!isBudgetRejection(error)) {
 				reportError(error, "chat", { teamId })
-				return
 			}
-			// the refusal posts as carl's own chat message
-			await postModelRefusal(chatRoom.topic?.id ?? null, teamId, promptChatMessageId, SPENT_BUDGET_REFUSAL).catch(
-				(refusalError) => console.error("carl refusal post failed", refusalError),
+
+			// every failure posts a rejection as carl's own chat message
+			const rejection = isBudgetRejection(error) ? SPENT_BUDGET_REJECTION : MODEL_CHAT_TURN_FAILED_REJECTION
+			await postModelRejection(chatRoom.topic?.id ?? null, teamId, promptChatMessageId, rejection).catch(
+				(rejectionError) => console.error("carl rejection post failed", rejectionError),
 			)
 		})
 	}
-	return { chatMessageId: chatMessageRow.id, refusalReason: null }
+	return { chatMessageId: chatMessageRow.id, rejectionReason: null }
 }
 
 // whether the replied-to chat message is carl's, which continues his exchange without a fresh chat mention
@@ -248,12 +256,12 @@ async function clearChatRoom(context: Context, topicId: string | null, teamId: s
 
 	// clearing belongs to a leader of the team, and to an admin moderating it
 	const role = await toTeamRole(userId, chatRoom.teamId)
-	const isLeader = role !== null && isLeaderRole(role)
-	if (!isLeader && !(await loadUserAccess(userId)).isAdmin) {
+	const isTeamLeader = role !== null && isLeaderRole(role)
+	if (!isTeamLeader && !(await loadUserAccess(userId)).isAdmin) {
 		return context.json({ error: "not found" }, 404)
 	}
 
-	// the shared attachment files' rows go first, then their stored objects, best-effort
+	// the shared attachment files' rows are deleted first, then their stored objects, best-effort
 	const chatRoomAttachmentRows = await db
 		.delete(chatRoomAttachments)
 		.where(and(toTopicFilter(chatRoomAttachments.topicId, topicId), eq(chatRoomAttachments.teamId, chatRoom.teamId)))
@@ -316,7 +324,7 @@ async function deleteChatRoomAttachment(
 		return context.json({ error: "not found" }, 404)
 	}
 
-	// the row goes first, then the object, best-effort, the same order topic attachments delete in
+	// the row is deleted first, then the object, best-effort, the same order topic attachments delete in
 	await db.delete(chatRoomAttachments).where(eq(chatRoomAttachments.id, chatRoomAttachment.id))
 	if (chatRoomAttachment.objectKey) {
 		await deleteAttachment(chatRoomAttachment.objectKey).catch(() => {})
@@ -428,7 +436,7 @@ export const chatRoomRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// the stored-file headers show a safe image type in place and refuse to serve anything else inline
+		// the stored-file headers show a safe image type in place and never serve anything else inline
 		return context.body(attachmentStream(linkPreviewImage.objectKey), 200, {
 			...toStoredFileHeaders("link-preview", linkPreviewImage.contentType),
 			"Cache-Control": PREVIEW_IMAGE_CACHE_CONTROL,
@@ -539,7 +547,7 @@ export const chatRoomRoute = new Hono<AppEnv>()
 		}
 		const { content, replyToChatMessageId, attachments } = context.req.valid("json")
 		// one rejected file returns a 400 for the whole chat message, while a missing chat room returns a 404
-		const posted = await postChatRoomMessage(
+		const postChatMessageResult = await postChatRoomMessage(
 			userId,
 			context.req.param("id"),
 			context.req.param("teamId"),
@@ -547,10 +555,13 @@ export const chatRoomRoute = new Hono<AppEnv>()
 			replyToChatMessageId ?? null,
 			attachments,
 		)
-		if (posted === "attachmentRefused") {
-			return context.json({ error: "attachment refused" }, 400)
+		if (postChatMessageResult === "attachmentLimitReached") {
+			return context.json({ error: "attachment limit reached" }, 400)
 		}
-		return posted ? context.json(posted) : context.json({ error: "not found" }, 404)
+		if (postChatMessageResult === "attachmentRejected") {
+			return context.json({ error: "attachment rejected" }, 400)
+		}
+		return postChatMessageResult ? context.json(postChatMessageResult) : context.json({ error: "not found" }, 404)
 	})
 	.post("/teams/:id/room", chatBodyLimit, zValidator("json", chatRoomMessagePayload), async (context) => {
 		// reject a signed-out visitor like a missing chat room. the payload schema already limits the length
@@ -560,7 +571,7 @@ export const chatRoomRoute = new Hono<AppEnv>()
 		}
 		const { content, replyToChatMessageId, attachments } = context.req.valid("json")
 		// one rejected file returns a 400 for the whole chat message, while a missing chat room returns a 404
-		const posted = await postChatRoomMessage(
+		const postChatMessageResult = await postChatRoomMessage(
 			userId,
 			null,
 			context.req.param("id"),
@@ -568,10 +579,13 @@ export const chatRoomRoute = new Hono<AppEnv>()
 			replyToChatMessageId ?? null,
 			attachments,
 		)
-		if (posted === "attachmentRefused") {
-			return context.json({ error: "attachment refused" }, 400)
+		if (postChatMessageResult === "attachmentLimitReached") {
+			return context.json({ error: "attachment limit reached" }, 400)
 		}
-		return posted ? context.json(posted) : context.json({ error: "not found" }, 404)
+		if (postChatMessageResult === "attachmentRejected") {
+			return context.json({ error: "attachment rejected" }, 400)
+		}
+		return postChatMessageResult ? context.json(postChatMessageResult) : context.json({ error: "not found" }, 404)
 	})
 	// a shared file streams back to any member, under the same gate the chat room itself uses
 	.get("/topics/:id/room/attachments/:attachmentId/download", async (context) => {

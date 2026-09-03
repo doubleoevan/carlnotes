@@ -73,7 +73,7 @@ export function NotesTable({ notes, onOpenNote }: { notes: Note[]; onOpenNote: (
 										>
 											{note.name}
 										</button>
-										<NoteRowBadges noteId={note.id} />
+										<NoteRowBadge noteId={note.id} />
 									</span>
 								</td>
 								<td className="py-2 pr-4">
@@ -98,37 +98,43 @@ export function NotesTable({ notes, onOpenNote }: { notes: Note[]; onOpenNote: (
 	)
 }
 
-// the unread edit and comment badges on one note row
-function NoteRowBadges({ noteId }: { noteId: string }) {
+// one combined unread badge on a note row, its tooltip listing edits and comments separately
+function NoteRowBadge({ noteId }: { noteId: string }) {
+	// the pill holds one total, and the labels keep the split for the tooltip and screen readers
 	const { unreadEdits, unreadComments } = useNoteBadge(noteId)
-	return (
-		<>
-			{unreadEdits > 0 && <UnreadBadge count={unreadEdits} label={toNoteEditsLabel(unreadEdits)} />}
-			{unreadComments > 0 && <UnreadBadge count={unreadComments} label={toNoteCommentsLabel(unreadComments)} />}
-		</>
-	)
-}
-
-// one outline pill with the tooltip naming what it counts
-function UnreadBadge({ count, label }: { count: number; label: string }) {
+	const unreadTotal = unreadEdits + unreadComments
+	if (unreadTotal === 0) {
+		return null
+	}
+	const unreadLabels = toUnreadLabels(unreadEdits, unreadComments)
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<span role="img" aria-label={label}>
-					<CountPill count={count} variant="outline" />
+				<span role="img" aria-label={unreadLabels.join(", ")}>
+					<CountPill count={unreadTotal} variant="outline" />
 				</span>
 			</TooltipTrigger>
-			<TooltipContent>{label}</TooltipContent>
+			<TooltipContent>
+				<ul className="list-disc pl-4">
+					{unreadLabels.map((unreadLabel) => (
+						<li key={unreadLabel}>{unreadLabel}</li>
+					))}
+				</ul>
+			</TooltipContent>
 		</Tooltip>
 	)
 }
 
-// what a note's unread edits badge shows
-function toNoteEditsLabel(unreadEdits: number): string {
-	return unreadEdits === 1 ? "1 unread edit" : `${unreadEdits} unread edits`
-}
-
-// what a note's unread comments badge shows
-function toNoteCommentsLabel(unreadComments: number): string {
-	return unreadComments === 1 ? "1 unread comment" : `${unreadComments} unread comments`
+/**
+ * The per-kind tooltip lines for the combined note badge pill, only including the kinds with anything unread.
+ */
+export function toUnreadLabels(unreadEdits: number, unreadComments: number): string[] {
+	const unreadLabels: string[] = []
+	if (unreadEdits > 0) {
+		unreadLabels.push(unreadEdits === 1 ? "1 unread edit" : `${unreadEdits} unread edits`)
+	}
+	if (unreadComments > 0) {
+		unreadLabels.push(unreadComments === 1 ? "1 unread comment" : `${unreadComments} unread comments`)
+	}
+	return unreadLabels
 }

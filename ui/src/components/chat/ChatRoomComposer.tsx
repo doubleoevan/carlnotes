@@ -4,9 +4,11 @@ import {
 	CHAT_ROOM_MESSAGE_MAX_CHARS,
 	type ChatAttachment,
 	type ChatRoomMessage,
+	clipAttachmentText,
 } from "@shared/contracts"
 import { ArrowUp, ChevronDown, Paperclip, Reply } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { toast } from "sonner"
 import { ChatAttachmentChips } from "@/components/chat/ChatAttachmentChips"
 import { toAttachment } from "@/components/chat/useChatAttachments"
 import type { ChatRoomReply } from "@/components/chat/useRoomReply"
@@ -27,6 +29,116 @@ const ACTIVE_CHAT_MENTION_PATTERN = /(^|[^\w@.-])@([\w-]*)$/
 export function toChatMentionSuggestions(mentionQuery: string, memberUsernames: string[]): string[] {
 	return [CARL_USERNAME, ...memberUsernames.filter((username) => username.toLowerCase() !== CARL_USERNAME)].filter(
 		(username) => username.toLowerCase().startsWith(mentionQuery.toLowerCase()),
+	)
+}
+
+// what the autocomplete shows the composer: the open list and the handlers the chat message box wires in
+type MentionAutocomplete = {
+	usernameSuggestions: string[]
+	highlightMentionIndex: number
+	readMentionQuery: (chatMessageStart: string) => void
+	selectMentionedUsername: (username: string) => void
+	handleAutocompleteKey: (event: React.KeyboardEvent<HTMLTextAreaElement>) => boolean
+	closeMentionList: () => void
+}
+
+// the @ autocomplete behind the chat message box: the typed prefix, the highlighted username, and the keys it owns
+function useMentionAutocomplete(options: {
+	memberUsernames: string[]
+	chatMessage: string
+	setChatMessage: (chatMessage: string) => void
+	chatMessageBoxRef: React.RefObject<HTMLTextAreaElement | null>
+}): MentionAutocomplete {
+	const { memberUsernames, chatMessage, setChatMessage, chatMessageBoxRef } = options
+	const [mentionQuery, setMentionQuery] = useState<string | null>(null)
+	const [highlightMentionIndex, setHighlightMentionIndex] = useState(0)
+
+	// carl is suggested first, then the chat members, narrowed by the typed prefix
+	const usernameSuggestions = mentionQuery === null ? [] : toChatMentionSuggestions(mentionQuery, memberUsernames)
+
+	// each keystroke re-reads the token behind the caret to suggest the users to mention
+	const readMentionQuery = (chatMessageStart: string): void => {
+		const activeMentionQuery = chatMessageStart.match(ACTIVE_CHAT_MENTION_PATTERN)
+		setMentionQuery(activeMentionQuery ? (activeMentionQuery[2] ?? "") : null)
+		setHighlightMentionIndex(0)
+	}
+
+	// selecting a username replaces the typed prefix and puts the caret after it
+	const selectMentionedUsername = (username: string): void => {
+		const chatMessageBox = chatMessageBoxRef.current
+		if (!chatMessageBox) {
+			return
+		}
+
+		// selecting a username replaces the typed prefix with the full one
+		const caret = chatMessageBox.selectionStart ?? chatMessage.length
+		const chatMessageStart = chatMessage.slice(0, caret).replace(ACTIVE_CHAT_MENTION_PATTERN, `$1@${username} `)
+		setChatMessage(chatMessageStart + chatMessage.slice(caret))
+		setMentionQuery(null)
+		chatMessageBox.focus()
+	}
+
+	// while the autocomplete is open, it owns the arrows, Enter, Tab, and Escape
+	const handleAutocompleteKey = (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
+		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+			event.preventDefault()
+			const step = event.key === "ArrowDown" ? 1 : -1
+			setHighlightMentionIndex((index) => (index + step + usernameSuggestions.length) % usernameSuggestions.length)
+			return true
+		}
+
+		// enter and tab select the highlighted username
+		if (event.key === "Enter" || event.key === "Tab") {
+			event.preventDefault()
+			const username = usernameSuggestions[highlightMentionIndex]
+			if (username) {
+				selectMentionedUsername(username)
+			}
+			return true
+		}
+
+		// escape closes the list without touching the chat message
+		if (event.key === "Escape") {
+			event.stopPropagation()
+			setMentionQuery(null)
+			return true
+		}
+		return false
+	}
+
+	// the composer clears the list after a post, so a sent draft never leaves suggestions floating
+	return {
+		usernameSuggestions,
+		highlightMentionIndex,
+		readMentionQuery,
+		selectMentionedUsername,
+		handleAutocompleteKey,
+		closeMentionList: () => setMentionQuery(null),
+	}
+}
+
+// the username list showing above the chat message box, carl pinned first then the chat members
+function MentionSuggestionList({ autocomplete }: { autocomplete: MentionAutocomplete }) {
+	return (
+		<ul className="bg-popover absolute right-3 bottom-full left-3 z-10 mb-1 overflow-hidden rounded-md border shadow-md">
+			{autocomplete.usernameSuggestions.map((username, index) => (
+				<li key={username}>
+					<button
+						type="button"
+						onMouseDown={(event) => {
+							event.preventDefault()
+							autocomplete.selectMentionedUsername(username)
+						}}
+						className={cn(
+							"w-full px-3 py-1.5 text-left text-sm",
+							index === autocomplete.highlightMentionIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
+						)}
+					>
+						@{username}
+					</button>
+				</li>
+			))}
+		</ul>
 	)
 }
 
@@ -67,34 +179,72 @@ export function ChatRoomComposer({
 	memberUsernames: string[]
 	// which chat message this composer answers
 	reply: ChatRoomReply
-	onPostChatMessage: (content: string, replyToChatMessageId: number | null, attachments: ChatAttachment[]) => void
+	// returns false when the post failed, which keeps the draft in the composer
+	onPostChatMessage: (
+		content: string,
+		replyToChatMessageId: number | null,
+		attachments: ChatAttachment[],
+	) => Promise<boolean>
 }) {
 	const { replyTo, isAutoReply, replyChatMessages } = reply
 	const [chatMessage, setChatMessage] = useState("")
+	// one post at a time, so Enter held through the round trip cannot send the draft twice.
+	// the ref gates the next press right away, and the state drives the disabled control
+	const isPostingMessageRef = useRef(false)
+	const [isPostingMessage, setIsPostingMessage] = useState(false)
 	// the attachment files waiting to send with the next chat message, removable until sent
 	const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([])
 
 	// selected and dropped files are read the same way. the limit is how many files one chat message may include
 	const attachSelectedFiles = (selected: File[]): void => {
-		for (const file of selected.slice(0, CHAT_MAX_ATTACHMENTS - pendingAttachments.length)) {
+		// files past the limit are dropped with a toast, never silently
+		const openSlots = CHAT_MAX_ATTACHMENTS - pendingAttachments.length
+		if (selected.length > openSlots) {
+			toast(`${CHAT_MAX_ATTACHMENTS} attachments max per message.`)
+		}
+		for (const file of selected.slice(0, openSlots)) {
 			void toAttachment(file)
-				.then((converted) => converted && setPendingAttachments((waiting) => [...waiting, converted]))
+				.then((chatAttachment) => {
+					// the limit reads the latest staged list, since reads that land together share one render
+					if (chatAttachment) {
+						setPendingAttachments((pendingChatAttachments) =>
+							pendingChatAttachments.length < CHAT_MAX_ATTACHMENTS
+								? [...pendingChatAttachments, chatAttachment]
+								: pendingChatAttachments,
+						)
+					}
+				})
 				.catch((error) => console.error("attachment read failed", error))
 		}
 	}
-	// pasted files become attachments. pasted text types as usual
-	function handlePaste(event: React.ClipboardEvent<HTMLTextAreaElement>): void {
+	// pasted files become attachments. pasted text types as usual, unless it would run past the chat message limit
+	function handlePasteFile(event: React.ClipboardEvent<HTMLTextAreaElement>): void {
 		const files = Array.from(event.clipboardData.files)
 		if (files.length > 0) {
 			event.preventDefault()
 			attachSelectedFiles(files)
+			return
+		}
+
+		// a paste that would run past the chat message limit becomes a text chip instead of being clipped.
+		// when every attachment slot is taken, the paste is rejected with the reason
+		const pastedText = event.clipboardData.getData("text")
+		if (chatMessage.length + pastedText.length > CHAT_ROOM_MESSAGE_MAX_CHARS) {
+			event.preventDefault()
+			if (pendingAttachments.length >= CHAT_MAX_ATTACHMENTS) {
+				toast(`That paste is longer than a message holds, and ${CHAT_MAX_ATTACHMENTS} attachments are already staged.`)
+				return
+			}
+			setPendingAttachments((waiting) => [
+				...waiting,
+				{ kind: "text", name: "Pasted text", text: clipAttachmentText(pastedText), keep: false },
+			])
 		}
 	}
 
-	// the username chat mention prefix being typed, null while nothing matches
-	const [mentionQuery, setMentionQuery] = useState<string | null>(null)
-	const [highlightMentionIndex, setHighlightMentionIndex] = useState(0)
+	// the @ autocomplete owns the typed prefix, the highlighted username, and the keys while its list is open
 	const chatMessageBoxRef = useRef<HTMLTextAreaElement>(null)
+	const autocomplete = useMentionAutocomplete({ memberUsernames, chatMessage, setChatMessage, chatMessageBoxRef })
 
 	// focus the chat message box when a reply target is picked, and always on a wide-screen
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the target changing is the trigger, not the flag
@@ -116,9 +266,6 @@ export function ChatRoomComposer({
 			chatMessageBox.style.height = `${Math.min(chatMessageBox.scrollHeight, MAX_MESSAGE_BOX_HEIGHT_PX)}px`
 		}
 	}, [chatMessage])
-
-	// carl is suggested first, then the chat members, narrowed by the typed prefix
-	const usernameSuggestions = mentionQuery === null ? [] : toChatMentionSuggestions(mentionQuery, memberUsernames)
 
 	// who the chat message is sent to, updated as the chat message is typed
 	const chatMentions = toChatMentions(chatMessage, [CARL_USERNAME, ALL_USERNAME, ...memberUsernames])
@@ -154,76 +301,51 @@ export function ChatRoomComposer({
 		chatMessageBoxRef.current?.focus()
 	}
 
-	// each keystroke re-reads the token behind the caret to suggest the users to mention
+	// each keystroke updates the draft and hands the caret's token to the autocomplete
 	function handleMessageChange(event: React.ChangeEvent<HTMLTextAreaElement>): void {
 		setChatMessage(event.target.value)
-		const selectedMentionQuery = event.target.value.slice(0, event.target.selectionStart ?? 0)
-		const activeMentionQuery = selectedMentionQuery.match(ACTIVE_CHAT_MENTION_PATTERN)
-		setMentionQuery(activeMentionQuery ? (activeMentionQuery[2] ?? "") : null)
-		setHighlightMentionIndex(0)
+		autocomplete.readMentionQuery(event.target.value.slice(0, event.target.selectionStart ?? 0))
 	}
 
-	// selecting a username replaces the typed prefix and puts the caret after it
-	function selectMentionedUsername(username: string): void {
-		const chatMessageBox = chatMessageBoxRef.current
-		if (!chatMessageBox) {
-			return
-		}
-
-		// selecting a username replaces the typed prefix with the full one
-		const caret = chatMessageBox.selectionStart ?? chatMessage.length
-		const chatMessageStart = chatMessage.slice(0, caret).replace(ACTIVE_CHAT_MENTION_PATTERN, `$1@${username} `)
-		setChatMessage(chatMessageStart + chatMessage.slice(caret))
-		setMentionQuery(null)
-		chatMessageBox.focus()
-	}
-
-	// post the trimmed chat message and reset the composer and the reply user
-	function handlePostChatMessage(): void {
+	// post the trimmed chat message, resetting the composer only once the post is accepted
+	async function handlePostChatMessage(): Promise<void> {
 		const content = chatMessage.trim()
-		if (content === "") {
+		if ((content === "" && pendingAttachments.length === 0) || isPostingMessageRef.current) {
 			return
 		}
+		isPostingMessageRef.current = true
 		// a chat mention addresses itself, a previous reply target starts a chat message thread
 		const isChatMessageThread = !hasMention && replyTo !== null
 		const sentContent = hasMention || isChatMessageThread ? content : `@${ALL_USERNAME} ${content}`
-		onPostChatMessage(sentContent, isChatMessageThread ? (replyTo?.id ?? null) : null, pendingAttachments)
-		setPendingAttachments([])
-		setChatMessage("")
-		setMentionQuery(null)
-	}
 
-	// while the autocomplete is open, it owns the arrows, Enter, Tab, and Escape
-	function handleAutocompleteKey(event: React.KeyboardEvent<HTMLTextAreaElement>): boolean {
-		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-			event.preventDefault()
-			const step = event.key === "ArrowDown" ? 1 : -1
-			setHighlightMentionIndex((index) => (index + step + usernameSuggestions.length) % usernameSuggestions.length)
-			return true
+		// remember exactly what went out, so a success clears only that and never what was typed meanwhile
+		const sentDraft = chatMessage
+		const sentAttachments = pendingAttachments
+		setIsPostingMessage(true)
+		let isChatMessagePosted = false
+		try {
+			isChatMessagePosted = await onPostChatMessage(
+				sentContent,
+				isChatMessageThread ? (replyTo?.id ?? null) : null,
+				sentAttachments,
+			)
+		} finally {
+			// a post that threw reopens the composer too, so the draft is never locked in
+			isPostingMessageRef.current = false
+			setIsPostingMessage(false)
 		}
 
-		// enter and tab select the highlighted username
-		if (event.key === "Enter" || event.key === "Tab") {
-			event.preventDefault()
-			const username = usernameSuggestions[highlightMentionIndex]
-			if (username) {
-				selectMentionedUsername(username)
-			}
-			return true
+		// a failed post keeps the draft so nothing typed is lost
+		if (isChatMessagePosted) {
+			setPendingAttachments((waiting) => waiting.filter((attachment) => !sentAttachments.includes(attachment)))
+			setChatMessage((current) => (current === sentDraft ? "" : current))
+			autocomplete.closeMentionList()
 		}
-
-		// escape closes the list without touching the chat message
-		if (event.key === "Escape") {
-			event.stopPropagation()
-			setMentionQuery(null)
-			return true
-		}
-		return false
 	}
 
 	// the autocomplete gets the key first while open. otherwise Enter sends and Shift+Enter starts a new line
 	function handleMessageKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
-		if (usernameSuggestions.length > 0 && handleAutocompleteKey(event)) {
+		if (autocomplete.usernameSuggestions.length > 0 && autocomplete.handleAutocompleteKey(event)) {
 			return
 		}
 		if (event.key === "Enter" && !event.shiftKey) {
@@ -241,28 +363,8 @@ export function ChatRoomComposer({
 				handlePostChatMessage()
 			}}
 		>
-			{/* the username suggestions autocomplete floats above the input, carl pinned first then the chat members */}
-			{usernameSuggestions.length > 0 && (
-				<ul className="bg-popover absolute right-3 bottom-full left-3 z-10 mb-1 overflow-hidden rounded-md border shadow-md">
-					{usernameSuggestions.map((username, index) => (
-						<li key={username}>
-							<button
-								type="button"
-								onMouseDown={(event) => {
-									event.preventDefault()
-									selectMentionedUsername(username)
-								}}
-								className={cn(
-									"w-full px-3 py-1.5 text-left text-sm",
-									index === highlightMentionIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-								)}
-							>
-								@{username}
-							</button>
-						</li>
-					))}
-				</ul>
-			)}
+			{/* the username suggestions float above the input while a mention prefix is being typed */}
+			{autocomplete.usernameSuggestions.length > 0 && <MentionSuggestionList autocomplete={autocomplete} />}
 
 			{/* the username reply dropdown names who the chat message answers */}
 			{replyUserLabel && (
@@ -287,7 +389,7 @@ export function ChatRoomComposer({
 					maxLength={CHAT_ROOM_MESSAGE_MAX_CHARS}
 					onChange={handleMessageChange}
 					onKeyDown={handleMessageKeyDown}
-					onPaste={handlePaste}
+					onPaste={handlePasteFile}
 					placeholder={toComposerPlaceholder(replyUser)}
 					aria-label="Message the room"
 					autoComplete="off"
@@ -318,7 +420,7 @@ export function ChatRoomComposer({
 						type="submit"
 						aria-label="Send"
 						className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full disabled:opacity-50 sm:size-8"
-						disabled={chatMessage.trim() === ""}
+						disabled={isPostingMessage || (chatMessage.trim() === "" && pendingAttachments.length === 0)}
 						onMouseDown={(event) => event.preventDefault()}
 					>
 						<ArrowUp className="size-4" />

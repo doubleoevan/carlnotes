@@ -2,13 +2,13 @@
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import type { Invite, InviteSource } from "@shared/contracts"
-import { inviteAcceptPayload, inviteCreatePayload } from "@shared/contracts"
-import { and, eq, isNull, or, sql } from "drizzle-orm"
+import { inviteCreatePayload } from "@shared/contracts"
+import { PLANS } from "@shared/plans"
+import { and, desc, eq, isNull, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
-import { canCreateInvitesToday } from "../../db/quotas"
+import { canCreateInvitesToday, loadUserAccess } from "../../db/quotas"
 import { invites, teamMembers, teams, topics, users } from "../../db/schema"
-import { verifyTurnstileToken } from "../auth"
 import { isAllowed, isLeaderRole } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
@@ -16,8 +16,7 @@ import { joinTeam, toTeamRole } from "../team/members"
 import { loadDirectSubscription } from "../topic/permissions"
 import { activateSubscription } from "../topic/subscriptions"
 
-// how many people one invite link lets in, and how long it works for. an email invite is unlimited
-const LINK_INVITE_MAX_USES = 25
+// how long an invite link works for. an email invite gets one use and never expires
 const LINK_INVITE_DAYS = 30
 
 // how an acceptance ended: the topic or team page to open, or which way the token failed
@@ -25,11 +24,12 @@ export type InviteAcceptResult =
 	| { status: "joined"; topicId: string; topicName: string }
 	| { status: "joinedTeam"; teamId: string; teamName: string }
 	| { status: "requestedTeam"; teamId: string; teamName: string }
-	| { status: "revoked" | "expired" | "exhausted" | "unknown" }
+	| { status: "teamFull"; teamId: string; teamName: string }
+	| { status: "expired" | "exhausted" | "unknown" }
 
 /**
- * Create an invite link for a topic, naming nobody. Whoever holds its token may accept it until its uses run out,
- * its expiry passes, or the owner revokes it.
+ * Create an invite link for a topic, naming nobody. Whoever holds its token may accept it until its uses run out
+ * or its expiry passes.
  */
 export async function createTopicInvite(
 	userId: string,
@@ -43,6 +43,13 @@ export async function createTopicInvite(
 		return "forbidden"
 	}
 
+	// reuse the caller's live link for this topic instead of writing a second row
+	const liveLinkInvite = await toLiveLinkInvite(userId, { topicId })
+	if (liveLinkInvite) {
+		trackEvent("invite_reused", userId, { ...analyticsProperties, topicId, source })
+		return toInvite(liveLinkInvite)
+	}
+
 	// the per-account daily limit, checked before anything is written
 	if (!(await canCreateInvitesToday(userId))) {
 		return "limited"
@@ -52,7 +59,7 @@ export async function createTopicInvite(
 	const expiresAt = new Date(Date.now() + LINK_INVITE_DAYS * 24 * 60 * 60 * 1000)
 	const [invite] = await db
 		.insert(invites)
-		.values({ topicId, invitedByUserId: userId, maxUses: LINK_INVITE_MAX_USES, expiresAt })
+		.values({ topicId, invitedByUserId: userId, maxUses: await toLinkInviteMaxUses(userId), expiresAt })
 		.returning()
 	if (!invite) {
 		return "forbidden"
@@ -77,6 +84,13 @@ export async function createTeamInvite(
 		return "forbidden"
 	}
 
+	// reuse the caller's live link for this team instead of writing a second row
+	const liveLinkInvite = await toLiveLinkInvite(userId, { teamId })
+	if (liveLinkInvite) {
+		trackEvent("invite_reused", userId, { ...analyticsProperties, teamId, source })
+		return toInvite(liveLinkInvite)
+	}
+
 	// the per-account daily limit, checked before anything is written
 	if (!(await canCreateInvitesToday(userId))) {
 		return "limited"
@@ -86,7 +100,7 @@ export async function createTeamInvite(
 	const expiresAt = new Date(Date.now() + LINK_INVITE_DAYS * 24 * 60 * 60 * 1000)
 	const [invite] = await db
 		.insert(invites)
-		.values({ teamId, invitedByUserId: userId, maxUses: LINK_INVITE_MAX_USES, expiresAt })
+		.values({ teamId, invitedByUserId: userId, maxUses: await toLinkInviteMaxUses(userId), expiresAt })
 		.returning()
 
 	// record which control created the invite
@@ -95,29 +109,11 @@ export async function createTeamInvite(
 }
 
 /**
- * Revoke one invite by setting a revokedAt time.
- */
-export async function revokeTopicInvite(userId: string, topicId: string, inviteId: string): Promise<boolean> {
-	// only someone who may edit the topic may revoke its invites
-	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
-	if (!topic || !(await isAllowed(userId, "topic:edit", topic))) {
-		return false
-	}
-
-	// scoped to this topic as well as the invite, so an id from another topic cannot revoke through it
-	await db
-		.update(invites)
-		.set({ revokedAt: new Date() })
-		.where(and(eq(invites.id, inviteId), eq(invites.topicId, topicId)))
-	return true
-}
-
-/**
- * Returns the topic or team a live token opens, or null when it is unknown, revoked, expired, or spent.
+ * Returns the topic or team a live token opens, or null when it is unknown, expired, or spent.
  */
 export async function toInviteTarget(token: string): Promise<{ topicId: string } | { teamId: string } | null> {
 	const [invite] = await db.select().from(invites).where(eq(invites.token, token))
-	if (!invite || toInviteRefusal(invite, new Date())) {
+	if (!invite || (await toTokenRejection(invite))) {
 		return null
 	}
 
@@ -139,10 +135,13 @@ export async function acceptInviteToken(userId: string, token: string): Promise<
 		return { status: "unknown" }
 	}
 
-	// each refusal has a reason, so the page can tell a user how to proceed
-	const refusal = toInviteRefusal(invite, new Date())
-	if (refusal) {
-		return { status: refusal }
+	// a dead team link still has a real signup behind it, so it lands as a join request instead of a dead end
+	const rejection = await toTokenRejection(invite)
+	if (rejection) {
+		if (invite.teamId) {
+			return acceptAsJoinRequest(userId, invite)
+		}
+		return { status: rejection }
 	}
 	return invite.teamId ? acceptTeamInvite(userId, invite) : acceptTopicInvite(userId, invite)
 }
@@ -152,9 +151,9 @@ export async function acceptTopicInvite(
 	userId: string,
 	invite: typeof invites.$inferSelect,
 ): Promise<InviteAcceptResult> {
-	// the topic the token opens
+	// the topic the token opens, with its visibility for the public-topic waiver below
 	const [topic] = await db
-		.select({ id: topics.id, name: topics.name })
+		.select({ id: topics.id, name: topics.name, visibility: topics.visibility })
 		.from(topics)
 		.where(eq(topics.id, invite.topicId ?? ""))
 	if (!topic) {
@@ -167,8 +166,8 @@ export async function acceptTopicInvite(
 		return joined
 	}
 
-	// the token use is spent first
-	if (!(await spendInviteUse(invite.id))) {
+	// the token use is spent first. Follow already opens a public topic, so an exhausted link still admits
+	if (!(await spendInviteUse(invite.id)) && topic.visibility !== "public") {
 		return { status: "exhausted" }
 	}
 	await activateSubscription(userId, topic.id)
@@ -203,13 +202,13 @@ export async function acceptTeamInvite(
 	// a leader's invitation joins the team automatically, and so does one addressed to this person by anyone
 	const creatorRole = invite.invitedByUserId ? await toTeamRole(invite.invitedByUserId, teamRow.id) : null
 	const isLeaderInvite = creatorRole !== null && isLeaderRole(creatorRole)
-	const isJoinAutomatically = isLeaderInvite || (await isInviteForUser(invite, userId))
+	const isAutomaticJoin = isLeaderInvite || (await isInviteForUser(invite, userId))
 
 	// an open link admits when some other live invitation already names this person
-	const automaticInvite = isJoinAutomatically ? null : await toAutomaticInvite(userId, teamRow.id, invite.id)
+	const automaticInvite = isAutomaticJoin ? null : await toAutomaticInvite(userId, teamRow.id, invite.id)
 
 	// an open link from a member arrives as a join request a team leader activates
-	if (!isJoinAutomatically && !automaticInvite) {
+	if (!isAutomaticJoin && !automaticInvite) {
 		await db
 			.insert(teamMembers)
 			.values({ teamId: teamRow.id, userId, invitedByUserId: invite.invitedByUserId, isActive: false })
@@ -230,7 +229,7 @@ export async function acceptTeamInvite(
 		if (automaticInvite) {
 			await refundInviteUse(automaticInvite.id)
 		}
-		return { status: "exhausted" }
+		return { status: "teamFull", teamId: teamRow.id, teamName: teamRow.name }
 	}
 	return joinedTeam
 }
@@ -263,14 +262,12 @@ export async function isInviteForUser(
  * Whether a live invitation other than the one being accepted admits the accepter on its own.
  */
 export function isAutomaticInvite(
-	namedInvite:
-		| Pick<typeof invites.$inferSelect, "id" | "revokedAt" | "expiresAt" | "maxUses" | "usedCount">
-		| undefined,
+	userInvite: Pick<typeof invites.$inferSelect, "id" | "expiresAt" | "maxUses" | "usedCount"> | undefined,
 	acceptedInviteId: string,
 	now: Date,
 ): boolean {
 	// the invitation being accepted cannot vouch for itself, and a dead one vouches for nobody
-	return Boolean(namedInvite && namedInvite.id !== acceptedInviteId && !toInviteRefusal(namedInvite, now))
+	return Boolean(userInvite && userInvite.id !== acceptedInviteId && !toInviteRejection(userInvite, now))
 }
 
 // a live invitation to this team addressed to this user, or null when none does
@@ -289,11 +286,11 @@ async function toAutomaticInvite(
 		: eq(invites.invitedUserId, userId)
 
 	// both addressings have their own unique row, so either one may match and the first live one admits
-	const addressedInvites = await db
+	const userInvites = await db
 		.select()
 		.from(invites)
 		.where(and(eq(invites.teamId, teamId), isAddressedToUser))
-	return addressedInvites.find((invite) => isAutomaticInvite(invite, acceptedInviteId, new Date())) ?? null
+	return userInvites.find((invite) => isAutomaticInvite(invite, acceptedInviteId, new Date())) ?? null
 }
 
 // one use spent from the token, conditional on the limit. false if the link had none left
@@ -318,14 +315,13 @@ async function refundInviteUse(inviteId: string): Promise<void> {
  * A topic's pending invites, the ones that can still be accepted, for its owner's invite list.
  */
 export async function loadPendingTopicInvites(topicId: string): Promise<Invite[]> {
-	// a revoked, declined, expired, or used up invite cannot be handed out, so none of them are listed
+	// a declined, expired, or used up invite cannot be handed out, so none of them are listed
 	const inviteRows = await db
 		.select()
 		.from(invites)
 		.where(
 			and(
 				eq(invites.topicId, topicId),
-				isNull(invites.revokedAt),
 				isNull(invites.declinedAt),
 				or(isNull(invites.expiresAt), sql`${invites.expiresAt} > now()`),
 				sql`${invites.usedCount} < ${invites.maxUses}`,
@@ -335,18 +331,76 @@ export async function loadPendingTopicInvites(topicId: string): Promise<Invite[]
 	return inviteRows.map(toInvite)
 }
 
-/**
- * Which way a token is no longer good, or null while it can still be accepted. A revocation is checked first,
- * and outranks a link running out of time or uses.
- */
-export function toInviteRefusal(
-	invite: Pick<typeof invites.$inferSelect, "revokedAt" | "expiresAt" | "maxUses" | "usedCount">,
-	now: Date,
-): "revoked" | "expired" | "exhausted" | null {
-	// a revoked link is refused whatever its uses or dates say
-	if (invite.revokedAt) {
-		return "revoked"
+// the caller's newest link invite for the target that can still be handed out, or null when none is live.
+// scoped to the creator. a leader's team link auto-joins while a member's is a join request
+async function toLiveLinkInvite(
+	userId: string,
+	target: { topicId: string } | { teamId: string },
+): Promise<typeof invites.$inferSelect | null> {
+	const targetMatch = "topicId" in target ? eq(invites.topicId, target.topicId) : eq(invites.teamId, target.teamId)
+	const [invite] = await db
+		.select()
+		.from(invites)
+		.where(
+			and(
+				targetMatch,
+				eq(invites.invitedByUserId, userId),
+				isNull(invites.email),
+				isNull(invites.invitedUserId),
+				isNull(invites.declinedAt),
+				or(isNull(invites.expiresAt), sql`${invites.expiresAt} > now()`),
+				sql`${invites.usedCount} < ${invites.maxUses}`,
+			),
+		)
+		.orderBy(desc(invites.invitedAt))
+		.limit(1)
+	return invite ?? null
+}
+
+// how many people this creator's links let in, read from their plan
+async function toLinkInviteMaxUses(userId: string): Promise<number> {
+	const { plan } = await loadUserAccess(userId)
+	return PLANS[plan].linkInviteMaxUses
+}
+
+// a token's rejection, with time and use limits waived for a currently-public topic, which Follow opens anyway
+async function toTokenRejection(invite: typeof invites.$inferSelect): Promise<"expired" | "exhausted" | null> {
+	const rejection = toInviteRejection(invite, new Date())
+	if (!rejection || !invite.topicId) {
+		return rejection
 	}
+	const [topic] = await db.select({ visibility: topics.visibility }).from(topics).where(eq(topics.id, invite.topicId))
+	return topic?.visibility === "public" ? null : rejection
+}
+
+// a dead team link's acceptance: a join request for a leader to activate
+async function acceptAsJoinRequest(userId: string, invite: typeof invites.$inferSelect): Promise<InviteAcceptResult> {
+	const [teamRow] = await db
+		.select({ id: teams.id, name: teams.name })
+		.from(teams)
+		.where(eq(teams.id, invite.teamId ?? ""))
+	if (!teamRow) {
+		return { status: "unknown" }
+	}
+
+	// someone already on the team just goes there
+	if ((await toTeamRole(userId, teamRow.id)) !== null) {
+		return { status: "joinedTeam", teamId: teamRow.id, teamName: teamRow.name }
+	}
+	await db
+		.insert(teamMembers)
+		.values({ teamId: teamRow.id, userId, invitedByUserId: invite.invitedByUserId, isActive: false })
+		.onConflictDoNothing()
+	return { status: "requestedTeam", teamId: teamRow.id, teamName: teamRow.name }
+}
+
+/**
+ * Which way a token is no longer good, or null while it can still be accepted: it ran out of time, or out of uses.
+ */
+export function toInviteRejection(
+	invite: Pick<typeof invites.$inferSelect, "expiresAt" | "maxUses" | "usedCount">,
+	now: Date,
+): "expired" | "exhausted" | null {
 	// an email invite has no expiry, so it never runs out of time
 	if (invite.expiresAt && invite.expiresAt.getTime() <= now.getTime()) {
 		return "expired"
@@ -383,16 +437,6 @@ export const invitesRoute = new Hono<AppEnv>()
 		}
 		return invite === "limited" ? context.json({ error: "daily invite limit reached" }, 429) : context.json({ invite })
 	})
-	.delete("/topics/:id/invites/:inviteId", async (context) => {
-		// reject a signed-out visitor
-		const userId = currentUser(context)
-		if (!userId) {
-			return context.json({ error: "unauthorized" }, 401)
-		}
-		// revoke the invite, leaving every subscription already made through it in place
-		const isRevoked = await revokeTopicInvite(userId, context.req.param("id"), context.req.param("inviteId"))
-		return isRevoked ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
-	})
 	.post("/teams/:id/invites", zValidator("json", inviteCreatePayload), async (context) => {
 		// reject a signed-out visitor
 		const userId = currentUser(context)
@@ -407,13 +451,8 @@ export const invitesRoute = new Hono<AppEnv>()
 		}
 		return invite === "limited" ? context.json({ error: "daily invite limit reached" }, 429) : context.json({ invite })
 	})
-	.post("/invite/:token", zValidator("json", inviteAcceptPayload), async (context) => {
-		// an invite url is opened by whoever holds it, so the bot check runs before the token is even read
-		const { turnstileToken } = context.req.valid("json")
-		if (!(await verifyTurnstileToken(turnstileToken))) {
-			return context.json({ error: "turnstile failed" }, 400)
-		}
-		// the visitor signs in first, so the join page sends them through login and back before posting here
+	.post("/invite/:token", async (context) => {
+		// signup runs the app's one bot check, so a session is the whole requirement here
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)

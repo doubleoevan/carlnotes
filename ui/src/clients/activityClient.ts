@@ -19,7 +19,7 @@ export async function fetchActivity(userId?: string): Promise<ActivityResponse> 
 export async function sendDeleteTopicInvite(topicId: string, inviteId: string): Promise<void> {
 	const response = await apiClient.api.topics[":id"].invite.$delete({ param: { id: topicId }, json: { inviteId } })
 	if (!response.ok) {
-		throw new Error(`invite revoke failed: ${response.status}`)
+		throw new Error(`invite delete failed: ${response.status}`)
 	}
 }
 

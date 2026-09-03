@@ -7,6 +7,9 @@ import type { ChatTurn } from "@/components/chat/ChatMessages"
 import { useChatAttachments } from "@/components/chat/useChatAttachments"
 import { hasPreviewableLink } from "@/components/common/LinkPreviewCard"
 
+// how long a finished chat turn waits before it looks for its link preview cards again
+const LINK_PREVIEW_REFRESH_MS = 2500
+
 // a stand-in id for a kept attachment that the server has not returned yet
 let placeholderCount = 0
 function toPlaceholderId(): string {
@@ -112,75 +115,21 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		}
 	}, [page.topicId, page.teamId, setKeptAttachments])
 
-	// how many background refreshes a chat turn with a link gets before its loading note gives up
-	const linkPreviewAttemptsRef = useRef(0)
-	const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-	// one refresh: read the conversation again and land the newest chat turn's cards when they are ready
-	const refreshLinkPreview = async (): Promise<void> => {
-		linkPreviewTimerRef.current = null
-
-		// read the newest chat turn back from the server, spending one of the tries
-		const chatConversation = await fetchChatConversation(page).catch(() => null)
-		const serverChatTurn = chatConversation?.chatTurns.at(-1)
-		linkPreviewAttemptsRef.current -= 1
-		const linkPreviewAttemptsLeft = linkPreviewAttemptsRef.current
-
-		// only a chat turn still marked pending takes the answer
-		setChatTurns((chatTurns) => {
-			const newestChatTurn = chatTurns.at(-1)
-			if (!newestChatTurn?.linkPreviewsPending) {
-				return chatTurns
-			}
-
-			// a chat turn still loading after this refresh books the next one
-			// a chat turn still pending after this try goes back on the timer
-			const refreshedChatTurn = toRefreshedChatTurn(newestChatTurn, serverChatTurn, linkPreviewAttemptsLeft)
-			if (refreshedChatTurn.linkPreviewsPending) {
-				scheduleLinkPreviewRefresh()
-			}
-			return replaceNewestChatTurn(chatTurns, () => refreshedChatTurn)
-		})
-	}
-
-	// the one timer, started only when nothing is already waiting
-	const scheduleLinkPreviewRefresh = (): void => {
-		linkPreviewTimerRef.current ??= setTimeout(() => void refreshLinkPreview(), 2500)
-	}
-
-	// a finished chat turn that mentioned a link loads until its cards land
-	const startLinkPreviewRefresh = (): void => {
-		setChatTurns((chatTurns) => {
-			// only the newest chat turn can still be waiting on a link preview, and a rejected turn never is
-			const newestChatTurn = chatTurns.at(-1)
-			if (!newestChatTurn || newestChatTurn.rejection !== null) {
-				return chatTurns
-			}
-			if (!hasPreviewableLink(newestChatTurn.question) && !hasPreviewableLink(newestChatTurn.answer)) {
-				return chatTurns
-			}
-
-			// a link is worth polling for, so the chat turn shows its card as pending until one arrives
-			linkPreviewAttemptsRef.current = 6
-			scheduleLinkPreviewRefresh()
-			return replaceNewestChatTurn(chatTurns, (chatTurn) => ({ ...chatTurn, linkPreviewsPending: true }))
-		})
-	}
-
-	// a conversation left behind stops refreshing for it
-	useEffect(() => {
-		return () => {
-			if (linkPreviewTimerRef.current) {
-				clearTimeout(linkPreviewTimerRef.current)
-			}
-		}
-	}, [])
+	// the newest chat turn's link preview cards poll in the background until they complete
+	const startLinkPreviewRefresh = useLinkPreviewRefresh(page, setChatTurns)
 
 	// send the user question, appending the reply to the newest chat turn as each chunk arrives
 	async function send(retryQuestion?: string): Promise<void> {
 		// a retry re-asks a finished chat turn's question, stripped of its attachment note
-		const askedQuestion = (retryQuestion ?? question).replace(/\n\n\[attached: [^\]]*\]$/, "").trim()
-		if (!askedQuestion || isStreaming) {
+		const askedQuestion = (retryQuestion ?? question).replace(/(?:^|\n\n)\[attached: [^\]]*\]$/, "").trim()
+
+		// a chat turn may be attachments alone, but a retry does not resend attachments and needs its question
+		const sendableAttachmentCount = retryQuestion === undefined ? attachments.length : 0
+		if ((!askedQuestion && sendableAttachmentCount === 0) || isStreaming) {
+			// a retried chat turn that sent attachments alone has nothing to resend, and a toast shows why
+			if (retryQuestion !== undefined && !isStreaming) {
+				toast("That turn sent attachments alone. Attach the files again to re-ask.")
+			}
 			return
 		}
 
@@ -286,6 +235,76 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		send,
 		stop,
 		clear,
+	}
+}
+
+// the background polling for the newest chat turn's link preview cards, giving up after a few attempts.
+// returns a function that starts the poll, called after a finished chat turn whose text held a link
+function useLinkPreviewRefresh(
+	chatPage: ChatPage,
+	setChatTurns: React.Dispatch<React.SetStateAction<ChatTurn[]>>,
+): () => void {
+	// how many background refreshes remain, and the timer that schedules them
+	const linkPreviewAttemptsRef = useRef(0)
+	const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+	// one refresh: read the conversation again and land the newest chat turn's cards when they are ready
+	const refreshLinkPreview = async (): Promise<void> => {
+		linkPreviewTimerRef.current = null
+
+		// read the newest chat turn back from the server, spending one of the attempts
+		const chatConversation = await fetchChatConversation(chatPage).catch(() => null)
+		const serverChatTurn = chatConversation?.chatTurns.at(-1)
+		linkPreviewAttemptsRef.current -= 1
+		const linkPreviewAttemptsLeft = linkPreviewAttemptsRef.current
+
+		// only a chat turn still marked pending takes the answer
+		setChatTurns((chatTurns) => {
+			const newestChatTurn = chatTurns.at(-1)
+			if (!newestChatTurn?.linkPreviewsPending) {
+				return chatTurns
+			}
+
+			// a chat turn still pending after this attempt goes back on the timer
+			const refreshedChatTurn = toRefreshedChatTurn(newestChatTurn, serverChatTurn, linkPreviewAttemptsLeft)
+			if (refreshedChatTurn.linkPreviewsPending) {
+				scheduleLinkPreviewRefresh()
+			}
+			return replaceNewestChatTurn(chatTurns, () => refreshedChatTurn)
+		})
+	}
+
+	// the one timer, started only when nothing is already waiting
+	const scheduleLinkPreviewRefresh = (): void => {
+		linkPreviewTimerRef.current ??= setTimeout(() => void refreshLinkPreview(), LINK_PREVIEW_REFRESH_MS)
+	}
+
+	// leaving the conversation clears the pending refresh timer
+	useEffect(() => {
+		return () => {
+			if (linkPreviewTimerRef.current) {
+				clearTimeout(linkPreviewTimerRef.current)
+			}
+		}
+	}, [])
+
+	// a completed chat turn that mentioned a link loads until its cards land
+	return (): void => {
+		setChatTurns((chatTurns) => {
+			// only the newest chat turn can still be waiting on a link preview. a rejected turn doesn't
+			const newestChatTurn = chatTurns.at(-1)
+			if (!newestChatTurn || newestChatTurn.rejection !== null) {
+				return chatTurns
+			}
+			if (!hasPreviewableLink(newestChatTurn.question) && !hasPreviewableLink(newestChatTurn.answer)) {
+				return chatTurns
+			}
+
+			// a link is worth polling for, so the chat turn shows its card as pending until one arrives
+			linkPreviewAttemptsRef.current = 6
+			scheduleLinkPreviewRefresh()
+			return replaceNewestChatTurn(chatTurns, (chatTurn) => ({ ...chatTurn, linkPreviewsPending: true }))
+		})
 	}
 }
 

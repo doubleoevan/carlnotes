@@ -3,6 +3,7 @@ import { EventEmitter } from "node:events"
 import { Client } from "@neondatabase/serverless"
 import { sql } from "drizzle-orm"
 import { db } from "../../db"
+import { toDirectConnectionString } from "../note/noteStream"
 
 // the one channel every instance listens on. the payload names the topic, the team, and the chat message id
 export const CHAT_ROOM_CHANNEL = "room_messages"
@@ -49,15 +50,6 @@ export async function notifyChatRoomMessage(
 	} catch (error) {
 		console.error("room notify failed", error)
 	}
-}
-
-// the connection string notifications actually travel on: the configured direct one
-function toDirectConnectionString(): string | undefined {
-	const connectionString = process.env.DATABASE_URL_DIRECT
-	if (connectionString) {
-		return connectionString
-	}
-	return process.env.DATABASE_URL?.replace("-pooler.", ".")
 }
 
 // start the chat room listener once. a dropped connection schedules its own reconnect

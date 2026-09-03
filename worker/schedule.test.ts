@@ -122,7 +122,7 @@ test("a topic sweep summary counts starts instead of outcomes", () => {
 
 // the stale scan window waits out the longest a Scan may legally run
 test("the stale scan window clears the longest a Scan may legally run", () => {
-	// each stage's total covers its own retries, so the sum below cannot fall behind a retry policy that changes
+	// each stage's total covers its own retries, so the summed total cannot fall behind a retry policy that changes
 	expect(INGEST_TOTAL_TIMEOUT_MS).toBe(INGEST_TIMEOUT_MS * INGEST_ATTEMPTS)
 	expect(REVIEW_TOTAL_TIMEOUT_MS).toBe(REVIEW_TIMEOUT_MS * REVIEW_ATTEMPTS)
 	expect(FINISH_TOTAL_TIMEOUT_MS).toBe(FINISH_TIMEOUT_MS * FINISH_ATTEMPTS)

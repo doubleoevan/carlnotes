@@ -2,11 +2,12 @@
 export {
 	AttachmentValidationError,
 	extractText,
+	generateAttachmentContext,
 	generateImageContext,
-	generatePdfContext,
 	ingestAttachment,
 	ingestUrlAttachment,
 	MAX_ATTACHMENT_BYTES,
+	toCanonicalContentType,
 } from "./attach"
 export { type ChatReplyStream, type ChatTurnInput, streamChatReply } from "./chat"
 export { lookupPodcast } from "./ingest/podcast"
@@ -17,7 +18,7 @@ export {
 	toLinkPreviewUrls,
 	toNormalizedLinkPreviewUrl,
 } from "./linkPreview"
-export { isBudgetRejection, SPENT_BUDGET_REFUSAL } from "./models"
+export { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "./models"
 export { sendManualScanEmail } from "./notify"
 export { loadScan, scanTopic, startTopicScan, stopTopicScan } from "./scan"
 export { failStaleScans, runScheduledTopicScans } from "./schedule"

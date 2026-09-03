@@ -21,7 +21,7 @@ const PUBLIC_HOST = "https://www.reddit.com"
 // what the Scan records for a Source the keyless feeds served
 const RSS_FALLBACK_MODE = "reddit-rss"
 
-// reddit refuses a burst from one address, and a Scan runs its Sources at once
+// reddit rejects a burst from one address, and a Scan runs its Sources at once
 const MIN_REQUEST_GAP_MS = { oauth: 1_000, rss: 30_000 }
 let lastRequest: Promise<unknown> = Promise.resolve()
 
@@ -34,14 +34,14 @@ export type RedditRequest =
 	| { kind: "search"; subreddit: string; query: string }
 
 /**
- * Fetch a subreddit listing or a Reddit search as "read" Resources, preferring OAuth and falling back to the
- * keyless endpoints. A Source that every access mode refuses fails with the reason each one gave.
+ * Fetch a subreddit listing or a Reddit search as "read" Resources, preferring OAuth and falling back to the keyless endpoints.
+ * A Source that every access mode rejects fails with the reason each one gave.
  */
 export const redditIngester: SourceIngester = async (source: Source) => {
 	// what the Source asked for, which is a subreddit it must name and a query it may add
 	const request = toRedditRequest(source)
 
-	// try each access mode in order and keep the first that responds, recording the keyless feeds as a fallback
+	// attempt each access mode in order and keep the first that responds, recording the keyless feeds as a fallback
 	const clientId = Bun.env.REDDIT_CLIENT_ID
 	const clientSecret = Bun.env.REDDIT_CLIENT_SECRET
 	const failures: string[] = []
@@ -54,12 +54,12 @@ export const redditIngester: SourceIngester = async (source: Source) => {
 				? { resources, costDollars: 0 }
 				: { resources, costDollars: 0, fallbackMode: RSS_FALLBACK_MODE }
 		} catch (error) {
-			// a refused access mode is not the Source's failure while another is left to try
+			// a rejected access mode is not the Source's failure while another is left to attempt
 			failures.push(`${accessMode} ${error instanceof Error ? error.message : String(error)}`)
 		}
 	}
 
-	// every access mode was refused, so the Source fails with what each one said. the Scan traces this and the report names it
+	// every access mode was rejected, so the Source fails with what each one said. the Scan traces this and the report names it
 	throw new Error(`reddit ${toRequestLabel(request)} failed in every access mode: ${failures.join("; ")}`)
 }
 
@@ -143,7 +143,7 @@ export function toOauthUrl(request: RedditRequest): string {
 }
 
 /**
- * The keyless url for a request. Reddit refuses its public `.json` endpoints but still serves these rss feeds,
+ * The keyless url for a request. Reddit rejects its public `.json` endpoints but still serves these rss feeds,
  * which have no post-score and only the subreddit's default ordering. That loss is what the fallback records.
  * Like the OAuth builder, it also builds the site-wide search form that finding a subreddit needs.
  */
@@ -224,7 +224,7 @@ async function fetchPosts(
 		}),
 	)
 
-	// a refused listing ends this access mode
+	// a rejected listing ends this access mode
 	if (!response.ok) {
 		throw new Error(`listing returned ${response.status}`)
 	}

@@ -14,7 +14,7 @@ function note(visibility: "private" | "team" | "public", name = "Ideas") {
 		createdAt: "2026-08-01T00:00:00.000Z",
 		updatedAt: "2026-08-20T00:00:00.000Z",
 		canEdit: true,
-		isOwner: true,
+		isTopicOwner: true,
 		canDelete: true,
 	}
 }

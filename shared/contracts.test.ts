@@ -1,12 +1,15 @@
 // tests for the payload contracts that create and update topic are validated through
 import { expect, test } from "bun:test"
 import {
+	chatRoomMessagePayload,
+	chatTurnPayload,
 	MAX_ATTACHMENT_CONTEXT_CHARS,
 	MAX_TOPIC_SOURCES,
 	suggestSourcesPayload,
 	type UpdateTopicPayload,
 	updateTopicPayload,
 	userInvitePayload,
+	withAttachmentNote,
 } from "./contracts"
 
 // a valid topic payload, varied only by the source list each test case needs
@@ -80,4 +83,23 @@ test("userInvitePayload accepts exactly one identifier and normalizes the email"
 	expect(userInvitePayload.safeParse({ username: "penny" }).success).toBe(true)
 	const parsedInvite = userInvitePayload.safeParse({ email: "  A@B.COM " })
 	expect(parsedInvite.success && parsedInvite.data.email).toBe("a@b.com")
+})
+
+// one staged file, the smallest attachment either chat payload accepts
+const textAttachment = { kind: "text" as const, name: "notes.txt", text: "hello", keep: false }
+
+// a chat turn or chat room message may be attachments alone, but never nothing at all
+test("the chat payloads accept attachments alone and reject an empty send", () => {
+	// a question or content may be empty while attachments go with the send
+	expect(chatTurnPayload.safeParse({ question: "", attachments: [textAttachment] }).success).toBe(true)
+	expect(chatRoomMessagePayload.safeParse({ content: "", attachments: [textAttachment] }).success).toBe(true)
+
+	// a send with nothing at all is rejected by both
+	expect(chatTurnPayload.safeParse({ question: "" }).success).toBe(false)
+	expect(chatRoomMessagePayload.safeParse({ content: "" }).success).toBe(false)
+})
+
+// an attachments-only question reads as the note alone, with no leading blank lines
+test("withAttachmentNote stands alone on an empty question", () => {
+	expect(withAttachmentNote("", [{ name: "a.pdf" }])).toBe("[attached: a.pdf]")
 })

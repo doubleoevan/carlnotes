@@ -21,7 +21,7 @@ test("fetchPromptTemplate returns the bundled template unmodified when Langfuse 
 			expect(promptTemplate.registryPrompt).toBeUndefined()
 		}
 	} finally {
-		// restore whatever keys the calling shell had set, even if an assertion above threw
+		// restore whatever keys the calling shell had set, even when the test threw
 		Bun.env.LANGFUSE_PUBLIC_KEY = originalPublicKey
 		Bun.env.LANGFUSE_SECRET_KEY = originalSecretKey
 	}

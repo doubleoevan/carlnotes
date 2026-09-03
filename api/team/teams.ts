@@ -9,11 +9,11 @@ import {
 	updateTeamPayload,
 } from "@shared/contracts"
 import { toUsernameWithDigits } from "@shared/usernames"
-import { and, count, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
+import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
 import { canCreateTeamToday, loadUserAccess } from "../../db/quotas"
-import { invites, subscriptions, teamMembers, teams, teamTopics, topics } from "../../db/schema"
+import { invites, subscriptions, teamMembers, teams, teamTopics, topics, users } from "../../db/schema"
 import { isLeaderRole } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
 import { canSeeTopic } from "../topic/permissions"
@@ -26,6 +26,7 @@ import {
 	deactivateTeamTopicSubscriptions,
 	deleteJoinTeamRequest,
 	removeTeamMember,
+	removeTeamMemberInTransaction,
 	requestToJoinTeam,
 	saveTeamTopicSubscriptions,
 	setTeamMemberRole,
@@ -208,7 +209,7 @@ async function addTopicInTransaction(
 		}
 	}
 
-	// the delivery: every activated member's muted subscription, written after the topic attached
+	// the delivery: every activated team member's subscription, with email off, written after the topic attached
 	const teamMemberRows = await transaction
 		.select({ userId: teamMembers.userId })
 		.from(teamMembers)
@@ -336,42 +337,93 @@ export async function updateTeam(
 	return "saved"
 }
 
+// the result of deleting a team with one leader: gone, or surviving under whoever leads it now
+export type DeleteTeamResult =
+	| { status: "deleted" }
+	| { status: "handedOver"; newLeaderUsername: string }
+	| { status: "forbidden" }
+
 /**
- * Delete the team. Its topics return to their owners through the set-null and member delivery ends.
+ * Deletes a team with no leader outright, and hands a populated one to a new leader while the caller leaves.
  */
-export async function deleteTeam(userId: string, teamId: string): Promise<"deleted" | "forbidden" | "lastLedTeam"> {
+export async function deleteTeam(userId: string, teamId: string): Promise<DeleteTeamResult> {
 	if ((await toTeamRole(userId, teamId)) !== "leader") {
-		return "forbidden"
+		return { status: "forbidden" }
 	}
 
-	// every user leads a team of their own, so the only one they lead stays
-	if ((await ledTeamCount(userId)) <= 1) {
-		return "lastLedTeam"
-	}
+	// the count and the delete share one transaction over the locked team row, since a team member joining
+	// concurrently would otherwise keep active subscriptions to topics that the team deletion gives back to their owner
+	const isTeamDeleted = await db.transaction(async (transaction) => {
+		const [teamRow] = await transaction.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)).for("update")
+		if (!teamRow) {
+			return false
+		}
 
-	// delivery ends before the row goes, while the membership list still says who to deactivate
-	await db.transaction(async (transaction) => {
-		const memberRows = await transaction
+		// any other active team members mean the team is not deleted
+		const teamMemberRows = await transaction
 			.select({ userId: teamMembers.userId })
 			.from(teamMembers)
 			.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true)))
+		if (teamMemberRows.some((memberRow) => memberRow.userId !== userId)) {
+			return false
+		}
+
+		// delivery ends before the row is deleted, while the team membership list still shows who to deactivate
 		await deactivateTeamTopicSubscriptions(
 			transaction,
 			teamId,
-			memberRows.map((memberRow) => memberRow.userId),
+			teamMemberRows.map((memberRow) => memberRow.userId),
 		)
 		await transaction.delete(teams).where(eq(teams.id, teamId))
+		return true
 	})
-	return "deleted"
+
+	// the team outlived the delete because someone else is on it, so the caller assigns it to a new team leader
+	if (!isTeamDeleted) {
+		return updateTeamLeader(userId, teamId)
+	}
+	return { status: "deleted" }
 }
 
-// how many teams the user leads. belonging to a team somebody else leads does not count
-async function ledTeamCount(userId: string): Promise<number> {
-	const [ledTeamRow] = await db
-		.select({ count: count() })
-		.from(teamMembers)
-		.where(and(eq(teamMembers.userId, userId), eq(teamMembers.role, "leader"), eq(teamMembers.isActive, true)))
-	return ledTeamRow?.count ?? 0
+// pass leadership to the oldest active member when no other leader remains, then the caller leaves
+async function updateTeamLeader(userId: string, teamId: string): Promise<DeleteTeamResult> {
+	// one transaction over locked member rows, so a concurrent change to those rows lands before the
+	// handover or after it, never inside it
+	const newLeaderId = await db.transaction(async (transaction) => {
+		const memberRows = await transaction
+			.select({ userId: teamMembers.userId, role: teamMembers.role, createdAt: teamMembers.createdAt })
+			.from(teamMembers)
+			.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true)))
+			.for("update")
+		const otherMembers = memberRows.filter((memberRow) => memberRow.userId !== userId)
+		if (otherMembers.length === 0) {
+			return null
+		}
+
+		// an existing co-leader already holds the team. otherwise the longest-standing member takes it
+		let newLeaderId = otherMembers.find((memberRow) => isLeaderRole(memberRow.role))?.userId
+		if (!newLeaderId) {
+			const [oldestMember] = [...otherMembers].sort(
+				(a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.userId.localeCompare(b.userId),
+			)
+			newLeaderId = oldestMember?.userId ?? ""
+			await transaction
+				.update(teamMembers)
+				.set({ role: "leader" })
+				.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, newLeaderId)))
+		}
+
+		// the caller leaves through the same cleanup a removed member gets, mentions and subscriptions included
+		await removeTeamMemberInTransaction(transaction, teamId, userId)
+		return newLeaderId
+	})
+
+	// the members left concurrently, and then there was nobody to hand the team to
+	if (!newLeaderId) {
+		return { status: "forbidden" }
+	}
+	const [newLeader] = await db.select({ username: users.username }).from(users).where(eq(users.id, newLeaderId))
+	return { status: "handedOver", newLeaderUsername: newLeader?.username ?? "" }
 }
 
 // the team routes. reads return a 404 for anything the user may not know exists
@@ -393,12 +445,12 @@ export const teamsRoute = new Hono<AppEnv>()
 		return context.json({ isTaken: taken !== undefined })
 	})
 	.get("/teams", async (context) => {
-		// reject a signed-out visitor. the email joins the address-invited rows to this account
-		const user = context.get("user")
-		if (!user) {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		return context.json(await loadTeamsPage(user.id, user.email))
+		return context.json(await loadTeamsPage(userId))
 	})
 	.post("/teams", zValidator("json", createTeamPayload), async (context) => {
 		// reject a signed-out visitor
@@ -485,15 +537,12 @@ export const teamsRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		const deleteTeamResponse = await deleteTeam(userId, context.req.param("id"))
-		if (deleteTeamResponse === "deleted") {
-			return context.json({ ok: true })
+		// the answer names whether the team is gone or surviving under a new leader
+		const deleteTeamResult = await deleteTeam(userId, context.req.param("id"))
+		if (deleteTeamResult.status === "forbidden") {
+			return context.json({ error: "not found" }, 404)
 		}
-
-		// the last team they lead stays until they lead another
-		return deleteTeamResponse === "lastLedTeam"
-			? context.json({ error: "create another team first" }, 409)
-			: context.json({ error: "not found" }, 404)
+		return context.json(deleteTeamResult)
 	})
 	.post("/teams/:id/topics", zValidator("json", addTopicPayload), async (context) => {
 		// reject a signed-out visitor
@@ -527,7 +576,7 @@ export const teamsRoute = new Hono<AppEnv>()
 		if (!actingUserId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// promote or demote, holding the last leader in place
+		// promote or demote, keeping the last leader in place
 		const saved = await setTeamMemberRole(
 			actingUserId,
 			context.req.param("id"),

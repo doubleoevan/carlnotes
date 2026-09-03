@@ -435,7 +435,7 @@ export function ModelThinkingBubble() {
 
 // what a rejected chat turn shows with a possible call to action
 function ChatRejectionNotice({ rejection, onRetry }: { rejection: ChatRejection; onRetry?: () => void }) {
-	// a stream that broke mid-reply invites another try, and the invitation re-asks the question
+	// a stream that broke mid-reply invites another attempt, and the invitation re-asks the question
 	if (rejection === "failed") {
 		return (
 			<p className="text-muted-foreground text-sm">
@@ -451,7 +451,7 @@ function ChatRejectionNotice({ rejection, onRetry }: { rejection: ChatRejection;
 		)
 	}
 
-	// an exhausted budget shows a call-to-action to upgrade at the plans page. anything forbidden shows a refusal
+	// an exhausted budget shows a call-to-action to upgrade at the plans page. anything forbidden shows a rejection
 	if (rejection === "budget") {
 		return <ChatBudgetNotice />
 	}

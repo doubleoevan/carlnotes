@@ -41,7 +41,7 @@ export type SourceOutcome =
 	| ({ status: "ok"; sourceId: string; sourceKind: string } & IngestResult)
 	| ({ status: "fallback"; sourceId: string; sourceKind: string } & IngestResult)
 	| { status: "failed"; sourceId: string; sourceKind: string; reason: string }
-	| { status: "skipped"; sourceKind: string }
+	| { status: "skipped"; sourceId: string; sourceKind: string }
 
 // what the Sources turned up, aggregated across all of them. cost is what they charged, which adds to the Scan's Budget
 export type ScanSummary = {
@@ -132,7 +132,7 @@ export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
 	const problemSources: ProblemSource[] = []
 	let costDollars = 0
 	for (const outcome of outcomes) {
-		// a Source that fell back or failed is traced on the Scan either way
+		// a Source that fell back, failed, or was skipped is traced on the Scan
 		const problemSource = toProblemSource(outcome)
 		if (problemSource) {
 			problemSources.push(problemSource)
@@ -173,8 +173,13 @@ function toProblemSource(sourceOutcome: SourceOutcome): ProblemSource | null {
 		return { sourceId: sourceOutcome.sourceId, status: "failed", reason: sourceOutcome.reason }
 	}
 
-	// a skip ran no ingester at all, and a Source that ran its primary path hit no problem
-	if (sourceOutcome.status === "skipped" || !sourceOutcome.fallbackMode) {
+	// a skipped source is recorded on the scan row
+	if (sourceOutcome.status === "skipped") {
+		return { sourceId: sourceOutcome.sourceId, status: "skipped" }
+	}
+
+	// a source that ran its primary path hit no problem
+	if (!sourceOutcome.fallbackMode) {
 		return null
 	}
 	return { sourceId: sourceOutcome.sourceId, status: "fallback", fallbackMode: sourceOutcome.fallbackMode }
@@ -184,13 +189,13 @@ function toProblemSource(sourceOutcome: SourceOutcome): ProblemSource | null {
 async function ingestFromSource(source: Source): Promise<SourceOutcome> {
 	// a Source that has not passed its llm-guard screen is skipped before its ingester is reached
 	if (source.status !== "ready") {
-		return { status: "skipped", sourceKind: source.kind }
+		return { status: "skipped", sourceId: source.id, sourceKind: source.kind }
 	}
 
 	// a source kind with no registered ingester is a no-op skip, not a Scan failure
 	const ingester = sourceIngesters[source.kind]
 	if (!ingester) {
-		return { status: "skipped", sourceKind: source.kind }
+		return { status: "skipped", sourceId: source.id, sourceKind: source.kind }
 	}
 
 	// run the ingester. an error stops only this Source, so the Scan keeps whatever the other sources found

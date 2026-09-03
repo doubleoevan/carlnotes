@@ -1,6 +1,6 @@
 // the operating system's share sheet, the only way to reach messaging applications that publish no share url of their own.
 
-// how the sheet ended. dismissed is a decision the person made, unavailable is the browser refusing
+// how the sheet ended. dismissed is a decision the person made, unavailable is the browser rejecting
 export type ShareSheetResult = "shared" | "dismissed" | "unavailable"
 
 /**
@@ -18,7 +18,7 @@ export function canOpenShareSheet(): boolean {
  * application they select, with no destination and no recipient, so nothing may be attributed from it.
  */
 export async function openShareSheet(share: { title: string; text: string; url: string }): Promise<ShareSheetResult> {
-	// a browser without the api returns the same as one that refuses, so a caller needs one fallback
+	// a browser without the api returns the same as one that rejects, so a caller needs one fallback
 	if (typeof navigator.share !== "function") {
 		return "unavailable"
 	}
@@ -27,7 +27,7 @@ export async function openShareSheet(share: { title: string; text: string; url: 
 		await navigator.share(share)
 		return "shared"
 	} catch (error) {
-		// dismissing the sheet is a completed interaction, and the browser refusing the gesture is not
+		// dismissing the sheet is a completed interaction, and the browser rejecting the gesture is not
 		return error instanceof Error && error.name === "AbortError" ? "dismissed" : "unavailable"
 	}
 }

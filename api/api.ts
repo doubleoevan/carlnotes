@@ -58,7 +58,7 @@ const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional() })
 // the api tree, mounted on the server in api/index.ts
 export const apiRoute = new Hono<AppEnv>()
 	.basePath("/api")
-	// resolves the session once per request, so every route below it gets the currentUser
+	// resolves the session once per request, so every route it wraps gets the currentUser
 	.use("*", async (context, next) => {
 		const session = await auth.api.getSession({ headers: context.req.raw.headers })
 		context.set("user", session?.user ?? null)

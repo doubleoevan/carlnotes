@@ -13,8 +13,9 @@ export type AnalyticsEvent =
 	// what the owner asks the product to do, and the paywall they hit when asking for more
 	| "scan_requested"
 	| "scan_quota_reached"
-	// sharing a topic, tagged by the control that created the invite
+	// sharing a topic, tagged by the path that created the invite. a reuse means an existing live link came back
 	| "invite_created"
+	| "invite_reused"
 	// engagement, which fires every time instead of only the first time
 	| "finding_rated"
 	| "finding_bookmarked"

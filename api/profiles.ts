@@ -15,7 +15,6 @@ import { isAllowed } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
 import { loadPublicTeams, loadTeamSummaries, loadTeamUpMenu } from "./team/helpers"
 import { toTopicTableRows } from "./topic/helpers"
-import { isShown } from "./topic/permissions"
 
 // the transaction a caller is already inside, or the pool when there is none
 type DbHandle = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -103,7 +102,7 @@ async function loadProfileTopics(
 ): Promise<Topic[]> {
 	const visibleTopics = includesNonPublicTopics
 		? eq(topics.ownerId, profileUserId)
-		: and(eq(topics.ownerId, profileUserId), eq(topics.visibility, "public"), isShown)
+		: and(eq(topics.ownerId, profileUserId), eq(topics.visibility, "public"))
 	const rows = await db
 		.select({
 			id: topics.id,

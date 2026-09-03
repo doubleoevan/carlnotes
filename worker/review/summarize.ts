@@ -78,11 +78,20 @@ export async function summarizeTopicScan(
 	charge(budget, "scoringCheap", tokenCost(usage.totalTokens ?? 0, CHEAP_COST_PER_MILLION_TOKENS))
 
 	// a blank answer is a failed call, so it throws an error instead of returning an empty report
-	const reportText = text.trim()
+	const reportText = withoutEmptyFindingsHeading(text.trim())
 	if (reportText.length === 0) {
 		throw new Error(`scan report came back empty after ${usage.totalTokens ?? 0} tokens`)
 	}
 	return reportText
+}
+
+/**
+ * Drops a trailing findings heading the model left with no links under it.
+ */
+export function withoutEmptyFindingsHeading(reportText: string): string {
+	// the prompt asks for the heading only when a scan kept findings. a quiet scan has nothing to
+	// link, so the heading a slip leaves behind is dropped instead of rendering over an empty list
+	return reportText.replace(/(?:^|\n+) *(?:#{1,6} *)?\*{0,2}findings:?\*{0,2} *$/i, "")
 }
 
 /**

@@ -54,8 +54,8 @@ test("toResources skips a tweet missing its id or its author handle", () => {
 	expect(resources).toEqual([])
 })
 
-// the handle goes straight into a query operator, so anything X would not resolve is refused instead of sent
-test("toSourceHandle takes a writable handle and refuses the rest", () => {
+// the handle goes straight into a query operator, so anything X would not resolve is rejected instead of sent
+test("toSourceHandle takes a writable handle and rejects the rest", () => {
 	expect(toSourceHandle({ handle: "sama" })).toBe("sama")
 	expect(toSourceHandle({ handle: "  @Karpathy  " })).toBe("Karpathy")
 	expect(toSourceHandle({ handle: "a_1" })).toBe("a_1")

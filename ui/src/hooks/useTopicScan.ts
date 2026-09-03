@@ -1,7 +1,7 @@
 import type { TopicResponse } from "@shared/contracts"
 import { useEffect, useState } from "react"
 
-// how often to re-fetch the page while a scan is running. the history and the manual scan button follow it live.
+// how often to re-fetch the page while a scan is running
 // a polled scan shows its first findings within seconds, and a long one is not worth as fast of a refetch.
 // the rate steps down the longer the scan runs.
 const FAST_POLL_MS = 3000
@@ -43,14 +43,14 @@ export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<
 		}
 
 		// only poll the page when it is visible
-		const handleChangeVisibility = (): void => {
+		const handleVisibilityChange = (): void => {
 			clearTimeout(pollTimer)
 			if (document.visibilityState === "visible") {
 				void reload()
 				schedule()
 			}
 		}
-		document.addEventListener("visibilitychange", handleChangeVisibility)
+		document.addEventListener("visibilitychange", handleVisibilityChange)
 		if (document.visibilityState === "visible") {
 			schedule()
 		}
@@ -58,7 +58,7 @@ export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<
 		// the cleared timer lets the page rest once the scan resolves
 		return () => {
 			clearTimeout(pollTimer)
-			document.removeEventListener("visibilitychange", handleChangeVisibility)
+			document.removeEventListener("visibilitychange", handleVisibilityChange)
 		}
 	}, [isScanning, reload])
 }

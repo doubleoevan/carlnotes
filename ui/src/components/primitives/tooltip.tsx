@@ -22,7 +22,7 @@ function TooltipTrigger({ ...props }: React.ComponentProps<typeof TooltipPrimiti
 	return <TooltipPrimitive.Trigger data-slot="tooltip-trigger" {...props} />
 }
 
-// the floating label. portalled so it escapes overflow, with an arrow pointing at the trigger
+// the label shown beside the trigger. portalled so it escapes overflow, with an arrow pointing at it
 function TooltipContent({
 	className,
 	sideOffset = 4,

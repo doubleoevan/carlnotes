@@ -16,7 +16,7 @@ test("a spent budget is read as a budget rejection", () => {
 	expect(isBudgetRejection({ statusCode: 429, responseBody: BUDGET_BODY })).toBe(true)
 })
 
-// the AI sdk retries a 429. the rejection reaches the caller wrapped in a retry error holding each attempt
+// the AI sdk retries a 429. the rejection reaches the caller wrapped in a retry error that includes each attempt
 test("a rejection wrapped by the retry error is still found", () => {
 	const retryError = {
 		reason: "maxRetriesExceeded",

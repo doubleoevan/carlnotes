@@ -94,13 +94,16 @@ export async function fetchNoteYdoc(noteId: string, stateVector: Uint8Array | nu
 }
 
 /**
- * Post one yjs update for the server to merge.
+ * Post one yjs update for the server to merge. "rejected" is the server rejecting this exact update, which no retry can ever send.
  */
-export async function sendNoteUpdate(noteId: string, update: Uint8Array): Promise<boolean> {
+export async function sendNoteUpdate(noteId: string, update: Uint8Array): Promise<boolean | "rejected"> {
 	const response = await apiClient.api.notes[":id"].updates.$post({
 		param: { id: noteId },
 		json: { update: toBase64(update) },
 	})
+	if (response.status === 400) {
+		return "rejected"
+	}
 	return response.ok
 }
 

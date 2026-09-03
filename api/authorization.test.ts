@@ -19,7 +19,7 @@ function scanInput(
 	return {
 		isAdmin: false,
 		plan: "free",
-		isOwner: true,
+		isTopicOwner: true,
 		scansUsedToday: 0,
 		hasPaymentMethod: false,
 		billingInterval: "yearly",
@@ -67,7 +67,7 @@ test("authorizeManualScan enforces owner authority and the daily limit", () => {
 		isOverage: false,
 	})
 	// a non-owner who is not an admin is rejected before any quota check
-	expect(authorizeManualScan(scanInput({ isOwner: false }))).toEqual({ status: "forbidden" })
+	expect(authorizeManualScan(scanInput({ isTopicOwner: false }))).toEqual({ status: "forbidden" })
 
 	// the monthly and yearly intervals are read as separate allowances
 	const plusAtMonthlyLimit = { plan: "plus", scansUsedToday: PLANS.plus.dailyScanLimit.monthly } as const
@@ -104,7 +104,7 @@ test("authorizeManualScan only makes the daily limit soft when the extra scan ca
 // the platform lets an admin override ownership and the daily limit
 test("authorizeManualScan lets an admin bypass every limit", () => {
 	// an admin scans any topic regardless of ownership or how many scans ran today
-	expect(authorizeManualScan(scanInput({ isAdmin: true, isOwner: false, scansUsedToday: 999 }))).toEqual({
+	expect(authorizeManualScan(scanInput({ isAdmin: true, isTopicOwner: false, scansUsedToday: 999 }))).toEqual({
 		status: "allowed",
 		remainingScans: ADMIN_QUOTA,
 		isOverage: false,

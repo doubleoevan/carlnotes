@@ -27,8 +27,8 @@ export const RESOURCE_KIND_ICON: Record<ResourceKind, LucideIcon> = {
 }
 
 /**
- * The copy that predates the clipboard api, for the browsers that refuse it. An off-screen textarea is written to, selected,
- * and copied through the document. It reports whether the copy succeeded, which a browser can also refuse.
+ * The copy implementation that predates the clipboard api, for the browsers that reject it. An off-screen textarea is written to, selected,
+ * and copied through the document. It reports whether the copy succeeded, which a browser can also reject.
  */
 export function copyWithDocument(text: string): boolean {
 	const textareaElement = document.createElement("textarea")
@@ -75,12 +75,15 @@ export function isWideScreen(): boolean {
 /**
  * What the topic prompt's file picker shows.
  */
-export const FILE_PICKER_ACCEPT = "image/*,application/pdf,.pdf,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.log"
+export const FILE_PICKER_ACCEPT =
+	"image/*,application/pdf,.pdf,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.log,.docx,.xlsx"
 
 /**
- * What the chat composers' file pickers offer: the topic prompt's list plus the video types a chat can play back.
+ * What the chat composers' file pickers can accept.
+ * The topic picker allows types the chat path rejects, so the lists stay separate.
  */
-export const CHAT_FILE_PICKER_ACCEPT = `${FILE_PICKER_ACCEPT},video/mp4,video/quicktime,video/webm`
+export const CHAT_FILE_PICKER_ACCEPT =
+	"image/*,application/pdf,.pdf,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.log,.docx,.xlsx,video/mp4,video/quicktime,video/webm"
 
 /**
  * Merges class names, resolving Tailwind conflicts.

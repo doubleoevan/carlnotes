@@ -28,7 +28,7 @@ export type ReviewOutcome = {
 
 // the summary returned to the scan by the review
 // biome-ignore format: one line keeps the type under the comment-density hook's limit
-export type ReviewSummary = { keptCount: number; filteredCount: number; scanSummary: string; scoredResourceIds: string[] }
+export type ReviewSummary = { keptCount: number; filteredCount: number; scanSummary: string; admittedResourceIds: string[]; scoredResourceIds: string[] }
 
 /**
  * Fold one Resource's outcome into the running totals.
@@ -84,5 +84,5 @@ export function emptyReviewOutcome(): ReviewOutcome {
  * The summary a Scan that reviewed nothing records
  */
 export function emptyReviewSummary(): ReviewSummary {
-	return { keptCount: 0, filteredCount: 0, scanSummary: "", scoredResourceIds: [] }
+	return { keptCount: 0, filteredCount: 0, scanSummary: "", admittedResourceIds: [], scoredResourceIds: [] }
 }

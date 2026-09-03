@@ -24,6 +24,9 @@ import { toBytesLabel, toCentsLabel, toCountLabel } from "@/lib/labels"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
+// how many columns the users table has, which a subtable row spans to sit under all of them
+const ADMIN_TABLE_COLUMN_COUNT = 14
+
 // the sort accessors for the users table columns
 const userSortValues = {
 	user: (user: AdminUserRow) => user.username,
@@ -31,6 +34,7 @@ const userSortValues = {
 	role: (user: AdminUserRow) => user.role,
 	plan: (user: AdminUserRow) => user.plan,
 	signup: (user: AdminUserRow) => user.createdAt,
+	lastLogin: (user: AdminUserRow) => user.lastLoginAt ?? "",
 	topics: (user: AdminUserRow) => user.topicCount,
 	teams: (user: AdminUserRow) => user.teamCount,
 	storage: (user: AdminUserRow) => user.attributedBytes,
@@ -67,6 +71,7 @@ export function AdminUsersTable({
 							<SortableHeader sort={sort} sortKey="role" label="Role" className="py-2 pr-4" />
 							<SortableHeader sort={sort} sortKey="plan" label="Plan" className="py-2 pr-4" />
 							<SortableHeader sort={sort} sortKey="signup" label="Signup" className="py-2 pr-4" />
+							<SortableHeader sort={sort} sortKey="lastLogin" label="Last login" className="py-2 pr-4" />
 							<SortableHeader sort={sort} sortKey="topics" label="Topics" className="py-2 pr-4" />
 							<SortableHeader sort={sort} sortKey="teams" label="Teams" className="py-2 pr-4" />
 							<SortableHeader sort={sort} sortKey="storage" label="Storage" className="py-2 pr-4" />
@@ -116,6 +121,8 @@ export function AdminUsersTable({
 								{toCountLabel(users.filter((user) => user.role === "admin").length, "admin")}
 							</td>
 							<td className="py-2 pr-4">{`${users.filter((user) => user.plan !== "free").length} paid`}</td>
+							{/* signup and last login total nothing, and each still needs its cell to keep the columns lined up */}
+							<td className="py-2 pr-4" />
 							<td className="py-2 pr-4" />
 							<td className="py-2 pr-4">{users.reduce((sum, user) => sum + user.topicCount, 0)}</td>
 							<td className="py-2 pr-4">{users.reduce((sum, user) => sum + user.teamCount, 0)}</td>
@@ -292,6 +299,8 @@ function UserRow({
 					</Tooltip>
 				</td>
 				<td className="py-2 pr-4">{new Date(user.createdAt).toLocaleDateString()}</td>
+				{/* a user who has not signed in since the column was added has no date to show */}
+				<td className="py-2 pr-4">{user.lastLoginAt ? new Date(user.lastLoginAt).toLocaleDateString() : "None"}</td>
 				<td className="py-2 pr-4">
 					{/* the topic count opens this user's topics subtable under the row. a user with no topics has nothing to open */}
 					<SubtableCountButton
@@ -365,7 +374,7 @@ function UserRow({
 			{/* this user's teams subtable, read-only rows in the teams index shape */}
 			{openSubtable === "teams" && (
 				<tr className="border-b">
-					<td colSpan={13} className="py-2">
+					<td colSpan={ADMIN_TABLE_COLUMN_COUNT} className="py-2">
 						{userTeams ? (
 							<UserTeamsSubtable teams={userTeams} />
 						) : (
@@ -375,7 +384,9 @@ function UserRow({
 				</tr>
 			)}
 			{/* this user's topics subtable */}
-			{openSubtable === "topics" && <TopicsSubtableRow topics={userTopics} colSpan={13} onReloadPage={onReloadPage} />}
+			{openSubtable === "topics" && (
+				<TopicsSubtableRow topics={userTopics} colSpan={ADMIN_TABLE_COLUMN_COUNT} onReloadPage={onReloadPage} />
+			)}
 		</>
 	)
 }

@@ -13,11 +13,11 @@ import { isConnected } from "../connections"
 import { type AppEnv, currentUser } from "../currentUser"
 import { toTeamRole } from "../team/members"
 import { startUserInviteEmail } from "./emails"
-import { acceptTeamInvite, acceptTopicInvite, type InviteAcceptResult, toInvite, toInviteRefusal } from "./invites"
+import { acceptTeamInvite, acceptTopicInvite, type InviteAcceptResult, toInvite, toInviteRejection } from "./invites"
 
-// the target an invite opens and the ways a user-invite creation is refused
+// the target an invite opens and the ways a user-invite creation is rejected
 export type InviteTarget = { topicId: string } | { teamId: string }
-export type UserInviteRefusal = "forbidden" | "unknown-username" | "not-accepting" | "limited"
+export type UserInviteRejection = "forbidden" | "unknown-username" | "not-accepting" | "limited"
 
 // the resolved recipient of a user invite: the account and its invite-access setting
 type InviteRecipient = { id: string; email: string; inviteAccess: (typeof users.$inferSelect)["inviteAccess"] }
@@ -30,7 +30,7 @@ export async function createUserInvite(
 	senderUserId: string,
 	inviteTarget: InviteTarget,
 	address: UserInvitePayload,
-): Promise<Invite | UserInviteRefusal> {
+): Promise<Invite | UserInviteRejection> {
 	// the sender's permission to invite to the target
 	if (!(await canInviteToTarget(senderUserId, inviteTarget))) {
 		return "forbidden"
@@ -44,7 +44,7 @@ export async function createUserInvite(
 
 	// the recipient's invite-access setting and the sender's connection to them, read once and used twice
 	const isConnectedRecipient = inviteRecipient ? await isConnected(senderUserId, inviteRecipient.id) : false
-	if (inviteRecipient && isInviteRefused(inviteRecipient.inviteAccess, isConnectedRecipient)) {
+	if (inviteRecipient && isInviteRejected(inviteRecipient.inviteAccess, isConnectedRecipient)) {
 		return "not-accepting"
 	}
 
@@ -136,8 +136,8 @@ async function resolveInviteRecipient(address: UserInvitePayload): Promise<Invit
 	return byUsername ?? null
 }
 
-// whether the recipient's invite-access setting refuses this sender: nobody refuses everyone, connected access refuses strangers
-export function isInviteRefused(inviteAccess: InviteRecipient["inviteAccess"], isConnectedSender: boolean): boolean {
+// whether the recipient's invite-access setting rejects this sender: nobody rejects everyone, connected access rejects strangers
+export function isInviteRejected(inviteAccess: InviteRecipient["inviteAccess"], isConnectedSender: boolean): boolean {
 	if (inviteAccess === "nobody") {
 		return true
 	}
@@ -183,21 +183,21 @@ async function reopenInvite(inviteId: string, senderUserId: string): Promise<Inv
 	return reopenedInvite ? toInvite(reopenedInvite) : "forbidden"
 }
 
-// what a topic save's invitee list resolves to before anything writes: each address's account
-export type InviteeReview =
+// what checking a topic save's invitee list found, before the save writes anything
+export type InviteeCheck =
 	| { status: "ok"; invitedUserIdByEmail: Map<string, string | null>; newInvites: string[]; reinvitedEmails: string[] }
-	| { status: "inviteeRefused"; email: string }
+	| { status: "inviteeRejected"; email: string }
 	| { status: "inviteLimit" }
 
 /**
- * Review a topic save's invitee list: resolve each address to its account, consult every newly invited recipient's invite-access setting,
- * and check the whole batch against the sender's computed limit.
+ * Checks a topic save's invitee list: each address against its account, each new recipient against their
+ * invite-access setting, and the whole batch against the sender's computed limit.
  */
-export async function reviewTopicInvites(
+export async function checkTopicInvitees(
 	senderUserId: string,
 	topicId: string | null,
 	inviteEmails: string[],
-): Promise<InviteeReview> {
+): Promise<InviteeCheck> {
 	// the rows the topic already holds decide which invites are new and which re-invite a declined one
 	const existingInviteRows = topicId
 		? await db
@@ -224,8 +224,8 @@ export async function reviewTopicInvites(
 		const isNewlyInvited = !pendingEmails.has(email)
 		if (isNewlyInvited && inviteRecipient) {
 			const isConnectedRecipient = await isConnected(senderUserId, inviteRecipient.id)
-			if (isInviteRefused(inviteRecipient.inviteAccess, isConnectedRecipient)) {
-				return { status: "inviteeRefused", email }
+			if (isInviteRejected(inviteRecipient.inviteAccess, isConnectedRecipient)) {
+				return { status: "inviteeRejected", email }
 			}
 		}
 	}
@@ -254,21 +254,31 @@ export function toInvitee(inviteRow: {
 }
 
 /**
- * Whether this user is the invitation's recipient, by resolved account or by invited address.
+ * Whether this user is the invitation's recipient: an address they verified, or the account a username resolved to.
+ * Signing up no longer proves the address, so an invitation sent to one accepts only a verified match.
  */
 export function isInviteRecipient(
 	invite: Pick<typeof invites.$inferSelect, "invitedUserId" | "email">,
-	user: { id: string; email: string },
+	user: { id: string; email: string; isEmailVerified: boolean },
 ): boolean {
-	return invite.invitedUserId === user.id || (invite.email !== null && invite.email === user.email)
+	// the address the invitation was sent to is the check, even if it resolved to an account when it was sent
+	if (invite.email !== null) {
+		return user.isEmailVerified && invite.email === user.email
+	}
+
+	// a username invitation names an account outright, so there is no address to prove
+	return invite.invitedUserId === user.id
 }
 
 // the invitation row when the user is its recipient and not yet declined, otherwise null
 async function loadReceivedInvite(userId: string, inviteId: string): Promise<typeof invites.$inferSelect | null> {
 	// the row, the user's address, and the recipient check together
 	const [invite] = await db.select().from(invites).where(eq(invites.id, inviteId))
-	const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId))
-	if (!invite || !user || !isInviteRecipient(invite, { id: userId, email: user.email })) {
+	const [user] = await db
+		.select({ email: users.email, isEmailVerified: users.emailVerified })
+		.from(users)
+		.where(eq(users.id, userId))
+	if (!invite || !user || !isInviteRecipient(invite, { id: userId, ...user })) {
 		return null
 	}
 
@@ -287,9 +297,9 @@ export async function acceptInvite(userId: string, inviteId: string): Promise<In
 	}
 
 	// revocation and expiry answer identically for email and username invites, exactly as the token path does
-	const refusal = toInviteRefusal(invite, new Date())
-	if (refusal) {
-		return { status: refusal }
+	const rejection = toInviteRejection(invite, new Date())
+	if (rejection) {
+		return { status: rejection }
 	}
 	return invite.teamId ? acceptTeamInvite(userId, invite) : acceptTopicInvite(userId, invite)
 }
@@ -308,28 +318,28 @@ export async function declineInvite(userId: string, inviteId: string): Promise<b
 	return true
 }
 
-// answer a user-invite creation: the invite, or its refusal on the status the target calls for
+// answer a user-invite creation: the invite, or its rejection on the status the target calls for
 function respondUserInvite(
 	context: Context<AppEnv>,
-	invite: Invite | UserInviteRefusal,
+	inviteResult: Invite | UserInviteRejection,
 	forbiddenStatus: 403 | 404,
 ): Response {
-	// each refusal keeps its name, so the api client can tell an unknown username from a recipient who is not accepting
-	if (invite === "forbidden") {
+	// each rejection keeps its name, so the api client can tell an unknown username from a recipient who is not accepting
+	if (inviteResult === "forbidden") {
 		return context.json({ error: "forbidden" }, forbiddenStatus)
 	}
-	if (invite === "unknown-username") {
+	if (inviteResult === "unknown-username") {
 		return context.json({ error: "unknown-username" }, 422)
 	}
 	// the recipient's setting and the sender's limit each answer with their own reason
-	if (invite === "not-accepting") {
+	if (inviteResult === "not-accepting") {
 		return context.json({ error: "not-accepting" }, 403)
 	}
-	if (invite === "limited") {
+	if (inviteResult === "limited") {
 		return context.json({ error: "daily invite limit reached" }, 429)
 	}
-	// past every refusal, the invite itself is the response
-	return context.json({ invite })
+	// past every rejection, the invite itself is the response
+	return context.json({ invite: inviteResult })
 }
 
 // the user-invite routes: creating an invite for a topic or a team, and responding to an invite received

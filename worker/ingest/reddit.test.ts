@@ -41,13 +41,13 @@ test("toRedditRequest restricts a query to its subreddit", () => {
 })
 
 // the subreddit is what a reddit Source is, so a Source without one fails instead of reading something arbitrary
-test("toRedditRequest refuses a Source with no subreddit", () => {
+test("toRedditRequest rejects a Source with no subreddit", () => {
 	expect(() => toRedditRequest(toRedditSource({}))).toThrow(/needs a valid config.subreddit/)
 	expect(() => toRedditRequest(toRedditSource({ query: "agent memory" }))).toThrow(/needs a valid config.subreddit/)
 })
 
-// a subreddit reddit itself would reject is refused instead of encoded into a url path
-test("toRedditRequest refuses an invalid subreddit", () => {
+// a subreddit reddit itself would reject is rejected instead of encoded into a url path
+test("toRedditRequest rejects an invalid subreddit", () => {
 	expect(() => toRedditRequest(toRedditSource({ subreddit: "not a subreddit" }))).toThrow(
 		/needs a valid config.subreddit/,
 	)
@@ -99,7 +99,7 @@ test("toRssUrl builds the feed urls and drops the sort", () => {
 	)
 })
 
-// a Scan runs its Sources at once, and reddit refuses the second request that arrives with the first
+// a Scan runs its Sources at once, and reddit rejects the second request that arrives with the first
 test("queueRedditRequest runs requests one at a time, even after one fails", async () => {
 	// each request records when it started and ended, so an overlap would show as a start before the previous end
 	const events: string[] = []
@@ -108,9 +108,9 @@ test("queueRedditRequest runs requests one at a time, even after one fails", asy
 		await Bun.sleep(10)
 		events.push(`${label} end`)
 
-		// a refused request is what has to leave the queue running for the ones behind it
+		// a rejected request is what has to leave the queue running for the ones behind it
 		if (willFail) {
-			throw new Error(`${label} refused`)
+			throw new Error(`${label} rejected`)
 		}
 		return label
 	}
@@ -123,7 +123,7 @@ test("queueRedditRequest runs requests one at a time, even after one fails", asy
 	]
 	expect(await Promise.all(queued)).toEqual(["first", "second failed", "third"])
 
-	// no request started before the one ahead of it finished, and a refusal did not stall the queue
+	// no request started before the one ahead of it finished, and a rejection did not stall the queue
 	// biome-ignore format: one line keeps the expected order under the comment-density hook's limit
 	expect(events).toEqual(["first start", "first end", "second start", "second end", "third start", "third end"])
 })

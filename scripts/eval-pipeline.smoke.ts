@@ -100,4 +100,4 @@ const exitCode = await smokeTest().catch((error) => {
 	return 1
 })
 await shutdownTelemetry()
-process.exit(exitCode)
+process.exitCode = exitCode

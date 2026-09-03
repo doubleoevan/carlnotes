@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { isBudgetError, toScanFailureLabel, toScanFailureReason } from "./scanFailure"
 
-// the proxy's refusal, as it reaches the workflow: wrapped by the AI sdk's retry and then by temporal
+// the proxy's rejection, as it reaches the workflow: wrapped by the AI sdk's retry and then by temporal
 function temporalFailure(): Error {
 	const budgetError = new Error(
 		"AI_APICallError: Budget has been exceeded! Key=user:reader@example.com Current cost: 3.008, Max budget: 3.0",
@@ -32,7 +32,7 @@ test("the stored reason comes from the cause, not temporal's wrapper", () => {
 
 // a failure with nothing wrapped keeps its own message
 test("an unwrapped failure keeps its message", () => {
-	expect(toScanFailureReason(new Error("every source refused"))).toBe("every source refused")
+	expect(toScanFailureReason(new Error("every source rejected"))).toBe("every source rejected")
 	expect(toScanFailureReason("a plain string")).toBe("a plain string")
 })
 

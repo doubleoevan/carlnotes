@@ -9,7 +9,10 @@ import { EMBED_DIMENSIONS } from "../db/schema"
 const MODEL_TIMEOUT_MS = Number(Bun.env.MODEL_TIMEOUT_MS ?? "120000")
 
 // what a spent budget tells the user, whether the gate caught it up front or the proxy rejected the call partway through a chat turn
-export const SPENT_BUDGET_REFUSAL = "Carl is staring at an empty mug. Top up to keep chatting."
+export const SPENT_BUDGET_REJECTION = "Carl is staring at an empty mug. Top up to keep chatting."
+
+// what carl posts when his chat turn broke for any other reason
+export const MODEL_CHAT_TURN_FAILED_REJECTION = "Carl couldn't answer that one. Mention him again to retry."
 
 /**
  * Whether the proxy rejected this call because the caller's key has spent its budget.

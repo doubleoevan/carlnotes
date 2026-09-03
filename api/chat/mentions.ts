@@ -1,7 +1,7 @@
 // the chat room mentions api helpers to update the badge counts
 import { toMentionedUserIds } from "@shared/chatMentions"
 import type { ChatMention } from "@shared/contracts"
-import { and, desc, eq, inArray, isNull } from "drizzle-orm"
+import { and, desc, eq, inArray, isNull, type SQL } from "drizzle-orm"
 import { db } from "../../db"
 import { chatRoomMentions, chatRoomMessages, teamMembers, users } from "../../db/schema"
 import { decryptChatText } from "./encryption"
@@ -44,6 +44,46 @@ export async function saveChatMentions(
 	}
 }
 
+// one unseen chat mention row, with the replied-to author resolved
+type UnseenChatMentionRow = {
+	topicId: string | null
+	teamId: string
+	authorUsername: string
+	content: string
+	repliedToUserId: string | null
+}
+
+// every unseen chat mention row for this user under the given room filter, newest first
+async function loadUnseenChatMentions(userId: string, roomFilter: SQL | undefined): Promise<UnseenChatMentionRow[]> {
+	const repliedChatMessages = db
+		.select({ id: chatRoomMessages.id, authorUserId: chatRoomMessages.authorUserId })
+		.from(chatRoomMessages)
+		.as("replied_to")
+	return db
+		.select({
+			topicId: chatRoomMessages.topicId,
+			teamId: chatRoomMessages.teamId,
+			authorUsername: chatRoomMessages.authorUsername,
+			content: chatRoomMessages.content,
+			repliedToUserId: repliedChatMessages.authorUserId,
+		})
+		.from(chatRoomMentions)
+		.innerJoin(chatRoomMessages, eq(chatRoomMentions.messageId, chatRoomMessages.id))
+		.leftJoin(repliedChatMessages, eq(chatRoomMessages.replyToMessageId, repliedChatMessages.id))
+		.where(and(eq(chatRoomMentions.userId, userId), isNull(chatRoomMentions.seenAt), roomFilter))
+		.orderBy(desc(chatRoomMessages.id))
+}
+
+// one row as a ChatMention
+function toChatMention(chatMentionRow: UnseenChatMentionRow, userId: string): ChatMention {
+	return {
+		teamId: chatMentionRow.teamId,
+		authorUsername: chatMentionRow.authorUsername,
+		isReply: chatMentionRow.repliedToUserId === userId,
+		excerpt: (decryptChatText(chatMentionRow.content) ?? "").slice(0, CHAT_MESSAGE_SNIPPET_LENGTH),
+	}
+}
+
 /**
  * Returns unseen chat mention mapped to a topic id for this user.
  */
@@ -55,45 +95,15 @@ export async function loadTopicChatMentions(
 		return new Map()
 	}
 
-	// every unseen chat mention row for these topics for this user
-	const repliedChatMessages = db
-		.select({ id: chatRoomMessages.id, authorUserId: chatRoomMessages.authorUserId })
-		.from(chatRoomMessages)
-		.as("replied_to")
-	const chatMentionRows = await db
-		.select({
-			topicId: chatRoomMessages.topicId,
-			teamId: chatRoomMessages.teamId,
-			chatMessageId: chatRoomMessages.id,
-			authorUsername: chatRoomMessages.authorUsername,
-			content: chatRoomMessages.content,
-			repliedToUserId: repliedChatMessages.authorUserId,
-		})
-		.from(chatRoomMentions)
-		.innerJoin(chatRoomMessages, eq(chatRoomMentions.messageId, chatRoomMessages.id))
-		.leftJoin(repliedChatMessages, eq(chatRoomMessages.replyToMessageId, repliedChatMessages.id))
-		.where(
-			and(
-				eq(chatRoomMentions.userId, userId),
-				isNull(chatRoomMentions.seenAt),
-				inArray(chatRoomMessages.topicId, topicIds),
-			),
-		)
-		.orderBy(desc(chatRoomMessages.id))
-
-	// return a map of unseen chat mentions mapped to a topic id for this user
+	// group the unseen rows for these topics under each topic
+	const chatMentionRows = await loadUnseenChatMentions(userId, inArray(chatRoomMessages.topicId, topicIds))
 	const chatMentionsByTopicId = new Map<string, ChatMention[]>()
 	for (const chatMentionRow of chatMentionRows) {
 		if (chatMentionRow.topicId === null) {
 			continue
 		}
 		const chatMentions = chatMentionsByTopicId.get(chatMentionRow.topicId) ?? []
-		chatMentions.push({
-			teamId: chatMentionRow.teamId,
-			authorUsername: chatMentionRow.authorUsername,
-			isReply: chatMentionRow.repliedToUserId === userId,
-			excerpt: (decryptChatText(chatMentionRow.content) ?? "").slice(0, CHAT_MESSAGE_SNIPPET_LENGTH),
-		})
+		chatMentions.push(toChatMention(chatMentionRow, userId))
 		chatMentionsByTopicId.set(chatMentionRow.topicId, chatMentions)
 	}
 	return chatMentionsByTopicId
@@ -156,42 +166,16 @@ export async function loadTeamChatMentions(
 		return new Map()
 	}
 
-	// every unseen row in these teams' own chat rooms, with the replied-to author resolved like the topic read
-	const repliedChatMessages = db
-		.select({ id: chatRoomMessages.id, authorUserId: chatRoomMessages.authorUserId })
-		.from(chatRoomMessages)
-		.as("replied_to")
-	const chatMentionRows = await db
-		.select({
-			teamId: chatRoomMessages.teamId,
-			authorUsername: chatRoomMessages.authorUsername,
-			content: chatRoomMessages.content,
-			repliedToUserId: repliedChatMessages.authorUserId,
-		})
-		.from(chatRoomMentions)
-		.innerJoin(chatRoomMessages, eq(chatRoomMentions.messageId, chatRoomMessages.id))
-		.leftJoin(repliedChatMessages, eq(chatRoomMessages.replyToMessageId, repliedChatMessages.id))
-		.where(
-			and(
-				eq(chatRoomMentions.userId, userId),
-				isNull(chatRoomMentions.seenAt),
-				isNull(chatRoomMessages.topicId),
-				inArray(chatRoomMessages.teamId, teamIds),
-			),
-		)
-		.orderBy(desc(chatRoomMessages.id))
-
-	// return a map of unseen chat mentions mapped to a team id for this user
+	// group the unseen rows in these teams' own chat rooms under each team
+	const chatMentionRows = await loadUnseenChatMentions(
+		userId,
+		and(isNull(chatRoomMessages.topicId), inArray(chatRoomMessages.teamId, teamIds)),
+	)
 	const chatMentionsByTeamId = new Map<string, ChatMention[]>()
-	for (const row of chatMentionRows) {
-		const mentions = chatMentionsByTeamId.get(row.teamId) ?? []
-		mentions.push({
-			teamId: row.teamId,
-			authorUsername: row.authorUsername,
-			isReply: row.repliedToUserId === userId,
-			excerpt: (decryptChatText(row.content) ?? "").slice(0, CHAT_MESSAGE_SNIPPET_LENGTH),
-		})
-		chatMentionsByTeamId.set(row.teamId, mentions)
+	for (const chatMentionRow of chatMentionRows) {
+		const chatMentions = chatMentionsByTeamId.get(chatMentionRow.teamId) ?? []
+		chatMentions.push(toChatMention(chatMentionRow, userId))
+		chatMentionsByTeamId.set(chatMentionRow.teamId, chatMentions)
 	}
 	return chatMentionsByTeamId
 }

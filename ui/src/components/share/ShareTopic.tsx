@@ -56,7 +56,7 @@ export function ShareTopic({
 	onMakeTopicPublic,
 }: {
 	// the topic being shared. only a public topic can be posted, and only its owner can make it public
-	topic: { id: string; name: string; visibility: string; isOwner?: boolean }
+	topic: { id: string; name: string; visibility: string; isTopicOwner?: boolean }
 	className?: string
 	// the homepage topic card shows the share icon alone instead of the labeled button
 	isIcon?: boolean
@@ -66,10 +66,10 @@ export function ShareTopic({
 	// the callback that the owner gets to save the topic as public
 	onMakeTopicPublic?: () => void
 }) {
-	const { id: topicId, name: topicName, isOwner: isTopicOwner } = topic
+	const { id: topicId, name: topicName, isTopicOwner } = topic
 	const isPublic = topic.visibility === "public"
 	// only the owner of a non-private topic can offer an invite link
-	const canInvite = isTopicOwner && topic.visibility !== "private"
+	const canInviteTopic = isTopicOwner && topic.visibility !== "private"
 	// controlled so the report issue option can close the menu
 	const [isOpen, setIsOpen] = useState(false)
 	const [isReportingIssue, setIsReportingIssue] = useState(false)
@@ -100,9 +100,11 @@ export function ShareTopic({
 				}
 			: undefined
 
+	// the send options are enabled for any non-private topic
+	const canShareTopic = topic.visibility !== "private"
+
 	// the props every platform option requires
 	const shareTargetProps = {
-		isPublic,
 		encodedUrl,
 		encodedTitle,
 		reason: disabledReason,
@@ -112,11 +114,11 @@ export function ShareTopic({
 	// one set of options, whether they open from the feed card's popover or the topic page's dialog
 	const shareOptions = (
 		<>
-			<ShareTargetOptions shareTargets={POST_PLATFORM_TARGETS} {...shareTargetProps} />
+			<ShareTargetOptions shareTargets={POST_PLATFORM_TARGETS} isEnabled={isPublic} {...shareTargetProps} />
 			{/* a divider above the options that share the topic to one person instead of posting it */}
 			<div className="bg-border my-1 h-px" />
 			{/* the only option providing an invite link that subscribes to the topic instead of the topic's url */}
-			{canInvite && (
+			{canInviteTopic && (
 				<InviteShareOption
 					isCopied={copiedLabel === INVITE_LABEL}
 					label={isShareSheetAvailable ? INVITE_SHARE_LABEL : INVITE_LABEL}
@@ -125,7 +127,7 @@ export function ShareTopic({
 			)}
 			{/* the device's share sheet is above the send options if one can open */}
 			{isShareSheetAvailable &&
-				(isPublic ? (
+				(canShareTopic ? (
 					<button type="button" onClick={() => void shareTopic()} className={SHARE_OPTION_CLASS}>
 						<Share className={SHARE_OPTION_ICON_CLASS} />
 						Share…
@@ -138,7 +140,7 @@ export function ShareTopic({
 						onClick={handleDisabledOptionClick}
 					/>
 				))}
-			<ShareTargetOptions shareTargets={SEND_TARGETS} {...shareTargetProps} />
+			<ShareTargetOptions shareTargets={SEND_TARGETS} isEnabled={canShareTopic} {...shareTargetProps} />
 			{/* the copy link option sits under a divider */}
 			<div className="bg-border my-1 h-px" />
 			<CopyLinkOption
@@ -240,7 +242,7 @@ export function ShareTopicButton({
 	onClose,
 	onMakeTopicPublic,
 }: {
-	topic: { id: string; name: string; visibility: string; isOwner: boolean }
+	topic: { id: string; name: string; visibility: string; isTopicOwner: boolean }
 	className?: string
 	isCompact?: boolean
 	// the topic page opens the options as a dialog from its actions menu

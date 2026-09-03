@@ -108,11 +108,11 @@ export function TopicRankDialog({
 		<Dialog open onOpenChange={onClose}>
 			<DialogContent className="sm:max-w-md">
 				<DialogTitle>Featured topics</DialogTitle>
-				{/* the rows bleed by the icons' own inset so the grip and the X line up with the title and its close
-				    button. min-w-0 lets a long name truncate, which a grid item otherwise refuses to do */}
+				{/* the rows bleed by the icons' own inset so the drag button and the X line up with the title and its close button.
+				    min-w-0 lets a long name truncate, which a grid item otherwise will not do */}
 				<div className="-mx-2.5 min-w-0">
 					{rankedTopics.map((rankedTopic, index) => (
-						// biome-ignore lint/a11y/noStaticElementInteractions: the grip button is the keyboard path
+						// biome-ignore lint/a11y/noStaticElementInteractions: the drag button is the keyboard path
 						<div
 							key={rankedTopic.topicId}
 							draggable
@@ -127,7 +127,7 @@ export function TopicRankDialog({
 								draggedTopicIndex === index && "bg-accent opacity-70",
 							)}
 						>
-							{/* the grip drags with a pointer and steps with the arrow keys */}
+							{/* the drag button drags with a pointer and steps with the arrow keys */}
 							<button
 								type="button"
 								aria-label={`Move ${rankedTopic.label}`}

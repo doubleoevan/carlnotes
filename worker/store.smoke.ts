@@ -11,13 +11,13 @@ async function smokeTest(): Promise<number> {
 	// upload, read back, and verify, then always delete the object
 	try {
 		const { contentKey, bytes } = await uploadResourceContent(resourceId, markdown)
-		const readBack = await getResourceContent(contentKey)
+		const uploadedMarkdown = await getResourceContent(contentKey)
 
 		// the key, size, and content all round-trip through object storage
 		const results: [string, boolean][] = [
 			["key matches resourceContentKey", contentKey === toResourceContentKey(resourceId)],
 			["bytes match the encoded length", bytes === new TextEncoder().encode(markdown).byteLength],
-			["read-back content matches", readBack === markdown],
+			["read-back content matches", uploadedMarkdown === markdown],
 		]
 
 		// print the smoke test report and return the overall result
@@ -34,9 +34,9 @@ async function smokeTest(): Promise<number> {
 	}
 }
 
-// run the smoke, then exit because the process would otherwise stay alive
+// run the smoke, then report the outcome as the exit code
 const exitCode = await smokeTest().catch((error) => {
 	console.error(error)
 	return 1
 })
-process.exit(exitCode)
+process.exitCode = exitCode

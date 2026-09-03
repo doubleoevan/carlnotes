@@ -121,6 +121,14 @@ export function toCountLabel(count: number, noun: string): string {
 	return `${count} ${noun}${count === 1 ? "" : "s"}`
 }
 
+/**
+ * The file size a base64 data url limit allows, for the toast that names it.
+ */
+export function toDataUrlSizeLabel(maxChars: number): string {
+	// base64 writes every 3 bytes as 4 characters, so the file a limit allows is three quarters of it
+	return toBytesLabel(Math.floor((maxChars * 3) / 4))
+}
+
 // human-readable bytes for the attributed-storage column and the admin page's storage total
 export function toBytesLabel(bytes: number): string {
 	if (bytes < 1024) {

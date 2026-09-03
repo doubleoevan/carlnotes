@@ -106,7 +106,7 @@ function toRssItem(item: FeedItem): string {
 	return `<item>\n${tags.join("\n")}\n</item>\n`
 }
 
-// xml 1.0 refuses most control characters even escaped, so they are dropped before escaping
+// xml 1.0 rejects most control characters even escaped, so they are dropped before escaping
 function toXmlText(text: string): string {
 	const kept = [...text].filter((character) => {
 		const code = character.charCodeAt(0)

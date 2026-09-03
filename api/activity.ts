@@ -198,12 +198,11 @@ async function loadInvitedTopicSubscriptions(user: {
 			and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, user.id), eq(teamMembers.isActive, true)),
 		)
 		.where(
-			// pending means unanswered: no spent use, no decline, no revocation, no passed expiry
+			// pending means unanswered: no spent use, no decline, no passed expiry
 			and(
 				or(eq(invites.invitedUserId, user.id), eq(invites.email, user.email)),
 				eq(invites.usedCount, 0),
 				isNull(invites.declinedAt),
-				isNull(invites.revokedAt),
 				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
 				notInArray(topics.id, subscribedTopicIdQuery),
 			),

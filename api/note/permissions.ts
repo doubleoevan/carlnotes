@@ -5,7 +5,7 @@ import { db } from "../../db"
 import { notes, teams, topics } from "../../db/schema"
 import { loadUserAccess, memberTopicIds } from "../authorization"
 import { toTeamRole } from "../team/members"
-import { canSeeTopic } from "../topic/permissions"
+import { assertNever, canSeeTopic } from "../topic/permissions"
 
 // a note row, and the two row shapes a page can be
 type NoteRow = typeof notes.$inferSelect
@@ -200,9 +200,4 @@ export async function loadTeamPage(teamId: string): Promise<NotePage | null> {
 		.from(teams)
 		.where(eq(teams.id, teamId))
 	return team ? { kind: "team", team } : null
-}
-
-// a compile-time error check for a visibility case that doesn't have a handler
-function assertNever(value: never): never {
-	throw new Error(`unhandled visibility: ${value}`)
 }

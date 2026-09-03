@@ -80,8 +80,8 @@ export function TopicHeader({ topic }: { topic: TopicResponse }) {
 /**
  * Whether the Follow button renders: an owner has nothing to follow, and a private topic has no followers.
  */
-export function isFollowShown(topic: Pick<TopicResponse, "isOwner" | "visibility">): boolean {
-	return !topic.isOwner && topic.visibility !== "private"
+export function isFollowShown(topic: Pick<TopicResponse, "isTopicOwner" | "visibility">): boolean {
+	return !topic.isTopicOwner && topic.visibility !== "private"
 }
 
 // the Follow button, subscribe in every identifier

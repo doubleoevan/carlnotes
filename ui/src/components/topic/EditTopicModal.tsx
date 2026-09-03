@@ -213,7 +213,7 @@ export function EditTopicModal({
 							onEmailInvitesChange={fields.setEmailInvites}
 							usernameInvites={fields.usernameInvites}
 							onUsernameInvitesChange={fields.setUsernameInvites}
-							topic={topic ? { id: topic.id, name: fields.name, invites: topic.invites } : undefined}
+							topic={topic ? { id: topic.id, name: fields.name } : undefined}
 						/>
 					</div>
 				)}

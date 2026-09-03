@@ -1,6 +1,6 @@
 // the shared helper for feeds that don't require an API key
 import Parser from "rss-parser"
-import { fetchPublicUrl, readLimitedBody } from "../scrape"
+import { fetchPublicUrl, readLimitedBody } from "../publicFetch"
 import type { NewResource } from "./ingester"
 
 // how long a feed fetch may run before it aborts. an oversized body is rejected by the shared read limit

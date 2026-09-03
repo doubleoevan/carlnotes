@@ -109,13 +109,14 @@ export async function reviewScan(
 		keptCount: reviewOutcome.keptFindings.length,
 		filteredCount: countFilteredResources(reviewOutcome),
 		scanSummary,
+		admittedResourceIds: admittedResources.map((resource) => resource.id),
 		scoredResourceIds,
 	}
 }
 
 // keep only the topic's top max_results findings by relevance score, except bookmarked ones
 async function filterTopicFindings(topicId: string): Promise<Set<string>> {
-	// the topic's limit on kept findings, and what the access check below needs
+	// the topic's limit on kept findings, and what the access check needs
 	const [topic] = await db
 		.select({ maxResults: topics.maxResults, ownerId: topics.ownerId, teamId: topics.teamId })
 		.from(topics)

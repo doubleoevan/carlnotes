@@ -8,7 +8,7 @@ A `text/*` file SHALL be decoded by its declared or sniffed character set, not a
 
 An uploaded `text/html` file SHALL be converted to Markdown before extraction. HTML passes the `text/` wildcard and decodes to tag soup, so an uploaded page would otherwise be summarized worse than the same page added as a URL.
 
-The gate `isSupportedAttachmentType`, the extractor `extractText`, and the picker's `FILE_PICKER_ACCEPT` SHALL admit the same set of types. Widening the gate alone stores bytes and starts a workflow for a file that then fails; adding an extractor alone rejects a readable file at upload; widening the picker alone offers a file the boundary refuses.
+The gate `isSupportedAttachmentType`, the extractor `extractText`, and the picker's `FILE_PICKER_ACCEPT` SHALL admit the same set of types. Widening the gate alone stores bytes and starts a workflow for a file that then fails; adding an extractor alone rejects a readable file at upload; widening the picker alone offers a file the boundary rejects.
 
 #### Scenario: Text and markdown are decoded
 
@@ -28,7 +28,7 @@ The gate `isSupportedAttachmentType`, the extractor `extractText`, and the picke
 #### Scenario: An XLSX is read as rows
 
 - **WHEN** an `.xlsx` file is ingested
-- **THEN** its sheets are read as rows and passed to the tabular projection
+- **THEN** its sheets are read as rows and passed to the table text
 
 #### Scenario: A Windows-1252 CSV decodes without replacement characters
 
@@ -49,7 +49,7 @@ The gate `isSupportedAttachmentType`, the extractor `extractText`, and the picke
 
 Ingesting an attachment SHALL, before storing it or running the model, reject a file larger than a bounded maximum size and reject an upload whose Topic does not exist, so a hostile, oversized, or misaddressed upload cannot consume storage or inference cost.
 
-The boundary SHALL NOT trust the browser's reported content type alone. When the reported type is empty or is not one the gate knows, the type SHALL be resolved from the filename extension. A browser reports CSV as `application/vnd.ms-excel` on Windows with Excel installed, and reports the long OOXML types as `application/octet-stream` or the empty string, so a picker-offered file would otherwise be refused as unsupported.
+The boundary SHALL NOT trust the browser's reported content type alone. When the reported type is empty or is not one the gate knows, the type SHALL be resolved from the filename extension. A browser reports CSV as `application/vnd.ms-excel` on Windows with Excel installed, and reports the long OOXML types as `application/octet-stream` or the empty string, so a picker-offered file would otherwise be rejected as unsupported.
 
 The boundary SHALL resolve one canonical content type and use it for storage, for extraction, and for the stored file's headers, so the three never disagree about one file.
 
@@ -79,7 +79,7 @@ The processing workflow SHALL extract the stored file's full text, split it into
 
 Extraction is limited to `MAX_PROCESS_CHARS`, and a document longer than that is cut there. That cut SHALL be marked in the extracted text, naming the full length, so a truncated document is summarized as a prefix instead of as the whole. `char_count` SHALL record the full extracted length, not the length after the cut.
 
-This requirement SHALL NOT apply to a tabular attachment, which is projected instead of summarized.
+This requirement SHALL NOT apply to a table file, which is written as table text instead of summarized.
 
 #### Scenario: A long document is chunked, summarized in parallel, and merged
 
@@ -121,7 +121,7 @@ An empty extraction currently produces no chunks, an empty merged summary, and a
 
 ### Requirement: The chat picker offers only what the chat path accepts
 
-The chat composers' accept list SHALL NOT be derived from the Topic picker's list. Each SHALL state the types its own path accepts, so widening one never makes the other offer a file it refuses.
+The chat composers' accept list SHALL NOT be derived from the Topic picker's list. Each SHALL state the types its own path accepts, so widening one never makes the other offer a file it rejects.
 
 Every type the chat picker offers SHALL be a type the chat attachment path accepts.
 
@@ -130,7 +130,7 @@ Every type the chat picker offers SHALL be a type the chat attachment path accep
 - **WHEN** the Topic picker's accept list gains a type the chat path does not accept
 - **THEN** the chat composers do not offer that type
 
-#### Scenario: The chat picker offers nothing it will refuse
+#### Scenario: The chat picker offers nothing it will reject
 
 - **WHEN** each type in the chat picker's accept list is posted to the chat attachment path
 - **THEN** each is accepted

@@ -10,7 +10,7 @@ const ATTACHMENT_WORKFLOW = "processAttachment"
 export const SCAN_TASK_QUEUE = "topic-scans"
 const SCAN_WORKFLOW = "runTopicScanWorkflow"
 
-// screening a Source gets its own queue because a Worker binds one workflow bundle to one queue
+// an llm-guard screen of a Source gets its own queue because a Worker binds one workflow bundle to one queue
 export const SOURCE_TASK_QUEUE = "source-screening"
 const SOURCE_WORKFLOW = "screenSourceWorkflow"
 
@@ -40,7 +40,7 @@ export async function startAttachmentWorkflow(attachmentId: string): Promise<voi
 
 /**
  * Start the llm-guard screening workflow for a url Source that was just saved.
- * A Source already being screened is rejected by its workflow id, which makes a restart safe to repeat.
+ * A Source already in an llm-guard screen is rejected by its workflow id, which makes a restart safe to repeat.
  */
 export async function startSourceScreenWorkflow(sourceId: string): Promise<void> {
 	const client = await getClient()
@@ -51,7 +51,7 @@ export async function startSourceScreenWorkflow(sourceId: string): Promise<void>
 			args: [sourceId],
 		})
 	} catch (error) {
-		// a Source whose screen is already running needs no second one, and anything else is a real failure
+		// a Source whose llm-guard screen is already running needs no second one, and anything else is a real failure
 		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
 			throw error
 		}

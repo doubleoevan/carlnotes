@@ -112,7 +112,7 @@ async function fetchWithBackoff(url: string): Promise<Response> {
 		return response
 	}
 
-	// wait for the interval the response itself named, then try only one more time
+	// wait for the interval the response itself named, then make only one more attempt
 	await Bun.sleep(toBackoffMs(response.headers))
 	return fetchXrpc(url)
 }

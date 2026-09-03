@@ -64,7 +64,7 @@ export function TopicPage() {
 	// the owning team a user on none of the topic's teams could join
 	const joinTeam = topic?.roomTeams.length === 0 ? topic.teamLink : null
 	const actionContext = {
-		topic: topic,
+		topic,
 		isSignedIn: Boolean(session),
 		isBookmarkedView: findingFilter === "bookmarked",
 		isJoinable: Boolean(joinTeam),
@@ -98,7 +98,7 @@ export function TopicPage() {
 					page: "Topic",
 					hasTeamBookmarks: topic.isTeamMember,
 					options: toTopicActionOptions({
-						topic: topic,
+						topic,
 						isAdmin: session?.user.role === "admin",
 						isFollowInMenu: isFollowInMenu(actionContext),
 						onShare: () => setOpenDialog("share"),
@@ -265,7 +265,7 @@ function TopicFindings({ topic, topicHandlers }: { topic: TopicResponse; topicHa
 				topicFindings={topicFindings}
 				hasAnyFindings={topic.findings.length > 0}
 				isRatable={topic.canRate}
-				isBookmarkable={topic.isOwner || topic.isTeamMember}
+				isBookmarkable={topic.isTopicOwner || topic.isTeamMember}
 				handlers={topicHandlers}
 				topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
 				newCountInfo={topic.newCount > 0 ? <NewCountInfo topic={topic} /> : undefined}

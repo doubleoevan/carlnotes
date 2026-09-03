@@ -13,6 +13,8 @@ type PlanConfig = {
 	topicLimit: number
 	// how many members one of their led teams may hold, null for unlimited. the best plan among a team's leaders wins
 	teamMemberLimit: number | null
+	// how many people one of their invite links lets in before it is exhausted
+	linkInviteMaxUses: number
 	// the daily invite-limit base, scaled by account age and reputation before it applies
 	inviteLimit: number
 	// how many of those topics may run on a daily frequency, which is what actually decides the monthly spend
@@ -43,8 +45,9 @@ export const PLANS = {
 	free: {
 		rank: 0,
 		topicLimit: 3,
-		teamMemberLimit: 10,
-		inviteLimit: 10,
+		teamMemberLimit: 15,
+		linkInviteMaxUses: 25,
+		inviteLimit: 30,
 		dailyTopicLimit: { monthly: 1, yearly: 1 },
 		dailyScanLimit: { monthly: 5, yearly: 5 },
 		monthlyBudgetCents: 300,
@@ -56,6 +59,7 @@ export const PLANS = {
 		rank: 1,
 		topicLimit: 10,
 		teamMemberLimit: null,
+		linkInviteMaxUses: 100,
 		inviteLimit: 30,
 		dailyTopicLimit: { monthly: 3, yearly: 4 },
 		dailyScanLimit: { monthly: 15, yearly: 20 },
@@ -68,6 +72,7 @@ export const PLANS = {
 		rank: 2,
 		topicLimit: 25,
 		teamMemberLimit: null,
+		linkInviteMaxUses: 250,
 		inviteLimit: 50,
 		dailyTopicLimit: { monthly: 6, yearly: 7 },
 		dailyScanLimit: { monthly: 30, yearly: 40 },

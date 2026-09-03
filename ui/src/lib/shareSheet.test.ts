@@ -48,13 +48,13 @@ test("openShareSheet reports a completed share, with the payload it was given", 
 })
 
 // dismissing the sheet is a decision, so it must not read as a failure and must not copy anything
-test("openShareSheet reports a dismissal apart from a refusal", async () => {
+test("openShareSheet reports a dismissal apart from a rejection", async () => {
 	const abort = Object.assign(new Error("cancelled"), { name: "AbortError" })
 	withBrowser({ share: () => Promise.reject(abort) })
 	expect(await openShareSheet(SHARE)).toBe("dismissed")
 })
 
-// a browser refusing the gesture takes the same exit as a missing api, which is what the copy fallback covers
+// a browser rejecting the gesture takes the same exit as a missing api, which is what the copy fallback covers
 test("openShareSheet reports a rejected gesture as unavailable", async () => {
 	const rejected = Object.assign(new Error("gesture"), { name: "NotAllowedError" })
 	withBrowser({ share: () => Promise.reject(rejected) })

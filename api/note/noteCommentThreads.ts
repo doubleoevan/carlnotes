@@ -136,7 +136,7 @@ async function mirrorNoteThread(
 		)
 }
 
-// the store throws "Not authorized" for a write the per-comment rules refuse, which maps to a 403
+// the store throws "Not authorized" for a write the per-comment rules rejection, which maps to a 403
 function toThreadErrorResponse(context: Context, error: unknown): Response {
 	const message = error instanceof Error ? error.message : "comment write failed"
 	return context.json({ error: message }, message === "Not authorized" ? 403 : 400)

@@ -28,7 +28,7 @@ describe("a Budget crossing between stages", () => {
 	})
 
 	test("a stage starting from a spent-out Budget respects the limit already reached", () => {
-		// the first stage spends the whole limit, so the second stage must refuse to pay for anything more
+		// the first stage spends the whole limit, so the second stage must not pay for anything more
 		const spentOutBudget = newBudget()
 		charge(spentOutBudget, "fetch", spentOutBudget.limitDollars)
 

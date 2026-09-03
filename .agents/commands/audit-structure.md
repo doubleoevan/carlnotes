@@ -138,7 +138,7 @@ Check for:
    - `viewer` for the person on the page (now `user` when signed in, `visitor` when not; the
      domain-model skill owns the split). `viewerRole`/`viewerUserId`/`isViewerLeader`/`viewerId`/
      `isViewerMember`/`viewerTeams`/`viewerRequest`/`loadViewerRooms` are now `role`/`userId`/
-     `isLeader`/`userId`/`isMember`/`userTeams`/`joinRequest`/`loadChatRooms`, and `loadProfile`'s
+     `isTeamLeader`/`userId`/`isMember`/`userTeams`/`joinRequest`/`loadChatRooms`, and `loadProfile`'s
      subject took the `profileUserId` name so `userId` could mean the signed-in caller
    - a bare `the client` for the code calling our own api (now `the api client`, matching the
      `ui/src/clients/*Client.ts` modules and the `apiClient` each one builds). a third-party client
@@ -168,6 +168,32 @@ Check for:
      `postChatRoomMessage`), `useChatRoom.refresh` (now `reloadChatMessages`),
      `TopicFeedProvider.reload` (now `reloadTopicFeed`), and `loadUserAccess`'s local `access`
      (now `userAccess`). `useTopicChat.send` asks a question and keeps its name
+   - `assertPublicHost` (folded into `resolvePublicAddress` in `worker/publicFetch.ts` when the fetch
+     path went fail-closed; the check-only wrapper had no callers left)
+   - `LINK_INVITE_MAX_USES` (now the per-plan `linkInviteMaxUses` in `shared/plans.ts`)
+   - `inviteAcceptPayload`/`InviteAcceptPayload` (removed: accepting an invite takes a session and
+     no body, since the bot check moved out of the acceptance route)
+   - `SignOutDialog.tsx` (removed: sign-out is one click through `session/signOut.ts`), and with it
+     the `primitives/alert-dialog.tsx` shadcn primitive and its `@radix-ui/react-alert-dialog`
+     dependency; `primitives/card.tsx` is the same removed-unused case
+   - the `integrations` table and `sources.integration_id` (dropped unused by migration 0081; the
+     domain-model skill keeps Integration as a planned concept with no table)
+   - `worker/scrape.ts` as the home of the public-fetch guard (`toFetchableUrl`, `isInternalAddress`,
+     `fetchPublicUrl`, `readLimitedBody` are now `worker/publicFetch.ts`; scrape keeps the content
+     and caption work)
+   - `useChatRoomStream.ts`'s own `toReconnectDelayMs` with its `RECONNECT_*` constants and
+     `useChatRoomStream.test.ts` (merged into the `noteProvider.ts` copy and its tests)
+   - `reviewTopicInvites` and `InviteeReview` (now `checkTopicInvitees` and `InviteeCheck`; review is the
+     scan pipeline's own stage name, so the invite path says check instead)
+   - `tabular` in every form (now `table`): `isTabularAttachmentType`, `toTabularProjection`,
+     `TABULAR_SCREEN_TIMEOUT_MS`, the `LLM_GUARD_TABULAR_TIMEOUT_MS` env var, and the
+     `add-tabular-attachments` change with its `tabular-attachments` capability
+   - every `refus*` spelling (now `reject*` throughout, extending the earlier `refused` rename to the
+     whole word family): `InviteRefusal`, `toInviteRefusal`, `UserInviteRefusal`, `isInviteRefused`,
+     `refusalReason`, `MODEL_CHAT_TURN_FAILED_REFUSAL`, `SPENT_BUDGET_REFUSAL`, `postModelRefusal`,
+     `toChatRefusal`, `toTokenRefusal`, the `"attachmentRefused"` and `"inviteeRefused"` statuses, and
+     `ui/src/pages/inviteRefusals.ts` (now `inviteRejections.ts`). the "refuses to <verb>" idiom is gone
+     too: it reads "will not <verb>" now, since "rejects to" is not english
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -27,7 +27,10 @@ const ChatRoomMessages = lazy(() =>
 )
 
 // the team's active members for the @ autocomplete, plus whether the user leads it
-function useRoomMembers(teamId: string, userId: string | undefined): { memberUsernames: string[]; isLeader: boolean } {
+function useRoomMembers(
+	teamId: string,
+	userId: string | undefined,
+): { memberUsernames: string[]; isTeamLeader: boolean } {
 	const [members, setMembers] = useState<{ userId: string; username: string }[]>([])
 	const [isTeamLeader, setIsTeamLeader] = useState(false)
 	useEffect(() => {
@@ -51,7 +54,7 @@ function useRoomMembers(teamId: string, userId: string | undefined): { memberUse
 		.filter((member) => member.userId !== userId)
 		.map((member) => member.username)
 		.sort()
-	return { memberUsernames, isLeader: isTeamLeader }
+	return { memberUsernames, isTeamLeader: isTeamLeader }
 }
 
 /**
@@ -86,7 +89,7 @@ export function ChatRoomPanel({
 	const [isClearChatOpen, setIsClearChatOpen] = useState(false)
 	const { data: session } = authClient.useSession()
 	const chatRoom = useChatRoom(topicId, teamId)
-	const { memberUsernames, isLeader } = useRoomMembers(teamId, session?.user.id)
+	const { memberUsernames, isTeamLeader } = useRoomMembers(teamId, session?.user.id)
 
 	// an admin moderates every chat room, the same way the header decides its admin console link
 	const isAdmin = session?.user.role === "admin"
@@ -100,7 +103,7 @@ export function ChatRoomPanel({
 	}, [topicId, teamId, onOpenChatRoom])
 
 	// a user who does not have access to the chat room gets a call to action button instead
-	if (chatRoom.isRefused && !joinButton) {
+	if (chatRoom.isRejected && !joinButton) {
 		return null
 	}
 
@@ -115,7 +118,7 @@ export function ChatRoomPanel({
 	}
 
 	// a chat room the user does not have access to gets a call to action button instead
-	if (chatRoom.isRefused) {
+	if (chatRoom.isRejected) {
 		return (
 			<ChatCallToActionPanel
 				isEnlarged={isPanelEnlarged}
@@ -130,7 +133,7 @@ export function ChatRoomPanel({
 	}
 
 	// the clear chat option belongs to a team leader or an admin. an empty chat room has nothing to clear
-	const isClearable = (isLeader || isAdmin) && chatRoom.chatMessages.length > 0
+	const isClearable = (isTeamLeader || isAdmin) && chatRoom.chatMessages.length > 0
 	return renderOnTop(
 		<ChatPanelWidget isEnlarged={isPanelEnlarged} onMinimizeChat={() => onPanelState("collapsed")}>
 			<ChatPanelHeader
@@ -152,7 +155,7 @@ export function ChatRoomPanel({
 						isEnlarged={isPanelEnlarged}
 						chatRoom={chatRoom}
 						userId={session?.user.id ?? ""}
-						isLeader={isLeader}
+						isTeamLeader={isTeamLeader}
 						isAdmin={isAdmin}
 						chatName={contextName}
 						topicId={topicId}
@@ -164,14 +167,14 @@ export function ChatRoomPanel({
 				<ChatMessagesLoading />
 			)}
 
-			{/* a budget refusal is private to the poster, shown here instead of posted to the chat room */}
-			{chatRoom.refusalReason && (
+			{/* a budget rejection is private to the poster, shown here instead of posted to the chat room */}
+			{chatRoom.rejectionReason && (
 				<div className="text-muted-foreground flex shrink-0 items-start justify-between gap-2 border-t px-3 py-2 text-xs">
 					<ChatBudgetNotice />
 					<button
 						type="button"
 						aria-label="Dismiss"
-						onClick={chatRoom.clearRefusalReason}
+						onClick={chatRoom.clearRejectionReason}
 						className="hover:text-foreground shrink-0"
 					>
 						<X className="size-3.5" />
@@ -182,10 +185,13 @@ export function ChatRoomPanel({
 				<ChatRoomComposer
 					memberUsernames={memberUsernames}
 					reply={reply}
-					onPostChatMessage={(content, replyToChatMessageId, attachments) => {
-						// the send includes the reply chat message that the composer resolved and the pending attachment files
-						void chatRoom.postChatMessage(content, replyToChatMessageId, attachments)
-						reply.clear()
+					onPostChatMessage={async (content, replyToChatMessageId, attachments) => {
+						// the reply target clears only with the draft, so a failed post keeps both
+						const isPosted = await chatRoom.postChatMessage(content, replyToChatMessageId, attachments)
+						if (isPosted) {
+							reply.clear()
+						}
+						return isPosted
 					}}
 				/>
 			) : (

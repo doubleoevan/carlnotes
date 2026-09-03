@@ -149,7 +149,7 @@ describe("routes added by later changes", () => {
 
 describe("reserved usernames", () => {
 	// the two names the app speaks with: @carl is Carl himself and @all addresses a whole chat room
-	it("refuses carl and all in every spelling", () => {
+	it("rejects carl and all in every spelling", () => {
 		for (const spelling of ["carl", "CARL", "c-a-r-l", "C_a_R_l", "all", "A_L_L", "a-l-l"]) {
 			expect(toUsernameRejection(spelling)).toBe("reserved")
 		}

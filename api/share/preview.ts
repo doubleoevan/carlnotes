@@ -5,7 +5,6 @@ import { findings, sources, teamMembers, teams, topics, users } from "../../db/s
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "../../worker"
 import { toPublishedAvatar } from "../avatars"
 import { countDistinctSubscribers } from "../profiles"
-import { isShown } from "../topic/permissions"
 import { type ProfilePreview, toProfilePreviewKey, toProfilePreviewPng } from "./profileImage"
 import { type TeamPreview, toTeamPreviewKey, toTeamPreviewPng } from "./teamImage"
 import { type TopicPreview, toTopicPreviewKey, toTopicPreviewPng } from "./topicImage"
@@ -156,7 +155,7 @@ export async function toProfilePreview(userId: string): Promise<ProfilePreview |
 	const [topicRow] = await db
 		.select({ publicTopics: count() })
 		.from(topics)
-		.where(and(eq(topics.ownerId, userId), eq(topics.visibility, "public"), isShown))
+		.where(and(eq(topics.ownerId, userId), eq(topics.visibility, "public")))
 	return {
 		userId: user.id,
 		username: user.username,
@@ -176,7 +175,7 @@ export async function toTeamPreview(teamId: string): Promise<TeamPreview | null>
 		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey })
 		.from(teams)
 		.where(and(eq(teams.id, teamId), eq(teams.isPublic, true)))
-	return team ? toTeamPreviewCounts(team) : null
+	return team ? toTeamPreviewWithCounts(team) : null
 }
 
 /**
@@ -205,11 +204,11 @@ export async function toInvitedTeamPreview(teamId: string): Promise<TeamPreview 
 		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey })
 		.from(teams)
 		.where(eq(teams.id, teamId))
-	return team ? toTeamPreviewCounts(team) : null
+	return team ? toTeamPreviewWithCounts(team) : null
 }
 
 // the counts and avatar that on a team's card, read once the row is resolved
-async function toTeamPreviewCounts(team: {
+async function toTeamPreviewWithCounts(team: {
 	teamId: string
 	name: string
 	avatarKey: string | null
@@ -222,7 +221,7 @@ async function toTeamPreviewCounts(team: {
 	const [topicRow] = await db
 		.select({ topics: count() })
 		.from(topics)
-		.where(and(eq(topics.teamId, team.teamId), eq(topics.visibility, "public"), isShown))
+		.where(and(eq(topics.teamId, team.teamId), eq(topics.visibility, "public")))
 
 	// the avatar is named instead of loaded, so the card's key changes when the image does
 	return {
@@ -283,7 +282,7 @@ export function toInvitePreviewHtml(
 	const inviteDescription = `You are invited to ${inviteVerb.toLowerCase()} ${name}. Carl reads its sources and shares the notes.`
 	const tags = [
 		`<title>${inviteTitle}</title>`,
-		// a token is a credential, so the url holding one is never indexed
+		// a token is a credential, so the url that includes one is never indexed
 		`<meta name="robots" content="noindex, nofollow">`,
 		// og:url is the invitation, not the page. a platform that rewrites a shared link to og:url
 		// would otherwise swap the invitation for a link that lets nobody in

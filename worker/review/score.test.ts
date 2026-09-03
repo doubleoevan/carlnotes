@@ -19,7 +19,7 @@ test("isContentStale gates on the ttl window", () => {
 	expect(isContentStale(new Date("2026-07-23T12:00:00Z"), now, 86_400_000)).toBe(true)
 })
 
-// a tweet arrives with its whole text, so scoring it must never pay for a fetch that x.com would refuse anyway
+// a tweet arrives with its entire text, so scoring it must never pay for a fetch that x.com would reject anyway
 test("isSnippetComplete skips the fetch for a tweet and for nothing else", () => {
 	expect(isSnippetComplete("https://x.com/sama/status/123")).toBe(true)
 

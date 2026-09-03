@@ -7,18 +7,29 @@ import type { AppType } from "../../../api"
 const apiClient = hc<AppType>("")
 
 /**
- * Load the chat room's newest chat messages, up to the server's load limit. Any error status returns null,
- * meaning there is no chat room here.
+ * Loads the chat room's newest chat messages. Null means this user has no chat room here,
+ * and "failed" means a server or network error the caller should retry.
  */
-export async function fetchChatRoomMessages(topicId: string | null, teamId: string): Promise<ChatRoomMessage[] | null> {
-	const response = await fetch(toChatRoomPath(topicId, teamId))
-	if (!response.ok) {
-		return null
-	}
+export async function fetchChatRoomMessages(
+	topicId: string | null,
+	teamId: string,
+): Promise<ChatRoomMessage[] | null | "failed"> {
+	// a rejection status is an answer, and any other error is a failure to retry
+	try {
+		const response = await fetch(toChatRoomPath(topicId, teamId))
+		if (response.status === 401 || response.status === 403 || response.status === 404) {
+			return null
+		}
+		if (!response.ok) {
+			return "failed"
+		}
 
-	// the payload is the decrypted chat messages in id order
-	const { chatMessages } = (await response.json()) as { chatMessages: ChatRoomMessage[] }
-	return chatMessages
+		// the payload is the decrypted chat messages in id order
+		const { chatMessages } = (await response.json()) as { chatMessages: ChatRoomMessage[] }
+		return chatMessages
+	} catch {
+		return "failed"
+	}
 }
 
 /**
@@ -54,7 +65,7 @@ function toChatRoomPath(topicId: string | null, teamId: string): string {
 
 /**
  * Post a chat message. The chat message itself arrives back through the stream.
- * The response includes the budget refusal when there is one.
+ * The response includes the budget rejection when there is one.
  */
 export async function sendChatRoomMessage(
 	topicId: string | null,
@@ -62,7 +73,7 @@ export async function sendChatRoomMessage(
 	chatMessage: string,
 	replyToChatMessageId: number | null,
 	attachments: ChatAttachment[],
-): Promise<{ refusalReason: string | null } | "attachmentRefused" | null> {
+): Promise<{ rejectionReason: string | null } | "attachmentRejected" | "attachmentLimitReached" | null> {
 	const response =
 		topicId === null
 			? await apiClient.api.teams[":id"].room.$post({
@@ -73,16 +84,23 @@ export async function sendChatRoomMessage(
 					param: { id: topicId, teamId },
 					json: { content: chatMessage, replyToChatMessageId, attachments },
 				})
+	// only the two the route names are attachment problems. anything else the validator rejected is a plain failure
 	if (response.status === 400) {
-		return "attachmentRefused"
+		const body = (await response.json().catch(() => null)) as { error?: string } | null
+		if (body?.error === "attachment limit reached") {
+			return "attachmentLimitReached"
+		}
+		return body?.error === "attachment rejected" ? "attachmentRejected" : null
 	}
+
+	// every other rejected status reports the same way, since none of them names a reason to show
 	if (!response.ok) {
 		return null
 	}
 
-	// a refusal reason is private to the chat poster, not a chat room message post
-	const refusedResponse = (await response.json()) as { refusalReason: string | null }
-	return { refusalReason: refusedResponse.refusalReason }
+	// a rejection reason is private to the chat poster, not a chat room message post
+	const postedBody = (await response.json()) as { rejectionReason: string | null }
+	return { rejectionReason: postedBody.rejectionReason }
 }
 
 /**

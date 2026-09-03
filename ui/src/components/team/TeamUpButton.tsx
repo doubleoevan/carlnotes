@@ -44,8 +44,8 @@ export function NewTeamOption({ onCreate }: { onCreate: () => void }) {
 /**
  * Whether Team Up renders. It shows for signed-in users, and never on someone else's private topic.
  */
-export function isTeamUpShown(topic: Pick<TopicResponse, "isOwner" | "visibility">, isSignedIn: boolean): boolean {
-	return isSignedIn && !(topic.visibility === "private" && !topic.isOwner)
+export function isTeamUpShown(topic: Pick<TopicResponse, "isTopicOwner" | "visibility">, isSignedIn: boolean): boolean {
+	return isSignedIn && !(topic.visibility === "private" && !topic.isTopicOwner)
 }
 
 export function TeamUpButton({

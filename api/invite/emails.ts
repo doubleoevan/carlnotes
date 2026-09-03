@@ -14,7 +14,7 @@ import { createTopicEmailSend } from "../../worker/notify"
 import type { InviteTarget } from "./userInvites"
 
 /**
- * Start the invitation emails without holding up the topic save that added them.
+ * Start the invitation emails without delaying the topic save that added them.
  */
 export function startInviteEmails(topic: { id: string; name: string; ownerId: string }, inviteEmails: string[]): void {
 	sendTopicInviteEmails(topic, inviteEmails).catch((error) => {
@@ -74,7 +74,7 @@ async function sendTopicInviteEmails(
 	}
 }
 
-// email one user invitation without holding up the response that created it
+// email one user invitation without delaying the response that created it
 // the invite target could be a topic or a team
 export function startUserInviteEmail(
 	target: InviteTarget,

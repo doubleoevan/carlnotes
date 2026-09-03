@@ -23,6 +23,7 @@ import { List, ListChecks, ListOrdered, MessageSquareText } from "lucide-react"
 import { useMemo } from "react"
 import { authClient } from "@/clients/authClient"
 import { fetchNoteUsers, toNoteThreadsUrl } from "@/clients/noteClient"
+import type { NoteSaveErrorReason } from "@/components/note/noteProvider"
 import { useTheme } from "@/hooks/useTheme"
 import { CommentEditorWithMentions, MentionUsernamesProvider } from "./CommentMentions"
 import { type NoteSync, useNoteSync } from "./useNoteSync"
@@ -50,7 +51,7 @@ export default function NoteEditor({
 	mentionableUsernames: string[]
 	// whether the comment threads panel shows
 	isThreadsOpen: boolean
-	onSaveError: () => void
+	onSaveError: (reason: NoteSaveErrorReason) => void
 }) {
 	// the sync spans the editor's whole lifetime
 	const sync = useNoteSync(noteId, onSaveError)

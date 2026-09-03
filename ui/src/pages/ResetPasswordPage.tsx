@@ -116,7 +116,7 @@ function ResetRequestForm() {
 	)
 }
 
-// takes the new password from a valid link. a used or expired token is refused by the api, not here
+// takes the new password from a valid link. a used or expired token is rejected by the api, not here
 function NewPasswordForm({ token }: { token: string }) {
 	const [password, setPassword] = useState("")
 	const [isSubmitting, setSubmitting] = useState(false)

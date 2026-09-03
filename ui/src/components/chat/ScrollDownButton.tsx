@@ -22,7 +22,7 @@ export function useAtBottom() {
 }
 
 /**
- * The jump back down to the newest chat message button, floating over the end of a chat message list.
+ * The jump back down to the newest chat message button, shown over the end of a chat message list.
  * It only shows once the user has scrolled away from the bottom.
  */
 export function ScrollDownButton({

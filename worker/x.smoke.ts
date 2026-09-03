@@ -118,7 +118,7 @@ async function check(source: Source): Promise<boolean> {
 
 // whether the lookup confirms this handle, which is what decides a suggestion's fate
 async function isConfirmed(handle: string): Promise<boolean> {
-	// a refusal is printed instead of ignored, so a rate limit does not read as a missing account
+	// a rejection is printed instead of ignored, so a rate limit does not read as a missing account
 	try {
 		await readHandle(handle)
 		return true
@@ -151,6 +151,6 @@ try {
 	exitCode = 1
 }
 
-// flush telemetry before exit, then exit because the Neon pool would otherwise keep the process alive
+// flush telemetry, then report the outcome as the exit code
 await shutdownTelemetry()
-process.exit(exitCode)
+process.exitCode = exitCode

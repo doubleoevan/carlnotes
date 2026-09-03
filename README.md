@@ -136,6 +136,7 @@ bun run dev:email    # react-email preview server for the templates in emails/ (
 bun run dev:docs     # Starlight dev server on localhost:4321/docs, reachable on the LAN, with hot reload; also shows draft pages that the production build leaves out
                      # it runs in the background: `cd docs && astro dev stop` ends it, `astro dev logs` tails it
 bun run test:coverage # the test suite with bun's built-in line and function coverage table
+bun run smoke:coverage # run every smoke test script, one process each, writing per-file lcov to coverage/smoke; the Smoke workflow runs this on each push to main
 bun run docs:embed   # chunk the docs markdown by section and embed the changed sections into docs_chunks, which chat quotes; run it after editing docs
 bun run docs:embed:prd # the same sync against the production database, the owner-run escape hatch until the deploy job runs it
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
@@ -152,7 +153,7 @@ Database: generate a migration from the Drizzle schema, then apply it:
 ```bash
 bun run db:generate   # write a migration from db/schema.ts (offline, no doppler)
 bun run db:migrate    # apply pending migrations (db/migrate.ts, the same one-shot script the deploy job runs)
-bun run db:seed       # creates the dev demo user via a real signup, then loads idempotent stub data (refuses to run outside the dev config)
+bun run db:seed       # creates the dev demo user using a real signup, then loads idempotent stub data (rejects an attempt to run it outside of the dev config)
 bun run litellm:restart # reload litellm-config.yaml. the file is bind-mounted, so a restart picks up an edit with no rebuild
 ```
 
@@ -199,7 +200,7 @@ bun run smoke:profile      # just the profile smoke test: the header's distinct 
 bun run smoke:chat         # just the topic chat retrieval smoke test (question → ranked findings → assembled context)
 bun run smoke:eval         # just the eval-harness smoke test: one tiny labeled fixture through the real gate and scoring
 bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, and detach succession
-bun run smoke:room         # just the team-room smoke test: the access matrix, isolation, budget refusal, mention rows, and the room lock
+bun run smoke:room         # just the team chat-room smoke test: the access matrix, isolation, budget rejection, mention rows, and the room lock
 bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a viewer may open, one per holding team, and the unseen count
 bun run smoke:invites      # just the invite smoke test: link authority and races, resolution, who-may-invite, connections, and accept-equals-redeem
 ```

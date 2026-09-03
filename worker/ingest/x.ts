@@ -64,7 +64,7 @@ export async function readHandle(handle: string): Promise<void> {
 	const username = handle.trim().replace(/^@/, "")
 	const response = await requestProvider(`${USER_INFO_ENDPOINT}?userName=${encodeURIComponent(username)}`)
 
-	// a refused request is the provider saying "not now", which the caller keeps instead of dropping
+	// a rejected request is the provider saying "not now", which the caller keeps instead of dropping
 	if (!response.ok) {
 		throw new FeedStatusError(USER_INFO_ENDPOINT, response.status)
 	}

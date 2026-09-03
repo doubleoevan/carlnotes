@@ -63,17 +63,19 @@ const TEXT_TARGET = {
 }
 export const SEND_TARGETS = [TEXT_TARGET, EMAIL_TARGET]
 
-// a share menu option per platform, live on a public page and disabled with a call-to-action handler otherwise
+/**
+ * A share menu option per platform, live where the page url works and disabled with a call-to-action otherwise.
+ */
 export function ShareTargetOptions({
 	shareTargets,
-	isPublic,
+	isEnabled,
 	encodedUrl,
 	encodedTitle,
 	reason,
 	onDisabledOptionClick,
 }: {
 	shareTargets: { label: string; icon: React.ReactNode; toUrl: (url: string, title: string) => string }[]
-	isPublic: boolean
+	isEnabled: boolean
 	encodedUrl: string
 	encodedTitle: string
 	reason: string
@@ -82,7 +84,7 @@ export function ShareTargetOptions({
 	return (
 		<>
 			{shareTargets.map((shareTarget) =>
-				isPublic ? (
+				isEnabled ? (
 					<AnchorLink
 						key={shareTarget.label}
 						href={shareTarget.toUrl(encodedUrl, encodedTitle)}

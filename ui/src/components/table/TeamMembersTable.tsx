@@ -37,7 +37,7 @@ export function TeamMembersTable({
 	teamId,
 	members,
 	hiddenMemberCount,
-	isLeader,
+	isTeamLeader,
 	isReadOnly = false,
 	onChanged,
 }: {
@@ -45,7 +45,7 @@ export function TeamMembersTable({
 	members: TeamMember[]
 	// how many opted out of the public members list, so the totals never read smaller than the team is
 	hiddenMemberCount: number
-	isLeader: boolean
+	isTeamLeader: boolean
 	// a page that only reads the team, like the admin console, where no row acts as the viewer's own
 	isReadOnly?: boolean
 	onChanged: () => void
@@ -54,7 +54,7 @@ export function TeamMembersTable({
 	const currentUserId = isReadOnly ? null : (session?.user.id ?? null)
 
 	// the removal columns show for a leader, and for the user's own row
-	const hasRemovalColumns = isLeader || members.some((member) => member.userId === currentUserId)
+	const hasRemovalColumns = isTeamLeader || members.some((member) => member.userId === currentUserId)
 
 	// sort feeds pagination, so a sorted column reorders across every page
 	const { pageRows, sort, pagination } = usePaginatedRowSort(members, memberSortValues, { key: "member" })
@@ -87,7 +87,7 @@ export function TeamMembersTable({
 								key={member.userId}
 								member={member}
 								teamId={teamId}
-								isLeader={isLeader}
+								isTeamLeader={isTeamLeader}
 								hasRemovalColumns={hasRemovalColumns}
 								currentUserId={currentUserId}
 								onChanged={onChanged}
@@ -125,14 +125,14 @@ export function TeamMembersTable({
 function MemberRow({
 	member,
 	teamId,
-	isLeader,
+	isTeamLeader,
 	hasRemovalColumns,
 	currentUserId,
 	onChanged,
 }: {
 	member: TeamMember
 	teamId: string
-	isLeader: boolean
+	isTeamLeader: boolean
 	// whether the table renders the Active and delete columns at all, so every row stays aligned
 	hasRemovalColumns: boolean
 	currentUserId: string | null
@@ -191,7 +191,7 @@ function MemberRow({
 			</td>
 			<td className="py-2 pr-4">
 				{/* a leader selects the role. everyone else reads it */}
-				{isLeader ? (
+				{isTeamLeader ? (
 					<select
 						value={member.role}
 						onChange={(event) => void handleRoleChange(event.target.value)}
@@ -227,14 +227,14 @@ function MemberRow({
 				<td className="py-2 pr-4">
 					{/* off is a request to join. a leader switches it on to admit them. switching a member
 					    off removes them, the same thing the X does */}
-					{(isLeader || member.userId === currentUserId) && (
+					{(isTeamLeader || member.userId === currentUserId) && (
 						<Tooltip>
 							{/* the trigger wraps the switch in a span. both write data-state to the same element otherwise */}
 							<TooltipTrigger asChild>
 								<span className="inline-flex">
 									<Switch
 										checked={member.isActive}
-										disabled={!member.isActive && !isLeader}
+										disabled={!member.isActive && !isTeamLeader}
 										onCheckedChange={() => void (member.isActive ? handleRemove() : handleApprove())}
 										aria-label={member.isActive ? `Deactivate ${member.username}` : `Activate ${member.username}`}
 									/>
@@ -250,7 +250,7 @@ function MemberRow({
 			)}
 			{hasRemovalColumns && (
 				<td className="py-2 text-right">
-					{(isLeader || member.userId === currentUserId) && (
+					{(isTeamLeader || member.userId === currentUserId) && (
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<Button

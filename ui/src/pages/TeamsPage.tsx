@@ -61,14 +61,16 @@ export function TeamsPage() {
 		setIsCreating(true)
 	}
 
-	// deleting is confirmed, and the only team they lead is rejected with the reason
+	// deleting is confirmed. a team with other members survives under a new leader, named in the toast
 	const handleDeleteTeam = async (): Promise<void> => {
 		if (!teamToDelete) {
 			return
 		}
-		const isDeleted = await sendDeleteTeam(teamToDelete.teamId)
-		if (!isDeleted) {
-			toast.error("Create another team before you delete this one.\nYou always lead at least one team.")
+		const deleteTeamResult = await sendDeleteTeam(teamToDelete.teamId)
+		if (!deleteTeamResult) {
+			toast.error("That team didn't get deleted. Try again.")
+		} else if (deleteTeamResult.status === "handedOver") {
+			toast(`You left ${teamToDelete.name}. @${deleteTeamResult.newLeaderUsername} leads it now.`)
 		}
 		setTeamToDelete(null)
 		reloadTeams()
@@ -167,7 +169,7 @@ export function TeamsPage() {
 					onConfirm={() => void handleDeleteTeam()}
 					onClose={() => setTeamToDelete(null)}
 				>
-					{`Its ${teamToDelete.topicCount} topic${teamToDelete.topicCount === 1 ? "" : "s"} go back to whoever created them, and the room goes with the team.`}
+					{`Its ${teamToDelete.topicCount} topic${teamToDelete.topicCount === 1 ? "" : "s"} go back to whoever created them, and the room is deleted with the team. A team with other members survives without you instead, led by a co-leader or its longest-standing member.`}
 				</ConfirmDialog>
 			)}
 			{teamToLeave && (

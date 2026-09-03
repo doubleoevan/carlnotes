@@ -7,7 +7,7 @@ import { db } from "../../db"
 import { invites, subscriptions, topics, users } from "../../db/schema"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
-import { loadOwnedTopic } from "./permissions"
+import { loadOwnedTopic, verifiedEmailQuery } from "./permissions"
 import { updateTopicSubscriberCount } from "./subscriberCounts"
 
 /**
@@ -15,10 +15,18 @@ import { updateTopicSubscriberCount } from "./subscriberCounts"
  * Unsubscribing only deactivates the row, so it can be reactivated. deleteTopicSubscription removes it for good.
  */
 export async function setTopicSubscription(userId: string, topicId: string, isSubscribed: boolean): Promise<boolean> {
-	// only a visible, non-private topic that someone else owns can be subscribed to
+	// only a visible topic can be subscribed to
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
-	// biome-ignore format: one line keeps the guard under the comment-density hook's limit
-	if (!topic || topic.visibility === "private" || topic.ownerId === userId || !(await isAllowed(userId, "topic:view", topic))) {
+	if (!topic || !(await isAllowed(userId, "topic:view", topic))) {
+		return false
+	}
+
+	// the owner's subscription exists from creation, so the subscribe direction only ever restores it.
+	const isTopicOwner = topic.ownerId === userId
+	if (isTopicOwner && !isSubscribed) {
+		return false
+	}
+	if (!isTopicOwner && topic.visibility === "private") {
 		return false
 	}
 
@@ -43,16 +51,21 @@ export async function setTopicSubscription(userId: string, topicId: string, isSu
 /**
  * Permanently remove the user's subscription row.
  */
-export async function deleteTopicSubscription(userId: string, email: string, topicId: string): Promise<void> {
+export async function deleteTopicSubscription(userId: string, topicId: string): Promise<void> {
 	// the invite gets deleted with the subscription
 	await db.transaction(async (transaction) => {
 		await transaction
 			.delete(subscriptions)
 			.where(and(eq(subscriptions.topicId, topicId), eq(subscriptions.subscriberUserId, userId)))
-		// the invite matches by email or username, and the subscription count updates after deletion
+		// the invite matches by resolved account or by a verified address, and the count updates after deletion
 		await transaction
 			.delete(invites)
-			.where(and(eq(invites.topicId, topicId), or(eq(invites.email, email), eq(invites.invitedUserId, userId))))
+			.where(
+				and(
+					eq(invites.topicId, topicId),
+					or(inArray(invites.email, verifiedEmailQuery(userId)), eq(invites.invitedUserId, userId)),
+				),
+			)
 		await updateTopicSubscriberCount(topicId, transaction)
 	})
 }
@@ -66,7 +79,7 @@ export async function deleteTopicInvite(ownerId: string, topicId: string, invite
 		return false
 	}
 
-	// the row scoped to this topic, read first so the invitee's subscription can go with it
+	// the row scoped to this topic, read first so the invitee's subscription is deleted with it
 	const [invite] = await db
 		.select({ id: invites.id, email: invites.email, invitedUserId: invites.invitedUserId })
 		.from(invites)
@@ -85,7 +98,7 @@ export async function deleteTopicInvite(ownerId: string, topicId: string, invite
 					.select({ id: users.id })
 					.from(users)
 					.where(eq(users.email, invite.email ?? ""))
-		// their subscription rows go with it, and the count updates after
+		// their subscription rows are deleted with it, and the count updates after
 		await transaction
 			.delete(subscriptions)
 			.where(and(eq(subscriptions.topicId, topicId), inArray(subscriptions.subscriberUserId, inviteeId)))
@@ -117,7 +130,7 @@ export async function activateSubscription(userId: string, topicId: string): Pro
 	const [topic] = await db.select({ frequency: topics.frequency }).from(topics).where(eq(topics.id, topicId))
 	const frequency = topic ? { frequency: topic.frequency } : {}
 
-	// the row and the count move together, so a subscriber is never counted before the row exists or after it goes
+	// the row and the count move together, so a subscriber is never counted before the row exists or after it is deleted
 	await db.transaction(async (transaction) => {
 		// one upsert against the unique index. a re-subscribe re-syncs the frequency and keeps the email choice
 		await transaction
@@ -147,12 +160,12 @@ export const subscriptionsRoute = new Hono<AppEnv>()
 	})
 	.delete("/topics/:id/subscription", async (context) => {
 		// reject a signed-out visitor
-		const user = context.get("user")
-		if (!user) {
+		const userId = currentUser(context)
+		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// permanently remove the user's own subscription row and their invite, distinct from deactivating it.
-		await deleteTopicSubscription(user.id, user.email, context.req.param("id"))
+		// permanently remove the user's own subscription row and their invite, distinct from deactivating it
+		await deleteTopicSubscription(userId, context.req.param("id"))
 		return context.json({ ok: true })
 	})
 	.delete("/topics/:id/invite", zValidator("json", inviteDeletePayload), async (context) => {

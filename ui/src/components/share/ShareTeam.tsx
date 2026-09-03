@@ -79,6 +79,10 @@ export function ShareTeam({
 			toast.error("That invite didn't get made. Try again.")
 			return
 		}
+		if (invite === "limited") {
+			toast.error("Daily invite limit reached. It resets tomorrow.")
+			return
+		}
 
 		// show share sheet if available otherwise show the copy link
 		const inviteUrl = toInviteUrl(invite.token)
@@ -90,8 +94,8 @@ export function ShareTeam({
 		}
 	}
 
-	const reason = "Make this team public to post it"
-	const targetOptionProps = { isPublic, encodedUrl, encodedTitle, reason }
+	const reason = "Make this team public to post it to a platform"
+	const targetOptionProps = { isEnabled: isPublic, encodedUrl, encodedTitle, reason }
 	// the invite option opens a sheet where there is one, and copies everywhere else
 	const inviteLabel = isShareSheetAvailable ? INVITE_SHARE_LABEL : INVITE_LABEL
 	return (

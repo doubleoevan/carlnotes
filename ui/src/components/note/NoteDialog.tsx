@@ -7,6 +7,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { createNote, deleteNote, fetchNote, type NotePageRef, sendNoteRead, updateNote } from "@/clients/noteClient"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
+import type { NoteSaveErrorReason } from "@/components/note/noteProvider"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
 import { Input } from "@/components/primitives/input"
@@ -250,8 +251,14 @@ function OpenNote({
 		onClose()
 	}
 
-	// an unsaved edit shows once as a toast. the sync provider keeps the content and retries
-	function handleSaveNoteError() {
+	// a save error shows as a toast. a failed post keeps the words for a retry, a rejected one stops saving
+	function handleSaveNoteError(reason: NoteSaveErrorReason) {
+		if (reason === "rejected") {
+			toast.error(
+				"That edit was too large to save, so this note stopped saving. Copy your latest changes, then refresh.",
+			)
+			return
+		}
 		toast.error("That note didn't save. Carl kept your words — try again in a moment.")
 	}
 
@@ -259,7 +266,7 @@ function OpenNote({
 		<>
 			{/* the owner's visibility select on the left, the expand and close controls grouped on the right */}
 			<div className="flex min-h-9 items-center justify-between gap-2">
-				{note.isOwner ? (
+				{note.isTopicOwner ? (
 					<NoteVisibilitySelect
 						visibilities={creatableVisibilities}
 						visibility={noteVisibility}

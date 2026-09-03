@@ -54,7 +54,7 @@ async function seedTestData(): Promise<{ subredditSource: Source; searchSource: 
 	return { subredditSource, searchSource, userId: user.id }
 }
 
-// run one Source and report what came back, or the reason each access mode refused it
+// run one Source and report what came back, or the reason each access mode rejected it
 async function checkSource(label: string, source: Source): Promise<boolean> {
 	// the ingester selects its own access modes from the environment, so this is exactly what a Scan would do
 	try {
@@ -72,9 +72,9 @@ async function checkSource(label: string, source: Source): Promise<boolean> {
 		console.log(`engagement    : ${resources[0]?.engagement ?? "none"}`)
 		return resources.length > 0
 	} catch (error) {
-		// every access mode refused. the message names each one, which is what a Scan traces and the report reads
+		// every access mode rejected. the message names each one, which is what a Scan traces and the report reads
 		console.log(`\n--- ${label} ---`)
-		console.log(`refused       : ${error instanceof Error ? error.message : String(error)}`)
+		console.log(`rejected       : ${error instanceof Error ? error.message : String(error)}`)
 		return false
 	}
 }
@@ -123,6 +123,6 @@ try {
 	exitCode = 1
 }
 
-// flush telemetry before exit, then exit because the Neon pool would otherwise keep the process alive
+// flush telemetry, then report the outcome as the exit code
 await shutdownTelemetry()
-process.exit(exitCode)
+process.exitCode = exitCode

@@ -7,7 +7,8 @@
 
 app:
   name: CarlNotes scanner
-  # the app fences untrusted text structurally and screens it here, so the scanner never rewrites content
+  # the app fences untrusted text structurally and screens it here. Secrets and Anonymize rewrite the text in place,
+  # and the app uses the rewritten copy the scanner returns
   scan_fail_fast: false
 
 input_scanners:

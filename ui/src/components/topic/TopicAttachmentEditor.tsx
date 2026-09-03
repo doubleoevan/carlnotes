@@ -63,7 +63,7 @@ export function TopicAttachmentEditor({
 				<div className="flex flex-col gap-1.5">
 					{pendingFiles.map((file) => (
 						<PendingAttachmentRow
-							key={toFileKey(file)}
+							key={toAttachmentFileKey(file)}
 							file={file}
 							onRemove={() => onPendingChange(pendingFiles.filter((pending) => pending !== file))}
 						/>
@@ -242,8 +242,10 @@ function AttachmentContext({
 	)
 }
 
-// a staged attachment file's stable identity for row key and file deduping
-function toFileKey(file: File): string {
+/**
+ * A staged attachment file's stable identity for row keys and file deduping.
+ */
+export function toAttachmentFileKey(file: File): string {
 	return `${file.name}-${file.size}-${file.lastModified}`
 }
 
@@ -252,8 +254,8 @@ function toFileKey(file: File): string {
  * so both routes dedupe the same way.
  */
 export function stageFiles(pendingFiles: File[], addedFiles: File[], onPendingChange: (files: File[]) => void): void {
-	const stagedKeys = new Set(pendingFiles.map(toFileKey))
-	const newFiles = addedFiles.filter((file) => !stagedKeys.has(toFileKey(file)))
+	const stagedAttachmentKeys = new Set(pendingFiles.map(toAttachmentFileKey))
+	const newFiles = addedFiles.filter((file) => !stagedAttachmentKeys.has(toAttachmentFileKey(file)))
 	if (newFiles.length > 0) {
 		onPendingChange([...pendingFiles, ...newFiles])
 	}

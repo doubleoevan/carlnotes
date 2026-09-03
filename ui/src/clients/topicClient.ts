@@ -25,8 +25,8 @@ import type { AppType } from "../../../api"
 // same-origin api client
 const apiClient = hc<AppType>(window.location.origin)
 
-// tells the user a write was rejected
-async function reportFailedWrite(request: Promise<Response>, action: string, isBackground = false): Promise<void> {
+// tells the user a write was rejected, and answers whether it landed
+async function reportFailedWrite(request: Promise<Response>, action: string, isBackground = false): Promise<boolean> {
 	// a rejected request never reaches a Response at all, so an offline user is told the same as a rejected write
 	let response: Response
 	try {
@@ -34,17 +34,18 @@ async function reportFailedWrite(request: Promise<Response>, action: string, isB
 	} catch (error) {
 		console.error(`${action} failed to reach the server`, error)
 		reportRejectedWrite(isBackground)
-		return
+		return false
 	}
 
 	// the server answered, so only a rejected status is a failure from here
 	if (response.ok) {
-		return
+		return true
 	}
 
 	// the log includes the detail. the toast only tells the user the write failed, not why.
 	console.error(`${action} failed: ${response.status} ${await response.text()}`)
 	reportRejectedWrite(isBackground)
+	return false
 }
 
 // the one message a failed write shows, skipped for a write the user never asked for by itself
@@ -54,9 +55,12 @@ function reportRejectedWrite(isBackground: boolean): void {
 	}
 }
 
-// create an invite link for a topic
-export async function sendCreateTopicInvite(topicId: string, source: InviteSource): Promise<Invite> {
+// create an invite link for a topic. "limited" is the daily invite limit
+export async function sendCreateTopicInvite(topicId: string, source: InviteSource): Promise<Invite | "limited"> {
 	const response = await apiClient.api.topics[":id"].invites.$post({ param: { id: topicId }, json: { source } })
+	if (response.status === 429) {
+		return "limited"
+	}
 	if (!response.ok) {
 		const body = (await response.json().catch(() => null)) as { error?: string } | null
 		throw new Error(body?.error ?? `invite create failed: ${response.status}`)
@@ -64,15 +68,9 @@ export async function sendCreateTopicInvite(topicId: string, source: InviteSourc
 	return inviteCreateResponse.parse(await response.json()).invite
 }
 
-// revoke one of a topic's invites. every subscription already made through it stays
-export async function sendRevokeInvite(topicId: string, inviteId: string): Promise<void> {
-	const request = apiClient.api.topics[":id"].invites[":inviteId"].$delete({ param: { id: topicId, inviteId } })
-	await reportFailedWrite(request, "invite revoke")
-}
-
 // accept a join token, which subscribes the signed-in user to the topic it opens
-export async function sendAcceptInvite(token: string, turnstileToken: string): Promise<InviteAcceptResponse> {
-	const response = await apiClient.api.invite[":token"].$post({ param: { token }, json: { turnstileToken } })
+export async function sendAcceptInvite(token: string): Promise<InviteAcceptResponse> {
+	const response = await apiClient.api.invite[":token"].$post({ param: { token } })
 	if (!response.ok) {
 		return { status: "unknown" }
 	}
@@ -332,13 +330,13 @@ export async function sendDeleteAttachment(attachmentId: string): Promise<void> 
 }
 
 // how a user invite was rejected, for the field to show inline
-export type UserInviteRefusal = "unknown-username" | "not-accepting" | "limited" | "failed"
+export type UserInviteRejection = "unknown-username" | "not-accepting" | "limited" | "failed"
 
 // create an invite that names a person, by username or email, for a topic or a team
 export async function sendUserInvite(
 	target: { topicId: string } | { teamId: string },
 	address: { username: string } | { email: string },
-): Promise<UserInviteRefusal | null> {
+): Promise<UserInviteRejection | null> {
 	const response = await ("topicId" in target
 		? apiClient.api.topics[":id"].invites.user.$post({ param: { id: target.topicId }, json: address })
 		: apiClient.api.teams[":id"].invites.user.$post({ param: { id: target.teamId }, json: address }))
@@ -346,15 +344,15 @@ export async function sendUserInvite(
 		return null
 	}
 
-	// the named refusals pass through for the field's copy, and anything else reads as a plain failure
-	const refusal = await response
+	// the named rejections pass through for the field's copy, and anything else reads as a plain failure
+	const rejection = await response
 		.json()
 		.then((body) => (body as { error?: string }).error)
 		.catch(() => undefined)
 
-	// a refusal with no body falls through to the status check
-	if (refusal === "unknown-username" || refusal === "not-accepting") {
-		return refusal
+	// a rejection with no body falls through to the status check
+	if (rejection === "unknown-username" || rejection === "not-accepting") {
+		return rejection
 	}
 	return response.status === 429 ? "limited" : "failed"
 }

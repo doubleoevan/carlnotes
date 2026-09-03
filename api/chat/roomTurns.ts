@@ -1,11 +1,12 @@
 // carl's chat turn in a team chat room
 
 import type { ChatAttachment } from "@shared/contracts"
+import { reportError } from "@shared/monitoring"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, type SQL, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 import { db } from "../../db"
 import { chatRoomAttachments, chatRoomMessages, chatRoomSummaries, type topics, users } from "../../db/schema"
-import { getAttachmentBytes } from "../../worker"
+import { getAttachmentBytes, MODEL_CHAT_TURN_FAILED_REJECTION } from "../../worker"
 import { streamChatReply } from "../../worker/chat"
 import { fetchPromptTemplate } from "../../worker/prompts/fetch"
 import { writePrompt } from "../../worker/prompts/write"
@@ -45,6 +46,8 @@ export async function runModelChatRoomTurn(
 		.from(users)
 		.where(eq(users.id, billedUserId))
 	if (!billedMember?.litellmVirtualKey) {
+		reportError(new Error(`chat room turn for user ${billedUserId} with no litellm key`), "chat", { teamId })
+		await postModelRejection(topic?.id ?? null, teamId, promptChatMessageId, MODEL_CHAT_TURN_FAILED_REJECTION)
 		return
 	}
 	const litellmApiKey = billedMember.litellmVirtualKey
@@ -69,12 +72,12 @@ export async function runModelChatRoomTurn(
 		topicId: topic?.id,
 		teamId: topic ? undefined : teamId,
 		userId: billedUserId,
-		isOwner: topic ? topic.ownerId === billedUserId : false,
+		isTopicOwner: topic ? topic.ownerId === billedUserId : false,
 		litellmApiKey,
 		question,
 		retrievalQuestion: promptChatMessage ? (decryptChatText(promptChatMessage.content) ?? undefined) : undefined,
 		history: [],
-		attachments: promptImages,
+		chatAttachments: promptImages,
 		// the billed member's privately kept attachments stay out. this answer posts to the whole chat room
 		includeAttachments: false,
 	})
@@ -146,13 +149,13 @@ async function loadPromptMessageImages(promptChatMessageId: number): Promise<Cha
 }
 
 /**
- * Post Carl's own refusal into the chat room, so a chat turn that failed mid-flight still answers the chat room.
+ * Post Carl's own rejection into the chat room, so a chat turn that failed mid-flight still answers the chat room.
  */
-export async function postModelRefusal(
+export async function postModelRejection(
 	topicId: string | null,
 	teamId: string,
 	promptChatMessageId: number,
-	refusalReason: string,
+	rejectionReason: string,
 ): Promise<void> {
 	const [modelChatMessage] = await db
 		.insert(chatRoomMessages)
@@ -161,7 +164,7 @@ export async function postModelRefusal(
 			teamId,
 			authorUsername: "Carl",
 			replyToMessageId: promptChatMessageId,
-			content: encryptChatText(refusalReason),
+			content: encryptChatText(rejectionReason),
 		})
 		.returning({ id: chatRoomMessages.id })
 	if (!modelChatMessage) {

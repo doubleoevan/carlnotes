@@ -6,7 +6,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { CountPill } from "@/components/common/CountPill"
 import { DocsLink } from "@/components/layout/DocsLink"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { SignOutDialog } from "@/components/session/SignOutDialog"
+import { signOutAndReload } from "@/components/session/signOut"
 import { ChatMentionCount, toChatLabel, toNoteLabel } from "@/components/topic/TopicMentionBadge"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
@@ -41,49 +41,40 @@ export function UserMenu({
 		setIsOpen(false)
 	}
 
-	// the sign-out confirmation dialog replaces the user menu
-	const [isConfirmingSignOut, setIsConfirmingSignOut] = useState(false)
-	const handleConfirmSignOut = (): void => {
-		setIsConfirmingSignOut(true)
+	// signing out is reversible and loses nothing, so one click does it
+	const handleSignOut = (): void => {
 		handleCloseMenu()
+		void signOutAndReload()
 	}
 
 	return (
-		<>
-			<Popover open={isOpen && !isConfirmingSignOut} onOpenChange={setIsOpen}>
-				<PopoverTrigger className="relative ml-1 hidden rounded-full sm:block" aria-label={menuLabel}>
-					{/* the user avatar trigger button */}
-					<UserAvatar
-						userId={userId}
-						username={username}
-						avatarSource={avatarSource}
-						className="size-9 border-2 border-white/55"
-					/>
-					{/* the filled chat mention badge leads the pair, and the outline note badge follows it */}
-					{(noteCount > 0 || chatMentions.length > 0) && (
-						<span className="absolute -top-1 -right-1 flex items-center gap-1">
-							{chatMentions.length > 0 && (
-								<ChatMentionCount
-									chatMentions={chatMentions}
-									className="bg-card text-card-foreground h-5 min-w-5 border text-xs"
-								/>
-							)}
-							{noteCount > 0 && <CountPill count={noteCount} variant="outline" className="h-5 min-w-5 text-xs" />}
-						</span>
-					)}
-				</PopoverTrigger>
-				<PopoverContent align="end" className="w-52" bodyClassName="p-1">
-					{/* the menu items for a signed-in user */}
-					<UserMenuItems
-						userId={userId}
-						isAdmin={isAdmin}
-						onNavigate={handleCloseMenu}
-						onSignOut={handleConfirmSignOut}
-					/>
-				</PopoverContent>
-			</Popover>
-			<SignOutDialog open={isConfirmingSignOut} onOpenChange={setIsConfirmingSignOut} />
-		</>
+		<Popover open={isOpen} onOpenChange={setIsOpen}>
+			<PopoverTrigger className="relative ml-1 hidden rounded-full sm:block" aria-label={menuLabel}>
+				{/* the user avatar trigger button */}
+				<UserAvatar
+					userId={userId}
+					username={username}
+					avatarSource={avatarSource}
+					className="size-9 border-2 border-white/55"
+				/>
+				{/* the filled chat mention badge leads the pair, and the outline note badge follows it */}
+				{(noteCount > 0 || chatMentions.length > 0) && (
+					<span className="absolute -top-1 -right-1 flex items-center gap-1">
+						{chatMentions.length > 0 && (
+							<ChatMentionCount
+								chatMentions={chatMentions}
+								className="bg-card text-card-foreground h-5 min-w-5 border text-xs"
+							/>
+						)}
+						{noteCount > 0 && <CountPill count={noteCount} variant="outline" className="h-5 min-w-5 text-xs" />}
+					</span>
+				)}
+			</PopoverTrigger>
+			<PopoverContent align="end" className="w-52" bodyClassName="p-1">
+				{/* the menu items for a signed-in user */}
+				<UserMenuItems userId={userId} isAdmin={isAdmin} onNavigate={handleCloseMenu} onSignOut={handleSignOut} />
+			</PopoverContent>
+		</Popover>
 	)
 }
 

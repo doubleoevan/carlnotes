@@ -11,6 +11,7 @@ import { isAllowed, isLeaderRole } from "../authorization"
 import { loadTeamChatMentions } from "../chat/mentions"
 import { toInvitee } from "../invite/userInvites"
 import { toTopicTableRows } from "../topic/helpers"
+import { verifiedEmailQuery } from "../topic/permissions"
 import { startOfUtcMonth } from "../topic/quotas"
 import { toTeamRole } from "./members"
 
@@ -23,7 +24,7 @@ const inviters = alias(users, "inviters")
 /**
  * The teams page sections: the user's teams, the team invites waiting for an answer, and the team invites sent.
  */
-export async function loadTeamsPage(userId: string, email: string): Promise<TeamsPageResponse> {
+export async function loadTeamsPage(userId: string): Promise<TeamsPageResponse> {
 	// the team ids that the user is a member of
 	const userTeamSummaries = await loadTeamSummaries(userId)
 	const userTeamIds = new Set(userTeamSummaries.map((teamSummary) => teamSummary.teamId))
@@ -47,12 +48,12 @@ export async function loadTeamsPage(userId: string, email: string): Promise<Team
 		.innerJoin(teams, eq(teams.id, invites.teamId))
 		.leftJoin(senders, eq(senders.id, invites.invitedByUserId))
 		.where(
-			// pending means unanswered: no spent use, no decline, no revocation, no passed expiry
+			// pending means unanswered: no spent use, no decline, no revocation, no passed expiry.
+			// an address matches only once the account verified it
 			and(
-				or(eq(invites.invitedUserId, userId), eq(invites.email, email)),
+				or(eq(invites.invitedUserId, userId), inArray(invites.email, verifiedEmailQuery(userId))),
 				eq(invites.usedCount, 0),
 				isNull(invites.declinedAt),
-				isNull(invites.revokedAt),
 				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
 			),
 		)
@@ -195,7 +196,6 @@ export async function loadTeamUpMenu(userId: string, profileUserId: string): Pro
 					eq(invites.invitedUserId, profileUserId),
 					eq(invites.usedCount, 0),
 					isNull(invites.declinedAt),
-					isNull(invites.revokedAt),
 					or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
 				),
 			),
@@ -515,31 +515,38 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 		return null
 	}
 
+	// the team page's independent reads run together. nothing returns until the access gate below passes
+	const [role, memberRows, topicRows, chatMentionsByTeam] = await Promise.all([
+		toTeamRole(userId, team.id),
+		// the members with the not-yet-activated rows included
+		db
+			.select({
+				userId: users.id,
+				username: users.username,
+				avatarSource: users.avatarSource,
+				role: teamMembers.role,
+				isMemberVisible: teamMembers.isMemberVisible,
+				isActive: teamMembers.isActive,
+			})
+			.from(teamMembers)
+			.innerJoin(users, eq(users.id, teamMembers.userId))
+			.where(eq(teamMembers.teamId, team.id))
+			.orderBy(teamMembers.createdAt),
+		loadTeamTopics(team.id),
+		loadTeamChatMentions(userId, [team.id]),
+	])
+
 	// a private team's page reads as a missing one to everyone but its members, an admin, and someone with a pending invite
-	const role = await toTeamRole(userId, team.id)
 	const isMember = role !== null
 	const isInvited = !isMember && (await hasPendingTeamInvite(userId, team.id))
 	if (!team.isPublic && !isMember && !isInvited && !(await isAllowed(userId, "admin:console"))) {
 		return null
 	}
 
-	// the members with the not-yet-activated rows included. members see everyone, and only a leader can see who asked to join
-	const memberRows = await db
-		.select({
-			userId: users.id,
-			username: users.username,
-			avatarSource: users.avatarSource,
-			role: teamMembers.role,
-			isMemberVisible: teamMembers.isMemberVisible,
-			isActive: teamMembers.isActive,
-		})
-		.from(teamMembers)
-		.innerJoin(users, eq(users.id, teamMembers.userId))
-		.where(eq(teamMembers.teamId, team.id))
-		.orderBy(teamMembers.createdAt)
-	const isLeader = isMember && isLeaderRole(role)
+	// members see everyone, and only a leader can see who asked to join
+	const isTeamLeader = isMember && isLeaderRole(role)
 	const shownMembers = memberRows.filter(
-		(memberRow) => (memberRow.isActive || isLeader) && (isMember || memberRow.isMemberVisible),
+		(memberRow) => (memberRow.isActive || isTeamLeader) && (isMember || memberRow.isMemberVisible),
 	)
 
 	// the hidden count reads activated rows alone, so a waiting request never shows through the number
@@ -548,7 +555,6 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 		activeRows.length - activeRows.filter((memberRow) => isMember || memberRow.isMemberVisible).length
 
 	// the team's topics: an outsider sees only the public ones, a member or someone with a pending invite sees them all
-	const topicRows = await loadTeamTopics(team.id)
 	const visibleTopics = topicRows.filter((topicRow) => isMember || isInvited || topicRow.visibility === "public")
 
 	return {
@@ -568,7 +574,7 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 			isActive: memberRow.isActive,
 		})),
 		hiddenMemberCount: hiddenActiveCount,
-		chatMentions: (await loadTeamChatMentions(userId, [team.id])).get(team.id) ?? [],
+		chatMentions: chatMentionsByTeam.get(team.id) ?? [],
 		topics: await toTopicTableRows(visibleTopics, userId),
 	}
 }
@@ -578,22 +584,17 @@ async function hasPendingTeamInvite(userId: string | null, teamId: string): Prom
 	if (!userId) {
 		return false
 	}
-	// the user's email, which an email invitation names until it resolves to an account
-	const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId))
-	if (!user) {
-		return false
-	}
-	// a single matching pending invite row is enough to return true
+
+	// a single matching pending invite row is enough. an address matches only once the account verified it
 	const [invite] = await db
 		.select({ id: invites.id })
 		.from(invites)
 		.where(
 			and(
 				eq(invites.teamId, teamId),
-				or(eq(invites.invitedUserId, userId), eq(invites.email, user.email)),
+				or(eq(invites.invitedUserId, userId), inArray(invites.email, verifiedEmailQuery(userId))),
 				eq(invites.usedCount, 0),
 				isNull(invites.declinedAt),
-				isNull(invites.revokedAt),
 				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
 			),
 		)

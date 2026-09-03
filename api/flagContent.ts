@@ -18,7 +18,7 @@ const flagCounts = new Map<string, { count: number; windowStartedAt: number }>()
 const FLAG_WINDOW_MS = 24 * 60 * 60 * 1000
 
 // what came of a flag, so the route can answer each outcome differently
-export type FlagContentResult = "sent" | "unknownSubject" | "limitReached" | "notConfigured"
+export type FlagContentResult = "sent" | "unknownSubject" | "limitReached" | "notConfigured" | "failed"
 
 /**
  * Mail a flag to the support address. The subject is resolved first, so a flag naming something that does not exist,
@@ -44,12 +44,18 @@ export async function flagContent(userId: string, payload: FlagContentPayload): 
 
 	// look up the sender's username for the moderator to act on
 	const [sender] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId))
-	await sendEmail({
+	const isAccepted = await sendEmail({
 		to: supportEmail,
 		subject: `Flagged: ${subject.label}`,
 		emailContent: toFlagHtml(subject, sender?.username ?? userId, payload.reason),
 		emailKind: "flag-content",
 	})
+
+	// a report the mailer rejected never reached support, and its spent slot comes back for the retry
+	if (!isAccepted) {
+		refundFlag(userId)
+		return "failed"
+	}
 	return "sent"
 }
 
@@ -119,6 +125,14 @@ function canFlag(userId: string): boolean {
 	return true
 }
 
+// give a spent flag content slot back for a report the mailer rejected
+function refundFlag(userId: string): void {
+	const userFlagCount = flagCounts.get(userId)
+	if (userFlagCount && userFlagCount.count > 0) {
+		userFlagCount.count -= 1
+	}
+}
+
 // the flag content route
 export const flagContentRoute = new Hono<AppEnv>().post(
 	"/flag-content",
@@ -138,6 +152,9 @@ export const flagContentRoute = new Hono<AppEnv>().post(
 		// each rejection reports in its own terms, so the dialog can show what actually went wrong
 		if (flagResult === "limitReached") {
 			return context.json({ error: "you have sent enough reports for one day" }, 429)
+		}
+		if (flagResult === "failed") {
+			return context.json({ error: "the report did not send. try again" }, 502)
 		}
 		return flagResult === "unknownSubject"
 			? context.json({ error: "not found" }, 404)

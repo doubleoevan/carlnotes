@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { newBudget } from "../budget"
 // the scan report prompt input reuses the source outcome shape the scan hands over
-import { buildScanReportPrompt, type ScannedSource, toTopicScanSummary } from "./summarize"
+import { buildScanReportPrompt, type ScannedSource, toTopicScanSummary, withoutEmptyFindingsHeading } from "./summarize"
 
 // an AI report that fails returns an empty summary
 test("toScanSummary yields an empty summary when the report throws an error", async () => {
@@ -70,4 +70,20 @@ test("buildScanReportPrompt grounds the report prompt in the scan's data", async
 	// the report beats survive rendering and no placeholder is left unfilled
 	expect(reportPrompt).toContain("worth flagging")
 	expect(reportPrompt).not.toContain("{{")
+})
+
+// a quiet scan links nothing, so a findings heading with no list under it never reaches the reader
+test("withoutEmptyFindingsHeading drops a dangling heading and keeps a real list", () => {
+	// the heading alone at the end goes, in each shape the model writes it
+	expect(withoutEmptyFindingsHeading("Nothing kept today.\n\nFindings:")).toBe("Nothing kept today.")
+	expect(withoutEmptyFindingsHeading("Nothing kept today.\n\n**Findings:**")).toBe("Nothing kept today.")
+	expect(withoutEmptyFindingsHeading("Nothing kept today.\n\n## Findings")).toBe("Nothing kept today.")
+
+	// a report that is only the heading strips to nothing, which the caller reads as a failed call
+	expect(withoutEmptyFindingsHeading("Findings:")).toBe("")
+
+	// a heading with links under it stays whole, and so does a report that never wrote one
+	const withFindings = "Two worth reading.\n\nFindings:\n\n- [One](https://a.com/1)"
+	expect(withoutEmptyFindingsHeading(withFindings)).toBe(withFindings)
+	expect(withoutEmptyFindingsHeading("Nothing kept today.")).toBe("Nothing kept today.")
 })

@@ -26,7 +26,7 @@ export type EmailMessage = {
 	headers?: Record<string, string>
 }
 
-// whether resend will take this address, checked here because one refusal fails the whole batch
+// whether resend will take this address, checked here because one rejection fails the whole batch
 function isSendableAddress(address: string): boolean {
 	return z.email().safeParse(address.trim()).success
 }
@@ -92,7 +92,7 @@ export async function sendEmailBatches(messages: EmailMessage[]): Promise<boolea
 		return messages.map(() => false)
 	}
 
-	// resend refuses the whole batch when one address fails its validation
+	// resend rejects the whole batch when one address fails its validation
 	const sendableMessages = messages.filter((message) => isSendableAddress(message.to))
 	if (sendableMessages.length < messages.length) {
 		console.error(`skipped ${messages.length - sendableMessages.length} emails whose address could not be sent to`)

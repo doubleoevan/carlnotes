@@ -2,25 +2,7 @@
 import type { ChatRoomMessage } from "@shared/contracts"
 import { useEffect, useRef } from "react"
 import { fetchChatRoomMessages, toChatRoomEventsUrl } from "@/clients/chatRoomClient"
-
-// a dropped stream reconnects with exponential backoff from this base
-const RECONNECT_BASE_MS = 1000
-
-// the backoff never waits longer than this
-const RECONNECT_MAX_MS = 30_000
-
-// silence past this long means the stream is dead. the server pings well inside it
-const STALE_STREAM_MS = 60_000
-
-/**
- * The wait before the next reconnect: doubled per failed attempt up to the limit, then jittered
- * down by up to half so reconnecting clients spread apart.
- */
-export function toReconnectDelayMs(failedAttempts: number): number {
-	// double per failed attempt, never past the limit
-	const backoffMs = Math.min(RECONNECT_BASE_MS * 2 ** failedAttempts, RECONNECT_MAX_MS)
-	return backoffMs * (0.5 + Math.random() / 2)
-}
+import { STALE_STREAM_MS, toReconnectStreamDelayMs } from "@/lib/streamReconnect"
 
 /**
  * Load a chat room's chat messages once, then follow its stream from that point. A drop reconnects from the highest
@@ -77,7 +59,7 @@ export function useChatRoomStream(
 				lastResponseTime = Date.now()
 			})
 
-			// a stream that opens resets the backoff
+			// a stream that opens resets the attempt count the reconnect delay grows from
 			eventSource.addEventListener("open", () => {
 				failedAttempts = 0
 			})
@@ -85,24 +67,32 @@ export function useChatRoomStream(
 			// the browser's own retry reuses an old cursor. the reconnect is ours
 			eventSource.addEventListener("error", () => {
 				eventSource?.close()
-				retryTimer = setTimeout(connect, toReconnectDelayMs(failedAttempts))
+				retryTimer = setTimeout(connect, toReconnectStreamDelayMs(failedAttempts))
 				failedAttempts += 1
 			})
 		}
 
-		// onLoaded fires even when the chat room is empty, so the caller can finish loading
-		fetchChatRoomMessages(topicId, teamId).then((chatMessages) => {
+		// load once, then connect. a failed load retries on the same reconnect delay a dropped stream uses
+		const loadAndConnectChatStream = async (): Promise<void> => {
+			const chatMessages = await fetchChatRoomMessages(topicId, teamId)
 			if (!isCurrentChatRoom) {
 				return
 			}
+			if (chatMessages === "failed") {
+				retryTimer = setTimeout(() => void loadAndConnectChatStream(), toReconnectStreamDelayMs(failedAttempts))
+				failedAttempts += 1
+				return
+			}
+
+			// onLoaded fires even when the chat room is empty. a rejected chat room never opens a stream
 			chatHandlersRef.current.onChatMessagesLoaded(chatMessages)
-			// a refused chat room never opens a stream. there is nothing to follow
 			if (chatMessages === null) {
 				return
 			}
 			cursorRef.current = chatMessages.at(-1)?.id ?? 0
 			connect()
-		})
+		}
+		void loadAndConnectChatStream()
 
 		// leaving the topic closes the chat stream and cancels any pending reconnect
 		return () => {

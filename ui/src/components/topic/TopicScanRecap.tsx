@@ -120,7 +120,7 @@ export function SafeNoteText({ note, allowedUrls }: { note: string; allowedUrls?
 
 /**
  * A bordered box that scrolls when its content overflows, with a thin visible scrollbar to indicate that it is scrollable.
- * With copyMarkdown set, a copy button floats on the corner instead of scrolling away, offering the box's content as Markdown for an AI.
+ * With copyMarkdown set, a copy button stays on the corner instead of scrolling away, offering the box's content as Markdown for an AI.
  */
 export function ScrollBox({ children, copyMarkdown }: { children: React.ReactNode; copyMarkdown?: string }) {
 	return (

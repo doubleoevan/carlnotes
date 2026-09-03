@@ -3,16 +3,7 @@ import { expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import * as schema from "./schema"
-import {
-	chatTurns,
-	EMBED_DIMENSIONS,
-	EMBED_MODEL_NAME,
-	findings,
-	resources,
-	sources,
-	subscriptions,
-	topics,
-} from "./schema"
+import { chatTurns, EMBED_DIMENSIONS, EMBED_MODEL_NAME, findings, resources, subscriptions, topics } from "./schema"
 
 // read the generated initial migration once for SQL-level assertions
 const migrationsDirectory = join(import.meta.dir, "migrations")
@@ -54,11 +45,6 @@ test("an HNSW cosine index covers resources.embedding", () => {
 	expect(allMigrationsSql()).toContain(
 		`CREATE INDEX "resources_embedding_hnsw" ON "resources" USING hnsw ("embedding" vector_cosine_ops)`,
 	)
-})
-
-// a source without an api key needs no Integration, so the integration_id must be nullable
-test("sources.integration_id is nullable", () => {
-	expect(sources.integrationId.notNull).toBe(false)
 })
 
 // the conditional-refetch validators are captured only when a fetch exposes them, so both must be nullable

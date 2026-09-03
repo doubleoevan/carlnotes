@@ -88,7 +88,7 @@ export function PlansPage() {
 	// a paying user changes or cancels their plan through the Stripe portal
 	async function handlePortal(): Promise<void> {
 		setIsRedirecting(true)
-		// a portal that never opens leaves the button spinning, whether it refused or threw
+		// a portal that never opens leaves the button spinning, whether it rejected or threw
 		try {
 			if (!(await openBillingPortal())) {
 				setIsRedirecting(false)

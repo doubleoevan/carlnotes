@@ -22,6 +22,9 @@ import { saveDefaultUsername, toAssignedUsername, toFreeUsernames } from "./user
 // how long a signup-gate token stays valid
 const GATE_TOKEN_LIFETIME_MS = 15 * 60 * 1000
 
+// how long an email-verification link works, which the email that carries it also states
+const VERIFICATION_LINK_HOURS = 24
+
 // the matching browser-side cookie lifetime
 export const GATE_COOKIE_MAX_AGE_SECONDS = GATE_TOKEN_LIFETIME_MS / 1000
 
@@ -200,12 +203,13 @@ export const auth = betterAuth({
 			"/change-password": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 		},
 	},
-	// a non-blocking verification email on signup
+	// a non-blocking verification email on signup, whose link lives a day instead of the default hour
 	emailVerification: {
 		sendVerificationEmail: async ({ user, url }) => {
 			await sendVerificationEmail(user.email, url)
 		},
 		sendOnSignUp: true,
+		expiresIn: VERIFICATION_LINK_HOURS * 60 * 60,
 	},
 	// the litellm virtual key stays server-only. role and plan are included in the session
 	user: {
@@ -290,6 +294,21 @@ export const auth = betterAuth({
 						isInAppBrowser: isInAppBrowser(userAgent ?? ""),
 						...(ctaTag ? { cta: ctaTag } : {}),
 					})
+				},
+			},
+		},
+		session: {
+			create: {
+				// a session is created by a sign-in, so its time is the user's last login.
+				// a failed write must not fail the sign-in, so it is logged and left
+				after: async (session) => {
+					await db
+						.update(schema.users)
+						.set({ lastLoginAt: new Date() })
+						.where(eq(schema.users.id, session.userId))
+						.catch((error) => {
+							console.error(`could not save the login time for user ${session.userId}`, error)
+						})
 				},
 			},
 		},
@@ -379,7 +398,7 @@ async function sendChangeEmailConfirmationEmail(currentEmail: string, newEmail: 
 async function sendVerificationEmail(email: string, url: string): Promise<void> {
 	const emailProps = {
 		heading: "Confirm your email",
-		lead: "Carl is ready to start reading for you. Confirm this address so he knows where to send what he finds.",
+		lead: `Carl is ready to start reading for you. Confirm this address so he knows where to send what he finds. The link works for ${VERIFICATION_LINK_HOURS} hours.`,
 		buttonLabel: "Confirm your email",
 		url,
 		appUrl: Bun.env.BETTER_AUTH_URL,

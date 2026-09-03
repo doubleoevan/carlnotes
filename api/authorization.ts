@@ -6,7 +6,7 @@ import { and, count, eq, gte, inArray, sql } from "drizzle-orm"
 import { db } from "../db"
 import { chatTurns, scans, subscriptions, teamMembers, teamTopics, topics, users } from "../db/schema"
 import { deleteLiteLLMKey, provisionLiteLLMKey } from "./litellm"
-import { canRateTopic, canSeeTopic, toTopicEditRole } from "./topic/permissions"
+import { assertNever, canRateTopic, canSeeTopic, toTopicEditRole } from "./topic/permissions"
 import { loadBillingAccess, scansToday, startOfUtcMonth } from "./topic/quotas"
 
 // the topic fields that every resource capability needs: identity, owner, visibility, and the team that owns it
@@ -303,7 +303,7 @@ export async function loadManualScanAuthorization(userId: string, topic: GatedTo
 	return authorizeManualScan({
 		isAdmin: userAccess.isAdmin,
 		plan: userAccess.plan,
-		isOwner: topic.ownerId === userId,
+		isTopicOwner: topic.ownerId === userId,
 		scansUsedToday,
 		...billingAccess,
 	})
@@ -357,21 +357,21 @@ export function authorizeDailyFrequency({
 export function authorizeManualScan({
 	isAdmin,
 	plan,
-	isOwner,
+	isTopicOwner,
 	scansUsedToday,
 	hasPaymentMethod,
 	billingInterval,
 }: {
 	isAdmin: boolean
 	plan: Plan
-	isOwner: boolean
+	isTopicOwner: boolean
 	scansUsedToday: number
 	hasPaymentMethod: boolean
 	// how the subscription bills: monthly or yearly
 	billingInterval: BillingInterval
 }): ManualScanAuthorization {
 	// only the owner or an admin may run a manual scan on the topic
-	if (!isAdmin && !isOwner) {
+	if (!isAdmin && !isTopicOwner) {
 		return { status: "forbidden" }
 	}
 
@@ -425,9 +425,4 @@ async function dailyTopicCount(userId: string): Promise<number> {
 		.from(topics)
 		.where(and(eq(topics.ownerId, userId), inArray(topics.frequency, [...dailyFrequencies])))
 	return topicCountRow?.count ?? 0
-}
-
-// a compile-time error check for a capability case that doesn't have a handler
-function assertNever(value: never): never {
-	throw new Error(`unhandled capability: ${value}`)
 }

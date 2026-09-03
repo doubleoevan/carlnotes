@@ -1,10 +1,10 @@
 // the shared access checks for topics and topic findings
 import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
-import { and, eq, inArray, or, sql } from "drizzle-orm"
+import { and, eq, inArray, or, type SQLWrapper, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { findings, invites, scans, subscriptions, teamMembers, teamTopics, topics, users } from "../../db/schema"
 
-// a topic row, shared by every check below
+// a topic row, the shape every check in this file takes
 type TopicRow = typeof topics.$inferSelect
 
 /**
@@ -120,14 +120,23 @@ export async function canSeeTopic(
 	return (await isInvited(userId, topic.id)) || (await hasSubscription(userId, topic.id))
 }
 
-// whether the user's account email is on the topic's invite list
+/**
+ * Returns a subquery of this user's email, empty until they verify it.
+ */
+export function verifiedEmailQuery(userId: string): SQLWrapper {
+	return db
+		.select({ email: users.email })
+		.from(users)
+		.where(and(eq(users.id, userId), eq(users.emailVerified, true)))
+}
+
+// whether an address the user has verified is on the topic's invite list
 async function isInvited(userId: string, topicId: string): Promise<boolean> {
-	// match the invite email against the user's email with a subquery, so one round trip decides it
-	const userEmail = db.select({ email: users.email }).from(users).where(eq(users.id, userId))
+	// only a verified address matches, since anyone can sign up with an unproven one
 	const [invite] = await db
 		.select({ email: invites.email })
 		.from(invites)
-		.where(and(eq(invites.topicId, topicId), inArray(invites.email, userEmail)))
+		.where(and(eq(invites.topicId, topicId), inArray(invites.email, verifiedEmailQuery(userId))))
 		.limit(1)
 	return invite !== undefined
 }
@@ -304,7 +313,9 @@ async function loadFindingTopic(findingId: string): Promise<
 	return topic
 }
 
-// exhaustiveness guard. a compile error here means a topic visibility case went unhandled above
-function assertNever(value: never): never {
+/**
+ * Throws on a union case its caller's branches did not handle, so a new case breaks the build at every call site.
+ */
+export function assertNever(value: never): never {
 	throw new Error(`unhandled case: ${value}`)
 }

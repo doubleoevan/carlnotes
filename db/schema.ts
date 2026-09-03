@@ -101,6 +101,8 @@ export const users = pgTable(
 		plan: plan("plan").notNull().default("free"),
 		// a per-user monthly spend override in cents. an admin can raise or lower it, and null falls back to the plan's backstop
 		budgetOverrideCents: integer("budget_override_cents"),
+		// when this user last signed in, written on every session creation. null until they sign in again
+		lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
 		// plain timestamps without time zone to mirror Better Auth's own schema exactly
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")
@@ -186,21 +188,6 @@ export const verifications = pgTable(
 	(table) => [index("verifications_identifier_idx").on(table.identifier)],
 )
 
-// an integration is a user's connected external account. sources pull with it and deliveries send with it
-export const integrations = pgTable("integrations", {
-	id: primaryId(),
-	// the owning user
-	userId: text("user_id")
-		.notNull()
-		.references(() => users.id, { onDelete: "cascade" }),
-	// the provider name, its oauth grant, and the granted scopes
-	provider: text("provider").notNull(),
-	scopes: jsonb("scopes").$type<string[]>().notNull().default([]),
-	oauthGrant: jsonb("oauth_grant").$type<Record<string, unknown>>(),
-	// created and updated timestamps
-	...timestamps(),
-})
-
 // a topic is the user's configuration of what to scan for
 export const topics = pgTable(
 	"topics",
@@ -253,8 +240,6 @@ export const sources = pgTable("sources", {
 	// the source kind: url, rss, reddit, YouTube, podcast, search, bluesky, x, composio, or plugin
 	kind: sourceKind("kind").notNull(),
 	config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
-	// credentials resolve through an integration when present
-	integrationId: text("integration_id").references(() => integrations.id, { onDelete: "set null" }),
 	// the async screening status and its failure reason
 	status: sourceStatus("status").notNull().default("pending"),
 	error: text("error"),
@@ -323,12 +308,13 @@ export const scans = pgTable(
 		stageCosts: jsonb("stage_costs").$type<Record<string, number>>().notNull().default({}),
 		// an AI written recap of what the scan did
 		scanSummary: text("scan_summary"),
-		// sources that did not deliver normally: one that fell back to a keyless path, or one that failed outright
+		// sources that fell back to a keyless path, failed outright, or were skipped
 		problemSources: jsonb("problem_sources")
 			.$type<
 				(
 					| { sourceId: string; status: "fallback"; fallbackMode: string }
 					| { sourceId: string; status: "failed"; reason: string }
+					| { sourceId: string; status: "skipped" }
 				)[]
 			>()
 			.notNull()
@@ -518,7 +504,6 @@ export const invites = pgTable(
 		usedCount: integer("used_count").notNull().default(0),
 		// when the token stops working on its own, and when the owner withdrew it. both null means neither has happened
 		expiresAt: timestamp("expires_at", { withTimezone: true }),
-		revokedAt: timestamp("revoked_at", { withTimezone: true }),
 		// when the recipient turned the invitation down. kept instead of deleted so reputation can read it
 		declinedAt: timestamp("declined_at", { withTimezone: true }),
 		invitedAt: timestamp("invited_at", { withTimezone: true }).defaultNow().notNull(),

@@ -5,7 +5,7 @@ import { isBreachedPassword } from "./passwords"
 // a famously leaked password answering false means the lookup did not happen and the check is unavailable
 const isPasswordCheckReachable = await isBreachedPassword("password")
 
-test.skipIf(!isPasswordCheckReachable)("a known breached password is refused", async () => {
+test.skipIf(!isPasswordCheckReachable)("a known breached password is rejected", async () => {
 	expect(await isBreachedPassword("password")).toBe(true)
 })
 

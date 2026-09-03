@@ -172,7 +172,7 @@ export function ChatComposer({
 							<button
 								type="submit"
 								aria-label="Send"
-								disabled={question.trim() === ""}
+								disabled={question.trim() === "" && chat.attachments.length === 0}
 								onMouseDown={(event) => event.preventDefault()}
 								className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8 disabled:opacity-40"
 							>

@@ -64,9 +64,10 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 				avatarSource: users.avatarSource,
 				role: users.role,
 				plan: users.plan,
-				// the override, signup time, and the key that bills topic scans
+				// the override, signup and last-login times, and the key that bills topic scans
 				budgetOverrideCents: users.budgetOverrideCents,
 				createdAt: users.createdAt,
+				lastLoginAt: users.lastLoginAt,
 				litellmVirtualKey: users.litellmVirtualKey,
 			})
 			.from(users),
@@ -120,6 +121,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			role: user.role,
 			plan: user.plan,
 			createdAt: user.createdAt.toISOString(),
+			lastLoginAt: user.lastLoginAt?.toISOString() ?? null,
 			topicCount: topicCountByUser.get(user.id) ?? 0,
 			teamCount: teamCountByUser.get(user.id) ?? 0,
 			// the attributed storage, observed monthly cost, the app's own split totals, and budget
@@ -302,7 +304,7 @@ export async function setUserBudgetOverride(
 		return "missing"
 	}
 
-	// the key is resized to the effective budget, which includes the override. the user is notified if the proxy refused
+	// the key is resized to the effective budget, which includes the override. the user is notified if the proxy rejected
 	return (await replaceUserLiteLLMKey(targetUserId)) ? "applied" : "key-unchanged"
 }
 

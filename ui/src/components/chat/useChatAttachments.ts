@@ -3,6 +3,7 @@ import {
 	CHAT_ATTACHMENT_KEEP_LIMIT,
 	CHAT_IMAGE_DATA_CHARS,
 	CHAT_MAX_ATTACHMENTS,
+	CHAT_PDF_DATA_CHARS,
 	CHAT_VIDEO_DATA_CHARS,
 	type ChatAttachment,
 	clipAttachmentText,
@@ -11,9 +12,10 @@ import {
 import { type Dispatch, type SetStateAction, useRef, useState } from "react"
 import { toast } from "sonner"
 import { sendDeleteKeptAttachment } from "@/clients/chatClient"
+import { toDataUrlSizeLabel } from "@/lib/labels"
 
 // the file extensions read as plain text when the browser gives no text/* type of its own
-const TEXT_FILE_SUFFIXES = [".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".log"]
+export const TEXT_FILE_SUFFIXES = [".txt", ".md", ".markdown", ".csv", ".tsv", ".json", ".log"]
 
 // the draft's files and the ones the topic already keeps, with the writes that change either
 export type ChatAttachments = {
@@ -117,7 +119,14 @@ export function useChatAttachments(): ChatAttachments {
 }
 
 // the video types both composers take, the ones the shared player can also stream back
-const VIDEO_FILE_TYPES = ["video/mp4", "video/quicktime", "video/webm"]
+export const VIDEO_FILE_TYPES = ["video/mp4", "video/quicktime", "video/webm"]
+
+// the word and workbook types, which the server extracts words from like a pdf
+export const DOCUMENT_FILE_TYPES = [
+	"application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+	"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+]
+export const DOCUMENT_FILE_SUFFIXES = [".docx", ".xlsx"]
 
 // a selected or pasted file as a chat attachment
 export async function toAttachment(file: File): Promise<ChatAttachment | null> {
@@ -132,28 +141,52 @@ export async function toAttachment(file: File): Promise<ChatAttachment | null> {
 		return toDataUrlAttachment(file, "video")
 	}
 
+	// a word file or workbook posts its bytes too. carl reads the words the server pulls out of it
+	if (
+		DOCUMENT_FILE_TYPES.includes(file.type) ||
+		DOCUMENT_FILE_SUFFIXES.some((suffix) => file.name.toLowerCase().endsWith(suffix))
+	) {
+		return toDataUrlAttachment(file, "document")
+	}
+
 	// text files post as raw text, clipped to the limit with the cut point marked for the model
 	if (file.type.startsWith("text/") || TEXT_FILE_SUFFIXES.some((suffix) => file.name.toLowerCase().endsWith(suffix))) {
 		const text = await file.text()
 		return { kind: "text", name: file.name || "text", text: clipAttachmentText(text), keep: false }
 	}
 	// every other kind of attachment is rejected with a toast
-	toast("Carl takes images, PDFs, text files, and videos for now.")
+	toast("Carl takes images, PDFs, Word and Excel files, text files, and videos for now.")
 	return null
 }
 
-// each data url kind's size limit and the toast that names it
+// each data url kind's size limit and the toast that names it, whose size reads from the limit itself
 const DATA_URL_KIND_LIMITS = {
-	image: { maxChars: CHAT_IMAGE_DATA_CHARS, tooLargeToast: "That image is too large. About 4 MB is the limit." },
-	pdf: { maxChars: CHAT_IMAGE_DATA_CHARS, tooLargeToast: "That PDF is too large. About 4 MB is the limit." },
-	video: { maxChars: CHAT_VIDEO_DATA_CHARS, tooLargeToast: "That video is too large. About 18 MB is the limit." },
+	image: {
+		maxChars: CHAT_IMAGE_DATA_CHARS,
+		tooLargeToast: `That image is too large. About ${toDataUrlSizeLabel(CHAT_IMAGE_DATA_CHARS)} is the limit.`,
+	},
+	pdf: {
+		maxChars: CHAT_PDF_DATA_CHARS,
+		tooLargeToast: `That PDF is too large. About ${toDataUrlSizeLabel(CHAT_PDF_DATA_CHARS)} is the limit.`,
+	},
+	document: {
+		maxChars: CHAT_PDF_DATA_CHARS,
+		tooLargeToast: `That file is too large. About ${toDataUrlSizeLabel(CHAT_PDF_DATA_CHARS)} is the limit.`,
+	},
+	video: {
+		maxChars: CHAT_VIDEO_DATA_CHARS,
+		tooLargeToast: `That video is too large. About ${toDataUrlSizeLabel(CHAT_VIDEO_DATA_CHARS)} is the limit.`,
+	},
 } as const
 
 // the fallback names for files the browser hands over unnamed
-const UNNAMED_FILE_NAMES = { image: "image", pdf: "document.pdf", video: "video" } as const
+const UNNAMED_FILE_NAMES = { image: "image", pdf: "document.pdf", document: "document", video: "video" } as const
 
 // an image, PDF, or video as a data url, rejected by name when it runs past its kind's size limit
-async function toDataUrlAttachment(file: File, kind: "image" | "pdf" | "video"): Promise<ChatAttachment | null> {
+async function toDataUrlAttachment(
+	file: File,
+	kind: "image" | "pdf" | "document" | "video",
+): Promise<ChatAttachment | null> {
 	const dataUrl = await toDataUrl(file)
 
 	// a file past its kind's limit rejects before any of it uploads

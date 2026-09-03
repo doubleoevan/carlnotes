@@ -118,7 +118,7 @@ test("a rate limit or a server error keeps a suggestion of any kind", () => {
 	expect(isTemporaryFailure(new FeedStatusError("https://a.test/feed", 503), "rss")).toBe(true)
 })
 
-// a suggestion context holding only what the context reads, for test cases to override
+// a suggestion context with only what the context reads, for test cases to override
 function toSuggestionContext(overrides: Partial<SuggestionContext>): SuggestionContext {
 	return {
 		name: "Raccoons",

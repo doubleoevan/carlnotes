@@ -118,7 +118,7 @@ export function TopicInfo(props: TopicInfoProps) {
 					<InfoSection label="Attachments">
 						<div className="flex flex-col gap-1">
 							{topic.attachments.map((attachment) => (
-								<AttachmentPill key={attachment.id} attachment={attachment} isDownloadable={topic.isOwner} />
+								<AttachmentPill key={attachment.id} attachment={attachment} isDownloadable={topic.isTopicOwner} />
 							))}
 						</div>
 					</InfoSection>

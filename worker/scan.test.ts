@@ -41,13 +41,13 @@ test("toScanSummary reports failed when every Source that ran threw", () => {
 	expect(summary.status).toBe("failed")
 })
 
-// skips are non-events. a topic with all-skipped Sources still succeeds
-test("toScanSummary treats skipped Sources as non-failures", () => {
-	const summary = toScanSummary([{ status: "skipped", sourceKind: "composio" }])
+// a skipped source is not a failure, but it is recorded, so a skipped source doesn't hide in a succeeded scan
+test("toScanSummary records skipped Sources without failing the scan", () => {
+	const summary = toScanSummary([{ status: "skipped", sourceId: "s1", sourceKind: "composio" }])
 
-	// a skipped Source has no ingester for it, so it counts as neither a failure nor a fallback
+	// the scan succeeds and the row names what went unread
 	expect(summary.status).toBe("succeeded")
-	expect(summary.problemSources).toEqual([])
+	expect(summary.problemSources).toEqual([{ sourceId: "s1", status: "skipped" }])
 })
 
 // a Source that ran its primary path cleanly leaves no trace behind

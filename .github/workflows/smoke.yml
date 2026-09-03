@@ -1,0 +1,50 @@
+name: Smoke
+
+# the smoke suite runs against real services: the dev database, LiteLLM, and the outside APIs.
+# it spends a little real money and writes real rows, so it runs on each push to main or triggered manually,
+# not on the pr path. it needs a DOPPLER_TOKEN repository secret holding a dev-config service token before its first run.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+# one smoke run at a time, since the runs share one dev database
+concurrency:
+  group: smoke
+  cancel-in-progress: false
+
+# the suite only reads the repo
+permissions:
+  contents: read
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      # persist-credentials false keeps the checkout token out of .git/config
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # the exact Bun the Dockerfile pins, matching the CI gate
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+      - run: bun install --frozen-lockfile
+      # the doppler cli injects the same dev secrets a local smoke run uses
+      - uses: dopplerhq/cli-action@v3
+      - run: doppler run -- bash scripts/smoke-coverage.sh
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      # the smoke coverage joins the unit coverage on Codecov under its own flag
+      - uses: codecov/codecov-action@v7
+        if: always()
+        with:
+          directory: ./coverage/smoke
+          flags: smoke
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false

@@ -35,11 +35,11 @@ export type ChatTurnInput = {
 	teamId?: string
 	question: string
 	history: ChatHistoryTurn[]
-	attachments?: ChatAttachment[]
+	chatAttachments?: ChatAttachment[]
 	// who is asking. chat is signed-in only, and this scopes their kept chat attachments
 	userId: string
 	// whether this user owns the topic, resolved by the authorization gate before the call
-	isOwner: boolean
+	isTopicOwner: boolean
 	litellmApiKey?: string
 	// false for a chat room turn, whose answer posts publicly, so the poster's kept chat attachments stay out
 	includeAttachments?: boolean
@@ -72,7 +72,7 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 			input.retrievalQuestion ?? input.question,
 			input.userId,
 			// the owner flag scopes the topic's own attachments, and the keep flag the user's chat material
-			input.isOwner,
+			input.isTopicOwner,
 			input.litellmApiKey,
 			input.includeAttachments ?? true,
 		)
@@ -100,7 +100,7 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 	const replyStream = streamText({
 		model: chatModel(input.litellmApiKey),
 		system: chatPrompt.prompt,
-		messages: toModelMessages(input.history, input.question, input.attachments ?? []),
+		messages: toModelMessages(input.history, input.question, input.chatAttachments ?? []),
 		tools: { searchWeb: webSearchTool(searchTotal) },
 		maxOutputTokens: MAX_TURN_OUTPUT_TOKENS,
 		stopWhen: stepCountIs(MAX_TURN_STEPS),

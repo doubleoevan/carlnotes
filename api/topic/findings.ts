@@ -81,7 +81,31 @@ export async function loadTopicFindings(
 		.orderBy(desc(findings.relevanceScore))
 
 	// shape each row into a topic finding and set its isConsumed flag
-	return findingRows.map((findingRow) => ({
+	return findingRows.map(toTopicFinding)
+}
+
+// the joined row a finding read returns: the finding, its resource metadata, and the user's marks
+type TopicFindingRow = {
+	findingId: string
+	scanId: string
+	resourceId: string
+	url: string
+	resourceKind: TopicFinding["resourceKind"]
+	title: TopicFinding["title"]
+	resourceCreatedAt: Date
+	fetchedAt: Date
+	relevanceScore: TopicFinding["relevanceScore"]
+	relevanceExplanation: TopicFinding["relevanceExplanation"]
+	viewCount: TopicFinding["viewCount"]
+	rating: TopicFinding["rating"]
+	engagement: TopicFinding["engagement"]
+	consumedAt: Date | null
+	bookmarkedAt: Date | null
+}
+
+/** Shapes one joined finding row into a TopicFinding, with the user's marks set. */
+export function toTopicFinding(findingRow: TopicFindingRow): TopicFinding {
+	return {
 		findingId: findingRow.findingId,
 		scanId: findingRow.scanId,
 		resourceId: findingRow.resourceId,
@@ -101,7 +125,7 @@ export async function loadTopicFindings(
 		isConsumed: findingRow.consumedAt !== null,
 		isBookmarked: findingRow.bookmarkedAt !== null,
 		teamBookmarks: [],
-	}))
+	}
 }
 
 /**
@@ -171,8 +195,8 @@ export async function saveFindingFeedback(userId: string, findingId: string, fee
 }
 
 /**
- * Bookmark or unbookmark a topic finding for the user. Bookmarking returns false unless the user owns the topic.
- * Unbookmarking always succeeds, so a bookmark held from before the owner rule can still be removed.
+ * Bookmark or unbookmark a topic finding for the user. Bookmarking returns false unless the user owns the topic
+ * or actively belongs to a team holding it. Unbookmarking always succeeds, so an older bookmark can still be removed.
  */
 export async function setBookmarked(
 	userId: string,
@@ -194,7 +218,7 @@ export async function setBookmarked(
 		return true
 	}
 
-	// bookmarking requires this user to own the topic. a duplicate insert does nothing
+	// bookmarking takes the owner or an active member of a team holding the topic. a duplicate insert does nothing
 	if (!(await canBookmarkFinding(userId, findingId))) {
 		return false
 	}
@@ -351,7 +375,7 @@ export const findingsRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// bookmark or unbookmark this topic finding for the current user, keeping the count below the max results
+		// bookmark or unbookmark this topic finding for the current user
 		const { isBookmarked } = context.req.valid("json")
 		const isBookmarkSet = await setBookmarked(
 			userId,

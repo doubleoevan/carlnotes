@@ -39,7 +39,6 @@ export function InviteFields({
 	onAddUsername,
 	onRemoveInvite,
 	inviteLink,
-	children,
 }: {
 	// what the section is called: Invites on a topic, Members on a team
 	label: string
@@ -50,8 +49,6 @@ export function InviteFields({
 	onRemoveInvite: (chip: string) => void
 	// the invite-by-link menu, shown once the target is saved and has something to link to
 	inviteLink?: InviteLink
-	// whatever the page shows under the fields, like a topic's live link rows
-	children?: React.ReactNode
 }) {
 	return (
 		<div className="space-y-2">
@@ -67,7 +64,6 @@ export function InviteFields({
 			<EmailInviteField onInvite={onAddEmail} />
 			<UsernameInviteField onInvite={onAddUsername} />
 			{inviteLink && <InviteLinkMenu inviteLink={inviteLink} />}
-			{children}
 		</div>
 	)
 }

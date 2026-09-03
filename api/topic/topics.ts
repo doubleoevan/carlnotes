@@ -26,7 +26,7 @@ import { loadTopicChatMentions } from "../chat/mentions"
 import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { startInviteEmails } from "../invite/emails"
-import { reviewTopicInvites } from "../invite/userInvites"
+import { checkTopicInvitees } from "../invite/userInvites"
 import { releaseFeatureOrder } from "./featuring"
 import { newTopicFindingCount } from "./findings"
 import {
@@ -66,7 +66,7 @@ export type UpdateTopicResult =
 	| InviteeRejection
 
 // a save stopped by its invitee list: a recipient who is not accepting invites, or the sender's invite limit
-type InviteeRejection = { status: "inviteeRefused"; email: string } | { status: "inviteLimit" }
+type InviteeRejection = { status: "inviteeRejected"; email: string } | { status: "inviteLimit" }
 
 /**
  * Load one topic's page or null if the topic is missing or not visible to this user.
@@ -80,7 +80,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 	}
 
 	// the page's independent reads run together
-	const isOwner = topic.ownerId === userId
+	const isTopicOwner = topic.ownerId === userId
 	// biome-ignore format: one line keeps the destructure under the comment-density hook's limit
 	const [{ isAdmin, topicFindings }, sourceRows, rawAttachmentRows, scanRows, directSubscription, inviteAndScanFields, [ownerRow], teamFields, isDailyFrequencyPaused, canRate, canEdit] =
 		await Promise.all([
@@ -120,7 +120,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 			// this user's own subscription state. a signed-out visitor subscribes to nothing
 			userId ? loadDirectSubscription(userId, topic.id) : null,
 			// the owner-only extras: the invite list, the manual scan quota, and whether their spend is used up
-			toInviteAndScanFields(userId, topic, isOwner),
+			toInviteAndScanFields(userId, topic, isTopicOwner),
 			// the topic owner's username, avatar and profile page id
 			db
 				.select({ userId: users.id, username: users.username, avatarSource: users.avatarSource })
@@ -129,14 +129,15 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 			// the team fields, read once: the badge, the user's membership, and the byline credit all follow from them
 			toTeamFields(topic.id, topic.teamId, userId),
 			// whether the owner's daily topics outgrew their plan, and what this user may do here
-			toDailyFrequencyPaused(topic, isOwner),
+			toDailyFrequencyPaused(topic, isTopicOwner),
 			isAllowed(userId, "topic:rate", topic),
 			isAllowed(userId, "topic:edit", topic),
 		])
 
-	// a Source that has not passed its llm-guard screen can only be seen by the owner
+	// a Source that has not passed its llm-guard screen is only seen by someone who may edit the list.
+	// an editor's save reconciles sources by deletion, so hiding a row from them would delete it
 	const sourceSummaries = sourceRows
-		.filter((source) => source.status === "ready" || isAdmin || isOwner)
+		.filter((source) => source.status === "ready" || isAdmin || canEdit)
 		.map((source) => ({
 			id: source.id,
 			sourceKind: source.kind,
@@ -149,10 +150,10 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 	// every later scan reads the generated context, so the owner and admins see it to edit it, and nobody else does
 	const attachmentRows = rawAttachmentRows.map((attachment) => ({
 		...attachment,
-		context: isAdmin || isOwner ? attachment.context : null,
+		context: isAdmin || isTopicOwner ? attachment.context : null,
 	}))
 	// a stopped scan is left out of the history and the last-succeeded scan. the month's cost still counts it
-	const scanHistory = toScanHistory(scanRows, isAdmin || isOwner)
+	const scanHistory = toScanHistory(scanRows, isAdmin || isTopicOwner)
 
 	// this user's own subscription state
 	const isSubscribed = directSubscription?.isActive === true
@@ -166,7 +167,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 	// this month's total scan spend, for the owner or an admin, summed from the raw scans since the first of the utc month
 	const monthStart = startOfUtcMonth(new Date())
 	const monthCostDollars =
-		isAdmin || isOwner
+		isAdmin || isTopicOwner
 			? scanRows.filter((scan) => scan.startedAt >= monthStart).reduce((sum, scan) => sum + Number(scan.cost), 0)
 			: null
 	return {
@@ -184,7 +185,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		maxResults: topic.maxResults,
 		visibility: topic.visibility,
 		// what this user may do with the topic
-		isOwner,
+		isTopicOwner,
 		isDailyFrequencyPaused,
 		isSubscribed,
 		// the user's unseen chat room mentions, for the count badge on the page's title
@@ -238,9 +239,9 @@ export async function createTopic(
 	// the deduped invite emails, shared by the insert inside the transaction and the emails after it
 	const inviteEmails = [...new Set(payload.inviteEmails)]
 	// each invitee resolves to an account and passes their invite-access setting before anything writes
-	const inviteeReview = await reviewTopicInvites(userId, null, inviteEmails)
-	if (inviteeReview.status !== "ok") {
-		return inviteeReview
+	const inviteeCheck = await checkTopicInvitees(userId, null, inviteEmails)
+	if (inviteeCheck.status !== "ok") {
+		return inviteeCheck
 	}
 	const podcastNames = await toPodcastNames(payload.sources)
 	const { topicId, firstScan } = await db.transaction(async (transaction) => {
@@ -272,7 +273,7 @@ export async function createTopic(
 				inviteEmails.map((email) => ({
 					topicId: topic.id,
 					email,
-					invitedUserId: inviteeReview.invitedUserIdByEmail.get(email) ?? null,
+					invitedUserId: inviteeCheck.invitedUserIdByEmail.get(email) ?? null,
 					invitedByUserId: userId,
 				})),
 			)
@@ -297,7 +298,7 @@ export async function createTopic(
 		reportError(error, "first-scan", { topicId, userId })
 	})
 
-	// email the invitations without holding up the topic created response
+	// email the invitations without delaying the topic created response
 	startInviteEmails({ id: topicId, name, ownerId: userId }, inviteEmails)
 
 	// track the topic creation event
@@ -336,16 +337,16 @@ export async function updateTopic(
 	// the deduped invite emails, shared by the reconcile inside the transaction and the emails after it
 	const inviteEmails = mayReconcileInvites ? [...new Set(payload.inviteEmails)] : []
 	// each fresh invitee resolves to an account and passes their invite-access setting before anything writes
-	const inviteeReview = mayReconcileInvites
-		? await reviewTopicInvites(userId, topicId, inviteEmails)
+	const inviteeCheck = mayReconcileInvites
+		? await checkTopicInvitees(userId, topicId, inviteEmails)
 		: {
 				status: "ok" as const,
 				invitedUserIdByEmail: new Map<string, string | null>(),
 				newInvites: [],
 				reinvitedEmails: [],
 			}
-	if (inviteeReview.status !== "ok") {
-		return inviteeReview
+	if (inviteeCheck.status !== "ok") {
+		return inviteeCheck
 	}
 	const podcastNames = await toPodcastNames(payload.sources)
 	await db.transaction(async (transaction) => {
@@ -378,22 +379,22 @@ export async function updateTopic(
 		}
 
 		// an explicitly re-invited decliner becomes pending again: declinedAt clears and invitedAt moves to now
-		if (inviteeReview.reinvitedEmails.length > 0) {
+		if (inviteeCheck.reinvitedEmails.length > 0) {
 			await transaction
 				.update(invites)
 				.set({ declinedAt: null, invitedAt: new Date() })
-				.where(and(eq(invites.topicId, topicId), inArray(invites.email, inviteeReview.reinvitedEmails)))
+				.where(and(eq(invites.topicId, topicId), inArray(invites.email, inviteeCheck.reinvitedEmails)))
 		}
 
 		// insert the newly invited emails, each with the account its address resolved to
-		if (inviteeReview.newInvites.length > 0) {
+		if (inviteeCheck.newInvites.length > 0) {
 			await transaction
 				.insert(invites)
 				.values(
-					inviteeReview.newInvites.map((email) => ({
+					inviteeCheck.newInvites.map((email) => ({
 						topicId,
 						email,
-						invitedUserId: inviteeReview.invitedUserIdByEmail.get(email) ?? null,
+						invitedUserId: inviteeCheck.invitedUserIdByEmail.get(email) ?? null,
 						invitedByUserId: userId,
 					})),
 				)
@@ -422,12 +423,12 @@ export async function updateTopic(
 
 	// email only the newly added invites. a re-invited decliner counts as newly invited
 	startInviteEmails({ id: topicId, name, ownerId: topic.ownerId }, [
-		...inviteeReview.newInvites,
-		...inviteeReview.reinvitedEmails,
+		...inviteeCheck.newInvites,
+		...inviteeCheck.reinvitedEmails,
 	])
 
 	// record who saved the topic. an admin may edit a topic they do not own so flag if it was not saved by the owner
-	trackEvent("topic_updated", userId, { ...analyticsProperties, topicId, isOwner: topic.ownerId === userId })
+	trackEvent("topic_updated", userId, { ...analyticsProperties, topicId, isTopicOwner: topic.ownerId === userId })
 	return { status: "saved" }
 }
 
@@ -471,7 +472,7 @@ export async function deleteTopic(
 	})
 
 	// record who deleted the topic. the row is gone, so this event is the only account of who deleted it
-	trackEvent("topic_deleted", userId, { ...analyticsProperties, topicId, isOwner: topic.ownerId === userId })
+	trackEvent("topic_deleted", userId, { ...analyticsProperties, topicId, isTopicOwner: topic.ownerId === userId })
 	return true
 }
 
@@ -489,8 +490,8 @@ export const topicsRoute = new Hono<AppEnv>()
 			return context.json({ id: createTopicResult.id })
 		}
 
-		// each rejection is named: a refusing invitee, a spent invite limit, or a topic quota
-		if (createTopicResult.status === "inviteeRefused") {
+		// each rejection is named: a rejecting invitee, a spent invite limit, or a topic quota
+		if (createTopicResult.status === "inviteeRejected") {
 			return context.json({ error: "invitee-not-accepting", email: createTopicResult.email }, 409)
 		}
 		if (createTopicResult.status === "inviteLimit") {
@@ -531,11 +532,11 @@ export const topicsRoute = new Hono<AppEnv>()
 	})
 	.get("/topics/addable", async (context) => {
 		// the topics a signed-in user may bring to a team, in the order the picker shows them
-		const user = context.get("user")
-		if (!user) {
+		const userId = currentUser(context)
+		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		return context.json({ topics: await loadTeamTopicOptions(user.id, user.email, context.req.query("excludeTeam")) })
+		return context.json({ topics: await loadTeamTopicOptions(userId, context.req.query("excludeTeam")) })
 	})
 	.get("/topics/:id", async (context) => {
 		// the topic detail payload, gated by visibility. a signed-out visitor may only view a public topic
@@ -570,8 +571,8 @@ export const topicsRoute = new Hono<AppEnv>()
 		if (updateTopicResult.status === "dailyFrequency") {
 			return context.json({ error: "daily topic limit reached", dailyTopicLimit: updateTopicResult.limit }, 429)
 		}
-		// a refused invitee and a spent invite limit each answer by name, so the modal can show which
-		if (updateTopicResult.status === "inviteeRefused") {
+		// a rejected invitee and a spent invite limit each answer by name, so the modal can show which
+		if (updateTopicResult.status === "inviteeRejected") {
 			return context.json({ error: "invitee-not-accepting", email: updateTopicResult.email }, 409)
 		}
 		if (updateTopicResult.status === "inviteLimit") {

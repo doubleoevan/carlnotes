@@ -86,10 +86,19 @@ export async function fetchTeamNameTaken(name: string): Promise<boolean> {
 	return ((await response.json()) as { isTaken: boolean }).isTaken
 }
 
-// delete the team, returning its topics to their creators. false if it is the only team the user leads
-export async function sendDeleteTeam(teamId: string): Promise<boolean> {
-	const response = await apiClient.api.teams[":id"].$delete({ param: { id: teamId } })
-	return response.ok
+// delete the team, or hand it over: a team with other members survives under a new leader while the caller leaves
+export async function sendDeleteTeam(
+	teamId: string,
+): Promise<{ status: "deleted" } | { status: "handedOver"; newLeaderUsername: string } | null> {
+	try {
+		const response = await apiClient.api.teams[":id"].$delete({ param: { id: teamId } })
+		if (!response.ok) {
+			return null
+		}
+		return (await response.json()) as { status: "deleted" } | { status: "handedOver"; newLeaderUsername: string }
+	} catch {
+		return null
+	}
 }
 
 // add a user's topic to a team, returning the conflict message if it is already on a team
@@ -130,9 +139,12 @@ export async function setTeamMemberVisibility(teamId: string, userId: string, is
 	})
 }
 
-// create an invite link for a team
-export async function sendCreateTeamInvite(teamId: string, source: InviteSource): Promise<Invite> {
+// create an invite link for a team. "limited" is the daily invite limit
+export async function sendCreateTeamInvite(teamId: string, source: InviteSource): Promise<Invite | "limited"> {
 	const response = await apiClient.api.teams[":id"].invites.$post({ param: { id: teamId }, json: { source } })
+	if (response.status === 429) {
+		return "limited"
+	}
 	if (!response.ok) {
 		const body = (await response.json().catch(() => null)) as { error?: string } | null
 		throw new Error(body?.error ?? `invite create failed: ${response.status}`)
@@ -151,9 +163,9 @@ export async function sendTeamAvatar(teamId: string, avatarFile: File): Promise<
 		return null
 	}
 
-	// the refusal names itself, so the picker can show which way it went
-	const refusal = ((await response.json().catch(() => null)) as { error?: string } | null)?.error
-	return refusal ?? "failed"
+	// the rejection names itself, so the picker can show which way it went
+	const rejection = ((await response.json().catch(() => null)) as { error?: string } | null)?.error
+	return rejection ?? "failed"
 }
 
 // the public teams a query finds, for the search bar's team suggestions

@@ -72,7 +72,7 @@ export async function retrieveChatContext(
 	topicId: string,
 	question: string,
 	userId: string,
-	isOwner: boolean,
+	isTopicOwner: boolean,
 	litellmApiKey?: string,
 	includeKeptAttachments = true,
 ): Promise<ChatContext | null> {
@@ -94,7 +94,7 @@ export async function retrieveChatContext(
 		readSources(topicId),
 		readScanSummaries(topicId),
 		// a chat room turn's answer posts publicly, so the owner's attachments and the poster's kept chat attachments both stay out
-		isOwner && includeKeptAttachments ? readAttachmentContext(topicId) : Promise.resolve(""),
+		isTopicOwner && includeKeptAttachments ? readAttachmentContext(topicId) : Promise.resolve(""),
 		includeKeptAttachments ? readChatAttachmentContext(userId, topicId) : Promise.resolve(""),
 		readDocsBlock(questionVector),
 	])
@@ -310,7 +310,7 @@ export async function retrieveTeamChatContext(
 		.from(teamTopics)
 		.innerJoin(topics, eq(topics.id, teamTopics.topicId))
 		.where(eq(teamTopics.teamId, teamId))
-	// the id list drives every read below, and the name map labels each finding and source line
+	// the topicIds list that drives the topic reads. the topicNameByTopicId map labels each finding and source line
 	const teamTopicRows = [...ownedTopicRows, ...sharedTopicRows]
 	const topicIds = teamTopicRows.map((topicRow) => topicRow.id)
 	const topicNameByTopicId = new Map(teamTopicRows.map((topicRow) => [topicRow.id, topicRow.name]))

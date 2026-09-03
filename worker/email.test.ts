@@ -52,13 +52,13 @@ test("sendEmailBatch chunks at 100 per call and flags every message accepted", a
 	expect(accepted.every(Boolean)).toBe(true)
 })
 
-// resend refuses a whole batch over one address it will not take, so an unsendable one is held back
+// resend rejects a whole batch over one address it will not take, so an unsendable one is held back
 test("an unsendable address is held back instead of failing the batch", async () => {
 	Bun.env.RESEND_API_KEY = "test-key"
 	Bun.env.RESEND_FROM_EMAIL = "carl@example.com"
 	const sentAddresses: string[] = []
 	globalThis.fetch = (async (_url: RequestInfo | URL, init?: RequestInit) => {
-		// record every address resend was actually posted, which is what the assertion below reads
+		// record every address resend was actually posted, which is what this test asserts on
 		const body = JSON.parse(String(init?.body)) as { to: string }[]
 		sentAddresses.push(...body.map((email) => email.to))
 		return new Response(JSON.stringify({ data: body.map(() => ({ id: "x" })) }), { status: 200 })

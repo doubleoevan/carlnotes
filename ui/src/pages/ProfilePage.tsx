@@ -411,8 +411,8 @@ function ProfileTeamUpButton({
 
 	// send the username an invitation to that team
 	const handleInviteTeamMember = async (teamMenuOption: TeamMenuOption): Promise<void> => {
-		const refusal = await sendUserInvite({ teamId: teamMenuOption.teamId }, { username })
-		if (refusal) {
+		const rejection = await sendUserInvite({ teamId: teamMenuOption.teamId }, { username })
+		if (rejection) {
 			toast.error(`The invitation to @${username} didn't go through.`)
 		} else {
 			toast(`Invited @${username} to ${teamMenuOption.name}.`)

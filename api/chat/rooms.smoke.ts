@@ -138,4 +138,4 @@ try {
 }
 
 console.log(failures === 0 ? "\nrooms smoke: every check passed" : `\nrooms smoke: ${failures} failed`)
-process.exit(failures === 0 ? 0 : 1)
+process.exitCode = failures === 0 ? 0 : 1

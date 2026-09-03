@@ -23,15 +23,12 @@ import { customSourceKeys } from "./sources"
 
 // the rating mutation body. up or down sets the topic finding's rating and null clears it
 export const ratingPayload = z.object({ rating: z.enum(ratings).nullable() })
-export type RatingPayload = z.infer<typeof ratingPayload>
 
 // the consumed mutation body. true marks the topic finding consumed for the current user and false unmarks it
 export const consumedPayload = z.object({ isConsumed: z.boolean() })
-export type ConsumedPayload = z.infer<typeof consumedPayload>
 
 // the bookmark mutation body. true sets the topic finding bookmark for the current user and false clears it
 export const bookmarkPayload = z.object({ isBookmarked: z.boolean() })
-export type BookmarkPayload = z.infer<typeof bookmarkPayload>
 
 // one chat message attachment shown with a chat message
 export type ChatMessageAttachment = { id: string; kind: (typeof chatAttachmentKinds)[number]; name: string }
@@ -66,32 +63,32 @@ export type ChatLinkPreview = {
 
 // the chat room post body
 export const CHAT_ROOM_MESSAGE_MAX_CHARS = 4000
-export const chatRoomMessagePayload = z.object({
-	content: z.string().trim().min(1).max(CHAT_ROOM_MESSAGE_MAX_CHARS),
-	replyToChatMessageId: z.number().int().positive().nullable().optional(),
-	// the shared files going with the chat message, under the per-chat message limit
-	get attachments() {
-		return z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([])
-	},
-})
+export const chatRoomMessagePayload = z
+	.object({
+		content: z.string().trim().max(CHAT_ROOM_MESSAGE_MAX_CHARS),
+		replyToChatMessageId: z.number().int().positive().nullable().optional(),
+		// the shared files going with the chat message, under the per-chat message limit
+		get attachments() {
+			return z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([])
+		},
+	})
+	// a chat message may be attachments alone, but never nothing at all
+	.refine((chatMessage) => chatMessage.content !== "" || chatMessage.attachments.length > 0)
 
 // a user's own words about a finding to use for tuning later
 export const findingFeedbackPayload = z.object({ feedback: z.string().trim().min(1).max(2000) })
 
 // the signup-gate body. oauth never calls this endpoint, only the password path needs turnstile
 export const signupGatePayload = z.object({ turnstileToken: z.string() })
-export type SignupGatePayload = z.infer<typeof signupGatePayload>
 
 // the checkout body. which paid plan and billing interval to subscribe to through Stripe Checkout
 export const checkoutPayload = z.object({
 	plan: z.enum(["plus", "premium"]),
 	billingInterval: z.enum(["monthly", "yearly"]),
 })
-export type CheckoutPayload = z.infer<typeof checkoutPayload>
 
 // the update username body. the validation rules live in toUsernameRejection
 export const usernamePayload = z.object({ username: z.string() })
-export type UsernamePayload = z.infer<typeof usernamePayload>
 
 // how long a flag's reason can be
 export const FLAG_REASON_MAX_CHARS = 1000
@@ -106,7 +103,6 @@ export type FlagContentPayload = z.infer<typeof flagContentPayload>
 
 // the invite-delete body, named by its invite id
 export const inviteDeletePayload = z.object({ inviteId: z.string() })
-export type InviteDeletePayload = z.infer<typeof inviteDeletePayload>
 
 // one pending invite to a topic or a team, as its sender sees it
 export const invite = z.object({
@@ -219,20 +215,17 @@ export type InviteSource = (typeof inviteSources)[number]
 // what creating an invite returns: the invite whose url goes into a composer or onto the clipboard
 export const inviteCreateResponse = z.object({ invite })
 
-// the invite acceptance body. the turnstile bot check the join page passes along with the token in its path
-export const inviteAcceptPayload = z.object({ turnstileToken: z.string() })
-export type InviteAcceptPayload = z.infer<typeof inviteAcceptPayload>
-
 // the ways an invite join token can fail, each one its own reason
-export const inviteRefusals = ["revoked", "expired", "exhausted", "unknown"] as const
-export type InviteRefusal = (typeof inviteRefusals)[number]
+export const inviteRejections = ["expired", "exhausted", "unknown"] as const
+export type InviteRejection = (typeof inviteRejections)[number]
 
 // what accepting an invite returns: the topic to open, or which way the token failed
 export const inviteAcceptResponse = z.discriminatedUnion("status", [
 	z.object({ status: z.literal("joined"), topicId: z.string(), topicName: z.string() }),
 	z.object({ status: z.literal("joinedTeam"), teamId: z.string(), teamName: z.string() }),
 	z.object({ status: z.literal("requestedTeam"), teamId: z.string(), teamName: z.string() }),
-	z.object({ status: z.enum(inviteRefusals) }),
+	z.object({ status: z.literal("teamFull"), teamId: z.string(), teamName: z.string() }),
+	z.object({ status: z.enum(inviteRejections) }),
 ])
 export type InviteAcceptResponse = z.infer<typeof inviteAcceptResponse>
 
@@ -242,7 +235,6 @@ export const subscriptionEmailPayload = z.object({
 	// whose subscription to write, for an admin acting on somebody else's. absent means the caller's own
 	subscriberUserId: z.string().optional(),
 })
-export type SubscriptionEmailPayload = z.infer<typeof subscriptionEmailPayload>
 
 // one Scan row in an Activity topic's subtable
 export type ActivityScan = {
@@ -431,6 +423,9 @@ export function toUncompactedChatTurnStart(history: { question: string; answer: 
 // how many chat turns a send posts to the llm. the older turns beyond the memory budget are compacted
 export const CHAT_HISTORY_TURNS = 100
 
+// what a broken reply stream ends with. the api client reads it as a failed chat turn
+export const CHAT_STREAM_FAILED_TEXT = "\n\n[Carl's reply broke off here.]"
+
 // how much of a compacted older answer survives
 const COMPACT_ANSWER_CHARS = 280
 
@@ -449,11 +444,20 @@ export const CHAT_MAX_ATTACHMENTS = 4
 export const CHAT_ATTACHMENT_TEXT_CHARS = 50_000
 export const CHAT_IMAGE_DATA_CHARS = 6_000_000
 
+// a pdf data url's limit. about 10 MB of file under base64, matching what an upload allows
+export const CHAT_PDF_DATA_CHARS = 14_000_000
+
 // a video data url's limit. about 18 MB of file under base64, inside the api's request body limit
 export const CHAT_VIDEO_DATA_CHARS = 25_000_000
 
-// how long a question may run, shared by the payload limit and the draft box
-export const CHAT_QUESTION_CHARS = 1_000
+// how long a question may run, shared by the payload limit and the draft box. matches a chat room message
+export const CHAT_QUESTION_CHARS = 4_000
+
+// how long a history answer may run. sized past the model's own longest replies, which the history resends
+export const CHAT_HISTORY_ANSWER_CHARS = 20_000
+
+// a history question is the asked question plus its stored attachment note, so it gets room for the note
+export const CHAT_HISTORY_QUESTION_CHARS = CHAT_QUESTION_CHARS + 1_000
 
 // how long a topic prompt may grow before a copy-paste is treated as an attachment
 export const TOPIC_PROMPT_CHARS = 2_000
@@ -480,7 +484,12 @@ export const chatAttachmentPayload = z.discriminatedUnion("kind", [
 	z.strictObject({
 		...chatAttachmentFields,
 		kind: z.literal("pdf"),
-		dataUrl: z.string().max(CHAT_IMAGE_DATA_CHARS).startsWith("data:application/pdf"),
+		dataUrl: z.string().max(CHAT_PDF_DATA_CHARS).startsWith("data:application/pdf"),
+	}),
+	z.strictObject({
+		...chatAttachmentFields,
+		kind: z.literal("document"),
+		dataUrl: z.string().max(CHAT_PDF_DATA_CHARS).startsWith("data:application/vnd.openxmlformats-"),
 	}),
 	z.strictObject({
 		...chatAttachmentFields,
@@ -513,18 +522,27 @@ export function withAttachmentNote(question: string, attachments: { name: string
 	if (attachments.length === 0) {
 		return question
 	}
-	return `${question}\n\n[attached: ${attachments.map((attachment) => attachment.name).join(", ")}]`
+	const attachmentNote = `[attached: ${attachments.map((attachment) => attachment.name).join(", ")}]`
+	return question === "" ? attachmentNote : `${question}\n\n${attachmentNote}`
 }
 
 // a chat turn's question plus the conversation so far
-export const chatTurnPayload = z.object({
-	question: z.string().trim().min(1).max(CHAT_QUESTION_CHARS),
-	history: z
-		.array(z.object({ question: z.string().max(1000), answer: z.string().max(6000) }))
-		.max(CHAT_HISTORY_TURNS)
-		.default([]),
-	attachments: z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([]),
-})
+export const chatTurnPayload = z
+	.object({
+		question: z.string().trim().max(CHAT_QUESTION_CHARS),
+		history: z
+			.array(
+				z.object({
+					question: z.string().max(CHAT_HISTORY_QUESTION_CHARS),
+					answer: z.string().max(CHAT_HISTORY_ANSWER_CHARS),
+				}),
+			)
+			.max(CHAT_HISTORY_TURNS)
+			.default([]),
+		attachments: z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([]),
+	})
+	// a chat turn may be attachments alone, but never nothing at all
+	.refine((chatTurn) => chatTurn.question !== "" || chatTurn.attachments.length > 0)
 export type ChatTurnPayload = z.infer<typeof chatTurnPayload>
 
 // one persisted chat turn of a stored conversation, replayed on a later page load
@@ -554,11 +572,9 @@ export type ChatConversation = {
 
 // the admin role-change body. an admin cannot remove their own admin role, enforced server-side
 export const setRolePayload = z.object({ role: z.enum(["admin", "user"]) })
-export type SetRolePayload = z.infer<typeof setRolePayload>
 
 // the admin budget-override body: a per-user monthly limit in cents, or null to fall back to the plan's backstop
 export const budgetOverridePayload = z.object({ budgetOverrideCents: z.number().int().nonnegative().nullable() })
-export type BudgetOverridePayload = z.infer<typeof budgetOverridePayload>
 
 // an admin-console user row: the user's status plus their attributed storage and month-to-date variable cost
 export type AdminUserRow = {
@@ -570,6 +586,8 @@ export type AdminUserRow = {
 	role: string
 	plan: Plan
 	createdAt: string
+	// when they last signed in, null until they sign in again
+	lastLoginAt: string | null
 	topicCount: number
 	// how many teams the user actively belongs to, opening the table row's teams subtable
 	teamCount: number
@@ -723,13 +741,13 @@ export const topicFeed = z.object({
 	maxResults: z.number(),
 	// the topic owner
 	owner: z.object({ userId: z.string(), username: z.string(), avatarSource: z.string() }).nullable(),
-	// isOwner gates attachment downloads. newCount is the user's unconsumed count for the "# new" badge
-	isOwner: z.boolean(),
+	// isTopicOwner gates attachment downloads. newCount is the user's unconsumed count for the "# new" badge
+	isTopicOwner: z.boolean(),
 	newCount: z.number(),
 	// whether a team owns the topic
 	isOnTeam: z.boolean(),
-	// each holding team the user belongs to, one chat room each, ordered by name
-	roomTeams: z.array(z.object({ teamId: z.string(), name: z.string() })),
+	// whether the user is an active member of any team holding the topic
+	isTeamMember: z.boolean(),
 	// the user's unseen chat room mentions, newest first, counted on the name's badge. empty with none
 	chatMentions: z.array(chatMention),
 	// the byline a team topic derives: the team itself, for anyone who can open its page. the owner otherwise
@@ -749,7 +767,7 @@ export const topicFeed = z.object({
 	subscriberCount: z.number(),
 	// how many teams hold this topic, shown in the info popover under the follower count
 	teamCount: z.number(),
-	// the topic visibility which determines whether to show the share button
+	// the topic visibility, which decides which share options are live
 	visibility: z.enum(visibilities),
 	// schedule shown in the info popover
 	createdAt: z.string(),
@@ -829,8 +847,8 @@ export const topicResponse = topicFeed.extend({
 	team: z.object({ teamId: z.string(), name: z.string(), isPublic: z.boolean() }).nullable(),
 	// whether the user already asked to join the owning team, which the Join Team button reads
 	hasRequestedToJoin: z.boolean(),
-	// whether the user is a member of the owning team, for the Team Up button
-	isTeamMember: z.boolean(),
+	// each holding team the user belongs to, one chat room each, ordered by name
+	roomTeams: z.array(z.object({ teamId: z.string(), name: z.string() })),
 	// whether the owner holds more daily topics than their plan runs
 	isDailyFrequencyPaused: z.boolean(),
 	// this topic's position in the Featured section as well as all featured topics, both are null on the topic page
@@ -892,7 +910,6 @@ export type UpdateTopicPayload = z.infer<typeof updateTopicPayload>
 
 // the subscription toggle body. true subscribes the current user and false unsubscribes them
 export const subscriptionPayload = z.object({ isSubscribed: z.boolean() })
-export type SubscriptionPayload = z.infer<typeof subscriptionPayload>
 
 // which signup button converted for posthog, kept in a cookie across the oauth round-trip
 export const SIGNUP_CTA_COOKIE_NAME = "signup_cta"
@@ -909,19 +926,15 @@ export function toCtaTag(value: string | null | undefined): string | null {
 
 // the edited attachment context body
 export const attachmentContextPayload = z.object({ context: z.string().trim().max(MAX_ATTACHMENT_CONTEXT_CHARS) })
-export type AttachmentContextPayload = z.infer<typeof attachmentContextPayload>
 
 // the payload for attaching a page by url
 export const attachmentUrlPayload = z.object({ url: z.string().trim().min(1).max(2000) })
-export type AttachmentUrlPayload = z.infer<typeof attachmentUrlPayload>
 
 // the admin's featured topics order choice
 export const topicFeatureOrderPayload = z.object({ position: z.number().int().min(0) })
-export type TopicFeatureOrderPayload = z.infer<typeof topicFeatureOrderPayload>
 
 // the manual scan response which is how many manual scans the user has left today
 export const manualScanResponse = z.object({ remainingScans: z.number() })
-export type ManualScanResponse = z.infer<typeof manualScanResponse>
 
 // the homepage payload. the collapsible sections of topic feeds, plus the user's topic-creation quota
 export const topicFeedResponse = z.object({
@@ -944,12 +957,10 @@ export type TopicFeedResponse = z.infer<typeof topicFeedResponse>
 
 // the create-topic response which is the new topic's id
 export const topicCreateResponse = z.object({ id: z.string() })
-export type TopicCreateResponse = z.infer<typeof topicCreateResponse>
 
-// one base64 yjs update posted from a note editor, size-limited
-export const NOTE_UPDATE_MAX_CHARS = 512 * 1024
+// one base64 yjs update posted from a note editor. a large paste arrives as one atomic update, so the limit is sized to hold one
+export const NOTE_UPDATE_MAX_CHARS = 4 * 1024 * 1024
 export const noteSyncPayload = z.object({ update: z.string().min(1).max(NOTE_UPDATE_MAX_CHARS) })
-export type NoteSyncPayload = z.infer<typeof noteSyncPayload>
 
 // the create body for a note on a page
 export const NOTE_NAME_MAX_CHARS = 120
@@ -957,14 +968,12 @@ export const noteCreatePayload = z.object({
 	name: z.string().trim().min(1).max(NOTE_NAME_MAX_CHARS),
 	visibility: z.enum(noteVisibilities),
 })
-export type NoteCreatePayload = z.infer<typeof noteCreatePayload>
 
 // the note update body. a rename takes edit access, a visibility change is the owner's alone
 export const noteUpdatePayload = z.object({
 	name: z.string().trim().min(1).max(NOTE_NAME_MAX_CHARS).optional(),
 	visibility: z.enum(noteVisibilities).optional(),
 })
-export type NoteUpdatePayload = z.infer<typeof noteUpdatePayload>
 
 // one note as the notes table lists it
 export type Note = {
@@ -975,7 +984,7 @@ export type Note = {
 	updatedAt: string
 	canEdit: boolean
 	// whether the user created it, which alone allows changing its visibility
-	isOwner: boolean
+	isTopicOwner: boolean
 	// whether the user may delete it: its owner, or an admin
 	canDelete: boolean
 }

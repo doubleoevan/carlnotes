@@ -1,15 +1,15 @@
 // fill a Resource's content: a published transcript or a video's caption track read straight from the origin,
-import { lookup } from "node:dns/promises"
+// or any other page as Markdown through Firecrawl. a conditional GET checks whether stored content changed
 import type { resourceKinds } from "@shared/enums"
 import { FIRECRAWL_COST_PER_FETCH } from "./budget"
+import { fetchPublicUrl, readLimitedBody } from "./publicFetch"
 
 const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v1/scrape"
 // scraping a live page is slower than a feed fetch, so allow a longer timeout
 const FETCH_TIMEOUT_MS = 30_000
 
-// a body read straight from its url is bounded by its own timeout and byte limit
+// a body read straight from its url is bounded by its own timeout
 const DIRECT_TIMEOUT_MS = 10_000
-const MAX_DIRECT_BYTES = 5_000_000
 
 // how long stored content stands in for a fetch
 export const CONTENT_TTL_MS = toTtlMs(Bun.env.CONTENT_TTL_MS)
@@ -52,103 +52,6 @@ const DAILYMOTION_CAPTION_DOMAIN = "dmcdn.net"
 
 // how long the revalidation request may run before it aborts, so a slow origin never holds up a scan
 const REVALIDATE_TIMEOUT_MS = Number(Bun.env.REVALIDATE_TIMEOUT_MS ?? "5000")
-
-// hosts that resolve to an internal address
-const INTERNAL_HOST_PATTERN =
-	/^(?:localhost|0\.0\.0\.0|\[?::1\]?|10\.\d+\.\d+\.\d+|127\.\d+\.\d+\.\d+|169\.254\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|.+\.(?:local|internal))$/i
-
-/**
- * The url as a fetchable parsed Url. Throws an error when it is malformed, not http(s), or internal.
- * Every rejection names the url and its reason, so a caller is shown the message as it is.
- */
-export function toFetchableUrl(url: string): URL {
-	let parsedUrl: URL
-	try {
-		parsedUrl = new URL(url)
-	} catch {
-		throw new Error(`malformed url: ${url}`)
-	}
-
-	if (parsedUrl.protocol !== "http:" && parsedUrl.protocol !== "https:") {
-		throw new Error(`url must be http or https: ${url}`)
-	}
-
-	// the literal internal hosts a string alone can name. a dns name that points inward is caught by assertPublicHost
-	if (INTERNAL_HOST_PATTERN.test(parsedUrl.hostname)) {
-		throw new Error(`url is an internal address: ${url}`)
-	}
-	return parsedUrl
-}
-
-// the ipv4 ranges a fetched host may never resolve to, as [firstOctet, minSecond, maxSecond]:
-// loopback, this-network, private, link-local, cgnat
-const INTERNAL_V4_RANGES: [number, number, number][] = [
-	[0, 0, 255],
-	[10, 0, 255],
-	[127, 0, 255],
-	[169, 254, 254],
-	[172, 16, 31],
-	[192, 168, 168],
-	[100, 64, 127],
-]
-
-// whether an address is one a fetched host may never resolve to
-export function isInternalAddress(address: string): boolean {
-	// an ipv6-mapped ipv4 address is checked as the ipv4 it wraps. a malformed octet defaults to 0, which fails closed
-	const ipv4 = address.startsWith("::ffff:") ? address.slice("::ffff:".length) : address
-	if (/^\d+\.\d+\.\d+\.\d+$/.test(ipv4)) {
-		const [first = 0, second = 0] = ipv4.split(".").map(Number)
-		return INTERNAL_V4_RANGES.some(([octet, min, max]) => first === octet && second >= min && second <= max)
-	}
-
-	// ipv6 loopback, unspecified, unique-local (fc00::/7), and link-local (fe80::/10)
-	const lower = address.toLowerCase()
-	return lower === "::1" || lower === "::" || /^f[cd]/.test(lower) || /^fe[89ab]/.test(lower)
-}
-
-/**
- * Reject a host that resolves to an internal address. getaddrinfo resolves a dns name and canonicalizes
- * a legacy ipv4 literal the same way fetch does, so what is checked here is what the fetch would connect to.
- */
-export async function assertPublicHost(hostname: string): Promise<void> {
-	// a bracketed ipv6 literal keeps its brackets in the hostname, which the resolver does not take
-	const host = hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname
-
-	// a host that does not resolve is harmless and left for the fetch to fail on. only a resolved private address is rejected
-	const addresses = await lookup(host, { all: true }).catch(() => [])
-	if (addresses.some(({ address }) => isInternalAddress(address))) {
-		throw new Error(`url resolves to an internal address: ${hostname}`)
-	}
-}
-
-// how many redirects a public fetch follows before it gives up
-const MAX_REDIRECTS = 5
-
-// the redirect statuses that come with a Location worth following
-const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
-
-/**
- * Fetches a url, checking every redirect hop's host against the private-address rule before connecting.
- * Throws an error when a hop is malformed, not http(s), internal, or the chain runs too long.
- */
-export async function fetchPublicUrl(url: string, init: RequestInit = {}): Promise<Response> {
-	// follow redirects by hand, checking each hop's host resolves to a public address before fetching it
-	let parsedUrl = toFetchableUrl(url)
-	for (let redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
-		await assertPublicHost(parsedUrl.hostname)
-		const response = await fetch(parsedUrl, { ...init, redirect: "manual" })
-
-		// anything that is not a redirect is the answer, and so is a redirect that names nowhere to go
-		const location = response.headers.get("location")
-		if (!REDIRECT_STATUSES.has(response.status) || !location) {
-			return response
-		}
-
-		// resolve the next hop against the url that sent it, the way a browser would, and check it
-		parsedUrl = toFetchableUrl(new URL(location, parsedUrl).toString())
-	}
-	throw new Error(`url redirected more than ${MAX_REDIRECTS} times: ${url}`)
-}
 
 // a fetch's text and what it spent, plus the etag and last-modified for a later conditional GET
 export type FetchResult = { text: string; cost: number; etag: string | null; lastModified: string | null }
@@ -303,7 +206,7 @@ async function fetchDailymotionTranscript(videoId: string): Promise<FetchResult>
 
 // fetch a cue-file caption track and join it to plain text
 async function fetchCueTrack(tracks: CaptionTrack[], captionDomain: string, label: string): Promise<FetchResult> {
-	// select the track and refuse a url pointing anywhere but the host's own caption domain
+	// select the track and reject a url pointing anywhere but the host's own caption domain
 	const track = toCaptionTrack(tracks, captionDomain, label)
 	const trackResponse = await fetch(track.url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
 	if (!trackResponse.ok) {
@@ -510,43 +413,6 @@ async function fetchDeclaredTranscript(transcriptUrl: string): Promise<FetchResu
 		throw new Error(`transcript ${transcriptUrl} is empty`)
 	}
 	return { text, cost: 0, etag: null, lastModified: null }
-}
-
-/**
- * Read a response body up to the byte limit, cancelling anything longer so an endless response is dropped instead of buffered whole.
- */
-export async function readLimitedBody(response: Response, url: string): Promise<string> {
-	const reader = response.body?.getReader()
-	if (!reader) {
-		return ""
-	}
-
-	// chunks are collected instead of being decoded as they arrive. a character can span two of them
-	const chunks: Uint8Array[] = []
-	let byteCount = 0
-	while (true) {
-		const { done, value } = await reader.read()
-		if (done) {
-			break
-		}
-
-		// cancelling closes the connection, so an endless response stops costing us bandwidth
-		byteCount += value.length
-		if (byteCount > MAX_DIRECT_BYTES) {
-			await reader.cancel()
-			throw new Error(`body of ${url} exceeds ${MAX_DIRECT_BYTES} bytes`)
-		}
-		chunks.push(value)
-	}
-
-	// join the chunks once, which is what the decoder reads
-	const body = new Uint8Array(byteCount)
-	let offset = 0
-	for (const chunk of chunks) {
-		body.set(chunk, offset)
-		offset += chunk.length
-	}
-	return new TextDecoder().decode(body)
 }
 
 // check with a conditional GET whether the stored content is still current, bounded by its own timeout

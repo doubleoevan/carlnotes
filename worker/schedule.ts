@@ -119,7 +119,7 @@ async function startUndispatchedScans(): Promise<void> {
 			await db.update(scans).set({ startedAt: new Date() }).where(eq(scans.id, scan.id))
 			await scanTopic(scan, scan.topicId as string, scan.ownerId, scan.isManual ? "manual" : "scheduled", true)
 		} catch (error) {
-			// the row stays undispatched, so the next sweep tries it again
+			// the row stays undispatched, so the next sweep attempts it again
 			console.error(`could not dispatch scan ${scan.id}`, error)
 			reportError(error, "scheduled-scan", { scanId: scan.id })
 		}
@@ -227,7 +227,7 @@ async function loadScheduledTopics(now = new Date()): Promise<Topic[]> {
 		lastScanStarts.map((scanRow) => [scanRow.topicId, new Date(scanRow.lastStartedAt)]),
 	)
 
-	// a Topic already scanning is rejected by the workflow id when the sweep tries to start it
+	// a Topic already scanning is rejected by the workflow id when the sweep attempts to start it
 	const topicRows = await db.select().from(topics)
 	return topicRows.filter((topicRow) => isTopicScheduled(topicRow, lastScanStartByTopic.get(topicRow.id), now))
 }

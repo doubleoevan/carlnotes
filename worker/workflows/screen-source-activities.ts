@@ -4,10 +4,11 @@ import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { sources } from "../../db/schema"
 import { screenText, toFlaggedReason } from "../guard"
-import { type FetchResult, fetchContent, toFetchableUrl } from "../scrape"
+import { toFetchableUrl } from "../publicFetch"
+import { type FetchResult, fetchContent } from "../scrape"
 
 /**
- * Fetch and screen the page for a url Source, then mark it ready or failed with the reason.
+ * Fetch the page for a url Source and screen it with llm-guard, then mark it ready or failed with the reason.
  * A url that cannot be fetched is a rejection, not a warning: its page produces nothing on every future Scan,
  * and the owner should be told so.
  */
@@ -33,7 +34,7 @@ export async function screenSource(sourceId: string): Promise<void> {
 		return
 	}
 
-	// screen the fetched Markdown the same way a Resource's content is screened before it is scored
+	// llm-guard screens the fetched Markdown the same way a Resource's content is screened before it is scored
 	const screenVerdict = await screenText(fetched.text, "page")
 	if (screenVerdict.isFlagged) {
 		await failSource(sourceId, toFlaggedReason(screenVerdict))

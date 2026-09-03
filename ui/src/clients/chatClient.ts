@@ -1,6 +1,7 @@
 // the topic chat client. the reply arrives as a stream, so it is read chunk by chunk instead of being parsed whole
 import {
 	CHAT_HISTORY_TURNS,
+	CHAT_STREAM_FAILED_TEXT,
 	type ChatAttachment,
 	type ChatConversation,
 	compactChatAnswer,
@@ -61,17 +62,33 @@ export async function sendChatTurn(
 			return toRejection(response.status)
 		}
 
-		// stream each decoded chunk as it lands
+		// stream each decoded chunk as it lands, keeping the whole text to read how the stream ended
 		const reader = response.body.getReader()
-		const decoder = new TextDecoder()
+		const textDecoder = new TextDecoder()
+		let streamedText = ""
+		let markerPrefixTail = ""
 		while (true) {
 			const { done, value } = await reader.read()
 
-			// a drained stream is a completed chat turn
+			// a drained stream completed unless the server ended it with the failure marker
 			if (done) {
+				if (streamedText.trimEnd().endsWith(CHAT_STREAM_FAILED_TEXT.trim())) {
+					return "failed"
+				}
+
+				// the held tail was ordinary text after all
+				if (markerPrefixTail) {
+					onChunk(markerPrefixTail)
+				}
 				return null
 			}
-			onChunk(decoder.decode(value, { stream: true }))
+			const chunk = textDecoder.decode(value, { stream: true })
+			streamedText += chunk
+
+			// hold back a tail that could begin the failure marker, so one split across chunks never flashes on screen
+			const pendingText = (markerPrefixTail + chunk).replace(CHAT_STREAM_FAILED_TEXT, "")
+			markerPrefixTail = toMarkerPrefixTail(pendingText)
+			onChunk(pendingText.slice(0, pendingText.length - markerPrefixTail.length))
 		}
 	} catch (error) {
 		// the user's own stop is not a failure, and a broken stream leaves what already arrived on screen
@@ -104,6 +121,16 @@ export function toChatAttachmentUrl(chatAttachmentId: string): string {
 export async function sendDeleteKeptAttachment(keptAttachmentId: string): Promise<boolean> {
 	const response = await fetch(`/api/chat-attachments/${keptAttachmentId}`, { method: "DELETE" })
 	return response.ok
+}
+
+// the longest tail of the text that could be the start of the failure marker
+function toMarkerPrefixTail(text: string): string {
+	for (let length = Math.min(CHAT_STREAM_FAILED_TEXT.length - 1, text.length); length > 0; length--) {
+		if (CHAT_STREAM_FAILED_TEXT.startsWith(text.slice(-length))) {
+			return text.slice(-length)
+		}
+	}
+	return ""
 }
 
 // the conversation route for a chat page

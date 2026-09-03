@@ -1,5 +1,6 @@
 // link preview tests: finding the url in a message, reading a page's meta tags, and rejecting a url that must not be fetched
-import { expect, test } from "bun:test"
+import { expect, mock, test } from "bun:test"
+import * as dnsPromises from "node:dns/promises"
 import {
 	fetchLinkPreviewImage,
 	fetchLinkPreviewMetadata,
@@ -7,6 +8,16 @@ import {
 	toLinkPreviewUrls,
 	toNormalizedLinkPreviewUrl,
 } from "./linkPreview"
+
+// stand in for dns so the .example hosts resolve here to a fixed public address.
+// every other host keeps the real resolver, so the mock cannot leak into other tests
+mock.module("node:dns/promises", () => ({
+	...dnsPromises,
+	lookup: (host: string, options: { all: true }) =>
+		host.endsWith(".example")
+			? Promise.resolve([{ address: "93.184.216.34", family: 4 }])
+			: dnsPromises.lookup(host, options),
+}))
 
 // the first url in a message is the one that gets a card
 test("toLinkPreviewUrls returns the first http url in a message", () => {
@@ -134,14 +145,14 @@ test("a link preview fetch fails closed on a redirect chain ending at an interna
 	const originalFetch = globalThis.fetch
 	const requestedUrls: string[] = []
 	globalThis.fetch = (async (input: string | URL | Request) => {
-		const url = input.toString()
-		requestedUrls.push(url)
+		const url = new URL(input.toString())
+		requestedUrls.push(url.toString())
 
 		// the page bounces to the cloud metadata address, and the image bounces to a private one
-		if (url.startsWith("https://public.example/bounce")) {
+		if (url.pathname === "/bounce") {
 			return new Response(null, { status: 302, headers: { location: "http://169.254.169.254/latest/meta-data" } })
 		}
-		if (url.startsWith("https://public.example/cover.png")) {
+		if (url.pathname === "/cover.png") {
 			return new Response(null, { status: 302, headers: { location: "http://10.0.0.5/cover.png" } })
 		}
 		return new Response("<html><head><title>public</title></head></html>", {
@@ -162,7 +173,7 @@ test("a link preview fetch fails closed on a redirect chain ending at an interna
 
 // a host that does not answer throws with the connection error
 test("a link preview fetch throws when the host does not answer", async () => {
-	// stand in for the network with a host that refuses the connection
+	// stand in for the network with a host that rejects the connection
 	const originalFetch = globalThis.fetch
 	globalThis.fetch = (async (_input: string | URL | Request): Promise<Response> => {
 		throw new Error("connect ECONNREFUSED")

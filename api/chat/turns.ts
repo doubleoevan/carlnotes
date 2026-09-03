@@ -2,6 +2,7 @@
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import {
+	CHAT_STREAM_FAILED_TEXT,
 	type ChatAttachment,
 	type ChatConversation,
 	type ChatTurnPayload,
@@ -16,7 +17,7 @@ import { bodyLimit } from "hono/body-limit"
 import { stream } from "hono/streaming"
 import { db } from "../../db"
 import { chatTurns, topics, users } from "../../db/schema"
-import { type ChatReplyStream, isBudgetRejection, SPENT_BUDGET_REFUSAL, streamChatReply } from "../../worker"
+import { type ChatReplyStream, isBudgetRejection, SPENT_BUDGET_REJECTION, streamChatReply } from "../../worker"
 import { CHAT_COST_PER_MILLION_TOKENS, EXA_COST_PER_SEARCH, tokenCost } from "../../worker/budget"
 import { isAllowed, isMonthlySpendExhausted } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
@@ -40,7 +41,7 @@ export const chatBodyLimit = bodyLimit({
 
 // the outcomes of a chat turn request
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ChatTurnAuthorization = { status: "allowed"; isOwner: boolean; isPersisted: boolean; litellmApiKey?: string } | { status: "signup" } | { status: "forbidden" } | { status: "budget" }
+export type ChatTurnAuthorization = { status: "allowed"; isTopicOwner: boolean; isPersisted: boolean; litellmApiKey?: string } | { status: "signup" } | { status: "forbidden" } | { status: "budget" }
 
 // the page a private conversation lives under: one topic, or a whole team read across its topics
 export type ChatPage = { topicId: string; teamId?: undefined } | { teamId: string; topicId?: undefined }
@@ -83,7 +84,7 @@ export async function authorizeChatTurn(userId: string | null, topicId: string):
 	])
 	return {
 		status: "allowed",
-		isOwner: topic.ownerId === userId,
+		isTopicOwner: topic.ownerId === userId,
 		isPersisted,
 		litellmApiKey: userRow?.litellmVirtualKey ?? undefined,
 	}
@@ -109,7 +110,7 @@ export async function authorizeTeamChatTurn(userId: string | null, teamId: strin
 		isAllowed(userId, "chat:persist"),
 		db.select({ litellmVirtualKey: users.litellmVirtualKey }).from(users).where(eq(users.id, userId)),
 	])
-	return { status: "allowed", isOwner: false, isPersisted, litellmApiKey: userRow?.litellmVirtualKey ?? undefined }
+	return { status: "allowed", isTopicOwner: false, isPersisted, litellmApiKey: userRow?.litellmVirtualKey ?? undefined }
 }
 
 /**
@@ -134,7 +135,7 @@ export async function recordChatTurn(
 		)
 		.returning({ id: chatTurns.id })
 
-	// the event goes with the row, so a chat turn is counted exactly when it is metered
+	// the event is written with the row, so a chat turn is counted exactly when it is metered
 	trackEvent("chat_turn_sent", userId, { ...analyticsProperties, topicId: page.topicId ?? page.teamId ?? "" })
 	return chatTurnRow?.id ?? null
 }
@@ -243,19 +244,19 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 }
 
 /**
- * Clear the user's conversation with a topic: every chat turn's text is nulled and everything they kept for the
- * topic goes with it. The chat turn rows stay as the spend
- * ledger, and deleting them would let a cleared chat reset the month's meter.
+ * Clear the user's conversation with a topic: every chat turn's text is set to null,
+ * and everything they kept for the topic is deleted with it. The chat turn rows stay as the spend ledger,
+ * because deleting them would let a cleared chat reset the month's budget meter.
  */
-export async function clearChatTurns(userId: string, page: ChatPage): Promise<void> {
+export async function clearChatTurns(userId: string, chatPage: ChatPage): Promise<void> {
 	await db
 		.update(chatTurns)
 		.set({ question: null, answer: null })
-		.where(and(eq(chatTurns.userId, userId), toPageFilter(page)))
+		.where(and(eq(chatTurns.userId, userId), toPageFilter(chatPage)))
 
 	// a team conversation stores no attachments, so only a topic clear has files to take with it
-	if (page.topicId) {
-		await deleteChatAttachments(page.topicId, userId)
+	if (chatPage.topicId) {
+		await deleteChatAttachments(chatPage.topicId, userId)
 	}
 }
 
@@ -282,11 +283,19 @@ function streamChatTurn(
 		} catch (error) {
 			// a stream that breaks partway still spent tokens, so it falls through to the recording below
 			console.error(`chat stream failed for ${chatTurn.page.topicId ?? chatTurn.page.teamId}`, error)
-			// a spent budget is the user's to know about, and the stream is the only place left to say it
-			if (isBudgetRejection(error)) {
-				await writeStream.write(`\n\n${SPENT_BUDGET_REFUSAL}`)
-			} else {
+			// a spent budget is the user's to know about, and the stream is the only place left to show it.
+			// anything else gets the chat stream failed text, which tells the api client this is a failed chat turn
+			let closingText = `\n\n${SPENT_BUDGET_REJECTION}`
+			if (!isBudgetRejection(error)) {
 				reportError(error, "chat", { topicId: chatTurn.page.topicId ?? chatTurn.page.teamId ?? "" })
+				closingText = CHAT_STREAM_FAILED_TEXT
+			}
+
+			// a reader who already left cannot be written to, and that must not skip the recording below
+			try {
+				await writeStream.write(closingText)
+			} catch (closingError) {
+				console.error("chat stream close failed", closingError)
 			}
 		}
 
@@ -351,7 +360,7 @@ async function recordFinishedChatTurn(
 }
 
 // the response each unallowed authorization status answers with
-function toChatRefusal(context: Context, status: "budget" | "signup" | "forbidden"): Response {
+function toChatRejection(context: Context, status: "budget" | "signup" | "forbidden"): Response {
 	if (status === "budget") {
 		return context.json({ error: "budget exhausted" }, 402)
 	}
@@ -368,15 +377,15 @@ async function answerChatTurn(
 	context: Context,
 	userId: string,
 	page: ChatPage,
-	authorization: { isOwner: boolean; isPersisted: boolean; litellmApiKey?: string },
+	authorization: { isTopicOwner: boolean; isPersisted: boolean; litellmApiKey?: string },
 	payload: ChatTurnPayload,
 	includeAttachments: boolean,
 ): Promise<Response> {
-	// a PDF attachment becomes its extracted text here, and an unreadable one rejects the chat turn in words
+	// an attached file becomes its extracted text here, and an unreadable one rejects the chat turn in words
 	const { question, history, attachments } = payload
-	const resolvedAttachments = await resolveChatAttachments(attachments)
-	if (resolvedAttachments === null) {
-		return context.json({ error: "That PDF couldn't be read." }, 422)
+	const chatAttachments = await resolveChatAttachments(attachments)
+	if (chatAttachments === null) {
+		return context.json({ error: "That file couldn't be read." }, 422)
 	}
 
 	// the reply reads against the page's own material: one topic, or every topic the team holds
@@ -385,9 +394,9 @@ async function answerChatTurn(
 		teamId: page.teamId,
 		question,
 		history,
-		attachments: resolvedAttachments,
+		chatAttachments,
 		userId,
-		isOwner: authorization.isOwner,
+		isTopicOwner: authorization.isTopicOwner,
 		litellmApiKey: authorization.litellmApiKey,
 		includeAttachments,
 	})
@@ -395,7 +404,7 @@ async function answerChatTurn(
 		return context.json({ error: "not found" }, 404)
 	}
 
-	// the question's first link fetches its link preview card in the background, never holding the reply
+	// the question's first link fetches its link preview card in the background, never delaying the reply
 	if (authorization.isPersisted) {
 		void saveLinkPreviews(question).catch((error) => console.error("chat link preview failed", error))
 	}
@@ -468,7 +477,7 @@ export const chatRoute = new Hono<AppEnv>()
 		const teamId = context.req.param("id")
 		const authorization = await authorizeTeamChatTurn(userId, teamId)
 		if (authorization.status !== "allowed" || !userId) {
-			return toChatRefusal(context, authorization.status === "allowed" ? "signup" : authorization.status)
+			return toChatRejection(context, authorization.status === "allowed" ? "signup" : authorization.status)
 		}
 
 		// the member's own kept files stay out, matching the chat room
@@ -489,12 +498,12 @@ export const chatRoute = new Hono<AppEnv>()
 		const topicId = context.req.param("id")
 		const authorization = await authorizeChatTurn(userId, topicId)
 
-		// an exhausted budget is counted before it refuses
+		// an exhausted budget is counted before it rejects
 		if (authorization.status === "budget" && userId) {
 			trackEvent("chat_budget_reached", userId, { ...toAnalyticsProperties(context), topicId })
 		}
 		if (authorization.status !== "allowed") {
-			return toChatRefusal(context, authorization.status)
+			return toChatRejection(context, authorization.status)
 		}
 
 		// the gate already rejected a signed-out visitor with "signup", so this narrows the type alone

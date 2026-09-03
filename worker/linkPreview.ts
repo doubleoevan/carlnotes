@@ -1,5 +1,6 @@
 // the link preview a link gets: the page's own title, description, and image, every fetch through the public-url guard
-import { fetchPublicUrl, toFetchableUrl, toYoutubeVideoId } from "./scrape"
+import { fetchPublicUrl, toFetchableUrl } from "./publicFetch"
+import { toYoutubeVideoId } from "./scrape"
 
 // how long one link preview fetch may run. a member is waiting on their post
 const PREVIEW_TIMEOUT_MS = 3_000

@@ -2,7 +2,8 @@
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { resources } from "../../db/schema"
-import { CONTENT_TTL_MS, fetchContent, isContentStale, toFetchableUrl } from "../scrape"
+import { toFetchableUrl } from "../publicFetch"
+import { CONTENT_TTL_MS, fetchContent, isContentStale } from "../scrape"
 import { getResourceContent } from "../store"
 import type { FetchedBody, IngestedResource, IngestResult, Source, SourceIngester } from "./ingester"
 import { toCanonicalUrl, toResourceKind } from "./normalize"
@@ -96,7 +97,7 @@ async function readPageBody(pageUrl: string): Promise<PageBody> {
 		const { text: markdown, cost, etag, lastModified } = await fetchContent(pageUrl, "read")
 		return { markdown, costDollars: cost, fetchedBody: { markdown, etag, lastModified } }
 	} catch (error) {
-		// the page had an error, so review will try to fetch it again
+		// the page had an error, so review will attempt the fetch again
 		console.error(`url source could not read the page at ${pageUrl}`, error)
 		return { markdown: "", costDollars: 0 }
 	}

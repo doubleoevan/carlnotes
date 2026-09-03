@@ -60,7 +60,7 @@ export function TopicResource({
 		setIsNoteOpen(isOpen)
 	}
 	const [isHintOpen, setIsHintOpen] = useState(false)
-	// unread rows are bold and consumed rows go muted
+	// unread rows are bold and consumed rows are muted
 	const titleClass = cn(
 		"max-w-full truncate text-left text-sm group-hover:text-foreground",
 		resource.isConsumed ? "text-muted-foreground font-normal" : "text-foreground font-semibold",

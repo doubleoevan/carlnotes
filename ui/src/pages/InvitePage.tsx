@@ -1,14 +1,13 @@
-import type { InviteRefusal } from "@shared/contracts"
-import { useState } from "react"
+import type { InviteRejection } from "@shared/contracts"
+import { useEffect, useRef, useState } from "react"
 import { Navigate, useNavigate, useParams } from "react-router-dom"
 import { authClient } from "@/clients/authClient"
 import { sendAcceptInvite } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { TurnstileWidget } from "@/components/session/TurnstileWidget"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { INVITE_REFUSALS } from "./inviteRefusals"
+import { INVITE_REJECTIONS } from "./inviteRejections"
 
 /**
  * The page an invite link opens. A signed-out visitor is sent to log in and comes back here,
@@ -19,23 +18,35 @@ export function InvitePage() {
 	const { token } = useParams()
 	const navigate = useNavigate()
 	const { data: session, isPending } = authClient.useSession()
-	const [inviteRefusal, setInviteRefusal] = useState<InviteRefusal | null>(null)
+	const [inviteRejection, setInviteRejection] = useState<InviteRejection | "teamFull" | null>(null)
 
-	// accept the invite once the bot check passes, then go to the topic or team for the invitation
-	const handleVerify = async (turnstileToken: string): Promise<void> => {
-		const inviteResponse = await sendAcceptInvite(token ?? "", turnstileToken)
-		// navigate to the accepted topic
-		if (inviteResponse.status === "joined") {
-			navigate(`/topics/${inviteResponse.topicId}`, { replace: true })
+	// accept the token exactly once, as soon as the session loads, then go to the topic or team it opens
+	const isAcceptingInviteRef = useRef(false)
+	useEffect(() => {
+		if (isPending || !session || isAcceptingInviteRef.current) {
 			return
 		}
-		// navigate to the accepted team
-		if (inviteResponse.status === "joinedTeam" || inviteResponse.status === "requestedTeam") {
-			navigate(`/teams/${inviteResponse.teamId}`, { replace: true })
-			return
-		}
-		setInviteRefusal(inviteResponse.status)
-	}
+		isAcceptingInviteRef.current = true
+		void sendAcceptInvite(token ?? "")
+			.catch(() => {
+				// a network failure may pass on a later visit, so the once-latch opens back up
+				isAcceptingInviteRef.current = false
+				return { status: "unknown" } as const
+			})
+			.then((inviteResponse) => {
+				// navigate to the accepted topic
+				if (inviteResponse.status === "joined") {
+					navigate(`/topics/${inviteResponse.topicId}`, { replace: true })
+					return
+				}
+				// navigate to the accepted team
+				if (inviteResponse.status === "joinedTeam" || inviteResponse.status === "requestedTeam") {
+					navigate(`/teams/${inviteResponse.teamId}`, { replace: true })
+					return
+				}
+				setInviteRejection(inviteResponse.status)
+			})
+	}, [isPending, session, token, navigate])
 
 	// the session decides whether this visitor can accept at all, so nothing renders until it resolves
 	if (isPending) {
@@ -50,22 +61,25 @@ export function InvitePage() {
 	return (
 		<div className="mx-auto flex min-h-dvh max-w-sm flex-col items-center justify-center gap-6 px-4 py-12">
 			<CoffeeMug className="size-12" />
-			{/* the invite refusal, or the bot check that stands between the visitor and the topic */}
-			{inviteRefusal ? (
+			{/* the invite rejection with its way forward, or a loading line while the acceptance runs */}
+			{inviteRejection ? (
 				<div className="text-center">
-					<p className="text-lg font-semibold">{INVITE_REFUSALS[inviteRefusal]}</p>
+					<p className="text-lg font-semibold">{INVITE_REJECTIONS[inviteRejection]}</p>
 					<p className="text-muted-foreground mt-2 text-sm">
-						{"Ask whoever invited you for a fresh link, or "}
-						<AnchorLink href="/" className="text-link hover:underline">
-							go find a topic
-						</AnchorLink>
+						{inviteRejection === "teamFull" ? (
+							"Ask a team leader to make room, then try again."
+						) : (
+							<>
+								{"Ask whoever invited you for a fresh link, or "}
+								<AnchorLink href="/" className="text-link hover:underline">
+									go find a topic
+								</AnchorLink>
+							</>
+						)}
 					</p>
 				</div>
 			) : (
-				<>
-					<p className="text-muted-foreground text-center text-sm">Carl is checking your invitation…</p>
-					<TurnstileWidget onVerify={(turnstileToken) => void handleVerify(turnstileToken)} />
-				</>
+				<p className="text-muted-foreground text-center text-sm">Carl is checking your invitation…</p>
 			)}
 		</div>
 	)

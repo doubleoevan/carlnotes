@@ -87,7 +87,7 @@ test("an unsigned request fails closed", async () => {
 })
 
 // a form-encoded webhook is the misconfiguration most likely to reach us, so it says so
-test("a form encoded body is refused with the reason", async () => {
+test("a form encoded body is rejected with the reason", async () => {
 	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"

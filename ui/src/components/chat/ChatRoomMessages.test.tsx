@@ -30,11 +30,11 @@ function chatRoom(chatMessages: ChatRoomMessage[], isModelThinking = false): Cha
 	return {
 		chatMessages,
 		isLoaded: true,
-		isRefused: false,
-		refusalReason: null,
-		clearRefusalReason: () => {},
+		isRejected: false,
+		rejectionReason: null,
+		clearRejectionReason: () => {},
 		isMessageLoading: isModelThinking,
-		postChatMessage: async () => {},
+		postChatMessage: async () => true,
 		reloadChatMessages: async () => {},
 		loadingChatMessageIds: new Set<number>(),
 	}
@@ -52,7 +52,7 @@ test("consecutive same-author chat messages each render the correct author line"
 			chatRoom={chatRoom(chatMessages)}
 			userId="user"
 			isEnlarged={false}
-			isLeader={false}
+			isTeamLeader={false}
 			isAdmin={false}
 			topicId="topic-1"
 			teamId="team-1"
@@ -79,7 +79,7 @@ test("the user's own chat messages align right", () => {
 			chatRoom={chatRoom(chatMessages)}
 			userId="user"
 			isEnlarged={false}
-			isLeader={false}
+			isTeamLeader={false}
 			isAdmin={false}
 			topicId="topic-1"
 			teamId="team-1"
@@ -105,7 +105,7 @@ test("a reply quotes what it answers when it reaches further back", () => {
 			chatRoom={chatRoom(chatMessages)}
 			userId="user"
 			isEnlarged={false}
-			isLeader={false}
+			isTeamLeader={false}
 			isAdmin={false}
 			topicId="topic-1"
 			teamId="team-1"
@@ -128,7 +128,7 @@ test("a reply to the chat message directly above shows no quote", () => {
 			chatRoom={chatRoom(chatMessages)}
 			userId="user"
 			isEnlarged={false}
-			isLeader={false}
+			isTeamLeader={false}
 			isAdmin={false}
 			topicId="topic-1"
 			teamId="team-1"
@@ -161,7 +161,7 @@ test("a link preview renders as a card without replacing the chat message text",
 			chatRoom={chatRoom(chatMessages)}
 			userId="user"
 			isEnlarged={false}
-			isLeader={false}
+			isTeamLeader={false}
 			isAdmin={false}
 			topicId="topic-1"
 			teamId="team-1"
@@ -204,7 +204,7 @@ test("a link preview with no image renders the card without one", () => {
 			chatRoom={chatRoom(chatMessages)}
 			userId="user"
 			isEnlarged={false}
-			isLeader={false}
+			isTeamLeader={false}
 			isAdmin={false}
 			topicId="topic-1"
 			teamId="team-1"
@@ -240,7 +240,7 @@ test("many chat messages virtualize", () => {
 			chatRoom={chatRoom(chatMessages)}
 			userId="user"
 			isEnlarged={false}
-			isLeader={false}
+			isTeamLeader={false}
 			isAdmin={false}
 			topicId="topic-1"
 			teamId="team-1"
@@ -252,13 +252,13 @@ test("many chat messages virtualize", () => {
 })
 
 // one chat room list with a single chat message, which each attachment test renders through
-function renderChatMessage(chatMessage: ChatRoomMessage, isLeader = false): string {
+function renderChatMessage(chatMessage: ChatRoomMessage, isTeamLeader = false): string {
 	return renderWithRouter(
 		<ChatRoomMessages
 			chatRoom={chatRoom([chatMessage])}
 			userId="member-1"
 			isEnlarged={false}
-			isLeader={isLeader}
+			isTeamLeader={isTeamLeader}
 			isAdmin={false}
 			topicId="topic-1"
 			teamId="team-1"
@@ -306,7 +306,7 @@ test("a team room image reads from the team route", () => {
 			chatRoom={chatRoom([chatRoomMessage({ attachments: [{ id: "a-1", kind: "image", name: "shot.png" }] })])}
 			userId="member-1"
 			isEnlarged={false}
-			isLeader={false}
+			isTeamLeader={false}
 			isAdmin={false}
 			topicId={null}
 			teamId="team-1"

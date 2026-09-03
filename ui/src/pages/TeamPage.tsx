@@ -168,14 +168,19 @@ export function TeamPage() {
 	}
 	const teamPage = teamResult.team
 
-	// deleting leaves the page, attempting to delete the only team a user lead is rejected with the reason
+	// deleting leaves the page. a team with other members survives under a new leader, named in the toast
 	const handleDeleteTeam = async (): Promise<void> => {
-		if (!(await sendDeleteTeam(teamPage.teamId))) {
-			toast.error("Create another team before you delete this one.\nYou always lead at least one team.")
+		const deleteTeamResult = await sendDeleteTeam(teamPage.teamId)
+		if (!deleteTeamResult) {
+			toast.error("That team didn't get deleted. Try again.")
 			setIsConfirmingDelete(false)
 			return
 		}
-		toast(`Deleted ${teamPage.name}.`)
+		if (deleteTeamResult.status === "handedOver") {
+			toast(`You left ${teamPage.name}. @${deleteTeamResult.newLeaderUsername} leads it now.`)
+		} else {
+			toast(`Deleted ${teamPage.name}.`)
+		}
 		navigate("/teams")
 	}
 
@@ -304,7 +309,7 @@ function TeamMembersSection({ teamPage, onChanged }: { teamPage: TeamPageRespons
 						teamId={teamPage.teamId}
 						members={teamPage.members}
 						hiddenMemberCount={teamPage.hiddenMemberCount}
-						isLeader={teamPage.role === "leader"}
+						isTeamLeader={teamPage.role === "leader"}
 						onChanged={onChanged}
 					/>
 				</TableCard>
@@ -334,13 +339,13 @@ function TeamTopicsSection({
 	onNewTopicOpen: () => void
 	onChanged: () => void
 }) {
-	const isLeader = teamPage.role === "leader"
+	const isTeamLeader = teamPage.role === "leader"
 	return (
 		<AccordionItem value="topics">
 			<div className="flex items-center gap-2 [&>:first-child]:flex-1">
 				<AccordionTrigger className="font-semibold">Team topics</AccordionTrigger>
 				{/* only a leader may attach a topic here or start a new one */}
-				{isLeader && (
+				{isTeamLeader && (
 					<AddTopicButton
 						teamId={teamPage.teamId}
 						addableTopics={addableTopics}
@@ -360,7 +365,9 @@ function TeamTopicsSection({
 						includesNonPublicTopics={teamPage.role !== null}
 						topicTooltip="Topics on this team"
 						onRemoveTopic={
-							isLeader ? (topic) => void sendRemoveTopicFromTeam(teamPage.teamId, topic.id).then(onChanged) : undefined
+							isTeamLeader
+								? (topic) => void sendRemoveTopicFromTeam(teamPage.teamId, topic.id).then(onChanged)
+								: undefined
 						}
 					/>
 				)}
@@ -488,11 +495,11 @@ function TeamHeader({
 	// the chat mention badge's click opens the page's chat room panel
 	onOpenChat: () => void
 }) {
-	const isLeader = teamPage.role === "leader"
+	const isTeamLeader = teamPage.role === "leader"
 	return (
 		<header>
 			<div className="flex items-center gap-4">
-				{isLeader ? (
+				{isTeamLeader ? (
 					<TeamHeaderAvatar team={teamPage} onChanged={onChanged} />
 				) : (
 					<TeamAvatar team={teamPage} className="size-16" />

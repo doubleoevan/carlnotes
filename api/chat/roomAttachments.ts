@@ -4,7 +4,13 @@ import { CHAT_ROOM_ATTACHMENT_LIMIT, type ChatAttachment } from "@shared/contrac
 import { and, count, eq } from "drizzle-orm"
 import { db } from "../../db"
 import { chatRoomAttachments, users } from "../../db/schema"
-import { extractText, generateImageContext, toChatRoomAttachmentKey, uploadAttachment } from "../../worker"
+import {
+	extractText,
+	generateImageContext,
+	toCanonicalContentType,
+	toChatRoomAttachmentKey,
+	uploadAttachment,
+} from "../../worker"
 import { contentTypeFromDataUrl, decodeDataUrl, screenAttachmentText, VIDEO_ATTACHMENT_CONTEXT } from "./attachments"
 import { encryptChatText } from "./encryption"
 import { toTopicFilter } from "./roomTurns"
@@ -27,7 +33,7 @@ export async function prepareChatRoomAttachments(
 	topicId: string | null,
 	teamId: string,
 	attachments: ChatAttachment[],
-): Promise<PreparedChatRoomAttachment[] | null> {
+): Promise<PreparedChatRoomAttachment[] | "attachmentLimitReached" | null> {
 	if (attachments.length === 0) {
 		return []
 	}
@@ -45,10 +51,10 @@ export async function prepareChatRoomAttachments(
 			),
 		)
 	if ((attachmentCountRow?.count ?? 0) + attachments.length > CHAT_ROOM_ATTACHMENT_LIMIT) {
-		return null
+		return "attachmentLimitReached"
 	}
 
-	// one refusal refuses the chat message, so the files are read in order, and the first refusal ends it
+	// one rejection rejects the whole chat message, so the files are read in order, and the first rejection stops it
 	const preparedAttachments: PreparedChatRoomAttachment[] = []
 	for (const attachment of attachments) {
 		const preparedAttachment = await prepareChatRoomAttachment(topicId, teamId, attachment)
@@ -88,20 +94,24 @@ async function prepareChatRoomAttachment(
 			contentType: contentTypeFromDataUrl(attachment.dataUrl),
 		}
 	}
-	if (attachment.kind === "pdf") {
-		// an unreadable pdf rejects the post, so nothing half-read ever stores
-		let pdfText: string
+	// a pdf, word file, or workbook has words to pull out, and the room picker offers all three
+	if (attachment.kind === "pdf" || attachment.kind === "document") {
+		const contentType = toCanonicalContentType(contentTypeFromDataUrl(attachment.dataUrl), attachment.name)
+
+		// an unreadable file rejects the post, so nothing half-read ever stores
+		let documentText: string
 		try {
-			pdfText = await extractText("application/pdf", new Uint8Array(bytes))
+			documentText = await extractText(contentType, new Uint8Array(bytes))
 		} catch {
 			return null
 		}
+
 		// the screen may also redact in place, so its returned text is the one that stores
-		const screenedText = await screenAttachmentText(pdfText, "room attachment", topicId ?? teamId)
+		const screenedText = await screenAttachmentText(documentText, "room attachment", topicId ?? teamId)
 		if (screenedText === null) {
 			return null
 		}
-		return { attachment, contextText: screenedText, bytes, contentType: "application/pdf" }
+		return { attachment, contextText: screenedText, bytes, contentType }
 	}
 	// an image stores as-is, and its description arrives after the post
 	return { attachment, contextText: "", bytes, contentType: contentTypeFromDataUrl(attachment.dataUrl) }

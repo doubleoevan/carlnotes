@@ -16,10 +16,10 @@ if (import.meta.main) {
 
 // resolves or creates the dev demo user through a real signup, then it seeds demo topics for it
 export async function seed(): Promise<void> {
-	// refuse to seed outside of the dev Doppler environment
+	// never seed outside of the dev Doppler environment
 	if (process.env.DOPPLER_ENVIRONMENT !== "dev") {
 		const seen = process.env.DOPPLER_ENVIRONMENT ?? "unset"
-		throw new Error(`db:seed refuses to run: DOPPLER_ENVIRONMENT is "${seen}", expected "dev"`)
+		throw new Error(`db:seed will not run: DOPPLER_ENVIRONMENT is "${seen}", expected "dev"`)
 	}
 
 	// capture the role before seeding, which promotes the dev user to admin with a plain row update

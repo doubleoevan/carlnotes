@@ -48,7 +48,7 @@ async function setNewTeamLeaders(userId: string): Promise<void> {
 			continue
 		}
 
-		// nobody else is on the team, so it goes with the account. its topics return to their owners
+		// nobody else is on the team, so it is deleted with the account. its topics return to their topic owners
 		await db.delete(teams).where(eq(teams.id, teamId))
 	}
 }
@@ -62,7 +62,7 @@ export async function deleteUser(
 	targetUserId: string,
 	analyticsProperties: AnalyticsProperties,
 ): Promise<"deleted" | "missing"> {
-	// a team this user leads alone is settled before the row goes, so the delete is never held up
+	// a team this user leads alone is settled before the row is deleted, so the deletion is never held up
 	await setNewTeamLeaders(targetUserId)
 
 	const [user] = await db

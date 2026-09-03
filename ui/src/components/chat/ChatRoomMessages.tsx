@@ -23,7 +23,7 @@ import { cn } from "@/lib/utils"
 const VIRTUALIZE_FROM_CHAT_MESSAGES = 30
 
 // the icon each shared file kind shows beside its name
-const ATTACHMENT_KIND_ICONS = { image: Image, pdf: FileText, text: Paperclip, video: Film } as const
+const ATTACHMENT_KIND_ICONS = { image: Image, pdf: FileText, document: FileText, text: Paperclip, video: Film } as const
 
 /**
  * The chat room's chat messages: every one through the shared author line, the user's own chat messages to the right,
@@ -32,7 +32,7 @@ const ATTACHMENT_KIND_ICONS = { image: Image, pdf: FileText, text: Paperclip, vi
 export function ChatRoomMessages({
 	chatRoom,
 	userId,
-	isLeader,
+	isTeamLeader,
 	isAdmin,
 	chatName,
 	topicId,
@@ -46,7 +46,7 @@ export function ChatRoomMessages({
 	isEnlarged: boolean
 	userId: string
 	// a leader may remove any shared file, everyone else only their own
-	isLeader: boolean
+	isTeamLeader: boolean
 	// an admin moderates every chat room, including teams they do not belong to
 	isAdmin: boolean
 	chatName: string
@@ -144,7 +144,7 @@ export function ChatRoomMessages({
 			chatMessage={chatMessage}
 			topicId={topicId}
 			teamId={teamId}
-			canDelete={isLeader || isAdmin || chatMessage.authorUserId === userId}
+			canDelete={isTeamLeader || isAdmin || chatMessage.authorUserId === userId}
 			isLinkPreviewLoading={chatRoom.loadingChatMessageIds.has(chatMessage.id)}
 			onAttachmentDelete={handleDeleteAttachment}
 			repliedTo={toRepliedTo(chatMessage, index)}

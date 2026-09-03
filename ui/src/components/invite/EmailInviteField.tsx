@@ -4,18 +4,18 @@ import { Input } from "@/components/primitives/input"
 
 /**
  * The invite-by-email pair every invite shares: the address input and its button.
- * An entered address becomes a pill to send or delete. A refusal is shown below the field.
+ * An entered address becomes a pill to send or delete. A rejection is shown below the field.
  */
 export function EmailInviteField({
 	placeholder = "invite by email…",
 	onInvite,
 }: {
 	placeholder?: string
-	// takes the entered address, lowercased. a returned string is the refusal shown below the field
+	// takes the entered address, lowercased. a returned string is the rejection shown below the field
 	onInvite: (email: string) => Promise<string | null> | string | null
 }) {
 	const [email, setEmail] = useState("")
-	const [refusal, setRefusal] = useState<string | null>(null)
+	const [rejection, setRejection] = useState<string | null>(null)
 
 	// a rough shape check keeps empty and malformed emails out. the api validates for real
 	const handleInvite = async (): Promise<void> => {
@@ -24,12 +24,12 @@ export function EmailInviteField({
 			return
 		}
 		if (!address.includes("@")) {
-			setRefusal("That needs to be an email address.")
+			setRejection("That needs to be an email address.")
 			return
 		}
-		const inviteResponse = await onInvite(address)
-		setRefusal(inviteResponse)
-		if (inviteResponse === null) {
+		const inviteRejection = await onInvite(address)
+		setRejection(inviteRejection)
+		if (inviteRejection === null) {
 			setEmail("")
 		}
 	}
@@ -51,7 +51,7 @@ export function EmailInviteField({
 					aria-label="Invite by email"
 					onChange={(event) => {
 						setEmail(event.target.value)
-						setRefusal(null)
+						setRejection(null)
 					}}
 					onKeyDown={(event) => {
 						if (event.key === "Enter") {
@@ -64,8 +64,8 @@ export function EmailInviteField({
 					Invite
 				</Button>
 			</div>
-			{/* the refusal reads inline, under the field it answers */}
-			{refusal && <p className="text-destructive mt-1 text-xs">{refusal}</p>}
+			{/* the rejection reads inline, under the field it answers */}
+			{rejection && <p className="text-destructive mt-1 text-xs">{rejection}</p>}
 		</div>
 	)
 }

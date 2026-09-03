@@ -12,7 +12,7 @@ export function ClearChatDialog({
 	onClose,
 	children,
 }: {
-	// returns whether the conversation was cleared, so a refused clear shows nothing
+	// returns whether the conversation was cleared, so a rejected clear shows nothing
 	onConfirm: () => Promise<boolean>
 	onClose: () => void
 	// the one line naming what this chat loses, which is the only part that differs between them

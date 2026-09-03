@@ -1,6 +1,6 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
-import { toSourceSummary, toSourceValue, toUrlHost } from "@shared/sources"
+import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm"
 import { db } from "../../db"
 import {
@@ -20,7 +20,7 @@ import {
 } from "../../db/schema"
 import { memberTopicIds, subscribedTopicIds } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
-import { filteredTopicFindings, newTopicFindingCount } from "./findings"
+import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
 import { toScheduledTimeLabel } from "./helpers"
 import { isShown } from "./permissions"
 import { startOfUtcMonth } from "./quotas"
@@ -357,12 +357,12 @@ function buildTopicFeed(
 	// the subscriber count shown in the info popover
 	const subscriberCount = topic.subscriberCount
 	// only the owner sees their own topic's scan spend
-	const isOwner = topic.ownerId === userId
+	const isTopicOwner = topic.ownerId === userId
 	const ownerRow = feedData.ownerByTopic.get(topic.id)
 
 	// read the sources, dropping the grouping key from each row
 	const topicSources = (feedData.sourcesByTopic.get(topic.id) ?? [])
-		.filter((source) => source.status === "ready" || isOwner)
+		.filter((source) => source.status === "ready" || isTopicOwner)
 		.map((source) => ({
 			id: source.id,
 			sourceKind: source.kind,
@@ -382,27 +382,7 @@ function buildTopicFeed(
 	}))
 
 	// shape each row into a topic finding and set its isConsumed flag
-	const topicFindings: TopicFinding[] = findingRows.map((findingRow) => ({
-		findingId: findingRow.findingId,
-		scanId: findingRow.scanId,
-		resourceId: findingRow.resourceId,
-		url: findingRow.url,
-		resourceKind: findingRow.resourceKind,
-		title: findingRow.title,
-		// the source host for the metadata, plus the published and fetched times
-		source: toUrlHost(findingRow.url),
-		publishedAt: findingRow.resourceCreatedAt.toISOString(),
-		fetchedAt: findingRow.fetchedAt.toISOString(),
-		// the relevance judgment, view count, rating, engagement for trending sort, and the user's consumed and bookmarked states
-		relevanceScore: findingRow.relevanceScore,
-		relevanceExplanation: findingRow.relevanceExplanation,
-		viewCount: findingRow.viewCount,
-		rating: findingRow.rating,
-		engagement: findingRow.engagement,
-		isConsumed: findingRow.consumedAt !== null,
-		isBookmarked: findingRow.bookmarkedAt !== null,
-		teamBookmarks: [],
-	}))
+	const topicFindings: TopicFinding[] = findingRows.map(toTopicFinding)
 
 	// return the topic feed with its metadata
 	return {
@@ -418,10 +398,10 @@ function buildTopicFeed(
 		owner: ownerRow
 			? { userId: ownerRow.userId, username: ownerRow.username, avatarSource: ownerRow.avatarSource }
 			: null,
-		isOwner,
+		isTopicOwner,
 		isOnTeam: topic.teamId !== null,
 		teamLink: feedData.teamLinkByTopic.get(topic.id) ?? null,
-		roomTeams: [],
+		isTeamMember: userId !== null && feedData.memberTopicIdSet.has(topic.id),
 		chatMentions: feedData.mentionsByTopic.get(topic.id) ?? [],
 		// what this user may do with the topic, plus their unconsumed topic findings count
 		canRate: canRateInFeed(topic, userId, feedData.subscribedTopicIdSet, feedData.memberTopicIdSet),
@@ -436,7 +416,7 @@ function buildTopicFeed(
 		lastScanAt: lastScan?.startedAt.toISOString() ?? null,
 		lastScanDurationMs:
 			lastScan?.finishedAt != null ? lastScan.finishedAt.getTime() - lastScan.startedAt.getTime() : null,
-		monthCostDollars: isOwner ? Number(feedData.monthCostByTopic.get(topic.id) ?? 0) : null,
+		monthCostDollars: isTopicOwner ? Number(feedData.monthCostByTopic.get(topic.id) ?? 0) : null,
 		scanSummary: lastScan?.scanSummary ?? null,
 		attachments: topicAttachments,
 		sources: topicSources,

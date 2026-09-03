@@ -361,7 +361,7 @@ export function isPromoted(score: number): boolean {
 
 /**
  * Whether the Resource's snippet is already its whole text, so fetching the page would add nothing.
- * A tweet is the only one today, and x.com refuses scraping, so a fetch there is billed only to fail.
+ * A tweet is the only one today, and x.com rejects scraping, so a fetch there is billed only to fail.
  */
 export function isSnippetComplete(url: string): boolean {
 	return url.startsWith(X_URL_PREFIX)

@@ -568,6 +568,34 @@
       "when": 1788267516954,
       "tag": "0080_awesome_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1788416602184,
+      "tag": "0081_redundant_yellow_claw",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1788428384124,
+      "tag": "0082_wet_loki",
+      "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1788466511920,
+      "tag": "0083_little_ricochet",
+      "breakpoints": true
+    },
+    {
+      "idx": 84,
+      "version": "7",
+      "when": 1788470519595,
+      "tag": "0084_gigantic_wilson_fisk",
+      "breakpoints": true
     }
   ]
 }

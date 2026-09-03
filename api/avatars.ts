@@ -108,6 +108,19 @@ export async function saveAvatarSource(userId: string, avatarSource: "generated"
 // where a published avatar comes from: a stored object, a url from the user's oauth provider
 export type PublishedAvatar = { avatarKey: string } | { imageUrl: string } | null
 
+// the provider photo hosts the avatar redirect may point at. users.image is set by the browser, so it is not trusted
+const PROVIDER_PHOTO_HOSTS = new Set(["lh3.googleusercontent.com", "avatars.githubusercontent.com"])
+
+// whether a url is a provider photo the redirect may show
+export function isProviderPhotoUrl(imageUrl: string): boolean {
+	try {
+		const parsedImageUrl = new URL(imageUrl)
+		return parsedImageUrl.protocol === "https:" && PROVIDER_PHOTO_HOSTS.has(parsedImageUrl.hostname)
+	} catch {
+		return false
+	}
+}
+
 /**
  * Where a user's published avatar comes from.
  */
@@ -120,7 +133,12 @@ export async function toPublishedAvatar(userId: string): Promise<PublishedAvatar
 	if (user?.avatarSource === "upload" && user.avatarKey) {
 		return { avatarKey: user.avatarKey }
 	}
-	return user?.avatarSource === "oauth" && user.image ? { imageUrl: user.image } : null
+
+	// only a real provider photo host redirects
+	if (user?.avatarSource === "oauth" && user.image && isProviderPhotoUrl(user.image)) {
+		return { imageUrl: user.image }
+	}
+	return null
 }
 
 // the object key for a user's uploaded avatar, or null when they have none stored

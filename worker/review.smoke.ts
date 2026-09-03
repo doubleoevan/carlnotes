@@ -5,7 +5,6 @@ import { and, eq, inArray, isNotNull, like } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, scans, sources, topics, users } from "../db/schema"
 import { embedVector } from "./models"
-import { isRelevant } from "./review/filter"
 import { loadScan } from "./scan"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/run-topic-scan-activities"
@@ -18,9 +17,6 @@ const TOPIC_CONTEXT =
 
 // the same instruction wrapper the relevance gate embeds its query side with
 const EMBED_QUERY_INSTRUCTION = "Given a topic's interest description, retrieve web resources relevant to it"
-
-// review's own near-duplicate threshold, mirrored so a dedupe drop can be told apart from a ranking miss
-const NEAR_DUPLICATE_DISTANCE = 0.05
 
 // the two knobs under test, read the same way review reads them, so the report names the run's real settings
 const REVIEW_CONCURRENCY = Number(Bun.env.REVIEW_CONCURRENCY ?? "4")
@@ -80,26 +76,26 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 	return { topicId: topic.id, userId: user.id }
 }
 
-// one resource as the ranking saw it, with the vector kept so dedupe drops can be explained
+// one resource as the ranking saw it, with what admission and the paid pass each did to it
 type RankedResource = {
 	id: string
-	embedding: number[]
 	similarity: number
+	isAdmitted: boolean
 	isScored: boolean
-	kind: (typeof resources.$inferSelect)["kind"]
-	title: string | null
 }
 
 // every Resource this Scan considered, with its similarity to the topic context recomputed
 async function loadResourceRanking(
 	topicId: string,
+	admittedResourceIds: string[],
 	scoredResourceIds: string[],
 	discoveredUrls: string[],
 ): Promise<{ rankedResources: RankedResource[]; findingCount: number }> {
 	// the topic-context embedding, wrapped as the query side exactly as the gate wraps it
 	const contextEmbedding = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${TOPIC_CONTEXT}`)
 
-	// the resources the review actually scored, reported by the review itself
+	// what the review reported it let through and what it paid for, so neither is guessed at here
+	const admittedIds = new Set(admittedResourceIds)
 	const scoredIds = new Set(scoredResourceIds)
 	const findingRows = await db
 		.select({ resourceId: findings.resourceId })
@@ -108,51 +104,32 @@ async function loadResourceRanking(
 
 	// only the Resources this Scan actually ingested
 	const resourceRows = await db
-		.select({ id: resources.id, embedding: resources.embedding, kind: resources.kind, title: resources.title })
+		.select({ id: resources.id, embedding: resources.embedding })
 		.from(resources)
 		.where(and(inArray(resources.url, discoveredUrls), isNotNull(resources.embedding)))
 
-	// score each resource the way the ranking did, tagging the ones that won a paid ranking slot
+	// score each resource the way the ranking did, tagging what admission let through and what won a paid slot
 	const rankedResources = resourceRows.map((resourceRow) => ({
 		id: resourceRow.id,
-		embedding: resourceRow.embedding as number[],
 		similarity: cosineSimilarity(resourceRow.embedding as number[], contextEmbedding),
+		isAdmitted: admittedIds.has(resourceRow.id),
 		isScored: scoredIds.has(resourceRow.id),
-		kind: resourceRow.kind,
-		title: resourceRow.title,
 	}))
 
 	// the finding count comes back too, printed next to the Scan's own kept count so a mismatch is visible
 	return { rankedResources, findingCount: findingRows.length }
 }
 
-// the unscored rankedResources that outrank the worst scored resource and that dedupe does not explain
+// the admitted rankedResources that outrank the worst purchase and were skipped anyway. a resource the
+// dedupe or the relevance gate never admitted is that filter's decision, and its own tallies report it
 function toRankingViolations(rankedResources: RankedResource[]): RankedResource[] {
-	// walk the ranking the way the admission pass does, best-first
-	const bySimilarity = [...rankedResources].sort((first, second) => second.similarity - first.similarity)
-	const scoredSimilarities = bySimilarity.filter((resource) => resource.isScored).map((resource) => resource.similarity)
+	const scoredSimilarities = rankedResources
+		.filter((resource) => resource.isScored)
+		.map((resource) => resource.similarity)
 	const lowestScoredSimilarity = Math.min(...scoredSimilarities)
-
-	// an unscored resource above the worst purchase is only legitimate when the filter had a reason to drop it
-	return bySimilarity.filter((rankedResource, index) => {
-		if (rankedResource.isScored || rankedResource.similarity <= lowestScoredSimilarity) {
-			return false
-		}
-
-		// the relevance gate reads a different threshold per kind
-		if (!isRelevant(rankedResource.similarity, rankedResource.kind)) {
-			return false
-		}
-
-		// dedupe explains the drop when something ranked above it is a near-duplicate of it, or is the same article at another url
-		const higherRanked = bySimilarity.slice(0, index)
-		const isDeduped = higherRanked.some(
-			(higherRankedResource) =>
-				1 - cosineSimilarity(rankedResource.embedding, higherRankedResource.embedding) < NEAR_DUPLICATE_DISTANCE ||
-				(rankedResource.title !== null && higherRankedResource.title === rankedResource.title),
-		)
-		return !isDeduped
-	})
+	return rankedResources
+		.filter((resource) => resource.isAdmitted && !resource.isScored && resource.similarity > lowestScoredSimilarity)
+		.sort((first, second) => second.similarity - first.similarity)
 }
 
 // run the Scan, time it, and report what the ranking and the limit actually did
@@ -180,9 +157,10 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	const overshootCount = scoredCount - MAX_SCORED_RESOURCES_PER_SCAN
 	const allowedOvershoot = REVIEW_CONCURRENCY - 1
 
-	// the ranking check. anything skipped that outranks the worst purchase must be explained by dedupe
+	// the ranking check. an admitted resource that outranks the worst purchase should have been bought
 	const { rankedResources, findingCount } = await loadResourceRanking(
 		topicId,
+		reviewResult.review.admittedResourceIds,
 		reviewResult.review.scoredResourceIds,
 		ingestResult.resources.map((resource) => resource.url),
 	)
@@ -226,7 +204,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	console.log(`findings rows      : ${findingCount} (scan kept_count ${topicScan.keptCount})`)
 	console.log(`ranking violations : ${rankingViolations.length}`)
 	for (const violation of rankingViolations) {
-		console.log(`  skipped ${violation.id} at ${violation.similarity.toFixed(4)}, no near-duplicate above it`)
+		console.log(`  admitted ${violation.id} at ${violation.similarity.toFixed(4)} went unbought`)
 	}
 	console.log(`summary length     : ${(topicScan.scanSummary ?? "").trim().length}`)
 
@@ -275,6 +253,6 @@ try {
 	exitCode = 1
 }
 
-// flush telemetry before exit, then exit because the Neon pool would otherwise keep the process alive
+// flush telemetry, then report the outcome as the exit code
 await shutdownTelemetry()
-process.exit(exitCode)
+process.exitCode = exitCode

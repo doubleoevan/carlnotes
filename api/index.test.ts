@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { CHAT_HISTORY_TURNS } from "@shared/contracts"
+import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@shared/contracts"
 import server from "./index"
 
 // the two bundle files the serving rules treat differently
@@ -23,7 +23,7 @@ async function withWorkingDirectory<T>(directory: string, run: () => Promise<T>)
 	}
 }
 
-// a fake directory holding a bundle shaped like the one build:ui writes: an app shell and one hashed asset
+// a fake directory with a bundle shaped like the one build:ui writes: an app shell and one hashed asset
 async function createBundleDirectory(): Promise<string> {
 	const root = await mkdtemp(join(tmpdir(), "carl-bundle-"))
 	await mkdir(join(root, "ui/dist/assets"), { recursive: true })
@@ -113,7 +113,7 @@ test("an oversized chat question is rejected", async () => {
 		new Request("http://localhost:3000/api/topics/abc123/chat", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ question: "x".repeat(1001) }),
+			body: JSON.stringify({ question: "x".repeat(CHAT_QUESTION_CHARS + 1) }),
 		}),
 	)
 	expect(response.status).toBe(400)

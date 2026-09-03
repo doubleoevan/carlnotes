@@ -119,8 +119,8 @@ function ScanRow({
 						</PopoverAnchor>
 					</PopoverTrigger>
 				</TooltipTrigger>
-				{/* the whole row is the trigger, so a centered tooltip would float in the middle of it. it sits at
-				    the right instead, over the note the row opens */}
+				{/* the whole row is the trigger, so a centered tooltip would show in the middle of it.
+				    it sits at the right instead, over the note the row opens */}
 				<TooltipContent align="end">A brew note from Carl</TooltipContent>
 			</Tooltip>
 			<ScanNote

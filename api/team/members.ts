@@ -37,7 +37,7 @@ export async function toTeamRole(userId: string | null, teamId: string): Promise
 }
 
 /**
- * Join a user to the team, writing the membership and a non-active subscription per team topic in one transaction.
+ * Joins a user to the team, writing the membership and a non-active email subscription per team topic in one transaction.
  * The invite acceptance and any later join path both come through here.
  */
 export async function joinTeam(userId: string, teamId: string, invitedByUserId: string | null): Promise<boolean> {
@@ -46,6 +46,12 @@ export async function joinTeam(userId: string, teamId: string, invitedByUserId: 
 
 	// the member limit check and the team membership write share one transaction.
 	return db.transaction(async (transaction) => {
+		// the team row is locked first, so a join lands either completely before its team is deleted or not at all
+		const [teamRow] = await transaction.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)).for("update")
+		if (!teamRow) {
+			return false
+		}
+
 		const [memberCountRow] = await transaction
 			.select({ count: count() })
 			.from(teamMembers)
@@ -59,7 +65,7 @@ export async function joinTeam(userId: string, teamId: string, invitedByUserId: 
 			.insert(teamMembers)
 			.values({ teamId, userId, invitedByUserId })
 			.onConflictDoUpdate({ target: [teamMembers.teamId, teamMembers.userId], set: { isActive: true } })
-		// a non-active subscription per team topic puts the user in the team member's table without an email subscription
+		// one subscription per team topic, active so the topic reaches them, with email off until they turn it on
 		await saveTeamTopicSubscriptions(transaction, [userId], await loadTeamTopics(transaction, teamId))
 		return true
 	})
@@ -194,28 +200,37 @@ export async function removeTeamMember(
 	}
 
 	// the team member row and their chat mentions are deleted
-	await db.transaction(async (transaction) => {
-		await transaction
-			.delete(teamMembers)
-			.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, removeUserId)))
-		await deactivateTeamTopicSubscriptions(transaction, teamId, [removeUserId])
-		// the chat mentions still waiting for them, found through the team's own chat room messages
-		const teamMessageIds = transaction
-			.select({ id: chatRoomMessages.id })
-			.from(chatRoomMessages)
-			.where(eq(chatRoomMessages.teamId, teamId))
-		// drop only their chat mentions, leaving the messages themselves for the rest of the chat room
-		await transaction
-			.delete(chatRoomMentions)
-			.where(and(eq(chatRoomMentions.userId, removeUserId), inArray(chatRoomMentions.messageId, teamMessageIds)))
-	})
+	await db.transaction((transaction) => removeTeamMemberInTransaction(transaction, teamId, removeUserId))
 	return "removed"
+}
+
+/**
+ * Deletes a member's row, deactivates their team-topic subscriptions, and drops their waiting chat mentions,
+ * within the caller's transaction.
+ */
+export async function removeTeamMemberInTransaction(
+	transaction: DbTransaction,
+	teamId: string,
+	removeUserId: string,
+): Promise<void> {
+	await transaction.delete(teamMembers).where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, removeUserId)))
+	await deactivateTeamTopicSubscriptions(transaction, teamId, [removeUserId])
+
+	// the chat mentions still waiting for them, found through the team's own chat room messages to be deleted.
+	// only their chat mentions are deleted, leaving the messages themselves for the rest of the chat room
+	const teamMessageIds = transaction
+		.select({ id: chatRoomMessages.id })
+		.from(chatRoomMessages)
+		.where(eq(chatRoomMessages.teamId, teamId))
+	await transaction
+		.delete(chatRoomMentions)
+		.where(and(eq(chatRoomMentions.userId, removeUserId), inArray(chatRoomMentions.messageId, teamMessageIds)))
 }
 
 /**
  * Deactivates a team member's subscriptions on the team's topics.
  * A team member that the topic can still reach through another of their teams keeps their subscription to it.
- * A team member that owns the topic keeps their subscription to it.
+ * A topic that another of their teams owns keeps their subscription to it.
  */
 export async function deactivateTeamTopicSubscriptions(
 	transaction: DbTransaction,
@@ -236,7 +251,7 @@ export async function deactivateTeamTopicSubscriptions(
 			.from(teamTopics)
 			.innerJoin(teamMembers, and(eq(teamMembers.teamId, teamTopics.teamId), eq(teamMembers.isActive, true)))
 			.where(and(eq(teamMembers.userId, userId), notInArray(teamTopics.teamId, [teamId])))
-	// a team member that owns the topic keeps their subscription to it
+	// a topic another of their teams owns keeps their subscription to it
 	// biome-ignore lint/nursery/useExplicitReturnType: drizzle's select builder type is generated, and naming it here would break on an upgrade
 	const ownedTopicIds = (userId: string) =>
 		transaction

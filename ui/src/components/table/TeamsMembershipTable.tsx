@@ -215,7 +215,7 @@ function TeamMembershipRow({
 							<TooltipContent className="max-w-72">{team.description}</TooltipContent>
 						</Tooltip>
 					) : (
-						"N/A"
+						"None"
 					)}
 				</td>
 				<td className="py-2 pr-4">{team.isPublic ? "public" : "private"}</td>
@@ -290,7 +290,7 @@ function TeamMembershipRow({
 			{openSubtable && (
 				<TeamSubtablesRow
 					teamId={team.teamId}
-					isLeader={team.role === "leader"}
+					isTeamLeader={team.role === "leader"}
 					openSubtable={openSubtable}
 					teamPage={teamPage}
 					columnCount={isReadOnly ? 6 : 11}
@@ -334,14 +334,14 @@ function useTeamSubtables(teamId: string) {
 // whichever subtable is open, in the same tables the team page renders
 function TeamSubtablesRow({
 	teamId,
-	isLeader,
+	isTeamLeader,
 	openSubtable,
 	teamPage,
 	columnCount,
 	onChanged,
 }: {
 	teamId: string
-	isLeader: boolean
+	isTeamLeader: boolean
 	openSubtable: "topics" | "members"
 	teamPage: TeamPageResponse | null
 	// the pageRow spans the table above it, whose columns depend on the read-only mode
@@ -364,7 +364,7 @@ function TeamSubtablesRow({
 								includesNonPublicTopics
 								topicTooltip="Topics on this team"
 								onRemoveTopic={
-									isLeader
+									isTeamLeader
 										? (topic) => void sendRemoveTopicFromTeam(teamId, topic.id).then(() => onChanged())
 										: undefined
 								}
@@ -375,7 +375,7 @@ function TeamSubtablesRow({
 							teamId={teamId}
 							members={teamPage.members}
 							hiddenMemberCount={teamPage.hiddenMemberCount}
-							isLeader={isLeader}
+							isTeamLeader={isTeamLeader}
 							onChanged={onChanged}
 						/>
 					)}
@@ -460,7 +460,7 @@ function TeamInviteRow({ invite, onAnswered }: { invite: ReceivedInvite; onAnswe
 							<TooltipContent className="max-w-72">{invite.description}</TooltipContent>
 						</Tooltip>
 					) : (
-						"N/A"
+						"None"
 					)}
 				</td>
 				<td className="py-2 pr-4">{invite.isPublic ? "public" : "private"}</td>
@@ -532,7 +532,7 @@ function TeamInviteRow({ invite, onAnswered }: { invite: ReceivedInvite; onAnswe
 			{openSubtable && (
 				<TeamSubtablesRow
 					teamId={invite.teamId}
-					isLeader={false}
+					isTeamLeader={false}
 					openSubtable={openSubtable}
 					teamPage={teamPage}
 					columnCount={11}

@@ -64,17 +64,21 @@ export function useShareTopicActions(
 		shareTopic: () => openSheet(`${topicName} on CarlNotes`, topicUrl, COPY_PAGE_LABEL),
 		// the invite token is created inside the click. a menu that is never used creates nothing
 		shareInvite: async () => {
-			// the invite is made first, and a failed create ends in a toast instead of an empty sheet
-			let invite: Awaited<ReturnType<typeof sendCreateTopicInvite>>
+			// the invite is made first, and a failed create attempt ends in a toast instead of an empty sheet
+			let inviteResult: Awaited<ReturnType<typeof sendCreateTopicInvite>>
 			try {
-				invite = await sendCreateTopicInvite(topicId, "share-sheet")
+				inviteResult = await sendCreateTopicInvite(topicId, "share-sheet")
 			} catch (error) {
 				console.error("invite create failed", error)
 				toast.error("That invite didn't get made. Try again.")
 				return
 			}
+			if (inviteResult === "limited") {
+				toast.error("Daily invite limit reached. It resets tomorrow.")
+				return
+			}
 			// the sheet offers the invite url under its own label
-			await openSheet(`Join ${topicName} on CarlNotes`, toInviteUrl(invite.token), INVITE_LABEL)
+			await openSheet(`Join ${topicName} on CarlNotes`, toInviteUrl(inviteResult.token), INVITE_LABEL)
 		},
 	}
 }

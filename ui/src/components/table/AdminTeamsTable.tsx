@@ -168,7 +168,7 @@ function TeamRow({ team }: { team: AdminTeamRow }) {
 									teamId={team.teamId}
 									members={teamMembers}
 									hiddenMemberCount={0}
-									isLeader={false}
+									isTeamLeader={false}
 									isReadOnly
 									onChanged={() => {}}
 								/>

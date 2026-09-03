@@ -96,9 +96,10 @@ export function LinkPreviewCard({ linkPreview, className }: { linkPreview: ChatL
 				className,
 			)}
 		>
-			{/* the page's image, proxied through this origin */}
+			{/* the page's image, proxied through this origin. it scales whole at its own ratio,
+				and only a very tall image is held to the height limit, cropped from the bottom so the top stays */}
 			{linkPreview.imagePath && (
-				<img src={linkPreview.imagePath} alt="" loading="lazy" className="h-36 w-full object-cover" />
+				<img src={linkPreview.imagePath} alt="" loading="lazy" className="max-h-72 w-full object-cover object-top" />
 			)}
 			{linkPreviewText}
 		</AnchorLink>

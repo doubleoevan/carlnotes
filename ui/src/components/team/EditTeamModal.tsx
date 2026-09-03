@@ -219,7 +219,7 @@ export function EditTeamModal({
 	const avatarUrl = useObjectUrl(avatarFile)
 	const previewAvatarUrl = avatarUrl ?? (editedTeam?.hasAvatar ? `/api/team-avatars/${editedTeam.teamId}` : null)
 
-	// a team rename is checked as the field is left, so a taken name is refused before Save
+	// leaving the field checks the name so a taken one shows early. the save checks again, and that is what rejects it
 	const handleNameBlur = (): void => {
 		const teamName = name.trim()
 		if (teamName === "" || teamName.toLowerCase() === editedTeam?.name.trim().toLowerCase()) {

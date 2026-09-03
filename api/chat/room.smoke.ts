@@ -66,11 +66,16 @@ function check(isPassed: boolean, label: string): void {
 
 // post into a chat room on the shared topic and hand back the stored chat message id, failing loud on a denial
 async function postAsMember(userId: string, roomTeamId: string, content: string): Promise<number> {
-	const posted = await postChatRoomMessage(userId, topicId, roomTeamId, content, null, [])
-	if (posted === null || posted === "attachmentRefused" || posted.refusalReason !== null) {
-		throw new Error(`FAIL  the post as ${userId} did not store: ${JSON.stringify(posted)}`)
+	const chatPostResult = await postChatRoomMessage(userId, topicId, roomTeamId, content, null, [])
+	if (
+		chatPostResult === null ||
+		chatPostResult === "attachmentRejected" ||
+		chatPostResult === "attachmentLimitReached" ||
+		chatPostResult.rejectionReason !== null
+	) {
+		throw new Error(`FAIL  the post as ${userId} did not store: ${JSON.stringify(chatPostResult)}`)
 	}
-	return posted.chatMessageId
+	return chatPostResult.chatMessageId
 }
 
 // how many chat room messages the shared topic has stored, across both of its chat rooms
@@ -206,19 +211,19 @@ async function checkRemovalNextRequest(): Promise<void> {
 	check((await readRoomStatus(memberAId)) === 200, "a remaining member still reads the room")
 }
 
-// section 4: an exhausted budget refuses privately before anything posts or spends
-async function checkBudgetRefusal(): Promise<void> {
-	console.log("\n=== 4. budget refusal ===")
+// section 4: an exhausted budget rejects privately before anything posts or spends
+async function checkBudgetRejection(): Promise<void> {
+	console.log("\n=== 4. budget rejection ===")
 
-	// the chat room's stored row count before the refused post
-	const messagesBefore = await countChatRoomMessages()
+	// the chat room's stored row count before the rejected post
+	const chatMessagesBeforeCount = await countChatRoomMessages()
 
-	// the seeded cost row exhausts the spender's one-cent override, so addressing carl refuses
-	const refused = await postChatRoomMessage(spenderId, topicId, teamAId, "@carl hello", null, [])
-	const isRefusal = typeof refused === "object" && refused !== null
-	check(isRefusal && refused.chatMessageId === 0, "the refusal answers chat message id 0")
-	check(isRefusal && (refused.refusalReason ?? "") !== "", "the refusal includes its reason")
-	check((await countChatRoomMessages()) === messagesBefore, "the refused post stored no room chat message")
+	// the seeded cost row exhausts the spender's one-cent override, so addressing carl rejects
+	const rejected = await postChatRoomMessage(spenderId, topicId, teamAId, "@carl hello", null, [])
+	const isRejection = typeof rejected === "object" && rejected !== null
+	check(isRejection && rejected.chatMessageId === 0, "the rejection answers chat message id 0")
+	check(isRejection && (rejected.rejectionReason ?? "") !== "", "the rejection includes its reason")
+	check((await countChatRoomMessages()) === chatMessagesBeforeCount, "the rejected post stored no room chat message")
 }
 
 // section 5: chat mention rows. a named member gets one row, and the author and a plain post get none
@@ -333,7 +338,7 @@ try {
 	await checkAccessMatrix()
 	await checkRoomIsolation()
 	await checkRemovalNextRequest()
-	await checkBudgetRefusal()
+	await checkBudgetRejection()
 	await checkChatRoomMentions()
 	await checkAdvisoryLock()
 	await checkMentionBadges()
@@ -356,4 +361,4 @@ try {
 
 // close the pool so the process exits on its own, then report the outcome as the exit code
 await connectionPool.end()
-process.exit(exitCode)
+process.exitCode = exitCode

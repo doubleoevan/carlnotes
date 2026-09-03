@@ -12,7 +12,7 @@ import { toAtomUrl, toYoutubeSourceId } from "./ingest/youtube"
 import { cheapModel } from "./models"
 import { fetchPromptTemplate, promptTelemetry } from "./prompts/fetch"
 import { writePrompt } from "./prompts/write"
-import { fetchPublicUrl } from "./scrape"
+import { fetchPublicUrl } from "./publicFetch"
 
 // one suggested Source: the custom source option it is added through, and its value
 export type SuggestedSource = { sourceOption: (typeof customSourceKeys)[number]; value: string; name?: string }
@@ -30,7 +30,7 @@ export type SuggestionContext = {
 // how much of the topic's own text reaches the model, so a very long prompt cannot inflate the model call
 const MAX_CONTEXT_CHARS = 4000
 
-// how long a verification fetch may run. a slow suggested source is dropped instead of holding up the reply
+// how long a verification fetch may run. a slow suggested source is dropped instead of delaying the reply
 const VERIFY_TIMEOUT_MS = 8000
 
 // how many extra sources to ask for beyond what the topic can hold
@@ -198,7 +198,7 @@ async function generateSourceSuggestions(suggestionContext: SuggestionContext): 
 // whether a namedSource can actually be read, fetched the way its own ingester reads it
 async function isReadable(suggestedSource: SuggestedSource): Promise<boolean> {
 	try {
-		// a host that hangs counts as temporarily unconfirmed instead of holding the response open
+		// a host that hangs counts as temporarily unconfirmed instead of keeping the response open
 		await Promise.race([
 			readSuggestedSource(suggestedSource),
 			new Promise((_, reject) =>
@@ -218,7 +218,7 @@ async function isReadable(suggestedSource: SuggestedSource): Promise<boolean> {
 }
 
 /**
- * Whether the host refused to answer instead of answering that the source is not there.
+ * Whether the host would not answer instead of answering that the source is not there.
  */
 export function isTemporaryFailure(error: unknown, sourceOption: SuggestedSource["sourceOption"]): boolean {
 	// a timeout or a dropped connection never reached a status at all

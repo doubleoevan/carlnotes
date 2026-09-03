@@ -28,9 +28,9 @@ him to exclude. Compare:
 > Keep me up to date on CarlNotes. I want releases, documentation changes, and anything the internet says about us. 
 > Exclude everything from the list of URLs that I've attached.
 
-The first prompt puts every topic on CarlNotes in front of Carl. The second gives Carl a way to filter
-the irrelevant ones out. The findings from the second prompt are better. If you'd like to craft your prompt with an 
-expert, ask Carl. He read the documentation. All of it. See [Coffee Talk](/docs/feed/chat/).
+The first prompt puts every topic finding on CarlNotes in front of Carl. The second gives Carl a way to filter
+the irrelevant ones out. If you'd like to craft your prompt with an expert, ask Carl. 
+He read the documentation. All of it. See [Coffee Talk](/docs/feed/chat/).
 
 ![A chat conversation, where Carl suggests how to improve a topic prompt](../../../assets/screenshots/prompt-chat-help.png)
 
@@ -46,9 +46,9 @@ three specific types of relevant content.
 One line of reader context changes scoring more than people expect. "I'm a solo developer" makes
 enterprise procurement news irrelevant without another word of exclusions. "I'm a beginner" reranks
 everything toward introductions. Carl scores against the prompt, and who is asking is part of what
-makes something relevant.
+makes a finding relevant.
 
-## Long context goes in an attachment
+## Longer context goes in an attachment
 
 The prompt is the rule. An attachment is the background behind the rule. A resume, a product spec, a
 list of things you've already seen: attach those documents instead of pasting them. Carl reads attachments on

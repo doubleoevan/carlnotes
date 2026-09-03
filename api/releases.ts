@@ -94,7 +94,7 @@ export async function isSignedByGitHub(body: string, signature: string | undefin
 	)
 	const bodyDigest = await crypto.subtle.sign("HMAC", signingKey, new TextEncoder().encode(body))
 
-	// the compare is constant time, so a wrong signature leaks nothing by how long it takes to refuse.
+	// the compare is constant time, so a wrong signature leaks nothing by how long it takes to reject.
 	// the lengths are checked first because timingSafeEqual throws on a mismatched pair
 	const expectedSignature = SIGNATURE_PREFIX + Buffer.from(bodyDigest).toString("hex")
 	return (

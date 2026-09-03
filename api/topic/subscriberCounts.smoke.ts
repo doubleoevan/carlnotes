@@ -128,4 +128,4 @@ for (const [label, expected, runCase] of cases) {
 }
 // close the pool so the process exits on its own, then report the outcome as the exit code
 await connectionPool.end()
-process.exit(allPassed ? 0 : 1)
+process.exitCode = allPassed ? 0 : 1

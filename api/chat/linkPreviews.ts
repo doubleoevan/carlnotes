@@ -21,8 +21,8 @@ const TEAM_PREVIEW_FETCHES_PER_HOUR = 20
 // how long a fetched link preview stands in for a fresh fetch
 const PREVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000
 
-// how long a url that could not be previewed is left alone before a later chat message can try it again
-const FAILED_PREVIEW_TTL_MS = 24 * 60 * 60 * 1000
+// how long a url that could not be previewed is left alone before a later chat message can attempt it again
+const FAILED_PREVIEW_TTL_MS = 15 * 60 * 1000
 
 // how many of a chat message's links get cards, which keeps the bubble readable and the fetch budget bounded
 const MESSAGE_PREVIEW_LIMIT = 3
@@ -155,7 +155,7 @@ async function isLinkPreviewStored(linkPreviewUrl: string): Promise<boolean> {
 		return false
 	}
 
-	// a failed url gets a shorter window than a fetched one, so a host that recovers is picked up the next day
+	// a failed url gets a shorter window than a fetched one, so a host that recovers is picked up faster
 	const ttlMs = linkPreviewRow.status === "failed" ? FAILED_PREVIEW_TTL_MS : PREVIEW_TTL_MS
 	return Date.now() - linkPreviewRow.fetchedAt.getTime() < ttlMs
 }

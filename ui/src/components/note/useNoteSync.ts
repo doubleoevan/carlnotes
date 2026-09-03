@@ -2,7 +2,7 @@
 // the stream pauses while the tab is hidden, and everything tears down on unmount
 import { useEffect, useRef, useState } from "react"
 import * as Y from "yjs"
-import { NoteProvider } from "./noteProvider"
+import { NoteProvider, type NoteSaveErrorReason } from "./noteProvider"
 
 // what the editor needs from an active sync
 export type NoteSync = { ydoc: Y.Doc; provider: NoteProvider }
@@ -10,7 +10,7 @@ export type NoteSync = { ydoc: Y.Doc; provider: NoteProvider }
 /**
  * Hold a connected provider for a note. Null until the first effect runs.
  */
-export function useNoteSync(noteId: string, onSaveError: () => void): NoteSync | null {
+export function useNoteSync(noteId: string, onSaveError: (reason: NoteSaveErrorReason) => void): NoteSync | null {
 	// the active sync, created per note activation
 	const [noteSync, setNoteSync] = useState<NoteSync | null>(null)
 
@@ -22,16 +22,16 @@ export function useNoteSync(noteId: string, onSaveError: () => void): NoteSync |
 	useEffect(() => {
 		// the provider connects immediately and resyncs itself
 		const ydoc = new Y.Doc()
-		const provider = new NoteProvider(noteId, ydoc, () => onSaveErrorRef.current())
-		provider.connect()
-		setNoteSync({ ydoc, provider })
+		const noteProvider = new NoteProvider(noteId, ydoc, (reason) => onSaveErrorRef.current(reason))
+		noteProvider.connect()
+		setNoteSync({ ydoc, provider: noteProvider })
 
 		// a hidden tab drops the stream, and coming back reconnects and resyncs
 		const handleVisibility = (): void => {
 			if (document.hidden) {
-				provider.disconnect()
+				noteProvider.disconnect()
 			} else {
-				provider.connect()
+				noteProvider.connect()
 			}
 		}
 		document.addEventListener("visibilitychange", handleVisibility)
@@ -39,7 +39,7 @@ export function useNoteSync(noteId: string, onSaveError: () => void): NoteSync |
 		// the teardown ends the stream and releases the ydoc
 		return () => {
 			document.removeEventListener("visibilitychange", handleVisibility)
-			provider.destroy()
+			noteProvider.destroy()
 			ydoc.destroy()
 		}
 	}, [noteId])

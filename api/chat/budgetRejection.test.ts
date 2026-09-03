@@ -1,20 +1,20 @@
-// budget refusal tests. one wording for a spent budget, and every path that can meet the proxy's rejection answers it.
+// budget rejection tests. one wording for a spent budget, and every path that can meet the proxy's rejection answers it.
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { isBudgetRejection, SPENT_BUDGET_REFUSAL } from "../../worker"
+import { isBudgetRejection, SPENT_BUDGET_REJECTION } from "../../worker"
 
 // the check that decides whether a failure is the proxy turning the call down for spend
-test("the proxy's spent-budget answer is the one that refuses", () => {
+test("the proxy's spent-budget answer is the one that rejects", () => {
 	const budgetBody = '{"error":{"message":"Budget has been exceeded!","type":"budget_exceeded","code":"429"}}'
 	expect(isBudgetRejection({ statusCode: 429, responseBody: budgetBody })).toBe(true)
-	// a 429 for anything else keeps reporting itself as a failure instead of posting a refusal
+	// a 429 for anything else keeps reporting itself as a failure instead of posting a rejection
 	expect(isBudgetRejection({ statusCode: 429, responseBody: '{"error":{"type":"rate_limit_exceeded"}}' })).toBe(false)
 })
 
-// the gate refuses before anything posts, and the proxy refuses partway through a chat turn. both say the same thing to the user
-test("the refusal wording is written once", () => {
-	expect(SPENT_BUDGET_REFUSAL).toContain("empty mug")
+// the gate rejects before anything posts, and the proxy rejects partway through a chat turn. both say the same thing to the user
+test("the rejection wording is written once", () => {
+	expect(SPENT_BUDGET_REJECTION).toContain("empty mug")
 	// the wording is not spelled out again anywhere in the chat module
 	const chatSources = ["room.ts", "roomTurns.ts", "turns.ts"].map((name) =>
 		readFileSync(join(import.meta.dir, name), "utf8"),
@@ -24,13 +24,13 @@ test("the refusal wording is written once", () => {
 })
 
 /**
- * A budget refusal that is returned after the message posts has to reach the user. Both chat paths answer it themselves.
+ * A budget rejection that is returned after the message posts has to reach the user. Both chat paths answer it themselves.
  */
 test("both chat paths answer a budget rejection instead of only logging it", () => {
 	for (const name of ["room.ts", "turns.ts"]) {
 		const source = readFileSync(join(import.meta.dir, name), "utf8")
 		expect(source).toContain("isBudgetRejection")
-		expect(source).toContain("SPENT_BUDGET_REFUSAL")
+		expect(source).toContain("SPENT_BUDGET_REJECTION")
 	}
 })
 

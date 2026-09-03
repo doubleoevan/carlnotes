@@ -140,21 +140,21 @@ async function createNewTeam(
 	if (!newTeam.name.trim()) {
 		return
 	}
-	const createTeamResponse = await sendCreateTeam({
+	const createTeamResult = await sendCreateTeam({
 		name: newTeam.name.trim(),
 		description: null,
 		topicIds: [topicId],
 		isPublic: newTeam.isPublic,
 	})
-	if ("rejection" in createTeamResponse) {
+	if ("rejection" in createTeamResult) {
 		toast.error(
-			createTeamResponse.rejection === "name-taken"
+			createTeamResult.rejection === "name-taken"
 				? "A team already holds that name."
 				: "That's a lot of teams for one day. Try again tomorrow.",
 		)
 		return
 	}
-	await sendPendingInvites(createTeamResponse.teamId, newTeam.pendingInvites)
+	await sendPendingInvites(createTeamResult.teamId, newTeam.pendingInvites)
 }
 
 /**

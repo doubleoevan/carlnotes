@@ -48,9 +48,8 @@ export async function notifyNoteUpdate(noteId: string, update: string): Promise<
 	}
 }
 
-// the connection string notifications actually message on: the configured direct one.
-// LISTEN needs the direct connection string. neon's pooler never delivers notifications to a listener
-function toDirectConnectionString(): string | undefined {
+/** The direct connection string notifications use. LISTEN needs it, never neon's pooler. */
+export function toDirectConnectionString(): string | undefined {
 	const connectionString = process.env.DATABASE_URL_DIRECT
 	if (connectionString) {
 		return connectionString

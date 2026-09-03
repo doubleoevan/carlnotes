@@ -23,7 +23,7 @@ import { isAllowed, isMonthlySpendExhausted, loadDailyFrequencyAuthorization, lo
 import { loadPendingTopicInvites } from "../invite/invites"
 import { loadFeaturedTopics } from "./featuring"
 import { loadTopicFindings } from "./findings"
-import { subscriptionActivatedAt, toTopicRole } from "./permissions"
+import { subscriptionActivatedAt, toTopicRole, verifiedEmailQuery } from "./permissions"
 import { scansRemaining } from "./quotas"
 
 // a rejected attempt to add one more topic on a daily frequency, including the plan's limit so the message can show it
@@ -149,7 +149,7 @@ export async function attachTeamBookmarks(
 export async function toInviteAndScanFields(
 	userId: string | null,
 	topic: typeof topics.$inferSelect,
-	isOwner: boolean,
+	isTopicOwner: boolean,
 ): Promise<{
 	inviteRows: Invite[]
 	manualScansRemaining: number | null
@@ -157,7 +157,7 @@ export async function toInviteAndScanFields(
 	isSpendExhausted: boolean
 }> {
 	// the invite list is the owner's alone, and the quota belongs to whoever may scan
-	const inviteRows = isOwner ? await loadPendingTopicInvites(topic.id) : []
+	const inviteRows = isTopicOwner ? await loadPendingTopicInvites(topic.id) : []
 	const canScan = await isAllowed(userId, "scan:request", topic)
 	return {
 		inviteRows,
@@ -254,11 +254,11 @@ export async function toTeamFields(
 		.map((teamMemberRow) => ({ teamId: teamMemberRow.teamId, name: teamMemberRow.name }))
 	const hasRequestedToJoin = topicTeamMemberRows.some((memberRow) => !memberRow.isActive && memberRow.teamId === teamId)
 
-	// isTeamMember reads the owning team's membership alone, and that membership is what credits a private team
+	// the owning team's own membership is what credits a private team's link
 	const isOwningMember = teamId !== null && chatRoomTeamRows.some((roomTeamRow) => roomTeamRow.teamId === teamId)
 	return {
 		team,
-		isTeamMember: isOwningMember,
+		isTeamMember: chatRoomTeamRows.length > 0,
 		teamLink: toTeamLink(isPublicTeam || isOwningMember),
 		roomTeams: chatRoomTeamRows,
 		teamCount,
@@ -292,9 +292,9 @@ export function toLastSucceededTopicScan(scanHistory: TopicScan[]): TopicScan | 
  */
 export async function toDailyFrequencyPaused(
 	topic: Pick<typeof topics.$inferSelect, "id" | "ownerId" | "frequency">,
-	isOwner: boolean,
+	isTopicOwner: boolean,
 ): Promise<boolean> {
-	if (!isOwner || !isDailyFrequency(topic.frequency)) {
+	if (!isTopicOwner || !isDailyFrequency(topic.frequency)) {
 		return false
 	}
 	return !(await dailyTopicIdsWithinLimit(topic.ownerId)).has(topic.id)
@@ -380,7 +380,7 @@ export async function toPodcastNames(payloadSources: UpdateTopicPayload["sources
 	return new Map(podcasts.flatMap((podcast) => (podcast ? [[podcast.podcastId, podcast.name] as const] : [])))
 }
 
-// start the llm-guard screen for the Topic's newly saved url Sources asynchronously, without holding up the save
+// start the llm-guard screen for the Topic's newly saved url Sources asynchronously, without delaying the save
 export function startPendingSourceScreens(topicId: string): void {
 	screenPendingSources(topicId).catch((error) => {
 		console.error(`could not start source screens for topic ${topicId}`, error)
@@ -403,11 +403,7 @@ const TEAM_TOPIC_OPTIONS_LIMIT = 500
  * The topics this user may add to a team: their own at any visibility first, then every public topic,
  * and the invite topics they can read, each group alphabetical.
  */
-export async function loadTeamTopicOptions(
-	userId: string,
-	email: string,
-	teamId?: string,
-): Promise<{ id: string; name: string }[]> {
+export async function loadTeamTopicOptions(userId: string, teamId?: string): Promise<{ id: string; name: string }[]> {
 	// an invite topic counts when the user has an active subscription or a pending invite to it
 	const hasSubscription = exists(
 		db
@@ -428,9 +424,9 @@ export async function loadTeamTopicOptions(
 			.where(
 				and(
 					eq(invites.topicId, topics.id),
-					or(eq(invites.invitedUserId, userId), eq(invites.email, email)),
+					// an address matches only once the account verified it
+					or(eq(invites.invitedUserId, userId), inArray(invites.email, verifiedEmailQuery(userId))),
 					isNull(invites.declinedAt),
-					isNull(invites.revokedAt),
 					or(isNull(invites.expiresAt), sql`${invites.expiresAt} > now()`),
 					sql`${invites.usedCount} < ${invites.maxUses}`,
 				),
@@ -479,10 +475,12 @@ export async function toTopicTableRows(
 	// whose email switch to read, absent on a page that shows somebody else's topics
 	userId?: string | null,
 ): Promise<Topic[]> {
-	// kept counts the topic's findings, and seen sums what its succeeded scans reviewed
+	// kept counts the topic's findings saved, and seen sums the topic's findings that succeeded scans reviewed
 	const topicIds = topicRows.map((topicRow) => topicRow.id)
-	const keptAndSeen = await loadFindingsKeptAndResourcesSeen(topicIds)
-	const emailByTopic = await loadTopicsEmailPreferences(userId, topicIds)
+	const [keptAndSeenTopicFindings, emailByTopic] = await Promise.all([
+		loadFindingsKeptAndResourcesSeen(topicIds),
+		loadTopicsEmailPreferences(userId, topicIds),
+	])
 	return topicRows.map((topicRow) => ({
 		id: topicRow.id,
 		name: topicRow.name,
@@ -490,8 +488,8 @@ export async function toTopicTableRows(
 		createdAt: topicRow.createdAt.toISOString(),
 		updatedAt: topicRow.updatedAt.toISOString(),
 		subscriberCount: topicRow.subscriberCount,
-		keptCount: keptAndSeen.get(topicRow.id)?.kept ?? 0,
-		seenCount: keptAndSeen.get(topicRow.id)?.seen ?? 0,
+		keptCount: keptAndSeenTopicFindings.get(topicRow.id)?.kept ?? 0,
+		seenCount: keptAndSeenTopicFindings.get(topicRow.id)?.seen ?? 0,
 		isEmailEnabled: emailByTopic.get(topicRow.id) ?? null,
 	}))
 }

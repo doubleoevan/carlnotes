@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import * as Y from "yjs"
 import type { NoteStreamHandlers, NoteTransport } from "./noteProvider"
-import { NoteProvider, toReconnectDelayMs } from "./noteProvider"
+import { NoteProvider } from "./noteProvider"
 
 // a transport whose calls the test can watch and resolve
 function fakeTransport(overrides: Partial<NoteTransport> = {}): NoteTransport & {
@@ -115,18 +115,4 @@ test("a failed post requeues the update and surfaces the save error", async () =
 	}
 	expect(replica.getText("t").toString()).toBe("and hold this")
 	provider.destroy()
-})
-
-// each failed attempt doubles the wait, jittered down by up to half, never past the limit
-test("the reconnect delay grows exponentially and stays bounded", () => {
-	for (const [failedAttempts, backoffMs] of [
-		[0, 1000],
-		[1, 2000],
-		[3, 8000],
-	] as const) {
-		const delayMs = toReconnectDelayMs(failedAttempts)
-		expect(delayMs).toBeGreaterThanOrEqual(backoffMs / 2)
-		expect(delayMs).toBeLessThanOrEqual(backoffMs)
-	}
-	expect(toReconnectDelayMs(50)).toBeLessThanOrEqual(30_000)
 })

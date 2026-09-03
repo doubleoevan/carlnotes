@@ -89,7 +89,7 @@ export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void
 	)
 	const accepted = await sendEmailBatches(messages)
 
-	// record the accepted sends in one insert, which is what the retry check above reads
+	// record the accepted sends in one insert, which is what the retry check reads
 	const acceptedRows = unsentRecipients
 		.filter((_, index) => accepted[index])
 		.map((recipient) => ({ topicId: topic.id, emailKind: "topic-scan" as const, recipientUserId: recipient.userId }))

@@ -5,13 +5,13 @@ import { db } from "../db"
 import { sources } from "../db/schema"
 import { startSourceScreenWorkflow } from "./temporal-client"
 
-// how long a Topic's first Scan can wait for its Sources to finish screening, and how often it checks
+// how long a Topic's first Scan can wait for its Sources to finish their llm-guard screen, and how often it checks
 const SCREEN_WAIT_MS = 30_000
 const SCREEN_POLL_MS = 500
 
 /**
- * Start the screening workflow for every Source still waiting on one, for one Topic or across all of them.
- * Safe to repeat: a Source whose screen is already running is rejected by its workflow id,
+ * Start the llm-guard screening workflow for every Source still waiting on one, for one Topic or across all of them.
+ * Safe to repeat: a Source whose llm-guard screen is already running is rejected by its workflow id,
  * so this starts a freshly saved Source or selects up one whose start never happened.
  */
 export async function screenPendingSources(topicId?: string): Promise<void> {
@@ -27,7 +27,7 @@ export async function screenPendingSources(topicId?: string): Promise<void> {
 		try {
 			await startSourceScreenWorkflow(source.id)
 		} catch (error) {
-			// the next sweep tries this Source again
+			// the next sweep attempts this Source again
 			console.error(`could not start the screen for source ${source.id}`, error)
 			reportError(error, "source-screen", { sourceId: source.id })
 		}

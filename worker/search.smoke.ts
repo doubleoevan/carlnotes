@@ -116,6 +116,6 @@ try {
 	exitCode = 1
 }
 
-// flush telemetry before exit, then exit because the Neon pool would otherwise keep the process alive
+// flush telemetry, then report the outcome as the exit code
 await shutdownTelemetry()
-process.exit(exitCode)
+process.exitCode = exitCode

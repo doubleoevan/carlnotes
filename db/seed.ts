@@ -188,7 +188,7 @@ export async function seed(devUserId: string): Promise<void> {
 	if (process.env.DOPPLER_ENVIRONMENT !== "dev") {
 		const seen = process.env.DOPPLER_ENVIRONMENT ?? "unset"
 		throw new Error(
-			`db:seed refuses to run: DOPPLER_ENVIRONMENT is "${seen}", expected "dev" (run via \`doppler run -- bun run db:seed\`)`,
+			`db:seed will not run: DOPPLER_ENVIRONMENT is "${seen}", expected "dev" (run via \`doppler run -- bun run db:seed\`)`,
 		)
 	}
 	const seedTopics = buildSeedTopics(devUserId)

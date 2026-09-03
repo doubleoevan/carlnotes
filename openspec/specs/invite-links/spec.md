@@ -126,36 +126,6 @@ The app SHALL NOT attempt to recover recipients by any means, including a bcc to
 - **WHEN** an owner views the invites for a Topic
 - **THEN** a link invite is shown by the uses it has left, while an email invite is shown by the address it named
 
-### Requirement: An owner can see pending invites and revoke one
-
-The owner SHALL be shown the Topic's invites that are still good, each with what it is, how much of it is spent, when it expires, and a control that revokes it. Revoking SHALL take effect immediately for every holder of that link and SHALL NOT touch any other invite or any subscription already created from it.
-
-#### Scenario: Revoking closes the link
-
-- **WHEN** an owner revokes an invite
-- **THEN** the invite URL for its token stops accepting from that moment
-
-#### Scenario: Revoking keeps the people who already joined
-
-- **WHEN** an owner revokes a link that has already been accepted
-- **THEN** the subscriptions created from it remain
-
-### Requirement: A travelling token is limited, expiring, and rate limited
-
-Every token SHALL have a limited number of uses and an expiry. The acceptance route SHALL be guarded by the bot check the app already uses, and creating SHALL be limited per account per day.
-
-These are part of this change, not a follow-up. A token that travels by link is a spam vector aimed at a Topic the creating user does not pay to scan, and an unbounded one turns another user's Scan budget into someone else's mailing list.
-
-#### Scenario: Creating past the daily limit is rejected
-
-- **WHEN** an account creates more invites in a day than the limit allows
-- **THEN** the api rejects it and no token is created
-
-#### Scenario: The acceptance route has the bot check
-
-- **WHEN** the join route is opened
-- **THEN** it is guarded by the same bot check the app's signup uses
-
 ### Requirement: An invite URL previews as what it opens
 
 `GET /invite/:token` SHALL serve the preview image of the Team or Topic the token opens, titled as an invitation naming it, so an invitation pasted into a message reads as one instead of as a page.
@@ -199,4 +169,62 @@ An invitation SHALL show only a card the origin already serves to anyone holding
 
 - **WHEN** an invite URL is fetched for a revoked, expired, exhausted, or unknown token
 - **THEN** the response carries the site's own tags and names no Team or Topic
+
+### Requirement: Tokens are guarded at the account, not the acceptance
+
+Every token SHALL have an expiry and a use limit read from the creator's plan at creation. Creating
+SHALL be limited per account per day, and creating again while the caller already has a live link for
+the target SHALL return that link instead of writing another, spending nothing. Reuse is scoped to
+the caller's own links: a leader's team link auto-joins while a member's is a join request, so handing
+one member another creator's token would change what the link admits.
+
+The acceptance route SHALL require a session and nothing more. The bot gate lives at account
+creation — password signup runs the bot check and OAuth accounts pass their provider's — so a
+second check at acceptance defends nothing the session requirement does not, while blocking real
+people whose browsers cannot complete a challenge.
+
+#### Scenario: Accepting needs only a session
+
+- **WHEN** a signed-in user posts an acceptance for a live token
+- **THEN** it is accepted with no bot challenge, and a session-less post is rejected
+
+#### Scenario: Creating twice hands back the same link
+
+- **WHEN** an owner creates a link for a topic they already hold a live one for
+- **THEN** their live link is returned, no row is written, and no daily-quota slot is spent
+
+### Requirement: Containment applies where it contains anything
+
+A link SHALL be rejected past its expiry or use limit only while it opens something the holder could
+not reach anyway. A link whose Topic is currently public SHALL be accepted past both — the Follow
+button on the public page already grants the same subscription — and its preview SHALL stay live.
+The gate reads the Topic's visibility at acceptance, so a Topic made private is contained again from
+that moment.
+
+#### Scenario: A stale link to a public topic still works
+
+- **WHEN** a signed-in user accepts an expired or exhausted link to a public Topic
+- **THEN** they are subscribed as the Follow button would have
+
+#### Scenario: A leaked private link is still contained
+
+- **WHEN** a token opening a private Topic is past its use limit
+- **THEN** it is rejected, and the page says to ask the inviter for a fresh link
+
+### Requirement: A rejected team link becomes a join request
+
+An expired or exhausted team token SHALL downgrade to a join request instead of a rejection: the
+accepter appears as a not-yet-active member a leader can activate, and the page tells them a leader will
+let them in. A team at its member limit SHALL be named as
+full — its own acceptance status with its own copy — never reported as a used-up link.
+
+#### Scenario: Person 26 becomes a join request
+
+- **WHEN** someone accepts a team link past its use limit
+- **THEN** a not-yet-active membership row is written and the page says a leader will let them in
+
+#### Scenario: A full team is named as full
+
+- **WHEN** an acceptance is rejected because the team is at its member limit
+- **THEN** the page tells them the team is full, not that the link ran out
 

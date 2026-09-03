@@ -183,7 +183,7 @@ function toNote(note: NoteRow, userId: string | null, access: PageAccess): Note 
 		createdAt: note.createdAt.toISOString(),
 		updatedAt: note.updatedAt.toISOString(),
 		canEdit: canEditNote(userId, note, access),
-		isOwner: userId !== null && note.ownerUserId === userId,
+		isTopicOwner: userId !== null && note.ownerUserId === userId,
 		canDelete: canDeleteNote(userId, note, access),
 	}
 }
@@ -378,10 +378,10 @@ export const notesRoute = new Hono<AppEnv>()
 		}
 
 		// the owner-only rules
-		const isOwner = visibleNote.userId !== null && visibleNote.note.ownerUserId === visibleNote.userId
+		const isTopicOwner = visibleNote.userId !== null && visibleNote.note.ownerUserId === visibleNote.userId
 		if (
 			visibility &&
-			(!isOwner || !creatableNoteVisibilities(visibleNote.userId, visibleNote.access).includes(visibility))
+			(!isTopicOwner || !creatableNoteVisibilities(visibleNote.userId, visibleNote.access).includes(visibility))
 		) {
 			return context.json({ error: "not found" }, 404)
 		}
@@ -433,14 +433,16 @@ export const notesRoute = new Hono<AppEnv>()
 		}
 
 		// reject bytes that do not decode as a yjs update
+		let update: Buffer
 		try {
-			const update = Buffer.from(context.req.valid("json").update, "base64")
+			update = Buffer.from(context.req.valid("json").update, "base64")
 			Y.encodeStateVectorFromUpdate(update)
-			await saveNoteUpdate(visibleNote.note.id, update, visibleNote.userId)
 		} catch {
 			return context.json({ error: "invalid update" }, 400)
 		}
 
+		// a failed save answers 500 instead of the invalid-update 400
+		await saveNoteUpdate(visibleNote.note.id, update, visibleNote.userId)
 		return context.json({ ok: true })
 	})
 	.get("/notes/:id/events", async (context) => {

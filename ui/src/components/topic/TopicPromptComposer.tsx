@@ -4,6 +4,7 @@ import type * as React from "react"
 import { useEffect, useRef, useState } from "react"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { toAttachmentFileKey } from "@/components/topic/TopicAttachmentEditor"
 import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
 import { FILE_PICKER_ACCEPT } from "@/lib/utils"
 
@@ -144,7 +145,10 @@ function PendingAttachmentChips({
 	return (
 		<div className="mb-2 flex flex-wrap gap-1.5">
 			{pendingFiles.map((file) => (
-				<div key={toFileKey(file)} className="bg-muted flex items-center gap-1.5 rounded-lg border px-1.5 py-1 text-xs">
+				<div
+					key={toAttachmentFileKey(file)}
+					className="bg-muted flex items-center gap-1.5 rounded-lg border px-1.5 py-1 text-xs"
+				>
 					{file.type.startsWith("image/") ? (
 						<FilePreview file={file} />
 					) : (
@@ -179,9 +183,4 @@ function FilePreview({ file }: { file: File }) {
 		return () => URL.revokeObjectURL(objectUrl)
 	}, [file])
 	return <img src={previewUrl} alt={file.name} className="size-6 rounded object-cover" />
-}
-
-// a staged file's stable identity, matching the one the attachment editor dedupes on
-function toFileKey(file: File): string {
-	return `${file.name}-${file.size}-${file.lastModified}`
 }

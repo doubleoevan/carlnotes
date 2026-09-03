@@ -2,6 +2,7 @@
 // run it with: doppler run -- bun api/invite/invites.smoke.ts. needs Doppler secrets
 import assert from "node:assert/strict"
 import type { Invite } from "@shared/contracts"
+import { PLANS } from "@shared/plans"
 import { toNormalizedUsername } from "@shared/usernames"
 import { and, eq, inArray } from "drizzle-orm"
 import { connectionPool, db } from "../../db"
@@ -9,9 +10,12 @@ import { canCreateInvitesToday, toInviteLimit } from "../../db/quotas"
 import { invites, subscriptions, teamMembers, teams, topics, users } from "../../db/schema"
 import { isConnected } from "../connections"
 import type { AnalyticsProperties } from "../currentUser"
-import { acceptInviteToken, createTeamInvite, createTopicInvite, revokeTopicInvite, toInviteRefusal } from "./invites"
-import type { UserInviteRefusal } from "./userInvites"
+import { acceptInviteToken, createTeamInvite, createTopicInvite, toInviteRejection } from "./invites"
+import type { UserInviteRejection } from "./userInvites"
 import { acceptInvite, createUserInvite, declineInvite } from "./userInvites"
+
+// the free plan's team member limit, which these fills sit exactly at
+const FREE_TEAM_MEMBER_LIMIT = PLANS.free.teamMemberLimit ?? 0
 
 // these keys are dropped before any invite call runs
 delete Bun.env.RESEND_API_KEY
@@ -36,7 +40,7 @@ const ANALYTICS: AnalyticsProperties = {
 	isInAppBrowser: false,
 }
 
-// 1. only edit authority creates a link, and a revoked one returns revoked
+// 1. only edit authority creates a link, and a fresh one is live
 async function checkLinkCreateAuthority(): Promise<void> {
 	console.log("\n=== 1. link create authority ===")
 	// an owner with a topic, and a stranger with no access to it
@@ -44,7 +48,7 @@ async function checkLinkCreateAuthority(): Promise<void> {
 	const stranger = await createUser("stranger1")
 	const topic = await createTopic(owner.id, "link authority topic")
 
-	// the stranger is refused, and the owner gets a live link with the link limits
+	// the stranger is rejected, and the owner gets a live link with the link limits
 	assert.equal(
 		await createTopicInvite(stranger.id, topic.id, "copy-link", ANALYTICS),
 		"forbidden",
@@ -55,16 +59,11 @@ async function checkLinkCreateAuthority(): Promise<void> {
 		"the owner's link",
 	)
 	assert.equal(created.maxUses, 25, "the owner's link does not have the link use limit")
-	assert.equal(toInviteRefusal(await loadInvite(created.id), new Date()), null, "the fresh link is not live")
+	assert.equal(toInviteRejection(await loadInvite(created.id), new Date()), null, "the fresh link is not live")
 
-	// revoking saves the row, and the refusal reads revoked
-	assert.ok(await revokeTopicInvite(owner.id, topic.id, created.id), "the owner could not revoke their link")
-	const revoked = await loadInvite(created.id)
-	assert.ok(revoked.revokedAt, "the revocation saved no time")
-	assert.equal(toInviteRefusal(revoked, new Date()), "revoked", "a revoked link does not answer revoked")
-	console.log("PASS  the stranger is refused, the owner's link lives, revocation answers revoked")
+	console.log("PASS  the stranger is rejected and the owner's link lives")
 
-	// a team link is a member's power the same way, and an outsider is refused
+	// a team link is a member's power the same way, and an outsider is rejected
 	const team = await createTeam("authority team", owner.id)
 	assert.equal(
 		await createTeamInvite(stranger.id, team.id, "copy-link", ANALYTICS),
@@ -122,33 +121,73 @@ async function checkUseLimitRace(): Promise<void> {
 	console.log("PASS  exactly two joined, two were answered exhausted, and usedCount ended at two")
 }
 
-// 4. a team at its member limit refuses the link acceptance and hands the spent use back
+// 3b. link reuse, the public-topic waiver, and a dead team link landing as a join request
+async function checkSpentAndReusedLinks(): Promise<void> {
+	console.log("\n=== 3b. growth paths ===")
+	// creating twice hands back the same live link instead of creating a secondInvite bearer token
+	const owner = await createUser("owner3b")
+	const topic = await createTopic(owner.id, "growth topic")
+	const firstInvite = toCreatedInvite(
+		await createTopicInvite(owner.id, topic.id, "copy-link", ANALYTICS),
+		"the first link",
+	)
+	const secondInvite = toCreatedInvite(await createTopicInvite(owner.id, topic.id, "copy-link", ANALYTICS), "the reuse")
+	assert.equal(
+		secondInvite.id,
+		firstInvite.id,
+		"a secondInvite create wrote a new link instead of returning the live one",
+	)
+	console.log("PASS  creating twice returns the same live link")
+
+	// an exhausted link to a public topic still admits, since Follow grants the same subscription
+	await db.update(topics).set({ visibility: "public" }).where(eq(topics.id, topic.id))
+	const spentInvite = await insertInvite({ topicId: topic.id, invitedByUserId: owner.id, maxUses: 1, usedCount: 1 })
+	const lateAccepter = await createUser("late3b")
+	const lateOutcome = await acceptInviteToken(lateAccepter.id, spentInvite.token)
+	assert.equal(lateOutcome.status, "joined", `the public topic's spent link answered ${lateOutcome.status}`)
+	console.log("PASS  a spent link to a public topic still joins")
+
+	// an exhausted team link lands as a join request instead of a dead end
+	const team = await createTeam("growth team", owner.id)
+	const spentTeamInvite = await insertInvite({ teamId: team.id, invitedByUserId: owner.id, maxUses: 1, usedCount: 1 })
+	const requester = await createUser("requester3b")
+	const requestOutcome = await acceptInviteToken(requester.id, spentTeamInvite.token)
+	assert.equal(requestOutcome.status, "requestedTeam", `the spent team link answered ${requestOutcome.status}`)
+	const [requestRow] = await db
+		.select({ isActive: teamMembers.isActive })
+		.from(teamMembers)
+		.where(and(eq(teamMembers.teamId, team.id), eq(teamMembers.userId, requester.id)))
+	assert.equal(requestRow?.isActive, false, "the spent team link wrote no waiting membership row")
+	console.log("PASS  a spent team link lands as a join request a leader can activate")
+}
+
+// 4. a team at its member limit rejects the link acceptance and hands the spent use back
 async function checkTeamLimitRefund(): Promise<void> {
 	console.log("\n=== 4. team-limit refund ===")
-	// a free-plan leader's team filled to the free member limit of ten
+	// a free-plan leader's team filled to the free plan's member limit
 	const leader = await createUser("leader4")
 	const team = await createTeam("limit team", leader.id)
 	const fillers = await db
 		.insert(users)
-		.values(Array.from({ length: 9 }, (_, index) => toUserValues(`filler4-${index}`)))
+		.values(Array.from({ length: FREE_TEAM_MEMBER_LIMIT - 1 }, (_, index) => toUserValues(`filler4-${index}`)))
 		.returning()
 	createdUserIds.push(...fillers.map((filler) => filler.id))
 	await db.insert(teamMembers).values(fillers.map((filler) => ({ teamId: team.id, userId: filler.id })))
 
-	// an eleventh person accepts a live team link and is refused at the limit
+	// one person past the limit accepts a live team link and is rejected
 	const invite = await insertInvite({ teamId: team.id, invitedByUserId: leader.id, maxUses: 25 })
 	const eleventh = await createUser("eleventh4")
 	const outcome = await acceptInviteToken(eleventh.id, invite.token)
-	assert.equal(outcome.status, "exhausted", `the full team answered ${outcome.status}`)
+	assert.equal(outcome.status, "teamFull", `the full team answered ${outcome.status}`)
 
-	// the refusal handed the spent use back and wrote no membership
-	assert.equal((await loadInvite(invite.id)).usedCount, 0, "the refused join kept the spent use")
+	// the rejection handed the spent use back and wrote no membership
+	assert.equal((await loadInvite(invite.id)).usedCount, 0, "the rejected join kept the spent use")
 	const [membership] = await db
 		.select()
 		.from(teamMembers)
 		.where(and(eq(teamMembers.teamId, team.id), eq(teamMembers.userId, eleventh.id)))
 	assert.equal(membership, undefined, "the full team still gained a member")
-	console.log("PASS  the full team refuses the link and the spent use is refunded")
+	console.log("PASS  the full team rejects the link and the spent use is refunded")
 }
 
 // 5. resolution: what each user invite kind stores on the row, and the one slot a person holds per target
@@ -188,7 +227,7 @@ async function checkResolution(): Promise<void> {
 	assert.equal(strangerRow.email, strangerAddress, "the stranger email invite dropped the address")
 	assert.equal(strangerRow.invitedUserId, null, "the stranger email invite resolved a phantom account")
 
-	// a username invite for a person holding a declined email row reopens that row instead of inserting a second
+	// a username invite for a person who has a declined email row reopens that row instead of inserting a secondInvite
 	const declined = await createUser("declined5")
 	const declinedRow = await insertInvite({
 		topicId: topic.id,
@@ -200,7 +239,7 @@ async function checkResolution(): Promise<void> {
 		await createUserInvite(sender.id, { topicId: topic.id }, { username: declined.username }),
 		"the reopening username invite",
 	)
-	assert.equal(reopened.id, declinedRow.id, "the re-invite inserted a second row instead of reopening")
+	assert.equal(reopened.id, declinedRow.id, "the re-invite inserted a secondInvite row instead of reopening")
 	assert.equal((await loadInvite(declinedRow.id)).declinedAt, null, "the reopened row kept its declined time")
 	// still exactly one row for this person on the topic
 	const slotRows = await db
@@ -211,7 +250,7 @@ async function checkResolution(): Promise<void> {
 	console.log("PASS  each mode stores what it resolved, and a declined row reopens as the one slot")
 }
 
-// 6. each invite-access setting: nobody refuses every sender, connected admits only a connected one, anyone admits a stranger
+// 6. each invite-access setting: nobody rejects every sender, connected admits only a connected one, anyone admits a stranger
 async function checkInviteAccess(): Promise<void> {
 	console.log("\n=== 6. invite-access ===")
 	// a stranger sender, a teammate sender, and one recipient per setting
@@ -219,30 +258,30 @@ async function checkInviteAccess(): Promise<void> {
 	const strangerTopic = await createTopic(strangerSender.id, "stranger sender topic")
 	const teammateSender = await createUser("teammatesender6")
 	const teammateTopic = await createTopic(teammateSender.id, "teammate sender topic")
-	const refusesAll = await createUser("nobody6", { inviteAccess: "nobody" })
+	const rejectsAll = await createUser("nobody6", { inviteAccess: "nobody" })
 	const connectedOnly = await createUser("connected6", { inviteAccess: "connected" })
 	const admitsAll = await createUser("anyone6", { inviteAccess: "anyone" })
 
 	// the teammate sender shares a team with both guarded recipients
 	const team = await createTeam("setting team", teammateSender.id)
 	await db.insert(teamMembers).values([
-		{ teamId: team.id, userId: refusesAll.id },
+		{ teamId: team.id, userId: rejectsAll.id },
 		{ teamId: team.id, userId: connectedOnly.id },
 	])
 
-	// nobody refuses the stranger and the teammate alike
+	// nobody rejects the stranger and the teammate alike
 	assert.equal(
-		await createUserInvite(strangerSender.id, { topicId: strangerTopic.id }, { username: refusesAll.username }),
+		await createUserInvite(strangerSender.id, { topicId: strangerTopic.id }, { username: rejectsAll.username }),
 		"not-accepting",
 		"a nobody recipient admitted a stranger",
 	)
 	assert.equal(
-		await createUserInvite(teammateSender.id, { topicId: teammateTopic.id }, { username: refusesAll.username }),
+		await createUserInvite(teammateSender.id, { topicId: teammateTopic.id }, { username: rejectsAll.username }),
 		"not-accepting",
 		"a nobody recipient admitted a teammate",
 	)
 
-	// connected refuses the stranger and admits the sender who shares a team
+	// connected rejects the stranger and admits the sender who shares a team
 	assert.equal(
 		await createUserInvite(strangerSender.id, { topicId: strangerTopic.id }, { username: connectedOnly.username }),
 		"not-accepting",
@@ -258,7 +297,7 @@ async function checkInviteAccess(): Promise<void> {
 		await createUserInvite(strangerSender.id, { topicId: strangerTopic.id }, { username: admitsAll.username }),
 		"the stranger's invite to an anyone recipient",
 	)
-	console.log("PASS  nobody refuses everyone, connected admits only a connected sender, anyone admits a stranger")
+	console.log("PASS  nobody rejects everyone, connected admits only a connected sender, anyone admits a stranger")
 }
 
 // 7. what counts as connected: a shared team, an active subscription, and an accepted invitation, but never two strangers
@@ -327,11 +366,11 @@ async function checkAcceptAndDecline(): Promise<void> {
 	)
 	assert.equal((await loadInvite(topicInvite.id)).usedCount, 1, "the topic acceptance spent no use")
 
-	// accepting a username team invite writes the membership and a muted subscription per held topic
+	// accepting a username team invite writes the membership and a subscription with email off per held topic
 	const teamInvite = await insertInvite({ teamId: team.id, invitedUserId: recipient.id, invitedByUserId: sender.id })
 	const teamOutcome = await acceptInvite(recipient.id, teamInvite.id)
 	assert.equal(teamOutcome.status, "joinedTeam", `the team acceptance answered ${teamOutcome.status}`)
-	// the membership row, then the muted subscription the join fanned out on the held topic
+	// the membership row, then the subscription with email off that the join fanned out on the held topic
 	const [membership] = await db
 		.select()
 		.from(teamMembers)
@@ -339,7 +378,7 @@ async function checkAcceptAndDecline(): Promise<void> {
 	assert.equal(membership?.role, "member", "the team acceptance wrote no membership")
 	const teamSubscription = await loadSubscription(recipient.id, teamTopic.id)
 	assert.equal(teamSubscription?.isActive, true, "the join fanned out no subscription on the held topic")
-	assert.equal(teamSubscription?.isEmailEnabled, false, "the fanned-out subscription is not muted")
+	assert.equal(teamSubscription?.isEmailEnabled, false, "the fanned-out subscription still has email on")
 
 	// declining saves the row, and the declined invitation returns unknown ever after
 	const laterTopic = await createTopic(sender.id, "declined topic")
@@ -476,8 +515,8 @@ async function loadSubscription(
 	return subscription
 }
 
-// narrow a creation answer to the invite it should be, throwing the refusal it was instead
-function toCreatedInvite(created: Invite | UserInviteRefusal, label: string): Invite {
+// narrow a creation answer to the invite it should be, throwing the rejection it was instead
+function toCreatedInvite(created: Invite | UserInviteRejection, label: string): Invite {
 	if (typeof created === "string") {
 		throw new Error(`${label} answered ${created} instead of an invite`)
 	}
@@ -504,6 +543,7 @@ try {
 	await checkValidAcceptance()
 	await checkUseLimitRace()
 	await checkTeamLimitRefund()
+	await checkSpentAndReusedLinks()
 	// then resolution, the invite-access setting, connections, accepting and declining, and the daily count
 	await checkResolution()
 	await checkInviteAccess()
@@ -522,4 +562,4 @@ try {
 	await cleanup()
 	await connectionPool.end()
 }
-process.exit(exitCode)
+process.exitCode = exitCode

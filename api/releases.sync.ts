@@ -34,12 +34,12 @@ export async function syncReleases(): Promise<{ storedReleaseCount: number; skip
 	let skippedReleaseCount = 0
 	const releases = (await response.json()) as Parameters<typeof toReleaseUpsert>[0][]
 	for (const release of releases) {
-		const releaseRow = toReleaseUpsert(release)
-		if (!releaseRow) {
+		const releaseUpsert = toReleaseUpsert(release)
+		if (!releaseUpsert) {
 			skippedReleaseCount += 1
 			continue
 		}
-		await saveRelease(releaseRow)
+		await saveRelease(releaseUpsert)
 		storedReleaseCount += 1
 	}
 	return { storedReleaseCount, skippedReleaseCount }

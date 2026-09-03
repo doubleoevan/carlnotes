@@ -81,5 +81,5 @@ async function smokeTest(): Promise<number> {
 	return allPassed ? 0 : 1
 }
 
-// run the smoke test and exit with its result
-process.exit(await smokeTest())
+// run the smoke test and report the outcome as the exit code
+process.exitCode = await smokeTest()

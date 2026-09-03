@@ -3,23 +3,20 @@
 import { Awareness } from "y-protocols/awareness"
 import * as Y from "yjs"
 import { fetchNoteYdoc, fromBase64, sendNoteUpdate, toNoteEventsUrl } from "@/clients/noteClient"
+import { STALE_STREAM_MS, toReconnectStreamDelayMs } from "@/lib/streamReconnect"
 
 // how long local edits pool before one merged update posts
 const SEND_DEBOUNCE_MS = 400
-
-// a silent stream is declared dead after this long. the server pings every 25 seconds
-const STALE_STREAM_MS = 60_000
-
-// the reconnect backoff bounds
-const RECONNECT_MIN_MS = 1000
-const RECONNECT_MAX_MS = 30_000
 
 // the network calls the provider makes, taken as one object so a test can pass fakes
 export type NoteTransport = {
 	openStream: (noteId: string, handlers: NoteStreamHandlers) => () => void
 	fetchDiff: (noteId: string, stateVector: Uint8Array) => Promise<Uint8Array | null>
-	sendUpdate: (noteId: string, update: Uint8Array) => Promise<boolean>
+	sendUpdate: (noteId: string, update: Uint8Array) => Promise<boolean | "rejected">
 }
+
+// how a save went wrong: a failed post retries, a rejected update stops the note from saving
+export type NoteSaveErrorReason = "failed" | "rejected"
 
 // what the stream delivers back to the provider
 export type NoteStreamHandlers = {
@@ -27,14 +24,6 @@ export type NoteStreamHandlers = {
 	onResync: () => void
 	onDown: () => void
 	onAlive: () => void
-}
-
-/**
- * The reconnect delay for the nth straight failure: exponential with jitter, up to a limit.
- */
-export function toReconnectDelayMs(failedAttempts: number, random: () => number = Math.random): number {
-	const backoffMs = Math.min(RECONNECT_MIN_MS * 2 ** failedAttempts, RECONNECT_MAX_MS)
-	return Math.round(backoffMs * (0.5 + random() / 2))
 }
 
 /**
@@ -48,6 +37,9 @@ export class NoteProvider {
 	// local edits pooled since the last post
 	private pendingUpdates: Uint8Array[] = []
 	private sendTimer: ReturnType<typeof setTimeout> | null = null
+
+	// set once the server rejects an update, which no retry can ever send
+	private hasRejectedUpdate = false
 
 	// the open stream's closer, null while disconnected
 	private closeStream: (() => void) | null = null
@@ -65,7 +57,7 @@ export class NoteProvider {
 	constructor(
 		private readonly noteId: string,
 		readonly ydoc: Y.Doc,
-		private readonly onSaveError: () => void,
+		private readonly onSaveError: (reason: NoteSaveErrorReason) => void,
 		private readonly transport: NoteTransport = browserNoteTransport,
 	) {
 		this.awareness = new Awareness(ydoc)
@@ -165,9 +157,10 @@ export class NoteProvider {
 		}
 	}
 
-	// pool a local edit and schedule the merged post. a remote apply names this provider as its origin
+	// pool a local edit and schedule the merged post. a remote apply names this provider as its origin,
+	// and a rejected note can never post again, so its later edits stay in the document and out of the pool
 	private handleLocalUpdate = (update: Uint8Array, origin: unknown): void => {
-		if (origin === this) {
+		if (origin === this || this.hasRejectedUpdate) {
 			return
 		}
 		this.pendingUpdates.push(update)
@@ -181,7 +174,10 @@ export class NoteProvider {
 			clearTimeout(this.sendTimer)
 			this.sendTimer = null
 		}
-		if (this.pendingUpdates.length === 0) {
+
+		// a rejected pool never posts again, and everything stays pooled. dropping the rejected update
+		// would leave a clock gap that strands every later edit for anyone reading the stored note
+		if (this.pendingUpdates.length === 0 || this.hasRejectedUpdate) {
 			return
 		}
 
@@ -189,15 +185,22 @@ export class NoteProvider {
 		const mergedUpdates = Y.mergeUpdates(this.pendingUpdates)
 		this.pendingUpdates = []
 
-		// a failed post keeps the edits pooled for the next flush
+		// a failed post keeps the edits pooled for the next flush. a rejected one can never send, so posting stops for good
 		const isUpdatesSent = await this.transport.sendUpdate(this.noteId, mergedUpdates).catch(() => false)
+		if (isUpdatesSent === "rejected") {
+			this.pendingUpdates.unshift(mergedUpdates)
+			this.hasRejectedUpdate = true
+			this.onSaveError("rejected")
+			return
+		}
+		// a post that only failed waits for the next flush with its edits still pooled
 		if (!isUpdatesSent) {
 			this.pendingUpdates.unshift(mergedUpdates)
-			this.onSaveError()
+			this.onSaveError("failed")
 		}
 	}
 
-	// tear the stream down and reopen after the backoff
+	// tear the stream down and reopen after the reconnect delay
 	private scheduleReconnect(): void {
 		if (!this.closeStream || this.reconnectTimer) {
 			return
@@ -211,11 +214,11 @@ export class NoteProvider {
 			this.staleTimer = null
 		}
 
-		// reopen after the backoff
+		// reopen after the reconnect delay
 		this.reconnectTimer = setTimeout(() => {
 			this.reconnectTimer = null
 			this.connect()
-		}, toReconnectDelayMs(this.failedAttempts))
+		}, toReconnectStreamDelayMs(this.failedAttempts))
 		this.failedAttempts += 1
 	}
 }
@@ -223,7 +226,7 @@ export class NoteProvider {
 // the real transport: an EventSource on the stream url, and the note client's fetch and post
 const browserNoteTransport: NoteTransport = {
 	openStream(noteId, handlers): () => void {
-		// the browser's own retry is bypassed. the provider owns the backoff
+		// the browser's own retry is bypassed. the provider owns the reconnect delay
 		const source = new EventSource(toNoteEventsUrl(noteId))
 		source.onopen = handlers.onAlive
 		source.onerror = () => {
