@@ -44,7 +44,7 @@ SMOKE_FILES=(
 	api/invite/invites.smoke.ts
 )
 
-# each run writes coverage/lcov.info, kept aside per file so one upload can send them all
+# each run writes coverage/lcov.info, kept aside per smoke file so one upload can send them all
 mkdir -p coverage/smoke
 failures=0
 skipped=0
@@ -59,10 +59,12 @@ for smoke_file in "${SMOKE_FILES[@]}"; do
 	if ! bun test --coverage --coverage-reporter=lcov "./$smoke_file"; then
 		failures=$((failures + 1))
 	fi
-	# keep this run's report under the smoke file's own name
+	# keep this run's report in its own directory, still named lcov.info. codecov searches for that name,
+	# and finds nothing under a name like scan.lcov.info, which is why the smoke flag uploaded no reports
 	name=$(basename "$smoke_file" .smoke.ts)
 	if [ -f coverage/lcov.info ]; then
-		mv coverage/lcov.info "coverage/smoke/$name.lcov.info"
+		mkdir -p "coverage/smoke/$name"
+		mv coverage/lcov.info "coverage/smoke/$name/lcov.info"
 	fi
 done
 
