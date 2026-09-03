@@ -4,10 +4,10 @@
 set -u
 cd "$(dirname "$0")/.." || exit 1
 
-# the smoke files that need the services docker compose runs: litellm on 4000 for every model and
-# embedding call, and temporal on 7233 for the attachment workflow. a machine without them cannot pass
-# these, so a runner skips them by name rather than failing on every call
-LOCAL_SERVICE_SMOKE_FILES=(
+# the smoke files that only a developer's machine can run: they need litellm on 4000 for their model
+# and embedding calls, or temporal on 7233 for the attachment workflow, both of which docker compose
+# runs locally. everything else runs anywhere, since it needs only the dev database and the outside apis
+DEVELOPER_ONLY_SMOKE_FILES=(
 	worker/scan.smoke.ts
 	worker/attach.smoke.ts
 	worker/search.smoke.ts
@@ -16,10 +16,10 @@ LOCAL_SERVICE_SMOKE_FILES=(
 	scripts/eval-pipeline.smoke.ts
 )
 
-# whether the file needs one of those services
-needs_local_service() {
-	for local_service_file in "${LOCAL_SERVICE_SMOKE_FILES[@]}"; do
-		[ "$local_service_file" = "$1" ] && return 0
+# whether this file is one of them
+is_developer_only() {
+	for developer_only_file in "${DEVELOPER_ONLY_SMOKE_FILES[@]}"; do
+		[ "$developer_only_file" = "$1" ] && return 0
 	done
 	return 1
 }
@@ -49,9 +49,9 @@ mkdir -p coverage/smoke
 failures=0
 skipped=0
 for smoke_file in "${SMOKE_FILES[@]}"; do
-	# a run with no local services says so, and the skip is named rather than passed over quietly
-	if [ "${SMOKE_SKIP_LOCAL_SERVICES:-0}" = "1" ] && needs_local_service "$smoke_file"; then
-		echo "=== smoke coverage: $smoke_file skipped, it needs litellm or temporal ==="
+	# a run off a developer's machine says so, and each skip is named rather than passed over quietly
+	if [ "${SMOKE_SKIP_DEVELOPER_ONLY:-0}" = "1" ] && is_developer_only "$smoke_file"; then
+		echo "=== smoke coverage: $smoke_file skipped, it runs only on a developer's machine ==="
 		skipped=$((skipped + 1))
 		continue
 	fi

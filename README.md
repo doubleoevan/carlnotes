@@ -137,7 +137,7 @@ bun run dev:docs     # Starlight dev server on localhost:4321/docs, reachable on
                      # it runs in the background: `cd docs && astro dev stop` ends it, `astro dev logs` tails it
 bun run test:coverage # the test suite with bun's built-in line and function coverage table
 bun run smoke:coverage # run every smoke test script, one process each, writing per-file lcov to coverage/smoke; the Smoke workflow runs this on each push to main
-                     # with SMOKE_SKIP_LOCAL_SERVICES=1 it skips the six that need litellm or temporal, which is what the workflow sets, since a runner has neither
+                     # with SMOKE_SKIP_DEVELOPER_ONLY=1 it skips the six that need litellm or temporal, which is what the Smoke workflow sets
 bun run docs:embed   # chunk the docs markdown by section and embed the changed sections into docs_chunks, which chat quotes; run it after editing docs
 bun run docs:embed:prd # the same sync against the production database, the owner-run escape hatch until the deploy job runs it
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run

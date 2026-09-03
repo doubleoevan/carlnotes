@@ -54,8 +54,18 @@ async function seedTestData(): Promise<{ subredditSource: Source; searchSource: 
 	return { subredditSource, searchSource, userId: user.id }
 }
 
+// what one Source's run answered: its resources, reddit's own throttle, or a real rejection
+type SourceOutcome = "found" | "throttled" | "failed"
+
+// reddit answers 429 to an address it is throttling, which it does to the shared addresses hosted
+// runners send from. that says nothing about the ingester, which tried every access mode and reported
+// the reason each gave, so a throttle is recorded instead of failing the run
+function isThrottled(message: string): boolean {
+	return message.includes("429")
+}
+
 // run one Source and report what came back, or the reason each access mode rejected it
-async function checkSource(label: string, source: Source): Promise<boolean> {
+async function checkSource(label: string, source: Source): Promise<SourceOutcome> {
 	// the ingester selects its own access modes from the environment, so this is exactly what a Scan would do
 	try {
 		const { resources, fallbackMode } = await redditIngester(source)
@@ -70,12 +80,13 @@ async function checkSource(label: string, source: Source): Promise<boolean> {
 		console.log(`sample title  : ${resources[0]?.title ?? "none"}`)
 		console.log(`sample snippet: ${resources[0]?.snippet?.slice(0, 80) ?? "none"}`)
 		console.log(`engagement    : ${resources[0]?.engagement ?? "none"}`)
-		return resources.length > 0
+		return resources.length > 0 ? "found" : "failed"
 	} catch (error) {
 		// every access mode rejected. the message names each one, which is what a Scan traces and the report reads
+		const message = error instanceof Error ? error.message : String(error)
 		console.log(`\n--- ${label} ---`)
-		console.log(`rejected       : ${error instanceof Error ? error.message : String(error)}`)
-		return false
+		console.log(`rejected       : ${message}`)
+		return isThrottled(message) ? "throttled" : "failed"
 	}
 }
 
@@ -85,17 +96,22 @@ async function check(subredditSource: Source, searchSource: Source): Promise<boo
 	console.log(`credentials   : ${Bun.env.REDDIT_CLIENT_ID && Bun.env.REDDIT_CLIENT_SECRET ? "set" : "absent"}`)
 
 	// each Source is run in turn instead of together, so the report reads as two separate results
-	const isSubredditOk = await checkSource(`subreddit r/${SMOKE_SUBREDDIT}`, subredditSource)
-	const isSearchOk = await checkSource(`search for "${SMOKE_QUERY}" in r/${SMOKE_SUBREDDIT}`, searchSource)
+	const subredditOutcome = await checkSource(`subreddit r/${SMOKE_SUBREDDIT}`, subredditSource)
+	const searchOutcome = await checkSource(`search for "${SMOKE_QUERY}" in r/${SMOKE_SUBREDDIT}`, searchSource)
 
 	// print each check and return the overall result
 	let allPass = true
-	for (const [label, pass] of [
-		["subreddit Source found resources", isSubredditOk],
-		["search Source found resources", isSearchOk],
-	] as [string, boolean][]) {
-		console.log(`${pass ? "PASS" : "FAIL"}  ${label}`)
-		allPass = allPass && pass
+	for (const [label, outcome] of [
+		["subreddit Source found resources", subredditOutcome],
+		["search Source found resources", searchOutcome],
+	] as [string, SourceOutcome][]) {
+		// a throttled address proves nothing either way, so it is named loudly and left out of the verdict
+		if (outcome === "throttled") {
+			console.log(`SKIP  ${label}, reddit is throttling this address`)
+			continue
+		}
+		console.log(`${outcome === "found" ? "PASS" : "FAIL"}  ${label}`)
+		allPass = allPass && outcome === "found"
 	}
 	return allPass
 }
