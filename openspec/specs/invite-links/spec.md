@@ -64,25 +64,6 @@ The sign-in step SHALL render the app's shared session layout, so that its embed
 - **WHEN** the join route asks a visitor to sign in
 - **THEN** it renders the shared session layout, so an embedded webview leads with email sign-in instead of a provider button that cannot work
 
-### Requirement: A refused token says which way it failed, in Carl's voice
-
-A revoked, expired, or exhausted token SHALL be rejected with a rendered message in Carl's voice instead of a raw error, and the three SHALL be distinguishable enough that the person holding the link knows whether asking for a new one would help. No rejection SHALL create a subscription.
-
-#### Scenario: A revoked token is rejected
-
-- **WHEN** a visitor opens an invite URL for a token the owner revoked
-- **THEN** they are told the link is no longer good, in Carl's voice, and no subscription is created
-
-#### Scenario: An expired token is rejected
-
-- **WHEN** a visitor opens an invite URL for a token past its expiry
-- **THEN** they are told the link has expired, and no subscription is created
-
-#### Scenario: An exhausted token is rejected
-
-- **WHEN** a visitor opens an invite URL for a token whose uses are spent
-- **THEN** they are told the link has been used up, and no subscription is created
-
 ### Requirement: Provider compose buttons hand the invite to a webmail composer
 
 The invite section SHALL offer a row of buttons that each create a token and open a webmail provider's own compose window with the invitation prewritten: Gmail, Outlook / Hotmail, Yahoo Mail, Proton Mail, and the default mail client through `mailto:`. Copy link SHALL remain reachable alongside them in every case.
@@ -112,7 +93,7 @@ Every compose url SHALL be built by one map of builder functions instead of inli
 
 The handoff to a composer is one way. The app SHALL NOT receive the chosen recipients, their addresses, or confirmation that anything was sent, and a compose button SHALL NOT add anyone to the Topic's invitee list.
 
-The invite section SHALL make the difference clear: naming an address is an allowlist, where the owner knows who was invited and one person can be revoked, and a compose button hands out a bearer token, where whoever holds the link may join and the owner sees a use count. The UI SHALL NOT imply that opening a composer added anyone.
+The invite section SHALL make the difference clear: naming an address is an allowlist, where the owner knows who was invited, and a compose button hands out a bearer token, where whoever holds the link may join and the owner sees a use count. The UI SHALL NOT imply that opening a composer added anyone.
 
 The app SHALL NOT attempt to recover recipients by any means, including a bcc to a CarlNotes address harvested through inbound email.
 
@@ -136,7 +117,7 @@ Its `og:url` SHALL be the invite URL, so a platform that rewrites a shared link 
 
 Serving the preview SHALL NOT accept the invitation, spend a use, or require a session. Acceptance remains a signed-in POST behind the bot check, so a link previewed by a messaging client or a crawler consumes nothing.
 
-A token that is unknown, revoked, expired, or exhausted SHALL fall through to the site's own tags, so a link nobody can act on advertises no Team or Topic.
+A token that is unknown, expired, or exhausted SHALL fall through to the site's own tags, so a link nobody can act on advertises no Team or Topic.
 
 An invitation SHALL show only a card the origin already serves to anyone holding its id. A Topic's card is served for any visibility, so a Topic invitation always previews. A Team's card is served only for a public Team, so an invitation to a private Team falls through to the site's own tags instead of showing a card its image route would refuse to render.
 
@@ -167,7 +148,7 @@ An invitation SHALL show only a card the origin already serves to anyone holding
 
 #### Scenario: A dead token advertises nothing
 
-- **WHEN** an invite URL is fetched for a revoked, expired, exhausted, or unknown token
+- **WHEN** an invite URL is fetched for an expired, exhausted, or unknown token
 - **THEN** the response carries the site's own tags and names no Team or Topic
 
 ### Requirement: Tokens are guarded at the account, not the acceptance
@@ -227,4 +208,18 @@ full — its own acceptance status with its own copy — never reported as a use
 
 - **WHEN** an acceptance is rejected because the team is at its member limit
 - **THEN** the page tells them the team is full, not that the link ran out
+
+### Requirement: A rejected token says which way it failed, in Carl's voice
+
+An expired or exhausted token SHALL be rejected with a rendered message in Carl's voice instead of a raw error, and the two SHALL be distinguishable enough that the person holding the link knows whether asking for a new one would help. No rejection SHALL create a subscription.
+
+#### Scenario: An expired token is rejected
+
+- **WHEN** a visitor opens an invite URL for a token past its expiry
+- **THEN** they are told the link has expired, and no subscription is created
+
+#### Scenario: An exhausted token is rejected
+
+- **WHEN** a visitor opens an invite URL for a token whose uses are spent
+- **THEN** they are told the link has been used up, and no subscription is created
 

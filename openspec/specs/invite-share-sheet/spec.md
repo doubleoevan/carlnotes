@@ -88,7 +88,7 @@ The payload handed to the sheet SHALL include the Topic's name and the absolute 
 
 Where the browser rejects the share for missing user activation, the invite URL SHALL be copied to the clipboard and the row SHALL report that the link was copied. It SHALL NOT report that the invite was shared, since it was not, and the person needs to know what is now on their clipboard.
 
-Where the person dismisses the sheet without choosing a destination, nothing SHALL be copied and no error SHALL be surfaced. A dismissal is a decision, not a failure. The token created for it stays valid until it expires or is revoked.
+Where the person dismisses the sheet without choosing a destination, nothing SHALL be copied and no error SHALL be surfaced. A dismissal is a decision, not a failure. The token created for it stays valid until it expires or its uses are spent.
 
 #### Scenario: A rejected gesture copies instead
 
@@ -130,22 +130,6 @@ Neither the sheet opening nor a completed share SHALL be logged as an event of i
 - **WHEN** an invite that was shared through the sheet is accepted
 - **THEN** the acceptance is what names the token, the Topic, and the accepting account
 
-### Requirement: A token shared through the sheet is limited, expiring, and revocable
-
-A token handed to the share sheet SHALL be the same kind of token the menu's other destinations hand out, with the same `max_uses` limit, the same expiry, and the same revoke control. No looser token kind SHALL be introduced for this path.
-
-A token given to the sheet can end up in a group chat, a screenshot, or a public post, which makes it the path most in need of those limits instead of the one that can do without them. One kind also keeps the revoke control covering every route a token left by.
-
-#### Scenario: The sheet's token is limited and expiring
-
-- **WHEN** a token is created for a share through the sheet
-- **THEN** it has the same use limit and expiry as a token created for any other invite destination
-
-#### Scenario: Revoking reaches a shared token
-
-- **WHEN** an owner revokes an invite token that was handed out through the sheet
-- **THEN** the invite URL stops accepting, exactly as it does for a token handed out any other way
-
 ### Requirement: The share sheet distinguishes sharing from inviting
 
 A share sheet SHALL name what each option sends. An option that shares the page SHALL say so, and the option that mints an invitation SHALL say so, so that a leader reading the sheet can tell which link grants access.
@@ -166,4 +150,15 @@ The invite option SHALL be offered to anyone who may invite, whether or not the 
 
 - **WHEN** someone who may not invite opens the sheet
 - **THEN** no invite option appears, and the sharing options are unchanged
+
+### Requirement: A token shared through the sheet is limited and expiring
+
+A token handed to the share sheet SHALL be the same kind of token the menu's other destinations hand out, with the same `max_uses` limit and the same expiry. No looser token kind SHALL be introduced for this path.
+
+A token given to the sheet can end up in a group chat, a screenshot, or a public post, which makes it the path most in need of those limits instead of the one that can do without them.
+
+#### Scenario: The sheet's token is limited and expiring
+
+- **WHEN** a token is created for a share through the sheet
+- **THEN** it has the same use limit and expiry as a token created for any other invite destination
 

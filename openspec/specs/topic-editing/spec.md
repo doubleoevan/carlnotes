@@ -291,7 +291,7 @@ The Invitees field SHALL render while the modal's visibility is public or invite
 
 Invite links are handed out from the share menu's share-sheet row instead of this section, a deliberate scope cut. The webmail-composer menu lives on the team form's membership fields alone.
 
-The section SHALL also list the links that are still good, each showing how much of it is left and a revoke button. The addresses stay the pills above, which are the same list under a different grant, so no address is shown twice.
+The section SHALL also list the links that are still good, each showing how much of it is left. The addresses stay the pills above, which are the same list under a different grant, so no address is shown twice.
 
 #### Scenario: Switching visibility reveals the invitee editor
 
@@ -311,7 +311,7 @@ The section SHALL also list the links that are still good, each showing how much
 #### Scenario: The invite list distinguishes the two paths
 
 - **WHEN** the owner views a Topic holding both an email invite and a link invite
-- **THEN** the address is a pill in the invitee field and the link is a row under the compose buttons showing its uses left, each with its own way to withdraw it
+- **THEN** the address is a pill in the invitee field and the link is a row under the compose buttons showing its uses left
 
 #### Scenario: An unknown username never becomes an invitee
 

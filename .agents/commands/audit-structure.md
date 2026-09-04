@@ -194,6 +194,9 @@ Check for:
      `toChatRefusal`, `toTokenRefusal`, the `"attachmentRefused"` and `"inviteeRefused"` statuses, and
      `ui/src/pages/inviteRefusals.ts` (now `inviteRejections.ts`). the "refuses to <verb>" idiom is gone
      too: it reads "will not <verb>" now, since "rejects to" is not english
+   - closing an invite link, removed whole in `remove-unnecessary-guards`: the `revoked` rejection
+     reason, the `revoked_at` column dropped by migration 0084, and every `revok*` spelling. expiry
+     and the use limit are the two ways a link ends now
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
