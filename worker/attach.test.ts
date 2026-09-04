@@ -9,6 +9,7 @@ import {
 	toCanonicalContentType,
 	toClippedTableText,
 	toTableText,
+	toTopicContextHash,
 } from "./attach"
 
 // the OOXML media types the resolver and gate know
@@ -257,4 +258,18 @@ test("toCanonicalContentType prefers a known extension over a generic reported t
 	expect(toCanonicalContentType("text/plain", "notes.txt")).toBe("text/plain")
 	expect(toCanonicalContentType("text/plain", "data.weird")).toBe("text/plain")
 	expect(toCanonicalContentType("text/plain", "noextension")).toBe("text/plain")
+})
+
+// an edited prompt and a changed attachment set each have to move the hash, while spacing alone must not
+test("toTopicContextHash changes with the context and ignores surrounding whitespace", () => {
+	const prompt = "Obscure art: outsider artists, self-taught painters, and the galleries that show them."
+	const contextWithAttachment = `${prompt}\n\n[attachment: catalogue.pdf]\nA 1994 exhibition catalogue.`
+
+	// an edited prompt, an attachment added, and an attachment removed each ask a different question
+	expect(toTopicContextHash(prompt)).not.toBe(toTopicContextHash(`${prompt} Focus on the 1990s.`))
+	expect(toTopicContextHash(prompt)).not.toBe(toTopicContextHash(contextWithAttachment))
+
+	// the same context asks the same question, no matter how it is spaced
+	expect(toTopicContextHash(prompt)).toBe(toTopicContextHash(`${prompt}\n`))
+	expect(toTopicContextHash(contextWithAttachment)).toBe(toTopicContextHash(contextWithAttachment))
 })

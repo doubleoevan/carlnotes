@@ -42,7 +42,7 @@ export function Layout() {
 	)
 }
 
-// keep the canonical link on the page the reader is actually on
+// keep the canonical link on the page the user is actually on
 function CanonicalLink() {
 	const { pathname } = useLocation()
 	useEffect(() => {

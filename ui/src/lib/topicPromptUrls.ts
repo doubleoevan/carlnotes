@@ -5,11 +5,13 @@ const PROMPT_URL_PATTERN = /https?:\/\/\S*[^\s<>"'.,;:!?]/gi
 function toBalancedUrl(url: string): string {
 	let balancedUrl = url
 	while (/[)\]]$/.test(balancedUrl)) {
-		// count the bracket that actually closed, so a url ending in ] is not judged by its parens
-		const isParen = balancedUrl.endsWith(")")
-		const opened = balancedUrl.split(isParen ? "(" : "[").length - 1
-		const closed = balancedUrl.split(isParen ? ")" : "]").length - 1
-		if (opened >= closed) {
+		// count only the bracket kind the url ends with, so a url ending in ] is not measured by its parens
+		const isParenthesis = balancedUrl.endsWith(")")
+		const openingBracket = isParenthesis ? "(" : "["
+		const closingBracket = isParenthesis ? ")" : "]"
+		const openingCount = balancedUrl.split(openingBracket).length - 1
+		const closingCount = balancedUrl.split(closingBracket).length - 1
+		if (openingCount >= closingCount) {
 			break
 		}
 

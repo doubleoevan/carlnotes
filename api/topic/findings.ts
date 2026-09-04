@@ -116,7 +116,7 @@ export function toTopicFinding(findingRow: TopicFindingRow): TopicFinding {
 		source: toUrlHost(findingRow.url),
 		publishedAt: findingRow.resourceCreatedAt.toISOString(),
 		fetchedAt: findingRow.fetchedAt.toISOString(),
-		// the relevance judgment, view count, rating, engagement, and the user's consumed and bookmarked states
+		// the relevance explanation, view count, rating, engagement, and the user's consumed and bookmarked states
 		relevanceScore: findingRow.relevanceScore,
 		relevanceExplanation: findingRow.relevanceExplanation,
 		viewCount: findingRow.viewCount,

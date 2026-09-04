@@ -291,7 +291,7 @@ function streamChatTurn(
 				closingText = CHAT_STREAM_FAILED_TEXT
 			}
 
-			// a reader who already left cannot be written to, and that must not skip the recording below
+			// a user who already left cannot be written to, and that must not skip the recording below
 			try {
 				await writeStream.write(closingText)
 			} catch (closingError) {

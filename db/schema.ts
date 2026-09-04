@@ -310,6 +310,7 @@ export const scans = pgTable(
 		scanSummary: text("scan_summary"),
 		// sources that fell back to a keyless path, failed outright, or were skipped
 		problemSources: jsonb("problem_sources")
+			// each problem source entry names its source and why it is listed
 			.$type<
 				(
 					| { sourceId: string; status: "fallback"; fallbackMode: string }
@@ -365,16 +366,16 @@ export const resources = pgTable(
 	],
 )
 
-// a finding is a topic-scoped record holding a relevance judgment about a discovered resource
+// a finding is a topic-scoped record holding a relevance review about a discovered resource
 export const findings = pgTable(
 	"findings",
 	{
 		id: primaryId(),
-		// the topic that judged the resource
+		// the topic that reviewed the resource
 		topicId: text("topic_id")
 			.notNull()
 			.references(() => topics.id, { onDelete: "cascade" }),
-		// the resource that was judged
+		// the resource that was reviewed
 		resourceId: text("resource_id")
 			.notNull()
 			.references(() => resources.id, { onDelete: "cascade" }),
@@ -385,6 +386,9 @@ export const findings = pgTable(
 		// the model's relevance score and its explanation
 		relevanceScore: real("relevance_score").notNull(),
 		relevanceExplanation: text("relevance_explanation").notNull().default(""),
+		// what this review was made against. a null context hash reviews again on the next scan
+		reviewedContextHash: text("reviewed_context_hash"),
+		reviewedContentHash: text("reviewed_content_hash"),
 		// the visibility of the source that produced this finding. the pipeline doesn't populate this, so it defaults to public
 		sourceVisibility: sourceVisibility("source_visibility").notNull().default("public"),
 		// the owner's optional rating

@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { isAutomaticInvite, toInviteRejection } from "./invites"
 
-// the moment every test case below is judged against
+// the moment each invite in this file is checked against
 const now = new Date("2026-08-18T12:00:00.000Z")
 
 // an invite with uses left and no expiry passed is still acceptable

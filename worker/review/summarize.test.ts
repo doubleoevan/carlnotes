@@ -72,7 +72,7 @@ test("buildScanReportPrompt grounds the report prompt in the scan's data", async
 	expect(reportPrompt).not.toContain("{{")
 })
 
-// a quiet scan links nothing, so a findings heading with no list under it never reaches the reader
+// a quiet scan links nothing, so a findings heading with no list under it never reaches the user
 test("withoutEmptyFindingsHeading drops a dangling heading and keeps a real list", () => {
 	// the heading alone at the end goes, in each shape the model writes it
 	expect(withoutEmptyFindingsHeading("Nothing kept today.\n\nFindings:")).toBe("Nothing kept today.")

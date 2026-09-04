@@ -694,7 +694,7 @@ export type BillingState = {
 	dailyScanLimit: number
 }
 
-// a topic finding. the AI judgment about one Resource under a Topic, plus the user's consumed and bookmarked state
+// a topic finding. the AI review about one Resource under a Topic, plus the user's consumed and bookmarked state
 export const topicFinding = z.object({
 	findingId: z.string(),
 	// the topic scan that produced the finding, so the scan history can list each scan's own findings
@@ -710,7 +710,7 @@ export const topicFinding = z.object({
 	// when the resource was fetched, and how many times it's been opened
 	fetchedAt: z.string(),
 	viewCount: z.number(),
-	// the model's judgment. the relevance score and a short explanation of why
+	// the model's review. the relevance score and a short explanation of why
 	relevanceScore: z.number(),
 	relevanceExplanation: z.string(),
 	// rating belongs to the topic finding itself. isConsumed and isBookmarked are the current user's states

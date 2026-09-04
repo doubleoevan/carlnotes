@@ -117,7 +117,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 		console.log(`sample explanation : ${findingsWithExplanations[0].relevanceExplanation}`)
 	}
 
-	// print the scan report itself so the owner can judge its quality by reading it
+	// print the scan report itself so the owner can review its quality by reading it
 	console.log(`scan summary:\n${topicScan.scanSummary}`)
 
 	// what the podcast source contributed, and whether any episode reached Firecrawl

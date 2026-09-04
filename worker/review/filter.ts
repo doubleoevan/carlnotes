@@ -1,10 +1,10 @@
 // the unpaid stages that decide
 import { reportError } from "@shared/monitoring"
 import { cosineSimilarity } from "ai"
-import { and, cosineDistance, eq, inArray, isNotNull, lt, notInArray, or } from "drizzle-orm"
+import { and, cosineDistance, eq, inArray, isNotNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { EMBED_MODEL_NAME, findings, resources, sources } from "../../db/schema"
-import { buildTopicScanContext } from "../attach"
+import { toTopicContextHash } from "../attach"
 import { type Budget, canSpend, charge, EMBED_COST_PER_MILLION_TOKENS, tokenCost } from "../budget"
 import type { NewResource } from "../ingest/ingester"
 import { embedVector, embedVectors } from "../models"
@@ -26,16 +26,17 @@ const EMBED_QUERY_INSTRUCTION = "Given a topic's interest description, retrieve 
 export type Resource = typeof resources.$inferSelect
 
 // the topic's derived context loaded once per Scan
-export type TopicContext = { name: string; text: string; embedding: number[] }
+// the topic's context: what the gate embeds, and the hash a Finding records
+export type TopicContext = { name: string; text: string; embedding: number[]; contextHash: string }
 
 // a Resource that cleared the relevance gate, with the embedding and the similarity score that ranks it
-export type SurvivingResource = { resource: Resource; embedding: number[]; similarity: number }
+export type RelevantResource = { resource: Resource; embedding: number[]; similarity: number }
 
-// the dedupe keys for what this Scan has admitted
-export type AdmittedResources = { contentHashes: Set<string>; embeddings: number[][] }
+// the content hashes and embeddings this Scan dedupes each new Resource against
+export type DedupeKeys = { contentHashes: Set<string>; embeddings: number[][] }
 
-// what the relevance gate makes of one Resource: a survivor for the ranked pass, or an outcome to record now
-type RelevanceGateOutcome = { status: "survived"; survivor: SurvivingResource } | ResourceOutcome
+// what the relevance gate makes of one Resource: a relevant one for the ranked pass, or an outcome to record now
+type RelevanceGateOutcome = { status: "relevant"; relevantResource: RelevantResource } | ResourceOutcome
 
 // the outcome of the batch embed pass: the vectors it produced by resource id, and the candidates whose batch failed
 type EmbeddedBatchOutcome = { embeddings: Map<string, number[]>; failedIds: Set<string> }
@@ -47,12 +48,13 @@ const EMBED_BATCH_SIZE = 100
  * The stored Resource rows this Scan discovered that are worth scoring. A Resource already scored for this Topic is excluded,
  * so a re-scan never pays to score the same article twice. The pages a url Source names are the exception. its content is pulled for every Scan.
  */
-export async function loadUnscoredResources(topicId: string, discoveredResources: NewResource[]): Promise<Resource[]> {
+export async function loadResourcesToReview(
+	topicId: string,
+	discoveredResources: NewResource[],
+	topicContextHash: string,
+): Promise<Resource[]> {
 	// the urls this scan discovered (already deduped by ingestion)
 	const urls = discoveredResources.map((resource) => resource.url)
-	if (urls.length === 0) {
-		return []
-	}
 
 	// the addresses this Topic watches, which every Scan pulls again
 	const urlSources = await db
@@ -63,34 +65,61 @@ export async function loadUnscoredResources(topicId: string, discoveredResources
 		.map((urlSource) => urlSource.config?.url)
 		.filter((url): url is string => typeof url === "string")
 
-	// exclude the Resources already scored for this Topic, then load the rest by url
-	const scoredResourceIds = db.select({ id: findings.resourceId }).from(findings).where(eq(findings.topicId, topicId))
+	// the Resources already reviewed against this context and content
+	const reviewedResourceIds = db
+		.select({ id: findings.resourceId })
+		.from(findings)
+		.innerJoin(resources, eq(findings.resourceId, resources.id))
+		.where(
+			and(
+				eq(findings.topicId, topicId),
+				eq(findings.reviewedContextHash, topicContextHash),
+				sql`${findings.reviewedContentHash} is not distinct from ${resources.contentHash}`,
+			),
+		)
 
-	// a source url is always worth reading again, no matter what it scored last time
+	// a Resource is worth scoring when no Finding has reviewed it against this context and content.
+	// a watched url Source is re-read every Scan, whatever it scored last time
 	const needsScoring =
 		sourceUrls.length > 0
-			? or(notInArray(resources.id, scoredResourceIds), inArray(resources.url, sourceUrls))
-			: notInArray(resources.id, scoredResourceIds)
+			? or(notInArray(resources.id, reviewedResourceIds), inArray(resources.url, sourceUrls))
+			: notInArray(resources.id, reviewedResourceIds)
 
-	// the stored rows for what this Scan discovered, narrowed to the ones worth paying to score
-	return db
-		.select()
-		.from(resources)
-		.where(and(inArray(resources.url, urls), needsScoring))
+	// the Resources this Scan may score: the ones it discovered, plus every Resource the Topic already
+	// holds a Finding for, since a bookmarked or rated Finding outlives the feed it came from
+	const topicResourceIds = db.select({ id: findings.resourceId }).from(findings).where(eq(findings.topicId, topicId))
+	const isTopicResource =
+		urls.length > 0
+			? or(inArray(resources.url, urls), inArray(resources.id, topicResourceIds))
+			: inArray(resources.id, topicResourceIds)
+
+	// the rows worth paying to score
+	return db.select().from(resources).where(and(isTopicResource, needsScoring))
+}
+
+/**
+ * Builds the one context text a Scan reviews against: the topic's name, its prompt, and its attachments.
+ */
+export function toTopicContextText(topicScanContext: { name: string; context: string }): string {
+	const { name, context } = topicScanContext
+	return [name, context.trim()].filter(Boolean).join("\n\n").slice(0, MAX_EMBED_CHARS)
 }
 
 /**
  * Embed the topic's context for the relevance gate: its name, its prompt, and its attachments' contexts.
  */
-export async function loadTopicContext(topicId: string, budget: Budget, litellmApiKey?: string): Promise<TopicContext> {
+export async function loadTopicContext(
+	topicScanContext: { name: string; context: string },
+	budget: Budget,
+	litellmApiKey?: string,
+): Promise<TopicContext> {
 	// always include the topic name in the scan context
-	const { name, context } = await buildTopicScanContext(topicId)
-	const text = [name, context.trim()].filter(Boolean).join("\n\n").slice(0, MAX_EMBED_CHARS)
+	const text = toTopicContextText(topicScanContext)
 
 	// embed the context as the query side once and update the estimated embedding cost
 	const embedding = await embedQuery(text, litellmApiKey)
 	charge(budget, "embedding", tokenCost(estimateEmbedTokens(text), EMBED_COST_PER_MILLION_TOKENS))
-	return { name, text, embedding }
+	return { name: topicScanContext.name, text, embedding, contextHash: toTopicContextHash(text) }
 }
 
 /**
@@ -98,26 +127,26 @@ export async function loadTopicContext(topicId: string, budget: Budget, litellmA
  * Embedding is the only metered work here, so a candidate past the Scan's limit is deferred instead of being embedded.
  */
 export async function gateResources(
-	unscoredResources: Resource[],
+	resourcesToReview: Resource[],
 	topicContext: TopicContext,
 	reviewOutcome: ReviewOutcome,
 	budget: Budget,
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
-): Promise<SurvivingResource[]> {
+): Promise<RelevantResource[]> {
 	// embed the candidates with no stored vector in batched calls first, one HTTP request per chunk
-	const embeddedBatchOutcome = await embedMissingVectors(unscoredResources, budget, litellmApiKey, stopSignal)
+	const embeddedBatchOutcome = await embedMissingVectors(resourcesToReview, budget, litellmApiKey, stopSignal)
 
-	// a survivor goes on to the ranked pass. anything else is already a finished outcome
-	const survivors: SurvivingResource[] = []
-	for (const resource of unscoredResources) {
+	// a relevant Resource goes on to the ranked pass. anything else is already a finished outcome
+	const relevantResources: RelevantResource[] = []
+	for (const resource of resourcesToReview) {
 		// a stopped Scan leaves the rest of the candidates for the next scan instead of walking the list to no end
 		if (stopSignal?.aborted) {
 			break
 		}
 		const gateOutcome = gateResource(resource, embeddedBatchOutcome, topicContext)
-		if (gateOutcome.status === "survived") {
-			survivors.push(gateOutcome.survivor)
+		if (gateOutcome.status === "relevant") {
+			relevantResources.push(gateOutcome.relevantResource)
 			continue
 		}
 
@@ -125,41 +154,41 @@ export async function gateResources(
 		trackOutcomes(reviewOutcome, gateOutcome)
 	}
 
-	// survivors are still in discovery order. the reviewScan caller ranks them before anything paid runs
-	return survivors
+	// the relevant Resources are still in discovery order. the reviewScan caller ranks them before anything paid runs
+	return relevantResources
 }
 
 /**
- * Drop the survivors that duplicate something already admitted, returning the rest in the order they were ranked.
- * This walk stays sequential, so the highest-ranked member of a duplicate set is the one that wins the slot to get admitted.
+ * Drop the relevant Resources that duplicate one this Scan already let through, returning the rest in ranked order.
+ * This walk stays sequential, so the highest-ranked member of a duplicate set is the one that wins the slot.
  */
-export async function admitResources(
-	survivors: SurvivingResource[],
+export async function dedupeResources(
+	relevantResources: RelevantResource[],
 	candidateIds: string[],
 	reviewOutcome: ReviewOutcome,
 ): Promise<Resource[]> {
-	const admitted: AdmittedResources = { contentHashes: new Set(), embeddings: [] }
-	const admittedResources: Resource[] = []
+	const dedupeKeys: DedupeKeys = { contentHashes: new Set(), embeddings: [] }
+	const resourcesToScore: Resource[] = []
 
-	// each admission compares against what came before it, so the dedupe keys grow as the walk goes
-	for (const survivor of survivors) {
-		const admissionOutcome = await admitResource(survivor, candidateIds, admitted)
-		if (admissionOutcome) {
-			trackOutcomes(reviewOutcome, admissionOutcome)
+	// each Resource compares against what came before it, so the dedupe keys grow as the walk goes
+	for (const relevantResource of relevantResources) {
+		const dedupeOutcome = await dedupeResource(relevantResource, candidateIds, dedupeKeys)
+		if (dedupeOutcome) {
+			trackOutcomes(reviewOutcome, dedupeOutcome)
 			continue
 		}
-		admittedResources.push(survivor.resource)
+		resourcesToScore.push(toResourceWithContentHash(relevantResource.resource))
 	}
 
 	// still best-first, which is the order the paid pass uses for its limit
-	return admittedResources
+	return resourcesToScore
 }
 
 /**
- * Orders relevance-gate survivors best-first, so a per-Scan limit defers the least relevant resource.
+ * Orders the relevant Resources best-first, so a per-Scan limit defers the least relevant one.
  */
-export function rankBySimilarity(survivors: SurvivingResource[]): SurvivingResource[] {
-	return [...survivors].sort((first, second) => second.similarity - first.similarity)
+export function rankBySimilarity(relevantResources: RelevantResource[]): RelevantResource[] {
+	return [...relevantResources].sort((first, second) => second.similarity - first.similarity)
 }
 
 // measure one candidate against the topic context, using its stored vector or the one the batch pass just embedded
@@ -180,20 +209,20 @@ function gateResource(
 		return { status: "filtered", reason: "below relevance threshold" }
 	}
 
-	// the survivor includes its vector too, which the ranked pass dedupes against
-	return { status: "survived", survivor: { resource, embedding, similarity } }
+	// the relevant Resource includes its vector too, which the ranked pass dedupes against
+	return { status: "relevant", relevantResource: { resource, embedding, similarity } }
 }
 
 // embed every candidate with no stored vector, a chunk at a time, stopping when finished or the budget runs out
 async function embedMissingVectors(
-	unscoredResources: Resource[],
+	resourcesToReview: Resource[],
 	budget: Budget,
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
 ): Promise<EmbeddedBatchOutcome> {
 	// only a candidate with no stored vector costs anything to embed
 	const embeddedBatchOutcome: EmbeddedBatchOutcome = { embeddings: new Map(), failedIds: new Set() }
-	const resourcesWithoutEmbeddings = unscoredResources.filter((resource) => !resource.embedding)
+	const resourcesWithoutEmbeddings = resourcesToReview.filter((resource) => !resource.embedding)
 	for (let start = 0; start < resourcesWithoutEmbeddings.length; start += EMBED_BATCH_SIZE) {
 		// embedding costs money, so check the limit before each chunk
 		if (!canSpend(budget, stopSignal)) {
@@ -244,36 +273,47 @@ async function embedResourcesBatch(
 	}
 }
 
-// run one surviving resource through both dedupe stages, returning a filtered outcome or null if it is admitted
-async function admitResource(
-	survivingResource: SurvivingResource,
+// run one relevant Resource through both dedupe stages, returning a filtered outcome or null when it is no duplicate
+async function dedupeResource(
+	relevantResource: RelevantResource,
 	candidateIds: string[],
-	admitted: AdmittedResources,
+	dedupeKeys: DedupeKeys,
 ): Promise<ResourceOutcome | null> {
-	const { resource, embedding } = survivingResource
+	const { resource, embedding } = relevantResource
 	// the content hash over the native text, only when the Resource has content. empty rows must not collapse to one hash
 	const contentHash = hasNativeText(resource) ? toContentHash(resource.title, resource.snippet) : null
 
-	// stage 1 checks for a content-level duplicate, of a sibling this Scan admitted or of a Resource an earlier
+	// stage 1 checks for a content-level duplicate, of a sibling this Scan let through or of a Resource an earlier
 	if (contentHash !== null) {
-		const isHashDuplicate = admitted.contentHashes.has(contentHash) || (await hasStoredHash(contentHash, candidateIds))
+		const isHashDuplicate =
+			dedupeKeys.contentHashes.has(contentHash) || (await hasStoredHash(contentHash, candidateIds))
 		if (isHashDuplicate) {
 			return { status: "filtered", reason: "duplicate content" }
 		}
 	}
 
-	// stage 2 checks for a near-duplicate, of a sibling this Scan admitted or of a Resource an earlier Scan stored
-	if (hasAdmittedNearDuplicate(admitted, embedding) || (await hasNearDuplicate(embedding, candidateIds))) {
+	// stage 2 checks for a near-duplicate, of a sibling this Scan let through or of a Resource an earlier Scan stored
+	if (hasNearDuplicateKey(dedupeKeys, embedding) || (await hasNearDuplicate(embedding, candidateIds))) {
 		return { status: "filtered", reason: "near-duplicate" }
 	}
 
-	// admitted. persist the hash for later Scans and remember both keys so a lower-ranked sibling dedupes against this one
+	// no duplicate. persist the hash for later Scans and remember both keys so a lower-ranked sibling dedupes against this one
 	if (contentHash !== null) {
-		admitted.contentHashes.add(contentHash)
+		dedupeKeys.contentHashes.add(contentHash)
 		await db.update(resources).set({ contentHash }).where(eq(resources.id, resource.id))
 	}
-	admitted.embeddings.push(embedding)
+	dedupeKeys.embeddings.push(embedding)
 	return null
+}
+
+/**
+ * Returns the Resource with the content hash the dedupe pass just wrote to its row.
+ */
+function toResourceWithContentHash(resource: Resource): Resource {
+	return {
+		...resource,
+		contentHash: hasNativeText(resource) ? toContentHash(resource.title, resource.snippet) : resource.contentHash,
+	}
 }
 
 // a Resource outside this Scan that already has this content hash makes this a content-level duplicate
@@ -308,13 +348,11 @@ async function hasNearDuplicate(embedding: number[], resourceIds: string[]): Pro
 }
 
 /**
- * Whether a candidate is a near-duplicate of one this Scan already admitted.
+ * Whether a candidate is a near-duplicate of one this Scan already let through.
  */
-export function hasAdmittedNearDuplicate(admitted: AdmittedResources, embedding: number[]): boolean {
+export function hasNearDuplicateKey(dedupeKeys: DedupeKeys, embedding: number[]): boolean {
 	// cosine similarity is the complement of the distance the stored query orders by, so both paths share one threshold
-	return admitted.embeddings.some((admittedEmbedding) =>
-		isNearDuplicate(1 - cosineSimilarity(embedding, admittedEmbedding)),
-	)
+	return dedupeKeys.embeddings.some((keyEmbedding) => isNearDuplicate(1 - cosineSimilarity(embedding, keyEmbedding)))
 }
 
 // whether a Resource includes any ingester-native text to hash and embed like a title or a snippet

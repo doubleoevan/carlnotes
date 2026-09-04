@@ -2,7 +2,14 @@
 import { expect, test } from "bun:test"
 import { canScoreResource, newBudget } from "../budget"
 import { isContentStale } from "../scrape"
-import { buildScorePrompt, isPromoted, isSnippetComplete, runWithConcurrency, toFetchedContentFields } from "./score"
+import {
+	buildScorePrompt,
+	isPromoted,
+	isSnippetComplete,
+	runWithConcurrency,
+	toFetchedContentFields,
+	toFindingReviewFields,
+} from "./score"
 
 // a high cheap-model score earns promotion to the premium score-model's re-score
 test("isPromoted gates on the promotion threshold", () => {
@@ -99,4 +106,40 @@ test("buildScorePrompt includes content and context and gates the relevance expl
 
 	// without Langfuse keys, no registry prompt is attached
 	expect(cheapModelResult.registryPrompt).toBeUndefined()
+})
+
+// a re-score rewrites the review and nothing else, so a user's rating and view count survive it.
+// without this an edited prompt would quietly clear a rating someone left
+test("a review names only the columns a re-score decides", () => {
+	const review = toFindingReviewFields({
+		scanId: "scan-1",
+		score: 0.82,
+		relevanceExplanation: "why this matters",
+		topicContextHash: "abc123",
+		contentHash: "def456",
+	})
+
+	// the review's own columns, and no column a user writes
+	expect(Object.keys(review).sort()).toEqual([
+		"relevanceExplanation",
+		"relevanceScore",
+		"reviewedContentHash",
+		"reviewedContextHash",
+		"scanId",
+	])
+	for (const userColumn of ["rating", "ratedByUserId", "ratedTeamId", "ratedRole", "viewCount"]) {
+		expect({ userColumn, isWritten: userColumn in review }).toEqual({ userColumn, isWritten: false })
+	}
+})
+
+// a resource with no stored content hash is reviewed against no content hash instead of an empty string
+test("a review keeps a null content hash null", () => {
+	const review = toFindingReviewFields({
+		scanId: "scan-1",
+		score: 0.1,
+		relevanceExplanation: "",
+		topicContextHash: "abc123",
+		contentHash: null,
+	})
+	expect(review.reviewedContentHash).toBe(null)
 })

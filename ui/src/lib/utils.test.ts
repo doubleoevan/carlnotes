@@ -93,7 +93,7 @@ function topicFinding(overrides: Partial<TopicFinding>): TopicFinding {
 		source: null,
 		publishedAt: null,
 		fetchedAt: "2026-07-01T00:00:00.000Z",
-		// the judgment, signals, and per-user states the helpers read
+		// the review, signals, and per-user states the helpers read
 		viewCount: 0,
 		relevanceScore: 0,
 		relevanceExplanation: "",

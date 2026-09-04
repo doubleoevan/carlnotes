@@ -125,7 +125,7 @@ test("a promoted prerelease is stored", async () => {
 	}
 })
 
-// an action that changes nothing a reader sees is acknowledged and dropped
+// an action that changes nothing a user sees is acknowledged and dropped
 test("an edit is still ignored", async () => {
 	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
 	try {

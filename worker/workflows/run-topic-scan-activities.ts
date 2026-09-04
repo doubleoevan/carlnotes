@@ -59,14 +59,14 @@ export async function ingestForScan(scanId: string, topicId: string): Promise<In
 }
 
 /**
- * Review what ingest found, paying for the fetches and the model calls the judgment needs.
+ * Review what ingest found, paying for the fetches and the model calls it needs.
  * A second attempt skips every Resource the first one already scored, and resumes with what it spent.
  */
 export async function reviewForScan(
 	scanId: string,
 	topicId: string,
 	ownerId: string,
-	ingested: IngestStageResult,
+	ingestResult: IngestStageResult,
 	budget: Budget,
 ): Promise<ReviewStageResult> {
 	// what the last attempt had spent when it died, or what ingestion handed over on the first attempt
@@ -83,8 +83,8 @@ export async function reviewForScan(
 			const review = await reviewScan(
 				scan,
 				topicId,
-				ingested.resources,
-				ingested.sourceOutcomes,
+				ingestResult.resources,
+				ingestResult.sourceOutcomes,
 				stageBudget,
 				owner?.litellmVirtualKey ?? undefined,
 				stopSignal(),
@@ -103,10 +103,10 @@ export async function finishScan(
 	topicId: string,
 	ownerId: string,
 	trigger: ScanTrigger,
-	ingested: IngestStageResult,
-	reviewed: ReviewStageResult,
+	ingestResult: IngestStageResult,
+	reviewResult: ReviewStageResult,
 ): Promise<void> {
-	const { review, budget } = reviewed
+	const { review, budget } = reviewResult
 
 	// what the Scan kept, counted from its own Findings instead of from the review
 	const [keptRow] = await db.select({ count: count() }).from(findings).where(eq(findings.scanId, scanId))
@@ -115,9 +115,9 @@ export async function finishScan(
 	const [finishedScan] = await db
 		.update(scans)
 		.set({
-			status: ingested.status,
-			foundCount: ingested.foundCount,
-			problemSources: ingested.problemSources,
+			status: ingestResult.status,
+			foundCount: ingestResult.foundCount,
+			problemSources: ingestResult.problemSources,
 			keptCount: keptRow?.count ?? review.keptCount,
 			filteredCount: review.filteredCount,
 			stageCosts: budget.stageCosts,
@@ -138,7 +138,7 @@ export async function finishScan(
 
 	// the topic owner's plan tracks the analytics event for a first scan
 	const [topicOwner] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, ownerId))
-	if (ingested.status === "succeeded" && (await isFirstSucceededScan(ownerId))) {
+	if (ingestResult.status === "succeeded" && (await isFirstSucceededScan(ownerId))) {
 		trackEvent("first_scan_completed", ownerId, { plan: topicOwner?.plan ?? "free", topicId })
 	}
 

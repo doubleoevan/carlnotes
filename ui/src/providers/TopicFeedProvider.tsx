@@ -65,7 +65,7 @@ function useTopicFeedState() {
 	// how findings order within the pinned and unbookmarked groups. read-side only, never persisted
 	const [sort, setSort] = useState<TopicFindingSort>("relevant")
 	const [resourceKinds, setResourceKinds] = useState<Set<ResourceKind>>(new Set(allResourceKinds))
-	// whose bookmarks the bookmarked filter shows: the reader's own, or every member's on a team topic
+	// whose bookmarks the bookmarked filter shows: the user's own, or every member's bookmarks on a team topic
 	const [bookmarkScope, setBookmarkScope] = useState<"mine" | "team">("mine")
 	// the feed watches the session itself
 	const { data: session } = authClient.useSession()
@@ -273,7 +273,7 @@ function matchesTagFilters(topicTags: string[], tagFilters: string[], tagMatchMo
 		return true
 	}
 
-	// count the selected tags the topic has, then judge per mode
+	// count the selected tags the topic has, then answer per match mode
 	const matchedTagCount = tagFilters.filter((tag) => topicTags.includes(tag)).length
 	if (tagMatchMode === "any") {
 		return matchedTagCount > 0

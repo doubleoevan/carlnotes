@@ -619,6 +619,7 @@ export async function buildTopicScanContext(topicId: string): Promise<{ name: st
 		.select({ filename: attachments.filename, context: attachments.context })
 		.from(attachments)
 		.where(and(eq(attachments.topicId, topicId), eq(attachments.status, "ready")))
+		.orderBy(attachments.filename, attachments.id)
 
 	// label each attachment context with its file
 	const labeledAttachmentContexts = attachmentContexts
@@ -626,4 +627,11 @@ export async function buildTopicScanContext(topicId: string): Promise<{ name: st
 		.map((contextRow) => `[attachment: ${contextRow.filename}]\n${(contextRow.context ?? "").trim()}`)
 	const context = [topic.prompt.trim(), ...labeledAttachmentContexts].filter(Boolean).join("\n\n")
 	return { name: topic.name, context }
+}
+
+/**
+ * Hashes the context text that a Scan reviews against, which the Finding records as its hash.
+ */
+export function toTopicContextHash(contextText: string): string {
+	return new Bun.CryptoHasher("sha256").update(contextText.trim()).digest("hex")
 }

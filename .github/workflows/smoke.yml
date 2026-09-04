@@ -1,9 +1,8 @@
 name: Smoke
 
-# the smoke suites a hosted runner can run: the dev database, most source APIs, and object storage.
-# they write real rows, so they run on each push to main or triggered manually, not on the pr path. the
-# suites that need litellm or temporal are skipped, since both run in local docker and a runner has neither.
-# the full suite is the check a developer runs before pushing.
+# the whole smoke suite, against the dev database, the real source APIs, object storage, and the litellm
+# and temporal containers this workflow starts. it writes real rows and spends real model credit, so it
+# runs on each push to main or by hand, never on the pr path.
 # it needs a DOPPLER_TOKEN repository secret holding a dev-config service token.
 on:
   workflow_dispatch:
@@ -39,10 +38,30 @@ jobs:
       - run: bun install --frozen-lockfile
       # the doppler cli injects the same dev secrets a local smoke run uses
       - uses: dopplerhq/cli-action@v3
+      # start the services six suites need: litellm for every model and embedding call, temporal for the
+      # attachment workflow. both read the same doppler secrets a developer's compose run reads
+      - run: doppler run -- docker compose up -d litellm temporal
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      # fail with the container logs when they never answer
+      - name: Wait for litellm and temporal
+        run: |
+          for attempt in $(seq 1 60); do
+            litellm=$(curl -s -o /dev/null -m 5 -w "%{http_code}" http://localhost:4000/health/readiness || echo 000)
+            temporal=$(curl -s -o /dev/null -m 5 -w "%{http_code}" http://localhost:8233 || echo 000)
+            if [ "$litellm" = "200" ] && [ "$temporal" = "200" ]; then
+              echo "litellm and temporal ready after $attempt attempts"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "litellm answered $litellm and temporal answered $temporal, so the suites that need them cannot run"
+          docker compose logs --tail 40 litellm temporal
+          exit 1
       - run: doppler run -- bash scripts/smoke-coverage.sh
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-          SMOKE_SKIP_DEVELOPER_ONLY: "1"
+          LLM_GUARD_URL: ""
       # the smoke coverage joins the unit coverage on Codecov under its own flag
       - uses: codecov/codecov-action@v7
         if: always()

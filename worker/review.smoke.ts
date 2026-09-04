@@ -1,10 +1,11 @@
 // a live smoke test for one real Scan on a busy feed, reporting time taken, limit overshoot, and whether it kept its
-// best survivors. run it with: bun run smoke:review. each run resets its feed, so two REVIEW_CONCURRENCY values compare fairly
+// best resources. run it with: bun run smoke:review. each run resets its feed, so two REVIEW_CONCURRENCY values compare fairly
 import { cosineSimilarity } from "ai"
 import { and, eq, inArray, isNotNull, like } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, scans, sources, topics, users } from "../db/schema"
 import { embedVector } from "./models"
+import { loadResourcesToReview } from "./review/filter"
 import { loadScan } from "./scan"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import { finishScan, ingestForScan, reviewForScan } from "./workflows/run-topic-scan-activities"
@@ -76,7 +77,7 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 	return { topicId: topic.id, userId: user.id }
 }
 
-// one resource as the ranking saw it, with what admission and the paid pass each did to it
+// one resource as the ranking saw it, with what the dedupe pass and the paid pass each did to it
 type RankedResource = {
 	id: string
 	similarity: number
@@ -87,7 +88,7 @@ type RankedResource = {
 // every Resource this Scan considered, with its similarity to the topic context recomputed
 async function loadResourceRanking(
 	topicId: string,
-	admittedResourceIds: string[],
+	resourceIdsToScore: string[],
 	scoredResourceIds: string[],
 	discoveredUrls: string[],
 ): Promise<{ rankedResources: RankedResource[]; findingCount: number }> {
@@ -95,7 +96,7 @@ async function loadResourceRanking(
 	const contextEmbedding = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${TOPIC_CONTEXT}`)
 
 	// what the review reported it let through and what it paid for, so neither is guessed at here
-	const admittedIds = new Set(admittedResourceIds)
+	const idsToScore = new Set(resourceIdsToScore)
 	const scoredIds = new Set(scoredResourceIds)
 	const findingRows = await db
 		.select({ resourceId: findings.resourceId })
@@ -108,11 +109,11 @@ async function loadResourceRanking(
 		.from(resources)
 		.where(and(inArray(resources.url, discoveredUrls), isNotNull(resources.embedding)))
 
-	// score each resource the way the ranking did, tagging what admission let through and what won a paid slot
+	// score each resource the way the ranking did, tagging what the dedupe pass let through and what won a paid slot
 	const rankedResources = resourceRows.map((resourceRow) => ({
 		id: resourceRow.id,
 		similarity: cosineSimilarity(resourceRow.embedding as number[], contextEmbedding),
-		isAdmitted: admittedIds.has(resourceRow.id),
+		isAdmitted: idsToScore.has(resourceRow.id),
 		isScored: scoredIds.has(resourceRow.id),
 	}))
 
@@ -120,8 +121,8 @@ async function loadResourceRanking(
 	return { rankedResources, findingCount: findingRows.length }
 }
 
-// the admitted rankedResources that outrank the worst purchase and were skipped anyway. a resource the
-// dedupe or the relevance gate never admitted is that filter's decision, and its own tallies report it
+// the ranked resources that outrank the worst purchase and were skipped anyway. a resource the dedupe
+// pass or the relevance gate dropped is that filter's decision, and its own tallies report it
 function toRankingViolations(rankedResources: RankedResource[]): RankedResource[] {
 	const scoredSimilarities = rankedResources
 		.filter((resource) => resource.isScored)
@@ -157,10 +158,10 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	const overshootCount = scoredCount - MAX_SCORED_RESOURCES_PER_SCAN
 	const allowedOvershoot = REVIEW_CONCURRENCY - 1
 
-	// the ranking check. an admitted resource that outranks the worst purchase should have been bought
+	// the ranking check. a resource that cleared dedupe and outranks the worst purchase should have been bought
 	const { rankedResources, findingCount } = await loadResourceRanking(
 		topicId,
-		reviewResult.review.admittedResourceIds,
+		reviewResult.review.resourceIdsToScore,
 		reviewResult.review.scoredResourceIds,
 		ingestResult.resources.map((resource) => resource.url),
 	)
@@ -204,7 +205,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	console.log(`findings rows      : ${findingCount} (scan kept_count ${topicScan.keptCount})`)
 	console.log(`ranking violations : ${rankingViolations.length}`)
 	for (const violation of rankingViolations) {
-		console.log(`  admitted ${violation.id} at ${violation.similarity.toFixed(4)} went unbought`)
+		console.log(`  ranked ${violation.id} at ${violation.similarity.toFixed(4)} went unbought`)
 	}
 	console.log(`summary length     : ${(topicScan.scanSummary ?? "").trim().length}`)
 
@@ -213,7 +214,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 		["scan succeeded", topicScan.status === "succeeded"],
 		["overshoot is within concurrency - 1", overshootCount <= allowedOvershoot],
 		["findings were written", topicScan.keptCount > 0],
-		["the scan bought its best survivors", rankingViolations.length === 0],
+		["the scan bought its best resources", rankingViolations.length === 0],
 		["the scan report was written", (topicScan.scanSummary ?? "").trim().length > 0],
 	]
 
@@ -227,6 +228,114 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 }
 
 // reset the feed, seed it, run the checks, then always delete the fake owner
+/**
+ * Scans the seeded topic again and reports what that pass reviewed.
+ */
+async function scanAgain(topicId: string, ownerId: string): Promise<{ scoredCount: number; cost: number }> {
+	const [openScan] = await db.insert(scans).values({ topicId, ownerId }).returning()
+	if (!openScan) {
+		throw new Error("could not open the second scan")
+	}
+	const ingestResult = await ingestForScan(openScan.id, topicId)
+	const reviewResult = await reviewForScan(openScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
+	await finishScan(openScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
+	const topicScan = await loadScan(openScan.id)
+	return {
+		scoredCount: reviewResult.review.scoredResourceIds.length,
+		cost: Number(topicScan?.cost ?? 0),
+	}
+}
+
+/**
+ * Checks that a scan reviews again a finding only when the question it was reviewed against changed.
+ */
+async function checkReviewAgain(topicId: string, ownerId: string): Promise<boolean> {
+	console.log("\n=== 2. reviewing again ===")
+
+	// read the findings the first scan wrote, and rate one to prove a re-score leaves it alone
+	const firstFindings = await db
+		.select({ id: findings.id, scanId: findings.scanId, reviewedContextHash: findings.reviewedContextHash })
+		.from(findings)
+		.where(eq(findings.topicId, topicId))
+	const ratedFinding = firstFindings[0]
+	if (!ratedFinding) {
+		console.log("FAIL  the first scan wrote no finding to review again")
+		return false
+	}
+	await db.update(findings).set({ rating: "up", viewCount: 3 }).where(eq(findings.id, ratedFinding.id))
+	console.log(`findings after scan 1 : ${firstFindings.length}`)
+
+	// whether a surviving finding still names the scan that reviewed it. a resource whose finding the filter
+	// deleted has no finding at all, so every scan reviews it again
+	const isStillReviewedBy = async (findingId: string, scanId: string): Promise<boolean> => {
+		const [row] = await db.select({ scanId: findings.scanId }).from(findings).where(eq(findings.id, findingId))
+		return row?.scanId === scanId
+	}
+
+	// an unchanged prompt leaves every surviving finding alone, so a topic nobody edited never pays to
+	// re-derive an answer it already holds
+	const unchangedPromptScan = await scanAgain(topicId, ownerId)
+	const isStillReviewedByFirstScan = await isStillReviewedBy(ratedFinding.id, ratedFinding.scanId)
+	console.log(
+		`scan 2, prompt unchanged: reviewed ${unchangedPromptScan.scoredCount}, cost $${unchangedPromptScan.cost.toFixed(4)}`,
+	)
+	console.log(`  the rated finding still names scan 1: ${isStillReviewedByFirstScan}`)
+
+	// ask the selector what a scan with nothing discovered would review. a bookmarked or rated finding
+	// outlives the feed it came from
+	const offeredResources = await loadResourcesToReview(topicId, [], "a-context-nothing-was-reviewed-against")
+	const offeredResourceIds = new Set(offeredResources.map((resource) => resource.id))
+	const [ratedResource] = await db
+		.select({ id: resources.id })
+		.from(findings)
+		.innerJoin(resources, eq(findings.resourceId, resources.id))
+		.where(eq(findings.id, ratedFinding.id))
+	const isOfferedWhenUndiscovered = ratedResource !== undefined && offeredResourceIds.has(ratedResource.id)
+	console.log(`  offered for reviewing again with nothing discovered: ${isOfferedWhenUndiscovered}`)
+
+	// an edited prompt asks a different question, so every surviving finding is reviewed again
+	await db
+		.update(topics)
+		.set({ prompt: `${TOPIC_CONTEXT} Focus on evaluation and testing above all.` })
+		.where(eq(topics.id, topicId))
+	const editedPromptScan = await scanAgain(topicId, ownerId)
+	const isReviewedAgain = !(await isStillReviewedBy(ratedFinding.id, ratedFinding.scanId))
+	console.log(
+		`scan 3, prompt edited   : reviewed ${editedPromptScan.scoredCount}, cost $${editedPromptScan.cost.toFixed(4)}`,
+	)
+	console.log(`  the rated finding was reviewed again: ${isReviewedAgain}`)
+
+	// what the review did to the rated finding
+	const [ratedFindingAfterEdit] = await db
+		.select({
+			rating: findings.rating,
+			viewCount: findings.viewCount,
+			reviewedContextHash: findings.reviewedContextHash,
+		})
+		.from(findings)
+		.where(eq(findings.id, ratedFinding.id))
+
+	const results: [string, boolean][] = [
+		["the first scan recorded a hash on every finding", firstFindings.every((row) => row.reviewedContextHash !== null)],
+		["an unchanged prompt leaves a surviving finding alone", isStillReviewedByFirstScan],
+		["an edited prompt reviews a surviving finding again", isReviewedAgain],
+		["a finding the scan never rediscovers is still offered for review", isOfferedWhenUndiscovered],
+		["the rated finding survived the review", ratedFindingAfterEdit !== undefined],
+		["the rating survived", ratedFindingAfterEdit?.rating === "up"],
+		["the view count survived", ratedFindingAfterEdit?.viewCount === 3],
+		[
+			"the finding reviewed again has a new hash",
+			ratedFindingAfterEdit?.reviewedContextHash !== ratedFinding.reviewedContextHash,
+		],
+	]
+	let isPassing = true
+	for (const [label, isPassed] of results) {
+		console.log(`${isPassed ? "PASS" : "FAIL"}  ${label}`)
+		isPassing = isPassing && isPassed
+	}
+	return isPassing
+}
+
 async function smokeTest(): Promise<number> {
 	// every run starts cold, so two runs differ only by their concurrency setting
 	const resetCount = await resetFeedResources()
@@ -236,8 +345,10 @@ async function smokeTest(): Promise<number> {
 	// run the checks, then delete the owner regardless of outcome
 	try {
 		const isPassed = await check(topicId, userId)
-		console.log(`\n=== smoke ${isPassed ? "PASSED" : "FAILED"} ===`)
-		return isPassed ? 0 : 1
+		const isReviewAgainPassed = await checkReviewAgain(topicId, userId)
+		const isAllPassed = isPassed && isReviewAgainPassed
+		console.log(`\n=== smoke ${isAllPassed ? "PASSED" : "FAILED"} ===`)
+		return isAllPassed ? 0 : 1
 	} finally {
 		await db.delete(users).where(eq(users.id, userId))
 	}

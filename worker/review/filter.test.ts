@@ -1,7 +1,7 @@
 // filter tests for the hashing, threshold, ranking, and dedupe decisions the free stages make
 import { expect, test } from "bun:test"
 import {
-	hasAdmittedNearDuplicate,
+	hasNearDuplicateKey,
 	isNearDuplicate,
 	isRelevant,
 	normalizeText,
@@ -49,71 +49,71 @@ test("the relevance gate measures each kind against its own bar", () => {
 	expect(isRelevant(0.1, "watch")).toBe(false)
 })
 
-// ranking orders the relevance-gate survivors best-first
-test("rankBySimilarity orders survivors best-first and the limit takes the top N", () => {
-	// three survivors in the arbitrary order the database returned them
-	const survivors = [
+// ranking orders the relevant Resources best-first
+test("rankBySimilarity orders relevant resources best-first and the limit takes the top N", () => {
+	// three relevant resources in the arbitrary order the database returned them
+	const relevantResources = [
 		{ resource: toTestResource("low"), embedding: [1, 0], similarity: 0.36 },
 		{ resource: toTestResource("high"), embedding: [0, 1], similarity: 0.98 },
 		{ resource: toTestResource("mid"), embedding: [1, 1], similarity: 0.72 },
 	]
 
 	// ranked best-first, so truncating to a limit of one keeps the 0.98 instead of the 0.36 that came back first
-	const ranked = rankBySimilarity(survivors)
-	expect(ranked.map((survivor) => survivor.similarity)).toEqual([0.98, 0.72, 0.36])
-	expect(ranked.slice(0, 1).map((survivor) => survivor.resource.id)).toEqual(["high"])
+	const ranked = rankBySimilarity(relevantResources)
+	expect(ranked.map((relevantResource) => relevantResource.similarity)).toEqual([0.98, 0.72, 0.36])
+	expect(ranked.slice(0, 1).map((relevantResource) => relevantResource.resource.id)).toEqual(["high"])
 })
 
-// two near-identical unscoredResources in one Scan must leave exactly one survivor, never both dropped
-test("hasAdmittedNearDuplicate drops a sibling of an already-admitted unscoredResource, leaving one survivor", () => {
-	// nothing admitted yet, so the first unscoredResource is not a duplicate of anything
-	const admitted = { contentHashes: new Set<string>(), embeddings: [] as number[][] }
+// two near-identical resources in one Scan must leave exactly one of them, never both dropped
+test("hasNearDuplicateKey drops a sibling of a resource already let through, leaving one", () => {
+	// no keys recorded yet, so the first resource is not a duplicate of anything
+	const dedupeKeys = { contentHashes: new Set<string>(), embeddings: [] as number[][] }
 	const firstEmbedding = [1, 0, 0]
-	expect(hasAdmittedNearDuplicate(admitted, firstEmbedding)).toBe(false)
+	expect(hasNearDuplicateKey(dedupeKeys, firstEmbedding)).toBe(false)
 
-	// admit the first unscoredResource, the way the ranked pass does once it clears both dedupe stages
-	admitted.contentHashes.add("hash-a")
-	admitted.embeddings.push(firstEmbedding)
+	// record the first resource's keys, the way the ranked pass does once it clears both dedupe stages
+	dedupeKeys.contentHashes.add("hash-a")
+	dedupeKeys.embeddings.push(firstEmbedding)
 
-	// a near-identical sibling now dedupes against the admitted one instead of being filtered with it
-	expect(hasAdmittedNearDuplicate(admitted, [0.9999, 0.0001, 0])).toBe(true)
-	// a genuinely distinct unscoredResource still passes
-	expect(hasAdmittedNearDuplicate(admitted, [0, 1, 0])).toBe(false)
+	// a near-identical sibling now dedupes against the recorded one instead of being filtered with it
+	expect(hasNearDuplicateKey(dedupeKeys, [0.9999, 0.0001, 0])).toBe(true)
+	// a genuinely distinct resource still passes
+	expect(hasNearDuplicateKey(dedupeKeys, [0, 1, 0])).toBe(false)
 })
 
-// two unscoredResources sharing a content hash in one Scan also leave exactly one survivor
-test("an admitted content hash drops a later sibling sharing it", () => {
-	// the first unscoredResource is admitted, recording its hash the way the ranked pass does
-	const admitted = { contentHashes: new Set<string>(), embeddings: [] as number[][] }
-	expect(admitted.contentHashes.has("hash-a")).toBe(false)
-	admitted.contentHashes.add("hash-a")
+// two resources sharing a content hash in one Scan also leave exactly one of them
+test("a recorded content hash drops a later sibling sharing it", () => {
+	// the first resource clears dedupe, recording its hash the way the ranked pass does
+	const dedupeKeys = { contentHashes: new Set<string>(), embeddings: [] as number[][] }
+	expect(dedupeKeys.contentHashes.has("hash-a")).toBe(false)
+	dedupeKeys.contentHashes.add("hash-a")
 
-	// a later unscoredResource with the same hash is caught, and a different hash is not
-	expect(admitted.contentHashes.has("hash-a")).toBe(true)
-	expect(admitted.contentHashes.has("hash-b")).toBe(false)
+	// a later resource with the same hash is caught, and a different hash is not
+	expect(dedupeKeys.contentHashes.has("hash-a")).toBe(true)
+	expect(dedupeKeys.contentHashes.has("hash-b")).toBe(false)
 })
 
 // because the pass is ranked, the member of a duplicate set that wins its slot is the one with the highest
-test("the admitted member of a near-duplicate set is the higher-scoring one", () => {
-	// two near-identical unscoredResources that reach the ranked pass out of order
-	const survivors = [
+test("the surviving member of a near-duplicate set is the higher-scoring one", () => {
+	// two near-identical resources that reach the ranked pass out of order
+	const relevantResources = [
 		{ resource: toTestResource("weaker"), embedding: [0.9999, 0.0001, 0], similarity: 0.4 },
 		{ resource: toTestResource("stronger"), embedding: [1, 0, 0], similarity: 0.9 },
 	]
 
-	// walk them in rank order the way the ranked pass does, admitting the first resource of each duplicate set
-	const admitted = { contentHashes: new Set<string>(), embeddings: [] as number[][] }
-	const admittedIds: string[] = []
-	for (const survivor of rankBySimilarity(survivors)) {
-		if (hasAdmittedNearDuplicate(admitted, survivor.embedding)) {
+	// walk them in rank order the way the ranked pass does, keeping the first resource of each duplicate set
+	const dedupeKeys = { contentHashes: new Set<string>(), embeddings: [] as number[][] }
+	const dedupedIds: string[] = []
+	for (const relevantResource of rankBySimilarity(relevantResources)) {
+		if (hasNearDuplicateKey(dedupeKeys, relevantResource.embedding)) {
 			continue
 		}
 
-		// admit it, so the next unscoredResource dedupes against this one
-		admitted.embeddings.push(survivor.embedding)
-		admittedIds.push(survivor.resource.id)
+		// record its keys, so the next resource dedupes against this one
+		dedupeKeys.embeddings.push(relevantResource.embedding)
+		dedupedIds.push(relevantResource.resource.id)
 	}
 
 	// exactly one survived, and it is the higher-scoring resource instead of whichever came back first
-	expect(admittedIds).toEqual(["stronger"])
+	expect(dedupedIds).toEqual(["stronger"])
 })

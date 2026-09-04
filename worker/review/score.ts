@@ -1,4 +1,4 @@
-// the paid stages: fetch each admitted Resource's content, score it against the topic context with tiered models
+// the paid stages: fetch each Resource's content, score it against the topic context with tiered models
 import { reportError } from "@shared/monitoring"
 import { generateText, type LanguageModel, Output } from "ai"
 import { eq } from "drizzle-orm"
@@ -54,10 +54,10 @@ type ScoreTier = {
 }
 
 /**
- * Fetch and score the admitted Resources concurrently, writing a Finding for each one that gets bought.
+ * Fetch and score the Resources concurrently, writing a Finding for each one that gets bought.
  */
 export async function fetchAndScoreResources(
-	admittedResources: Resource[],
+	resourcesToScore: Resource[],
 	scan: Scan,
 	topicId: string,
 	topicContext: TopicContext,
@@ -67,15 +67,15 @@ export async function fetchAndScoreResources(
 	stopSignal?: AbortSignal,
 ): Promise<string[]> {
 	// each Resource checks the limit before it starts
-	const paidOutcomes = await runWithConcurrency(admittedResources, REVIEW_CONCURRENCY, (resource) =>
+	const paidOutcomes = await runWithConcurrency(resourcesToScore, REVIEW_CONCURRENCY, (resource) =>
 		fetchAndScoreResource(resource, scan, topicId, topicContext, budget, litellmApiKey, stopSignal),
 	)
 	for (const paidOutcome of paidOutcomes) {
 		trackOutcomes(reviewOutcome, paidOutcome)
 	}
 
-	// the Resources this stage admitted that the limit did not defer
-	return admittedResources
+	// the Resources this stage scored, which the limit did not defer
+	return resourcesToScore
 		.filter((_, index) => paidOutcomes[index]?.status !== "deferred")
 		.map((resource) => resource.id)
 }
@@ -106,7 +106,7 @@ export async function runWithConcurrency<Item, Result>(
 	return results
 }
 
-// the paid stages for one admitted Resource: fetch its content, score it, and write the Finding
+// the paid stages for one Resource: fetch its content, score it, and write the Finding
 async function fetchAndScoreResource(
 	resource: Resource,
 	scan: Scan,
@@ -140,7 +140,14 @@ async function fetchAndScoreResource(
 
 		// score the scanner's text, not the original, so any personal details it redacted never reach a model
 		const scoredResource = await scoreResource(screenVerdict.text, topicContext.text, budget, litellmApiKey)
-		await upsertFinding(scan, topicId, resource, scoredResource.score, scoredResource.relevanceExplanation)
+		await upsertFinding(
+			scan,
+			topicId,
+			resource,
+			scoredResource.score,
+			scoredResource.relevanceExplanation,
+			topicContext.contextHash,
+		)
 
 		// the kept outcome includes the feed-facing details that the report cites
 		const keptFinding = {
@@ -163,7 +170,7 @@ async function fetchAndScoreResource(
 	}
 }
 
-// get the survivor's content
+// get the resource's content
 async function fetchResourceContent(
 	resource: Resource,
 	budget: Budget,
@@ -326,6 +333,31 @@ export async function buildScorePrompt(
 	return { prompt, name, registryPrompt }
 }
 
+/**
+ * Returns the columns a re-score decides, so upserting one leaves a user's rating and view count untouched.
+ */
+export function toFindingReviewFields(review: {
+	scanId: string
+	score: number
+	relevanceExplanation: string
+	topicContextHash: string
+	contentHash: string | null
+}): {
+	scanId: string
+	relevanceScore: number
+	relevanceExplanation: string
+	reviewedContextHash: string
+	reviewedContentHash: string | null
+} {
+	return {
+		scanId: review.scanId,
+		relevanceScore: review.score,
+		relevanceExplanation: review.relevanceExplanation,
+		reviewedContextHash: review.topicContextHash,
+		reviewedContentHash: review.contentHash,
+	}
+}
+
 // upsert one finding per topic and resource. re-scoring updates the existing row instead of adding another
 async function upsertFinding(
 	scan: Scan,
@@ -333,22 +365,26 @@ async function upsertFinding(
 	resource: Resource,
 	score: number,
 	relevanceExplanation: string,
+	topicContextHash: string,
 ): Promise<void> {
+	// build the whole of what a re-score may change
+	const review = toFindingReviewFields({
+		scanId: scan.id,
+		score,
+		relevanceExplanation,
+		topicContextHash,
+		contentHash: resource.contentHash,
+	})
+
 	// insert the topic finding
 	await db
 		.insert(findings)
 		// the finding includes the relevance score and explanation, plus the scan that produced them
-		.values({
-			topicId,
-			resourceId: resource.id,
-			scanId: scan.id,
-			relevanceScore: score,
-			relevanceExplanation,
-		})
+		.values({ topicId, resourceId: resource.id, ...review })
 		// a re-score hits the topic and resource unique constraint, so update that row in place
 		.onConflictDoUpdate({
 			target: [findings.topicId, findings.resourceId],
-			set: { scanId: scan.id, relevanceScore: score, relevanceExplanation },
+			set: review,
 		})
 }
 

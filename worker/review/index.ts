@@ -2,10 +2,18 @@
 import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { bookmarks, findings, resources, type scans, teamMembers, teamTopics, topics } from "../../db/schema"
+import { buildTopicScanContext, toTopicContextHash } from "../attach"
 import type { Budget } from "../budget"
 import type { NewResource } from "../ingest/ingester"
 import { traceStage } from "../telemetry"
-import { admitResources, gateResources, loadTopicContext, loadUnscoredResources, rankBySimilarity } from "./filter"
+import {
+	dedupeResources,
+	gateResources,
+	loadResourcesToReview,
+	loadTopicContext,
+	rankBySimilarity,
+	toTopicContextText,
+} from "./filter"
 import { fetchAndScoreResources } from "./score"
 import { type ScannedSource, summarizeTopicScan, toTopicScanSummary } from "./summarize"
 import { countFilteredResources, emptyReviewOutcome, emptyReviewSummary, type ReviewSummary } from "./track"
@@ -35,9 +43,13 @@ export async function reviewScan(
 		return emptyReviewSummary()
 	}
 
-	// load the unscored list of discovered Resources for this Topic
-	const unscoredResources = await loadUnscoredResources(topicId, discoveredResources)
-	if (unscoredResources.length === 0) {
+	// read the topic's context once. its hash decides which Findings this Scan reviews again
+	const topicScanContext = await buildTopicScanContext(topicId)
+	const topicContextHash = toTopicContextHash(toTopicContextText(topicScanContext))
+
+	// select what this Scan has to review: never reviewed, reviewed against another context, or older content
+	const resourcesToReview = await loadResourcesToReview(topicId, discoveredResources, topicContextHash)
+	if (resourcesToReview.length === 0) {
 		// filter anyway, so a lowered max_results takes effect even when a scan finds nothing new
 		await filterTopicFindings(topicId)
 		return emptyReviewSummary()
@@ -50,32 +62,32 @@ export async function reviewScan(
 	if (stopSignal?.aborted) {
 		return emptyReviewSummary()
 	}
-	const topicContext = await loadTopicContext(topicId, budget, litellmApiKey)
+	const topicContext = await loadTopicContext(topicScanContext, budget, litellmApiKey)
 
-	// the first pass embeds every unscored resource and keeps the ones relevant to the topic
-	const survivingResources = await traceStage(
+	// the first pass embeds every resource up for review and keeps the ones relevant to the topic
+	const relevantResources = await traceStage(
 		"embed-filter",
 		budget,
-		() => gateResources(unscoredResources, topicContext, reviewOutcome, budget, litellmApiKey, stopSignal),
-		(survivors) => ({ unscoredCount: unscoredResources.length, survivorCount: survivors.length }),
+		() => gateResources(resourcesToReview, topicContext, reviewOutcome, budget, litellmApiKey, stopSignal),
+		(relevantResources) => ({ toReviewCount: resourcesToReview.length, relevantCount: relevantResources.length }),
 	)
 
 	// the second pass dedupes the surviving resources best-first, so a limit defers the least relevant resources
-	const unscoredResourceIds = unscoredResources.map((resource) => resource.id)
-	const admittedResources = await traceStage(
+	const resourceIdsToReview = resourcesToReview.map((resource) => resource.id)
+	const resourcesToScore = await traceStage(
 		"dedupe",
 		budget,
-		() => admitResources(rankBySimilarity(survivingResources), unscoredResourceIds, reviewOutcome),
-		(admitted) => ({ survivorCount: survivingResources.length, admittedCount: admitted.length }),
+		() => dedupeResources(rankBySimilarity(relevantResources), resourceIdsToReview, reviewOutcome),
+		(toScore) => ({ relevantCount: relevantResources.length, toScoreCount: toScore.length }),
 	)
 
-	// the paid stage: fetch each admitted Resource and score it under the Scan's limits
+	// the paid stage: fetch each of those Resources and score it under the Scan's limits
 	const scoredResourceIds = await traceStage(
 		"score",
 		budget,
 		() =>
 			fetchAndScoreResources(
-				admittedResources,
+				resourcesToScore,
 				scan,
 				topicId,
 				topicContext,
@@ -84,12 +96,12 @@ export async function reviewScan(
 				litellmApiKey,
 				stopSignal,
 			),
-		(scoredIds) => ({ admittedCount: admittedResources.length, scoredCount: scoredIds.length }),
+		(scoredIds) => ({ toScoreCount: resourcesToScore.length, scoredCount: scoredIds.length }),
 	)
 
 	// keep only the topic's top max_results findings now that this scan's findings are written
-	const survivingUrls = await filterTopicFindings(topicId)
-	reviewOutcome.keptFindings = reviewOutcome.keptFindings.filter((finding) => survivingUrls.has(finding.url))
+	const relevantUrls = await filterTopicFindings(topicId)
+	reviewOutcome.keptFindings = reviewOutcome.keptFindings.filter((finding) => relevantUrls.has(finding.url))
 
 	// summarize the scan, unless the user stopped it
 	const scanSummary = stopSignal?.aborted
@@ -109,7 +121,7 @@ export async function reviewScan(
 		keptCount: reviewOutcome.keptFindings.length,
 		filteredCount: countFilteredResources(reviewOutcome),
 		scanSummary,
-		admittedResourceIds: admittedResources.map((resource) => resource.id),
+		resourceIdsToScore: resourcesToScore.map((resource) => resource.id),
 		scoredResourceIds,
 	}
 }
@@ -131,6 +143,7 @@ async function filterTopicFindings(topicId: string): Promise<Set<string>> {
 			id: findings.id,
 			relevanceScore: findings.relevanceScore,
 			createdAt: findings.createdAt,
+			rating: findings.rating,
 			url: resources.url,
 		})
 		.from(findings)
@@ -164,10 +177,14 @@ async function filterTopicFindings(topicId: string): Promise<Set<string>> {
 		.innerJoin(findings, eq(bookmarks.findingId, findings.id))
 		.where(and(eq(findings.topicId, topicId), holderHasAccess))
 
-	// decide which findings fall outside the limit, then delete them in one statement
+	// decide which findings fall outside the limit. a re-score can lower a score,
+	// and filtering by score alone would delete a finding its user bookmarked
 	const bookmarkedIds = new Set(bookmarkedRows.map((bookmarkRow) => bookmarkRow.findingId))
 	const filteredIds = findingIdsToFilter(
-		findingRows.map((findingRow) => ({ ...findingRow, isBookmarked: bookmarkedIds.has(findingRow.id) })),
+		findingRows.map((findingRow) => ({
+			...findingRow,
+			isBookmarkedOrRated: bookmarkedIds.has(findingRow.id) || findingRow.rating !== null,
+		})),
 		topic.maxResults,
 	)
 	if (filteredIds.length > 0) {
@@ -182,19 +199,20 @@ async function filterTopicFindings(topicId: string): Promise<Set<string>> {
 }
 
 /**
- * The topic's non-bookmarked finding ids ranked beyond maxResults by relevance score, which need filtering.
- * A tie goes to the newer finding, so a Topic already full of top-scored ones can still update from a later Scan.
+ * The topic's finding ids no user bookmarked or rated, ranked beyond maxResults by relevance score,
+ * which need filtering. A tie goes to the newer finding, so a Topic already full of top-scored ones can
+ * still update from a later Scan.
  */
 export function findingIdsToFilter(
-	findingRows: { id: string; relevanceScore: number; createdAt: Date; isBookmarked: boolean }[],
+	findingRows: { id: string; relevanceScore: number; createdAt: Date; isBookmarkedOrRated: boolean }[],
 	maxResults: number,
 ): string[] {
-	// rank the unbookmarked rows and drop everything past the limit
-	const rankedUnbookmarkedRows = findingRows
-		.filter((findingRow) => !findingRow.isBookmarked)
+	// rank the rows no user bookmarked or rated and drop everything past the limit
+	const rankedFilterableRows = findingRows
+		.filter((findingRow) => !findingRow.isBookmarkedOrRated)
 		.sort(
 			(first, second) =>
 				second.relevanceScore - first.relevanceScore || second.createdAt.getTime() - first.createdAt.getTime(),
 		)
-	return rankedUnbookmarkedRows.slice(maxResults).map((findingRow) => findingRow.id)
+	return rankedFilterableRows.slice(maxResults).map((findingRow) => findingRow.id)
 }

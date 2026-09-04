@@ -5,6 +5,7 @@ import {
 	toDefaultSource,
 	toGoogleNewsFeedUrl,
 	toGoogleNewsPublisher,
+	toPublisherDomain,
 	toSourceSummary,
 	toSourceValue,
 	toUrlHost,
@@ -147,4 +148,16 @@ test("toSourceValue reads what the ingester stores, not the display name", () =>
 	// a config missing the field its kind reads has no value to exclude on
 	expect(toSourceValue("podcast", {})).toBe("")
 	expect(toSourceValue("search", {})).toBe("")
+})
+
+// the domain becomes a Google news feed url, so a wrong one silently scans the wrong publisher
+test("toPublisherDomain reads the publisher out of whatever was pasted", () => {
+	// a pasted article url keeps only its host, without the scheme, the path, or a leading www
+	expect(toPublisherDomain("https://www.theguardian.com/world/2026/jan/01/some-article")).toBe("theguardian.com")
+	expect(toPublisherDomain("http://Example.COM/a?b=c#d")).toBe("example.com")
+	expect(toPublisherDomain("  bbc.co.uk  ")).toBe("bbc.co.uk")
+
+	// a value with no dot names no publisher, so it builds no feed instead of a broken one
+	expect(toPublisherDomain("theguardian")).toBe(null)
+	expect(toPublisherDomain("")).toBe(null)
 })

@@ -167,7 +167,7 @@ export async function serveRelease(tag: string): Promise<string | null> {
 		return null
 	}
 
-	// the whole body renders here, generated list included, to show a reader this one release
+	// the whole body renders here, generated list included, to show a user this one release
 	const releasedOn = release.releasedAt.toISOString().slice(0, 10)
 	return toContentHtml({
 		title: release.name,

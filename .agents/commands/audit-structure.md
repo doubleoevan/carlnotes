@@ -198,6 +198,19 @@ Check for:
      reason, the `revoked_at` column dropped by migration 0084, and every `revok*` spelling. expiry
      and the use limit are the two ways a link ends now
 
+   - the review pipeline's stage names, each renamed to say which test a Resource passed. the gate
+     tests relevance, so `SurvivingResource` is `RelevantResource` and `survivor`/`survivors` are
+     `relevantResource`/`relevantResources`; the second stage dedupes, so `admitResource`/`admitResources`
+     are `dedupeResource`/`dedupeResources`, the `AdmittedResources` type is `DedupeKeys`, and
+     `hasAdmittedNearDuplicate` is `hasNearDuplicateKey`. its output is what the Scan pays to score, so
+     `admittedResources`/`admittedResourceIds` are `resourcesToScore`/`resourceIdsToScore` and the
+     `admittedCount` span attribute is `toScoreCount`. `allowResource` was rejected for colliding with
+     `isAllowed`, and `screenResource` for colliding with llm-guard's screening
+   - `loadUnscoredResources`/`unscoredResources` (now `loadResourcesToReview`/`resourcesToReview`; the
+     selector returns already-scored Findings whose context changed, so "unscored" named only some of them)
+   - `finishScan`'s `ingested`/`reviewed` parameters (now `ingestResult`/`reviewResult`, which every
+     call site already used). they hold stage results, so neither is a Resource
+
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
    same scripts. Compare the tool/event coverage of each adapter against the
