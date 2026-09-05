@@ -137,7 +137,7 @@ bun run dev:docs     # Starlight dev server on localhost:4321/docs, reachable on
                      # it runs in the background: `cd docs && astro dev stop` ends it, `astro dev logs` tails it
 bun run test:coverage # the test suite with bun's built-in line and function coverage table
 bun run smoke:coverage # run every smoke test script, one process each, writing coverage/smoke/<name>/lcov.info; the Smoke workflow runs this on each push to main and uploads them under the smoke flag
-                     # with SMOKE_SKIP_DEVELOPER_ONLY=1 it skips the six that need litellm or temporal, which is what the Smoke workflow sets
+                     # with SMOKE_SKIP_DEVELOPER_ONLY=1 it skips the six that need litellm or temporal. the Smoke workflow starts both as containers instead, and runs a temporal worker beside them, so it runs all sixteen
 bun run docs:embed   # chunk the docs markdown by section and embed the changed sections into docs_chunks, which chat quotes; run it after editing docs
 bun run docs:embed:prd # the same sync against the production database, the owner-run escape hatch until the deploy job runs it
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
@@ -248,7 +248,7 @@ docker build --platform=linux/amd64 --build-arg VITE_TURNSTILE_SITE_KEY=<site-ke
 
 `--platform=linux/amd64` matters on Apple Silicon. The Doppler CLI is copied from `dopplerhq/cli:3`, which publishes amd64 only.
 
-Migrations are a deploy job, not a start-up step. A push to `main` runs the `release-main` pipeline, which builds the image once, runs this job against it, and only then deploys `app` and `temporal-worker`, finishing with the docs embed. It runs in Northflank instead of GitHub Actions, and its definition is [infra/northflank/release-main.json](infra/northflank/release-main.json). `.github/workflows/` holds the offline gate alone. So new code never meets an old schema:
+Migrations are a deploy job, not a start-up step. A push to `main` runs the `release-main` pipeline, which builds the image once, runs this job against it, and only then deploys `app` and `temporal-worker`, finishing with the docs embed. It runs in Northflank instead of GitHub Actions, and its definition is [infra/northflank/release-main.json](infra/northflank/release-main.json). `.github/workflows/` holds checks alone: the offline gate, the smoke suite, and the weekly LLM Guard version check. None of them deploy. So new code never meets an old schema:
 
 ```bash
 doppler run -- bun db/migrate.ts

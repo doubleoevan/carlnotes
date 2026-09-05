@@ -58,10 +58,33 @@ jobs:
           echo "litellm answered $litellm and temporal answered $temporal, so the suites that need them cannot run"
           docker compose logs --tail 40 litellm temporal
           exit 1
-      - run: doppler run -- bash scripts/smoke-coverage.sh
+      # the attachment suite needs a worker polling temporal's queues, not just the server behind them.
+      # nohup keeps it running across the steps that follow, and its log is printed if it never polls
+      - name: Start the temporal worker
+        run: nohup doppler run -- env LLM_GUARD_URL= bun worker/temporal.ts > temporal-worker.log 2>&1 &
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
-          LLM_GUARD_URL: ""
+      # a worker that never polls would otherwise surface as an attachment stuck pending for 90 seconds
+      - name: Wait for the temporal worker
+        run: |
+          for attempt in $(seq 1 60); do
+            if docker compose exec -T temporal temporal task-queue describe \
+                 --task-queue attachment-processing --namespace default 2>/dev/null \
+                 | awk '/^Pollers:/{seen = 1; next} seen && /UNVERSIONED/{found = 1} END{exit !found}'; then
+              echo "the temporal worker is polling after $attempt attempts"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "the temporal worker never polled attachment-processing, so the attachment suite cannot run"
+          cat temporal-worker.log
+          exit 1
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      # env after doppler run, since doppler injects its own value over anything the step sets
+      - run: doppler run -- env LLM_GUARD_URL= bash scripts/smoke-coverage.sh
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       # the smoke coverage joins the unit coverage on Codecov under its own flag
       - uses: codecov/codecov-action@v7
         if: always()

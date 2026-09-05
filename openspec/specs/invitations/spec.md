@@ -7,7 +7,7 @@ TBD - created by archiving change add-username-invites. Update Purpose after arc
 
 A user invite SHALL live on the same invites row every invite already is — never a second table, entity, or code path. The email column records which identifier the sender used, the invited user records the resolved recipient: a username invite has the user alone, an email invite has the address and gains the user when it resolves, and a link invite has neither. Each creation path SHALL set only its own identifier column, and per-target unique indexes on the invited user SHALL make re-inviting the same person a no-op, across modes included. Everything downstream of creation — expiry, acceptance, and display — SHALL treat the two identifiers identically apart from whether an email is sent.
 
-Creating a username invite SHALL resolve the username first and refuse an unknown one, so no invite row is ever written for a name no account holds. The sender surfaces stage each entered username as a chip and report a refusal by name when the invitations send.
+Creating a username invite SHALL resolve the username first and reject an unknown one, so no invite row is ever written for a name no account holds. The invite form SHALL show each entered username as a chip, and SHALL name each rejected username when the invitations send.
 
 #### Scenario: Both modes share one lifecycle
 
