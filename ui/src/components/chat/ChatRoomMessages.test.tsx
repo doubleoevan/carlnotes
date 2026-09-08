@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import type { ChatRoomMessage } from "@shared/contracts"
 import { renderToStaticMarkup } from "react-dom/server"
 import { MemoryRouter } from "react-router-dom"
-import type { ChatRoomState } from "@/components/chat/useChatRoom"
+import { type ChatRoomState, FIRST_ITEM_INDEX_START } from "@/components/chat/useChatRoom"
 import { ChatRoomMessages } from "./ChatRoomMessages"
 
 // the author lines link to profiles through the router, so every render mounts inside one
@@ -35,6 +35,9 @@ function chatRoom(chatMessages: ChatRoomMessage[], isModelThinking = false): Cha
 		clearRejectionReason: () => {},
 		isMessageLoading: isModelThinking,
 		postChatMessage: async () => true,
+		loadEarlierChatMessages: async () => 0,
+		hasEarlierChatMessages: false,
+		firstItemIndex: FIRST_ITEM_INDEX_START,
 		reloadChatMessages: async () => {},
 		loadingChatMessageIds: new Set<number>(),
 	}

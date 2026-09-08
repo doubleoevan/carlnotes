@@ -1,5 +1,5 @@
 // the api client for a team topic's chat room and a team's own chat room: the chat messages, the post, and the stream url
-import type { ChatAttachment, ChatLinkPreview, ChatRoom, ChatRoomMessage } from "@shared/contracts"
+import type { ChatAttachment, ChatLinkPreview, ChatRoom, ChatRoomMessagePage } from "@shared/contracts"
 import { hc } from "hono/client"
 import type { AppType } from "../../../api"
 
@@ -7,16 +7,20 @@ import type { AppType } from "../../../api"
 const apiClient = hc<AppType>("")
 
 /**
- * Loads the chat room's newest chat messages. Null means this user has no chat room here,
+ * Loads the chat room's latest chat messages. Null means this user has no chat room here,
  * and "failed" means a server or network error the caller should retry.
  */
 export async function fetchChatRoomMessages(
 	topicId: string | null,
 	teamId: string,
-): Promise<ChatRoomMessage[] | null | "failed"> {
+	beforeChatMessageId?: number,
+): Promise<ChatRoomMessagePage | null | "failed"> {
 	// a rejection status is an answer, and any other error is a failure to retry
 	try {
-		const response = await fetch(toChatRoomPath(topicId, teamId))
+		const chatRoomPath = toChatRoomPath(topicId, teamId)
+		const response = await fetch(
+			beforeChatMessageId === undefined ? chatRoomPath : `${chatRoomPath}?before=${beforeChatMessageId}`,
+		)
 		if (response.status === 401 || response.status === 403 || response.status === 404) {
 			return null
 		}
@@ -24,9 +28,9 @@ export async function fetchChatRoomMessages(
 			return "failed"
 		}
 
-		// the payload is the decrypted chat messages in id order
-		const { chatMessages } = (await response.json()) as { chatMessages: ChatRoomMessage[] }
-		return chatMessages
+		// the payload is the decrypted chat messages in id order, with whether a page sits above them
+		const { chatMessages, hasEarlierChatMessages } = (await response.json()) as ChatRoomMessagePage
+		return { chatMessages, hasEarlierChatMessages }
 	} catch {
 		return "failed"
 	}
@@ -171,7 +175,7 @@ export async function sendDeleteChatRoomMessage(
 }
 
 /**
- * Every chat room the signed-in user may open, newest first. A rejected fetch returns an empty list,
+ * Every chat room the signed-in user may open, latest first. A rejected fetch returns an empty list,
  * so the chat panel shows its call to action instead of an empty menu.
  */
 export async function fetchChatRooms(): Promise<ChatRoom[]> {

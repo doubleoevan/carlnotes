@@ -22,16 +22,16 @@ import {
 	isPageChatRoom,
 	isSameChat,
 	setChatId,
+	setChatIdAtChatMessage,
 	setChatPanelState,
 	toDefaultChatId,
 	useChatPanel,
 } from "@/stores/chatPanelStore"
-import { setChatRooms, useAllChatMentions, useChatRooms } from "@/stores/chatRoomStore"
+import { setChatRooms, toFirstChatMention, useAllChatMentions, useChatRooms } from "@/stores/chatRoomStore"
 import { setNoteBadges } from "@/stores/noteBadgeStore"
 
 // how often the chat mention and note badges are polled, kept under a minute
 const CHAT_MENTION_POLL_MS = 45_000
-
 /**
  * The chat menu's dropdown options, one row for each chat room the user can open plus one to join the page's team.
  */
@@ -49,7 +49,16 @@ function toChatRoomOptions(
 		isActive: isSameChat(chatId, { kind: "room", teamId: chatRoomOption.teamId, topicId: chatRoomOption.topicId }),
 		chatMentions: chatRoomOption.chatMentions,
 		chatRoomMembers: chatRoomOption.chatRoomMembers,
-		onSelect: () => setChatId({ kind: "room", teamId: chatRoomOption.teamId, topicId: chatRoomOption.topicId }),
+		onSelect: () => {
+			// a row with mentions loads the earliest one, so reading forward passes the rest in order
+			const chatId: ChatId = { kind: "room", teamId: chatRoomOption.teamId, topicId: chatRoomOption.topicId }
+			const firstChatMention = toFirstChatMention(chatRoomOption.chatMentions)
+			if (firstChatMention) {
+				setChatIdAtChatMessage(chatId, firstChatMention.chatMessageId)
+				return
+			}
+			setChatId(chatId)
+		},
 	}))
 
 	// the join team option, whose row opens up the join panel instead of the chat messages
@@ -190,7 +199,7 @@ export function AppChatPanel() {
 		setChatPanelState(isWideScreen() ? "open" : "enlarged")
 	}
 
-	// opening before the chat rooms answered leaves nothing selected, so the choice is made again once they land
+	// opening before the chat rooms answered leaves nothing selected, so the choice is made again once they load
 	useEffect(() => {
 		if (panelState !== "collapsed" && hasLoadedChatRooms) {
 			pickDefaultChat()

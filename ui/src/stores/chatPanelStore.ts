@@ -1,5 +1,6 @@
 import type { ChatRoom } from "@shared/contracts"
 import { useEffect, useSyncExternalStore } from "react"
+import { toStoreListeners } from "@/stores/storeListeners"
 
 /**
  * Which chat room the panel is showing, or the private chat about one topic. It holds the addressing keys
@@ -17,7 +18,7 @@ export type ChatId =
 export type ChatPanelState = "collapsed" | "open" | "enlarged"
 
 /**
- * What the page on screen is about, which the panel opens on before falling back to the newest chat room.
+ * What the page on screen is about, which the panel opens on before falling back to the latest chat room.
  * A page names its team so the panel can offer the way in where the user is on none of them.
  */
 export type ChatPageContext = {
@@ -32,29 +33,17 @@ export type ChatPageContext = {
 	pageTeamIds?: string[]
 	pageTopicIds?: string[]
 	// which kind of chat room this page opens first
-	preferredRoomKind?: "team" | "topic"
+	preferredChatRoomKind?: "team" | "topic"
 }
 
 // the panel lives in the app shell and outlives every route, so its state lives beside it instead of in a page
 let panelState: ChatPanelState = "collapsed"
 let chatId: ChatId | null = null
 let pageContext: ChatPageContext | null = null
-const listeners = new Set<() => void>()
-let version = 0
-
-// tell every subscriber the panel moved
-function publish(): void {
-	version += 1
-	for (const listener of listeners) {
-		listener()
-	}
-}
-
-// the store half useSyncExternalStore needs
-function subscribe(listener: () => void): () => void {
-	listeners.add(listener)
-	return () => listeners.delete(listener)
-}
+// the chat message an open should load, set when a mention badge opens its chat room. it belongs to
+// one open instead of to the chat itself, so the chat room clears it once it has acted
+let chatMessageId: number | null = null
+const { subscribe, publish, getVersion } = toStoreListeners()
 
 /** Open, enlarge, or close the panel, which every page shares. */
 export function setChatPanelState(next: ChatPanelState): void {
@@ -66,9 +55,41 @@ export function setChatPanelState(next: ChatPanelState): void {
 	publish()
 }
 
-/** Point the panel at a chat room or a private chat, which opening one from a page does. */
-export function setChatId(next: ChatId): void {
-	chatId = next
+/**
+ * Switches the chat panel to a chat room or a private chat.
+ */
+export function setChatId(nextChatId: ChatId): void {
+	chatId = nextChatId
+	chatMessageId = null
+	publish()
+}
+
+/**
+ * Switches the chat panel to a chat and scrolls to a chat message.
+ */
+export function setChatIdAtChatMessage(nextChatId: ChatId, nextChatMessageId: number): void {
+	chatId = nextChatId
+	chatMessageId = nextChatMessageId
+	publish()
+}
+
+/**
+ * The chat message the panel should scroll to, or null. Stays set until the room clears it.
+ */
+export function useChatMessageMentioned(): number | null {
+	// the version is the snapshot, the same way the panel's own state is read
+	useSyncExternalStore(subscribe, getVersion, getVersion)
+	return chatMessageId
+}
+
+/**
+ * Clear the mentioned chat message once the room has scrolled to it.
+ */
+export function clearMentionedChatMessage(): void {
+	if (chatMessageId === null) {
+		return
+	}
+	chatMessageId = null
 	publish()
 }
 
@@ -76,19 +97,19 @@ export function setChatId(next: ChatId): void {
  * Tell the panel what the page on screen is about, for as long as that page is mounted. A page that
  * is about nothing in particular registers null and leaves the panel wherever the user left it.
  */
-export function useRegisterChatContext(context: ChatPageContext | null): void {
+export function useRegisterChatContext(nextPageContext: ChatPageContext | null): void {
 	// the identity of the value is what changes, so the effect keys on its contents instead
-	const contextKey = JSON.stringify(context)
+	const pageContextKey = JSON.stringify(nextPageContext)
 	useEffect(() => {
 		// the key is parsed back, so the stored value never closes over a stale render's literal
-		pageContext = contextKey === "null" ? null : (JSON.parse(contextKey) as ChatPageContext)
+		pageContext = pageContextKey === "null" ? null : (JSON.parse(pageContextKey) as ChatPageContext)
 		publish()
 		// leaving the page clears it, so the panel stops offering a chat room that page was about
 		return () => {
 			pageContext = null
 			publish()
 		}
-	}, [contextKey])
+	}, [pageContextKey])
 }
 
 /**
@@ -103,11 +124,7 @@ export function useChatPanel(): {
 	pageContext: ChatPageContext | null
 } {
 	// the version is the snapshot. the values it stands for are module state
-	useSyncExternalStore(
-		subscribe,
-		() => version,
-		() => version,
-	)
+	useSyncExternalStore(subscribe, getVersion, getVersion)
 	return { panelState, chatId, pageContext }
 }
 
@@ -148,20 +165,15 @@ export function isSameChat(firstChatId: ChatId | null, secondChatId: ChatId): bo
 	)
 }
 
-/**
- * Which conversation the panel opens on, decided once per open instead of on every navigation.
- * The rule is the closest match to the page. A team's page opens that team's chat room, and a topic's
- * page opens that topic's chat room, the way into the team that has it, or the user's private chat about
- * it, whichever of those three is closest to hand. A page that names teams without being one, which a profile does, opens the busiest of
- * those. Only a page about no conversation at all falls through to the busiest chat room anywhere, where
- * a team's leads a topic's unless the page asked otherwise, and a private chat is never reached.
- */
-export function toDefaultChatId(pageContext: ChatPageContext | null, rooms: ChatRoom[]): ChatId | null {
+/** Picks the chat this page opens on, falling back to the busiest one when the page names none. */
+export function toDefaultChatId(pageContext: ChatPageContext | null, chatRooms: ChatRoom[]): ChatId | null {
 	// a team page opens that team's own chat room, or offers the way in where the user is on none
 	if (pageContext?.teamId) {
-		const teamRoom = rooms.find((room) => room.teamId === pageContext.teamId && room.topicId === null)
-		if (teamRoom) {
-			return { kind: "room", teamId: teamRoom.teamId, topicId: null }
+		const teamChatRoom = chatRooms.find(
+			(chatRoom) => chatRoom.teamId === pageContext.teamId && chatRoom.topicId === null,
+		)
+		if (teamChatRoom) {
+			return { kind: "room", teamId: teamChatRoom.teamId, topicId: null }
 		}
 		// on neither the team nor its invite, so the topic rules below decide instead
 		if (pageContext.joinTeam) {
@@ -170,9 +182,9 @@ export function toDefaultChatId(pageContext: ChatPageContext | null, rooms: Chat
 	}
 	// a topic page opens that topic's conversation, closest first
 	if (pageContext?.topicId) {
-		const topicRoom = rooms.find((room) => room.topicId === pageContext.topicId)
-		if (topicRoom) {
-			return { kind: "room", teamId: topicRoom.teamId, topicId: topicRoom.topicId }
+		const topicChatRoom = chatRooms.find((chatRoom) => chatRoom.topicId === pageContext.topicId)
+		if (topicChatRoom) {
+			return { kind: "room", teamId: topicChatRoom.teamId, topicId: topicChatRoom.topicId }
 		}
 		if (pageContext.joinTeam) {
 			return { kind: "room", teamId: pageContext.joinTeam.teamId, topicId: pageContext.topicId }
@@ -180,25 +192,32 @@ export function toDefaultChatId(pageContext: ChatPageContext | null, rooms: Chat
 		// no chat room and no way into one, so the topic falls back to carl
 		return { kind: "private", topicId: pageContext.topicId }
 	}
-	// the chat rooms a page names, which a profile does, are tried before the rest
-	const named = rooms.filter((room) => isPageChatRoom(room, pageContext))
-	const preferred = pageContext?.preferredRoomKind ?? "team"
-	const selected = toBusiestPreferring(named, preferred) ?? toBusiestPreferring(rooms, preferred) ?? rooms[0]
-	if (selected) {
-		return { kind: "room", teamId: selected.teamId, topicId: selected.topicId }
+
+	// the highlighted chat rooms that reference a page
+	const pageChatRooms = chatRooms.filter((chatRoom) => isPageChatRoom(chatRoom, pageContext))
+	// a chat room that references the page wins, then any chat room with mentions waiting, then simply the first available
+	const selectedChatRoom =
+		toBusiestChatRoom(pageChatRooms, pageContext) ?? toBusiestChatRoom(chatRooms, pageContext) ?? chatRooms[0]
+	if (selectedChatRoom) {
+		return { kind: "room", teamId: selectedChatRoom.teamId, topicId: selectedChatRoom.topicId }
 	}
 	return null
 }
 
-// the busiest chat room of the kind that leads, and the busiest of the other kind where that one holds nothing
-function toBusiestPreferring(rooms: ChatRoom[], kind: "team" | "topic"): ChatRoom | undefined {
-	const isPreferred = (room: ChatRoom): boolean => (kind === "team" ? room.topicId === null : room.topicId !== null)
-	return toBusiestChatRoom(rooms.filter(isPreferred)) ?? toBusiestChatRoom(rooms.filter((room) => !isPreferred(room)))
-}
+// the chat room holding the most mentions, with the kind the page leads on winning before any other.
+// none where every chat room is quiet, which is what sends the caller to its next choice
+function toBusiestChatRoom(chatRooms: ChatRoom[], pageContext: ChatPageContext | null): ChatRoom | undefined {
+	// a page asking for neither kind reads as a team page, since a team's chat room is the broader one
+	const preferredChatRoomKind = pageContext?.preferredChatRoomKind ?? "team"
+	const isPreferredChatRoomKind = (chatRoom: ChatRoom): boolean =>
+		preferredChatRoomKind === "team" ? chatRoom.topicId === null : chatRoom.topicId !== null
 
-// the chat room with the most unread chat mentions, or none where nothing is waiting
-function toBusiestChatRoom(chatRooms: ChatRoom[]): ChatRoom | undefined {
-	return chatRooms.reduce<ChatRoom | undefined>(
+	// a quiet chat room never wins, so the preference only ever picks between chat rooms that have mentions
+	const chatRoomsWithMentions = chatRooms.filter((chatRoom) => chatRoom.chatMentions.length > 0)
+	const chatRoomsToChooseFrom = chatRoomsWithMentions.some(isPreferredChatRoomKind)
+		? chatRoomsWithMentions.filter(isPreferredChatRoomKind)
+		: chatRoomsWithMentions
+	return chatRoomsToChooseFrom.reduce<ChatRoom | undefined>(
 		(busiestChatRoom, chatRoom) =>
 			chatRoom.chatMentions.length > (busiestChatRoom?.chatMentions.length ?? 0) ? chatRoom : busiestChatRoom,
 		undefined,

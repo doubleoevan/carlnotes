@@ -1,7 +1,7 @@
 import { isModelChatMessage } from "@shared/chatMentions"
 import type { ChatRoomMessage } from "@shared/contracts"
 import { FileText, Film, Image, Paperclip, Reply, Trash2, X } from "lucide-react"
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef } from "react"
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { toast } from "sonner"
 import {
@@ -18,6 +18,7 @@ import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPre
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useNow } from "@/hooks/useNow"
 import { cn } from "@/lib/utils"
+import { clearMentionedChatMessage, useChatMessageMentioned } from "@/stores/chatPanelStore"
 
 // virtualize the chat room's chat messages past this limit
 const VIRTUALIZE_FROM_CHAT_MESSAGES = 30
@@ -55,7 +56,7 @@ export function ChatRoomMessages({
 	teamId: string
 	onReplyChatMessage: (chatMessage: ChatRoomMessage) => void
 }) {
-	const { chatMessages, isMessageLoading } = chatRoom
+	const { chatMessages, isMessageLoading, loadEarlierChatMessages, hasEarlierChatMessages, firstItemIndex } = chatRoom
 
 	// the parent recreates these callbacks on every render, so stable wrappers let the memoized chat bubbles skip a re-render
 	const handleReplyChatMessage = useStableCallback(onReplyChatMessage)
@@ -110,9 +111,29 @@ export function ChatRoomMessages({
 		chatMessagesRef.current = chatMessages
 	}, [chatMessages])
 
-	// the jump down to the newest chat message from either list
-	const scrollToLatest = useCallback(() => {
-		virtuosoRef.current?.scrollToIndex({ index: chatMessagesRef.current.length - 1, align: "end" })
+	// virtuoso offsets every index it passes to itemContent and every index it takes in scrollToIndex by the first index.
+	// the scroll callbacks are made once, so they read it through a ref, never a closure
+	const firstItemIndexRef = useRef(firstItemIndex)
+	useLayoutEffect(() => {
+		firstItemIndexRef.current = firstItemIndex
+	}, [firstItemIndex])
+
+	// switching chat rooms starts a different list, so the note starts over with it
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the room is the trigger, not a value the effect reads
+	useEffect(() => {
+		setIsMentionedChatMessageMissing(false)
+	}, [topicId, teamId])
+
+	// the chat room message a mention badge is trying to load, and whether the search for it ran out of pages
+	const chatMessageMentioned = useChatMessageMentioned()
+	const [isMentionedChatMessageMissing, setIsMentionedChatMessageMissing] = useState(false)
+
+	// the jump down to the latest chat message
+	const scrollToLatestChatMessage = useCallback(() => {
+		virtuosoRef.current?.scrollToIndex({
+			index: firstItemIndexRef.current + chatMessagesRef.current.length - 1,
+			align: "end",
+		})
 		bottomRef.current?.scrollIntoView({ behavior: "auto", block: "end" })
 	}, [])
 
@@ -128,18 +149,47 @@ export function ChatRoomMessages({
 		// the virtualized list scrolls by index, because the target chat bubble may not be mounted
 		const repliedChatMessageIndex = currentChatMessages.findIndex((chatMessage) => chatMessage.id === chatMessageId)
 		if (repliedChatMessageIndex >= 0) {
-			virtuosoRef.current?.scrollToIndex({ index: repliedChatMessageIndex, align: "center", behavior: "smooth" })
+			virtuosoRef.current?.scrollToIndex({
+				index: firstItemIndexRef.current + repliedChatMessageIndex,
+				align: "center",
+				behavior: "smooth",
+			})
 		}
 	}, [])
 
+	// load the chat message that a mention named: scroll to it when it is loaded, load the page above when it is
+	// not, and stop when the room has no more pages to search
+	useEffect(() => {
+		if (chatMessageMentioned === null || chatMessages.length === 0) {
+			return
+		}
+		if (chatMessages.some((chatMessage) => chatMessage.id === chatMessageMentioned)) {
+			clearMentionedChatMessage()
+			setIsMentionedChatMessageMissing(false)
+			scrollToChatMessage(chatMessageMentioned)
+			return
+		}
+		if (!hasEarlierChatMessages) {
+			clearMentionedChatMessage()
+			setIsMentionedChatMessageMissing(true)
+			return
+		}
+		void loadEarlierChatMessages()
+	}, [chatMessageMentioned, chatMessages, hasEarlierChatMessages, loadEarlierChatMessages, scrollToChatMessage])
+
+	// shown when the jump reached the room's first chat message without finding the one the badge named
+	const missingChatMessageNotice = isMentionedChatMessageMissing ? (
+		<p className="text-muted-foreground px-3 pb-1 text-center text-xs">That message is no longer in this chat room.</p>
+	) : null
+
 	// answering the chat message directly above needs no quote, only a reply to an earlier chat message needs one
-	const toRepliedTo = (chatMessage: ChatRoomMessage, index: number): ChatRoomMessage | undefined =>
+	const toRepliedChatMessage = (chatMessage: ChatRoomMessage, index: number): ChatRoomMessage | undefined =>
 		chatMessage.replyToChatMessageId === null || chatMessage.replyToChatMessageId === chatMessages[index - 1]?.id
 			? undefined
 			: chatMessagesById.get(chatMessage.replyToChatMessageId)
 
 	// one chat bubble with its props, shared by the plain and virtualized paths
-	const renderBubble = (chatMessage: ChatRoomMessage, index: number) => (
+	const renderChatMessageBubble = (chatMessage: ChatRoomMessage, index: number) => (
 		<ChatRoomMessageBubble
 			chatMessage={chatMessage}
 			topicId={topicId}
@@ -147,7 +197,7 @@ export function ChatRoomMessages({
 			canDelete={isTeamLeader || isAdmin || chatMessage.authorUserId === userId}
 			isLinkPreviewLoading={chatRoom.loadingChatMessageIds.has(chatMessage.id)}
 			onAttachmentDelete={handleDeleteAttachment}
-			repliedTo={toRepliedTo(chatMessage, index)}
+			repliedChatMessage={toRepliedChatMessage(chatMessage, index)}
 			isOwnChatMessage={chatMessage.authorUserId === userId}
 			now={now}
 			onReply={handleReplyChatMessage}
@@ -177,14 +227,19 @@ export function ChatRoomMessages({
 					ref={virtuosoRef}
 					data={chatMessages}
 					computeItemKey={(_, chatMessage) => chatMessage.id}
-					initialTopMostItemIndex={chatMessages.length - 1}
+					firstItemIndex={firstItemIndex}
+					startReached={hasEarlierChatMessages ? () => void loadEarlierChatMessages() : undefined}
+					initialTopMostItemIndex={{ index: "LAST", align: "end" }}
 					followOutput="auto"
 					components={virtuosoComponents}
 					atBottomStateChange={setIsAtBottom}
 					atBottomThreshold={atBottomThreshold}
-					itemContent={(index, chatMessage) => <div className="px-3 py-2">{renderBubble(chatMessage, index)}</div>}
+					itemContent={(index, chatMessage) => (
+						<div className="px-3 py-2">{renderChatMessageBubble(chatMessage, index - firstItemIndex)}</div>
+					)}
 				/>
-				<ScrollDownButton isScrollDownShown={!isAtBottom} onScrollDown={scrollToLatest} />
+				{missingChatMessageNotice}
+				<ScrollDownButton isScrollDownShown={!isAtBottom} onScrollDown={scrollToLatestChatMessage} />
 			</div>
 		)
 	}
@@ -199,13 +254,14 @@ export function ChatRoomMessages({
 				)}
 				{chatMessages.map((chatMessage, index) => (
 					<div key={chatMessage.id} id={`room-message-${chatMessage.id}`}>
-						{renderBubble(chatMessage, index)}
+						{renderChatMessageBubble(chatMessage, index)}
 					</div>
 				))}
 				{isMessageLoading && <ModelThinkingBubble />}
 				<div ref={bottomRef} />
 			</div>
-			<ScrollDownButton isScrollDownShown={!isAtBottom} onScrollDown={scrollToLatest} />
+			{missingChatMessageNotice}
+			<ScrollDownButton isScrollDownShown={!isAtBottom} onScrollDown={scrollToLatestChatMessage} />
 		</div>
 	)
 }
@@ -215,7 +271,7 @@ const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 	chatMessage,
 	topicId,
 	teamId,
-	repliedTo,
+	repliedChatMessage,
 	isOwnChatMessage,
 	now,
 	canDelete,
@@ -229,7 +285,7 @@ const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 	// null is the team's own chat room, whose files download from the team routes
 	topicId: string | null
 	teamId: string
-	repliedTo: ChatRoomMessage | undefined
+	repliedChatMessage: ChatRoomMessage | undefined
 	isOwnChatMessage: boolean
 	now: number
 	// the chat message's author and a team leader may remove it and its shared files
@@ -253,17 +309,17 @@ const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 		>
 			<div className={cn("group flex flex-col", isOwnChatMessage ? "items-end" : "items-start")}>
 				{/* the reference quotes what this chat message answers, and clicking it scrolls back up to it */}
-				{repliedTo && (
+				{repliedChatMessage && (
 					<button
 						type="button"
-						onClick={() => onQuoteClick(repliedTo.id)}
+						onClick={() => onQuoteClick(repliedChatMessage.id)}
 						className="text-muted-foreground bg-bubble/60 border-border mb-0.5 max-w-[92%] rounded-lg border-l-2 px-2.5 py-1 text-left text-xs @lg:max-w-[75%]"
 					>
 						<span className="flex items-center gap-1">
 							<Reply className="size-3" />
-							{repliedTo.authorUsername}
+							{repliedChatMessage.authorUsername}
 						</span>
-						<span className="mt-0.5 line-clamp-3 block">{repliedTo.content}</span>
+						<span className="mt-0.5 line-clamp-3 block">{repliedChatMessage.content}</span>
 					</button>
 				)}
 				<div
@@ -351,7 +407,7 @@ const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 									<Trash2 className="size-3" />
 								</button>
 							</TooltipTrigger>
-							<TooltipContent>Delete chatMessage</TooltipContent>
+							<TooltipContent>Delete message</TooltipContent>
 						</Tooltip>
 					)}
 				</div>

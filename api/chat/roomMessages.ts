@@ -1,25 +1,24 @@
 // the read path for a team's chat room: loading chat messages, their link preview cards, and the deduped SSE delta
 import type { ChatLinkPreview, ChatRoomMessage } from "@shared/contracts"
-import { and, asc, desc, eq, gt, inArray } from "drizzle-orm"
+import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm"
 import { db } from "../../db"
 import { chatRoomAttachments, chatRoomMessages, users } from "../../db/schema"
 import { decryptChatText } from "./encryption"
 import { loadChatLinkPreviews } from "./linkPreviews"
 import { toTopicFilter } from "./roomTurns"
 
-// how many chat messages one load returns
-const CHAT_ROOM_LOAD_LIMIT = 500
+// how many chat messages one load returns. a page this long may have another above it
+export const CHAT_ROOM_LOAD_LIMIT = 500
 
-/**
- * The chat room's chat messages after a cursor, decrypted, oldest first.
- */
+/** One page of the chat room's chat messages, decrypted, earliest first. */
 export async function loadChatRoomMessages(
 	topicId: string | null,
 	teamId: string,
 	afterChatMessageId: number,
+	beforeChatMessageId?: number,
 ): Promise<ChatRoomMessage[]> {
-	// the newest chat messages under a limit, reversed back into id order. the author avatar is null for carl or a closed account
-	const newestMessageRows = await db
+	// the latest chat messages under a limit, reversed back into id order. the author avatar is null for carl or a closed account
+	const latestChatMessageRows = await db
 		.select({ chatMessage: chatRoomMessages, authorAvatarSource: users.avatarSource })
 		.from(chatRoomMessages)
 		.leftJoin(users, eq(users.id, chatRoomMessages.authorUserId))
@@ -28,11 +27,12 @@ export async function loadChatRoomMessages(
 				toTopicFilter(chatRoomMessages.topicId, topicId),
 				eq(chatRoomMessages.teamId, teamId),
 				gt(chatRoomMessages.id, afterChatMessageId),
+				beforeChatMessageId === undefined ? undefined : lt(chatRoomMessages.id, beforeChatMessageId),
 			),
 		)
 		.orderBy(desc(chatRoomMessages.id))
 		.limit(CHAT_ROOM_LOAD_LIMIT)
-	const chatMessageRows = newestMessageRows
+	const chatMessageRows = latestChatMessageRows
 		.reverse()
 		.map(({ chatMessage, authorAvatarSource }) => ({ ...chatMessage, authorAvatarSource }))
 
@@ -98,8 +98,9 @@ export async function loadChatRoomMessages(
 }
 
 /**
- * The link preview cards for a few of a chat room's chat messages by id, keyed by chat message id. The link preview poll reads
- * only these instead of the whole chat room, so a card landing after a post costs one small query, not a reload.
+ * The link preview cards for a few of a chat room's chat messages by id, keyed by chat message id.
+ * The link preview poll reads only these instead of the whole chat room,
+ * so a card loading after a post costs one small query, not a reload.
  */
 export async function loadChatRoomMessageLinkPreviews(
 	topicId: string | null,

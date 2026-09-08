@@ -155,7 +155,9 @@ The Coffee talk panel SHALL keep its docked width, with the expand toggle as the
 
 ### Requirement: Transport is a Postgres log, an SSE cursor, and LISTEN/NOTIFY fan-out
 
-The room SHALL be a Postgres message log whose ids are ordered, streamed to members over SSE with a cursor on the message id, fanned out across instances with LISTEN/NOTIFY on a dedicated non-pooled connection. No websocket service and no edge state product. A reconnect SHALL resume from the cursor instead of replaying the room. Message text SHALL be encrypted at the application layer like the solo transcript.
+The room SHALL be a Postgres message log whose ids are ordered, streamed to members over SSE with a cursor on the message id, fanned out across instances with LISTEN/NOTIFY on a dedicated non-pooled connection. No websocket service and no edge state product. A reconnect SHALL resume from the cursor instead of replaying the room. A load SHALL also take a cursor for the page above the
+one held, so a room longer than one page can be read backward. Reaching the top of the list SHALL load
+that page, and prepending it SHALL leave the reader on the message they were reading. Message text SHALL be encrypted at the application layer like the solo transcript.
 
 Messages record an author, and the author's username SHALL be included in the content sent to the model — the role field alone cannot tell Carl who asked what. Carl's turns SHALL take a per-room advisory lock around the transcript read and the summary roll only, released before the model call, so no pooled connection or lock is held for a completion's whole runtime. Two overlapping mentions may therefore both answer the pre-reply transcript — a weaker serialization the room accepts in exchange for freeing the pool.
 
@@ -173,6 +175,21 @@ Messages record an author, and the author's username SHALL be included in the co
 
 - **WHEN** two members ask different questions and the second mentions him
 - **THEN** the content he receives names each message's author, and he answers the mentioner
+
+#### Scenario: The top of a long room loads the page above it
+
+- **WHEN** a reader scrolls to the top of a room holding more messages than one page
+- **THEN** the page above is loaded and prepended, instead of the room ending there
+
+#### Scenario: A prepend leaves the reader where they were
+
+- **WHEN** an earlier page is prepended to the list
+- **THEN** the reader stays on the message they were reading rather than being moved by the new rows
+
+#### Scenario: A room with nothing above says so by stopping
+
+- **WHEN** a reader reaches the top of a room whose first message is already loaded
+- **THEN** no further page is requested
 
 ### Requirement: Shared files belong to the room
 
@@ -246,7 +263,11 @@ room it holds, its open state, and its size survive navigation. Its "…" menu S
 the viewer may open — one per team they are on, one per topic those teams hold — each reading
 "*name* chat" behind the avatar of the team the room belongs to, whose tooltip names that team, its
 own mention badge, and a check on the room being read. The avatar SHALL be what tells apart two
-rooms of one topic held by two of the viewer's teams, in place of naming the team in text. Picking a row switches to it and opens it.
+rooms of one topic held by two of the viewer's teams, in place of naming the team in text. Picking a row switches to it and opens it. Picking a row that carries a mention badge SHALL
+additionally load the earliest mention in that room the reader has not seen, instead of
+its latest message, loading earlier pages until that message is loaded. Where the room runs out of
+pages first, the reader SHALL be told the chat message is no longer in the room. Either way the room's
+mentions SHALL be marked seen, so a badge always discharges.
 
 A page SHALL be able to name the teams it is about, and the menu SHALL mark those teams' rooms and
 their topics' rooms in the highlight color. A team page names itself; someone else's profile names
@@ -263,7 +284,7 @@ through to the busiest room anywhere, and that fallback SHALL never reach a priv
 private chat is about such a page. Where it runs, a Team's own room SHALL lead a Topic's unless the
 page named the other order: the teams index leads with a Team's and a profile with a Topic's.
 Busiest means the most unseen mentions, and a tie SHALL keep the earlier room, since the room list
-already arrives newest first. A viewer on no team SHALL be offered the way to start a topic instead
+already arrives latest first. A viewer on no team SHALL be offered the way to start a topic instead
 of an empty menu.
 
 The menu SHALL list its rooms in alphabetical order, with the private chat row ahead of all of them,
@@ -290,6 +311,21 @@ itself never says which one is open.
 
 - **WHEN** a viewer opens the menu on a team page
 - **THEN** that team's own room and every topic it holds are marked, and the panel opened on the team's own room
+
+#### Scenario: A mention badge opens the room at the mention
+
+- **WHEN** a reader opens a room from a menu row carrying a mention badge
+- **THEN** the room loads the earliest mention they have not seen, not the latest message
+
+#### Scenario: One jump serves several mentions
+
+- **WHEN** a room holds more than one unseen mention for the reader
+- **THEN** the jump loads the earliest of them, so reading forward passes the rest in order
+
+#### Scenario: A mention whose chat message is gone still clears
+
+- **WHEN** the jump reaches the room's first chat message without finding the one the mention named
+- **THEN** the reader is told it is no longer in the room, and the badge is cleared anyway
 
 ### Requirement: The team page has the team's own room
 

@@ -110,7 +110,7 @@ export function ProfilePage() {
 					name: profile.username,
 					joinTeam: null,
 					pageTeamIds: isOwnProfile ? [] : profileTeamIds,
-					preferredRoomKind: "topic",
+					preferredChatRoomKind: "topic",
 				}
 			: null,
 	)

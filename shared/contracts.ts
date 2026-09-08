@@ -44,7 +44,7 @@ export type ChatRoomMessage = {
 	replyToChatMessageId: number | null
 	content: string
 	createdAt: string
-	// the files this chat message shared with the chat room, oldest first, empty if it shared none
+	// the files this chat message shared with the chat room, earliest first, empty if it shared none
 	attachments: ChatMessageAttachment[]
 	// the cards for the chat message's first links, empty if it holds none or no link preview is stored
 	linkPreviews: ChatLinkPreview[]
@@ -160,7 +160,7 @@ export type TeamSummary = TeamRowFields & {
 	isOnlyLeader: boolean
 	// who invited the user onto the team, for the summary's Invited by column. null joined on their own
 	invitedBy: ProfileIdentity | null
-	// the user's unseen mentions in the team's own chat room, newest first, counted on the name's badge
+	// the user's unseen mentions in the team's own chat room, latest first, counted on the name's badge
 	chatMentions: ChatMention[]
 }
 
@@ -187,7 +187,7 @@ export type TeamPageResponse = {
 	}[]
 	// how many members opted out of the public members list, so the team never appears smaller than it is
 	hiddenMemberCount: number
-	// the user's unseen chat mentions in the team's chat room, newest first, for the title badge and the pill
+	// the user's unseen chat mentions in the team's chat room, latest first, for the title badge and the pill
 	chatMentions: ChatMention[]
 	// the same profile-shaped rows the profile page's topic table renders
 	topics: Topic[]
@@ -252,10 +252,15 @@ export type ActivityScan = {
 	costCents: number
 }
 
+// one page of a chat room's chat messages, and whether an earlier page exists above it
+export type ChatRoomMessagePage = { chatMessages: ChatRoomMessage[]; hasEarlierChatMessages: boolean }
+
 // one chat mention still waiting for the user in a chat room
 export const chatMention = z.object({
 	// the chat room's team, so the badge's link can open that chat room
 	teamId: z.string(),
+	// the chat message that named the user
+	chatMessageId: z.number(),
 	authorUsername: z.string(),
 	// whether the chat message replied to the user's own, which selects the tooltip's verb
 	isReply: z.boolean(),
@@ -323,7 +328,7 @@ export type OwnerTopic = {
 	// the owner's own subscription decides whether this topic emails them
 	isEmailEnabled: boolean
 	scans: ActivityScan[]
-	// the user's unseen chat room mentions, newest first, counted on the name's badge. empty with none
+	// the user's unseen chat room mentions, latest first
 	chatMentions: ChatMention[]
 }
 
@@ -403,16 +408,16 @@ export type ActivityResponse = {
 export const CHAT_MEMORY_CHARS = 40_000
 
 /**
- * Where the uncompacted chat turns start, walking back from the newest turn until the character budget runs out.
+ * Where the uncompacted chat turns start, walking back from the latest turn until the character budget runs out.
  */
 export function toUncompactedChatTurnStart(history: { question: string; answer: string }[]): number {
-	// spend the budget newest-first
+	// spend the budget latest-first
 	let budget = CHAT_MEMORY_CHARS
 	for (let index = history.length - 1; index >= 0; index--) {
 		const chatTurn = history[index]
 		budget -= (chatTurn?.question.length ?? 0) + (chatTurn?.answer.length ?? 0)
 
-		// the chat turn that overdraws the budget is the first compacted one, unless it is the newest
+		// the chat turn that overdraws the budget is the first compacted one, unless it is the latest
 		if (budget < 0) {
 			return Math.min(index + 1, history.length - 1)
 		}
@@ -420,17 +425,17 @@ export function toUncompactedChatTurnStart(history: { question: string; answer: 
 	return 0
 }
 
-// how many chat turns a send posts to the llm. the older turns beyond the memory budget are compacted
+// how many chat turns a send posts to the llm. the earlier turns beyond the memory budget are compacted
 export const CHAT_HISTORY_TURNS = 100
 
 // what a broken reply stream ends with. the api client reads it as a failed chat turn
 export const CHAT_STREAM_FAILED_TEXT = "\n\n[Carl's reply broke off here.]"
 
-// how much of a compacted older answer survives
+// how much of a compacted earlier answer survives
 const COMPACT_ANSWER_CHARS = 280
 
 /**
- * An older answer compacted to its opening characters, so the payload and the prompt clip identically.
+ * An earlier answer compacted to its opening characters, so the payload and the prompt clip identically.
  */
 export function compactChatAnswer(answer: string): string {
 	if (answer.length <= COMPACT_ANSWER_CHARS) {
@@ -748,7 +753,7 @@ export const topicFeed = z.object({
 	isOnTeam: z.boolean(),
 	// whether the user is an active member of any team holding the topic
 	isTeamMember: z.boolean(),
-	// the user's unseen chat room mentions, newest first, counted on the name's badge. empty with none
+	// the user's unseen chat room mentions, latest first, counted on the name's badge. empty with none
 	chatMentions: z.array(chatMention),
 	// the byline a team topic derives: the team itself, for anyone who can open its page. the owner otherwise
 	teamLink: z
@@ -831,7 +836,7 @@ export type TopicScan = z.infer<typeof topicScan>
 // a topic's full payload. the topic feed shape plus everything the detail page needs
 export const topicResponse = topicFeed.extend({
 	visibility: z.enum(visibilities),
-	// the scan history, newest first
+	// the scan history, latest first
 	scans: z.array(topicScan),
 	// the topic's pending invites, both the addresses it named and the links it created. empty for anyone but the owner
 	invites: z.array(invite),

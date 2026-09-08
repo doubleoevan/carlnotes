@@ -1,5 +1,5 @@
 // the chat room's live stream: opening it, resuming past the cursor, and reconnecting when it drops
-import type { ChatRoomMessage } from "@shared/contracts"
+import type { ChatRoomMessage, ChatRoomMessagePage } from "@shared/contracts"
 import { useEffect, useRef } from "react"
 import { fetchChatRoomMessages, toChatRoomEventsUrl } from "@/clients/chatRoomClient"
 import { STALE_STREAM_MS, toReconnectStreamDelayMs } from "@/lib/streamReconnect"
@@ -14,13 +14,13 @@ export function useChatRoomStream(
 	teamId: string,
 	chatHandlers: {
 		// the stored conversation, or null if this user may not open the chat room at all
-		onChatMessagesLoaded: (chatMessages: ChatRoomMessage[] | null) => void
+		onChatMessagesLoaded: (chatMessagePage: ChatRoomMessagePage | null) => void
 		onChatMessage: (chatMessage: ChatRoomMessage) => void
 	},
 ): void {
 	// the highest chat message id seen, which every reconnect resumes from
 	const cursorRef = useRef(0)
-	// the chat handlers are rebuilt every render. the effect reads the newest ones without restarting the stream
+	// the chat handlers are rebuilt every render. the effect reads the latest ones without restarting the stream
 	const chatHandlersRef = useRef(chatHandlers)
 	chatHandlersRef.current = chatHandlers
 
@@ -74,22 +74,22 @@ export function useChatRoomStream(
 
 		// load once, then connect. a failed load retries on the same reconnect delay a dropped stream uses
 		const loadAndConnectChatStream = async (): Promise<void> => {
-			const chatMessages = await fetchChatRoomMessages(topicId, teamId)
+			const chatMessagePage = await fetchChatRoomMessages(topicId, teamId)
 			if (!isCurrentChatRoom) {
 				return
 			}
-			if (chatMessages === "failed") {
+			if (chatMessagePage === "failed") {
 				retryTimer = setTimeout(() => void loadAndConnectChatStream(), toReconnectStreamDelayMs(failedAttempts))
 				failedAttempts += 1
 				return
 			}
 
-			// onLoaded fires even when the chat room is empty. a rejected chat room never opens a stream
-			chatHandlersRef.current.onChatMessagesLoaded(chatMessages)
-			if (chatMessages === null) {
+			// onChatMessagesLoaded fires even when the chat room is empty. a rejected chat room never opens a stream
+			chatHandlersRef.current.onChatMessagesLoaded(chatMessagePage)
+			if (chatMessagePage === null) {
 				return
 			}
-			cursorRef.current = chatMessages.at(-1)?.id ?? 0
+			cursorRef.current = chatMessagePage.chatMessages.at(-1)?.id ?? 0
 			connect()
 		}
 		void loadAndConnectChatStream()

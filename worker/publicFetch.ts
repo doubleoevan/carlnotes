@@ -4,6 +4,16 @@ import { checkServerIdentity, type PeerCertificate } from "node:tls"
 
 // a body read directly is dropped past this many bytes instead of buffered whole
 const MAX_DIRECT_BYTES = 5_000_000
+
+// a response whose body ran past the limit, cancelled part way through. the host answered, so this is not a fault here
+export class OversizedBodyError extends Error {
+	constructor(
+		url: string,
+		readonly limitBytes: number,
+	) {
+		super(`body of ${url} exceeds ${limitBytes} bytes`)
+	}
+}
 // hostnames that name an internal address
 const INTERNAL_HOST_PATTERN =
 	/^(?:localhost|0\.0\.0\.0|\[?::1\]?|10\.\d+\.\d+\.\d+|127\.\d+\.\d+\.\d+|169\.254\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|.+\.(?:local|internal))$/i
@@ -155,7 +165,7 @@ export async function readLimitedBody(response: Response, url: string): Promise<
 		byteCount += value.length
 		if (byteCount > MAX_DIRECT_BYTES) {
 			await reader.cancel()
-			throw new Error(`body of ${url} exceeds ${MAX_DIRECT_BYTES} bytes`)
+			throw new OversizedBodyError(url, MAX_DIRECT_BYTES)
 		}
 		chunks.push(value)
 	}

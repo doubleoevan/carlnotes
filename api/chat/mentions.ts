@@ -48,12 +48,13 @@ export async function saveChatMentions(
 type UnseenChatMentionRow = {
 	topicId: string | null
 	teamId: string
+	chatMessageId: number
 	authorUsername: string
 	content: string
 	repliedToUserId: string | null
 }
 
-// every unseen chat mention row for this user under the given room filter, newest first
+// every unseen chat mention row for this user under the given room filter, latest first
 async function loadUnseenChatMentions(userId: string, roomFilter: SQL | undefined): Promise<UnseenChatMentionRow[]> {
 	const repliedChatMessages = db
 		.select({ id: chatRoomMessages.id, authorUserId: chatRoomMessages.authorUserId })
@@ -63,6 +64,7 @@ async function loadUnseenChatMentions(userId: string, roomFilter: SQL | undefine
 		.select({
 			topicId: chatRoomMessages.topicId,
 			teamId: chatRoomMessages.teamId,
+			chatMessageId: chatRoomMessages.id,
 			authorUsername: chatRoomMessages.authorUsername,
 			content: chatRoomMessages.content,
 			repliedToUserId: repliedChatMessages.authorUserId,
@@ -78,6 +80,7 @@ async function loadUnseenChatMentions(userId: string, roomFilter: SQL | undefine
 function toChatMention(chatMentionRow: UnseenChatMentionRow, userId: string): ChatMention {
 	return {
 		teamId: chatMentionRow.teamId,
+		chatMessageId: chatMentionRow.chatMessageId,
 		authorUsername: chatMentionRow.authorUsername,
 		isReply: chatMentionRow.repliedToUserId === userId,
 		excerpt: (decryptChatText(chatMentionRow.content) ?? "").slice(0, CHAT_MESSAGE_SNIPPET_LENGTH),

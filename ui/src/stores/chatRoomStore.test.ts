@@ -2,10 +2,16 @@
 
 import { expect, test } from "bun:test"
 import type { ChatMention, ChatRoom } from "@shared/contracts"
-import { markChatRoomOpened, setChatRooms, toChatRooms } from "./chatRoomStore"
+import { markChatRoomOpened, setChatRooms, toChatRooms, toFirstChatMention } from "./chatRoomStore"
 
 // one waiting chat mention, which is what a badge counts
-const CHAT_MENTION: ChatMention = { teamId: "team-a", authorUsername: "ana", isReply: false, excerpt: "hi" }
+const CHAT_MENTION: ChatMention = {
+	teamId: "team-a",
+	chatMessageId: 1,
+	authorUsername: "ana",
+	isReply: false,
+	excerpt: "hi",
+}
 // a team's own chat room and one of its topics', each with a chat mention waiting
 const TEAM_ROOM: ChatRoom = {
 	teamId: "team-a",
@@ -34,4 +40,16 @@ test("the topic rooms and the team rooms cover every room exactly once", () => {
 	const topicMentions = chatRooms.flatMap((chatRoom) => (chatRoom.topicId === null ? [] : chatRoom.chatMentions))
 	const teamMentions = chatRooms.flatMap((chatRoom) => (chatRoom.topicId === null ? chatRoom.chatMentions : []))
 	expect(topicMentions.length + teamMentions.length).toBe(chatRooms.flatMap((chatRoom) => chatRoom.chatMentions).length)
+})
+
+// the badge loads the earliest mention, so reading forward passes every later one in order
+test("toFirstChatMention picks the lowest chat message id whatever order they arrive in", () => {
+	const earlierChatMention = { ...CHAT_MENTION, chatMessageId: 7 }
+	const laterChatMention = { ...CHAT_MENTION, chatMessageId: 91 }
+	expect(toFirstChatMention([laterChatMention, earlierChatMention])?.chatMessageId).toBe(7)
+	expect(toFirstChatMention([earlierChatMention, laterChatMention])?.chatMessageId).toBe(7)
+
+	// one mention is its own earliest, and a chat room with none has nothing to load
+	expect(toFirstChatMention([laterChatMention])?.chatMessageId).toBe(91)
+	expect(toFirstChatMention([])).toBeUndefined()
 })

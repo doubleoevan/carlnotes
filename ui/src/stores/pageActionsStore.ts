@@ -1,6 +1,7 @@
 import type { FlagContentPayload } from "@shared/contracts"
 import type { LucideIcon } from "lucide-react"
 import { useEffect, useSyncExternalStore } from "react"
+import { toStoreListeners } from "@/stores/storeListeners"
 
 /**
  * An option in the page actions dropdown menu.
@@ -33,21 +34,12 @@ export type PageActions = {
 
 // the page on screen owns the menu, so only one registration stands at a time
 let pageActions: PageActions | null = null
-const listeners = new Set<() => void>()
-let version = 0
+const { subscribe, publish, getVersion } = toStoreListeners()
 
-// notify every subscriber if the registration changed
-function publish(actions: PageActions | null): void {
+// record the registration, then notify every subscriber it changed
+function savePageActions(actions: PageActions | null): void {
 	pageActions = actions
-	version += 1
-	for (const listener of listeners) {
-		listener()
-	}
-}
-
-function subscribe(listener: () => void): () => void {
-	listeners.add(listener)
-	return () => listeners.delete(listener)
+	publish()
 }
 
 /**
@@ -58,8 +50,8 @@ export function useRegisterPageActions(actions: PageActions | null): void {
 	const signature = JSON.stringify(actions, (_, value) => (typeof value === "function" ? "handler" : value))
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the signature stands in for the object
 	useEffect(() => {
-		publish(actions)
-		return () => publish(null)
+		savePageActions(actions)
+		return () => savePageActions(null)
 	}, [signature])
 }
 
@@ -67,6 +59,6 @@ export function useRegisterPageActions(actions: PageActions | null): void {
  * The actions the page on screen registered, or null if a page doesn't have any.
  */
 export function usePageActions(): PageActions | null {
-	useSyncExternalStore(subscribe, () => version)
+	useSyncExternalStore(subscribe, getVersion)
 	return pageActions
 }

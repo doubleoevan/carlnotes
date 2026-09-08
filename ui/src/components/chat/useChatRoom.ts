@@ -7,6 +7,10 @@ import { fetchChatRoomMessageLinkPreviews, fetchChatRoomMessages, sendChatRoomMe
 import { useChatRoomStream } from "@/components/chat/useChatRoomStream"
 import { hasPreviewableLink } from "@/components/common/LinkPreviewCard"
 
+// where the virtualized list numbers its first chat message before any earlier page is prepended. it
+// starts very high because prepending lowers it, and it may never go below zero
+export const FIRST_ITEM_INDEX_START = 1_000_000
+
 export type ChatRoomState = {
 	chatMessages: ChatRoomMessage[]
 	isLoaded: boolean
@@ -23,6 +27,12 @@ export type ChatRoomState = {
 		replyToChatMessageId: number | null,
 		chatAttachments: ChatAttachment[],
 	) => Promise<boolean>
+	// prepend the page above the earliest chat message loaded, answering how many arrived and 0 when none did
+	loadEarlierChatMessages: () => Promise<number>
+	// whether a page sits above the earliest chat message loaded
+	hasEarlierChatMessages: boolean
+	// where the virtualized list numbers its first chat message, lowered by every prepend
+	firstItemIndex: number
 	// re-read every chat message, for a change the stream never announces, like a removed file
 	reloadChatMessages: () => Promise<void>
 	// the fresh chat messages with links whose link preview cards are still loading in the background
@@ -42,14 +52,20 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 	const linkPreviewAttemptsRef = useRef(new Map<number, number>())
 	const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const [loadingChatMessageIds, setLoadingChatMessageIds] = useState<Set<number>>(new Set())
+	// whether a page sits above the earliest chat message loaded, and whether one is already on its way
+	const [hasEarlierChatMessages, setHasOlderChatMessages] = useState(false)
+	// where the virtualized list initializes its first chat message number to. it lives here so a prepend lowers it in
+	// the same update that grows the list, leaving no render where one moved without the other
+	const [firstItemIndex, setFirstItemIndex] = useState(FIRST_ITEM_INDEX_START)
+	const isLoadingEarlierChatMessagesRef = useRef(false)
 
-	// one refresh: read just the loading chat messages' cards, merge any that landed, and keep loading the rest
+	// one refresh: read just the loading chat messages' cards, merge any that loaded, and keep loading the rest
 	const runLinkPreviewRefresh = async (): Promise<void> => {
 		linkPreviewTimerRef.current = null
 		const loadingLinkPreviewIds = [...linkPreviewAttemptsRef.current.keys()]
 		const linkPreviewsById = await fetchChatRoomMessageLinkPreviews(topicId, teamId, loadingLinkPreviewIds)
 
-		// each loading chat message: merge its cards if they landed, else keep loading while attempts remain
+		// each loading chat message: merge its cards if they loaded, or keep loading while attempts remain
 		const loadingChatMessageIds = new Set<number>()
 		for (const [chatMessageId, attemptsLeft] of linkPreviewAttemptsRef.current) {
 			mergeLoadingChatMessage(chatMessageId, attemptsLeft, linkPreviewsById[chatMessageId] ?? [], loadingChatMessageIds)
@@ -62,14 +78,14 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 		}
 	}
 
-	// merge a chat message's cards if they landed, otherwise decrement its attempts and keep it loading
+	// merge a chat message's cards if they loaded, otherwise decrement its attempts and keep it loading
 	const mergeLoadingChatMessage = (
 		chatMessageId: number,
 		attemptsLeft: number,
 		linkPreviews: ChatRoomMessage["linkPreviews"],
 		stillLoading: Set<number>,
 	): void => {
-		// cards landed: merge them into the chat message and drop it from the loading set
+		// cards loaded: merge them into the chat message and drop it from the loading set
 		if (linkPreviews.length > 0) {
 			linkPreviewAttemptsRef.current.delete(chatMessageId)
 			setChatMessages((known) =>
@@ -103,21 +119,23 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 
 	// the stream owns opening, resuming, and reconnecting. this hook only says what to do with what arrives
 	useChatRoomStream(topicId, teamId, {
-		onChatMessagesLoaded: (chatMessages) => {
+		onChatMessagesLoaded: (chatMessagePage) => {
 			// a failed load means no chat room for this user, and the stream never opens
-			if (chatMessages === null) {
+			if (chatMessagePage === null) {
 				setIsRejected(true)
 				setIsLoaded(true)
 				return
 			}
-			setChatMessages(chatMessages)
+			setChatMessages(chatMessagePage.chatMessages)
+			setHasOlderChatMessages(chatMessagePage.hasEarlierChatMessages)
+			setFirstItemIndex(FIRST_ITEM_INDEX_START)
 			setIsLoaded(true)
 		},
 		onChatMessage: (chatMessage) => {
 			setChatMessages((known) =>
 				known.some((existing) => existing.id === chatMessage.id) ? known : [...known, chatMessage],
 			)
-			// a fresh chat message with a link loads under it until its cards land
+			// a fresh chat message with a link loads under it until its cards load
 			if (hasPreviewableLink(chatMessage.content) && chatMessage.linkPreviews.length === 0) {
 				linkPreviewAttemptsRef.current.set(chatMessage.id, 6)
 				setLoadingChatMessageIds((loading) => new Set(loading).add(chatMessage.id))
@@ -168,9 +186,35 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 
 	// re-read every chat message, for a change the stream never announces, like a removed file
 	const reloadChatMessages = async (): Promise<void> => {
-		const chatMessages = await fetchChatRoomMessages(topicId, teamId)
-		if (Array.isArray(chatMessages)) {
-			setChatMessages(chatMessages)
+		const chatMessagePage = await fetchChatRoomMessages(topicId, teamId)
+		if (chatMessagePage !== null && chatMessagePage !== "failed") {
+			setChatMessages(chatMessagePage.chatMessages)
+			setHasOlderChatMessages(chatMessagePage.hasEarlierChatMessages)
+			setFirstItemIndex(FIRST_ITEM_INDEX_START)
+		}
+	}
+
+	const loadOlderChatMessages = async (): Promise<number> => {
+		const earliestChatMessage = chatMessages[0]
+		if (!earliestChatMessage || !hasEarlierChatMessages || isLoadingEarlierChatMessagesRef.current) {
+			return 0
+		}
+		isLoadingEarlierChatMessagesRef.current = true
+		try {
+			// the chat message cursor is exclusive, so an earlier page never repeats a chat message already loaded
+			const earlierChatMessagePage = await fetchChatRoomMessages(topicId, teamId, earliestChatMessage.id)
+			if (earlierChatMessagePage === null || earlierChatMessagePage === "failed") {
+				return 0
+			}
+			setHasOlderChatMessages(earlierChatMessagePage.hasEarlierChatMessages)
+			if (earlierChatMessagePage.chatMessages.length === 0) {
+				return 0
+			}
+			setChatMessages((known) => [...earlierChatMessagePage.chatMessages, ...known])
+			setFirstItemIndex((index) => index - earlierChatMessagePage.chatMessages.length)
+			return earlierChatMessagePage.chatMessages.length
+		} finally {
+			isLoadingEarlierChatMessagesRef.current = false
 		}
 	}
 
@@ -183,6 +227,9 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 		clearRejectionReason: () => setRejectionReason(null),
 		postChatMessage,
 		reloadChatMessages,
+		loadEarlierChatMessages: loadOlderChatMessages,
+		hasEarlierChatMessages,
+		firstItemIndex,
 		loadingChatMessageIds,
 	}
 }

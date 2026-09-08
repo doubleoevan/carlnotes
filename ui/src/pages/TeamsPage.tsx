@@ -39,7 +39,7 @@ export function TeamsPage() {
 		teamId: null,
 		name: "your teams",
 		joinTeam: null,
-		preferredRoomKind: "team",
+		preferredChatRoomKind: "team",
 	})
 	const [isCreating, setIsCreating] = useState(false)
 	const [teamToLeave, setTeamToLeave] = useState<TeamSummary | null>(null)

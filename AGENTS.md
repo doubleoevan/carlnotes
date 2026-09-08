@@ -55,6 +55,7 @@ Green before any hand-off.
 
 - Comment every logical group: `//` comment line(s) above every group of 2+ statements, one line preferred.
 - One package.json. Folders separate concerns; packages separate deployments.
+- State lives in module scope behind exported functions, in a `ui/src/stores/` module, or in a hook. Author a class only for an `Error` subclass, or for many instances with their own lifecycle that something outside holds, as `ui/src/components/note/noteProvider.ts` does. A single-instance class is a singleton, which is a module with extra steps.
 - Domain nouns and rejected terms: the `domain-model` skill is the single source.
 - Follow vs subscribe: the domain-model skill owns the rule. Copy says follow, identifiers say subscribe.
 - Bash runs from the repo root: relative paths only, never prefix commands with cd. Scripts and hooks assume repo-root cwd.

@@ -1,21 +1,13 @@
 // the unread note counts the poll last read, plus the notes opened this session that already cleared
 import type { NoteBadge } from "@shared/contracts"
 import { useSyncExternalStore } from "react"
+import { toStoreListeners } from "@/stores/storeListeners"
 
 // the notes opened this session, which clear their badge before the next poll confirms it
 const openedNoteIds = new Set<string>()
 // what the poll last read
 let noteBadges: NoteBadge[] = []
-const listeners = new Set<() => void>()
-let version = 0
-
-// tell every badge to re-render
-function publish(): void {
-	version += 1
-	for (const listener of listeners) {
-		listener()
-	}
-}
+const { subscribe, publish, getVersion } = toStoreListeners()
 
 /**
  * Mark a note opened, clearing its badges everywhere they show.
@@ -40,20 +32,10 @@ export function setNoteBadges(updatedNoteBadges: NoteBadge[]): void {
 	publish()
 }
 
-// the subscribe callback useSyncExternalStore needs. the version number makes one change re-render every consumer
-function subscribe(listener: () => void): () => void {
-	listeners.add(listener)
-	return () => listeners.delete(listener)
-}
-
 // every hook below re-renders off the same version, so they share one subscription. the third
 // snapshot is what a server render reads, and the note table's tests render on the server
 function useBadgeVersion(): void {
-	useSyncExternalStore(
-		subscribe,
-		() => version,
-		() => version,
-	)
+	useSyncExternalStore(subscribe, getVersion, getVersion)
 }
 
 // the edits and comments waiting on the notes a filter picks, with everything opened this session left out

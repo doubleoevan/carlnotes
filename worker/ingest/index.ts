@@ -4,9 +4,11 @@ import { eq, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { resources, type scans, sources } from "../../db/schema"
 import { type Budget, charge } from "../budget"
+import { OversizedBodyError } from "../publicFetch"
 import { deleteResourceContent, toResourceContentKey, uploadResourceContent } from "../store"
 import { traceStage } from "../telemetry"
 import { blueskyIngester } from "./bluesky"
+import { FeedStatusError } from "./feed"
 import type { FetchedBody, IngestedResource, IngestResult, Source, SourceIngester } from "./ingester"
 import { toCanonicalUrl, toFallbackTitle } from "./normalize"
 import { podcastIngester } from "./podcast"
@@ -124,6 +126,18 @@ async function storeFetchedBody(resourceId: string, fetchedBody: FetchedBody): P
 }
 
 /**
+ * Whether a Source failure is the host declining instead of a fault in this code.
+ */
+export function isAnsweredRefusal(error: unknown): boolean {
+	if (error instanceof OversizedBodyError) {
+		return true
+	}
+
+	// a 5xx is the host failing instead of refusing, and can be a request this code sent wrong
+	return error instanceof FeedStatusError && error.status < 500
+}
+
+/**
  * Pure aggregation over Source outcomes. Dedupes Resources by canonical url, sums cost, and decides the status.
  */
 export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
@@ -205,9 +219,11 @@ async function ingestFromSource(source: Source): Promise<SourceOutcome> {
 		const status = ingestResult.resources.length === 0 ? "fallback" : "ok"
 		return { status, sourceId: source.id, sourceKind: source.kind, ...ingestResult }
 	} catch (error) {
-		// log and report the failure, then return this Source with a failed status and the reason
+		// log every failure, but only report the failures our code could be at fault for
 		console.error(`source ${source.id} (${source.kind}) failed`, error)
-		reportError(error, "ingest", { sourceId: source.id, sourceKind: source.kind })
+		if (!isAnsweredRefusal(error)) {
+			reportError(error, "ingest", { sourceId: source.id, sourceKind: source.kind })
+		}
 		const reason = (error instanceof Error ? error.message : String(error)).slice(0, MAX_FAILURE_REASON_CHARS)
 		return { status: "failed", sourceId: source.id, sourceKind: source.kind, reason }
 	}

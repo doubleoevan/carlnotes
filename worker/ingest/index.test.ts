@@ -1,6 +1,8 @@
 // a Source that runs clean and brings back nothing is reported as a fallback
 import { expect, test } from "bun:test"
-import { type SourceOutcome, toScanSummary } from "./index"
+import { OversizedBodyError } from "../publicFetch"
+import { FeedStatusError } from "./feed"
+import { isAnsweredRefusal, type SourceOutcome, toScanSummary } from "./index"
 
 // one Source outcome, defaulting to a clean run that found one Resource
 function toSourceOutcome(
@@ -61,4 +63,21 @@ test("a page found twice keeps the body of the first sighting", () => {
 	])
 	expect(scanSummary.resources).toHaveLength(1)
 	expect(scanSummary.resources[0]?.fetchedBody).toEqual(fetchedBody)
+})
+
+// a refused status and an oversized body are answers from the host, so neither pages anyone
+test("isAnsweredRefusal separates the host declining from a fault in this code", () => {
+	expect(isAnsweredRefusal(new FeedStatusError("https://a.test/feed", 404))).toBe(true)
+	expect(isAnsweredRefusal(new FeedStatusError("https://a.test/feed", 429))).toBe(true)
+	expect(isAnsweredRefusal(new OversizedBodyError("https://a.test/feed", 5_000_000))).toBe(true)
+
+	// a 5xx is the host failing, and can be a request this code sent wrong, so it stays reported
+	expect(isAnsweredRefusal(new FeedStatusError("https://a.test/feed", 500))).toBe(false)
+	expect(isAnsweredRefusal(new FeedStatusError("https://a.test/feed", 503))).toBe(false)
+
+	// anything else reached us without the host saying no, so it is still worth reporting
+	expect(isAnsweredRefusal(new TypeError("undefined is not a function"))).toBe(false)
+	expect(isAnsweredRefusal(new Error("fetch failed"))).toBe(false)
+	expect(isAnsweredRefusal("not an error at all")).toBe(false)
+	expect(isAnsweredRefusal(undefined)).toBe(false)
 })

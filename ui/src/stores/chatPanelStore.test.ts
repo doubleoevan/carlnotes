@@ -17,17 +17,17 @@ describe("isSameChat", () => {
 
 	// a team's own chat room and a topic's chat room on the same team are different conversations
 	test("a team room and one of its topic rooms are not the same", () => {
-		const teamRoom = { kind: "room", teamId: "team-a", topicId: null } as const
-		const topicRoom = { kind: "room", teamId: "team-a", topicId: "topic-1" } as const
-		expect(isSameChat(teamRoom, topicRoom)).toBe(false)
-		expect(isSameChat(teamRoom, teamRoom)).toBe(true)
+		const teamChatRoom = { kind: "room", teamId: "team-a", topicId: null } as const
+		const topicChatRoom = { kind: "room", teamId: "team-a", topicId: "topic-1" } as const
+		expect(isSameChat(teamChatRoom, topicChatRoom)).toBe(false)
+		expect(isSameChat(teamChatRoom, teamChatRoom)).toBe(true)
 	})
 
 	// the same topic in two teams is two chat rooms, one per pair
 	test("one topic in two teams is two rooms", () => {
-		const first = { kind: "room", teamId: "team-a", topicId: "topic-1" } as const
-		const second = { kind: "room", teamId: "team-b", topicId: "topic-1" } as const
-		expect(isSameChat(first, second)).toBe(false)
+		const teamAChatId = { kind: "room", teamId: "team-a", topicId: "topic-1" } as const
+		const teamBChatId = { kind: "room", teamId: "team-b", topicId: "topic-1" } as const
+		expect(isSameChat(teamAChatId, teamBChatId)).toBe(false)
 	})
 
 	// a private chat is named by its topic alone, and never matches that topic's shared chat room
@@ -39,8 +39,8 @@ describe("isSameChat", () => {
 	})
 })
 
-// the chat rooms a user might have, newest first the way the api returns them
-const TEAM_ROOM: ChatRoom = {
+// the chat rooms a user might have, latest first the way the api returns them
+const TEAM_CHAT_ROOM: ChatRoom = {
 	teamId: "team-a",
 	topicId: null,
 	name: "Agent Infra Crew",
@@ -49,7 +49,7 @@ const TEAM_ROOM: ChatRoom = {
 	chatMentions: [],
 	chatRoomMembers: [],
 }
-const TOPIC_ROOM: ChatRoom = {
+const TOPIC_CHAT_ROOM: ChatRoom = {
 	teamId: "team-a",
 	topicId: "topic-1",
 	name: "Speed reading",
@@ -60,17 +60,17 @@ const TOPIC_ROOM: ChatRoom = {
 }
 
 // a page context in the shape a page registers, with only what the default chat reads set
-function toContext(context: Partial<ChatPageContext>): ChatPageContext {
-	return { topicId: null, teamId: null, name: "", joinTeam: null, ...context }
+function toPageContext(pageContext: Partial<ChatPageContext>): ChatPageContext {
+	return { topicId: null, teamId: null, name: "", joinTeam: null, ...pageContext }
 }
 
 // one unread chat mention, in the shape a chat room holds them
-const MENTION = { teamId: "team-a", authorUsername: "someone", isReply: false, excerpt: "hi" }
+const CHAT_MENTION = { teamId: "team-a", chatMessageId: 1, authorUsername: "someone", isReply: false, excerpt: "hi" }
 
 describe("toDefaultChatId", () => {
 	// the panel selects once per open, so a page about nothing still opens something useful
 	test("a page about nothing with nothing waiting opens the first room", () => {
-		expect(toDefaultChatId(null, [TOPIC_ROOM, TEAM_ROOM])).toEqual({
+		expect(toDefaultChatId(null, [TOPIC_CHAT_ROOM, TEAM_CHAT_ROOM])).toEqual({
 			kind: "room",
 			teamId: "team-a",
 			topicId: "topic-1",
@@ -79,25 +79,33 @@ describe("toDefaultChatId", () => {
 
 	// what is waiting outranks the order, so the panel opens where someone is asking for you
 	test("a page about nothing opens whichever room has the most waiting", () => {
-		const busy = { ...TEAM_ROOM, chatMentions: [MENTION, MENTION] }
-		const quiet = { ...TOPIC_ROOM, chatMentions: [MENTION] }
-		expect(toDefaultChatId(null, [quiet, busy])).toEqual({ kind: "room", teamId: "team-a", topicId: null })
+		const busyChatRoom = { ...TEAM_CHAT_ROOM, chatMentions: [CHAT_MENTION, CHAT_MENTION] }
+		const quietChatRoom = { ...TOPIC_CHAT_ROOM, chatMentions: [CHAT_MENTION] }
+		expect(toDefaultChatId(null, [quietChatRoom, busyChatRoom])).toEqual({
+			kind: "room",
+			teamId: "team-a",
+			topicId: null,
+		})
 	})
 
 	// a page naming teams, which a profile does, opens one of theirs before anything else waiting
-	test("a named team with a mention beats a busier room elsewhere", () => {
-		const named = { ...TEAM_ROOM, teamId: "team-b", name: "Their team", chatMentions: [MENTION] }
-		const busier = { ...TOPIC_ROOM, chatMentions: [MENTION, MENTION] }
-		const context = toContext({ pageTeamIds: ["team-b"] })
-		expect(toDefaultChatId(context, [busier, named])).toEqual({ kind: "room", teamId: "team-b", topicId: null })
+	test("a named team with a mention beats a busier chat room elsewhere", () => {
+		const namedChatRoom = { ...TEAM_CHAT_ROOM, teamId: "team-b", name: "Their team", chatMentions: [CHAT_MENTION] }
+		const busierChatRoom = { ...TOPIC_CHAT_ROOM, chatMentions: [CHAT_MENTION, CHAT_MENTION] }
+		const pageContext = toPageContext({ pageTeamIds: ["team-b"] })
+		expect(toDefaultChatId(pageContext, [busierChatRoom, namedChatRoom])).toEqual({
+			kind: "room",
+			teamId: "team-b",
+			topicId: null,
+		})
 	})
 
 	// a named team with nothing waiting is not a reason to open it over the busiest chat room
-	test("a named team with nothing waiting falls back to the busiest room", () => {
-		const named = { ...TEAM_ROOM, teamId: "team-b", name: "Their team", chatMentions: [] }
-		const busier = { ...TOPIC_ROOM, chatMentions: [MENTION] }
-		const context = toContext({ pageTeamIds: ["team-b"] })
-		expect(toDefaultChatId(context, [named, busier])).toEqual({
+	test("a named team with nothing waiting falls back to the busiest chat room", () => {
+		const namedChatRoom = { ...TEAM_CHAT_ROOM, teamId: "team-b", name: "Their team", chatMentions: [] }
+		const busierChatRoom = { ...TOPIC_CHAT_ROOM, chatMentions: [CHAT_MENTION] }
+		const pageContext = toPageContext({ pageTeamIds: ["team-b"] })
+		expect(toDefaultChatId(pageContext, [namedChatRoom, busierChatRoom])).toEqual({
 			kind: "room",
 			teamId: "team-a",
 			topicId: "topic-1",
@@ -106,10 +114,10 @@ describe("toDefaultChatId", () => {
 
 	// the teams index leads with a team's own chat room even when a topic's has more waiting
 	test("a team-first page takes the busiest team room over a busier topic room", () => {
-		const teamRoom = { ...TEAM_ROOM, chatMentions: [MENTION] }
-		const topicRoom = { ...TOPIC_ROOM, chatMentions: [MENTION, MENTION] }
-		const context = toContext({ preferredRoomKind: "team" })
-		expect(toDefaultChatId(context, [topicRoom, teamRoom])).toEqual({
+		const teamChatRoom = { ...TEAM_CHAT_ROOM, chatMentions: [CHAT_MENTION] }
+		const topicChatRoom = { ...TOPIC_CHAT_ROOM, chatMentions: [CHAT_MENTION, CHAT_MENTION] }
+		const pageContext = toPageContext({ preferredChatRoomKind: "team" })
+		expect(toDefaultChatId(pageContext, [topicChatRoom, teamChatRoom])).toEqual({
 			kind: "room",
 			teamId: "team-a",
 			topicId: null,
@@ -118,10 +126,10 @@ describe("toDefaultChatId", () => {
 
 	// with nothing waiting in its preferred kind it falls to the other, instead of opening a quiet chat room
 	test("a team-first page falls back to a topic room when no team room waits", () => {
-		const teamRoom = { ...TEAM_ROOM, chatMentions: [] }
-		const topicRoom = { ...TOPIC_ROOM, chatMentions: [MENTION] }
-		const context = toContext({ preferredRoomKind: "team" })
-		expect(toDefaultChatId(context, [teamRoom, topicRoom])).toEqual({
+		const teamChatRoom = { ...TEAM_CHAT_ROOM, chatMentions: [] }
+		const topicChatRoom = { ...TOPIC_CHAT_ROOM, chatMentions: [CHAT_MENTION] }
+		const pageContext = toPageContext({ preferredChatRoomKind: "team" })
+		expect(toDefaultChatId(pageContext, [teamChatRoom, topicChatRoom])).toEqual({
 			kind: "room",
 			teamId: "team-a",
 			topicId: "topic-1",
@@ -130,28 +138,36 @@ describe("toDefaultChatId", () => {
 
 	// a profile is the mirror of the index: a topic's chat room leads, a team's is the fallback
 	test("a topic-first page takes the busiest topic room over a busier team room", () => {
-		const teamRoom = { ...TEAM_ROOM, chatMentions: [MENTION, MENTION] }
-		const topicRoom = { ...TOPIC_ROOM, chatMentions: [MENTION] }
-		const context = toContext({ preferredRoomKind: "topic" })
-		expect(toDefaultChatId(context, [teamRoom, topicRoom])).toEqual({
+		const teamChatRoom = { ...TEAM_CHAT_ROOM, chatMentions: [CHAT_MENTION, CHAT_MENTION] }
+		const topicChatRoom = { ...TOPIC_CHAT_ROOM, chatMentions: [CHAT_MENTION] }
+		const pageContext = toPageContext({ preferredChatRoomKind: "topic" })
+		expect(toDefaultChatId(pageContext, [teamChatRoom, topicChatRoom])).toEqual({
 			kind: "room",
 			teamId: "team-a",
 			topicId: "topic-1",
 		})
 	})
 
-	// a tie keeps the first, which the api already ordered newest first a team's conversation is the one more
-	test("a team room beats a topic room on the same count", () => {
-		const topicRoom = { ...TOPIC_ROOM, chatMentions: [MENTION] }
-		const teamRoom = { ...TEAM_ROOM, chatMentions: [MENTION] }
-		expect(toDefaultChatId(null, [topicRoom, teamRoom])).toEqual({ kind: "room", teamId: "team-a", topicId: null })
+	// a mention count tie chooses a team chat room over a topic chat room
+	test("a team chat room beats a topic room on the same count", () => {
+		const topicChatRoom = { ...TOPIC_CHAT_ROOM, chatMentions: [CHAT_MENTION] }
+		const teamChatRoom = { ...TEAM_CHAT_ROOM, chatMentions: [CHAT_MENTION] }
+		expect(toDefaultChatId(null, [topicChatRoom, teamChatRoom])).toEqual({
+			kind: "room",
+			teamId: "team-a",
+			topicId: null,
+		})
 	})
 
-	// within one kind a tie keeps the earlier chat room, which the api already ordered newest first
-	test("a tie between two team rooms keeps the first", () => {
-		const first = { ...TEAM_ROOM, teamId: "team-a", chatMentions: [MENTION] }
-		const second = { ...TEAM_ROOM, teamId: "team-b", chatMentions: [MENTION] }
-		expect(toDefaultChatId(null, [first, second])).toEqual({ kind: "room", teamId: "team-a", topicId: null })
+	// within one kind a tie keeps the earlier chat room, which the api already ordered latest first
+	test("a tie between two team chat rooms keeps the earlier one", () => {
+		const earlierChatRoom = { ...TEAM_CHAT_ROOM, teamId: "team-a", chatMentions: [CHAT_MENTION] }
+		const laterChatRoom = { ...TEAM_CHAT_ROOM, teamId: "team-b", chatMentions: [CHAT_MENTION] }
+		expect(toDefaultChatId(null, [earlierChatRoom, laterChatRoom])).toEqual({
+			kind: "room",
+			teamId: "team-a",
+			topicId: null,
+		})
 	})
 
 	test("a user with no rooms gets no chatId, which is what shows the create call to action", () => {
@@ -159,9 +175,9 @@ describe("toDefaultChatId", () => {
 	})
 
 	// a topic page opens that topic's chat room wherever the user has one
-	test("a topic page opens that topic's room", () => {
-		const context = toContext({ topicId: "topic-1", name: "Speed reading" })
-		expect(toDefaultChatId(context, [TEAM_ROOM, TOPIC_ROOM])).toEqual({
+	test("a topic page opens that topic's chat room", () => {
+		const pageContext = toPageContext({ topicId: "topic-1", name: "Speed reading" })
+		expect(toDefaultChatId(pageContext, [TEAM_CHAT_ROOM, TOPIC_CHAT_ROOM])).toEqual({
 			kind: "room",
 			teamId: "team-a",
 			topicId: "topic-1",
@@ -170,9 +186,9 @@ describe("toDefaultChatId", () => {
 
 	// the private chat is the fallback the closest match to the page wins
 	test("a topic page with no room of its own opens its private chat", () => {
-		const context = toContext({ topicId: "topic-9", name: "A topic" })
-		const busierRoom = { ...TEAM_ROOM, chatMentions: [MENTION, MENTION] }
-		expect(toDefaultChatId(context, [busierRoom])).toEqual({ kind: "private", topicId: "topic-9" })
+		const pageContext = toPageContext({ topicId: "topic-9", name: "A topic" })
+		const busierChatRoom = { ...TEAM_CHAT_ROOM, chatMentions: [CHAT_MENTION, CHAT_MENTION] }
+		expect(toDefaultChatId(pageContext, [busierChatRoom])).toEqual({ kind: "private", topicId: "topic-9" })
 	})
 
 	// a page about no conversation never reaches a private chat
@@ -182,8 +198,8 @@ describe("toDefaultChatId", () => {
 
 	// a team page opens the team's own chat room, never one of its topics
 	test("a team page opens the team's own room", () => {
-		const context = toContext({ teamId: "team-a", name: "Agent Infra Crew" })
-		expect(toDefaultChatId(context, [TOPIC_ROOM, TEAM_ROOM])).toEqual({
+		const pageContext = toPageContext({ teamId: "team-a", name: "Agent Infra Crew" })
+		expect(toDefaultChatId(pageContext, [TOPIC_CHAT_ROOM, TEAM_CHAT_ROOM])).toEqual({
 			kind: "room",
 			teamId: "team-a",
 			topicId: null,
@@ -192,23 +208,23 @@ describe("toDefaultChatId", () => {
 
 	// an outsider has no chat room to open, so the chatId names the team the join button belongs to
 	test("a team page the user is not on aims at the team it offers joining", () => {
-		const context = toContext({
+		const pageContext = toPageContext({
 			teamId: "team-b",
 			name: "Lets Build",
 			joinTeam: { teamId: "team-b", name: "Lets Build", hasAvatar: false, hasRequestedToJoin: false },
 		})
-		expect(toDefaultChatId(context, [TEAM_ROOM])).toEqual({ kind: "room", teamId: "team-b", topicId: null })
+		expect(toDefaultChatId(pageContext, [TEAM_CHAT_ROOM])).toEqual({ kind: "room", teamId: "team-b", topicId: null })
 	})
 
 	// a private team names nothing
 	test("a team page with no room and no way in opens a room the user has", () => {
-		const context = toContext({ teamId: "team-b", name: "Lets Build" })
-		expect(toDefaultChatId(context, [TEAM_ROOM])).toEqual({ kind: "room", teamId: "team-a", topicId: null })
+		const pageContext = toPageContext({ teamId: "team-b", name: "Lets Build" })
+		expect(toDefaultChatId(pageContext, [TEAM_CHAT_ROOM])).toEqual({ kind: "room", teamId: "team-a", topicId: null })
 	})
 
 	test("a team page opens nothing when the user has no rooms and no way in", () => {
-		const context = toContext({ teamId: "team-b", name: "Lets Build" })
-		expect(toDefaultChatId(context, [])).toBeNull()
+		const pageContext = toPageContext({ teamId: "team-b", name: "Lets Build" })
+		expect(toDefaultChatId(pageContext, [])).toBeNull()
 	})
 })
 
@@ -224,26 +240,26 @@ test("minimizing forgets the room and opening again does not", () => {
 
 // a topic a team holds offers the way in, which is closer to the page than the user's own chat
 test("a topic page with no room opens the way into the team that has it", () => {
-	const context = toContext({
+	const pageContext = toPageContext({
 		topicId: "topic-9",
 		name: "A topic",
 		joinTeam: { teamId: "team-z", name: "Their team", hasAvatar: false, hasRequestedToJoin: false },
 	})
-	expect(toDefaultChatId(context, [])).toEqual({ kind: "room", teamId: "team-z", topicId: "topic-9" })
+	expect(toDefaultChatId(pageContext, [])).toEqual({ kind: "room", teamId: "team-z", topicId: "topic-9" })
 })
 
 // an empty chat room list looks the same as having no chat rooms
 test("nothing is selected while there are no rooms to select from", () => {
-	const context = toContext({ teamId: "team-a", name: "A team" })
-	expect(toDefaultChatId(context, [])).toBeNull()
+	const pageContext = toPageContext({ teamId: "team-a", name: "A team" })
+	expect(toDefaultChatId(pageContext, [])).toBeNull()
 })
 
 // a topic page names its own topic, so every team's chat room for it is marked and preferred alike
 test("a page naming a topic prefers that topic's room over a busier one elsewhere", () => {
-	const pageTopicRoom = { ...TOPIC_ROOM, teamId: "team-b", chatMentions: [MENTION] }
-	const busierElsewhere = { ...TEAM_ROOM, chatMentions: [MENTION, MENTION] }
-	const context = toContext({ pageTopicIds: ["topic-1"] })
-	expect(toDefaultChatId(context, [busierElsewhere, pageTopicRoom])).toEqual({
+	const pageTopicChatRoom = { ...TOPIC_CHAT_ROOM, teamId: "team-b", chatMentions: [CHAT_MENTION] }
+	const busierChatRoom = { ...TEAM_CHAT_ROOM, chatMentions: [CHAT_MENTION, CHAT_MENTION] }
+	const pageContext = toPageContext({ pageTopicIds: ["topic-1"] })
+	expect(toDefaultChatId(pageContext, [busierChatRoom, pageTopicChatRoom])).toEqual({
 		kind: "room",
 		teamId: "team-b",
 		topicId: "topic-1",

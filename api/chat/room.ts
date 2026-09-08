@@ -1,7 +1,7 @@
 // the chat messages, stream, and post route for a team's chat room. a null topic is the team's own chat room
 import { zValidator } from "@hono/zod-validator"
 import { hasAllMention, hasModelMention, isModelChatMessage } from "@shared/chatMentions"
-import { type ChatAttachment, chatRoomMessagePayload } from "@shared/contracts"
+import { type ChatAttachment, type ChatRoomMessagePage, chatRoomMessagePayload } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
 import { and, eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
@@ -34,6 +34,7 @@ import { loadLinkPreviewImage, saveLinkPreviews } from "./linkPreviews"
 import { saveChatMentions, saveSeenChatMentions } from "./mentions"
 import { prepareChatRoomAttachments, storeChatRoomAttachment } from "./roomAttachments"
 import {
+	CHAT_ROOM_LOAD_LIMIT,
 	loadChatRoomDeltas,
 	loadChatRoomMessageLinkPreviews,
 	loadChatRoomMessages,
@@ -158,7 +159,7 @@ export async function postChatRoomMessage(
 		)
 	}
 
-	// the link preview cards fetch in the background, so the chat message lands for everyone without waiting on its links
+	// the link preview cards fetch in the background, so the chat message loads for everyone without waiting on its links
 	void saveLinkPreviews(content, chatRoom.teamId).catch((error) =>
 		console.error("chat room link preview failed", error),
 	)
@@ -425,6 +426,19 @@ async function loadChatRoomAttachment(
 // and one stored image is the same for every viewer
 const PREVIEW_IMAGE_CACHE_CONTROL = "public, max-age=86400"
 
+/** The chat message id a backward page starts reading below, or undefined for the latest page. */
+export function toBeforeChatMessageId(beforeParam: string | undefined): number | undefined {
+	const beforeChatMessageId = Number(beforeParam)
+	return beforeParam && Number.isSafeInteger(beforeChatMessageId) && beforeChatMessageId > 0
+		? beforeChatMessageId
+		: undefined
+}
+
+/** One page of chat messages, saying whether another sits above it so the list knows when to stop. */
+export function toChatMessagePage(chatMessages: ChatRoomMessagePage["chatMessages"]): ChatRoomMessagePage {
+	return { chatMessages, hasEarlierChatMessages: chatMessages.length === CHAT_ROOM_LOAD_LIMIT }
+}
+
 // the chat room routes. every access rejection is a 404, so a chat room's existence follows the team's
 export const chatRoomRoute = new Hono<AppEnv>()
 	// a link preview's image, served from this origin so no user's browser reaches the page's own host.
@@ -443,26 +457,30 @@ export const chatRoomRoute = new Hono<AppEnv>()
 		})
 	})
 	.get("/topics/:id/rooms/:teamId", async (context) => {
-		// the chat room's newest chat messages, members only
+		// the chat room's latest chat messages, members only
 		const userId = currentUser(context)
 		const chatRoom = await loadChatRoom(userId, context.req.param("id"), context.req.param("teamId"))
 		if (!userId || !chatRoom) {
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// no cursor, so the load limit returns the newest chat messages
-		return context.json({ chatMessages: await loadChatRoomMessages(context.req.param("id"), chatRoom.teamId, 0) })
+		// no cursor returns the latest chat messages, a cursor returns the page above that chat message
+		const beforeChatMessageId = toBeforeChatMessageId(context.req.query("before"))
+		return context.json(
+			toChatMessagePage(await loadChatRoomMessages(context.req.param("id"), chatRoom.teamId, 0, beforeChatMessageId)),
+		)
 	})
 	.get("/teams/:id/room", async (context) => {
-		// the team's own chat room's newest chat messages, members only
+		// the team's own chat room's latest chat messages, members only
 		const userId = currentUser(context)
 		const chatRoom = await loadChatRoom(userId, null, context.req.param("id"))
 		if (!userId || !chatRoom) {
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// no cursor, so the load limit returns the newest chat messages
-		return context.json({ chatMessages: await loadChatRoomMessages(null, chatRoom.teamId, 0) })
+		// no cursor returns the latest chat messages, a cursor returns the page above that chat message
+		const beforeChatMessageId = toBeforeChatMessageId(context.req.query("before"))
+		return context.json(toChatMessagePage(await loadChatRoomMessages(null, chatRoom.teamId, 0, beforeChatMessageId)))
 	})
 	.get("/topics/:id/rooms/:teamId/link-previews", async (context) => {
 		// the cards for a few loading chat messages, members only, so the poll never reloads the chat room
