@@ -18,6 +18,7 @@ import {
 	tokenCost,
 } from "../budget"
 import { screenText, toFlaggedReason } from "../guard"
+import { isTitleFromUrlFallback } from "../ingest/normalize"
 import { cheapModel, isBudgetRejection, scoreModel } from "../models"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
@@ -221,15 +222,22 @@ async function fetchAndStoreContent(
 ): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
 	try {
 		// fetch the content, charge what that fetch spent, then write the body to object storage
-		const { text, cost, etag, lastModified } = await fetchContent(resource.url, resource.kind, resource.transcriptUrl)
+		const { text, cost, etag, lastModified, title } = await fetchContent(
+			resource.url,
+			resource.kind,
+			resource.transcriptUrl,
+		)
 		charge(budget, "fetch", cost)
 		const stored = text ? await storeResourceContent(resource.id, text) : null
 
-		// decide the text to score and the key to store, then store the resource row
+		// the text to score and the key to store, plus the title when the stored one came from the url
 		const { scoringText, contentKey, contentBytes } = toFetchedContentFields(stored, text, resource.snippet)
+		const pageTitleField = toPageTitleField(resource, title)
+
+		// store the resource row
 		await db
 			.update(resources)
-			.set({ contentKey, contentBytes, etag, lastModified, fetchedAt: new Date() })
+			.set({ contentKey, contentBytes, etag, lastModified, fetchedAt: new Date(), ...pageTitleField })
 			.where(eq(resources.id, resource.id))
 		return { content: scoringText, fetchOutcome: "fetched" }
 	} catch (error) {
@@ -401,6 +409,17 @@ export function isPromoted(score: number): boolean {
  */
 export function isSnippetComplete(url: string): boolean {
 	return url.startsWith(X_URL_PREFIX)
+}
+
+/**
+ * The title field a fetch writes, which is the page's own title if the stored one was taken from the url.
+ * An empty object leaves the stored title alone.
+ */
+export function toPageTitleField(
+	resource: Pick<Resource, "title" | "url">,
+	pageTitle: string | null,
+): { title?: string } {
+	return pageTitle && isTitleFromUrlFallback(resource.title, resource.url) ? { title: pageTitle } : {}
 }
 
 /**

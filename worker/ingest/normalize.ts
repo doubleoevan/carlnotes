@@ -117,6 +117,14 @@ export function toFallbackTitle(url: string, snippet: string | null | undefined)
 	}
 }
 
+/**
+ * Whether a Resource's stored title is the one the fallback rule reads from its url alone, compared without case
+ * so an anchor word matches the path it points at.
+ */
+export function isTitleFromUrlFallback(title: string | null, url: string): boolean {
+	return title?.toLowerCase() === toFallbackTitle(url, null)?.toLowerCase()
+}
+
 // so the resource kind is inferred from the host
 const WATCH_HOSTS = [
 	"youtube.com",

@@ -20,6 +20,24 @@ const PREVIEW_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "im
 // how long a title or description may run
 const MAX_PREVIEW_TEXT_CHARS = 500
 
+// the HTML entities a page is likely to write, and the numeric form that names any character by its code point
+const HTML_ENTITIES: Record<string, string> = {
+	amp: "&",
+	lt: "<",
+	gt: ">",
+	quot: '"',
+	apos: "'",
+	nbsp: "\u00a0",
+	mdash: "\u2014",
+	ndash: "\u2013",
+	hellip: "\u2026",
+	rsquo: "\u2019",
+	lsquo: "\u2018",
+	ldquo: "\u201c",
+	rdquo: "\u201d",
+}
+const HTML_ENTITY_PATTERN = /&(#\d+|#x[0-9a-f]+|[a-z]+);/gi
+
 // what a page offered for its link preview. a field is null if the page named nothing for it
 export type LinkPreviewMetaTags = { title: string | null; description: string | null; imageUrl: string | null }
 
@@ -224,9 +242,29 @@ function toAbsoluteImageUrl(imageUrl: string | null, pageUrl: string): string | 
 	}
 }
 
+// a page's entities read as the characters they name. neither parse path decodes them
+function toDecodedHtmlEntities(text: string): string {
+	return text.replace(HTML_ENTITY_PATTERN, (entity, entityName: string) => toEntityCharacter(entityName) ?? entity)
+}
+
+// the character an entity names, or null when it names none, which leaves it as the page wrote it
+function toEntityCharacter(entityName: string): string | null {
+	// a name is looked up, and the numeric forms name a code point in decimal or in hex
+	if (!entityName.startsWith("#")) {
+		return HTML_ENTITIES[entityName.toLowerCase()] ?? null
+	}
+	const isHexadecimal = entityName[1]?.toLowerCase() === "x"
+	const codePoint = isHexadecimal ? Number.parseInt(entityName.slice(2), 16) : Number(entityName.slice(1))
+
+	// a code point outside the range, or one naming half a surrogate pair, is not a character to write
+	const isCharacter =
+		Number.isInteger(codePoint) && codePoint > 0 && codePoint <= 0x10ffff && (codePoint < 0xd800 || codePoint > 0xdfff)
+	return isCharacter ? String.fromCodePoint(codePoint) : null
+}
+
 // collapse a tag's whitespace and limit its length, or null if it holds no words
 function toClippedText(text: string): string | null {
-	const collapsedText = text.replace(/\s+/g, " ").trim()
+	const collapsedText = toDecodedHtmlEntities(text).replace(/\s+/g, " ").trim()
 	return collapsedText ? collapsedText.slice(0, MAX_PREVIEW_TEXT_CHARS) : null
 }
 

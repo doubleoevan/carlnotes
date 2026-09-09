@@ -8,6 +8,9 @@ Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker), `sch
   chat replies and their retrieval; `prompts/` — model-facing Markdown templates; `models.ts` —
   every model call, through LiteLLM.
 - Every scan stage charges the Scan's one Budget (`budget.ts`); nothing spends outside it.
+- A Resource's content hash is taken in the dedupe stage, over the title and snippet as they stand then.
+  The fetch that follows may replace a title read off the url and leaves the hash alone, so a retitled
+  Resource still matches its Finding's `reviewed_content_hash` and no later Scan pays to score it again.
 - Untrusted text is screened by LLM Guard (`guard.ts`) before any model reads it.
 - Every fetch of a user-supplied url goes through `fetchPublicUrl` (`publicFetch.ts`), which re-checks
   each redirect hop against the internal-address rule, with `readLimitedBody` bounding reads. `scrape.ts` reads a

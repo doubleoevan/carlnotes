@@ -148,7 +148,8 @@ test("toCueText reads WEBVTT and SRT down to their words", () => {
 	// a note block annotates a cue file and is not spoken either
 	expect(toCueText("WEBVTT\n\nNOTE this is a comment\n\n00:00:01.000 --> 00:00:02.000\nthe words")).toBe("the words")
 
-	// a file with no cues at all joins to nothing	expect(toCueText("WEBVTT\n\n")).toBe("")
+	// a file with no cues at all joins to nothing
+	expect(toCueText("WEBVTT\n\n")).toBe("")
 	expect(toCueText("")).toBe("")
 })
 
@@ -173,12 +174,13 @@ test("toTranscriptText joins the caption lines without running their words toget
 	// an event with no segments is a timing-only gap, so it contributes nothing
 	expect(toTranscriptText({ events: [{}, { segs: [{ utf8: "only this" }] }] })).toBe("only this")
 
-	// nothing spoken joins to nothing	expect(toTranscriptText({ events: [] })).toBe("")
+	// nothing spoken joins to nothing
+	expect(toTranscriptText({ events: [] })).toBe("")
 	expect(toTranscriptText(null)).toBe("")
 })
 
 // an episode that declared no transcript is scored on its show notes, so the router spends no scrape credit on it
 test("fetchContent skips the fetch for an episode with no transcript", async () => {
-	const fetched = await fetchContent("https://example.com/episode", "listen")
-	expect(fetched).toEqual({ text: "", cost: 0, etag: null, lastModified: null })
+	const fetchResult = await fetchContent("https://example.com/episode", "listen")
+	expect(fetchResult).toEqual({ text: "", cost: 0, etag: null, lastModified: null, title: null })
 })

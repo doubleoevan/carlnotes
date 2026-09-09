@@ -53,8 +53,15 @@ const DAILYMOTION_CAPTION_DOMAIN = "dmcdn.net"
 // how long the revalidation request may run before it aborts, so a slow origin never holds up a scan
 const REVALIDATE_TIMEOUT_MS = Number(Bun.env.REVALIDATE_TIMEOUT_MS ?? "5000")
 
-// a fetch's text and what it spent, plus the etag and last-modified for a later conditional GET
-export type FetchResult = { text: string; cost: number; etag: string | null; lastModified: string | null }
+// a fetch's text result and what it spent, plus the etag and last-modified for a later conditional GET,
+// and the page's own title if the fetch read a page
+export type FetchResult = {
+	text: string
+	cost: number
+	etag: string | null
+	lastModified: string | null
+	title: string | null
+}
 
 // the stored etag and last-modified a conditional GET is built from. either may be null
 export type FetchValidators = { etag: string | null; lastModified: string | null }
@@ -88,7 +95,7 @@ export async function fetchContent(
 
 	// an episode that declared none is a player and its show notes, and the notes are already in the snippet
 	if (resourceKind === "listen") {
-		return { text: "", cost: 0, etag: null, lastModified: null }
+		return { text: "", cost: 0, etag: null, lastModified: null, title: null }
 	}
 
 	// only a video publishes captions worth reading, so anything else is scraped
@@ -134,11 +141,12 @@ async function fetchFirecrawlMarkdown(url: string): Promise<FetchResult> {
 		throw new Error(`firecrawl scrape ${url} returned no content`)
 	}
 
-	// read the etag and last-modified from Firecrawl's page metadata when present
+	// read the etag, last-modified, and the page's own title from Firecrawl's page metadata when present
 	const metadata = payload.data?.metadata ?? {}
 	const etag = typeof metadata.etag === "string" ? metadata.etag : null
 	const lastModified = typeof metadata["last-modified"] === "string" ? metadata["last-modified"] : null
-	return { text: markdown, cost: FIRECRAWL_COST_PER_FETCH, etag, lastModified }
+	const title = typeof metadata.title === "string" ? metadata.title.trim() || null : null
+	return { text: markdown, cost: FIRECRAWL_COST_PER_FETCH, etag, lastModified, title }
 }
 
 // fetch a video's published caption track as plain text
@@ -171,7 +179,7 @@ async function fetchYoutubeTranscript(videoId: string): Promise<FetchResult> {
 	if (!text) {
 		throw new Error(`youtube caption track for ${videoId} is empty`)
 	}
-	return { text, cost: 0, etag: null, lastModified: null }
+	return { text, cost: 0, etag: null, lastModified: null, title: null }
 }
 
 // fetch a Vimeo video's published captions
@@ -218,7 +226,7 @@ async function fetchCueTrack(tracks: CaptionTrack[], captionDomain: string, labe
 	if (!text) {
 		throw new Error(`${label} caption track is empty`)
 	}
-	return { text, cost: 0, etag: null, lastModified: null }
+	return { text, cost: 0, etag: null, lastModified: null, title: null }
 }
 
 // the track to fetch, preferring English
@@ -412,7 +420,7 @@ async function fetchDeclaredTranscript(transcriptUrl: string): Promise<FetchResu
 	if (!text) {
 		throw new Error(`transcript ${transcriptUrl} is empty`)
 	}
-	return { text, cost: 0, etag: null, lastModified: null }
+	return { text, cost: 0, etag: null, lastModified: null, title: null }
 }
 
 // check with a conditional GET whether the stored content is still current, bounded by its own timeout

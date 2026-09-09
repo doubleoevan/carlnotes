@@ -9,6 +9,7 @@ import {
 	runWithConcurrency,
 	toFetchedContentFields,
 	toFindingReviewFields,
+	toPageTitleField,
 } from "./score"
 
 // a high cheap-model score earns promotion to the premium score-model's re-score
@@ -142,4 +143,17 @@ test("a review keeps a null content hash null", () => {
 		contentHash: null,
 	})
 	expect(review.reviewedContentHash).toBe(null)
+})
+
+// the page's own title replaces a title that came from the url, and leaves every other title alone
+test("toPageTitleField writes the page title only over a title from the url", () => {
+	const urlFallbackResource = { title: "agent evals", url: "https://example.com/blog/agent-evals" }
+	expect(toPageTitleField(urlFallbackResource, "Agent Evals Are Hard")).toEqual({ title: "Agent Evals Are Hard" })
+
+	// a title that already names the page is kept, since a page's own title is often its site's name
+	const alreadyNamedResource = { title: "Why agent evals are hard", url: "https://example.com/blog/agent-evals" }
+	expect(toPageTitleField(alreadyNamedResource, "Example Blog")).toEqual({})
+
+	// a fetch that read no page names no title, so the stored one stands
+	expect(toPageTitleField(urlFallbackResource, null)).toEqual({})
 })

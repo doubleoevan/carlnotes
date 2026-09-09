@@ -1,6 +1,6 @@
 // tests for url canonicalization, title fallback, and resource kind detection
 import { expect, test } from "bun:test"
-import { toCanonicalUrl, toFallbackTitle, toResourceKind } from "./normalize"
+import { isTitleFromUrlFallback, toCanonicalUrl, toFallbackTitle, toResourceKind } from "./normalize"
 
 // a host ignores case, so two links that differ only there are the same page
 test("toCanonicalUrl lowercases the host and drops the fragment", () => {
@@ -100,4 +100,20 @@ test("toResourceKind reads a url's kind off its host", () => {
 	expect(toResourceKind("https://hamel.dev/blog/judge-bias")).toBe("read")
 	expect(toResourceKind("not a url")).toBe("read")
 	expect(toResourceKind("https://notyoutube.com/watch")).toBe("read")
+})
+
+// a title from the url is the one the page's own title replaces once it is fetched
+test("isTitleFromUrlFallback holds only for a title the url itself gives", () => {
+	expect(isTitleFromUrlFallback("agent evals", "https://example.com/blog/agent-evals")).toBe(true)
+	expect(isTitleFromUrlFallback(".github", "https://github.com/carl/notes/tree/main/.github")).toBe(true)
+
+	// an anchor word and the path it points at are the same name written two ways
+	expect(isTitleFromUrlFallback("Latest", "https://github.com/carl/notes/releases/latest")).toBe(true)
+
+	// a title that names the page is not the url's, whoever supplied it
+	expect(isTitleFromUrlFallback("Raising a Baby Raccoon", "https://example.com/blog/agent-evals")).toBe(false)
+
+	// a bare host gives no title, so an untitled Resource on one counts as a title from the url
+	expect(isTitleFromUrlFallback(null, "https://example.com/")).toBe(true)
+	expect(isTitleFromUrlFallback(null, "https://example.com/blog/agent-evals")).toBe(false)
 })

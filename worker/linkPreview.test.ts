@@ -199,3 +199,30 @@ test("a link preview fetch throws when the page is not html", async () => {
 		globalThis.fetch = originalFetch
 	}
 })
+
+// an entity is read as the character it names
+test("toLinkPreviewMetaTags returns the characters for its HTML entities", async () => {
+	const plainMeta = await toLinkPreviewMetaTags(
+		"<html><head><title>a topic&#39;s findings &mdash; Carl</title></head></html>",
+	)
+	expect(plainMeta.title).toBe("a topic's findings — Carl")
+
+	// an attribute is handed back as written too, so the og path decodes the same way
+	const openGraphHtml = `<html><head>
+		<meta property="og:title" content="Ben &amp; Carl&rsquo;s notes">
+		<meta property="og:description" content="&#x2014; a dash">
+	</head></html>`
+	const openGraphMeta = await toLinkPreviewMetaTags(openGraphHtml)
+	expect(openGraphMeta.title).toBe("Ben & Carl’s notes")
+	expect(openGraphMeta.description).toBe("— a dash")
+
+	// a hex entity names the same character whichever case its marker is written in
+	const upperHexMeta = await toLinkPreviewMetaTags("<html><head><title>an &#X2014; dash</title></head></html>")
+	expect(upperHexMeta.title).toBe("an — dash")
+
+	// a sequence that names no entity, and half a surrogate pair, are left as the page wrote them
+	const literalMeta = await toLinkPreviewMetaTags("<html><head><title>rust &borrow; checker</title></head></html>")
+	expect(literalMeta.title).toBe("rust &borrow; checker")
+	const surrogateMeta = await toLinkPreviewMetaTags("<html><head><title>lone &#xD800; half</title></head></html>")
+	expect(surrogateMeta.title).toBe("lone &#xD800; half")
+})
