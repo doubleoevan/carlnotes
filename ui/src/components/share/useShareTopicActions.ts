@@ -5,7 +5,7 @@ import { toast } from "sonner"
 import { sendCreateTopicInvite, toInviteUrl } from "@/clients/topicClient"
 import { COPIED_FEEDBACK_MS, COPY_PAGE_LABEL, INVITE_LABEL } from "@/components/share/ShareOptions"
 import { canOpenShareSheet, openShareSheet } from "@/lib/shareSheet"
-import { copyWithDocument } from "@/lib/utils"
+import { copyToClipboard } from "@/lib/utils"
 
 // what the share menu can do, and the label it shows after a copy lands
 export type ShareTopicActions = {
@@ -31,14 +31,7 @@ export function useShareTopicActions(
 
 	// copy a link to the topic to the clipboard and show a confirmation label
 	const copyLink = async (label: string, text: string): Promise<void> => {
-		let isCopied = true
-		try {
-			await navigator.clipboard.writeText(text)
-		} catch {
-			isCopied = copyWithDocument(text)
-		}
-		// only a copy that landed shows the copied note
-		if (isCopied) {
+		if (await copyToClipboard(text)) {
 			setCopiedLabel(label)
 			setTimeout(() => setCopiedLabel(null), COPIED_FEEDBACK_MS)
 		}
@@ -73,6 +66,7 @@ export function useShareTopicActions(
 				toast.error("That invite didn't get made. Try again.")
 				return
 			}
+			// a day at the invite limit ends in a toast too
 			if (inviteResult === "limited") {
 				toast.error("Daily invite limit reached. It resets tomorrow.")
 				return

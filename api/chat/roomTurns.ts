@@ -1,5 +1,4 @@
 // carl's chat turn in a team chat room
-
 import type { ChatAttachment } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, type SQL, sql } from "drizzle-orm"
@@ -10,6 +9,8 @@ import { getAttachmentBytes, MODEL_CHAT_TURN_FAILED_REJECTION } from "../../work
 import { streamChatReply } from "../../worker/chat"
 import { fetchPromptTemplate } from "../../worker/prompts/fetch"
 import { writePrompt } from "../../worker/prompts/write"
+import { isAllowed } from "../authorization"
+import { type ChatTurnToolCalls, toChatTopicTools } from "../tool/chatTools"
 import { decryptChatText, encryptChatText } from "./encryption"
 import { saveLinkPreviews } from "./linkPreviews"
 import { notifyChatRoomMessage } from "./roomStream"
@@ -45,6 +46,7 @@ export async function runModelChatRoomTurn(
 		.select({ litellmVirtualKey: users.litellmVirtualKey })
 		.from(users)
 		.where(eq(users.id, billedUserId))
+	// a member with no key cannot be billed, so carl posts his own rejection instead of a reply
 	if (!billedMember?.litellmVirtualKey) {
 		reportError(new Error(`chat room turn for user ${billedUserId} with no litellm key`), "chat", { teamId })
 		await postModelRejection(topic?.id ?? null, teamId, promptChatMessageId, MODEL_CHAT_TURN_FAILED_REJECTION)
@@ -67,8 +69,17 @@ export async function runModelChatRoomTurn(
 	// the images shared with the prompt chat message, read back for carl's reply
 	const promptImages = await loadPromptMessageImages(promptChatMessageId)
 
+	// a member with topic:edit gets the edit chatTurnTools, which check the rights again themselves
+	// the saves go out with carl's chat message
+	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const chatTurnTools =
+		topic && (await isAllowed(billedUserId, "topic:edit", topic))
+			? toChatTopicTools({ userId: billedUserId, topicId: topic.id, toolCalls })
+			: undefined
+
 	// the same reply path the private chat uses
 	const replyStream = await streamChatReply({
+		tools: chatTurnTools,
 		topicId: topic?.id,
 		teamId: topic ? undefined : teamId,
 		userId: billedUserId,
@@ -113,7 +124,10 @@ export async function runModelChatRoomTurn(
 	// the ledger is updated after carl's answer is stored, naming the chat message carl answered
 	await recordChatRoomTurn(billedUserId, topic?.id ?? null, teamId, promptChatMessageId, completion)
 	// the fan-out runs only after the insert commits. every listener's re-read finds the chat message
-	await notifyChatRoomMessage(topic?.id ?? null, teamId, modelChatMessage.id)
+	await notifyChatRoomMessage(topic?.id ?? null, teamId, modelChatMessage.id, {
+		topicSaves: toolCalls.topicSaves,
+		topicSaveRejections: toolCalls.topicSaveRejections,
+	})
 }
 
 // the images stored with one chat room message, rebuilt as the data urls the model reads

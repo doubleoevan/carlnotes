@@ -4,7 +4,7 @@ import type { scanStatuses } from "@shared/enums"
 import { isBudgetError } from "@shared/scanFailure"
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
-import { useLayoutEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { CopyMarkdownButton } from "@/components/common/CopyMarkdownButton"
 import { durationMsBetween, toDollarLabel, toDurationLabel } from "@/lib/labels"
@@ -121,11 +121,30 @@ export function SafeNoteText({ note, allowedUrls }: { note: string; allowedUrls?
 /**
  * A bordered box that scrolls when its content overflows, with a thin visible scrollbar to indicate that it is scrollable.
  * With copyMarkdown set, a copy button stays on the corner instead of scrolling away, offering the box's content as Markdown for an AI.
+ * With scrollToTopOn set, a change of that value scrolls the box back to its top.
  */
-export function ScrollBox({ children, copyMarkdown }: { children: React.ReactNode; copyMarkdown?: string }) {
+export function ScrollBox({
+	children,
+	copyMarkdown,
+	scrollToTopOn,
+	className,
+}: {
+	children: React.ReactNode
+	copyMarkdown?: string
+	scrollToTopOn?: unknown
+	// the scrolling element's own classes, for a caller that bounds its height
+	className?: string
+}) {
+	const scrollBoxRef = useRef<HTMLDivElement>(null)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the value is the trigger, read through the ref
+	useEffect(() => {
+		scrollBoxRef.current?.scrollTo({ top: 0 })
+	}, [scrollToTopOn])
 	return (
 		<div className="group border-primary/50 relative rounded-md border">
-			<div className={cn("max-h-72 overflow-y-auto p-2", HIGHLIGHT_SCROLLBAR_CLASS)}>{children}</div>
+			<div ref={scrollBoxRef} className={cn("max-h-72 overflow-y-auto p-2", HIGHLIGHT_SCROLLBAR_CLASS, className)}>
+				{children}
+			</div>
 			{copyMarkdown && <CopyMarkdownButton markdown={copyMarkdown} />}
 		</div>
 	)

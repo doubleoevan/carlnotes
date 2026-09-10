@@ -2,9 +2,11 @@
 import { type BrowserPlatform, isInAppBrowser, toBrowserPlatform, toPlatform } from "@shared/userAgent"
 import type { Context } from "hono"
 import type { SessionUser } from "./auth"
+import type { Caller } from "./mcp/caller"
 
-// the hono environment every route shares. Variables holds the session user the auth middleware set, or null
-export type AppEnv = { Variables: { user: SessionUser | null } }
+// the hono environment every route shares. Variables holds the session user the auth middleware set, or null,
+// and the caller an mcp request resolved ahead of its rate limit
+export type AppEnv = { Variables: { user: SessionUser | null; mcpCaller?: Caller } }
 
 // a request context under that environment
 export type AppContext = Context<AppEnv>

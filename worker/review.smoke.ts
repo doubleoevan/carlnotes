@@ -328,12 +328,12 @@ async function checkReviewAgain(topicId: string, ownerId: string): Promise<boole
 			ratedFindingAfterEdit?.reviewedContextHash !== ratedFinding.reviewedContextHash,
 		],
 	]
-	let isPassing = true
+	let isTestPassing = true
 	for (const [label, isPassed] of results) {
 		console.log(`${isPassed ? "PASS" : "FAIL"}  ${label}`)
-		isPassing = isPassing && isPassed
+		isTestPassing = isTestPassing && isPassed
 	}
-	return isPassing
+	return isTestPassing
 }
 
 async function smokeTest(): Promise<number> {

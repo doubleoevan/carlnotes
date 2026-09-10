@@ -30,7 +30,7 @@ him to exclude. Compare:
 
 The first prompt puts every topic finding on CarlNotes in front of Carl. The second gives Carl a way to filter
 the irrelevant ones out. If you'd like to craft your prompt with an expert, ask Carl. 
-He read the documentation. All of it. See [Coffee Talk](/docs/feed/chat/).
+He read the documentation. All of it. See [Making a topic with Coffee Talk](/docs/feed/making-a-topic-in-chat/).
 
 ![A chat conversation, where Carl suggests how to improve a topic prompt](../../../assets/screenshots/prompt-chat-help.png)
 
@@ -66,7 +66,9 @@ cut](../../../assets/screenshots/prompt-relevance-note.png)
 ## Edit it any time
 
 The prompt isn't locked. Open the topic's edit dialog with the pencil icon, rewrite
-**Carl's prompt**, and save. The next brew does research based on the new version. Previous findings stay put in your **Brew diary**.
+**Carl's prompt**, and save. The next brew does research based on the new version. Previous findings stay put in your **Brew diary**. Or ask
+Carl in Coffee Talk: he proposes the rewrite and saves it after your yes. See
+[Editing a topic with Coffee Talk](/docs/feed/editing-a-topic-in-chat/).
 
 To check if a rewrite worked, run a brew with the **Brew** button and compare it against
 the earlier entries in your **Brew diary** on the topic page. Read counts, kept counts, and the updated

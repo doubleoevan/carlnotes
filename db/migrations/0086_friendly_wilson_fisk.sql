@@ -1,0 +1,64 @@
+CREATE TYPE "public"."prompt_version_origin" AS ENUM('editor', 'chat', 'mcp');--> statement-breakpoint
+CREATE TABLE "oauth_access_tokens" (
+	"id" text PRIMARY KEY NOT NULL,
+	"access_token" text NOT NULL,
+	"refresh_token" text NOT NULL,
+	"access_token_expires_at" timestamp NOT NULL,
+	"refresh_token_expires_at" timestamp NOT NULL,
+	"client_id" text NOT NULL,
+	"user_id" text,
+	"scopes" text NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "oauth_access_tokens_access_token_unique" UNIQUE("access_token"),
+	CONSTRAINT "oauth_access_tokens_refresh_token_unique" UNIQUE("refresh_token")
+);
+--> statement-breakpoint
+CREATE TABLE "oauth_applications" (
+	"id" text PRIMARY KEY NOT NULL,
+	"name" text NOT NULL,
+	"icon" text,
+	"metadata" text,
+	"client_id" text NOT NULL,
+	"client_secret" text,
+	"redirect_urls" text NOT NULL,
+	"type" text NOT NULL,
+	"disabled" boolean DEFAULT false,
+	"user_id" text,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL,
+	CONSTRAINT "oauth_applications_client_id_unique" UNIQUE("client_id")
+);
+--> statement-breakpoint
+CREATE TABLE "oauth_consents" (
+	"id" text PRIMARY KEY NOT NULL,
+	"client_id" text NOT NULL,
+	"user_id" text NOT NULL,
+	"scopes" text NOT NULL,
+	"consent_given" boolean NOT NULL,
+	"created_at" timestamp DEFAULT now() NOT NULL,
+	"updated_at" timestamp DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+CREATE TABLE "topic_prompt_versions" (
+	"id" text PRIMARY KEY NOT NULL,
+	"topic_id" text NOT NULL,
+	"prompt" text NOT NULL,
+	"saved_by_user_id" text,
+	"origin" "prompt_version_origin" NOT NULL,
+	"created_at" timestamp with time zone DEFAULT now() NOT NULL
+);
+--> statement-breakpoint
+ALTER TABLE "oauth_access_tokens" ADD CONSTRAINT "oauth_access_tokens_client_id_oauth_applications_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_applications"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "oauth_access_tokens" ADD CONSTRAINT "oauth_access_tokens_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "oauth_applications" ADD CONSTRAINT "oauth_applications_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "oauth_consents" ADD CONSTRAINT "oauth_consents_client_id_oauth_applications_client_id_fk" FOREIGN KEY ("client_id") REFERENCES "public"."oauth_applications"("client_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "oauth_consents" ADD CONSTRAINT "oauth_consents_user_id_users_id_fk" FOREIGN KEY ("user_id") REFERENCES "public"."users"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "topic_prompt_versions" ADD CONSTRAINT "topic_prompt_versions_topic_id_topics_id_fk" FOREIGN KEY ("topic_id") REFERENCES "public"."topics"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "topic_prompt_versions" ADD CONSTRAINT "topic_prompt_versions_saved_by_user_id_users_id_fk" FOREIGN KEY ("saved_by_user_id") REFERENCES "public"."users"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "oauth_access_tokens_client_id_idx" ON "oauth_access_tokens" USING btree ("client_id");--> statement-breakpoint
+CREATE INDEX "oauth_access_tokens_user_id_idx" ON "oauth_access_tokens" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "oauth_applications_user_id_idx" ON "oauth_applications" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "oauth_consents_client_id_idx" ON "oauth_consents" USING btree ("client_id");--> statement-breakpoint
+CREATE INDEX "oauth_consents_user_id_idx" ON "oauth_consents" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "topic_prompt_versions_topic_created_idx" ON "topic_prompt_versions" USING btree ("topic_id","created_at");

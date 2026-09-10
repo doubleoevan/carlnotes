@@ -50,7 +50,10 @@ Turning the toggle off stops the email from being sent. But the topic keeps brew
 stay up to date in the feed.
 
 The unsubscribe link inside the email deactivates your subscription to another user's topic. Nothing
-is deleted, and the email or subscription can be reactivated on the Activity page.
+is deleted, and the email or subscription can be reactivated on the Activity page. An invitation you
+haven't answered shows as a count on the **Activity** row of your menu, on the Activity page's title, and
+in the tab title, and the count's tooltip names who invited you to which topic. The badge on your avatar
+adds it to your unread chats and notes, and its tooltip lists all three.
 
 ## The Brew diary is your topic brew's history
 

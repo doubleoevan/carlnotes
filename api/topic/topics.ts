@@ -48,6 +48,7 @@ import {
 	toTeamFields,
 } from "./helpers"
 import { loadDirectSubscription } from "./permissions"
+import { type PromptVersionOrigin, savePromptVersion } from "./promptVersions"
 import { startOfUtcMonth } from "./quotas"
 
 // the outcome of a topic creation request
@@ -82,7 +83,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 	// the page's independent reads run together
 	const isTopicOwner = topic.ownerId === userId
 	// biome-ignore format: one line keeps the destructure under the comment-density hook's limit
-	const [{ isAdmin, topicFindings }, sourceRows, rawAttachmentRows, scanRows, directSubscription, inviteAndScanFields, [ownerRow], teamFields, isDailyFrequencyPaused, canRate, canEdit] =
+	const [{ isAdmin, topicFindings }, topicSourceRows, rawAttachmentRows, scanRows, directSubscription, inviteAndScanFields, [ownerRow], teamFields, isDailyFrequencyPaused, canRate, canEdit] =
 		await Promise.all([
 			// the user's access and the findings it gates
 			loadTopicAccessAndFindings(topic, userId),
@@ -136,15 +137,15 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 
 	// a Source that has not passed its llm-guard screen is only seen by someone who may edit the list.
 	// an editor's save reconciles sources by deletion, so hiding a row from them would delete it
-	const sourceSummaries = sourceRows
-		.filter((source) => source.status === "ready" || isAdmin || canEdit)
-		.map((source) => ({
-			id: source.id,
-			sourceKind: source.kind,
-			summary: toSourceSummary(source.kind, source.config),
-			value: toSourceValue(source.kind, source.config),
-			status: source.status,
-			error: source.error,
+	const sourceSummaries = topicSourceRows
+		.filter((topicSource) => topicSource.status === "ready" || isAdmin || canEdit)
+		.map((topicSource) => ({
+			id: topicSource.id,
+			sourceKind: topicSource.kind,
+			summary: toSourceSummary(topicSource.kind, topicSource.config),
+			value: toSourceValue(topicSource.kind, topicSource.config),
+			status: topicSource.status,
+			error: topicSource.error,
 		}))
 
 	// every later scan reads the generated context, so the owner and admins see it to edit it, and nobody else does
@@ -222,6 +223,8 @@ export async function createTopic(
 	userId: string,
 	payload: UpdateTopicPayload,
 	analyticsProperties: AnalyticsProperties,
+	// where the first prompt version is saved from. the editor unless a topic tool says otherwise
+	origin: PromptVersionOrigin = "editor",
 ): Promise<CreateTopicResult> {
 	// enforce the topic limit and user role before writing anything.
 	if (!(await isAllowed(userId, "topic:create"))) {
@@ -264,6 +267,9 @@ export async function createTopic(
 			throw new Error("failed to create topic")
 		}
 
+		// save the first prompt version
+		await savePromptVersion(transaction, { topicId: topic.id, prompt, userId, origin })
+
 		// the owner subscribes to their own topic, so its deliveries reach them like any other subscriber
 		await transaction.insert(subscriptions).values({ topicId: topic.id, subscriberUserId: userId })
 
@@ -280,11 +286,11 @@ export async function createTopic(
 		}
 
 		// insert the new sources. a create payload never includes kept ids
-		const newSources = payload.sources.flatMap((source) => ("id" in source ? [] : [source]))
+		const newSources = payload.sources.flatMap((topicSource) => ("id" in topicSource ? [] : [topicSource]))
 		if (newSources.length > 0) {
 			await transaction
 				.insert(sources)
-				.values(newSources.map((source) => toNewSourceRow(topic.id, source, podcastNames)))
+				.values(newSources.map((topicSource) => toNewSourceRow(topic.id, topicSource, podcastNames)))
 		}
 
 		// open the first scan as running, so the new topic page shows a scan already under way
@@ -302,7 +308,7 @@ export async function createTopic(
 	startInviteEmails({ id: topicId, name, ownerId: userId }, inviteEmails)
 
 	// track the topic creation event
-	trackEvent("topic_created", userId, { ...analyticsProperties, topicId })
+	trackEvent("topic_created", userId, { ...analyticsProperties, topicId, origin })
 	return { status: "created", id: topicId }
 }
 
@@ -365,6 +371,9 @@ export async function updateTopic(
 			})
 			.where(eq(topics.id, topicId))
 
+		// save a prompt version when the prompt changed
+		await savePromptVersion(transaction, { topicId, prompt, userId, origin: "editor", previousPrompt: topic.prompt })
+
 		// only a public topic can be featured, so changing the visibility from public drops it from the featured topics
 		if (visibility !== "public") {
 			await releaseFeatureOrder(topicId, transaction)
@@ -402,7 +411,7 @@ export async function updateTopic(
 		}
 
 		// reconcile sources: keep the rows the payload names by id, delete the rest, insert the ones without an id
-		const keptSourceIds = payload.sources.flatMap((source) => ("id" in source ? [source.id] : []))
+		const keptSourceIds = payload.sources.flatMap((topicSource) => ("id" in topicSource ? [topicSource.id] : []))
 		const staleSourceFilter =
 			keptSourceIds.length > 0
 				? and(eq(sources.topicId, topicId), notInArray(sources.id, keptSourceIds))
@@ -410,11 +419,11 @@ export async function updateTopic(
 		await transaction.delete(sources).where(staleSourceFilter)
 
 		// insert the newly added sources. the flatMap narrows the union to the members with source kind and source config
-		const newSources = payload.sources.flatMap((source) => ("id" in source ? [] : [source]))
+		const newSources = payload.sources.flatMap((topicSource) => ("id" in topicSource ? [] : [topicSource]))
 		if (newSources.length > 0) {
 			await transaction
 				.insert(sources)
-				.values(newSources.map((source) => toNewSourceRow(topicId, source, podcastNames)))
+				.values(newSources.map((topicSource) => toNewSourceRow(topicId, topicSource, podcastNames)))
 		}
 	})
 

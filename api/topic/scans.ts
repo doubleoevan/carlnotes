@@ -51,7 +51,8 @@ export async function runManualScan(
 	}
 
 	// an overage bills only once the scan finished
-	started.whenFinished
+	started
+		.whenFinished()
 		.then(async () => {
 			// a Scan the user stopped gave its daily scan back, so the limit the overage bills for is no longer exceeded
 			const finishedScan = await loadScan(started.scan.id)

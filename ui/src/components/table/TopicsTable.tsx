@@ -5,6 +5,7 @@ import { fetchTopicPage, sendSubscriptionEmail } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Button } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Switch } from "@/components/primitives/switch"
@@ -14,7 +15,6 @@ import { SortableHeader } from "@/components/table/SortableHeader"
 import { TableCard } from "@/components/table/TableCard"
 import { SMALLEST_PAGE_SIZE, TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { TopicInfo } from "@/components/topic/TopicInfo"
-import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { toMonthYearLabel } from "@/lib/labels"
 import { POPOVER_PANEL_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
@@ -146,7 +146,7 @@ export function TopicsTable({
 										<AnchorLink href={`/topics/${topic.id}`} className="text-link hover:underline">
 											{topic.name}
 										</AnchorLink>
-										<TopicMentionBadge topicId={topic.id} />
+										<PageUpdateCountBadge topicId={topic.id} />
 									</span>
 								</td>
 								<td className="text-muted-foreground py-2 pr-4">{toMonthYearLabel(topic.createdAt)}</td>

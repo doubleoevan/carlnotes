@@ -216,7 +216,7 @@ function streamChatRoomEvents(context: Context, topicId: string | null, teamId: 
 		// notifications chain one after another, so a burst never reads the cursor before the prior delta advanced it
 		await new Promise<void>((resolve) => {
 			let deliveryChain = Promise.resolve()
-			const stopListening = onChatRoomMessage(topicId, teamId, (chatMessageId) => {
+			const stopListening = onChatRoomMessage(topicId, teamId, (chatMessageId, topicToasts) => {
 				// each notification delivers everything past the cursor, and the api client dedupes replays by id
 				deliveryChain = deliveryChain
 					.then(async () => {
@@ -224,6 +224,10 @@ function streamChatRoomEvents(context: Context, topicId: string | null, teamId: 
 						for (const chatMessage of await loadChatRoomDeltas(topicId, teamId, cursor, chatMessageId)) {
 							await stream.writeSSE({ id: String(chatMessage.id), event: "message", data: JSON.stringify(chatMessage) })
 							cursor = Math.max(cursor, chatMessage.id)
+						}
+						// send the toast lines carl's tools left after his chat message
+						if (topicToasts.topicSaves.length > 0 || topicToasts.topicSaveRejections.length > 0) {
+							await stream.writeSSE({ event: "topicToolCalls", data: JSON.stringify(topicToasts) })
 						}
 					})
 					.catch((error) => console.error("chat room delta delivery failed", error))
@@ -579,6 +583,7 @@ export const chatRoomRoute = new Hono<AppEnv>()
 		if (postChatMessageResult === "attachmentRejected") {
 			return context.json({ error: "attachment rejected" }, 400)
 		}
+		// the posted chat message, or 404 for a chat room this user may not use
 		return postChatMessageResult ? context.json(postChatMessageResult) : context.json({ error: "not found" }, 404)
 	})
 	.post("/teams/:id/room", chatBodyLimit, zValidator("json", chatRoomMessagePayload), async (context) => {
@@ -603,6 +608,7 @@ export const chatRoomRoute = new Hono<AppEnv>()
 		if (postChatMessageResult === "attachmentRejected") {
 			return context.json({ error: "attachment rejected" }, 400)
 		}
+		// the posted chat message, or 404 for a chat room this user may not use
 		return postChatMessageResult ? context.json(postChatMessageResult) : context.json({ error: "not found" }, 404)
 	})
 	// a shared file streams back to any member, under the same gate the chat room itself uses

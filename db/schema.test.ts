@@ -3,7 +3,19 @@ import { expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import * as schema from "./schema"
-import { chatTurns, EMBED_DIMENSIONS, EMBED_MODEL_NAME, findings, resources, subscriptions, topics } from "./schema"
+import {
+	chatTurns,
+	EMBED_DIMENSIONS,
+	EMBED_MODEL_NAME,
+	findings,
+	oauthAccessTokens,
+	oauthApplications,
+	oauthConsents,
+	resources,
+	subscriptions,
+	topicPromptVersions,
+	topics,
+} from "./schema"
 
 // read the generated initial migration once for SQL-level assertions
 const migrationsDirectory = join(import.meta.dir, "migrations")
@@ -252,4 +264,30 @@ test("room messages and summaries never reach the worker pipeline", () => {
 		.filter((file) => /chatRoomMessages|chatRoomSummaries/.test(file.text))
 		.map((file) => file.path)
 	expect(readers).toEqual([])
+})
+
+// a prompt version cascades from its topic and keeps its row when the account that saved it closes.
+// its origin is editor, chat, or mcp, and the topic-and-time index covers the history read
+test("topic_prompt_versions cascades from its topic, nulls its user, and indexes topic and time", () => {
+	expect(topicPromptVersions.prompt.notNull).toBe(true)
+	expect(topicPromptVersions.savedByUserId.notNull).toBe(false)
+	expect(topicPromptVersions.origin.notNull).toBe(true)
+	// the migration SQL holds the cascades, the enum, and the index
+	expect(allMigrationsSql()).toMatch(/topic_prompt_versions_topic_id_topics_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/topic_prompt_versions_saved_by_user_id_users_id_fk.*ON DELETE set null/)
+	expect(allMigrationsSql()).toMatch(/CREATE TYPE "public"\."prompt_version_origin" AS ENUM\('editor', 'chat', 'mcp'\)/)
+	expect(allMigrationsSql()).toMatch(/CREATE INDEX (IF NOT EXISTS )?"topic_prompt_versions_topic_created_idx"/)
+})
+
+// the oauth tables come from Better Auth's mcp plugin. tokens and consents cascade from their client,
+// and a consent also cascades from its user
+test("the oauth tables mirror the mcp plugin's models and cascade from their client", () => {
+	expect(oauthApplications.clientId.isUnique).toBe(true)
+	expect(oauthAccessTokens.accessToken.isUnique).toBe(true)
+	expect(oauthAccessTokens.userId.notNull).toBe(false)
+	expect(oauthConsents.consentGiven.notNull).toBe(true)
+	// the migration SQL holds the cascades
+	expect(allMigrationsSql()).toMatch(/oauth_access_tokens_client_id_oauth_applications_client_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/oauth_consents_client_id_oauth_applications_client_id_fk.*ON DELETE cascade/)
+	expect(allMigrationsSql()).toMatch(/oauth_consents_user_id_users_id_fk.*ON DELETE cascade/)
 })

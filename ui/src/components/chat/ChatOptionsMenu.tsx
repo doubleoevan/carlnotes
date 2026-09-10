@@ -1,13 +1,13 @@
 // the chat room switcher, a row under the title that opens the chat room list
 import type { ChatMention } from "@shared/contracts"
-import { Check, ChevronDown, Trash2, Users } from "lucide-react"
+import { Check, ChevronDown, Plus, Trash2, Users } from "lucide-react"
 import { useState } from "react"
 import { CarlAvatar } from "@/components/branding/CarlAvatar"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
+import { CountBadge } from "@/components/common/CountBadge"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { ChatMentionCount } from "@/components/topic/TopicMentionBadge"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { useAllChatMentions } from "@/stores/chatRoomStore"
@@ -36,6 +36,8 @@ export type ChatOptionsMenuProps = {
 	chatRoomOptions?: ChatRoomOption[]
 	// opens the user's own conversation about this topic, absent where there is no topic
 	onPrivateChat?: () => void
+	// opens the new-topic chat, where carl makes a topic. absent for a visitor
+	onNewTopicChat?: () => void
 	// the Clear chat row: the private chat's own, or the chat room's for a team leader
 	onClear?: () => void
 	// the Clear row's label, naming the conversation it empties
@@ -45,13 +47,16 @@ export type ChatOptionsMenuProps = {
 }
 
 // the switcher props a chat room panel passes through, without the Clear row it adds itself
-export type ChatRoomMenu = Pick<ChatOptionsMenuProps, "chatRoomOptions" | "onPrivateChat" | "onOpenChatRoomMenu">
+export type ChatRoomMenu = Pick<
+	ChatOptionsMenuProps,
+	"chatRoomOptions" | "onPrivateChat" | "onNewTopicChat" | "onOpenChatRoomMenu"
+>
 
 /**
  * Whether the switcher row has anything to show: another chat room, private chat, or clear.
  */
 export function hasChatOptions(menu: ChatOptionsMenuProps): boolean {
-	return Boolean(menu.onPrivateChat || menu.onClear || menu.chatRoomOptions?.length)
+	return Boolean(menu.onPrivateChat || menu.onNewTopicChat || menu.onClear || menu.chatRoomOptions?.length)
 }
 
 // the avatar and name the trigger shows for the chat room currently open, whether a team chat room or the private chat
@@ -65,6 +70,7 @@ export type CurrentChatRoomOption = {
 export function ChatOptionsMenu({
 	chatRoomOptions,
 	onPrivateChat,
+	onNewTopicChat,
 	onClear,
 	clearLabel,
 	onOpenChatRoomMenu,
@@ -89,7 +95,7 @@ export function ChatOptionsMenu({
 	const chatMentions = useAllChatMentions()
 
 	// nothing to switch to and nothing to clear. no row to show
-	if (!hasChatOptions({ chatRoomOptions, onPrivateChat, onClear })) {
+	if (!hasChatOptions({ chatRoomOptions, onPrivateChat, onNewTopicChat, onClear })) {
 		return null
 	}
 
@@ -109,7 +115,7 @@ export function ChatOptionsMenu({
 					) : null}
 					<span className="min-w-0 flex-1 truncate font-medium">{currentChatRoom?.name ?? "Select a chat"}</span>
 					{chatMentions.length > 0 && (
-						<ChatMentionCount chatMentions={chatMentions} className="h-5 min-w-5 shrink-0 text-xs" />
+						<CountBadge count={chatMentions.length} className="h-5 min-w-5 shrink-0 text-xs" />
 					)}
 					<ChevronDown className="text-muted-foreground size-3.5 shrink-0" />
 				</button>
@@ -122,6 +128,13 @@ export function ChatOptionsMenu({
 						{/* the private chat is with carl alone, marked with his avatar */}
 						<CarlAvatar className="size-5" />
 						Private chat
+					</button>
+				)}
+				{/* the new-topic chat, where carl makes a topic */}
+				{onNewTopicChat && (
+					<button type="button" onClick={() => handleSelectChatOption(onNewTopicChat)} className={MENU_OPTION_CLASS}>
+						<Plus className="text-muted-foreground size-5" />
+						Give Carl a topic. You know the one.
 					</button>
 				)}
 				{/* then the selected chat room, then the rest alphabetically */}
@@ -146,10 +159,7 @@ export function ChatOptionsMenu({
 								{/* a team and one of its topics can share a name. the team option shows an icon */}
 								{chatRoomOption.isTeamRoom && <Users className="text-muted-foreground size-3.5 shrink-0" />}
 								{chatRoomOption.chatMentions && chatRoomOption.chatMentions.length > 0 && (
-									<ChatMentionCount
-										chatMentions={chatRoomOption.chatMentions}
-										className="h-5 min-w-5 shrink-0 text-xs"
-									/>
+									<CountBadge count={chatRoomOption.chatMentions.length} className="h-5 min-w-5 shrink-0 text-xs" />
 								)}
 								{chatRoomOption.isActive && <Check className="text-primary size-4 shrink-0" />}
 							</button>

@@ -37,7 +37,7 @@ import { matchesTopicFindingFilter } from "@/lib/topicFindingFilters"
 import { toSortedTopicFindings } from "@/lib/topicFindingSorts"
 import { cn, NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
 import { type TopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
-import { useRegisterChatContext } from "@/stores/chatPanelStore"
+import { useRegisterChatContext, useTopicChangeCount } from "@/stores/chatPanelStore"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
 // the page's dialogs, one open at a time
@@ -97,6 +97,8 @@ export function TopicPage() {
 			? {
 					page: "Topic",
 					hasTeamBookmarks: topic.isTeamMember,
+					// the topic-bound mcp server
+					mcp: { name: `CarlNotes: ${topic.name}`, url: `${window.location.origin}/mcp/t/${topic.id}` },
 					options: toTopicActionOptions({
 						topic,
 						isAdmin: session?.user.role === "admin",
@@ -129,6 +131,14 @@ export function TopicPage() {
 		setGatedTopic(null)
 		void reloadTopicPage()
 	}, [reloadTopicPage])
+
+	// reload the page each time the chat panel reports this topic changed
+	const topicChangeCount = useTopicChangeCount(topic?.id ?? null)
+	useEffect(() => {
+		if (topicChangeCount > 0) {
+			void reloadTopicPage()
+		}
+	}, [topicChangeCount, reloadTopicPage])
 
 	// reload the page after running a topic feed handler
 	const runThenReload = useCallback(

@@ -8,6 +8,7 @@ import { fetchTeamPage, sendRemoveTopicFromTeam } from "@/clients/teamClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
@@ -18,7 +19,6 @@ import { TableCard } from "@/components/table/TableCard"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { TeamMembersTable } from "@/components/table/TeamMembersTable"
 import { TopicsTable } from "@/components/table/TopicsTable"
-import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { toCentsLabel, toCountLabel } from "@/lib/labels"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
@@ -202,7 +202,7 @@ function TeamMembershipRow({
 							<TeamAvatar team={team} className="size-6" />
 							{team.name}
 						</AnchorLink>
-						<TopicMentionBadge topicId={null} teamId={team.teamId} href={`/teams/${team.teamId}`} />
+						<PageUpdateCountBadge topicId={null} teamId={team.teamId} href={`/teams/${team.teamId}`} />
 					</span>
 				</td>
 				<td className="text-muted-foreground max-w-40 py-2 pr-4 sm:max-w-64">

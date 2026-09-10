@@ -1,5 +1,5 @@
 // the typed api client for the activity routes. AppType is imported types-only, so no api code enters the ui bundle
-import type { ActivityResponse } from "@shared/contracts"
+import type { ActivityResponse, TopicInviteBadge } from "@shared/contracts"
 import { hc } from "hono/client"
 import type { AppType } from "../../../api"
 
@@ -40,4 +40,15 @@ export async function sendDeclineInvite(inviteId: string): Promise<void> {
 	if (!response.ok) {
 		throw new Error(`invite decline failed: ${response.status}`)
 	}
+}
+
+/**
+ * Fetches the topic invitations waiting for the user's response.
+ */
+export async function fetchTopicInviteBadges(): Promise<TopicInviteBadge[]> {
+	const pendingInvitesResponse = await apiClient.api.invites.topics.pending.$get()
+	if (!pendingInvitesResponse.ok) {
+		throw new Error(`topic invite badges failed: ${pendingInvitesResponse.status}`)
+	}
+	return (await pendingInvitesResponse.json()) as TopicInviteBadge[]
 }

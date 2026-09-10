@@ -8,9 +8,9 @@ import type { ScanTrigger } from "./workflows/run-topic-scan-activities"
 // a persisted Scan row
 type Scan = typeof scans.$inferSelect
 
-// the scan row this opened and a promise that settles when the workflow ends. "running" means one was already in flight
+// the scan row this opened and a call that waits for the workflow to end. "running" means one was already in flight
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type TopicScanStart = { status: "started"; scan: Scan; whenFinished: Promise<void> } | { status: "running" }
+export type TopicScanStart = { status: "started"; scan: Scan; whenFinished: () => Promise<void> } | { status: "running" }
 
 /**
  * Open a Scan for a Topic and pass it to Temporal. Returns "running" if the Topic already has one in flight.

@@ -224,19 +224,37 @@ Boolean variables and props are prefixed with `is`, `has`, `can`, `should`,
 or `will`. Examples: `isActive`, `isLoading`, `hasError`, `canSubmit`,
 `shouldRetry`, `willExpire`.
 
-### 10. Meaningful variable names
+### 10. Name the noun, in full
 
-Names describe what the value represents, not its position or freshness.
-`existing`, `latest`, `current`, `result`, `data`, `value`, `item` are not
-self-documenting.
+A name says what the value is, with the domain noun spelled out. Nothing is
+inferred from the surrounding code, the file name, or the function it sits in.
 
-    // wrong
-    const existing = await db.findUser(id)
-    const data = await response.json()
+- **Never an adjective or a participle alone.** `existing`, `removed`, `added`,
+  `bound`, `written`, `isPassing` name a state without the thing in that state.
+  Name the thing: `existingUser`, `removeTopicSourceResult`, `writtenChunks`,
+  `isTestPassing`.
+- **Never a generic noun.** `result`, `data`, `value`, `item`, `calls`, `binding`
+  say nothing the type did not. Name what it holds: `toolCalls`,
+  `newTopicToolBinding`, `reportPayload`.
+- **A call's result is named after the call.** `const addTopicSourceResult =
+  await addTopicSource(...)`, never `const added` or `const result`.
+- **A count says count.** `failureCount`, `readyTopicSourceCount`, never
+  `failures` or `ready`.
+- **A compound keeps the whole domain noun.** `topicSource` never `source`,
+  `topicDraft` never `draft`, and every compound follows: `xTopicSourceId` never
+  `xSourceId`, `toTopicSourceLabel` never `toSourceLabel`. The one exception is a
+  key the codebase already ships in a contract or a table.
+- **The loop index `i` is canonical.** It is the one short name that stays.
 
-    // right
-    const existingUser = await db.findUser(id)
-    const reportPayload = await response.json()
+  // wrong
+  const removed = await removeSource({ userId, topicId, sourceId })
+  let failures = 0
+  for (const source of draft.sources) { ... }
+
+  // right
+  const removeTopicSourceResult = await removeTopicSource({ userId, topicId, sourceId })
+  let failureCount = 0
+  for (const topicSource of topicDraft.sources) { ... }
 
 ### 11. JSDoc for exported functions
 

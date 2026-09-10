@@ -162,8 +162,10 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 	}
 }
 
-// the topic invitations waiting for this user's answer, shaped as the subscription rows they will become,
-async function loadInvitedTopicSubscriptions(user: {
+/**
+ * Loads the topic invitations waiting for the user's answer, shaped as the subscription rows they will become.
+ */
+export async function loadInvitedTopicSubscriptions(user: {
 	id: string
 	email: string
 }): Promise<(Omit<SubscriptionRow, "subscribedAt"> & { subscribedAt: Date })[]> {

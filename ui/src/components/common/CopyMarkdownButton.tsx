@@ -1,7 +1,7 @@
 import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { cn, copyWithDocument } from "@/lib/utils"
+import { cn, copyToClipboard } from "@/lib/utils"
 
 // how long the copied checkmark stays before the button offers to copy again
 const COPIED_FEEDBACK_MS = 1500
@@ -15,15 +15,9 @@ export function CopyMarkdownButton({ markdown }: { markdown: string }) {
 	// controlled so the copied confirmation survives the click. a tooltip closes when its trigger is clicked
 	const [isTooltipOpen, setIsTooltipOpen] = useState(false)
 
-	// copy, then confirm on the button. a browser that rejects the clipboard api falls back to a selection copy
-	async function handleCopy(): Promise<void> {
-		let isWritten = true
-		try {
-			await navigator.clipboard.writeText(markdown)
-		} catch {
-			isWritten = copyWithDocument(markdown)
-		}
-		if (isWritten) {
+	// copy to clipboard, then confirm on the button
+	async function handleCopyMarkdown(): Promise<void> {
+		if (await copyToClipboard(markdown)) {
 			setIsCopied(true)
 			setTimeout(() => setIsCopied(false), COPIED_FEEDBACK_MS)
 		}
@@ -34,7 +28,7 @@ export function CopyMarkdownButton({ markdown }: { markdown: string }) {
 			<TooltipTrigger asChild>
 				<button
 					type="button"
-					onClick={handleCopy}
+					onClick={handleCopyMarkdown}
 					aria-label="Copy Markdown for AI"
 					className={cn(
 						"bg-card/90 text-muted-foreground hover:text-foreground absolute top-1.5 right-1.5 grid size-7 place-items-center rounded-md border opacity-0 shadow-lift transition-opacity focus-visible:opacity-100 group-hover:opacity-100",

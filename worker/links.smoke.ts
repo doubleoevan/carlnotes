@@ -162,9 +162,9 @@ await resetPageContent()
 const { topicId, userId } = await seedTestData()
 try {
 	// a thrown check still cleans up, so a failed run leaves the database as it found it
-	const isPassing = await check(topicId, userId)
+	const isTestPassing = await check(topicId, userId)
 	await cleanUp(userId, urlsBefore)
-	process.exitCode = isPassing ? 0 : 1
+	process.exitCode = isTestPassing ? 0 : 1
 } catch (error) {
 	console.error("url source links smoke failed", error)
 	await cleanUp(userId, urlsBefore)

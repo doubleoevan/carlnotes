@@ -1,6 +1,7 @@
 // the helpers with no larger subject of their own to live under
 import { type ClassValue, clsx } from "clsx"
 import { FileText, Headphones, type LucideIcon, Play } from "lucide-react"
+import { toast } from "sonner"
 import { twMerge } from "tailwind-merge"
 import type { ResourceKind } from "@/providers/TopicFeedProvider"
 
@@ -18,6 +19,17 @@ export function toSafeRedirectPath(path: string | null): string {
 }
 
 /**
+ * Reads the mcp authorize path to return to after login, with the query the mcp plugin sent to the login page, or
+ * null.
+ */
+export function toAuthorizeReturnPath(searchParams: URLSearchParams): string | null {
+	if (!searchParams.has("client_id") || !searchParams.has("redirect_uri")) {
+		return null
+	}
+	return `/api/auth/mcp/authorize?${searchParams.toString()}`
+}
+
+/**
  * The lucide icon mapped to its resource kind
  */
 export const RESOURCE_KIND_ICON: Record<ResourceKind, LucideIcon> = {
@@ -27,10 +39,29 @@ export const RESOURCE_KIND_ICON: Record<ResourceKind, LucideIcon> = {
 }
 
 /**
- * The copy implementation that predates the clipboard api, for the browsers that reject it. An off-screen textarea is written to, selected,
- * and copied through the document. It reports whether the copy succeeded, which a browser can also reject.
+ * Copies text to the clipboard, through the document for a browser that rejects the clipboard api, confirms a
+ * copy that succeeded in a toast when given one, and reports whether it succeeded.
  */
-export function copyWithDocument(text: string): boolean {
+export async function copyToClipboard(text: string, copiedToast?: string): Promise<boolean> {
+	const isTextCopied = await writeClipboard(text)
+	if (isTextCopied && copiedToast) {
+		toast(copiedToast)
+	}
+	return isTextCopied
+}
+
+// the clipboard api, or the document for a browser that rejects it
+async function writeClipboard(text: string): Promise<boolean> {
+	try {
+		await navigator.clipboard.writeText(text)
+		return true
+	} catch {
+		return copyWithDocument(text)
+	}
+}
+
+// the copy that predates the clipboard api: an off-screen textarea, selected and copied through the document
+function copyWithDocument(text: string): boolean {
 	const textareaElement = document.createElement("textarea")
 	textareaElement.value = text
 	// off-screen instead of hidden. a field the browser considers invisible cannot be selected

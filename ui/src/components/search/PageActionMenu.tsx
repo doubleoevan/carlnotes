@@ -1,5 +1,6 @@
-import { EllipsisVertical, Flag } from "lucide-react"
+import { Bot, EllipsisVertical, Flag } from "lucide-react"
 import { useState } from "react"
+import { AddToAiDialog } from "@/components/common/AddToAiDialog"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog.tsx"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -15,11 +16,14 @@ export function PageActionMenu() {
 	const pageActions = usePageActions()
 	const [isOpen, setIsOpen] = useState(false)
 	const [isReporting, setIsReporting] = useState(false)
+	const [isAddingToAi, setIsAddingToAi] = useState(false)
 
 	if (!pageActions) {
 		return null
 	}
 	const label = `${pageActions.page} actions`
+	// the mcp server the Add to AI dialog offers. the page's own, or the one at /mcp
+	const mcpServer = pageActions.mcp ?? { name: "CarlNotes", url: `${window.location.origin}/mcp` }
 	return (
 		<>
 			<Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -52,6 +56,18 @@ export function PageActionMenu() {
 							<span className="flex-1 text-left">{pageAction.label}</span>
 						</button>
 					))}
+					{/* the Add to AI option */}
+					<button
+						type="button"
+						onClick={() => {
+							setIsOpen(false)
+							setIsAddingToAi(true)
+						}}
+						className={MENU_OPTION_CLASS}
+					>
+						<Bot className="text-muted-foreground size-4" />
+						<span className="flex-1 text-left">Add to AI</span>
+					</button>
 					{pageActions.report && (
 						<Tooltip>
 							<TooltipTrigger asChild>
@@ -74,6 +90,8 @@ export function PageActionMenu() {
 					)}
 				</PopoverContent>
 			</Popover>
+			{/* the Add to AI dialog mounts only while open. its state resets on each close */}
+			{isAddingToAi && <AddToAiDialog mcpServer={mcpServer} onClose={() => setIsAddingToAi(false)} />}
 			{/* the report issue dialog mounts only while open. its state resets on each close */}
 			{isReporting && pageActions.report && (
 				<ReportIssueDialog

@@ -14,7 +14,7 @@ import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { CountPill } from "@/components/common/CountPill"
+import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
@@ -25,14 +25,13 @@ import { TopicsTable } from "@/components/table/TopicsTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { NewTeamOption, TeamOption } from "@/components/team/TeamUpButton"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { ChatMentionCount, toChatLabel, toNoteLabel } from "@/components/topic/TopicMentionBadge"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { toCountLabel } from "@/lib/labels"
 import { CARD_CLASS, MENU_OPTION_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useAllChatMentions } from "@/stores/chatRoomStore"
-import { useAllNoteCount } from "@/stores/noteBadgeStore"
+import { useAllNoteBadges } from "@/stores/noteBadgeStore"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
 
 // editing the profile and starting a team are both owner actions
@@ -298,10 +297,9 @@ function ProfileHeader({
 	onLoadTeams: () => void
 }) {
 	const { data: session } = authClient.useSession()
-	// unread chat mentions, for the avatar badge
+	// the unread chat mentions and note changes the user has, across topics and teams, summed on the avatar badge
 	const chatMentions = useAllChatMentions()
-	// every unread note change the user has, across topics and teams, for the avatar badge
-	const noteChangeCount = useAllNoteCount()
+	const noteBadges = useAllNoteBadges()
 	// the join month and year label
 	const joinDateLabel = new Date(profile.joinedAt).toLocaleDateString(undefined, { month: "long", year: "numeric" })
 
@@ -311,27 +309,15 @@ function ProfileHeader({
 			<div className="flex items-center gap-4">
 				{isOwnProfile ? (
 					<>
-						{/* the user avatar with its unread chat mention and note badges */}
+						{/* the user avatar with its one unread badge */}
 						<span className="relative inline-block">
 							<UserAvatarPicker userId={profile.userId} username={profile.username} className="size-16" />
-							{(noteChangeCount > 0 || chatMentions.length > 0) && (
-								<span className="pointer-events-none absolute -top-1 -right-1 flex items-center gap-1">
-									{/* the filled chat mentions badge next to the outline note changes badge */}
-									{chatMentions.length > 0 && (
-										<span role="status" aria-label={toChatLabel(chatMentions)}>
-											<ChatMentionCount
-												chatMentions={chatMentions}
-												className="bg-card text-card-foreground h-5 min-w-5 border text-xs"
-											/>
-										</span>
-									)}
-									{noteChangeCount > 0 && (
-										<span role="status" aria-label={toNoteLabel(noteChangeCount)}>
-											<CountPill count={noteChangeCount} variant="outline" className="h-5 min-w-5 text-xs" />
-										</span>
-									)}
-								</span>
-							)}
+							<UpdateCountBadge
+								chatMentions={chatMentions}
+								noteBadges={noteBadges}
+								className="absolute -top-1 -right-1"
+								countBadgeClassName="h-5 min-w-5 text-xs"
+							/>
 						</span>
 						<AnchorLink href="/account" className="rounded-md hover:underline">
 							<h1 className="font-display text-2xl">{profile.username}</h1>

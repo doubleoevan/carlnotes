@@ -1,14 +1,32 @@
 // the chat panel's conversation state, owned by one hook so the panel components stay pure view
-import { type ChatAttachment, type KeptChatAttachment, withAttachmentNote } from "@shared/contracts"
+import {
+	type ChatAttachment,
+	type KeptChatAttachment,
+	type TopicDraft,
+	type TopicToolCalls,
+	withAttachmentNote,
+} from "@shared/contracts"
 import { useEffect, useRef, useState } from "react"
+import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
-import { type ChatPage, fetchChatConversation, sendChatTurn, sendClearChat } from "@/clients/chatClient"
+import {
+	type ChatPage,
+	type ChatSendResult,
+	fetchChatConversation,
+	sendChatTurn,
+	sendClearChat,
+} from "@/clients/chatClient"
+import { uploadTopicAttachment } from "@/clients/topicClient"
 import type { ChatTurn } from "@/components/chat/ChatMessages"
 import { useChatAttachments } from "@/components/chat/useChatAttachments"
 import { hasPreviewableLink } from "@/components/common/LinkPreviewCard"
+import { publishTopicChanged } from "@/stores/chatPanelStore"
 
 // how long a finished chat turn waits before it looks for its link preview cards again
 const LINK_PREVIEW_REFRESH_MS = 2500
+
+// the new-topic chat's draft before carl writes anything
+const EMPTY_TOPIC_DRAFT: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [] }
 
 // a stand-in id for a kept attachment that the server has not returned yet
 let placeholderCount = 0
@@ -24,7 +42,8 @@ export type TopicChat = {
 	setQuestion: (value: string) => void
 	// the draft's attachments: files selected or dropped in, images pasted, and long copy pastes turned into chips
 	attachments: ChatAttachment[]
-	addFiles: (files: File[]) => Promise<void>
+	// the files taken in
+	addAttachmentFiles: (attachmentFiles: File[]) => Promise<File[]>
 	addPastedText: (text: string) => void
 	removeAttachment: (index: number) => void
 	// what this user already keeps for the topic, and the delete attachment handler that frees a slot
@@ -35,6 +54,16 @@ export type TopicChat = {
 	isSignupRequired: boolean
 	// an exhausted monthly budget keeps the panel open showing the upgrade link instead of the composer
 	isBudgetExhausted: boolean
+	// whether this user may edit the topic in the chat
+	canEditTopic: boolean
+	// carl's draft, the files waiting for the topic, and whether it is the user's first
+	topicDraft: TopicDraft
+	topicDraftAttachmentFiles: File[]
+	removeDraftFile: (index: number) => void
+	isFirstTopic: boolean
+	// how many more topics the plan holds and its limit, on the new-topic chat alone
+	topicsRemaining: number | null
+	topicLimit: number | null
 	// true once the conversation load finishes, so the panel can select its opening state from what came back
 	isLoaded: boolean
 	isStreaming: boolean
@@ -55,13 +84,21 @@ export function useTopicChat(page: ChatPage): TopicChat {
 	const [canChat, setCanChat] = useState(false)
 	const [isSignupRequired, setIsSignupRequired] = useState(false)
 	const [isBudgetExhausted, setIsBudgetExhausted] = useState(false)
+	const [canEditTopic, setCanEditTopic] = useState(false)
+	const [isFirstTopic, setIsFirstTopic] = useState(false)
+	const [topicsRemaining, setTopicsRemaining] = useState<number | null>(null)
+	const [topicLimit, setTopicLimit] = useState<number | null>(null)
+	// the new-topic chat's draft and the files waiting for the topic
+	const [topicDraft, setTopicDraft] = useState<TopicDraft>(EMPTY_TOPIC_DRAFT)
+	const [topicDraftAttachmentFiles, setTopicDraftAttachmentFiles] = useState<File[]>([])
+	const navigate = useNavigate()
 	const [isLoaded, setIsLoaded] = useState(false)
 	const [isStreaming, setIsStreaming] = useState(false)
 	const abortRef = useRef<AbortController | null>(null)
 	// the draft's files and the topic's kept ones, held together with the two limits that bound them
 	const {
 		attachments,
-		addFiles,
+		addAttachmentFiles: addChatAttachmentFiles,
 		addPastedText,
 		removeAttachment,
 		keptAttachments,
@@ -96,6 +133,11 @@ export function useTopicChat(page: ChatPage): TopicChat {
 				setCanChat(chatConversation.canChat)
 				setIsSignupRequired(chatConversation.isSignupRequired)
 				setIsBudgetExhausted(chatConversation.isBudgetExhausted)
+				setCanEditTopic(chatConversation.canEditTopic)
+				setIsFirstTopic(chatConversation.isFirstTopic ?? false)
+				setTopicsRemaining(chatConversation.topicsRemaining ?? null)
+				setTopicLimit(chatConversation.topicLimit ?? null)
+				// the kept files and the loaded flag are set last, so the panel opens in one finished state
 				setKeptAttachments(chatConversation.keptAttachments ?? [])
 				setIsLoaded(true)
 			})
@@ -113,10 +155,74 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		return () => {
 			isCurrentTopic = false
 		}
-	}, [page.topicId, page.teamId, setKeptAttachments])
+	}, [page.topicId, page.teamId, page.newTopic, setKeptAttachments])
 
 	// the newest chat turn's link preview cards poll in the background until they complete
 	const startLinkPreviewRefresh = useLinkPreviewRefresh(page, setChatTurns)
+
+	// a attachmentFile attached in the new-topic chat waits in the draft as well as reaching carl for the turn
+	const addAttachmentFiles = async (attachmentFiles: File[]): Promise<File[]> => {
+		const validAttachmentFiles = await addChatAttachmentFiles(attachmentFiles)
+		if (page.newTopic) {
+			setTopicDraftAttachmentFiles((previousFiles) => [...previousFiles, ...validAttachmentFiles])
+		}
+		return validAttachmentFiles
+	}
+
+	// open the new topic's page while this chat stays put, upload the draft's files to it, then reload its page
+	const openCreatedTopic = async (topicId: string): Promise<void> => {
+		navigate(`/topics/${topicId}`)
+		const filesToUpload = topicDraftAttachmentFiles
+		setTopicDraft(EMPTY_TOPIC_DRAFT)
+		setTopicDraftAttachmentFiles([])
+		// upload each attachmentFile through the topic page's own screening, toasting a rejection's reason
+		for (const attachmentFile of filesToUpload) {
+			await uploadTopicAttachment(topicId, attachmentFile).catch((error: Error) =>
+				toast(`${attachmentFile.name} didn't attach. ${error.message}`),
+			)
+		}
+		if (filesToUpload.length > 0) {
+			publishTopicChanged(topicId)
+		}
+	}
+
+	// toast the saves and rejections, show the draft, and open a created topic, else reload the page behind the panel
+	const handleToolCalls = (toolCalls: TopicToolCalls): void => {
+		for (const topicSave of toolCalls.topicSaves) {
+			toast(topicSave)
+		}
+		for (const rejection of toolCalls.topicSaveRejections) {
+			toast.error(rejection)
+		}
+		// fill the card with the draft carl wrote
+		if (toolCalls.topicDraft) {
+			setTopicDraft(toolCalls.topicDraft)
+		}
+		// open a created topic
+		if (toolCalls.createdTopicId) {
+			void openCreatedTopic(toolCalls.createdTopicId)
+			return
+		}
+		if (page.topicId) {
+			publishTopicChanged(page.topicId)
+		}
+	}
+
+	// whether a send may go: something to send and no reply streaming. a retry with only attachments to resend says why
+	function canSend(askedQuestion: string, sendableAttachmentCount: number, isRetry: boolean): boolean {
+		if (isStreaming) {
+			return false
+		}
+		// send when there is something to send
+		if (askedQuestion || sendableAttachmentCount > 0) {
+			return true
+		}
+		// say why a retry with nothing left to resend stops
+		if (isRetry) {
+			toast("That turn sent attachments alone. Attach the files again to re-ask.")
+		}
+		return false
+	}
 
 	// send the user question, appending the reply to the newest chat turn as each chunk arrives
 	async function send(retryQuestion?: string): Promise<void> {
@@ -125,14 +231,9 @@ export function useTopicChat(page: ChatPage): TopicChat {
 
 		// a chat turn may be attachments alone, but a retry does not resend attachments and needs its question
 		const sendableAttachmentCount = retryQuestion === undefined ? attachments.length : 0
-		if ((!askedQuestion && sendableAttachmentCount === 0) || isStreaming) {
-			// a retried chat turn that sent attachments alone has nothing to resend, and a toast shows why
-			if (retryQuestion !== undefined && !isStreaming) {
-				toast("That turn sent attachments alone. Attach the files again to re-ask.")
-			}
+		if (!canSend(askedQuestion, sendableAttachmentCount, retryQuestion !== undefined)) {
 			return
 		}
-
 		// the conversation so far that gets posted, minus rejected chat turns
 		const historyChatTurns = chatTurns
 			.filter((chatTurn) => chatTurn.rejection === null && chatTurn.answer !== "")
@@ -183,21 +284,14 @@ export function useTopicChat(page: ChatPage): TopicChat {
 					replaceNewestChatTurn(previous, (chatTurn) => ({ ...chatTurn, answer: chatTurn.answer + chunk })),
 				)
 			},
+			handleToolCalls,
 			controller.signal,
+			page.newTopic ? topicDraft : undefined,
 		)
 		abortRef.current = null
 
 		// a stop before any text drops the whole chat turn, so the empty bubble never lingers
-		setChatTurns((previousChatTurns) => {
-			if (chatSendResult === "stopped" && previousChatTurns.at(-1)?.answer === "") {
-				return previousChatTurns.slice(0, -1)
-			}
-			return replaceNewestChatTurn(previousChatTurns, (chatTurn) => ({
-				...chatTurn,
-				rejection: chatSendResult === "stopped" ? null : chatSendResult,
-				at: Date.now(),
-			}))
-		})
+		setChatTurns((previousChatTurns) => toFinishedChatTurns(previousChatTurns, chatSendResult))
 		setIsStreaming(false)
 		startLinkPreviewRefresh()
 	}
@@ -212,6 +306,9 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		if (await sendClearChat(page)) {
 			setChatTurns([])
 			setKeptAttachments([])
+			// reset the draft and its files with the conversation
+			setTopicDraft(EMPTY_TOPIC_DRAFT)
+			setTopicDraftAttachmentFiles([])
 			return true
 		}
 		return false
@@ -222,7 +319,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		question,
 		setQuestion,
 		attachments,
-		addFiles,
+		addAttachmentFiles,
 		addPastedText,
 		removeAttachment,
 		keptAttachments,
@@ -230,6 +327,14 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		canChat,
 		isSignupRequired,
 		isBudgetExhausted,
+		canEditTopic,
+		topicDraft,
+		topicDraftAttachmentFiles: topicDraftAttachmentFiles,
+		removeDraftFile: (index) =>
+			setTopicDraftAttachmentFiles((previousFiles) => previousFiles.filter((_, position) => position !== index)),
+		isFirstTopic,
+		topicsRemaining,
+		topicLimit,
 		isLoaded,
 		isStreaming,
 		send,
@@ -327,6 +432,18 @@ function toRefreshedChatTurn(
 	const isAnswerDone = !hasPreviewableLink(newestChatTurn.answer) || answerLinkPreviews.length > 0
 	const isChatTurnDone = (isQuestionDone && isAnswerDone) || attemptsLeft <= 0
 	return { ...newestChatTurn, linkPreviews, answerLinkPreviews, linkPreviewsPending: !isChatTurnDone }
+}
+
+// the chat turns once a send ends: a stop before any text drops the empty bubble, else the newest turn settles
+function toFinishedChatTurns(chatTurns: ChatTurn[], chatSendResult: ChatSendResult): ChatTurn[] {
+	if (chatSendResult === "stopped" && chatTurns.at(-1)?.answer === "") {
+		return chatTurns.slice(0, -1)
+	}
+	return replaceNewestChatTurn(chatTurns, (chatTurn) => ({
+		...chatTurn,
+		rejection: chatSendResult === "stopped" ? null : chatSendResult,
+		at: Date.now(),
+	}))
 }
 
 // replace the newest chat turn, which is the one a streaming reply is filling in

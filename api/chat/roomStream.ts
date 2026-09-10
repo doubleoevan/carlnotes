@@ -1,6 +1,7 @@
 // the chat room's fan-out across instances
 import { EventEmitter } from "node:events"
 import { Client } from "@neondatabase/serverless"
+import type { TopicToolToasts } from "@shared/contracts"
 import { sql } from "drizzle-orm"
 import { db } from "../../db"
 import { toDirectConnectionString } from "../note/noteStream"
@@ -21,12 +22,13 @@ const LISTEN_RETRY_MAX_MS = 30_000
 let listenRetryMs = LISTEN_RETRY_MIN_MS
 
 /**
- * Subscribe this instance to a chat room's new-chat message ids. Returns the unsubscribe.
+ * Subscribes this instance to a chat room's new chat message ids, each with the toast lines a topic tool left in that
+ * chat turn, and returns the unsubscribe.
  */
 export function onChatRoomMessage(
 	topicId: string | null,
 	teamId: string,
-	handler: (chatMessageId: number) => void,
+	handler: (chatMessageId: number, topicToasts: TopicToolToasts) => void,
 ): () => void {
 	startChatRoomListener()
 	// the team's own chat room keys on the literal "team" where a topic id would sit
@@ -35,15 +37,19 @@ export function onChatRoomMessage(
 }
 
 /**
- * Tell every instance a chat message was stored. Called after the insert commits.
+ * Tells every instance a chat message was stored, with the toast lines a topic tool left, after the insert commits.
  */
 export async function notifyChatRoomMessage(
 	topicId: string | null,
 	teamId: string,
 	chatMessageId: number,
+	topicToasts: TopicToolToasts = { topicSaves: [], topicSaveRejections: [] },
 ): Promise<void> {
-	// the notify goes through the pooled db. pg_notify works through the pooler, and only LISTEN needs the direct connection
-	const payload = `${topicId ?? "team"}:${teamId}:${chatMessageId}`
+	// pg_notify works through the pooler. only LISTEN needs the direct connection
+	// the toast lines are sent as base64url json, which has no colon to split on
+	const hasToasts = topicToasts.topicSaves.length > 0 || topicToasts.topicSaveRejections.length > 0
+	const toastsPart = hasToasts ? `:${Buffer.from(JSON.stringify(topicToasts)).toString("base64url")}` : ""
+	const payload = `${topicId ?? "team"}:${teamId}:${chatMessageId}${toastsPart}`
 	// best-effort delivery: a failed notify is logged, and the cursor catch-up covers the gap
 	try {
 		await db.execute(sql`select pg_notify(${CHAT_ROOM_CHANNEL}, ${payload})`)
@@ -64,10 +70,10 @@ function startChatRoomListener(): void {
 
 	// each notification re-emits to this instance's subscribers for that topic
 	client.on("notification", (notification) => {
-		// the payload is topicId:teamId:messageId
-		const [topicId, teamId, chatMessageId] = (notification.payload ?? "").split(":")
+		// the payload is topicId:teamId:messageId, with the toast lines as a fourth part when a topic tool left any
+		const [topicId, teamId, chatMessageId, toastsPart] = (notification.payload ?? "").split(":")
 		if (topicId && teamId && chatMessageId) {
-			chatRoomEvents.emit(`${topicId}:${teamId}`, Number(chatMessageId))
+			chatRoomEvents.emit(`${topicId}:${teamId}`, Number(chatMessageId), toTopicToasts(toastsPart))
 		}
 	})
 
@@ -102,4 +108,11 @@ function scheduleChatRoomRelisten(client: Client): void {
 	listener = null
 	setTimeout(startChatRoomListener, listenRetryMs).unref()
 	listenRetryMs = Math.min(listenRetryMs * 2, LISTEN_RETRY_MAX_MS)
+}
+
+// the toast lines a payload's fourth part holds, or none
+function toTopicToasts(toastsPart: string | undefined): TopicToolToasts {
+	return toastsPart
+		? (JSON.parse(Buffer.from(toastsPart, "base64url").toString()) as TopicToolToasts)
+		: { topicSaves: [], topicSaveRejections: [] }
 }

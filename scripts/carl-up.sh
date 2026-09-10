@@ -117,6 +117,28 @@ if [[ -z "$(get_secret LITELLM_DEV_KEY)" ]]; then
   echo "created the limited dev key and stored it as LITELLM_DEV_KEY"
 fi
 
+# first boot: create the budgeted public key for the mcp server's visitor searches
+if [[ -z "$(get_secret LITELLM_PUBLIC_KEY)" ]]; then
+  # delete any leftover public key on the proxy, then generate a fresh one
+  MASTER_KEY="$(get_secret LITELLM_MASTER_KEY)"
+  curl -s http://localhost:4000/key/delete \
+    -H "Authorization: Bearer $MASTER_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"key_aliases":["public"]}' >/dev/null 2>&1 || true
+  PUBLIC_KEY="$(curl -s http://localhost:4000/key/generate \
+    -H "Authorization: Bearer $MASTER_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"key_alias":"public","max_budget":5,"budget_duration":"30d"}' | jq -r '.key')"
+
+  # do not store a failed request
+  if [[ -z "$PUBLIC_KEY" || "$PUBLIC_KEY" == "null" ]]; then
+    echo "public key request failed: check the proxy logs (docker compose logs litellm)" >&2
+    exit 1
+  fi
+  set_secret LITELLM_PUBLIC_KEY "$PUBLIC_KEY"
+  echo "created the budgeted public key and stored it as LITELLM_PUBLIC_KEY"
+fi
+
 # hand agent tokens to gui apps and new terminals (macos; skipped when absent)
 if command -v launchctl >/dev/null 2>&1; then
   for name in LITELLM_DEV_KEY NOTION_TOKEN; do

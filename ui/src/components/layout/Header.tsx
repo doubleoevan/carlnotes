@@ -6,7 +6,7 @@ import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { CoffeeRings } from "@/components/branding/CoffeeRings"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { CountPill } from "@/components/common/CountPill"
+import { toUpdateLabel, UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Attribution } from "@/components/layout/Attribution"
 import { DocsLink } from "@/components/layout/DocsLink"
 import { ThemeToggle } from "@/components/layout/ThemeToggle"
@@ -15,16 +15,16 @@ import { buttonVariants } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { signOutAndReload } from "@/components/session/signOut"
-import { ChatMentionCount } from "@/components/topic/TopicMentionBadge"
 import { useRememberedSignedIn } from "@/hooks/useRememberedSignedIn"
 import { useTheme } from "@/hooks/useTheme"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { useAllChatMentions } from "@/stores/chatRoomStore"
-import { useAllNoteCount } from "@/stores/noteBadgeStore"
+import { useAllNoteBadges } from "@/stores/noteBadgeStore"
+import { useTopicInviteBadges } from "@/stores/topicInviteStore"
 
-// the hover treatment shared by the header's menu buttons, tuned for the dark hero banner
+// the hover style shared by the header's menu buttons
 const HERO_BUTTON_HOVER = "hover:bg-white/10 hover:text-hero-foreground dark:hover:bg-white/10"
 
 // the size the count pills shrink to in the hamburger menu's corner
@@ -211,10 +211,10 @@ function HeaderMenu({
 }) {
 	// the path highlights the open page's row, and sends the login back to where the visitor started
 	const { pathname } = useLocation()
-	// the chat panel polls for chat mentions to show in the header menu
+	// the one badge sums every unread chat mention, note change, and topic invitation
 	const chatMentions = useAllChatMentions()
-	// every unread note change the user has, across their topics and teams
-	const noteCount = useAllNoteCount()
+	const noteBadges = useAllNoteBadges()
+	const topicInviteBadges = useTopicInviteBadges()
 	// controlled so every item click closes the menu, including navigation and sign-out
 	const [isMenuOpen, setIsMenuOpen] = useState(false)
 	const closeMenu = (): void => {
@@ -231,14 +231,17 @@ function HeaderMenu({
 		<Popover open={isMenuOpen} onOpenChange={setIsMenuOpen}>
 			<PopoverTrigger
 				className="relative grid size-11 place-items-center rounded-md hover:bg-white/10 sm:hidden"
-				aria-label="Menu"
+				aria-label={["Menu", toUpdateLabel(chatMentions, noteBadges, topicInviteBadges)].filter(Boolean).join(", ")}
 			>
 				<Menu className="size-5" />
-				{/* the unread counts badged on the menu trigger. the chat mention pill sits left of the note pill */}
-				<span className="absolute top-1 right-1 flex items-center gap-1">
-					{chatMentions.length > 0 && <ChatMentionCount chatMentions={chatMentions} className={MENU_BADGE_CLASS} />}
-					{noteCount > 0 && <CountPill count={noteCount} variant="outline" className={MENU_BADGE_CLASS} />}
-				</span>
+				{/* the one unread count badged on the menu trigger */}
+				<UpdateCountBadge
+					chatMentions={chatMentions}
+					noteBadges={noteBadges}
+					invites={topicInviteBadges}
+					className="absolute top-1 right-1"
+					countBadgeClassName={MENU_BADGE_CLASS}
+				/>
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-44" bodyClassName="p-1">
 				<button

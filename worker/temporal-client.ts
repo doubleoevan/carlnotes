@@ -17,9 +17,10 @@ const SOURCE_WORKFLOW = "screenSourceWorkflow"
 // how long a task queue description may take before the scan sweep gives up on it and continues
 const QUEUE_DESCRIBE_TIMEOUT_MS = 10_000
 
-// whether the Scan was handed to Temporal, and a promise that settles when it ends
+// whether the Scan was handed to Temporal, and a call that waits for it to end.
+// it is a call, not a promise, so a process that only starts a Scan opens no long-poll and exits on its own
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ScanStart = { status: "started"; whenFinished: Promise<void> } | { status: "running" }
+export type ScanStart = { status: "started"; whenFinished: () => Promise<void> } | { status: "running" }
 
 // whether a cancel reached a running Scan
 export type ScanCancel = { status: "cancelled" } | { status: "idle" }
@@ -76,10 +77,8 @@ export async function startTopicScanWorkflow(
 			workflowId: `scan-${topicId}`,
 			args: [scanId, topicId, ownerId, trigger],
 		})
-		// the sweep starts a Scan and moves on without waiting for this
-		const whenFinished = workflowHandle.result()
-		whenFinished.catch(() => {})
-		return { status: "started", whenFinished }
+		// return the wait as a call that opens its long-poll only when asked
+		return { status: "started", whenFinished: () => workflowHandle.result() }
 	} catch (error) {
 		// a Topic already scanning is an expected answer, not a failure. anything else is
 		if (error instanceof WorkflowExecutionAlreadyStartedError) {

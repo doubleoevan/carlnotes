@@ -10,6 +10,7 @@ export {
 	toCanonicalContentType,
 } from "./attach"
 export { type ChatReplyStream, type ChatTurnInput, streamChatReply } from "./chat"
+export { type RankedTopicFinding, searchTopicFindings } from "./chat/retrieve"
 export { lookupPodcast } from "./ingest/podcast"
 export {
 	fetchLinkPreviewImage,

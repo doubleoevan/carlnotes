@@ -76,7 +76,7 @@ export function toChatRooms(): ChatRoom[] {
 /**
  * The unopened chat mentions waiting in topic chat rooms.
  */
-export function useAllTopicMentions(): ChatMention[] {
+export function useAllTopicChatMentions(): ChatMention[] {
 	useSyncExternalStore(subscribe, getVersion)
 	return toChatRooms().flatMap((chatRoom) => (chatRoom.topicId === null ? [] : chatRoom.chatMentions))
 }
@@ -84,7 +84,7 @@ export function useAllTopicMentions(): ChatMention[] {
 /**
  * The unopened chat mentions waiting in team chat rooms.
  */
-export function useAllTeamMentions(): ChatMention[] {
+export function useAllTeamChatMentions(): ChatMention[] {
 	useSyncExternalStore(subscribe, getVersion)
 	return toChatRooms().flatMap((chatRoom) => (chatRoom.topicId === null ? chatRoom.chatMentions : []))
 }

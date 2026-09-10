@@ -1,14 +1,20 @@
 // the server that owns the origin
 import { extname } from "node:path"
 import { startMonitoring } from "@shared/monitoring"
-import { type Context, Hono } from "hono"
+import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins"
+import type { Context } from "hono"
+import { Hono } from "hono"
 import { serveStatic } from "hono/bun"
 import { compress } from "hono/compress"
 import { startTelemetry } from "../worker"
 import { apiRoute } from "./api"
-import { reportForwardedChain } from "./auth"
+import { auth, reportForwardedChain } from "./auth"
 import { contentRoute } from "./content"
+import type { AppEnv } from "./currentUser"
+import { resolveCaller } from "./mcp/caller"
+import { mcpRoute } from "./mcp/server"
 import { pagesRoute, UI_BUNDLE_ROOT } from "./pages"
+import { callerRateLimiter } from "./rateLimit"
 import { releasesRoute } from "./releases"
 
 // where build:docs writes the Starlight site, relative to the repo root the server runs from
@@ -29,7 +35,7 @@ const CONTENT_SECURITY_POLICY =
 	"img-src 'self' blob: data: https://raw.githubusercontent.com; frame-src 'self' https://www.youtube-nocookie.com; object-src 'none'; frame-ancestors 'none'"
 
 // one server serves the api, the pages, and the built ui
-const server = new Hono()
+const server = new Hono<AppEnv>()
 	// gzip every text response over a kilobyte. the defaults skip images and anything already compressed
 	.use(compress())
 	// the content security policy, set on the way back out so every route includes it
@@ -44,6 +50,18 @@ const server = new Hono()
 	})
 	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
 	.get("/api/health", (context) => context.json({ status: "ok" }))
+	// the oauth discovery documents an mcp client reads under /.well-known, with or without a path appended
+	.get("/.well-known/oauth-authorization-server", (context) => oAuthDiscoveryMetadata(auth)(context.req.raw))
+	.get("/.well-known/oauth-authorization-server/*", (context) => oAuthDiscoveryMetadata(auth)(context.req.raw))
+	.get("/.well-known/oauth-protected-resource", (context) => oAuthProtectedResourceMetadata(auth)(context.req.raw))
+	.get("/.well-known/oauth-protected-resource/*", (context) => oAuthProtectedResourceMetadata(auth)(context.req.raw))
+	// the mcp caller resolves ahead of the limiter, which keys by the user a token names. the wildcard matches /mcp itself
+	.use("/mcp/*", async (context, next) => {
+		context.set("mcpCaller", await resolveCaller(context.req.raw.headers))
+		await next()
+	})
+	.use("/mcp/*", callerRateLimiter)
+	.route("/", mcpRoute)
 	.route("/", apiRoute)
 	// the release pages and the GitHub webhook that writes the rows they read. the webhook sits under
 	// /api, so it is mounted ahead of the catch-all below instead of beside the other page routes

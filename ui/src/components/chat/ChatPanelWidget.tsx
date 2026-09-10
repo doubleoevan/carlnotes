@@ -14,8 +14,8 @@ import {
 	hasChatOptions,
 } from "@/components/chat/ChatOptionsMenu"
 import { DisabledRoomComposer } from "@/components/chat/ChatRoomComposer"
+import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { ChatMentionCount, ChatMentionsTooltipBody, toChatLabel } from "@/components/topic/TopicMentionBadge"
 import { cn } from "@/lib/utils"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
 
@@ -103,20 +103,12 @@ export function ChatPill({ onOpenChat, chatMentions }: { onOpenChat: () => void;
 		>
 			<CoffeeCup className="size-5.5" />
 			Coffee Talk
-			{chatMentions && chatMentions.length > 0 && (
-				<Tooltip>
-					<TooltipTrigger asChild>
-						<span role="status" aria-label={toChatLabel(chatMentions)} className="absolute -top-1.5 -right-1">
-							{/* the card surface, against the pill's own orange */}
-							<ChatMentionCount
-								chatMentions={chatMentions}
-								className="bg-card text-card-foreground h-5 min-w-5 border text-xs"
-							/>
-						</span>
-					</TooltipTrigger>
-					<ChatMentionsTooltipBody chatMentions={chatMentions} />
-				</Tooltip>
-			)}
+			{/* the unread chat mentions, on the Coffee Talk button */}
+			<UpdateCountBadge
+				chatMentions={chatMentions ?? []}
+				className="absolute -top-1.5 -right-1"
+				countBadgeClassName="bg-card text-card-foreground h-5 min-w-5 border text-xs"
+			/>
 		</button>
 	)
 }

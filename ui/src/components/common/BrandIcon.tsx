@@ -1,5 +1,16 @@
-// the brand icons used for sharing, sign-in, and source rows
-import { siBluesky, siGithub, siReddit, siX, siYoutube } from "simple-icons"
+// the brand icons used for sharing, sign-in, source rows, and the Add to AI dialog
+import {
+	siBluesky,
+	siClaudecode,
+	siCursor,
+	siDeepseek,
+	siGithub,
+	siGooglegemini,
+	siPerplexity,
+	siReddit,
+	siX,
+	siYoutube,
+} from "simple-icons"
 
 // LinkedIn asked simple-icons to drop its icon, so this is the one shape still kept by hand.
 const LINKEDIN_ICON_PATH =
@@ -13,6 +24,11 @@ const BRAND_ICON_PATHS = {
 	youtube: siYoutube.path,
 	github: siGithub.path,
 	linkedin: LINKEDIN_ICON_PATH,
+	claude: siClaudecode.path,
+	cursor: siCursor.path,
+	deepseek: siDeepseek.path,
+	gemini: siGooglegemini.path,
+	perplexity: siPerplexity.path,
 } as const
 
 export type Brand = keyof typeof BRAND_ICON_PATHS

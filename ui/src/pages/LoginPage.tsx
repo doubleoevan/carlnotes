@@ -4,7 +4,7 @@ import { authClient } from "@/clients/authClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { SessionLayout } from "@/components/session/SessionLayout"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { toSafeRedirectPath } from "@/lib/utils"
+import { toAuthorizeReturnPath, toSafeRedirectPath } from "@/lib/utils"
 
 /**
  * The login page. oauth is one click, and email is a step, revealed on request
@@ -13,9 +13,9 @@ export function LoginPage() {
 	usePageTitle("Log in")
 	const [error, setError] = useState<string | null>(null)
 	const [isSubmitting, setSubmitting] = useState(false)
-	// where a link that sent the visitor here should return to
+	// where sign-in returns the visitor to. an mcp client's authorize request, otherwise the next param
 	const [searchParams] = useSearchParams()
-	const redirectPath = toSafeRedirectPath(searchParams.get("next"))
+	const redirectPath = toSafeRedirectPath(toAuthorizeReturnPath(searchParams) ?? searchParams.get("next"))
 
 	// logs in with the existing account's email and password
 	const handleLogin = async (email: string, password: string): Promise<void> => {
@@ -54,7 +54,7 @@ export function LoginPage() {
 			}
 			footerPrompt={"Don't have an account? "}
 			footerLinkLabel="Sign up"
-			footerHref="/signup?cta=login"
+			footerHref={`/signup?cta=login&next=${encodeURIComponent(redirectPath)}`}
 		/>
 	)
 }

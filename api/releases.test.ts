@@ -125,23 +125,6 @@ test("a promoted prerelease is stored", async () => {
 	}
 })
 
-// an action that changes nothing a user sees is acknowledged and dropped
-test("an edit is still ignored", async () => {
-	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
-	try {
-		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
-		const body = JSON.stringify({ action: "edited", release: PUBLISHED_RELEASE })
-		const response = await releasesRoute.request("/api/webhooks/github", {
-			method: "POST",
-			body,
-			headers: { [SIGNATURE_HEADER]: await toSignature(body) },
-		})
-		expect(await response.json()).toEqual({ ignored: "edited" })
-	} finally {
-		restoreSecret(previousSecret)
-	}
-})
-
 // the signature GitHub actually sends is accepted
 test("a correctly signed request passes", async () => {
 	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
@@ -159,6 +142,45 @@ test("a correctly signed request passes", async () => {
 		)
 		const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body))
 		expect(await isSignedByGitHub(body, `sha256=${Buffer.from(digest).toString("hex")}`)).toBe(true)
+	} finally {
+		restoreSecret(previousSecret)
+	}
+})
+
+// post one signed webhook payload and read the response text
+async function postWebhook(payload: object): Promise<string> {
+	const body = JSON.stringify(payload)
+	// post the delivery signed the way GitHub signs one
+	const response = await releasesRoute.request("/api/webhooks/github", {
+		method: "POST",
+		body,
+		headers: { [SIGNATURE_HEADER]: await toSignature(body) },
+	})
+	return response.text()
+}
+
+// an edit to a published release is stored, so a fixed typo reaches the page without a sync
+test("an edit to a published release is stored", async () => {
+	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
+	try {
+		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
+		// a stored edit is anything but a dropped action
+		expect(await postWebhook({ action: "edited", release: PUBLISHED_RELEASE })).not.toContain("ignored")
+	} finally {
+		restoreSecret(previousSecret)
+	}
+})
+
+// an edited draft is not on the page yet, and an action that changes nothing a user sees is acknowledged and dropped
+test("an edited draft and an unknown action are dropped", async () => {
+	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
+	try {
+		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
+		const draftText = await postWebhook({ action: "edited", release: { ...PUBLISHED_RELEASE, draft: true } })
+		expect(draftText).toBe(JSON.stringify({ ignored: "draft" }))
+		// post an action outside the stored set
+		const createdText = await postWebhook({ action: "created", release: PUBLISHED_RELEASE })
+		expect(createdText).toBe(JSON.stringify({ ignored: "created" }))
 	} finally {
 		restoreSecret(previousSecret)
 	}

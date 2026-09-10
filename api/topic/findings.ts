@@ -36,21 +36,18 @@ export async function loadTopicFindings(
 		return []
 	}
 
-	// a signed-out visitor has no history. sql`false` stands in where drizzle's typing rejects comparing user_id to null
-	const consumptionJoinCondition = userId
-		? and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
-		: sql`false`
-	const bookmarkJoinCondition = userId
-		? and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId))
-		: sql`false`
-
 	// the activation gate keeps only findings whose scan started after the user's subscription activated
 	const findingFilter = subscriberActivatedAt
 		? and(eq(findings.topicId, topicId), gt(scans.startedAt, subscriberActivatedAt))
 		: eq(findings.topicId, topicId)
 
-	// join each topic finding with its resource. a left join adds the user's consumed date when one exists
-	const findingRows = await db
+	// a user's own columns are consumed and bookmarked. a visitor's are null
+	const userColumns = userId
+		? { consumedAt: consumptions.consumedAt, bookmarkedAt: bookmarks.createdAt }
+		: { consumedAt: sql<Date | null>`null`, bookmarkedAt: sql<Date | null>`null` }
+
+	// join each topic finding with its resource and its scan
+	const findingQuery = db
 		.select({
 			// load the finding identity, the scan that produced it, and its resource metadata
 			findingId: findings.id,
@@ -68,23 +65,26 @@ export async function loadTopicFindings(
 			viewCount: findings.viewCount,
 			rating: findings.rating,
 			engagement: resources.engagement,
-			consumedAt: consumptions.consumedAt,
-			bookmarkedAt: bookmarks.createdAt,
+			...userColumns,
 		})
-		// join the resource, the finding's scan for the activation gate, and the user's consumed and bookmark rows
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
 		.innerJoin(scans, eq(findings.scanId, scans.id))
-		.leftJoin(consumptions, consumptionJoinCondition)
-		.leftJoin(bookmarks, bookmarkJoinCondition)
-		.where(findingFilter)
-		.orderBy(desc(findings.relevanceScore))
+		.$dynamic()
+
+	// left join a user's consumed and bookmark rows. a visitor skips the join
+	const markedQuery = userId
+		? findingQuery
+				.leftJoin(consumptions, and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId)))
+				.leftJoin(bookmarks, and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId)))
+		: findingQuery
+	const findingRows = await markedQuery.where(findingFilter).orderBy(desc(findings.relevanceScore))
 
 	// shape each row into a topic finding and set its isConsumed flag
 	return findingRows.map(toTopicFinding)
 }
 
-// the joined row a finding read returns: the finding, its resource metadata, and the user's marks
+// the joined row a finding read returns: the finding, its resource metadata, and the user's own columns
 type TopicFindingRow = {
 	findingId: string
 	scanId: string
@@ -92,8 +92,10 @@ type TopicFindingRow = {
 	url: string
 	resourceKind: TopicFinding["resourceKind"]
 	title: TopicFinding["title"]
+	// the resource's dates
 	resourceCreatedAt: Date
 	fetchedAt: Date
+	// the relevance, view count, rating, engagement, and the user's own columns
 	relevanceScore: TopicFinding["relevanceScore"]
 	relevanceExplanation: TopicFinding["relevanceExplanation"]
 	viewCount: TopicFinding["viewCount"]

@@ -2,10 +2,11 @@ import type { ActivityResponse } from "@shared/contracts"
 import { X } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
-import { sendAcceptInvite, sendDeclineInvite } from "@/clients/activityClient"
+import { fetchTopicInviteBadges, sendAcceptInvite, sendDeclineInvite } from "@/clients/activityClient"
 import { sendDeleteSubscription, sendSubscriptionEmail, sendTopicSubscription } from "@/clients/topicClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
+import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
@@ -14,10 +15,10 @@ import { SortableHeader } from "@/components/table/SortableHeader"
 import { TableCard } from "@/components/table/TableCard"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { TeamLink } from "@/components/team/TeamLink"
-import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { toMonthYearLabel } from "@/lib/labels"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
 import { NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
+import { setTopicInviteBadges } from "@/stores/topicInviteStore"
 
 // one subscription the user holds on a topic they do not own
 type SubscriptionRow = ActivityResponse["subscriptions"][number]
@@ -57,10 +58,18 @@ export function TopicSubscriptionsTable({
 		inviteId: string | null
 	} | null>(null)
 
+	// re-read the waiting invitations
+	const updateTopicInviteBadges = (): void => {
+		fetchTopicInviteBadges()
+			.then(setTopicInviteBadges)
+			.catch(() => {})
+	}
+
 	// flip a subscription's active state on the server, cascading the email off when it deactivates
 	async function handleActiveChange(row: SubscriptionRow, isActive: boolean): Promise<void> {
 		if (row.inviteId) {
 			await sendAcceptInvite(row.inviteId)
+			updateTopicInviteBadges()
 			toast(`You are subscribed.\n${NEXT_SCAN_DISCLAIMER}`)
 			onReloadPage()
 			return
@@ -87,6 +96,7 @@ export function TopicSubscriptionsTable({
 		}
 		if (subscriptionToDelete.inviteId) {
 			await sendDeclineInvite(subscriptionToDelete.inviteId)
+			updateTopicInviteBadges()
 		} else {
 			await sendDeleteSubscription(subscriptionToDelete.topicId)
 		}
@@ -127,10 +137,10 @@ export function TopicSubscriptionsTable({
 										<AnchorLink href={`/topics/${subscriptionRow.topicId}`} className="text-link hover:underline">
 											{subscriptionRow.name}
 										</AnchorLink>
-										<TopicMentionBadge topicId={subscriptionRow.topicId} />
+										<PageUpdateCountBadge topicId={subscriptionRow.topicId} />
 									</span>
 									{/* a pending invitation and a switched-off subscription both read inactive, so it shows which */}
-									{subscriptionRow.inviteId && <span className="text-muted-foreground ml-2 text-xs">Invited</span>}
+									{subscriptionRow.inviteId && <span className="block">Invited</span>}
 								</td>
 								<td className="py-2 pr-4">
 									{/* the byline: the owning team where one exists, otherwise the creator's profile */}

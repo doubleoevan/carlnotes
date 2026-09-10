@@ -40,6 +40,7 @@ export const RESERVED_USERNAMES = new Set([
 	"pricing",
 	"assets",
 	"screenshots",
+	"mcp",
 	// reserved ahead of need
 	"settings",
 	"t",

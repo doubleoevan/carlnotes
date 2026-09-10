@@ -14,9 +14,13 @@ export type EditableSourceKind = (typeof editableSourceKinds)[number]
 export const customSourceKeys = ["url", "rss", "googleNews", "reddit", "youtube", "podcast", "bluesky", "x"] as const
 export type CustomSourceKey = (typeof customSourceKeys)[number]
 
+// the default Source keys, one per DEFAULT_SOURCES entry
+export const defaultSourceKeys = ["webSearch"] as const
+export type DefaultSourceKey = (typeof defaultSourceKeys)[number]
+
 // a default Source, on for every new topic, with its sourceKind and toConfig save it, and label and summary to render it
 export type DefaultSource = {
-	key: string
+	key: DefaultSourceKey
 	sourceKind: EditableSourceKind
 	label: string
 	summary: string

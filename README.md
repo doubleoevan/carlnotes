@@ -142,6 +142,7 @@ bun run docs:embed   # chunk the docs markdown by section and embed the changed 
 bun run docs:embed:prd # the same sync against the production database, the owner-run escape hatch until the deploy job runs it
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
 bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty. the webhook writes it going forward
+bun run releases:preview <tag> "<title>" # store release-notes/<tag>.local.md in the dev releases table with the repo's screenshots inlined, so /releases and /releases/<tag> read as they will before the release exists on GitHub
 bun run build:ui     # production build (no doppler, so it runs in CI and deploys)
 bun run build:docs   # build static docs to docs/dist, which the api serves under /docs
                      # /docs on the api (3000) and through the Vite proxy (5173) is this build, which only changes when you rerun this script and doesn't hot reload
@@ -166,7 +167,7 @@ Backfills (owner-run) — one-time data migrations that pair with a schema chang
 doppler run -- bun scripts/backfill-resource-content.ts   # upload existing resources.content to object storage, set content_key/content_bytes
 ```
 
-The content scanner (LLM Guard, see Architecture above) is optional too: `bun run llm-guard:up` and set `LLM_GUARD_URL`. Error monitoring and product analytics are the same: when `SENTRY_DSN` and `POSTHOG_API_KEY` are not set, the monitoring and analytics are off but the app behaves the same.
+The content scanner (LLM Guard, see Architecture above) is optional too: `bun run llm-guard:up` and set `LLM_GUARD_URL`. Error monitoring and product analytics are the same: when `SENTRY_DSN` and `POSTHOG_API_KEY` are not set, the monitoring and analytics are off but the app behaves the same. A visitor's search on the MCP server is optional the same way: `bun run carl-up` creates a budgeted `LITELLM_PUBLIC_KEY` for it. Without one, the search answers that it needs an account, and every other tool still works.
 
 Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium plans and a Stripe webhook derives the active plan. It needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the per-plan `STRIPE_PRICE_*` ids, and a metered `STRIPE_PRICE_MANUAL_SCAN_OVERAGE` (see `.env.example`). Until they're set, checkout, the Customer Portal, metered overage, and the admin console's Stripe net-revenue line are static. The gate, plans, and quotas all work without Stripe.
 
@@ -203,6 +204,8 @@ bun run smoke:eval         # just the eval-harness smoke test: one tiny labeled 
 bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, and detach succession
 bun run smoke:room         # just the team chat-room smoke test: the access matrix, isolation, budget rejection, mention rows, and the room lock
 bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a viewer may open, one per holding team, and the unseen count
+bun run smoke:mcp          # just the mcp smoke test: what a visitor reads, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, the edit tools, and the rate limit
+bun run smoke:tools        # just the topic tools smoke test: the gate inside each tool, the prompt version writes, adding and removing sources up to the limit, and that no tool starts a scan
 bun run smoke:invites      # just the invite smoke test: link authority and races, resolution, who-may-invite, connections, and accept-equals-redeem
 ```
 

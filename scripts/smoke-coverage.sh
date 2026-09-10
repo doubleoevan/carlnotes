@@ -42,6 +42,8 @@ SMOKE_FILES=(
 	api/chat/room.smoke.ts
 	api/chat/rooms.smoke.ts
 	api/invite/invites.smoke.ts
+	api/mcp/mcp.smoke.ts
+	api/tool/topicTools.smoke.ts
 )
 
 # each run writes coverage/lcov.info, kept aside per smoke file so one upload can send them all

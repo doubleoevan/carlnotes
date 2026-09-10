@@ -11,7 +11,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives
 import { TagPill } from "@/components/topic/TagPicker"
 import { type EmailProvider, toEmailProviders } from "@/lib/emailProviders"
 import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
-import { copyWithDocument } from "@/lib/utils"
+import { copyToClipboard } from "@/lib/utils"
 
 // what the invite-by-link menu needs from its caller
 export type InviteLink = {
@@ -106,15 +106,10 @@ function InviteLinkMenu({ inviteLink }: { inviteLink: InviteLink }) {
 		if (!token) {
 			return
 		}
-		// some browsers reject the clipboard api even over https
-		const inviteUrl = toInviteUrl(token)
-		try {
-			await navigator.clipboard.writeText(inviteUrl)
-		} catch {
-			// copy with an off-screen textarea instead
-			copyWithDocument(inviteUrl)
+		// copy the invite url, and report only a copy that landed
+		if (await copyToClipboard(toInviteUrl(token))) {
+			inviteLink.onCopied?.()
 		}
-		inviteLink.onCopied?.()
 	}
 	return (
 		<div>

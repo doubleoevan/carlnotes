@@ -170,8 +170,8 @@ describe("toDefaultChatId", () => {
 		})
 	})
 
-	test("a user with no rooms gets no chatId, which is what shows the create call to action", () => {
-		expect(toDefaultChatId(null, [])).toBeNull()
+	test("a user with no rooms opens the new-topic chat in place of a call to action", () => {
+		expect(toDefaultChatId(null, [])).toEqual({ kind: "private", newTopic: true })
 	})
 
 	// a topic page opens that topic's chat room wherever the user has one
@@ -191,9 +191,9 @@ describe("toDefaultChatId", () => {
 		expect(toDefaultChatId(pageContext, [busierChatRoom])).toEqual({ kind: "private", topicId: "topic-9" })
 	})
 
-	// a page about no conversation never reaches a private chat
-	test("a page about nothing opens no private chat", () => {
-		expect(toDefaultChatId(null, [])).toBeNull()
+	// a page about no conversation reaches no topic or team chat, only the new-topic chat
+	test("a page about nothing opens the new-topic chat", () => {
+		expect(toDefaultChatId(null, [])).toEqual({ kind: "private", newTopic: true })
 	})
 
 	// a team page opens the team's own chat room, never one of its topics
@@ -222,9 +222,9 @@ describe("toDefaultChatId", () => {
 		expect(toDefaultChatId(pageContext, [TEAM_CHAT_ROOM])).toEqual({ kind: "room", teamId: "team-a", topicId: null })
 	})
 
-	test("a team page opens nothing when the user has no rooms and no way in", () => {
+	test("a team page opens the new-topic chat when the user has no rooms and no way in", () => {
 		const pageContext = toPageContext({ teamId: "team-b", name: "Lets Build" })
-		expect(toDefaultChatId(pageContext, [])).toBeNull()
+		expect(toDefaultChatId(pageContext, [])).toEqual({ kind: "private", newTopic: true })
 	})
 })
 
@@ -248,10 +248,16 @@ test("a topic page with no room opens the way into the team that has it", () => 
 	expect(toDefaultChatId(pageContext, [])).toEqual({ kind: "room", teamId: "team-z", topicId: "topic-9" })
 })
 
-// an empty chat room list looks the same as having no chat rooms
-test("nothing is selected while there are no rooms to select from", () => {
+// with no chat room to select from, carl offers to make a topic
+test("the new-topic chat opens while there are no rooms to select from", () => {
 	const pageContext = toPageContext({ teamId: "team-a", name: "A team" })
-	expect(toDefaultChatId(pageContext, [])).toBeNull()
+	expect(toDefaultChatId(pageContext, [])).toEqual({ kind: "private", newTopic: true })
+})
+
+// a user with nothing in their feed is here to make a topic, before any chat room
+test("an empty feed opens the new-topic chat ahead of every room", () => {
+	const pageContext = toPageContext({ isUserTopicFeedEmpty: true })
+	expect(toDefaultChatId(pageContext, [TEAM_CHAT_ROOM])).toEqual({ kind: "private", newTopic: true })
 })
 
 // a topic page names its own topic, so every team's chat room for it is marked and preferred alike

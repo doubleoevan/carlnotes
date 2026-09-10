@@ -13,6 +13,7 @@ import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
+import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { InviteMembersModal } from "@/components/invite/InviteMembersModal"
 import { NotesSection } from "@/components/note/NotesSection"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
@@ -26,7 +27,6 @@ import { AddTopicButton } from "@/components/team/AddTopicButton"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { refreshAvatars } from "@/hooks/useAvatarVersion"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { toCountLabel } from "@/lib/labels"
@@ -507,7 +507,7 @@ function TeamHeader({
 				<span className="relative inline-block">
 					<h1 className="font-display text-2xl">{teamPage.name}</h1>
 					{/* the team chat room's unseen mentions. the badge's click opens the chat room, which clears it */}
-					<TopicMentionBadge
+					<PageUpdateCountBadge
 						topicId={null}
 						teamId={teamPage.teamId}
 						href={`/teams/${teamPage.teamId}`}

@@ -6,6 +6,7 @@ import { authClient } from "@/clients/authClient"
 import { sendTopicSubscription } from "@/clients/topicClient"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
@@ -13,7 +14,6 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { TeamLink } from "@/components/team/TeamLink"
 import { TopicInfo } from "@/components/topic/TopicInfo"
-import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { useIsVisible } from "@/hooks/useIsVisible"
 import {
 	POPOVER_PANEL_CLASS,
@@ -61,7 +61,7 @@ export function Topic({ topic, index }: TopicProps) {
 						<AnchorLink href={`/topics/${topic.id}`} className="text-link min-w-0 hover:underline">
 							<h3 className="font-display pt-1 pl-4 pb-1 text-lg leading-tight">{topic.name}</h3>
 						</AnchorLink>
-						<TopicMentionBadge topicId={topic.id} className="-right-2" />
+						<PageUpdateCountBadge topicId={topic.id} className="-right-2" />
 					</span>
 					<TopicInfoPopover topic={topic} />
 				</div>

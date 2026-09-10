@@ -21,11 +21,14 @@ export const CHAT_QUESTION_PLACEHOLDER = "Hand-crafted notes are richer…"
 export function ChatComposer({
 	chat,
 	onSendQuestion,
+	placeholder = CHAT_QUESTION_PLACEHOLDER,
 }: {
 	// the conversation the composer writes into, which owns the draft, its attachments, and the stream
 	chat: TopicChat
 	// a visitor's send routes to the signup instead of the conversation
 	onSendQuestion: () => void
+	// what the empty question box shows. the private chat's line unless the conversation says otherwise
+	placeholder?: string
 }) {
 	const { question, attachments, keptAttachments, isStreaming, isSignupRequired } = chat
 	const questionBoxRef = useRef<HTMLTextAreaElement>(null)
@@ -63,7 +66,7 @@ export function ChatComposer({
 		const files = Array.from(event.clipboardData.files)
 		if (files.length > 0) {
 			event.preventDefault()
-			void chat.addFiles(files)
+			void chat.addAttachmentFiles(files)
 			return
 		}
 
@@ -94,7 +97,7 @@ export function ChatComposer({
 						onSendQuestion()
 						return
 					}
-					void chat.addFiles(files)
+					void chat.addAttachmentFiles(files)
 				}}
 			>
 				{/* the input box is 16px to keep the panel on the screen. autocomplete is off,
@@ -107,8 +110,8 @@ export function ChatComposer({
 					onChange={(event) => chat.setQuestion(event.target.value)}
 					onKeyDown={handleSendQuestion}
 					onPaste={handlePaste}
-					placeholder={CHAT_QUESTION_PLACEHOLDER}
-					aria-label="Ask about this topic"
+					placeholder={placeholder}
+					aria-label="Ask Carl"
 					autoComplete="off"
 					className="placeholder:text-muted-foreground w-full resize-none bg-transparent py-1 text-base leading-relaxed outline-none sm:text-sm"
 				/>
@@ -117,7 +120,11 @@ export function ChatComposer({
 					{/* the add and remove attachment buttons sit next to each other */}
 					<div className="flex shrink-0 items-center">
 						{/* a visitor's attachment routes to the signup page */}
-						<AttachButton isSignupRequired={isSignupRequired} onSelect={chat.addFiles} onSignup={onSendQuestion} />
+						<AttachButton
+							isSignupRequired={isSignupRequired}
+							onSelect={chat.addAttachmentFiles}
+							onSignup={onSendQuestion}
+						/>
 						{keptAttachments.length > 0 && (
 							<KeptAttachmentsButton
 								keptAttachments={keptAttachments}
@@ -272,7 +279,7 @@ function AttachButton({
 	onSignup,
 }: {
 	isSignupRequired: boolean
-	onSelect: (files: File[]) => Promise<void>
+	onSelect: (files: File[]) => Promise<unknown>
 	onSignup: () => void
 }) {
 	const inputRef = useRef<HTMLInputElement>(null)

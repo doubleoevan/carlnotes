@@ -7,7 +7,7 @@ import { durationMsBetween, toAgeLabel, toDurationLabel, toScheduleLabel, toTime
 import { matchesTopicFindingFilter } from "./topicFindingFilters"
 import { toSortedTopicFindings } from "./topicFindingSorts"
 import { toPossibleSourceUrls } from "./topicPromptUrls"
-import { cn, toSafeRedirectPath } from "./utils"
+import { cn, toAuthorizeReturnPath, toSafeRedirectPath } from "./utils"
 
 // twMerge makes later tailwind classes win over earlier conflicting ones
 test("cn merges conflicting tailwind classes", () => {
@@ -226,4 +226,21 @@ test("toSafeRedirectPath keeps a plain path and rejects everything that could le
 	expect(toSafeRedirectPath("/\\evil.com")).toBe("/")
 	expect(toSafeRedirectPath("\\/evil.com")).toBe("/")
 	expect(toSafeRedirectPath("/\tevil.com")).toBe("/")
+})
+
+// sign-in returns to the authorize endpoint with the whole oauth query
+test("an oauth query returns to the authorize endpoint with the query intact", () => {
+	const searchParams = new URLSearchParams({
+		client_id: "client-1",
+		redirect_uri: "http://localhost:9999/callback",
+		response_type: "code",
+		state: "s1",
+	})
+	expect(toAuthorizeReturnPath(searchParams)).toBe(`/api/auth/mcp/authorize?${searchParams.toString()}`)
+})
+
+// a visit with only a next parameter, or only a client id, returns null
+test("a visit without the oauth parameters returns no authorize path", () => {
+	expect(toAuthorizeReturnPath(new URLSearchParams({ next: "/topics/topic-1" }))).toBeNull()
+	expect(toAuthorizeReturnPath(new URLSearchParams({ client_id: "client-1" }))).toBeNull()
 })

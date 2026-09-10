@@ -3,6 +3,17 @@
 GitHub Releases is where release notes are authored. [carlnotes.com/releases](https://carlnotes.com/releases)
 is where they are read. There is no second changelog to keep in step.
 
+## The cycle
+
+1. Write the body in `release-notes/<tag>.local.md`, a gitignored scratch file.
+2. Preview it on the dev server (below) until it reads right.
+3. Commit and push the code, and wait for the deploy.
+4. Create the release on GitHub from the file (below). The webhook puts it on `/releases` within a second.
+5. Edit it on GitHub from then on. The webhook carries each edit to `/releases` too.
+
+The GitHub body is the canonical copy once published. The local file is scratch, and it can be
+recreated from GitHub at any time (below).
+
 ## The body
 
 A release body has three parts, in this order:
@@ -45,19 +56,53 @@ It reads from `main`, so an image referenced before its branch merges resolves o
 these to a public object-storage URL when there is one; nothing about the convention changes but the
 host.
 
-## Publishing
+## Previewing locally
 
-Write the body to a gitignored `release-notes/<tag>.local.md`, then:
+Before the release exists on GitHub, read it as the pages will render it:
 
 ```bash
-gh release create v1.2.0 --draft --title "v1.2.0 — What it is" --notes-file release-notes/v1.2.0.local.md
+bun run releases:preview v1.2.0 "v1.2.0 — What it is"
 ```
 
-Drafts are visible only to people with push access and do not create the tag. Review, then publish
-from GitHub.
+It stores the body from `release-notes/v1.2.0.local.md` in the dev database under that tag, with every
+image the body names inlined from this repository, since the raw URL only resolves once the branch merges.
+Open `http://localhost:3000/releases/v1.2.0` and `http://localhost:3000/releases`. Publishing the real
+release later replaces the row by tag.
 
-Publishing fires the `release` webhook, which upserts the row `/releases` reads. Nothing else is
-needed — the page is current within a second.
+## Publishing
+
+After the push, with the deploy up so the page never announces what the site does not have yet:
+
+```bash
+gh release create v1.2.0 --title "v1.2.0 — What it is" --notes-file release-notes/v1.2.0.local.md
+```
+
+Add `--draft` to look at it on GitHub first. Drafts are visible only to people with push access and do
+not create the tag; publish from GitHub when ready. Publishing fires the `release` webhook, which
+upserts the row `/releases` reads. Nothing else is needed.
+
+## Editing a published release
+
+Edit on GitHub, with the pencil on the release page, or from the local file:
+
+```bash
+gh release edit v1.2.0 --notes-file release-notes/v1.2.0.local.md
+```
+
+The webhook stores an edit the way it stores a publish, so `/releases` follows within a second. To edit
+locally when the file is gone, or has drifted from what GitHub holds, pull the body back down first:
+
+```bash
+gh release view v1.2.0 --json body --jq .body > release-notes/v1.2.0.local.md
+```
+
+## Updating a screenshot
+
+A screenshot is a file in this repository, so a new one is a commit, not a release edit. Drop the new
+PNG over the old one under the same name, commit, and push: the raw URL serves the new image, and the
+docs pages, which reference the same files by relative path, update in the same commit. The raw host
+caches for a few minutes, so the old image can linger that long. A screenshot under a new name also
+needs the body's image line edited to the new name.
 
 ## When the page is behind GitHub
 
@@ -69,4 +114,4 @@ bun run sync:releases
 
 It reads every published release from the GitHub API and upserts each one by tag, so it reconciles a
 dropped delivery and seeds releases published before the webhook existed. Running it twice changes
-nothing the first run already did.
+nothing the first run already did. `bun run sync:releases:prd` does the same against production.

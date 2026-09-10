@@ -76,7 +76,7 @@ export function TopicInfo(props: TopicInfoProps) {
 				    found nothing. card only, since the feed payload has no scan history */}
 				{props.isCard && <FailedBrewSection scans={props.topic.scans} />}
 
-				{/* who tuned this topic, leading the roast because it frames everything under it */}
+				{/* who owns this topic */}
 				{topic.owner && (
 					<InfoSection label="Carl's Barista">
 						<div className="flex items-center justify-between gap-3">

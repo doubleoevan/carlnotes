@@ -15,14 +15,14 @@ const ownedTopicId = `${runId}-owned`
 const sharedTopicId = `${runId}-shared`
 
 // each check reports its own line, and one failure fails the run
-let failures = 0
-function check(label: string, isPassing: boolean, detail?: unknown): void {
+let failureCount = 0
+function check(label: string, isTestPassing: boolean, detail?: unknown): void {
 	// a pass is one line, and a failure prints what it actually saw
-	if (isPassing) {
+	if (isTestPassing) {
 		console.log(`  ok  ${label}`)
 		return
 	}
-	failures += 1
+	failureCount += 1
 	console.error(`FAIL  ${label}`, detail ?? "")
 }
 
@@ -137,5 +137,5 @@ try {
 	await connectionPool.end()
 }
 
-console.log(failures === 0 ? "\nrooms smoke: every check passed" : `\nrooms smoke: ${failures} failed`)
-process.exitCode = failures === 0 ? 0 : 1
+console.log(failureCount === 0 ? "\nrooms smoke: every check passed" : `\nrooms smoke: ${failureCount} failed`)
+process.exitCode = failureCount === 0 ? 0 : 1

@@ -4,7 +4,7 @@ description: >-
   Write rich-text notes on a topic or a team page, keep them private or share them, comment on a
   line with your teammates, and see what changed since you last looked.
 sidebar:
-  order: 3
+  order: 5
 ---
 
 Carl writes what he found. **Tasting Notes** are where you write what you think about it. Every

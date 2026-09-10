@@ -1,6 +1,6 @@
 // the invites that name a person, by email or by @username
 import { zValidator } from "@hono/zod-validator"
-import type { Invite, UserInvitePayload } from "@shared/contracts"
+import type { Invite, TopicInviteBadge, UserInvitePayload } from "@shared/contracts"
 import { type ProfileIdentity, userInvitePayload } from "@shared/contracts"
 import { toNormalizedUsername } from "@shared/usernames"
 import { and, eq, inArray, or, sql } from "drizzle-orm"
@@ -8,6 +8,7 @@ import { type Context, Hono } from "hono"
 import { db } from "../../db"
 import { canCreateInvitesToday } from "../../db/quotas"
 import { invites, topics, users } from "../../db/schema"
+import { loadInvitedTopicSubscriptions } from "../activity"
 import { isAllowed } from "../authorization"
 import { isConnected } from "../connections"
 import { type AppEnv, currentUser } from "../currentUser"
@@ -363,6 +364,28 @@ export const userInvitesRoute = new Hono<AppEnv>()
 		// create the user invite. a private team is not shown to non-members, so its forbidden status returns not found
 		const invite = await createUserInvite(userId, { teamId: context.req.param("id") }, context.req.valid("json"))
 		return respondUserInvite(context, invite, 404)
+	})
+	// the topic invitations waiting for this user's answer
+	.get("/invites/topics/pending", async (context) => {
+		const user = context.get("user")
+		if (!user) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		const invitedRows = await loadInvitedTopicSubscriptions({ id: user.id, email: user.email })
+		// shape each row as a badge
+		const badges: TopicInviteBadge[] = invitedRows.flatMap((invitedRow) =>
+			invitedRow.inviteId
+				? [
+						{
+							inviteId: invitedRow.inviteId,
+							topicId: invitedRow.topicId,
+							topicName: invitedRow.name,
+							inviterUsername: invitedRow.owner.username,
+						},
+					]
+				: [],
+		)
+		return context.json(badges)
 	})
 	.post("/invites/:id/accept", async (context) => {
 		// reject a signed-out visitor

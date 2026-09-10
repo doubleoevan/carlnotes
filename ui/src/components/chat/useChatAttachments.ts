@@ -20,7 +20,8 @@ export const TEXT_FILE_SUFFIXES = [".txt", ".md", ".markdown", ".csv", ".tsv", "
 // the draft's files and the ones the topic already keeps, with the writes that change either
 export type ChatAttachments = {
 	attachments: ChatAttachment[]
-	addFiles: (files: File[]) => Promise<void>
+	// the files taken in
+	addAttachmentFiles: (files: File[]) => Promise<File[]>
 	addPastedText: (text: string) => void
 	removeAttachment: (index: number) => void
 	// what this user already keeps for the topic, which the keep limit measures against
@@ -67,21 +68,25 @@ export function useChatAttachments(): ChatAttachments {
 		attachments,
 		keptAttachments,
 		setKeptAttachments,
-		// take in selected or pasted attachment files
-		addFiles: async (files) => {
-			for (const file of files) {
+		// take in selected or pasted attachment files, returning the ones that were taken
+		addAttachmentFiles: async (attachmentFiles) => {
+			const validAttachmentFiles: File[] = []
+			for (const attachmentFile of attachmentFiles) {
 				// one chat turn's attachment limit is checked first. a big multi-select stops with a toast
 				if (isQuestionFull()) {
-					return
+					break
 				}
 				// convert, then append kept by default. a rejected file already explained itself in the conversion
-				const attachment = await toAttachment(file)
+				const attachment = await toAttachment(attachmentFile)
 				if (attachment) {
 					attachmentCountRef.current += 1
 					const keepAttachment = shouldKeepAttachment()
 					setAttachments((previous) => [...previous, { ...attachment, keep: keepAttachment }])
+					validAttachmentFiles.push(attachmentFile)
 				}
 			}
+			// return the files that made it in
+			return validAttachmentFiles
 		},
 		// turn a long copy-paste into a text chip. the draft box holds the question instead of the material
 		addPastedText: (text) => {

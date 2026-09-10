@@ -10,9 +10,11 @@ import { toStoreListeners } from "@/stores/storeListeners"
 export type ChatId =
 	// a shared chat room, keyed by the same pair the chat room list and the stream are keyed by
 	| ({ kind: "room" } & Pick<ChatRoom, "teamId" | "topicId">)
-	// one user's private conversation with Carl about a topic, which is no chat room at all
-	| { kind: "private"; topicId: string; teamId?: undefined }
-	| { kind: "private"; topicId?: undefined; teamId: string }
+	// one user's private conversation with Carl about a topic or a team, which is no chat room at all
+	| { kind: "private"; topicId: string; teamId?: undefined; newTopic?: undefined }
+	| { kind: "private"; topicId?: undefined; teamId: string; newTopic?: undefined }
+	// the new-topic chat, where Carl makes a topic, bound to neither
+	| { kind: "private"; newTopic: true; topicId?: undefined; teamId?: undefined }
 
 /** How much of the screen the panel takes. */
 export type ChatPanelState = "collapsed" | "open" | "enlarged"
@@ -34,6 +36,8 @@ export type ChatPageContext = {
 	pageTopicIds?: string[]
 	// which kind of chat room this page opens first
 	preferredChatRoomKind?: "team" | "topic"
+	// whether a signed-in user's feed is still empty, no topic of their own and none subscribed to
+	isUserTopicFeedEmpty?: boolean
 }
 
 // the panel lives in the app shell and outlives every route, so its state lives beside it instead of in a page
@@ -154,7 +158,11 @@ export function isSameChat(firstChatId: ChatId | null, secondChatId: ChatId): bo
 	}
 	// a private chat is named by its topic or its team, and a chat room by the pair the routes address it with
 	if (firstChatId.kind === "private" && secondChatId.kind === "private") {
-		return firstChatId.topicId === secondChatId.topicId && firstChatId.teamId === secondChatId.teamId
+		return (
+			firstChatId.topicId === secondChatId.topicId &&
+			firstChatId.teamId === secondChatId.teamId &&
+			firstChatId.newTopic === secondChatId.newTopic
+		)
 	}
 	// the room arms are re-checked so the narrowing holds
 	return (
@@ -165,8 +173,15 @@ export function isSameChat(firstChatId: ChatId | null, secondChatId: ChatId): bo
 	)
 }
 
-/** Picks the chat this page opens on, falling back to the busiest one when the page names none. */
+/**
+ * Picks the chat this page opens on: the page's own, else the busiest chat room, else the new-topic chat,
+ * which an empty feed opens on its own.
+ */
 export function toDefaultChatId(pageContext: ChatPageContext | null, chatRooms: ChatRoom[]): ChatId | null {
+	// open the new-topic chat for a user with nothing in their feed
+	if (pageContext?.isUserTopicFeedEmpty) {
+		return { kind: "private", newTopic: true }
+	}
 	// a team page opens that team's own chat room, or offers the way in where the user is on none
 	if (pageContext?.teamId) {
 		const teamChatRoom = chatRooms.find(
@@ -201,7 +216,8 @@ export function toDefaultChatId(pageContext: ChatPageContext | null, chatRooms: 
 	if (selectedChatRoom) {
 		return { kind: "room", teamId: selectedChatRoom.teamId, topicId: selectedChatRoom.topicId }
 	}
-	return null
+	// fall back to the new-topic chat
+	return { kind: "private", newTopic: true }
 }
 
 // the chat room holding the most mentions, with the kind the page leads on winning before any other.
@@ -222,4 +238,25 @@ function toBusiestChatRoom(chatRooms: ChatRoom[], pageContext: ChatPageContext |
 			chatRoom.chatMentions.length > (busiestChatRoom?.chatMentions.length ?? 0) ? chatRoom : busiestChatRoom,
 		undefined,
 	)
+}
+
+// the last topic a topic tool changed, and how many topic changes so far
+let changedTopicId: string | null = null
+let topicChangeCount = 0
+
+/**
+ * Publishes that a topic tool changed a topic.
+ */
+export function publishTopicChanged(topicId: string): void {
+	changedTopicId = topicId
+	topicChangeCount += 1
+	publish()
+}
+
+/**
+ * Reads the topic change count when this topic was changed last, or 0 otherwise.
+ */
+export function useTopicChangeCount(topicId: string | null): number {
+	useSyncExternalStore(subscribe, getVersion)
+	return topicId !== null && changedTopicId === topicId ? topicChangeCount : 0
 }

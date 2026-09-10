@@ -53,3 +53,5 @@ export const avatarSources = ["generated", "oauth", "upload"] as const
 export const maxResultsOptions = [5, 10, 15, 20] as const
 // who may see a note: its owner alone, the page's team, or everyone
 export const noteVisibilities = ["private", "team", "public"] as const
+// where a prompt version comes from: the topic editor, a chat tool, or an MCP tool
+export const promptVersionOrigins = ["editor", "chat", "mcp"] as const

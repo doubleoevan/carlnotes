@@ -1,6 +1,6 @@
 // the read side of topic chat
 import { reportError } from "@shared/monitoring"
-import { toSourceSummary } from "@shared/sources"
+import { toSourceSummary, toUrlHost } from "@shared/sources"
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { db } from "../../db"
 import {
@@ -29,7 +29,7 @@ const MAX_RESOURCE_CHARS = 2000
 const MAX_SCAN_SUMMARIES = 3
 
 // how close two findings' question-similarity has to be before recency is used to break their tie
-const SIMILARITY_TIE_BAND = 0.05
+const SIMILARITY_TIE_RANGE = 0.05
 
 // qwen3 is instruction-aware
 const EMBED_QUERY_INSTRUCTION = "Given a user's question about a topic, retrieve web resources that answer it"
@@ -110,19 +110,77 @@ export async function retrieveChatContext(
 	}
 }
 
-// the topics' findings ranked by how close their resource is to the question
+// one topic finding as rankTopicFindings returns it
+export type RankedTopicFinding = {
+	// the finding and the topic it belongs to
+	findingId: string
+	topicId: string
+	// its resource, and the url's host as its source
+	title: string | null
+	url: string
+	source: string | null
+	resourceKind: string
+	// when the topic found it and when the resource was published
+	foundAt: Date
+	publishedAt: Date
+	// the review, where the resource's text lives, and how close it is to the query
+	relevanceScore: number
+	relevanceExplanation: string
+	snippet: string | null
+	contentKey: string | null
+	distance: number
+}
+
+/**
+ * Ranks a topic's findings closest to a query over the same embedding index and instruction chat retrieval uses, with
+ * no resource text read.
+ */
+export async function searchTopicFindings(
+	topicId: string,
+	query: string,
+	limit: number,
+	litellmApiKey?: string,
+): Promise<RankedTopicFinding[]> {
+	const queryVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${query}`, litellmApiKey)
+	return rankTopicFindings([topicId], queryVector, limit)
+}
+
+// the topics' findings ranked by how close their resource is to the question, each with its stored text
 async function retrieveFindings(
 	topicIds: string[],
 	questionVector: number[],
 	topicNameById?: Map<string, string>,
 ): Promise<RetrievedFinding[]> {
-	// order by cosine distance against the question, keeping only rows this model embedded
+	// rank the findings, then read each resource's text
+	const rankedTopicFindings = await rankTopicFindings(topicIds, questionVector, MAX_RETRIEVED_FINDINGS)
+	return Promise.all(
+		rankedTopicFindings.map(async (rankedRow) => ({
+			title: rankedRow.title,
+			url: rankedRow.url,
+			foundAt: rankedRow.foundAt,
+			relevanceScore: rankedRow.relevanceScore,
+			relevanceExplanation: rankedRow.relevanceExplanation,
+			text: (await readResourceText(rankedRow.contentKey, rankedRow.snippet)).slice(0, MAX_RESOURCE_CHARS),
+			topicName: topicNameById?.get(rankedRow.topicId),
+		})),
+	)
+}
+
+// the findings nearest the question among the resources this model embedded, near-ties broken by recency
+async function rankTopicFindings(
+	topicIds: string[],
+	questionVector: number[],
+	limit: number,
+): Promise<RankedTopicFinding[]> {
 	const rows = await db
 		.select({
+			findingId: findings.id,
 			topicId: findings.topicId,
 			title: resources.title,
 			url: resources.url,
+			resourceKind: resources.kind,
 			foundAt: findings.createdAt,
+			publishedAt: resources.createdAt,
 			relevanceScore: findings.relevanceScore,
 			relevanceExplanation: findings.relevanceExplanation,
 			snippet: resources.snippet,
@@ -139,20 +197,10 @@ async function retrieveFindings(
 			),
 		)
 		.orderBy(sql`${resources.embedding} <=> ${JSON.stringify(questionVector)}::vector`)
-		.limit(MAX_RETRIEVED_FINDINGS)
+		.limit(limit)
 
-	// read each resource's stored text, falling back to its snippet
-	return Promise.all(
-		toRecencyOrdered(rows).map(async (row) => ({
-			title: row.title,
-			url: row.url,
-			foundAt: row.foundAt,
-			relevanceScore: row.relevanceScore,
-			relevanceExplanation: row.relevanceExplanation,
-			text: (await readResourceText(row.contentKey, row.snippet)).slice(0, MAX_RESOURCE_CHARS),
-			topicName: topicNameById?.get(row.topicId),
-		})),
-	)
+	// break near-ties by recency, then add each row's url host as its source
+	return toRelevanceThenRecencyOrder(rows).map((rankedRow) => ({ ...rankedRow, source: toUrlHost(rankedRow.url) }))
 }
 
 // the docs sections close enough to the question to quote, composed into one block
@@ -180,12 +228,13 @@ async function readDocsBlock(questionVector: number[]): Promise<string> {
  * The retrieved rows with near-ties broken by recency, so the newer of two findings that answer the question equally well leads.
  * The set never changes, only its order.
  */
-export function toRecencyOrdered<Row extends { distance: number; foundAt: Date }>(rows: Row[]): Row[] {
-	// banding the distance makes this a real ordering
-	const toBand = (distance: number): number => Math.floor(distance / SIMILARITY_TIE_BAND)
+export function toRelevanceThenRecencyOrder<Row extends { distance: number; foundAt: Date }>(rows: Row[]): Row[] {
+	// distances in one range count as a tie, so recency can decide between them
+	const toSimilarityRange = (distance: number): number => Math.floor(distance / SIMILARITY_TIE_RANGE)
 	return [...rows].sort(
 		(row, otherRow) =>
-			toBand(row.distance) - toBand(otherRow.distance) || otherRow.foundAt.getTime() - row.foundAt.getTime(),
+			toSimilarityRange(row.distance) - toSimilarityRange(otherRow.distance) ||
+			otherRow.foundAt.getTime() - row.foundAt.getTime(),
 	)
 }
 
@@ -209,18 +258,22 @@ async function readResourceText(contentKey: string | null, snippet: string | nul
 
 // the topic's ready sources, summarized the same way the topic page shows them
 async function readSources(topicId: string): Promise<string[]> {
-	const sourceRows = await db
-		.select({ sourceKind: sources.kind, config: sources.config })
+	const topicSourceRows = await db
+		.select({ id: sources.id, sourceKind: sources.kind, config: sources.config })
 		.from(sources)
 		.where(and(eq(sources.topicId, topicId), eq(sources.status, "ready")))
 
 	// the built-in web search stores nothing worth summarizing, so it names itself
-	return sourceRows.map((sourceRow) => {
-		if (sourceRow.sourceKind === "search") {
-			return "web search — Carl searches the live web for this topic"
-		}
-		const summary = toSourceSummary(sourceRow.sourceKind, sourceRow.config)
-		return summary ? `${sourceRow.sourceKind} — ${summary}` : sourceRow.sourceKind
+	return topicSourceRows.map((topicSourceRow) => {
+		const summary = toSourceSummary(topicSourceRow.sourceKind, topicSourceRow.config)
+		const label =
+			topicSourceRow.sourceKind === "search"
+				? "web search — Carl searches the live web for this topic"
+				: summary
+					? `${topicSourceRow.sourceKind} — ${summary}`
+					: topicSourceRow.sourceKind
+		// end the line with the source id the removeSource tool takes
+		return `${label} [source ${topicSourceRow.id}]`
 	})
 }
 
@@ -285,6 +338,14 @@ export type TeamChatContext = {
 }
 
 /**
+ * Builds the docs block alone for the new-topic chat, which has no topic material to read.
+ */
+export async function retrieveDocsBlock(question: string, litellmApiKey?: string): Promise<string> {
+	const questionVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${question}`, litellmApiKey)
+	return readDocsBlock(questionVector)
+}
+
+/**
  * Assembles one team chat room turn's context from every topic the team holds, or null if the team does not exist.
  * Owner attachments and kept chat material stay out of an answer that posts to the whole chat room.
  */
@@ -335,20 +396,20 @@ export async function retrieveTeamChatContext(
 
 // every topic's ready sources in one query, each line prefixed with its topic's name
 async function readTeamSources(topicIds: string[], topicNameById: Map<string, string>): Promise<string[]> {
-	const sourceRows = await db
+	const topicSourceRows = await db
 		.select({ topicId: sources.topicId, sourceKind: sources.kind, config: sources.config })
 		.from(sources)
 		.where(and(inArray(sources.topicId, topicIds), eq(sources.status, "ready")))
 
 	// the built-in web search stores nothing worth summarizing, so it names itself
-	return sourceRows.map((sourceRow) => {
-		const topicName = topicNameById.get(sourceRow.topicId) ?? "a topic"
-		if (sourceRow.sourceKind === "search") {
+	return topicSourceRows.map((topicSourceRow) => {
+		const topicName = topicNameById.get(topicSourceRow.topicId) ?? "a topic"
+		if (topicSourceRow.sourceKind === "search") {
 			return `${topicName}: web search — Carl searches the live web for this topic`
 		}
 		// every other source keeps the topic page's own summary line
-		const sourceSummary = toSourceSummary(sourceRow.sourceKind, sourceRow.config)
-		return `${topicName}: ${sourceSummary ? `${sourceRow.sourceKind} — ${sourceSummary}` : sourceRow.sourceKind}`
+		const sourceSummary = toSourceSummary(topicSourceRow.sourceKind, topicSourceRow.config)
+		return `${topicName}: ${sourceSummary ? `${topicSourceRow.sourceKind} — ${sourceSummary}` : topicSourceRow.sourceKind}`
 	})
 }
 

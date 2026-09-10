@@ -11,6 +11,7 @@ const AdminPage = lazy(() => import("@/pages/AdminPage").then((page) => ({ defau
 const HomePage = lazy(() => import("@/pages/HomePage").then((page) => ({ default: page.HomePage })))
 const InvitePage = lazy(() => import("@/pages/InvitePage").then((page) => ({ default: page.InvitePage })))
 const LoginPage = lazy(() => import("@/pages/LoginPage").then((page) => ({ default: page.LoginPage })))
+const McpConsentPage = lazy(() => import("@/pages/McpConsentPage").then((page) => ({ default: page.McpConsentPage })))
 const PlansPage = lazy(() => import("@/pages/PlansPage").then((page) => ({ default: page.PlansPage })))
 const NotFoundPage = lazy(() => import("@/pages/NotFoundPage").then((page) => ({ default: page.NotFoundPage })))
 const PrivacyPage = lazy(() => import("@/pages/PrivacyPage").then((page) => ({ default: page.PrivacyPage })))
@@ -92,6 +93,8 @@ export function App() {
 					<Route path="teams" element={<TeamsPage />} />
 					<Route path="teams/:teamId" element={<TeamPage />} />
 					<Route path="terms" element={<TermsPage />} />
+					{/* the consent step of an MCP client's sign-in */}
+					<Route path="mcp/consent" element={<McpConsentPage />} />
 					{/* the catch-all, so a url no route matches gets a page instead of a blank render */}
 					<Route path="*" element={<NotFoundPage />} />
 				</Route>

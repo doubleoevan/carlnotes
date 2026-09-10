@@ -41,7 +41,7 @@ function useBadgeVersion(): void {
 // the edits and comments waiting on the notes a filter picks, with everything opened this session left out
 function toCount(matches: (badge: NoteBadge) => boolean): number {
 	return noteBadges
-		.filter((badge) => !openedNoteIds.has(badge.noteId) && matches(badge))
+		.filter((noteBadge) => !openedNoteIds.has(noteBadge.noteId) && matches(noteBadge))
 		.reduce((total, badge) => total + badge.unreadEdits + badge.unreadComments, 0)
 }
 
@@ -92,22 +92,16 @@ export function toNoteBadge(noteId: string): { unreadEdits: number; unreadCommen
 	return { unreadEdits: noteBadge?.unreadEdits ?? 0, unreadComments: noteBadge?.unreadComments ?? 0 }
 }
 
-/** Every unread note count the user has. */
+/** Reads every unread note badge the user has, with the notes opened this session left out. */
+export function useAllNoteBadges(): NoteBadge[] {
+	useBadgeVersion()
+	return noteBadges.filter((noteBadge) => !openedNoteIds.has(noteBadge.noteId))
+}
+
+/** Reads every unread note count the user has. */
 export function useAllNoteCount(): number {
 	useBadgeVersion()
 	return toAllNoteCount()
-}
-
-/** Every unread note count waiting on topic-page notes. */
-export function useAllTopicNoteCount(): number {
-	useBadgeVersion()
-	return toCount((badge) => badge.topicId !== null)
-}
-
-/** Every unread note count waiting on team-page notes. */
-export function useAllTeamNoteCount(): number {
-	useBadgeVersion()
-	return toAllTeamNoteCount()
 }
 
 /** One note's two numbers. */

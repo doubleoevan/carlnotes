@@ -17,7 +17,7 @@ import { randomThinkingLine } from "@/components/chat/thinkingLines"
 import { hasPreviewableLink, LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useNow } from "@/hooks/useNow"
-import { cn } from "@/lib/utils"
+import { cn, copyToClipboard } from "@/lib/utils"
 
 // one chat turn in the chat message list, with whatever was attached to its question
 export type ChatTurn = {
@@ -52,6 +52,7 @@ export function ChatMessages({
 	author,
 	onRetry,
 	isEnlarged,
+	openingLine,
 }: {
 	chatTurns: ChatTurn[]
 	isStreaming: boolean
@@ -64,6 +65,8 @@ export function ChatMessages({
 	author: ChatMessageAuthor
 	// re-asks a failed chat turn's question on the failure notice
 	onRetry?: (question: string) => void
+	// what an empty conversation opens with, in place of the hot take line
+	openingLine?: string
 }) {
 	// one scroll handle per list
 	const bottomRef = useRef<HTMLDivElement>(null)
@@ -139,7 +142,9 @@ export function ChatMessages({
 	return (
 		<div className="relative flex min-h-24 flex-1 flex-col">
 			<div onScroll={handleScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3">
-				{chatTurns.length === 0 && !isBudgetExhausted && <ChatInputPlaceholder chatName={chatName} />}
+				{chatTurns.length === 0 && !isBudgetExhausted && (
+					<ChatInputPlaceholder chatName={chatName} openingLine={openingLine} />
+				)}
 				{chatTurns.map((chatTurn, index) => (
 					<ChatTurnBlock
 						// biome-ignore lint/suspicious/noArrayIndexKey: chat turns are append-only and never reordered
@@ -226,8 +231,12 @@ function CompactionNotice() {
 }
 
 // the placeholder line for an empty conversation, naming the topic
-function ChatInputPlaceholder({ chatName }: { chatName: string }) {
-	return <p className="text-muted-foreground py-2 text-sm">{`Ask me for a hot take on ${chatName || "this chat"}.`}</p>
+function ChatInputPlaceholder({ chatName, openingLine }: { chatName: string; openingLine?: string }) {
+	return (
+		<p className="text-muted-foreground py-2 text-sm">
+			{openingLine ?? `Ask me for a hot take on ${chatName || "this chat"}.`}
+		</p>
+	)
 }
 
 /**
@@ -381,14 +390,11 @@ export function CopyButton({ text }: { text: string }) {
 	// controlled so the copied confirmation survives the click. a tooltip closes when its trigger is clicked
 	const [isTooltipOpen, setIsTooltipOpen] = useState(false)
 
-	// write the clipboard and flash the check
+	// copy to the clipboard, then show the check briefly
 	async function handleCopy(): Promise<void> {
-		try {
-			await navigator.clipboard.writeText(text)
+		if (await copyToClipboard(text)) {
 			setIsCopied(true)
 			setTimeout(() => setIsCopied(false), 1500)
-		} catch (error) {
-			console.error("copy failed", error)
 		}
 	}
 
@@ -449,6 +455,11 @@ function ChatRejectionNotice({ rejection, onRetry }: { rejection: ChatRejection;
 				)}
 			</p>
 		)
+	}
+
+	// ask a user past the per-minute limit to wait
+	if (rejection === "rateLimited") {
+		return <p className="text-muted-foreground text-sm">{"Carl needs a minute to catch up. Ask again shortly."}</p>
 	}
 
 	// an exhausted budget shows a call-to-action to upgrade at the plans page. anything forbidden shows a rejection

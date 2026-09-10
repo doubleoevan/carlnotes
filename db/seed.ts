@@ -193,7 +193,7 @@ export async function seed(devUserId: string): Promise<void> {
 	}
 	const seedTopics = buildSeedTopics(devUserId)
 	// a pool of stub members that gives topics real subscriber counts
-	const memberUsers = Array.from({ length: MEMBER_COUNT }, (_, i) => ({
+	const seedUsers = Array.from({ length: MEMBER_COUNT }, (_, i) => ({
 		id: `usr_member_${i}`,
 		name: `Member ${i + 1}`,
 		email: `member${i}@carlnotes.dev`,
@@ -209,7 +209,7 @@ export async function seed(devUserId: string): Promise<void> {
 				email: "community@carlnotes.dev",
 				...toSeedUsername("CarlNotes-Community"),
 			},
-			...memberUsers,
+			...seedUsers,
 		])
 		.onConflictDoNothing()
 	// the dev user operates the instance, so they hold the admin role. the update keeps re-seeding idempotent

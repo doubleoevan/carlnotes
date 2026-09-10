@@ -26,6 +26,8 @@ export type AnalyticsEvent =
 	// conversation about a topic, and the paywall a user hits when their month's budget is spent
 	| "chat_turn_sent"
 	| "chat_budget_reached"
+	// a topic edited through a topic tool, tagged by the tool and its origin
+	| "topic_edited"
 
 /**
  * Records one product event for a user. A no-op if `POSTHOG_API_KEY` isn't set.

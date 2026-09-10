@@ -7,6 +7,7 @@ import { fetchActivity } from "@/clients/activityClient"
 import { authClient } from "@/clients/authClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
@@ -15,12 +16,15 @@ import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTa
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS } from "@/lib/styleClasses"
+import { useTopicInviteBadges } from "@/stores/topicInviteStore"
 
 /**
  * The Activity page: the signed-in user's topic subscriptions and the invitations they sent.
  */
 export function ActivityPage() {
 	usePageTitle("Activity")
+	// the topic invitations waiting for the user's response, badged on the title
+	const topicInviteBadges = useTopicInviteBadges()
 	const navigate = useNavigate()
 	const { data: session } = authClient.useSession()
 	const [activity, setActivity] = useState<ActivityResponse | null>(null)
@@ -71,7 +75,11 @@ export function ActivityPage() {
 			<div className="flex items-center justify-between gap-4">
 				<h1 className="font-display flex items-center gap-2 text-2xl">
 					<Activity className="size-6" />
-					Activity
+					{/* the user's own title shows the topic invitations waiting for an answer */}
+					<span className="relative">
+						Activity
+						{isOwnView && <UpdateCountBadge invites={topicInviteBadges} className="absolute -top-2 -right-3.5 z-10" />}
+					</span>
 				</h1>
 				{isOwnView && (
 					<Button className="shrink-0" onClick={() => setIsNewTopicOpen(true)}>

@@ -25,6 +25,7 @@ import { type AppEnv, currentUser } from "./currentUser"
 import { flagContentRoute } from "./flagContent"
 import { invitesRoute, toInviteTarget } from "./invite/invites"
 import { userInvitesRoute } from "./invite/userInvites"
+import { mcpClientsRoute } from "./mcp/server"
 import { noteCommentThreadsRoute } from "./note/noteCommentThreads"
 import { notesRoute } from "./note/notes"
 import { profilesRoute } from "./profiles"
@@ -52,6 +53,9 @@ import { usersRoute } from "./users"
 // better auth's reset-password endpoint, the one unauthenticated route that sends mail to an address it is given
 const PASSWORD_RESET_REQUEST_PATH = "/request-password-reset"
 
+// the mcp plugin's authorize endpoint. it shows the consent page only when the request sends prompt=consent
+const MCP_AUTHORIZE_PATH = "/mcp/authorize"
+
 // the "All" vs. "Unread" topic finding toggle
 const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional() })
 
@@ -65,6 +69,13 @@ export const apiRoute = new Hono<AppEnv>()
 		await next()
 	})
 	.on(["POST", "GET"], "/auth/*", async (context) => {
+		// send every mcp authorize request through the consent page. the client cannot skip it
+		if (context.req.method === "GET" && context.req.path.endsWith(MCP_AUTHORIZE_PATH)) {
+			const authorizeUrl = new URL(context.req.url)
+			authorizeUrl.searchParams.set("prompt", "consent")
+			return auth.handler(new Request(authorizeUrl, context.req.raw))
+		}
+
 		// the reset-password request sends mail to any address on demand, so it includes the same turnstile gate that signup does
 		if (context.req.path.endsWith(PASSWORD_RESET_REQUEST_PATH)) {
 			const gateToken = getCookie(context, GATE_COOKIE_NAME) ?? null
@@ -227,6 +238,8 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", usernamesRoute)
 	// closing an account, by an admin or by its own user
 	.route("/", usersRoute)
+	// the mcp client name route
+	.route("/", mcpClientsRoute)
 	// the admin console routes
 	.route("/", adminRoute)
 	.route("/", featuringRoute)

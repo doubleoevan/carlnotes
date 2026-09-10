@@ -1,5 +1,5 @@
 // the chat room's live stream: opening it, resuming past the cursor, and reconnecting when it drops
-import type { ChatRoomMessage, ChatRoomMessagePage } from "@shared/contracts"
+import type { ChatRoomMessage, ChatRoomMessagePage, TopicToolToasts } from "@shared/contracts"
 import { useEffect, useRef } from "react"
 import { fetchChatRoomMessages, toChatRoomEventsUrl } from "@/clients/chatRoomClient"
 import { STALE_STREAM_MS, toReconnectStreamDelayMs } from "@/lib/streamReconnect"
@@ -16,6 +16,8 @@ export function useChatRoomStream(
 		// the stored conversation, or null if this user may not open the chat room at all
 		onChatMessagesLoaded: (chatMessagePage: ChatRoomMessagePage | null) => void
 		onChatMessage: (chatMessage: ChatRoomMessage) => void
+		// the toast lines carl's tools left in his chat turn, sent after his chat message
+		onTopicToolCalls: (topicToasts: TopicToolToasts) => void
 	},
 ): void {
 	// the highest chat message id seen, which every reconnect resumes from
@@ -54,6 +56,12 @@ export function useChatRoomStream(
 				chatHandlersRef.current.onChatMessage(chatMessage)
 			})
 
+			// the toast lines carl's tools left follow his chat message
+			eventSource.addEventListener("topicToolCalls", (event) => {
+				lastResponseTime = Date.now()
+				chatHandlersRef.current.onTopicToolCalls(JSON.parse(event.data) as TopicToolToasts)
+			})
+
 			// the heartbeat only marks the stream alive
 			eventSource.addEventListener("ping", () => {
 				lastResponseTime = Date.now()
@@ -78,6 +86,7 @@ export function useChatRoomStream(
 			if (!isCurrentChatRoom) {
 				return
 			}
+			// a failed load retries after the delay
 			if (chatMessagePage === "failed") {
 				retryTimer = setTimeout(() => void loadAndConnectChatStream(), toReconnectStreamDelayMs(failedAttempts))
 				failedAttempts += 1

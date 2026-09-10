@@ -211,6 +211,12 @@ Check for:
    - `finishScan`'s `ingested`/`reviewed` parameters (now `ingestResult`/`reviewResult`, which every
      call site already used). they hold stage results, so neither is a Resource
 
+   - `topic/TopicMentionBadge.tsx` (now `common/UpdateCountBadge.tsx`, since one summed badge shows chat mentions, note
+     changes, and topic invitations alike; the page-name badge it exported is `PageUpdateCountBadge`)
+   - `common/CountPill.tsx` (now `common/CountBadge.tsx`; a badge is what every caller called it)
+   - `toRecencyOrdered` (now `toRelevanceThenRecencyOrder`; it orders by similarity band first and recency second,
+     so the old name said only the tiebreak)
+
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
    same scripts. Compare the tool/event coverage of each adapter against the

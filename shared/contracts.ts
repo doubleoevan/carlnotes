@@ -19,7 +19,7 @@ import {
 	visibilities,
 } from "./enums"
 import type { BillingInterval, Plan } from "./plans"
-import { customSourceKeys } from "./sources"
+import { customSourceKeys, defaultSourceKeys } from "./sources"
 
 // the rating mutation body. up or down sets the topic finding's rating and null clears it
 export const ratingPayload = z.object({ rating: z.enum(ratings).nullable() })
@@ -348,6 +348,9 @@ export type SubscriptionRow = {
 	inviteId: string | null
 }
 
+// a topic invitation waiting for the user's answer, as the badges name it
+export type TopicInviteBadge = { inviteId: string; topicId: string; topicName: string; inviterUsername: string }
+
 // an invite the user sent on a topic they own
 export type InviteRow = {
 	inviteId: string
@@ -431,6 +434,15 @@ export const CHAT_HISTORY_TURNS = 100
 // what a broken reply stream ends with. the api client reads it as a failed chat turn
 export const CHAT_STREAM_FAILED_TEXT = "\n\n[Carl's reply broke off here.]"
 
+// what a reply stream ends with after a topic tool ran, followed by the tool calls as JSON
+export const CHAT_TOOL_CALLS_MARKER = "\n\n[carl-tool-calls]"
+
+// the toast lines the topic tools leave: one per save and one per rejected change
+export type TopicToolToasts = { topicSaves: string[]; topicSaveRejections: string[] }
+
+// what the stream ends with: the toast lines, the draft as the tools left it, and the topic a create made
+export type TopicToolCalls = TopicToolToasts & { topicDraft?: TopicDraft; createdTopicId?: string }
+
 // how much of a compacted earlier answer survives
 const COMPACT_ANSWER_CHARS = 280
 
@@ -466,6 +478,9 @@ export const CHAT_HISTORY_QUESTION_CHARS = CHAT_QUESTION_CHARS + 1_000
 
 // how long a topic prompt may grow before a copy-paste is treated as an attachment
 export const TOPIC_PROMPT_CHARS = 2_000
+// how long a topic name may be, and how many people one draft may invite
+export const TOPIC_NAME_CHARS = 200
+export const MAX_DRAFT_INVITES = 20
 
 // how many attachments one user may keep durably against one topic
 export const CHAT_ATTACHMENT_KEEP_LIMIT = 20
@@ -531,6 +546,34 @@ export function withAttachmentNote(question: string, attachments: { name: string
 	return question === "" ? attachmentNote : `${question}\n\n${attachmentNote}`
 }
 
+// how many Sources one topic may hold, the same on every plan.
+export const MAX_TOPIC_SOURCES = 10
+
+// the topic tool payloads
+export const updateTopicPromptPayload = z.object({ prompt: z.string().trim().min(1).max(TOPIC_PROMPT_CHARS) })
+export const addTopicSourcePayload = z.object({
+	// a source option key and its value. a default source takes no value
+	sourceOption: z.enum([...defaultSourceKeys, ...customSourceKeys]),
+	value: z.string().trim().max(2000).default(""),
+})
+export const removeTopicSourcePayload = z.object({ sourceId: z.string().min(1) })
+export type AddTopicSourcePayload = z.infer<typeof addTopicSourcePayload>
+
+// the topic draft the new-topic chat holds: what carl has written down so far, every field starting empty
+export const topicDraftPayload = z.object({
+	name: z.string().trim().max(TOPIC_NAME_CHARS).default(""),
+	prompt: z.string().trim().max(TOPIC_PROMPT_CHARS).default(""),
+	sources: z.array(addTopicSourcePayload).max(MAX_TOPIC_SOURCES).default([]),
+	inviteEmails: z.array(z.string().trim().toLowerCase().pipe(z.email())).max(MAX_DRAFT_INVITES).default([]),
+})
+export type TopicDraft = z.infer<typeof topicDraftPayload>
+
+// the create_topic tool's input over mcp: a draft whose name and prompt are required
+export const createTopicPayload = topicDraftPayload.extend({
+	name: z.string().trim().min(1).max(TOPIC_NAME_CHARS),
+	prompt: z.string().trim().min(1).max(TOPIC_PROMPT_CHARS),
+})
+
 // a chat turn's question plus the conversation so far
 export const chatTurnPayload = z
 	.object({
@@ -545,6 +588,8 @@ export const chatTurnPayload = z
 			.max(CHAT_HISTORY_TURNS)
 			.default([]),
 		attachments: z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([]),
+		// the chat's new topic draft as the browser holds it
+		topicDraft: topicDraftPayload.optional(),
 	})
 	// a chat turn may be attachments alone, but never nothing at all
 	.refine((chatTurn) => chatTurn.question !== "" || chatTurn.attachments.length > 0)
@@ -573,6 +618,13 @@ export type ChatConversation = {
 	// an exhausted monthly budget keeps the panel open on the upgrade link instead of hiding chat
 	isBudgetExhausted: boolean
 	keptAttachments: KeptChatAttachment[]
+	// whether the user may edit the topic in the chat
+	canEditTopic: boolean
+	// whether the user owns no topic yet
+	isFirstTopic?: boolean
+	// how many more topics the plan lets the user hold, and the plan's limit, on the new-topic conversation alone
+	topicsRemaining?: number
+	topicLimit?: number
 }
 
 // the admin role-change body. an admin cannot remove their own admin role, enforced server-side
@@ -861,9 +913,6 @@ export const topicResponse = topicFeed.extend({
 	featuredTopics: z.array(z.object({ id: z.string(), name: z.string(), featureOrder: z.number() })).nullable(),
 })
 export type TopicResponse = z.infer<typeof topicResponse>
-
-// how many Sources one topic may hold, the same on every plan.
-export const MAX_TOPIC_SOURCES = 10
 
 // a source in the update payload
 export const updateTopicSource = z.union([

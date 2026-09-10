@@ -1,9 +1,10 @@
 // the one shared chat panel that the app shell mounts
 import type { ChatRoom } from "@shared/contracts"
-import { Plus } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router-dom"
+import { fetchTopicInviteBadges } from "@/clients/activityClient"
 import { authClient } from "@/clients/authClient"
+import type { ChatPage } from "@/clients/chatClient"
 import { fetchChatMentionCount, fetchChatRooms } from "@/clients/chatRoomClient"
 import { fetchNoteBadges } from "@/clients/noteClient"
 import { ChatCallToActionPanel } from "@/components/chat/ChatCallToActionPanel"
@@ -13,7 +14,6 @@ import { ChatRoomPanel } from "@/components/chat/ChatRoomPanel"
 import { PrivateChatPanel } from "@/components/chat/PrivateChatPanel"
 import { Button } from "@/components/primitives/button"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
-import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { isWideScreen } from "@/lib/utils"
 import {
 	type ChatId,
@@ -29,6 +29,7 @@ import {
 } from "@/stores/chatPanelStore"
 import { setChatRooms, toFirstChatMention, useAllChatMentions, useChatRooms } from "@/stores/chatRoomStore"
 import { setNoteBadges } from "@/stores/noteBadgeStore"
+import { setTopicInviteBadges } from "@/stores/topicInviteStore"
 
 // how often the chat mention and note badges are polled, kept under a minute
 const CHAT_MENTION_POLL_MS = 45_000
@@ -95,16 +96,51 @@ function toPrivateChatId(pageContext: ChatPageContext | null, chatId: ChatId | n
 	return teamId ? { kind: "private", teamId } : null
 }
 
+// the conversation page a private chat id addresses: the new-topic chat, a topic, or a team
+function toPrivateChatPage(chatId: ChatId & { kind: "private" }): ChatPage {
+	if (chatId.newTopic) {
+		return { newTopic: true }
+	}
+	return chatId.topicId !== undefined ? { topicId: chatId.topicId } : { teamId: chatId.teamId }
+}
+
 // return the placeholder text for a private chat
 function toPrivateChatName(
 	chatId: ChatId & { kind: "private" },
 	chatRooms: ChatRoom[],
 	pageContext: ChatPageContext | null,
 ): string {
+	if (chatId.newTopic) {
+		return "a new topic"
+	}
 	if (chatId.teamId !== undefined) {
 		return chatRooms.find((chatRoom) => chatRoom.teamId === chatId.teamId)?.teamName ?? pageContext?.name ?? "this team"
 	}
 	return pageContext?.name ?? "this topic"
+}
+
+// the menu handler that opens the new-topic chat: for a signed-in user, and left out of that chat's own menu
+function toOpenNewTopicChat(isSignedIn: boolean, chatId: ChatId | null): (() => void) | undefined {
+	if (!isSignedIn || (chatId?.kind === "private" && chatId.newTopic)) {
+		return undefined
+	}
+	return () => setChatId({ kind: "private", newTopic: true })
+}
+
+// whether the panel already opened for an empty feed this page load. a user who closes it is left alone
+let hasOpenedOnEmptyUserTopicFeed = false
+
+// an empty feed opens the panel on the new-topic chat by itself, once per page load
+function useOpenNewTopicChatOnEmptyFeed(pageContext: ChatPageContext | null, panelState: ChatPanelState): void {
+	const isUserTopicFeedEmpty = Boolean(pageContext?.isUserTopicFeedEmpty)
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the panel state is read once on arrival, so a close stays closed
+	useEffect(() => {
+		if (isUserTopicFeedEmpty && panelState === "collapsed" && !hasOpenedOnEmptyUserTopicFeed) {
+			hasOpenedOnEmptyUserTopicFeed = true
+			setChatId({ kind: "private", newTopic: true })
+			setChatPanelState(isWideScreen() ? "open" : "enlarged")
+		}
+	}, [isUserTopicFeedEmpty])
 }
 
 /**
@@ -161,9 +197,16 @@ export function AppChatPanel() {
 				.then(setNoteBadges)
 				.catch(() => {})
 		}
+		// read the topic invitations waiting for an answer
+		const readTopicInvites = (): void => {
+			fetchTopicInviteBadges()
+				.then(setTopicInviteBadges)
+				.catch(() => {})
+		}
 		const readBadges = (): void => {
 			readCount()
 			readNoteBadges()
+			readTopicInvites()
 		}
 		readBadges()
 		const badgePollInterval = setInterval(readBadges, CHAT_MENTION_POLL_MS)
@@ -206,6 +249,9 @@ export function AppChatPanel() {
 		}
 	}, [panelState, hasLoadedChatRooms, pickDefaultChat])
 
+	// open the panel on the new-topic chat for an empty feed
+	useOpenNewTopicChatOnEmptyFeed(session ? pageContext : null, panelState)
+
 	// every chat mention for a chat that the user hasn't opened
 	const chatMentions = useAllChatMentions()
 
@@ -218,16 +264,19 @@ export function AppChatPanel() {
 	// the private chat opens on the topic this page shows, or on a team when this page or the open chat room names one
 	const privateChatId = toPrivateChatId(pageContext, chatId)
 	const openPrivateChat = privateChatId ? () => setChatId(privateChatId) : undefined
+	// offer the new-topic chat in the menu to any signed-in user
+	const openNewTopicChat = toOpenNewTopicChat(Boolean(session), chatId)
 	if (chatId?.kind === "private") {
 		return (
 			<PrivateChatPanel
-				key={`private:${chatId.topicId ?? chatId.teamId}`}
-				page={chatId.topicId !== undefined ? { topicId: chatId.topicId } : { teamId: chatId.teamId }}
+				key={`private:${chatId.topicId ?? chatId.teamId ?? "new-topic"}`}
+				page={toPrivateChatPage(chatId)}
 				chatName={toPrivateChatName(chatId, chatRooms, pageContext)}
 				panelState={panelState}
 				onPanelState={setChatPanelState}
 				chatRoomOptions={chatRoomChoices}
 				onOpenMenu={updateChatRooms}
+				onNewTopicChat={openNewTopicChat}
 			/>
 		)
 	}
@@ -244,6 +293,7 @@ export function AppChatPanel() {
 				chatRoomMenu={{
 					chatRoomOptions: chatRoomChoices,
 					onPrivateChat: openPrivateChat,
+					onNewTopicChat: openNewTopicChat,
 					onOpenChatRoomMenu: updateChatRooms,
 				}}
 				panelState={panelState}
@@ -269,43 +319,23 @@ export function AppChatPanel() {
 		return <ChatLoadingPanel isEnlarged={panelState === "enlarged"} onPanelStateChange={setChatPanelState} />
 	}
 
-	// nothing to open, so the panel asks for the first topic or for an account
-	return <NoConversationPanel isSignedIn={Boolean(session)} panelState={panelState} />
+	// show a visitor the panel that asks for an account
+	return <NoConversationPanel panelState={panelState} />
 }
 
-// the panel where the user has no conversation to open
-function NoConversationPanel({ isSignedIn, panelState }: { isSignedIn: boolean; panelState: ChatPanelState }) {
-	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
+// the panel where a visitor has no conversation to open, which asks for an account
+function NoConversationPanel({ panelState }: { panelState: ChatPanelState }) {
 	const navigate = useNavigate()
 	return (
-		<>
-			{/* saving a new topic navigates to that topic */}
-			{isNewTopicOpen && (
-				<EditTopicModal
-					onClose={() => setIsNewTopicOpen(false)}
-					onTopicSaved={async (topicId) => {
-						setIsNewTopicOpen(false)
-						navigate(`/topics/${topicId}`)
-					}}
-				/>
-			)}
-			<ChatCallToActionPanel
-				isEnlarged={panelState === "enlarged"}
-				onPanelState={setChatPanelState}
-				actionLine={isSignedIn ? "Start a topic to begin the conversation" : "Sign up to begin the conversation"}
-				placeholder="Carl is waiting for your topic…"
-			>
-				{isSignedIn ? (
-					<Button className="shrink-0" onClick={() => setIsNewTopicOpen(true)}>
-						<Plus className="size-4" />
-						New Topic
-					</Button>
-				) : (
-					<Button className="shrink-0" onClick={() => navigate("/signup?cta=chat")}>
-						Sign up
-					</Button>
-				)}
-			</ChatCallToActionPanel>
-		</>
+		<ChatCallToActionPanel
+			isEnlarged={panelState === "enlarged"}
+			onPanelState={setChatPanelState}
+			actionLine="Sign up to begin the conversation"
+			placeholder="Carl is waiting for your topic…"
+		>
+			<Button className="shrink-0" onClick={() => navigate("/signup?cta=chat")}>
+				Sign up
+			</Button>
+		</ChatCallToActionPanel>
 	)
 }

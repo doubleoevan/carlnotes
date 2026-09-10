@@ -8,6 +8,7 @@ import { toNormalizedUsername, toProviderUsername } from "@shared/usernames"
 import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { createAuthMiddleware } from "better-auth/api"
+import { mcp } from "better-auth/plugins"
 import { and, eq, like } from "drizzle-orm"
 import { db } from "../db"
 import * as schema from "../db/schema"
@@ -17,6 +18,7 @@ import { effectiveBudgetCents } from "./authorization"
 import { provisionLiteLLMKey } from "./litellm"
 import { isBreachedPassword } from "./passwords"
 import { saveDefaultUserTeam } from "./team/teams"
+import { trustedProxies } from "./trustedProxies"
 import { saveDefaultUsername, toAssignedUsername, toFreeUsernames } from "./usernames"
 
 // how long a signup-gate token stays valid
@@ -114,13 +116,6 @@ export function toSignupAvatarSource(image: string | null | undefined): "oauth" 
 	return image ? "oauth" : "generated"
 }
 
-// the proxies from TRUSTED_PROXIES whose x-forwarded-for may be trusted, as comma-separated IPs or CIDR ranges.
-// until it is set, the forwarded header is ignored and rate limiting shares one bucket
-const trustedProxies = (Bun.env.TRUSTED_PROXIES ?? "")
-	.split(",")
-	.map((proxy) => proxy.trim())
-	.filter(Boolean)
-
 // set already when the proxies are configured, so nothing is reported
 let hasReportedForwardedChain = trustedProxies.length > 0
 
@@ -151,6 +146,13 @@ export function reportForwardedChain(forwardedFor: string | null): void {
 			`Set it to the proxy hop(s) behind the user: ${hops.slice(1).join(", ") || "(none, the header holds only the user)"}`,
 	)
 }
+
+// the oauth server plugin, minus its options property. `tsc -b` cannot name that property's type in auth's declaration
+const { options: _mcpOptions, ...mcpPlugin } = mcp({
+	loginPage: "/login",
+	resource: `${Bun.env.BETTER_AUTH_URL}/mcp`,
+	oidcConfig: { loginPage: "/login", consentPage: "/mcp/consent" },
+})
 
 export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: "pg", schema, usePlural: true }),
@@ -191,6 +193,8 @@ export const auth = betterAuth({
 	// resolve the client address through the named proxies
 	advanced:
 		trustedProxies.length > 0 ? { ipAddress: { trustedProxies, ipAddressHeaders: ["x-forwarded-for"] } } : undefined,
+	// the oauth server for the mcp server. a client registers itself, then the user signs in and consents
+	plugins: [mcpPlugin],
 	// rate limiting for credential endpoints
 	rateLimit: {
 		enabled: true,

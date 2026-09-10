@@ -12,6 +12,7 @@ import {
 	maxResultsOptions,
 	noteVisibilities,
 	plans,
+	promptVersionOrigins,
 	ratings,
 	resourceKinds,
 	scanStatuses,
@@ -68,6 +69,8 @@ export const teamRole = pgEnum("team_role", teamRoles)
 export const inviteAccess = pgEnum("invite_access", inviteAccesses)
 // who may see a note
 export const noteVisibility = pgEnum("note_visibility", noteVisibilities)
+// where a topic prompt version was saved from
+export const promptVersionOrigin = pgEnum("prompt_version_origin", promptVersionOrigins)
 
 // the review embedding's vector width
 export const EMBED_DIMENSIONS = 1024
@@ -103,7 +106,7 @@ export const users = pgTable(
 		budgetOverrideCents: integer("budget_override_cents"),
 		// when this user last signed in, written on every session creation. null until they sign in again
 		lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
-		// plain timestamps without time zone to mirror Better Auth's own schema exactly
+		// plain timestamps, as Better Auth's own schema has them
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")
 			.defaultNow()
@@ -129,7 +132,7 @@ export const sessions = pgTable(
 		// client metadata captured at session creation
 		ipAddress: text("ip_address"),
 		userAgent: text("user_agent"),
-		// plain timestamps without time zone to mirror Better Auth's own schema exactly
+		// plain timestamps, as Better Auth's own schema has them
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")
 			.defaultNow()
@@ -160,7 +163,7 @@ export const accounts = pgTable(
 		scope: text("scope"),
 		// the hashed password. only set for the password credential provider
 		password: text("password"),
-		// plain timestamps without time zone to mirror Better Auth's own schema exactly
+		// plain timestamps, as Better Auth's own schema has them
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")
 			.defaultNow()
@@ -178,7 +181,7 @@ export const verifications = pgTable(
 		identifier: text("identifier").notNull(),
 		value: text("value").notNull(),
 		expiresAt: timestamp("expires_at").notNull(),
-		// plain timestamps without time zone to mirror Better Auth's own schema exactly
+		// plain timestamps, as Better Auth's own schema has them
 		createdAt: timestamp("created_at").defaultNow().notNull(),
 		updatedAt: timestamp("updated_at")
 			.defaultNow()
@@ -986,6 +989,114 @@ export const releases = pgTable("releases", {
 	// created and updated timestamps
 	...timestamps(),
 })
+
+// a prompt version is one saved text of a topic's prompt. every save appends one, and rows are never updated
+export const topicPromptVersions = pgTable(
+	"topic_prompt_versions",
+	{
+		id: primaryId(),
+		// the topic whose prompt this is
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		// the prompt text as saved
+		prompt: text("prompt").notNull(),
+		// who saved it. null once that account closes
+		savedByUserId: text("saved_by_user_id").references(() => users.id, { onDelete: "set null" }),
+		// where the save came from: editor, chat, or mcp
+		origin: promptVersionOrigin("origin").notNull(),
+		// when it was saved. the time order is the history
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// covers a topic's history read newest first
+	(table) => [index("topic_prompt_versions_topic_created_idx").on(table.topicId, table.createdAt)],
+)
+
+// the oauth applications table. Better Auth's row for one registered MCP client
+export const oauthApplications = pgTable(
+	"oauth_applications",
+	{
+		id: primaryId(),
+		// the client's name, icon, and metadata as it registered them
+		name: text("name").notNull(),
+		icon: text("icon"),
+		metadata: text("metadata"),
+		// the client id and secret. empty for a public client
+		clientId: text("client_id").notNull().unique(),
+		clientSecret: text("client_secret"),
+		// the comma-joined redirect urls the client may return to, its type, and whether it is disabled
+		redirectUrls: text("redirect_urls").notNull(),
+		type: text("type").notNull(),
+		disabled: boolean("disabled").default(false),
+		// the user who was signed in when the client registered, if any
+		userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+		// plain timestamps, as Better Auth's own schema has them
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		updatedAt: timestamp("updated_at")
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(table) => [index("oauth_applications_user_id_idx").on(table.userId)],
+)
+
+// the oauth access tokens table. one access token and its refresh token, issued to a client acting as a user
+export const oauthAccessTokens = pgTable(
+	"oauth_access_tokens",
+	{
+		id: primaryId(),
+		// the access and refresh tokens, and when each expires
+		accessToken: text("access_token").notNull().unique(),
+		refreshToken: text("refresh_token").notNull().unique(),
+		accessTokenExpiresAt: timestamp("access_token_expires_at").notNull(),
+		refreshTokenExpiresAt: timestamp("refresh_token_expires_at").notNull(),
+		// the client the tokens were issued to, and the user it acts as
+		clientId: text("client_id")
+			.notNull()
+			.references(() => oauthApplications.clientId, { onDelete: "cascade" }),
+		userId: text("user_id").references(() => users.id, { onDelete: "cascade" }),
+		// the space-joined scopes the tokens grant
+		scopes: text("scopes").notNull(),
+		// plain timestamps, as Better Auth's own schema has them
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		updatedAt: timestamp("updated_at")
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(table) => [
+		index("oauth_access_tokens_client_id_idx").on(table.clientId),
+		index("oauth_access_tokens_user_id_idx").on(table.userId),
+	],
+)
+
+// the oauth consents table. whether a user let a client act as them, and for which scopes
+export const oauthConsents = pgTable(
+	"oauth_consents",
+	{
+		id: primaryId(),
+		// the client that asked and the user who answered
+		clientId: text("client_id")
+			.notNull()
+			.references(() => oauthApplications.clientId, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// the space-joined scopes asked for, and whether the user agreed
+		scopes: text("scopes").notNull(),
+		consentGiven: boolean("consent_given").notNull(),
+		// plain timestamps, as Better Auth's own schema has them
+		createdAt: timestamp("created_at").defaultNow().notNull(),
+		updatedAt: timestamp("updated_at")
+			.defaultNow()
+			.$onUpdate(() => new Date())
+			.notNull(),
+	},
+	(table) => [
+		index("oauth_consents_client_id_idx").on(table.clientId),
+		index("oauth_consents_user_id_idx").on(table.userId),
+	],
+)
 
 // every table's text primary key. our code defaults it. Better Auth overrides it on its own inserts
 function primaryId() {

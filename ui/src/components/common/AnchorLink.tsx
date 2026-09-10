@@ -1,8 +1,8 @@
 import type * as React from "react"
 import { Link } from "react-router-dom"
 
-// the schemes that open in the same tab with no target or rel, like a mail client or dialer
-const SCHEME_PREFIXES = ["mailto:", "tel:", "sms:"]
+// the schemes that open in the same tab with no target or rel, like a mail client, dialer, or code editor
+const SCHEME_PREFIXES = ["mailto:", "tel:", "sms:", "cursor:", "vscode:"]
 
 // the paths the server renders itself: the docs site, the blog, and the releases. the client router has no routes for them
 const SERVER_RENDERED_PREFIXES = ["/docs", "/blog", "/releases"]

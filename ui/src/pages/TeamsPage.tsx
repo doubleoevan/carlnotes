@@ -7,19 +7,18 @@ import { fetchTeams, sendDeleteTeam, sendRemoveTeamMember } from "@/clients/team
 import { fetchAddableTopics } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
-import { CountPill } from "@/components/common/CountPill"
+import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { SentTeamInvitesTable } from "@/components/table/TeamInvitesTable"
 import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
-import { ChatMentionCount } from "@/components/topic/TopicMentionBadge"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { useRegisterChatContext } from "@/stores/chatPanelStore"
-import { useAllTeamMentions } from "@/stores/chatRoomStore"
-import { useAllTeamNoteCount } from "@/stores/noteBadgeStore"
+import { useAllTeamChatMentions } from "@/stores/chatRoomStore"
+import { useAllNoteBadges } from "@/stores/noteBadgeStore"
 
 /**
  * The teams page: the teams the user belongs to with their role in each, the New Team button, and the
@@ -30,9 +29,9 @@ export function TeamsPage() {
 	const { data: session } = authClient.useSession()
 	const [teamsPage, setTeamsIndex] = useState<TeamsPageResponse | null>(null)
 	// the chat panel's poll feeds this
-	const teamMentions = useAllTeamMentions()
+	const teamMentions = useAllTeamChatMentions()
 	// every unread change on the teams' notes
-	const teamNoteCount = useAllTeamNoteCount()
+	const teamNoteBadges = useAllNoteBadges().filter((noteBadge) => noteBadge.teamId !== null)
 	// the panel leads with a team's own chat room and falls back to a topic's
 	useRegisterChatContext({
 		topicId: null,
@@ -96,9 +95,12 @@ export function TeamsPage() {
 				<h1 className="font-display flex items-center gap-2 text-2xl">
 					<Users className="size-6" />
 					Teams
-					{/* the unread chat mentions across every chat room, with the note count after them */}
-					{teamMentions.length > 0 && <ChatMentionCount chatMentions={teamMentions} className="h-6 min-w-6 text-sm" />}
-					{teamNoteCount > 0 && <CountPill count={teamNoteCount} variant="outline" className="h-6 min-w-6 text-sm" />}
+					{/* the unread chat mentions across every chat room and the unread notes on the teams, in one count */}
+					<UpdateCountBadge
+						chatMentions={teamMentions}
+						noteBadges={teamNoteBadges}
+						countBadgeClassName="h-6 min-w-6 text-sm"
+					/>
 				</h1>
 				<Button className="shrink-0" onClick={() => void handleCreateOpen()}>
 					<Plus className="size-4" />

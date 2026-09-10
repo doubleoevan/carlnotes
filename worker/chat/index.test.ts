@@ -1,8 +1,11 @@
 // chat prompt and history-compaction tests
 import { expect, test } from "bun:test"
 import { CHAT_HISTORY_TURNS, CHAT_MEMORY_CHARS, toUncompactedChatTurnStart } from "@shared/contracts"
-import { buildTopicChatPrompt, toModelMessages } from "."
-import { type ChatContext, toRecencyOrdered } from "./retrieve"
+import type { TextStreamPart, ToolSet } from "ai"
+import { FALLBACK_PROMPT_TEMPLATES } from "../prompts/fetch"
+import { writePrompt } from "../prompts/write"
+import { breakTextAroundToolCalls, buildNewTopicChatPrompt, buildTopicChatPrompt, isConsent, toModelMessages } from "."
+import { type ChatContext, toRelevanceThenRecencyOrder } from "./retrieve"
 
 // a context with one finding, two sources, one scan note, and no attachments, for cases to override
 function chatContext(overrides: Partial<ChatContext> = {}): ChatContext {
@@ -134,12 +137,14 @@ test("recency breaks a near-tie in similarity but never beats a clearly better m
 
 	// two findings inside the tie band come back newest first, whichever order they arrived in
 	const nearTies = [findingRow(0.21, "2026-01-01"), findingRow(0.2, "2026-06-01")]
-	expect(toRecencyOrdered(nearTies).map((findingRow) => findingRow.foundAt.getFullYear())).toEqual([2026, 2026])
-	expect(toRecencyOrdered(nearTies)[0]?.foundAt.getMonth()).toBe(5)
+	expect(toRelevanceThenRecencyOrder(nearTies).map((findingRow) => findingRow.foundAt.getFullYear())).toEqual([
+		2026, 2026,
+	])
+	expect(toRelevanceThenRecencyOrder(nearTies)[0]?.foundAt.getMonth()).toBe(5)
 
 	// a much closer match leads even when it is the older
 	const clearWinner = [findingRow(0.9, "2026-06-01"), findingRow(0.2, "2026-01-01")]
-	expect(toRecencyOrdered(clearWinner)[0]?.distance).toBe(0.2)
+	expect(toRelevanceThenRecencyOrder(clearWinner)[0]?.distance).toBe(0.2)
 })
 
 // a history of numbered chat turns with long answers, for the compaction cases to slice
@@ -224,4 +229,131 @@ test("the chat prompt explains attachment notes so a real reading is never denie
 	const { prompt } = await buildTopicChatPrompt(chatContext())
 	expect(prompt).toContain("a file truly went with that chat turn")
 	expect(prompt).toContain("Never conclude the file failed to arrive")
+})
+
+// a turn with the tools includes the editing rules under their heading, bare
+test("the editing rules are written into the prompt for a turn that has the tools", async () => {
+	const { prompt } = await buildTopicChatPrompt(chatContext(), "Propose first, in words.")
+	expect(prompt).toContain("## Editing this topic")
+	expect(prompt).toContain("\n\nPropose first, in words.\n")
+	expect(prompt).not.toContain("{{")
+})
+
+// every other turn reads the note, bare, so the model points a reader who asks at the editor.
+// the fenced values also say none, but only the edit block's stands unfenced
+test("a turn without the tools reads the no-edit note", async () => {
+	const { prompt } = await buildTopicChatPrompt(chatContext())
+	expect(prompt).toContain('When the block below says "None."')
+	expect(prompt).toContain("\n\nNone.\n")
+})
+
+// the edit template names the three tools and the confirmation rule, and has no placeholder
+test("the edit template names the tools and the propose-then-confirm rule", () => {
+	const editTopicBlock = writePrompt(FALLBACK_PROMPT_TEMPLATES["chat-edit-topic"], {})
+	expect(editTopicBlock).toContain("updateTopicPrompt")
+	expect(editTopicBlock).toContain("addSource")
+	expect(editTopicBlock).toContain("removeSource")
+	expect(editTopicBlock).toContain("Propose first")
+	expect(editTopicBlock).not.toContain("{{")
+})
+
+// the new-topic prompt shows the draft as data and names the four tools
+test("the new-topic prompt shows the draft as data and names the tools", async () => {
+	const { prompt } = await buildNewTopicChatPrompt("None.", {
+		name: "Hoops",
+		prompt: "Runs after work",
+		sources: [{ sourceOption: "reddit", value: "r/hoops" }],
+		inviteEmails: [],
+	})
+	expect(prompt).toContain("Title: Hoops")
+	expect(prompt).toContain("reddit r/hoops")
+	expect(prompt).toContain("draftTopic")
+	expect(prompt).toContain("createTopic")
+	expect(prompt).not.toContain("{{")
+})
+
+// a draft with nothing in it reads as nothing written yet
+test("an empty draft reads as nothing written yet", async () => {
+	const { prompt } = await buildNewTopicChatPrompt("", undefined)
+	expect(prompt).toContain("Nothing written yet.")
+})
+
+// a consent answers a proposal, and a question with more in it does not
+test("isConsent reads a consent and nothing longer", () => {
+	expect(isConsent("yes")).toBe(true)
+	expect(isConsent("  Yes! ")).toBe(true)
+	expect(isConsent("go for it.")).toBe(true)
+	expect(isConsent("lets do it")).toBe(true)
+	expect(isConsent("Sure thing!")).toBe(true)
+	// a yes with more in it is a question
+	expect(isConsent("yes, but drop the second source")).toBe(false)
+	expect(isConsent("what is a brew?")).toBe(false)
+})
+
+// the prompt tells carl how much room the plan has left, and to say so first when there is none
+test("the new-topic prompt states the plan's room", async () => {
+	const { prompt: noRoom } = await buildNewTopicChatPrompt("", undefined, 0)
+	expect(noRoom).toContain("reached their plan's topic limit")
+	const { prompt: someRoom } = await buildNewTopicChatPrompt("", undefined, 2)
+	expect(someRoom).toContain("room for 2 more topics")
+	const { prompt: noLimit } = await buildNewTopicChatPrompt("", undefined, undefined)
+	expect(noLimit).toContain("as many topics as they like")
+})
+
+// one text block's streamParts, and one tool call with its result, for building a fake reply stream
+function textBlock(id: string, text: string): TextStreamPart<ToolSet>[] {
+	return [
+		{ type: "text-start", id },
+		{ type: "text-delta", id, text },
+		{ type: "text-end", id },
+	]
+}
+
+// one tool call with its result, the split between two text blocks
+const toolCall = [
+	{ type: "tool-call", toolCallId: "call-1", toolName: "draftTopic", input: {} },
+	{ type: "tool-result", toolCallId: "call-1", toolName: "draftTopic", input: {}, output: "ok" },
+] as TextStreamPart<ToolSet>[]
+
+// run streamParts through the transform and join the text deltas that come out
+async function toTransformedText(streamParts: TextStreamPart<ToolSet>[]): Promise<string> {
+	// feed the streamParts through the transform as one stream
+	const partStream = new ReadableStream<TextStreamPart<ToolSet>>({
+		start(controller) {
+			for (const streamPart of streamParts) {
+				controller.enqueue(streamPart)
+			}
+			controller.close()
+		},
+	})
+	// the transform under test, read from its far end
+	const reader = partStream.pipeThrough(breakTextAroundToolCalls()({ tools: {}, stopStream: () => {} })).getReader()
+
+	// join the text deltas that come out
+	let collectedText = ""
+	while (true) {
+		const { done, value } = await reader.read()
+		// stop at the end of the stream, and collect only text
+		if (done) {
+			return collectedText
+		}
+		if (value.type === "text-delta") {
+			collectedText += value.text
+		}
+	}
+}
+
+// text before a tool call and text after it get one paragraph break between them
+test("breakTextAroundToolCalls separates the text a tool call split", async () => {
+	const streamParts = [...textBlock("t1", "Writing that now:"), ...toolCall, ...textBlock("t2", "Draft's saved.")]
+	expect(await toTransformedText(streamParts)).toBe("Writing that now:\n\nDraft's saved.")
+})
+
+// a call before any text adds nothing, two calls in a row add one break, and text with no call keeps its shape
+test("breakTextAroundToolCalls adds no break where no text was split", async () => {
+	expect(await toTransformedText([...toolCall, ...textBlock("t1", "Hi.")])).toBe("Hi.")
+	expect(await toTransformedText([...textBlock("t1", "A"), ...toolCall, ...toolCall, ...textBlock("t2", "B")])).toBe(
+		"A\n\nB",
+	)
+	expect(await toTransformedText([...textBlock("t1", "One "), ...textBlock("t2", "two.")])).toBe("One two.")
 })

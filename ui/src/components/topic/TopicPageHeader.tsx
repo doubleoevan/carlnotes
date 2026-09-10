@@ -1,12 +1,12 @@
 import type { TopicResponse } from "@shared/contracts"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"
+import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TeamLink } from "@/components/team/TeamLink"
 import { TopicInfoPopover } from "@/components/topic/Topic"
-import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
 import { cn, toSubscribeTooltip } from "@/lib/utils"
 import { setChatPanelState } from "@/stores/chatPanelStore"
@@ -33,7 +33,7 @@ export function TopicHeader({ topic }: { topic: TopicResponse }) {
 					{/* the chat mention count sits on the name, and its click opens the chat instead of the title's note */}
 					<span className="relative">
 						{topic.name}
-						<TopicMentionBadge
+						<PageUpdateCountBadge
 							topicId={topic.id}
 							onClick={(event) => {
 								// the click opens the chat in place, never the link or the title's note

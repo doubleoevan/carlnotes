@@ -31,6 +31,7 @@ Each module has its own AGENTS.md with entry points, layout, and commands.
 | Release notes | `api/releases.ts`, the convention in `docs/release-notes.md` | domain-model | `ui/` except the footer link |
 | Docs page | `docs/src/content/`, its shared pieces in `docs/src/components/`, then `bun run docs:embed` | — | `docs/dist/` (built) |
 | Eval work | `evals/README.md`, `.github/workflows/llm-guard-update.yml` | — | app modules |
+| MCP tool, Topic Tool, or the Add to AI dialog | `api/mcp/`, `api/tool/`, `ui/src/components/common/AddToAiDialog.tsx` | domain-model | `worker/` except `worker/index.ts` and `worker/budget.ts` exports |
 
 Domain vocabulary is canonical and enforced, so grepping a domain noun reliably finds its code.
 

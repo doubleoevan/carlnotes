@@ -13,9 +13,9 @@ import { appUrl } from "./pages"
 // sits above it, and a body written without it renders whole
 const SUMMARY_SENTINEL = "<!-- more -->"
 
-// the actions that put a release on the page. published fires on a first publish,
-// released fires on a prerelease promoted to a full release
-const STORE_RELEASE_ACTIONS = new Set(["published", "released"])
+// the actions that put a release on the page or change one already there. published fires on a first publish,
+// released on a prerelease promoted to a full release, and edited on a change to the title or body
+const STORE_RELEASE_ACTIONS = new Set(["published", "released", "edited"])
 
 // the header GitHub signs its webhook payload with, and the prefix that signature includes
 const SIGNATURE_HEADER = "x-hub-signature-256"
@@ -208,11 +208,11 @@ export const releasesRoute = new Hono()
 			)
 		}
 
-		// only a publication writes. every other action is acknowledged and dropped, so editing a
-		// typo in a published release never re-fires anything downstream
+		// a publish, a promotion, and an edit write. every other action is ignored
 		if (!payload.action || !STORE_RELEASE_ACTIONS.has(payload.action)) {
 			return context.json({ ignored: payload.action ?? "unknown" })
 		}
+		// a draft is not on the page yet
 		const release = toReleaseUpsert(payload.release)
 		if (!release) {
 			return context.json({ ignored: "draft" })

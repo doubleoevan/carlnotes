@@ -18,7 +18,7 @@ import {
 	ShareTargetOptions,
 } from "@/components/share/ShareOptions"
 import { canOpenShareSheet, openShareSheet } from "@/lib/shareSheet"
-import { copyWithDocument } from "@/lib/utils"
+import { copyToClipboard } from "@/lib/utils"
 
 /**
  * The Share dialog for a Team, opened from the actions menu. It shares the team's page,
@@ -49,13 +49,7 @@ export function ShareTeam({
 
 	// copy a link to the team to the clipboard and show a confirmation label
 	async function handleCopyLink(label: string, text: string): Promise<void> {
-		let isCopied = true
-		try {
-			await navigator.clipboard.writeText(text)
-		} catch {
-			isCopied = copyWithDocument(text)
-		}
-		if (isCopied) {
+		if (await copyToClipboard(text)) {
 			setCopiedLabel(label)
 			setTimeout(() => setCopiedLabel(null), COPIED_FEEDBACK_MS)
 		}

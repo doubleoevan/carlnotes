@@ -54,12 +54,12 @@ alone, and chat text is encrypted at rest either way. A team room is not private
 team reads what you say there and can open what you attach. Context that should describe how a topic
 is brewed belongs in [Attachments](/docs/topics/attachments/).
 
-## What Carl won't do here
+## What Carl can change, and what he won't
 
-Carl won't create topics, change prompts, add sources, or run brews from inside a conversation. The
-boundary is deliberate. A conversation is a place to brainstorm. Carl won't
-spend your budget because a sentence sounded like an instruction. When a conversation convinces you
-to change the topic, you can change it in the topic's editor and kick off a brew.
+For a user who may edit the topic, Carl can rewrite its prompt and add or remove a source, and in
+the new-topic chat he makes a topic with you. He proposes first and saves only after you say "yes". 
+See [Editing a topic with Coffee Talk](/docs/feed/editing-a-topic-in-chat/)
+and [Making a topic with Coffee Talk](/docs/feed/making-a-topic-in-chat/).
 
 ## Getting better answers
 

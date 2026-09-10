@@ -1,3 +1,4 @@
+import type { TopicFeedResponse } from "@shared/contracts"
 import { ADMIN_QUOTA } from "@shared/plans"
 import { Coffee, Plus } from "lucide-react"
 import { useState } from "react"
@@ -13,6 +14,7 @@ import { TopicFeedSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicSection } from "@/components/topic/TopicSection"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
+import { useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
 /**
@@ -48,6 +50,21 @@ export function HomePage() {
 		options: [{ label: "Reheat", Icon: Coffee, onSelect: () => void reheat() }],
 	})
 
+	// the panel's page context: a signed-in user whose feed holds nothing yet has the new-topic chat opened by default
+	const ownTopicCount = toSectionTopicCount(topicFeed, "yours")
+	const followedTopicCount = toSectionTopicCount(topicFeed, "subscribed")
+	useRegisterChatContext(
+		isSignedIn && topicFeed
+			? {
+					topicId: null,
+					teamId: null,
+					name: "a new topic",
+					joinTeam: null,
+					isUserTopicFeedEmpty: ownTopicCount === 0 && followedTopicCount === 0,
+				}
+			: null,
+	)
+
 	// a created topic refreshes the feed behind the navigation to its new page
 	const handleTopicCreated = async (topicId: string): Promise<void> => {
 		setIsNewTopicOpen(false)
@@ -66,8 +83,8 @@ export function HomePage() {
 
 	// the remount key changes on a reheat or any filter change so that the updated content animates in
 	const viewKey = `${reheatKey}-${findingFilter}-${sort}-${[...resourceKinds].sort().join()}-${tagMatchMode}-${[...tagFilters].sort().join("|")}-${isSignedIn}`
-	// signed in opens your topics section, signed out opens the featured topics section
-	const defaultOpenSection = isSignedIn ? "yours" : "featured"
+	// the section that opens first
+	const defaultOpenSection = toDefaultOpenSection(isSignedIn, ownTopicCount, followedTopicCount)
 	const openSection = openedSection ?? defaultOpenSection
 	return (
 		<main className={PAGE_CLASS}>
@@ -165,4 +182,21 @@ function NewTopicRow({
 			</TooltipContent>
 		</Tooltip>
 	)
+}
+
+// how many topics a section of the feed holds, or null while the feed is still loading
+function toSectionTopicCount(topicFeed: TopicFeedResponse | null, sectionKey: string): number | null {
+	return topicFeed?.sections.find((section) => section.key === sectionKey)?.topics.length ?? null
+}
+
+// which section opens first: featured for a visitor, else the user's own topics, else the ones they follow
+function toDefaultOpenSection(
+	isSignedIn: boolean,
+	ownTopicCount: number | null,
+	followedTopicCount: number | null,
+): string {
+	if (!isSignedIn) {
+		return "featured"
+	}
+	return ownTopicCount === 0 && (followedTopicCount ?? 0) > 0 ? "subscribed" : "yours"
 }

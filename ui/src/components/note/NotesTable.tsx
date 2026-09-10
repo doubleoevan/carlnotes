@@ -1,6 +1,6 @@
 // the notes table: sortable name, visibility, and updated columns, one row per visible note
 import type { Note } from "@shared/contracts"
-import { CountPill } from "@/components/common/CountPill"
+import { CountBadge } from "@/components/common/CountBadge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TableCard } from "@/components/table/TableCard"
@@ -111,7 +111,7 @@ function NoteRowBadge({ noteId }: { noteId: string }) {
 		<Tooltip>
 			<TooltipTrigger asChild>
 				<span role="img" aria-label={unreadLabels.join(", ")}>
-					<CountPill count={unreadTotal} variant="outline" />
+					<CountBadge count={unreadTotal} />
 				</span>
 			</TooltipTrigger>
 			<TooltipContent>

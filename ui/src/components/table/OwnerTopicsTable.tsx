@@ -5,13 +5,13 @@ import { Fragment, useState } from "react"
 import { fetchScanNote, sendSubscriptionEmail } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TableCard } from "@/components/table/TableCard"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
-import { TopicMentionBadge } from "@/components/topic/TopicMentionBadge"
 import { TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
 import { durationMsBetween, toCentsLabel, toCountLabel, toDurationLabel, toMonthYearLabel } from "@/lib/labels"
 import { POPOVER_PANEL_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
@@ -229,7 +229,7 @@ function TopicNameLink({ topic }: { topic: OwnerTopic }) {
 			<AnchorLink href={`/topics/${topic.id}`} className="text-link hover:underline">
 				{topic.name}
 			</AnchorLink>
-			<TopicMentionBadge topicId={topic.id} />
+			<PageUpdateCountBadge topicId={topic.id} />
 		</span>
 	)
 }

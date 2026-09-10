@@ -6,6 +6,7 @@ import { toast } from "sonner"
 import { fetchChatRoomMessageLinkPreviews, fetchChatRoomMessages, sendChatRoomMessage } from "@/clients/chatRoomClient"
 import { useChatRoomStream } from "@/components/chat/useChatRoomStream"
 import { hasPreviewableLink } from "@/components/common/LinkPreviewCard"
+import { publishTopicChanged } from "@/stores/chatPanelStore"
 
 // where the virtualized list numbers its first chat message before any earlier page is prepended. it
 // starts very high because prepending lowers it, and it may never go below zero
@@ -126,6 +127,7 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 				setIsLoaded(true)
 				return
 			}
+			// the first page replaces the list and resets the virtual index
 			setChatMessages(chatMessagePage.chatMessages)
 			setHasOlderChatMessages(chatMessagePage.hasEarlierChatMessages)
 			setFirstItemIndex(FIRST_ITEM_INDEX_START)
@@ -146,6 +148,19 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 				setIsMessageLoading(false)
 			}
 		},
+		// toast the saves and the rejections for every member, then reload the topic page behind the panel
+		onTopicToolCalls: (topicToasts) => {
+			for (const topicSave of topicToasts.topicSaves) {
+				toast(topicSave)
+			}
+			for (const topicSaveRejection of topicToasts.topicSaveRejections) {
+				toast.error(topicSaveRejection)
+			}
+			// reload the topic page behind the panel
+			if (topicId) {
+				publishTopicChanged(topicId)
+			}
+		},
 	})
 
 	// the posted chat message arrives back through the stream
@@ -154,31 +169,38 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 		replyToChatMessageId: number | null,
 		attachments: ChatAttachment[],
 	): Promise<boolean> => {
-		const postResult = await sendChatRoomMessage(topicId, teamId, content, replyToChatMessageId, attachments).catch(
-			() => null,
-		)
-		if (postResult === "attachmentLimitReached") {
+		const postChatMessageResult = await sendChatRoomMessage(
+			topicId,
+			teamId,
+			content,
+			replyToChatMessageId,
+			attachments,
+		).catch(() => null)
+		if (postChatMessageResult === "attachmentLimitReached") {
 			setRejectionReason(
 				`That would pass the ${CHAT_ROOM_ATTACHMENT_LIMIT} files you can share in this chat room. Delete some to share more.`,
 			)
 			return false
 		}
-		if (postResult === "attachmentRejected") {
+		// unreadable files and a failed post each say so and post nothing
+		if (postChatMessageResult === "attachmentRejected") {
 			setRejectionReason("Those files didn't post. One of them may be unreadable.")
 			return false
 		}
-		if (postResult === null) {
+		if (postChatMessageResult === null) {
 			toast("That didn't post. Try again.")
 			return false
 		}
-		setRejectionReason(postResult.rejectionReason)
+		// a posted chat message may still show the budget gate's rejection in place of carl's reply
+		setRejectionReason(postChatMessageResult.rejectionReason)
 
 		// a post that gives carl the chat turn starts the wait his reply or rejection ends
 		const repliedTo =
 			replyToChatMessageId === null ? undefined : chatMessages.find((known) => known.id === replyToChatMessageId)
+		// carl answers a mention of him or of everyone, and a reply to his own chat message
 		const isModelChatTurn =
 			hasModelMention(content) || hasAllMention(content) || (repliedTo !== undefined && isModelChatMessage(repliedTo))
-		if (isModelChatTurn && postResult.rejectionReason === null) {
+		if (isModelChatTurn && postChatMessageResult.rejectionReason === null) {
 			setIsMessageLoading(true)
 		}
 		return true
@@ -206,10 +228,12 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 			if (earlierChatMessagePage === null || earlierChatMessagePage === "failed") {
 				return 0
 			}
+			// an empty page means the top was reached
 			setHasOlderChatMessages(earlierChatMessagePage.hasEarlierChatMessages)
 			if (earlierChatMessagePage.chatMessages.length === 0) {
 				return 0
 			}
+			// the earlier page goes above the known list, and the virtual index moves up by its length
 			setChatMessages((known) => [...earlierChatMessagePage.chatMessages, ...known])
 			setFirstItemIndex((index) => index - earlierChatMessagePage.chatMessages.length)
 			return earlierChatMessagePage.chatMessages.length
