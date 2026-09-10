@@ -51,13 +51,13 @@ function check(label: string, isTestPassing: boolean, detail?: unknown): void {
 	console.error(`FAIL  ${label}`, detail ?? "")
 }
 
-// the text of a tool toolResult
+// the text of a tool result
 function toResultText(toolResult: unknown): string {
-	const resultContent = (toolResult as { resultContent?: { type: string; text?: string }[] }).resultContent ?? []
+	const resultContent = (toolResult as { content?: { type: string; text?: string }[] }).content ?? []
 	return resultContent.map((contentPart) => contentPart.text ?? "").join("\n")
 }
 
-// a tool toolResult's text parsed as json
+// a tool result's text parsed as json
 function toResultJson<Shape>(toolResult: unknown): Shape {
 	return JSON.parse(toResultText(toolResult)) as Shape
 }
@@ -289,7 +289,7 @@ async function checkOAuth(): Promise<string> {
 		consentResponse.status,
 	)
 
-	// exchange the code and the verifier for a tokenJson
+	// exchange the code and the verifier for a token
 	const tokenResponse = await apiRequest("/api/auth/mcp/token", {
 		method: "POST",
 		headers: { "content-type": "application/json" },
@@ -303,7 +303,7 @@ async function checkOAuth(): Promise<string> {
 	})
 	const tokenJson = (await tokenResponse.json()) as { access_token?: string }
 	check(
-		"the tokenJson exchange issues an access token",
+		"the token exchange issues an access token",
 		tokenResponse.ok && Boolean(tokenJson.access_token),
 		tokenResponse.status,
 	)

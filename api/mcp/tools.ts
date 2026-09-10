@@ -34,8 +34,8 @@ import {
 const topicIdArgument = z
 	.string()
 	.optional()
-	.describe("The topic's id. Optional on a topic-bound mcpServer, which already knows its topic.")
-const cursorArgument = z.string().optional().describe("The cursor a previous mcpPage returned.")
+	.describe("The topic's id. Optional on a topic-bound server, which already knows its topic.")
+const cursorArgument = z.string().optional().describe("The cursor a previous page returned.")
 
 // register the eleven tools. every caller gets the same list, and only the results differ
 export function registerTools(mcpServer: McpServer, caller: Caller, routeTopicId: string | null): void {
@@ -99,7 +99,7 @@ function registerReadTools(mcpServer: McpServer, caller: Caller, routeTopicId: s
 		"mark_finding_consumed",
 		{
 			title: "Mark a finding consumed",
-			description: "Mark a finding read for the connected account, the way opening it on the mcpPage does.",
+			description: "Mark a finding read for the connected account, the way opening it on the page does.",
 			inputSchema: z.object({ finding_id: z.string() }),
 			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
@@ -298,7 +298,7 @@ function registerTopicTools(mcpServer: McpServer, caller: Caller, routeTopicId: 
 	)
 }
 
-// shape a mcpPage as a tool result, as json text and as structured content. some clients read only the text
+// shape a page as a tool result, as json text and as structured content. some clients read only the text
 function toPageResult(mcpPage: McpPage<unknown> | null): CallToolResult {
 	if (!mcpPage) {
 		return toTextResult("No readable topic has that id.", true)

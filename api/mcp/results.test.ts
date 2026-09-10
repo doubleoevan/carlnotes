@@ -26,8 +26,8 @@ function topicFinding(index: number, explanationChars = 40): TopicFinding {
 	}
 }
 
-// a packedPage holds whole entries up to its budget and returns the cursor for the rest
-test("a packedPage packs whole items under the character budget and continues with a cursor", () => {
+// a page holds whole entries up to its budget and returns the cursor for the rest
+test("a page packs whole items under the character budget and continues with a cursor", () => {
 	const items = [1, 2, 3, 4].map((index) => ({ index, text: "y".repeat(100) }))
 	const itemChars = JSON.stringify(items[0]).length
 	const packedPage = packPage(items, 0, itemChars * 2 + 1, 20)
@@ -40,16 +40,16 @@ test("a packedPage packs whole items under the character budget and continues wi
 	expect(nextPage.nextCursor).toBeNull()
 })
 
-// an entry larger than the budget still goes out whole, on its own packedPage
-test("a packedPage always holds at least one item and never cuts it", () => {
+// an entry larger than the budget still goes out whole, on its own page
+test("a page always holds at least one item and never cuts it", () => {
 	const items = [{ text: "z".repeat(500) }, { text: "w".repeat(500) }]
 	const packedPage = packPage(items, 0, 100, 20)
 	expect(packedPage.items).toEqual(items.slice(0, 1))
 	expect(packedPage.nextCursor).toBe(toCursor(1))
 })
 
-// the count limit ends a packedPage the same way the character budget does
-test("a packedPage stops at the item limit", () => {
+// the count limit ends a page the same way the character budget does
+test("a page stops at the item limit", () => {
 	const items = [1, 2, 3].map((index) => ({ index }))
 	const packedPage = packPage(items, 0, 100_000, 2)
 	expect(packedPage.items.length).toBe(2)

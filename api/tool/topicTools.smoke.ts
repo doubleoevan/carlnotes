@@ -316,7 +316,7 @@ try {
 		.from(sources)
 		.where(eq(sources.topicId, createdTopicId))
 	check(
-		"the createTopicFromDraftResult topic reads the default web search and the chosen source, the chosen default once",
+		"the created topic reads the default web search and the chosen source, the chosen default once",
 		createdTopicSources
 			.map((topicSource) => topicSource.kind)
 			.sort()
@@ -329,7 +329,7 @@ try {
 		.where(eq(topicPromptVersions.topicId, createdTopicId))
 	const [firstScan] = await db.select({ id: scans.id }).from(scans).where(eq(scans.topicId, createdTopicId))
 	check(
-		"the createTopicFromDraftResult topic has a first version of the adapter's origin and an open first scan",
+		"the created topic has a first version of the adapter's origin and an open first scan",
 		createdVersion?.origin === "chat" && Boolean(firstScan),
 		createdVersion,
 	)

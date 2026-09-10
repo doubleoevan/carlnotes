@@ -300,7 +300,7 @@ test("the new-topic prompt states the plan's room", async () => {
 	expect(noLimit).toContain("as many topics as they like")
 })
 
-// one text block's streamParts, and one tool call with its result, for building a fake reply stream
+// one text block's parts, and one tool call with its result, for building a fake reply stream
 function textBlock(id: string, text: string): TextStreamPart<ToolSet>[] {
 	return [
 		{ type: "text-start", id },
@@ -315,9 +315,9 @@ const toolCall = [
 	{ type: "tool-result", toolCallId: "call-1", toolName: "draftTopic", input: {}, output: "ok" },
 ] as TextStreamPart<ToolSet>[]
 
-// run streamParts through the transform and join the text deltas that come out
+// run parts through the transform and join the text deltas that come out
 async function toTransformedText(streamParts: TextStreamPart<ToolSet>[]): Promise<string> {
-	// feed the streamParts through the transform as one stream
+	// feed the parts through the transform as one stream
 	const partStream = new ReadableStream<TextStreamPart<ToolSet>>({
 		start(controller) {
 			for (const streamPart of streamParts) {

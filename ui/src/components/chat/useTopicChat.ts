@@ -160,7 +160,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 	// the newest chat turn's link preview cards poll in the background until they complete
 	const startLinkPreviewRefresh = useLinkPreviewRefresh(page, setChatTurns)
 
-	// a attachmentFile attached in the new-topic chat waits in the draft as well as reaching carl for the turn
+	// a file attached in the new-topic chat waits in the draft as well as reaching carl for the turn
 	const addAttachmentFiles = async (attachmentFiles: File[]): Promise<File[]> => {
 		const validAttachmentFiles = await addChatAttachmentFiles(attachmentFiles)
 		if (page.newTopic) {
@@ -175,7 +175,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		const filesToUpload = topicDraftAttachmentFiles
 		setTopicDraft(EMPTY_TOPIC_DRAFT)
 		setTopicDraftAttachmentFiles([])
-		// upload each attachmentFile through the topic page's own screening, toasting a rejection's reason
+		// upload each file through the topic page's own screening, toasting a rejection's reason
 		for (const attachmentFile of filesToUpload) {
 			await uploadTopicAttachment(topicId, attachmentFile).catch((error: Error) =>
 				toast(`${attachmentFile.name} didn't attach. ${error.message}`),

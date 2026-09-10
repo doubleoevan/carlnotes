@@ -517,7 +517,7 @@ async function answerChatTurn(
 		return context.json({ error: "That file couldn't be read." }, 422)
 	}
 
-	// offer the topic chatTurnTools to an editor's turn on a topic, and the draft chatTurnTools to the new-topic chat
+	// offer the topic tools to an editor's turn on a topic, and the draft tools to the new-topic chat
 	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
 	const chatTurnTools = toChatTurnTools(
 		userId,

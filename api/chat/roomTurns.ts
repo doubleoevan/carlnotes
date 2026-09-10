@@ -69,7 +69,7 @@ export async function runModelChatRoomTurn(
 	// the images shared with the prompt chat message, read back for carl's reply
 	const promptImages = await loadPromptMessageImages(promptChatMessageId)
 
-	// a member with topic:edit gets the edit chatTurnTools, which check the rights again themselves
+	// a member with topic:edit gets the edit tools, which check the rights again themselves
 	// the saves go out with carl's chat message
 	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
 	const chatTurnTools =

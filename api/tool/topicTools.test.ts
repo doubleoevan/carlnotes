@@ -89,7 +89,7 @@ test("the source limit is the shared constant", () => {
 
 // an unchanged prompt writes no version, and a changed one does
 test("the version write skips an unchanged prompt and saves a changed one", async () => {
-	// a fake transaction that keeps every insertedRows insertedRow
+	// a fake transaction that keeps every inserted row
 	const insertedRows: unknown[] = []
 	const transaction = {
 		insert: () => ({
