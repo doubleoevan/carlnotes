@@ -5,13 +5,13 @@
       "source": "vercel/ai",
       "sourceType": "github",
       "skillPath": "skills/use-ai-sdk/SKILL.md",
-      "computedHash": "0883204d11b055e968dee697c5858e68064c27dfd4deb6310212895daa65c5ad"
+      "computedHash": "da25c27a274ef2b71017c255f95a26350d2519765a75cb54ee1a37872b121dab"
     },
     "code-style": {
       "source": "doubleoevan/skills",
       "sourceType": "github",
       "skillPath": "skills/code-style/SKILL.md",
-      "computedHash": "4107cbc4cc56dffaa8a96874a18995f75d391feb31e8aa3fe96aaa42c6777ed3"
+      "computedHash": "8a3fc8dd4a0328843a1de60ed53ecdd1a79be43fd92a6d224ba57b3c984fa02b"
     },
     "git-discipline": {
       "source": "doubleoevan/skills",
@@ -23,7 +23,7 @@
       "source": "pbakaus/impeccable",
       "sourceType": "github",
       "skillPath": ".agents/skills/impeccable/SKILL.md",
-      "computedHash": "aac688d98a678c4f87a43c69be48b9668984519484d5b7dae030c73f354a0b93"
+      "computedHash": "a80e96114cca1a7324c3b5b72586b93687a12a2a05302563fa81e1e30987a049"
     },
     "jsx-conventions": {
       "source": "doubleoevan/skills",
