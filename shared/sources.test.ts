@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test"
 import {
 	CUSTOM_SOURCE_OPTIONS,
+	toCustomSourceOption,
 	toDefaultSource,
 	toGoogleNewsFeedUrl,
 	toGoogleNewsPublisher,
@@ -160,4 +161,18 @@ test("toPublisherDomain reads the publisher out of whatever was pasted", () => {
 	// a value with no dot names no publisher, so it builds no feed instead of a broken one
 	expect(toPublisherDomain("theguardian")).toBe(null)
 	expect(toPublisherDomain("")).toBe(null)
+})
+
+// an x account may be typed as its handle, an @handle, or its profile url. anything else is rejected before the save
+test("the x option keeps the bare handle from a handle, an @handle, or a profile url", () => {
+	const xOption = toCustomSourceOption("x")
+	expect(xOption?.toConfig("gregisenberg")).toEqual({ handle: "gregisenberg" })
+	expect(xOption?.toConfig("@gregisenberg")).toEqual({ handle: "gregisenberg" })
+	expect(xOption?.toConfig("https://x.com/gregisenberg")).toEqual({ handle: "gregisenberg" })
+	expect(xOption?.toConfig("https://twitter.com/gregisenberg?s=21")).toEqual({ handle: "gregisenberg" })
+	// a bare domain and free text name no account
+	expect(xOption?.toConfig("https://x.com/")).toBeNull()
+	expect(xOption?.toConfig("https://x.com/i/flow/login")).toBeNull()
+	expect(xOption?.toConfig("https://x.com/gregisenberg/status/1")).toBeNull()
+	expect(xOption?.toConfig("not a handle")).toBeNull()
 })

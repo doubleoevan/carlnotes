@@ -1,10 +1,9 @@
 // the X ingester
+
+import { X_HANDLE_PATTERN } from "@shared/sources"
 import { X_COST_MINIMUM_PER_REQUEST, X_COST_PER_READ } from "../budget"
 import { FeedStatusError } from "./feed"
 import type { IngestResult, NewResource, Source, SourceIngester } from "./ingester"
-
-// an x handle is up to fifteen letters, digits, or underscores
-const HANDLE_PATTERN = /^[A-Za-z0-9_]{1,15}$/
 
 // how far back a query looks. a Scan wants the current conversation, and an unbounded window spends reads on stale posts
 const RECENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
@@ -47,7 +46,7 @@ export function toSourceHandle(config: Record<string, unknown>): string | null {
 
 	// the cleaned handle only counts if X would resolve it. it goes straight into a query operator
 	const handle = configuredHandle.trim().replace(/^@/, "")
-	return HANDLE_PATTERN.test(handle) ? handle : null
+	return X_HANDLE_PATTERN.test(handle) ? handle : null
 }
 
 /**
@@ -56,7 +55,7 @@ export function toSourceHandle(config: Record<string, unknown>): string | null {
  */
 export async function readHandle(handle: string): Promise<void> {
 	// a handle X would never resolve is invented, whatever the provider would say about it
-	if (!HANDLE_PATTERN.test(handle.trim().replace(/^@/, ""))) {
+	if (!X_HANDLE_PATTERN.test(handle.trim().replace(/^@/, ""))) {
 		throw new Error(`x handle ${handle} is not a handle X could resolve`)
 	}
 

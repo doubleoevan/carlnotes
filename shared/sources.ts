@@ -10,6 +10,23 @@ const PUBLISHER_FILTER = "site:"
 // the source kinds a source is saved as
 export type EditableSourceKind = (typeof editableSourceKinds)[number]
 
+// an x handle: up to fifteen letters, digits, and underscores, the form x itself allows
+export const X_HANDLE_PATTERN = /^[A-Za-z0-9_]{1,15}$/
+
+/**
+ * The X handle a typed value names, from the handle, an @handle, or a profile url on x.com or twitter.com, or null for anything else.
+ */
+export function toXHandle(value: string): string | null {
+	// a profile url is the host and one path segment. a deeper path such as /i/flow/login names no account
+	const profilePath = value.trim().replace(/^https?:\/\/(?:www\.)?(?:x|twitter)\.com\//i, "")
+	const [handle = "", ...deeperSegments] = profilePath.replace(/[?#].*$/, "").split("/")
+	if (deeperSegments.some((segment) => segment !== "")) {
+		return null
+	}
+	const bareHandle = handle.replace(/^@/, "")
+	return X_HANDLE_PATTERN.test(bareHandle) ? bareHandle : null
+}
+
 // the custom source options and suggested source keys
 export const customSourceKeys = ["url", "rss", "googleNews", "reddit", "youtube", "podcast", "bluesky", "x"] as const
 export type CustomSourceKey = (typeof customSourceKeys)[number]
@@ -91,13 +108,17 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		placeholder: "account handle…",
 		toConfig: (value) => ({ handle: value.replace(/^@/, "") }),
 	},
-	// an x source follows one account, named by its handle with any leading @ stripped
+	// an X source follows one account, named by its handle. an @handle or a profile url gives the handle, and
+	// anything else is rejected before the save
 	{
 		key: "x",
 		sourceKind: "x",
 		label: "x",
 		placeholder: "account handle…",
-		toConfig: (value) => ({ handle: value.replace(/^@/, "") }),
+		toConfig: (value) => {
+			const handle = toXHandle(value)
+			return handle ? { handle } : null
+		},
 	},
 ]
 
