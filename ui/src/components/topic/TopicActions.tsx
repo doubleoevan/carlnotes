@@ -41,52 +41,52 @@ function toActionLayout({ topic, isSignedIn, isBookmarkedView, isJoinable }: Top
 }
 
 // whether the follow row goes in the page's actions menu instead of the bar
-export function isFollowInMenu(context: TopicActionContext): boolean {
+export function isFollowTopicInMenu(context: TopicActionContext): boolean {
 	return toActionLayout(context).isFollowInMenu
 }
 
 // the rows this page hands the search bar's actions menu, in the order they read
 export function toTopicActionOptions({
 	topic,
-	isAdmin,
-	isFollowInMenu,
-	onShare,
-	onToggleFollow,
-	onRank,
-	onEdit,
-	onDelete,
+	isAdminUser,
+	isFollowTopicInMenu,
+	onShareTopic,
+	onToggleFollowTopic,
+	onRankFeaturedTopic,
+	onEditTopic,
+	onDeleteTopic,
 }: {
 	topic: TopicResponse
-	isAdmin: boolean
-	isFollowInMenu: boolean
-	onShare: () => void
-	onToggleFollow: () => void
-	onRank: () => void
-	onEdit: () => void
-	onDelete: () => void
+	isAdminUser: boolean
+	isFollowTopicInMenu: boolean
+	onShareTopic: () => void
+	onToggleFollowTopic: () => void
+	onRankFeaturedTopic: () => void
+	onEditTopic: () => void
+	onDeleteTopic: () => void
 }): PageActionOption[] {
 	return [
 		// on a team topic Team Up holds the row, so following leads the menu instead of being a second button
-		...(isFollowInMenu
+		...(isFollowTopicInMenu
 			? [
 					{
 						label: topic.isSubscribed ? "Unfollow topic" : "Follow topic",
 						Icon: PawPrint,
 						isActive: topic.isSubscribed,
-						onSelect: onToggleFollow,
+						onSelect: onToggleFollowTopic,
 					},
 				]
 			: []),
 		// an admin arranges the Featured section from inside the topic itself, on a public topic alone
-		...(isAdmin && topic.visibility === "public"
-			? [{ label: "Featured topics", Icon: ListOrdered, onSelect: onRank }]
+		...(isAdminUser && topic.visibility === "public"
+			? [{ label: "Featured topics", Icon: ListOrdered, onSelect: onRankFeaturedTopic }]
 			: []),
 		// sharing sits directly above editing
-		{ label: "Share topic", Icon: Share2, onSelect: onShare },
+		{ label: "Share topic", Icon: Share2, onSelect: onShareTopic },
 		...(topic.canEdit
 			? [
-					{ label: "Edit topic", Icon: Pencil, onSelect: onEdit },
-					{ label: "Delete topic", Icon: Trash2, onSelect: onDelete },
+					{ label: "Edit topic", Icon: Pencil, onSelect: onEditTopic },
+					{ label: "Delete topic", Icon: Trash2, onSelect: onDeleteTopic },
 				]
 			: []),
 	]

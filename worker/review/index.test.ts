@@ -14,7 +14,7 @@ function findingRow(
 }
 
 // under the limit nothing filters. over it the lowest-ranked findings no user bookmarked or rated go
-test("findingIdsToFilter keeps the top maxResults by relevance", () => {
+test("findingIdsToFilter keeps the top maxTopicFindings by relevance", () => {
 	// three rows under a limit of five keep everything
 	expect(findingIdsToFilter([findingRow("a", 0.9), findingRow("b", 0.5), findingRow("c", 0.7)], 5)).toEqual([])
 	// a limit of two drops the lowest-ranked row

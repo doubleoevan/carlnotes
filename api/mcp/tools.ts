@@ -5,19 +5,26 @@ import {
 	addTopicSourcePayload,
 	createTopicPayload,
 	removeTopicSourcePayload,
+	updateTopicFieldsPayload,
 	updateTopicPromptPayload,
 } from "@shared/contracts"
 import { ratings } from "@shared/enums"
 import { z } from "zod"
-import { toAddTopicSourceText, toCreateTopicText, toRejectionText, toSuggestionsText } from "../tool/chatTools"
+import {
+	toAddTopicSourceText,
+	toCreateTopicText,
+	toRejectionText,
+	toSuggestionsText,
+	toUpdateTopicFieldsText,
+} from "../tool/chatTools"
 import {
 	addTopicSource,
 	createTopicFromDraft,
 	removeTopicSource,
 	suggestTopicDraftSources,
+	updateTopicFields,
 	updateTopicPrompt,
 } from "../tool/topicTools"
-import { type Caller, toMcpAnalyticsProperties } from "./caller"
 import {
 	bookmarkFinding,
 	CONNECT_ACCOUNT_TEXT,
@@ -29,6 +36,7 @@ import {
 	searchFindings,
 	toToolTopicId,
 } from "./results"
+import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 
 // the two arguments tools share. on the bound route the topic id comes from the url
 const topicIdArgument = z
@@ -37,25 +45,25 @@ const topicIdArgument = z
 	.describe("The topic's id. Optional on a topic-bound server, which already knows its topic.")
 const cursorArgument = z.string().optional().describe("The cursor a previous page returned.")
 
-// register the eleven tools. every caller gets the same list, and only the results differ
-export function registerTools(mcpServer: McpServer, caller: Caller, routeTopicId: string | null): void {
-	registerReadTools(mcpServer, caller, routeTopicId)
-	registerMarkTools(mcpServer, caller)
-	registerTopicTools(mcpServer, caller, routeTopicId)
+// register the eleven tools. every tool caller gets the same list, and only the results differ
+export function registerTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
+	registerReadTools(mcpServer, toolCaller, routeTopicId)
+	registerMarkTools(mcpServer, toolCaller)
+	registerTopicTools(mcpServer, toolCaller, routeTopicId)
 }
 
 // register the three reads and the consumed write
-function registerReadTools(mcpServer: McpServer, caller: Caller, routeTopicId: string | null): void {
+function registerReadTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
 	mcpServer.registerTool(
 		"list_topics",
 		{
 			title: "List topics",
 			description:
-				"The topics this caller may read: the public ones for everyone, plus what a connected account owns, follows, and holds through a team.",
+				"The topics this toolCaller may read: the public ones for everyone, plus what a connected account owns, follows, and holds through a team.",
 			inputSchema: z.object({ cursor: cursorArgument }),
 			annotations: { readOnlyHint: true },
 		},
-		async ({ cursor }) => toPageResult(await listTopics(caller, routeTopicId, cursor ?? null)),
+		async ({ cursor }) => toPageResult(await listTopics(toolCaller, routeTopicId, cursor ?? null)),
 	)
 	mcpServer.registerTool(
 		"read_topic_feed",
@@ -71,7 +79,7 @@ function registerReadTools(mcpServer: McpServer, caller: Caller, routeTopicId: s
 			if ("rejection" in toolTopic) {
 				return toTextResult(toolTopic.rejection, true)
 			}
-			return toPageResult(await readTopicFeed(caller, toolTopic.topicId, cursor ?? null))
+			return toPageResult(await readTopicFeed(toolCaller, toolTopic.topicId, cursor ?? null))
 		},
 	)
 	mcpServer.registerTool(
@@ -88,7 +96,7 @@ function registerReadTools(mcpServer: McpServer, caller: Caller, routeTopicId: s
 				return toTextResult(toolTopic.rejection, true)
 			}
 			// search the findings. a search that could not run returns a message
-			const searchResult = await searchFindings(caller, toolTopic.topicId, query, cursor ?? null)
+			const searchResult = await searchFindings(toolCaller, toolTopic.topicId, query, cursor ?? null)
 			if (searchResult && "text" in searchResult) {
 				return toTextResult(searchResult.text)
 			}
@@ -104,17 +112,17 @@ function registerReadTools(mcpServer: McpServer, caller: Caller, routeTopicId: s
 			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ finding_id }) => {
-			if (caller.kind !== "user") {
+			if (toolCaller.kind !== "user") {
 				return toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
-			const isMarkedConsumed = await markFindingConsumed(caller, finding_id)
+			const isMarkedConsumed = await markFindingConsumed(toolCaller, finding_id)
 			return toTextResult(isMarkedConsumed ? "Marked consumed." : "No readable finding has that id.", !isMarkedConsumed)
 		},
 	)
 }
 
 // register the rating and bookmark tools. both need an account
-function registerMarkTools(mcpServer: McpServer, caller: Caller): void {
+function registerMarkTools(mcpServer: McpServer, toolCaller: ToolCaller): void {
 	mcpServer.registerTool(
 		"rate_finding",
 		{
@@ -125,10 +133,10 @@ function registerMarkTools(mcpServer: McpServer, caller: Caller): void {
 			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ finding_id, rating }) => {
-			if (caller.kind !== "user") {
+			if (toolCaller.kind !== "user") {
 				return toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
-			const isRated = await rateFinding(caller, finding_id, rating)
+			const isRated = await rateFinding(toolCaller, finding_id, rating)
 			return toTextResult(isRated ? "Rated." : "This account may not rate that finding.", !isRated)
 		},
 	)
@@ -142,10 +150,10 @@ function registerMarkTools(mcpServer: McpServer, caller: Caller): void {
 			annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true },
 		},
 		async ({ finding_id, is_bookmarked }) => {
-			if (caller.kind !== "user") {
+			if (toolCaller.kind !== "user") {
 				return toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
-			const isBookmarkSaved = await bookmarkFinding(caller, finding_id, is_bookmarked)
+			const isBookmarkSaved = await bookmarkFinding(toolCaller, finding_id, is_bookmarked)
 			return toTextResult(
 				isBookmarkSaved ? "Bookmark saved." : "This account may not bookmark that finding.",
 				!isBookmarkSaved,
@@ -155,7 +163,7 @@ function registerMarkTools(mcpServer: McpServer, caller: Caller): void {
 }
 
 // register the five topic tools. confirmation is left to the client
-function registerTopicTools(mcpServer: McpServer, caller: Caller, routeTopicId: string | null): void {
+function registerTopicTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
 	mcpServer.registerTool(
 		"update_topic_prompt",
 		{
@@ -167,12 +175,12 @@ function registerTopicTools(mcpServer: McpServer, caller: Caller, routeTopicId: 
 		},
 		async ({ topic_id, prompt }) => {
 			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
-			if ("rejection" in toolTopic || caller.kind !== "user") {
+			if ("rejection" in toolTopic || toolCaller.kind !== "user") {
 				return "rejection" in toolTopic ? toTextResult(toolTopic.rejection, true) : toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
 			// save the prompt. the tool checks edit rights itself
 			const updateTopicPromptResult = await updateTopicPrompt({
-				userId: caller.userId,
+				userId: toolCaller.userId,
 				topicId: toolTopic.topicId,
 				prompt,
 				origin: "mcp",
@@ -180,6 +188,32 @@ function registerTopicTools(mcpServer: McpServer, caller: Caller, routeTopicId: 
 			return updateTopicPromptResult.status === "saved"
 				? toTextResult(`Saved the new prompt for ${updateTopicPromptResult.topicName}. The next brew reads it.`)
 				: toTextResult(toRejectionText(updateTopicPromptResult.status), true)
+		},
+	)
+	mcpServer.registerTool(
+		"update_topic_fields",
+		{
+			title: "Change a topic's settings",
+			description:
+				"Change the topic's tags, how often it brews (daily, weekdays, or weekly), or how many findings a brew keeps (5, 10, 15, or 20). Name only the fields to change. No brew starts.",
+			inputSchema: z.object({ topic_id: topicIdArgument, ...updateTopicFieldsPayload.shape }),
+			annotations: { readOnlyHint: false, destructiveHint: true },
+		},
+		async ({ topic_id, ...topicFields }) => {
+			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
+			if ("rejection" in toolTopic || toolCaller.kind !== "user") {
+				return "rejection" in toolTopic ? toTextResult(toolTopic.rejection, true) : toTextResult(CONNECT_ACCOUNT_TEXT)
+			}
+			// save the named settings. the tool checks edit rights itself
+			const updateTopicFieldsResult = await updateTopicFields({
+				userId: toolCaller.userId,
+				topicId: toolTopic.topicId,
+				topicFields,
+				promptVersionOrigin: "mcp",
+			})
+			return updateTopicFieldsResult.status === "saved"
+				? toTextResult(`Saved the settings for ${updateTopicFieldsResult.topicName}. The next brew follows them.`)
+				: toTextResult(toUpdateTopicFieldsText(updateTopicFieldsResult), true)
 		},
 	)
 	mcpServer.registerTool(
@@ -193,12 +227,12 @@ function registerTopicTools(mcpServer: McpServer, caller: Caller, routeTopicId: 
 		},
 		async ({ topic_id, sourceOption, value }) => {
 			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
-			if ("rejection" in toolTopic || caller.kind !== "user") {
+			if ("rejection" in toolTopic || toolCaller.kind !== "user") {
 				return "rejection" in toolTopic ? toTextResult(toolTopic.rejection, true) : toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
 			// add the source. the tool checks edit rights itself
 			const addTopicSourceResult = await addTopicSource({
-				userId: caller.userId,
+				userId: toolCaller.userId,
 				topicId: toolTopic.topicId,
 				sourceOption,
 				value,
@@ -221,12 +255,12 @@ function registerTopicTools(mcpServer: McpServer, caller: Caller, routeTopicId: 
 		},
 		async ({ topic_id, sourceId }) => {
 			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
-			if ("rejection" in toolTopic || caller.kind !== "user") {
+			if ("rejection" in toolTopic || toolCaller.kind !== "user") {
 				return "rejection" in toolTopic ? toTextResult(toolTopic.rejection, true) : toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
 			// remove the source. the tool checks edit rights itself
 			const removeTopicSourceResult = await removeTopicSource({
-				userId: caller.userId,
+				userId: toolCaller.userId,
 				topicId: toolTopic.topicId,
 				sourceId,
 				origin: "mcp",
@@ -252,10 +286,10 @@ function registerTopicTools(mcpServer: McpServer, caller: Caller, routeTopicId: 
 			annotations: { readOnlyHint: false, destructiveHint: false, openWorldHint: true },
 		},
 		async ({ name, prompt }) => {
-			if (caller.kind !== "user") {
+			if (toolCaller.kind !== "user") {
 				return toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
-			const suggestTopicDraftSourcesResult = await suggestTopicDraftSources({ userId: caller.userId, name, prompt })
+			const suggestTopicDraftSourcesResult = await suggestTopicDraftSources({ userId: toolCaller.userId, name, prompt })
 			return toTextResult(
 				toSuggestionsText(suggestTopicDraftSourcesResult),
 				suggestTopicDraftSourcesResult.status !== "ok",
@@ -267,20 +301,20 @@ function registerTopicTools(mcpServer: McpServer, caller: Caller, routeTopicId: 
 		{
 			title: "Create a topic",
 			description:
-				"Create a topic for the connected account from a name, a prompt, sources as option and value pairs, invite emails, and a visibility of public, invite, or private, shared by invite when unsaid. The schedule takes the editor's defaults: weekly on Wednesday, ten results. Its first brew starts.",
+				"Create a topic for the connected account from a name, a prompt, sources as option and value pairs, invite emails, a visibility of public, invite, or private, the team it joins as the id and name of a team the account leads, tags, how often it brews (daily, weekdays, or weekly), and how many findings a brew keeps (5, 10, 15, or 20). Unsaid fields take the editor's defaults: shared by invite, weekly on Wednesday, ten findings. Its first brew starts.",
 			inputSchema: createTopicPayload,
 			annotations: { readOnlyHint: false, destructiveHint: true },
 		},
 		async (topicDraft) => {
-			if (caller.kind !== "user") {
+			if (toolCaller.kind !== "user") {
 				return toTextResult(CONNECT_ACCOUNT_TEXT)
 			}
 			// create the topic through the create path's own gate. the result names the topic's id
 			const createTopicFromDraftResult = await createTopicFromDraft({
-				userId: caller.userId,
+				userId: toolCaller.userId,
 				topicDraft,
 				origin: "mcp",
-				analyticsProperties: toMcpAnalyticsProperties(caller),
+				analyticsProperties: toMcpAnalyticsProperties(toolCaller),
 			})
 			if (createTopicFromDraftResult.status !== "created") {
 				return toTextResult(toCreateTopicText(createTopicFromDraftResult), true)

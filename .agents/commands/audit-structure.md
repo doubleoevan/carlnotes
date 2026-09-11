@@ -208,6 +208,13 @@ Check for:
      `isAllowed`, and `screenResource` for colliding with llm-guard's screening
    - `loadUnscoredResources`/`unscoredResources` (now `loadResourcesToReview`/`resourcesToReview`; the
      selector returns already-scored Findings whose context changed, so "unscored" named only some of them)
+   - `maxResults` and `maxResultsOptions` (now `maxTopicFindings` and `maxTopicFindingsOptions`, since what a scan keeps are
+     Findings). the `max_results` column and its `topics_max_results_allowed` check keep their names, mapped in
+     `db/schema.ts`, so no migration moved
+   - `api/mcp/caller.ts` (now `api/mcp/toolCaller.ts`), and with it `Caller`, `resolveCaller`, the `mcpCaller` context
+     variable, `RateLimitCaller`, `toRateLimitCaller`, and `callerRateLimiter` (now `ToolCaller`, `resolveToolCaller`,
+     `toolCaller`, `RateLimitToolCaller`, `toRateLimitToolCaller`, and `toolCallerRateLimiter`). the plain word for
+     whoever calls a function keeps its comments
    - `finishScan`'s `ingested`/`reviewed` parameters (now `ingestResult`/`reviewResult`, which every
      call site already used). they hold stage results, so neither is a Resource
 

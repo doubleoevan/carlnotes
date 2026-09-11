@@ -27,7 +27,7 @@ import { useAllNoteBadges } from "@/stores/noteBadgeStore"
 export function TeamsPage() {
 	usePageTitle("Teams")
 	const { data: session } = authClient.useSession()
-	const [teamsPage, setTeamsIndex] = useState<TeamsPageResponse | null>(null)
+	const [teamsPage, setTeamsPage] = useState<TeamsPageResponse | null>(null)
 	// the chat panel's poll feeds this
 	const teamMentions = useAllTeamChatMentions()
 	// every unread change on the teams' notes
@@ -49,8 +49,8 @@ export function TeamsPage() {
 	// every team and invitation, reloaded after every change made from this page
 	const reloadTeams = useCallback((): void => {
 		fetchTeams()
-			.then(setTeamsIndex)
-			.catch(() => setTeamsIndex({ teams: [], receivedInvites: [], sentInvites: [] }))
+			.then(setTeamsPage)
+			.catch(() => setTeamsPage({ teams: [], receivedInvites: [], sentInvites: [] }))
 	}, [])
 	useEffect(() => reloadTeams(), [reloadTeams])
 

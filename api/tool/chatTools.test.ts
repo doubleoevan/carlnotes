@@ -13,16 +13,21 @@ import {
 	toSuggestionsText,
 } from "./chatTools"
 
-// the three tools bound to one topic
+// the four tools bound to one topic
 const chatTopicTools = toChatTopicTools({
 	userId: "user-1",
 	topicId: "topic-1",
 	toolCalls: { count: 0, topicSaves: [], topicSaveRejections: [] },
 })
 
-// exactly the three tools, under the names the prompt uses
-test("the adapter offers the three topic tools", () => {
-	expect(Object.keys(chatTopicTools).sort()).toEqual(["addSource", "removeSource", "updateTopicPrompt"])
+// exactly the four tools, under the names the prompt uses
+test("the adapter offers the four topic tools", () => {
+	expect(Object.keys(chatTopicTools).sort()).toEqual([
+		"addSource",
+		"removeSource",
+		"updateTopicFields",
+		"updateTopicPrompt",
+	])
 })
 
 // no schema takes a topic. a message cannot point a tool at another topic
@@ -74,7 +79,17 @@ const analyticsProperties = {
 
 // the new-topic chat's tools are the draft, the suggestions, and the create
 test("the new-topic tools are the draft, the suggestions, and the create", () => {
-	const topicDraft: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [], visibility: "invite" }
+	const topicDraft: TopicDraft = {
+		name: "",
+		prompt: "",
+		sources: [],
+		inviteEmails: [],
+		visibility: "invite",
+		team: null,
+		tags: [],
+		frequency: "weekly",
+		maxTopicFindings: 10,
+	}
 	const newTopicTools = toNewTopicChatTools({
 		userId: "user-1",
 		toolCalls: { count: 0, topicSaves: [], topicSaveRejections: [] },
@@ -93,11 +108,15 @@ test("draftTopic writes the named fields and leaves the rest", async () => {
 		sources: [],
 		inviteEmails: [],
 		visibility: "invite",
+		team: null,
+		tags: [],
+		frequency: "weekly",
+		maxTopicFindings: 10,
 	}
 	const newTopicTools = toNewTopicChatTools({
 		userId: "user-1",
 		toolCalls,
-		topicDraft: topicDraft,
+		topicDraft,
 		analyticsProperties,
 	})
 	await newTopicTools.draftTopic?.execute?.(
@@ -110,6 +129,10 @@ test("draftTopic writes the named fields and leaves the rest", async () => {
 		sources: [],
 		inviteEmails: [],
 		visibility: "public",
+		team: null,
+		tags: [],
+		frequency: "weekly",
+		maxTopicFindings: 10,
 	})
 	expect(toolCalls.topicDraft).toEqual(topicDraft)
 	expect(toolCalls.count).toBe(1)
@@ -117,7 +140,18 @@ test("draftTopic writes the named fields and leaves the rest", async () => {
 
 // the create and suggestion text is plain words
 test("the create and suggestion text is plain words", () => {
-	expect(toCreateTopicText({ status: "created", topicId: "topic-1", name: "Hoops" })).toContain("Created Hoops")
+	expect(
+		toCreateTopicText({ status: "created", topicId: "topic-1", name: "Hoops", teamName: null, addTeamRejection: null }),
+	).toContain("Created Hoops")
+	expect(
+		toCreateTopicText({
+			status: "created",
+			topicId: "topic-1",
+			name: "Hoops",
+			teamName: "Notes of Carl",
+			addTeamRejection: null,
+		}),
+	).toContain("It is on Notes of Carl")
 	expect(toCreateTopicText({ status: "incomplete" })).toContain("title and a prompt")
 	expect(toCreateTopicText({ status: "inviteeRejected", email: "a@b.co" })).toContain("a@b.co")
 	expect(toSuggestionsText({ status: "ok", sources: [{ sourceOption: "reddit", value: "r/hoops" }] })).toContain(

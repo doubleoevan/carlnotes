@@ -28,8 +28,8 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 						{lastScanDuration && <div className="text-muted-foreground text-xs">{lastScanDuration} taken</div>}
 					</InfoSection>
 
-					{/* how many findings a scan keeps */}
-					<InfoSection label="Max results">{`Carl's top ${topic.maxResults}`}</InfoSection>
+					{/* how many findings a topic scan keeps */}
+					<InfoSection label="Max findings">{`Carl's top ${topic.maxTopicFindings}`}</InfoSection>
 
 					{/* this month's total scan spend, visible to the owner or an admin */}
 					{topic.monthCostDollars !== null && (

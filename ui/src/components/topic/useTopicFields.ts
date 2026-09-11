@@ -28,8 +28,8 @@ export type TopicFields = {
 	// who may see the topic and how many findings a scan keeps
 	visibility: Visibility
 	setVisibility: (visibility: Visibility) => void
-	maxResults: number
-	setMaxResults: (maxResults: number) => void
+	maxTopicFindings: number
+	setMaxTopicFindings: (maxTopicFindings: number) => void
 	// the follower invites queued for the save
 	emailInvites: string[]
 	setEmailInvites: (emailInvites: string[]) => void
@@ -67,7 +67,7 @@ export function useTopicFields(topic: TopicResponse | undefined, isMakingTopicPu
 	const [scheduledDayOfWeek, setScheduledDayOfWeek] = useState<DayOfWeek>(topic?.scheduledDayOfWeek ?? "monday")
 	// a new topic defaults to invite for sharing without showing up automatically in the popular section
 	const [visibility, setVisibility] = useState<Visibility>(toStartingVisibility(topic, isMakingTopicPublic))
-	const [maxResults, setMaxResults] = useState(topic?.maxResults ?? 10)
+	const [maxTopicFindings, setMaxTopicFindings] = useState(topic?.maxTopicFindings ?? 10)
 	// the email address invite pills to edit
 	const [emailInvites, setEmailInvites] = useState(
 		() => topic?.invites.flatMap((invite) => (invite.email ? [invite.email] : [])) ?? [],
@@ -114,8 +114,8 @@ export function useTopicFields(topic: TopicResponse | undefined, isMakingTopicPu
 		setScheduledDayOfWeek,
 		visibility,
 		setVisibility,
-		maxResults,
-		setMaxResults,
+		maxTopicFindings,
+		setMaxTopicFindings,
 		emailInvites,
 		setEmailInvites,
 		usernameInvites,
@@ -171,7 +171,7 @@ export function toUpdateTopicPayload(fields: TopicFields): UpdateTopicPayload {
 		scheduledTime: fields.scheduledTime,
 		scheduledDayOfWeek: fields.scheduledDayOfWeek,
 		visibility: fields.visibility,
-		maxResults: fields.maxResults,
+		maxTopicFindings: fields.maxTopicFindings,
 		inviteEmails: fields.visibility !== "private" ? fields.emailInvites : [],
 		// the urls still showing under the prompt save as Sources along with the ones added from the sources section
 		sources: [

@@ -1,4 +1,4 @@
-import type { ChatRoom } from "@shared/contracts"
+import type { ChatRoom, TopicDraftTeam } from "@shared/contracts"
 import { useEffect, useSyncExternalStore } from "react"
 import { toStoreListeners } from "@/stores/storeListeners"
 
@@ -13,8 +13,8 @@ export type ChatId =
 	// one user's private conversation with Carl about a topic or a team, which is no chat room at all
 	| { kind: "private"; topicId: string; teamId?: undefined; newTopic?: undefined }
 	| { kind: "private"; topicId?: undefined; teamId: string; newTopic?: undefined }
-	// the new-topic chat, where Carl makes a topic, bound to neither
-	| { kind: "private"; newTopic: true; topicId?: undefined; teamId?: undefined }
+	// the new-topic chat, where Carl makes a topic, bound to neither, with the team a team page hands it
+	| { kind: "private"; newTopic: true; topicId?: undefined; teamId?: undefined; initialTeam?: TopicDraftTeam }
 
 /** How much of the screen the panel takes. */
 export type ChatPanelState = "collapsed" | "open" | "enlarged"

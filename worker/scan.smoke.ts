@@ -81,10 +81,13 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 
 	// read this topic's findings and one embedded resource from this scan, joined through the findings
 	const topicFindings = await db.select().from(findings).where(eq(findings.topicId, topicId))
-	const [topic] = await db.select({ maxResults: topics.maxResults }).from(topics).where(eq(topics.id, topicId))
+	const [topic] = await db
+		.select({ maxTopicFindings: topics.maxTopicFindings })
+		.from(topics)
+		.where(eq(topics.id, topicId))
 
-	// the scan's kept_count is what review wrote, and the topic is then trimmed to its max_results
-	const expectedFindingCount = Math.min(topicScan.keptCount, topic?.maxResults ?? 0)
+	// the scan's kept_count is what review wrote, and the topic is then trimmed to its maxTopicFindings
+	const expectedFindingCount = Math.min(topicScan.keptCount, topic?.maxTopicFindings ?? 0)
 	const [embedded] = await db
 		.select({ embedding: resources.embedding, model: resources.embeddingModel })
 		.from(findings)
@@ -134,7 +137,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 		["embedding is 1024-dim", embeddingLength === 1024],
 
 		// topic findings checks
-		["findings match kept_count limited by max_results", topicFindings.length === expectedFindingCount],
+		["findings match kept_count limited by maxTopicFindings", topicFindings.length === expectedFindingCount],
 		["stage_costs sum to cost", Math.abs(totalCost - totalStageCosts) < 1e-6],
 		["at least one finding", topicFindings.length > 0],
 		["a finding has a relevance explanation", findingsWithExplanations.length > 0],

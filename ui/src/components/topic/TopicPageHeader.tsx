@@ -16,8 +16,8 @@ import { setChatPanelState } from "@/stores/chatPanelStore"
  */
 export function TopicHeader({ topic }: { topic: TopicResponse }) {
 	// both the heading and its note icon open the note and show the hint, so the title holds the state the icon reads
-	const [isNoteOpen, setNoteOpen] = useState(false)
-	const [isNoteHintOpen, setNoteHintOpen] = useState(false)
+	const [isNoteOpen, setIsNoteOpen] = useState(false)
+	const [isNoteHintOpen, setIsNoteHintOpen] = useState(false)
 	return (
 		<>
 			{/* title row. the heading takes the whole width and wraps instead of truncating, and the note
@@ -25,9 +25,9 @@ export function TopicHeader({ topic }: { topic: TopicResponse }) {
 			<div className="mt-3">
 				{/* biome-ignore lint/a11y/useKeyWithClickEvents: the note icon in the heading is the keyboard path */}
 				<h1
-					onClick={() => setNoteOpen(true)}
-					onMouseEnter={() => setNoteHintOpen(true)}
-					onMouseLeave={() => setNoteHintOpen(false)}
+					onClick={() => setIsNoteOpen(true)}
+					onMouseEnter={() => setIsNoteHintOpen(true)}
+					onMouseLeave={() => setIsNoteHintOpen(false)}
 					className="font-display min-w-0 cursor-pointer text-2xl leading-tight"
 				>
 					{/* the chat mention count sits on the name, and its click opens the chat instead of the title's note */}
@@ -41,7 +41,7 @@ export function TopicHeader({ topic }: { topic: TopicResponse }) {
 								event.stopPropagation()
 								setChatPanelState("open")
 							}}
-							onMouseEnter={() => setTimeout(() => setNoteHintOpen(false), 0)}
+							onMouseEnter={() => setTimeout(() => setIsNoteHintOpen(false), 0)}
 							className="-right-2"
 						/>
 					</span>
@@ -49,9 +49,9 @@ export function TopicHeader({ topic }: { topic: TopicResponse }) {
 						topic={topic}
 						isInline
 						isOpen={isNoteOpen}
-						onOpenChange={setNoteOpen}
+						onOpenChange={setIsNoteOpen}
 						isHintOpen={isNoteHintOpen}
-						onHintOpenChange={setNoteHintOpen}
+						onHintOpenChange={setIsNoteHintOpen}
 					/>
 				</h1>
 			</div>

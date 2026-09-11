@@ -99,7 +99,7 @@ function toPrivateChatId(pageContext: ChatPageContext | null, chatId: ChatId | n
 // the conversation page a private chat id addresses: the new-topic chat, a topic, or a team
 function toPrivateChatPage(chatId: ChatId & { kind: "private" }): ChatPage {
 	if (chatId.newTopic) {
-		return { newTopic: true }
+		return { newTopic: true, initialTeam: chatId.initialTeam }
 	}
 	return chatId.topicId !== undefined ? { topicId: chatId.topicId } : { teamId: chatId.teamId }
 }

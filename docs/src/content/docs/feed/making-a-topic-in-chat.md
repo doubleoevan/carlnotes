@@ -19,6 +19,8 @@ card below](../../../assets/screenshots/chat-new-topic-draft.png)
 Open the Coffee Talk panel and press the switcher under its title, the current chat's name with a
 chevron. Pick **Give Carl a topic. You know the one.** It is there on every page for a signed-in user.
 Or press **New Topic** on the home, activity, or profile page and pick **Build with Carl**.
+On a team page, the **New topic** option at the end of the Add Topic picker does the same, with the team
+already on the draft.
 
 Sign up with no topic yet, and the panel opens on it by itself when you reach the home page, with
 the message box reading "Let's make your first topic. You know the one." Close it and it stays
@@ -37,21 +39,28 @@ he goes back and rewrites that field.
    up, he proposes from what he knows and says those are unverified.
 4. **Who should see it.** Anyone, the people you invite, or just you. Skipping keeps it shared by
    invite.
-5. **Who reads along.** Email addresses, one each. Skipping is fine.
-6. **A file.** Attach a PDF, a spreadsheet, or notes with the paperclip. It reaches Carl for that
+5. **Which team.** When you lead a team, he asks whether the topic should go on one, unless the draft already
+   names one. Skipping is fine.
+6. **Who reads along.** Email addresses, one each. Skipping is fine.
+7. **A file.** Attach a PDF, a spreadsheet, or notes with the paperclip. It reaches Carl for that
    turn and waits in the draft. Skipping is fine.
-7. **The read-back.** He reads the draft back and asks for a yes. Yes creates the topic.
+8. **The settings.** Tags, how often to brew (daily, weekdays, or weekly), and how many findings a brew
+   keeps (5, 10, 15, or 20). Say what you want or skip it: weekly and ten are the defaults.
+   Ask for daily when your plan has no daily slot left and the save says so, with the draft kept for another
+   try.
+9. **The read-back.** He reads the draft back and asks for a yes. Yes creates the topic.
 
 ## The draft card
 
 Everything Carl has written down so far shows on the **Topic draft** card above the message box:
-the title, the prompt, the sources with the built-in web search first, the visibility, the invites, and the files waiting. It is exactly what the yes
-saves, and the files upload to the new topic right after it is created. **Clear chat** drops the conversation and the draft together.
+the title, the prompt, the sources with the built-in web search first, the visibility, the team, the settings, the invites, and the files waiting. It is what the yes
+saves, and the files upload to the new topic right after it is created. The one thing that can still fall
+short is the team: if you no longer lead it, the topic is created without it and a toast says so. **Clear chat** drops the conversation and the draft together.
 
 ## After the yes
 
-The topic is created with the visibility you chose and the editor's defaults: weekly on Wednesday
-morning, the top ten findings per brew. Its page opens with **Carl is Brewing…** already running, the people you
+The topic is created with what the draft holds. Anything you skipped takes the editor's defaults:
+shared by invite, no team, weekly on Wednesday morning, the top ten findings per brew. Its page opens with **Carl is Brewing…** already running, the people you
 named get their invites, and the files you attached upload to it as attachments. The panel stays
 where it is, so you can start the next one. The schedule and everything else are yours to change on
 the topic page.

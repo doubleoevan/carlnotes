@@ -8,6 +8,8 @@ import {
 	TOPIC_PROMPT_CHARS,
 	type TopicDraft,
 	type TopicToolCalls,
+	topicDraftTeamPayload,
+	updateTopicFieldsPayload,
 	updateTopicPromptPayload,
 } from "@shared/contracts"
 import { visibilities } from "@shared/enums"
@@ -22,6 +24,8 @@ import {
 	removeTopicSource,
 	type SuggestTopicDraftSourcesResult,
 	suggestTopicDraftSources,
+	type UpdateTopicFieldsResult,
+	updateTopicFields,
 	updateTopicPrompt,
 } from "./topicTools"
 
@@ -44,6 +48,7 @@ export function toChatTopicTools(editTopicToolBinding: EditTopicToolBinding): Re
 		updateTopicPrompt: toUpdateTopicPromptTool(editTopicToolBinding),
 		addSource: toAddTopicSourceTool(editTopicToolBinding),
 		removeSource: toRemoveTopicSourceTool(editTopicToolBinding),
+		updateTopicFields: toUpdateTopicFieldsTool(editTopicToolBinding),
 	}
 }
 
@@ -65,6 +70,32 @@ function toUpdateTopicPromptTool({ userId, topicId, toolCalls }: EditTopicToolBi
 			// list the save for the toast
 			toolCalls.topicSaves.push("Carl saved the new prompt.")
 			return `Saved the new prompt for ${updateTopicPromptResult.topicName}.`
+		},
+	})
+}
+
+// the tool that changes the topic's settings: its tags, how often it scans, and how many findings a scan keeps
+function toUpdateTopicFieldsTool({ userId, topicId, toolCalls }: EditTopicToolBinding): Tool {
+	return tool({
+		description: `Change the topic's tags, how often it brews (daily, weekdays, or weekly), or how many findings a brew keeps (5, 10, 15, or 20). Name only the fields to change. ${CONFIRMATION_RULE}`,
+		inputSchema: updateTopicFieldsPayload,
+		execute: async (topicFields) => {
+			toolCalls.count += 1
+			const updateTopicFieldsResult = await updateTopicFields({
+				userId,
+				topicId,
+				topicFields,
+				promptVersionOrigin: "chat",
+			})
+			if (updateTopicFieldsResult.status !== "saved") {
+				toolCalls.topicSaveRejections.push(
+					toRejectionToast("save the settings", toUpdateTopicFieldsReason(updateTopicFieldsResult)),
+				)
+				return toUpdateTopicFieldsText(updateTopicFieldsResult)
+			}
+			// list the save for the toast
+			toolCalls.topicSaves.push("Carl saved the topic's settings.")
+			return `Saved the settings for ${updateTopicFieldsResult.topicName}.`
 		},
 	})
 }
@@ -159,6 +190,8 @@ const topicDraftFieldsPayload = z.object({
 	sources: z.array(addTopicSourcePayload).max(MAX_TOPIC_SOURCES).optional(),
 	inviteEmails: z.array(z.string().trim().toLowerCase().pipe(z.email())).max(MAX_DRAFT_INVITES).optional(),
 	visibility: z.enum(visibilities).optional(),
+	team: topicDraftTeamPayload.nullable().optional(),
+	...updateTopicFieldsPayload.shape,
 })
 
 /**
@@ -177,7 +210,7 @@ export function toNewTopicChatTools(newTopicToolBinding: NewTopicToolBinding): R
 function toDraftTopicTool({ toolCalls, topicDraft }: NewTopicToolBinding): Tool {
 	return tool({
 		description:
-			"Write what the reader has settled into the topic draft shown beside this chat: the title, the prompt, the sources as option and value pairs, who may read it as public, invite, or private, or the invite emails. Name only the fields to change. Call it as soon as an answer settles.",
+			"Write what the reader has settled into the topic draft shown beside this chat: the title, the prompt, the sources as option and value pairs, who may read it as public, invite, or private, the team it joins as the id and name from the reader's teams, the tags, how often it brews, how many findings a brew keeps, or the invite emails. Name only the fields to change. Call it as soon as an answer settles.",
 		inputSchema: topicDraftFieldsPayload,
 		execute: async (topicDraftFields) => {
 			toolCalls.count += 1
@@ -228,15 +261,26 @@ function toCreateTopicTool({ userId, toolCalls, topicDraft, analyticsProperties 
 				origin: "chat",
 				analyticsProperties,
 			})
-			// list the save and the created topic, or what stopped the create, for the toast
-			if (createTopicFromDraftResult.status === "created") {
-				toolCalls.topicSaves.push(`Carl created ${createTopicFromDraftResult.name}.`)
-				toolCalls.createdTopicId = createTopicFromDraftResult.topicId
-			} else {
+			// what stopped the create, for the toast
+			if (createTopicFromDraftResult.status !== "created") {
 				toolCalls.topicSaveRejections.push(
 					toRejectionToast("create the topic", toCreateTopicReason(createTopicFromDraftResult)),
 				)
+				return toCreateTopicText(createTopicFromDraftResult)
 			}
+			// list the save and the created topic for the toast
+			toolCalls.topicSaves.push(`Carl created ${createTopicFromDraftResult.name}.`)
+			toolCalls.createdTopicId = createTopicFromDraftResult.topicId
+			// a rejected team add gets its own toast beside the create
+			if (createTopicFromDraftResult.addTeamRejection) {
+				toolCalls.topicSaveRejections.push(
+					toRejectionToast(
+						`add it to ${createTopicFromDraftResult.teamName}`,
+						createTopicFromDraftResult.addTeamRejection,
+					),
+				)
+			}
+			// word the result for carl
 			return toCreateTopicText(createTopicFromDraftResult)
 		},
 	})
@@ -247,7 +291,7 @@ function toTopicDraftSummary(topicDraft: TopicDraft): string {
 	const topicSources = topicDraft.sources
 		.map((topicSource) => `${topicSource.sourceOption} ${topicSource.value}`.trim())
 		.join(", ")
-	return `title "${topicDraft.name}", prompt "${topicDraft.prompt}", sources [${topicSources}], visibility ${topicDraft.visibility}, invites [${topicDraft.inviteEmails.join(", ")}].`
+	return `title "${topicDraft.name}", prompt "${topicDraft.prompt}", sources [${topicSources}], visibility ${topicDraft.visibility}, team ${topicDraft.team?.name ?? "none"}, tags [${topicDraft.tags.join(", ")}], brews ${topicDraft.frequency}, keeps ${topicDraft.maxTopicFindings}, invites [${topicDraft.inviteEmails.join(", ")}].`
 }
 
 /**
@@ -281,7 +325,7 @@ export function toCreateTopicText(createTopicFromDraftResult: CreateTopicFromDra
 	switch (createTopicFromDraftResult.status) {
 		// the topic, its first scan already under way
 		case "created":
-			return `Created ${createTopicFromDraftResult.name}. Its first brew is under way, and the reader is being taken to it.`
+			return `Created ${createTopicFromDraftResult.name}. Its first brew is under way, and the reader is being taken to it.${toAddTeamText(createTopicFromDraftResult)}`
 		// a draft not ready to save
 		case "incomplete":
 			return "The draft needs a title and a prompt first. Write them with draftTopic."
@@ -305,6 +349,47 @@ export function toCreateTopicText(createTopicFromDraftResult: CreateTopicFromDra
 		default:
 			return "The reader may not create a topic."
 	}
+}
+
+// what the create says about the topic draft's team: on it, not added and why, or nothing when none was named
+function toAddTeamText({
+	teamName,
+	addTeamRejection,
+}: {
+	teamName: string | null
+	addTeamRejection: string | null
+}): string {
+	// nothing when the topic draft named no team
+	if (!teamName) {
+		return ""
+	}
+	return addTeamRejection ? ` It was not added to ${teamName}: ${addTeamRejection}` : ` It is on ${teamName}.`
+}
+
+/**
+ * The words for a rejected settings save, returned by the tool and repeated by carl.
+ */
+export function toUpdateTopicFieldsText(
+	updateTopicFieldsResult: Exclude<UpdateTopicFieldsResult, { status: "saved" }>,
+): string {
+	if (updateTopicFieldsResult.status === "empty") {
+		return "Name at least one setting: the tags, how often it brews, or how many findings a brew keeps."
+	}
+	return updateTopicFieldsResult.status === "dailyFrequency"
+		? `A daily topic does not fit the plan right now. The limit is ${updateTopicFieldsResult.limit}.`
+		: toRejectionText(updateTopicFieldsResult.status)
+}
+
+// the toast's reason for a rejected settings save
+function toUpdateTopicFieldsReason(
+	updateTopicFieldsResult: Exclude<UpdateTopicFieldsResult, { status: "saved" }>,
+): string {
+	if (updateTopicFieldsResult.status === "empty") {
+		return "No setting was named."
+	}
+	return updateTopicFieldsResult.status === "dailyFrequency"
+		? CREATE_REJECTION_LINES.dailyFrequency
+		: toGateReason(updateTopicFieldsResult.status)
 }
 
 // the toast a rejected change shows: what carl could not do, and why

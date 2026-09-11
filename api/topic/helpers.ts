@@ -319,7 +319,7 @@ export function isTakingDailySlot(savedFrequency: string, currentFrequency?: str
  */
 export async function authorizeNewDailyTopic(
 	userId: string,
-	topicPayload: UpdateTopicPayload,
+	topicPayload: Pick<UpdateTopicPayload, "frequency">,
 	currentFrequency?: string,
 ): Promise<DailyFrequencyRejection | null> {
 	if (!isTakingDailySlot(topicPayload.frequency, currentFrequency)) {

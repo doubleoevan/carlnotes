@@ -25,14 +25,14 @@ export function UserAvatarPicker({
 	username: string
 	className?: string
 }) {
-	const [isUploading, setUploading] = useState(false)
+	const [isUploading, setIsUploading] = useState(false)
 	const [updateRejection, setUpdateRejection] = useState<string | null>(null)
 	// the source comes from the session, so a finished upload re-renders every picker at once
 	const { avatarSource, uploadAvatarFile } = useAvatar()
 
 	// upload the avatar photo. the hook refreshes the session on success, which updates every avatar on the page
 	async function handleUploadAvatarFile(avatarFile: File): Promise<void> {
-		setUploading(true)
+		setIsUploading(true)
 		setUpdateRejection(null)
 		try {
 			// a phone photo is cut to the stored size before it is sent
@@ -44,7 +44,7 @@ export function UserAvatarPicker({
 			console.error("avatar upload failed", error)
 			setUpdateRejection("That didn't reach Carl. Try again.")
 		} finally {
-			setUploading(false)
+			setIsUploading(false)
 		}
 	}
 

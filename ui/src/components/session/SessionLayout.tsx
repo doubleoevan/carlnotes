@@ -175,7 +175,7 @@ function EmailForm({
 	error: string | null
 	extraFields?: React.ReactNode
 }) {
-	const [isOpen, setOpen] = useState(isBrowserInApp)
+	const [isOpen, setIsOpen] = useState(isBrowserInApp)
 	const [email, setEmail] = useState("")
 	const [password, setPassword] = useState("")
 	const emailInputRef = useRef<HTMLInputElement>(null)
@@ -197,7 +197,7 @@ function EmailForm({
 		return (
 			<button
 				type="button"
-				onClick={() => setOpen(true)}
+				onClick={() => setIsOpen(true)}
 				className="text-muted-foreground hover:text-foreground mt-4 text-center text-sm underline underline-offset-4"
 			>
 				Continue with email

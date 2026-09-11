@@ -167,7 +167,7 @@ test("users.budget_override_cents is a nullable integer", () => {
 
 // the kept-set size is constrained to the shared allowed values, and the default doubles as the migration backfill
 test("topics.max_results defaults to ten and is checked against the allowed sizes", () => {
-	expect(schema.topics.maxResults.notNull).toBe(true)
+	expect(schema.topics.maxTopicFindings.notNull).toBe(true)
 	expect(allMigrationsSql()).toContain(`"max_results" integer DEFAULT 10 NOT NULL`)
 	expect(allMigrationsSql()).toContain(`CHECK (max_results in (5, 10, 15, 20))`)
 })

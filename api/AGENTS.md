@@ -13,13 +13,13 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   `noteCommentThreads.ts` (comment writes), `noteStream.ts` (fan-out), `permissions.ts` (visibility access),
   `noteBadges.ts` (the unread edit and comment counts, and the read time that clears them).
 - `mcp/` — the mcp server: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and the transport), `tools.ts` (the eleven
-  tools it registers, with their schemas and annotations), `caller.ts` (the visitor or user a bearer token resolves to), and
+  tools it registers, with their schemas and annotations), `toolCaller.ts` (the tool caller: the visitor or user a bearer token resolves to), and
   `results.ts` (what each tool returns for a visitor or a user, paged under a client's result limit).
 - `tool/` — `topicTools.ts` (the five Topic Tools, each with its own gate check) and the chat adapters in
   `chatTools.ts`: the edit tools bound to a chat's topic, and the draft tools of the new-topic chat. The mcp adapter is
   in `mcp/tools.ts`.
 - `topic/promptVersions.ts` — the Prompt Version write the editor's save and the Topic Tools share.
-- `rateLimit.ts` — the one per-caller rate limit, shared by the chat turn routes and the mcp routes, keyed by the
+- `rateLimit.ts` — the one per-tool-caller rate limit, shared by the chat turn routes and the mcp routes, keyed by the
   user or by the client address `trustedProxies.ts` vouches for.
 - Every authority answer routes through `authorization.ts` and the role helpers; inline
   `role ===` / `plan ===` comparisons are banned outside it (`authorization.test.ts` greps).

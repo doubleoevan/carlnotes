@@ -144,14 +144,14 @@ export function ProfileFields({
 function EmailSection() {
 	const { data: session } = authClient.useSession()
 	const [newEmail, setNewEmail] = useState("")
-	const [isSubmitting, setSubmitting] = useState(false)
+	const [isSubmitting, setIsSubmitting] = useState(false)
 	const [error, setError] = useState<string | null>(null)
-	const [isRequested, setRequested] = useState(false)
+	const [isRequested, setIsRequested] = useState(false)
 
 	// ask for the email change. better auth emails the current address first, and only afterward the new one
 	async function handleChangeEmail(event: SubmitEvent): Promise<void> {
 		event.preventDefault()
-		setSubmitting(true)
+		setIsSubmitting(true)
 		setError(null)
 		try {
 			const { error: changeError } = await authClient.changeEmail({ newEmail, callbackURL: "/account" })
@@ -159,12 +159,12 @@ function EmailSection() {
 				setError(changeError.message ?? "That didn't work. Try again.")
 				return
 			}
-			setRequested(true)
+			setIsRequested(true)
 		} catch (changeError) {
 			console.error("email change failed", changeError)
 			setError("That didn't reach Carl. Try again.")
 		} finally {
-			setSubmitting(false)
+			setIsSubmitting(false)
 		}
 	}
 
@@ -212,16 +212,16 @@ function EmailSection() {
 function PasswordSection() {
 	const [currentPassword, setCurrentPassword] = useState("")
 	const [newPassword, setNewPassword] = useState("")
-	const [isSubmitting, setSubmitting] = useState(false)
+	const [isSubmitting, setIsSubmitting] = useState(false)
 	const [error, setError] = useState<string | null>(null)
-	const [isChanged, setChanged] = useState(false)
+	const [isChanged, setIsChanged] = useState(false)
 
 	// change the password, revoking other sessions to keep this session alive with the updated password
 	async function handleChangePassword(event: SubmitEvent): Promise<void> {
 		event.preventDefault()
-		setSubmitting(true)
+		setIsSubmitting(true)
 		setError(null)
-		setChanged(false)
+		setIsChanged(false)
 		try {
 			const { error: changeError } = await authClient.changePassword({
 				currentPassword,
@@ -235,12 +235,12 @@ function PasswordSection() {
 			// clear the fields so the typed passwords are not left sitting in the form
 			setCurrentPassword("")
 			setNewPassword("")
-			setChanged(true)
+			setIsChanged(true)
 		} catch (error) {
 			console.error("password change failed", error)
 			setError("That didn't reach Carl. Try again.")
 		} finally {
-			setSubmitting(false)
+			setIsSubmitting(false)
 		}
 	}
 

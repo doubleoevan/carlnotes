@@ -33,8 +33,8 @@ export function ResetPasswordPage() {
 function ResetRequestForm() {
 	const [email, setEmail] = useState("")
 	const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
-	const [isSubmitting, setSubmitting] = useState(false)
-	const [isSent, setSent] = useState(false)
+	const [isSubmitting, setIsSubmitting] = useState(false)
+	const [isSent, setIsSent] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 	const [spentTokenCount, setSpentTokenCount] = useState(0)
 
@@ -45,7 +45,7 @@ function ResetRequestForm() {
 			setError("Finish the check below first.")
 			return
 		}
-		setSubmitting(true)
+		setIsSubmitting(true)
 		setError(null)
 
 		// checking the token spends it, so every path that leaves this form on screen needs a new one
@@ -64,12 +64,12 @@ function ResetRequestForm() {
 			}
 			// the reply is the same either way
 			await authClient.requestPasswordReset({ email, redirectTo: "/reset-password" })
-			setSent(true)
+			setIsSent(true)
 		} catch (requestError) {
 			console.error("password reset request failed", requestError)
 			failAndRenewChallenge("That didn't reach Carl. Try again.")
 		} finally {
-			setSubmitting(false)
+			setIsSubmitting(false)
 		}
 	}
 
@@ -119,13 +119,13 @@ function ResetRequestForm() {
 // takes the new password from a valid link. a used or expired token is rejected by the api, not here
 function NewPasswordForm({ token }: { token: string }) {
 	const [password, setPassword] = useState("")
-	const [isSubmitting, setSubmitting] = useState(false)
+	const [isSubmitting, setIsSubmitting] = useState(false)
 	const [error, setError] = useState<string | null>(null)
 
 	// set the password, then return the user to where they were trying to get to instead of to the login form
 	const handleSubmit = async (event: React.FormEvent): Promise<void> => {
 		event.preventDefault()
-		setSubmitting(true)
+		setIsSubmitting(true)
 		setError(null)
 		// a dropped network call reads as an error instead of a submit button that stays stuck
 		try {
@@ -140,7 +140,7 @@ function NewPasswordForm({ token }: { token: string }) {
 			console.error("password reset failed", resetFailure)
 			setError("That didn't reach Carl. Try again.")
 		} finally {
-			setSubmitting(false)
+			setIsSubmitting(false)
 		}
 	}
 

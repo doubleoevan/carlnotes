@@ -26,7 +26,17 @@ import { publishTopicChanged } from "@/stores/chatPanelStore"
 const LINK_PREVIEW_REFRESH_MS = 2500
 
 // the new-topic chat's draft before carl writes anything
-const EMPTY_TOPIC_DRAFT: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [], visibility: "invite" }
+const EMPTY_TOPIC_DRAFT: TopicDraft = {
+	name: "",
+	prompt: "",
+	sources: [],
+	inviteEmails: [],
+	visibility: "invite",
+	team: null,
+	tags: [],
+	frequency: "weekly",
+	maxTopicFindings: 10,
+}
 
 // a stand-in id for a kept attachment that the server has not returned yet
 let placeholderCount = 0
@@ -59,7 +69,7 @@ export type TopicChat = {
 	// carl's draft, the files waiting for the topic, and whether it is the user's first
 	topicDraft: TopicDraft
 	topicDraftAttachmentFiles: File[]
-	removeDraftFile: (index: number) => void
+	removeTopicDraftAttachmentFile: (index: number) => void
 	isFirstTopic: boolean
 	// how many more topics the plan holds and its limit, on the new-topic chat alone
 	topicsRemaining: number | null
@@ -157,6 +167,15 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		}
 	}, [page.topicId, page.teamId, page.newTopic, setKeptAttachments])
 
+	// the team a team page handed this chat goes onto the topic draft, and onto the empty one a clear or a create leaves
+	const initialTeam = page.newTopic ? page.initialTeam : undefined
+	const emptyTopicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT, team: initialTeam ?? null }
+	useEffect(() => {
+		if (initialTeam) {
+			setTopicDraft((previousTopicDraft) => ({ ...previousTopicDraft, team: initialTeam }))
+		}
+	}, [initialTeam])
+
 	// the newest chat turn's link preview cards poll in the background until they complete
 	const startLinkPreviewRefresh = useLinkPreviewRefresh(page, setChatTurns)
 
@@ -173,7 +192,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 	const openCreatedTopic = async (topicId: string): Promise<void> => {
 		navigate(`/topics/${topicId}`)
 		const filesToUpload = topicDraftAttachmentFiles
-		setTopicDraft(EMPTY_TOPIC_DRAFT)
+		setTopicDraft(emptyTopicDraft)
 		setTopicDraftAttachmentFiles([])
 		// upload each file through the topic page's own screening, toasting a rejection's reason
 		for (const attachmentFile of filesToUpload) {
@@ -307,7 +326,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 			setChatTurns([])
 			setKeptAttachments([])
 			// reset the draft and its files with the conversation
-			setTopicDraft(EMPTY_TOPIC_DRAFT)
+			setTopicDraft(emptyTopicDraft)
 			setTopicDraftAttachmentFiles([])
 			return true
 		}
@@ -330,7 +349,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		canEditTopic,
 		topicDraft,
 		topicDraftAttachmentFiles: topicDraftAttachmentFiles,
-		removeDraftFile: (index) =>
+		removeTopicDraftAttachmentFile: (index) =>
 			setTopicDraftAttachmentFiles((previousFiles) => previousFiles.filter((_, position) => position !== index)),
 		isFirstTopic,
 		topicsRemaining,

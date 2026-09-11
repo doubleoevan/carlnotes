@@ -10,6 +10,7 @@ import {
 	type ChatTurnRow,
 	chatTurnPayload,
 	type TopicDraft,
+	type TopicDraftTeam,
 	type TopicToolCalls,
 	withAttachmentNote,
 } from "@shared/contracts"
@@ -23,10 +24,11 @@ import { db } from "../../db"
 import { chatTurns, topics, users } from "../../db/schema"
 import { type ChatReplyStream, isBudgetRejection, SPENT_BUDGET_REJECTION, streamChatReply } from "../../worker"
 import { CHAT_COST_PER_MILLION_TOKENS, EXA_COST_PER_SEARCH, tokenCost } from "../../worker/budget"
-import { isAllowed, isMonthlySpendExhausted, topicLimit, topicsRemaining } from "../authorization"
+import { isAllowed, isLeaderRole, isMonthlySpendExhausted, topicLimit, topicsRemaining } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { callerRateLimiter } from "../rateLimit"
+import { toolCallerRateLimiter } from "../rateLimit"
+import { loadTeamSummaries } from "../team/helpers"
 import { toTeamRole } from "../team/members"
 import { type ChatTurnToolCalls, toChatTopicTools, toNewTopicChatTools } from "../tool/chatTools"
 import {
@@ -47,7 +49,7 @@ export const chatBodyLimit = bodyLimit({
 
 // the outcomes of a chat turn request
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ChatTurnAuthorization = { status: "allowed"; isTopicOwner: boolean; isPersisted: boolean; canEditTopic: boolean; litellmApiKey?: string; topicsRemaining?: number } | { status: "signup" } | { status: "forbidden" } | { status: "budget" }
+export type ChatTurnAuthorization = { status: "allowed"; isTopicOwner: boolean; isPersisted: boolean; canEditTopic: boolean; litellmApiKey?: string; topicsRemaining?: number; leaderTeams?: TopicDraftTeam[] } | { status: "signup" } | { status: "forbidden" } | { status: "budget" }
 
 // the page a private conversation lives under: one topic, a whole team, or the new-topic chat, bound to neither
 export type ChatPage =
@@ -150,10 +152,11 @@ export async function authorizeNewTopicChatTurn(userId: string | null): Promise<
 
 	// the gate decides whether the chat turn keeps its text and how many more topics the plan holds.
 	// the model calls bill to the user's own key
-	const [isPersisted, remainingTopics, [userRow]] = await Promise.all([
+	const [isPersisted, remainingTopics, [userRow], teamSummaries] = await Promise.all([
 		isAllowed(userId, "chat:persist"),
 		topicsRemaining(userId),
 		db.select({ litellmVirtualKey: users.litellmVirtualKey }).from(users).where(eq(users.id, userId)),
+		loadTeamSummaries(userId),
 	])
 	return {
 		status: "allowed",
@@ -162,6 +165,10 @@ export async function authorizeNewTopicChatTurn(userId: string | null): Promise<
 		canEditTopic: false,
 		litellmApiKey: userRow?.litellmVirtualKey ?? undefined,
 		topicsRemaining: remainingTopics,
+		// the teams the user leads, which carl may put the topic on
+		leaderTeams: teamSummaries
+			.filter((teamSummary) => isLeaderRole(teamSummary.role))
+			.map((teamSummary) => ({ teamId: teamSummary.teamId, name: teamSummary.name })),
 	}
 }
 
@@ -464,7 +471,17 @@ function toChatTurnTools(
 	analyticsProperties: AnalyticsProperties,
 ): ReturnType<typeof toChatTopicTools> | undefined {
 	if (page.newTopic) {
-		const emptyTopicDraft: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [], visibility: "invite" }
+		const emptyTopicDraft: TopicDraft = {
+			name: "",
+			prompt: "",
+			sources: [],
+			inviteEmails: [],
+			visibility: "invite",
+			team: null,
+			tags: [],
+			frequency: "weekly",
+			maxTopicFindings: 10,
+		}
 		return toNewTopicChatTools({ userId, toolCalls, topicDraft: topicDraft ?? emptyTopicDraft, analyticsProperties })
 	}
 	return canEditTopic && page.topicId ? toChatTopicTools({ userId, topicId: page.topicId, toolCalls }) : undefined
@@ -506,6 +523,7 @@ async function answerChatTurn(
 		canEditTopic: boolean
 		litellmApiKey?: string
 		topicsRemaining?: number
+		leaderTeams?: TopicDraftTeam[]
 	},
 	payload: ChatTurnPayload,
 	includeAttachments: boolean,
@@ -535,6 +553,7 @@ async function answerChatTurn(
 		newTopic: page.newTopic,
 		topicDraft: payload.topicDraft,
 		topicsRemaining: toPromptTopicsRemaining(authorization.topicsRemaining),
+		leaderTeams: authorization.leaderTeams,
 		question,
 		history,
 		chatAttachments,
@@ -618,18 +637,24 @@ export const chatRoute = new Hono<AppEnv>()
 		await clearChatTurns(userId, { teamId: context.req.param("id") })
 		return context.json({ ok: true })
 	})
-	.post("/teams/:id/chat", callerRateLimiter, chatBodyLimit, zValidator("json", chatTurnPayload), async (context) => {
-		// membership authorizes the chat turn, and each rejection keeps its own status
-		const userId = currentUser(context)
-		const teamId = context.req.param("id")
-		const authorization = await authorizeTeamChatTurn(userId, teamId)
-		if (authorization.status !== "allowed" || !userId) {
-			return toChatRejection(context, authorization.status === "allowed" ? "signup" : authorization.status)
-		}
+	.post(
+		"/teams/:id/chat",
+		toolCallerRateLimiter,
+		chatBodyLimit,
+		zValidator("json", chatTurnPayload),
+		async (context) => {
+			// membership authorizes the chat turn, and each rejection keeps its own status
+			const userId = currentUser(context)
+			const teamId = context.req.param("id")
+			const authorization = await authorizeTeamChatTurn(userId, teamId)
+			if (authorization.status !== "allowed" || !userId) {
+				return toChatRejection(context, authorization.status === "allowed" ? "signup" : authorization.status)
+			}
 
-		// the member's own kept files stay out, matching the chat room
-		return answerChatTurn(context, userId, { teamId }, authorization, context.req.valid("json"), false)
-	})
+			// the member's own kept files stay out, matching the chat room
+			return answerChatTurn(context, userId, { teamId }, authorization, context.req.valid("json"), false)
+		},
+	)
 	.get("/chat/new-topic", async (context) => {
 		// load the new-topic conversation and whether this is the user's first topic
 		const userId = currentUser(context)
@@ -663,17 +688,23 @@ export const chatRoute = new Hono<AppEnv>()
 		await clearChatTurns(userId, { newTopic: true })
 		return context.json({ ok: true })
 	})
-	.post("/chat/new-topic", callerRateLimiter, chatBodyLimit, zValidator("json", chatTurnPayload), async (context) => {
-		// authorize the chat turn by session, each rejection with its own status
-		const userId = currentUser(context)
-		const authorization = await authorizeNewTopicChatTurn(userId)
-		if (authorization.status !== "allowed" || !userId) {
-			return toChatRejection(context, authorization.status === "allowed" ? "signup" : authorization.status)
-		}
+	.post(
+		"/chat/new-topic",
+		toolCallerRateLimiter,
+		chatBodyLimit,
+		zValidator("json", chatTurnPayload),
+		async (context) => {
+			// authorize the chat turn by session, each rejection with its own status
+			const userId = currentUser(context)
+			const authorization = await authorizeNewTopicChatTurn(userId)
+			if (authorization.status !== "allowed" || !userId) {
+				return toChatRejection(context, authorization.status === "allowed" ? "signup" : authorization.status)
+			}
 
-		// answer the turn, its files read for the turn and stored nowhere
-		return answerChatTurn(context, userId, { newTopic: true }, authorization, context.req.valid("json"), false)
-	})
+			// answer the turn, its files read for the turn and stored nowhere
+			return answerChatTurn(context, userId, { newTopic: true }, authorization, context.req.valid("json"), false)
+		},
+	)
 	.delete("/topics/:id/chat", async (context) => {
 		// clearing a chat wipes the chat owner's conversation text while the spend rows stay
 		const userId = currentUser(context)
@@ -683,23 +714,29 @@ export const chatRoute = new Hono<AppEnv>()
 		await clearChatTurns(userId, { topicId: context.req.param("id") })
 		return context.json({ ok: true })
 	})
-	.post("/topics/:id/chat", callerRateLimiter, chatBodyLimit, zValidator("json", chatTurnPayload), async (context) => {
-		// authorize the chat turn first. each rejection reads differently to the user, so each gets its own status
-		const userId = currentUser(context)
-		const topicId = context.req.param("id")
-		const authorization = await authorizeChatTurn(userId, topicId)
+	.post(
+		"/topics/:id/chat",
+		toolCallerRateLimiter,
+		chatBodyLimit,
+		zValidator("json", chatTurnPayload),
+		async (context) => {
+			// authorize the chat turn first. each rejection reads differently to the user, so each gets its own status
+			const userId = currentUser(context)
+			const topicId = context.req.param("id")
+			const authorization = await authorizeChatTurn(userId, topicId)
 
-		// an exhausted budget is counted before it rejects
-		if (authorization.status === "budget" && userId) {
-			trackEvent("chat_budget_reached", userId, { ...toAnalyticsProperties(context), topicId })
-		}
-		if (authorization.status !== "allowed") {
-			return toChatRejection(context, authorization.status)
-		}
+			// an exhausted budget is counted before it rejects
+			if (authorization.status === "budget" && userId) {
+				trackEvent("chat_budget_reached", userId, { ...toAnalyticsProperties(context), topicId })
+			}
+			if (authorization.status !== "allowed") {
+				return toChatRejection(context, authorization.status)
+			}
 
-		// the gate already rejected a signed-out visitor with "signup", so this narrows the type alone
-		if (!userId) {
-			return context.json({ error: "sign up required" }, 401)
-		}
-		return answerChatTurn(context, userId, { topicId }, authorization, context.req.valid("json"), true)
-	})
+			// the gate already rejected a signed-out visitor with "signup", so this narrows the type alone
+			if (!userId) {
+				return context.json({ error: "sign up required" }, 401)
+			}
+			return answerChatTurn(context, userId, { topicId }, authorization, context.req.valid("json"), true)
+		},
+	)

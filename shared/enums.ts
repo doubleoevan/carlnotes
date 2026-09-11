@@ -50,7 +50,7 @@ export const billingIntervals = ["monthly", "yearly"] as const
 // where a user's public avatar comes from. generated uses the username initials
 export const avatarSources = ["generated", "oauth", "upload"] as const
 // how many findings a topic scan may keep
-export const maxResultsOptions = [5, 10, 15, 20] as const
+export const maxTopicFindingsOptions = [5, 10, 15, 20] as const
 // who may see a note: its owner alone, the page's team, or everyone
 export const noteVisibilities = ["private", "team", "public"] as const
 // where a prompt version comes from: the topic editor, a chat tool, or an MCP tool

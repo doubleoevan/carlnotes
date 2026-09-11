@@ -65,7 +65,7 @@ export function TeamUpButton({
 	// the topics the create modal offers, loaded when it opens
 	const [modalTopics, setModalTopics] = useState<{ id: string; name: string }[]>([])
 	// the teams the user leads, null until they load
-	const [ledTeams, setLedTeams] = useState<TeamSummary[] | null>(null)
+	const [leaderTeams, setLeaderTeams] = useState<TeamSummary[] | null>(null)
 
 	const isHidden = !isTeamUpShown(topic, isSignedIn)
 
@@ -75,8 +75,8 @@ export function TeamUpButton({
 			return
 		}
 		fetchTeams()
-			.then((index) => setLedTeams(index.teams.filter((team) => team.role === "leader")))
-			.catch(() => setLedTeams([]))
+			.then((index) => setLeaderTeams(index.teams.filter((team) => team.role === "leader")))
+			.catch(() => setLeaderTeams([]))
 	}, [isHidden])
 	if (isHidden) {
 		return null
@@ -99,16 +99,16 @@ export function TeamUpButton({
 	}
 
 	// the filled button shows for a leader of a team that has the topic
-	const ledTeamsWithTopic = (ledTeams ?? []).filter((team) => topicTeamIds.has(team.teamId))
-	if (topicTeamIds.size > 0 && ledTeams === null) {
+	const leaderTeamsWithTopic = (leaderTeams ?? []).filter((team) => topicTeamIds.has(team.teamId))
+	if (topicTeamIds.size > 0 && leaderTeams === null) {
 		return null
 	}
-	if (ledTeamsWithTopic.length > 0) {
+	if (leaderTeamsWithTopic.length > 0) {
 		return (
 			<>
 				<HeldTeamMenu
-					teamsWithTopic={ledTeamsWithTopic}
-					otherTeams={(ledTeams ?? []).filter((team) => !topicTeamIds.has(team.teamId))}
+					teamsWithTopic={leaderTeamsWithTopic}
+					otherTeams={(leaderTeams ?? []).filter((team) => !topicTeamIds.has(team.teamId))}
 					topicId={topic.id}
 					isHighlighted={isHighlighted}
 					onChanged={onChanged}
@@ -136,17 +136,17 @@ export function TeamUpButton({
 
 	// a user who leads no team goes straight to the create modal
 	const handleClick = async (): Promise<void> => {
-		const led =
-			ledTeams ??
+		const leaderTeamsNow =
+			leaderTeams ??
 			(await fetchTeams()
 				.then((index) => index.teams.filter((team) => team.role === "leader"))
 				.catch(() => []))
-		if (led.length === 0) {
+		if (leaderTeamsNow.length === 0) {
 			await openCreateModal()
 			return
 		}
 		// keep the fetched teams. the click can run before the effect has loaded them
-		setLedTeams(led)
+		setLeaderTeams(leaderTeamsNow)
 		setIsMenuOpen(true)
 	}
 
@@ -165,7 +165,7 @@ export function TeamUpButton({
 				</PopoverTrigger>
 				<PopoverContent align="end" className="w-56" bodyClassName="p-1">
 					{/* the teams this topic can join, then the New team row */}
-					{(ledTeams ?? []).map((team) => (
+					{(leaderTeams ?? []).map((team) => (
 						<Tooltip key={team.teamId}>
 							<TooltipTrigger asChild>
 								<button type="button" onClick={() => void handleAttach(team)} className={MENU_OPTION_CLASS}>
@@ -205,7 +205,7 @@ function HeldTeamMenu({
 	onCreate,
 }: {
 	teamsWithTopic: TeamSummary[]
-	// the user's led teams that do not hold the topic yet
+	// the user's leader teams that do not hold the topic yet
 	otherTeams: TeamSummary[]
 	topicId: string
 	// whether this button is the page's one call to action
@@ -254,7 +254,7 @@ function HeldTeamMenu({
 						onSelect={() => void handleDetach(team)}
 					/>
 				))}
-				{/* the led teams that could still take the topic */}
+				{/* the leader teams that could still take the topic */}
 				{otherTeams.length > 0 && <div className="bg-border my-1 h-px" />}
 				{otherTeams.map((team) => (
 					<TeamActionRow

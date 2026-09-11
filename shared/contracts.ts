@@ -8,7 +8,7 @@ import {
 	editableSourceKinds,
 	frequencies,
 	inviteAccesses,
-	maxResultsOptions,
+	maxTopicFindingsOptions,
 	noteVisibilities,
 	ratings,
 	resourceKinds,
@@ -559,6 +559,32 @@ export const addTopicSourcePayload = z.object({
 export const removeTopicSourcePayload = z.object({ sourceId: z.string().min(1) })
 export type AddTopicSourcePayload = z.infer<typeof addTopicSourcePayload>
 
+// the limits on the tags a chat writes onto a topic
+export const MAX_TOPIC_DRAFT_TAGS = 10
+export const TOPIC_DRAFT_TAG_CHARS = 40
+// the tags a chat writes, and the results count as one of the editor's choices
+const topicDraftTagsPayload = z.array(z.string().trim().min(1).max(TOPIC_DRAFT_TAG_CHARS)).max(MAX_TOPIC_DRAFT_TAGS)
+const maxTopicFindingsPayload = z
+	.number()
+	.refine((value) => (maxTopicFindingsOptions as readonly number[]).includes(value))
+
+// the settings a chat may change on a topic, each optional so a call names only what changes
+export const updateTopicFieldsPayload = z
+	.object({
+		tags: topicDraftTagsPayload.optional(),
+		frequency: z.enum(frequencies).optional(),
+		maxTopicFindings: maxTopicFindingsPayload.optional(),
+	})
+	.refine((fields) => Object.values(fields).some((value) => value !== undefined), "name at least one field")
+export type UpdateTopicFieldsPayload = z.infer<typeof updateTopicFieldsPayload>
+
+// a team the topic draft names: its id for the save, its name for the card and for carl
+export const topicDraftTeamPayload = z.object({
+	teamId: z.string().trim().min(1),
+	name: z.string().trim().min(1).max(200),
+})
+export type TopicDraftTeam = z.infer<typeof topicDraftTeamPayload>
+
 // the topic draft the new-topic chat holds: what carl has written down so far, every field starting empty
 export const topicDraftPayload = z.object({
 	name: z.string().trim().max(TOPIC_NAME_CHARS).default(""),
@@ -567,6 +593,12 @@ export const topicDraftPayload = z.object({
 	inviteEmails: z.array(z.string().trim().toLowerCase().pipe(z.email())).max(MAX_DRAFT_INVITES).default([]),
 	// who may read the topic, shared by invite unless the topic draft says otherwise
 	visibility: z.enum(visibilities).default("invite"),
+	// the team the topic joins at the save, one the user leads, or none
+	team: topicDraftTeamPayload.nullable().default(null),
+	// the settings the editor defaults: no tags, a weekly scan, and ten findings kept
+	tags: topicDraftTagsPayload.default([]),
+	frequency: z.enum(frequencies).default("weekly"),
+	maxTopicFindings: maxTopicFindingsPayload.default(10),
 })
 export type TopicDraft = z.infer<typeof topicDraftPayload>
 
@@ -797,7 +829,7 @@ export const topicFeed = z.object({
 	scheduledTime: z.string(),
 	scheduledDayOfWeek: z.enum(daysOfWeek),
 	// how many findings a scan is set to keep for this topic
-	maxResults: z.number(),
+	maxTopicFindings: z.number(),
 	// the topic owner
 	owner: z.object({ userId: z.string(), username: z.string(), avatarSource: z.string() }).nullable(),
 	// isTopicOwner gates attachment downloads. newCount is the user's unconsumed count for the "# new" badge
@@ -956,7 +988,7 @@ export const updateTopicPayload = z.object({
 	scheduledDayOfWeek: z.enum(daysOfWeek),
 	visibility: z.enum(visibilities),
 	// how many findings a scan is set to keep for this topic
-	maxResults: z.number().refine((value) => (maxResultsOptions as readonly number[]).includes(value)),
+	maxTopicFindings: maxTopicFindingsPayload,
 	// the full list of a topic's invited email addresses
 	inviteEmails: z.array(z.string().trim().toLowerCase().pipe(z.email())),
 	// stored, staged, and prompt-derived Sources are combined into one array and limited to MAX_TOPIC_SOURCES

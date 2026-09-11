@@ -22,7 +22,7 @@ import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { NewCountInfo } from "@/components/topic/Topic"
-import { isFollowInMenu, TopicActionBar, toTopicActionOptions } from "@/components/topic/TopicActions"
+import { isFollowTopicInMenu, TopicActionBar, toTopicActionOptions } from "@/components/topic/TopicActions"
 import { TopicEditorChoiceDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
@@ -102,13 +102,13 @@ export function TopicPage() {
 					mcp: { name: `CarlNotes: ${topic.name}`, url: `${window.location.origin}/mcp/t/${topic.id}` },
 					options: toTopicActionOptions({
 						topic,
-						isAdmin: session?.user.role === "admin",
-						isFollowInMenu: isFollowInMenu(actionContext),
-						onShare: () => setOpenDialog("share"),
-						onToggleFollow: () => void handleSubscriptionToggle(),
-						onRank: () => setOpenDialog("rank"),
-						onEdit: () => setOpenDialog("edit-choice"),
-						onDelete: () => setOpenDialog("delete"),
+						isAdminUser: session?.user.role === "admin",
+						isFollowTopicInMenu: isFollowTopicInMenu(actionContext),
+						onShareTopic: () => setOpenDialog("share"),
+						onToggleFollowTopic: () => void handleSubscriptionToggle(),
+						onRankFeaturedTopic: () => setOpenDialog("rank"),
+						onEditTopic: () => setOpenDialog("edit-choice"),
+						onDeleteTopic: () => setOpenDialog("delete"),
 					}),
 					report: { subjectKind: "topic", subjectId: topic.id, subjectLabel: topic.name },
 				}
@@ -335,7 +335,7 @@ function TopicDialogs({
 			{openDialog === "edit-choice" && (
 				<TopicEditorChoiceDialog
 					topicId={topic.id}
-					onChooseForm={() => onOpenDialog("edit")}
+					onChooseTopicForm={() => onOpenDialog("edit")}
 					onClose={() => onOpenDialog(null)}
 				/>
 			)}

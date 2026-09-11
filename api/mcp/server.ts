@@ -6,7 +6,7 @@ import { type Context, Hono } from "hono"
 import { db } from "../../db"
 import { oauthApplications } from "../../db/schema"
 import { type AppEnv, currentUser } from "../currentUser"
-import { resolveCaller } from "./caller"
+import { resolveToolCaller } from "./toolCaller"
 import { registerTools } from "./tools"
 
 // the name and version the mcpServer reports on initialize
@@ -33,11 +33,11 @@ export const mcpClientsRoute = new Hono<AppEnv>().get("/mcp/clients/:clientId", 
 	return client ? context.json({ name: client.name }) : context.json({ error: "not found" }, 404)
 })
 
-// serve one request with the tools registered for the caller the rate limit resolved
+// serve one request with the tools registered for the tool caller the rate limit resolved
 async function handleMcpRequest(context: Context<AppEnv>, routeTopicId: string | null): Promise<Response> {
-	const caller = context.get("mcpCaller") ?? (await resolveCaller(context.req.raw.headers))
+	const toolCaller = context.get("toolCaller") ?? (await resolveToolCaller(context.req.raw.headers))
 	const mcpServer = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
-	registerTools(mcpServer, caller, routeTopicId)
+	registerTools(mcpServer, toolCaller, routeTopicId)
 
 	// connect a stateless transport. no session id, and a json response to each post
 	const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })

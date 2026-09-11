@@ -393,7 +393,7 @@ function buildTopicFeed(
 		frequency: topic.frequency,
 		scheduledTime: toScheduledTimeLabel(topic.scheduledTime),
 		scheduledDayOfWeek: topic.scheduledDayOfWeek,
-		maxResults: topic.maxResults,
+		maxTopicFindings: topic.maxTopicFindings,
 		// the topic owner to show
 		owner: ownerRow
 			? { userId: ownerRow.userId, username: ownerRow.username, avatarSource: ownerRow.avatarSource }

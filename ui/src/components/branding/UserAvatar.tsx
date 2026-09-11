@@ -22,7 +22,7 @@ export function UserAvatar({
 }) {
 	// the version changes when an upload arrives, which is what re-fetches an image the url already named
 	const avatarVersion = useAvatarVersion()
-	const [isImageBroken, setImageBroken] = useState(false)
+	const [isImageBroken, setIsImageBroken] = useState(false)
 	const hasAvatar = Boolean(avatarSource) && avatarSource !== "generated" && !isImageBroken
 	return (
 		<span className={cn(AVATAR_CLASS, "size-8", className)}>
@@ -30,7 +30,7 @@ export function UserAvatar({
 				<img
 					src={`/api/avatars/${userId}?v=${avatarVersion}`}
 					alt=""
-					onError={() => setImageBroken(true)}
+					onError={() => setIsImageBroken(true)}
 					className="size-full object-cover"
 				/>
 			) : (

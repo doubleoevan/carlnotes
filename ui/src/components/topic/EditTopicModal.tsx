@@ -1,5 +1,5 @@
 import type { TopicResponse } from "@shared/contracts"
-import { maxResultsOptions, visibilities } from "@shared/enums"
+import { maxTopicFindingsOptions, visibilities } from "@shared/enums"
 import { useRef, useState } from "react"
 import { useNavigate } from "react-router"
 import { toast } from "sonner"
@@ -167,18 +167,21 @@ export function EditTopicModal({
 					onScheduledDayOfWeekChange={fields.setScheduledDayOfWeek}
 				/>
 
-				{/* max results and visibility side by side */}
+				{/* max findings and visibility side by side */}
 				<div className="grid grid-cols-2 gap-3">
 					<div>
-						<FieldLabel>Max results</FieldLabel>
-						<Select value={String(fields.maxResults)} onValueChange={(value) => fields.setMaxResults(Number(value))}>
-							<SelectTrigger className="w-full" aria-label="Max results">
+						<FieldLabel>Max findings</FieldLabel>
+						<Select
+							value={String(fields.maxTopicFindings)}
+							onValueChange={(value) => fields.setMaxTopicFindings(Number(value))}
+						>
+							<SelectTrigger className="w-full" aria-label="Max findings">
 								<SelectValue />
 							</SelectTrigger>
 							<SelectContent>
-								{maxResultsOptions.map((maxResultsOption) => (
-									<SelectItem key={maxResultsOption} value={String(maxResultsOption)}>
-										{`Carl's top ${maxResultsOption}`}
+								{maxTopicFindingsOptions.map((maxTopicFindingsOption) => (
+									<SelectItem key={maxTopicFindingsOption} value={String(maxTopicFindingsOption)}>
+										{`Carl's top ${maxTopicFindingsOption}`}
 									</SelectItem>
 								))}
 							</SelectContent>

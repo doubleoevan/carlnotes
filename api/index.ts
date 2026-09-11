@@ -11,10 +11,10 @@ import { apiRoute } from "./api"
 import { auth, reportForwardedChain } from "./auth"
 import { contentRoute } from "./content"
 import type { AppEnv } from "./currentUser"
-import { resolveCaller } from "./mcp/caller"
 import { mcpRoute } from "./mcp/server"
+import { resolveToolCaller } from "./mcp/toolCaller"
 import { pagesRoute, UI_BUNDLE_ROOT } from "./pages"
-import { callerRateLimiter } from "./rateLimit"
+import { toolCallerRateLimiter } from "./rateLimit"
 import { releasesRoute } from "./releases"
 
 // where build:docs writes the Starlight site, relative to the repo root the server runs from
@@ -55,12 +55,12 @@ const server = new Hono<AppEnv>()
 	.get("/.well-known/oauth-authorization-server/*", (context) => oAuthDiscoveryMetadata(auth)(context.req.raw))
 	.get("/.well-known/oauth-protected-resource", (context) => oAuthProtectedResourceMetadata(auth)(context.req.raw))
 	.get("/.well-known/oauth-protected-resource/*", (context) => oAuthProtectedResourceMetadata(auth)(context.req.raw))
-	// the mcp caller resolves ahead of the limiter, which keys by the user a token names. the wildcard matches /mcp itself
+	// the tool caller resolves ahead of the limiter, which keys by the user a token names. the wildcard matches /mcp itself
 	.use("/mcp/*", async (context, next) => {
-		context.set("mcpCaller", await resolveCaller(context.req.raw.headers))
+		context.set("toolCaller", await resolveToolCaller(context.req.raw.headers))
 		await next()
 	})
-	.use("/mcp/*", callerRateLimiter)
+	.use("/mcp/*", toolCallerRateLimiter)
 	.route("/", mcpRoute)
 	.route("/", apiRoute)
 	// the release pages and the GitHub webhook that writes the rows they read. the webhook sits under

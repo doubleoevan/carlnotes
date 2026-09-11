@@ -54,7 +54,7 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 	const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 	const [loadingChatMessageIds, setLoadingChatMessageIds] = useState<Set<number>>(new Set())
 	// whether a page sits above the earliest chat message loaded, and whether one is already on its way
-	const [hasEarlierChatMessages, setHasOlderChatMessages] = useState(false)
+	const [hasEarlierChatMessages, setHasEarlierChatMessages] = useState(false)
 	// where the virtualized list initializes its first chat message number to. it lives here so a prepend lowers it in
 	// the same update that grows the list, leaving no render where one moved without the other
 	const [firstItemIndex, setFirstItemIndex] = useState(FIRST_ITEM_INDEX_START)
@@ -129,7 +129,7 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 			}
 			// the first page replaces the list and resets the virtual index
 			setChatMessages(chatMessagePage.chatMessages)
-			setHasOlderChatMessages(chatMessagePage.hasEarlierChatMessages)
+			setHasEarlierChatMessages(chatMessagePage.hasEarlierChatMessages)
 			setFirstItemIndex(FIRST_ITEM_INDEX_START)
 			setIsLoaded(true)
 		},
@@ -211,7 +211,7 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 		const chatMessagePage = await fetchChatRoomMessages(topicId, teamId)
 		if (chatMessagePage !== null && chatMessagePage !== "failed") {
 			setChatMessages(chatMessagePage.chatMessages)
-			setHasOlderChatMessages(chatMessagePage.hasEarlierChatMessages)
+			setHasEarlierChatMessages(chatMessagePage.hasEarlierChatMessages)
 			setFirstItemIndex(FIRST_ITEM_INDEX_START)
 		}
 	}
@@ -229,7 +229,7 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 				return 0
 			}
 			// an empty page means the top was reached
-			setHasOlderChatMessages(earlierChatMessagePage.hasEarlierChatMessages)
+			setHasEarlierChatMessages(earlierChatMessagePage.hasEarlierChatMessages)
 			if (earlierChatMessagePage.chatMessages.length === 0) {
 				return 0
 			}

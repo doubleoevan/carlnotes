@@ -1,5 +1,5 @@
 // a live smoke test for the mcp server through the sdk client, in-process: a visitor's reads, the oauth flow with
-// its forced consent, an account's consumed, rating, and bookmark writes, its edits, and the per-caller rate limit
+// its forced consent, an account's consumed, rating, and bookmark writes, its edits, and the per-tool-caller rate limit
 // run it with: doppler run -- bun api/mcp/mcp.smoke.ts. needs Doppler secrets, and no model at all
 import { Client } from "@modelcontextprotocol/sdk/client/index.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js"
@@ -20,7 +20,7 @@ import {
 import { apiRoute } from "../api"
 import { auth } from "../auth"
 import type { AppEnv } from "../currentUser"
-import { CALLER_RATE_LIMIT, callerRateLimiter } from "../rateLimit"
+import { CALLER_RATE_LIMIT, toolCallerRateLimiter } from "../rateLimit"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
 import { mcpRoute } from "./server"
 
@@ -140,7 +140,7 @@ async function checkVisitor(): Promise<void> {
 	const { tools } = await client.listTools()
 	check(
 		"initialize and list tools as a visitor",
-		tools.length === 11,
+		tools.length === 12,
 		tools.map((tool) => tool.name),
 	)
 	check(
@@ -430,9 +430,9 @@ async function checkUser(accessToken: string): Promise<void> {
 	await client.close()
 }
 
-// check the per-caller rate limit. a bearer nobody holds resolves to a visitor, so the requests share the visitor bucket
+// check the per-tool-caller rate limit. a bearer nobody holds resolves to a visitor, so the requests share the visitor bucket
 async function checkRateLimit(): Promise<void> {
-	const limitedRoute = new Hono<AppEnv>().use("/mcp/*", callerRateLimiter).route("/", mcpRoute)
+	const limitedRoute = new Hono<AppEnv>().use("/mcp/*", toolCallerRateLimiter).route("/", mcpRoute)
 
 	// send one more initialize than the limit allows, all as that visitor
 	const statuses: number[] = []

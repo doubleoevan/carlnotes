@@ -11,7 +11,7 @@ type PlanConfig = {
 	// a higher rank inherits every capability of the plans below it. free is 0, premium is highest
 	rank: number
 	topicLimit: number
-	// how many members one of their led teams may hold, null for unlimited. the best plan among a team's leaders wins
+	// how many members one of their leader teams may hold, null for unlimited. the best plan among a team's leaders wins
 	teamMemberLimit: number | null
 	// how many people one of their invite links lets in before it is exhausted
 	linkInviteMaxUses: number

@@ -4,6 +4,7 @@ import {
 	type ChatAttachment,
 	compactChatAnswer,
 	type TopicDraft,
+	type TopicDraftTeam,
 	toUncompactedChatTurnStart,
 } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
@@ -64,6 +65,8 @@ export type ChatTurnInput = {
 	topicDraft?: TopicDraft
 	// how many more topics the plan lets the user hold
 	topicsRemaining?: number
+	// the teams the user leads, which the new-topic chat may put the topic on
+	leaderTeams?: TopicDraftTeam[]
 }
 
 // the edit block for a turn without the topic tools
@@ -147,7 +150,7 @@ async function buildReplyPrompt(
 	chatContext: ChatContext | TeamChatContext | NewTopicChatContext,
 ): Promise<BuiltPrompt> {
 	if (input.newTopic) {
-		return buildNewTopicChatPrompt(chatContext.docsBlock, input.topicDraft, input.topicsRemaining)
+		return buildNewTopicChatPrompt(chatContext.docsBlock, input.topicDraft, input.topicsRemaining, input.leaderTeams)
 	}
 	// retrieve every topic the team holds for the team chat room
 	if (input.teamId) {
@@ -263,20 +266,37 @@ export async function buildNewTopicChatPrompt(
 	docsBlock: string,
 	topicDraft?: TopicDraft,
 	topicsRemaining?: number,
+	leaderTeams?: TopicDraftTeam[],
 ): Promise<BuiltPrompt> {
 	const { template, name, registryPrompt } = await fetchPromptTemplate("chat-new-topic")
-	// write the prompt with the docs and the draft fenced as data and the plan's limit unfenced
+	// write the prompt with the docs, the topic draft, and the teams fenced as data and the plan's limit unfenced
 	const prompt = writePrompt(
 		template,
-		{ docsBlock: docsBlock || "None.", topicDraftBlock: toTopicDraftBlock(topicDraft) },
+		{
+			docsBlock: docsBlock || "None.",
+			topicDraftBlock: toTopicDraftBlock(topicDraft),
+			teamsBlock: toTeamsBlock(leaderTeams),
+		},
 		{ topicLimitBlock: toTopicLimitBlock(topicsRemaining) },
 	)
 	return { prompt, name, registryPrompt }
 }
 
+// whether any field the user can fill holds something
+function isTopicDraftWritten(topicDraft: TopicDraft): boolean {
+	return Boolean(
+		topicDraft.name ||
+			topicDraft.prompt ||
+			topicDraft.sources.length > 0 ||
+			topicDraft.tags.length > 0 ||
+			topicDraft.inviteEmails.length > 0 ||
+			topicDraft.team,
+	)
+}
+
 // the draft as carl reads it, one line per field, or a plain line for a draft with nothing written yet
 function toTopicDraftBlock(topicDraft?: TopicDraft): string {
-	if (!topicDraft || (!topicDraft.name && !topicDraft.prompt && topicDraft.sources.length === 0)) {
+	if (!topicDraft || !isTopicDraftWritten(topicDraft)) {
 		return "Nothing written yet."
 	}
 	const topicSources = topicDraft.sources
@@ -287,8 +307,19 @@ function toTopicDraftBlock(topicDraft?: TopicDraft): string {
 		`Prompt: ${topicDraft.prompt || "(none yet)"}`,
 		`Sources: ${topicSources || "(none yet)"}`,
 		`Visibility: ${topicDraft.visibility}`,
+		`Team: ${topicDraft.team?.name ?? "(none)"}`,
+		`Tags: ${topicDraft.tags.join(", ") || "(none)"}`,
+		`Brews: ${topicDraft.frequency}, keeping ${topicDraft.maxTopicFindings} findings each`,
 		`Invites: ${topicDraft.inviteEmails.join(", ") || "(none)"}`,
 	].join("\n")
+}
+
+// the teams the user leads, one per line with the id draftTopic takes, or a plain line for none
+function toTeamsBlock(leaderTeams?: TopicDraftTeam[]): string {
+	if (!leaderTeams || leaderTeams.length === 0) {
+		return "None."
+	}
+	return leaderTeams.map((leaderTeam) => `- ${leaderTeam.name} (teamId: ${leaderTeam.teamId})`).join("\n")
 }
 
 // how many more topics the plan allows, in the words carl passes on

@@ -183,7 +183,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		frequency: topic.frequency,
 		scheduledTime: toScheduledTimeLabel(topic.scheduledTime),
 		scheduledDayOfWeek: topic.scheduledDayOfWeek,
-		maxResults: topic.maxResults,
+		maxTopicFindings: topic.maxTopicFindings,
 		visibility: topic.visibility,
 		// what this user may do with the topic
 		isTopicOwner,
@@ -238,7 +238,7 @@ export async function createTopic(
 	}
 
 	// one transaction writes the topic and everything hanging off it
-	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxResults } = payload
+	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxTopicFindings } = payload
 	// the deduped invite emails, shared by the insert inside the transaction and the emails after it
 	const inviteEmails = [...new Set(payload.inviteEmails)]
 	// each invitee resolves to an account and passes their invite-access setting before anything writes
@@ -260,7 +260,7 @@ export async function createTopic(
 				scheduledTime,
 				scheduledDayOfWeek,
 				visibility,
-				maxResults,
+				maxTopicFindings,
 			})
 			.returning()
 		if (!topic) {
@@ -337,7 +337,7 @@ export async function updateTopic(
 	}
 
 	// one transaction covers the fields and both reconciled invitee and source lists
-	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxResults } = payload
+	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxTopicFindings } = payload
 	// only the owner manages invites, so a team editor's save leaves the invite list untouched
 	const mayReconcileInvites = await isAllowed(userId, "topic:invite", topic)
 	// the deduped invite emails, shared by the reconcile inside the transaction and the emails after it
@@ -367,7 +367,7 @@ export async function updateTopic(
 				scheduledTime,
 				scheduledDayOfWeek,
 				visibility,
-				maxResults,
+				maxTopicFindings,
 			})
 			.where(eq(topics.id, topicId))
 

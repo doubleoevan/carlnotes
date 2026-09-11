@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { toClientAddress, toRateLimitKey } from "./rateLimit"
 
-// a user is one caller, whatever chain the request also sends
+// a user is one tool caller, whatever chain the request also sends
 test("a user is keyed by their id ahead of any address", () => {
 	expect(toRateLimitKey({ userId: "user-1", forwardedFor: "1.2.3.4" }, 1)).toBe("user:user-1")
 })

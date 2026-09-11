@@ -1,18 +1,31 @@
 // the topic tools, each asking the gate itself
 import { trackEvent } from "@shared/analytics"
-import { type AddTopicSourcePayload, MAX_TOPIC_SOURCES, type TopicDraft } from "@shared/contracts"
+import {
+	type AddTopicSourcePayload,
+	MAX_TOPIC_SOURCES,
+	type TopicDraft,
+	type UpdateTopicFieldsPayload,
+} from "@shared/contracts"
 import type { frequencies } from "@shared/enums"
 import { SCAN_COST_CENTS } from "@shared/plans"
 import { DEFAULT_SOURCES, toCustomSourceOption, toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, desc, eq } from "drizzle-orm"
 import { db } from "../../db"
 import { incrementDaySuggestionCount } from "../../db/quotas"
-import { scans, sources, topics, users } from "../../db/schema"
+import { scans, sources, teams, topics, users } from "../../db/schema"
 import { type SuggestedSource, suggestSources } from "../../worker"
 import { EXA_COST_PER_SEARCH, X_COST_PER_READ } from "../../worker/budget"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
-import { type NewTopicSource, startPendingSourceScreens, toNewSourceRow, toPodcastNames } from "../topic/helpers"
+import { addTopicToTeam } from "../team/teams"
+import {
+	authorizeNewDailyTopic,
+	type DailyFrequencyRejection,
+	type NewTopicSource,
+	startPendingSourceScreens,
+	toNewSourceRow,
+	toPodcastNames,
+} from "../topic/helpers"
 import { type PromptVersionOrigin, savePromptVersion } from "../topic/promptVersions"
 import { createTopic } from "../topic/topics"
 
@@ -42,6 +55,13 @@ export type TopicSourceCostDelta = { perScanCents: number; perMonthCents: number
 
 // each tool's results
 export type UpdateTopicPromptResult = TopicToolRejection | { status: "saved"; topicName: string }
+// the settings tool's results: the gate's rejections, the plan's daily limit, or the save
+export type UpdateTopicFieldsResult =
+	| TopicToolRejection
+	| DailyFrequencyRejection
+	| { status: "empty" }
+	| { status: "saved"; topicName: string }
+// the source tool's results: a value it cannot use, the limit, a source already there, or the save
 export type AddTopicSourceResult =
 	| TopicToolRejection
 	| { status: "invalid" }
@@ -82,6 +102,47 @@ export async function updateTopicPrompt({
 		})
 	})
 	trackEvent("topic_edited", editableTopic.userId, { topicId, tool: "updateTopicPrompt", origin })
+	return { status: "saved", topicName: editableTopic.topic.name }
+}
+
+/**
+ * Changes a topic's tags, frequency, or results count, the ones named, through the same gate as the prompt tool.
+ */
+export async function updateTopicFields({
+	userId,
+	topicId,
+	topicFields,
+	promptVersionOrigin,
+}: {
+	userId: string | null
+	topicId: string
+	topicFields: UpdateTopicFieldsPayload
+	promptVersionOrigin: PromptVersionOrigin
+}): Promise<UpdateTopicFieldsResult> {
+	// a call that names no field has nothing to save, whatever adapter sent it
+	const namedFields = Object.fromEntries(Object.entries(topicFields).filter(([, value]) => value !== undefined))
+	if (Object.keys(namedFields).length === 0) {
+		return { status: "empty" }
+	}
+	// ask the gate whether the user may edit the topic
+	const editableTopic = await loadEditableTopic(userId, topicId)
+	if (editableTopic.status !== "ok") {
+		return editableTopic
+	}
+	// a move onto a daily frequency takes a slot from the owner who funds its scans
+	if (topicFields.frequency) {
+		const dailyFrequency = await authorizeNewDailyTopic(
+			editableTopic.topic.ownerId,
+			{ frequency: topicFields.frequency },
+			editableTopic.topic.frequency,
+		)
+		if (dailyFrequency) {
+			return dailyFrequency
+		}
+	}
+	// write the named fields. the scan schedule reads them from the row
+	await db.update(topics).set(namedFields).where(eq(topics.id, topicId))
+	trackEvent("topic_edited", editableTopic.userId, { topicId, tool: "updateTopicFields", origin: promptVersionOrigin })
 	return { status: "saved", topicName: editableTopic.topic.name }
 }
 
@@ -317,7 +378,7 @@ export type CreateTopicFromDraftResult =
 	| { status: "incomplete" }
 	| { status: "invalid"; value: string }
 	| { status: "limit"; limit: number }
-	| { status: "created"; topicId: string; name: string }
+	| { status: "created"; topicId: string; name: string; teamName: string | null; addTeamRejection: string | null }
 	| Exclude<Awaited<ReturnType<typeof createTopic>>, { status: "created" }>
 
 /**
@@ -380,21 +441,51 @@ export async function createTopicFromDraft({
 		{
 			name: topicDraft.name,
 			prompt: topicDraft.prompt,
-			tags: [],
-			frequency: "weekly",
+			tags: topicDraft.tags,
+			frequency: topicDraft.frequency,
 			scheduledTime: "09:00",
 			scheduledDayOfWeek: "wednesday",
 			visibility: topicDraft.visibility,
-			maxResults: 10,
+			maxTopicFindings: topicDraft.maxTopicFindings,
 			inviteEmails: topicDraft.inviteEmails,
 			sources: topicSources,
 		},
 		analyticsProperties,
 		origin,
 	)
-	return createTopicResult.status === "created"
-		? { status: "created", topicId: createTopicResult.id, name: topicDraft.name }
-		: createTopicResult
+	if (createTopicResult.status !== "created") {
+		return createTopicResult
+	}
+	// put the topic on the topic draft's team through the leader-only path, and name a rejected add beside the topic
+	const addTeamResult = topicDraft.team
+		? await toAddTeamResult({ userId, teamId: topicDraft.team.teamId, topicId: createTopicResult.id })
+		: null
+	return {
+		status: "created",
+		topicId: createTopicResult.id,
+		name: topicDraft.name,
+		teamName: addTeamResult?.teamName ?? null,
+		addTeamRejection: addTeamResult?.addTeamRejection ?? null,
+	}
+}
+
+// the words for an add the leader check rejected, or the team's own name once the topic is on it
+async function toAddTeamResult({
+	userId,
+	teamId,
+	topicId,
+}: {
+	userId: string
+	teamId: string
+	topicId: string
+}): Promise<{ teamName: string; addTeamRejection: string | null }> {
+	// the add first, so a rejected caller reads no name
+	const addTopicToTeamResult = await addTopicToTeam(userId, teamId, topicId)
+	if (addTopicToTeamResult === "forbidden") {
+		return { teamName: "that team", addTeamRejection: "Only a team's leader can add a topic to it." }
+	}
+	const [teamRow] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId))
+	return { teamName: teamRow?.name ?? "that team", addTeamRejection: null }
 }
 
 // what suggesting sources for a draft returns

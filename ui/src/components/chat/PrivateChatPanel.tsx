@@ -77,7 +77,7 @@ function TopicDraftOrLimitNotice({ chat }: { chat: TopicChat }) {
 		<TopicDraftCard
 			topicDraft={chat.topicDraft}
 			attachmentFiles={chat.topicDraftAttachmentFiles}
-			onRemoveAttachmentFile={chat.removeDraftFile}
+			onRemoveAttachmentFile={chat.removeTopicDraftAttachmentFile}
 		/>
 	)
 }

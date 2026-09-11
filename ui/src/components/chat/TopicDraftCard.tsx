@@ -11,6 +11,13 @@ const VISIBILITY_LABELS: Record<TopicDraft["visibility"], string> = {
 	private: "Private",
 }
 
+// how the card words each scan frequency
+const FREQUENCY_LABELS: Record<TopicDraft["frequency"], string> = {
+	daily: "Daily",
+	weekdays: "Weekdays",
+	weekly: "Weekly",
+}
+
 /**
  * Shows the topic draft in the chat as Carl has written it so far, with the files waiting to become the topic's attachments,
  * above the new-topic chat's composer, hidden while empty and scrolled to the top after each rewrite.
@@ -28,7 +35,9 @@ export function TopicDraftCard({
 		topicDraft.name === "" &&
 		topicDraft.prompt === "" &&
 		topicDraft.sources.length === 0 &&
-		topicDraft.inviteEmails.length === 0
+		topicDraft.inviteEmails.length === 0 &&
+		topicDraft.team === null &&
+		topicDraft.tags.length === 0
 	if (isTopicDraftEmpty && attachmentFiles.length === 0) {
 		return null
 	}
@@ -48,6 +57,10 @@ export function TopicDraftCard({
 						</ul>
 					</TopicDraftField>
 					<TopicDraftField label="Visibility">{VISIBILITY_LABELS[topicDraft.visibility]}</TopicDraftField>
+					{topicDraft.team && <TopicDraftField label="Team">{topicDraft.team.name}</TopicDraftField>}
+					{topicDraft.tags.length > 0 && <TopicDraftField label="Tags">{topicDraft.tags.join(", ")}</TopicDraftField>}
+					<TopicDraftField label="Brews">{FREQUENCY_LABELS[topicDraft.frequency]}</TopicDraftField>
+					<TopicDraftField label="Keeps">{topicDraft.maxTopicFindings} findings per brew</TopicDraftField>
 					{topicDraft.inviteEmails.length > 0 && (
 						<TopicDraftField label="Invites">
 							<ul className="grid gap-0.5">

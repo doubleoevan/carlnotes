@@ -65,6 +65,6 @@ back with nothing.
 
 ## Limits
 
-One caller may make thirty requests a minute, whether that caller is your AI or the Coffee Talk
+One tool caller may make thirty requests a minute, whether that is your AI or the Coffee Talk
 panel. Past that, requests are rejected until the minute turns. What your AI reads and changes
 counts against your plan the same way the pages do. See [Plans and limits](/docs/account/plans-and-limits/).

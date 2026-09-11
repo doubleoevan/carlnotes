@@ -9,7 +9,7 @@ import { toTopicSourceLabel } from "../tool/topicTools"
 import { loadTopicFindings, setBookmarked, setConsumed, setRating } from "../topic/findings"
 import { loadTopicAccessAndFindings } from "../topic/helpers"
 import { isShown } from "../topic/permissions"
-import { type Caller, toMcpAnalyticsProperties } from "./caller"
+import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 
 // the most charactersthat one page returns, under a client's limit on one result
 export const MCP_PAGE_MAX_CHARS = 40_000
@@ -74,17 +74,17 @@ const topicColumns = {
 }
 
 /**
- * Lists the topics a caller may read: the public ones plus what a user owns, subscribes to, or holds through a team,
+ * Lists the topics a tool caller may read: the public ones plus what a user owns, subscribes to, or holds through a team,
  * or a bound server's one topic.
  */
 export async function listTopics(
-	caller: Caller,
+	toolCaller: ToolCaller,
 	routeTopicId: string | null,
 	cursor: string | null,
 ): Promise<McpPage<McpTopic>> {
-	// return the bound topic alone, when the caller may see it
+	// return the bound topic alone, when the tool caller may see it
 	if (routeTopicId) {
-		const boundTopic = await loadVisibleTopic(caller, routeTopicId)
+		const boundTopic = await loadVisibleTopic(toolCaller, routeTopicId)
 		if (!boundTopic) {
 			return { items: [], nextCursor: null }
 		}
@@ -101,7 +101,7 @@ export async function listTopics(
 		.limit(MCP_TOPIC_LIST_LIMIT)
 
 	// put a user's own topics first, then the public ones, each topic once
-	const ownRows = caller.kind === "user" ? await loadUserTopicRows(caller.userId) : []
+	const ownRows = toolCaller.kind === "user" ? await loadUserTopicRows(toolCaller.userId) : []
 	const topicRows = [...new Map([...ownRows, ...publicRows].map((topicRow) => [topicRow.id, topicRow])).values()]
 
 	// add each topic's ready sources and pack the page
@@ -112,24 +112,24 @@ export async function listTopics(
 
 /**
  * Reads a topic's feed in stored relevance order, with a user's consumed and bookmark rows and the invite gate joined
- * for a user alone, or null for a topic the caller may not see.
+ * for a user alone, or null for a topic the tool caller may not see.
  */
 export async function readTopicFeed(
-	caller: Caller,
+	toolCaller: ToolCaller,
 	topicId: string,
 	cursor: string | null,
 ): Promise<McpPage<McpFinding> | null> {
-	const topic = await loadVisibleTopic(caller, topicId)
+	const topic = await loadVisibleTopic(toolCaller, topicId)
 	if (!topic) {
 		return null
 	}
 
 	// load the findings and pack the page. only a user's read joins their consumed and bookmark rows
 	const topicFindings =
-		caller.kind === "user"
-			? (await loadTopicAccessAndFindings(topic, caller.userId)).topicFindings
+		toolCaller.kind === "user"
+			? (await loadTopicAccessAndFindings(topic, toolCaller.userId)).topicFindings
 			: await loadTopicFindings(topic.id, null)
-	const mcpFindings = topicFindings.map((finding) => toMcpFinding(caller, finding))
+	const mcpFindings = topicFindings.map((finding) => toMcpFinding(toolCaller, finding))
 	return packPage(mcpFindings, fromCursor(cursor), MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE)
 }
 
@@ -141,19 +141,19 @@ export type SearchResult = { page: McpPage<McpFinding> } | { text: string }
  * their own key for a user.
  */
 export async function searchFindings(
-	caller: Caller,
+	toolCaller: ToolCaller,
 	topicId: string,
 	query: string,
 	cursor: string | null,
 ): Promise<SearchResult | null> {
-	const topic = await loadVisibleTopic(caller, topicId)
+	const topic = await loadVisibleTopic(toolCaller, topicId)
 	if (!topic) {
 		return null
 	}
 
 	// pick the key the embedding bills to. a visitor with no public key cannot search
-	const litellmApiKey = caller.kind === "user" ? caller.litellmApiKey : Bun.env.LITELLM_PUBLIC_KEY
-	if (caller.kind === "visitor" && !litellmApiKey) {
+	const litellmApiKey = toolCaller.kind === "user" ? toolCaller.litellmApiKey : Bun.env.LITELLM_PUBLIC_KEY
+	if (toolCaller.kind === "visitor" && !litellmApiKey) {
 		return { text: SEARCH_NEEDS_ACCOUNT_TEXT }
 	}
 
@@ -175,7 +175,7 @@ export async function searchFindings(
 	} catch (error) {
 		// return a message for a spent budget, the public key's or the user's own. rethrow anything else
 		if (isBudgetRejection(error)) {
-			return { text: caller.kind === "visitor" ? PUBLIC_KEY_SPENT_TEXT : SPENT_BUDGET_REJECTION }
+			return { text: toolCaller.kind === "visitor" ? PUBLIC_KEY_SPENT_TEXT : SPENT_BUDGET_REJECTION }
 		}
 		throw error
 	}
@@ -184,30 +184,33 @@ export async function searchFindings(
 /**
  * Marks a finding consumed for the user, or returns false when they may not see it.
  */
-export async function markFindingConsumed(caller: Caller & { kind: "user" }, findingId: string): Promise<boolean> {
-	return setConsumed(caller.userId, findingId, true, toMcpAnalyticsProperties(caller))
+export async function markFindingConsumed(
+	toolCaller: ToolCaller & { kind: "user" },
+	findingId: string,
+): Promise<boolean> {
+	return setConsumed(toolCaller.userId, findingId, true, toMcpAnalyticsProperties(toolCaller))
 }
 
 /**
  * Rates a finding up or down for the user or clears the rating, returning false when they may not rate.
  */
 export async function rateFinding(
-	caller: Caller & { kind: "user" },
+	toolCaller: ToolCaller & { kind: "user" },
 	findingId: string,
 	rating: "up" | "down" | null,
 ): Promise<boolean> {
-	return setRating(caller.userId, findingId, rating, toMcpAnalyticsProperties(caller))
+	return setRating(toolCaller.userId, findingId, rating, toMcpAnalyticsProperties(toolCaller))
 }
 
 /**
  * Bookmarks or unbookmarks a finding for the user, returning false when they may not bookmark.
  */
 export async function bookmarkFinding(
-	caller: Caller & { kind: "user" },
+	toolCaller: ToolCaller & { kind: "user" },
 	findingId: string,
 	isBookmarked: boolean,
 ): Promise<boolean> {
-	return setBookmarked(caller.userId, findingId, isBookmarked, toMcpAnalyticsProperties(caller))
+	return setBookmarked(toolCaller.userId, findingId, isBookmarked, toMcpAnalyticsProperties(toolCaller))
 }
 
 /**
@@ -253,9 +256,9 @@ export function fromCursor(cursor: string | null): number {
 }
 
 /**
- * Shapes a finding for the caller, with the consumed and bookmark fields on a user's alone.
+ * Shapes a finding for the tool caller, with the consumed and bookmark fields on a user's alone.
  */
-export function toMcpFinding(caller: Caller, finding: TopicFinding): McpFinding {
+export function toMcpFinding(toolCaller: ToolCaller, finding: TopicFinding): McpFinding {
 	const mcpFinding: McpFinding = {
 		findingId: finding.findingId,
 		title: finding.title,
@@ -266,16 +269,16 @@ export function toMcpFinding(caller: Caller, finding: TopicFinding): McpFinding 
 		relevanceExplanation: finding.relevanceExplanation,
 		publishedAt: finding.publishedAt,
 	}
-	if (caller.kind === "visitor") {
+	if (toolCaller.kind === "visitor") {
 		return mcpFinding
 	}
 	return { ...mcpFinding, isConsumed: finding.isConsumed, isBookmarked: finding.isBookmarked }
 }
 
-// load the topic, or null when it is missing or the caller may not see it
-async function loadVisibleTopic(caller: Caller, topicId: string): Promise<typeof topics.$inferSelect | null> {
+// load the topic, or null when it is missing or the tool caller may not see it
+async function loadVisibleTopic(toolCaller: ToolCaller, topicId: string): Promise<typeof topics.$inferSelect | null> {
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
-	if (!topic || !(await isAllowed(caller.kind === "user" ? caller.userId : null, "topic:view", topic))) {
+	if (!topic || !(await isAllowed(toolCaller.kind === "user" ? toolCaller.userId : null, "topic:view", topic))) {
 		return null
 	}
 	return topic

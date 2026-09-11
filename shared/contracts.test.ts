@@ -22,7 +22,7 @@ function topicPayload(sources: UpdateTopicPayload["sources"]): UpdateTopicPayloa
 		scheduledTime: "09:00",
 		scheduledDayOfWeek: "monday" as const,
 		visibility: "private" as const,
-		maxResults: 10,
+		maxTopicFindings: 10,
 		inviteEmails: [],
 		sources,
 	}

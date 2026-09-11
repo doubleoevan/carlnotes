@@ -7,10 +7,10 @@ import { auth } from "../auth"
 import type { AnalyticsProperties } from "../currentUser"
 
 // who is calling, resolved once to a visitor or a user
-export type Caller = { kind: "visitor" } | { kind: "user"; userId: string; plan: string; litellmApiKey?: string }
+export type ToolCaller = { kind: "visitor" } | { kind: "user"; userId: string; plan: string; litellmApiKey?: string }
 
-// resolve the caller. an accepted bearer token means a user, anything else is a visitor
-export async function resolveCaller(headers: Headers): Promise<Caller> {
+// resolve the tool caller. an accepted bearer token means a user, anything else is a visitor
+export async function resolveToolCaller(headers: Headers): Promise<ToolCaller> {
 	if (!headers.get("authorization")) {
 		return { kind: "visitor" }
 	}
@@ -39,9 +39,9 @@ export async function resolveCaller(headers: Headers): Promise<Caller> {
 }
 
 // build an mcp call's analytics properties. it has no user agent
-export function toMcpAnalyticsProperties(caller: Caller & { kind: "user" }): AnalyticsProperties {
+export function toMcpAnalyticsProperties(toolCaller: ToolCaller & { kind: "user" }): AnalyticsProperties {
 	return {
-		plan: caller.plan,
+		plan: toolCaller.plan,
 		platform: toPlatform(undefined),
 		browserPlatform: toBrowserPlatform(""),
 		isInAppBrowser: false,

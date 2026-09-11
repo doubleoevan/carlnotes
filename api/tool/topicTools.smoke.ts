@@ -6,7 +6,13 @@ import { count, eq, inArray } from "drizzle-orm"
 import { connectionPool, db } from "../../db"
 import { scans, sources, topicPromptVersions, topics, users } from "../../db/schema"
 import { updateTopic } from "../topic/topics"
-import { addTopicSource, createTopicFromDraft, removeTopicSource, updateTopicPrompt } from "./topicTools"
+import {
+	addTopicSource,
+	createTopicFromDraft,
+	removeTopicSource,
+	updateTopicFields,
+	updateTopicPrompt,
+} from "./topicTools"
 
 // one id per run, and every fixture id derives from it. two runs at once never collide
 const runId = `tools-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
@@ -56,7 +62,7 @@ async function seed(): Promise<string> {
 			name: `${runId} topic`,
 			prompt: "the first prompt",
 			visibility: "public",
-			frequency: "weekly",
+			frequency: "weekly" as const,
 		},
 		{ id: otherTopicId, ownerId, name: `${runId} other`, prompt: "another", visibility: "private" },
 	])
@@ -85,7 +91,7 @@ function toEditorPayload(prompt: string): UpdateTopicPayload {
 		scheduledTime: "09:00",
 		scheduledDayOfWeek: "monday" as const,
 		visibility: "public" as const,
-		maxResults: 10,
+		maxTopicFindings: 10,
 		inviteEmails: [],
 		sources: [],
 	}
@@ -119,6 +125,44 @@ try {
 	})
 	check("a missing topic reads as missing", missingTopicEditResult.status === "missing", missingTopicEditResult)
 	check("the rejected edits wrote no version", (await versionCount()) === 0)
+
+	// the settings tool is gated the same way, and writes only the fields it is given
+	const outsiderFieldsResult = await updateTopicFields({
+		userId: outsiderId,
+		topicId,
+		topicFields: { maxTopicFindings: 15 },
+		promptVersionOrigin: "chat",
+	})
+	check(
+		"a reader without edit rights cannot change the settings",
+		outsiderFieldsResult.status === "forbidden",
+		outsiderFieldsResult,
+	)
+	const emptyFieldsResult = await updateTopicFields({
+		userId: ownerId,
+		topicId,
+		topicFields: {},
+		promptVersionOrigin: "chat",
+	})
+	check("a settings call naming no field saves nothing", emptyFieldsResult.status === "empty", emptyFieldsResult)
+	const ownerFieldsResult = await updateTopicFields({
+		userId: ownerId,
+		topicId,
+		topicFields: { tags: ["hoops"], maxTopicFindings: 15 },
+		promptVersionOrigin: "chat",
+	})
+	const [topicSettingsRow] = await db
+		.select({ tags: topics.tags, maxTopicFindings: topics.maxTopicFindings, frequency: topics.frequency })
+		.from(topics)
+		.where(eq(topics.id, topicId))
+	check(
+		"the owner's settings save writes the named fields and keeps the rest",
+		ownerFieldsResult.status === "saved" &&
+			topicSettingsRow?.maxTopicFindings === 15 &&
+			topicSettingsRow.tags?.[0] === "hoops" &&
+			topicSettingsRow.frequency === "weekly",
+		{ ownerFieldsResult, topicSettingsRow },
+	)
 
 	// the owner's edit writes a version, and the same text again writes none
 	const ownerEditResult = await updateTopicPrompt({
@@ -266,7 +310,17 @@ try {
 	check("no tool started a scan", (await scanCount()) === topicScansBefore)
 
 	// a draft with no name is not saved, a visitor may not save one, and the owner's draft becomes the editor's topic
-	const emptyTopicDraft: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [], visibility: "invite" }
+	const emptyTopicDraft: TopicDraft = {
+		name: "",
+		prompt: "",
+		sources: [],
+		inviteEmails: [],
+		visibility: "invite",
+		team: null,
+		tags: [],
+		frequency: "weekly" as const,
+		maxTopicFindings: 10,
+	}
 	const incompleteTopicDraftResult = await createTopicFromDraft({
 		userId: ownerId,
 		topicDraft: emptyTopicDraft,
@@ -287,6 +341,10 @@ try {
 		],
 		inviteEmails: [],
 		visibility: "private" as const,
+		team: { teamId: crypto.randomUUID(), name: "A team the user does not lead" },
+		tags: [],
+		frequency: "weekly" as const,
+		maxTopicFindings: 10,
 	}
 	const visitorCreate = await createTopicFromDraft({
 		userId: null,
@@ -309,7 +367,12 @@ try {
 			createdTopic?.frequency === "weekly" &&
 			createdTopic.scheduledDayOfWeek === "wednesday" &&
 			createdTopic.visibility === "private" &&
-			createdTopic.maxResults === 10,
+			createdTopic.maxTopicFindings === 10,
+		createTopicFromDraftResult,
+	)
+	check(
+		"a draft naming a team the user does not lead creates the topic and says the add was rejected",
+		createTopicFromDraftResult.status === "created" && createTopicFromDraftResult.addTeamRejection !== null,
 		createTopicFromDraftResult,
 	)
 	const createdTopicSources = await db

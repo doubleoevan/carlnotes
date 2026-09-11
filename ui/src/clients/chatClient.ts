@@ -7,6 +7,7 @@ import {
 	type ChatConversation,
 	compactChatAnswer,
 	type TopicDraft,
+	type TopicDraftTeam,
 	type TopicToolCalls,
 	toUncompactedChatTurnStart,
 } from "@shared/contracts"
@@ -21,7 +22,7 @@ export type ChatSendResult = ChatRejection | "stopped" | null
 export type ChatPage =
 	| { topicId: string; teamId?: undefined; newTopic?: undefined }
 	| { teamId: string; topicId?: undefined; newTopic?: undefined }
-	| { newTopic: true; topicId?: undefined; teamId?: undefined }
+	| { newTopic: true; topicId?: undefined; teamId?: undefined; initialTeam?: TopicDraftTeam }
 
 /**
  * Loads the user's persisted conversation and its metadata, including whether the user can continue chatting

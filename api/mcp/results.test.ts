@@ -1,4 +1,4 @@
-// mcp read test: pages, cursors, the caller's finding shape, and the bound-topic rule
+// mcp read test: pages, cursors, the tool caller's finding shape, and the bound-topic rule
 import { expect, test } from "bun:test"
 import type { TopicFinding } from "@shared/contracts"
 import { CONNECT_ACCOUNT_TEXT, fromCursor, packPage, toCursor, toMcpFinding, toToolTopicId } from "./results"

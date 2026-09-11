@@ -26,7 +26,7 @@ import { TopicsTable } from "@/components/table/TopicsTable"
 import { AddTopicButton } from "@/components/team/AddTopicButton"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
-import { EditTopicModal } from "@/components/topic/EditTopicModal"
+import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { refreshAvatars } from "@/hooks/useAvatarVersion"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { toCountLabel } from "@/lib/labels"
@@ -280,9 +280,9 @@ function TeamDialogs({
 					onSaveTeam={onChanged}
 				/>
 			)}
-			{/* a new topic starts on this team and opens on its own page, the way every other new topic does */}
+			{/* a new topic starts on this team, in the form or with carl, and opens on its own page */}
 			{openDialog === "new-topic" && (
-				<EditTopicModal
+				<NewTopicDialog
 					initialTeam={{ teamId: teamPage.teamId, name: teamPage.name }}
 					onClose={() => onOpenDialog(null)}
 					onTopicSaved={async (topicId) => onNewTopicSaved(topicId)}

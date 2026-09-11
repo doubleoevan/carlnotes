@@ -46,7 +46,7 @@ export function SearchBar() {
 	const { topicFeed } = useTopicFeed()
 	const navigate = useNavigate()
 	const [query, setQuery] = useState("")
-	const [isFocused, setFocused] = useState(false)
+	const [isFocused, setIsFocused] = useState(false)
 	// the highlighted suggestion index, or -1 when the user hasn't selected one with the arrow keys
 	const [suggestionIndex, setSuggestionIndex] = useState(-1)
 	// the search's result kinds filter
@@ -160,8 +160,8 @@ export function SearchBar() {
 						setQuery(event.target.value)
 						setSuggestionIndex(-1)
 					}}
-					onFocus={() => setFocused(true)}
-					onBlur={() => setFocused(false)}
+					onFocus={() => setIsFocused(true)}
+					onBlur={() => setIsFocused(false)}
 					onKeyDown={handleKeyDown}
 					role="combobox"
 					aria-expanded={showSearchSuggestion}

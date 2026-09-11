@@ -69,10 +69,10 @@ person has no account yet, which is the sign-up and join copy. Never "viewer": i
 once, so `viewerRole` and `viewerUserId` read as if a logged-out person could hold a role. Where the
 subject is already unambiguous the qualifier drops entirely: `isLeader`, `role`, `userId`.
 
-## On the MCP side, the client is the program and the caller resolves to a user or a visitor
+## On the MCP side, the client is the program and the tool caller resolves to a user or a visitor
 The **MCP server** at `/mcp` (and its topic-bound `/mcp/t/<topicId>`) is a second reader over the api's query
 layer with the same tool list for everyone. The **client** is the program on the other end (Claude, Cursor,
-VS Code), never the person. A **caller** is whoever is behind a request before it is resolved, and it resolves
+VS Code), never the person. A **tool caller** is whoever is behind a request before it is resolved, and it resolves
 exactly once: a bearer token the OAuth lookup accepts makes it a **user**, anything else makes it a **visitor**.
 Past that line identifiers say `user` and `visitor` as everywhere else, and no query runs against a null user
 where a visitor branch should run instead. "Add to AI" is the install copy. Better Auth's `oauth_applications`,

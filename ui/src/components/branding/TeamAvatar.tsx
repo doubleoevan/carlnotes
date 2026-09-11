@@ -19,7 +19,7 @@ export function TeamAvatar({
 	// the version changes when an upload arrives, which is what re-fetches an image the url already named
 	const avatarVersion = useAvatarVersion()
 	// an image the browser could not fetch falls back to the initials
-	const [isImageBroken, setImageBroken] = useState(false)
+	const [isImageBroken, setIsImageBroken] = useState(false)
 	const isImageShown = team.hasAvatar && !isImageBroken
 	return (
 		<span className={cn(AVATAR_CLASS, "size-8", className)}>
@@ -27,7 +27,7 @@ export function TeamAvatar({
 				<img
 					src={`/api/team-avatars/${team.teamId}?v=${avatarVersion}`}
 					alt=""
-					onError={() => setImageBroken(true)}
+					onError={() => setIsImageBroken(true)}
 					className="size-full object-cover"
 				/>
 			) : (

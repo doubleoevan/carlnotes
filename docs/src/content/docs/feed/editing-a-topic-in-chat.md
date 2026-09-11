@@ -32,9 +32,9 @@ plan says no.
 
 ## What Carl can change
 
-Three things: the prompt, and the source list by adding or removing one source at a time. Everything
-else about a topic, its title, schedule, visibility, and findings per brew, stays in the topic's
-editor.
+Three things: the prompt, the source list by adding or removing one source at a time, and the
+settings, its tags, how often it brews, and how many findings a brew keeps. Everything else about a
+topic, its title, the brew's time and day, and its visibility, stays in the topic's editor.
 
 Adding a source comes with its projected cost per brew and per month at the topic's frequency, so
 you know what one more place to read adds. A topic holds up to 10 sources.

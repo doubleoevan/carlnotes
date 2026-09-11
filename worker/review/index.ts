@@ -50,7 +50,7 @@ export async function reviewScan(
 	// select what this Scan has to review: never reviewed, reviewed against another context, or older content
 	const resourcesToReview = await loadResourcesToReview(topicId, discoveredResources, topicContextHash)
 	if (resourcesToReview.length === 0) {
-		// filter anyway, so a lowered max_results takes effect even when a scan finds nothing new
+		// filter anyway, so a lowered max topic findings takes effect even when a scan finds nothing new
 		await filterTopicFindings(topicId)
 		return emptyReviewSummary()
 	}
@@ -99,7 +99,7 @@ export async function reviewScan(
 		(scoredIds) => ({ toScoreCount: resourcesToScore.length, scoredCount: scoredIds.length }),
 	)
 
-	// keep only the topic's top max_results findings now that this scan's findings are written
+	// keep only the topic's top maxTopicFindings findings now that this scan's findings are written
 	const relevantUrls = await filterTopicFindings(topicId)
 	reviewOutcome.keptFindings = reviewOutcome.keptFindings.filter((finding) => relevantUrls.has(finding.url))
 
@@ -126,11 +126,11 @@ export async function reviewScan(
 	}
 }
 
-// keep only the topic's top max_results findings by relevance score, except bookmarked ones
+// keep only the topic's top maxTopicFindings findings by relevance score, except bookmarked ones
 async function filterTopicFindings(topicId: string): Promise<Set<string>> {
 	// the topic's limit on kept findings, and what the access check needs
 	const [topic] = await db
-		.select({ maxResults: topics.maxResults, ownerId: topics.ownerId, teamId: topics.teamId })
+		.select({ maxTopicFindings: topics.maxTopicFindings, ownerId: topics.ownerId, teamId: topics.teamId })
 		.from(topics)
 		.where(eq(topics.id, topicId))
 	if (!topic) {
@@ -185,7 +185,7 @@ async function filterTopicFindings(topicId: string): Promise<Set<string>> {
 			...findingRow,
 			isBookmarkedOrRated: bookmarkedIds.has(findingRow.id) || findingRow.rating !== null,
 		})),
-		topic.maxResults,
+		topic.maxTopicFindings,
 	)
 	if (filteredIds.length > 0) {
 		await db.delete(findings).where(inArray(findings.id, filteredIds))
@@ -199,13 +199,13 @@ async function filterTopicFindings(topicId: string): Promise<Set<string>> {
 }
 
 /**
- * The topic's finding ids no user bookmarked or rated, ranked beyond maxResults by relevance score,
+ * The topic's finding ids no user bookmarked or rated, ranked beyond maxTopicFindings by relevance score,
  * which need filtering. A tie goes to the newer finding, so a Topic already full of top-scored ones can
  * still update from a later Scan.
  */
 export function findingIdsToFilter(
 	findingRows: { id: string; relevanceScore: number; createdAt: Date; isBookmarkedOrRated: boolean }[],
-	maxResults: number,
+	maxTopicFindings: number,
 ): string[] {
 	// rank the rows no user bookmarked or rated and drop everything past the limit
 	const rankedFilterableRows = findingRows
@@ -214,5 +214,5 @@ export function findingIdsToFilter(
 			(first, second) =>
 				second.relevanceScore - first.relevanceScore || second.createdAt.getTime() - first.createdAt.getTime(),
 		)
-	return rankedFilterableRows.slice(maxResults).map((findingRow) => findingRow.id)
+	return rankedFilterableRows.slice(maxTopicFindings).map((findingRow) => findingRow.id)
 }

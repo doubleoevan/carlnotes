@@ -259,16 +259,31 @@ test("the edit template names the tools and the propose-then-confirm rule", () =
 
 // the new-topic prompt shows the draft as data and names the four tools
 test("the new-topic prompt shows the draft as data and names the tools", async () => {
-	const { prompt } = await buildNewTopicChatPrompt("None.", {
-		name: "Hoops",
-		prompt: "Runs after work",
-		sources: [{ sourceOption: "reddit", value: "r/hoops" }],
-		inviteEmails: [],
-		visibility: "public",
-	})
+	const { prompt } = await buildNewTopicChatPrompt(
+		"None.",
+		// a topic draft that names a team
+		{
+			name: "Hoops",
+			prompt: "Runs after work",
+			sources: [{ sourceOption: "reddit", value: "r/hoops" }],
+			inviteEmails: [],
+			visibility: "public",
+			team: { teamId: "team-1", name: "Notes of Carl" },
+			tags: [],
+			frequency: "weekly",
+			maxTopicFindings: 10,
+		},
+		// no topic limit, and one leader team for the teams block
+		undefined,
+		[{ teamId: "team-1", name: "Notes of Carl" }],
+	)
 	expect(prompt).toContain("Title: Hoops")
 	expect(prompt).toContain("reddit r/hoops")
 	expect(prompt).toContain("Visibility: public")
+	// the topic draft's team and the leader teams both reach carl
+	expect(prompt).toContain("Team: Notes of Carl")
+	expect(prompt).toContain("Brews: weekly, keeping 10 findings each")
+	expect(prompt).toContain("Notes of Carl (teamId: team-1)")
 	expect(prompt).toContain("draftTopic")
 	expect(prompt).toContain("createTopic")
 	expect(prompt).not.toContain("{{")

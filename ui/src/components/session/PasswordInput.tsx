@@ -19,7 +19,7 @@ export function PasswordInput({
 	onChange: (value: string) => void
 	autoComplete?: string
 }) {
-	const [isShown, setShown] = useState(false)
+	const [isShown, setIsShown] = useState(false)
 	return (
 		<div className="space-y-1.5">
 			<Label htmlFor={id}>{label}</Label>
@@ -36,7 +36,7 @@ export function PasswordInput({
 				/>
 				<button
 					type="button"
-					onClick={() => setShown(!isShown)}
+					onClick={() => setIsShown(!isShown)}
 					aria-label={isShown ? "Hide password" : "Show password"}
 					aria-pressed={isShown}
 					className="text-muted-foreground hover:text-foreground focus-visible:ring-ring absolute inset-y-0 right-0 flex items-center rounded-md px-3 focus-visible:ring-2 focus-visible:outline-none"

@@ -9,7 +9,7 @@ import {
 	daysOfWeek,
 	frequencies,
 	inviteAccesses,
-	maxResultsOptions,
+	maxTopicFindingsOptions,
 	noteVisibilities,
 	plans,
 	promptVersionOrigins,
@@ -217,7 +217,7 @@ export const topics = pgTable(
 		// an admin can feature this topic and set its order
 		featureOrder: integer("feature_order"),
 		// how many findings a scan keeps for this topic, one of the shared allowed sizes
-		maxResults: integer("max_results").notNull().default(10),
+		maxTopicFindings: integer("max_results").notNull().default(10),
 		// the unique subscriber count for the topic's active subscribers, not including the owner
 		subscriberCount: integer("subscriber_count").notNull().default(0),
 		// created and updated timestamps
@@ -229,7 +229,7 @@ export const topics = pgTable(
 		// covers the owner and team topic lists
 		index("topics_owner_id_idx").on(table.ownerId),
 		index("topics_team_id_idx").on(table.teamId),
-		check("topics_max_results_allowed", sql.raw(`max_results in (${maxResultsOptions.join(", ")})`)),
+		check("topics_max_results_allowed", sql.raw(`max_results in (${maxTopicFindingsOptions.join(", ")})`)),
 	],
 )
 

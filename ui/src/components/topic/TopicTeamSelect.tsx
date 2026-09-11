@@ -1,4 +1,4 @@
-// the topic edit modal's teams field: which of the user's led teams hold the topic after the save
+// the topic edit modal's teams field: which of the user's leader teams hold the topic after the save
 import type { TeamSummary, TopicResponse } from "@shared/contracts"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
@@ -29,36 +29,38 @@ export function useTopicTeamChoice(topic: TopicResponse | undefined, initialTeam
 	const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(initialTeam ? [initialTeam.teamId] : [])
 	// a new team's fields: its name, its visibility, and the invitations sent once it exists
 	const [newTeamName, setNewTeamName] = useState("")
-	const [isNewTeamPublic, setNewTeamPublic] = useState(false)
+	const [isNewTeamPublic, setIsNewTeamPublic] = useState(false)
 	const [pendingInvites, setPendingInvites] = useState<PendingInvite[]>([])
 	const [newTeamRejection, setNewTeamRejection] = useState<string | null>(null)
 
 	// the ids of the user's teams that already hold the topic
 	const holdingTeamIds = (topic?.roomTeams ?? []).map((roomTeam) => roomTeam.teamId)
 
-	// the led teams load with the modal, seeding the selection with the ones already holding the topic
+	// the leader teams load with the modal, seeding the selection with the ones already holding the topic
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the topic id identifies the seed
 	useEffect(() => {
 		fetchTeams()
 			.then((index) => {
-				const ledTeams = index.teams.filter((team) => team.role === "leader")
-				setTeams(ledTeams)
-				const heldLedTeamIds = ledTeams.map((team) => team.teamId).filter((teamId) => holdingTeamIds.includes(teamId))
-				// an existing topic starts on the led teams that hold it. a new one takes the first team led, never none
+				const leaderTeams = index.teams.filter((team) => team.role === "leader")
+				setTeams(leaderTeams)
+				const heldLeaderTeamIds = leaderTeams
+					.map((team) => team.teamId)
+					.filter((teamId) => holdingTeamIds.includes(teamId))
+				// an existing topic starts on the leader teams that hold it. a new one takes the first team led, never none
 				setSelectedTeamIds((chosen) => {
 					if (chosen.length > 0) {
 						return chosen
 					}
 					if (topic) {
-						return heldLedTeamIds
+						return heldLeaderTeamIds
 					}
-					return ledTeams[0] ? [ledTeams[0].teamId] : []
+					return leaderTeams[0] ? [leaderTeams[0].teamId] : []
 				})
 			})
 			.catch(() => setTeams([]))
 	}, [topic?.id])
 
-	// the teams offered: every led team, plus the create-page team when it is not led
+	// the teams offered: every leader team, plus the create-page team when it is not led
 	const offeredTeams = (teams ?? []).some((team) => team.teamId === initialTeam?.teamId)
 		? (teams ?? [])
 		: [...(teams ?? []), ...(initialTeam ? [initialTeam] : [])]
@@ -88,10 +90,10 @@ export function useTopicTeamChoice(topic: TopicResponse | undefined, initialTeam
 			await createNewTeam(topicId, { name: newTeamName, isPublic: isNewTeamPublic, pendingInvites })
 		}
 
-		// the diff against the led teams that held the topic when the modal opened
-		const heldLedTeamIds = teams.map((team) => team.teamId).filter((teamId) => holdingTeamIds.includes(teamId))
-		const addedTeamIds = selectedRealTeamIds.filter((teamId) => !heldLedTeamIds.includes(teamId))
-		const removedTeamIds = heldLedTeamIds.filter((teamId) => !selectedRealTeamIds.includes(teamId))
+		// the diff against the leader teams that held the topic when the modal opened
+		const heldLeaderTeamIds = teams.map((team) => team.teamId).filter((teamId) => holdingTeamIds.includes(teamId))
+		const addedTeamIds = selectedRealTeamIds.filter((teamId) => !heldLeaderTeamIds.includes(teamId))
+		const removedTeamIds = heldLeaderTeamIds.filter((teamId) => !selectedRealTeamIds.includes(teamId))
 
 		// adds first, so the topic never passes through a moment with no team. a rejection shows in a toast
 		const addRejections = await Promise.all(addedTeamIds.map((teamId) => sendAddTopicTeam(teamId, topicId)))
@@ -124,7 +126,7 @@ export function useTopicTeamChoice(topic: TopicResponse | undefined, initialTeam
 		newTeamRejection,
 		checkNewTeamName,
 		isNewTeamPublic,
-		setNewTeamPublic,
+		setIsNewTeamPublic,
 		pendingInvites,
 		setPendingInvites,
 		isTeamChosen,
@@ -158,7 +160,7 @@ async function createNewTeam(
 }
 
 /**
- * The topic teams multiselect: the led teams this topic may sit on, and a new team created on save.
+ * The topic teams multiselect: the leader teams this topic may sit on, and a new team created on save.
  */
 export function TopicTeamSelect({ teamField, isTeamMissing }: { teamField: TopicTeamField; isTeamMissing?: boolean }) {
 	return (
@@ -203,7 +205,7 @@ export function TopicTeamSelect({ teamField, isTeamMissing }: { teamField: Topic
 					<div className="flex items-center gap-2 text-sm">
 						<Switch
 							checked={teamField.isNewTeamPublic}
-							onCheckedChange={teamField.setNewTeamPublic}
+							onCheckedChange={teamField.setIsNewTeamPublic}
 							aria-label="Public"
 						/>
 						Public

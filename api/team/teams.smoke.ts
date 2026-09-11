@@ -105,7 +105,7 @@ async function seedFixtures(): Promise<void> {
 		{ id: toId("topic-multi"), ownerId: toId("owner"), name: "smoke multi", teamId: toId("team-multi-d") },
 	])
 
-	// the share rows. the succession pair is spaced apart so the oldest owner-led team with it is deterministic
+	// the share rows. the succession pair is spaced apart, so the oldest owner-led team with it is deterministic
 	await db.insert(teamTopics).values([
 		{ teamId: toId("team-hold"), topicId: toId("topic-shared") },
 		{ teamId: toId("team-del"), topicId: toId("topic-shared") },

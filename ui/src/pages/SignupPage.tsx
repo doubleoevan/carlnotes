@@ -21,7 +21,7 @@ export function SignupPage() {
 	const redirectPath = toSafeRedirectPath(searchParams.get("next"))
 	const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
 	const [error, setError] = useState<string | null>(null)
-	const [isSubmitting, setSubmitting] = useState(false)
+	const [isSubmitting, setIsSubmitting] = useState(false)
 	const [spentTokenCount, setSpentTokenCount] = useState(0)
 	// the address a succeeded password signup was sent to, which swaps the form for a non-blocking notice
 	const [verifyingEmail, setVerifyingEmail] = useState<string | null>(null)
@@ -41,7 +41,7 @@ export function SignupPage() {
 			setError("Complete the challenge above first.")
 			return
 		}
-		setSubmitting(true)
+		setIsSubmitting(true)
 		setError(null)
 
 		// checking the token spends it, so the token count must be incremented to issue a new one
@@ -49,7 +49,7 @@ export function SignupPage() {
 			setError(message)
 			setTurnstileToken(null)
 			setSpentTokenCount((previousTokenCount) => previousTokenCount + 1)
-			setSubmitting(false)
+			setIsSubmitting(false)
 		}
 
 		// a dropped network call reads as a failed check instead of a Submit button that stays stuck

@@ -42,7 +42,7 @@ export function HomePage() {
 	} = useTopicFeed()
 	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
 	// the section the user opened, or null while none has been opened and the default still applies
-	const [openedSection, setopenedSection] = useState<string | null>(null)
+	const [openedSection, setOpenedSection] = useState<string | null>(null)
 
 	// the search bar's menu includes this page's reheat row
 	useRegisterPageActions({
@@ -120,7 +120,7 @@ export function HomePage() {
 						type="single"
 						collapsible
 						value={openSection}
-						onValueChange={setopenedSection}
+						onValueChange={setOpenedSection}
 						className="[&>*:first-child_[data-slot=accordion-trigger]]:pt-0"
 					>
 						{topicFeed.sections.map((section) => (

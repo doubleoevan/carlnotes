@@ -1,3 +1,4 @@
+import type { TopicDraftTeam } from "@shared/contracts"
 import { type ComponentProps, useState } from "react"
 import { CoffeeCup } from "@/components/branding/CoffeeCup"
 import { Button } from "@/components/primitives/button"
@@ -11,17 +12,20 @@ import { setChatId, setChatPanelState } from "@/stores/chatPanelStore"
  */
 export function TopicEditorChoiceDialog({
 	topicId,
-	onChooseForm,
+	initialTeam,
+	onChooseTopicForm,
 	onClose,
 }: {
 	topicId?: string
-	onChooseForm: () => void
+	// the team a new topic starts on, handed to the new-topic chat when carl is chosen
+	initialTeam?: TopicDraftTeam
+	onChooseTopicForm: () => void
 	onClose: () => void
 }) {
 	const isEditingTopic = topicId !== undefined
 	// the chat choice opens the panel on the chat and closes the dialog, enlarged where the screen is narrow
 	const handleChooseChat = (): void => {
-		setChatId(topicId === undefined ? { kind: "private", newTopic: true } : { kind: "private", topicId })
+		setChatId(topicId === undefined ? { kind: "private", newTopic: true, initialTeam } : { kind: "private", topicId })
 		setChatPanelState(isWideScreen() ? "open" : "enlarged")
 		onClose()
 	}
@@ -31,7 +35,7 @@ export function TopicEditorChoiceDialog({
 				<DialogTitle>{isEditingTopic ? "Edit topic" : "New topic"}</DialogTitle>
 				<DialogDescription>{isEditingTopic ? "Let's get to work" : "Let's get started"}</DialogDescription>
 				<DialogFooter className="mt-2 flex-col-reverse sm:flex-row">
-					<Button variant="outline" onClick={onChooseForm}>
+					<Button variant="outline" onClick={onChooseTopicForm}>
 						Do it myself
 					</Button>
 					<Button onClick={handleChooseChat}>
@@ -48,12 +52,19 @@ export function TopicEditorChoiceDialog({
  * The New Topic button's dialogs: the choice first, then the create form when the user picks it.
  */
 export function NewTopicDialog({
+	initialTeam,
 	onClose,
 	onTopicSaved,
-}: Pick<ComponentProps<typeof EditTopicModal>, "onClose" | "onTopicSaved">) {
+}: Pick<ComponentProps<typeof EditTopicModal>, "initialTeam" | "onClose" | "onTopicSaved">) {
 	const [isFormChosen, setIsFormChosen] = useState(false)
 	if (isFormChosen) {
-		return <EditTopicModal onClose={onClose} onTopicSaved={onTopicSaved} />
+		return <EditTopicModal initialTeam={initialTeam} onClose={onClose} onTopicSaved={onTopicSaved} />
 	}
-	return <TopicEditorChoiceDialog onChooseForm={() => setIsFormChosen(true)} onClose={onClose} />
+	return (
+		<TopicEditorChoiceDialog
+			initialTeam={initialTeam}
+			onChooseTopicForm={() => setIsFormChosen(true)}
+			onClose={onClose}
+		/>
+	)
 }
