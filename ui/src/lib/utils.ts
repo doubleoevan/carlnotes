@@ -104,6 +104,13 @@ export function isWideScreen(): boolean {
 }
 
 /**
+ * Whether the screen is touched instead of pointed at, where an on-screen keyboard covers the page while a box has focus.
+ */
+export function isTouchScreen(): boolean {
+	return window.matchMedia("(pointer: coarse)").matches
+}
+
+/**
  * What the topic prompt's file picker shows.
  */
 export const FILE_PICKER_ACCEPT =

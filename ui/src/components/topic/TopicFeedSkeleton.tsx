@@ -76,7 +76,7 @@ export function ResourceSkeleton() {
 	return (
 		<div className="after:border-separator-strong relative flex after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden">
 			{/* the rank slot the real row keeps for its number */}
-			<div className="absolute top-1.5 left-0 grid size-11 place-items-center sm:size-8">
+			<div className="absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8">
 				<div className="bg-muted size-3 animate-pulse rounded" />
 			</div>
 			{/* icon, then title and metadata lines */}

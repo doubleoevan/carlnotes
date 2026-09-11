@@ -15,7 +15,7 @@ import type { ChatRoomReply } from "@/components/chat/useRoomReply"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
-import { CHAT_FILE_PICKER_ACCEPT, cn, isWideScreen } from "@/lib/utils"
+import { CHAT_FILE_PICKER_ACCEPT, cn, isTouchScreen, isWideScreen } from "@/lib/utils"
 
 // how tall the chat message box may grow before it scrolls inside itself, matching the private chat's composer
 const MAX_MESSAGE_BOX_HEIGHT_PX = 120
@@ -307,6 +307,13 @@ export function ChatRoomComposer({
 		autocomplete.readMentionQuery(event.target.value.slice(0, event.target.selectionStart ?? 0))
 	}
 
+	// on a touch screen the box lets go of focus, so the keyboard closes, and the chat message shows
+	function closeTouchKeyboard(): void {
+		if (isTouchScreen()) {
+			chatMessageBoxRef.current?.blur()
+		}
+	}
+
 	// post the trimmed chat message, resetting the composer only once the post is accepted
 	async function handlePostChatMessage(): Promise<void> {
 		const content = chatMessage.trim()
@@ -314,6 +321,8 @@ export function ChatRoomComposer({
 			return
 		}
 		isPostingMessageRef.current = true
+		closeTouchKeyboard()
+
 		// a chat mention addresses itself, a previous reply target starts a chat message thread
 		const isChatMessageThread = !hasMention && replyTo !== null
 		const sentContent = hasMention || isChatMessageThread ? content : `@${ALL_USERNAME} ${content}`

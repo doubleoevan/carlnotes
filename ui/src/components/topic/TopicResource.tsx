@@ -83,10 +83,11 @@ export function TopicResource({
 				onMouseLeave={() => setIsHintOpen(false)}
 				className="group after:border-separator-strong relative isolate flex cursor-pointer before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden hover:before:bg-accent-foreground/20"
 			>
-				{/* the rank, in the slot the bookmark mark takes over once the finding is bookmarked */}
+				{/* the rank, in the slot the bookmark mark takes over once the finding is bookmarked.
+				    on a phone the taller slot starts at the row top, level with the title */}
 				{rank !== null && (
 					<span
-						className="text-muted-foreground absolute top-1.5 left-0 grid size-11 place-items-center sm:size-8"
+						className="text-muted-foreground absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8"
 						aria-hidden="true"
 					>
 						<span className="font-display text-sm tabular-nums">{rank}</span>
@@ -103,7 +104,7 @@ export function TopicResource({
 							}}
 							aria-pressed={true}
 							aria-label={bookmarkLabel}
-							className="text-primary absolute top-1.5 left-0 grid size-11 place-items-center sm:size-8"
+							className="text-primary absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8"
 						>
 							<Bookmark className="size-3.75 fill-current" strokeWidth={2.5} />
 						</TooltipTrigger>

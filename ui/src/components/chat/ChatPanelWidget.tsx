@@ -16,6 +16,7 @@ import {
 import { DisabledRoomComposer } from "@/components/chat/ChatRoomComposer"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { useKeyboardViewport } from "@/hooks/useKeyboardViewport"
 import { cn } from "@/lib/utils"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
 
@@ -69,6 +70,12 @@ export function ChatPanelWidget({
 	onMinimizeChat: () => void
 	children: React.ReactNode
 }) {
+	// a phone keyboard leaves the enlarged panel sized to what stays visible, so its buttons sit where they are painted
+	const keyboardViewport = useKeyboardViewport()
+	const keyboardPanelStyle =
+		isEnlarged && keyboardViewport
+			? { top: keyboardViewport.top + 12, height: keyboardViewport.height - 24, bottom: "auto" }
+			: undefined
 	return (
 		<>
 			{/* only show an overlay on the page if the chat panel is enlarged */}
@@ -83,6 +90,7 @@ export function ChatPanelWidget({
 					CHAT_PANEL_ELEVATION_CLASS,
 					isEnlarged ? "bottom-safe top-3 right-3 left-3 sm:inset-6" : DOCKED_CHAT_PANEL_CLASS,
 				)}
+				style={keyboardPanelStyle}
 			>
 				{children}
 			</section>

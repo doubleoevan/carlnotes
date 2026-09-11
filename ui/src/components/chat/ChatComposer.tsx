@@ -7,7 +7,7 @@ import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
-import { CHAT_FILE_PICKER_ACCEPT, isWideScreen } from "@/lib/utils"
+import { CHAT_FILE_PICKER_ACCEPT, isTouchScreen, isWideScreen } from "@/lib/utils"
 
 // how tall the question box may grow before it scrolls inside itself
 const MAX_QUESTION_BOX_HEIGHT_PX = 120
@@ -53,11 +53,19 @@ export function ChatComposer({
 		}
 	}, [question])
 
+	// send the question. on a touch screen the box lets go of focus, so the keyboard closes, and the reply shows
+	function sendQuestion(): void {
+		onSendQuestion()
+		if (isTouchScreen()) {
+			questionBoxRef.current?.blur()
+		}
+	}
+
 	// Enter sends the question and Shift+Enter starts a new line
 	function handleSendQuestion(event: React.KeyboardEvent<HTMLTextAreaElement>): void {
 		if (event.key === "Enter" && !event.shiftKey) {
 			event.preventDefault()
-			onSendQuestion()
+			sendQuestion()
 		}
 	}
 
@@ -84,7 +92,7 @@ export function ChatComposer({
 			className="shrink-0 border-t px-3 py-2.5"
 			onSubmit={(event) => {
 				event.preventDefault()
-				onSendQuestion()
+				sendQuestion()
 			}}
 		>
 			{/* attachments show as chips in the input, each is removable until the send */}
