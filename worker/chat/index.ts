@@ -286,6 +286,7 @@ function toTopicDraftBlock(topicDraft?: TopicDraft): string {
 		`Title: ${topicDraft.name || "(none yet)"}`,
 		`Prompt: ${topicDraft.prompt || "(none yet)"}`,
 		`Sources: ${topicSources || "(none yet)"}`,
+		`Visibility: ${topicDraft.visibility}`,
 		`Invites: ${topicDraft.inviteEmails.join(", ") || "(none)"}`,
 	].join("\n")
 }

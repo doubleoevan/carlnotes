@@ -464,7 +464,7 @@ function toChatTurnTools(
 	analyticsProperties: AnalyticsProperties,
 ): ReturnType<typeof toChatTopicTools> | undefined {
 	if (page.newTopic) {
-		const emptyTopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [] }
+		const emptyTopicDraft: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [], visibility: "invite" }
 		return toNewTopicChatTools({ userId, toolCalls, topicDraft: topicDraft ?? emptyTopicDraft, analyticsProperties })
 	}
 	return canEditTopic && page.topicId ? toChatTopicTools({ userId, topicId: page.topicId, toolCalls }) : undefined

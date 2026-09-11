@@ -1,7 +1,7 @@
 // a live smoke test for the topic tools: the gate inside them, the prompt versions they write, adding and removing
 // a source, and that no tool starts a scan
 // run it with: doppler run -- bun api/tool/topicTools.smoke.ts. needs Doppler secrets and no model
-import { MAX_TOPIC_SOURCES, type UpdateTopicPayload } from "@shared/contracts"
+import { MAX_TOPIC_SOURCES, type TopicDraft, type UpdateTopicPayload } from "@shared/contracts"
 import { count, eq, inArray } from "drizzle-orm"
 import { connectionPool, db } from "../../db"
 import { scans, sources, topicPromptVersions, topics, users } from "../../db/schema"
@@ -266,7 +266,7 @@ try {
 	check("no tool started a scan", (await scanCount()) === topicScansBefore)
 
 	// a draft with no name is not saved, a visitor may not save one, and the owner's draft becomes the editor's topic
-	const emptyTopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [] }
+	const emptyTopicDraft: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [], visibility: "invite" }
 	const incompleteTopicDraftResult = await createTopicFromDraft({
 		userId: ownerId,
 		topicDraft: emptyTopicDraft,
@@ -286,6 +286,7 @@ try {
 			{ sourceOption: "webSearch" as const, value: "" },
 		],
 		inviteEmails: [],
+		visibility: "private" as const,
 	}
 	const visitorCreate = await createTopicFromDraft({
 		userId: null,
@@ -303,11 +304,11 @@ try {
 	const createdTopicId = createTopicFromDraftResult.status === "created" ? createTopicFromDraftResult.topicId : ""
 	const [createdTopic] = await db.select().from(topics).where(eq(topics.id, createdTopicId))
 	check(
-		"the draft becomes a weekly wednesday topic shared by invite with the editor's defaults",
+		"the draft becomes a weekly wednesday topic with the draft's visibility and the editor's other defaults",
 		createTopicFromDraftResult.status === "created" &&
 			createdTopic?.frequency === "weekly" &&
 			createdTopic.scheduledDayOfWeek === "wednesday" &&
-			createdTopic.visibility === "invite" &&
+			createdTopic.visibility === "private" &&
 			createdTopic.maxResults === 10,
 		createTopicFromDraftResult,
 	)

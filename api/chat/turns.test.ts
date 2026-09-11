@@ -46,7 +46,7 @@ test("writeReplyStream ends with the tool calls made during the stream", async (
 	async function* textStream(): AsyncGenerator<string> {
 		yield "Writing it. "
 		toolCalls.count += 1
-		toolCalls.topicDraft = { name: "Hoops", prompt: "", sources: [], inviteEmails: [] }
+		toolCalls.topicDraft = { name: "Hoops", prompt: "", sources: [], inviteEmails: [], visibility: "invite" }
 		yield "Done."
 	}
 	// what reached the stream, in order

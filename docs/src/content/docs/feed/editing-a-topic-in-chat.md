@@ -16,6 +16,12 @@ yes, and he saves it.
 ![The topic page with Carl's proposal in the panel, the reader's yes, Carl's confirmation, and the
 toast that says the prompt was saved](../../../assets/screenshots/chat-carl-saved-toast.png)
 
+## Where it lives
+
+Pick **Edit topic** in the topic page's actions menu and choose **Edit with Carl**. The panel opens
+on your private chat about the topic, the same one the panel's switcher offers, so you can also
+just open the panel and ask.
+
 ## The toast is the confirmation
 
 A change is saved when a toast says so: "Carl saved the new prompt", "Carl added reddit — r/austin",

@@ -264,9 +264,11 @@ test("the new-topic prompt shows the draft as data and names the tools", async (
 		prompt: "Runs after work",
 		sources: [{ sourceOption: "reddit", value: "r/hoops" }],
 		inviteEmails: [],
+		visibility: "public",
 	})
 	expect(prompt).toContain("Title: Hoops")
 	expect(prompt).toContain("reddit r/hoops")
+	expect(prompt).toContain("Visibility: public")
 	expect(prompt).toContain("draftTopic")
 	expect(prompt).toContain("createTopic")
 	expect(prompt).not.toContain("{{")

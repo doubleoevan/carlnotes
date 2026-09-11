@@ -13,7 +13,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Button } from "@/components/primitives/button"
 import { TopicInvitesTable } from "@/components/table/TopicInvitesTable.tsx"
 import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTable"
-import { EditTopicModal } from "@/components/topic/EditTopicModal"
+import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { useTopicInviteBadges } from "@/stores/topicInviteStore"
@@ -97,7 +97,7 @@ export function ActivityPage() {
 			) : (
 				<CoffeeLoading />
 			)}
-			{isNewTopicOpen && <EditTopicModal onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
+			{isNewTopicOpen && <NewTopicDialog onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
 		</main>
 	)
 }

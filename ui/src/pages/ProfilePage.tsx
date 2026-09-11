@@ -24,7 +24,7 @@ import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
 import { TopicsTable } from "@/components/table/TopicsTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { NewTeamOption, TeamOption } from "@/components/team/TeamUpButton"
-import { EditTopicModal } from "@/components/topic/EditTopicModal"
+import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { toCountLabel } from "@/lib/labels"
 import { CARD_CLASS, MENU_OPTION_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
@@ -208,7 +208,7 @@ export function ProfilePage() {
 				onNewTopic={() => setIsNewTopicOpen(true)}
 				onReloadProfile={handleReloadProfile}
 			/>
-			{isNewTopicOpen && <EditTopicModal onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
+			{isNewTopicOpen && <NewTopicDialog onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
 		</main>
 	)
 }

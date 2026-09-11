@@ -1,0 +1,59 @@
+import { type ComponentProps, useState } from "react"
+import { CoffeeCup } from "@/components/branding/CoffeeCup"
+import { Button } from "@/components/primitives/button"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
+import { EditTopicModal } from "@/components/topic/EditTopicModal"
+import { isWideScreen } from "@/lib/utils"
+import { setChatId, setChatPanelState } from "@/stores/chatPanelStore"
+
+/**
+ * The dialog that asks whether to use the form or Carl, editing the topic whose id it has or making a new one without.
+ */
+export function TopicEditorChoiceDialog({
+	topicId,
+	onChooseForm,
+	onClose,
+}: {
+	topicId?: string
+	onChooseForm: () => void
+	onClose: () => void
+}) {
+	const isEditingTopic = topicId !== undefined
+	// the chat choice opens the panel on the chat and closes the dialog, enlarged where the screen is narrow
+	const handleChooseChat = (): void => {
+		setChatId(topicId === undefined ? { kind: "private", newTopic: true } : { kind: "private", topicId })
+		setChatPanelState(isWideScreen() ? "open" : "enlarged")
+		onClose()
+	}
+	return (
+		<Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
+			<DialogContent className="sm:max-w-md">
+				<DialogTitle>{isEditingTopic ? "Edit topic" : "New topic"}</DialogTitle>
+				<DialogDescription>{isEditingTopic ? "Let's get to work" : "Let's get started"}</DialogDescription>
+				<DialogFooter className="mt-2 flex-col-reverse sm:flex-row">
+					<Button variant="outline" onClick={onChooseForm}>
+						Do it myself
+					</Button>
+					<Button onClick={handleChooseChat}>
+						<CoffeeCup className="size-6" />
+						{isEditingTopic ? "Edit with Carl" : "Build with Carl"}
+					</Button>
+				</DialogFooter>
+			</DialogContent>
+		</Dialog>
+	)
+}
+
+/**
+ * The New Topic button's dialogs: the choice first, then the create form when the user picks it.
+ */
+export function NewTopicDialog({
+	onClose,
+	onTopicSaved,
+}: Pick<ComponentProps<typeof EditTopicModal>, "onClose" | "onTopicSaved">) {
+	const [isFormChosen, setIsFormChosen] = useState(false)
+	if (isFormChosen) {
+		return <EditTopicModal onClose={onClose} onTopicSaved={onTopicSaved} />
+	}
+	return <TopicEditorChoiceDialog onChooseForm={() => setIsFormChosen(true)} onClose={onClose} />
+}

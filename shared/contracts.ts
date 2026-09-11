@@ -565,6 +565,8 @@ export const topicDraftPayload = z.object({
 	prompt: z.string().trim().max(TOPIC_PROMPT_CHARS).default(""),
 	sources: z.array(addTopicSourcePayload).max(MAX_TOPIC_SOURCES).default([]),
 	inviteEmails: z.array(z.string().trim().toLowerCase().pipe(z.email())).max(MAX_DRAFT_INVITES).default([]),
+	// who may read the topic, shared by invite unless the topic draft says otherwise
+	visibility: z.enum(visibilities).default("invite"),
 })
 export type TopicDraft = z.infer<typeof topicDraftPayload>
 

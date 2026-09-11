@@ -4,6 +4,13 @@ import { X } from "lucide-react"
 import type { ReactNode } from "react"
 import { ScrollBox } from "@/components/topic/TopicScanRecap"
 
+// how the card words each visibility
+const VISIBILITY_LABELS: Record<TopicDraft["visibility"], string> = {
+	public: "Public",
+	invite: "Shared by invite",
+	private: "Private",
+}
+
 /**
  * Shows the topic draft in the chat as Carl has written it so far, with the files waiting to become the topic's attachments,
  * above the new-topic chat's composer, hidden while empty and scrolled to the top after each rewrite.
@@ -40,6 +47,7 @@ export function TopicDraftCard({
 							))}
 						</ul>
 					</TopicDraftField>
+					<TopicDraftField label="Visibility">{VISIBILITY_LABELS[topicDraft.visibility]}</TopicDraftField>
 					{topicDraft.inviteEmails.length > 0 && (
 						<TopicDraftField label="Invites">
 							<ul className="grid gap-0.5">

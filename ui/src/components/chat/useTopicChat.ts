@@ -26,7 +26,7 @@ import { publishTopicChanged } from "@/stores/chatPanelStore"
 const LINK_PREVIEW_REFRESH_MS = 2500
 
 // the new-topic chat's draft before carl writes anything
-const EMPTY_TOPIC_DRAFT: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [] }
+const EMPTY_TOPIC_DRAFT: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [], visibility: "invite" }
 
 // a stand-in id for a kept attachment that the server has not returned yet
 let placeholderCount = 0

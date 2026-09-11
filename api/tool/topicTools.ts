@@ -384,7 +384,7 @@ export async function createTopicFromDraft({
 			frequency: "weekly",
 			scheduledTime: "09:00",
 			scheduledDayOfWeek: "wednesday",
-			visibility: "invite",
+			visibility: topicDraft.visibility,
 			maxResults: 10,
 			inviteEmails: topicDraft.inviteEmails,
 			sources: topicSources,

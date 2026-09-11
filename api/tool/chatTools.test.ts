@@ -74,7 +74,7 @@ const analyticsProperties = {
 
 // the new-topic chat's tools are the draft, the suggestions, and the create
 test("the new-topic tools are the draft, the suggestions, and the create", () => {
-	const topicDraft: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [] }
+	const topicDraft: TopicDraft = { name: "", prompt: "", sources: [], inviteEmails: [], visibility: "invite" }
 	const newTopicTools = toNewTopicChatTools({
 		userId: "user-1",
 		toolCalls: { count: 0, topicSaves: [], topicSaveRejections: [] },
@@ -87,7 +87,13 @@ test("the new-topic tools are the draft, the suggestions, and the create", () =>
 // draftTopic writes the named fields alone and saves the whole topic draft for the card
 test("draftTopic writes the named fields and leaves the rest", async () => {
 	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
-	const topicDraft: TopicDraft = { name: "", prompt: "Runs after work", sources: [], inviteEmails: [] }
+	const topicDraft: TopicDraft = {
+		name: "",
+		prompt: "Runs after work",
+		sources: [],
+		inviteEmails: [],
+		visibility: "invite",
+	}
 	const newTopicTools = toNewTopicChatTools({
 		userId: "user-1",
 		toolCalls,
@@ -95,10 +101,16 @@ test("draftTopic writes the named fields and leaves the rest", async () => {
 		analyticsProperties,
 	})
 	await newTopicTools.draftTopic?.execute?.(
-		{ name: "Hoops" },
+		{ name: "Hoops", visibility: "public" },
 		{ toolCallId: "call-1", messages: [], context: undefined },
 	)
-	expect(topicDraft).toEqual({ name: "Hoops", prompt: "Runs after work", sources: [], inviteEmails: [] })
+	expect(topicDraft).toEqual({
+		name: "Hoops",
+		prompt: "Runs after work",
+		sources: [],
+		inviteEmails: [],
+		visibility: "public",
+	})
 	expect(toolCalls.topicDraft).toEqual(topicDraft)
 	expect(toolCalls.count).toBe(1)
 })

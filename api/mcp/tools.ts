@@ -267,7 +267,7 @@ function registerTopicTools(mcpServer: McpServer, caller: Caller, routeTopicId: 
 		{
 			title: "Create a topic",
 			description:
-				"Create a topic for the connected account from a name, a prompt, sources as option and value pairs, and invite emails, with the editor's defaults: weekly on Wednesday, shared by invite, ten results. Its first brew starts.",
+				"Create a topic for the connected account from a name, a prompt, sources as option and value pairs, invite emails, and a visibility of public, invite, or private, shared by invite when unsaid. The schedule takes the editor's defaults: weekly on Wednesday, ten results. Its first brew starts.",
 			inputSchema: createTopicPayload,
 			annotations: { readOnlyHint: false, destructiveHint: true },
 		},

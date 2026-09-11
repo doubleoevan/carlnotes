@@ -8,8 +8,8 @@ import { authClient } from "@/clients/authClient"
 import { Accordion } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { TagPicker } from "@/components/topic/TagPicker"
+import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFeedSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicSection } from "@/components/topic/TopicSection"
 import { PAGE_CLASS } from "@/lib/styleClasses"
@@ -22,7 +22,7 @@ import { useRegisterPageActions } from "@/stores/pageActionsStore"
  */
 export function HomePage() {
 	const navigate = useNavigate()
-	// the session decides whether + New Topic opens the modal or sends the visitor to sign up
+	// the session decides whether + New Topic opens the new-topic dialog or sends the visitor to sign up
 	const { data: session } = authClient.useSession()
 	const isSignedIn = Boolean(session)
 	// the shared feed state: the sections, the finding and resource filters, and the topic-creation quota
@@ -72,7 +72,7 @@ export function HomePage() {
 		void reloadTopicFeed()
 	}
 
-	// "+ New Topic" button opens the modal when signed in, otherwise it sends the visitor to sign up first
+	// "+ New Topic" button opens the new-topic dialog when signed in, otherwise it sends the visitor to sign up first
 	const handleNewTopic = (): void => {
 		if (isSignedIn) {
 			setIsNewTopicOpen(true)
@@ -130,7 +130,7 @@ export function HomePage() {
 				)}
 			</div>
 			{/* the new-topic modal is only mounted while it's open so that its state resets each time */}
-			{isNewTopicOpen && <EditTopicModal onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
+			{isNewTopicOpen && <NewTopicDialog onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
 		</main>
 	)
 }

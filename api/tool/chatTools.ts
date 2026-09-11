@@ -10,6 +10,7 @@ import {
 	type TopicToolCalls,
 	updateTopicPromptPayload,
 } from "@shared/contracts"
+import { visibilities } from "@shared/enums"
 import { type Tool, tool } from "ai"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
@@ -157,6 +158,7 @@ const topicDraftFieldsPayload = z.object({
 	prompt: z.string().trim().max(TOPIC_PROMPT_CHARS).optional(),
 	sources: z.array(addTopicSourcePayload).max(MAX_TOPIC_SOURCES).optional(),
 	inviteEmails: z.array(z.string().trim().toLowerCase().pipe(z.email())).max(MAX_DRAFT_INVITES).optional(),
+	visibility: z.enum(visibilities).optional(),
 })
 
 /**
@@ -175,7 +177,7 @@ export function toNewTopicChatTools(newTopicToolBinding: NewTopicToolBinding): R
 function toDraftTopicTool({ toolCalls, topicDraft }: NewTopicToolBinding): Tool {
 	return tool({
 		description:
-			"Write what the reader has settled into the topic draft shown beside this chat: the title, the prompt, the sources as option and value pairs, or the invite emails. Name only the fields to change. Call it as soon as an answer settles.",
+			"Write what the reader has settled into the topic draft shown beside this chat: the title, the prompt, the sources as option and value pairs, who may read it as public, invite, or private, or the invite emails. Name only the fields to change. Call it as soon as an answer settles.",
 		inputSchema: topicDraftFieldsPayload,
 		execute: async (topicDraftFields) => {
 			toolCalls.count += 1
@@ -245,7 +247,7 @@ function toTopicDraftSummary(topicDraft: TopicDraft): string {
 	const topicSources = topicDraft.sources
 		.map((topicSource) => `${topicSource.sourceOption} ${topicSource.value}`.trim())
 		.join(", ")
-	return `title "${topicDraft.name}", prompt "${topicDraft.prompt}", sources [${topicSources}], invites [${topicDraft.inviteEmails.join(", ")}].`
+	return `title "${topicDraft.name}", prompt "${topicDraft.prompt}", sources [${topicSources}], visibility ${topicDraft.visibility}, invites [${topicDraft.inviteEmails.join(", ")}].`
 }
 
 /**

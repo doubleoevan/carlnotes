@@ -23,6 +23,7 @@ import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { NewCountInfo } from "@/components/topic/Topic"
 import { isFollowInMenu, TopicActionBar, toTopicActionOptions } from "@/components/topic/TopicActions"
+import { TopicEditorChoiceDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
 import { TopicHeader } from "@/components/topic/TopicPageHeader"
@@ -41,7 +42,7 @@ import { useRegisterChatContext, useTopicChangeCount } from "@/stores/chatPanelS
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
 // the page's dialogs, one open at a time
-type TopicDialog = "edit" | "make-public" | "share" | "rank" | "delete"
+type TopicDialog = "edit-choice" | "edit" | "make-public" | "share" | "rank" | "delete"
 
 /**
  * The page for a single topic at /topics/:id: header with owner actions, findings, scan history, and the info card.
@@ -106,7 +107,7 @@ export function TopicPage() {
 						onShare: () => setOpenDialog("share"),
 						onToggleFollow: () => void handleSubscriptionToggle(),
 						onRank: () => setOpenDialog("rank"),
-						onEdit: () => setOpenDialog("edit"),
+						onEdit: () => setOpenDialog("edit-choice"),
 						onDelete: () => setOpenDialog("delete"),
 					}),
 					report: { subjectKind: "topic", subjectId: topic.id, subjectLabel: topic.name },
@@ -330,6 +331,14 @@ function TopicDialogs({
 }) {
 	return (
 		<>
+			{/* the edit option asks form or Carl first. the form choice opens the modal in its place */}
+			{openDialog === "edit-choice" && (
+				<TopicEditorChoiceDialog
+					topicId={topic.id}
+					onChooseForm={() => onOpenDialog("edit")}
+					onClose={() => onOpenDialog(null)}
+				/>
+			)}
 			{(openDialog === "edit" || openDialog === "make-public") && (
 				<EditTopicModal
 					topic={topic}
