@@ -51,11 +51,12 @@ async function ingestOnce(
 	topicId: string,
 	ownerId: string,
 ): Promise<{ foundCount: number; ingestionCost: number; urls: string[] }> {
-	const [openScan] = await db.insert(scans).values({ topicId, ownerId }).returning()
-	if (!openScan) {
+	// the row is marked dispatched, so a schedule sweep sharing the database never starts it a second time
+	const [smokeScan] = await db.insert(scans).values({ topicId, ownerId, dispatchedAt: new Date() }).returning()
+	if (!smokeScan) {
 		throw new Error("could not open a scan for the links smoke")
 	}
-	const ingestResult = await ingestForScan(openScan.id, topicId)
+	const ingestResult = await ingestForScan(smokeScan.id, topicId)
 	return {
 		foundCount: ingestResult.foundCount,
 		ingestionCost: ingestResult.budget.stageCosts.ingestion,

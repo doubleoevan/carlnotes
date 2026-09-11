@@ -127,6 +127,7 @@ function toRankingViolations(rankedResources: RankedResource[]): RankedResource[
 	const scoredSimilarities = rankedResources
 		.filter((resource) => resource.isScored)
 		.map((resource) => resource.similarity)
+	// the weakest similarity that still earned a score
 	const lowestScoredSimilarity = Math.min(...scoredSimilarities)
 	return rankedResources
 		.filter((resource) => resource.isAdmitted && !resource.isScored && resource.similarity > lowestScoredSimilarity)
@@ -136,19 +137,19 @@ function toRankingViolations(rankedResources: RankedResource[]): RankedResource[
 // run the Scan, time it, and report what the ranking and the limit actually did
 async function check(topicId: string, ownerId: string): Promise<boolean> {
 	// time the whole pipeline, ingestion through review, driving the workflow's own stages in order
-	const [openScan] = await db.insert(scans).values({ topicId, ownerId }).returning()
-	if (!openScan) {
+	const [smokeScan] = await db.insert(scans).values({ topicId, ownerId, dispatchedAt: new Date() }).returning()
+	if (!smokeScan) {
 		throw new Error("could not open a scan for the smoke topic")
 	}
 	// the clock spans every stage, and the limit being checked is on the whole pipeline
 	const startedAt = Date.now()
-	const ingestResult = await ingestForScan(openScan.id, topicId)
-	const reviewResult = await reviewForScan(openScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
-	await finishScan(openScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
+	const ingestResult = await ingestForScan(smokeScan.id, topicId)
+	const reviewResult = await reviewForScan(smokeScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
+	await finishScan(smokeScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
 	const elapsedMs = Date.now() - startedAt
 
 	// re-read the row, whose counts and cost the closing stage wrote
-	const topicScan = await loadScan(openScan.id)
+	const topicScan = await loadScan(smokeScan.id)
 	if (!topicScan) {
 		throw new Error("the scan row vanished mid-smoke")
 	}
@@ -232,14 +233,16 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
  * Scans the seeded topic again and reports what that pass reviewed.
  */
 async function scanAgain(topicId: string, ownerId: string): Promise<{ scoredCount: number; cost: number }> {
-	const [openScan] = await db.insert(scans).values({ topicId, ownerId }).returning()
-	if (!openScan) {
+	// the row is marked dispatched, so a schedule sweep sharing the database never starts it a second time
+	const [smokeScan] = await db.insert(scans).values({ topicId, ownerId, dispatchedAt: new Date() }).returning()
+	if (!smokeScan) {
 		throw new Error("could not open the second scan")
 	}
-	const ingestResult = await ingestForScan(openScan.id, topicId)
-	const reviewResult = await reviewForScan(openScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
-	await finishScan(openScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
-	const topicScan = await loadScan(openScan.id)
+	// drive the stages in order, then read back what the closing stage wrote
+	const ingestResult = await ingestForScan(smokeScan.id, topicId)
+	const reviewResult = await reviewForScan(smokeScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
+	await finishScan(smokeScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
+	const topicScan = await loadScan(smokeScan.id)
 	return {
 		scoredCount: reviewResult.review.scoredResourceIds.length,
 		cost: Number(topicScan?.cost ?? 0),
@@ -257,6 +260,7 @@ async function checkReviewAgain(topicId: string, ownerId: string): Promise<boole
 		.select({ id: findings.id, scanId: findings.scanId, reviewedContextHash: findings.reviewedContextHash })
 		.from(findings)
 		.where(eq(findings.topicId, topicId))
+	// the first finding takes a rating and views, which the re-score must leave alone
 	const ratedFinding = firstFindings[0]
 	if (!ratedFinding) {
 		console.log("FAIL  the first scan wrote no finding to review again")
@@ -283,15 +287,16 @@ async function checkReviewAgain(topicId: string, ownerId: string): Promise<boole
 
 	// ask the selector what a scan with nothing discovered would review. a bookmarked or rated finding
 	// outlives the feed it came from
-	const offeredResources = await loadResourcesToReview(topicId, [], "a-context-nothing-was-reviewed-against")
-	const offeredResourceIds = new Set(offeredResources.map((resource) => resource.id))
+	const resourcesToReview = await loadResourcesToReview(topicId, [], "a-context-nothing-was-reviewed-against")
+	const resourceIdsToReview = new Set(resourcesToReview.map((resource) => resource.id))
+	// the rated finding's resource, which the resources to review must include
 	const [ratedResource] = await db
 		.select({ id: resources.id })
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
 		.where(eq(findings.id, ratedFinding.id))
-	const isOfferedWhenUndiscovered = ratedResource !== undefined && offeredResourceIds.has(ratedResource.id)
-	console.log(`  offered for reviewing again with nothing discovered: ${isOfferedWhenUndiscovered}`)
+	const isRatedResourceToReview = ratedResource !== undefined && resourceIdsToReview.has(ratedResource.id)
+	console.log(`  the rated finding's resource is still to review with nothing discovered: ${isRatedResourceToReview}`)
 
 	// an edited prompt asks a different question, so every surviving finding is reviewed again
 	await db
@@ -319,7 +324,7 @@ async function checkReviewAgain(topicId: string, ownerId: string): Promise<boole
 		["the first scan recorded a hash on every finding", firstFindings.every((row) => row.reviewedContextHash !== null)],
 		["an unchanged prompt leaves a surviving finding alone", isStillReviewedByFirstScan],
 		["an edited prompt reviews a surviving finding again", isReviewedAgain],
-		["a finding the scan never rediscovers is still offered for review", isOfferedWhenUndiscovered],
+		["a finding the scan never rediscovers is still reviewed", isRatedResourceToReview],
 		["the rated finding survived the review", ratedFindingAfterEdit !== undefined],
 		["the rating survived", ratedFindingAfterEdit?.rating === "up"],
 		["the view count survived", ratedFindingAfterEdit?.viewCount === 3],
@@ -342,7 +347,7 @@ async function smokeTest(): Promise<number> {
 	console.log(`reset ${resetCount} cached resources from the feed`)
 
 	const { topicId, userId } = await seedTestData()
-	// run the checks, then delete the owner regardless of outcome
+	// run the checks against the seeded topic
 	try {
 		const isPassed = await check(topicId, userId)
 		const isReviewAgainPassed = await checkReviewAgain(topicId, userId)
@@ -350,6 +355,7 @@ async function smokeTest(): Promise<number> {
 		console.log(`\n=== smoke ${isAllPassed ? "PASSED" : "FAILED"} ===`)
 		return isAllPassed ? 0 : 1
 	} finally {
+		// delete the fake owner however the checks came out
 		await db.delete(users).where(eq(users.id, userId))
 	}
 }

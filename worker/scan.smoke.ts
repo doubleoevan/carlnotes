@@ -64,17 +64,18 @@ async function seedTestData(): Promise<{ topicId: string; userId: string }> {
 
 // run the topic scan pipeline, check the smoke assertions, and print a report. returns true if every check passes
 async function check(topicId: string, ownerId: string): Promise<boolean> {
-	// run the full pipeline for the topic, ingestion then review, driving the workflow's own stages in order
-	const [openScan] = await db.insert(scans).values({ topicId, ownerId }).returning()
-	if (!openScan) {
+	// run the full pipeline for the topic, ingestion then review, driving the workflow's own stages in order. the row
+	// is marked dispatched, so a schedule sweep sharing the database never starts it a second time through Temporal
+	const [smokeScan] = await db.insert(scans).values({ topicId, ownerId, dispatchedAt: new Date() }).returning()
+	if (!smokeScan) {
 		throw new Error("could not open a scan for the smoke topic")
 	}
-	const ingestResult = await ingestForScan(openScan.id, topicId)
-	const reviewResult = await reviewForScan(openScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
-	await finishScan(openScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
+	const ingestResult = await ingestForScan(smokeScan.id, topicId)
+	const reviewResult = await reviewForScan(smokeScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
+	await finishScan(smokeScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
 
 	// re-read the scan row, whose counts and cost the closing stage wrote
-	const topicScan = await loadScan(openScan.id)
+	const topicScan = await loadScan(smokeScan.id)
 	if (!topicScan) {
 		throw new Error("the scan row vanished mid-smoke")
 	}
