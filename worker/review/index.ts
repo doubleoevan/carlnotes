@@ -55,6 +55,13 @@ export async function reviewScan(
 		return emptyReviewSummary()
 	}
 
+	// the Resources the Topic already holds Findings for. they are in the feed, so they pass the gate and win a dedupe
+	const topicResourceRows = await db
+		.select({ resourceId: findings.resourceId })
+		.from(findings)
+		.where(eq(findings.topicId, topicId))
+	const topicResourceIds = new Set(topicResourceRows.map((topicResourceRow) => topicResourceRow.resourceId))
+
 	// the running totals for this review. each stage below traces as its own span with what it spent
 	const reviewOutcome = emptyReviewOutcome()
 
@@ -68,16 +75,31 @@ export async function reviewScan(
 	const relevantResources = await traceStage(
 		"embed-filter",
 		budget,
-		() => gateResources(resourcesToReview, topicContext, reviewOutcome, budget, litellmApiKey, stopSignal),
+		() =>
+			gateResources(
+				resourcesToReview,
+				topicContext,
+				reviewOutcome,
+				budget,
+				litellmApiKey,
+				stopSignal,
+				topicResourceIds,
+			),
 		(relevantResources) => ({ toReviewCount: resourcesToReview.length, relevantCount: relevantResources.length }),
 	)
 
-	// the second pass dedupes the surviving resources best-first, so a limit defers the least relevant resources
+	// the second pass dedupes the surviving resources best-first, so a limit defers the least relevant resources. a topic
+	// Resource walks first, so a new near-duplicate of it is the one dropped and no limit defers its second review
 	const resourceIdsToReview = resourcesToReview.map((resource) => resource.id)
+	const rankedResources = rankBySimilarity(relevantResources)
+	const topicResourcesFirst = [
+		...rankedResources.filter((rankedResource) => topicResourceIds.has(rankedResource.resource.id)),
+		...rankedResources.filter((rankedResource) => !topicResourceIds.has(rankedResource.resource.id)),
+	]
 	const resourcesToScore = await traceStage(
 		"dedupe",
 		budget,
-		() => dedupeResources(rankBySimilarity(relevantResources), resourceIdsToReview, reviewOutcome),
+		() => dedupeResources(topicResourcesFirst, resourceIdsToReview, reviewOutcome),
 		(toScore) => ({ relevantCount: relevantResources.length, toScoreCount: toScore.length }),
 	)
 

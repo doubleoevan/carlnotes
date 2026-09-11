@@ -1,6 +1,8 @@
 // filter tests for the hashing, threshold, ranking, and dedupe decisions the free stages make
 import { expect, test } from "bun:test"
+import { newBudget } from "../budget"
 import {
+	gateResources,
 	hasNearDuplicateKey,
 	isNearDuplicate,
 	isRelevant,
@@ -8,6 +10,7 @@ import {
 	rankBySimilarity,
 	toContentHash,
 } from "./filter"
+import { emptyReviewOutcome } from "./track"
 
 // a stand-in Resource for the ranking and dedupe test cases, which read only its id
 function toTestResource(id: string): Parameters<typeof rankBySimilarity>[0][number]["resource"] {
@@ -116,4 +119,26 @@ test("the surviving member of a near-duplicate set is the higher-scoring one", (
 
 	// exactly one survived, and it is the higher-scoring resource instead of whichever came back first
 	expect(dedupedIds).toEqual(["stronger"])
+})
+
+// a Resource the Topic already holds a Finding for is in the feed, so a changed context scores it again instead of
+// gating it out, while a new Resource measuring the same is dropped at the bar
+test("the gate lets a resource the topic holds through below the bar and drops a new one", async () => {
+	// two articles with the same stored vector, orthogonal to the context, so both measure a similarity of zero
+	const orthogonalEmbedding = [0, 1]
+	const topicResource = { id: "topic-resource", kind: "read", embedding: orthogonalEmbedding } as Parameters<
+		typeof gateResources
+	>[0][number]
+	const newResource = { ...topicResource, id: "new" }
+	const topicContext = { name: "t", text: "t", embedding: [1, 0], contextHash: "hash" }
+	const relevantResources = await gateResources(
+		[topicResource, newResource],
+		topicContext,
+		emptyReviewOutcome(),
+		newBudget(),
+		undefined,
+		undefined,
+		new Set(["topic-resource"]),
+	)
+	expect(relevantResources.map((relevantResource) => relevantResource.resource.id)).toEqual(["topic-resource"])
 })

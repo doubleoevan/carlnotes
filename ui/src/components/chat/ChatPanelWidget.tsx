@@ -70,8 +70,8 @@ export function ChatPanelWidget({
 	onMinimizeChat: () => void
 	children: React.ReactNode
 }) {
-	// a phone keyboard leaves the enlarged panel sized to what stays visible, down to the keyboard's edge, so its buttons
-	// sit where they are painted and nothing shows through beneath it
+	// a phone keyboard leaves the enlarged panel sized to what stays visible, down to the keyboard's edge,
+	// so its buttons stay where they are rendered and nothing shows through beneath it
 	const keyboardViewport = useKeyboardViewport()
 	const keyboardPanelStyle =
 		isEnlarged && keyboardViewport

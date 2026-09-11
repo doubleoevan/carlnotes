@@ -125,6 +125,7 @@ export async function loadTopicContext(
 /**
  * Embed every candidate and keep the ones relevant to the topic, recording the outcome of the ones dropped.
  * Embedding is the only metered work here, so a candidate past the Scan's limit is deferred instead of being embedded.
+ * A candidate the Topic already holds a Finding for passes whatever it measures, so a changed context scores it again.
  */
 export async function gateResources(
 	resourcesToReview: Resource[],
@@ -133,6 +134,7 @@ export async function gateResources(
 	budget: Budget,
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
+	topicResourceIds: Set<string> = new Set(),
 ): Promise<RelevantResource[]> {
 	// embed the candidates with no stored vector in batched calls first, one HTTP request per chunk
 	const embeddedBatchOutcome = await embedMissingVectors(resourcesToReview, budget, litellmApiKey, stopSignal)
@@ -144,7 +146,7 @@ export async function gateResources(
 		if (stopSignal?.aborted) {
 			break
 		}
-		const gateOutcome = gateResource(resource, embeddedBatchOutcome, topicContext)
+		const gateOutcome = gateResource(resource, embeddedBatchOutcome, topicContext, topicResourceIds.has(resource.id))
 		if (gateOutcome.status === "relevant") {
 			relevantResources.push(gateOutcome.relevantResource)
 			continue
@@ -196,6 +198,7 @@ function gateResource(
 	resource: Resource,
 	embeddedBatch: EmbeddedBatchOutcome,
 	topicContext: TopicContext,
+	isTopicResource: boolean,
 ): RelevanceGateOutcome {
 	// reuse a Resource's existing global embedding
 	const embedding = resource.embedding ?? embeddedBatch.embeddings.get(resource.id)
@@ -203,9 +206,10 @@ function gateResource(
 		return embeddedBatch.failedIds.has(resource.id) ? { status: "failed" } : { status: "deferred" }
 	}
 
-	// the relevance gate, measured against this resource kind's own bar
+	// the relevance gate, measured against this resource kind's own bar. a Resource the Topic already holds a Finding
+	// for is in the feed, so a changed context scores it again instead of gating it out
 	const similarity = cosineSimilarity(embedding, topicContext.embedding)
-	if (!isRelevant(similarity, resource.kind)) {
+	if (!isTopicResource && !isRelevant(similarity, resource.kind)) {
 		return { status: "filtered", reason: "below relevance threshold" }
 	}
 
