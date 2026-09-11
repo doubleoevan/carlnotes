@@ -140,7 +140,7 @@ export function ChatMessages({
 	}
 
 	return (
-		<div className="relative flex min-h-24 flex-1 flex-col">
+		<div className="relative flex min-h-0 flex-1 flex-col">
 			<div onScroll={handleScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3">
 				{chatTurns.length === 0 && !isBudgetExhausted && (
 					<ChatInputPlaceholder chatName={chatName} openingLine={openingLine} />

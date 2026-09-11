@@ -23,7 +23,7 @@ import type { ChatPanelState } from "@/stores/chatPanelStore"
 // the loading chat message that the chat panel shows while the chat history is loading
 export function ChatMessagesLoading() {
 	return (
-		<div className="text-muted-foreground font-display flex min-h-24 flex-1 items-center justify-center gap-2 text-sm">
+		<div className="text-muted-foreground font-display flex min-h-0 flex-1 items-center justify-center gap-2 text-sm">
 			<CoffeePot className="size-12" />
 			Pouring…
 		</div>
@@ -70,11 +70,12 @@ export function ChatPanelWidget({
 	onMinimizeChat: () => void
 	children: React.ReactNode
 }) {
-	// a phone keyboard leaves the enlarged panel sized to what stays visible, so its buttons sit where they are painted
+	// a phone keyboard leaves the enlarged panel sized to what stays visible, down to the keyboard's edge, so its buttons
+	// sit where they are painted and nothing shows through beneath it
 	const keyboardViewport = useKeyboardViewport()
 	const keyboardPanelStyle =
 		isEnlarged && keyboardViewport
-			? { top: keyboardViewport.top + 12, height: keyboardViewport.height - 24, bottom: "auto" }
+			? { top: keyboardViewport.top + 12, height: keyboardViewport.height - 12, bottom: "auto" }
 			: undefined
 	return (
 		<>

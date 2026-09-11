@@ -245,7 +245,7 @@ export function ChatRoomMessages({
 	}
 
 	return (
-		<div className="animate-in fade-in relative flex min-h-24 flex-1 flex-col duration-200">
+		<div className="animate-in fade-in relative flex min-h-0 flex-1 flex-col duration-200">
 			<div onScroll={handleScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3">
 				{chatMessages.length === 0 && (
 					<p className="text-muted-foreground px-1 py-6 text-center text-sm">
