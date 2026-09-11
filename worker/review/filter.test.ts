@@ -124,9 +124,9 @@ test("the surviving member of a near-duplicate set is the higher-scoring one", (
 // a Resource the Topic already holds a Finding for is in the feed, so a changed context scores it again instead of
 // gating it out, while a new Resource measuring the same is dropped at the bar
 test("the gate lets a resource the topic holds through below the bar and drops a new one", async () => {
-	// two articles with the same stored vector, orthogonal to the context, so both measure a similarity of zero
-	const orthogonalEmbedding = [0, 1]
-	const topicResource = { id: "topic-resource", kind: "read", embedding: orthogonalEmbedding } as Parameters<
+	// two articles with the same stored vector, one with nothing in common with the context, so both measure a similarity of zero
+	const unrelatedEmbedding = [0, 1]
+	const topicResource = { id: "topic-resource", kind: "read", embedding: unrelatedEmbedding } as Parameters<
 		typeof gateResources
 	>[0][number]
 	const newResource = { ...topicResource, id: "new" }
