@@ -13,7 +13,6 @@ import { ChatAuthor } from "@/components/chat/ChatAuthor"
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown"
 import { ChatVideo, CopyButton, ModelThinkingBubble, toTimeAgoLabel } from "@/components/chat/ChatMessages"
 import { ScrollDownButton, useAtBottom } from "@/components/chat/ScrollDownButton.tsx"
-import { SlashWrappedText } from "@/components/chat/SlashWrappedText"
 import type { ChatRoomState } from "@/components/chat/useChatRoom"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -323,9 +322,7 @@ const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 							<Reply className="size-3" />
 							{repliedChatMessage.authorUsername}
 						</span>
-						<span className="mt-0.5 line-clamp-3 block">
-							<SlashWrappedText text={repliedChatMessage.content} />
-						</span>
+						<span className="mt-0.5 line-clamp-3 block">{repliedChatMessage.content}</span>
 					</button>
 				)}
 				<div
@@ -339,9 +336,7 @@ const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 					{isModel ? (
 						<ChatMarkdown markdown={chatMessage.content} />
 					) : (
-						<p className="whitespace-pre-wrap">
-							<SlashWrappedText text={chatMessage.content} />
-						</p>
+						<p className="whitespace-pre-wrap">{chatMessage.content}</p>
 					)}
 				</div>
 

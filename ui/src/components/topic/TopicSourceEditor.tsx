@@ -18,7 +18,7 @@ import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { cn } from "@/lib/utils"
-import { toScreeningNote } from "./TopicInfo"
+import { toScreeningMessage } from "./TopicInfo"
 import type { TopicFields } from "./useTopicFields"
 
 // a source staged by the picker or by a suggestion: the custom source option it came from, and its typed value
@@ -164,7 +164,7 @@ export function TopicSourceEditor({ fields }: TopicSourceEditorProps) {
 						key={source.id}
 						sourceKind={source.sourceKind}
 						summary={source.summary}
-						screening={toScreeningNote(source)}
+						screeningMessage={toScreeningMessage(source)}
 						onRemoveTopicSource={() =>
 							removeSource(() => setKeptSources(keptSources.filter((kept) => kept.id !== source.id)))
 						}
@@ -355,12 +355,12 @@ function TopicSourceSectionLabel({ children, className }: { children: React.Reac
 function TopicSource({
 	sourceKind,
 	summary,
-	screening,
+	screeningMessage,
 	onRemoveTopicSource,
 }: {
 	sourceKind: string
 	summary: string
-	screening?: string | null
+	screeningMessage?: string | null
 	onRemoveTopicSource: () => void
 }) {
 	return (
@@ -372,7 +372,7 @@ function TopicSource({
 				<TooltipTrigger asChild>
 					<span className="text-muted-foreground min-w-0 flex-1 truncate">
 						{summary || "—"}
-						{screening && <span className="text-muted-foreground/70"> · {screening}</span>}
+						{screeningMessage && <span className="text-muted-foreground/70"> · {screeningMessage}</span>}
 					</span>
 				</TooltipTrigger>
 				{/* the whole summary, since the row cuts a long url short. hover only, as touch has no hover */}

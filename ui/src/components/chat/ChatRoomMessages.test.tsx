@@ -181,8 +181,8 @@ test("a link preview renders as a card without replacing the chat message text",
 	// the image is served from this origin, never from the page's own host
 	expect(chatMessagesHtml).toContain('src="/api/link-previews/link-preview-1/image"')
 
-	// the raw url stays in the chat message, so the user always sees where the link goes. each slash gains a break opportunity
-	expect(chatMessagesHtml).toContain("worth a read https:/<wbr/>/<wbr/>example.com/<wbr/>piece")
+	// the raw url stays in the chat message, so the user always sees where the link goes
+	expect(chatMessagesHtml).toContain("worth a read https://example.com/piece")
 })
 
 // a chat message whose page offered no image still renders the card, with its words alone

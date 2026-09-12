@@ -13,7 +13,6 @@ import { ChatAuthor } from "@/components/chat/ChatAuthor"
 import { ChatBudgetNotice } from "@/components/chat/ChatBudgetNotice"
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown"
 import { ScrollDownButton, useAtBottom } from "@/components/chat/ScrollDownButton.tsx"
-import { SlashWrappedText } from "@/components/chat/SlashWrappedText"
 import { randomThinkingLine } from "@/components/chat/thinkingLines"
 import { hasPreviewableLink, LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -270,7 +269,7 @@ function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: nu
 		>
 			<div className="group flex flex-col items-end">
 				<p className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2 text-sm whitespace-pre-wrap @lg:max-w-[75%]">
-					<SlashWrappedText text={chatTurn.question} />
+					{chatTurn.question}
 				</p>
 				{/* the images and clips sent with the question, each shown under it in place */}
 				{chatTurn.attachments.map((attachment) => {

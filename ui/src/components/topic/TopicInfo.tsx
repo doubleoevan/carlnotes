@@ -304,7 +304,7 @@ export function TopicSourcesSection({ sources }: { sources: TopicFeed["sources"]
 						key={source.id}
 						sourceKind={source.sourceKind}
 						summary={source.summary}
-						screening={toScreeningNote(source)}
+						screeningMessage={toScreeningMessage(source)}
 					/>
 				))}
 			</div>
@@ -317,17 +317,19 @@ function TopicSource({
 	sourceKind,
 	summary,
 	isMuted,
-	screening,
+	screeningMessage,
 }: {
 	sourceKind: string
 	summary: string
 	isMuted?: boolean
-	screening?: string | null
+	screeningMessage?: string | null
 }) {
 	// a source kind with no icon of its own still gets a neutral marker
 	const SourceIcon = SOURCE_ICON[sourceKind] ?? Diamond
 	return (
-		<div className={cn("flex min-w-0 items-baseline gap-1.5", (isMuted || screening) && "text-muted-foreground")}>
+		<div
+			className={cn("flex min-w-0 items-baseline gap-1.5", (isMuted || screeningMessage) && "text-muted-foreground")}
+		>
 			{/* an svg has no baseline of its own, so it aligns by its box bottom and sits high.
 			    the nudge drops it down to the text */}
 			<SourceIcon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0 translate-y-0.5" />
@@ -336,7 +338,7 @@ function TopicSource({
 					<span className="min-w-0 truncate">
 						{sourceKind}
 						{summary && <span className="text-muted-foreground"> — {summary}</span>}
-						{screening && <span className="text-muted-foreground"> · {screening}</span>}
+						{screeningMessage && <span className="text-muted-foreground"> · {screeningMessage}</span>}
 					</span>
 				</TooltipTrigger>
 				{/* the whole summary, since the row cuts a long url short. hover only, as touch has no hover */}
@@ -346,8 +348,8 @@ function TopicSource({
 	)
 }
 
-// what a source that has not passed its llm-guard screen reads as. only its owner ever sees this.
-export function toScreeningNote(source: { status: string; error: string | null }): string | null {
+// the text a source row shows after its summary: "checking" while its screen is pending, or the reason it failed. only its owner sees it
+export function toScreeningMessage(source: { status: string; error: string | null }): string | null {
 	if (source.status === "pending") {
 		return "checking"
 	}
