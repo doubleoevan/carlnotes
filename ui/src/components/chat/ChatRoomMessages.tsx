@@ -13,6 +13,7 @@ import { ChatAuthor } from "@/components/chat/ChatAuthor"
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown"
 import { ChatVideo, CopyButton, ModelThinkingBubble, toTimeAgoLabel } from "@/components/chat/ChatMessages"
 import { ScrollDownButton, useAtBottom } from "@/components/chat/ScrollDownButton.tsx"
+import { SlashWrappedText } from "@/components/chat/SlashWrappedText"
 import type { ChatRoomState } from "@/components/chat/useChatRoom"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -246,7 +247,10 @@ export function ChatRoomMessages({
 
 	return (
 		<div className="animate-in fade-in relative flex min-h-0 flex-1 flex-col duration-200">
-			<div onScroll={handleScroll} className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3">
+			<div
+				onScroll={handleScroll}
+				className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain px-3 py-3 wrap-anywhere"
+			>
 				{chatMessages.length === 0 && (
 					<p className="text-muted-foreground px-1 py-6 text-center text-sm">
 						{`Join the conversation, or ask @carl for a hot take on ${chatName || "this chat"}.`}
@@ -319,7 +323,9 @@ const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 							<Reply className="size-3" />
 							{repliedChatMessage.authorUsername}
 						</span>
-						<span className="mt-0.5 line-clamp-3 block">{repliedChatMessage.content}</span>
+						<span className="mt-0.5 line-clamp-3 block">
+							<SlashWrappedText text={repliedChatMessage.content} />
+						</span>
 					</button>
 				)}
 				<div
@@ -333,7 +339,9 @@ const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 					{isModel ? (
 						<ChatMarkdown markdown={chatMessage.content} />
 					) : (
-						<p className="whitespace-pre-wrap">{chatMessage.content}</p>
+						<p className="whitespace-pre-wrap">
+							<SlashWrappedText text={chatMessage.content} />
+						</p>
 					)}
 				</div>
 

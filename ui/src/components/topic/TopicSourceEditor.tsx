@@ -368,10 +368,16 @@ function TopicSource({
 			<Badge variant="outline" className="shrink-0">
 				{sourceKind}
 			</Badge>
-			<span className="text-muted-foreground min-w-0 flex-1 truncate">
-				{summary || "—"}
-				{screening && <span className="text-muted-foreground/70"> · {screening}</span>}
-			</span>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<span className="text-muted-foreground min-w-0 flex-1 truncate">
+						{summary || "—"}
+						{screening && <span className="text-muted-foreground/70"> · {screening}</span>}
+					</span>
+				</TooltipTrigger>
+				{/* the whole summary, since the row cuts a long url short. hover only, as touch has no hover */}
+				{summary && <TooltipContent className="max-w-72 wrap-anywhere">{summary}</TooltipContent>}
+			</Tooltip>
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<button

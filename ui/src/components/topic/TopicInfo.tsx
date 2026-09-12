@@ -5,6 +5,7 @@ import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { BrandIcon } from "@/components/common/BrandIcon"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ShareTopicButton } from "@/components/share/ShareTopic"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
 import {
@@ -330,11 +331,17 @@ function TopicSource({
 			{/* an svg has no baseline of its own, so it aligns by its box bottom and sits high.
 			    the nudge drops it down to the text */}
 			<SourceIcon aria-hidden="true" className="text-muted-foreground size-3.5 shrink-0 translate-y-0.5" />
-			<span className="min-w-0 truncate">
-				{sourceKind}
-				{summary && <span className="text-muted-foreground"> — {summary}</span>}
-				{screening && <span className="text-muted-foreground"> · {screening}</span>}
-			</span>
+			<Tooltip>
+				<TooltipTrigger asChild>
+					<span className="min-w-0 truncate">
+						{sourceKind}
+						{summary && <span className="text-muted-foreground"> — {summary}</span>}
+						{screening && <span className="text-muted-foreground"> · {screening}</span>}
+					</span>
+				</TooltipTrigger>
+				{/* the whole summary, since the row cuts a long url short. hover only, as touch has no hover */}
+				{summary && <TooltipContent className="max-w-72 wrap-anywhere">{summary}</TooltipContent>}
+			</Tooltip>
 		</div>
 	)
 }
