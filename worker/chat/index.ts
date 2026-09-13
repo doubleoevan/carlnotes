@@ -29,6 +29,7 @@ import {
 	retrieveDocsBlock,
 	retrieveTeamChatContext,
 	type TeamChatContext,
+	type TopicSettings,
 } from "./retrieve"
 import { type SearchTotal, webSearchTool } from "./search"
 
@@ -238,6 +239,7 @@ export async function buildTopicChatPrompt(
 		{
 			topicName: chatContext.topicName,
 			topicPrompt: chatContext.topicPrompt || "Nothing written down yet.",
+			topicSettingsBlock: toTopicSettingsBlock(chatContext.topicSettings),
 			findingsBlock: toFindingsBlock(chatContext.findings),
 			sourcesBlock: toSourcesBlock(chatContext.sources),
 			scanSummariesBlock: toScanSummariesBlock(chatContext.scanSummaries),
@@ -311,6 +313,18 @@ function toTopicDraftBlock(topicDraft?: TopicDraft): string {
 		`Tags: ${topicDraft.tags.join(", ") || "(none)"}`,
 		`Brews: ${topicDraft.frequency}, keeping ${topicDraft.maxTopicFindings} findings each`,
 		`Invites: ${topicDraft.inviteEmails.join(", ") || "(none)"}`,
+	].join("\n")
+}
+
+// the topic's settings as carl reads them, one line each, in the words the draft block uses
+function toTopicSettingsBlock(topicSettings: TopicSettings): string {
+	const { frequency, scheduledTime, scheduledDayOfWeek, visibility, tags, maxTopicFindings } = topicSettings
+	// only a weekly scan has a day, and the stored time drops its seconds
+	const scanDay = frequency === "weekly" ? ` on ${scheduledDayOfWeek}` : ""
+	return [
+		`Visibility: ${visibility}`,
+		`Tags: ${tags.join(", ") || "(none)"}`,
+		`Brews: ${frequency}${scanDay} at ${scheduledTime.slice(0, 5)}, keeping ${maxTopicFindings} findings each`,
 	].join("\n")
 }
 

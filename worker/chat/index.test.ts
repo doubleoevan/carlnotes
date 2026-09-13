@@ -12,6 +12,14 @@ function chatContext(overrides: Partial<ChatContext> = {}): ChatContext {
 	return {
 		topicName: "AI startups worth applying to",
 		topicPrompt: "Series A and B startups hiring founding engineers",
+		topicSettings: {
+			frequency: "weekly",
+			scheduledTime: "09:00:00",
+			scheduledDayOfWeek: "monday",
+			visibility: "private",
+			tags: ["ai", "hiring"],
+			maxTopicFindings: 10,
+		},
 		findings: [
 			{
 				title: "16 Series B Startups Hiring Right Now",
@@ -30,6 +38,22 @@ function chatContext(overrides: Partial<ChatContext> = {}): ChatContext {
 		...overrides,
 	}
 }
+
+// the settings block names the visibility, the tags, and the scan schedule with its weekly day
+test("the chat prompt states the topic's settings and its weekly scan day", async () => {
+	const { prompt } = await buildTopicChatPrompt(chatContext())
+	expect(prompt).toContain("Visibility: private")
+	expect(prompt).toContain("Tags: ai, hiring")
+	expect(prompt).toContain("Brews: weekly on monday at 09:00, keeping 10 findings each")
+})
+
+// a daily scan has no day, and a topic with no tags says so
+test("a daily scan names no day and empty tags read as none", async () => {
+	const topicSettings = { ...chatContext().topicSettings, frequency: "daily" as const, tags: [] }
+	const { prompt } = await buildTopicChatPrompt(chatContext({ topicSettings }))
+	expect(prompt).toContain("Tags: (none)")
+	expect(prompt).toContain("Brews: daily at 09:00, keeping 10 findings each")
+})
 
 // a user's own kept chat attachments reach the model in their own labeled section
 test("the user's kept chat attachment context is interpolated", async () => {

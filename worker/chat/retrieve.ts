@@ -50,10 +50,17 @@ export type RetrievedFinding = {
 	topicName?: string
 }
 
+// the settings a topic is scanned and shown with, so the chat can know and edit them
+export type TopicSettings = Pick<
+	typeof topics.$inferSelect,
+	"frequency" | "scheduledTime" | "scheduledDayOfWeek" | "visibility" | "tags" | "maxTopicFindings"
+>
+
 // everything one chat turn puts in front of the model, assembled from what the topic already holds
 export type ChatContext = {
 	topicName: string
 	topicPrompt: string
+	topicSettings: TopicSettings
 	findings: RetrievedFinding[]
 	// the places this topic reads, one display line each
 	sources: string[]
@@ -78,7 +85,16 @@ export async function retrieveChatContext(
 ): Promise<ChatContext | null> {
 	// a missing topic has nothing to chat about
 	const [topic] = await db
-		.select({ name: topics.name, prompt: topics.prompt })
+		.select({
+			name: topics.name,
+			prompt: topics.prompt,
+			frequency: topics.frequency,
+			scheduledTime: topics.scheduledTime,
+			scheduledDayOfWeek: topics.scheduledDayOfWeek,
+			visibility: topics.visibility,
+			tags: topics.tags,
+			maxTopicFindings: topics.maxTopicFindings,
+		})
 		.from(topics)
 		.where(eq(topics.id, topicId))
 	if (!topic) {
@@ -98,9 +114,12 @@ export async function retrieveChatContext(
 		includeKeptAttachments ? readChatAttachmentContext(userId, topicId) : Promise.resolve(""),
 		readDocsBlock(questionVector),
 	])
+	// the name and prompt fill their own lines, and the rest of the row is the settings block
+	const { name, prompt, ...topicSettings } = topic
 	return {
-		topicName: topic.name,
-		topicPrompt: topic.prompt,
+		topicName: name,
+		topicPrompt: prompt,
+		topicSettings,
 		findings: retrievedFindings,
 		sources: topicSources,
 		scanSummaries,
