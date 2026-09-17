@@ -76,6 +76,7 @@ function TopicDraftOrLimitNotice({ chat }: { chat: TopicChat }) {
 	return (
 		<TopicDraftCard
 			topicDraft={chat.topicDraft}
+			isCarlReplying={chat.isStreaming}
 			attachmentFiles={chat.topicDraftAttachmentFiles}
 			onRemoveAttachmentFile={chat.removeTopicDraftAttachmentFile}
 		/>
@@ -165,6 +166,15 @@ export function PrivateChatPanel({
 			)}
 			{/* carl's draft above the composer, or the plan's limit when it holds no more topics */}
 			{page.newTopic && <TopicDraftOrLimitNotice chat={chat} />}
+			{/* the topic this chat may edit, as it is saved or as carl proposed changing it */}
+			{chat.editableTopicDraft && (
+				<TopicDraftCard
+					topicDraft={chat.editableTopicDraft.topicDraft}
+					topicId={page.topicId}
+					isTopicEditProposed={chat.editableTopicDraft.isTopicEditProposed}
+					isCarlReplying={chat.isStreaming}
+				/>
+			)}
 			<PrivateChatComposer chat={chat} placeholder={chatCopy.placeholder} onSendQuestion={handleSendChat} />
 
 			{/* the clear confirmation is only mounted while open, so its state resets each time */}

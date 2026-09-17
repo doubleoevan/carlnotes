@@ -125,6 +125,8 @@ Feature work lands change-by-change through [OpenSpec](https://github.com/Fissio
 ```bash
 bun install
 bun run dev          # api, ui, temporal, and worker together (concurrently, colored per process); run carl-up first for the Docker infra
+                     # `mkdir -p logs && bun run dev 2>&1 | tee logs/dev.log` keeps a copy to tail from another shell; logs/ is gitignored
+                     # every line is prefixed with its process, so `grep '^\[api\]' logs/dev.log` reads one of them
 bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server) and create a limited dev key; carl-down stops it
                      # scans run as Temporal workflows, so dev:temporal must be up for any scan to happen, not just for attachments
 bun run dev:ui       # Vite dev server (UI); wraps itself in doppler run

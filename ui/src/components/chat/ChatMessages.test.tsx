@@ -47,6 +47,37 @@ function renderChatTurn(attachments: ChatMessageAttachment[]): string {
 	)
 }
 
+// a broken reply offers a retry that re-asks the question, with the icon that names the action
+test("a failed chat turn renders a retry control", () => {
+	const failedChatTurn: ChatTurn = {
+		question: "what is this",
+		answer: "",
+		rejection: "failed",
+		attachments: [],
+		linkPreviews: [],
+		answerLinkPreviews: [],
+	}
+	const chatMessagesHtml = renderToStaticMarkup(
+		<MemoryRouter>
+			<ChatMessages
+				chatTurns={[failedChatTurn]}
+				isEnlarged={false}
+				isStreaming={false}
+				chatName="brew"
+				author={USER}
+				onRetry={() => {}}
+			/>
+		</MemoryRouter>,
+	)
+	expect(chatMessagesHtml).toContain("Carl lost his train of thought.")
+	expect(chatMessagesHtml).toContain("Try again?")
+	// the icon is decoration beside the words, so a screen reader reads the words alone
+	expect(chatMessagesHtml).toContain("lucide-rotate-ccw")
+	expect(chatMessagesHtml).toContain('aria-hidden="true"')
+	// the words lead the icon, which is what puts the button on the sentence's baseline
+	expect(chatMessagesHtml.indexOf("Try again?")).toBeLessThan(chatMessagesHtml.indexOf("lucide-rotate-ccw"))
+})
+
 // an image sent with a question is shown in its bubble instead of being named and nothing else
 test("an image sent with a question renders in its bubble", () => {
 	const chatMessagesHtml = renderChatTurn([{ id: "attachment-1", kind: "image", name: "latte.png" }])

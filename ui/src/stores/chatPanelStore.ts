@@ -1,5 +1,6 @@
-import type { ChatRoom, TopicDraftTeam } from "@shared/contracts"
+import type { ChatRoom, ProposeTopicEditPayload, TopicDraftTeam } from "@shared/contracts"
 import { useEffect, useSyncExternalStore } from "react"
+import { isWideScreen } from "@/lib/utils"
 import { toStoreListeners } from "@/stores/storeListeners"
 
 /**
@@ -259,4 +260,60 @@ export function publishTopicChanged(topicId: string): void {
 export function useTopicChangeCount(topicId: string | null): number {
 	useSyncExternalStore(subscribe, getVersion)
 	return topicId !== null && changedTopicId === topicId ? topicChangeCount : 0
+}
+
+// the topic being edited with carl, whichever chat about it the panel is on, and what he last proposed changing
+let editingTopicId: string | null = null
+let proposedTopicEdit: ProposeTopicEditPayload | null = null
+
+/**
+ * Marks a topic as the one being edited with carl, and keeps what he proposed changing.
+ * The topic editor's chat choice starts an edit with nothing proposed yet, and each proposal replaces the last.
+ * Moving to another topic drops the previous topic's proposal.
+ */
+export function startEditingTopic(topicId: string, nextProposedTopicEdit?: ProposeTopicEditPayload): void {
+	if (editingTopicId !== topicId) {
+		proposedTopicEdit = null
+	}
+	editingTopicId = topicId
+	// a call with no proposal starts the edit and leaves whatever is previewed alone
+	if (nextProposedTopicEdit) {
+		proposedTopicEdit = nextProposedTopicEdit
+	}
+	publish()
+}
+
+/**
+ * Drops what carl proposed, leaving the edit under way.
+ */
+export function clearProposedTopicEdit(): void {
+	if (proposedTopicEdit === null) {
+		return
+	}
+	proposedTopicEdit = null
+	publish()
+}
+
+/**
+ * Reads what carl proposed changing to this topic, or null when this topic is not the one being edited.
+ */
+export function useProposedTopicEdit(topicId: string | null): ProposeTopicEditPayload | null {
+	useSyncExternalStore(subscribe, getVersion)
+	return topicId !== null && editingTopicId === topicId ? proposedTopicEdit : null
+}
+
+/**
+ * Reads whether this topic is the one being edited with carl.
+ */
+export function useIsEditingTopic(topicId: string | null): boolean {
+	useSyncExternalStore(subscribe, getVersion)
+	return topicId !== null && editingTopicId === topicId
+}
+
+/**
+ * Opens the panel on the new-topic chat with an optional team, enlarged on a narrow screen.
+ */
+export function openNewTopicChat(initialTeam?: TopicDraftTeam): void {
+	setChatId({ kind: "private", newTopic: true, initialTeam })
+	setChatPanelState(isWideScreen() ? "open" : "enlarged")
 }

@@ -100,7 +100,7 @@ Check for:
    - `SourceEditor.tsx` (now `TopicSourceEditor.tsx`)
    - "web scout" (now "web search", in UI copy and specs alike) — the built-in Source that
      searches the web, distinct from the `search` Source kind that names it in code
-   - `emit` as the verb for what an ingester hands back (now "find" for discovering a page,
+   - `emit` as the verb for what an ingester returns (now "find" for discovering a page,
      "return" for what the function gives its caller)
    - "reader" for the person using the app (now "user" everywhere in code). prompt markdown keeps
      "reader", since Carl addresses one — see the prompt-authoring skill for where that line falls
@@ -130,6 +130,8 @@ Check for:
      the webhook route). `content.ts`'s `Surface`/`SURFACES` are now `Section`/`SECTIONS`, since the value
      is the folder under `content/` a group of pages is read from. the verb (an error is surfaced) and the
      visual noun (a card on a sunken surface) are different words and stay
+   - `hand` / `hands back` / `handed back` in a comment for what a function returns (now `return`). the word keeps
+     its other senses: a Scan started by hand, one module handing a value to another, a hand-written skill
    - `carries` / `carrying` in comments (now `includes` when one thing holds another, `has` for an attribute,
      `sends` for something transmitted), `rather than` (now `instead of`), `rides with` (now `goes with`),
      `steers` (say what it sets or bounds), `lands in` (now `is included in`), `wears` (now `shows`),
@@ -223,6 +225,10 @@ Check for:
    - `common/CountPill.tsx` (now `common/CountBadge.tsx`; a badge is what every caller called it)
    - `toRecencyOrdered` (now `toRelevanceThenRecencyOrder`; it orders by similarity band first and recency second,
      so the old name said only the tiebreak)
+   - `ui/src/components/chat/ChatMarkdown.test.ts` (now `ChatMarkdown.test.tsx`; its render cases need JSX)
+   - `CHAT_STREAM_FAILED_TEXT` and the marker line it belonged to. a chat reply stream is newline-delimited json
+     now, one `ChatReplyLine` per line, so a failure is the `failed` line and text Carl writes can never pass
+     for one
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
@@ -254,6 +260,18 @@ Check for:
     root AGENTS.md and each module AGENTS.md name exists as described, and no
     module has grown a subsystem its AGENTS.md omits. Spot-check by listing
     each module's folders against its doc's layout bullet.
+
+11. **Prompts do not restate what the code already holds**: check each prompt
+    body under `worker/prompts/` for a hand-typed list of source kinds,
+    visibilities, frequencies, or findings limits, and compare it against
+    `shared/sources.ts` and `shared/enums.ts`. A prompt takes such a list as a
+    variable, the way `chat-glossary.md` takes `{{sourceOptions}}`. The
+    `prompt-authoring` skill's Prompt fragments section is the rule.
+12. **One wording, one prompt fragment**: when two prompts under `worker/prompts/`
+    share the same paragraph or rule, it belongs in a prompt fragment that both prompts splice, as
+    `chat-glossary.md` and `chat-conduct.md` are spliced. Diff the prompt bodies
+    against each other for repeated sentences and flag any that a prompt fragment
+    should own. The `prompt-authoring` skill's Prompt fragments section is the rule.
 
 Report as a table: finding, file(s), which rule it violates, proposed fix.
 Then stop.

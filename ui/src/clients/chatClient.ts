@@ -1,14 +1,15 @@
 // the topic chat client. the reply arrives as a stream, so it is read chunk by chunk instead of being parsed whole
 import {
 	CHAT_HISTORY_TURNS,
-	CHAT_STREAM_FAILED_TEXT,
-	CHAT_TOOL_CALLS_MARKER,
 	type ChatAttachment,
 	type ChatConversation,
+	type ChatReplyLine,
+	type ChatToolCall,
 	compactChatAnswer,
 	type TopicDraft,
 	type TopicDraftTeam,
 	type TopicToolCalls,
+	toSentToolCalls,
 	toUncompactedChatTurnStart,
 } from "@shared/contracts"
 
@@ -22,6 +23,7 @@ export type ChatSendResult = ChatRejection | "stopped" | null
 export type ChatPage =
 	| { topicId: string; teamId?: undefined; newTopic?: undefined }
 	| { teamId: string; topicId?: undefined; newTopic?: undefined }
+	// the team the new-topic chat's draft starts with
 	| { newTopic: true; topicId?: undefined; teamId?: undefined; initialTeam?: TopicDraftTeam }
 
 /**
@@ -45,7 +47,7 @@ export async function fetchChatConversation(chatPage: ChatPage): Promise<ChatCon
 export async function sendChatTurn(
 	page: ChatPage,
 	question: string,
-	history: { question: string; answer: string }[],
+	history: { question: string; answer: string; toolCalls?: ChatToolCall[] }[],
 	attachments: ChatAttachment[],
 	onChunk: (chunk: string) => void,
 	onToolCalls: (toolCalls: TopicToolCalls) => void,
@@ -67,6 +69,7 @@ export async function sendChatTurn(
 				history: historyChatTurns.map((chatTurn, index) => ({
 					question: chatTurn.question,
 					answer: index < uncompactedChatTurnStart ? compactChatAnswer(chatTurn.answer) : chatTurn.answer,
+					toolCalls: chatTurn.toolCalls && toSentToolCalls(chatTurn.toolCalls),
 				})),
 			}),
 			signal,
@@ -87,11 +90,18 @@ export async function sendChatTurn(
 }
 
 /**
- * Clears the user's conversation with a topic. Returns whether the server accepted it.
+ * Clears the user's conversation with a topic. Returns whether the server accepted it, and reads a request that
+ * never arrived as a no, so a caller decides what to keep on one answer instead of two.
  */
 export async function sendClearChat(chatPage: ChatPage): Promise<boolean> {
-	const response = await fetch(toChatUrl(chatPage), { method: "DELETE" })
-	return response.ok
+	// ask the server to clear, reading a request that never left as a clear that did not happen
+	try {
+		const response = await fetch(toChatUrl(chatPage), { method: "DELETE" })
+		return response.ok
+	} catch (error) {
+		console.error("chat clear failed", error)
+		return false
+	}
 }
 
 /**
@@ -109,93 +119,94 @@ export async function sendDeleteKeptAttachment(keptAttachmentId: string): Promis
 	return response.ok
 }
 
-// read the reply stream to its end, showing the text as it arrives with any marker held back. null once it completes
+// read the reply stream to its end, one json line at a time. null once it completes
 async function readChatStream(
 	body: ReadableStream<Uint8Array>,
 	onChunk: (chunk: string) => void,
 	onToolCalls: (toolCalls: TopicToolCalls) => void,
 ): Promise<ChatSendResult> {
+	// the reader, the decoder, the tail that holds a line until the newline ending it, and how the chat turn ended
 	const reader = body.getReader()
 	const textDecoder = new TextDecoder()
-	let streamedText = ""
-	let shownTextLength = 0
-	// decode each chunk into the whole text, which the markers are read from
+	let pendingText = ""
+	let chatSendResult: ChatSendResult = null
+
+	// read until the stream closes, applying each line as it completes
 	while (true) {
 		const { done, value } = await reader.read()
 		if (done) {
-			return endChatStream(streamedText, shownTextLength, onChunk, onToolCalls)
+			return chatSendResult
 		}
-		streamedText += textDecoder.decode(value, { stream: true })
+		pendingText += textDecoder.decode(value, { stream: true })
 
-		// show the text so far, minus a tail that could begin a marker, so no fragment of one flashes on screen
-		const visibleText = toVisibleText(streamedText)
-		const showableTextLength = visibleText.length - toChatStreamMarkerPrefixTail(visibleText).length
-		if (showableTextLength > shownTextLength) {
-			onChunk(visibleText.slice(shownTextLength, showableTextLength))
-			shownTextLength = showableTextLength
+		// apply every line whose newline has arrived, keeping the unfinished last one for the next chunk
+		const chatReplyLineTexts = pendingText.split("\n")
+		pendingText = chatReplyLineTexts.pop() ?? ""
+		for (const chatReplyLineText of chatReplyLineTexts) {
+			chatSendResult = applyChatReplyLine(chatReplyLineText, onChunk, onToolCalls) ?? chatSendResult
 		}
 	}
 }
 
-// a drained stream completed unless the server ended it with the failure marker
-function endChatStream(
-	streamedText: string,
-	shownTextLength: number,
+// show one line's text or apply its tool calls, answering "failed" for the line that ends a broken reply
+function applyChatReplyLine(
+	chatReplyLineText: string,
 	onChunk: (chunk: string) => void,
 	onToolCalls: (toolCalls: TopicToolCalls) => void,
 ): ChatSendResult {
-	if (streamedText.trimEnd().endsWith(CHAT_STREAM_FAILED_TEXT.trim())) {
-		return "failed"
-	}
-
-	// show the held tail as ordinary text
-	const unshownText = toVisibleText(streamedText).slice(shownTextLength)
-	if (unshownText) {
-		onChunk(unshownText)
-	}
-	// read the tool calls the stream ends with
-	const toolCalls = toToolCalls(streamedText)
-	if (toolCalls) {
-		onToolCalls(toolCalls)
-	}
-	return null
-}
-
-// the two markers a chat stream can end with. a tail that could begin one is held back until the next chunk settles it
-const CHAT_STREAM_MARKERS = [CHAT_STREAM_FAILED_TEXT, CHAT_TOOL_CALLS_MARKER]
-
-// the text the bubble shows: nothing from the tool calls marker on, and never the failure marker
-function toVisibleText(streamedText: string): string {
-	const toolCallsStartIndex = streamedText.lastIndexOf(CHAT_TOOL_CALLS_MARKER)
-	const textBeforeToolCalls = toolCallsStartIndex >= 0 ? streamedText.slice(0, toolCallsStartIndex) : streamedText
-	return textBeforeToolCalls.replace(CHAT_STREAM_FAILED_TEXT, "")
-}
-
-// the tool calls the stream ends with, or null
-function toToolCalls(streamedText: string): TopicToolCalls | null {
-	const toolCallsStartIndex = streamedText.lastIndexOf(CHAT_TOOL_CALLS_MARKER)
-	if (toolCallsStartIndex < 0) {
+	const chatReplyLine = toChatReplyLine(chatReplyLineText)
+	// a text line is the only one the bubble shows
+	if (chatReplyLine?.type === "text") {
+		onChunk(chatReplyLine.text)
 		return null
 	}
-	// read the tool calls, or none for a broken stream that cut them off part-way
+	// the tool calls go to the toast, the card, and the topic page instead
+	if (chatReplyLine?.type === "toolCalls") {
+		onToolCalls(chatReplyLine.toolCalls)
+		return null
+	}
+	return chatReplyLine ? "failed" : null
+}
+
+// what one streamed line says, or null for the blank line a stream ends on and for text the server never wrote
+function toChatReplyLine(chatReplyLineText: string): ChatReplyLine | null {
+	if (chatReplyLineText === "") {
+		return null
+	}
+	// read the line as json, and drop it unless it is one of the three lines the server writes
 	try {
-		return JSON.parse(streamedText.slice(toolCallsStartIndex + CHAT_TOOL_CALLS_MARKER.length)) as TopicToolCalls
+		const parsedReplyLine: unknown = JSON.parse(chatReplyLineText)
+		return isChatReplyLine(parsedReplyLine) ? parsedReplyLine : null
 	} catch {
+		console.error("chat reply line could not be read")
 		return null
 	}
 }
 
-// the longest tail of the text that could be the start of a marker
-function toChatStreamMarkerPrefixTail(text: string): string {
-	const longestMarkerPrefixLength = Math.max(...CHAT_STREAM_MARKERS.map((marker) => marker.length)) - 1
-	// search from the longest tail down
-	for (let length = Math.min(longestMarkerPrefixLength, text.length); length > 0; length--) {
-		const tail = text.slice(-length)
-		if (CHAT_STREAM_MARKERS.some((marker) => marker.startsWith(tail))) {
-			return tail
-		}
+// whether a parsed line says one of the three things, payload included, so a half-written one is dropped instead of shown or applied
+function isChatReplyLine(parsedLine: unknown): parsedLine is ChatReplyLine {
+	if (typeof parsedLine !== "object" || parsedLine === null) {
+		return false
 	}
-	return ""
+	// a text line needs its text, and the failed line needs nothing beyond its type
+	const { type, text, toolCalls } = parsedLine as Record<string, unknown>
+	if (type === "text") {
+		return typeof text === "string"
+	}
+	// a tool calls line needs the lists its own guard checks
+	if (type === "toolCalls") {
+		return isTopicToolCalls(toolCalls)
+	}
+	return type === "failed"
+}
+
+// whether a value holds the two lists the toast, the card, and the topic page read off every tool calls line
+function isTopicToolCalls(toolCalls: unknown): toolCalls is TopicToolCalls {
+	if (typeof toolCalls !== "object" || toolCalls === null) {
+		return false
+	}
+	const { topicSaves, topicSaveRejections } = toolCalls as Record<string, unknown>
+	return Array.isArray(topicSaves) && Array.isArray(topicSaveRejections)
 }
 
 // the conversation route for a chat page

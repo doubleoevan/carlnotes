@@ -1,6 +1,7 @@
 // the app's core database tables, one per domain concept
 
 // enum value sets that live in @shared so that db pgEnums, api validation, and ui rendering can read one source
+import type { TopicDraft } from "@shared/contracts"
 import {
 	attachmentStatuses,
 	avatarSources,
@@ -232,6 +233,15 @@ export const topics = pgTable(
 		check("topics_max_results_allowed", sql.raw(`max_results in (${maxTopicFindingsOptions.join(", ")})`)),
 	],
 )
+
+// the new-topic chat's draft, one per user, so it survives a reload
+export const topicDrafts = pgTable("topic_drafts", {
+	userId: text("user_id")
+		.primaryKey()
+		.references(() => users.id, { onDelete: "cascade" }),
+	topicDraft: jsonb("topic_draft").$type<TopicDraft>().notNull(),
+	updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
+})
 
 // a source is a topic input that scans pull resources from
 export const sources = pgTable("sources", {
@@ -735,15 +745,19 @@ export const chatTurns = pgTable(
 		userId: text("user_id")
 			.notNull()
 			.references(() => users.id, { onDelete: "cascade" }),
-		// the topic the chat turn is about. null on a team chat room's turn, which names the team instead
+		// the topic the chat turn is about. null on a team chat room's turn, which names the team instead,
+		// and on a new-topic chat turn, where no topic exists yet
 		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
 		// the team whose own chat room billed the chat turn, so team spend still counts it. null on a topic chat turn
+		// and on a new-topic chat turn, which is one user's alone
 		teamId: text("team_id").references(() => teams.id, { onDelete: "cascade" }),
 		// what the chat turn cost, in the same dollars scans record, summed into the user's monthly spend
 		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
 		// the chat turn's text, stored only when the gate grants the sender chat:persist
 		question: text("question"),
 		answer: text("answer"),
+		// the tools the chat turn called, stored encrypted beside its text
+		toolCalls: text("tool_calls"),
 		// the chat room message this turn answered, for a chat room completion. null on a private chat turn
 		roomMessageId: bigint("room_message_id", { mode: "number" }),
 		// what the completion spent in tokens, kept beside the cost it produced

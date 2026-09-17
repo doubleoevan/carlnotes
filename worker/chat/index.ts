@@ -2,12 +2,16 @@
 import {
 	CHAT_HISTORY_TURNS,
 	type ChatAttachment,
+	type ChatToolCall,
 	compactChatAnswer,
 	type TopicDraft,
 	type TopicDraftTeam,
+	toStandingTopicEditCall,
 	toUncompactedChatTurnStart,
 } from "@shared/contracts"
+import { toScanFrequenciesSentence } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
+import { toSourceOptionsSentence } from "@shared/sources"
 import {
 	type ImagePart,
 	type ModelMessage,
@@ -40,7 +44,7 @@ const MAX_TURN_STEPS = 8
 const MAX_TURN_OUTPUT_TOKENS = 3000
 
 // one earlier chat turn, replayed so the model can resolve what "that" and "the second one" point back to
-export type ChatHistoryTurn = { question: string; answer: string }
+export type ChatHistoryTurn = { question: string; answer: string; toolCalls?: ChatToolCall[] }
 
 // everything one chat turn needs to answer a user's question about a topic, or about a team's whole topic set
 export type ChatTurnInput = {
@@ -61,6 +65,12 @@ export type ChatTurnInput = {
 	retrievalQuestion?: string
 	// the tools this turn offers: the edit tools to a user who may edit the topic, the draft tools to the new-topic chat
 	tools?: Record<string, Tool>
+	// the tools that save nothing, all bound outside tools so a consent's forced call can never pick one:
+	// open the new-topic chat, show a proposed change on the topic's card, take it back off, and suggest sources
+	openNewTopicChatTool?: Tool
+	proposeTopicEditTool?: Tool
+	cancelTopicEditTool?: Tool
+	suggestSourcesTool?: Tool
 	// the new-topic chat, bound to no topic and no team, and the draft its turn was sent with
 	newTopic?: boolean
 	topicDraft?: TopicDraft
@@ -73,27 +83,32 @@ export type ChatTurnInput = {
 // the edit block for a turn without the topic tools
 const EMPTY_EDIT_TOPIC_BLOCK = "None."
 
+// one part of a streamed reply: text as it arrives, or a tool call that returned
+export type ChatReplyPart = { type: "text"; text: string } | { type: "tool-result"; toolCall: ChatToolCall }
+
 // the streamed reply plus what it cost, resolved once the stream is fully read
 export type ChatReplyStream = {
-	textStream: AsyncIterable<string>
-	completion: Promise<{ text: string; totalTokens: number; searchCount: number }>
+	replyParts: AsyncIterable<ChatReplyPart>
+	completion: Promise<{ text: string; totalTokens: number; searchCount: number; toolCalls: ChatToolCall[] }>
 }
 
 /**
  * Streams one reply to a user's question about a topic, or null if the topic does not exist.
  */
 export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplyStream | null> {
-	// a missing topic or team has nothing to chat about
-	const chatContext = await retrieveReplyContext(input)
-	if (!chatContext) {
-		return null
-	}
-	// a template drift here throws an error, and nothing downstream would otherwise report it
+	// catch a failed read or a template drift here
+	let chatContext: ChatContext | TeamChatContext | NewTopicChatContext | null
 	let chatPrompt: BuiltPrompt
 	try {
+		// return null when there is no topic or team to chat about
+		chatContext = await retrieveReplyContext(input)
+		if (!chatContext) {
+			return null
+		}
 		chatPrompt = await buildReplyPrompt(input, chatContext)
 	} catch (error) {
-		console.error(`chat prompt failed for ${input.teamId ? `team ${input.teamId}` : `topic ${input.topicId}`}`, error)
+		// report the failure, then rethrow
+		console.error(`chat reply failed for ${input.teamId ? `team ${input.teamId}` : `topic ${input.topicId}`}`, error)
 		reportError(error, "chat", { topicId: input.topicId ?? input.teamId ?? "" })
 		throw error
 	}
@@ -104,9 +119,15 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 		model: chatModel(input.litellmApiKey),
 		system: chatPrompt.prompt,
 		messages: toModelMessages(input.history, input.question, input.chatAttachments ?? []),
-		tools: { searchWeb: webSearchTool(searchTotal), ...input.tools },
-		prepareStep: ({ stepNumber }) =>
-			stepNumber === 0 && input.tools && isConsent(input.question) ? { toolChoice: "required" } : undefined,
+		tools: {
+			searchWeb: webSearchTool(searchTotal),
+			...(input.openNewTopicChatTool ? { openNewTopicChat: input.openNewTopicChatTool } : {}),
+			...(input.proposeTopicEditTool ? { proposeTopicEdit: input.proposeTopicEditTool } : {}),
+			...(input.cancelTopicEditTool ? { cancelTopicEdit: input.cancelTopicEditTool } : {}),
+			...(input.suggestSourcesTool ? { suggestSources: input.suggestSourcesTool } : {}),
+			...input.tools,
+		},
+		prepareStep: ({ stepNumber }) => toConsentStep(stepNumber, input, input.tools),
 		maxOutputTokens: MAX_TURN_OUTPUT_TOKENS,
 		stopWhen: stepCountIs(MAX_TURN_STEPS),
 		// a paragraph break between text a tool call separates, in the stream and in the stored answer alike
@@ -116,7 +137,63 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 	// stops an early failure here from crashing the process. it's still handled properly further down
 	const completion = toCompletion(replyStream, searchTotal)
 	completion.catch(() => {})
-	return { textStream: replyStream.textStream, completion }
+	return { replyParts: toReplyParts(replyStream.stream), completion }
+}
+
+// the text and the tool results out of the model's full stream, in the order they arrive
+async function* toReplyParts(modelStream: AsyncIterable<TextStreamPart<ToolSet>>): AsyncGenerator<ChatReplyPart> {
+	for await (const streamPart of modelStream) {
+		// forward the text and each tool result
+		if (streamPart.type === "text-delta") {
+			yield { type: "text", text: streamPart.text }
+		} else if (streamPart.type === "tool-result") {
+			yield { type: "tool-result", toolCall: toChatToolCall(streamPart) }
+		}
+		// throw an error part. the full stream yields one instead of throwing
+		if (streamPart.type === "error") {
+			throw streamPart.error
+		}
+	}
+}
+
+// one tool result as the call it records. a tool that returned nothing records "null"
+function toChatToolCall(toolResult: { toolName: string; input: unknown; output: unknown }): ChatToolCall {
+	return {
+		toolName: toolResult.toolName,
+		input: toolResult.input,
+		output: typeof toolResult.output === "string" ? toolResult.output : (JSON.stringify(toolResult.output) ?? "null"),
+	}
+}
+
+/**
+ * Puts a paragraph break between text a tool call separates, as a delta of the later text block,
+ * ahead of the SDK saving the text so the stored reply has the break too.
+ */
+export function breakTextAroundToolCalls(): StreamTextTransform<ToolSet> {
+	return () => {
+		// whether any text passed yet, and whether a tool call came after it with no text since
+		let hasText = false
+		let isBreakDue = false
+		return new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>({
+			transform(part, controller) {
+				// mark a break due after a tool call that follows text
+				if (part.type === "tool-call") {
+					isBreakDue = hasText
+				}
+				// put the break at the front of the first text after that call
+				if (part.type === "text-delta" && part.text !== "") {
+					hasText = true
+					// the break goes at the front of this delta
+					if (isBreakDue) {
+						isBreakDue = false
+						controller.enqueue({ ...part, text: `\n\n${part.text}` })
+						return
+					}
+				}
+				controller.enqueue(part)
+			},
+		})
+	}
 }
 
 // the new-topic chat's context, the docs alone. it has no topic material to read
@@ -160,6 +237,28 @@ async function buildReplyPrompt(
 	return buildTopicChatPrompt(chatContext as ChatContext, await toEditTopicBlock(input.tools))
 }
 
+/**
+ * Restricts a consent's first step to the tools that save, and leaves every other step unrestricted.
+ * Only a yes that answers a change Carl proposed is restricted, so a yes to any other question never forces a save.
+ */
+export function toConsentStep(
+	stepNumber: number,
+	chatTurn: Pick<ChatTurnInput, "question" | "history">,
+	savingTools: ChatTurnInput["tools"],
+): { toolChoice: "required"; activeTools: string[] } | undefined {
+	if (stepNumber !== 0 || !savingTools || !isConsent(chatTurn.question) || !isTopicEditProposed(chatTurn.history)) {
+		return undefined
+	}
+	// name the tools that save. an empty set leaves the step unrestricted
+	const savingToolNames = Object.keys(savingTools)
+	return savingToolNames.length > 0 ? { toolChoice: "required", activeTools: savingToolNames } : undefined
+}
+
+// whether carl's last proposal is still standing, which is what a yes answers
+export function isTopicEditProposed(history: ChatHistoryTurn[]): boolean {
+	return toStandingTopicEditCall(history.flatMap((chatTurn) => chatTurn.toolCalls ?? [])) !== null
+}
+
 // the short questions that consent to whatever carl last proposed
 const CONSENT_PATTERN =
 	/^(yes|yep|yeah|yup|sure|sure thing|ok|okay|do it|go ahead|go for it|create it|save it|make it|sounds good|perfect|let'?s do it|let'?s go|ship it|yes please|please do)[\s!.,]*$/i
@@ -184,13 +283,16 @@ export function toModelMessages(
 
 	// the newest chat is returned word for word
 	const uncompactedChatTurnStart = toUncompactedChatTurnStart(includedHistory)
-	const conversation = includedHistory.flatMap((chatTurn, index): ModelMessage[] => [
-		{ role: "user", content: chatTurn.question },
-		{
-			role: "assistant",
-			content: index < uncompactedChatTurnStart ? compactChatAnswer(chatTurn.answer) : chatTurn.answer,
-		},
-	])
+	const conversation = includedHistory.flatMap((chatTurn, index): ModelMessage[] => {
+		// compact an older chat turn to its opening, without its tool calls
+		if (index < uncompactedChatTurnStart) {
+			return [
+				{ role: "user", content: chatTurn.question },
+				{ role: "assistant", content: compactChatAnswer(chatTurn.answer) },
+			]
+		}
+		return [{ role: "user", content: chatTurn.question }, ...toAnswerModelMessages(chatTurn, index)]
+	})
 	return [...conversation, { role: "user", content: toUserContent(question, attachments) }]
 }
 
@@ -215,13 +317,57 @@ function toUserContent(question: string, attachments: ChatAttachment[]): string 
 	return [{ type: "text" as const, text: [question, ...textBlocks].join("\n\n") }, ...images]
 }
 
-// the assembled reply with its token and search counts, all of which resolve only once the chat stream is drained
+// how a chat turn answered, its tool calls with what they returned, then its words. a chat turn that called no tool
+// is one assistant message. the stored calls keep no step of their own, so calls across steps replay as one batch
+function toAnswerModelMessages(chatTurn: ChatHistoryTurn, chatTurnIndex: number): ModelMessage[] {
+	const toolCalls = chatTurn.toolCalls ?? []
+	if (toolCalls.length === 0) {
+		return [{ role: "assistant", content: chatTurn.answer }]
+	}
+	// key each tool call by its place in the conversation. the stored calls keep no id of their own, and a
+	// provider rejects a request where two calls share one id
+	const toolCallIds = toolCalls.map((_toolCall, index) => `${chatTurnIndex}-${index}`)
+	return [
+		{
+			role: "assistant",
+			content: toolCalls.map((toolCall, index) => ({
+				type: "tool-call" as const,
+				toolCallId: toolCallIds[index] ?? `${index}`,
+				toolName: toolCall.toolName,
+				input: toolCall.input,
+			})),
+		},
+		{
+			role: "tool",
+			content: toolCalls.map((toolCall, index) => ({
+				type: "tool-result" as const,
+				toolCallId: toolCallIds[index] ?? `${index}`,
+				toolName: toolCall.toolName,
+				output: { type: "text" as const, value: toolCall.output },
+			})),
+		},
+		{ role: "assistant", content: chatTurn.answer },
+	]
+}
+
+// the assembled reply with its token and search counts, all of which resolve only once the chat stream is read
 async function toCompletion(
-	replyStream: { text: PromiseLike<string>; usage: PromiseLike<{ totalTokens?: number }> },
+	replyStream: {
+		text: PromiseLike<string>
+		usage: PromiseLike<{ totalTokens?: number }>
+		toolResults: PromiseLike<{ toolName: string; input: unknown; output: unknown }[]>
+	},
 	searchTotal: SearchTotal,
-): Promise<{ text: string; totalTokens: number; searchCount: number }> {
+): Promise<{ text: string; totalTokens: number; searchCount: number; toolCalls: ChatToolCall[] }> {
 	const usage = await replyStream.usage
-	return { text: await replyStream.text, totalTokens: usage.totalTokens ?? 0, searchCount: searchTotal.count }
+	// collect every tool the chat turn called, with its input and output
+	const toolCalls = (await replyStream.toolResults).map(toChatToolCall)
+	return {
+		text: await replyStream.text,
+		totalTokens: usage.totalTokens ?? 0,
+		searchCount: searchTotal.count,
+		toolCalls,
+	}
 }
 
 /**
@@ -231,9 +377,13 @@ export async function buildTopicChatPrompt(
 	chatContext: ChatContext,
 	editTopicBlock: string = EMPTY_EDIT_TOPIC_BLOCK,
 ): Promise<BuiltPrompt> {
-	const { template, name, registryPrompt } = await fetchPromptTemplate("chat-topic")
+	const [{ template, name, registryPrompt }, glossaryBlock, conductBlock] = await Promise.all([
+		fetchPromptTemplate("chat-topic"),
+		toGlossaryBlock(TOPIC_CHAT_GLOSSARY_LINE),
+		toConductBlock(),
+	])
 
-	// fill the template, composing each list block first. the edit block is the app's own text and stays unfenced
+	// fill the template, composing each list block first. the app's own blocks stay unfenced
 	const prompt = writePrompt(
 		template,
 		{
@@ -247,9 +397,40 @@ export async function buildTopicChatPrompt(
 			chatAttachmentContext: chatContext.chatAttachmentContext || "None.",
 			docsBlock: chatContext.docsBlock || "None.",
 		},
-		{ editTopicBlock },
+		{ editTopicBlock, glossaryBlock, conductBlock },
 	)
 	return { prompt, name, registryPrompt }
+}
+
+// the one glossary line each chat writes for itself
+const TOPIC_CHAT_GLOSSARY_LINE =
+	"**Coffee Talk** is this conversation. Following a topic puts its brews in a reader's feed and, if they want, their email."
+const TEAM_CHAT_GLOSSARY_LINE =
+	"**Coffee Talk** is this conversation. This room belongs to the whole team, so everything you say here is read by every member."
+const NEW_TOPIC_CHAT_GLOSSARY_LINE = "**Coffee Talk** is this conversation."
+
+/**
+ * The glossary block every chat prompt shares, with the source options from the source registry.
+ */
+async function toGlossaryBlock(chatGlossaryLine: string): Promise<string> {
+	const { template } = await fetchPromptTemplate("chat-glossary")
+	return writePrompt(
+		template,
+		{},
+		{
+			sourceOptions: toSourceOptionsSentence(),
+			scanFrequencies: toScanFrequenciesSentence(),
+			chatGlossaryLine,
+		},
+	)
+}
+
+/**
+ * Carl's voice and the rules every chat about findings shares, written once.
+ */
+async function toConductBlock(): Promise<string> {
+	const { template } = await fetchPromptTemplate("chat-conduct")
+	return writePrompt(template, {})
 }
 
 // the edit block for a turn with the topic tools, or "None." for a turn without them
@@ -258,7 +439,7 @@ async function toEditTopicBlock(tools: ChatTurnInput["tools"]): Promise<string> 
 		return EMPTY_EDIT_TOPIC_BLOCK
 	}
 	const { template } = await fetchPromptTemplate("chat-edit-topic")
-	return writePrompt(template, {})
+	return writePrompt(template, {}, { scanFrequencies: toScanFrequenciesSentence() })
 }
 
 /**
@@ -270,8 +451,11 @@ export async function buildNewTopicChatPrompt(
 	topicsRemaining?: number,
 	leaderTeams?: TopicDraftTeam[],
 ): Promise<BuiltPrompt> {
-	const { template, name, registryPrompt } = await fetchPromptTemplate("chat-new-topic")
-	// write the prompt with the docs, the topic draft, and the teams fenced as data and the plan's limit unfenced
+	const [{ template, name, registryPrompt }, glossaryBlock] = await Promise.all([
+		fetchPromptTemplate("chat-new-topic"),
+		toGlossaryBlock(NEW_TOPIC_CHAT_GLOSSARY_LINE),
+	])
+	// write the prompt with the docs, the topic draft, and the teams fenced as data and the app's own blocks unfenced
 	const prompt = writePrompt(
 		template,
 		{
@@ -279,7 +463,11 @@ export async function buildNewTopicChatPrompt(
 			topicDraftBlock: toTopicDraftBlock(topicDraft),
 			teamsBlock: toTeamsBlock(leaderTeams),
 		},
-		{ topicLimitBlock: toTopicLimitBlock(topicsRemaining) },
+		{
+			topicLimitBlock: toTopicLimitBlock(topicsRemaining),
+			glossaryBlock,
+			scanFrequencies: toScanFrequenciesSentence(),
+		},
 	)
 	return { prompt, name, registryPrompt }
 }
@@ -352,17 +540,25 @@ function toTopicLimitBlock(topicsRemaining?: number): string {
  * Builds the team chat room's system prompt from the 'chat-team.md' template, reading across every topic the team holds.
  */
 export async function buildTeamChatPrompt(teamContext: TeamChatContext): Promise<BuiltPrompt> {
-	const { template, name, registryPrompt } = await fetchPromptTemplate("chat-team")
+	const [{ template, name, registryPrompt }, glossaryBlock, conductBlock] = await Promise.all([
+		fetchPromptTemplate("chat-team"),
+		toGlossaryBlock(TEAM_CHAT_GLOSSARY_LINE),
+		toConductBlock(),
+	])
 
-	// fill the template, composing each list block first
-	const prompt = writePrompt(template, {
-		teamName: teamContext.teamName,
-		topicsBlock: toTopicsBlock(teamContext.topics),
-		findingsBlock: toFindingsBlock(teamContext.findings),
-		sourcesBlock: toSourcesBlock(teamContext.sources),
-		scanSummariesBlock: toScanSummariesBlock(teamContext.scanSummaries),
-		docsBlock: teamContext.docsBlock || "None.",
-	})
+	// fill the template, composing each list block first. the app's own blocks stay unfenced
+	const prompt = writePrompt(
+		template,
+		{
+			teamName: teamContext.teamName,
+			topicsBlock: toTopicsBlock(teamContext.topics),
+			findingsBlock: toFindingsBlock(teamContext.findings),
+			sourcesBlock: toSourcesBlock(teamContext.sources),
+			scanSummariesBlock: toScanSummariesBlock(teamContext.scanSummaries),
+			docsBlock: teamContext.docsBlock || "None.",
+		},
+		{ glossaryBlock, conductBlock },
+	)
 	return { prompt, name, registryPrompt }
 }
 
@@ -408,35 +604,4 @@ function toScanSummariesBlock(scanSummaries: string[]): string {
 		return "No scan notes yet."
 	}
 	return scanSummaries.join("\n\n")
-}
-
-/**
- * Puts a paragraph break between text a tool call separates, as a delta of the later text block,
- * ahead of the SDK saving the text so the stored reply has the break too.
- */
-export function breakTextAroundToolCalls(): StreamTextTransform<ToolSet> {
-	return () => {
-		// whether any text passed yet, and whether a tool call came after it with no text since
-		let hasText = false
-		let isBreakDue = false
-		return new TransformStream<TextStreamPart<ToolSet>, TextStreamPart<ToolSet>>({
-			transform(part, controller) {
-				// mark a break due after a tool call that follows text
-				if (part.type === "tool-call") {
-					isBreakDue = hasText
-				}
-				// put the break at the front of the first text after that call
-				if (part.type === "text-delta" && part.text !== "") {
-					hasText = true
-					// the break goes at the front of this delta
-					if (isBreakDue) {
-						isBreakDue = false
-						controller.enqueue({ ...part, text: `\n\n${part.text}` })
-						return
-					}
-				}
-				controller.enqueue(part)
-			},
-		})
-	}
 }

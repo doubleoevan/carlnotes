@@ -310,7 +310,7 @@ async function checkOAuth(): Promise<string> {
 	return tokenJson.access_token ?? ""
 }
 
-// check a user's writes. marking consumed, rating, bookmarking, and the three edit tools
+// check a user's writes. marking consumed, rating, bookmarking, and the edit tools
 async function checkUser(accessToken: string): Promise<void> {
 	const { client, transport } = toClient("/mcp", accessToken)
 	await client.connect(transport)

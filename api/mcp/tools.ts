@@ -1,4 +1,4 @@
-// the eleven tools the mcp mcpServer registers: their names, schemas, annotations, and what each returns
+// the tools the mcp server registers: their names, schemas, annotations, and what each returns
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
 import {
@@ -45,14 +45,14 @@ const topicIdArgument = z
 	.describe("The topic's id. Optional on a topic-bound server, which already knows its topic.")
 const cursorArgument = z.string().optional().describe("The cursor a previous page returned.")
 
-// register the eleven tools. every tool caller gets the same list, and only the results differ
+// register every tool. every tool caller gets the same list, and only the results differ
 export function registerTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
 	registerReadTools(mcpServer, toolCaller, routeTopicId)
 	registerMarkTools(mcpServer, toolCaller)
 	registerTopicTools(mcpServer, toolCaller, routeTopicId)
 }
 
-// register the three reads and the consumed write
+// register the read tools and the consumed write
 function registerReadTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
 	mcpServer.registerTool(
 		"list_topics",
@@ -162,7 +162,7 @@ function registerMarkTools(mcpServer: McpServer, toolCaller: ToolCaller): void {
 	)
 }
 
-// register the five topic tools. confirmation is left to the client
+// register the topic tools. confirmation is left to the client
 function registerTopicTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
 	mcpServer.registerTool(
 		"update_topic_prompt",
@@ -193,9 +193,9 @@ function registerTopicTools(mcpServer: McpServer, toolCaller: ToolCaller, routeT
 	mcpServer.registerTool(
 		"update_topic_fields",
 		{
-			title: "Change a topic's settings",
+			title: "Change a topic's title or settings",
 			description:
-				"Change the topic's tags, how often it brews (daily, weekdays, or weekly), or how many findings a brew keeps (5, 10, 15, or 20). Name only the fields to change. No brew starts.",
+				"Change the topic's name, its tags, its visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day it brews as HH:MM and the day a weekly brew runs, or how many findings a brew keeps (5, 10, 15, or 20). Name only the fields to change. No brew starts.",
 			inputSchema: z.object({ topic_id: topicIdArgument, ...updateTopicFieldsPayload.shape }),
 			annotations: { readOnlyHint: false, destructiveHint: true },
 		},

@@ -1,6 +1,7 @@
 // the chat panel's conversation state, owned by one hook so the panel components stay pure view
 import {
 	type ChatAttachment,
+	EMPTY_TOPIC_DRAFT,
 	type KeptChatAttachment,
 	type TopicDraft,
 	type TopicToolCalls,
@@ -18,25 +19,15 @@ import {
 } from "@/clients/chatClient"
 import { uploadTopicAttachment } from "@/clients/topicClient"
 import type { ChatTurn } from "@/components/chat/ChatMessages"
+import { toChatHistoryTurns } from "@/components/chat/chatHistoryTurns"
+import { applyTopicEditToolCalls, toastTopicToolCalls, toProposedTopicEdit } from "@/components/chat/topicToolCalls"
 import { useChatAttachments } from "@/components/chat/useChatAttachments"
+import { type EditableTopicDraft, useEditableTopicDraft } from "@/components/chat/useEditableTopicDraft"
 import { hasPreviewableLink } from "@/components/common/LinkPreviewCard"
-import { publishTopicChanged } from "@/stores/chatPanelStore"
+import { publishTopicChanged, setChatId, startEditingTopic } from "@/stores/chatPanelStore"
 
 // how long a finished chat turn waits before it looks for its link preview cards again
 const LINK_PREVIEW_REFRESH_MS = 2500
-
-// the new-topic chat's draft before carl writes anything
-const EMPTY_TOPIC_DRAFT: TopicDraft = {
-	name: "",
-	prompt: "",
-	sources: [],
-	inviteEmails: [],
-	visibility: "invite",
-	team: null,
-	tags: [],
-	frequency: "weekly",
-	maxTopicFindings: 10,
-}
 
 // a stand-in id for a kept attachment that the server has not returned yet
 let placeholderCount = 0
@@ -45,12 +36,12 @@ function toPlaceholderId(): string {
 	return `pending-${placeholderCount}`
 }
 
-// everything the panel needs: the conversation, the draft with its attachments, the gates, and the actions
+// everything the panel needs: the conversation, the question with its attachments, the gates, and the actions
 export type TopicChat = {
 	chatTurns: ChatTurn[]
 	question: string
 	setQuestion: (value: string) => void
-	// the draft's attachments: files selected or dropped in, images pasted, and long copy pastes turned into chips
+	// the question's attachments: files selected or dropped in, images pasted, and long copy pastes turned into chips
 	attachments: ChatAttachment[]
 	// the files taken in
 	addAttachmentFiles: (attachmentFiles: File[]) => Promise<File[]>
@@ -66,7 +57,9 @@ export type TopicChat = {
 	isBudgetExhausted: boolean
 	// whether this user may edit the topic in the chat
 	canEditTopic: boolean
-	// carl's draft, the files waiting for the topic, and whether it is the user's first
+	// the topic being edited with carl, previewing what he proposed, or null when no edit is under way
+	editableTopicDraft: EditableTopicDraft | null
+	// carl's topic draft, the files waiting for the topic, and whether it is the user's first
 	topicDraft: TopicDraft
 	topicDraftAttachmentFiles: File[]
 	removeTopicDraftAttachmentFile: (index: number) => void
@@ -77,7 +70,7 @@ export type TopicChat = {
 	// true once the conversation load finishes, so the panel can select its opening state from what came back
 	isLoaded: boolean
 	isStreaming: boolean
-	// send streams the draft's reply, stop cuts it keeping whatever arrived
+	// send streams the question's reply, stop cuts it keeping whatever arrived
 	send: (retryQuestion?: string) => Promise<void>
 	stop: () => void
 	clear: () => Promise<boolean>
@@ -98,14 +91,22 @@ export function useTopicChat(page: ChatPage): TopicChat {
 	const [isFirstTopic, setIsFirstTopic] = useState(false)
 	const [topicsRemaining, setTopicsRemaining] = useState<number | null>(null)
 	const [topicLimit, setTopicLimit] = useState<number | null>(null)
-	// the new-topic chat's draft and the files waiting for the topic
+	// the topic draft the new-topic chat is building, and the files waiting for the topic
 	const [topicDraft, setTopicDraft] = useState<TopicDraft>(EMPTY_TOPIC_DRAFT)
 	const [topicDraftAttachmentFiles, setTopicDraftAttachmentFiles] = useState<File[]>([])
 	const navigate = useNavigate()
 	const [isLoaded, setIsLoaded] = useState(false)
 	const [isStreaming, setIsStreaming] = useState(false)
 	const abortRef = useRef<AbortController | null>(null)
-	// the draft's files and the topic's kept ones, held together with the two limits that bound them
+	// whether to open the new-topic chat once the reply ends
+	const shouldOpenNewTopicChatRef = useRef(false)
+	// whether a topic was created, which ends this conversation once the reply and its save are done
+	const isTopicCreatedRef = useRef(false)
+	// whether the conversation on screen was cleared on the server, so the next question starts a new one here too
+	const [isConversationEnded, setIsConversationEnded] = useState(false)
+	// the topic this chat may edit
+	const editableTopicDraft = useEditableTopicDraft(page.topicId ?? null)
+	// the question's files and the topic's kept ones, held together with the two limits that bound them
 	const {
 		attachments,
 		addAttachmentFiles: addChatAttachmentFiles,
@@ -132,6 +133,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 					chatConversation.chatTurns.map((chatTurn) => ({
 						question: chatTurn.question,
 						answer: chatTurn.answer,
+						toolCalls: chatTurn.toolCalls,
 						rejection: null,
 						at: chatTurn.at ? Date.parse(chatTurn.at) : undefined,
 						attachments: chatTurn.attachments,
@@ -147,6 +149,13 @@ export function useTopicChat(page: ChatPage): TopicChat {
 				setIsFirstTopic(chatConversation.isFirstTopic ?? false)
 				setTopicsRemaining(chatConversation.topicsRemaining ?? null)
 				setTopicLimit(chatConversation.topicLimit ?? null)
+				// show the topic draft carl wrote earlier
+				setTopicDraft(chatConversation.topicDraft ?? EMPTY_TOPIC_DRAFT)
+				// bring back the change carl proposed earlier in this conversation
+				const proposedTopicEdit = page.topicId ? toProposedTopicEdit(chatConversation.chatTurns) : null
+				if (page.topicId && proposedTopicEdit) {
+					startEditingTopic(page.topicId, proposedTopicEdit)
+				}
 				// the kept files and the loaded flag are set last, so the panel opens in one finished state
 				setKeptAttachments(chatConversation.keptAttachments ?? [])
 				setIsLoaded(true)
@@ -179,7 +188,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 	// the newest chat turn's link preview cards poll in the background until they complete
 	const startLinkPreviewRefresh = useLinkPreviewRefresh(page, setChatTurns)
 
-	// a file attached in the new-topic chat waits in the draft as well as reaching carl for the turn
+	// a file attached in the new-topic chat waits in the topic draft as well as reaching carl for the turn
 	const addAttachmentFiles = async (attachmentFiles: File[]): Promise<File[]> => {
 		const validAttachmentFiles = await addChatAttachmentFiles(attachmentFiles)
 		if (page.newTopic) {
@@ -188,7 +197,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		return validAttachmentFiles
 	}
 
-	// open the new topic's page while this chat stays put, upload the draft's files to it, then reload its page
+	// open the new topic's page while this chat stays put, upload the topic draft's files to it, then reload its page.
 	const openCreatedTopic = async (topicId: string): Promise<void> => {
 		navigate(`/topics/${topicId}`)
 		const filesToUpload = topicDraftAttachmentFiles
@@ -205,23 +214,37 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		}
 	}
 
-	// toast the saves and rejections, show the draft, and open a created topic, else reload the page behind the panel
+	// toast the saves and rejections, show the topic draft, and open a created topic, else reload the page behind the panel
 	const handleToolCalls = (toolCalls: TopicToolCalls): void => {
-		for (const topicSave of toolCalls.topicSaves) {
-			toast(topicSave)
+		// keep the chat tool calls on the chat turn, so the model reads a save as a call
+		const streamedChatToolCalls = toolCalls.chatToolCalls
+		if (streamedChatToolCalls) {
+			setChatTurns((previousChatTurns) =>
+				replaceNewestChatTurn(previousChatTurns, (chatTurn) => ({
+					...chatTurn,
+					toolCalls: [...(chatTurn.toolCalls ?? []), ...streamedChatToolCalls],
+				})),
+			)
 		}
-		for (const rejection of toolCalls.topicSaveRejections) {
-			toast.error(rejection)
+		toastTopicToolCalls(toolCalls)
+		if (page.topicId) {
+			applyTopicEditToolCalls(page.topicId, toolCalls)
 		}
-		// fill the card with the draft carl wrote
+		// fill the card with the topic draft carl wrote
 		if (toolCalls.topicDraft) {
 			setTopicDraft(toolCalls.topicDraft)
 		}
-		// open a created topic
+		// remember to open the new-topic chat once the reply ends. the reply's last words stay in this conversation
+		if (toolCalls.isNewTopicChatOpened) {
+			shouldOpenNewTopicChatRef.current = true
+		}
+		// open a created topic, and remember to end the conversation that made it
 		if (toolCalls.createdTopicId) {
+			isTopicCreatedRef.current = true
 			void openCreatedTopic(toolCalls.createdTopicId)
 			return
 		}
+		// reload the topic page behind the panel, so a save shows there too
 		if (page.topicId) {
 			publishTopicChanged(page.topicId)
 		}
@@ -253,10 +276,8 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		if (!canSend(askedQuestion, sendableAttachmentCount, retryQuestion !== undefined)) {
 			return
 		}
-		// the conversation so far that gets posted, minus rejected chat turns
-		const historyChatTurns = chatTurns
-			.filter((chatTurn) => chatTurn.rejection === null && chatTurn.answer !== "")
-			.map((chatTurn) => ({ question: chatTurn.question, answer: chatTurn.answer }))
+		// a created topic already cleared this conversation on the server, so the next question sends none of it
+		const chatHistoryTurns = isConversationEnded ? [] : toChatHistoryTurns(chatTurns)
 
 		// the attachments get posted with this chat turn, and the kept attachments join the manage list right away
 		const sentAttachments = retryQuestion === undefined ? attachments : []
@@ -267,7 +288,12 @@ export function useTopicChat(page: ChatPage): TopicChat {
 				...previousAttachments,
 				...sentAttachments
 					.filter((attachment) => attachment.keep)
-					.map((attachment) => ({ id: toPlaceholderId(), name: attachment.name, kind: attachment.kind })),
+					.map((attachment) => ({
+						id: toPlaceholderId(),
+						name: attachment.name,
+						kind: attachment.kind,
+						at: new Date().toISOString(),
+					})),
 			])
 		}
 		// a fresh chat turn shows what it sent: an image or a clip on its own bytes until the reload hands it a stored id
@@ -277,8 +303,9 @@ export function useTopicChat(page: ChatPage): TopicChat {
 			name: attachment.name,
 			...(attachment.kind === "image" || attachment.kind === "video" ? { dataUrl: attachment.dataUrl } : {}),
 		}))
+		// show the question, on its own when the conversation before it ended with the topic it made
 		setChatTurns((previousChatTurns) => [
-			...previousChatTurns,
+			...(isConversationEnded ? [] : previousChatTurns),
 			{
 				question: withAttachmentNote(askedQuestion, sentAttachments),
 				answer: "",
@@ -288,6 +315,8 @@ export function useTopicChat(page: ChatPage): TopicChat {
 				answerLinkPreviews: [],
 			},
 		])
+		// this question is the new conversation, so the next one keeps it
+		setIsConversationEnded(false)
 		setIsStreaming(true)
 
 		// stream under a fresh abort controller, so the stop button can cut this chat turn and only this chat turn
@@ -296,7 +325,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		const chatSendResult = await sendChatTurn(
 			page,
 			askedQuestion,
-			historyChatTurns,
+			chatHistoryTurns,
 			sentAttachments,
 			(chunk) => {
 				setChatTurns((previous) =>
@@ -308,11 +337,38 @@ export function useTopicChat(page: ChatPage): TopicChat {
 			page.newTopic ? topicDraft : undefined,
 		)
 		abortRef.current = null
+		finishSend(chatSendResult)
+	}
 
+	// complete the chat turn the reply filled, then follow wherever that reply pointed
+	function finishSend(chatSendResult: ChatSendResult): void {
 		// a stop before any text drops the whole chat turn, so the empty bubble never lingers
 		setChatTurns((previousChatTurns) => toFinishedChatTurns(previousChatTurns, chatSendResult))
 		setIsStreaming(false)
 		startLinkPreviewRefresh()
+		// open the new-topic chat the reply asked for
+		if (shouldOpenNewTopicChatRef.current) {
+			shouldOpenNewTopicChatRef.current = false
+			setChatId({ kind: "private", newTopic: true })
+		}
+		if (!isTopicCreatedRef.current) {
+			return
+		}
+		isTopicCreatedRef.current = false
+
+		// a stopped send returns before the server has written the created turn, so the clear would race that write
+		// and leave the conversation half gone
+		if (chatSendResult !== "stopped") {
+			void endCreatedTopicConversation()
+		}
+	}
+
+	// a created topic ends the conversation that made it, so the next topic starts from nothing. the reply stays on
+	// screen until the next question, and a clear the server turned down leaves the conversation whole on both sides
+	async function endCreatedTopicConversation(): Promise<void> {
+		if (await sendClearChat(page)) {
+			setIsConversationEnded(true)
+		}
 	}
 
 	// cut the in-flight chat turn. the text already on screen stays there
@@ -325,7 +381,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		if (await sendClearChat(page)) {
 			setChatTurns([])
 			setKeptAttachments([])
-			// reset the draft and its files with the conversation
+			// reset the topic draft and its files with the conversation
 			setTopicDraft(emptyTopicDraft)
 			setTopicDraftAttachmentFiles([])
 			return true
@@ -347,6 +403,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		isSignupRequired,
 		isBudgetExhausted,
 		canEditTopic,
+		editableTopicDraft,
 		topicDraft,
 		topicDraftAttachmentFiles: topicDraftAttachmentFiles,
 		removeTopicDraftAttachmentFile: (index) =>
@@ -455,7 +512,10 @@ function toRefreshedChatTurn(
 
 // the chat turns once a send ends: a stop before any text drops the empty bubble, else the newest turn settles
 function toFinishedChatTurns(chatTurns: ChatTurn[], chatSendResult: ChatSendResult): ChatTurn[] {
-	if (chatSendResult === "stopped" && chatTurns.at(-1)?.answer === "") {
+	// a stop before any text drops the chat turn, unless a tool ran in it, since the server kept that save and the
+	// next question has to replay it
+	const newestChatTurn = chatTurns.at(-1)
+	if (chatSendResult === "stopped" && newestChatTurn?.answer === "" && (newestChatTurn.toolCalls?.length ?? 0) === 0) {
 		return chatTurns.slice(0, -1)
 	}
 	return replaceNewestChatTurn(chatTurns, (chatTurn) => ({

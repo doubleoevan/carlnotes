@@ -1,8 +1,9 @@
-// the chat adapters: the topic tools bound to one chat turn's topic, and the draft tools bound to a new-topic turn
+// the chat adapters: the topic tools bound to one chat turn's topic, and the new-topic chat's own tools
 import {
 	addTopicSourcePayload,
 	MAX_DRAFT_INVITES,
 	MAX_TOPIC_SOURCES,
+	proposeTopicEditPayload,
 	removeTopicSourcePayload,
 	TOPIC_NAME_CHARS,
 	TOPIC_PROMPT_CHARS,
@@ -12,10 +13,10 @@ import {
 	updateTopicFieldsPayload,
 	updateTopicPromptPayload,
 } from "@shared/contracts"
-import { visibilities } from "@shared/enums"
 import { type Tool, tool } from "ai"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
+import { deleteTopicDraft } from "../topic/topicDrafts"
 import {
 	type AddTopicSourceResult,
 	addTopicSource,
@@ -52,6 +53,71 @@ export function toChatTopicTools(editTopicToolBinding: EditTopicToolBinding): Re
 	}
 }
 
+/**
+ * Builds the tool that opens the new-topic chat, where Carl makes a topic.
+ */
+export function toOpenNewTopicChatTool({ toolCalls }: { toolCalls: ChatTurnToolCalls }): Tool {
+	return tool({
+		description:
+			"Open the new-topic chat for the reader, where a topic is built and created. Call this when the reader asks for a new topic. Nothing about a new topic can be made in this chat.",
+		inputSchema: z.object({}),
+		execute: async () => {
+			// leave this call out of the count that keeps a chat turn's text
+			toolCalls.isNewTopicChatOpened = true
+			return "The new-topic chat is opening beside this one. Tell the reader to continue there, in one line."
+		},
+	})
+}
+
+/**
+ * The pair that drives the topic's card in a chat that may edit it. One puts a proposed change on the card and the
+ * other takes it back off. Neither saves, so neither is bound with the saving tools, the only ones toConsentStep
+ * may force.
+ */
+export function toTopicEditPreviewTools({ toolCalls }: { toolCalls: ChatTurnToolCalls }): {
+	proposeTopicEditTool: Tool
+	cancelTopicEditTool: Tool
+} {
+	return {
+		proposeTopicEditTool: toProposeTopicEditTool({ toolCalls }),
+		cancelTopicEditTool: toCancelTopicEditTool({ toolCalls }),
+	}
+}
+
+/**
+ * Builds the tool that previews a change to this topic. It saves nothing and only shows the user the topic as it
+ * would read with the change applied, so the user can refine it before saying yes.
+ */
+export function toProposeTopicEditTool({ toolCalls }: { toolCalls: ChatTurnToolCalls }): Tool {
+	return tool({
+		description:
+			"Preview a change to this topic for the reader: show the topic as it would read with your change applied. Call this in the same turn you propose a change, before you describe it, and again every time you revise the proposal. Name every field you would change. For sources, name what you would add in addSources and the ids you would drop in removeSourceIds, so a source you leave unnamed stays. Tags are sent whole. This saves nothing and changes nothing. Do not call it when the reader is only asking about findings.",
+		inputSchema: proposeTopicEditPayload,
+		execute: async (proposedTopicEdit) => {
+			// leave this call out of the count that keeps a chat turn's text
+			toolCalls.proposedTopicEdit = proposedTopicEdit
+			return "The reader can see the topic as it would read with this change. Describe it in words and wait for a yes."
+		},
+	})
+}
+
+/**
+ * Builds the tool that cancels a proposed change. It saves nothing and only takes the preview off the card,
+ * for a user who turned the change down.
+ */
+export function toCancelTopicEditTool({ toolCalls }: { toolCalls: ChatTurnToolCalls }): Tool {
+	return tool({
+		description:
+			"Cancel the change you proposed, taking it off the reader's topic card. Call this when the reader turns a proposal down or drops the subject, so the card stops previewing a change nobody is making. This saves nothing and changes nothing.",
+		inputSchema: z.object({}),
+		execute: async () => {
+			// leave this call out of the count that keeps a chat turn's text
+			toolCalls.isTopicEditCancelled = true
+			return "The preview is off the card. The topic reads as it is saved."
+		},
+	})
+}
+
 // the tool that rewrites the topic prompt
 function toUpdateTopicPromptTool({ userId, topicId, toolCalls }: EditTopicToolBinding): Tool {
 	return tool({
@@ -74,10 +140,10 @@ function toUpdateTopicPromptTool({ userId, topicId, toolCalls }: EditTopicToolBi
 	})
 }
 
-// the tool that changes the topic's settings: its tags, how often it scans, and how many findings a scan keeps
+// the tool that changes the topic's fields
 function toUpdateTopicFieldsTool({ userId, topicId, toolCalls }: EditTopicToolBinding): Tool {
 	return tool({
-		description: `Change the topic's tags, how often it brews (daily, weekdays, or weekly), or how many findings a brew keeps (5, 10, 15, or 20). Name only the fields to change. ${CONFIRMATION_RULE}`,
+		description: `Change the topic's title, its tags, its visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day it brews as HH:MM and the day a weekly brew runs, or how many findings a brew keeps (5, 10, 15, or 20). Name only the fields to change. ${CONFIRMATION_RULE}`,
 		inputSchema: updateTopicFieldsPayload,
 		execute: async (topicFields) => {
 			toolCalls.count += 1
@@ -183,38 +249,37 @@ type NewTopicToolBinding = {
 	analyticsProperties: AnalyticsProperties
 }
 
-// the draft fields one call may write. an omitted field keeps its value, so no default may stand in for one
+// the topic draft fields one call may write. an omitted field keeps its value, so no default may stand in for one
 const topicDraftFieldsPayload = z.object({
+	...updateTopicFieldsPayload.shape,
+	// the topic draft's name, which may be empty here
 	name: z.string().trim().max(TOPIC_NAME_CHARS).optional(),
 	prompt: z.string().trim().max(TOPIC_PROMPT_CHARS).optional(),
 	sources: z.array(addTopicSourcePayload).max(MAX_TOPIC_SOURCES).optional(),
 	inviteEmails: z.array(z.string().trim().toLowerCase().pipe(z.email())).max(MAX_DRAFT_INVITES).optional(),
-	visibility: z.enum(visibilities).optional(),
 	team: topicDraftTeamPayload.nullable().optional(),
-	...updateTopicFieldsPayload.shape,
 })
 
 /**
- * Binds the new-topic chat's tools to the turn's own draft: write the draft, suggest sources for it, and create the
- * topic from it.
+ * Binds the new-topic chat's tools to this chat turn's topic draft.
+ * draftTopic writes into that draft, and createTopic makes the topic from it.
  */
 export function toNewTopicChatTools(newTopicToolBinding: NewTopicToolBinding): Record<string, Tool> {
 	return {
 		draftTopic: toDraftTopicTool(newTopicToolBinding),
-		suggestSources: toSuggestTopicSourcesTool(newTopicToolBinding),
 		createTopic: toCreateTopicTool(newTopicToolBinding),
 	}
 }
 
-// the tool that writes the draft. each call replaces the fields it names and saves the whole draft for the card
+// the tool that writes the topic draft. each call replaces the fields it names and saves the whole of it for the card
 function toDraftTopicTool({ toolCalls, topicDraft }: NewTopicToolBinding): Tool {
 	return tool({
 		description:
-			"Write what the reader has settled into the topic draft shown beside this chat: the title, the prompt, the sources as option and value pairs, who may read it as public, invite, or private, the team it joins as the id and name from the reader's teams, the tags, how often it brews, how many findings a brew keeps, or the invite emails. Name only the fields to change. Call it as soon as an answer settles.",
+			"Write what the reader has settled into the topic draft shown beside this chat: the title, the prompt, the sources as option and value pairs, who may read it as public, invite, or private, the team it joins as the id and name from the reader's teams, the tags, how often it brews, the time of day it brews as HH:MM and the day a weekly brew runs, how many findings a brew keeps, or the invite emails. Name only the fields to change: a field you leave out keeps what the draft already holds, so clear one by naming it empty, sources, tags and invites as an empty list, the title and prompt as an empty string, and the team as null. Call it as soon as an answer settles.",
 		inputSchema: topicDraftFieldsPayload,
 		execute: async (topicDraftFields) => {
 			toolCalls.count += 1
-			// the named fields replace the draft's
+			// the named fields replace the topic draft's
 			Object.assign(
 				topicDraft,
 				Object.fromEntries(Object.entries(topicDraftFields).filter(([, value]) => value !== undefined)),
@@ -225,8 +290,11 @@ function toDraftTopicTool({ toolCalls, topicDraft }: NewTopicToolBinding): Tool 
 	})
 }
 
-// the tool that suggests sources for the draft
-function toSuggestTopicSourcesTool({ userId, toolCalls }: NewTopicToolBinding): Tool {
+/**
+ * Builds the tool that suggests sources for a topic draft. It saves nothing, so it is not bound with the saving tools.
+ * Those are the only ones toConsentStep may force, and fetching suggestions must never answer a yes.
+ */
+export function toSuggestTopicSourcesTool({ userId, toolCalls }: NewTopicToolBinding): Tool {
 	return tool({
 		description:
 			"Suggest verified sources for a title and prompt, each as the option and value the draft takes. Offer them to the reader, then write the ones they pick into the draft.",
@@ -248,7 +316,7 @@ function toSuggestTopicSourcesTool({ userId, toolCalls }: NewTopicToolBinding): 
 	})
 }
 
-// the tool that creates the topic from the draft as it stands
+// the tool that creates the topic from the topic draft as it stands
 function toCreateTopicTool({ userId, toolCalls, topicDraft, analyticsProperties }: NewTopicToolBinding): Tool {
 	return tool({
 		description: `Create the topic from the draft as it stands, with a first brew. ${CONFIRMATION_RULE}`,
@@ -271,7 +339,11 @@ function toCreateTopicTool({ userId, toolCalls, topicDraft, analyticsProperties 
 			// list the save and the created topic for the toast
 			toolCalls.topicSaves.push(`Carl created ${createTopicFromDraftResult.name}.`)
 			toolCalls.createdTopicId = createTopicFromDraftResult.topicId
-			// a rejected team add gets its own toast beside the create
+			// delete the topic draft now that the topic exists
+			await deleteTopicDraft(userId).catch((error) => {
+				console.error("topic draft delete failed", error)
+			})
+			// a rejected team add gets its own toast
 			if (createTopicFromDraftResult.addTeamRejection) {
 				toolCalls.topicSaveRejections.push(
 					toRejectionToast(
@@ -286,7 +358,7 @@ function toCreateTopicTool({ userId, toolCalls, topicDraft, analyticsProperties 
 	})
 }
 
-// the draft in one line, so carl can read back what stands
+// the topic draft in one line, so carl can read back what stands
 function toTopicDraftSummary(topicDraft: TopicDraft): string {
 	const topicSources = topicDraft.sources
 		.map((topicSource) => `${topicSource.sourceOption} ${topicSource.value}`.trim())
@@ -299,7 +371,7 @@ function toTopicDraftSummary(topicDraft: TopicDraft): string {
  */
 export function toSuggestionsText(suggestTopicDraftSourcesResult: SuggestTopicDraftSourcesResult): string {
 	switch (suggestTopicDraftSourcesResult.status) {
-		// the suggestions, each as the pair the draft takes
+		// the suggestions, each as the pair the topic draft takes
 		case "ok":
 			return suggestTopicDraftSourcesResult.sources.length === 0
 				? "No source came back verified. Propose from what you know and the web search, and say each is unverified."
@@ -326,7 +398,7 @@ export function toCreateTopicText(createTopicFromDraftResult: CreateTopicFromDra
 		// the topic, its first scan already under way
 		case "created":
 			return `Created ${createTopicFromDraftResult.name}. Its first brew is under way, and the reader is being taken to it.${toAddTeamText(createTopicFromDraftResult)}`
-		// a draft not ready to save
+		// a topic draft not ready to save
 		case "incomplete":
 			return "The draft needs a title and a prompt first. Write them with draftTopic."
 		// a source the registry could not build
@@ -373,7 +445,7 @@ export function toUpdateTopicFieldsText(
 	updateTopicFieldsResult: Exclude<UpdateTopicFieldsResult, { status: "saved" }>,
 ): string {
 	if (updateTopicFieldsResult.status === "empty") {
-		return "Name at least one setting: the tags, how often it brews, or how many findings a brew keeps."
+		return "Name at least one field: the title, the tags, the visibility, how often it brews, when it brews, or how many findings a brew keeps."
 	}
 	return updateTopicFieldsResult.status === "dailyFrequency"
 		? `A daily topic does not fit the plan right now. The limit is ${updateTopicFieldsResult.limit}.`
@@ -446,7 +518,7 @@ export function toCreateTopicReason(
 		case "invalid":
 			return `That source can't be read: ${createTopicFromDraftResult.value}.`
 		case "limit":
-			return `That's more than the ${createTopicFromDraftResult.limit}sources a topic can have.`
+			return `That's more than the ${createTopicFromDraftResult.limit} sources a topic can have.`
 		case "inviteeRejected":
 			return `${createTopicFromDraftResult.email} doesn't take invites.`
 		// the rest read from the map

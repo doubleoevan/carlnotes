@@ -18,6 +18,7 @@ import { EXA_COST_PER_SEARCH, X_COST_PER_READ } from "../../worker/budget"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { addTopicToTeam } from "../team/teams"
+import { releaseFeatureOrder } from "../topic/featuring"
 import {
 	authorizeNewDailyTopic,
 	type DailyFrequencyRejection,
@@ -106,7 +107,7 @@ export async function updateTopicPrompt({
 }
 
 /**
- * Changes a topic's tags, frequency, or results count, the ones named, through the same gate as the prompt tool.
+ * Changes only the topic fields that are named.
  */
 export async function updateTopicFields({
 	userId,
@@ -140,10 +141,16 @@ export async function updateTopicFields({
 			return dailyFrequency
 		}
 	}
-	// write the named fields. the scan schedule reads them from the row
-	await db.update(topics).set(namedFields).where(eq(topics.id, topicId))
+	// write the named fields and release the feature order in one transaction
+	await db.transaction(async (transaction) => {
+		await transaction.update(topics).set(namedFields).where(eq(topics.id, topicId))
+		// drop the topic from the featured topics when it stops being public
+		if (topicFields.visibility && topicFields.visibility !== "public") {
+			await releaseFeatureOrder(topicId, transaction)
+		}
+	})
 	trackEvent("topic_edited", editableTopic.userId, { topicId, tool: "updateTopicFields", origin: promptVersionOrigin })
-	return { status: "saved", topicName: editableTopic.topic.name }
+	return { status: "saved", topicName: topicFields.name ?? editableTopic.topic.name }
 }
 
 /**
@@ -443,8 +450,8 @@ export async function createTopicFromDraft({
 			prompt: topicDraft.prompt,
 			tags: topicDraft.tags,
 			frequency: topicDraft.frequency,
-			scheduledTime: "09:00",
-			scheduledDayOfWeek: "wednesday",
+			scheduledTime: topicDraft.scheduledTime,
+			scheduledDayOfWeek: topicDraft.scheduledDayOfWeek,
 			visibility: topicDraft.visibility,
 			maxTopicFindings: topicDraft.maxTopicFindings,
 			inviteEmails: topicDraft.inviteEmails,

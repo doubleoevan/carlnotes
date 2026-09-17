@@ -18,9 +18,12 @@ card below](../../../assets/screenshots/chat-new-topic-draft.png)
 
 Open the Coffee Talk panel and press the switcher under its title, the current chat's name with a
 chevron. Pick **Give Carl a topic. You know the one.** It is there on every page for a signed-in user.
-Or press **New Topic** on the home, activity, or profile page and pick **Build with Carl**.
+Or press **New Topic** on the home, activity, or profile page and pick **Build with Carl**. Where the home
+or profile page has no topics yet, that same **Give Carl a topic. You know the one.** link appears and
+opens this chat.
 On a team page, the **New topic** option at the end of the Add Topic picker does the same, with the team
 already on the draft.
+Or just ask for a new topic in any private chat, and Carl opens this one beside the chat you were in.
 
 Sign up with no topic yet, and the panel opens on it by itself when you reach the home page, with
 the message box reading "Let's make your first topic. You know the one." Close it and it stays
@@ -44,7 +47,7 @@ he goes back and rewrites that field.
 6. **Who reads along.** Email addresses, one each. Skipping is fine.
 7. **A file.** Attach a PDF, a spreadsheet, or notes with the paperclip. It reaches Carl for that
    turn and waits in the draft. Skipping is fine.
-8. **The settings.** Tags, how often to brew (daily, weekdays, or weekly), and how many findings a brew
+8. **The settings.** Tags, how often to brew (daily, weekdays, or weekly), the time and day it brews, and how many findings a brew
    keeps (5, 10, 15, or 20). Say what you want or skip it: weekly and ten are the defaults.
    Ask for daily when your plan has no daily slot left and the save says so, with the draft kept for another
    try.
@@ -53,7 +56,7 @@ he goes back and rewrites that field.
 ## The draft card
 
 Everything Carl has written down so far shows on the **Topic draft** card above the message box:
-the title, the prompt, the sources with the built-in web search first, the visibility, the team, the settings, the invites, and the files waiting. It is what the yes
+the title, the prompt, the tags, the schedule, how many findings a brew keeps, the visibility, the team, the invites, the sources with the built-in web search first, and the files waiting. It is what the yes
 saves, and the files upload to the new topic right after it is created. The one thing that can still fall
 short is the team: if you no longer lead it, the topic is created without it and a toast says so. **Clear chat** drops the conversation and the draft together.
 

@@ -1,16 +1,16 @@
 // carl's chat turn in a team chat room
-import type { ChatAttachment } from "@shared/contracts"
+import type { ChatAttachment, RoomTopicToolCalls } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, type SQL, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 import { db } from "../../db"
 import { chatRoomAttachments, chatRoomMessages, chatRoomSummaries, type topics, users } from "../../db/schema"
-import { getAttachmentBytes, MODEL_CHAT_TURN_FAILED_REJECTION } from "../../worker"
+import { type ChatReplyPart, getAttachmentBytes, MODEL_CHAT_TURN_FAILED_REJECTION } from "../../worker"
 import { streamChatReply } from "../../worker/chat"
 import { fetchPromptTemplate } from "../../worker/prompts/fetch"
 import { writePrompt } from "../../worker/prompts/write"
 import { isAllowed } from "../authorization"
-import { type ChatTurnToolCalls, toChatTopicTools } from "../tool/chatTools"
+import { type ChatTurnToolCalls, toChatTopicTools, toTopicEditPreviewTools } from "../tool/chatTools"
 import { decryptChatText, encryptChatText } from "./encryption"
 import { saveLinkPreviews } from "./linkPreviews"
 import { notifyChatRoomMessage } from "./roomStream"
@@ -80,6 +80,8 @@ export async function runModelChatRoomTurn(
 	// the same reply path the private chat uses
 	const replyStream = await streamChatReply({
 		tools: chatTurnTools,
+		// the tools that put a proposed change on the topic's card and take it back off
+		...(chatTurnTools ? toTopicEditPreviewTools({ toolCalls }) : {}),
 		topicId: topic?.id,
 		teamId: topic ? undefined : teamId,
 		userId: billedUserId,
@@ -96,11 +98,8 @@ export async function runModelChatRoomTurn(
 		return
 	}
 
-	// drain the stream into the one chat message the chat room posts
-	let answer = ""
-	for await (const chunk of replyStream.textStream) {
-		answer += chunk
-	}
+	// read the whole stream into the one chat message the chat room posts
+	const reply = await toReplyText(replyStream.replyParts)
 	const completion = await replyStream.completion
 
 	// carl's answer is stored once the completion is done
@@ -111,7 +110,7 @@ export async function runModelChatRoomTurn(
 			teamId,
 			authorUsername: "Carl",
 			replyToMessageId: promptChatMessageId,
-			content: encryptChatText(answer.trim()),
+			content: encryptChatText(reply.trim()),
 		})
 		.returning({ id: chatRoomMessages.id })
 	if (!modelChatMessage) {
@@ -119,15 +118,44 @@ export async function runModelChatRoomTurn(
 	}
 
 	// carl's first link fetches its link preview card in the background, like a member's chat message
-	void saveLinkPreviews(answer, teamId).catch((error) => console.error("chat room link preview failed", error))
+	void saveLinkPreviews(reply, teamId).catch((error) => console.error("chat room link preview failed", error))
 
 	// the ledger is updated after carl's answer is stored, naming the chat message carl answered
 	await recordChatRoomTurn(billedUserId, topic?.id ?? null, teamId, promptChatMessageId, completion)
 	// the fan-out runs only after the insert commits. every listener's re-read finds the chat message
-	await notifyChatRoomMessage(topic?.id ?? null, teamId, modelChatMessage.id, {
+	await notifyChatRoomMessage(
+		topic?.id ?? null,
+		teamId,
+		modelChatMessage.id,
+		toChatRoomToolCalls(toolCalls, billedUserId),
+	)
+}
+
+// the reply's text alone, read from its parts
+async function toReplyText(replyParts: AsyncIterable<ChatReplyPart>): Promise<string> {
+	let replyText = ""
+	// keep the text parts and drop the tool results
+	for await (const replyPart of replyParts) {
+		if (replyPart.type === "text") {
+			replyText += replyPart.text
+		}
+	}
+	return replyText
+}
+
+/**
+ * What the room is told about carl's topic tools: the toast lines every member reads, and the preview named for the
+ * member who asked, since a proposal and its cancellation are theirs alone.
+ */
+function toChatRoomToolCalls(toolCalls: ChatTurnToolCalls, billedUserId: string): RoomTopicToolCalls {
+	const isTopicEditPreviewChanged = Boolean(toolCalls.proposedTopicEdit || toolCalls.isTopicEditCancelled)
+	return {
 		topicSaves: toolCalls.topicSaves,
 		topicSaveRejections: toolCalls.topicSaveRejections,
-	})
+		proposedToUserId: isTopicEditPreviewChanged ? billedUserId : undefined,
+		proposedTopicEdit: toolCalls.proposedTopicEdit,
+		isTopicEditCancelled: toolCalls.isTopicEditCancelled,
+	}
 }
 
 // the images stored with one chat room message, rebuilt as the data urls the model reads

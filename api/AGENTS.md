@@ -12,13 +12,14 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
 - `note/` — the tasting-notes routes and their yjs sync: `notes.ts` (page payload, snapshot, updates, stream),
   `noteCommentThreads.ts` (comment writes), `noteStream.ts` (fan-out), `permissions.ts` (visibility access),
   `noteBadges.ts` (the unread edit and comment counts, and the read time that clears them).
-- `mcp/` — the mcp server: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and the transport), `tools.ts` (the eleven
-  tools it registers, with their schemas and annotations), `toolCaller.ts` (the tool caller: the visitor or user a bearer token resolves to), and
+- `mcp/` — the mcp server: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and the transport), `tools.ts` (the tools it registers, with their schemas and annotations), `toolCaller.ts` (the tool caller: the visitor or user a bearer token resolves to), and
   `results.ts` (what each tool returns for a visitor or a user, paged under a client's result limit).
-- `tool/` — `topicTools.ts` (the five Topic Tools, each with its own gate check) and the chat adapters in
+- `tool/` — `topicTools.ts` (the Topic Tools, each with its own gate check) and the chat adapters in
   `chatTools.ts`: the edit tools bound to a chat's topic, and the draft tools of the new-topic chat. The mcp adapter is
   in `mcp/tools.ts`.
 - `topic/promptVersions.ts` — the Prompt Version write the editor's save and the Topic Tools share.
+- `topic/topicDrafts.ts` — the new-topic chat's Topic Draft row, written by the chat turn that changed it and read
+  back when the conversation loads.
 - `rateLimit.ts` — the one per-tool-caller rate limit, shared by the chat turn routes and the mcp routes, keyed by the
   user or by the client address `trustedProxies.ts` vouches for.
 - Every authority answer routes through `authorization.ts` and the role helpers; inline

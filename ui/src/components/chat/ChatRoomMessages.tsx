@@ -310,7 +310,7 @@ const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 			avatarSource={chatMessage.authorAvatarSource}
 			isOwnChatMessage={isOwnChatMessage}
 		>
-			<div className={cn("group flex flex-col", isOwnChatMessage ? "items-end" : "items-start")}>
+			<div className={cn("group flex w-full flex-col", isOwnChatMessage ? "items-end" : "items-start")}>
 				{/* the reference quotes what this chat message answers, and clicking it scrolls back up to it */}
 				{repliedChatMessage && (
 					<button

@@ -25,6 +25,15 @@ Every model-facing prompt lives as one versioned markdown file under `worker/pro
 - Limit user-controlled inputs (content, context, documents) in the builder before writing so a huge input cannot inflate token spend.
 - A tier-gated span sits between `<!-- premium-tier -->` and `<!-- /premium-tier -->` markers; the cheap tier's builder drops it with `filterPremiumPrompt` before writing. Only `summarize-resource.md` uses this today. The marker name leaves room for more tiers later without another rename.
 
+## Prompt fragments
+- A prompt that another prompt needs is a **prompt fragment**: its own file under `worker/prompts/`, its own frontmatter and version, fetched and written by a builder and spliced into the parent through a `{{...Block}}` variable. `chat-glossary.md`, `chat-conduct.md` and `chat-edit-topic.md` are the prompt fragments today, and `worker/chat/index.ts` holds their builders.
+- **Splice one when the same wording has to hold in two prompts.** Two copies of a rule drift, and the copies that drifted are the ones nobody notices: three chat prompts once listed the source kinds in prose and all three disagreed. One prompt fragment is one place to fix it.
+- A prompt fragment is written before it is spliced, so it fills its own variables first. `writePrompt` replaces placeholders in one pass, so a `{{variable}}` inside an already-filled value is never filled again. That is what lets a prompt fragment take its own inputs, as `chat-glossary.md` takes each chat's own glossary line.
+- **Splice as a trusted variable.** A prompt fragment is the app's own wording, so it goes in the trusted map and renders unfenced. Only the values a user typed or a page returned belong in the untrusted map.
+- **Do not split for length alone.** The prompts together are a few thousand words, and a second fetch costs more than the lines it saves. Shared wording is one reason to split. A block one prompt splices only on some turns is the other, as `worker/chat/index.ts` splices `chat-edit-topic.md` only when the turn binds the edit tools.
+- A prompt fragment holding a list the code already knows takes it as a variable instead of restating it. The source options come from `toSourceOptionsSentence()` in `shared/sources.ts`, so adding a source option reaches every prompt that names them.
+- Register a new prompt fragment in `FALLBACK_PROMPT_TEMPLATES` (`worker/prompts/fetch.ts`) like any prompt, and sync it: it is served registry-first the same way.
+
 ## Registry
 - Prompts are served registry-first from Langfuse (5-minute cache, ~2.5s timeout) and fall back to the bundled markdown on any failure or when `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` are unset — a Scan can never fail or hang on the registry.
 - **Git is canonical.** `bun run prompts:sync` (`worker/prompts/sync.ts`) pushes each bundled body up as a `production`-labeled version, idempotently — an unchanged body creates no new version. A prompt edited in the Langfuse UI is an experiment: the next sync overwrites it with the git body. Never treat the UI as a place to leave a permanent change.

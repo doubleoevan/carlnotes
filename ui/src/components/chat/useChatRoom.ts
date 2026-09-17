@@ -4,6 +4,7 @@ import { CHAT_ROOM_ATTACHMENT_LIMIT, type ChatAttachment, type ChatRoomMessage }
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { fetchChatRoomMessageLinkPreviews, fetchChatRoomMessages, sendChatRoomMessage } from "@/clients/chatRoomClient"
+import { applyTopicEditToolCalls, toastTopicToolCalls } from "@/components/chat/topicToolCalls"
 import { useChatRoomStream } from "@/components/chat/useChatRoomStream"
 import { hasPreviewableLink } from "@/components/common/LinkPreviewCard"
 import { publishTopicChanged } from "@/stores/chatPanelStore"
@@ -40,8 +41,14 @@ export type ChatRoomState = {
 	loadingChatMessageIds: Set<number>
 }
 
-// a null topic is the team's own chat room on its team page
-export function useChatRoom(topicId: string | null, teamId: string): ChatRoomState {
+type UseChatRoomOptions = {
+	// a null topic is the team's own chat room on its team page
+	topicId: string | null
+	teamId: string
+	userId: string | undefined
+}
+
+export function useChatRoom({ topicId, teamId, userId }: UseChatRoomOptions): ChatRoomState {
 	const [chatMessages, setChatMessages] = useState<ChatRoomMessage[]>([])
 	const [isLoaded, setIsLoaded] = useState(false)
 	const [isRejected, setIsRejected] = useState(false)
@@ -149,17 +156,19 @@ export function useChatRoom(topicId: string | null, teamId: string): ChatRoomSta
 			}
 		},
 		// toast the saves and the rejections for every member, then reload the topic page behind the panel
-		onTopicToolCalls: (topicToasts) => {
-			for (const topicSave of topicToasts.topicSaves) {
-				toast(topicSave)
+		onTopicToolCalls: (roomToolCalls) => {
+			toastTopicToolCalls(roomToolCalls)
+			if (!topicId) {
+				return
 			}
-			for (const topicSaveRejection of topicToasts.topicSaveRejections) {
-				toast.error(topicSaveRejection)
-			}
-			// reload the topic page behind the panel
-			if (topicId) {
-				publishTopicChanged(topicId)
-			}
+			// preview only for the member carl proposed to. a save reaches everyone watching
+			const isProposedToThisMember = userId !== undefined && roomToolCalls.proposedToUserId === userId
+			applyTopicEditToolCalls(topicId, {
+				proposedTopicEdit: isProposedToThisMember ? roomToolCalls.proposedTopicEdit : undefined,
+				isTopicEditCancelled: isProposedToThisMember && roomToolCalls.isTopicEditCancelled,
+				topicSaves: roomToolCalls.topicSaves,
+			})
+			publishTopicChanged(topicId)
 		},
 	})
 

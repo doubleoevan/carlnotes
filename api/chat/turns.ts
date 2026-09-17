@@ -1,21 +1,23 @@
-// authorizing and metering one chat turn. the reply itself is generated in the worker
+// one chat turn end to end: authorizing it, streaming the worker's reply, sending the tool calls, and metering it
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import {
-	CHAT_STREAM_FAILED_TEXT,
-	CHAT_TOOL_CALLS_MARKER,
 	type ChatAttachment,
 	type ChatConversation,
+	type ChatToolCall,
 	type ChatTurnPayload,
 	type ChatTurnRow,
 	chatTurnPayload,
+	EMPTY_TOPIC_DRAFT,
 	type TopicDraft,
 	type TopicDraftTeam,
 	type TopicToolCalls,
+	toChatReplyLineText,
 	withAttachmentNote,
 } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
 import { ADMIN_QUOTA } from "@shared/plans"
+import type { Tool } from "ai"
 import { and, desc, eq, isNull, type SQL } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
@@ -30,7 +32,15 @@ import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
 import { loadTeamSummaries } from "../team/helpers"
 import { toTeamRole } from "../team/members"
-import { type ChatTurnToolCalls, toChatTopicTools, toNewTopicChatTools } from "../tool/chatTools"
+import {
+	type ChatTurnToolCalls,
+	toChatTopicTools,
+	toNewTopicChatTools,
+	toOpenNewTopicChatTool,
+	toSuggestTopicSourcesTool,
+	toTopicEditPreviewTools,
+} from "../tool/chatTools"
+import { deleteTopicDraft, loadTopicDraft, saveTopicDraft } from "../topic/topicDrafts"
 import {
 	deleteChatAttachments,
 	loadKeptTopicAttachments,
@@ -193,13 +203,24 @@ export async function saveChatTurn(
 	isPersisted: boolean,
 	question: string,
 	answer: string,
+	toolCalls: ChatToolCall[],
 	analyticsProperties: AnalyticsProperties,
 ): Promise<string | null> {
 	// the id comes back so the attachments sent with the question can point at this chat turn
 	const [chatTurnRow] = await db
 		.insert(chatTurns)
 		.values(
-			toChatTurnRow(userId, page.topicId ?? null, totalTokens, searchCount, isPersisted, question, answer, page.teamId),
+			toChatTurnRow(
+				userId,
+				page.topicId ?? null,
+				totalTokens,
+				searchCount,
+				isPersisted,
+				question,
+				answer,
+				page.teamId,
+				toolCalls,
+			),
 		)
 		.returning({ id: chatTurns.id })
 
@@ -242,6 +263,7 @@ export function toChatTurnRow(
 	question: string,
 	answer: string,
 	teamId?: string,
+	toolCalls: ChatToolCall[] = [],
 ): typeof chatTurns.$inferInsert {
 	// a chat turn that does not persist stores null text, so its row is a meter entry and nothing more
 	return {
@@ -251,6 +273,8 @@ export function toChatTurnRow(
 		cost: (tokenCost(totalTokens, CHAT_COST_PER_MILLION_TOKENS) + searchCount * EXA_COST_PER_SEARCH).toFixed(6),
 		question: isPersisted ? encryptChatText(question) : null,
 		answer: isPersisted ? encryptChatText(answer) : null,
+		// the tool calls as encrypted json
+		toolCalls: isPersisted && toolCalls.length > 0 ? encryptChatText(JSON.stringify(toolCalls)) : null,
 	}
 }
 
@@ -271,6 +295,7 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 				id: chatTurns.id,
 				question: chatTurns.question,
 				answer: chatTurns.answer,
+				toolCalls: chatTurns.toolCalls,
 				createdAt: chatTurns.createdAt,
 			})
 			.from(chatTurns)
@@ -294,7 +319,15 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 
 		// what was sent with this question, which the bubble shows again
 		const attachments = attachmentsByChatTurnId.get(chatTurnRow.id) ?? []
-		return [{ question, answer, at: chatTurnRow.createdAt.toISOString(), attachments }]
+		return [
+			{
+				question,
+				answer,
+				toolCalls: toChatToolCalls(chatTurnRow.toolCalls),
+				at: chatTurnRow.createdAt.toISOString(),
+				attachments,
+			},
+		]
 	})
 
 	// each question's and answer's first link resolves against the shared link preview cache in one query.
@@ -311,6 +344,20 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 	}))
 }
 
+// the tool calls a stored chat turn made, empty when the chat turn row has none or the text does not decrypt
+function toChatToolCalls(storedToolCalls: string | null): ChatToolCall[] {
+	const toolCallsJson = storedToolCalls === null ? null : decryptChatText(storedToolCalls)
+	if (toolCallsJson === null) {
+		return []
+	}
+	// treat text that fails to parse as no tool calls
+	try {
+		return JSON.parse(toolCallsJson) as ChatToolCall[]
+	} catch {
+		return []
+	}
+}
+
 /**
  * Clear the user's conversation with a topic: every chat turn's text is set to null,
  * and everything they kept for the topic is deleted with it. The chat turn rows stay as the spend ledger,
@@ -319,7 +366,7 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 export async function clearChatTurns(userId: string, chatPage: ChatPage): Promise<void> {
 	await db
 		.update(chatTurns)
-		.set({ question: null, answer: null })
+		.set({ question: null, answer: null, toolCalls: null })
 		.where(and(eq(chatTurns.userId, userId), toPageFilter(chatPage)))
 
 	// a team conversation stores no attachments, so only a topic clear has files to take with it
@@ -345,23 +392,23 @@ function streamChatTurn(
 	},
 ): Response {
 	return stream(context, async (writeStream) => {
-		// forward the reply, then the tool calls
+		// forward the reply, with the tool calls as each tool returns
 		try {
 			await writeReplyStream(writeStream, reply, chatTurn.toolCalls)
 		} catch (error) {
 			// a stream that breaks partway still spent tokens, so it falls through to the save below
 			console.error(`chat stream failed for ${chatTurn.page.topicId ?? chatTurn.page.teamId}`, error)
 			// a spent budget is the user's to know about, and the stream is the only place left to show it.
-			// anything else gets the chat stream failed text, which tells the api client this is a failed chat turn
-			let closingText = `\n\n${SPENT_BUDGET_REJECTION}`
+			// anything else closes with the failed line
+			let closingLine = toChatReplyLineText({ type: "text", text: `\n\n${SPENT_BUDGET_REJECTION}` })
 			if (!isBudgetRejection(error)) {
 				reportError(error, "chat", { topicId: chatTurn.page.topicId ?? chatTurn.page.teamId ?? "" })
-				closingText = CHAT_STREAM_FAILED_TEXT
+				closingLine = toChatReplyLineText({ type: "failed" })
 			}
 
 			// a user who already left cannot be written to, and that must not skip the save below
 			try {
-				await writeStream.write(closingText)
+				await writeStream.write(closingLine)
 			} catch (closingError) {
 				console.error("chat stream close failed", closingError)
 			}
@@ -369,6 +416,14 @@ function streamChatTurn(
 
 		// save the spend whether the stream finished or broke, so a partial chat turn is never free
 		const chatTurnId = await saveFinishedChatTurn(reply, chatTurn)
+
+		// store the topic draft the chat turn wrote. a chat turn that created the topic already deleted it
+		if (chatTurn.toolCalls.topicDraft && !chatTurn.toolCalls.createdTopicId) {
+			await saveTopicDraft(chatTurn.userId, chatTurn.toolCalls.topicDraft).catch((error) => {
+				console.error("topic draft save failed", error)
+				reportError(error, "chat")
+			})
+		}
 
 		// store what was sent once the reply has finished. the summaries take seconds, so they run on
 		// past the closed stream. a team conversation stores none
@@ -388,19 +443,138 @@ function streamChatTurn(
 	})
 }
 
-// forward each chunk as it arrives, then the tool calls, when there are any
+/**
+ * Forwards each text part as it arrives, and the tool calls the api client has not been sent each time a tool returns.
+ */
 export async function writeReplyStream(
 	writeStream: { write: (text: string) => Promise<unknown> },
-	reply: Pick<ChatReplyStream, "textStream">,
+	reply: Pick<ChatReplyStream, "replyParts">,
 	toolCalls: ChatTurnToolCalls,
 ): Promise<void> {
-	for await (const chunk of reply.textStream) {
-		await writeStream.write(chunk)
+	const sentToolCalls: SentToolCalls = {
+		topicSaveCount: 0,
+		topicSaveRejectionCount: 0,
+		chatToolCallCount: 0,
+		isCreatedTopicSent: false,
+		isNewTopicChatSent: false,
+		isTopicEditCancelledSent: false,
 	}
-	// read the tool calls once the reply ends
-	const streamedToolCalls = toStreamedToolCalls(toolCalls)
-	if (streamedToolCalls) {
-		await writeStream.write(`${CHAT_TOOL_CALLS_MARKER}${JSON.stringify(streamedToolCalls)}`)
+	// collect the tool calls in the order they returned
+	const chatToolCalls: ChatToolCall[] = []
+	// forward each text part, and write the tool calls the api client has not been sent when a tool returns
+	for await (const replyPart of reply.replyParts) {
+		if (replyPart.type === "text") {
+			await writeStream.write(toChatReplyLineText({ type: "text", text: replyPart.text }))
+			continue
+		}
+		chatToolCalls.push(replyPart.toolCall)
+		await writeUnsentToolCalls(writeStream, toolCalls, chatToolCalls, sentToolCalls)
+	}
+	// write again, so a tool that returned after the last part still reaches the api client
+	await writeUnsentToolCalls(writeStream, toolCalls, chatToolCalls, sentToolCalls)
+}
+
+// the tool calls the api client has been sent so far
+type SentToolCalls = {
+	// how much of each list the api client already has
+	topicSaveCount: number
+	topicSaveRejectionCount: number
+	chatToolCallCount: number
+	// the ones that go out once each
+	isCreatedTopicSent: boolean
+	isNewTopicChatSent: boolean
+	isTopicEditCancelledSent: boolean
+	// the two compared by their json, so carl rewriting one sends it again
+	topicDraftJson?: string
+	proposedTopicEditJson?: string
+}
+
+// write the tool calls the api client has not been sent, and count them as sent
+async function writeUnsentToolCalls(
+	writeStream: { write: (text: string) => Promise<unknown> },
+	toolCalls: ChatTurnToolCalls,
+	chatToolCalls: ChatToolCall[],
+	sentToolCalls: SentToolCalls,
+): Promise<void> {
+	const unsentToolCalls = toUnsentToolCalls(toolCalls, chatToolCalls, sentToolCalls)
+	if (!unsentToolCalls) {
+		return
+	}
+	// read the two compared by their json before the write, since a tool may rewrite either one during it
+	const writtenTopicDraftJson = unsentToolCalls.topicDraft ? JSON.stringify(unsentToolCalls.topicDraft) : undefined
+	const writtenProposedTopicEditJson = unsentToolCalls.proposedTopicEdit
+		? JSON.stringify(unsentToolCalls.proposedTopicEdit)
+		: undefined
+	await writeStream.write(toChatReplyLineText({ type: "toolCalls", toolCalls: unsentToolCalls }))
+	// count only what was just written as sent. a tool that finished during the write goes out with the next line
+	sentToolCalls.topicSaveCount += unsentToolCalls.topicSaves.length
+	sentToolCalls.topicSaveRejectionCount += unsentToolCalls.topicSaveRejections.length
+	sentToolCalls.chatToolCallCount += unsentToolCalls.chatToolCalls?.length ?? 0
+	// mark the topic draft as sent until it changes, and the created topic once
+	if (writtenTopicDraftJson) {
+		sentToolCalls.topicDraftJson = writtenTopicDraftJson
+	}
+	if (unsentToolCalls.createdTopicId) {
+		sentToolCalls.isCreatedTopicSent = true
+	}
+	// mark the opened new-topic chat as sent once
+	if (unsentToolCalls.isNewTopicChatOpened) {
+		sentToolCalls.isNewTopicChatSent = true
+	}
+	// mark the cancelled edit as sent once
+	if (unsentToolCalls.isTopicEditCancelled) {
+		sentToolCalls.isTopicEditCancelledSent = true
+	}
+	// mark the proposed edit as sent until carl revises it
+	if (writtenProposedTopicEditJson) {
+		sentToolCalls.proposedTopicEditJson = writtenProposedTopicEditJson
+	}
+}
+
+// the tool calls the api client has not been sent, null when nothing new happened
+function toUnsentToolCalls(
+	toolCalls: ChatTurnToolCalls,
+	chatToolCalls: ChatToolCall[],
+	sentToolCalls: SentToolCalls,
+): TopicToolCalls | null {
+	const topicSaves = toolCalls.topicSaves.slice(sentToolCalls.topicSaveCount)
+	const topicSaveRejections = toolCalls.topicSaveRejections.slice(sentToolCalls.topicSaveRejectionCount)
+	const unsentChatToolCalls = chatToolCalls.slice(sentToolCalls.chatToolCallCount)
+	// a topic draft and a proposal each count as unsent until carl rewrites them, so both compare by their json
+	const topicDraftJson = toolCalls.topicDraft ? JSON.stringify(toolCalls.topicDraft) : undefined
+	const topicDraft = topicDraftJson !== sentToolCalls.topicDraftJson ? toolCalls.topicDraft : undefined
+	// the created topic, the opened new-topic chat and a cancelled edit each go out once
+	const createdTopicId = sentToolCalls.isCreatedTopicSent ? undefined : toolCalls.createdTopicId
+	const isNewTopicChatOpened = !sentToolCalls.isNewTopicChatSent && toolCalls.isNewTopicChatOpened ? true : undefined
+	const isTopicEditCancelled =
+		!sentToolCalls.isTopicEditCancelledSent && toolCalls.isTopicEditCancelled ? true : undefined
+	const proposedTopicEditJson = toolCalls.proposedTopicEdit ? JSON.stringify(toolCalls.proposedTopicEdit) : undefined
+	const proposedTopicEdit =
+		proposedTopicEditJson !== sentToolCalls.proposedTopicEditJson ? toolCalls.proposedTopicEdit : undefined
+	// whether every one of them has already gone out
+	const isEveryToolCallSent =
+		topicSaves.length === 0 &&
+		topicSaveRejections.length === 0 &&
+		unsentChatToolCalls.length === 0 &&
+		// and none of the tool calls that go out once each is still waiting
+		!topicDraft &&
+		!createdTopicId &&
+		!isNewTopicChatOpened &&
+		!proposedTopicEdit &&
+		!isTopicEditCancelled
+	if (isEveryToolCallSent) {
+		return null
+	}
+	// return only what is new, so the api client applies each tool call once
+	return {
+		topicSaves,
+		topicSaveRejections,
+		topicDraft,
+		createdTopicId,
+		isNewTopicChatOpened,
+		proposedTopicEdit,
+		isTopicEditCancelled,
+		chatToolCalls: unsentChatToolCalls.length > 0 ? unsentChatToolCalls : undefined,
 	}
 }
 
@@ -420,7 +594,7 @@ async function saveFinishedChatTurn(
 ): Promise<string | null> {
 	try {
 		// save the chat turn. a topic tool call keeps the chat turn's text even when the gate rejects persistence
-		const { text, totalTokens, searchCount } = await reply.completion
+		const { text, totalTokens, searchCount, toolCalls } = await reply.completion
 		const isChatTurnPersisted = chatTurn.isPersisted || chatTurn.toolCalls.count > 0
 		const savedChatTurnId = await saveChatTurn(
 			chatTurn.userId,
@@ -430,6 +604,7 @@ async function saveFinishedChatTurn(
 			isChatTurnPersisted,
 			chatTurn.question,
 			text,
+			toolCalls,
 			chatTurn.analyticsProperties,
 		)
 
@@ -469,22 +644,20 @@ function toChatTurnTools(
 	topicDraft: TopicDraft | undefined,
 	toolCalls: ChatTurnToolCalls,
 	analyticsProperties: AnalyticsProperties,
-): ReturnType<typeof toChatTopicTools> | undefined {
+): { tools?: ReturnType<typeof toChatTopicTools>; suggestSourcesTool?: Tool } {
 	if (page.newTopic) {
-		const emptyTopicDraft: TopicDraft = {
-			name: "",
-			prompt: "",
-			sources: [],
-			inviteEmails: [],
-			visibility: "invite",
-			team: null,
-			tags: [],
-			frequency: "weekly",
-			maxTopicFindings: 10,
+		// copy the empty topic draft. the tools write into this object, and EMPTY_TOPIC_DRAFT is frozen
+		const chatTurnTopicDraft = topicDraft ?? { ...EMPTY_TOPIC_DRAFT }
+		const newTopicToolBinding = { userId, toolCalls, topicDraft: chatTurnTopicDraft, analyticsProperties }
+		return {
+			tools: toNewTopicChatTools(newTopicToolBinding),
+			suggestSourcesTool: toSuggestTopicSourcesTool(newTopicToolBinding),
 		}
-		return toNewTopicChatTools({ userId, toolCalls, topicDraft: topicDraft ?? emptyTopicDraft, analyticsProperties })
 	}
-	return canEditTopic && page.topicId ? toChatTopicTools({ userId, topicId: page.topicId, toolCalls }) : undefined
+	// the suggestion tool belongs to the new-topic chat alone
+	return {
+		tools: canEditTopic && page.topicId ? toChatTopicTools({ userId, topicId: page.topicId, toolCalls }) : undefined,
+	}
 }
 
 // how many more topics the plan allows, as the prompt states it. an admin's unlimited marker reads as no limit at all
@@ -492,24 +665,16 @@ function toPromptTopicsRemaining(remainingTopics: number | undefined): number | 
 	return remainingTopics === undefined || remainingTopics >= ADMIN_QUOTA ? undefined : remainingTopics
 }
 
-// the tool calls the stream ends with when a tool did anything, else null
-function toStreamedToolCalls(toolCalls: ChatTurnToolCalls): TopicToolCalls | null {
-	// nothing to send when no tool did anything
-	if (
-		toolCalls.topicSaves.length === 0 &&
-		toolCalls.topicSaveRejections.length === 0 &&
-		!toolCalls.topicDraft &&
-		!toolCalls.createdTopicId
-	) {
-		return null
+/**
+ * The topic draft the new-topic chat starts a chat turn from. A stored draft replaces the browser's copy. The team comes
+ * from the browser when it sends one.
+ */
+async function toNewTopicChatDraft(userId: string, browserTopicDraft?: TopicDraft): Promise<TopicDraft | undefined> {
+	const storedTopicDraft = await loadTopicDraft(userId)
+	if (!storedTopicDraft) {
+		return browserTopicDraft
 	}
-	// what the tools left, minus the count
-	return {
-		topicSaves: toolCalls.topicSaves,
-		topicSaveRejections: toolCalls.topicSaveRejections,
-		topicDraft: toolCalls.topicDraft,
-		createdTopicId: toolCalls.createdTopicId,
-	}
+	return { ...storedTopicDraft, team: browserTopicDraft?.team ?? storedTopicDraft.team }
 }
 
 // the reply every chat POST route streams once authorization allows
@@ -535,23 +700,30 @@ async function answerChatTurn(
 		return context.json({ error: "That file couldn't be read." }, 422)
 	}
 
+	// load the topic draft the new-topic chat's tools read and write
+	const topicDraft = page.newTopic ? await toNewTopicChatDraft(userId, payload.topicDraft) : undefined
+
 	// offer the topic tools to an editor's turn on a topic, and the draft tools to the new-topic chat
 	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
-	const chatTurnTools = toChatTurnTools(
+	const { tools: chatTurnTools, suggestSourcesTool } = toChatTurnTools(
 		userId,
 		page,
 		authorization.canEditTopic,
-		payload.topicDraft,
+		topicDraft,
 		toolCalls,
 		toAnalyticsProperties(context),
 	)
 
 	// the reply reads against the page's own material: one topic, every topic the team holds, or nothing but the draft
 	const chatReply = await streamChatReply({
+		// the tool that opens the new-topic chat
+		openNewTopicChatTool: page.newTopic ? undefined : toOpenNewTopicChatTool({ toolCalls }),
+		// the tools that put a proposed change on the topic's card and take it back off
+		...(authorization.canEditTopic && page.topicId ? toTopicEditPreviewTools({ toolCalls }) : {}),
 		topicId: page.topicId,
 		teamId: page.teamId,
 		newTopic: page.newTopic,
-		topicDraft: payload.topicDraft,
+		topicDraft,
 		topicsRemaining: toPromptTopicsRemaining(authorization.topicsRemaining),
 		leaderTeams: authorization.leaderTeams,
 		question,
@@ -562,6 +734,7 @@ async function answerChatTurn(
 		litellmApiKey: authorization.litellmApiKey,
 		includeAttachments,
 		tools: chatTurnTools,
+		suggestSourcesTool,
 	})
 	if (!chatReply) {
 		return context.json({ error: "not found" }, 404)
@@ -658,11 +831,12 @@ export const chatRoute = new Hono<AppEnv>()
 	.get("/chat/new-topic", async (context) => {
 		// load the new-topic conversation and whether this is the user's first topic
 		const userId = currentUser(context)
-		const [chatTurns, authorization, isFirstTopic, planTopicLimit] = await Promise.all([
+		const [chatTurns, authorization, isFirstTopic, planTopicLimit, topicDraft] = await Promise.all([
 			loadChatTurns(userId, { newTopic: true }),
 			authorizeNewTopicChatTurn(userId),
 			ownsNoTopic(userId),
 			userId ? topicLimit(userId) : Promise.resolve(undefined),
+			loadTopicDraft(userId),
 		])
 
 		// the payload the chat panel renders from, in the topic conversation's own shape
@@ -676,6 +850,7 @@ export const chatRoute = new Hono<AppEnv>()
 			isFirstTopic,
 			topicsRemaining: authorization.status === "allowed" ? authorization.topicsRemaining : undefined,
 			topicLimit: planTopicLimit,
+			topicDraft: topicDraft ?? undefined,
 		}
 		return context.json(chatConversation)
 	})
@@ -685,7 +860,8 @@ export const chatRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "sign up required" }, 401)
 		}
-		await clearChatTurns(userId, { newTopic: true })
+		// delete the topic draft with its conversation
+		await Promise.all([clearChatTurns(userId, { newTopic: true }), deleteTopicDraft(userId)])
 		return context.json({ ok: true })
 	})
 	.post(

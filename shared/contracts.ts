@@ -431,17 +431,45 @@ export function toUncompactedChatTurnStart(history: { question: string; answer: 
 // how many chat turns a send posts to the llm. the earlier turns beyond the memory budget are compacted
 export const CHAT_HISTORY_TURNS = 100
 
-// what a broken reply stream ends with. the api client reads it as a failed chat turn
-export const CHAT_STREAM_FAILED_TEXT = "\n\n[Carl's reply broke off here.]"
+// what one line of a chat reply stream says. text the model writes can never pass for another line,
+// since JSON escapes the newline that ends one
+export type ChatReplyLine =
+	| { type: "text"; text: string }
+	| { type: "toolCalls"; toolCalls: TopicToolCalls }
+	| { type: "failed" }
 
-// what a reply stream ends with after a topic tool ran, followed by the tool calls as JSON
-export const CHAT_TOOL_CALLS_MARKER = "\n\n[carl-tool-calls]"
+/**
+ * One line's text, as the chat reply stream sends it.
+ */
+export function toChatReplyLineText(chatReplyLine: ChatReplyLine): string {
+	return `${JSON.stringify(chatReplyLine)}\n`
+}
 
 // the toast lines the topic tools leave: one per save and one per rejected change
 export type TopicToolToasts = { topicSaves: string[]; topicSaveRejections: string[] }
 
-// what the stream ends with: the toast lines, the draft as the tools left it, and the topic a create made
-export type TopicToolCalls = TopicToolToasts & { topicDraft?: TopicDraft; createdTopicId?: string }
+// what the tools leave for the api client: the toast lines, the topic draft, the topic a create made,
+// and whether the new-topic chat opened
+export type TopicToolCalls = TopicToolToasts & {
+	topicDraft?: TopicDraft
+	createdTopicId?: string
+	isNewTopicChatOpened?: boolean
+	// what carl proposed changing this turn
+	proposedTopicEdit?: ProposeTopicEditPayload
+	// whether the user turned the proposal down
+	isTopicEditCancelled?: boolean
+	// the tool calls, sent back as history, so the model reads a save as a call
+	chatToolCalls?: ChatToolCall[]
+}
+
+// what a chat room shows every member: the toast lines, and who carl proposed a change to. the proposal names its user,
+// so one member asking never moves another member's panel
+export type RoomTopicToolCalls = Pick<
+	TopicToolCalls,
+	"topicSaves" | "topicSaveRejections" | "proposedTopicEdit" | "isTopicEditCancelled"
+> & {
+	proposedToUserId?: string
+}
 
 // how much of a compacted earlier answer survives
 const COMPACT_ANSWER_CHARS = 280
@@ -454,6 +482,56 @@ export function compactChatAnswer(answer: string): string {
 		return answer
 	}
 	return `${answer.slice(0, COMPACT_ANSWER_CHARS).trimEnd()}…`
+}
+
+/**
+ * A stored tool call clipped to what the chat turn payload accepts. A tool that returned more than the payload allows,
+ * as a web search over a long page does, would otherwise reject every later question in that conversation.
+ */
+export function toSentToolCall(toolCall: ChatToolCall): ChatToolCall {
+	// clip an output past its limit, and drop an input past its own. the output still says what the call did
+	const isInputSendable = JSON.stringify(toolCall.input ?? null).length <= CHAT_HISTORY_TOOL_CALL_INPUT_CHARS
+	const isOutputSendable = toolCall.output.length <= CHAT_HISTORY_ANSWER_CHARS
+	if (isInputSendable && isOutputSendable) {
+		return toolCall
+	}
+	return {
+		toolName: toolCall.toolName,
+		input: isInputSendable ? toolCall.input : null,
+		output: isOutputSendable
+			? toolCall.output
+			: `${toolCall.output.slice(0, CHAT_HISTORY_ANSWER_CHARS - 1).trimEnd()}…`,
+	}
+}
+
+/**
+ * One chat turn's tool calls as the next question sends them, keeping the newest when a turn called more than the
+ * payload accepts. A turn over that count would otherwise reject every later question in that conversation.
+ */
+export function toSentToolCalls(toolCalls: ChatToolCall[]): ChatToolCall[] {
+	return toolCalls.slice(-CHAT_HISTORY_TOOL_CALLS).map(toSentToolCall)
+}
+
+// the tools carl calls to put a change on the topic's card or to take it back off, and the ones that save
+export const PROPOSE_TOPIC_EDIT_TOOL = "proposeTopicEdit"
+export const CANCEL_TOPIC_EDIT_TOOL = "cancelTopicEdit"
+export const TOPIC_SAVE_TOOL_NAMES = ["updateTopicPrompt", "addSource", "removeSource", "updateTopicFields"]
+
+/**
+ * The proposal a conversation is still sitting on, read from the tools its chat turns called, or null for none.
+ * A proposal stands until carl cancels it or a tool saves, so a change already written is never answered twice.
+ */
+export function toStandingTopicEditCall(toolCalls: ChatToolCall[]): ChatToolCall | null {
+	// the last call that opened a proposal or closed one, by cancelling it or by saving
+	const lastTopicEditCall = toolCalls
+		.filter(
+			(toolCall) =>
+				toolCall.toolName === PROPOSE_TOPIC_EDIT_TOOL ||
+				toolCall.toolName === CANCEL_TOPIC_EDIT_TOOL ||
+				TOPIC_SAVE_TOOL_NAMES.includes(toolCall.toolName),
+		)
+		.at(-1)
+	return lastTopicEditCall?.toolName === PROPOSE_TOPIC_EDIT_TOOL ? lastTopicEditCall : null
 }
 
 // how many attachments one chat turn may include, and how large each may run
@@ -475,6 +553,10 @@ export const CHAT_HISTORY_ANSWER_CHARS = 20_000
 
 // a history question is the asked question plus its stored attachment note, so it gets room for the note
 export const CHAT_HISTORY_QUESTION_CHARS = CHAT_QUESTION_CHARS + 1_000
+
+// how many tool calls one replayed chat turn may include, and how long each tool call's input may be as JSON
+export const CHAT_HISTORY_TOOL_CALLS = 10
+export const CHAT_HISTORY_TOOL_CALL_INPUT_CHARS = 8_000
 
 // how long a topic prompt may grow before a copy-paste is treated as an attachment
 export const TOPIC_PROMPT_CHARS = 2_000
@@ -568,15 +650,30 @@ const maxTopicFindingsPayload = z
 	.number()
 	.refine((value) => (maxTopicFindingsOptions as readonly number[]).includes(value))
 
-// the settings a chat may change on a topic, each optional so a call names only what changes
+// the time of day a scan runs, as HH:MM
+export const scheduledTimePayload = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM")
+
 export const updateTopicFieldsPayload = z
 	.object({
+		name: z.string().trim().min(1).max(TOPIC_NAME_CHARS).optional(),
 		tags: topicDraftTagsPayload.optional(),
+		visibility: z.enum(visibilities).optional(),
 		frequency: z.enum(frequencies).optional(),
+		scheduledTime: scheduledTimePayload.optional(),
+		scheduledDayOfWeek: z.enum(daysOfWeek).optional(),
 		maxTopicFindings: maxTopicFindingsPayload.optional(),
 	})
 	.refine((fields) => Object.values(fields).some((value) => value !== undefined), "name at least one field")
 export type UpdateTopicFieldsPayload = z.infer<typeof updateTopicFieldsPayload>
+
+// what carl proposes changing, which the card previews over the topic as it stands. sources are named as the two
+// acts the saving tools take, one adding and one dropping, so a source he does not name is never read as a removal
+export const proposeTopicEditPayload = updateTopicFieldsPayload.extend({
+	prompt: z.string().trim().min(1).max(TOPIC_PROMPT_CHARS).optional(),
+	addSources: z.array(addTopicSourcePayload).max(MAX_TOPIC_SOURCES).optional(),
+	removeSourceIds: z.array(z.string().min(1)).max(MAX_TOPIC_SOURCES).optional(),
+})
+export type ProposeTopicEditPayload = z.infer<typeof proposeTopicEditPayload>
 
 // a team the topic draft names: its id for the save, its name for the card and for carl
 export const topicDraftTeamPayload = z.object({
@@ -595,18 +692,36 @@ export const topicDraftPayload = z.object({
 	visibility: z.enum(visibilities).default("invite"),
 	// the team the topic joins at the save, one the user leads, or none
 	team: topicDraftTeamPayload.nullable().default(null),
-	// the settings the editor defaults: no tags, a weekly scan, and ten findings kept
+	// the settings a new topic draft starts with: no tags, a weekly scan on Wednesday morning, and ten findings kept
 	tags: topicDraftTagsPayload.default([]),
 	frequency: z.enum(frequencies).default("weekly"),
+	scheduledTime: scheduledTimePayload.default("09:00"),
+	scheduledDayOfWeek: z.enum(daysOfWeek).default("wednesday"),
 	maxTopicFindings: maxTopicFindingsPayload.default(10),
 })
 export type TopicDraft = z.infer<typeof topicDraftPayload>
+
+// a topic draft with nothing written yet, every field at the payload's own default
+export const EMPTY_TOPIC_DRAFT: TopicDraft = Object.freeze(topicDraftPayload.parse({}))
 
 // the create_topic tool's input over mcp: a draft whose name and prompt are required
 export const createTopicPayload = topicDraftPayload.extend({
 	name: z.string().trim().min(1).max(TOPIC_NAME_CHARS),
 	prompt: z.string().trim().min(1).max(TOPIC_PROMPT_CHARS),
 })
+
+// one tool a chat turn called, with its input and what it returned
+export const chatToolCallPayload = z
+	.object({
+		toolName: z.string().max(80),
+		input: z.unknown(),
+		output: z.string().max(CHAT_HISTORY_ANSWER_CHARS),
+	})
+	.refine(
+		(toolCall) => JSON.stringify(toolCall.input ?? null).length <= CHAT_HISTORY_TOOL_CALL_INPUT_CHARS,
+		"tool call input too long",
+	)
+export type ChatToolCall = z.infer<typeof chatToolCallPayload>
 
 // a chat turn's question plus the conversation so far
 export const chatTurnPayload = z
@@ -617,6 +732,8 @@ export const chatTurnPayload = z
 				z.object({
 					question: z.string().max(CHAT_HISTORY_QUESTION_CHARS),
 					answer: z.string().max(CHAT_HISTORY_ANSWER_CHARS),
+					// the tools the chat turn called, replayed so the model reads a save as a call
+					toolCalls: z.array(chatToolCallPayload).max(CHAT_HISTORY_TOOL_CALLS).optional(),
 				}),
 			)
 			.max(CHAT_HISTORY_TURNS)
@@ -634,6 +751,8 @@ export type ChatTurnRow = {
 	question: string
 	answer: string
 	at?: string
+	// the tools this chat turn called, sent back with the next question
+	toolCalls?: ChatToolCall[]
 	attachments: ChatMessageAttachment[]
 	// the cards for the question's first links, empty if it holds none or no link preview is stored
 	linkPreviews: ChatLinkPreview[]
@@ -641,8 +760,13 @@ export type ChatTurnRow = {
 	answerLinkPreviews: ChatLinkPreview[]
 }
 
-// an attachment the user keeps durably for a topic
-export type KeptChatAttachment = { id: string; name: string; kind: (typeof chatAttachmentKinds)[number] }
+// an attachment the user keeps durably for a topic, with when they added it
+export type KeptChatAttachment = {
+	id: string
+	name: string
+	kind: (typeof chatAttachmentKinds)[number]
+	at: string
+}
 
 // the stored conversation for a topic
 export type ChatConversation = {
@@ -659,6 +783,8 @@ export type ChatConversation = {
 	// how many more topics the plan lets the user hold, and the plan's limit, on the new-topic conversation alone
 	topicsRemaining?: number
 	topicLimit?: number
+	// the topic draft carl has written so far, on the new-topic conversation alone
+	topicDraft?: TopicDraft
 }
 
 // the admin role-change body. an admin cannot remove their own admin role, enforced server-side
@@ -984,7 +1110,7 @@ export const updateTopicPayload = z.object({
 	prompt: z.string().trim().min(1),
 	tags: z.array(z.string().trim().min(1)),
 	frequency: z.enum(frequencies),
-	scheduledTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM"),
+	scheduledTime: scheduledTimePayload,
 	scheduledDayOfWeek: z.enum(daysOfWeek),
 	visibility: z.enum(visibilities),
 	// how many findings a scan is set to keep for this topic

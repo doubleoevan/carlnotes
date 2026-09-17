@@ -610,6 +610,20 @@
       "when": 1788921398167,
       "tag": "0086_friendly_wilson_fisk",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1789403040699,
+      "tag": "0087_optimal_longshot",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1789408900147,
+      "tag": "0088_little_scarecrow",
+      "breakpoints": true
     }
   ]
 }

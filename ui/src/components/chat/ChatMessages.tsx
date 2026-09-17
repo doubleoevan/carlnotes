@@ -2,9 +2,10 @@ import {
 	CHAT_HISTORY_TURNS,
 	type ChatLinkPreview,
 	type ChatMessageAttachment,
+	type ChatToolCall,
 	toUncompactedChatTurnStart,
 } from "@shared/contracts"
-import { Check, Copy } from "lucide-react"
+import { Check, Copy, RotateCcw } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { type ChatRejection, toChatAttachmentUrl } from "@/clients/chatClient"
@@ -25,6 +26,8 @@ export type ChatTurn = {
 	answer: string
 	rejection: ChatRejection | null
 	at?: number
+	// the tools this chat turn called, sent back with the next question
+	toolCalls?: ChatToolCall[]
 	// a just-sent image or clip holds its data url until the reload hands it a stored id to read from
 	attachments: (ChatMessageAttachment & { dataUrl?: string })[]
 	// the cards for the question's first links, empty if it holds none or no link preview is stored yet
@@ -159,6 +162,7 @@ export function ChatMessages({
 						isLast={index === chatTurns.length - 1}
 						isStreaming={isStreaming}
 						now={now}
+						onRetry={onRetry}
 					/>
 				))}
 				<div ref={bottomRef} />
@@ -267,7 +271,7 @@ function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: nu
 			avatarSource={author.avatarSource}
 			isOwnChatMessage
 		>
-			<div className="group flex flex-col items-end">
+			<div className="group flex w-full flex-col items-end">
 				<p className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2 text-sm whitespace-pre-wrap @lg:max-w-[75%]">
 					{chatTurn.question}
 				</p>
@@ -354,7 +358,7 @@ function AnswerBubble({
 
 	return (
 		<ChatAuthor authorUserId={null} authorUsername="Carl">
-			<div className="group flex flex-col items-start">
+			<div className="group flex w-full flex-col items-start">
 				<div className="bg-bubble text-foreground max-w-[92%] rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm @lg:max-w-[75%]">
 					<div className={cn(isStreamingAnswer && "shimmer-text")}>
 						<ChatMarkdown markdown={chatTurn.answer} />
@@ -452,6 +456,7 @@ function ChatRejectionNotice({ rejection, onRetry }: { rejection: ChatRejection;
 				{onRetry ? (
 					<button type="button" onClick={onRetry} className="text-link hover:underline">
 						Try again?
+						<RotateCcw className="ml-1.5 inline size-3.5 align-middle" aria-hidden="true" />
 					</button>
 				) : (
 					"Try again?"

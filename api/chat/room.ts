@@ -213,23 +213,28 @@ function streamChatRoomEvents(context: Context, topicId: string | null, teamId: 
 			cursor = chatMessage.id
 		}
 
-		// notifications chain one after another, so a burst never reads the cursor before the prior delta advanced it
+		// each notification's delivery chains onto the last, so a burst never reads the cursor before the prior delta advanced it
 		await new Promise<void>((resolve) => {
-			let deliveryChain = Promise.resolve()
-			const stopListening = onChatRoomMessage(topicId, teamId, (chatMessageId, topicToasts) => {
+			let notificationDeliveryChain = Promise.resolve()
+			const stopListening = onChatRoomMessage(topicId, teamId, (chatMessageId, roomToolCalls) => {
 				// each notification delivers everything past the cursor, and the api client dedupes replays by id
-				deliveryChain = deliveryChain
+				notificationDeliveryChain = notificationDeliveryChain
 					.then(async () => {
 						// write each new chat message and advance the cursor past it
 						for (const chatMessage of await loadChatRoomDeltas(topicId, teamId, cursor, chatMessageId)) {
 							await stream.writeSSE({ id: String(chatMessage.id), event: "message", data: JSON.stringify(chatMessage) })
 							cursor = Math.max(cursor, chatMessage.id)
 						}
-						// send the toast lines carl's tools left after his chat message
-						if (topicToasts.topicSaves.length > 0 || topicToasts.topicSaveRejections.length > 0) {
-							await stream.writeSSE({ event: "topicToolCalls", data: JSON.stringify(topicToasts) })
+						// send the toast lines and any proposed topic edit carl's topic tools left
+						if (
+							roomToolCalls.topicSaves.length > 0 ||
+							roomToolCalls.topicSaveRejections.length > 0 ||
+							roomToolCalls.proposedToUserId !== undefined
+						) {
+							await stream.writeSSE({ event: "topicToolCalls", data: JSON.stringify(roomToolCalls) })
 						}
 					})
+					// log a failed delivery and keep the chain running
 					.catch((error) => console.error("chat room delta delivery failed", error))
 			})
 

@@ -265,13 +265,24 @@ export async function loadKeptTopicAttachments(userId: string | null, topicId: s
 		return []
 	}
 	// the user and topic index makes this a cheap read on every conversation load
-	return db
-		.select({ id: chatAttachments.id, name: chatAttachments.name, kind: chatAttachments.kind })
+	const keptAttachmentRows = await db
+		.select({
+			id: chatAttachments.id,
+			name: chatAttachments.name,
+			kind: chatAttachments.kind,
+			createdAt: chatAttachments.createdAt,
+		})
 		.from(chatAttachments)
 		.where(
 			and(eq(chatAttachments.userId, userId), eq(chatAttachments.topicId, topicId), eq(chatAttachments.isKept, true)),
 		)
 		.orderBy(chatAttachments.createdAt)
+
+	// return attachments with the created time as an iso string
+	return keptAttachmentRows.map(({ createdAt, ...keptAttachment }) => ({
+		...keptAttachment,
+		at: createdAt.toISOString(),
+	}))
 }
 
 /**

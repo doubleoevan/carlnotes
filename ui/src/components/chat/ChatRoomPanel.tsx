@@ -16,7 +16,9 @@ import {
 } from "@/components/chat/ChatPanelWidget"
 import { ChatRoomComposer, DisabledRoomComposer } from "@/components/chat/ChatRoomComposer"
 import { ClearChatDialog } from "@/components/chat/ClearChatDialog"
+import { TopicDraftCard } from "@/components/chat/TopicDraftCard"
 import { useChatRoom } from "@/components/chat/useChatRoom"
+import { useEditableTopicDraft } from "@/components/chat/useEditableTopicDraft"
 import { useRoomReply } from "@/components/chat/useRoomReply"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
 import { markChatRoomOpened } from "@/stores/chatRoomStore"
@@ -88,8 +90,10 @@ export function ChatRoomPanel({
 	// the chat members for the autocomplete, the chat room itself, and which chat message the composer answers
 	const [isClearChatOpen, setIsClearChatOpen] = useState(false)
 	const { data: session } = authClient.useSession()
-	const chatRoom = useChatRoom(topicId, teamId)
+	const chatRoom = useChatRoom({ topicId, teamId, userId: session?.user.id })
 	const { memberUsernames, isTeamLeader } = useRoomMembers(teamId, session?.user.id)
+	// read the topic this chat room may edit
+	const editableTopicDraft = useEditableTopicDraft(topicId)
 
 	// an admin moderates every chat room, the same way the header decides its admin console link
 	const isAdmin = session?.user.role === "admin"
@@ -180,6 +184,15 @@ export function ChatRoomPanel({
 						<X className="size-3.5" />
 					</button>
 				</div>
+			)}
+			{/* the topic this chat room can edit, as it is saved or as carl proposed changing it */}
+			{editableTopicDraft && (
+				<TopicDraftCard
+					topicDraft={editableTopicDraft.topicDraft}
+					topicId={topicId}
+					isTopicEditProposed={editableTopicDraft.isTopicEditProposed}
+					isCarlReplying={chatRoom.isMessageLoading}
+				/>
 			)}
 			{chatRoom.isLoaded ? (
 				<ChatRoomComposer

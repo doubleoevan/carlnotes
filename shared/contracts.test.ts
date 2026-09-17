@@ -1,12 +1,21 @@
 // tests for the payload contracts that create and update topic are validated through
 import { expect, test } from "bun:test"
 import {
+	CHAT_HISTORY_ANSWER_CHARS,
+	CHAT_HISTORY_TOOL_CALL_INPUT_CHARS,
+	CHAT_HISTORY_TOOL_CALLS,
+	type ChatToolCall,
 	chatRoomMessagePayload,
 	chatTurnPayload,
 	MAX_ATTACHMENT_CONTEXT_CHARS,
 	MAX_TOPIC_SOURCES,
 	suggestSourcesPayload,
+	TOPIC_SAVE_TOOL_NAMES,
+	toSentToolCall,
+	toSentToolCalls,
+	toStandingTopicEditCall,
 	type UpdateTopicPayload,
+	updateTopicFieldsPayload,
 	updateTopicPayload,
 	userInvitePayload,
 	withAttachmentNote,
@@ -102,4 +111,111 @@ test("the chat payloads accept attachments alone and reject an empty send", () =
 // an attachments-only question reads as the note alone, with no leading blank lines
 test("withAttachmentNote stands alone on an empty question", () => {
 	expect(withAttachmentNote("", [{ name: "a.pdf" }])).toBe("[attached: a.pdf]")
+})
+
+// a partial update where one field alone is enough, and an unknown visibility is still rejected
+test("updateTopicFieldsPayload takes a name or a visibility alone and rejects an empty call", () => {
+	expect(updateTopicFieldsPayload.safeParse({ name: "Where to hoop" }).success).toBe(true)
+	expect(updateTopicFieldsPayload.safeParse({ visibility: "private" }).success).toBe(true)
+	expect(updateTopicFieldsPayload.safeParse({ visibility: "secret" }).success).toBe(false)
+	expect(updateTopicFieldsPayload.safeParse({}).success).toBe(false)
+})
+
+// a tool that returned more than the payload accepts must not reject every later question in that conversation
+test("a long tool call output is clipped to what the chat turn payload accepts", () => {
+	const longToolCall = {
+		toolName: "searchWeb",
+		input: { query: "sleep" },
+		output: "x".repeat(CHAT_HISTORY_ANSWER_CHARS + 2_000),
+	}
+	const sentToolCall = toSentToolCall(longToolCall)
+	expect(sentToolCall.output.length).toBeLessThanOrEqual(CHAT_HISTORY_ANSWER_CHARS)
+	expect(sentToolCall.output.endsWith("\u2026")).toBe(true)
+	expect(
+		chatTurnPayload.safeParse({
+			question: "and now?",
+			history: [{ question: "q", answer: "a", toolCalls: [sentToolCall] }],
+		}).success,
+	).toBe(true)
+
+	// the same payload with the raw call is what the validator rejects
+	expect(
+		chatTurnPayload.safeParse({
+			question: "and now?",
+			history: [{ question: "q", answer: "a", toolCalls: [longToolCall] }],
+		}).success,
+	).toBe(false)
+
+	// a call already inside the limit is returned untouched
+	const shortToolCall = { toolName: "draftTopic", input: {}, output: "The draft now reads: Sourdough" }
+	expect(toSentToolCall(shortToolCall)).toBe(shortToolCall)
+})
+
+// an input past its own limit rejects the payload just as an output does, and a tool that takes a list of sources
+// or a whole prompt can write one
+test("a long tool call input is dropped, keeping the output that says what the call did", () => {
+	const longInputToolCall = {
+		toolName: "draftTopic",
+		input: { sources: "x".repeat(CHAT_HISTORY_TOOL_CALL_INPUT_CHARS + 1_000) },
+		output: "The draft now reads: Sourdough",
+	}
+	expect(
+		chatTurnPayload.safeParse({
+			question: "and now?",
+			history: [{ question: "q", answer: "a", toolCalls: [longInputToolCall] }],
+		}).success,
+	).toBe(false)
+	const sentToolCall = toSentToolCall(longInputToolCall)
+	expect(sentToolCall.input).toBeNull()
+	expect(sentToolCall.output).toBe("The draft now reads: Sourdough")
+	expect(
+		chatTurnPayload.safeParse({
+			question: "and now?",
+			history: [{ question: "q", answer: "a", toolCalls: [sentToolCall] }],
+		}).success,
+	).toBe(true)
+})
+
+// one turn may call more tools than the payload replays, as a consent that swaps every source does. the whole
+// conversation would otherwise reject every later question
+test("a turn's tool calls are clipped to the count the payload accepts, newest kept", () => {
+	const toolCalls = Array.from({ length: CHAT_HISTORY_TOOL_CALLS + 3 }, (_, index) => ({
+		toolName: "addSource",
+		input: { value: `r/hoops${index}` },
+		output: `Carl added reddit — r/hoops${index}.`,
+	}))
+	expect(
+		chatTurnPayload.safeParse({
+			question: "what did you change?",
+			history: [{ question: "yes", answer: "Saved.", toolCalls }],
+		}).success,
+	).toBe(false)
+	const sentToolCalls = toSentToolCalls(toolCalls)
+	expect(sentToolCalls).toHaveLength(CHAT_HISTORY_TOOL_CALLS)
+	expect(sentToolCalls.at(-1)?.output).toBe(`Carl added reddit — r/hoops${CHAT_HISTORY_TOOL_CALLS + 2}.`)
+	expect(
+		chatTurnPayload.safeParse({
+			question: "what did you change?",
+			history: [{ question: "yes", answer: "Saved.", toolCalls: sentToolCalls }],
+		}).success,
+	).toBe(true)
+})
+
+// the proposal a yes answers. one already saved is spent, so a later yes to anything else forces no save
+test("a topic edit proposal stands until it is cancelled or saved", () => {
+	const proposeCall = { toolName: "proposeTopicEdit", input: { tags: ["Testing"] }, output: "Proposed." }
+	const toToolCall = (toolName: string): ChatToolCall => ({ toolName, input: {}, output: "" })
+	expect(toStandingTopicEditCall([])).toBeNull()
+	expect(toStandingTopicEditCall([toToolCall("searchWeb")])).toBeNull()
+	expect(toStandingTopicEditCall([proposeCall])).toBe(proposeCall)
+
+	// a search between the two leaves the proposal standing, since it saves nothing
+	expect(toStandingTopicEditCall([proposeCall, toToolCall("searchWeb")])).toBe(proposeCall)
+	expect(toStandingTopicEditCall([proposeCall, toToolCall("cancelTopicEdit")])).toBeNull()
+	for (const savingToolName of TOPIC_SAVE_TOOL_NAMES) {
+		expect(toStandingTopicEditCall([proposeCall, toToolCall(savingToolName)])).toBeNull()
+	}
+
+	// a proposal made after a save is standing again
+	expect(toStandingTopicEditCall([proposeCall, toToolCall("addSource"), proposeCall])).toBe(proposeCall)
 })

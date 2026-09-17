@@ -104,16 +104,18 @@ export async function retrieveChatContext(
 	// embed the question once through the same helper review uses. the findings and the docs both rank against it
 	const questionVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${question}`, litellmApiKey)
 
-	// re-rank the findings against the question, then read the sources, scan summaries, attachment contexts
-	const retrievedFindings = await retrieveFindings([topicId], questionVector)
-	const [topicSources, scanSummaries, attachmentContext, chatAttachmentContext, docsBlock] = await Promise.all([
-		readSources(topicId),
-		readScanSummaries(topicId),
-		// a chat room turn's answer posts publicly, so the owner's attachments and the poster's kept chat attachments both stay out
-		isTopicOwner && includeKeptAttachments ? readAttachmentContext(topicId) : Promise.resolve(""),
-		includeKeptAttachments ? readChatAttachmentContext(userId, topicId) : Promise.resolve(""),
-		readDocsBlock(questionVector),
-	])
+	// re-rank the findings against the question and read the sources, scan summaries, attachment contexts, and docs
+	const [retrievedFindings, topicSources, scanSummaries, attachmentContext, chatAttachmentContext, docsBlock] =
+		await Promise.all([
+			retrieveFindings([topicId], questionVector),
+			readSources(topicId),
+			readScanSummaries(topicId),
+			// read the topic's own attachments only when the asker owns the topic
+			// both they and the user's kept chat attachments stay out of a chat room turn, whose answer posts publicly
+			isTopicOwner && includeKeptAttachments ? readAttachmentContext(topicId) : Promise.resolve(""),
+			includeKeptAttachments ? readChatAttachmentContext(userId, topicId) : Promise.resolve(""),
+			readDocsBlock(questionVector),
+		])
 	// the name and prompt fill their own lines, and the rest of the row is the settings block
 	const { name, prompt, ...topicSettings } = topic
 	return {

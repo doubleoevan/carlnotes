@@ -3,7 +3,9 @@ import { LangfuseClient } from "@langfuse/client"
 import { reportError } from "@shared/monitoring"
 import attachContextTemplate from "./attach-context.md" with { type: "text" }
 import attachImageContextTemplate from "./attach-image-context.md" with { type: "text" }
+import chatConductTemplate from "./chat-conduct.md" with { type: "text" }
 import chatEditTopicTemplate from "./chat-edit-topic.md" with { type: "text" }
+import chatGlossaryTemplate from "./chat-glossary.md" with { type: "text" }
 import chatNewTopicTemplate from "./chat-new-topic.md" with { type: "text" }
 import chatRoomTurnTemplate from "./chat-room-turn.md" with { type: "text" }
 import chatTeamTemplate from "./chat-team.md" with { type: "text" }
@@ -23,6 +25,8 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"attach-image-context": attachImageContextTemplate,
 	"chat-topic": chatTopicTemplate,
 	"chat-edit-topic": chatEditTopicTemplate,
+	"chat-glossary": chatGlossaryTemplate,
+	"chat-conduct": chatConductTemplate,
 	"chat-new-topic": chatNewTopicTemplate,
 	"chat-team": chatTeamTemplate,
 	"chat-room-turn": chatRoomTurnTemplate,

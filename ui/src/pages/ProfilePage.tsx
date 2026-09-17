@@ -29,7 +29,7 @@ import { usePageTitle } from "@/hooks/usePageTitle"
 import { toCountLabel } from "@/lib/labels"
 import { CARD_CLASS, MENU_OPTION_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
-import { useRegisterChatContext } from "@/stores/chatPanelStore"
+import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useAllChatMentions } from "@/stores/chatRoomStore"
 import { useAllNoteBadges } from "@/stores/noteBadgeStore"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
@@ -205,7 +205,6 @@ export function ProfilePage() {
 				topics={topics}
 				isOwnProfile={isOwnProfile}
 				onLoadTopics={handleLoadTopics}
-				onNewTopic={() => setIsNewTopicOpen(true)}
 				onReloadProfile={handleReloadProfile}
 			/>
 			{isNewTopicOpen && <NewTopicDialog onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
@@ -219,14 +218,12 @@ function ProfileSections({
 	isOwnProfile,
 	topics,
 	onLoadTopics,
-	onNewTopic,
 	onReloadProfile,
 }: {
 	profile: ProfileResponse
 	isOwnProfile: boolean
 	topics: OwnerTopic[] | null
 	onLoadTopics: () => void
-	onNewTopic: () => void
 	onReloadProfile: () => void
 }) {
 	const navigate = useNavigate()
@@ -244,7 +241,11 @@ function ProfileSections({
 								<CoffeeLoading className="min-h-0 justify-start py-2 text-sm" />
 							) : topics.length === 0 ? (
 								<div className={cn(CARD_CLASS, "mb-4")}>
-									<button type="button" onClick={onNewTopic} className="font-display text-link text-lg hover:underline">
+									<button
+										type="button"
+										onClick={() => openNewTopicChat()}
+										className="font-display text-link text-lg hover:underline"
+									>
 										Give Carl a topic. You know the one.
 									</button>
 								</div>

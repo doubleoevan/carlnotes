@@ -40,6 +40,8 @@ export type DefaultSource = {
 	key: DefaultSourceKey
 	sourceKind: EditableSourceKind
 	label: string
+	// what carl calls this source in a sentence, where label is the name the editor shows
+	promptLabel: string
 	summary: string
 	toConfig: () => Record<string, unknown>
 }
@@ -49,6 +51,8 @@ export type CustomSourceOption = {
 	key: CustomSourceKey
 	sourceKind: EditableSourceKind
 	label: string
+	// what carl calls this source in a sentence, where label is the name the editor shows
+	promptLabel: string
 	placeholder: string
 	toConfig: (value: string) => Record<string, unknown> | null
 }
@@ -58,7 +62,14 @@ export type CustomSourceOption = {
  */
 export const DEFAULT_SOURCES: DefaultSource[] = [
 	// web search is the only default source for now
-	{ key: "webSearch", sourceKind: "search", label: "web", summary: "Let Carl crawl", toConfig: () => ({}) },
+	{
+		key: "webSearch",
+		sourceKind: "search",
+		label: "web",
+		promptLabel: "web search",
+		summary: "Let Carl crawl",
+		toConfig: () => ({}),
+	},
 ]
 
 /**
@@ -66,13 +77,28 @@ export const DEFAULT_SOURCES: DefaultSource[] = [
  */
 export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 	// a page and an rss feed are both named by their url. what differs is the ingester that reads it
-	{ key: "url", sourceKind: "url", label: "url", placeholder: "page url…", toConfig: (value) => ({ url: value }) },
-	{ key: "rss", sourceKind: "rss", label: "rss", placeholder: "feed url…", toConfig: (value) => ({ url: value }) },
+	{
+		key: "url",
+		sourceKind: "url",
+		label: "url",
+		promptLabel: "a page",
+		placeholder: "page url…",
+		toConfig: (value) => ({ url: value }),
+	},
+	{
+		key: "rss",
+		sourceKind: "rss",
+		label: "rss",
+		promptLabel: "an RSS feed",
+		placeholder: "feed url…",
+		toConfig: (value) => ({ url: value }),
+	},
 	// Google News is an rss feed of one publisher's articles, built from the publisher's domain
 	{
 		key: "googleNews",
 		sourceKind: "rss",
 		label: "Google News",
+		promptLabel: "a news publisher",
 		placeholder: "publisher domain…",
 		toConfig: toGoogleNewsSourceConfig,
 	},
@@ -81,6 +107,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		key: "reddit",
 		sourceKind: "reddit",
 		label: "reddit",
+		promptLabel: "a subreddit",
 		placeholder: "subreddit…",
 		toConfig: (value) => ({ subreddit: value.replace(/^r\//, "") }),
 	},
@@ -89,6 +116,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		key: "youtube",
 		sourceKind: "youtube",
 		label: "youtube",
+		promptLabel: "a YouTube channel",
 		placeholder: "channel or playlist id…",
 		toConfig: toYouTubeConfig,
 	},
@@ -97,6 +125,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		key: "podcast",
 		sourceKind: "podcast",
 		label: "podcast",
+		promptLabel: "a podcast",
 		placeholder: "podcast id…",
 		toConfig: (value) => ({ podcastId: value }),
 	},
@@ -105,6 +134,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		key: "bluesky",
 		sourceKind: "bluesky",
 		label: "bluesky",
+		promptLabel: "a Bluesky account",
 		placeholder: "account handle…",
 		toConfig: (value) => ({ handle: value.replace(/^@/, "") }),
 	},
@@ -114,6 +144,7 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		key: "x",
 		sourceKind: "x",
 		label: "x",
+		promptLabel: "an X account",
 		placeholder: "account handle…",
 		toConfig: (value) => {
 			const handle = toXHandle(value)
@@ -121,6 +152,17 @@ export const CUSTOM_SOURCE_OPTIONS: CustomSourceOption[] = [
 		},
 	},
 ]
+
+/**
+ * Every source a topic can read, named the way carl says them, as one sentence fragment with "or" before the
+ * last. Prompts fill this in instead of listing the options themselves, so adding one here reaches every prompt
+ * that names them.
+ */
+export function toSourceOptionsSentence(): string {
+	const promptLabels = [...DEFAULT_SOURCES, ...CUSTOM_SOURCE_OPTIONS].map((sourceOption) => sourceOption.promptLabel)
+	const lastPromptLabel = promptLabels.at(-1)
+	return `${promptLabels.slice(0, -1).join(", ")}, or ${lastPromptLabel}`
+}
 
 /**
  * The default Source for a source kind, or null if it is a custom source kind.

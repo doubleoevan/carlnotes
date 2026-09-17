@@ -6,6 +6,7 @@ import type { TopicChat } from "@/components/chat/useTopicChat"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { toAgeLabel } from "@/lib/labels"
 import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
 import { CHAT_FILE_PICKER_ACCEPT, isTouchScreen, isWideScreen } from "@/lib/utils"
 
@@ -143,7 +144,7 @@ export function ChatComposer({
 					{/* the clear and send buttons. each keeps focus in the message box.
 						losing it closes a phone's keyboard, which moves the button before the click lands */}
 					<div className="ml-auto flex items-center gap-2">
-						{/* an X button clears the input and hands focus back, only appearing when there is content */}
+						{/* an X button clears the input and returns focus, only appearing when there is content */}
 						{question !== "" && (
 							<button
 								type="button"
@@ -258,6 +259,8 @@ function KeptAttachmentsButton({
 							</TooltipTrigger>
 							<TooltipContent>Click to download</TooltipContent>
 						</Tooltip>
+						{/* the name truncates before its age does */}
+						<span className="text-muted-foreground shrink-0 text-xs">{toAgeLabel(keptAttachment.at)}</span>
 						<Tooltip>
 							<TooltipTrigger asChild>
 								<button

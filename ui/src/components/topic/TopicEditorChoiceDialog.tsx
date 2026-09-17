@@ -5,7 +5,7 @@ import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { isWideScreen } from "@/lib/utils"
-import { setChatId, setChatPanelState } from "@/stores/chatPanelStore"
+import { openNewTopicChat, setChatId, setChatPanelState, startEditingTopic } from "@/stores/chatPanelStore"
 
 /**
  * The dialog that asks whether to use the form or Carl, editing the topic whose id it has or making a new one without.
@@ -23,10 +23,16 @@ export function TopicEditorChoiceDialog({
 	onClose: () => void
 }) {
 	const isEditingTopic = topicId !== undefined
-	// the chat choice opens the panel on the chat and closes the dialog, enlarged where the screen is narrow
+	// the chat choice opens the panel on the chat and closes the dialog
 	const handleChooseChat = (): void => {
-		setChatId(topicId === undefined ? { kind: "private", newTopic: true, initialTeam } : { kind: "private", topicId })
-		setChatPanelState(isWideScreen() ? "open" : "enlarged")
+		if (topicId === undefined) {
+			openNewTopicChat(initialTeam)
+		} else {
+			// mark the topic as being edited, then open the panel on its chat
+			startEditingTopic(topicId)
+			setChatId({ kind: "private", topicId })
+			setChatPanelState(isWideScreen() ? "open" : "enlarged")
+		}
 		onClose()
 	}
 	return (

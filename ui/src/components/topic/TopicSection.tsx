@@ -26,12 +26,12 @@ const SECTION_TITLE = {
 }
 
 // a topic feed section with its key and its topic feeds, or an empty section's call to action
-type TopicSectionProps = { section: TopicFeedResponse["sections"][number]; onNewTopic: () => void }
+type TopicSectionProps = { section: TopicFeedResponse["sections"][number]; onNewTopicChat: () => void }
 
 /**
  * A collapsible section of topics: "Your topics", "Your subscribed topics", "Featured topics", or "Popular topics"
  */
-export function TopicSection({ section, onNewTopic }: TopicSectionProps) {
+export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 	return (
 		<AccordionItem value={section.key}>
 			<AccordionTrigger onClick={scrollTriggerToTop} className="pb-1">
@@ -42,14 +42,12 @@ export function TopicSection({ section, onNewTopic }: TopicSectionProps) {
 				</span>
 			</AccordionTrigger>
 			<AccordionContent>
-				{/* the section topics, or a call to action to start one.
-				    a signed-in user opens a new topic, or a visitor links to the sign-up page */}
+				{/* the section topics, or a call to action to start one */}
 				{section.topics.length === 0 && (
 					<p className="text-muted-foreground pl-4 pb-4 text-sm">
-						<button type="button" onClick={onNewTopic} className="text-link hover:underline">
-							Give Carl a topic.
+						<button type="button" onClick={onNewTopicChat} className="text-link hover:underline">
+							Give Carl a topic. You know the one.
 						</button>
-						{` You know the one.`}
 					</p>
 				)}
 				{section.topics.map((topic, index) => (

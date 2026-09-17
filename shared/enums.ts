@@ -20,6 +20,14 @@ export const frequencies = ["daily", "weekdays", "weekly"] as const
 export const dailyFrequencies = ["daily", "weekdays"] as const
 
 /**
+ * Every schedule a scan can run on, as one sentence fragment with "or" before the last. Prompts fill this in
+ * instead of listing the frequencies themselves, so adding one reaches every prompt that names them.
+ */
+export function toScanFrequenciesSentence(): string {
+	return `${frequencies.slice(0, -1).join(", ")}, or ${frequencies.at(-1)}`
+}
+
+/**
  * Whether the frequency is one the plan's daily topic limit applies to.
  */
 export function isDailyFrequency(frequency: string): boolean {

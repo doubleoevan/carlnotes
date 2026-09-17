@@ -14,7 +14,7 @@ import { TopicFeedSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicSection } from "@/components/topic/TopicSection"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
-import { useRegisterChatContext } from "@/stores/chatPanelStore"
+import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
 /**
@@ -81,6 +81,15 @@ export function HomePage() {
 		}
 	}
 
+	// the "Give Carl a topic" button opens the new-topic chat, and sends a visitor to sign up first
+	const handleNewTopicChat = (): void => {
+		if (isSignedIn) {
+			openNewTopicChat()
+		} else {
+			navigate("/signup?cta=new-topic")
+		}
+	}
+
 	// the remount key changes on a reheat or any filter change so that the updated content animates in
 	const viewKey = `${reheatKey}-${findingFilter}-${sort}-${[...resourceKinds].sort().join()}-${tagMatchMode}-${[...tagFilters].sort().join("|")}-${isSignedIn}`
 	// the section that opens first
@@ -124,7 +133,7 @@ export function HomePage() {
 						className="[&>*:first-child_[data-slot=accordion-trigger]]:pt-0"
 					>
 						{topicFeed.sections.map((section) => (
-							<TopicSection key={section.key} section={section} onNewTopic={handleNewTopic} />
+							<TopicSection key={section.key} section={section} onNewTopicChat={handleNewTopicChat} />
 						))}
 					</Accordion>
 				)}

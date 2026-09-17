@@ -1,6 +1,12 @@
 import type * as React from "react"
 import { defaultRehypePlugins, Streamdown } from "streamdown"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { openNewTopicChat } from "@/stores/chatPanelStore"
+
+// the words that name the new-topic chat, which carl writes when he points a user at it, and the href they get
+// once they are linked. a url fragment, which streamdown's harden plugin passes through and no page reads
+const NEW_TOPIC_CHAT_WORDS = "Give Carl a topic. You know the one."
+const NEW_TOPIC_CHAT_HREF = "#new-topic-chat"
 
 // streamdown's raw plugin is left out, so HTML inside a reply is rendered as characters instead of becoming a live tag
 const SAFE_REHYPE_PLUGINS = [defaultRehypePlugins.sanitize, defaultRehypePlugins.harden].filter(
@@ -17,9 +23,16 @@ export function ChatMarkdown({ markdown, className }: { markdown: string; classN
 			components={MARKDOWN_COMPONENTS}
 			rehypePlugins={SAFE_REHYPE_PLUGINS}
 		>
-			{markdown}
+			{toNewTopicChatLinkedMarkdown(markdown)}
 		</Streamdown>
 	)
+}
+
+/**
+ * The Markdown with the words that name the new-topic chat turned into a link to that chat.
+ */
+export function toNewTopicChatLinkedMarkdown(markdown: string): string {
+	return markdown.replaceAll(NEW_TOPIC_CHAT_WORDS, `[${NEW_TOPIC_CHAT_WORDS}](${NEW_TOPIC_CHAT_HREF})`)
 }
 
 /**
@@ -31,6 +44,14 @@ export function isSafeHref(href: string | undefined): href is string {
 
 // a web-scheme link renders through the shared link component
 function ReplyLink({ href, children }: { href?: string; children?: React.ReactNode }) {
+	// open the new-topic chat from the words that name it
+	if (href === NEW_TOPIC_CHAT_HREF) {
+		return (
+			<button type="button" onClick={() => openNewTopicChat()} className="text-link hover:underline">
+				{children}
+			</button>
+		)
+	}
 	if (!isSafeHref(href)) {
 		return <span>{children}</span>
 	}

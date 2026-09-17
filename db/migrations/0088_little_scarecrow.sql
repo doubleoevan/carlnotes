@@ -1,0 +1,1 @@
+ALTER TABLE "chat_turns" ADD COLUMN "tool_calls" text;

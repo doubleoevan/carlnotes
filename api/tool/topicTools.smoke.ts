@@ -1,7 +1,7 @@
 // a live smoke test for the topic tools: the gate inside them, the prompt versions they write, adding and removing
 // a source, and that no tool starts a scan
 // run it with: doppler run -- bun api/tool/topicTools.smoke.ts. needs Doppler secrets and no model
-import { MAX_TOPIC_SOURCES, type TopicDraft, type UpdateTopicPayload } from "@shared/contracts"
+import { EMPTY_TOPIC_DRAFT, MAX_TOPIC_SOURCES, type TopicDraft, type UpdateTopicPayload } from "@shared/contracts"
 import { count, eq, inArray } from "drizzle-orm"
 import { connectionPool, db } from "../../db"
 import { scans, sources, topicPromptVersions, topics, users } from "../../db/schema"
@@ -310,17 +310,7 @@ try {
 	check("no tool started a scan", (await scanCount()) === topicScansBefore)
 
 	// a draft with no name is not saved, a visitor may not save one, and the owner's draft becomes the editor's topic
-	const emptyTopicDraft: TopicDraft = {
-		name: "",
-		prompt: "",
-		sources: [],
-		inviteEmails: [],
-		visibility: "invite",
-		team: null,
-		tags: [],
-		frequency: "weekly" as const,
-		maxTopicFindings: 10,
-	}
+	const emptyTopicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT }
 	const incompleteTopicDraftResult = await createTopicFromDraft({
 		userId: ownerId,
 		topicDraft: emptyTopicDraft,
@@ -332,19 +322,16 @@ try {
 		incompleteTopicDraftResult.status === "incomplete",
 		incompleteTopicDraftResult,
 	)
-	const topicDraft = {
+	const topicDraft: TopicDraft = {
+		...EMPTY_TOPIC_DRAFT,
 		name: `${runId} drafted topic`,
 		prompt: "pickup runs after work",
 		sources: [
-			{ sourceOption: "reddit" as const, value: "r/hoops" },
-			{ sourceOption: "webSearch" as const, value: "" },
+			{ sourceOption: "reddit", value: "r/hoops" },
+			{ sourceOption: "webSearch", value: "" },
 		],
-		inviteEmails: [],
-		visibility: "private" as const,
+		visibility: "private",
 		team: { teamId: crypto.randomUUID(), name: "A team the user does not lead" },
-		tags: [],
-		frequency: "weekly" as const,
-		maxTopicFindings: 10,
 	}
 	const visitorCreate = await createTopicFromDraft({
 		userId: null,

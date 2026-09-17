@@ -1,7 +1,7 @@
 // the chat room's fan-out across instances
 import { EventEmitter } from "node:events"
 import { Client } from "@neondatabase/serverless"
-import type { TopicToolToasts } from "@shared/contracts"
+import type { RoomTopicToolCalls } from "@shared/contracts"
 import { sql } from "drizzle-orm"
 import { db } from "../../db"
 import { toDirectConnectionString } from "../note/noteStream"
@@ -22,13 +22,13 @@ const LISTEN_RETRY_MAX_MS = 30_000
 let listenRetryMs = LISTEN_RETRY_MIN_MS
 
 /**
- * Subscribes this instance to a chat room's new chat message ids, each with the toast lines a topic tool left in that
- * chat turn, and returns the unsubscribe.
+ * Listens on this instance for a chat room's new chat message ids, each with what a topic tool left in that chat turn,
+ * and returns the function that stops listening.
  */
 export function onChatRoomMessage(
 	topicId: string | null,
 	teamId: string,
-	handler: (chatMessageId: number, topicToasts: TopicToolToasts) => void,
+	handler: (chatMessageId: number, roomToolCalls: RoomTopicToolCalls) => void,
 ): () => void {
 	startChatRoomListener()
 	// the team's own chat room keys on the literal "team" where a topic id would sit
@@ -36,20 +36,29 @@ export function onChatRoomMessage(
 	return () => chatRoomEvents.off(`${topicId ?? "team"}:${teamId}`, handler)
 }
 
+// how much of pg_notify's 8000 byte payload the tool calls may take, leaving room for the ids that go with them
+const NOTIFY_TOOL_CALLS_MAX_BYTES = 7_000
+
 /**
- * Tells every instance a chat message was stored, with the toast lines a topic tool left, after the insert commits.
+ * Tells every instance a chat message was stored, with what a topic tool left, after the insert commits.
  */
 export async function notifyChatRoomMessage(
 	topicId: string | null,
 	teamId: string,
 	chatMessageId: number,
-	topicToasts: TopicToolToasts = { topicSaves: [], topicSaveRejections: [] },
+	roomToolCalls: RoomTopicToolCalls = { topicSaves: [], topicSaveRejections: [] },
 ): Promise<void> {
-	// pg_notify works through the pooler. only LISTEN needs the direct connection
-	// the toast lines are sent as base64url json, which has no colon to split on
-	const hasToasts = topicToasts.topicSaves.length > 0 || topicToasts.topicSaveRejections.length > 0
-	const toastsPart = hasToasts ? `:${Buffer.from(JSON.stringify(topicToasts)).toString("base64url")}` : ""
-	const payload = `${topicId ?? "team"}:${teamId}:${chatMessageId}${toastsPart}`
+	// pg_notify works through the pooler. only LISTEN needs the direct connection.
+	// the tool calls are sent as base64url json, which has no colon to split on
+	const hasToolCalls =
+		roomToolCalls.topicSaves.length > 0 ||
+		roomToolCalls.topicSaveRejections.length > 0 ||
+		roomToolCalls.proposedToUserId !== undefined ||
+		roomToolCalls.isTopicEditCancelled === true
+	const toolCallsPart = hasToolCalls ? Buffer.from(JSON.stringify(roomToolCalls)).toString("base64url") : ""
+	// drop tool calls too large for pg_notify's 8000 bytes, so the chat message still arrives
+	const toolCallsSuffix = toolCallsPart.length <= NOTIFY_TOOL_CALLS_MAX_BYTES ? `:${toolCallsPart}` : ""
+	const payload = `${topicId ?? "team"}:${teamId}:${chatMessageId}${toolCallsSuffix}`
 	// best-effort delivery: a failed notify is logged, and the cursor catch-up covers the gap
 	try {
 		await db.execute(sql`select pg_notify(${CHAT_ROOM_CHANNEL}, ${payload})`)
@@ -70,10 +79,10 @@ function startChatRoomListener(): void {
 
 	// each notification re-emits to this instance's subscribers for that topic
 	client.on("notification", (notification) => {
-		// the payload is topicId:teamId:messageId, with the toast lines as a fourth part when a topic tool left any
-		const [topicId, teamId, chatMessageId, toastsPart] = (notification.payload ?? "").split(":")
+		// the payload is topicId:teamId:messageId, with the tool calls as a fourth part when a topic tool left any
+		const [topicId, teamId, chatMessageId, toolCallsPart] = (notification.payload ?? "").split(":")
 		if (topicId && teamId && chatMessageId) {
-			chatRoomEvents.emit(`${topicId}:${teamId}`, Number(chatMessageId), toTopicToasts(toastsPart))
+			chatRoomEvents.emit(`${topicId}:${teamId}`, Number(chatMessageId), toRoomTopicToolCalls(toolCallsPart))
 		}
 	})
 
@@ -110,9 +119,9 @@ function scheduleChatRoomRelisten(client: Client): void {
 	listenRetryMs = Math.min(listenRetryMs * 2, LISTEN_RETRY_MAX_MS)
 }
 
-// the toast lines a payload's fourth part holds, or none
-function toTopicToasts(toastsPart: string | undefined): TopicToolToasts {
-	return toastsPart
-		? (JSON.parse(Buffer.from(toastsPart, "base64url").toString()) as TopicToolToasts)
+// the tool calls a notification sent, decoded from base64url JSON, or none when it sent none
+function toRoomTopicToolCalls(toolCallsPart: string | undefined): RoomTopicToolCalls {
+	return toolCallsPart
+		? (JSON.parse(Buffer.from(toolCallsPart, "base64url").toString()) as RoomTopicToolCalls)
 		: { topicSaves: [], topicSaveRejections: [] }
 }

@@ -1,4 +1,4 @@
-// the mcp mcpServer. one handler serves /mcp and the topic-bound /mcp/t/:topicId with the same tools
+// the mcp server. one handler serves /mcp and the topic-bound /mcp/t/:topicId with the same tools
 import { StreamableHTTPTransport } from "@hono/mcp"
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import { eq } from "drizzle-orm"
