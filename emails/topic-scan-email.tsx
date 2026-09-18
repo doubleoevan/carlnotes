@@ -187,7 +187,12 @@ export function FindingCards({ findings }: { findings: TopicScanEmailFinding[] }
 						<span style={cardNumber}>{index + 1}. </span>
 						{finding.title ?? finding.url}
 					</Link>
-					<Text style={cardHost}>{hostOf(finding.url)}</Text>
+					{/* link the domain instead of leaving it as text, which a mail client would link to its front page */}
+					<Text style={cardHost}>
+						<Link href={finding.url} style={cardHostLink}>
+							{hostOf(finding.url)}
+						</Link>
+					</Text>
 					{finding.relevanceExplanation ? <Text style={cardNote}>{finding.relevanceExplanation}</Text> : null}
 				</Section>
 			))}
@@ -379,6 +384,7 @@ const cardTitle: CSSProperties = { color: "#7c4a1e", fontSize: "16px", fontWeigh
 // the same muted tone as cardHost, so the rank reads as a label instead of part of the link itself
 const cardNumber: CSSProperties = { color: "#a79c8c", fontWeight: 400 }
 const cardHost: CSSProperties = { color: "#a79c8c", fontSize: "12px", margin: "2px 0 0" }
+const cardHostLink: CSSProperties = { color: "#a79c8c", textDecoration: "none" }
 const cardNote: CSSProperties = { color: "#4b4b4b", fontSize: "14px", lineHeight: "1.5", margin: "8px 0 0" }
 const hr: CSSProperties = { borderColor: "#ece7de", margin: "24px 0 16px" }
 const footerText: CSSProperties = { color: "#9a938a", fontSize: "12px", lineHeight: "1.5", margin: "0 0 6px" }

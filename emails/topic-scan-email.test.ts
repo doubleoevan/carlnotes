@@ -21,6 +21,20 @@ test("renderTopicScanEmail lists findings, links them, and escapes text", async 
 	expect(html).toContain("&lt;agents&gt;")
 })
 
+// the host under each title is written as a link, so a mail client cannot linkify the bare domain into a
+// link to that domain's front page
+test("renderTopicScanEmail links the host at the finding, not at its domain", async () => {
+	const html = await renderTopicScanEmail({
+		topicName: "Engineer jobs",
+		findingCount: 1,
+		findings: [{ title: "Full Stack", url: "https://jobs.ashbyhq.com/fireworks/123", relevanceExplanation: "" }],
+	})
+
+	// the host text sits inside an anchor, and that anchor points at the finding rather than the domain root
+	const hostLink = html.match(/<a[^>]*href="([^"]*)"[^>]*>\s*jobs\.ashbyhq\.com\s*<\/a>/)
+	expect(hostLink?.[1]).toBe("https://jobs.ashbyhq.com/fireworks/123")
+})
+
 // a scan that kept nothing still sends, with Carl's aside standing in for the missing findings list
 test("renderTopicScanEmail reports a scan that kept nothing new", async () => {
 	const html = await renderTopicScanEmail({ topicName: "LLM tooling", findingCount: 0, findings: [] })
