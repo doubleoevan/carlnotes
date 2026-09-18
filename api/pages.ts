@@ -1,5 +1,5 @@
 // the pages this origin serves as paths with a custom app shell and page-specific header preview tags
-import { Hono } from "hono"
+import { type Context, Hono } from "hono"
 import { loadPages } from "./content"
 import { toInviteTarget } from "./invite/invites"
 import { loadReleases, toReleaseSummary } from "./releases"
@@ -35,6 +35,11 @@ import {
 
 // where build:ui writes the bundle, relative to the repo root the server runs from
 export const UI_BUNDLE_ROOT = "./ui/dist"
+
+// the shell revalidates, so a deploy reaches the user on their next request
+function htmlShell(context: Context, shellHtml: string): Response {
+	return context.html(shellHtml, 200, { "Cache-Control": "no-cache" })
+}
 
 // the pages the SPA draws entirely on its own, named here with the title that each one serves
 const SPA_PAGE_TITLES: Record<string, string> = {
@@ -139,7 +144,7 @@ export const pagesRoute = new Hono()
 					toJsonLdTag(toOrganizationLd(appUrl())),
 					toJsonLdTag(toSoftwareApplicationLd(appUrl())),
 				].join("")
-				return context.html(toShellWithHeadTags(await appShell.text(), headTags))
+				return htmlShell(context, toShellWithHeadTags(await appShell.text(), headTags))
 			}
 		} catch (error) {
 			console.error("homepage structured data skipped", error)
@@ -157,7 +162,7 @@ export const pagesRoute = new Hono()
 					`<title>${pageTitle} — CarlNotes</title>`,
 					`<link rel="canonical" href="${appUrl()}${context.req.path}">`,
 				].join("")
-				return context.html(toShellWithHeadTags(await appShell.text(), headTags))
+				return htmlShell(context, toShellWithHeadTags(await appShell.text(), headTags))
 			}
 		} catch (error) {
 			console.error("page tags skipped", error)
@@ -174,7 +179,7 @@ export const pagesRoute = new Hono()
 			if (topicPreview && (await appShell.exists())) {
 				// a private or invite topic serves its card tags only: title, username, and counts, never its findings
 				if (topicPreview.visibility !== "public") {
-					return context.html(toTopicPreviewHtml(await appShell.text(), topicPreview, appUrl()))
+					return htmlShell(context, toTopicPreviewHtml(await appShell.text(), topicPreview, appUrl()))
 				}
 				// a public topic's seo content also includes its last scan's findings as a ranked hasPart list in CreativeWork
 				const scan = await lastScan(topicPreview.topicId)
@@ -191,7 +196,8 @@ export const pagesRoute = new Hono()
 					}),
 				)
 				const findingListHtml = toFindingListHtml(topicPreview.title, toTopicDescription(topicPreview), findingRows)
-				return context.html(
+				return htmlShell(
+					context,
 					toTopicPreviewHtml(await appShell.text(), topicPreview, appUrl(), creativeWork, findingListHtml),
 				)
 			}
@@ -207,7 +213,7 @@ export const pagesRoute = new Hono()
 			const appShell = Bun.file(`${UI_BUNDLE_ROOT}/index.html`)
 			// a private or missing team, or an unbuilt bundle, falls through to the plain shell
 			if (teamPreview && (await appShell.exists())) {
-				return context.html(toTeamPreviewHtml(await appShell.text(), teamPreview, appUrl()))
+				return htmlShell(context, toTeamPreviewHtml(await appShell.text(), teamPreview, appUrl()))
 			}
 		} catch (error) {
 			console.error("team preview tags skipped", error)
@@ -235,7 +241,8 @@ export const pagesRoute = new Hono()
 			if (!name) {
 				return next()
 			}
-			return context.html(
+			return htmlShell(
+				context,
 				toInvitePreviewHtml(await appShell.text(), {
 					name,
 					imageUrl,
@@ -255,7 +262,7 @@ export const pagesRoute = new Hono()
 			const appShell = Bun.file(`${UI_BUNDLE_ROOT}/index.html`)
 			// a missing user or an unbuilt bundle falls through to the plain shell
 			if (profilePreview && (await appShell.exists())) {
-				return context.html(toProfilePreviewHtml(await appShell.text(), profilePreview, appUrl()))
+				return htmlShell(context, toProfilePreviewHtml(await appShell.text(), profilePreview, appUrl()))
 			}
 		} catch (error) {
 			console.error("profile preview tags skipped", error)

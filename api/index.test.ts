@@ -77,6 +77,18 @@ test("an unknown page path serves the app shell", async () => {
 	expect(response.cacheControl).toBe("no-cache")
 })
 
+// the pages that write their own head tags return the shell before serveStatic sees the request,
+// so they set the no-cache header themselves
+test("the homepage shell revalidates too", async () => {
+	const bundleDirectory = await createBundleDirectory()
+	const response = await withWorkingDirectory(bundleDirectory, () => request("/"))
+
+	// the title only this route writes proves this route returned it, not the static shell behind it
+	expect(response.status).toBe(200)
+	expect(response.body).toContain("He already read it")
+	expect(response.cacheControl).toBe("no-cache")
+})
+
 // a hashed filename cannot change contents, so it is cached and never revalidated
 test("a hashed asset is cached immutably", async () => {
 	const bundleDirectory = await createBundleDirectory()
