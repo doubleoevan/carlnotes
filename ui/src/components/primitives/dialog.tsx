@@ -1,6 +1,7 @@
 import { X } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
 import type * as React from "react"
+import { useRef } from "react"
 
 import { HIGHLIGHT_SCROLLBAR_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
@@ -31,11 +32,18 @@ function DialogContent({
 	hideCloseButton,
 	...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & { hideCloseButton?: boolean }) {
+	// the element to give focus back to when the dialog closes, and nothing where a render has no document
+	const openerRef = useRef(typeof document === "undefined" ? null : (document.activeElement as HTMLElement | null))
 	return (
 		<DialogPrimitive.Portal data-slot="dialog-portal">
 			<DialogOverlay />
 			<DialogPrimitive.Content
 				data-slot="dialog-content"
+				// give focus back to the opener element, which radix would otherwise drop
+				onCloseAutoFocus={(event) => {
+					event.preventDefault()
+					openerRef.current?.focus()
+				}}
 				className={cn(
 					"bg-popover text-popover-foreground data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-1/2 left-1/2 z-50 grid max-h-[85dvh] w-[calc(100%-2rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 overflow-y-auto rounded-xl border p-6 shadow-lift",
 					HIGHLIGHT_SCROLLBAR_CLASS,
