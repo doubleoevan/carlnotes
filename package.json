@@ -98,6 +98,7 @@
 		"lucide-react": "^1.24.0",
 		"mammoth": "^1.12.2",
 		"markdown-to-jsx": "^9.9.0",
+		"posthog-js": "^1.434.0",
 		"posthog-node": "^5.46.1",
 		"radix-ui": "^1.6.2",
 		"react": "^19.2.7",

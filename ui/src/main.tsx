@@ -6,8 +6,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
+import { startVisitAnalytics } from "@/lib/visitAnalytics"
 import { App } from "./App"
 import "./globals.css"
+
+// start visit analytics before the first render, so the first page is counted
+startVisitAnalytics()
 
 // find the mount point
 const container = document.getElementById("root")

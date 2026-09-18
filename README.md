@@ -246,10 +246,10 @@ bun run prompts:sync:prd
 Container image: The app service is the Hono API plus the built UI bundle it serves. It builds from the repo-root `Dockerfile` and starts under `doppler run`. The LiteLLM proxy is a separate service with its own image in `infra/litellm/`:
 
 ```bash
-docker build --platform=linux/amd64 --build-arg VITE_TURNSTILE_SITE_KEY=<site-key> -t carlnotes-app .
+docker build --platform=linux/amd64 --build-arg VITE_TURNSTILE_SITE_KEY=<site-key> --build-arg VITE_POSTHOG_KEY=<project-key> --build-arg VITE_POSTHOG_HOST=<host> -t carlnotes-app .
 ```
 
-`VITE_TURNSTILE_SITE_KEY` is the one setting that cannot wait for `doppler run`: Vite inlines it into the bundle at build time, so it has to be present during the build. It is a public key that ships to every visitor.
+`VITE_TURNSTILE_SITE_KEY`, `VITE_POSTHOG_KEY` and `VITE_POSTHOG_HOST` are the settings that cannot wait for `doppler run`: Vite inlines them into the bundle at build time, so they have to be present during the build. They are public values that ship to every visitor.
 
 `--platform=linux/amd64` matters on Apple Silicon. The Doppler CLI is copied from `dopplerhq/cli:3`, which publishes amd64 only.
 

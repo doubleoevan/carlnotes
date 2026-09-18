@@ -19,6 +19,10 @@ COPY . .
 # wait for doppler run at start. it is a public key that ships to every visitor, so it arrives as a build argument.
 # a Doppler token here would instead hand the build read access to every real secret, to inject a public one
 ARG VITE_TURNSTILE_SITE_KEY
+# the PostHog project key and host, which the browser sends its page views to. the same project key the server
+# already uses, and public for the same reason: a project key can post events and can never read them back
+ARG VITE_POSTHOG_KEY
+ARG VITE_POSTHOG_HOST
 
 # refuse to build without the Turnstile site key.
 # Vite would otherwise inline undefined and ship a signup form whose widget never loads.

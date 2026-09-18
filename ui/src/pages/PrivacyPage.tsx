@@ -97,7 +97,7 @@ We use third-party providers to run the service. Each one receives only what its
 | Resend | Email delivery | Email address and scan email contents |
 | Langfuse | Pipeline tracing | Prompt and response contents |
 | Sentry | Error tracking | Error diagnostics, may include request context |
-| PostHog | Product analytics | Usage events, pseudonymous |
+| PostHog | Product analytics | Usage events and page views, pseudonymous |
 | Stripe | Payments | Billing details, when paid plans are live |
 
 We select providers that do not train models on data submitted through their APIs. Their own terms govern their handling of that data.
@@ -130,7 +130,7 @@ Our use of information received from Google APIs adheres to the Google API Servi
 
 ## Cookies
 
-We use a session cookie to keep you signed in and a security cookie for bot protection. Both are required for the service to work. Analytics cookies are used on the hosted service only and can be declined where the law requires a choice.
+We use a session cookie to keep you signed in and a security cookie for bot protection. Both are required for the service to work. Our page-view analytics set no cookie and store nothing on your device.
 
 ## Retention
 

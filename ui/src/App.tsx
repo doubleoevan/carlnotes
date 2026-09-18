@@ -1,7 +1,8 @@
-import { lazy, Suspense } from "react"
-import { BrowserRouter, Route, Routes } from "react-router-dom"
+import { lazy, Suspense, useEffect } from "react"
+import { BrowserRouter, Route, Routes, useLocation } from "react-router-dom"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { Layout } from "@/components/layout/Layout"
+import { captureVisit } from "@/lib/visitAnalytics"
 import { TopicFeedProvider } from "@/providers/TopicFeedProvider"
 
 // each page is fetched on the route that needs it, so a visitor downloads one page and not the whole app
@@ -32,6 +33,7 @@ const TopicPage = lazy(() => import("@/pages/TopicPage").then((page) => ({ defau
 export function App() {
 	return (
 		<BrowserRouter>
+			<VisitAnalytics />
 			<Routes>
 				{/* the auth pages render bare, with no header and no topic feed, so each includes its own
 				    Suspense fallback instead of the one that Layout holds for every other page */}
@@ -101,4 +103,14 @@ export function App() {
 			</Routes>
 		</BrowserRouter>
 	)
+}
+
+// report each page the visitor opens. the app navigates without a page reload, so a route change is what counts as a view
+function VisitAnalytics(): null {
+	const { pathname } = useLocation()
+	// biome-ignore lint/correctness/useExhaustiveDependencies: the path is the signal to report, not a value read here
+	useEffect(() => {
+		captureVisit()
+	}, [pathname])
+	return null
 }

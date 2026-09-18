@@ -4,7 +4,8 @@ Vite React SPA. Entry `ui/src/main.tsx` → `App.tsx` holds the routes.
 
 - `pages/` — one file per route; `components/<area>/` — components by domain area.
 - `components/primitives/` is reserved for shadcn; custom shared components go in `components/common/`.
-- `components/table/` — the page tables; `lib/` — `utils.ts` and small pure client-side helpers.
+- `components/table/` — the page tables; `lib/` — `utils.ts`, small pure client-side helpers, and
+  `visitAnalytics.ts`, which starts the browser's analytics and reports a page view per route change.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/share/` — the share menus for a topic and a team, over the options they both use.
 - `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use.
