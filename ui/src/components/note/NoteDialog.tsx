@@ -59,6 +59,8 @@ export function NoteDialog({
 	const [isExpanded, setIsExpanded] = useState(() => !isWideScreen())
 	const openNote = createdNote ?? note
 
+	const panelRef = useRef<HTMLDivElement>(null)
+
 	// the open note's size: medium by default, the full screen when expanded
 	const openNoteClass = isExpanded
 		? "flex h-[calc(100dvh-1.5rem)] max-h-none w-[calc(100vw-1.5rem)] max-w-none flex-col sm:h-[calc(100dvh-3rem)] sm:w-[calc(100vw-3rem)]"
@@ -66,11 +68,17 @@ export function NoteDialog({
 	return (
 		<Dialog open onOpenChange={(isOpen) => !isOpen && onClose()}>
 			<DialogContent
-				// the create flow keeps the standard small dialog. an open note takes the editor size above
-				className={openNote ? openNoteClass : undefined}
+				ref={panelRef}
+				// the create flow keeps the standard small dialog. an open note takes the editor size above.
+				// the panel holds focus without being a control, so it draws no ring
+				className={cn("outline-hidden", openNote && openNoteClass)}
 				// an open note renders its own expand and close controls and hides the default close
 				hideCloseButton={Boolean(openNote)}
-				onOpenAutoFocus={(event) => event.preventDefault()}
+				onOpenAutoFocus={(event) => {
+					// focus the panel instead of the note name, which would take the caret
+					event.preventDefault()
+					panelRef.current?.focus()
+				}}
 			>
 				{openNote ? (
 					<OpenNote
