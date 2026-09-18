@@ -23,8 +23,9 @@ import { List, ListChecks, ListOrdered, MessageSquareText } from "lucide-react"
 import { useMemo } from "react"
 import { authClient } from "@/clients/authClient"
 import { fetchNoteUsers, toNoteThreadsUrl } from "@/clients/noteClient"
-import type { NoteSaveErrorReason } from "@/components/note/noteProvider"
+import type { NoteSaveErrorReason, NoteSaveStatus } from "@/components/note/noteProvider"
 import { useTheme } from "@/hooks/useTheme"
+import { cn } from "@/lib/utils"
 import { CommentEditorWithMentions, MentionUsernamesProvider } from "./CommentMentions"
 import { type NoteSync, useNoteSync } from "./useNoteSync"
 
@@ -43,6 +44,7 @@ export default function NoteEditor({
 	mentionableUsernames,
 	isThreadsOpen,
 	onSaveError,
+	onSaveStatus,
 }: {
 	noteId: string
 	// the topic or team the note belongs to, named in the empty note's placeholder
@@ -52,16 +54,17 @@ export default function NoteEditor({
 	// whether the comment threads panel shows
 	isThreadsOpen: boolean
 	onSaveError: (reason: NoteSaveErrorReason) => void
+	onSaveStatus: (status: NoteSaveStatus) => void
 }) {
 	// the sync spans the editor's whole lifetime
-	const sync = useNoteSync(noteId, onSaveError)
-	if (!sync) {
+	const noteSync = useNoteSync(noteId, onSaveError, onSaveStatus)
+	if (!noteSync) {
 		return null
 	}
 	return (
 		<ConnectedNoteEditor
 			noteId={noteId}
-			sync={sync}
+			noteSync={noteSync}
 			pageName={pageName}
 			mentionableUsernames={mentionableUsernames}
 			isCommentThreadsOpen={isThreadsOpen}
@@ -72,13 +75,13 @@ export default function NoteEditor({
 // the editor itself, mounted once the sync exists
 function ConnectedNoteEditor({
 	noteId,
-	sync,
+	noteSync,
 	pageName,
 	mentionableUsernames,
 	isCommentThreadsOpen,
 }: {
 	noteId: string
-	sync: NoteSync
+	noteSync: NoteSync
 	pageName: string
 	mentionableUsernames: string[]
 	isCommentThreadsOpen: boolean
@@ -96,12 +99,12 @@ function ConnectedNoteEditor({
 		const store = new RESTYjsThreadStore(
 			toNoteThreadsUrl(noteId),
 			{},
-			sync.ydoc.getMap("threads"),
+			noteSync.ydoc.getMap("threads"),
 			new DefaultThreadStoreAuth(userId, "editor"),
 		)
 		;(store as { addThreadToDocument?: unknown }).addThreadToDocument = undefined
 		return store
-	}, [noteId, sync.ydoc, userId])
+	}, [noteId, noteSync.ydoc, userId])
 
 	// the empty note names what it is for. the hint fills both keys, emptyDocument while nothing is
 	// focused and default once the caret lands. blocknote takes a whole dictionary
@@ -115,9 +118,9 @@ function ConnectedNoteEditor({
 		withCollaboration({
 			dictionary,
 			collaboration: {
-				fragment: sync.ydoc.getXmlFragment("prosemirror"),
+				fragment: noteSync.ydoc.getXmlFragment("prosemirror"),
 				user: { name: "", color: "" },
-				provider: sync.provider,
+				provider: noteSync.noteProvider,
 			},
 			extensions: [
 				CommentsExtension({
@@ -126,7 +129,7 @@ function ConnectedNoteEditor({
 				}),
 			],
 		}),
-		[sync.ydoc, threadStore],
+		[noteSync.ydoc, threadStore],
 	)
 
 	// pressing commented text opens its thread. the mark holds the thread id the extension selects by
@@ -157,12 +160,11 @@ function ConnectedNoteEditor({
 			{/* the override sits inside the view. the view installs mantine's own component set, replacing any override outside it */}
 			<ComponentsContext.Provider value={COMMENT_COMPONENTS}>
 				<MentionUsernamesProvider value={mentionableUsernames}>
-					{/* the rich text controls across the top, commenting first. the gap below matches the dialog's row gap */}
-					<div className="pb-4">
+					{/* the rich text controls across the top, commenting first. the gap below matches the dialog's row gap.
+						the phone's sheet covers the note, so the controls go with it instead of showing their edge above it */}
+					<div className={cn("pb-4", isCommentThreadsOpen && "hidden sm:block")}>
 						<FormattingToolbar>
 							<AddCommentButton />
-							{/* a divider separates commenting from the text styling that follows it */}
-							<div className="bg-separator-strong mx-1.5 h-6 w-px shrink-0 self-center" />
 							{getFormattingToolbarItems().filter((item) => item.key !== "addCommentButton")}
 							{LIST_BUTTONS.map((listButton) => (
 								<ListButton key={listButton.blockType} {...listButton} />

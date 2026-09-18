@@ -7,7 +7,7 @@ import { lazy, Suspense, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { createNote, deleteNote, fetchNote, type NotePageRef, sendNoteRead, updateNote } from "@/clients/noteClient"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
-import type { NoteSaveErrorReason } from "@/components/note/noteProvider"
+import type { NoteSaveErrorReason, NoteSaveStatus } from "@/components/note/noteProvider"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
 import { Input } from "@/components/primitives/input"
@@ -20,6 +20,13 @@ import { NoteVisibilitySelect, VISIBILITY_TOOLTIPS } from "./NoteVisibilitySelec
 
 // the editor and the blocknote bundle load only when a note opens for a user who can edit
 const NoteEditor = lazy(() => import("./NoteEditor"))
+
+// how the dialog words each save status. the toast carries the reason, so these stay the plain fact
+const SAVE_STATUS_LABELS: Record<NoteSaveStatus, string> = {
+	saving: "Saving…",
+	saved: "Saved",
+	unsaved: "Not saved",
+}
 
 type NoteVisibility = (typeof noteVisibilities)[number]
 
@@ -160,7 +167,39 @@ function CreateNote({
 	)
 }
 
-// an open note: the header row, the always-editable body, and the delete action
+// the foot of the note dialog: where the note stands, then the delete. edit rights and delete rights are separate,
+// so an editor who may not delete still sees the status, and a reader who may not edit sees none
+function NoteFooter({
+	canEdit,
+	canDelete,
+	noteSaveStatus,
+	onDelete,
+}: {
+	canEdit: boolean
+	canDelete: boolean
+	noteSaveStatus: NoteSaveStatus
+	onDelete: () => void
+}) {
+	if (!canEdit && !canDelete) {
+		return null
+	}
+	return (
+		<div className="flex items-center justify-end gap-4">
+			{canEdit && (
+				<p className="text-sm font-medium" aria-live="polite">
+					{SAVE_STATUS_LABELS[noteSaveStatus]}
+				</p>
+			)}
+			{canDelete && (
+				<Button variant="destructive" onClick={onDelete}>
+					Delete
+				</Button>
+			)}
+		</div>
+	)
+}
+
+// an open note: the header row, the always-editable body, and the footer
 function OpenNote({
 	note,
 	pageName,
@@ -183,6 +222,8 @@ function OpenNote({
 }) {
 	// the dialog's own copy of the mutable header fields
 	const [name, setName] = useState(note.name)
+	// where the note stands. it opens saved, since everything already in it is on the server
+	const [noteSaveStatus, setNoteSaveStatus] = useState<NoteSaveStatus>("saved")
 	const [noteVisibility, setNoteVisibility] = useState<NoteVisibility>(note.visibility)
 	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
 
@@ -346,6 +387,7 @@ function OpenNote({
 							mentionableUsernames={mentionableUsernames}
 							isThreadsOpen={isThreadsOpen}
 							onSaveError={handleSaveNoteError}
+							onSaveStatus={setNoteSaveStatus}
 						/>
 					</Suspense>
 				) : (
@@ -353,14 +395,12 @@ function OpenNote({
 				)}
 			</div>
 
-			{/* the owner and an admin may delete, bottom-right, behind a confirmation */}
-			{note.canDelete && (
-				<div className="flex justify-end">
-					<Button variant="destructive" onClick={() => setIsConfirmingDelete(true)}>
-						Delete
-					</Button>
-				</div>
-			)}
+			<NoteFooter
+				canEdit={note.canEdit}
+				canDelete={note.canDelete}
+				noteSaveStatus={noteSaveStatus}
+				onDelete={() => setIsConfirmingDelete(true)}
+			/>
 
 			{/* the delete confirmation */}
 			{isConfirmingDelete && (

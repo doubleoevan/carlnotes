@@ -18,6 +18,9 @@ export type NoteTransport = {
 // how a save went wrong: a failed post retries, a rejected update stops the note from saving
 export type NoteSaveErrorReason = "failed" | "rejected"
 
+// where the note stands: edits are on their way, everything landed, or a post could not be made
+export type NoteSaveStatus = "saving" | "saved" | "unsaved"
+
 // what the stream delivers back to the provider
 export type NoteStreamHandlers = {
 	onUpdate: (update: Uint8Array) => void
@@ -37,6 +40,8 @@ export class NoteProvider {
 	// local edits pooled since the last post
 	private pendingUpdates: Uint8Array[] = []
 	private sendTimer: ReturnType<typeof setTimeout> | null = null
+	// how many posts are still out. an edit during one schedules the next, so two can be in flight at once
+	private sendingCount = 0
 
 	// set once the server rejects an update, which no retry can ever send
 	private hasRejectedUpdate = false
@@ -59,6 +64,7 @@ export class NoteProvider {
 		readonly ydoc: Y.Doc,
 		private readonly onSaveError: (reason: NoteSaveErrorReason) => void,
 		private readonly transport: NoteTransport = browserNoteTransport,
+		private readonly onSaveStatus: (status: NoteSaveStatus) => void = () => {},
 	) {
 		this.awareness = new Awareness(ydoc)
 		ydoc.on("update", this.handleLocalUpdate)
@@ -164,6 +170,7 @@ export class NoteProvider {
 			return
 		}
 		this.pendingUpdates.push(update)
+		this.onSaveStatus("saving")
 		this.sendTimer ??= setTimeout(() => void this.flushPendingUpdates(), SEND_DEBOUNCE_MS)
 	}
 
@@ -186,17 +193,28 @@ export class NoteProvider {
 		this.pendingUpdates = []
 
 		// a failed post keeps the edits pooled for the next flush. a rejected one can never send, so posting stops for good
+		this.sendingCount += 1
 		const isUpdatesSent = await this.transport.sendUpdate(this.noteId, mergedUpdates).catch(() => false)
+		this.sendingCount -= 1
 		if (isUpdatesSent === "rejected") {
 			this.pendingUpdates.unshift(mergedUpdates)
 			this.hasRejectedUpdate = true
+			this.onSaveStatus("unsaved")
 			this.onSaveError("rejected")
 			return
 		}
 		// a post that only failed waits for the next flush with its edits still pooled
 		if (!isUpdatesSent) {
 			this.pendingUpdates.unshift(mergedUpdates)
+			this.onSaveStatus("unsaved")
 			this.onSaveError("failed")
+			return
+		}
+
+		// an edit made during the post is still on its way, and the post it scheduled may still be out, so the note is
+		// saved only once nothing is pooled and nothing is in flight
+		if (this.pendingUpdates.length === 0 && this.sendingCount === 0) {
+			this.onSaveStatus("saved")
 		}
 	}
 
