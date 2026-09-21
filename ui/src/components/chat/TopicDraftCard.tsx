@@ -81,10 +81,7 @@ export function TopicDraftCard({
 					<>
 						{/* the topic name leads the card with no label of its own */}
 						{topicDraft.name && (
-							<p
-								key={topicDraft.name}
-								className="text-foreground animate-in fade-in mb-2 break-words duration-500 motion-reduce:animate-none"
-							>
+							<p key={topicDraft.name} className="text-foreground animate-in fade-in mb-2 break-words duration-500">
 								{/* the name opens the topic behind the panel, and reads as plain text before one exists */}
 								{topicId ? (
 									<AnchorLink href={`/topics/${topicId}`} className="text-link hover:underline">
@@ -212,10 +209,7 @@ function TopicDraftField({
 	return (
 		<div className="py-1.5 first:pt-0 last:pb-0">
 			<dt className="text-muted-foreground font-display text-xs tracking-wide uppercase">{label}</dt>
-			<dd
-				key={fieldText}
-				className="text-foreground animate-in fade-in mt-1 min-w-0 break-words duration-500 motion-reduce:animate-none"
-			>
+			<dd key={fieldText} className="text-foreground animate-in fade-in mt-1 min-w-0 break-words duration-500">
 				{children}
 			</dd>
 		</div>

@@ -131,10 +131,7 @@ export function TopicActionBar({
 			    while the page loads, a skeleton holds the slot */}
 			<div className="flex items-start gap-2">
 				{topic === undefined && (
-					<div
-						aria-hidden="true"
-						className="bg-muted h-11 w-28 animate-pulse rounded-lg motion-reduce:animate-none sm:h-9"
-					/>
+					<div aria-hidden="true" className="bg-muted h-11 w-28 animate-pulse rounded-lg sm:h-9" />
 				)}
 				{/* the scan control mounts for every user to keep its poll running, and shows nothing to the rest */}
 				{scanControl}

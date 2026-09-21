@@ -324,8 +324,14 @@
 	}
 }
 
-/* honor a user's reduced-motion preference: no hydrate animation, no rings, no shimmer, and the coffee mug's steam held still */
+/* honor a user's reduced-motion preference: no hydrate animation, no rings, no shimmer, and the coffee mug's steam kept still */
 @media (prefers-reduced-motion: reduce) {
+	/* a placeholder stays still, and a card, a message, or a dialog appears and leaves without its entrance */
+	.animate-pulse,
+	.animate-in,
+	.animate-out {
+		animation: none;
+	}
 	.animate-hydrate {
 		animation: none;
 		opacity: 1;
