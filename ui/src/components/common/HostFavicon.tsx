@@ -11,7 +11,7 @@ import { cn } from "@/lib/utils"
  */
 export function HostFavicon({ faviconPath }: { faviconPath: string | null }) {
 	return (
-		<span className="border-border bg-foreground/5 dark:border-white dark:bg-white relative inline-flex size-[18px] shrink-0 items-center justify-center rounded-full border">
+		<span className="border-hero bg-card dark:border-white dark:bg-white relative inline-flex size-[18px] shrink-0 items-center justify-center rounded-full border">
 			{faviconPath ? <HostFaviconImage key={faviconPath} faviconPath={faviconPath} /> : <HostGlobe />}
 		</span>
 	)
