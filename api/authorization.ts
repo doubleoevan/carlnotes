@@ -1,11 +1,9 @@
 // the authorization gate
-import { dailyFrequencies } from "@shared/enums"
-import { reportError } from "@shared/monitoring"
-import { ADMIN_BUDGET_CENTS, ADMIN_QUOTA, type BillingInterval, PLANS, type Plan } from "@shared/plans"
+import { dailyFrequencies, isAdminRole } from "@shared/enums"
+import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, type UserAccess, userBudgetCents } from "@shared/plans"
 import { and, count, eq, gte, inArray, sql } from "drizzle-orm"
 import { db } from "../db"
 import { chatTurns, scans, subscriptions, teamMembers, teamTopics, topics, users } from "../db/schema"
-import { deleteLiteLLMKey, provisionLiteLLMKey } from "./litellm"
 import { assertNever, canRateTopic, canSeeTopic, toTopicEditRole } from "./topic/permissions"
 import { loadBillingAccess, scansToday, startOfUtcMonth } from "./topic/quotas"
 
@@ -16,8 +14,9 @@ type GatedTopic = Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibilit
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type Capability = "topic:view" | "topic:edit" | "topic:delete" | "topic:invite" | "topic:rate" | "topic:create" | "scan:request" | "scan:manual" | "chat:send" | "chat:persist" | "admin:console" | "admin:setRole" | "admin:setBudget" | "admin:setFeatureOrder" | "admin:deleteUser"
 
-// a user's authority and entitlement inputs, read together
-export type UserAccess = { isAdmin: boolean; plan: Plan; budgetOverrideCents: number | null }
+// the user's budget and the admin role test live in shared, where the worker can read them
+export { isAdminRole } from "@shared/enums"
+export { type UserAccess, userBudgetCents } from "@shared/plans"
 
 /**
  * Whether the user may execute a capability, optionally on a given topic.
@@ -101,30 +100,10 @@ export async function loadUserAccess(userId: string): Promise<UserAccess> {
 }
 
 /**
- * Whether a stored role string grants admin authority.
- */
-export function isAdminRole(role: string | undefined): boolean {
-	// the one place this role decides authority. it stays plain text to match Better Auth's admin plugin shape
-	return role === "admin"
-}
-
-/**
  * Whether a team membership row's role grants team leader authority.
  */
 export function isLeaderRole(role: "leader" | "member"): boolean {
 	return role === "leader"
-}
-
-/**
- * The user's effective monthly budget in cents: their per-user override, otherwise the admin backstop, otherwise the plan's.
- */
-export function effectiveBudgetCents({
-	isAdmin,
-	plan,
-	budgetOverrideCents,
-}: Pick<UserAccess, "isAdmin" | "plan" | "budgetOverrideCents">): number {
-	// an override is deliberate, so it wins even for an admin. that is the only way to guarantee a limit
-	return budgetOverrideCents ?? (isAdmin ? ADMIN_BUDGET_CENTS : PLANS[plan].monthlyBudgetCents)
 }
 
 /**
@@ -134,7 +113,7 @@ export async function isMonthlySpendExhausted(userId: string): Promise<boolean> 
 	// scans and chat draw from one budget pool, so both are summed against the same budget
 	const [userAccess, spend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
 	const spentCents = Math.round(spend.scanDollars * 100) + Math.round(spend.chatDollars * 100)
-	return spentCents >= effectiveBudgetCents(userAccess)
+	return spentCents >= userBudgetCents(userAccess)
 }
 
 /**
@@ -154,46 +133,6 @@ export async function monthlySpendDollars(userId: string): Promise<{ scanDollars
 			.where(and(eq(chatTurns.userId, userId), gte(chatTurns.createdAt, monthStart))),
 	])
 	return { scanDollars: Number(scanRow?.dollars ?? 0), chatDollars: Number(chatRow?.dollars ?? 0) }
-}
-
-/**
- * Replace the user's LiteLLM key with a fresh one at their current effective budget,
- * after any update that changes it: a plan change, a role change, or a budget override.
- */
-export async function replaceUserLiteLLMKey(userId: string): Promise<boolean> {
-	// read the access the budget derives from, plus the email the new key is aliased to and the key it replaces
-	const [userAccess, [user]] = await Promise.all([
-		loadUserAccess(userId),
-		db
-			.select({ email: users.email, litellmVirtualKey: users.litellmVirtualKey })
-			.from(users)
-			.where(eq(users.id, userId)),
-	])
-
-	// a user whose key was never created has nothing to replace or update
-	if (!user?.litellmVirtualKey) {
-		return true
-	}
-
-	// a new key starts its spend at zero, so the full new limit is available from the moment it applies
-	try {
-		const replacementKey = await provisionLiteLLMKey(user.email, effectiveBudgetCents(userAccess))
-		try {
-			await db.update(users).set({ litellmVirtualKey: replacementKey }).where(eq(users.id, userId))
-		} catch (error) {
-			// the db update failed to store the new key, so delete it from the proxy
-			await deleteLiteLLMKey(replacementKey)
-			throw error
-		}
-		await deleteLiteLLMKey(user.litellmVirtualKey)
-		return true
-	} catch (error) {
-		// the proxy is not the source of truth here, so an error must not fail the update that triggered this.
-		// the key stays sized to the old budget and returns false to the caller.
-		console.error(`litellm key replace failed for user ${userId}`, error)
-		reportError(error, "chat", { userId, budgetCents: String(effectiveBudgetCents(userAccess)) })
-		return false
-	}
 }
 
 /**

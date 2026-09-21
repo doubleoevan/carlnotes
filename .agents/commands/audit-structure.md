@@ -229,6 +229,10 @@ Check for:
    - `CHAT_STREAM_FAILED_TEXT` and the marker line it belonged to. a chat reply stream is newline-delimited json
      now, one `ChatReplyLine` per line, so a failure is the `failed` line and text Carl writes can never pass
      for one
+   - `api/litellm.ts` (now `worker/litellm.ts`), `effectiveBudgetCents` (now `userBudgetCents` in `shared/plans.ts`
+     with `UserAccess`), `isAdminRole` (now in `shared/enums.ts`; the gate re-exports all three), the admin row's
+     `effectiveBudgetCents` field (now `budgetCents`), and `startOfUtcMonth` (now in `db/quotas.ts`, re-exported from
+     `api/topic/quotas.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

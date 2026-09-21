@@ -1,5 +1,5 @@
 // per-user scan-quota checks
-import { dailyFrequencies } from "@shared/enums"
+import { dailyFrequencies, isAdminRole } from "@shared/enums"
 import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan } from "@shared/plans"
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm"
 import { db } from "."
@@ -55,7 +55,7 @@ export async function incrementDaySuggestionCount(userId: string): Promise<boole
 export async function loadUserAccess(userId: string): Promise<{ isAdmin: boolean; plan: Plan }> {
 	// one row read of the two access fields, defaulting a missing user to a plain free user
 	const [user] = await db.select({ role: users.role, plan: users.plan }).from(users).where(eq(users.id, userId))
-	return { isAdmin: user?.role === "admin", plan: user?.plan ?? "free" }
+	return { isAdmin: isAdminRole(user?.role), plan: user?.plan ?? "free" }
 }
 
 // how many topic scans ran for the user since utc midnight, scheduled and manual combined
@@ -228,6 +228,11 @@ export async function loadBillingAccess(
 // utc midnight starting from the given moment's day. quota days roll over at utc midnight
 export function startOfUtcDay(moment: Date): Date {
 	return new Date(Date.UTC(moment.getUTCFullYear(), moment.getUTCMonth(), moment.getUTCDate()))
+}
+
+// utc midnight starting the given moment's month, when monthly spend and the key budget roll over
+export function startOfUtcMonth(moment: Date): Date {
+	return new Date(Date.UTC(moment.getUTCFullYear(), moment.getUTCMonth(), 1))
 }
 
 /**

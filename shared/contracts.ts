@@ -394,7 +394,7 @@ export type TeamIdentity = {
 	hasAvatar: boolean
 }
 
-// the Activity payload: whose it is, metered variable spend against the effective budget, owned topics,
+// the Activity payload: whose it is, metered variable spend against the budget, owned topics,
 export type ActivityResponse = {
 	// whose activity this is: the user's own, or the user an admin is viewing
 	user: ProfileIdentity
@@ -815,9 +815,9 @@ export type AdminUserRow = {
 	// the app's own month-to-date totals in cents, split by what produced them
 	scanSpendCents: number
 	chatSpendCents: number
-	// the per-user override in cents (null means the plan value), and the resulting effective monthly budget
+	// the per-user override in cents (null means the plan value), and the resulting monthly budget
 	budgetOverrideCents: number | null
-	effectiveBudgetCents: number
+	budgetCents: number
 }
 
 // an admin-console team row: the team's status, who leads it, and month-to-date spend on its topics

@@ -81,3 +81,14 @@ export const PLANS = {
 		priceYearlyCents: MONTHLY_PRICE_CENTS.premium * YEARLY_MONTHS,
 	},
 } as const satisfies Record<Plan, PlanConfig>
+
+// a user's authority and entitlement inputs, read together
+export type UserAccess = { isAdmin: boolean; plan: Plan; budgetOverrideCents: number | null }
+
+/**
+ * The user's monthly budget in cents: their override, otherwise the admin backstop, otherwise the plan's.
+ */
+export function userBudgetCents({ isAdmin, plan, budgetOverrideCents }: UserAccess): number {
+	// an override is deliberate, so it wins even for an admin. that is the only way to guarantee a limit
+	return budgetOverrideCents ?? (isAdmin ? ADMIN_BUDGET_CENTS : PLANS[plan].monthlyBudgetCents)
+}

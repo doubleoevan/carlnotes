@@ -25,11 +25,11 @@ import {
 	topics,
 	users,
 } from "../db/schema"
+import { readLiteLLMKeySpend, replaceUserLiteLLMKey } from "../worker"
 import { loadActivity } from "./activity"
-import { effectiveBudgetCents, isAdminRole, isAllowed, replaceUserLiteLLMKey } from "./authorization"
+import { isAdminRole, isAllowed, userBudgetCents } from "./authorization"
 import { readStripeTotalRevenueCents } from "./billing"
 import { type AppEnv, currentUser } from "./currentUser"
-import { readLiteLLMKeySpend } from "./litellm"
 import { loadAdminTeamTopics, loadTeamSummaries, toSpendByTeamId } from "./team/helpers"
 import { startOfUtcMonth } from "./topic/quotas"
 
@@ -49,7 +49,7 @@ export async function loadAdminUserTopics(userId: string): Promise<OwnerTopic[] 
 }
 
 /**
- * One row per user for the admin table: status, topic and team counts, attributed storage, and month-to-date variable cost against their effective budget.
+ * One row per user for the admin table: status, topic and team counts, attributed storage, and month-to-date variable cost against their budget.
  */
 export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 	// the base user rows, the per-user topic and team counts, the attributed storage
@@ -109,7 +109,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 		chatSpendRows.map((chatSpendRow) => [chatSpendRow.userId, Math.round(Number(chatSpendRow.dollars) * 100)]),
 	)
 
-	// assemble each row, converting the observed dollar spend to cents and resolving the effective budget
+	// assemble each row, converting the observed dollar spend to cents and resolving the budget
 	return userRows.map((user) => {
 		const spendDollars = spendByUser.get(user.id) ?? null
 		return {
@@ -130,7 +130,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			scanSpendCents: scanSpendByUser.get(user.id) ?? 0,
 			chatSpendCents: chatSpendByUser.get(user.id) ?? 0,
 			budgetOverrideCents: user.budgetOverrideCents,
-			effectiveBudgetCents: effectiveBudgetCents({
+			budgetCents: userBudgetCents({
 				isAdmin: isAdminRole(user.role),
 				plan: user.plan,
 				budgetOverrideCents: user.budgetOverrideCents,
@@ -287,7 +287,7 @@ export function isSelfDemotion(actingUserId: string, targetUserId: string, role:
 }
 
 /**
- * Set or clear a user's per-user budget override, then reissue their LiteLLM key at the resulting effective budget.
+ * Set or clear a user's budget override, then reissue their LiteLLM key for the new budget.
  * Returns false if no such user exists.
  */
 export async function setUserBudgetOverride(
@@ -304,7 +304,7 @@ export async function setUserBudgetOverride(
 		return "missing"
 	}
 
-	// the key is resized to the effective budget, which includes the override. the user is notified if the proxy rejected
+	// the key is resized to the budget, which includes the override. the user is notified if the proxy rejected
 	return (await replaceUserLiteLLMKey(targetUserId)) ? "applied" : "key-unchanged"
 }
 
@@ -453,7 +453,7 @@ export const adminRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// set or clear a user's budget override and resize their key to the new effective budget, admin only.
+		// set or clear a user's budget override and resize their key to the new budget, admin only.
 		if (!(await isAllowed(userId, "admin:setBudget"))) {
 			return context.json({ error: "forbidden" }, 403)
 		}

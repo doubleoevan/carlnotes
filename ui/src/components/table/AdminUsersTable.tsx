@@ -131,7 +131,7 @@ export function AdminUsersTable({
 							<td className="py-2 pr-4">{toCentsLabel(users.reduce((sum, user) => sum + user.chatSpendCents, 0))}</td>
 							<td className="py-2 pr-4">
 								{toCentsLabel(users.reduce((sum, user) => sum + (user.monthVariableCostCents ?? 0), 0))} /{" "}
-								{toCentsLabel(users.reduce((sum, user) => sum + user.effectiveBudgetCents, 0))}
+								{toCentsLabel(users.reduce((sum, user) => sum + user.budgetCents, 0))}
 							</td>
 							<td className="py-2 pr-4">{`${users.filter((user) => user.budgetOverrideCents !== null).length} set`}</td>
 							<td className="py-2" />
@@ -238,8 +238,8 @@ function UserRow({
 		}
 	}
 
-	// the cost is shown against the effective budget. highlight the figure if the user is over their budget
-	const isOverBudget = user.monthVariableCostCents !== null && user.monthVariableCostCents > user.effectiveBudgetCents
+	// the cost is shown against the budget. highlight the figure if the user is over their budget
+	const isOverBudget = user.monthVariableCostCents !== null && user.monthVariableCostCents > user.budgetCents
 	return (
 		<>
 			<tr className="border-b">
@@ -323,7 +323,7 @@ function UserRow({
 				<td className="py-2 pr-4">{toCentsLabel(user.scanSpendCents)}</td>
 				<td className="py-2 pr-4">{toCentsLabel(user.chatSpendCents)}</td>
 				<td className={`py-2 pr-4 ${isOverBudget ? "text-destructive font-semibold" : ""}`}>
-					{toCentsLabel(user.monthVariableCostCents)} / {toCentsLabel(user.effectiveBudgetCents)}
+					{toCentsLabel(user.monthVariableCostCents)} / {toCentsLabel(user.budgetCents)}
 				</td>
 				<td className="py-2 pr-4">
 					{/* four digits wide, for a small whole-dollar figure */}

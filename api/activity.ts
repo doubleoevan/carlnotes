@@ -4,7 +4,7 @@ import { and, count, desc, eq, gt, gte, inArray, isNotNull, isNull, ne, notInArr
 import { Hono } from "hono"
 import { db } from "../db"
 import { invites, scans, subscriptions, teamMembers, teams, topicEmailSends, topics, users } from "../db/schema"
-import { effectiveBudgetCents, isAdminRole, isAllowed, monthlySpendDollars } from "./authorization"
+import { isAdminRole, isAllowed, monthlySpendDollars, userBudgetCents } from "./authorization"
 import { loadTopicChatMentions } from "./chat/mentions"
 import type { AppEnv } from "./currentUser"
 import { toInvitee } from "./invite/userInvites"
@@ -135,7 +135,7 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 		user: { userId: user.id, username: userRow?.username ?? "", avatarSource: userRow?.avatarSource ?? null },
 		scanSpendCents: Math.round(monthlySpend.scanDollars * 100),
 		chatSpendCents: Math.round(monthlySpend.chatDollars * 100),
-		budgetCents: effectiveBudgetCents({
+		budgetCents: userBudgetCents({
 			isAdmin: isAdminRole(userRow?.role),
 			plan: userRow?.plan ?? "free",
 			budgetOverrideCents: userRow?.budgetOverrideCents ?? null,

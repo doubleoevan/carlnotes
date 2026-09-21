@@ -39,11 +39,11 @@ test("both chat paths answer a budget rejection instead of only logging it", () 
  * Whoever changed the budget has to be told.
  */
 test("a budget change reports whether the key followed it", () => {
-	const authorization = readFileSync(join(import.meta.dir, "..", "authorization.ts"), "utf8")
-	// the replace answers whether the key now matches
-	expect(authorization).toContain("Promise<boolean>")
+	const litellm = readFileSync(join(import.meta.dir, "..", "..", "worker", "litellm.ts"), "utf8")
+	// the replace call returns whether the key now matches
+	expect(litellm).toContain("Promise<boolean>")
 	// a failure is reported, not only logged
-	expect(authorization).toContain("reportError")
+	expect(litellm).toContain("reportError")
 
 	// the admin route passes that outcome on
 	const admin = readFileSync(join(import.meta.dir, "..", "admin.ts"), "utf8")

@@ -13,9 +13,9 @@ import { and, eq, like } from "drizzle-orm"
 import { db } from "../db"
 import * as schema from "../db/schema"
 import { renderAuthEmail, renderAuthEmailText } from "../emails/auth-email"
+import { provisionLiteLLMKey } from "../worker"
 import { sendEmail } from "../worker/email"
-import { effectiveBudgetCents } from "./authorization"
-import { provisionLiteLLMKey } from "./litellm"
+import { userBudgetCents } from "./authorization"
 import { isBreachedPassword } from "./passwords"
 import { saveDefaultUserTeam } from "./team/teams"
 import { trustedProxies } from "./trustedProxies"
@@ -255,7 +255,7 @@ export const auth = betterAuth({
 					// create a litellm key for the new user, budgeted at the free plan they start on
 					const litellmVirtualKey = await provisionLiteLLMKey(
 						user.email,
-						effectiveBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: null }),
+						userBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: null }),
 					)
 
 					// the provider's own handle is kept when it is well-formed and nobody holds it. GitHub's

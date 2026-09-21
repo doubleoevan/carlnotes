@@ -97,6 +97,8 @@ export const users = pgTable(
 		avatarKey: text("avatar_key"),
 		// this user's litellm virtual key, provisioned with a spend budget at signup. null only before signup completes
 		litellmVirtualKey: text("litellm_virtual_key"),
+		// when that key was created. a key created before the current month is due for the monthly reset
+		litellmKeyCreatedAt: timestamp("litellm_key_created_at", { withTimezone: true }).defaultNow().notNull(),
 		// the platform role: "admin" or "user". plain text to match Better Auth's admin plugin shape
 		role: text("role").notNull().default("user"),
 		// who may address an invite to this user, enforced at invite creation and nowhere else

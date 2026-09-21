@@ -6,6 +6,7 @@ import { and, eq, isNotNull, isNull, lt, ne, sql } from "drizzle-orm"
 import { db } from "../db"
 import { dailyTopicIdsWithinLimit, scansRemainingToday } from "../db/quotas"
 import { scans, topics } from "../db/schema"
+import { resetMonthlyBudgets } from "./litellm"
 import { scanTopic, startTopicScan } from "./scan"
 import { screenPendingSources } from "./screen"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
@@ -36,6 +37,20 @@ export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSwe
 	// start anything that was opened and never dispatched, then close out anything dispatched that has gone quiet
 	await startUndispatchedScans()
 	await failStaleScans()
+
+	// the first sweep of a month replaces every key created before it, so a user it unblocks scans on the fresh key.
+	// a reset that could not start is reported, and the scans still run
+	try {
+		const budgetResetSummary = await resetMonthlyBudgets()
+		if (budgetResetSummary.replaced > 0 || budgetResetSummary.failed > 0) {
+			console.log(
+				`monthly budget reset: ${budgetResetSummary.replaced} keys replaced, ${budgetResetSummary.failed} failed`,
+			)
+		}
+	} catch (error) {
+		console.error("monthly budget reset failed", error)
+		reportError(error, "scheduled-scan")
+	}
 
 	// a Source row is written before its llm-guard screen starts
 	await screenPendingSources()

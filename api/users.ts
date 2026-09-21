@@ -7,12 +7,11 @@ import { and, asc, count, eq, inArray, ne } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
 import { teamMembers, teams, topics, users } from "../db/schema"
-import { deleteAttachment } from "../worker"
+import { deleteAttachment, deleteLiteLLMKey } from "../worker"
 import { isAllowed } from "./authorization"
 import { cancelUserSubscription } from "./billing"
 import { deleteStoredChatAttachments } from "./chat/attachments"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
-import { deleteLiteLLMKey } from "./litellm"
 import { deleteTopic } from "./topic/topics"
 
 // promote a new leader to the team if the user is the only leader and there are more than one team member

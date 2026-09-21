@@ -1,4 +1,4 @@
-// authorization gate tests for the manual-scan decision, the effective budget, and the single-gate rule
+// authorization gate tests for the manual-scan decision, the user's budget, and the single-gate rule
 import { expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
@@ -8,8 +8,8 @@ import {
 	authorizeDailyFrequency,
 	authorizeManualScan,
 	type Capability,
-	effectiveBudgetCents,
 	isAdminRole,
+	userBudgetCents,
 } from "./authorization"
 
 // an authorizeManualScan input for a non-admin owner within the daily limit for test cases to override
@@ -27,27 +27,27 @@ function scanInput(
 	}
 }
 
-// the effective budget is the per-user override when set, otherwise it's the plan's monthly backstop
-test("effectiveBudgetCents uses the override when set, otherwise it's the plan backstop", () => {
+// the user's budget is the override when set, otherwise use the plan's monthly backstop
+test("userBudgetCents uses the override when set, otherwise it's the plan backstop", () => {
 	// a null override falls back to the plan's monthly backstop
-	expect(effectiveBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: null })).toBe(
+	expect(userBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: null })).toBe(
 		PLANS.free.monthlyBudgetCents,
 	)
-	expect(effectiveBudgetCents({ isAdmin: false, plan: "premium", budgetOverrideCents: null })).toBe(
+	expect(userBudgetCents({ isAdmin: false, plan: "premium", budgetOverrideCents: null })).toBe(
 		PLANS.premium.monthlyBudgetCents,
 	)
 	// a set override wins in both directions, above or below the plan value
-	expect(effectiveBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: 5000 })).toBe(5000)
-	expect(effectiveBudgetCents({ isAdmin: false, plan: "premium", budgetOverrideCents: 100 })).toBe(100)
+	expect(userBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: 5000 })).toBe(5000)
+	expect(userBudgetCents({ isAdmin: false, plan: "premium", budgetOverrideCents: 100 })).toBe(100)
 })
 
 // an admin bypasses the topic and scan limits, so their spend backstop has to clear their plan's too
-test("effectiveBudgetCents gives an admin the admin backstop overriding their plan", () => {
+test("userBudgetCents gives an admin the admin backstop overriding their plan", () => {
 	// an admin on the lowest plan still gets the admin backstop, well above that plan's limit
-	expect(effectiveBudgetCents({ isAdmin: true, plan: "free", budgetOverrideCents: null })).toBe(ADMIN_BUDGET_CENTS)
+	expect(userBudgetCents({ isAdmin: true, plan: "free", budgetOverrideCents: null })).toBe(ADMIN_BUDGET_CENTS)
 	expect(ADMIN_BUDGET_CENTS).toBeGreaterThan(PLANS.premium.monthlyBudgetCents)
 	// an override is deliberate, so it limits an admin too
-	expect(effectiveBudgetCents({ isAdmin: true, plan: "free", budgetOverrideCents: 500 })).toBe(500)
+	expect(userBudgetCents({ isAdmin: true, plan: "free", budgetOverrideCents: 500 })).toBe(500)
 })
 
 // the role string is the only thing that grants admin authority

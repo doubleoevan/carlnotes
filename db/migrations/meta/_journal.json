@@ -624,6 +624,13 @@
       "when": 1789408900147,
       "tag": "0088_little_scarecrow",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1789830064269,
+      "tag": "0089_public_microchip",
+      "breakpoints": true
     }
   ]
 }

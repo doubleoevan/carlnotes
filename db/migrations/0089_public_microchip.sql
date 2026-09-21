@@ -1,0 +1,1 @@
+ALTER TABLE "users" ADD COLUMN "litellm_key_created_at" timestamp with time zone DEFAULT now() NOT NULL;

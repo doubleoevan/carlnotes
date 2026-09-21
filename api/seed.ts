@@ -3,8 +3,9 @@ import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { users } from "../db/schema"
 import { seed as seedTopics } from "../db/seed"
+import { replaceUserLiteLLMKey } from "../worker"
 import { auth, GATE_COOKIE_NAME, signGateToken } from "./auth"
-import { isAdminRole, replaceUserLiteLLMKey } from "./authorization"
+import { isAdminRole } from "./authorization"
 
 // fixed local credentials so the seeded demo topics are always reachable by logging in as the same account
 const DEV_USER_EMAIL = Bun.env.DEV_USER_EMAIL ?? "evan@carlnotes.dev"
