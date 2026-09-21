@@ -20,6 +20,7 @@ import {
 } from "../../db/schema"
 import { lookupPodcast, scanTopic, screenPendingSources, screenTopicSources } from "../../worker"
 import { isAllowed, isMonthlySpendExhausted, loadDailyFrequencyAuthorization, loadUserAccess } from "../authorization"
+import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadPendingTopicInvites } from "../invite/invites"
 import { loadFeaturedTopics } from "./featuring"
 import { loadTopicFindings } from "./findings"
@@ -183,6 +184,7 @@ export async function loadTopicAccessAndFindings(
 		await topicSubscriptionStartDate(topic, userId, isAdmin),
 	)
 	await attachTeamBookmarks(topicFindings, topic.id, topic.teamId)
+	await attachTopicFindingFaviconPaths(topicFindings)
 	return { isAdmin, topicFindings }
 }
 

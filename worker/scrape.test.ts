@@ -182,5 +182,5 @@ test("toTranscriptText joins the caption lines without running their words toget
 // an episode that declared no transcript is scored on its show notes, so the router spends no scrape credit on it
 test("fetchContent skips the fetch for an episode with no transcript", async () => {
 	const fetchResult = await fetchContent("https://example.com/episode", "listen")
-	expect(fetchResult).toEqual({ text: "", cost: 0, etag: null, lastModified: null, title: null })
+	expect(fetchResult).toEqual({ text: "", cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null })
 })

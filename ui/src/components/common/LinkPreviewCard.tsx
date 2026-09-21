@@ -4,6 +4,7 @@ import { Play } from "lucide-react"
 import { useMemo, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { HostFavicon } from "@/components/common/HostFavicon"
 import { cn } from "@/lib/utils"
 
 /**
@@ -32,7 +33,10 @@ export function LinkPreviewCard({ linkPreview, className }: { linkPreview: ChatL
 	// the page's title and description, with the host above them. the same block ends both card shapes
 	const linkPreviewText = (
 		<div className="px-3 py-2">
-			<p className="text-muted-foreground text-xs">{linkPreviewHost}</p>
+			<p className="text-muted-foreground flex items-center gap-1.5 text-xs">
+				<HostFavicon faviconPath={linkPreview.faviconPath} />
+				{linkPreviewHost}
+			</p>
 			{linkPreview.title && (
 				<p className="text-foreground mt-0.5 line-clamp-2 text-sm font-semibold">{linkPreview.title}</p>
 			)}

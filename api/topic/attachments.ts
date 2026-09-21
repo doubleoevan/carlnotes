@@ -113,7 +113,15 @@ export async function loadDownloadableAttachment(
 
 // the image types a stored file may be served inline as. svg is intentionally left out for security.
 // it can hold script that would run in this origin
-const INLINE_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"])
+const INLINE_IMAGE_TYPES = new Set([
+	"image/png",
+	"image/jpeg",
+	"image/gif",
+	"image/webp",
+	"image/avif",
+	"image/x-icon",
+	"image/vnd.microsoft.icon",
+])
 
 // the video types a stored file may be served inline as
 const INLINE_VIDEO_TYPES = new Set(["video/mp4", "video/quicktime", "video/webm"])

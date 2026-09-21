@@ -20,6 +20,7 @@ import {
 } from "../../db/schema"
 import { memberTopicIds, subscribedTopicIds } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
+import { attachTopicFindingFaviconPaths } from "../favicons"
 import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
 import { toScheduledTimeLabel } from "./helpers"
 import { isShown } from "./permissions"
@@ -156,6 +157,13 @@ export async function buildTopicFeeds(
 	)
 	const popularTopicFeeds = popularTopics.map((topic) =>
 		buildTopicFeed(topic, userId, includeConsumedResources, topicFeedData),
+	)
+
+	// fill every feed's favicon paths in one query
+	await attachTopicFindingFaviconPaths(
+		[...ownerTopicFeeds, ...subscribedTopicFeeds, ...featuredTopicFeeds, ...popularTopicFeeds].flatMap(
+			(topicFeed) => topicFeed.findings,
+		),
 	)
 
 	// only show "yours" and "subscribed" sections to a signed-in visitor

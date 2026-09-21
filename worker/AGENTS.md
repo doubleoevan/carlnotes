@@ -7,7 +7,8 @@ Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker), `sch
   `ingester.ts` is the interface; `review/` — filtering and scoring; `chat/` — Carl's streamed
   chat replies and their retrieval; `prompts/` — model-facing Markdown templates; `models.ts` —
   every model call, through LiteLLM; `litellm.ts` — the user keys those calls bill to: created, replaced, read, and
-  reset on the first of the month by the sweep.
+  reset on the first of the month by the sweep; `favicons.ts` — a host's favicon, fetched once when review reads a
+  page on it.
 - Every scan stage charges the Scan's one Budget (`budget.ts`); nothing spends outside it.
 - A Resource's content hash is taken in the dedupe stage, over the title and snippet as they stand then.
   The fetch that follows may replace a title read off the url and leaves the hash alone, so a retitled

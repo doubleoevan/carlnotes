@@ -962,6 +962,17 @@ export const linkPreviews = pgTable(
 	(table) => [index("link_previews_team_fetched_idx").on(table.fetchedByTeamId, table.fetchedAt)],
 )
 
+// a host's favicon, fetched once when review reads a page on the host and shown wherever the host is named
+export const favicons = pgTable("favicons", {
+	// the host the icon belongs to, as the feed names it
+	host: text("host").primaryKey(),
+	// where the stored icon lives in object storage and its type, both null until a fetch stores one
+	objectKey: text("object_key"),
+	contentType: text("content_type"),
+	// when the icon was fetched. a row older than a month is fetched again the next time a page on the host is read
+	fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+})
+
 // a billing subscription is a user's active paid Stripe subscription.
 export const billingSubscriptions = pgTable("billing_subscriptions", {
 	id: primaryId(),

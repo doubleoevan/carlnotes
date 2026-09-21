@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { fetchTopicFindingLinkPreview, sendFindingFeedback } from "@/clients/topicClient"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { HostFavicon } from "@/components/common/HostFavicon"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { Button } from "@/components/primitives/button"
 import { Input } from "@/components/primitives/input"
@@ -130,7 +131,7 @@ export function TopicResource({
 							</PopoverTrigger>
 						</div>
 						<div className={cn(metadataClass, "flex items-center gap-1.5")}>
-							{[resource.source, toAgeLabel(resource.publishedAt)].filter(Boolean).join(" · ")}
+							<ResourceMetadata resource={resource} />
 							{/* the teammates who kept this finding */}
 							{resource.teamBookmarks.length > 0 && (
 								<span className="flex items-center gap-0.5">
@@ -241,8 +242,8 @@ function ResourceInfo({
 							{resource.title ?? resource.url}
 							<ExternalLink className="mt-0.5 size-3.5 shrink-0" />
 						</AnchorLink>
-						<div className="text-muted-foreground mt-0.5 text-xs">
-							{[resource.source, toAgeLabel(resource.publishedAt)].filter(Boolean).join(" · ")}
+						<div className="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-xs">
+							<ResourceMetadata resource={resource} />
 						</div>
 					</div>
 				</div>
@@ -403,5 +404,15 @@ function RateTopicFindingButton({ isActive, label, onClick, children }: RateTopi
 		>
 			{children}
 		</Button>
+	)
+}
+
+// the favicon, host, and age under a finding's title
+function ResourceMetadata({ resource }: { resource: TopicFinding }) {
+	return (
+		<>
+			{resource.source && <HostFavicon faviconPath={resource.faviconPath} />}
+			{[resource.source, toAgeLabel(resource.publishedAt)].filter(Boolean).join(" · ")}
+		</>
 	)
 }

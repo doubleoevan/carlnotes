@@ -14,6 +14,7 @@ function topicFinding(isConsumed: boolean): TopicFinding {
 		resourceKind: "read",
 		title: null,
 		source: null,
+		faviconPath: null,
 		publishedAt: null,
 		fetchedAt: "2026-01-01T00:00:00.000Z",
 		// the topic finding's metadata and the user's isConsumed flag

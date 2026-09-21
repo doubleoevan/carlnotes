@@ -84,7 +84,10 @@ export function ResourceSkeleton() {
 				<div className="bg-muted mt-0.5 size-4 shrink-0 animate-pulse rounded" />
 				<div className="min-w-0 flex-1">
 					<div className="bg-muted h-4 w-3/4 animate-pulse rounded" />
-					<div className="bg-muted mt-2 h-3 w-2/5 animate-pulse rounded" />
+					<div className="mt-2 flex items-center gap-1.5">
+						<div className="bg-muted size-[18px] shrink-0 animate-pulse rounded-full" />
+						<div className="bg-muted h-3 w-2/5 animate-pulse rounded" />
+					</div>
 				</div>
 			</div>
 		</div>

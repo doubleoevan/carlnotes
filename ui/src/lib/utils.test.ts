@@ -91,6 +91,7 @@ function topicFinding(overrides: Partial<TopicFinding>): TopicFinding {
 		resourceKind: "read",
 		title: null,
 		source: null,
+		faviconPath: null,
 		publishedAt: null,
 		fetchedAt: "2026-07-01T00:00:00.000Z",
 		// the review, signals, and per-user states the helpers read

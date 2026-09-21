@@ -54,13 +54,14 @@ const DAILYMOTION_CAPTION_DOMAIN = "dmcdn.net"
 const REVALIDATE_TIMEOUT_MS = Number(Bun.env.REVALIDATE_TIMEOUT_MS ?? "5000")
 
 // a fetch's text result and what it spent, plus the etag and last-modified for a later conditional GET,
-// and the page's own title if the fetch read a page
+// and the page's own title and favicon url if the fetch read a page
 export type FetchResult = {
 	text: string
 	cost: number
 	etag: string | null
 	lastModified: string | null
 	title: string | null
+	faviconUrl: string | null
 }
 
 // the stored etag and last-modified a conditional GET is built from. either may be null
@@ -95,7 +96,7 @@ export async function fetchContent(
 
 	// an episode that declared none is a player and its show notes, and the notes are already in the snippet
 	if (resourceKind === "listen") {
-		return { text: "", cost: 0, etag: null, lastModified: null, title: null }
+		return { text: "", cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null }
 	}
 
 	// only a video publishes captions worth reading, so anything else is scraped
@@ -141,12 +142,27 @@ async function fetchFirecrawlMarkdown(url: string): Promise<FetchResult> {
 		throw new Error(`firecrawl scrape ${url} returned no content`)
 	}
 
-	// read the etag, last-modified, and the page's own title from Firecrawl's page metadata when present
+	// read the etag, last-modified, the page's own title, and its favicon from Firecrawl's page metadata when present
 	const metadata = payload.data?.metadata ?? {}
 	const etag = typeof metadata.etag === "string" ? metadata.etag : null
 	const lastModified = typeof metadata["last-modified"] === "string" ? metadata["last-modified"] : null
 	const title = typeof metadata.title === "string" ? metadata.title.trim() || null : null
-	return { text: markdown, cost: FIRECRAWL_COST_PER_FETCH, etag, lastModified, title }
+	const faviconUrl = toAbsoluteFaviconUrl(typeof metadata.favicon === "string" ? metadata.favicon : null, url)
+	return { text: markdown, cost: FIRECRAWL_COST_PER_FETCH, etag, lastModified, title, faviconUrl }
+}
+
+// a favicon url firecrawl names relative to its page, made absolute
+function toAbsoluteFaviconUrl(faviconUrl: string | null, pageUrl: string): string | null {
+	try {
+		if (!faviconUrl) {
+			return null
+		}
+		const absoluteUrl = new URL(faviconUrl, pageUrl)
+		// keep only an http or https url
+		return absoluteUrl.protocol === "http:" || absoluteUrl.protocol === "https:" ? absoluteUrl.href : null
+	} catch {
+		return null
+	}
 }
 
 // fetch a video's published caption track as plain text
@@ -179,7 +195,7 @@ async function fetchYoutubeTranscript(videoId: string): Promise<FetchResult> {
 	if (!text) {
 		throw new Error(`youtube caption track for ${videoId} is empty`)
 	}
-	return { text, cost: 0, etag: null, lastModified: null, title: null }
+	return { text, cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null }
 }
 
 // fetch a Vimeo video's published captions
@@ -226,7 +242,7 @@ async function fetchCueTrack(tracks: CaptionTrack[], captionDomain: string, labe
 	if (!text) {
 		throw new Error(`${label} caption track is empty`)
 	}
-	return { text, cost: 0, etag: null, lastModified: null, title: null }
+	return { text, cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null }
 }
 
 // the track to fetch, preferring English
@@ -420,7 +436,7 @@ async function fetchDeclaredTranscript(transcriptUrl: string): Promise<FetchResu
 	if (!text) {
 		throw new Error(`transcript ${transcriptUrl} is empty`)
 	}
-	return { text, cost: 0, etag: null, lastModified: null, title: null }
+	return { text, cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null }
 }
 
 // check with a conditional GET whether the stored content is still current, bounded by its own timeout

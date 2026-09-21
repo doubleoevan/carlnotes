@@ -11,6 +11,7 @@ import { apiRoute } from "./api"
 import { auth, reportForwardedChain } from "./auth"
 import { contentRoute } from "./content"
 import type { AppEnv } from "./currentUser"
+import { faviconsRoute } from "./favicons"
 import { mcpRoute } from "./mcp/server"
 import { resolveToolCaller } from "./mcp/toolCaller"
 import { pagesRoute, UI_BUNDLE_ROOT } from "./pages"
@@ -38,10 +39,12 @@ const CONTENT_SECURITY_POLICY =
 const server = new Hono<AppEnv>()
 	// gzip every text response over a kilobyte. the defaults skip images and anything already compressed
 	.use(compress())
-	// the content security policy, set on the way back out so every route includes it
+	// the content security policy, set on the way back out so every route includes it. a route that set its own keeps it
 	.use(async (context, next) => {
 		await next()
-		context.header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+		if (!context.res.headers.has("Content-Security-Policy")) {
+			context.header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+		}
 	})
 	// one report of the forwarded chain, which names the proxies TRUSTED_PROXIES needs. a no-op once this is set
 	.use(async (context, next) => {
@@ -50,6 +53,8 @@ const server = new Hono<AppEnv>()
 	})
 	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
 	.get("/api/health", (context) => context.json({ status: "ok" }))
+	// an icon request reads one row and never a session, so it sits ahead of the api tree too
+	.route("/api", faviconsRoute)
 	// the oauth discovery documents an mcp client reads under /.well-known, with or without a path appended
 	.get("/.well-known/oauth-authorization-server", (context) => oAuthDiscoveryMetadata(auth)(context.req.raw))
 	.get("/.well-known/oauth-authorization-server/*", (context) => oAuthDiscoveryMetadata(auth)(context.req.raw))

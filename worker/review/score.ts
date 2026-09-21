@@ -1,5 +1,6 @@
 // the paid stages: fetch each Resource's content, score it against the topic context with tiered models
 import { reportError } from "@shared/monitoring"
+import { toUrlHost } from "@shared/sources"
 import { generateText, type LanguageModel, Output } from "ai"
 import { eq } from "drizzle-orm"
 import { z } from "zod"
@@ -17,6 +18,7 @@ import {
 	toFetchCountField,
 	tokenCost,
 } from "../budget"
+import { fetchAndStoreHostFavicon, settleFaviconFetches } from "../favicons"
 import { screenText, toFlaggedReason } from "../guard"
 import { isTitleFromUrlFallback } from "../ingest/normalize"
 import { cheapModel, isBudgetRejection, scoreModel } from "../models"
@@ -74,6 +76,9 @@ export async function fetchAndScoreResources(
 	for (const paidOutcome of paidOutcomes) {
 		trackOutcomes(reviewOutcome, paidOutcome)
 	}
+
+	// the icons fetched beside the scores are stored before the stage ends
+	await settleFaviconFetches()
 
 	// the Resources this stage scored, which the limit did not defer
 	return resourcesToScore
@@ -222,7 +227,7 @@ async function fetchAndStoreContent(
 ): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
 	try {
 		// fetch the content, charge what that fetch spent, then write the body to object storage
-		const { text, cost, etag, lastModified, title } = await fetchContent(
+		const { text, cost, etag, lastModified, title, faviconUrl } = await fetchContent(
 			resource.url,
 			resource.kind,
 			resource.transcriptUrl,
@@ -239,6 +244,12 @@ async function fetchAndStoreContent(
 			.update(resources)
 			.set({ contentKey, contentBytes, etag, lastModified, fetchedAt: new Date(), ...pageTitleField })
 			.where(eq(resources.id, resource.id))
+
+		// the page's host gets its favicon beside the score, never ahead of it
+		const host = toUrlHost(resource.url)
+		if (host) {
+			void fetchAndStoreHostFavicon(host, faviconUrl)
+		}
 		return { content: scoringText, fetchOutcome: "fetched" }
 	} catch (error) {
 		// the fetch failed, so fall back to the snippet. the Finding is still written, with less to go on
@@ -341,6 +352,15 @@ export async function buildScorePrompt(
 	return { prompt, name, registryPrompt }
 }
 
+// the finding columns a review writes
+type FindingReviewFields = {
+	scanId: string
+	relevanceScore: number
+	relevanceExplanation: string
+	reviewedContextHash: string
+	reviewedContentHash: string | null
+}
+
 /**
  * Returns the columns a re-score decides, so upserting one leaves a user's rating and view count untouched.
  */
@@ -350,13 +370,7 @@ export function toFindingReviewFields(review: {
 	relevanceExplanation: string
 	topicContextHash: string
 	contentHash: string | null
-}): {
-	scanId: string
-	relevanceScore: number
-	relevanceExplanation: string
-	reviewedContextHash: string
-	reviewedContentHash: string | null
-} {
+}): FindingReviewFields {
 	return {
 		scanId: review.scanId,
 		relevanceScore: review.score,

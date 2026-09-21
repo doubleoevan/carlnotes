@@ -71,6 +71,11 @@ export function toLinkPreviewImageKey(linkPreviewId: string): string {
 	return `link-previews/${linkPreviewId}/image`
 }
 
+// the object key for a host's favicon, namespaced by host
+export function toFaviconKey(host: string): string {
+	return `favicons/${host}`
+}
+
 // the object key for a Resource's fetched content, namespaced by resource id, mirroring toAttachmentKey
 export function toResourceContentKey(resourceId: string): string {
 	return `resources/${resourceId}/content.md`

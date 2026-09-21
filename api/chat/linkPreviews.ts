@@ -13,6 +13,7 @@ import {
 	toYoutubeVideoId,
 	uploadAttachment,
 } from "../../worker"
+import { attachLinkPreviewFaviconPaths } from "../favicons"
 import { decryptChatText, encryptChatText } from "./encryption"
 
 // how many links one team can fetch in an hour. past this a chat message reuses the cache or goes without a card
@@ -79,7 +80,12 @@ export async function loadOrFetchLinkPreview(url: string): Promise<ChatLinkPrevi
 		.select()
 		.from(linkPreviews)
 		.where(and(eq(linkPreviews.url, linkPreviewUrl), eq(linkPreviews.status, "ready")))
-	return linkPreviewRow ? toLinkPreviewCard(linkPreviewRow) : null
+	// the card, with its host's icon when one is stored
+	const chatLinkPreview = linkPreviewRow ? toLinkPreviewCard(linkPreviewRow) : null
+	if (chatLinkPreview) {
+		await attachLinkPreviewFaviconPaths([chatLinkPreview])
+	}
+	return chatLinkPreview
 }
 
 /**
@@ -124,6 +130,9 @@ export async function loadChatLinkPreviews(
 			linkPreviewsByChatMessageId.set(chatMessageId, chatMessageLinkPreviews)
 		}
 	}
+
+	// fill every card's favicon path in one query
+	await attachLinkPreviewFaviconPaths([...linkPreviewsByChatMessageId.values()].flat())
 	return linkPreviewsByChatMessageId
 }
 
@@ -256,6 +265,7 @@ function toLinkPreviewCard(linkPreviewRow: typeof linkPreviews.$inferSelect): Ch
 		description: linkPreviewRow.description ? decryptChatText(linkPreviewRow.description) : null,
 		// the image is served from this origin by link preview id, and one that stored none has no path
 		imagePath: linkPreviewRow.imageObjectKey ? `/api/link-previews/${linkPreviewRow.id}/image` : null,
+		faviconPath: null,
 		// a YouTube link's card plays the video in place instead of only linking out
 		youtubeVideoId: toYoutubeVideoId(linkPreviewRow.url),
 	}

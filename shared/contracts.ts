@@ -55,8 +55,9 @@ export type ChatLinkPreview = {
 	url: string
 	title: string | null
 	description: string | null
-	// the path this origin serves the page's image from, null if the page offered none
+	// the paths this origin serves the page's image and its host's favicon from, null for one it has not stored
 	imagePath: string | null
+	faviconPath: string | null
 	// set when the link is a youtube video, which the card offers to play in place
 	youtubeVideoId: string | null
 }
@@ -921,8 +922,9 @@ export const topicFinding = z.object({
 	// the kind of the resource this finding points at, not a kind of finding
 	resourceKind: z.enum(resourceKinds),
 	title: z.string().nullable(),
-	// shown in the metadata
+	// shown in the metadata, and the path this origin serves the source host's favicon from, null when it has none
 	source: z.string().nullable(),
+	faviconPath: z.string().nullable(),
 	publishedAt: z.string().nullable(),
 	// when the resource was fetched, and how many times it's been opened
 	fetchedAt: z.string(),

@@ -15,7 +15,7 @@ const YOUTUBE_PAGE_READ_BYTES = 1024 * 1024
 const MAX_LINK_PREVIEW_IMAGE_BYTES = 2 * 1024 * 1024
 
 // the image types a link preview image may be stored as. an svg can hold a script and is left out
-const PREVIEW_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"])
+export const PREVIEW_IMAGE_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp", "image/avif"])
 
 // how long a title or description may run
 const MAX_PREVIEW_TEXT_CHARS = 500
@@ -205,9 +205,13 @@ export async function toLinkPreviewMetaTags(html: string): Promise<LinkPreviewMe
 }
 
 /**
- * Fetch a page's link preview image through the public-url guard. Throws when it is not an image type served inline or is too large.
+ * Fetch a page's link preview image through the public-url guard. Throws when it is not one of the image types or is too large.
  */
-export async function fetchLinkPreviewImage(imageUrl: string): Promise<LinkPreviewImage> {
+export async function fetchLinkPreviewImage(
+	imageUrl: string,
+	maxBytes = MAX_LINK_PREVIEW_IMAGE_BYTES,
+	imageTypes = PREVIEW_IMAGE_TYPES,
+): Promise<LinkPreviewImage> {
 	// the same guard the page went through, so an image host redirecting inward is rejected too
 	const response = await fetchPublicUrl(imageUrl, { signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS) })
 	if (!response.ok) {
@@ -216,14 +220,14 @@ export async function fetchLinkPreviewImage(imageUrl: string): Promise<LinkPrevi
 
 	// the type decides this before the bytes are read, and an svg never passes
 	const contentType = response.headers.get("content-type")?.split(";")[0]?.trim().toLowerCase() ?? ""
-	if (!PREVIEW_IMAGE_TYPES.has(contentType)) {
+	if (!imageTypes.has(contentType)) {
 		throw new Error(`link preview image ${imageUrl} is ${contentType || "an unnamed type"}`)
 	}
 
 	// one byte past the limit is enough to know the image is too large to store
-	const bytes = await readStart(response, MAX_LINK_PREVIEW_IMAGE_BYTES + 1)
-	if (bytes.byteLength > MAX_LINK_PREVIEW_IMAGE_BYTES) {
-		throw new Error(`link preview image ${imageUrl} exceeds ${MAX_LINK_PREVIEW_IMAGE_BYTES} bytes`)
+	const bytes = await readStart(response, maxBytes + 1)
+	if (bytes.byteLength > maxBytes) {
+		throw new Error(`link preview image ${imageUrl} exceeds ${maxBytes} bytes`)
 	}
 	return { bytes, contentType }
 }

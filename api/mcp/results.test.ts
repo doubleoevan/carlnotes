@@ -13,6 +13,7 @@ function topicFinding(index: number, explanationChars = 40): TopicFinding {
 		resourceKind: "read",
 		title: `Finding ${index}`,
 		source: "example.test",
+		faviconPath: null,
 		publishedAt: "2026-09-01T00:00:00.000Z",
 		fetchedAt: "2026-09-02T00:00:00.000Z",
 		relevanceScore: 0.9,

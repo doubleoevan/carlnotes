@@ -114,8 +114,9 @@ export function toTopicFinding(findingRow: TopicFindingRow): TopicFinding {
 		url: findingRow.url,
 		resourceKind: findingRow.resourceKind,
 		title: findingRow.title,
-		// the source host for the metadata, plus the published and fetched times
+		// the source host for the metadata, its favicon path, and the published and fetched times
 		source: toUrlHost(findingRow.url),
+		faviconPath: null,
 		publishedAt: findingRow.resourceCreatedAt.toISOString(),
 		fetchedAt: findingRow.fetchedAt.toISOString(),
 		// the relevance explanation, view count, rating, engagement, and the user's consumed and bookmarked states
