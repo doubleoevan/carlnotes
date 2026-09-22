@@ -51,7 +51,7 @@ export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void
 	}
 
 	// skip the subscribers an earlier attempt of this send already reached, so a retried activity never emails anyone twice
-	const recipients = await loadTopicEmailSubscribers(topic.id, topic.frequency)
+	const recipients = await loadTopicEmailSubscribers(topic.id)
 	const alreadySentUserIds = await loadTopicScanEmailRecipients(topic.id, scan)
 	const unsentRecipients = recipients.filter((recipient) => !alreadySentUserIds.has(recipient.userId))
 	if (unsentRecipients.length === 0) {
@@ -200,12 +200,11 @@ async function newFindingsForScan(scan: Scan): Promise<TopicScanEmailFinding[]> 
 		.orderBy(desc(findings.relevanceScore))
 }
 
-// the Topic's subscribers to email: users at the matching frequency
-async function loadTopicEmailSubscribers(topicId: string, frequency: Topic["frequency"]): Promise<Recipient[]> {
+// the Topic's subscribers to email
+async function loadTopicEmailSubscribers(topicId: string): Promise<Recipient[]> {
 	// only an active subscription with email on gets mail, unsubscribing deactivates the row instead of deleting it
 	const canEmailSubscription = and(
 		eq(subscriptions.topicId, topicId),
-		eq(subscriptions.frequency, frequency),
 		eq(subscriptions.isActive, true),
 		eq(subscriptions.isEmailEnabled, true),
 	)
