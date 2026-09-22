@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@shared/contracts"
+import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import server from "./index"
 
 // the two bundle files the serving rules treat differently
@@ -150,4 +151,13 @@ test("a missing bundle responds with a 404 instead of failing", async () => {
 	const response = await withWorkingDirectory(emptyDirectory, () => request("/"))
 
 	expect(response.status).toBe(404)
+})
+
+// an oauth avatar redirects to its provider, so the policy has to allow that origin
+test("the content security policy allows every provider photo host the avatar redirect points at", async () => {
+	const response = await server.fetch(new Request("http://localhost:3000/api/health"))
+	const imageSources = response.headers.get("Content-Security-Policy")?.split(";")[0] ?? ""
+	for (const photoOrigin of PROVIDER_PHOTO_ORIGINS) {
+		expect(imageSources).toContain(photoOrigin)
+	}
 })

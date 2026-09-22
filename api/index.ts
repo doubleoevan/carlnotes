@@ -9,6 +9,7 @@ import { compress } from "hono/compress"
 import { startTelemetry } from "../worker"
 import { apiRoute } from "./api"
 import { auth, reportForwardedChain } from "./auth"
+import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import { contentRoute } from "./content"
 import type { AppEnv } from "./currentUser"
 import { faviconsRoute } from "./favicons"
@@ -28,12 +29,14 @@ export type AppType = typeof apiRoute
 startMonitoring()
 startTelemetry()
 
-// the policy every response includes. img-src limits images to this origin,
-// and blob: is the local file a composer previews before it is uploaded. raw.githubusercontent.com
-// is there for the screenshots in a release body, which are the repository's own files: release notes
-// are authored on GitHub, so their images live beside them instead of being copied into the app
-const CONTENT_SECURITY_POLICY =
-	"img-src 'self' blob: data: https://raw.githubusercontent.com; frame-src 'self' https://www.youtube-nocookie.com; object-src 'none'; frame-ancestors 'none'"
+// the default policy, used unless a route sets its own. its image list allows a composer's local preview,
+// a release body's screenshots on github, and the photo host an avatar redirects to
+const CONTENT_SECURITY_POLICY = [
+	`img-src 'self' blob: data: https://raw.githubusercontent.com ${[...PROVIDER_PHOTO_ORIGINS].join(" ")}`,
+	"frame-src 'self' https://www.youtube-nocookie.com",
+	"object-src 'none'",
+	"frame-ancestors 'none'",
+].join("; ")
 
 // one server serves the api, the pages, and the built ui
 const server = new Hono<AppEnv>()
