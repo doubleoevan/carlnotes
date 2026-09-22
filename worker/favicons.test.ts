@@ -29,12 +29,12 @@ test("a host's icon is due once a month", () => {
 	expect(isFaviconFetchDue(new Date(now.getTime() - FAVICON_TTL_MS - 1), now)).toBe(true)
 })
 
-// the root icon comes first, then the page's own, then the root svg and touch icon, then the www or bare sibling's
+// the root icon comes first, then the page's own, then the root svg and touch icon, then the host variant's
 // three, and a page naming a root icon adds nothing
-test("toFaviconCandidateUrls tries the root icon, the named icon, the root svg and touch icon, then the sibling's", () => {
-	expect(toFaviconCandidateUrls("news.example", "https://cdn.example/icon.png")).toEqual([
+test("toFaviconCandidateUrls tries the root icon, the named icon, the root svg and touch icon, then the variant's", () => {
+	expect(toFaviconCandidateUrls("news.example", "https://news.example/assets/icon.png")).toEqual([
 		"https://news.example/favicon.ico",
-		"https://cdn.example/icon.png",
+		"https://news.example/assets/icon.png",
 		"https://news.example/favicon.svg",
 		"https://news.example/apple-touch-icon.png",
 		"https://www.news.example/favicon.ico",
@@ -52,20 +52,39 @@ test("toFaviconCandidateUrls tries the root icon, the named icon, the root svg a
 	expect(toFaviconCandidateUrls("news.example", null)).toHaveLength(6)
 })
 
+// a large site serves its icon from a cdn, and the scrape only names one for a page that stayed on this host
+test("toFaviconCandidateUrls keeps a page icon served from a cdn", () => {
+	expect(toFaviconCandidateUrls("news.example", "https://cdn.other.example/icon.png")).toContain(
+		"https://cdn.other.example/icon.png",
+	)
+})
+
 // a failed refetch keeps the icon already stored, and a failed first fetch stores nothing
 test("toFaviconFields keeps a stored icon through a failed fetch", () => {
 	const now = new Date("2026-09-21T12:00:00Z")
-	const storedFavicon = { objectKey: "favicons/news.example", contentType: "image/png" }
+	const storedFavicon = {
+		objectKey: "favicons/news.example",
+		contentType: "image/png",
+		sourceUrl: "https://news.example/favicon.ico",
+	}
 	expect(toFaviconFields("news.example", storedFavicon, null, now)).toEqual({ ...storedFavicon, fetchedAt: now })
 	expect(toFaviconFields("news.example", undefined, null, now)).toEqual({
 		objectKey: null,
 		contentType: null,
+		sourceUrl: null,
 		fetchedAt: now,
 	})
-	const fetchedFavicon = { bytes: new Uint8Array(8), contentType: "image/x-icon" }
+
+	// a fetched icon replaces all three, so the row says where the icon now stored came from
+	const fetchedFavicon = {
+		bytes: new Uint8Array(8),
+		contentType: "image/x-icon",
+		sourceUrl: "https://news.example/favicon.svg",
+	}
 	expect(toFaviconFields("news.example", storedFavicon, fetchedFavicon, now)).toEqual({
 		objectKey: "favicons/news.example",
 		contentType: "image/x-icon",
+		sourceUrl: "https://news.example/favicon.svg",
 		fetchedAt: now,
 	})
 })

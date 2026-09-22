@@ -31,7 +31,7 @@ test("parseVideos skips a missing items array and videos with no videoId", () =>
 	// no items key at all yield no Resources instead of a TypeError
 	expect(parseVideos({})).toEqual([])
 
-	// a video missing its videoId is dropped. a well-formed sibling still gets mapped
+	// a video missing its videoId is dropped. a well-formed one beside it still gets mapped
 	const resources = parseVideos({
 		items: [{ snippet: { title: "Deleted" } }, { snippet: { title: "Live", resourceId: { videoId: "ccc" } } }],
 	})

@@ -7,6 +7,7 @@ import {
 	toCueText,
 	toDailymotionCaptionTracks,
 	toDailymotionVideoId,
+	toPageFaviconUrl,
 	toTranscriptText,
 	toVimeoCaptionTracks,
 	toVimeoVideoId,
@@ -183,4 +184,31 @@ test("toTranscriptText joins the caption lines without running their words toget
 test("fetchContent skips the fetch for an episode with no transcript", async () => {
 	const fetchResult = await fetchContent("https://example.com/episode", "listen")
 	expect(fetchResult).toEqual({ text: "", cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null })
+})
+
+// a url that wraps a redirect lands on the publisher, whose icon is not the requested host's
+test("toPageFaviconUrl keeps an icon only for a page that stayed on the requested host", () => {
+	const wrappedMetadata = {
+		url: "https://www.cbssports.com/ufc/news/ufc-330",
+		favicon: "https://www.cbssports.com/favicon-32x32.png",
+	}
+	expect(toPageFaviconUrl(wrappedMetadata, "https://news.google.com/rss/articles/CBMinAF")).toBeNull()
+
+	// a large site serves its icon from a cdn, which is still its own icon
+	const cdnMetadata = {
+		url: "https://news.google.com/home?hl=en-US",
+		favicon: "https://www.gstatic.com/gnews/logo/google_news_192.png",
+	}
+	expect(toPageFaviconUrl(cdnMetadata, "https://news.google.com/")).toBe(
+		"https://www.gstatic.com/gnews/logo/google_news_192.png",
+	)
+
+	// a host and its variant are one site, and a relative icon resolves against where the page landed
+	expect(
+		toPageFaviconUrl({ url: "https://www.news.example/story", favicon: "/icon.png" }, "https://news.example/story"),
+	).toBe("https://www.news.example/icon.png")
+
+	// no landing url reported means the fetch stayed put, and a page naming no icon has none
+	expect(toPageFaviconUrl({ favicon: "/icon.png" }, "https://news.example/story")).toBe("https://news.example/icon.png")
+	expect(toPageFaviconUrl({ url: "https://news.example/story" }, "https://news.example/story")).toBeNull()
 })

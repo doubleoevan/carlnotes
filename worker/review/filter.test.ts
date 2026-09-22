@@ -68,7 +68,7 @@ test("rankBySimilarity orders relevant resources best-first and the limit takes 
 })
 
 // two near-identical resources in one Scan must leave exactly one of them, never both dropped
-test("hasNearDuplicateKey drops a sibling of a resource already let through, leaving one", () => {
+test("hasNearDuplicateKey drops a candidate matching a resource already let through, leaving one", () => {
 	// no keys recorded yet, so the first resource is not a duplicate of anything
 	const dedupeKeys = { contentHashes: new Set<string>(), embeddings: [] as number[][] }
 	const firstEmbedding = [1, 0, 0]
@@ -78,14 +78,14 @@ test("hasNearDuplicateKey drops a sibling of a resource already let through, lea
 	dedupeKeys.contentHashes.add("hash-a")
 	dedupeKeys.embeddings.push(firstEmbedding)
 
-	// a near-identical sibling now dedupes against the recorded one instead of being filtered with it
+	// a near-identical candidate now dedupes against the recorded one instead of being filtered with it
 	expect(hasNearDuplicateKey(dedupeKeys, [0.9999, 0.0001, 0])).toBe(true)
 	// a genuinely distinct resource still passes
 	expect(hasNearDuplicateKey(dedupeKeys, [0, 1, 0])).toBe(false)
 })
 
 // two resources sharing a content hash in one Scan also leave exactly one of them
-test("a recorded content hash drops a later sibling sharing it", () => {
+test("a recorded content hash drops a later candidate sharing it", () => {
 	// the first resource clears dedupe, recording its hash the way the ranked pass does
 	const dedupeKeys = { contentHashes: new Set<string>(), embeddings: [] as number[][] }
 	expect(dedupeKeys.contentHashes.has("hash-a")).toBe(false)

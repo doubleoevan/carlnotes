@@ -258,6 +258,22 @@ function toNamedSummary(name: unknown, id: unknown): string {
 }
 
 /**
+ * The host's other variant, www or bare, which is the same site.
+ */
+export function toHostVariant(host: string): string {
+	return host.startsWith("www.") ? host.slice("www.".length) : `www.${host}`
+}
+
+/**
+ * Whether both urls are on the same site, counting a host and its variant as one.
+ */
+export function isSameSiteUrl(url: string, otherUrl: string): boolean {
+	const host = toUrlHost(url)
+	const otherHost = toUrlHost(otherUrl)
+	return host !== null && otherHost !== null && (host === otherHost || host === toHostVariant(otherHost))
+}
+
+/**
  * Return the host for the url or null if the url is invalid.
  */
 export function toUrlHost(url: string): string | null {

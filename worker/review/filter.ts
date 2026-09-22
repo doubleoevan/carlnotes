@@ -287,7 +287,7 @@ async function dedupeResource(
 	// the content hash over the native text, only when the Resource has content. empty rows must not collapse to one hash
 	const contentHash = hasNativeText(resource) ? toContentHash(resource.title, resource.snippet) : null
 
-	// stage 1 checks for a content-level duplicate, of a sibling this Scan let through or of a Resource an earlier
+	// stage 1 checks for a content-level duplicate, of a candidate this Scan let through or of a Resource an earlier
 	if (contentHash !== null) {
 		const isHashDuplicate =
 			dedupeKeys.contentHashes.has(contentHash) || (await hasStoredHash(contentHash, candidateIds))
@@ -296,12 +296,12 @@ async function dedupeResource(
 		}
 	}
 
-	// stage 2 checks for a near-duplicate, of a sibling this Scan let through or of a Resource an earlier Scan stored
+	// stage 2 checks for a near-duplicate, of a candidate this Scan let through or of a Resource an earlier Scan stored
 	if (hasNearDuplicateKey(dedupeKeys, embedding) || (await hasNearDuplicate(embedding, candidateIds))) {
 		return { status: "filtered", reason: "near-duplicate" }
 	}
 
-	// no duplicate. persist the hash for later Scans and remember both keys so a lower-ranked sibling dedupes against this one
+	// no duplicate. persist the hash for later Scans and remember both keys so a lower-ranked candidate dedupes against this one
 	if (contentHash !== null) {
 		dedupeKeys.contentHashes.add(contentHash)
 		await db.update(resources).set({ contentHash }).where(eq(resources.id, resource.id))

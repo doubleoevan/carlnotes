@@ -1,0 +1,1 @@
+ALTER TABLE "favicons" ADD COLUMN "source_url" text;

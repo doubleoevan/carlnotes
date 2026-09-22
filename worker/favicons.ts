@@ -1,5 +1,6 @@
 // a host's favicon: fetched once when review reads a page on the host, kept for every place the host is named
 import { reportError } from "@shared/monitoring"
+import { toHostVariant } from "@shared/sources"
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { favicons } from "../db/schema"
@@ -21,7 +22,10 @@ export const FAVICON_IMAGE_TYPES = new Set([
 ])
 
 // the favicon row's stored icon columns
-type StoredFavicon = { objectKey: string | null; contentType: string | null }
+type StoredFavicon = { objectKey: string | null; contentType: string | null; sourceUrl: string | null }
+
+// a fetched icon and the candidate url it came from
+type FetchedFavicon = LinkPreviewImage & { sourceUrl: string }
 
 // each host's fetch under way, so pages reviewed side by side on one host share one
 const faviconFetchesByHost = new Map<string, Promise<void>>()
@@ -35,12 +39,13 @@ export function isFaviconFetchDue(fetchedAt: Date | null, now: Date): boolean {
 
 /**
  * The urls to try for a host's icon, in order: favicon.ico at the host's root, the icon the page named, the root svg
- * and touch icon, then the three root icons at the host's www or bare spelling.
+ * and touch icon, then the three root icons at the host's other variant, www or bare. The scrape names a page icon
+ * only for a page that stayed on this host, so that icon may sit on a cdn and still be this host's.
  */
 export function toFaviconCandidateUrls(host: string, faviconUrl: string | null): string[] {
 	const [rootFaviconUrl, ...otherRootFaviconUrls] = toRootFaviconUrls(host)
-	const siblingHost = host.startsWith("www.") ? host.slice("www.".length) : `www.${host}`
-	const candidateUrls = [rootFaviconUrl, faviconUrl, ...otherRootFaviconUrls, ...toRootFaviconUrls(siblingHost)]
+	const hostVariant = toHostVariant(host)
+	const candidateUrls = [rootFaviconUrl, faviconUrl, ...otherRootFaviconUrls, ...toRootFaviconUrls(hostVariant)]
 	return [...new Set(candidateUrls.filter((url): url is string => url !== null))]
 }
 
@@ -55,12 +60,13 @@ function toRootFaviconUrls(host: string): string[] {
 export function toFaviconFields(
 	host: string,
 	storedFavicon: StoredFavicon | undefined,
-	favicon: LinkPreviewImage | null,
+	favicon: FetchedFavicon | null,
 	now: Date,
 ): StoredFavicon & { fetchedAt: Date } {
 	return {
 		objectKey: favicon ? toFaviconKey(host) : (storedFavicon?.objectKey ?? null),
 		contentType: favicon ? favicon.contentType : (storedFavicon?.contentType ?? null),
+		sourceUrl: favicon ? favicon.sourceUrl : (storedFavicon?.sourceUrl ?? null),
 		fetchedAt: now,
 	}
 }
@@ -92,7 +98,12 @@ async function fetchAndStoreFaviconWhenDue(host: string, faviconUrl: string | nu
 	try {
 		// a row inside the ttl, failed or not, is kept
 		const [faviconRow] = await db
-			.select({ objectKey: favicons.objectKey, contentType: favicons.contentType, fetchedAt: favicons.fetchedAt })
+			.select({
+				objectKey: favicons.objectKey,
+				contentType: favicons.contentType,
+				sourceUrl: favicons.sourceUrl,
+				fetchedAt: favicons.fetchedAt,
+			})
 			.from(favicons)
 			.where(eq(favicons.host, host))
 		if (!isFaviconFetchDue(faviconRow?.fetchedAt ?? null, new Date())) {
@@ -119,7 +130,7 @@ async function fetchAndStoreFaviconWhenDue(host: string, faviconUrl: string | nu
 }
 
 // whether the icon reached object storage. a failed upload is logged and reported
-async function uploadFavicon(host: string, favicon: LinkPreviewImage): Promise<boolean> {
+async function uploadFavicon(host: string, favicon: FetchedFavicon): Promise<boolean> {
 	try {
 		await uploadAttachment(toFaviconKey(host), favicon.bytes, favicon.contentType)
 		return true
@@ -133,10 +144,12 @@ async function uploadFavicon(host: string, favicon: LinkPreviewImage): Promise<b
 
 // the first candidate that comes back as an icon, or null when none does. a rejected candidate is expected, so it
 // logs one line
-async function fetchFirstFavicon(host: string, candidateUrls: string[]): Promise<LinkPreviewImage | null> {
+async function fetchFirstFavicon(host: string, candidateUrls: string[]): Promise<FetchedFavicon | null> {
 	for (const candidateUrl of candidateUrls) {
+		// the first that comes back wins, and the row records which one it was
 		try {
-			return await fetchLinkPreviewImage(candidateUrl, MAX_FAVICON_BYTES, FAVICON_IMAGE_TYPES)
+			const favicon = await fetchLinkPreviewImage(candidateUrl, MAX_FAVICON_BYTES, FAVICON_IMAGE_TYPES)
+			return { ...favicon, sourceUrl: candidateUrl }
 		} catch (error) {
 			console.warn(`favicon ${candidateUrl} for ${host}: ${error instanceof Error ? error.message : String(error)}`)
 		}

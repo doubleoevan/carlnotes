@@ -969,6 +969,8 @@ export const favicons = pgTable("favicons", {
 	// where the stored icon lives in object storage and its type, both null until a fetch stores one
 	objectKey: text("object_key"),
 	contentType: text("content_type"),
+	// the url the stored icon came from, so a wrong icon says where it was taken from
+	sourceUrl: text("source_url"),
 	// when the icon was fetched. a row older than a month is fetched again the next time a page on the host is read
 	fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
 })

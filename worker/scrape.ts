@@ -1,6 +1,7 @@
 // fill a Resource's content: a published transcript or a video's caption track read straight from the origin,
 // or any other page as Markdown through Firecrawl. a conditional GET checks whether stored content changed
 import type { resourceKinds } from "@shared/enums"
+import { isSameSiteUrl } from "@shared/sources"
 import { FIRECRAWL_COST_PER_FETCH } from "./budget"
 import { fetchPublicUrl, readLimitedBody } from "./publicFetch"
 
@@ -147,8 +148,19 @@ async function fetchFirecrawlMarkdown(url: string): Promise<FetchResult> {
 	const etag = typeof metadata.etag === "string" ? metadata.etag : null
 	const lastModified = typeof metadata["last-modified"] === "string" ? metadata["last-modified"] : null
 	const title = typeof metadata.title === "string" ? metadata.title.trim() || null : null
-	const faviconUrl = toAbsoluteFaviconUrl(typeof metadata.favicon === "string" ? metadata.favicon : null, url)
+	const faviconUrl = toPageFaviconUrl(metadata, url)
 	return { text: markdown, cost: FIRECRAWL_COST_PER_FETCH, etag, lastModified, title, faviconUrl }
+}
+
+// the icon the fetched page names, or null when the fetch landed on another site, whose icon is not this host's.
+// a large site serves its icon from a cdn, so the page's own host is what decides, never the icon's host
+export function toPageFaviconUrl(metadata: Record<string, unknown>, requestedUrl: string): string | null {
+	// firecrawl reports where it landed, which is the publisher for a url that wraps a redirect
+	const landedUrl = typeof metadata.url === "string" ? metadata.url : requestedUrl
+	if (!isSameSiteUrl(landedUrl, requestedUrl)) {
+		return null
+	}
+	return toAbsoluteFaviconUrl(typeof metadata.favicon === "string" ? metadata.favicon : null, landedUrl)
 }
 
 // a favicon url firecrawl names relative to its page, made absolute
