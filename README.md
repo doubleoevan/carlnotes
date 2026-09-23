@@ -295,6 +295,8 @@ bun run schedule
 
 Without the `temporal` worker, `workflow.start` still succeeds against a queue nobody polls: scans queue silently and the api looks healthy. The scan sweep reports when no worker is polling the scan queue, which is the check to alert on.
 
+The LiteLLM proxy builds outside the `release-main` pipeline. [infra/litellm/Dockerfile](infra/litellm/Dockerfile) copies [litellm-config.yaml](litellm-config.yaml) into the image, and a Northflank path rule on those two files rebuilds and redeploys the service on push. A model swap is the config edit and nothing else.
+
 ## Attribution
 
 The persona for CarlNotes was inspired by [Jake Van Clief](https://www.linkedin.com/in/jake-van-clief-74b66915a/). The real Jake runs [Eduba](https://eduba.io), an AI training and consulting company, makes excellent videos on [YouTube](https://www.youtube.com/@JEVanClief), and teaches AI systems over at [Clief Notes](https://www.skool.com/cliefnotes). Go learn from him. Carl would.

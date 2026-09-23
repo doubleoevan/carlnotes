@@ -59,10 +59,14 @@ model_list:
   # score-model: the review premium tier — re-scores promoted Resources and writes relevance summaries
   - model_name: score-model
     litellm_params:
-      model: fireworks_ai/accounts/fireworks/models/glm-5p2
+      model: fireworks_ai/accounts/fireworks/models/glm-5p3
       api_key: os.environ/FIREWORKS_API_KEY
+      # Fireworks Standard serving path: $1.40/M input, $0.26/M cached input, $4.40/M output
+      input_cost_per_token: 0.0000014
+      cache_read_input_token_cost: 0.00000026
+      output_cost_per_token: 0.0000044
     model_info:
-      friendly_name: "GLM 5.2"
+      friendly_name: "GLM 5.3"
       supports_function_calling: true
       supports_prompt_caching: true
       max_input_tokens: 1048576
