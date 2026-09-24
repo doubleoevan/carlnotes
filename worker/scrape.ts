@@ -3,6 +3,7 @@
 import type { resourceKinds } from "@shared/enums"
 import { isSameSiteUrl } from "@shared/sources"
 import { FIRECRAWL_COST_PER_FETCH } from "./budget"
+import { fetchRedditThread, toRedditPostId } from "./ingest/reddit"
 import { fetchPublicUrl, readLimitedBody } from "./publicFetch"
 
 const FIRECRAWL_ENDPOINT = "https://api.firecrawl.dev/v1/scrape"
@@ -98,6 +99,13 @@ export async function fetchContent(
 	// an episode that declared none is a player and its show notes, and the notes are already in the snippet
 	if (resourceKind === "listen") {
 		return { text: "", cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null }
+	}
+
+	// reddit rejects firecrawl, and its own api returns the replies where a thread's words are
+	const redditPostId = toRedditPostId(url)
+	if (redditPostId) {
+		const text = await fetchRedditThread(redditPostId)
+		return { text, cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null }
 	}
 
 	// only a video publishes captions worth reading, so anything else is scraped

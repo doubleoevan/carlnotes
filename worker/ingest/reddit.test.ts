@@ -6,9 +6,11 @@ import {
 	queueRedditRequest,
 	toOauthUrl,
 	toRedditAccessModes,
+	toRedditPostId,
 	toRedditRequest,
 	toRssUrl,
 	toSubredditName,
+	toThreadText,
 } from "./reddit"
 
 // a Source setting just the config under test. the rest of the row is irrelevant to what it fetches
@@ -170,4 +172,56 @@ test("parsePosts maps a search response the same way", () => {
 			engagement: 3,
 		},
 	])
+})
+
+// only a thread url names a post, and the id is what the thread endpoint takes
+test("toRedditPostId reads the id from a thread url and rejects everything else", () => {
+	// every host spelling of a thread url yields the id, with or without the slug
+	expect(toRedditPostId("https://www.reddit.com/r/improv/comments/1v7pwde/a_slug_here")).toBe("1v7pwde")
+	expect(toRedditPostId("https://reddit.com/r/AskCulinary/comments/abc123/")).toBe("abc123")
+	expect(toRedditPostId("https://old.reddit.com/r/x/comments/zz99/title")).toBe("zz99")
+
+	// a subreddit listing, another host, and an unparseable string all name no post
+	expect(toRedditPostId("https://www.reddit.com/r/improv/")).toBeNull()
+	expect(toRedditPostId("https://example.com/r/x/comments/abc/")).toBeNull()
+	expect(toRedditPostId("not a url")).toBeNull()
+})
+
+// a thread is worth fetching for its replies, so the text has to include the replies
+test("toThreadText joins the post's body with its replies", () => {
+	const text = toThreadText([
+		{ data: { children: [{ data: { title: "How do I braise?", selftext: "Never done it." } }] } },
+		{ data: { children: [{ data: { body: "Low and slow." } }, { data: { body: "Sear it first." } }] } },
+	])
+	expect(text).toBe("How do I braise?\n\nNever done it.\n\nLow and slow.\n\nSear it first.")
+})
+
+// a missing body must not leave a blank run in the joined text
+test("toThreadText skips a missing body and an empty reply", () => {
+	// a link post has only a title, and the "load more" stub has no body
+	const text = toThreadText([
+		{ data: { children: [{ data: { title: "Look at this" } }] } },
+		{ data: { children: [{ data: { body: "  " } }, { data: {} }, { data: { body: "Nice find." } }] } },
+	])
+	expect(text).toBe("Look at this\n\nNice find.")
+
+	// a response with nothing readable reads as an empty string instead of throwing
+	expect(toThreadText([])).toBe("")
+})
+
+// reddit keeps a removed reply in the thread and puts a placeholder where its words were
+test("toThreadText drops a removed post body and a removed reply", () => {
+	const text = toThreadText([
+		{ data: { children: [{ data: { title: "Still here", selftext: "[deleted]" } }] } },
+		{
+			data: {
+				children: [
+					{ data: { body: "[removed]" } },
+					{ data: { body: "[deleted]" } },
+					{ data: { body: "Real answer." } },
+				],
+			},
+		},
+	])
+	expect(text).toBe("Still here\n\nReal answer.")
 })

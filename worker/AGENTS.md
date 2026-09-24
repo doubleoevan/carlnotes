@@ -16,6 +16,6 @@ Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker), `sch
 - Untrusted text is screened by LLM Guard (`guard.ts`) before any model reads it.
 - Every fetch of a user-supplied url goes through `fetchPublicUrl` (`publicFetch.ts`), which re-checks
   each redirect hop against the internal-address rule, with `readLimitedBody` bounding reads. `scrape.ts` reads a
-  declared transcript over that path and scrapes any other page through Firecrawl, and `linkPreview.ts` reads a
-  chat link's preview on it.
+  declared transcript over that path, reads a reddit thread from reddit's own api, and scrapes any other page
+  through Firecrawl, and `linkPreview.ts` reads a chat link's preview on it.
 - Tests: `bun test worker`; `*.smoke.ts` hit real services and run under `doppler run`.

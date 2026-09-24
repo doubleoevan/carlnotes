@@ -4,6 +4,10 @@ import type { NewResource, Source, SourceIngester } from "./ingester"
 
 // fetch limits
 const MAX_POSTS = 25
+// how many of a thread's replies to read, in reddit's own top order
+const MAX_REPLIES = 20
+// what reddit puts in place of a removed post or reply's words
+const REMOVED_BODIES = new Set(["[deleted]", "[removed]"])
 const DEFAULT_SORT = "hot"
 const FETCH_TIMEOUT_MS = 10_000
 
@@ -24,6 +28,12 @@ const RSS_FALLBACK_MODE = "reddit-rss"
 // reddit rejects a burst from one address, and a Scan runs its Sources at once
 const MIN_REQUEST_GAP_MS = { oauth: 1_000, rss: 30_000 }
 let lastRequest: Promise<unknown> = Promise.resolve()
+
+// the app-only token and when it expires
+let cachedToken: { token: string; expiresAt: number } | null = null
+
+// how early to expire the cached token, so a token never dies between the check and the request that uses it
+const TOKEN_EXPIRY_MARGIN_MS = 60_000
 
 // which type of access an ingest attempt uses. OAuth sends a token, rss sends nothing
 type AccessMode = "oauth" | "rss"
@@ -167,6 +177,11 @@ type RedditListing = {
 	data: { children: { data: { permalink: string; title?: string; selftext?: string; score?: number } }[] }
 }
 
+// selftext is a post's words, body is a reply's words
+type RedditThreadListing = {
+	data?: { children?: { data?: { title?: string; selftext?: string; body?: string } }[] }
+}
+
 /**
  * Map a reddit listing or search response to "read" Resources, each keyed by its comments permalink and deduped.
  */
@@ -204,6 +219,63 @@ export function queueRedditRequest<T>(accessMode: AccessMode, sendRequest: () =>
 	return queuedRequest
 }
 
+/**
+ * One reddit post read as text: its title and body, then its replies.
+ * Throws an error when reddit rejects the request or the thread reads as nothing.
+ */
+export async function fetchRedditThread(postId: string): Promise<string> {
+	// the thread endpoint takes the same app-only token the listing takes
+	const clientId = Bun.env.REDDIT_CLIENT_ID
+	const clientSecret = Bun.env.REDDIT_CLIENT_SECRET
+	if (!clientId || !clientSecret) {
+		throw new Error("REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET must be set to read a reddit thread")
+	}
+	const token = await fetchOauthToken(clientId, clientSecret)
+
+	// one queue spaces every reddit request, this thread fetch included, to the rate reddit asks for
+	const response = await queueRedditRequest("oauth", () =>
+		fetch(`${OAUTH_HOST}/comments/${postId}?limit=${MAX_REPLIES}&depth=1&sort=top&raw_json=1`, {
+			headers: { authorization: `Bearer ${token}`, "user-agent": REDDIT_USER_AGENT },
+			signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+		}),
+	)
+	if (!response.ok) {
+		throw new Error(`reddit thread ${postId} returned ${response.status}`)
+	}
+
+	// a thread whose post and replies are all empty has nothing to score, so the fetch counts as failed
+	const threadText = toThreadText((await response.json()) as RedditThreadListing[])
+	if (!threadText) {
+		throw new Error(`reddit thread ${postId} is empty`)
+	}
+	return threadText
+}
+
+/**
+ * The post id a reddit url names, or null for a url that names no post.
+ */
+export function toRedditPostId(url: string): string | null {
+	// a thread url reads /r/<subreddit>/comments/<id>/<slug>, and the id alone is what the thread endpoint takes
+	const postMatch = /^https?:\/\/(?:[a-z0-9-]+\.)?reddit\.com\/r\/[A-Za-z0-9_]+\/comments\/([a-z0-9]+)/i.exec(url)
+	return postMatch?.[1] ?? null
+}
+
+/**
+ * A thread as one text: the post's title and body, then each reply, separated by blank lines.
+ */
+export function toThreadText(listings: RedditThreadListing[]): string {
+	// the post is the first listing's only child, and its replies are the second listing's children
+	const [postListing, replyListing] = listings
+	const post = postListing?.data?.children?.[0]?.data
+	const replyBodies = (replyListing?.data?.children ?? []).map((child) => child.data?.body)
+
+	// a removed post or reply reads as a placeholder, not as empty
+	return [post?.title, post?.selftext, ...replyBodies]
+		.map((part) => part?.trim() ?? "")
+		.filter((part) => part && !REMOVED_BODIES.has(part))
+		.join("\n\n")
+}
+
 // fetch the request in one access mode and parse what it returns
 async function fetchPosts(
 	accessMode: AccessMode,
@@ -233,6 +305,11 @@ async function fetchPosts(
 
 // exchange app credentials for an app-only bearer token via the client credentials grant
 async function fetchOauthToken(clientId: string, clientSecret: string): Promise<string> {
+	// a token still inside its lifetime saves a request that the queue would otherwise space by a second
+	if (cachedToken && Date.now() < cachedToken.expiresAt) {
+		return cachedToken.token
+	}
+
 	// the body requests the app-only grant. the token call is queued like every other request reddit sees
 	const response = await queueRedditRequest("oauth", () =>
 		fetch(`${PUBLIC_HOST}/api/v1/access_token`, {
@@ -253,10 +330,12 @@ async function fetchOauthToken(clientId: string, clientSecret: string): Promise<
 		throw new Error(`token request returned ${response.status}`)
 	}
 
-	// no token cache. one Source makes one token request per Scan, which is already the low request rate reddit asks for
-	const token = ((await response.json()) as { access_token?: string }).access_token
-	if (!token) {
+	// keep the token for the lifetime reddit gives it
+	const payload = (await response.json()) as { access_token?: string; expires_in?: number }
+	if (!payload.access_token) {
 		throw new Error("token response had no access_token")
 	}
-	return token
+	const lifetimeMs = (payload.expires_in ?? 3600) * 1000
+	cachedToken = { token: payload.access_token, expiresAt: Date.now() + lifetimeMs - TOKEN_EXPIRY_MARGIN_MS }
+	return payload.access_token
 }
