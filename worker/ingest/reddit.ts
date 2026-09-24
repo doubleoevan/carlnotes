@@ -220,15 +220,16 @@ export function queueRedditRequest<T>(accessMode: AccessMode, sendRequest: () =>
 }
 
 /**
- * One reddit post read as text: its title and body, then its replies.
- * Throws an error when reddit rejects the request or the thread reads as nothing.
+ * One reddit post read as text: its title and body, then its replies. Null when no reddit credentials are set.
+ * Throws an error if reddit rejects the request or the thread reads as nothing.
  */
-export async function fetchRedditThread(postId: string): Promise<string> {
+export async function fetchRedditThread(postId: string): Promise<string | null> {
 	// the thread endpoint takes the same app-only token the listing takes
 	const clientId = Bun.env.REDDIT_CLIENT_ID
 	const clientSecret = Bun.env.REDDIT_CLIENT_SECRET
 	if (!clientId || !clientSecret) {
-		throw new Error("REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET must be set to read a reddit thread")
+		console.warn(`reddit thread ${postId} not read: REDDIT_CLIENT_ID and REDDIT_CLIENT_SECRET are not set`)
+		return null
 	}
 	const token = await fetchOauthToken(clientId, clientSecret)
 

@@ -105,7 +105,7 @@ export async function fetchContent(
 	const redditPostId = toRedditPostId(url)
 	if (redditPostId) {
 		const text = await fetchRedditThread(redditPostId)
-		return { text, cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null }
+		return { text: text ?? "", cost: 0, etag: null, lastModified: null, title: null, faviconUrl: null }
 	}
 
 	// only a video publishes captions worth reading, so anything else is scraped
