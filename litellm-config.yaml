@@ -72,7 +72,7 @@ model_list:
       max_input_tokens: 1048576
       max_output_tokens: 8192
 
-  # embed-model: the review embedding tier. output_vector_size MUST equal the schema's resources.embedding dimension (1024)
+  # embed-model: the review embedding tier. fireworks drops the dimensions param, so worker/models.ts slices 4096 to 1024
   - model_name: embed-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/qwen3-embedding-8b
