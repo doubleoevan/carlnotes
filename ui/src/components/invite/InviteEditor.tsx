@@ -1,3 +1,4 @@
+import { toTopicPath } from "@shared/seo"
 import { toast } from "sonner"
 import { sendCreateTopicInvite, sendUserInvite } from "@/clients/topicClient"
 import { InviteFields } from "@/components/invite/InviteFields"
@@ -73,7 +74,7 @@ export function InviteEditor({
 							subjectName: topic.name,
 							toBody: (inviteUrl: string) => `Carl reads this topic and takes notes. Follow here: ${inviteUrl}`,
 							createToken,
-							link: { label: "topic page", href: `/topics/${topic.id}` },
+							link: { label: "topic page", href: toTopicPath(topic) },
 							onCopied: () => toast.success("Invite link copied. Anyone holding it can follow."),
 						}
 					: undefined

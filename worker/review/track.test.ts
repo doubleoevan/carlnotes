@@ -1,6 +1,23 @@
-// track tests for the spend accounting and the limits every stage of a Scan reads off it
+// track tests for the review's finding count, and for the spend accounting and the limits every stage of a Scan
+// reads off it
 import { expect, test } from "bun:test"
 import { canScoreResource, canSpend, charge, newBudget, tokenCost } from "../budget"
+import { countAddedOrFilteredFindings } from "./track"
+
+// a finding this scan added and the filter kept counts once
+test("countAddedOrFilteredFindings counts a new kept finding", () => {
+	expect(countAddedOrFilteredFindings({ newFindingCount: 1, keptNewFindingCount: 1, filteredFindingCount: 0 })).toBe(1)
+})
+
+// an existing finding the topic's limit filtered out counts once
+test("countAddedOrFilteredFindings counts an existing finding filtered out", () => {
+	expect(countAddedOrFilteredFindings({ newFindingCount: 0, keptNewFindingCount: 0, filteredFindingCount: 1 })).toBe(1)
+})
+
+// a finding this scan added and then filtered out never shows on the topic page, so it counts nothing
+test("countAddedOrFilteredFindings skips a finding added and filtered out in the same scan", () => {
+	expect(countAddedOrFilteredFindings({ newFindingCount: 1, keptNewFindingCount: 0, filteredFindingCount: 1 })).toBe(0)
+})
 
 // charge accumulates per-stage costs into the total. canSpend flips to false once the budget limit is reached
 test("charge accumulates the per-stage costs and the budget limit halts paid work", () => {

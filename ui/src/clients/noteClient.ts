@@ -2,11 +2,7 @@
 // and the comment users
 import type { Note, NoteBadge, NoteCommentUser, NoteResponse, NotesResponse } from "@shared/contracts"
 import type { noteVisibilities } from "@shared/enums"
-import { hc } from "hono/client"
-import type { AppType } from "../../../api"
-
-// same-origin api client on a relative base url
-const apiClient = hc<AppType>("")
+import { apiClient } from "./apiClient"
 
 // a note visibility and a note page reference
 type NoteVisibility = (typeof noteVisibilities)[number]

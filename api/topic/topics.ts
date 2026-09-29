@@ -1,9 +1,11 @@
 // the topic logic for the api routes
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
+import { appUrl } from "@shared/appUrl"
 import type { TopicResponse, UpdateTopicPayload } from "@shared/contracts"
 import { suggestSourcesPayload, updateTopicPayload } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
+import { toTopicPath } from "@shared/seo"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, desc, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm"
 import { Hono } from "hono"
@@ -19,7 +21,7 @@ import {
 	topics,
 	users,
 } from "../../db/schema"
-import { deleteAttachment, suggestSources } from "../../worker"
+import { deleteAttachment, notifyIndexNow, suggestSources } from "../../worker"
 import { isAllowed } from "../authorization"
 import { deleteChatAttachments } from "../chat/attachments"
 import { loadTopicChatMentions } from "../chat/mentions"
@@ -70,7 +72,7 @@ export type UpdateTopicResult =
 type InviteeRejection = { status: "inviteeRejected"; email: string } | { status: "inviteLimit" }
 
 /**
- * Load one topic's page or null if the topic is missing or not visible to this user.
+ * Loads one topic's page or null if the topic is missing or not visible to this user.
  * A signed-out visitor may view a public topic, with no consumed state and no owner extras.
  */
 export async function loadTopicPage(userId: string | null, topicId: string): Promise<TopicResponse | null> {
@@ -217,7 +219,30 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 }
 
 /**
- * Create a topic for the user with its invites and sources, enforcing the topic limit.
+ * Tells IndexNow the urls a save changed: a topic's url if it turns public, its old url if it stops being public,
+ * and both if a rename moves a public topic.
+ */
+export function notifyIndexNowOfTopicChange({
+	savedTopic,
+	previousTopic,
+}: {
+	savedTopic: { id: string; name: string; visibility: (typeof topics.$inferSelect)["visibility"] }
+	previousTopic: { name: string; visibility: (typeof topics.$inferSelect)["visibility"] } | null
+}): void {
+	// the topic's indexed path after the save and before it. only a public topic's page is indexed
+	const topicPath = savedTopic.visibility === "public" ? toTopicPath(savedTopic) : null
+	const previousTopicPath =
+		previousTopic?.visibility === "public" ? toTopicPath({ id: savedTopic.id, name: previousTopic.name }) : null
+	if (topicPath === previousTopicPath) {
+		return
+	}
+	// send the path that appeared and the path that went away
+	const changedPaths = [topicPath, previousTopicPath].filter((changedPath) => changedPath !== null)
+	void notifyIndexNow(changedPaths.map((changedPath) => `${appUrl()}${changedPath}`))
+}
+
+/**
+ * Creates a topic for the user with its invites and sources, enforcing the topic limit.
  */
 export async function createTopic(
 	userId: string,
@@ -307,13 +332,16 @@ export async function createTopic(
 	// email the invitations without delaying the topic created response
 	startInviteEmails({ id: topicId, name, ownerId: userId }, inviteEmails)
 
+	// tell IndexNow about a public topic that was created
+	notifyIndexNowOfTopicChange({ savedTopic: { id: topicId, name, visibility }, previousTopic: null })
+
 	// track the topic creation event
 	trackEvent("topic_created", userId, { ...analyticsProperties, topicId, origin })
 	return { status: "created", id: topicId }
 }
 
 /**
- * Apply the edit modal's saved fields and reconcile the invitee and source lists. owner or admin only.
+ * Applies the edit modal's saved fields and reconciles the invitee and source lists. owner or admin only.
  */
 export async function updateTopic(
 	userId: string,
@@ -430,6 +458,9 @@ export async function updateTopic(
 	// screen whatever this edit added with llm-guard, now that the rows are committed
 	startPendingSourceScreens(topicId)
 
+	// tell IndexNow if the save made the topic public or changed its url
+	notifyIndexNowOfTopicChange({ savedTopic: { id: topicId, name, visibility }, previousTopic: topic })
+
 	// email only the newly added invites. a re-invited decliner counts as newly invited
 	startInviteEmails({ id: topicId, name, ownerId: topic.ownerId }, [
 		...inviteeCheck.newInvites,
@@ -442,7 +473,7 @@ export async function updateTopic(
 }
 
 /**
- * Delete a topic and everything it includes. Owner or admin only.
+ * Deletes a topic and everything it includes. Only allowed by an owner or admin.
  */
 export async function deleteTopic(
 	userId: string,
@@ -479,6 +510,11 @@ export async function deleteTopic(
 		await releaseFeatureOrder(topicId, transaction)
 		await transaction.delete(topics).where(eq(topics.id, topicId))
 	})
+
+	// a deleted public topic's url is gone, so notify IndexNow to drop it
+	if (topic.visibility === "public") {
+		void notifyIndexNow([`${appUrl()}${toTopicPath(topic)}`])
+	}
 
 	// record who deleted the topic. the row is gone, so this event is the only account of who deleted it
 	trackEvent("topic_deleted", userId, { ...analyticsProperties, topicId, isTopicOwner: topic.ownerId === userId })
@@ -580,7 +616,7 @@ export const topicsRoute = new Hono<AppEnv>()
 		if (updateTopicResult.status === "dailyFrequency") {
 			return context.json({ error: "daily topic limit reached", dailyTopicLimit: updateTopicResult.limit }, 429)
 		}
-		// a rejected invitee and a spent invite limit each answer by name, so the modal can show which
+		// a rejected invitee is returned with its email, and a spent invite limit is returned with its error
 		if (updateTopicResult.status === "inviteeRejected") {
 			return context.json({ error: "invitee-not-accepting", email: updateTopicResult.email }, 409)
 		}

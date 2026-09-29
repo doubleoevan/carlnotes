@@ -43,14 +43,14 @@ const ANALYTICS: AnalyticsProperties = {
 // 1. only edit authority creates a link, and a fresh one is live
 async function checkLinkCreateAuthority(): Promise<void> {
 	console.log("\n=== 1. link create authority ===")
-	// an owner with a topic, and a stranger with no access to it
+	// an owner with a topic, and another user with no access to it
 	const owner = await createUser("owner1")
-	const stranger = await createUser("stranger1")
+	const otherUser = await createUser("otheruser1")
 	const topic = await createTopic(owner.id, "link authority topic")
 
-	// the stranger is rejected, and the owner gets a live link with the link limits
+	// the other user is rejected, and the owner gets a live link with the link limits
 	assert.equal(
-		await createTopicInvite(stranger.id, topic.id, "copy-link", ANALYTICS),
+		await createTopicInvite(otherUser.id, topic.id, "copy-link", ANALYTICS),
 		"forbidden",
 		"a non-owner created a link",
 	)
@@ -61,16 +61,16 @@ async function checkLinkCreateAuthority(): Promise<void> {
 	assert.equal(created.maxUses, 25, "the owner's link does not have the link use limit")
 	assert.equal(toInviteRejection(await loadInvite(created.id), new Date()), null, "the fresh link is not live")
 
-	console.log("PASS  the stranger is rejected and the owner's link lives")
+	console.log("PASS  the other user is rejected and the owner's link lives")
 
-	// a team link is a member's power the same way, and an outsider is rejected
+	// a team link is a member's power the same way, and a non-member is rejected
 	const team = await createTeam("authority team", owner.id)
 	assert.equal(
-		await createTeamInvite(stranger.id, team.id, "copy-link", ANALYTICS),
+		await createTeamInvite(otherUser.id, team.id, "copy-link", ANALYTICS),
 		"forbidden",
-		"an outsider created a team link",
+		"a non-member created a team link",
 	)
-	console.log("PASS  an outsider cannot create a team link")
+	console.log("PASS  a non-member cannot create a team link")
 }
 
 // 2. a valid acceptance subscribes the accepter and spends one use, and arriving again spends nothing
@@ -153,6 +153,8 @@ async function checkSpentAndReusedLinks(): Promise<void> {
 	const requester = await createUser("requester3b")
 	const requestOutcome = await acceptInviteToken(requester.id, spentTeamInvite.token)
 	assert.equal(requestOutcome.status, "requestedTeam", `the spent team link answered ${requestOutcome.status}`)
+
+	// the join request is a waiting membership row, not an active one
 	const [requestRow] = await db
 		.select({ isActive: teamMembers.isActive })
 		.from(teamMembers)
@@ -218,14 +220,14 @@ async function checkResolution(): Promise<void> {
 	assert.equal(emailRow.invitedUserId, byEmail.id, "the account email invite did not resolve the account")
 
 	// an email invite to an address nobody holds stores the address alone
-	const strangerAddress = `${runId}-stranger5@example.com`
-	const strangerInvite = toCreatedInvite(
-		await createUserInvite(sender.id, { topicId: topic.id }, { email: strangerAddress }),
-		"the stranger email invite",
+	const noAccountAddress = `${runId}-noaccount5@example.com`
+	const noAccountInvite = toCreatedInvite(
+		await createUserInvite(sender.id, { topicId: topic.id }, { email: noAccountAddress }),
+		"the no-account email invite",
 	)
-	const strangerRow = await loadInvite(strangerInvite.id)
-	assert.equal(strangerRow.email, strangerAddress, "the stranger email invite dropped the address")
-	assert.equal(strangerRow.invitedUserId, null, "the stranger email invite resolved a phantom account")
+	const noAccountRow = await loadInvite(noAccountInvite.id)
+	assert.equal(noAccountRow.email, noAccountAddress, "the no-account email invite dropped the address")
+	assert.equal(noAccountRow.invitedUserId, null, "the no-account email invite resolved a phantom account")
 
 	// a username invite for a person who has a declined email row reopens that row instead of inserting a secondInvite
 	const declined = await createUser("declined5")
@@ -250,12 +252,12 @@ async function checkResolution(): Promise<void> {
 	console.log("PASS  each mode stores what it resolved, and a declined row reopens as the one slot")
 }
 
-// 6. each invite-access setting: nobody rejects every sender, connected admits only a connected one, anyone admits a stranger
+// 6. each invite-access setting: nobody rejects every sender, connected admits only a connected one, anyone admits an unconnected sender
 async function checkInviteAccess(): Promise<void> {
 	console.log("\n=== 6. invite-access ===")
-	// a stranger sender, a teammate sender, and one recipient per setting
-	const strangerSender = await createUser("strangersender6")
-	const strangerTopic = await createTopic(strangerSender.id, "stranger sender topic")
+	// an unconnected sender, a teammate sender, and one recipient per setting
+	const unconnectedSender = await createUser("unconnectedsender6")
+	const unconnectedSenderTopic = await createTopic(unconnectedSender.id, "unconnected sender topic")
 	const teammateSender = await createUser("teammatesender6")
 	const teammateTopic = await createTopic(teammateSender.id, "teammate sender topic")
 	const rejectsAll = await createUser("nobody6", { inviteAccess: "nobody" })
@@ -269,11 +271,15 @@ async function checkInviteAccess(): Promise<void> {
 		{ teamId: team.id, userId: connectedOnly.id },
 	])
 
-	// nobody rejects the stranger and the teammate alike
+	// nobody rejects the unconnected sender and the teammate alike
 	assert.equal(
-		await createUserInvite(strangerSender.id, { topicId: strangerTopic.id }, { username: rejectsAll.username }),
+		await createUserInvite(
+			unconnectedSender.id,
+			{ topicId: unconnectedSenderTopic.id },
+			{ username: rejectsAll.username },
+		),
 		"not-accepting",
-		"a nobody recipient admitted a stranger",
+		"a nobody recipient admitted an unconnected sender",
 	)
 	assert.equal(
 		await createUserInvite(teammateSender.id, { topicId: teammateTopic.id }, { username: rejectsAll.username }),
@@ -281,26 +287,36 @@ async function checkInviteAccess(): Promise<void> {
 		"a nobody recipient admitted a teammate",
 	)
 
-	// connected rejects the stranger and admits the sender who shares a team
+	// connected rejects the unconnected sender and admits the sender who shares a team
 	assert.equal(
-		await createUserInvite(strangerSender.id, { topicId: strangerTopic.id }, { username: connectedOnly.username }),
+		await createUserInvite(
+			unconnectedSender.id,
+			{ topicId: unconnectedSenderTopic.id },
+			{ username: connectedOnly.username },
+		),
 		"not-accepting",
-		"a connected-only recipient admitted a stranger",
+		"a connected-only recipient admitted an unconnected sender",
 	)
 	toCreatedInvite(
 		await createUserInvite(teammateSender.id, { topicId: teammateTopic.id }, { username: connectedOnly.username }),
 		"the teammate's invite to a connected-only recipient",
 	)
 
-	// anyone admits the stranger
+	// anyone admits the unconnected sender
 	toCreatedInvite(
-		await createUserInvite(strangerSender.id, { topicId: strangerTopic.id }, { username: admitsAll.username }),
-		"the stranger's invite to an anyone recipient",
+		await createUserInvite(
+			unconnectedSender.id,
+			{ topicId: unconnectedSenderTopic.id },
+			{ username: admitsAll.username },
+		),
+		"the unconnected sender's invite to an anyone recipient",
 	)
-	console.log("PASS  nobody rejects everyone, connected admits only a connected sender, anyone admits a stranger")
+	console.log(
+		"PASS  nobody rejects everyone, connected admits only a connected sender, anyone admits an unconnected sender",
+	)
 }
 
-// 7. what counts as connected: a shared team, an active subscription, and an accepted invitation, but never two strangers
+// 7. what counts as connected: a shared team, an active subscription, and an accepted invitation, but never two unconnected users
 async function checkIsConnected(): Promise<void> {
 	console.log("\n=== 7. isConnected derivations ===")
 	// a teammate pair on one team
@@ -334,11 +350,13 @@ async function checkIsConnected(): Promise<void> {
 	})
 	assert.equal(await isConnected(pastSender.id, acceptor.id), true, "an accepted invitation does not connect")
 
-	// total strangers never connect
-	const strangerA = await createUser("strangera7")
-	const strangerB = await createUser("strangerb7")
-	assert.equal(await isConnected(strangerA.id, strangerB.id), false, "two strangers connect")
-	console.log("PASS  a shared team, an active subscription, and an accepted invitation connect, strangers do not")
+	// two users who share nothing never connect
+	const unconnectedUserA = await createUser("unconnecteda7")
+	const unconnectedUserB = await createUser("unconnectedb7")
+	assert.equal(await isConnected(unconnectedUserA.id, unconnectedUserB.id), false, "two unconnected users connect")
+	console.log(
+		"PASS  a shared team, an active subscription, and an accepted invitation connect, unconnected users do not",
+	)
 }
 
 // 8. accepting works the same by token or by row, and a declined invitation can no longer be answered

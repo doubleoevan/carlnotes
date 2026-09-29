@@ -234,6 +234,22 @@ Check for:
      `effectiveBudgetCents` field (now `budgetCents`), and `startOfUtcMonth` (now in `db/quotas.ts`, re-exported from
      `api/topic/quotas.ts`)
 
+   - `api/pages.ts` and `pagesRoute` (now `api/documents.ts` and `documentsRoute`), `UI_BUNDLE_ROOT` (now
+     `UI_CLIENT_ROOT`), and the shell routes with `toShellWithHeadTags`, `toFindingListHtml`, and `SPA_PAGE_TITLES`
+     (now each route's `head()` under `ui/src/routes/`, and `pageHeadRoute` in `api/share/pageHead.ts`)
+   - `ui/index.html`, `ui/src/App.tsx`, `ui/src/main.tsx`, and `react-router-dom` (now the route files under
+     `ui/src/routes/`, `ui/src/router.tsx`, and `ui/src/client.tsx`)
+   - `renderOnTop` (now `BodyPortal` in `ui/src/components/chat/ChatPanelWidget.tsx`)
+   - `useRememberedSignedIn` and the `signed-in` localStorage key (now `useIsSignedInBeforeSession` in
+     `ui/src/hooks/useIsSignedInBeforeSession.ts`)
+   - `publicTopicRows` (now `loadPublicTopics` in `api/seo.ts`), `toTopicDescription` in `api/share/preview.ts` (now in
+     `api/seo.ts`), and `MAX_POPULAR_TOPICS` (now `TOPICS_PER_PAGE` in `ui/src/components/topic/TopicSection.tsx`)
+   - `outsider` in every form (now `non-member` for a user who is not on the team, as in the smoke tests'
+     `nonMemberId`. the topic tools smoke's user with no tie to the topic is now `otherUserId`)
+   - `ChatRoomState.rejectionReason` and `clearRejectionReason` (now `rejection` and `clearRejection`, a
+     `ChatRoomRejection` kind that `ChatRoomRejectionNotice` in `ui/src/components/chat/ChatRoomPanel.tsx` renders)
+   - `/topics/<id>` as a topic's canonical url (now `/topics/<id>/<slug>`, from `toTopicPath` in `shared/seo.ts`)
+
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
    same scripts. Compare the tool/event coverage of each adapter against the

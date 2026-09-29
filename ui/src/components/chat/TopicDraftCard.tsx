@@ -1,4 +1,5 @@
 import type { TopicDraft } from "@shared/contracts"
+import { toTopicPath } from "@shared/seo"
 import { DEFAULT_SOURCES } from "@shared/sources"
 import { X } from "lucide-react"
 import type { ReactNode } from "react"
@@ -84,7 +85,10 @@ export function TopicDraftCard({
 							<p key={topicDraft.name} className="text-foreground animate-in fade-in mb-2 break-words duration-500">
 								{/* the name opens the topic behind the panel, and reads as plain text before one exists */}
 								{topicId ? (
-									<AnchorLink href={`/topics/${topicId}`} className="text-link hover:underline">
+									<AnchorLink
+										href={toTopicPath({ id: topicId, name: topicDraft.name })}
+										className="text-link hover:underline"
+									>
 										{topicDraft.name}
 									</AnchorLink>
 								) : (

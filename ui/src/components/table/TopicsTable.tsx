@@ -1,4 +1,5 @@
 import type { Topic, TopicResponse } from "@shared/contracts"
+import { toTopicPath } from "@shared/seo"
 import { X } from "lucide-react"
 import { useState } from "react"
 import { fetchTopicPage, sendSubscriptionEmail } from "@/clients/topicClient"
@@ -143,7 +144,7 @@ export function TopicsTable({
 								<td className="py-2 pr-4">
 									{/* the chat mention count sits in the name's top-right corner while the user has unseen chat mentions */}
 									<span className="relative inline-block">
-										<AnchorLink href={`/topics/${topic.id}`} className="text-link hover:underline">
+										<AnchorLink href={toTopicPath(topic)} className="text-link hover:underline">
 											{topic.name}
 										</AnchorLink>
 										<PageUpdateCountBadge topicId={topic.id} />

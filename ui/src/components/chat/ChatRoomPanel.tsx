@@ -1,4 +1,5 @@
 // the chat room panel: one shared conversation streaming live, clearable by a leader alone
+import { CHAT_ROOM_ATTACHMENT_LIMIT } from "@shared/contracts"
 import { X } from "lucide-react"
 import { lazy, Suspense, useEffect, useState } from "react"
 import { authClient } from "@/clients/authClient"
@@ -6,18 +7,12 @@ import { sendChatMentionsViewed, sendClearChatRoom } from "@/clients/chatRoomCli
 import { fetchTeamPage } from "@/clients/teamClient"
 import { ChatBudgetNotice } from "@/components/chat/ChatBudgetNotice"
 import { ChatCallToActionPanel } from "@/components/chat/ChatCallToActionPanel"
-import type { ChatRoomMenu } from "@/components/chat/ChatOptionsMenu"
-import {
-	ChatMessagesLoading,
-	type ChatPanelCurrentRoom,
-	ChatPanelHeader,
-	ChatPanelWidget,
-	renderOnTop,
-} from "@/components/chat/ChatPanelWidget"
+import type { ChatRoomMenu, CurrentChatRoomOption } from "@/components/chat/ChatOptionsMenu"
+import { ChatMessagesLoading, ChatPanelWidget } from "@/components/chat/ChatPanelWidget"
 import { ChatRoomComposer, DisabledRoomComposer } from "@/components/chat/ChatRoomComposer"
 import { ClearChatDialog } from "@/components/chat/ClearChatDialog"
 import { TopicDraftCard } from "@/components/chat/TopicDraftCard"
-import { useChatRoom } from "@/components/chat/useChatRoom"
+import { type ChatRoomRejection, useChatRoom } from "@/components/chat/useChatRoom"
 import { useEditableTopicDraft } from "@/components/chat/useEditableTopicDraft"
 import { useRoomReply } from "@/components/chat/useRoomReply"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
@@ -56,7 +51,7 @@ function useRoomMembers(
 		.filter((member) => member.userId !== userId)
 		.map((member) => member.username)
 		.sort()
-	return { memberUsernames, isTeamLeader: isTeamLeader }
+	return { memberUsernames, isTeamLeader }
 }
 
 /**
@@ -81,7 +76,7 @@ export function ChatRoomPanel({
 	chatRoomMenu: ChatRoomMenu
 	// how much of the screen the panel takes, owned by the shell so it survives a chat room switch
 	panelState: Exclude<ChatPanelState, "collapsed">
-	onPanelState: (next: ChatPanelState) => void
+	onPanelState: (nextPanelState: ChatPanelState) => void
 	// a callback to mark the chat room's mentions as seen
 	onOpenChatRoom?: () => void
 	// the Join Team button, shown in place of the conversation to someone who cannot see a team chat
@@ -116,7 +111,7 @@ export function ChatRoomPanel({
 
 	// the open chat room the switcher row names, taken from this chat room's own menu row
 	const currentChatRoom = chatRoomMenu.chatRoomOptions?.find((chatRoomOption) => chatRoomOption.isActive)
-	const currentRoom: ChatPanelCurrentRoom = {
+	const currentRoom: CurrentChatRoomOption = {
 		name: currentChatRoom?.name ?? contextName,
 		team: currentChatRoom?.team,
 	}
@@ -138,21 +133,19 @@ export function ChatRoomPanel({
 
 	// the clear chat option belongs to a team leader or an admin. an empty chat room has nothing to clear
 	const isClearable = (isTeamLeader || isAdmin) && chatRoom.chatMessages.length > 0
-	return renderOnTop(
-		<ChatPanelWidget isEnlarged={isPanelEnlarged} onMinimizeChat={() => onPanelState("collapsed")}>
-			<ChatPanelHeader
-				isEnlarged={isPanelEnlarged}
-				isRoom
-				onToggleSize={() => onPanelState(isPanelEnlarged ? "open" : "enlarged")}
-				onCollapse={() => onPanelState("collapsed")}
-				currentChatRoom={currentRoom}
-				chatRoomMenu={{
-					...chatRoomMenu,
-					onClear: isClearable ? () => setIsClearChatOpen(true) : undefined,
-					clearLabel: `Clear ${contextName} chat`,
-				}}
-			/>
-			{/* the chat panel stays on screen while another chat room loads */}
+	return (
+		<ChatPanelWidget
+			isEnlarged={isPanelEnlarged}
+			onPanelState={onPanelState}
+			isRoom
+			currentChatRoom={currentRoom}
+			chatRoomMenu={{
+				...chatRoomMenu,
+				onClear: isClearable ? () => setIsClearChatOpen(true) : undefined,
+				clearLabel: `Clear ${contextName} chat`,
+			}}
+		>
+			{/* the chat messages, or the loading message while the chat room loads */}
 			{chatRoom.isLoaded ? (
 				<Suspense fallback={<ChatMessagesLoading />}>
 					<ChatRoomMessages
@@ -171,14 +164,14 @@ export function ChatRoomPanel({
 				<ChatMessagesLoading />
 			)}
 
-			{/* a budget rejection is private to the poster, shown here instead of posted to the chat room */}
-			{chatRoom.rejectionReason && (
+			{/* a rejected post is private to the poster, shown here instead of posted to the chat room */}
+			{chatRoom.rejection && (
 				<div className="text-muted-foreground flex shrink-0 items-start justify-between gap-2 border-t px-3 py-2 text-xs">
-					<ChatBudgetNotice />
+					<ChatRoomRejectionNotice rejection={chatRoom.rejection} />
 					<button
 						type="button"
 						aria-label="Dismiss"
-						onClick={chatRoom.clearRejectionReason}
+						onClick={chatRoom.clearRejection}
 						className="hover:text-foreground shrink-0"
 					>
 						<X className="size-3.5" />
@@ -199,7 +192,7 @@ export function ChatRoomPanel({
 					memberUsernames={memberUsernames}
 					reply={reply}
 					onPostChatMessage={async (content, replyToChatMessageId, attachments) => {
-						// the reply target clears only with the draft, so a failed post keeps both
+						// the reply selection clears only with the draft, so a failed post keeps both
 						const isPosted = await chatRoom.postChatMessage(content, replyToChatMessageId, attachments)
 						if (isPosted) {
 							reply.clear()
@@ -215,7 +208,7 @@ export function ChatRoomPanel({
 			{isClearChatOpen && (
 				<ClearChatDialog
 					onConfirm={async () => {
-						// the re-read empties the chat messages. the stream never announces a clear
+						// clear the chat room, then reload its chat messages. the stream never announces a clear
 						const isChatCleared = await sendClearChatRoom(topicId, teamId)
 						if (isChatCleared) {
 							await chatRoom.reloadChatMessages()
@@ -227,6 +220,23 @@ export function ChatRoomPanel({
 					{"This clears the whole conversation for every member of the team, and the attachment files are deleted too."}
 				</ClearChatDialog>
 			)}
-		</ChatPanelWidget>,
+		</ChatPanelWidget>
+	)
+}
+
+// why a post's files did not post, shown only to the poster
+const ATTACHMENT_REJECTION_TEXT = {
+	attachmentLimitReached: `That would pass the ${CHAT_ROOM_ATTACHMENT_LIMIT} files you can share in this chat room. Delete some to share more.`,
+	attachmentRejected: "Those files didn't post. One of them may be unreadable.",
+}
+
+/**
+ * Renders why a chat room post was rejected: the plans link for a spent budget, or why its files did not post.
+ */
+export function ChatRoomRejectionNotice({ rejection }: { rejection: ChatRoomRejection }) {
+	return rejection === "budget" ? (
+		<ChatBudgetNotice />
+	) : (
+		<p className="text-muted-foreground text-sm">{ATTACHMENT_REJECTION_TEXT[rejection]}</p>
 	)
 }

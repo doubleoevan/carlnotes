@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-# the app service image: the Hono api plus the built ui bundle, started under Doppler.
+# the app service image: the Hono api plus the ui's built browser files and server build, started under Doppler.
 # the litellm proxy is a separate service and builds from infra/litellm/Dockerfile, not this file.
 # Bun is pinned to the version the repo targets (@types/bun ^1.3.14) so the image and a developer's
 # local runtime cannot drift apart on a patch release
@@ -33,8 +33,8 @@ RUN bun run build:ui
 # dependencies, so the toolchain stays in this stage and only the built output is copied forward
 RUN bun run build:docs
 
-# the runtime carries only what serving a request needs: production dependencies, the modules Bun executes, and the built bundle.
-# the toolchain and every dev dependency stay behind in the build stage
+# the runtime includes only what serving a request needs: production dependencies, the modules Bun executes, and the
+# built ui and docs. the toolchain and every dev dependency stay behind in the build stage
 FROM oven/bun:1.3.14 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
@@ -52,7 +52,7 @@ COPY --from=dopplerhq/cli:3 /bin/doppler /bin/doppler
 COPY package.json bun.lock ./
 RUN bun install --frozen-lockfile --production
 
-# Bun runs the TypeScript directly, so the source is the artifact. each module carries its own tsconfig,
+# Bun runs the TypeScript directly, so the source is the artifact. each module has its own tsconfig,
 # and the root pair resolves the @shared alias the worker and api import across
 COPY tsconfig.base.json tsconfig.json ./
 COPY shared ./shared
@@ -64,7 +64,7 @@ COPY api ./api
 # the blog's markdown, which the api renders per request. the docs moved to the Starlight site above
 COPY content ./content
 
-# the ui bundle the app service serves alongside the api
+# the built ui: the browser files the api serves, and the server build the api renders pages through
 COPY --from=build /app/ui/dist ./ui/dist
 
 # the built docs site, served under /docs

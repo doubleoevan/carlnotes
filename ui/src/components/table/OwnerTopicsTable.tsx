@@ -1,5 +1,6 @@
 import type { ActivityScan, OwnerTopic } from "@shared/contracts"
 import { frequencies, isDailyFrequency } from "@shared/enums"
+import { toTopicPath } from "@shared/seo"
 import { ChevronDown, Globe, Lock, Mail } from "lucide-react"
 import { Fragment, useState } from "react"
 import { fetchScanNote, sendSubscriptionEmail } from "@/clients/topicClient"
@@ -226,7 +227,7 @@ export function OwnerTopicsTable({
 function TopicNameLink({ topic }: { topic: OwnerTopic }) {
 	return (
 		<span className="relative inline-block">
-			<AnchorLink href={`/topics/${topic.id}`} className="text-link hover:underline">
+			<AnchorLink href={toTopicPath(topic)} className="text-link hover:underline">
 				{topic.name}
 			</AnchorLink>
 			<PageUpdateCountBadge topicId={topic.id} />

@@ -126,7 +126,7 @@ export function TopicActionBar({
 					/>
 				)}
 			</div>
-			{/* the call to action: whoever may scan brews, an outsider joins the team that has it, a visitor follows,
+			{/* the call to action: whoever may scan brews, a non-member joins the team that has it, a visitor follows,
 			    and everyone else teams up.
 			    while the page loads, a skeleton holds the slot */}
 			<div className="flex items-start gap-2">

@@ -1,4 +1,5 @@
 // the one-click unsubscribe target for the topic-scan email
+import { toTopicPath } from "@shared/seo"
 import { and, eq } from "drizzle-orm"
 import { db } from "../db"
 import { subscriptions, topics } from "../db/schema"
@@ -39,7 +40,7 @@ export async function unsubscribe(unsubscribeToken: string | undefined): Promise
  */
 export function unsubscribedPage(topic: { id: string; name: string }, appUrl?: string): string {
 	// link straight to the topic so the user can still drop by for new notes
-	const topicUrl = appUrl ? `${appUrl.replace(/\/$/, "")}/topics/${topic.id}` : undefined
+	const topicUrl = appUrl ? `${appUrl.replace(/\/$/, "")}${toTopicPath(topic)}` : undefined
 	return renderPage(`
 		<h1>You're unsubscribed</h1>
 		<p>No more emails about <strong>${Bun.escapeHTML(topic.name)}</strong>. Carl will read quietly.</p>

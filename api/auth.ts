@@ -1,5 +1,6 @@
 // the app's Better Auth instance: email/password and Google/GitHub sign-in, sessions in Neon via the Drizzle adapter
 import { trackEvent } from "@shared/analytics"
+import { appBaseUrl } from "@shared/appUrl"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
 import { toCanonicalEmail } from "@shared/emails"
 import { reportError } from "@shared/monitoring"
@@ -150,7 +151,7 @@ export function reportForwardedChain(forwardedFor: string | null): void {
 // the oauth server plugin, minus its options property. `tsc -b` cannot name that property's type in auth's declaration
 const { options: _mcpOptions, ...mcpPlugin } = mcp({
 	loginPage: "/login",
-	resource: `${Bun.env.BETTER_AUTH_URL}/mcp`,
+	resource: `${appBaseUrl()}/mcp`,
 	oidcConfig: { loginPage: "/login", consentPage: "/mcp/consent" },
 })
 
@@ -368,7 +369,7 @@ async function sendResetPasswordEmail(email: string, url: string): Promise<void>
 		buttonLabel: "Reset your password",
 		url,
 		linkNote: "The link works once and expires in an hour.",
-		appUrl: Bun.env.BETTER_AUTH_URL,
+		appUrl: appBaseUrl(),
 	}
 	await sendEmail({
 		to: email,
@@ -387,7 +388,7 @@ async function sendChangeEmailConfirmationEmail(currentEmail: string, newEmail: 
 		buttonLabel: "Confirm the change",
 		url,
 		linkNote: "Nothing changes until you confirm.",
-		appUrl: Bun.env.BETTER_AUTH_URL,
+		appUrl: appBaseUrl(),
 	}
 	await sendEmail({
 		to: currentEmail,
@@ -405,7 +406,7 @@ async function sendVerificationEmail(email: string, url: string): Promise<void> 
 		lead: `Carl is ready to start reading for you. Confirm this address so he knows where to send what he finds. The link works for ${VERIFICATION_LINK_HOURS} hours.`,
 		buttonLabel: "Confirm your email",
 		url,
-		appUrl: Bun.env.BETTER_AUTH_URL,
+		appUrl: appBaseUrl(),
 	}
 	await sendEmail({
 		to: email,

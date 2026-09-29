@@ -1,4 +1,4 @@
-import { useLocation } from "react-router-dom"
+import { useLocation } from "@tanstack/react-router"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { DocsLink } from "@/components/layout/DocsLink"
 import { cn } from "@/lib/utils"
@@ -17,7 +17,7 @@ export function Footer() {
 
 // the copyright and license line, then the legal link row, each centered with a readable gap between items
 function FooterLegal() {
-	const { pathname } = useLocation()
+	const pathname = useLocation({ select: (location) => location.pathname })
 	return (
 		<div className="mt-3 space-y-1.5">
 			{/* the copyright, the license, and the raccoon line */}

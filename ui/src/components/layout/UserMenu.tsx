@@ -1,6 +1,6 @@
+import { useLocation } from "@tanstack/react-router"
 import { Activity, CircleUserRound, Columns3Cog, LogOut, ShieldUser, User, Users } from "lucide-react"
 import { useState } from "react"
-import { useLocation } from "react-router-dom"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { toUpdateLabel, UpdateCountBadge } from "@/components/common/UpdateCountBadge"
@@ -96,7 +96,7 @@ export function UserMenuItems({
 	const topicInviteBadges = useTopicInviteBadges()
 
 	// the open page's row shows the selected tint
-	const { pathname } = useLocation()
+	const pathname = useLocation({ select: (location) => location.pathname })
 	const optionClassName = (href: string): string =>
 		cn(MENU_OPTION_CLASS, pathname === href && MENU_OPTION_SELECTED_CLASS)
 	const isCurrentRoute = (href: string): "page" | undefined => (pathname === href ? "page" : undefined)

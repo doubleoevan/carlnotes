@@ -1,8 +1,8 @@
 import type { ActivityResponse } from "@shared/contracts"
+import { useNavigate } from "@tanstack/react-router"
 import { Activity, Plus } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useState } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
 import { fetchActivity } from "@/clients/activityClient"
 import { authClient } from "@/clients/authClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -15,6 +15,7 @@ import { TopicInvitesTable } from "@/components/table/TopicInvitesTable.tsx"
 import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTable"
 import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { usePageTitle } from "@/hooks/usePageTitle"
+import { useSearchParams } from "@/hooks/useSearchParams"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { useTopicInviteBadges } from "@/stores/topicInviteStore"
 
@@ -28,16 +29,16 @@ export function ActivityPage() {
 	const navigate = useNavigate()
 	const { data: session } = authClient.useSession()
 	const [activity, setActivity] = useState<ActivityResponse | null>(null)
-	// a load the api rejected or could not answer
+	// a load the api rejected or did not respond to
 	const [isLoadFailed, setIsLoadFailed] = useState(false)
 	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
 
-	// an admin may open another user's activity
-	const [searchParams] = useSearchParams()
+	// the user whose activity the page shows, the userId param's user or else the signed-in user
+	const searchParams = useSearchParams()
 	const viewedUserId = searchParams.get("userId") ?? undefined
 	const isOwnView = !viewedUserId || viewedUserId === session?.user.id
 
-	// load the target user's activity
+	// load the viewed user's activity
 	const reloadActivity = (): void => {
 		fetchActivity(viewedUserId)
 			.then(setActivity)
@@ -52,7 +53,7 @@ export function ActivityPage() {
 		setActivity(null)
 		setIsLoadFailed(false)
 		fetchActivity(viewedUserId)
-			.then((loaded) => isViewCurrent && setActivity(loaded))
+			.then((activityResponse) => isViewCurrent && setActivity(activityResponse))
 			.catch(() => isViewCurrent && setIsLoadFailed(true))
 		return () => {
 			isViewCurrent = false
@@ -62,11 +63,11 @@ export function ActivityPage() {
 	// a saved topic closes the modal and opens the topic it created
 	const handleTopicCreated = async (topicId: string): Promise<void> => {
 		setIsNewTopicOpen(false)
-		navigate(`/topics/${topicId}`)
+		navigate({ to: "/topics/$topicId", params: { topicId } })
 	}
 
 	if (!session) {
-		return <main className={PAGE_CLASS}>Please log in to see your activity.</main>
+		return null
 	}
 
 	return (
@@ -88,7 +89,7 @@ export function ActivityPage() {
 					</Button>
 				)}
 			</div>
-			{/* the target user's profile link */}
+			{/* the viewed user's profile link */}
 			{activity && <UserProfileLink user={activity.user} className="mt-2 text-sm" />}
 			{activity ? (
 				<ActivitySections activity={activity} isOwnView={isOwnView} onReload={reloadActivity} />

@@ -1,4 +1,4 @@
-// track what became of each finding reviewed finding a review looked at
+// track what became of each Resource a review looked at
 
 // the reasons a Resource is filtered out
 export type FilterReason =
@@ -8,8 +8,15 @@ export type FilterReason =
 	| "flagged by scanner"
 	| "no text to score"
 
-// a kept resource finding's details, collected for the scan report
-export type KeptFinding = { title: string | null; url: string; relevanceScore: number; relevanceExplanation: string }
+// a finding the review kept, with its resource's title and url
+export type KeptFinding = {
+	title: string | null
+	url: string
+	relevanceScore: number
+	relevanceExplanation: string
+	// whether this scan added the finding to the topic
+	isNew: boolean
+}
 
 // the outcome of one Resource's pipeline. whether it was kept, filtered out, deferred by the spend limit, or failed
 export type ResourceOutcome =
@@ -27,8 +34,18 @@ export type ReviewOutcome = {
 }
 
 // the summary returned to the scan by the review
-// biome-ignore format: one line keeps the type under the comment-density hook's limit
-export type ReviewSummary = { keptCount: number; filteredCount: number; scanSummary: string; resourceIdsToScore: string[]; scoredResourceIds: string[] }
+export type ReviewSummary = {
+	// how many findings the review kept, and how many resources it filtered out
+	keptCount: number
+	filteredCount: number
+	// how many findings this scan added and kept, plus how many existing findings the topic's limit filtered out
+	addedOrFilteredFindingCount: number
+	// Carl's summary of the scan, or an empty string if there is none
+	scanSummary: string
+	// the resources the review sent to scoring, and the ones it scored
+	resourceIdsToScore: string[]
+	scoredResourceIds: string[]
+}
 
 /**
  * Fold one Resource's outcome into the running totals.
@@ -61,6 +78,29 @@ export function countFilteredResources(reviewOutcome: ReviewOutcome): number {
 	return Object.values(reviewOutcome.filteredCounts).reduce((sum, count) => sum + count, 0)
 }
 
+// the finding counts a review reads around the filter on the topic's findings
+type CountAddedOrFilteredFindingsOptions = {
+	// the findings this scan added, before and after the filter
+	newFindingCount: number
+	keptNewFindingCount: number
+	// every finding the filter removed, new or existing
+	filteredFindingCount: number
+}
+
+/**
+ * Counts the Findings a Scan added and kept, plus the existing Findings it filtered out.
+ */
+export function countAddedOrFilteredFindings({
+	newFindingCount,
+	keptNewFindingCount,
+	filteredFindingCount,
+}: CountAddedOrFilteredFindingsOptions): number {
+	// leave out the findings this scan added and then filtered out. those findings never show on the topic page
+	const filteredNewFindingCount = newFindingCount - keptNewFindingCount
+	const filteredExistingFindingCount = Math.max(0, filteredFindingCount - filteredNewFindingCount)
+	return keptNewFindingCount + filteredExistingFindingCount
+}
+
 /**
  * A fresh zeroed review outcome to track outcomes into.
  */
@@ -84,5 +124,12 @@ export function emptyReviewOutcome(): ReviewOutcome {
  * The summary a Scan that reviewed nothing records
  */
 export function emptyReviewSummary(): ReviewSummary {
-	return { keptCount: 0, filteredCount: 0, scanSummary: "", resourceIdsToScore: [], scoredResourceIds: [] }
+	return {
+		keptCount: 0,
+		filteredCount: 0,
+		addedOrFilteredFindingCount: 0,
+		scanSummary: "",
+		resourceIdsToScore: [],
+		scoredResourceIds: [],
+	}
 }

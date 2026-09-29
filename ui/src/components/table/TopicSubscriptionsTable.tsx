@@ -1,4 +1,5 @@
 import type { ActivityResponse } from "@shared/contracts"
+import { toTopicPath } from "@shared/seo"
 import { X } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -134,7 +135,10 @@ export function TopicSubscriptionsTable({
 								<td className="py-2 pr-4">
 									{/* the badge sits on the name's corner, the way it does in every other topic table */}
 									<span className="relative inline-block">
-										<AnchorLink href={`/topics/${subscriptionRow.topicId}`} className="text-link hover:underline">
+										<AnchorLink
+											href={toTopicPath({ id: subscriptionRow.topicId, name: subscriptionRow.name })}
+											className="text-link hover:underline"
+										>
 											{subscriptionRow.name}
 										</AnchorLink>
 										<PageUpdateCountBadge topicId={subscriptionRow.topicId} />
@@ -189,7 +193,10 @@ export function TopicSubscriptionsTable({
 					onClose={() => setSubscriptionToDelete(null)}
 				>
 					{subscriptionToDelete.inviteId ? "Your invitation to " : "Your subscription to "}
-					<AnchorLink href={`/topics/${subscriptionToDelete.topicId}`} className="text-link hover:underline">
+					<AnchorLink
+						href={toTopicPath({ id: subscriptionToDelete.topicId, name: subscriptionToDelete.name })}
+						className="text-link hover:underline"
+					>
 						{subscriptionToDelete.name}
 					</AnchorLink>
 					{subscriptionToDelete.inviteId ? " goes away, and whoever sent it is not told." : " gets removed for good."}

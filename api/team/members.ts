@@ -19,7 +19,7 @@ import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
- * The user's role on a team, or null for an outsider. The one team authority answer routes build on.
+ * The user's role on a team, or null for a non-member. The one team authority answer routes build on.
  */
 export async function toTeamRole(userId: string | null, teamId: string): Promise<"leader" | "member" | null> {
 	// a signed-out user is not a team member

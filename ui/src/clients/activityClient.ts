@@ -1,10 +1,6 @@
-// the typed api client for the activity routes. AppType is imported types-only, so no api code enters the ui bundle
+// the typed api client for the activity routes
 import type { ActivityResponse, TopicInviteBadge } from "@shared/contracts"
-import { hc } from "hono/client"
-import type { AppType } from "../../../api"
-
-// same-origin api client, like topicClient. in dev vite forwards /api to the Hono server
-const apiClient = hc<AppType>(window.location.origin)
+import { apiClient } from "./apiClient"
 
 // the activity payload: monthly spend against budget, owned topics, subscriptions, and sent invitations
 export async function fetchActivity(userId?: string): Promise<ActivityResponse> {

@@ -1,4 +1,5 @@
 // the invitation emails for both targets
+import { appBaseUrl } from "@shared/appUrl"
 import { reportError } from "@shared/monitoring"
 import { and, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
@@ -29,7 +30,7 @@ async function sendTopicInviteEmails(
 	inviteEmails: string[],
 ): Promise<void> {
 	// skip if there are no emails to send, or with no app url there is no link to invite anyone to
-	const appUrl = Bun.env.BETTER_AUTH_URL?.replace(/\/$/, "")
+	const appUrl = appBaseUrl()
 	if (inviteEmails.length === 0 || !appUrl) {
 		return
 	}
@@ -99,7 +100,7 @@ async function sendUserInviteEmail(
 	token: string,
 ): Promise<void> {
 	// with no app url there is no link to invite anyone to
-	const appUrl = Bun.env.BETTER_AUTH_URL?.replace(/\/$/, "")
+	const appUrl = appBaseUrl()
 	if (!appUrl) {
 		return
 	}

@@ -60,6 +60,8 @@ export function TopicInfo(props: TopicInfoProps) {
 	const { topic } = props
 	// the topic scan's ranked topic findings list with the content offered to copy to the clipboard as Markdown for AI
 	const topicFindings = topic.findings.length > 0 ? <NumberedTopicFindingList findings={topic.findings} /> : null
+	// the latest scan's recap, empty if the scan wrote none
+	const scanNote = topic.scanSummary ?? ""
 	const notesMarkdown = toNotesMarkdown({
 		topicId: topic.id,
 		topicName: topic.name,
@@ -99,15 +101,16 @@ export function TopicInfo(props: TopicInfoProps) {
 				</InfoSection>
 
 				{/* recap of the latest scan through the sanitized subset, citing only the kept findings' own urls,
-				    with the numbered findings below it. the card clips with Read more up to a max height that scrolls */}
-				{topic.scanSummary && (
+				    with the numbered findings below it. a scan with an empty recap still lists the findings.
+				    the card clips with Read more up to a max height that scrolls */}
+				{(scanNote || topicFindings) && (
 					<InfoSection label={topic.findings.length > 0 ? `Carl's Top ${topic.findings.length}` : "Carl's Notes"}>
 						{props.isCard ? (
-							<TopicScanNote note={topic.scanSummary} allowedUrls={toFindingUrls(topic)} copyMarkdown={notesMarkdown}>
+							<TopicScanNote note={scanNote} allowedUrls={toFindingUrls(topic)} copyMarkdown={notesMarkdown}>
 								{topicFindings}
 							</TopicScanNote>
 						) : (
-							<ScrollNote note={topic.scanSummary} allowedUrls={toFindingUrls(topic)} copyMarkdown={notesMarkdown}>
+							<ScrollNote note={scanNote} allowedUrls={toFindingUrls(topic)} copyMarkdown={notesMarkdown}>
 								{topicFindings}
 							</ScrollNote>
 						)}

@@ -23,11 +23,8 @@ import { loadTopicChatMentions } from "../chat/mentions"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
 import { toScheduledTimeLabel } from "./helpers"
-import { isShown } from "./permissions"
+import { isPublicAndShown } from "./permissions"
 import { startOfUtcMonth } from "./quotas"
-
-// the most topics the Popular section shows
-const MAX_POPULAR_TOPICS = 5
 
 // the most findings the feed query pulls per topic
 // ponytail: a user who consumed a topic's top 25 findings sees an empty card in the default view, raise this if that shows up
@@ -59,21 +56,19 @@ async function publicSectionTopicIds(): Promise<{ featuredIds: string[]; popular
 	if (topicSectionIdCache && Date.now() - topicSectionIdCache.loadedAt < SECTION_ID_CACHE_TTL_MS) {
 		return topicSectionIdCache.value
 	}
-	// isShown keeps a topic out of the public sections until it has enough findings
-	const publicShownFilter = and(eq(topics.visibility, "public"), isShown)
-	// featured topics keep their feature order. popular topics rank by subscriber count, newer breaking a tie
+	// featured topics keep their feature order. every other shown public topic is popular, ranked by subscriber count,
+	// newer breaking a tie
 	const [featuredTopicIds, popularTopicIds] = await Promise.all([
 		db
 			.select({ id: topics.id })
 			.from(topics)
-			.where(and(publicShownFilter, isNotNull(topics.featureOrder)))
+			.where(and(isPublicAndShown, isNotNull(topics.featureOrder)))
 			.orderBy(asc(topics.featureOrder)),
 		db
 			.select({ id: topics.id })
 			.from(topics)
-			.where(and(publicShownFilter, isNull(topics.featureOrder)))
-			.orderBy(desc(topics.subscriberCount), desc(topics.createdAt))
-			.limit(MAX_POPULAR_TOPICS),
+			.where(and(isPublicAndShown, isNull(topics.featureOrder)))
+			.orderBy(desc(topics.subscriberCount), desc(topics.createdAt)),
 	])
 	// store the fresh lists with their load time
 	topicSectionIdCache = {

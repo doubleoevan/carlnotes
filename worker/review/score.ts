@@ -2,7 +2,7 @@
 import { reportError } from "@shared/monitoring"
 import { toUrlHost } from "@shared/sources"
 import { generateText, type LanguageModel, Output } from "ai"
-import { eq } from "drizzle-orm"
+import { eq, sql } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "../../db"
 import { findings, resources, type scans } from "../../db/schema"
@@ -146,14 +146,14 @@ async function fetchAndScoreResource(
 
 		// score the scanner's text, not the original, so any personal details it redacted never reach a model
 		const scoredResource = await scoreResource(screenVerdict.text, topicContext.text, budget, litellmApiKey)
-		await upsertFinding(
+		const isFindingNew = await upsertFinding({
 			scan,
 			topicId,
 			resource,
-			scoredResource.score,
-			scoredResource.relevanceExplanation,
-			topicContext.contextHash,
-		)
+			score: scoredResource.score,
+			relevanceExplanation: scoredResource.relevanceExplanation,
+			topicContextHash: topicContext.contextHash,
+		})
 
 		// the kept outcome includes the feed-facing details that the report cites
 		const keptFinding = {
@@ -162,6 +162,7 @@ async function fetchAndScoreResource(
 			// the score and note come from the tiered scoring call
 			relevanceScore: scoredResource.score,
 			relevanceExplanation: scoredResource.relevanceExplanation,
+			isNew: isFindingNew,
 		}
 		return { status: "kept", finding: keptFinding }
 	} catch (error) {
@@ -380,15 +381,25 @@ export function toFindingReviewFields(review: {
 	}
 }
 
-// upsert one finding per topic and resource. re-scoring updates the existing row instead of adding another
-async function upsertFinding(
-	scan: Scan,
-	topicId: string,
-	resource: Resource,
-	score: number,
-	relevanceExplanation: string,
-	topicContextHash: string,
-): Promise<void> {
+// the scan, topic, and resource a finding belongs to, and the review it records
+type UpsertFindingOptions = {
+	scan: Scan
+	topicId: string
+	resource: Resource
+	score: number
+	relevanceExplanation: string
+	topicContextHash: string
+}
+
+// upsert one finding per topic and resource, and return whether the finding is new to the topic
+async function upsertFinding({
+	scan,
+	topicId,
+	resource,
+	score,
+	relevanceExplanation,
+	topicContextHash,
+}: UpsertFindingOptions): Promise<boolean> {
 	// build the whole of what a re-score may change
 	const review = toFindingReviewFields({
 		scanId: scan.id,
@@ -398,8 +409,8 @@ async function upsertFinding(
 		contentHash: resource.contentHash,
 	})
 
-	// insert the topic finding
-	await db
+	// upsert the topic finding. postgres returns xmax as zero for an inserted row and non-zero for an updated row
+	const [findingRow] = await db
 		.insert(findings)
 		// the finding includes the relevance score and explanation, plus the scan that produced them
 		.values({ topicId, resourceId: resource.id, ...review })
@@ -408,6 +419,8 @@ async function upsertFinding(
 			target: [findings.topicId, findings.resourceId],
 			set: review,
 		})
+		.returning({ isNew: sql<boolean>`(xmax = 0)` })
+	return findingRow?.isNew ?? false
 }
 
 /**

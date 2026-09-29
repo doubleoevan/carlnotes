@@ -1,7 +1,7 @@
 import type { TeamPageResponse } from "@shared/contracts"
+import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Pencil, Plus, Share2, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 import { authClient } from "@/clients/authClient"
 import type { TeamPageResult } from "@/clients/teamClient"
@@ -28,6 +28,7 @@ import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { refreshAvatars } from "@/hooks/useAvatarVersion"
+import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { toCountLabel } from "@/lib/labels"
 import { PAGE_CLASS } from "@/lib/styleClasses"
@@ -48,7 +49,7 @@ function toTeamChatContext(viewedTeam: TeamPageResponse | null): ChatPageContext
 					hasRequestedToJoin: viewedTeam.hasRequestedToJoin,
 				}
 			: null
-	// naming the team marks its own chat room and its topics' chat rooms, which all carry its team id
+	// naming the team marks its own chat room and its topics' chat rooms, which all have its team id
 	return {
 		topicId: null,
 		teamId: viewedTeam.teamId,
@@ -61,14 +62,18 @@ function toTeamChatContext(viewedTeam: TeamPageResponse | null): ChatPageContext
 // which of the team page's modals is open
 type TeamDialog = "edit" | "new-topic" | "invite"
 
+// the team route, whose loader reads the team on the server
+const teamRoute = getRouteApi("/_layout/teams/$teamId")
+
 /**
  * The team page: the profile template pointed at a team. The members, the profile page's topic
  * table, and for a leader the membership, attachment, and visibility controls.
  */
 export function TeamPage() {
-	const { teamId } = useParams()
+	const { teamId } = teamRoute.useParams()
 	const { data: session } = authClient.useSession()
-	const [teamResult, setTeamResult] = useState<TeamPageResult | undefined>(undefined)
+	// the team page result, and its reload after a change
+	const { teamResult, reloadTeam } = useTeamPageResult(teamId)
 	const [isConfirmingDelete, setIsConfirmingDelete] = useState(false)
 	const navigate = useNavigate()
 	// the one modal on screen, or null when none is open
@@ -78,7 +83,7 @@ export function TeamPage() {
 	const [isSharing, setIsSharing] = useState(false)
 	usePageTitle(teamResult?.status === "visible" ? teamResult.team.name : null)
 
-	// the search bar's menu includes this page's rows while the team is on screen
+	// the search bar's menu includes this page's options while the team is on screen
 	const viewedTeam = teamResult?.status === "visible" ? teamResult.team : null
 	useRegisterPageActions(
 		viewedTeam && session
@@ -102,14 +107,6 @@ export function TeamPage() {
 	useRegisterChatContext(toTeamChatContext(viewedTeam))
 	// the topics the user may bring, offered beside the team's in the edit modal's combobox
 	const [addableTopics, setAddableTopics] = useState<{ id: string; name: string }[]>([])
-
-	// fetch the team page result, which says whether the team is visible, gated to this user, or missing
-	const reloadTeam = useCallback((): void => {
-		fetchTeamPage(teamId ?? "")
-			.then(setTeamResult)
-			.catch(() => setTeamResult({ status: "missing" }))
-	}, [teamId])
-	useEffect(() => reloadTeam(), [reloadTeam])
 
 	// a leader's first visit to a team with no topics opens the edit team dialog
 	const openEditTeamDialog = useCallback((team: TeamPageResponse, teamDialog: TeamDialog): void => {
@@ -150,10 +147,10 @@ export function TeamPage() {
 			<main className={PAGE_CLASS}>
 				<TeamSkeleton teamName={teamResult.teamName} />
 				<TeamGateNotice
-					teamId={teamId ?? ""}
+					teamId={teamId}
 					teamName={teamResult.teamName}
 					isSignedIn={Boolean(session)}
-					hasRequested={teamResult.hasRequestedToJoin}
+					hasRequestedToJoin={teamResult.hasRequestedToJoin}
 					onChanged={reloadTeam}
 				/>
 			</main>
@@ -181,7 +178,7 @@ export function TeamPage() {
 		} else {
 			toast(`Deleted ${teamPage.name}.`)
 		}
-		navigate("/teams")
+		void navigate({ to: "/teams" })
 	}
 
 	return (
@@ -227,7 +224,7 @@ export function TeamPage() {
 				onChanged={reloadTeam}
 				onNewTopicSaved={(topicId) => {
 					setOpenDialog(null)
-					navigate(`/topics/${topicId}`)
+					navigate({ to: "/topics/$topicId", params: { topicId } })
 				}}
 			/>
 			{isConfirmingDelete && (
@@ -243,6 +240,29 @@ export function TeamPage() {
 			)}
 		</main>
 	)
+}
+
+// the team page result, seeded by the server's read, and its reload
+function useTeamPageResult(teamId: string): {
+	teamResult: TeamPageResult | undefined
+	reloadTeam: () => void
+} {
+	// the team page result the route loads on the server, or undefined after a browser navigation
+	const loadedTeamResult = teamRoute.useLoaderData({ select: (loaderData) => loaderData?.teamResult ?? undefined })
+	const [teamResult, setTeamResult] = useState<TeamPageResult | undefined>(loadedTeamResult)
+
+	// fetch the team page result, which says whether the team is visible, gated to this user, or missing
+	const reloadTeam = useCallback((): void => {
+		fetchTeamPage(teamId)
+			.then(setTeamResult)
+			.catch(() => setTeamResult({ status: "missing" }))
+	}, [teamId])
+
+	// load the team on mount and on a move to another team, except when hydrating a visible or gated team the server
+	// rendered. a server read that failed or came back missing still loads
+	const isLoadedOnServer = loadedTeamResult?.status === "visible" || loadedTeamResult?.status === "gated"
+	useLoadInBrowser({ pageId: teamId, isLoadedOnServer, loadPage: reloadTeam })
+	return { teamResult, reloadTeam }
 }
 
 // the dialogs the header opens, each mounted only while open, so its state resets every time
@@ -334,7 +354,7 @@ function TeamTopicsSection({
 	onChanged,
 }: {
 	teamPage: TeamPageResponse
-	// the user's topics this team does not hold yet, offered before the create modal
+	// the user's topics not on this team yet, offered before the create modal
 	addableTopics: { id: string; name: string }[]
 	onNewTopicOpen: () => void
 	onChanged: () => void
@@ -399,18 +419,18 @@ function TeamGateNotice({
 	teamId,
 	teamName,
 	isSignedIn,
-	hasRequested,
+	hasRequestedToJoin,
 	onChanged,
 }: {
 	teamId: string
 	teamName: string
 	isSignedIn: boolean
-	hasRequested: boolean
+	hasRequestedToJoin: boolean
 	onChanged: () => void
 }) {
 	const navigate = useNavigate()
 	return (
-		<Dialog open onOpenChange={() => navigate("/")}>
+		<Dialog open onOpenChange={() => navigate({ to: "/" })}>
 			{/* the gate's own actions are the only ways out, so there is no ✕ */}
 			<DialogContent className="sm:max-w-md" hideCloseButton>
 				<DialogTitle>This team is invite-only</DialogTitle>
@@ -424,7 +444,7 @@ function TeamGateNotice({
 						<JoinTeamButton
 							teamId={teamId}
 							teamName={teamName}
-							hasJoinRequest={hasRequested}
+							hasJoinRequest={hasRequestedToJoin}
 							isSignedIn
 							onChangeRequest={onChanged}
 						/>
@@ -434,7 +454,7 @@ function TeamGateNotice({
 							Sign up
 						</AnchorLink>
 					)}
-					<Button variant="outline" onClick={() => navigate("/")}>
+					<Button variant="outline" onClick={() => navigate({ to: "/" })}>
 						Back to topics
 					</Button>
 				</DialogFooter>
@@ -480,7 +500,7 @@ function TeamHeaderAvatar({
 // the decorative rows the gated page draws where its tables would be
 const TEAM_SKELETON_ROWS = ["members", "topics", "footer"]
 
-// the identity header: the avatar, the name, and an outsider's join control
+// the identity header: the avatar, the name, and a non-member's join control
 function TeamHeader({
 	teamPage,
 	isSignedIn,

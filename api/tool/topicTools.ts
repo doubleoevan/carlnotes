@@ -28,7 +28,7 @@ import {
 	toPodcastNames,
 } from "../topic/helpers"
 import { type PromptVersionOrigin, savePromptVersion } from "../topic/promptVersions"
-import { createTopic } from "../topic/topics"
+import { createTopic, notifyIndexNowOfTopicChange } from "../topic/topics"
 
 // how many recent succeeded scans the mean scan cost averages over
 const COST_AVERAGE_SCAN_COUNT = 5
@@ -149,8 +149,17 @@ export async function updateTopicFields({
 			await releaseFeatureOrder(topicId, transaction)
 		}
 	})
+	// tell IndexNow if the edit made the topic public or changed its url
+	const savedTopic = {
+		id: topicId,
+		name: topicFields.name ?? editableTopic.topic.name,
+		visibility: topicFields.visibility ?? editableTopic.topic.visibility,
+	}
+	notifyIndexNowOfTopicChange({ savedTopic, previousTopic: editableTopic.topic })
+
+	// track the edit and return the saved name
 	trackEvent("topic_edited", editableTopic.userId, { topicId, tool: "updateTopicFields", origin: promptVersionOrigin })
-	return { status: "saved", topicName: topicFields.name ?? editableTopic.topic.name }
+	return { status: "saved", topicName: savedTopic.name }
 }
 
 /**

@@ -2,7 +2,10 @@
 
 What every module may import, and the reason the boundary holds: `contracts.ts` is the zod request
 and response shapes the api validates with and the ui parses against, `enums.ts` and `plans.ts` hold
-the values both sides compare, and `sources.ts` defines the Sources an ingester reads.
+the values both sides compare, `sources.ts` defines the Sources an ingester reads, `seo.ts` builds topic
+slugs and paths, meta descriptions, and the site's structured data, and `appUrl.ts` reads the app's base url
+from `BETTER_AUTH_URL` for server code: `appUrl()` falls back to the local dev server, and `appBaseUrl()` is
+undefined when unset, for the emails and notifications that skip without a link.
 
 - This module imports nothing app-level. It may not reach into `ui`, `api`, `worker`, or `db`, which
   is what lets all four depend on it.

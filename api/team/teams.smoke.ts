@@ -7,6 +7,7 @@ import { subscriptions, teamMembers, teams, teamTopics, topicEmailSends, topics,
 import { isLeaderRole } from "../authorization"
 import { canSeeTopic, toTopicRole } from "../topic/permissions"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
+import { loadTeamPage } from "./helpers"
 import {
 	approveJoinTeamRequest,
 	deleteJoinTeamRequest,
@@ -34,7 +35,7 @@ const personNames = [
 	"joiner",
 	"member",
 	"hold-leader",
-	"outsider",
+	"non-member",
 	"leader-a",
 	"leader-b",
 	"other-leader",
@@ -321,33 +322,33 @@ async function checkTopicRoleMatrix(): Promise<void> {
 	check((await toTopicRole(toId("owner"), ownedTopic)) === "owner", "the owner outranks their team membership")
 	check((await toTopicRole(toId("hold-leader"), ownedTopic)) === "leader", "a leader of the owning team answers leader")
 	check((await toTopicRole(toId("member"), sharedTopic)) === "member", "a member of a shared-in team answers member")
-	check((await toTopicRole(toId("outsider"), ownedTopic)) === null, "a non-member answers null")
+	check((await toTopicRole(toId("non-member"), ownedTopic)) === null, "a non-member answers null")
 
-	// the private team topic opens to a member and stays closed to an outsider
+	// the private team topic opens to a member and stays closed to a non-member
 	check(await canSeeTopic(toId("member"), ownedTopic), "a member sees the private team topic")
-	check((await canSeeTopic(toId("outsider"), ownedTopic)) === false, "an outsider never sees it")
+	check((await canSeeTopic(toId("non-member"), ownedTopic)) === false, "a non-member never sees it")
 }
 
 // 10
 async function checkJoinRequests(): Promise<void> {
 	console.log("\n=== 10. join requests ===")
 	// the ask writes the inactive row, and the requester still holds no topic role
-	check(await requestToJoinTeam(toId("outsider"), toId("team-hold")), "requestToJoinTeam answers true")
-	const requestRow = await loadMembership(toId("outsider"), toId("team-hold"))
+	check(await requestToJoinTeam(toId("non-member"), toId("team-hold")), "requestToJoinTeam answers true")
+	const requestRow = await loadMembership(toId("non-member"), toId("team-hold"))
 	check(requestRow?.isActive === false, "the request row is a member that is not active")
 	check(
-		(await toTopicRole(toId("outsider"), await loadTopic(toId("topic-owned")))) === null,
+		(await toTopicRole(toId("non-member"), await loadTopic(toId("topic-owned")))) === null,
 		"the request grants nothing",
 	)
 
 	// taking it back deletes the row, and a fresh ask writes it again
-	await deleteJoinTeamRequest(toId("outsider"), toId("team-hold"))
-	check((await loadMembership(toId("outsider"), toId("team-hold"))) === undefined, "the withdrawn request is gone")
-	check(await requestToJoinTeam(toId("outsider"), toId("team-hold")), "a fresh ask writes the row again")
+	await deleteJoinTeamRequest(toId("non-member"), toId("team-hold"))
+	check((await loadMembership(toId("non-member"), toId("team-hold"))) === undefined, "the withdrawn request is gone")
+	check(await requestToJoinTeam(toId("non-member"), toId("team-hold")), "a fresh ask writes the row again")
 
 	// only a leader admits, and never someone who did not ask
 	check(
-		(await approveJoinTeamRequest(toId("member"), toId("team-hold"), toId("outsider"))) === "forbidden",
+		(await approveJoinTeamRequest(toId("member"), toId("team-hold"), toId("non-member"))) === "forbidden",
 		"a member cannot admit",
 	)
 	check(
@@ -357,16 +358,62 @@ async function checkJoinRequests(): Promise<void> {
 
 	// the leader's admission activates the row and writes the subscriptions with email off a join gets
 	check(
-		(await approveJoinTeamRequest(toId("hold-leader"), toId("team-hold"), toId("outsider"))) === "joined",
+		(await approveJoinTeamRequest(toId("hold-leader"), toId("team-hold"), toId("non-member"))) === "joined",
 		"the leader admits the requester",
 	)
-	const admittedRow = await loadMembership(toId("outsider"), toId("team-hold"))
+	const admittedRow = await loadMembership(toId("non-member"), toId("team-hold"))
 	check(admittedRow?.isActive === true, "the admitted row is active")
-	const subscription = await loadSubscription(toId("outsider"), toId("topic-owned"))
+	const subscription = await loadSubscription(toId("non-member"), toId("topic-owned"))
 	check(
 		subscription?.isActive === true && subscription.isEmailEnabled === false,
 		"the admission wrote the subscription with email off",
 	)
+}
+
+// 11. a private team's page shows its gate to anyone who may not see it, and the whole page to a member
+async function checkTeamPageGate(): Promise<void> {
+	console.log("\n=== 11. team page gate ===")
+	// the seeded private team, and the name its gate shows
+	const teamId = toId("team-roles")
+	const teamName = `smoke team-roles ${runId}`
+
+	// a signed-out visitor and a non-member get the gate, with no join request
+	const visitorResult = await loadTeamPage(null, teamId)
+	check(
+		visitorResult.status === "gated" && visitorResult.teamName === teamName && !visitorResult.hasRequestedToJoin,
+		"a signed-out visitor gets the gate with the team's name",
+	)
+	const nonMemberResult = await loadTeamPage(toId("joiner"), teamId)
+	check(nonMemberResult.status === "gated" && !nonMemberResult.hasRequestedToJoin, "a non-member gets the gate")
+
+	// a non-member who asked to join sees the request on the gate
+	check(await requestToJoinTeam(toId("joiner"), teamId), "the non-member asks to join")
+	const requesterResult = await loadTeamPage(toId("joiner"), teamId)
+	check(
+		requesterResult.status === "gated" && requesterResult.hasRequestedToJoin,
+		"the gate shows the non-member's pending request",
+	)
+
+	// a member gets the whole page, and an unknown team id is missing
+	const teamMemberResult = await loadTeamPage(toId("leader-b"), teamId)
+	check(
+		teamMemberResult.status === "visible" && teamMemberResult.team.name === teamName,
+		"a member gets the whole page",
+	)
+	check((await loadTeamPage(null, toId("no-such-team"))).status === "missing", "an unknown id is missing")
+
+	// the route returns the gate to a signed-out visitor as a 403 with the team's name and no join request
+	const server = (await import("../index")).default
+	const gateResponse = await server.fetch(new Request(`http://localhost:3000/api/teams/${teamId}/page`))
+	const gateBody = (await gateResponse.json()) as { teamName?: string; hasRequestedToJoin?: boolean }
+	check(
+		gateResponse.status === 403 && gateBody.teamName === teamName && gateBody.hasRequestedToJoin === false,
+		"the page route returns the gate as a 403 with the team's name",
+	)
+
+	// a public team's page is whole for a signed-out visitor
+	await db.update(teams).set({ isPublic: true }).where(eq(teams.id, teamId))
+	check((await loadTeamPage(null, teamId)).status === "visible", "a public team's page is whole for a visitor")
 }
 
 // log a passing check, or throw an error so the run stops loudly at the first wrong answer
@@ -447,6 +494,8 @@ async function smokeTest(): Promise<number> {
 		await checkRemoveDeactivation()
 		await checkTopicRoleMatrix()
 		await checkJoinRequests()
+		// the team page and the gate a private team shows a non-member
+		await checkTeamPageGate()
 		// every check passed
 		console.log("\n=== smoke PASSED ===")
 		return 0

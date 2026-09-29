@@ -1,11 +1,11 @@
+import { useNavigate } from "@tanstack/react-router"
 import { lazy, Suspense, useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { authClient } from "@/clients/authClient"
 import type { ChatPage } from "@/clients/chatClient"
 import { ChatBudgetNotice } from "@/components/chat/ChatBudgetNotice"
 import { CHAT_QUESTION_PLACEHOLDER, ChatComposer } from "@/components/chat/ChatComposer"
 import type { ChatRoomOption } from "@/components/chat/ChatOptionsMenu"
-import { ChatMessagesLoading, ChatPanelHeader, ChatPanelWidget, renderOnTop } from "@/components/chat/ChatPanelWidget"
+import { ChatMessagesLoading, ChatPanelWidget } from "@/components/chat/ChatPanelWidget"
 import { DisabledRoomComposer } from "@/components/chat/ChatRoomComposer"
 import { ChatTopicLimitNotice } from "@/components/chat/ChatTopicLimitNotice"
 import { ClearChatDialog } from "@/components/chat/ClearChatDialog"
@@ -99,7 +99,7 @@ export function PrivateChatPanel({
 	chatName: string
 	// how much of the screen the panel takes, owned by the shell so it survives a chat room switch
 	panelState: Exclude<ChatPanelState, "collapsed">
-	onPanelState: (next: ChatPanelState) => void
+	onPanelState: (nextPanelState: ChatPanelState) => void
 	// the chat rooms the menu offers beside this conversation
 	chatRoomOptions?: ChatRoomOption[]
 	// re-reads the chat room list when the options menu opens
@@ -114,8 +114,8 @@ export function PrivateChatPanel({
 	// the user authors every question bubble
 	const { data: session } = authClient.useSession()
 
-	// a visitor navigates to the signup on send
-	const handleSendChat = chat.isSignupRequired ? () => navigate("/signup") : chat.send
+	// a visitor's send opens the signup page, tagged as a signup from the chat
+	const handleSendChat = chat.isSignupRequired ? () => navigate({ to: "/signup", search: { cta: "chat" } }) : chat.send
 
 	// a user with no way forward gets no panel, but a logged-out visitor or a user with an exhausted budget still
 	if (chat.isLoaded && !chat.canChat && !chat.isSignupRequired && !chat.isBudgetExhausted) {
@@ -128,22 +128,20 @@ export function PrivateChatPanel({
 	// "open" and "enlarged" render the same panel, sized by the flag
 	const isPanelEnlarged = panelState === "enlarged"
 	const isClearable = (chat.canChat || chat.isBudgetExhausted) && chat.chatTurns.length > 0
-	return renderOnTop(
-		<ChatPanelWidget isEnlarged={isPanelEnlarged} onMinimizeChat={() => onPanelState("collapsed")}>
-			<ChatPanelHeader
-				isEnlarged={isPanelEnlarged}
-				onToggleSize={() => onPanelState(isPanelEnlarged ? "open" : "enlarged")}
-				onCollapse={() => onPanelState("collapsed")}
-				currentChatRoom={{ name: chatCopy.headerName, isPrivate: true }}
-				chatRoomMenu={{
-					chatRoomOptions,
-					onOpenChatRoomMenu,
-					onNewTopicChat,
-					onClear: isClearable ? () => setIsClearConfirmOpen(true) : undefined,
-					clearLabel: "Clear private chat",
-				}}
-			/>
-			{/* the frame stays on screen while the conversation loads, so opening the panel pours into it */}
+	return (
+		<ChatPanelWidget
+			isEnlarged={isPanelEnlarged}
+			onPanelState={onPanelState}
+			currentChatRoom={{ name: chatCopy.headerName, isPrivate: true }}
+			chatRoomMenu={{
+				chatRoomOptions,
+				onOpenChatRoomMenu,
+				onNewTopicChat,
+				onClear: isClearable ? () => setIsClearConfirmOpen(true) : undefined,
+				clearLabel: "Clear private chat",
+			}}
+		>
+			{/* the chat messages, or the loading message while the conversation loads */}
 			{chat.isLoaded ? (
 				<Suspense fallback={<ChatMessagesLoading />}>
 					<ChatMessages
@@ -164,7 +162,7 @@ export function PrivateChatPanel({
 			) : (
 				<ChatMessagesLoading />
 			)}
-			{/* carl's draft above the composer, or the plan's limit when it holds no more topics */}
+			{/* carl's topic draft above the composer, or the topic limit notice if the plan has no topics left */}
 			{page.newTopic && <TopicDraftOrLimitNotice chat={chat} />}
 			{/* the topic this chat may edit, as it is saved or as carl proposed changing it */}
 			{chat.editableTopicDraft && (
@@ -183,6 +181,6 @@ export function PrivateChatPanel({
 					{chatCopy.clearNote}
 				</ClearChatDialog>
 			)}
-		</ChatPanelWidget>,
+		</ChatPanelWidget>
 	)
 }

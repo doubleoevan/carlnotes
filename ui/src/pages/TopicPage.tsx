@@ -1,7 +1,8 @@
 import { type TopicResponse, toCtaTag } from "@shared/contracts"
+import { isTopicSlugStale, toTopicPath } from "@shared/seo"
+import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
 import type * as React from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { toast } from "sonner"
 import { authClient } from "@/clients/authClient"
 import {
@@ -32,8 +33,10 @@ import { TopicScanButton } from "@/components/topic/TopicScanButton.tsx"
 import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
 import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
 import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
+import { useIsHydrating, useLoadInBrowser, useOrigin } from "@/hooks/useBrowserValue"
 import { useIsVisible } from "@/hooks/useIsVisible"
 import { usePageTitle } from "@/hooks/usePageTitle"
+import { useSearchParams } from "@/hooks/useSearchParams"
 import { matchesTopicFindingFilter } from "@/lib/topicFindingFilters"
 import { toSortedTopicFindings } from "@/lib/topicFindingSorts"
 import { cn, NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
@@ -45,19 +48,19 @@ import { useRegisterPageActions } from "@/stores/pageActionsStore"
 type TopicDialog = "edit-choice" | "edit" | "make-public" | "share" | "rank" | "delete"
 
 /**
- * The page for a single topic at /topics/:id: header with owner actions, findings, scan history, and the info card.
+ * The topic page at /topics/$topicId/$topicSlug: header with owner actions, findings, scan history, and the info card.
  */
 export function TopicPage() {
-	const { id = "" } = useParams()
+	const { topicId = "", topicSlug } = useParams({ strict: false })
+	// the topic page payload, how the topic is gated, and its reload
+	const { topic, gatedTopic, reloadTopicPage } = useTopicPagePayload({ topicId, topicSlug })
+	// the page's origin for the topic-bound mcp url
+	const origin = useOrigin()
 	const navigate = useNavigate()
 	// the session gates the Follow button. a visitor's click is sent to signup instead
 	const { data: session } = authClient.useSession()
 	// the shared feed state includes the homepage reload plus the finding filter this page's action bar reads
 	const { reloadTopicFeed: reloadHomePage, findingFilter } = useTopicFeed()
-	// the topic page payload. undefined while loading, null if missing or not visible
-	const [topic, setTopic] = useState<TopicResponse | null | undefined>(undefined)
-	// how the topic is gated if this user may not see it, an invite topic's gate shows its name, a private topic
-	const [gatedTopic, setGatedTopic] = useState<{ topicName: string | null } | null>(null)
 	// the one dialog on screen, or null when none is open
 	const [openDialog, setOpenDialog] = useState<TopicDialog | null>(null)
 	usePageTitle(topic?.name ?? null)
@@ -99,7 +102,7 @@ export function TopicPage() {
 					page: "Topic",
 					hasTeamBookmarks: topic.isTeamMember,
 					// the topic-bound mcp server
-					mcp: { name: `CarlNotes: ${topic.name}`, url: `${window.location.origin}/mcp/t/${topic.id}` },
+					mcp: { name: `CarlNotes: ${topic.name}`, url: `${origin}/mcp/t/${topic.id}` },
 					options: toTopicActionOptions({
 						topic,
 						isAdminUser: session?.user.role === "admin",
@@ -114,32 +117,6 @@ export function TopicPage() {
 				}
 			: null,
 	)
-
-	// reload the page payload when the topic id changes
-	const reloadTopicPage = useCallback(async () => {
-		try {
-			const topicPage = await fetchTopicPage(id)
-			setTopic(topicPage.status === "visible" ? topicPage.topic : null)
-			setGatedTopic(topicPage.status === "gated" ? { topicName: topicPage.topicName } : null)
-		} catch (error) {
-			console.error("topic page load failed", error)
-			setTopic(null)
-		}
-	}, [id])
-	// clearing first falls back to the skeleton
-	useEffect(() => {
-		setTopic(undefined)
-		setGatedTopic(null)
-		void reloadTopicPage()
-	}, [reloadTopicPage])
-
-	// reload the page each time the chat panel reports this topic changed
-	const topicChangeCount = useTopicChangeCount(topic?.id ?? null)
-	useEffect(() => {
-		if (topicChangeCount > 0) {
-			void reloadTopicPage()
-		}
-	}, [topicChangeCount, reloadTopicPage])
 
 	// reload the page after running a topic feed handler
 	const runThenReload = useCallback(
@@ -172,7 +149,7 @@ export function TopicPage() {
 		}
 		// a visitor has to sign up before subscribing
 		if (!session) {
-			navigate("/signup?cta=subscribe")
+			void navigate({ to: "/signup", search: { cta: "subscribe" } })
 			return
 		}
 		const isSubscribing = !topic.isSubscribed
@@ -226,7 +203,7 @@ export function TopicPage() {
 					isLoading={topic === undefined}
 					gatedTopic={gatedTopic}
 					isSignedIn={Boolean(session)}
-					topicId={id}
+					topicId={topicId}
 				/>
 			)}
 			{topic && (
@@ -245,13 +222,79 @@ export function TopicPage() {
 						onRankTopic={handleRankTopic}
 						onTopicDeleted={async () => {
 							await reloadHomePage()
-							navigate("/")
+							void navigate({ to: "/" })
 						}}
 					/>
 				</>
 			)}
 		</main>
 	)
+}
+
+// the topic id from the url, and the slug if the url has one
+type UseTopicPagePayloadOptions = { topicId: string; topicSlug: string | undefined }
+
+// the topic page payload and how the topic is gated, seeded by the server's read and reloaded on a new topic id or a chat change
+function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions): {
+	topic: TopicResponse | null | undefined
+	gatedTopic: { topicName: string | null } | null
+	reloadTopicPage: () => Promise<void>
+} {
+	const navigate = useNavigate()
+	// the public topic either topic route loads on the server, or nothing
+	const loadedTopicById = useMatch({
+		from: "/_layout/topics/$topicId",
+		shouldThrow: false,
+		select: (topicMatch) => topicMatch.loaderData?.topic,
+	})
+	const loadedTopicBySlug = useMatch({
+		from: "/_layout/topics/$topicId_/$topicSlug",
+		shouldThrow: false,
+		select: (topicMatch) => topicMatch.loaderData?.topic,
+	})
+	const loadedTopic = loadedTopicById ?? loadedTopicBySlug
+	// the topic page payload. undefined while loading, null if missing or not visible
+	const [topic, setTopic] = useState<TopicResponse | null | undefined>(loadedTopic ?? undefined)
+	// the gate in front of an invite topic this user may not see, with the topic's name if the api sends the name
+	const [gatedTopic, setGatedTopic] = useState<{ topicName: string | null } | null>(null)
+
+	// fetch the topic page payload, which says whether the topic is visible, gated to this user, or missing
+	const reloadTopicPage = useCallback(async () => {
+		try {
+			const topicPage = await fetchTopicPage(topicId)
+			setTopic(topicPage.status === "visible" ? topicPage.topic : null)
+			setGatedTopic(topicPage.status === "gated" ? { topicName: topicPage.topicName } : null)
+		} catch (error) {
+			console.error("topic page load failed", error)
+			setTopic(null)
+		}
+	}, [topicId])
+	// keep the topic if its id matches the url, otherwise show the skeleton, then reload the page payload. the first
+	// load skips while hydrating the public topic the server loaded, unless a scan was running, whose findings may have changed since
+	const resetAndReloadTopicPage = useCallback((): void => {
+		setTopic((previousTopic) => (previousTopic?.id === topicId ? previousTopic : undefined))
+		setGatedTopic(null)
+		void reloadTopicPage()
+	}, [reloadTopicPage, topicId])
+	const isLoadedOnServer =
+		loadedTopic?.id === topicId && !loadedTopic.scans.some((topicScan) => topicScan.status === "running")
+	useLoadInBrowser({ pageId: topicId, isLoadedOnServer, loadPage: resetAndReloadTopicPage })
+
+	// redirect a url by id alone or with a stale slug to the topic's current path once the url's topic loads
+	useEffect(() => {
+		if (topic?.id === topicId && isTopicSlugStale(topic, topicSlug)) {
+			navigate({ to: toTopicPath(topic), replace: true })
+		}
+	}, [topic, topicId, topicSlug, navigate])
+
+	// reload the page each time the chat panel reports this topic changed
+	const topicChangeCount = useTopicChangeCount(topic?.id ?? null)
+	useEffect(() => {
+		if (topicChangeCount > 0) {
+			void reloadTopicPage()
+		}
+	}, [topicChangeCount, reloadTopicPage])
+	return { topic, gatedTopic, reloadTopicPage }
 }
 
 /**
@@ -365,7 +408,7 @@ function TopicDialogs({
 	)
 }
 
-// what stands in for the topic
+// what shows in place of the topic
 function TopicPagePlaceholder({
 	isLoading,
 	gatedTopic,
@@ -401,10 +444,10 @@ function TopicGateNotice({ isSignedIn, topicId }: { isSignedIn: boolean; topicId
 	// where a visitor returns after signing up
 	const returnPath = `?next=${encodeURIComponent(`/topics/${topicId}`)}`
 	// which arrival a signup gets attributed to for analytics
-	const [searchParams] = useSearchParams()
+	const searchParams = useSearchParams()
 	const ctaTag = toCtaTag(searchParams.get("src")) ?? "gate"
 	return (
-		<Dialog open onOpenChange={() => navigate("/")}>
+		<Dialog open onOpenChange={() => navigate({ to: "/" })}>
 			{/* the gate's own actions are the only ways out, so there is no ✕ */}
 			<DialogContent className="sm:max-w-md" hideCloseButton>
 				<DialogTitle>This topic is invite-only</DialogTitle>
@@ -414,7 +457,7 @@ function TopicGateNotice({ isSignedIn, topicId }: { isSignedIn: boolean; topicId
 				<DialogFooter>
 					{isSignedIn ? (
 						// the only action a signed-in user has here is leaving
-						<Button onClick={() => navigate("/")}>Back to CarlNotes</Button>
+						<Button onClick={() => navigate({ to: "/" })}>Back to CarlNotes</Button>
 					) : (
 						<GatedSignedOutActions returnPath={returnPath} ctaTag={ctaTag} />
 					)}
@@ -439,14 +482,21 @@ function GatedSignedOutActions({ returnPath, ctaTag }: { returnPath: string; cta
 	)
 }
 
-// a section that stays hidden until scrolled into findingFilter, then plays the staggered hydrate animation
+// the index of the last section in view when the page opens
+const LAST_TOP_SECTION_INDEX = 1
+
+// a section that stays hidden until scrolled into view, then plays the staggered hydrate animation. a top section
+// of a server-rendered page keeps the animation class from the server's html and animates before any script runs
 function HydrateSection({ index, children }: { index: number; children: React.ReactNode }) {
 	const { ref, isVisible } = useIsVisible<HTMLDivElement>()
+	const isHydrating = useIsHydrating()
+	const [isAnimatedInServerHtml] = useState(isHydrating && index <= LAST_TOP_SECTION_INDEX)
 	return (
 		<div
 			ref={ref}
+			data-reveal
 			className={cn(
-				isVisible ? "animate-hydrate" : "opacity-0",
+				isVisible || isAnimatedInServerHtml ? "animate-hydrate" : "opacity-0",
 				"motion-reduce:animate-none motion-reduce:opacity-100",
 			)}
 			style={{ animationDelay: `${Math.min(index, 3) * 50}ms` }}

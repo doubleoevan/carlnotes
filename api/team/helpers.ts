@@ -13,7 +13,6 @@ import { toInvitee } from "../invite/userInvites"
 import { toTopicTableRows } from "../topic/helpers"
 import { verifiedEmailQuery } from "../topic/permissions"
 import { startOfUtcMonth } from "../topic/quotas"
-import { toTeamRole } from "./members"
 
 // the users table under a second name, so an invitation can join its sender beside its invitee
 const senders = alias(users, "senders")
@@ -220,26 +219,6 @@ export async function loadTeamUpMenu(userId: string, profileUserId: string): Pro
 			canDeleteInvite: Boolean(invite && (isLeaderRole(teamRow.role) || invite.invitedByUserId === userId)),
 		}
 	})
-}
-
-// the name a private team shows an outsider on its page, or null if no team has that id
-export async function toGatedTeam(
-	userId: string | null,
-	teamId: string,
-): Promise<{ name: string; hasRequestedToJoin: boolean } | null> {
-	const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId))
-	if (!team) {
-		return null
-	}
-
-	// the user's pending request
-	const [joinRequest] = userId
-		? await db
-				.select({ userId: teamMembers.userId })
-				.from(teamMembers)
-				.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.userId, userId), eq(teamMembers.isActive, false)))
-		: []
-	return { name: team.name, hasRequestedToJoin: joinRequest !== undefined }
 }
 
 /**
@@ -504,20 +483,41 @@ async function toCountsByTeamId(teamIds: string[]): Promise<Map<string, { member
 	)
 }
 
+// a team page as one user may see it: the whole page, the gate a private team shows a non-member, or no team at all
+export type TeamPageResult =
+	| { status: "visible"; team: TeamPageResponse }
+	| { status: "gated"; teamName: string; hasRequestedToJoin: boolean }
+	| { status: "missing" }
+
 /**
- * The team page payload by id, or null when the user does not have access.
- * the page is for members always, for admins always, and for anyone if the team is public.
+ * Loads a team's page as the user may see it, or the gate a private team shows a non-member.
  */
-export async function loadTeamPage(userId: string | null, teamId: string): Promise<TeamPageResponse | null> {
-	// select the team for the id
-	const [team] = await db.select().from(teams).where(eq(teams.id, teamId))
-	if (!team) {
-		return null
+export async function loadTeamPage(userId: string | null, teamId: string): Promise<TeamPageResult> {
+	// read the team and the user's membership row in one query. a signed-out visitor joins no membership row
+	const [teamRow] = await db
+		.select({ team: teams, membershipRole: teamMembers.role, isMembershipActive: teamMembers.isActive })
+		.from(teams)
+		.leftJoin(teamMembers, and(eq(teamMembers.teamId, teams.id), userId ? eq(teamMembers.userId, userId) : sql`false`))
+		.where(eq(teams.id, teamId))
+	if (!teamRow) {
+		return { status: "missing" }
 	}
 
-	// the team page's independent reads run together. nothing returns until the access gate below passes
-	const [role, memberRows, topicRows, chatMentionsByTeam] = await Promise.all([
-		toTeamRole(userId, team.id),
+	// an active membership is the user's role, and an inactive one is a join request no leader has approved yet
+	const { team } = teamRow
+	const role = teamRow.isMembershipActive ? teamRow.membershipRole : null
+	const hasRequestedToJoin = teamRow.isMembershipActive === false
+
+	// check access before reading the page. a private team shows only its gate to everyone but its members, an admin,
+	// and someone with a pending invite
+	const isMember = role !== null
+	const isInvited = !isMember && (await hasPendingTeamInvite(userId, team.id))
+	if (!team.isPublic && !isMember && !isInvited && !(await isAllowed(userId, "admin:console"))) {
+		return { status: "gated", teamName: team.name, hasRequestedToJoin }
+	}
+
+	// the team page's independent reads run together
+	const [memberRows, topicRows, chatMentionsByTeam] = await Promise.all([
 		// the members with the not-yet-activated rows included
 		db
 			.select({
@@ -536,13 +536,6 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 		loadTeamChatMentions(userId, [team.id]),
 	])
 
-	// a private team's page reads as a missing one to everyone but its members, an admin, and someone with a pending invite
-	const isMember = role !== null
-	const isInvited = !isMember && (await hasPendingTeamInvite(userId, team.id))
-	if (!team.isPublic && !isMember && !isInvited && !(await isAllowed(userId, "admin:console"))) {
-		return null
-	}
-
 	// members see everyone, and only a leader can see who asked to join
 	const isTeamLeader = isMember && isLeaderRole(role)
 	const shownMembers = memberRows.filter(
@@ -554,17 +547,18 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 	const hiddenActiveCount =
 		activeRows.length - activeRows.filter((memberRow) => isMember || memberRow.isMemberVisible).length
 
-	// the team's topics: an outsider sees only the public ones, a member or someone with a pending invite sees them all
+	// the team's topics: a non-member sees only the public ones, a member or someone with a pending invite sees them all
 	const visibleTopics = topicRows.filter((topicRow) => isMember || isInvited || topicRow.visibility === "public")
 
-	return {
+	// build the page from the members and topics the user may see
+	const teamPage: TeamPageResponse = {
 		teamId: team.id,
 		name: team.name,
 		description: team.description,
 		isPublic: team.isPublic,
 		hasAvatar: team.avatarKey !== null,
 		role,
-		hasRequestedToJoin: memberRows.some((memberRow) => memberRow.userId === userId && !memberRow.isActive),
+		hasRequestedToJoin,
 		members: shownMembers.map((memberRow) => ({
 			userId: memberRow.userId,
 			username: memberRow.username,
@@ -577,6 +571,7 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 		chatMentions: chatMentionsByTeam.get(team.id) ?? [],
 		topics: await toTopicTableRows(visibleTopics, userId),
 	}
+	return { status: "visible", team: teamPage }
 }
 
 // whether a pending invite names this user, by account or by their email address

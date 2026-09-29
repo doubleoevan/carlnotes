@@ -191,7 +191,13 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	const contextResult = await buildContextPrompt("sample document text")
 
 	// the report prompt renders over a minimal sample scan
-	const sampleFinding = { title: "Sample", url: "https://a.test", relevanceScore: 0.9, relevanceExplanation: "note" }
+	const sampleFinding = {
+		title: "Sample",
+		url: "https://a.test",
+		relevanceScore: 0.9,
+		relevanceExplanation: "note",
+		isNew: true,
+	}
 	const reportResult = await buildScanReportPrompt({
 		topicName: "sample topic",
 		topicContext: "sample topic context",

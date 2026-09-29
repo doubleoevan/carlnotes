@@ -1,7 +1,6 @@
 import type { ActivityResponse, BillingState } from "@shared/contracts"
 import { User } from "lucide-react"
 import { useEffect, useState } from "react"
-import { useSearchParams } from "react-router-dom"
 import { fetchActivity } from "@/clients/activityClient"
 import { authClient } from "@/clients/authClient"
 import { fetchBillingState } from "@/clients/billingClient"
@@ -10,6 +9,7 @@ import { AccountSettings } from "@/components/account/AccountSettings"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { usePageTitle } from "@/hooks/usePageTitle"
+import { useSearchParams } from "@/hooks/useSearchParams"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 
 /**
@@ -22,8 +22,8 @@ export function AccountPage() {
 	const [billing, setBilling] = useState<BillingState | null>(null)
 	const [activity, setActivity] = useState<ActivityResponse | null>(null)
 
-	// whose account this shows: the user's own without the param, or a different user for an admin
-	const [searchParams] = useSearchParams()
+	// the user whose account the page shows, the userId param's user or else the signed-in user
+	const searchParams = useSearchParams()
 	const viewedUserId = searchParams.get("userId") ?? undefined
 	const isOwnView = !viewedUserId || viewedUserId === session?.user.id
 
@@ -37,10 +37,10 @@ export function AccountPage() {
 		setBilling(null)
 		setActivity(null)
 		fetchBillingState(viewedUserId)
-			.then((loaded) => isViewCurrent && setBilling(loaded))
+			.then((billingState) => isViewCurrent && setBilling(billingState))
 			.catch(() => isViewCurrent && setBilling(null))
 		fetchActivity(viewedUserId)
-			.then((loaded) => isViewCurrent && setActivity(loaded))
+			.then((activityResponse) => isViewCurrent && setActivity(activityResponse))
 			.catch(() => isViewCurrent && setActivity(null))
 		return () => {
 			isViewCurrent = false
@@ -48,7 +48,7 @@ export function AccountPage() {
 	}, [session, viewedUserId])
 
 	if (!session) {
-		return <main className={PAGE_CLASS}>Please log in to manage your account.</main>
+		return null
 	}
 
 	// the username row's user from the session for the user's own page or the payload from an admin's link

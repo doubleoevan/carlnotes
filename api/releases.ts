@@ -2,12 +2,12 @@
 // those: /releases, each release's own page, the /changelog redirect, and the signed GitHub webhook.
 // a release is authored on GitHub and read here
 
+import { appUrl } from "@shared/appUrl"
 import { desc, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
 import { releases } from "../db/schema"
 import { toContentHtml, toPageHtml } from "./content"
-import { appUrl } from "./pages"
 
 // what a release body puts above its auto-generated pull request list. the index renders only what
 // sits above it, and a body written without it renders whole
@@ -72,6 +72,13 @@ export async function loadReleases(): Promise<ReleaseRow[]> {
 export function toReleaseSummary(body: string): string {
 	const sentinelAt = body.indexOf(SUMMARY_SENTINEL)
 	return sentinelAt === -1 ? body : body.slice(0, sentinelAt)
+}
+
+/**
+ * Returns a release page's path, with its tag encoded.
+ */
+export function toReleasePath(tag: string): string {
+	return `/releases/${encodeURIComponent(tag)}`
 }
 
 /**
@@ -141,7 +148,12 @@ export function toReleaseUpsert(release: ReleasePayload["release"]): ReleaseUpse
 // one release as a card on the index: its name, its date, and the summary above the sentinel
 function toReleaseCard(release: ReleaseRow): string {
 	const releasedOn = release.releasedAt.toISOString().slice(0, 10)
-	return `<article class="post-card"><h2><a href="/releases/${encodeURIComponent(release.tag)}">${Bun.escapeHTML(release.name)}</a></h2><div class="post-date">${releasedOn}</div>${toPageHtml(toReleaseSummary(release.body))}</article>`
+	return `
+		<article class="post-card">
+			<h2><a href="${toReleasePath(release.tag)}">${Bun.escapeHTML(release.name)}</a></h2>
+			<div class="post-date">${releasedOn}</div>
+			${toPageHtml(toReleaseSummary(release.body))}
+		</article>`
 }
 
 /**
@@ -154,7 +166,9 @@ export async function serveReleaseIndex(): Promise<string> {
 		description: "What shipped, and what changed.",
 		canonicalUrl: `${appUrl()}/releases`,
 		jsonLd: "",
-		bodyHtml: `<h1>Releases</h1>${releaseCards}`,
+		bodyHtml: `
+			<h1>Releases</h1>
+			${releaseCards}`,
 	})
 }
 
@@ -172,9 +186,15 @@ export async function serveRelease(tag: string): Promise<string | null> {
 	return toContentHtml({
 		title: release.name,
 		description: `What shipped in ${release.name}.`,
-		canonicalUrl: `${appUrl()}/releases/${encodeURIComponent(release.tag)}`,
+		canonicalUrl: `${appUrl()}${toReleasePath(release.tag)}`,
 		jsonLd: "",
-		bodyHtml: `<article><h1>${Bun.escapeHTML(release.name)}</h1><div class="post-date">${releasedOn}</div>${toPageHtml(release.body)}<p><a href="${Bun.escapeHTML(release.htmlUrl)}">This release on GitHub</a></p></article>`,
+		bodyHtml: `
+			<article>
+				<h1>${Bun.escapeHTML(release.name)}</h1>
+				<div class="post-date">${releasedOn}</div>
+				${toPageHtml(release.body)}
+				<p><a href="${Bun.escapeHTML(release.htmlUrl)}">This release on GitHub</a></p>
+			</article>`,
 	})
 }
 

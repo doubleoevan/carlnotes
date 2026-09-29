@@ -206,7 +206,7 @@ describe("toDefaultChatId", () => {
 		})
 	})
 
-	// an outsider has no chat room to open, so the chatId names the team the join button belongs to
+	// a non-member has no chat room to open, so the chatId names the team the join button belongs to
 	test("a team page the user is not on aims at the team it offers joining", () => {
 		const pageContext = toPageContext({
 			teamId: "team-b",

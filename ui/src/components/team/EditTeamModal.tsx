@@ -1,7 +1,7 @@
 import type { TeamIdentity } from "@shared/contracts"
+import { useNavigate } from "@tanstack/react-router"
 import { Users } from "lucide-react"
 import { useRef, useState } from "react"
-import { useNavigate } from "react-router"
 import { toast } from "sonner"
 import {
 	type CreateTeamRejection,
@@ -184,7 +184,7 @@ export function EditTeamModal({
 				currentTopicIds: (currentTopics ?? []).map((topic) => topic.id),
 				pendingInvites,
 				avatarFile,
-				onTeamSaved: (savedTeam) => navigate(`/teams/${savedTeam.teamId}`),
+				onTeamSaved: (savedTeam) => navigate({ to: "/teams/$teamId", params: { teamId: savedTeam.teamId } }),
 			})
 			if (saveRejection) {
 				setRejection(saveRejection)
@@ -192,7 +192,7 @@ export function EditTeamModal({
 			}
 			// a team the invite-link button already made still opens its page. this save is the end of creating it
 			if (createdTeam) {
-				navigate(`/teams/${createdTeam.teamId}`)
+				navigate({ to: "/teams/$teamId", params: { teamId: createdTeam.teamId } })
 			}
 			onSaveTeam?.()
 			onClose()

@@ -39,12 +39,17 @@ export function AdminPage() {
 		}
 	}, [session, loadConsole])
 
+	// render nothing while the session loads
 	if (!session) {
-		return <main className={cn(PAGE_CLASS, "max-w-6xl")}>Please log in.</main>
+		return null
 	}
+
+	// show the no-access message after a failed load
 	if (isForbidden) {
 		return <main className={cn(PAGE_CLASS, "max-w-6xl")}>You do not have access to this page.</main>
 	}
+
+	// show the animation until the console loads
 	if (!adminConsole) {
 		return (
 			<main className={cn(PAGE_CLASS, "max-w-6xl")}>
@@ -109,7 +114,7 @@ export function AdminPage() {
 	)
 }
 
-// the platform totals: user counts per plan, the team count, attributed storage, current month-to-date cost,
+// the platform totals: user counts per plan, the team count, storage, this month's cost, net revenue, and contribution
 function TotalSummaries({
 	totals,
 	users,

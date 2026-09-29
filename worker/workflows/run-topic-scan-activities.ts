@@ -1,11 +1,14 @@
 // the Scan pipeline as three activities: ingest, review, and the write that completes the Scan
 import { propagateAttributes, startActiveObservation } from "@langfuse/tracing"
 import { trackEvent } from "@shared/analytics"
+import { appBaseUrl } from "@shared/appUrl"
+import { toTopicPath } from "@shared/seo"
 import { asyncLocalStorage } from "@temporalio/activity"
 import { and, count, eq, isNull } from "drizzle-orm"
 import { db } from "../../db"
 import { findings, scans, topics, users } from "../../db/schema"
 import { type Budget, newBudget, toResumedBudget } from "../budget"
+import { notifyIndexNow } from "../indexNow"
 import type { SourceOutcome } from "../ingest"
 import { ingestFromTopicSources } from "../ingest"
 import type { NewResource } from "../ingest/ingester"
@@ -96,7 +99,8 @@ export async function reviewForScan(
 }
 
 /**
- * Finish the Scan by storing its counts and cost, then email the owner or the subscribers.
+ * Finishes the Scan by storing its counts and cost, telling IndexNow if a public topic gained or lost a finding,
+ * and emailing the owner or the subscribers.
  */
 export async function finishScan(
 	scanId: string,
@@ -142,10 +146,16 @@ export async function finishScan(
 		trackEvent("first_scan_completed", ownerId, { plan: topicOwner?.plan ?? "free", topicId })
 	}
 
-	// a manual or creation Scan reports back to whoever fired it
+	// load the topic for the IndexNow notification and the emails, and stop if the topic was deleted
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
 	if (!topic) {
 		return
+	}
+
+	// tell IndexNow a public topic's page changed if a finding was added or filtered out
+	const appUrl = appBaseUrl()
+	if (appUrl && topic.visibility === "public" && review.addedOrFilteredFindingCount > 0) {
+		await notifyIndexNow([`${appUrl}${toTopicPath(topic)}`])
 	}
 
 	// whoever triggered a manual scan is emailed, and a scheduled Scan goes to the Topic's subscribers instead

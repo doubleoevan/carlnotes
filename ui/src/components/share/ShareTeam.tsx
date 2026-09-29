@@ -17,6 +17,7 @@ import {
 	SHARE_OPTION_ICON_CLASS,
 	ShareTargetOptions,
 } from "@/components/share/ShareOptions"
+import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
 import { canOpenShareSheet, openShareSheet } from "@/lib/shareSheet"
 import { copyToClipboard } from "@/lib/utils"
 
@@ -40,11 +41,11 @@ export function ShareTeam({
 	onClose: () => void
 }) {
 	const [copiedLabel, setCopiedLabel] = useState<string | null>(null)
-	// read once on mount, so the share sheet is only shown if available
-	const [isShareSheetAvailable] = useState(canOpenShareSheet)
+	// whether this browser can open a share sheet, false until the component mounts in the browser
+	const isShareSheetAvailable = useIsMounted() && canOpenShareSheet()
 
 	// the absolute url a platform needs, encoded once for use inside a query string
-	const teamUrl = `${window.location.origin}/teams/${teamId}`
+	const teamUrl = `${useOrigin()}/teams/${teamId}`
 	const [encodedUrl, encodedTitle] = [encodeURIComponent(teamUrl), encodeURIComponent(teamName)]
 
 	// copy a link to the team to the clipboard and show a confirmation label

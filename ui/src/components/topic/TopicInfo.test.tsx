@@ -2,10 +2,7 @@
 import { expect, test } from "bun:test"
 import { renderToStaticMarkup } from "react-dom/server"
 
-// the topic client builds its api client from window.location when it loads, and the runner has no window.
-// the import comes after, so the module graph this file pulls in finds one
-Object.assign(globalThis, { window: { location: { origin: "http://localhost" } } })
-const { TopicPrompt } = await import("./TopicInfo")
+import { TopicPrompt } from "./TopicInfo"
 
 // the character count the component treats as long
 const SCROLLING_PROMPT_CHARS = 900

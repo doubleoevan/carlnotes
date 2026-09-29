@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { useSearchParams } from "react-router-dom"
 import { authClient, passSignupGate } from "@/clients/authClient"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
@@ -9,27 +8,28 @@ import { Label } from "@/components/primitives/label"
 import { PasswordInput } from "@/components/session/PasswordInput"
 import { TurnstileWidget } from "@/components/session/TurnstileWidget"
 import { usePageTitle } from "@/hooks/usePageTitle"
+import { useSearchParams } from "@/hooks/useSearchParams"
 
 /**
- * Password reset and recovery, both on one route: without a token it asks for an email address to send the token to,
- * and with a token it takes a new password. The token count is incremented when a token is spent to issue a new one.
+ * Renders the reset link request without a reset token, and the new password form with a reset token.
  */
 export function ResetPasswordPage() {
 	usePageTitle("Reset password")
-	const [searchParams] = useSearchParams()
-	const token = searchParams.get("token")
+	// the reset token from the emailed reset link, or null
+	const searchParams = useSearchParams()
+	const resetToken = searchParams.get("token")
 	return (
 		<main className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-safe py-10">
 			<div className="mb-8 flex items-center justify-center gap-2">
 				<CoffeeMug className="text-primary" />
 				<span className="font-display text-2xl">CarlNotes</span>
 			</div>
-			{token ? <NewPasswordForm token={token} /> : <ResetRequestForm />}
+			{resetToken ? <NewPasswordForm resetToken={resetToken} /> : <ResetRequestForm />}
 		</main>
 	)
 }
 
-// asks for an email address to send the link.
+// asks for an email address to send the reset link to
 function ResetRequestForm() {
 	const [email, setEmail] = useState("")
 	const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
@@ -38,7 +38,7 @@ function ResetRequestForm() {
 	const [error, setError] = useState<string | null>(null)
 	const [spentTokenCount, setSpentTokenCount] = useState(0)
 
-	// pass the turnstile gate, then ask for the link. the gate is what stands in for a rate limiter here
+	// pass the turnstile gate, then ask for the reset link
 	const handleSubmit = async (event: React.FormEvent): Promise<void> => {
 		event.preventDefault()
 		if (!turnstileToken) {
@@ -117,7 +117,7 @@ function ResetRequestForm() {
 }
 
 // takes the new password from a valid link. a used or expired token is rejected by the api, not here
-function NewPasswordForm({ token }: { token: string }) {
+function NewPasswordForm({ resetToken }: { resetToken: string }) {
 	const [password, setPassword] = useState("")
 	const [isSubmitting, setIsSubmitting] = useState(false)
 	const [error, setError] = useState<string | null>(null)
@@ -129,7 +129,7 @@ function NewPasswordForm({ token }: { token: string }) {
 		setError(null)
 		// a dropped network call reads as an error instead of a submit button that stays stuck
 		try {
-			const { error: resetError } = await authClient.resetPassword({ token, newPassword: password })
+			const { error: resetError } = await authClient.resetPassword({ token: resetToken, newPassword: password })
 			if (resetError) {
 				setError(resetError.message ?? "That link has expired or already been used.")
 				return

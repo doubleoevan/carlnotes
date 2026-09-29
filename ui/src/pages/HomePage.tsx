@@ -1,8 +1,8 @@
 import type { TopicFeedResponse } from "@shared/contracts"
 import { ADMIN_QUOTA } from "@shared/plans"
+import { useNavigate } from "@tanstack/react-router"
 import { Coffee, Plus } from "lucide-react"
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { authClient } from "@/clients/authClient"
 import { Accordion } from "@/components/primitives/accordion"
@@ -18,7 +18,7 @@ import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStor
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
 /**
- * The homepage topic feed sections
+ * Renders the homepage: the tag picker, the New Topic button, and the topic feed sections.
  */
 export function HomePage() {
 	const navigate = useNavigate()
@@ -44,13 +44,13 @@ export function HomePage() {
 	// the section the user opened, or null while none has been opened and the default still applies
 	const [openedSection, setOpenedSection] = useState<string | null>(null)
 
-	// the search bar's menu includes this page's reheat row
+	// the search bar's menu includes this page's reheat option
 	useRegisterPageActions({
 		page: "Home",
 		options: [{ label: "Reheat", Icon: Coffee, onSelect: () => void reheat() }],
 	})
 
-	// the panel's page context: a signed-in user whose feed holds nothing yet has the new-topic chat opened by default
+	// the panel's page context. the new-topic chat opens by default for a user who owns and follows no topics
 	const ownTopicCount = toSectionTopicCount(topicFeed, "yours")
 	const followedTopicCount = toSectionTopicCount(topicFeed, "subscribed")
 	useRegisterChatContext(
@@ -68,7 +68,7 @@ export function HomePage() {
 	// a created topic refreshes the feed behind the navigation to its new page
 	const handleTopicCreated = async (topicId: string): Promise<void> => {
 		setIsNewTopicOpen(false)
-		navigate(`/topics/${topicId}`)
+		navigate({ to: "/topics/$topicId", params: { topicId } })
 		void reloadTopicFeed()
 	}
 
@@ -77,7 +77,7 @@ export function HomePage() {
 		if (isSignedIn) {
 			setIsNewTopicOpen(true)
 		} else {
-			navigate("/signup?cta=new-topic")
+			navigate({ to: "/signup", search: { cta: "new-topic" } })
 		}
 	}
 
@@ -86,12 +86,14 @@ export function HomePage() {
 		if (isSignedIn) {
 			openNewTopicChat()
 		} else {
-			navigate("/signup?cta=new-topic")
+			navigate({ to: "/signup", search: { cta: "new-topic" } })
 		}
 	}
 
 	// the remount key changes on a reheat or any filter change so that the updated content animates in
-	const viewKey = `${reheatKey}-${findingFilter}-${sort}-${[...resourceKinds].sort().join()}-${tagMatchMode}-${[...tagFilters].sort().join("|")}-${isSignedIn}`
+	const resourceKindsKey = [...resourceKinds].sort().join()
+	const tagFiltersKey = [...tagFilters].sort().join("|")
+	const viewKey = [reheatKey, findingFilter, sort, resourceKindsKey, tagMatchMode, tagFiltersKey, isSignedIn].join("-")
 	// the section that opens first
 	const defaultOpenSection = toDefaultOpenSection(isSignedIn, ownTopicCount, followedTopicCount)
 	const openSection = openedSection ?? defaultOpenSection
@@ -152,7 +154,7 @@ function NewTopicRow({
 	onNewTopic,
 }: {
 	remainingTopics: number | null
-	// the plan's limit, paired with what is left to say how many of them are held
+	// the plan's topic limit, or null while the feed loads
 	topicLimit: number | null
 	isSignedIn: boolean
 	onNewTopic: () => void
@@ -175,7 +177,7 @@ function NewTopicRow({
 					size="sm"
 					onClick={
 						isAtLimit
-							? () => toast(limitLine, { action: { label: "See plans", onClick: () => navigate("/plans") } })
+							? () => toast(limitLine, { action: { label: "See plans", onClick: () => navigate({ to: "/plans" }) } })
 							: onNewTopic
 					}
 					disabled={isSignedIn && remainingTopics === null}
@@ -193,7 +195,7 @@ function NewTopicRow({
 	)
 }
 
-// how many topics a section of the feed holds, or null while the feed is still loading
+// how many topics a section of the feed has, or null while the feed is still loading
 function toSectionTopicCount(topicFeed: TopicFeedResponse | null, sectionKey: string): number | null {
 	return topicFeed?.sections.find((section) => section.key === sectionKey)?.topics.length ?? null
 }

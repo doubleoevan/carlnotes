@@ -9,10 +9,10 @@ test("unsubscribedPage names the topic and links to it", () => {
 	expect(page).toContain("Carl will read quietly")
 	expect(page).toContain("A &amp; B &lt;topic&gt;")
 	expect(page).toContain("Drop by on your own for the latest notes")
-	expect(page).toContain("https://carlnotes.example.com/topics/t1")
+	expect(page).toContain("https://carlnotes.example.com/topics/t1/a-b-topic")
 })
 
-// a missing or forged token lands on a fallback page instead of an error
+// a missing or forged token shows a fallback page instead of an error
 test("invalidUnsubscribePage renders a fallback message", () => {
 	expect(invalidUnsubscribePage()).toContain("didn't work")
 })

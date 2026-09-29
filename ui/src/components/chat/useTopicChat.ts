@@ -7,8 +7,8 @@ import {
 	type TopicToolCalls,
 	withAttachmentNote,
 } from "@shared/contracts"
+import { useNavigate } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import {
 	type ChatPage,
@@ -199,7 +199,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 
 	// open the new topic's page while this chat stays put, upload the topic draft's files to it, then reload its page.
 	const openCreatedTopic = async (topicId: string): Promise<void> => {
-		navigate(`/topics/${topicId}`)
+		void navigate({ to: "/topics/$topicId", params: { topicId } })
 		const filesToUpload = topicDraftAttachmentFiles
 		setTopicDraft(emptyTopicDraft)
 		setTopicDraftAttachmentFiles([])
@@ -405,7 +405,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		canEditTopic,
 		editableTopicDraft,
 		topicDraft,
-		topicDraftAttachmentFiles: topicDraftAttachmentFiles,
+		topicDraftAttachmentFiles,
 		removeTopicDraftAttachmentFile: (index) =>
 			setTopicDraftAttachmentFiles((previousFiles) => previousFiles.filter((_, position) => position !== index)),
 		isFirstTopic,

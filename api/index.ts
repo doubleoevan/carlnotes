@@ -1,6 +1,6 @@
 // the server that owns the origin
-import { extname } from "node:path"
-import { startMonitoring } from "@shared/monitoring"
+import { extname, resolve } from "node:path"
+import { reportError, startMonitoring } from "@shared/monitoring"
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins"
 import type { Context } from "hono"
 import { Hono } from "hono"
@@ -12,15 +12,24 @@ import { auth, reportForwardedChain } from "./auth"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import { contentRoute } from "./content"
 import type { AppEnv } from "./currentUser"
+import { documentsRoute } from "./documents"
 import { faviconsRoute } from "./favicons"
 import { mcpRoute } from "./mcp/server"
 import { resolveToolCaller } from "./mcp/toolCaller"
-import { pagesRoute, UI_BUNDLE_ROOT } from "./pages"
 import { toolCallerRateLimiter } from "./rateLimit"
 import { releasesRoute } from "./releases"
 
 // where build:docs writes the Starlight site, relative to the repo root the server runs from
 const DOCS_BUNDLE_ROOT = "./docs/dist"
+
+// where build:ui writes the client files, relative to the repo root the server runs from
+const UI_CLIENT_ROOT = "./ui/dist/client"
+
+// where build:ui writes the ui's server entry, which renders every page no other route serves
+const UI_SERVER_ENTRY = "ui/dist/server/server.js"
+
+// the ui's server handler, as the server entry exports it
+type UiServer = { fetch: (request: Request) => Promise<Response> }
 
 // the ui builds its typed api client from this definition
 export type AppType = typeof apiRoute
@@ -78,8 +87,8 @@ const server = new Hono<AppEnv>()
 	.all("/api/*", (context) => context.json({ error: "not found" }, 404))
 	// the server-rendered blog and docs pages
 	.route("/", contentRoute)
-	// the app's own pages and documents that are built per request, so a crawler gets real tags and headers
-	.route("/", pagesRoute)
+	// the documents built per request, and the redirect from the old /pricing path
+	.route("/", documentsRoute)
 	// the statically built docs site, which owns every /docs path
 	.on(
 		["GET", "HEAD"],
@@ -94,10 +103,17 @@ const server = new Hono<AppEnv>()
 		}
 		return context.html(await notFoundPage.text(), 404)
 	})
-	// the bundle itself: hashed assets, the app shell, and whatever vite copied from the public folder
-	.on(["GET", "HEAD"], "*", serveStatic({ root: UI_BUNDLE_ROOT, onFound: setBundleCacheControl }))
-	// a client-routed path is not a file, so it gets the app shell, and the router resolves it
-	.on(["GET", "HEAD"], "*", serveStatic({ path: `${UI_BUNDLE_ROOT}/index.html`, onFound: setBundleCacheControl }))
+	// the built ui's files: hashed assets and whatever vite copied from the public folder
+	.on(["GET", "HEAD"], "*", serveStatic({ root: UI_CLIENT_ROOT, onFound: setBundleCacheControl }))
+	// redirect a page url that ends in a slash permanently to the url without it. the leading slashes collapse to
+	// one, so the redirect stays on this site
+	.on(["GET", "HEAD"], "*", (context, next) => {
+		const { pathname, search } = new URL(context.req.url)
+		const pagePath = `/${pathname.replace(/^\/+|\/+$/g, "")}`
+		return pathname.length > 1 && pathname.endsWith("/") ? context.redirect(`${pagePath}${search}`, 301) : next()
+	})
+	// render every other GET as a page with the ui's server
+	.on(["GET", "HEAD"], "*", (context) => renderUiPage(context.req.raw))
 
 /**
  * The file a docs url names. Astro prefixes /docs onto every link it generates but does not nest the build
@@ -115,11 +131,40 @@ function setDocsCacheControl(_path: string, context: Context): void {
 	context.header("Cache-Control", isHashedAsset ? "public, max-age=31536000, immutable" : "no-cache")
 }
 
+// render a page with the ui's server. a missing bundle is a 404, and a bundle that fails to import is a 503
+async function renderUiPage(request: Request): Promise<Response> {
+	// a missing bundle is a 404 that names build:ui
+	const uiServerEntryPath = resolve(UI_SERVER_ENTRY)
+	if (!(await Bun.file(uiServerEntryPath).exists())) {
+		return new Response("the ui is not built. run bun run build:ui", { status: 404 })
+	}
+
+	// import the ui's server handler. bun caches the module after the first import. a bundle that fails to import is
+	// reported, and the page responds 503 so a crawler retries it later
+	const uiServer = await import(uiServerEntryPath)
+		.then((uiServerEntry) => uiServerEntry.default as UiServer)
+		.catch((error: unknown) => {
+			console.error("the ui's server bundle failed to import", error)
+			reportError(error, "page-render")
+			return null
+		})
+	// respond 503 if the import failed
+	if (!uiServer) {
+		return new Response("the ui failed to load", { status: 503 })
+	}
+
+	// render the page with a no-cache header, so a deploy reaches the user on their next request
+	const page = await uiServer.fetch(request)
+	const headers = new Headers(page.headers)
+	headers.set("Cache-Control", "no-cache")
+	return new Response(page.body, { status: page.status, statusText: page.statusText, headers })
+}
+
 // a hashed filename never changes contents, so it caches for a year
 function setBundleCacheControl(_path: string, context: Context): void {
 	const isHashedAsset = context.req.path.startsWith("/assets/")
 	context.header("Cache-Control", isHashedAsset ? "public, max-age=31536000, immutable" : "no-cache")
 }
 
-// in dev this runs on port 3000 and vite forwards /api to it
+// in dev this runs on port 3000, and vite forwards /api, /mcp, and the api's own pages and documents to it
 export default { port: 3000, fetch: server.fetch, idleTimeout: 120 }

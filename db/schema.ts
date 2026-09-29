@@ -569,7 +569,7 @@ export const teams = pgTable(
 		description: text("description"),
 		// the stored object for an uploaded team avatar, null for generated initials
 		avatarKey: text("avatar_key"),
-		// a private team's page returns a 404 to outsiders. public renders it to anyone
+		// a private team's page shows a non-member its name and a way to ask to join. public renders it to anyone
 		isPublic: boolean("is_public").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},

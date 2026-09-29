@@ -3,7 +3,11 @@
 Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregates the `/api` routes.
 
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `share/`, `tool/`, `mcp/`. Root files serve more than one domain
-  (auth, billing, admin, avatars, favicons, profiles, SEO pages, and `content.ts` for the blog under `content/blog/`).
+  (auth, billing, admin, avatars, favicons, profiles, SEO, and `content.ts` for the blog under `content/blog/`).
+- `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key, and
+  security.txt. `seo.ts` builds what they read, and the JSON-LD the topic page head includes.
+- `share/pageHead.ts` — the `/api/<page>/:id/head` routes that return a topic, profile, team, or invite page's
+  `PageHead`, which each ui route's `head()` turns into tags.
 - `releases.ts` — the `/releases` index and each release's own page, both
   rendered through `content.ts`, plus the signed GitHub webhook that upserts the rows they read.
   `releases.sync.ts` (`bun run sync:releases`) re-reads the GitHub API through the same write, which
@@ -22,8 +26,8 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   back when the conversation loads.
 - `rateLimit.ts` — the one per-tool-caller rate limit, shared by the chat turn routes and the mcp routes, keyed by the
   user or by the client address `trustedProxies.ts` vouches for.
-- Every authority answer routes through `authorization.ts` and the role helpers; inline
+- Every authority check routes through `authorization.ts` and the role helpers; inline
   `role ===` / `plan ===` comparisons are banned outside it (`authorization.test.ts` greps).
 - Request bodies validate with zod payloads from `shared/contracts.ts` via `zValidator`.
-- A private or team read the user may not see answers 404, never 403; the invite gate keeps its 403.
+- A private or team read the user may not see responds 404, never 403; the invite gate keeps its 403.
 - Dev: `bun run dev:api` (doppler, port 3000). Tests: `bun test api`; `*.smoke.ts` run under `doppler run`.

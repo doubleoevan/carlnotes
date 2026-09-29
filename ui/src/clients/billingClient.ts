@@ -1,10 +1,6 @@
 // the typed api client for the billing and admin routes
 import type { AdminConsoleResponse, BillingState, OwnerTopic, TeamPageResponse, TeamSummary } from "@shared/contracts"
-import { hc } from "hono/client"
-import type { AppType } from "../../../api"
-
-// same-origin api client, like topicClient. in dev vite forwards /api to the Hono server
-const apiClient = hc<AppType>(window.location.origin)
+import { apiClient } from "./apiClient"
 
 // start Stripe Checkout for a plan and billing interval, then redirect the browser to the hosted page
 export async function startCheckout(plan: "plus" | "premium", billingInterval: "monthly" | "yearly"): Promise<void> {

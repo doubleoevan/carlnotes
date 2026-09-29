@@ -2,12 +2,12 @@
 
 ## Module map
 
-Dependency order: `ui` → `api` / `worker` → `db` → `shared`. The boundary is a rule, compile-enforced
-by tsconfig project references (`bunx tsc -b`): ui never imports api, worker, or db; api and worker
-import db; every module imports shared; shared imports nothing app-level.
+Dependency order: `ui` → `api` / `worker` → `db` → `shared`. The boundary is a rule, enforced for the ui by a
+preflight check (`scripts/check-ui-boundary.ts`) and by convention elsewhere. The ui imports api, worker, and db as
+types only. The api and the worker import db, every module imports shared, and shared imports nothing app-level.
 
-- `ui/` — the Vite React SPA: pages, components, typed API clients, and the stores behind them.
-- `api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards, SEO pages.
+- `ui/` — the TanStack Start app: the file routes under `ui/src/routes/`, the pages they render, components, typed API clients, and the stores behind them. A public page renders on the server for a visitor and a crawler. The sign-in pages, a route behind sign-in, and every route when the request brings a session cookie render in the browser.
+- `api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards, page head data, and the document routes (the sitemap, the feeds, the llms files, the IndexNow key, and security.txt).
 - `worker/` — Temporal workflows, the scan pipeline, ingesters, chat replies, link previews, prompts, email delivery.
 - `db/` — Drizzle schema, migrations, quotas. Neon Postgres.
 - `shared/` — what every module may import: the zod contracts, enums, plans, and Source definitions.
@@ -23,7 +23,7 @@ Each module has its own AGENTS.md with entry points, layout, and commands.
 | New or changed ingester | `worker/ingest/` (`ingester.ts` is the interface) | ingester-authoring | `api/`, `ui/` |
 | Model-facing prompt | `worker/prompts/*.md` + its thin builder | prompt-authoring | everything outside `worker/` |
 | Schema or migration | `db/schema.ts`, then `bun run db:generate` | domain-model | `db/migrations/` (generated) |
-| UI screen or component | `ui/src/pages/`, `ui/src/components/<area>/` | jsx-conventions | `api/` except `shared/contracts.ts` types |
+| UI screen or component | `ui/src/routes/` for the route and its head, `ui/src/pages/`, `ui/src/components/<area>/` | jsx-conventions | `api/` except `shared/contracts.ts` types |
 | Tasting note or sync change | `api/note/`, `ui/src/components/note/` | domain-model | `worker/` |
 | API route or permission | `api/<domain>/`, `api/authorization.ts` | domain-model | `worker/` except `worker/index.ts` exports |
 | Temporal workflow change | `worker/workflows/`, `worker/temporal.ts` | — | `ui/`, `api/` route files |
@@ -40,6 +40,7 @@ Domain vocabulary is canonical and enforced, so grepping a domain noun reliably 
 Generated or archived paths that burn context:
 
 - `db/migrations/` — generated SQL and snapshots; the schema is `db/schema.ts`
+- `ui/src/routeTree.gen.ts` — the route tree Vite generates from `ui/src/routes/`; the routes are the files
 - `ui/dist/`, `docs/dist/` — built UI and docs output
 - `coverage/` — test coverage output
 - `openspec/changes/archive/` — archived OpenSpec changes
@@ -49,7 +50,8 @@ Generated or archived paths that burn context:
 
 ## Verification
 
-`bun run check` is the gate: Biome, `tsc -b`, the Temporal workflow bundle check, and the test suite.
+`bun run check` is the gate: Biome, the ui boundary check, `tsc -b`, the Temporal workflow bundle check, and the test
+suite.
 Green before any hand-off.
 
 ## Rules (always-on)

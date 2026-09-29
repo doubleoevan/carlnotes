@@ -1,7 +1,8 @@
 // the JSON endpoints the ui fetches, served under /api by the basePath
 import { zValidator } from "@hono/zod-validator"
+import { appUrl } from "@shared/appUrl"
 import { signupGatePayload } from "@shared/contracts"
-import { Hono } from "hono"
+import { type Context, Hono } from "hono"
 import { getCookie, setCookie } from "hono/cookie"
 import { z } from "zod"
 import { activityRoute } from "./activity"
@@ -29,6 +30,8 @@ import { mcpClientsRoute } from "./mcp/server"
 import { noteCommentThreadsRoute } from "./note/noteCommentThreads"
 import { notesRoute } from "./note/notes"
 import { profilesRoute } from "./profiles"
+import { loadPublicTopics } from "./seo"
+import { pageHeadRoute } from "./share/pageHead"
 import {
 	toCachedInvitePreviewPng,
 	toCachedProfilePreviewPng,
@@ -104,8 +107,7 @@ export const apiRoute = new Hono<AppEnv>()
 	.get("/unsubscribe", async (context) => {
 		// verify the token, drop the direct subscription, and show the result page
 		const topic = await unsubscribe(context.req.query("token"))
-		const appUrl = Bun.env.BETTER_AUTH_URL
-		return topic ? context.html(unsubscribedPage(topic, appUrl)) : context.html(invalidUnsubscribePage(appUrl), 400)
+		return topic ? context.html(unsubscribedPage(topic, appUrl())) : context.html(invalidUnsubscribePage(appUrl()), 400)
 	})
 	.post("/unsubscribe", async (context) => {
 		// inbox providers post here to comply with RFC 8058 one-click unsubscribe. act on the token and return 200 with no body
@@ -174,18 +176,17 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", billingRoute)
 	// the avatar routes
 	.route("/", avatarsRoute)
+	// the page head routes
+	.route("/", pageHeadRoute)
+	// every public topic with enough findings to show, most recently changed first
+	.get("/public-topics", async (context) => context.json(await loadPublicTopics()))
 	// the link-preview card that a social platform fetches for topic links
 	.get("/topics/:id/preview.png", async (context) => {
 		const topicPreviewCard = await toTopicPreview(context.req.param("id"))
 		if (!topicPreviewCard) {
 			return context.json({ error: "not found" }, 404)
 		}
-		// rendered once per distinct card and read from storage after
-		const { bytes, cacheControl } = await toCachedTopicPreviewPng(topicPreviewCard)
-		return context.body(bytes as unknown as ArrayBuffer, 200, {
-			"Content-Type": "image/png",
-			"Cache-Control": cacheControl,
-		})
+		return toPreviewPngResponse(context, await toCachedTopicPreviewPng(topicPreviewCard))
 	})
 	// the link-preview card that a social platform fetches for profile links
 	.get("/profiles/:userId/preview.png", async (context) => {
@@ -193,12 +194,7 @@ export const apiRoute = new Hono<AppEnv>()
 		if (!profilePreviewCard) {
 			return context.json({ error: "not found" }, 404)
 		}
-		// rendered once per distinct card and read from storage after
-		const { bytes, cacheControl } = await toCachedProfilePreviewPng(profilePreviewCard)
-		return context.body(bytes as unknown as ArrayBuffer, 200, {
-			"Content-Type": "image/png",
-			"Cache-Control": cacheControl,
-		})
+		return toPreviewPngResponse(context, await toCachedProfilePreviewPng(profilePreviewCard))
 	})
 	// the link-preview card that a social platform fetches for team links
 	.get("/teams/:teamId/preview.png", async (context) => {
@@ -206,31 +202,22 @@ export const apiRoute = new Hono<AppEnv>()
 		if (!teamPreviewCard) {
 			return context.json({ error: "not found" }, 404)
 		}
-		// rendered once per distinct card and read from storage after
-		const { bytes, cacheControl } = await toCachedTeamPreviewPng(teamPreviewCard)
-		return context.body(bytes as unknown as ArrayBuffer, 200, {
-			"Content-Type": "image/png",
-			"Cache-Control": cacheControl,
-		})
+		return toPreviewPngResponse(context, await toCachedTeamPreviewPng(teamPreviewCard))
 	})
 	// the card an invitation shows, addressed by its token so a private team still gets one.
 	// the token already opens the team, so its card discloses less than the link it came on
 	.get("/invites/:token/preview.png", async (context) => {
-		const target = await toInviteTarget(context.req.param("token"))
-		if (!target) {
+		const inviteTarget = await toInviteTarget(context.req.param("token"))
+		if (!inviteTarget) {
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// the token's own target decides which card is rendered, at any visibility
-		const invitePreviewPng = await toCachedInvitePreviewPng(target)
+		// the token's target, a team or a topic, decides which card is rendered, at any visibility
+		const invitePreviewPng = await toCachedInvitePreviewPng(inviteTarget)
 		if (!invitePreviewPng) {
 			return context.json({ error: "not found" }, 404)
 		}
-		const { bytes, cacheControl } = invitePreviewPng
-		return context.body(bytes as unknown as ArrayBuffer, 200, {
-			"Content-Type": "image/png",
-			"Cache-Control": cacheControl,
-		})
+		return toPreviewPngResponse(context, invitePreviewPng)
 	})
 	// the public profile routes
 	.route("/", profilesRoute)
@@ -243,3 +230,11 @@ export const apiRoute = new Hono<AppEnv>()
 	// the admin console routes
 	.route("/", adminRoute)
 	.route("/", featuringRoute)
+
+// the png response of a link-preview card, with the card's cache-control header
+function toPreviewPngResponse(context: Context, previewPng: { bytes: Uint8Array; cacheControl: string }): Response {
+	return context.body(previewPng.bytes as unknown as ArrayBuffer, 200, {
+		"Content-Type": "image/png",
+		"Cache-Control": previewPng.cacheControl,
+	})
+}

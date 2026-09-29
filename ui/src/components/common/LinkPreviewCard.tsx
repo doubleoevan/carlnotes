@@ -25,7 +25,16 @@ export function hasPreviewableLink(text: string): boolean {
  * The link preview card for a link: the page's own title, description, and image, all served from this origin.
  * A YouTube link's card plays the video in place, and nothing reaches YouTube until the play button is pressed.
  */
-export function LinkPreviewCard({ linkPreview, className }: { linkPreview: ChatLinkPreview; className?: string }) {
+export function LinkPreviewCard({
+	linkPreview,
+	className,
+	isUserContent,
+}: {
+	linkPreview: ChatLinkPreview
+	className?: string
+	// a user content link, such as a finding's source, gets rel ugc and keeps its referrer
+	isUserContent?: boolean
+}) {
 	// the host shown above the page's words
 	const linkPreviewHost = useMemo(() => toLinkPreviewHost(linkPreview.url), [linkPreview.url])
 	const [isPlayingVideo, setIsPlayingVideo] = useState(false)
@@ -86,7 +95,7 @@ export function LinkPreviewCard({ linkPreview, className }: { linkPreview: ChatL
 						</span>
 					</button>
 				)}
-				<AnchorLink href={linkPreview.url} className="hover:bg-bubble block">
+				<AnchorLink href={linkPreview.url} isUserContent={isUserContent} className="hover:bg-bubble block">
 					{linkPreviewText}
 				</AnchorLink>
 			</div>
@@ -95,6 +104,7 @@ export function LinkPreviewCard({ linkPreview, className }: { linkPreview: ChatL
 	return (
 		<AnchorLink
 			href={linkPreview.url}
+			isUserContent={isUserContent}
 			className={cn(
 				"border-border bg-bubble/60 hover:bg-bubble mt-1 block max-w-[92%] overflow-hidden rounded-xl border @lg:max-w-[75%]",
 				className,

@@ -1,4 +1,5 @@
 import type { TeamSearchResult, TopicFeed, TopicFinding, UserSearchResult } from "@shared/contracts"
+import { toTopicPath } from "@shared/seo"
 import { Hash } from "lucide-react"
 import { sendTopicFindingOpened } from "@/clients/topicClient"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
@@ -15,7 +16,7 @@ type SuggestionRowProps = { suggestionId: string; isActive: boolean; onOpen: () 
 export function TopicResult({ suggestionId, topic, isActive, onOpen }: SuggestionRowProps & { topic: TopicFeed }) {
 	return (
 		<AnchorLink
-			href={`/topics/${topic.id}`}
+			href={toTopicPath(topic)}
 			id={suggestionId}
 			role="option"
 			aria-selected={isActive}
@@ -87,6 +88,7 @@ export function ResourceResult({
 	return (
 		<AnchorLink
 			href={resource.url}
+			isUserContent
 			id={suggestionId}
 			role="option"
 			aria-selected={isActive}

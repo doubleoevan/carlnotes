@@ -158,12 +158,12 @@ async function hasSubscription(userId: string, topicId: string): Promise<boolean
 }
 
 /**
- * Whether a public TopicRow has enough kept Findings to be shown in Featured topics, Popular topics,
- * and the profile table.
+ * Whether a TopicRow is public and has enough kept Findings to be listed.
  */
-export const isShown = sql`(
-	select count(*) from ${findings} where ${findings.topicId} = ${topics.id}
-) >= ${MINIMUM_SHOWN_FINDINGS}`
+export const isPublicAndShown = and(
+	eq(topics.visibility, "public"),
+	sql`(select count(*) from ${findings} where ${findings.topicId} = ${topics.id}) >= ${MINIMUM_SHOWN_FINDINGS}`,
+)
 
 /**
  * When the user's subscription to the topic became active, or null with no active subscription.

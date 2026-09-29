@@ -1,6 +1,7 @@
 // Stripe Billing: Checkout, the Customer Portal
 // SETUP: create plus and premium products with monthly and yearly prices, plus a metered manual-scan overage price in Stripe
 import { zValidator } from "@hono/zod-validator"
+import { appUrl } from "@shared/appUrl"
 import type { BillingState } from "@shared/contracts"
 import { checkoutPayload } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
@@ -13,7 +14,6 @@ import { billingSubscriptions, users } from "../db/schema"
 import { replaceUserLiteLLMKey } from "../worker"
 import { isAllowed } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
-import { appUrl } from "./pages"
 import { scansToday } from "./topic/quotas"
 
 // a paid plan is any plan but free. only paid plans map to a Stripe price

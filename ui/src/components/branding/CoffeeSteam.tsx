@@ -1,4 +1,4 @@
-import { useLocation } from "react-router-dom"
+import { useLocation } from "@tanstack/react-router"
 
 // ring numbers mapped to css classes
 const RING_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
@@ -8,7 +8,7 @@ const RING_NUMBERS = [1, 2, 3, 4, 5, 6, 7, 8, 9]
  */
 export function CoffeeSteam() {
 	// keyed on the url path so each route change remounts the canvas
-	const { pathname } = useLocation()
+	const pathname = useLocation({ select: (location) => location.pathname })
 	return (
 		<div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
 			{/* the canvas tracks the real page height, so rings reach the bottom on any route */}

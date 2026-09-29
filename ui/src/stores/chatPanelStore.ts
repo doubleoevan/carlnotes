@@ -1,12 +1,11 @@
 import type { ChatRoom, ProposeTopicEditPayload, TopicDraftTeam } from "@shared/contracts"
-import { useEffect, useSyncExternalStore } from "react"
+import { useEffect } from "react"
 import { isWideScreen } from "@/lib/utils"
 import { toStoreListeners } from "@/stores/storeListeners"
 
 /**
- * Which chat room the panel is showing, or the private chat about one topic. It holds the addressing keys
- * alone, never a chat room's name or counts, so the panel reads those live from the badge store instead
- * of from a copy that could go stale.
+ * Which chat room the panel is showing, or the private chat about one topic. A chat id includes only the addressing keys,
+ * so the panel reads a chat room's name and counts live from the badge store.
  */
 export type ChatId =
 	// a shared chat room, keyed by the same pair the chat room list and the stream are keyed by
@@ -48,13 +47,15 @@ let pageContext: ChatPageContext | null = null
 // the chat message an open should load, set when a mention badge opens its chat room. it belongs to
 // one open instead of to the chat itself, so the chat room clears it once it has acted
 let chatMessageId: number | null = null
-const { subscribe, publish, getVersion } = toStoreListeners()
+const { publish, useStoreVersion } = toStoreListeners()
 
-/** Open, enlarge, or close the panel, which every page shares. */
-export function setChatPanelState(next: ChatPanelState): void {
-	panelState = next
+/**
+ * Opens, enlarges, or closes the chat panel.
+ */
+export function setChatPanelState(nextPanelState: ChatPanelState): void {
+	panelState = nextPanelState
 	// minimizing is closing: the chat room is forgotten, so opening somewhere new selects for that page
-	if (next === "collapsed") {
+	if (nextPanelState === "collapsed") {
 		chatId = null
 	}
 	publish()
@@ -82,8 +83,7 @@ export function setChatIdAtChatMessage(nextChatId: ChatId, nextChatMessageId: nu
  * The chat message the panel should scroll to, or null. Stays set until the room clears it.
  */
 export function useChatMessageMentioned(): number | null {
-	// the version is the snapshot, the same way the panel's own state is read
-	useSyncExternalStore(subscribe, getVersion, getVersion)
+	useStoreVersion()
 	return chatMessageId
 }
 
@@ -118,7 +118,7 @@ export function useRegisterChatContext(nextPageContext: ChatPageContext | null):
 }
 
 /**
- * The panel's live state and which chat it holds. The chat id is null until an open selects one and
+ * The panel's live state and which chat it shows. The chat id is null until an open selects one and
  * null again once the panel is minimized, so opening it somewhere new chooses for that page while a
  * chat room the user switched to survives navigation.
  */
@@ -128,8 +128,7 @@ export function useChatPanel(): {
 	// what the page on screen is about, which the panel reads when it selects its default
 	pageContext: ChatPageContext | null
 } {
-	// the version is the snapshot. the values it stands for are module state
-	useSyncExternalStore(subscribe, getVersion, getVersion)
+	useStoreVersion()
 	return { panelState, chatId, pageContext }
 }
 
@@ -221,7 +220,7 @@ export function toDefaultChatId(pageContext: ChatPageContext | null, chatRooms: 
 	return { kind: "private", newTopic: true }
 }
 
-// the chat room holding the most mentions, with the kind the page leads on winning before any other.
+// the chat room with the most mentions, from the page's preferred kind if a chat room of that kind has mentions.
 // none where every chat room is quiet, which is what sends the caller to its next choice
 function toBusiestChatRoom(chatRooms: ChatRoom[], pageContext: ChatPageContext | null): ChatRoom | undefined {
 	// a page asking for neither kind reads as a team page, since a team's chat room is the broader one
@@ -258,7 +257,7 @@ export function publishTopicChanged(topicId: string): void {
  * Reads the topic change count when this topic was changed last, or 0 otherwise.
  */
 export function useTopicChangeCount(topicId: string | null): number {
-	useSyncExternalStore(subscribe, getVersion)
+	useStoreVersion()
 	return topicId !== null && changedTopicId === topicId ? topicChangeCount : 0
 }
 
@@ -298,7 +297,7 @@ export function clearProposedTopicEdit(): void {
  * Reads what carl proposed changing to this topic, or null when this topic is not the one being edited.
  */
 export function useProposedTopicEdit(topicId: string | null): ProposeTopicEditPayload | null {
-	useSyncExternalStore(subscribe, getVersion)
+	useStoreVersion()
 	return topicId !== null && editingTopicId === topicId ? proposedTopicEdit : null
 }
 
@@ -306,7 +305,7 @@ export function useProposedTopicEdit(topicId: string | null): ProposeTopicEditPa
  * Reads whether this topic is the one being edited with carl.
  */
 export function useIsEditingTopic(topicId: string | null): boolean {
-	useSyncExternalStore(subscribe, getVersion)
+	useStoreVersion()
 	return topicId !== null && editingTopicId === topicId
 }
 

@@ -16,7 +16,13 @@ import {
 } from "./filter"
 import { fetchAndScoreResources } from "./score"
 import { type ScannedSource, summarizeTopicScan, toTopicScanSummary } from "./summarize"
-import { countFilteredResources, emptyReviewOutcome, emptyReviewSummary, type ReviewSummary } from "./track"
+import {
+	countAddedOrFilteredFindings,
+	countFilteredResources,
+	emptyReviewOutcome,
+	emptyReviewSummary,
+	type ReviewSummary,
+} from "./track"
 
 export type { ReviewSummary } from "./track"
 
@@ -51,8 +57,8 @@ export async function reviewScan(
 	const resourcesToReview = await loadResourcesToReview(topicId, discoveredResources, topicContextHash)
 	if (resourcesToReview.length === 0) {
 		// filter anyway, so a lowered max topic findings takes effect even when a scan finds nothing new
-		await filterTopicFindings(topicId)
-		return emptyReviewSummary()
+		const { filteredFindingCount } = await filterTopicFindings(topicId)
+		return { ...emptyReviewSummary(), addedOrFilteredFindingCount: filteredFindingCount }
 	}
 
 	// the Resources the Topic already holds Findings for. they are in the feed, so they pass the gate and win a dedupe
@@ -121,9 +127,18 @@ export async function reviewScan(
 		(scoredIds) => ({ toScoreCount: resourcesToScore.length, scoredCount: scoredIds.length }),
 	)
 
-	// keep only the topic's top maxTopicFindings findings now that this scan's findings are written
-	const relevantUrls = await filterTopicFindings(topicId)
-	reviewOutcome.keptFindings = reviewOutcome.keptFindings.filter((finding) => relevantUrls.has(finding.url))
+	// count this scan's new findings, then keep only the topic's top maxTopicFindings
+	const newFindingCount = reviewOutcome.keptFindings.filter((finding) => finding.isNew).length
+	const { keptFindingUrls, filteredFindingCount } = await filterTopicFindings(topicId)
+	reviewOutcome.keptFindings = reviewOutcome.keptFindings.filter((finding) => keptFindingUrls.has(finding.url))
+
+	// count the findings this scan added and kept, plus the existing findings the filter removed
+	const keptNewFindingCount = reviewOutcome.keptFindings.filter((finding) => finding.isNew).length
+	const addedOrFilteredFindingCount = countAddedOrFilteredFindings({
+		newFindingCount,
+		keptNewFindingCount,
+		filteredFindingCount,
+	})
 
 	// summarize the scan, unless the user stopped it
 	const scanSummary = stopSignal?.aborted
@@ -142,21 +157,24 @@ export async function reviewScan(
 	return {
 		keptCount: reviewOutcome.keptFindings.length,
 		filteredCount: countFilteredResources(reviewOutcome),
+		addedOrFilteredFindingCount,
 		scanSummary,
 		resourceIdsToScore: resourcesToScore.map((resource) => resource.id),
 		scoredResourceIds,
 	}
 }
 
-// keep only the topic's top maxTopicFindings findings by relevance score, except bookmarked ones
-async function filterTopicFindings(topicId: string): Promise<Set<string>> {
+// keep only the topic's top maxTopicFindings findings by relevance score, except for bookmarked or rated findings
+async function filterTopicFindings(
+	topicId: string,
+): Promise<{ keptFindingUrls: Set<string>; filteredFindingCount: number }> {
 	// the topic's limit on kept findings, and what the access check needs
 	const [topic] = await db
 		.select({ maxTopicFindings: topics.maxTopicFindings, ownerId: topics.ownerId, teamId: topics.teamId })
 		.from(topics)
 		.where(eq(topics.id, topicId))
 	if (!topic) {
-		return new Set()
+		return { keptFindingUrls: new Set(), filteredFindingCount: 0 }
 	}
 
 	// the topic's findings with their ranking scores, the url each one points at, and when it was found
@@ -213,11 +231,12 @@ async function filterTopicFindings(topicId: string): Promise<Set<string>> {
 		await db.delete(findings).where(inArray(findings.id, filteredIds))
 	}
 
-	// return the filtered topic finding urls
+	// return the urls of the findings that remain, and how many were filtered out
 	const filteredIdSet = new Set(filteredIds)
-	return new Set(
+	const keptFindingUrls = new Set(
 		findingRows.filter((findingRow) => !filteredIdSet.has(findingRow.id)).map((findingRow) => findingRow.url),
 	)
+	return { keptFindingUrls, filteredFindingCount: filteredIds.length }
 }
 
 /**

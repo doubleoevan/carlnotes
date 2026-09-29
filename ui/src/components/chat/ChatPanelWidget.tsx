@@ -16,6 +16,7 @@ import {
 import { DisabledRoomComposer } from "@/components/chat/ChatRoomComposer"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { useIsMounted } from "@/hooks/useBrowserValue"
 import { useKeyboardViewport } from "@/hooks/useKeyboardViewport"
 import { cn } from "@/lib/utils"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
@@ -35,21 +36,16 @@ export function ChatMessagesLoading() {
  */
 export function ChatLoadingPanel({
 	isEnlarged,
-	onPanelStateChange,
+	onPanelState,
 }: {
 	isEnlarged: boolean
-	onPanelStateChange: (next: ChatPanelState) => void
+	onPanelState: (nextPanelState: ChatPanelState) => void
 }) {
-	return renderOnTop(
-		<ChatPanelWidget isEnlarged={isEnlarged} onMinimizeChat={() => onPanelStateChange("collapsed")}>
-			<ChatPanelHeader
-				isEnlarged={isEnlarged}
-				onToggleSize={() => onPanelStateChange(isEnlarged ? "open" : "enlarged")}
-				onCollapse={() => onPanelStateChange("collapsed")}
-			/>
+	return (
+		<ChatPanelWidget isEnlarged={isEnlarged} onPanelState={onPanelState}>
 			<ChatMessagesLoading />
 			<DisabledRoomComposer />
-		</ChatPanelWidget>,
+		</ChatPanelWidget>
 	)
 }
 
@@ -60,14 +56,25 @@ const DOCKED_CHAT_PANEL_CLASS = "top-3 bottom-safe right-3 left-3 sm:left-auto s
 const CHAT_PANEL_ELEVATION_CLASS =
 	"shadow-[0_12px_28px_rgba(0,0,0,0.35),0_32px_80px_-12px_rgba(0,0,0,0.6),0_0_48px_rgba(0,0,0,0.55)] ring-1 ring-black/10 dark:ring-white/20"
 
-// the shared widget that every chat panel renders: the enlarge overlay, and the docked section that Escape minimizes
+/**
+ * Renders a chat panel with its title bar on the body, over a dimming overlay while enlarged.
+ */
 export function ChatPanelWidget({
 	isEnlarged,
-	onMinimizeChat,
+	onPanelState,
+	isRoom,
+	currentChatRoom,
+	chatRoomMenu,
 	children,
 }: {
 	isEnlarged: boolean
-	onMinimizeChat: () => void
+	onPanelState: (nextPanelState: ChatPanelState) => void
+	// a chat room shows the pair of mugs while a private chat only shows one mug
+	isRoom?: boolean
+	// the chat room that the chat rooms menu highlights as open
+	currentChatRoom?: CurrentChatRoomOption
+	// the chat rooms menu only shows if the menu has options
+	chatRoomMenu?: ChatOptionsMenuProps
 	children: React.ReactNode
 }) {
 	// a phone keyboard leaves the enlarged panel sized to what stays visible, down to the keyboard's edge,
@@ -78,14 +85,14 @@ export function ChatPanelWidget({
 			? { top: keyboardViewport.top + 12, height: keyboardViewport.height - 12, bottom: "auto" }
 			: undefined
 	return (
-		<>
+		<BodyPortal>
 			{/* only show an overlay on the page if the chat panel is enlarged */}
 			{isEnlarged && <div className="fixed inset-0 z-40 bg-black/50" aria-hidden="true" />}
 
 			{/* Escape also minimizes the chat panel */}
 			<section
 				aria-label="Coffee Talk"
-				onKeyDown={(event) => event.key === "Escape" && onMinimizeChat()}
+				onKeyDown={(event) => event.key === "Escape" && onPanelState("collapsed")}
 				className={cn(
 					"bg-popover @container fixed z-50 flex flex-col overflow-hidden rounded-xl",
 					CHAT_PANEL_ELEVATION_CLASS,
@@ -93,37 +100,43 @@ export function ChatPanelWidget({
 				)}
 				style={keyboardPanelStyle}
 			>
+				<ChatPanelHeader
+					isEnlarged={isEnlarged}
+					onPanelState={onPanelState}
+					isRoom={isRoom}
+					currentChatRoom={currentChatRoom}
+					chatRoomMenu={chatRoomMenu}
+				/>
 				{children}
 			</section>
-		</>
+		</BodyPortal>
 	)
 }
 
 // the minimized state is a labeled pill button with a chat mentions badge on its top right corner
 export function ChatPill({ onOpenChat, chatMentions }: { onOpenChat: () => void; chatMentions?: ChatMention[] }) {
 	return (
-		<button
-			type="button"
-			onClick={onOpenChat}
-			className={cn(
-				"bg-primary text-primary-foreground font-display bottom-safe fixed right-3 z-50 flex items-center gap-2 rounded-full py-2.5 pr-4 pl-3 text-sm transition-transform hover:scale-105",
-				CHAT_PANEL_ELEVATION_CLASS,
-			)}
-		>
-			<CoffeeCup className="size-5.5" />
-			Coffee Talk
-			{/* the unread chat mentions, on the Coffee Talk button */}
-			<UpdateCountBadge
-				chatMentions={chatMentions ?? []}
-				className="absolute -top-1.5 -right-1"
-				countBadgeClassName="bg-card text-card-foreground h-5 min-w-5 border text-xs"
-			/>
-		</button>
+		<BodyPortal>
+			<button
+				type="button"
+				onClick={onOpenChat}
+				className={cn(
+					"bg-primary text-primary-foreground font-display bottom-safe fixed right-3 z-50 flex items-center gap-2 rounded-full py-2.5 pr-4 pl-3 text-sm transition-transform hover:scale-105",
+					CHAT_PANEL_ELEVATION_CLASS,
+				)}
+			>
+				<CoffeeCup className="size-5.5" />
+				Coffee Talk
+				{/* the unread chat mentions badge, on the chat pill's top right corner */}
+				<UpdateCountBadge
+					chatMentions={chatMentions ?? []}
+					className="absolute -top-1.5 -right-1"
+					countBadgeClassName="bg-card text-card-foreground h-5 min-w-5 border text-xs"
+				/>
+			</button>
+		</BodyPortal>
 	)
 }
-
-// the chat room open in the panel right now, in the shape the switcher row's menu takes it
-export type { CurrentChatRoomOption as ChatPanelCurrentRoom } from "@/components/chat/ChatOptionsMenu"
 
 // the chat panel title display with coffee cups
 function ChatPanelTitle({ isRoom }: { isRoom?: boolean }) {
@@ -140,24 +153,13 @@ function ChatPanelTitle({ isRoom }: { isRoom?: boolean }) {
 }
 
 // the chat panel title bar: the static title and its buttons, with the chat room switcher as its own row below
-export function ChatPanelHeader({
+function ChatPanelHeader({
 	isEnlarged,
+	onPanelState,
 	isRoom,
-	onToggleSize,
-	onCollapse,
-	chatRoomMenu,
 	currentChatRoom,
-}: {
-	isEnlarged: boolean
-	// a chat room shows the pair of mugs while a private chat only shows one mug
-	isRoom?: boolean
-	onToggleSize: () => void
-	onCollapse: () => void
-	// what the chat room switcher row offers to open. no row shows when it is absent or has nothing to offer
-	chatRoomMenu?: ChatOptionsMenuProps
-	// the chat room the switcher row names as open
-	currentChatRoom?: CurrentChatRoomOption
-}) {
+	chatRoomMenu,
+}: Omit<React.ComponentProps<typeof ChatPanelWidget>, "children">) {
 	return (
 		<header className="flex shrink-0 flex-col border-b">
 			<div className="flex items-center gap-2 px-3 py-2.5">
@@ -171,7 +173,7 @@ export function ChatPanelHeader({
 							<button
 								type="button"
 								aria-label={isEnlarged ? "Collapse" : "Expand"}
-								onClick={onToggleSize}
+								onClick={() => onPanelState(isEnlarged ? "open" : "enlarged")}
 								className="text-muted-foreground hover:text-foreground hidden size-8 place-items-center rounded-md sm:grid"
 							>
 								{isEnlarged ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
@@ -185,7 +187,7 @@ export function ChatPanelHeader({
 							<button
 								type="button"
 								aria-label="Minimize"
-								onClick={onCollapse}
+								onClick={() => onPanelState("collapsed")}
 								className="text-muted-foreground hover:text-foreground grid size-8 place-items-center rounded-md"
 							>
 								<Minus className="size-4" />
@@ -205,7 +207,7 @@ export function ChatPanelHeader({
 	)
 }
 
-// render into the body for the highest z-index possible
-export function renderOnTop(children: React.ReactNode): React.ReactPortal {
-	return createPortal(children, document.body)
+// the children in a portal on the body, above the page, rendered once BodyPortal has mounted in the browser
+function BodyPortal({ children }: { children: React.ReactNode }): React.ReactPortal | null {
+	return useIsMounted() ? createPortal(children, document.body) : null
 }

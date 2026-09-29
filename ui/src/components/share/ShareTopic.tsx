@@ -1,3 +1,4 @@
+import { toTopicFeedPath, toTopicPath } from "@shared/seo"
 import { Check, Flag, Link, Rss, Share, Share2 } from "lucide-react"
 import { useState } from "react"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog.tsx"
@@ -17,6 +18,7 @@ import {
 	ShareTargetOptions,
 } from "@/components/share/ShareOptions"
 import { useShareTopicActions } from "@/components/share/useShareTopicActions"
+import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
 import { canOpenShareSheet } from "@/lib/shareSheet"
 
 // what a disabled share option shows, which names the owner's way to fix it
@@ -24,7 +26,7 @@ function toDisabledReason(isTopicOwner?: boolean): string {
 	return isTopicOwner ? "Make this topic public to post it" : "This topic must be public to post it"
 }
 
-// the option that shares an invite link, relabeled once a clipboard copy lands
+// the option that shares an invite link, relabeled once a clipboard copy succeeds
 function InviteShareOption({
 	isCopied,
 	label,
@@ -78,14 +80,15 @@ export function ShareTopic({
 		setIsReportingIssue(true)
 	}
 
-	// read once on mount, so the share sheet is only shown if available
-	const [isShareSheetAvailable] = useState(canOpenShareSheet)
+	// whether this browser can open a share sheet, false until the component mounts in the browser
+	const isShareSheetAvailable = useIsMounted() && canOpenShareSheet()
 
-	// the absolute url a platform needs, encoded once for use inside a query string
-	const topicUrl = `${window.location.origin}/topics/${topicId}`
-	const feedUrl = `${topicUrl}/feed.xml`
+	// the absolute topic and feed urls, with the topic url and title encoded once for use inside a query string
+	const origin = useOrigin()
+	const topicUrl = `${origin}${toTopicPath(topic)}`
+	const feedUrl = `${origin}${toTopicFeedPath(topicId)}`
 	const [encodedUrl, encodedTitle] = [encodeURIComponent(topicUrl), encodeURIComponent(topicName)]
-	// the topic actions for the rows below, which close this menu once a share actually lands
+	// the topic actions for the options below, which close this menu once a share succeeds
 	const { copiedLabel, copyLink, shareTopic, shareInvite } = useShareTopicActions(topicId, topicName, topicUrl, () =>
 		setIsOpen(false),
 	)

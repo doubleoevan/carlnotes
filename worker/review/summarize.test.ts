@@ -16,7 +16,13 @@ test("toScanSummary yields an empty summary when the report throws an error", as
 // buildScanReportPrompt writes the report prompt from summarize-topic-scan.md over the scan's totals, sources, and costs
 test("buildScanReportPrompt grounds the report prompt in the scan's data", async () => {
 	// one kept finding with its user-facing note
-	const keptFinding = { title: "One", url: "https://a.com/1", relevanceScore: 0.91, relevanceExplanation: "agent news" }
+	const keptFinding = {
+		title: "One",
+		url: "https://a.com/1",
+		relevanceScore: 0.91,
+		relevanceExplanation: "agent news",
+		isNew: true,
+	}
 
 	// per-cause drop counts plus the failed count. the deferred count is set but never reported
 	const reviewOutcome = {

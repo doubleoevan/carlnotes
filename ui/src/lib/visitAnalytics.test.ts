@@ -20,17 +20,24 @@ test("a path with no id is reported unchanged", () => {
 
 // anything after the id keeps its place, so a deeper route still reads as one page
 test("a segment after the id is kept", () => {
-	expect(toReportedPath("/topics/bffe43c2/settings")).toBe("/topics/:id/settings")
+	expect(toReportedPath("/teams/team-1/settings")).toBe("/teams/:teamId/settings")
 })
 
-// the settings that keep a visit off the device and unidentified. a later edit that drops one would be silent,
-// so they are asserted from the source rather than trusted
+// a topic's slug is its name, and a private topic's name never reaches the report
+test("a topic's slug is reported by its shape", () => {
+	expect(toReportedPath("/topics/bffe43c2/getting-a-literary-agent")).toBe("/topics/:id/:slug")
+	expect(toReportedPath("/topics/bffe43c2")).toBe("/topics/:id")
+})
+
+// the settings that keep a visit off the device and unidentified, asserted on the visitAnalytics.ts source
 test("the client is configured to store nothing and identify nobody", async () => {
 	const visitAnalyticsSource = await Bun.file(new URL("./visitAnalytics.ts", import.meta.url)).text()
+	// no cookie, no profile, and no automatic capture or recording
 	expect(visitAnalyticsSource).toContain('cookieless_mode: "always"')
 	expect(visitAnalyticsSource).toContain('person_profiles: "never"')
 	expect(visitAnalyticsSource).toContain("autocapture: false")
 	expect(visitAnalyticsSource).toContain("disable_session_recording: true")
+	// a page view is reported by hand, with its ids taken out
 	expect(visitAnalyticsSource).toContain("capture_pageview: false")
 	expect(visitAnalyticsSource).toContain("before_send: toReportedEvent")
 })
@@ -39,6 +46,7 @@ test("the client is configured to store nothing and identify nobody", async () =
 test("nothing in the ui identifies a visitor", async () => {
 	const uiFiles = new Bun.Glob("**/*.{ts,tsx}").scanSync({ cwd: new URL("../", import.meta.url).pathname })
 	const identifyingFiles: string[] = []
+	// collect every ui file that calls PostHog's identify or alias
 	for (const uiFile of uiFiles) {
 		const source = await Bun.file(new URL(`../${uiFile}`, import.meta.url)).text()
 		if (/posthog\.(identify|alias)\s*\(/.test(source)) {

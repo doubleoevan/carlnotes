@@ -9,12 +9,8 @@ import {
 	type TeamsPageResponse,
 	type UpdateTeamPayload,
 } from "@shared/contracts"
-import { hc } from "hono/client"
 import { refreshAvatars } from "@/hooks/useAvatarVersion"
-import type { AppType } from "../../../api"
-
-// same-origin api client. in dev vite forwards /api to the Hono server
-const apiClient = hc<AppType>(window.location.origin)
+import { apiClient, readApiErrorMessage } from "./apiClient"
 
 // how creating a team was rejected, for the modal to show which way it went
 export type CreateTeamRejection = "quota" | "name-taken"
@@ -50,7 +46,7 @@ export async function fetchTeamPage(teamId: string): Promise<TeamPageResult> {
 		return { status: "visible", team: (await response.json()) as TeamPageResponse }
 	}
 
-	// a private team returns only its name, so its page can offer an outsider a way in. the value is checked instead of trusted
+	// a private team returns only its name, so its page can offer a non-member a way in. the value is checked instead of trusted
 	const body = (await response.json().catch(() => null)) as { teamName?: unknown; hasRequestedToJoin?: unknown } | null
 	return typeof body?.teamName === "string"
 		? { status: "gated", teamName: body.teamName, hasRequestedToJoin: body.hasRequestedToJoin === true }
@@ -92,6 +88,7 @@ export async function sendDeleteTeam(
 ): Promise<{ status: "deleted" } | { status: "handedOver"; newLeaderUsername: string } | null> {
 	try {
 		const response = await apiClient.api.teams[":id"].$delete({ param: { id: teamId } })
+		// return null for a failed delete, and the deleted or handed-over result otherwise
 		if (!response.ok) {
 			return null
 		}
@@ -107,8 +104,7 @@ export async function sendAddTopicTeam(teamId: string, topicId: string): Promise
 	if (response.ok) {
 		return null
 	}
-	const body = (await response.json().catch(() => null)) as { error?: string } | null
-	return body?.error ?? "That topic didn't get added. Try again."
+	return (await readApiErrorMessage(response)) ?? "That topic didn't get added. Try again."
 }
 
 // remove a topic from the team
@@ -145,9 +141,9 @@ export async function sendCreateTeamInvite(teamId: string, source: InviteSource)
 	if (response.status === 429) {
 		return "limited"
 	}
+	// throw any other failure with the api's error message, or with the status if the body has none
 	if (!response.ok) {
-		const body = (await response.json().catch(() => null)) as { error?: string } | null
-		throw new Error(body?.error ?? `invite create failed: ${response.status}`)
+		throw new Error((await readApiErrorMessage(response)) ?? `invite create failed: ${response.status}`)
 	}
 	return inviteCreateResponse.parse(await response.json()).invite
 }
@@ -164,8 +160,7 @@ export async function sendTeamAvatar(teamId: string, avatarFile: File): Promise<
 	}
 
 	// the rejection names itself, so the picker can show which way it went
-	const rejection = ((await response.json().catch(() => null)) as { error?: string } | null)?.error
-	return rejection ?? "failed"
+	return (await readApiErrorMessage(response)) ?? "failed"
 }
 
 // the public teams a query finds, for the search bar's team suggestions

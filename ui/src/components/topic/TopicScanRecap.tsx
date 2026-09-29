@@ -2,6 +2,7 @@
 import type { TopicFinding } from "@shared/contracts"
 import type { scanStatuses } from "@shared/enums"
 import { isBudgetError } from "@shared/scanFailure"
+import { toTopicPath } from "@shared/seo"
 import Markdown from "markdown-to-jsx"
 import type * as React from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
@@ -68,7 +69,7 @@ function FindingLink({
 	// an allowed url renders as a link
 	if (href && allowedUrls?.has(href)) {
 		return (
-			<AnchorLink href={href} className="text-link hover:underline">
+			<AnchorLink href={href} isUserContent className="text-link hover:underline">
 				{children}
 			</AnchorLink>
 		)
@@ -188,8 +189,9 @@ export function toNotesMarkdown({
 	note?: string | null
 	findings?: TopicFinding[]
 }): string {
-	// the topic title links back to its page, so the pasted context can be followed to the source
-	const title = `# [${topicName}](${window.location.origin}/topics/${topicId})`
+	// link the topic title to the topic page. a server render has no window, so the link is a bare path
+	const origin = typeof window === "undefined" ? "" : window.location.origin
+	const title = `# [${topicName}](${origin}${toTopicPath({ id: topicId, name: topicName })})`
 	const findingLines = (findings ?? []).map(
 		(finding, index) =>
 			`${index + 1}. [${finding.title ?? finding.url}](${finding.url}) — ${finding.relevanceExplanation}`,
@@ -205,7 +207,7 @@ export function NumberedTopicFindingList({ findings }: { findings: TopicFinding[
 		<ol className="mt-3 space-y-2.5">
 			{findings.map((finding, index) => (
 				<li key={finding.findingId}>
-					<AnchorLink href={finding.url} className="text-link hover:underline">
+					<AnchorLink href={finding.url} isUserContent className="text-link hover:underline">
 						{index + 1}. {finding.title ?? finding.url}
 					</AnchorLink>
 					{/* the host under the title, then the model's reason the finding was kept.

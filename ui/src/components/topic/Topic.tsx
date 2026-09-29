@@ -1,7 +1,8 @@
 import type { TopicFeed } from "@shared/contracts"
+import { toTopicPath } from "@shared/seo"
+import { useNavigate } from "@tanstack/react-router"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { authClient } from "@/clients/authClient"
 import { sendTopicSubscription } from "@/clients/topicClient"
 import { NoteIcon } from "@/components/branding/NoteIcon"
@@ -49,6 +50,7 @@ export function Topic({ topic, index }: TopicProps) {
 	return (
 		<div
 			ref={ref}
+			data-reveal
 			className={cn("py-1.5", isVisible ? "animate-hydrate" : "opacity-0")}
 			style={{ animationDelay: `${Math.min(index, 3) * 50}ms` }}
 		>
@@ -58,7 +60,7 @@ export function Topic({ topic, index }: TopicProps) {
 				<div className="flex items-center gap-2">
 					{/* the chat mention count sits at the name's top-right corner while the user has unseen chat mentions */}
 					<span className="relative inline-block min-w-0">
-						<AnchorLink href={`/topics/${topic.id}`} className="text-link min-w-0 hover:underline">
+						<AnchorLink href={toTopicPath(topic)} className="text-link min-w-0 hover:underline">
 							<h3 className="font-display pt-1 pl-4 pb-1 text-lg leading-tight">{topic.name}</h3>
 						</AnchorLink>
 						<PageUpdateCountBadge topicId={topic.id} className="-right-2" />
@@ -142,7 +144,7 @@ function SubscribeToggle({ topic }: { topic: TopicFeed }) {
 	// a visitor is sent to signup, a signed-in user toggles their topic subscription and reloads the topic feed
 	async function handleClick(): Promise<void> {
 		if (!session) {
-			navigate("/signup?cta=subscribe")
+			void navigate({ to: "/signup", search: { cta: "subscribe" } })
 			return
 		}
 		await sendTopicSubscription(topic.id, !topic.isSubscribed)

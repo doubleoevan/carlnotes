@@ -1,18 +1,13 @@
 import type * as React from "react"
-import { useEffect, useState } from "react"
+import { useSyncExternalStore } from "react"
 import { Toaster as SonnerToaster } from "sonner"
 
 /**
  * The app's toast host, mounted once in the layout. It mirrors the HTML dark class so that toasts match the theme.
  */
 export function Toaster(props: React.ComponentProps<typeof SonnerToaster>) {
-	// track the dark class on the HTML element so a theme toggle restyles live
-	const [isDark, setIsDark] = useState(() => document.documentElement.classList.contains("dark"))
-	useEffect(() => {
-		const observer = new MutationObserver(() => setIsDark(document.documentElement.classList.contains("dark")))
-		observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
-		return () => observer.disconnect()
-	}, [])
+	// read the HTML element's dark class, and read it again on every class change so a theme toggle restyles the toasts
+	const isDark = useSyncExternalStore(subscribeToHtmlClass, readIsDark, readIsDarkOnServer)
 
 	// toasts drop from the top, themed to match the app, with props last so a caller can override
 	return (
@@ -28,4 +23,21 @@ export function Toaster(props: React.ComponentProps<typeof SonnerToaster>) {
 			/>
 		</div>
 	)
+}
+
+// run the callback on every change to the HTML element's class list
+function subscribeToHtmlClass(onClassChange: () => void): () => void {
+	const observer = new MutationObserver(onClassChange)
+	observer.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] })
+	return () => observer.disconnect()
+}
+
+// whether the HTML element has the dark class
+function readIsDark(): boolean {
+	return document.documentElement.classList.contains("dark")
+}
+
+// the server render has no document, so it renders the light theme
+function readIsDarkOnServer(): boolean {
+	return false
 }

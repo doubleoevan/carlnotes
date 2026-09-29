@@ -1,8 +1,5 @@
 // the api client for the mcp consent page. it fetches the mcp client's name and sends the user's consent
-import { hc } from "hono/client"
-import type { AppType } from "../../../api"
-
-const apiClient = hc<AppType>(window.location.origin)
+import { apiClient } from "./apiClient"
 
 /**
  * Fetches the name of the mcp client asking for consent, or null when no client has that id.

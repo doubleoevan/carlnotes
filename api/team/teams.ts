@@ -19,7 +19,7 @@ import { type AppEnv, currentUser } from "../currentUser"
 import { canSeeTopic } from "../topic/permissions"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 import { isUniqueViolation } from "../usernames"
-import { loadTeamPage, loadTeamsPage, searchTeams, toGatedTeam } from "./helpers"
+import { loadTeamPage, loadTeamsPage, searchTeams } from "./helpers"
 import {
 	approveJoinTeamRequest,
 	type DbTransaction,
@@ -395,6 +395,7 @@ async function updateTeamLeader(userId: string, teamId: string): Promise<DeleteT
 			.from(teamMembers)
 			.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true)))
 			.for("update")
+		// the team members who stay. a team with no other member has no one to pass the leader role to
 		const otherMembers = memberRows.filter((memberRow) => memberRow.userId !== userId)
 		if (otherMembers.length === 0) {
 			return null
@@ -470,20 +471,17 @@ export const teamsRoute = new Hono<AppEnv>()
 		return context.json({ error: "team limit reached" }, 429)
 	})
 	.get("/teams/:id/page", async (context) => {
-		// the page payload, or the gate a private team shows an outsider: its name and nothing else
-		const userId = currentUser(context)
-		const teamPage = await loadTeamPage(userId, context.req.param("id"))
-		if (teamPage) {
-			return context.json(teamPage)
+		// the team page, or the gate a private team shows a non-member with the team's name and the user's join request
+		const teamPageResult = await loadTeamPage(currentUser(context), context.req.param("id"))
+		if (teamPageResult.status === "visible") {
+			return context.json(teamPageResult.team)
 		}
-		// no team for the id at all still reads as nothing existing
-		const gatedTeam = await toGatedTeam(userId, context.req.param("id"))
-		return gatedTeam
-			? context.json(
-					{ error: "forbidden", teamName: gatedTeam.name, hasRequestedToJoin: gatedTeam.hasRequestedToJoin },
-					403,
-				)
-			: context.json({ error: "not found" }, 404)
+		if (teamPageResult.status === "gated") {
+			const { teamName, hasRequestedToJoin } = teamPageResult
+			return context.json({ error: "forbidden", teamName, hasRequestedToJoin }, 403)
+		}
+		// no team has the id
+		return context.json({ error: "not found" }, 404)
 	})
 	.post("/teams/:id/join-requests", async (context) => {
 		// reject a signed-out visitor
@@ -491,7 +489,7 @@ export const teamsRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// ask to join. a missing team and a member both answer not found, telling an outsider nothing
+		// ask to join. a missing team and a member both answer not found, telling a non-member nothing
 		const isRequested = await requestToJoinTeam(userId, context.req.param("id"))
 		return isRequested ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
 	})

@@ -1,7 +1,7 @@
 import type { OwnerTopic, ProfileResponse } from "@shared/contracts"
+import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Pencil, Plus, Users, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
 import { toast } from "sonner"
 import { fetchActivity } from "@/clients/activityClient"
 import { authClient } from "@/clients/authClient"
@@ -25,6 +25,7 @@ import { TopicsTable } from "@/components/table/TopicsTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { NewTeamOption, TeamOption } from "@/components/team/TeamUpButton"
 import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { toCountLabel } from "@/lib/labels"
 import { CARD_CLASS, MENU_OPTION_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
@@ -35,11 +36,15 @@ import { useAllNoteBadges } from "@/stores/noteBadgeStore"
 import { type PageActionOption, useRegisterPageActions } from "@/stores/pageActionsStore"
 
 // editing the profile and starting a team are both owner actions
-function toProfileActionOptions(
-	isOwnProfile: boolean,
-	onEditProfile: () => void,
-	onNewTeam: () => void,
-): PageActionOption[] {
+function toProfileActionOptions({
+	isOwnProfile,
+	onEditProfile,
+	onNewTeam,
+}: {
+	isOwnProfile: boolean
+	onEditProfile: () => void
+	onNewTeam: () => void
+}): PageActionOption[] {
 	return isOwnProfile
 		? [
 				{ label: "Edit profile", Icon: Pencil, onSelect: onEditProfile },
@@ -48,15 +53,20 @@ function toProfileActionOptions(
 		: []
 }
 
+// the profile route, whose loader reads the profile on the server
+const profileRoute = getRouteApi("/_layout/profiles/$userId")
+
 /**
  * A user's public profile: their avatar, username, subscriber count, when they joined, and their public Topics,
  * with the owner's non-public topics only shown to the owner or an admin.
  */
 export function ProfilePage() {
-	const { userId } = useParams<{ userId: string }>()
+	const { userId } = profileRoute.useParams()
 	const navigate = useNavigate()
 	const { data: session } = authClient.useSession()
-	const [profile, setProfile] = useState<ProfileResponse | null>(null)
+	// the profile the route loads on the server, or null after a browser navigation
+	const loadedProfile = profileRoute.useLoaderData({ select: (loaderData) => loaderData?.profile ?? null })
+	const [profile, setProfile] = useState<ProfileResponse | null>(loadedProfile)
 	const [isProfileMissing, setIsProfileMissing] = useState(false)
 	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
 	const [isEditingProfile, setIsEditingProfile] = useState(false)
@@ -73,9 +83,7 @@ export function ProfilePage() {
 
 	// reload the profile after a change to its teams or topics
 	const handleReloadProfile = useCallback(async (): Promise<void> => {
-		if (userId) {
-			setProfile(await fetchProfile(userId))
-		}
+		setProfile(await fetchProfile(userId))
 	}, [userId])
 
 	// load a user's own topics
@@ -88,11 +96,9 @@ export function ProfilePage() {
 	// load the profile user's teams
 	const [teamOptions, setTeamOptions] = useState<TeamMenuOption[] | null>(null)
 	const handleLoadTeams = useCallback((): void => {
-		if (userId) {
-			fetchTeamOptions(userId)
-				.then(setTeamOptions)
-				.catch(() => setTeamOptions([]))
-		}
+		fetchTeamOptions(userId)
+			.then(setTeamOptions)
+			.catch(() => setTeamOptions([]))
 	}, [userId])
 	useEffect(() => handleLoadTeams(), [handleLoadTeams])
 
@@ -119,11 +125,11 @@ export function ProfilePage() {
 		profile && session
 			? {
 					page: "Profile",
-					options: toProfileActionOptions(
+					options: toProfileActionOptions({
 						isOwnProfile,
-						() => setIsEditingProfile(true),
-						() => void handleOpenTeamUpMenu(),
-					),
+						onEditProfile: () => setIsEditingProfile(true),
+						onNewTeam: () => void handleOpenTeamUpMenu(),
+					}),
 					report: { subjectKind: "profile", subjectId: profile.userId, subjectLabel: profile.username },
 				}
 			: null,
@@ -135,24 +141,22 @@ export function ProfilePage() {
 		setIsTeamingUp(true)
 	}
 
-	// load the profile
-	useEffect(() => {
-		if (!userId) {
-			return
-		}
+	// load the profile, except while hydrating the profile the server loaded
+	const reloadProfilePage = useCallback((): void => {
 		// a failed profile load shows the missing page
 		fetchProfile(userId)
-			.then((profile) => (profile ? setProfile(profile) : setIsProfileMissing(true)))
+			.then((fetchedProfile) => (fetchedProfile ? setProfile(fetchedProfile) : setIsProfileMissing(true)))
 			.catch((error) => {
 				console.error("profile load failed", error)
 				setIsProfileMissing(true)
 			})
 	}, [userId])
+	useLoadInBrowser({ pageId: userId, isLoadedOnServer: loadedProfile !== null, loadPage: reloadProfilePage })
 
 	// close the new topic modal and forward to the topic page
 	const handleTopicCreated = async (topicId: string): Promise<void> => {
 		setIsNewTopicOpen(false)
-		navigate(`/topics/${topicId}`)
+		navigate({ to: "/topics/$topicId", params: { topicId } })
 	}
 
 	// show the missing page or the loading page
@@ -166,7 +170,7 @@ export function ProfilePage() {
 	// a logged-out visitor goes to the sign-up page, and a user on their own profile does not open the team up menu
 	const handleTeamUp = (): void => {
 		if (!session) {
-			navigate("/signup?cta=profile-team-up")
+			void navigate({ to: "/signup", search: { cta: "profile-team-up" } })
 			return
 		}
 		if (isOwnProfile) {
@@ -267,8 +271,8 @@ function ProfileSections({
 								teams={profile.teams}
 								receivedInvites={[]}
 								isReadOnly={!isOwnProfile}
-								onLeave={() => navigate("/teams")}
-								onDelete={() => navigate("/teams")}
+								onLeave={() => navigate({ to: "/teams" })}
+								onDelete={() => navigate({ to: "/teams" })}
 								onAnswered={onReloadProfile}
 							/>
 						) : (
@@ -385,7 +389,7 @@ function ProfileTeamUpButton({
 }) {
 	const [isOpen, setIsOpen] = useState(false)
 
-	// the rows refetch on open
+	// refetch the team options when the team up menu opens
 	const handleOpenChange = (isOpening: boolean): void => {
 		setIsOpen(isOpening)
 		if (isOpening) {
@@ -476,7 +480,7 @@ function ProfileTeamUpButton({
 											<X className="text-muted-foreground size-4 opacity-50" />
 										</span>
 									</TooltipTrigger>
-									<TooltipContent>Must be a leader to delete another member&apos;s invitation</TooltipContent>
+									<TooltipContent>{"Must be a leader to delete another member's invitation"}</TooltipContent>
 								</Tooltip>
 							)}
 						</div>

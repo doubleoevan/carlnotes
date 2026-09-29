@@ -7,6 +7,7 @@ import {
 	inviteAcceptResponse,
 	inviteCreateResponse,
 	manualScanResponse,
+	type PublicTopic,
 	type SuggestSourcesPayload,
 	type SuggestSourcesResponse,
 	scanNote,
@@ -18,14 +19,10 @@ import {
 	topicResponse,
 	type UpdateTopicPayload,
 } from "@shared/contracts"
-import { hc } from "hono/client"
 import { toast } from "sonner"
-import type { AppType } from "../../../api"
+import { apiClient, readApiErrorMessage } from "./apiClient"
 
-// same-origin api client
-const apiClient = hc<AppType>(window.location.origin)
-
-// tells the user a write was rejected, and answers whether it landed
+// tells the user a write was rejected, and returns whether it succeeded
 async function reportFailedWrite(request: Promise<Response>, action: string, isBackground = false): Promise<boolean> {
 	// a rejected request never reaches a Response at all, so an offline user is told the same as a rejected write
 	let response: Response
@@ -61,9 +58,9 @@ export async function sendCreateTopicInvite(topicId: string, source: InviteSourc
 	if (response.status === 429) {
 		return "limited"
 	}
+	// throw any other failure with the api's error message, or with the status if the body has none
 	if (!response.ok) {
-		const body = (await response.json().catch(() => null)) as { error?: string } | null
-		throw new Error(body?.error ?? `invite create failed: ${response.status}`)
+		throw new Error((await readApiErrorMessage(response)) ?? `invite create failed: ${response.status}`)
 	}
 	return inviteCreateResponse.parse(await response.json()).invite
 }
@@ -281,8 +278,7 @@ export async function sendSubscriptionEmail(
 export async function sendManualScan(topicId: string): Promise<number> {
 	const response = await apiClient.api.topics[":id"].scan.$post({ param: { id: topicId } })
 	if (!response.ok) {
-		const body = (await response.json().catch(() => null)) as { error?: string } | null
-		throw new Error(body?.error ?? `scan request failed: ${response.status}`)
+		throw new Error((await readApiErrorMessage(response)) ?? `scan request failed: ${response.status}`)
 	}
 	return manualScanResponse.parse(await response.json()).remainingScans
 }
@@ -291,8 +287,7 @@ export async function sendManualScan(topicId: string): Promise<number> {
 export async function sendStopScan(topicId: string): Promise<void> {
 	const response = await apiClient.api.topics[":id"].scan.stop.$post({ param: { id: topicId } })
 	if (!response.ok) {
-		const body = (await response.json().catch(() => null)) as { error?: string } | null
-		throw new Error(body?.error ?? `stop request failed: ${response.status}`)
+		throw new Error((await readApiErrorMessage(response)) ?? `stop request failed: ${response.status}`)
 	}
 }
 
@@ -305,8 +300,7 @@ export async function uploadTopicAttachment(topicId: string, file: File): Promis
 
 	// surface the rejection reason from the api, falling back to the status
 	if (!response.ok) {
-		const body = (await response.json().catch(() => null)) as { error?: string } | null
-		throw new Error(body?.error ?? `upload failed: ${response.status}`)
+		throw new Error((await readApiErrorMessage(response)) ?? `upload failed: ${response.status}`)
 	}
 }
 
@@ -345,14 +339,19 @@ export async function sendUserInvite(
 	}
 
 	// the named rejections pass through for the field's copy, and anything else reads as a plain failure
-	const rejection = await response
-		.json()
-		.then((body) => (body as { error?: string }).error)
-		.catch(() => undefined)
+	const rejection = await readApiErrorMessage(response)
 
 	// a rejection with no body falls through to the status check
 	if (rejection === "unknown-username" || rejection === "not-accepting") {
 		return rejection
 	}
 	return response.status === 429 ? "limited" : "failed"
+}
+
+/**
+ * Every shown public topic, most recently updated first, or an empty list if the request fails.
+ */
+export async function fetchPublicTopics(): Promise<PublicTopic[]> {
+	const response = await apiClient.api["public-topics"].$get()
+	return response.ok ? ((await response.json()) as PublicTopic[]) : []
 }

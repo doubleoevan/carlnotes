@@ -1,16 +1,15 @@
 // the unread note counts the poll last read, plus the notes opened this session that already cleared
 import type { NoteBadge } from "@shared/contracts"
-import { useSyncExternalStore } from "react"
 import { toStoreListeners } from "@/stores/storeListeners"
 
 // the notes opened this session, which clear their badge before the next poll confirms it
 const openedNoteIds = new Set<string>()
 // what the poll last read
 let noteBadges: NoteBadge[] = []
-const { subscribe, publish, getVersion } = toStoreListeners()
+const { publish, useStoreVersion } = toStoreListeners()
 
 /**
- * Mark a note opened, clearing its badges everywhere they show.
+ * Marks a note opened, which clears its badges everywhere they show.
  */
 export function markNoteOpened(noteId: string): void {
 	openedNoteIds.add(noteId)
@@ -18,7 +17,7 @@ export function markNoteOpened(noteId: string): void {
 }
 
 /**
- * Replace the updated note counts with what the poll last read.
+ * Replaces the note badge counts with what the poll last read.
  */
 export function setNoteBadges(updatedNoteBadges: NoteBadge[]): void {
 	noteBadges = updatedNoteBadges
@@ -32,12 +31,6 @@ export function setNoteBadges(updatedNoteBadges: NoteBadge[]): void {
 	publish()
 }
 
-// every hook below re-renders off the same version, so they share one subscription. the third
-// snapshot is what a server render reads, and the note table's tests render on the server
-function useBadgeVersion(): void {
-	useSyncExternalStore(subscribe, getVersion, getVersion)
-}
-
 // the edits and comments waiting on the notes a filter picks, with everything opened this session left out
 function toCount(matches: (badge: NoteBadge) => boolean): number {
 	return noteBadges
@@ -47,7 +40,7 @@ function toCount(matches: (badge: NoteBadge) => boolean): number {
 
 /**
  * The unread badges waiting on one page. A topic id shows its topic badges.
- * A team id shows its team's notes and the notes on every topic the team holds.
+ * A team id shows its team's notes and the notes on every topic of the team.
  */
 export function toPageNoteBadges(topicId: string | null, teamId: string | undefined): NoteBadge[] {
 	return noteBadges.filter(
@@ -57,9 +50,9 @@ export function toPageNoteBadges(topicId: string | null, teamId: string | undefi
 	)
 }
 
-/** The unread note badges waiting on one page, with what each note holds. */
+/** The unread note badges waiting on one page, with each note's unread edits and comments. */
 export function usePageNoteBadges(topicId: string | null, teamId: string | undefined): NoteBadge[] {
-	useBadgeVersion()
+	useStoreVersion()
 	return toPageNoteBadges(topicId, teamId)
 }
 
@@ -88,24 +81,24 @@ export function toAllTeamNoteCount(): number {
  * One note's two numbers, kept separate for the note's own row. Zeroes for a note with nothing waiting.
  */
 export function toNoteBadge(noteId: string): { unreadEdits: number; unreadComments: number } {
-	const noteBadge = openedNoteIds.has(noteId) ? undefined : noteBadges.find((waiting) => waiting.noteId === noteId)
+	const noteBadge = openedNoteIds.has(noteId) ? undefined : noteBadges.find((badge) => badge.noteId === noteId)
 	return { unreadEdits: noteBadge?.unreadEdits ?? 0, unreadComments: noteBadge?.unreadComments ?? 0 }
 }
 
 /** Reads every unread note badge the user has, with the notes opened this session left out. */
 export function useAllNoteBadges(): NoteBadge[] {
-	useBadgeVersion()
+	useStoreVersion()
 	return noteBadges.filter((noteBadge) => !openedNoteIds.has(noteBadge.noteId))
 }
 
 /** Reads every unread note count the user has. */
 export function useAllNoteCount(): number {
-	useBadgeVersion()
+	useStoreVersion()
 	return toAllNoteCount()
 }
 
 /** One note's two numbers. */
 export function useNoteBadge(noteId: string): { unreadEdits: number; unreadComments: number } {
-	useBadgeVersion()
+	useStoreVersion()
 	return toNoteBadge(noteId)
 }

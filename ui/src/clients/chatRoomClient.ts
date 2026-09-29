@@ -1,10 +1,6 @@
 // the api client for a team topic's chat room and a team's own chat room: the chat messages, the post, and the stream url
 import type { ChatAttachment, ChatLinkPreview, ChatRoom, ChatRoomMessagePage } from "@shared/contracts"
-import { hc } from "hono/client"
-import type { AppType } from "../../../api"
-
-// same-origin api client on a relative base url
-const apiClient = hc<AppType>("")
+import { apiClient, readApiErrorMessage } from "./apiClient"
 
 /**
  * Loads the chat room's latest chat messages. Null means this user has no chat room here,
@@ -90,11 +86,11 @@ export async function sendChatRoomMessage(
 				})
 	// only the two the route names are attachment problems. anything else the validator rejected is a plain failure
 	if (response.status === 400) {
-		const body = (await response.json().catch(() => null)) as { error?: string } | null
-		if (body?.error === "attachment limit reached") {
+		const errorMessage = await readApiErrorMessage(response)
+		if (errorMessage === "attachment limit reached") {
 			return "attachmentLimitReached"
 		}
-		return body?.error === "attachment rejected" ? "attachmentRejected" : null
+		return errorMessage === "attachment rejected" ? "attachmentRejected" : null
 	}
 
 	// every other rejected status reports the same way, since none of them names a reason to show

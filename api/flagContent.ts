@@ -1,6 +1,8 @@
 // a user flagging a Topic, profile, or Team. the report is mailed to the SUPPORT_EMAIL address
 import { zValidator } from "@hono/zod-validator"
+import { appUrl } from "@shared/appUrl"
 import { type FlagContentPayload, flagContentPayload } from "@shared/contracts"
+import { toTopicPath } from "@shared/seo"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
@@ -17,12 +19,11 @@ const DAILY_FLAG_LIMIT = 10
 const flagCounts = new Map<string, { count: number; windowStartedAt: number }>()
 const FLAG_WINDOW_MS = 24 * 60 * 60 * 1000
 
-// what came of a flag, so the route can answer each outcome differently
+// the result from a flag content request
 export type FlagContentResult = "sent" | "unknownSubject" | "limitReached" | "notConfigured" | "failed"
 
 /**
- * Mail a flag to the support address. The subject is resolved first, so a flag naming something that does not exist,
- * or a Topic the sender cannot see, is rejected instead of mailed.
+ * Emails a flag to the support address, or rejects the flag if its subject is missing or hidden from the sender.
  */
 export async function flagContent(userId: string, payload: FlagContentPayload): Promise<FlagContentResult> {
 	const supportEmail = Bun.env.SUPPORT_EMAIL
@@ -76,7 +77,7 @@ async function toFlaggedSubject(
 			})
 			.from(topics)
 			.where(eq(topics.id, payload.subjectId))
-		return topic && (await canSeeTopic(userId, topic)) ? { label: topic.name, path: `/topics/${topic.id}` } : null
+		return topic && (await canSeeTopic(userId, topic)) ? { label: topic.name, path: toTopicPath(topic) } : null
 	}
 
 	// a team follows its visibility rule: members can always flag, anyone can flag once it is public
@@ -99,10 +100,10 @@ async function toFlaggedSubject(
 
 // the message as the moderator reads it. the reason is in the sender's own words, so it is escaped for safety
 function toFlagHtml(subject: { label: string; path: string }, sender: string, reason: string): string {
-	const appUrl = Bun.env.BETTER_AUTH_URL ?? ""
+	const subjectUrl = `${appUrl()}${subject.path}`
 	return [
 		`<p><strong>${Bun.escapeHTML(subject.label)}</strong> was flagged by ${Bun.escapeHTML(sender)}.</p>`,
-		`<p><a href="${Bun.escapeHTML(appUrl + subject.path)}">${Bun.escapeHTML(appUrl + subject.path)}</a></p>`,
+		`<p><a href="${Bun.escapeHTML(subjectUrl)}">${Bun.escapeHTML(subjectUrl)}</a></p>`,
 		`<p>${Bun.escapeHTML(reason)}</p>`,
 	].join("\n")
 }
@@ -156,6 +157,7 @@ export const flagContentRoute = new Hono<AppEnv>().post(
 		if (flagResult === "failed") {
 			return context.json({ error: "the report did not send. try again" }, 502)
 		}
+		// a subject that is missing or hidden from the user is a 404, and an unset SUPPORT_EMAIL is a 503
 		return flagResult === "unknownSubject"
 			? context.json({ error: "not found" }, 404)
 			: context.json({ error: "reports are not configured" }, 503)

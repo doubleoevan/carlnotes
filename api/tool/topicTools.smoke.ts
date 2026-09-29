@@ -17,7 +17,7 @@ import {
 // one id per run, and every fixture id derives from it. two runs at once never collide
 const runId = `tools-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
 const ownerId = `${runId}-owner`
-const outsiderId = `${runId}-outsider`
+const otherUserId = `${runId}-other-user`
 const topicId = `${runId}-topic`
 const otherTopicId = `${runId}-other`
 
@@ -52,9 +52,9 @@ async function scanCount(): Promise<number> {
 	return countRow?.count ?? 0
 }
 
-// the owner, an outsider, a weekly topic with one succeeded scan, and a second topic holding one source
+// the owner, another user, a weekly topic with one succeeded scan, and a second topic holding one source
 async function seed(): Promise<string> {
-	await db.insert(users).values([toUserRow(ownerId), toUserRow(outsiderId)])
+	await db.insert(users).values([toUserRow(ownerId), toUserRow(otherUserId)])
 	await db.insert(topics).values([
 		{
 			id: topicId,
@@ -78,7 +78,7 @@ async function seed(): Promise<string> {
 
 // delete both users. every other fixture row cascades from them
 async function cleanUp(): Promise<void> {
-	await db.delete(users).where(inArray(users.id, [ownerId, outsiderId]))
+	await db.delete(users).where(inArray(users.id, [ownerId, otherUserId]))
 }
 
 // what the editor's save sends, with the prompt as given and no invites or sources
@@ -108,12 +108,12 @@ const analyticsProperties = {
 try {
 	const otherTopicSourceId = await seed()
 
-	// the gate inside the tools rejects an outsider and a visitor, and a missing topic reads as missing
-	const outsiderEditResult = await updateTopicPrompt({ userId: outsiderId, topicId, prompt: "no", origin: "chat" })
+	// the gate inside the tools rejects a user who doesn't own the topic and a visitor, and a missing topic reads as missing
+	const otherUserEditResult = await updateTopicPrompt({ userId: otherUserId, topicId, prompt: "no", origin: "chat" })
 	check(
 		"a reader without edit rights is rejected inside the tool",
-		outsiderEditResult.status === "forbidden",
-		outsiderEditResult,
+		otherUserEditResult.status === "forbidden",
+		otherUserEditResult,
 	)
 	const visitorEditResult = await updateTopicPrompt({ userId: null, topicId, prompt: "no", origin: "mcp" })
 	check("a visitor is rejected inside the tool", visitorEditResult.status === "forbidden", visitorEditResult)
@@ -127,16 +127,16 @@ try {
 	check("the rejected edits wrote no version", (await versionCount()) === 0)
 
 	// the settings tool is gated the same way, and writes only the fields it is given
-	const outsiderFieldsResult = await updateTopicFields({
-		userId: outsiderId,
+	const otherUserFieldsResult = await updateTopicFields({
+		userId: otherUserId,
 		topicId,
 		topicFields: { maxTopicFindings: 15 },
 		promptVersionOrigin: "chat",
 	})
 	check(
 		"a reader without edit rights cannot change the settings",
-		outsiderFieldsResult.status === "forbidden",
-		outsiderFieldsResult,
+		otherUserFieldsResult.status === "forbidden",
+		otherUserFieldsResult,
 	)
 	const emptyFieldsResult = await updateTopicFields({
 		userId: ownerId,
@@ -244,17 +244,17 @@ try {
 		origin: "mcp",
 	})
 	check("a blank value is invalid", invalidAddTopicSourceResult.status === "invalid", invalidAddTopicSourceResult)
-	const outsiderAddTopicSourceResult = await addTopicSource({
-		userId: outsiderId,
+	const otherUserAddTopicSourceResult = await addTopicSource({
+		userId: otherUserId,
 		topicId,
 		sourceOption: "rss",
 		value: "https://x.test/feed",
 		origin: "mcp",
 	})
 	check(
-		"an outsider cannot add a source",
-		outsiderAddTopicSourceResult.status === "forbidden",
-		outsiderAddTopicSourceResult,
+		"another user cannot add a source",
+		otherUserAddTopicSourceResult.status === "forbidden",
+		otherUserAddTopicSourceResult,
 	)
 
 	// the topic fills to its limit and rejects one more

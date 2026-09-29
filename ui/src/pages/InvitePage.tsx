@@ -1,6 +1,6 @@
 import type { InviteRejection } from "@shared/contracts"
+import { getRouteApi, Navigate, useNavigate } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
-import { Navigate, useNavigate, useParams } from "react-router-dom"
 import { authClient } from "@/clients/authClient"
 import { sendAcceptInvite } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -9,13 +9,16 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { INVITE_REJECTIONS } from "./inviteRejections"
 
+// the invite route, whose token param is the invite url's token
+const inviteRoute = getRouteApi("/invite/$token")
+
 /**
  * The page an invite link opens. A signed-out visitor is sent to log in and comes back here,
  * and a signed-in user accepts the token and opens the topic or team that sent the invite.
  */
 export function InvitePage() {
 	usePageTitle("Invitation")
-	const { token } = useParams()
+	const { token } = inviteRoute.useParams()
 	const navigate = useNavigate()
 	const { data: session, isPending } = authClient.useSession()
 	const [inviteRejection, setInviteRejection] = useState<InviteRejection | "teamFull" | null>(null)
@@ -27,7 +30,7 @@ export function InvitePage() {
 			return
 		}
 		isAcceptingInviteRef.current = true
-		void sendAcceptInvite(token ?? "")
+		void sendAcceptInvite(token)
 			.catch(() => {
 				// a network failure may pass on a later visit, so the once-latch opens back up
 				isAcceptingInviteRef.current = false
@@ -36,12 +39,12 @@ export function InvitePage() {
 			.then((inviteResponse) => {
 				// navigate to the accepted topic
 				if (inviteResponse.status === "joined") {
-					navigate(`/topics/${inviteResponse.topicId}`, { replace: true })
+					navigate({ to: "/topics/$topicId", params: { topicId: inviteResponse.topicId }, replace: true })
 					return
 				}
 				// navigate to the accepted team
 				if (inviteResponse.status === "joinedTeam" || inviteResponse.status === "requestedTeam") {
-					navigate(`/teams/${inviteResponse.teamId}`, { replace: true })
+					navigate({ to: "/teams/$teamId", params: { teamId: inviteResponse.teamId }, replace: true })
 					return
 				}
 				setInviteRejection(inviteResponse.status)
@@ -55,7 +58,7 @@ export function InvitePage() {
 
 	// a signed-out visitor logs in and returns to this same url which includes the invitation
 	if (!session) {
-		return <Navigate to={`/login?next=/invite/${token}`} replace />
+		return <Navigate to="/login" search={{ next: `/invite/${token}` }} replace />
 	}
 
 	return (

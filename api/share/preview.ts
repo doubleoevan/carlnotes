@@ -1,10 +1,11 @@
-// link previews for a public Topic: the image a platform fetches, and the meta tags it reads to find it
+// the link preview of a topic, a team, a profile, or an invitation, and its card image cached in storage
 import { and, count, eq } from "drizzle-orm"
 import { db } from "../../db"
 import { findings, sources, teamMembers, teams, topics, users } from "../../db/schema"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "../../worker"
-import { toPublishedAvatar } from "../avatars"
+import { publishedAvatarColumns, toPublishedAvatar, toPublishedAvatarFromUser } from "../avatars"
 import { countDistinctSubscribers } from "../profiles"
+import { lastScanSummary, toTeamPublicTopicsFilter, toTopicDescription } from "../seo"
 import { type ProfilePreview, toProfilePreviewKey, toProfilePreviewPng } from "./profileImage"
 import { type TeamPreview, toTeamPreviewKey, toTeamPreviewPng } from "./teamImage"
 import { type TopicPreview, toTopicPreviewKey, toTopicPreviewPng } from "./topicImage"
@@ -17,38 +18,50 @@ const PREVIEW_CACHE_CONTROL = "public, max-age=31536000, immutable"
  * Every Topic gets a preview whatever its visibility, so a pasted link never looks broken.
  */
 export async function toTopicPreview(topicId: string): Promise<TopicPreview | null> {
-	const [row] = await db
-		.select({
-			topicId: topics.id,
-			title: topics.name,
-			visibility: topics.visibility,
-			ownerUserId: users.id,
-			ownerUsername: users.username,
-		})
-		.from(topics)
-		.innerJoin(users, eq(users.id, topics.ownerId))
-		.where(eq(topics.id, topicId))
+	// the topic with its owner, and its finding and source counts, read together
+	const [[topicRow], [keptRow], [sourceRow]] = await Promise.all([
+		db
+			.select({
+				topicId: topics.id,
+				title: topics.name,
+				prompt: topics.prompt,
+				scanSummary: lastScanSummary,
+				visibility: topics.visibility,
+				ownerUserId: users.id,
+				ownerUsername: users.username,
+				ownerAvatarColumns: publishedAvatarColumns,
+			})
+			.from(topics)
+			.innerJoin(users, eq(users.id, topics.ownerId))
+			.where(eq(topics.id, topicId)),
+		db.select({ kept: count() }).from(findings).where(eq(findings.topicId, topicId)),
+		db
+			.select({ sources: count() })
+			.from(sources)
+			.where(and(eq(sources.topicId, topicId), eq(sources.status, "ready"))),
+	])
 	// a topic that doesn't exist does not get a preview
-	if (!row) {
+	if (!topicRow) {
 		return null
 	}
 
-	// what the Topic holds, which is the only part of the preview that changes when it scans
-	const [keptRow] = await db.select({ kept: count() }).from(findings).where(eq(findings.topicId, topicId))
-	const [sourceRow] = await db
-		.select({ sources: count() })
-		.from(sources)
-		.where(and(eq(sources.topicId, topicId), eq(sources.status, "ready")))
 	// which image the owner publishes, named instead of loaded
+	const keptFindingCount = keptRow?.kept ?? 0
 	return {
-		topicId: row.topicId,
-		title: row.title,
-		visibility: row.visibility,
-		ownerUserId: row.ownerUserId,
-		ownerUsername: row.ownerUsername,
-		ownerAvatar: await toPublishedAvatar(row.ownerUserId),
-		keptCount: keptRow?.kept ?? 0,
+		topicId: topicRow.topicId,
+		title: topicRow.title,
+		visibility: topicRow.visibility,
+		ownerUserId: topicRow.ownerUserId,
+		ownerUsername: topicRow.ownerUsername,
+		ownerAvatar: toPublishedAvatarFromUser(topicRow.ownerAvatarColumns),
+		keptCount: keptFindingCount,
 		sourceCount: sourceRow?.sources ?? 0,
+		// a public topic's description is its last scan summary, prompt, or name. any other topic's scan summary and
+		// prompt stay private, so its description names only its owner and how many findings Carl kept
+		description:
+			topicRow.visibility === "public"
+				? toTopicDescription({ name: topicRow.title, prompt: topicRow.prompt, scanSummary: topicRow.scanSummary })
+				: `A topic by ${topicRow.ownerUsername}. ${keptFindingCount} findings Carl kept.`,
 	}
 }
 
@@ -102,47 +115,6 @@ async function renderAndStorePng(previewKey: string, renderPng: () => Promise<Ui
 }
 
 /**
- * A Topic page's own description, shared by the OG tags and the structured data.
- */
-export function toTopicDescription(preview: TopicPreview): string {
-	return preview.ownerUsername
-		? `A topic by ${preview.ownerUsername}. ${preview.keptCount} findings Carl kept.`
-		: `${preview.keptCount} findings Carl kept.`
-}
-
-/**
- * The app shell with a specific Topic's preview tags, title, and canonical URL to serve a crawler.
- * extraHeadTags includes anything else the route appends, like a structured-data script, and
- * extraBodyTags includes content for the body, like the noscript findings list.
- */
-export function toTopicPreviewHtml(
-	appShell: string,
-	preview: TopicPreview,
-	appUrl: string,
-	extraHeadTags = "",
-	extraBodyTags = "",
-): string {
-	const description = toTopicDescription(preview)
-	const previewUrl = `${appUrl}/api/topics/${preview.topicId}/preview.png`
-	const title = Bun.escapeHTML(preview.title)
-	// X reads the Twitter tags before the og ones
-	const tags = [
-		`<title>${title} — CarlNotes</title>`,
-		`<link rel="canonical" href="${appUrl}/topics/${preview.topicId}">`,
-		`<meta property="og:title" content="${title}">`,
-		`<meta property="og:description" content="${Bun.escapeHTML(description)}">`,
-		`<meta property="og:image" content="${previewUrl}">`,
-		`<meta property="og:image:alt" content="${title}">`,
-		`<meta property="og:url" content="${appUrl}/topics/${preview.topicId}">`,
-		`<meta name="twitter:card" content="summary_large_image">`,
-		`<meta name="twitter:title" content="${title}">`,
-		`<meta name="twitter:description" content="${Bun.escapeHTML(description)}">`,
-		`<meta name="twitter:image" content="${previewUrl}">`,
-	].join("")
-	return toShellWithHeadTags(appShell, `${tags}${extraHeadTags}`, extraBodyTags)
-}
-
-/**
  * What a profile's preview shows, or null if no user has that id.
  */
 export async function toProfilePreview(userId: string): Promise<ProfilePreview | null> {
@@ -167,7 +139,7 @@ export async function toProfilePreview(userId: string): Promise<ProfilePreview |
 
 /**
  * What a team's card shows, or null if there is no public team at that id.
- * A private team renders no card, and its page shows an outsider its name and nothing else.
+ * A private team renders no card, and its page shows a non-member its name and nothing else.
  */
 export async function toTeamPreview(teamId: string): Promise<TeamPreview | null> {
 	// the id resolves the team, and a private one reads as no team at all
@@ -199,7 +171,7 @@ export async function toCachedInvitePreviewPng(
  * What a team's card shows whatever its visibility, for the holder of an invitation that opens it.
  */
 export async function toInvitedTeamPreview(teamId: string): Promise<TeamPreview | null> {
-	// the token stands in for the public check: whoever holds it can already join this team
+	// the token replaces the public check. whoever has the token can already join this team
 	const [team] = await db
 		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey })
 		.from(teams)
@@ -207,21 +179,18 @@ export async function toInvitedTeamPreview(teamId: string): Promise<TeamPreview 
 	return team ? toTeamPreviewWithCounts(team) : null
 }
 
-// the counts and avatar that on a team's card, read once the row is resolved
+// the counts and the avatar on a team's card, read once the row is resolved
 async function toTeamPreviewWithCounts(team: {
 	teamId: string
 	name: string
 	avatarKey: string | null
 }): Promise<TeamPreview> {
-	// what the team page itself shows a stranger: how many members it has, and how many public topics it holds
+	// the team's active member count and public topic count, which the team page shows a non-member
 	const [teamMembersRow] = await db
 		.select({ members: count() })
 		.from(teamMembers)
 		.where(and(eq(teamMembers.teamId, team.teamId), eq(teamMembers.isActive, true)))
-	const [topicRow] = await db
-		.select({ topics: count() })
-		.from(topics)
-		.where(and(eq(topics.teamId, team.teamId), eq(topics.visibility, "public")))
+	const [topicRow] = await db.select({ topics: count() }).from(topics).where(toTeamPublicTopicsFilter(team.teamId))
 
 	// the avatar is named instead of loaded, so the card's key changes when the image does
 	return {
@@ -240,116 +209,4 @@ export async function toCachedTeamPreviewPng(
 	preview: TeamPreview,
 ): Promise<{ bytes: Uint8Array; cacheControl: string }> {
 	return toCachedPng(toTeamPreviewKey(preview), () => toTeamPreviewPng(preview))
-}
-
-/**
- * The app shell with a team's preview tags, title, and canonical URL.
- */
-export function toTeamPreviewHtml(appShell: string, teamPreview: TeamPreview, appUrl: string): string {
-	const name = Bun.escapeHTML(teamPreview.name)
-	const membersWord = teamPreview.memberCount === 1 ? "member" : "members"
-	const topicsWord = teamPreview.topicCount === 1 ? "public topic" : "public topics"
-	const description = `${name} on CarlNotes. ${teamPreview.memberCount} ${membersWord}, ${teamPreview.topicCount} ${topicsWord}.`
-	// the team's own rendered card, the image a platform shows beside the link
-	const previewUrl = `${appUrl}/api/teams/${teamPreview.teamId}/preview.png`
-	const tags = [
-		`<title>${name} — CarlNotes</title>`,
-		`<link rel="canonical" href="${appUrl}/teams/${teamPreview.teamId}">`,
-		`<meta property="og:title" content="${name} — CarlNotes">`,
-		`<meta property="og:description" content="${description}">`,
-		`<meta property="og:image" content="${previewUrl}">`,
-		`<meta property="og:image:alt" content="${name} — CarlNotes">`,
-		`<meta property="og:url" content="${appUrl}/teams/${teamPreview.teamId}">`,
-		`<meta name="twitter:card" content="summary_large_image">`,
-		`<meta name="twitter:title" content="${name} — CarlNotes">`,
-		`<meta name="twitter:description" content="${description}">`,
-		`<meta name="twitter:image" content="${previewUrl}">`,
-	].join("")
-	return toShellWithHeadTags(appShell, tags)
-}
-
-/**
- * The app shell with an invitation card's preview tags.
- */
-export function toInvitePreviewHtml(
-	appShell: string,
-	invitePreview: { name: string; imageUrl: string; inviteUrl: string; kind: "team" | "topic" },
-): string {
-	const name = Bun.escapeHTML(invitePreview.name)
-	// a team invitation joins the team, and a topic invitation follows the topic
-	const inviteVerb = invitePreview.kind === "team" ? "Join" : "Follow"
-	const inviteTitle = `${inviteVerb} ${name} on CarlNotes`
-	const inviteDescription = `You are invited to ${inviteVerb.toLowerCase()} ${name}. Carl reads its sources and shares the notes.`
-	const tags = [
-		`<title>${inviteTitle}</title>`,
-		// a token is a credential, so the url that includes one is never indexed
-		`<meta name="robots" content="noindex, nofollow">`,
-		// og:url is the invitation, not the page. a platform that rewrites a shared link to og:url
-		// would otherwise swap the invitation for a link that lets nobody in
-		`<meta property="og:url" content="${invitePreview.inviteUrl}">`,
-		`<meta property="og:title" content="${inviteTitle}">`,
-		`<meta property="og:description" content="${inviteDescription}">`,
-		`<meta property="og:image" content="${invitePreview.imageUrl}">`,
-		`<meta property="og:image:alt" content="${inviteTitle}">`,
-		`<meta name="twitter:card" content="summary_large_image">`,
-		`<meta name="twitter:title" content="${inviteTitle}">`,
-		`<meta name="twitter:description" content="${inviteDescription}">`,
-		`<meta name="twitter:image" content="${invitePreview.imageUrl}">`,
-	].join("")
-	return toShellWithHeadTags(appShell, tags)
-}
-
-/**
- * The app shell with a profile's preview tags, title, and canonical URL, the treatment Topic pages get.
- */
-export function toProfilePreviewHtml(appShell: string, preview: ProfilePreview, appUrl: string): string {
-	const username = Bun.escapeHTML(preview.username)
-	const topicsWord = preview.publicTopicCount === 1 ? "public topic" : "public topics"
-	const followersWord = preview.followerCount === 1 ? "follower" : "followers"
-	const description = `${username} on CarlNotes. ${preview.publicTopicCount} ${topicsWord}, ${preview.followerCount} ${followersWord}.`
-	// the rendered card a platform shows beside the link
-	const previewUrl = `${appUrl}/api/profiles/${preview.userId}/preview.png`
-	const tags = [
-		`<title>${username} — CarlNotes</title>`,
-		`<link rel="canonical" href="${appUrl}/profiles/${preview.userId}">`,
-		`<meta property="og:title" content="${username} — CarlNotes">`,
-		`<meta property="og:description" content="${description}">`,
-		`<meta property="og:image" content="${previewUrl}">`,
-		`<meta property="og:image:alt" content="${username} — CarlNotes">`,
-		`<meta property="og:url" content="${appUrl}/profiles/${preview.userId}">`,
-		`<meta name="twitter:card" content="summary_large_image">`,
-		`<meta name="twitter:title" content="${username} — CarlNotes">`,
-		`<meta name="twitter:description" content="${description}">`,
-		`<meta name="twitter:image" content="${previewUrl}">`,
-	].join("")
-	return toShellWithHeadTags(appShell, tags)
-}
-
-/**
- * The app shell with the given head tags in place of the shell's own version of each. Every injecting
- * route builds its head through this. A tag the route leaves alone keeps the shell's site-wide default,
- * so a page that sets only a title still shows the default preview card.
- * bodyTags wrap the SPA root that the shell renders into.
- */
-export function toShellWithHeadTags(appShell: string, headTags: string, bodyTags = ""): string {
-	const body = toAppShellBody(appShell)
-	return `${withoutReplacedTags(appShell, headTags)}${headTags}</head>${bodyTags ? body.replace(/<body[^>]*>/, (bodyTag) => `${bodyTag}${bodyTags}`) : body}`
-}
-
-// a meta-tag, capturing the property or name it has
-const META_PROPERTY_PATTERN = /<meta\s+(?:property|name)="([^"]+)"[^>]*>/g
-
-// the shell head with only the tags this route writes taken out, so appending the route's own tags leaves one of each
-function withoutReplacedTags(appShell: string, headTags: string): string {
-	const replacedProperties = new Set([...headTags.matchAll(META_PROPERTY_PATTERN)].map(([, property]) => property))
-	const head = appShell.slice(0, appShell.indexOf("</head>"))
-	return head
-		.replace(/<title>[\s\S]*?<\/title>/, (title) => (headTags.includes("<title>") ? "" : title))
-		.replace(/<link\s+rel="canonical"[^>]*>/, (link) => (headTags.includes('rel="canonical"') ? "" : link))
-		.replaceAll(META_PROPERTY_PATTERN, (tag, property) => (replacedProperties.has(property) ? "" : tag))
-}
-
-// everything after the app shell head tag
-function toAppShellBody(appShell: string): string {
-	return appShell.slice(appShell.indexOf("</head>") + "</head>".length)
 }

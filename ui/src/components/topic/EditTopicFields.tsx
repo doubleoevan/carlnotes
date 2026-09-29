@@ -1,8 +1,8 @@
 import { MAX_TOPIC_SOURCES } from "@shared/contracts"
 import { daysOfWeek, type frequencies, isDailyFrequency } from "@shared/enums"
 import { ADMIN_QUOTA } from "@shared/plans"
+import { useNavigate } from "@tanstack/react-router"
 import { Coffee, X } from "lucide-react"
-import { useNavigate } from "react-router"
 import { FieldLabel } from "@/components/common/FieldLabel"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -130,7 +130,7 @@ function FrequencyOption({ frequency, hasDailySlot }: { frequency: Frequency; ha
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<button type="button" className="w-full cursor-pointer text-left" onClick={() => navigate("/plans")}>
+				<button type="button" className="w-full cursor-pointer text-left" onClick={() => navigate({ to: "/plans" })}>
 					<SelectItem value={frequency} disabled>
 						{capitalize(frequency)}
 						{/* a coffee cup where the check mark sits on the option that is disabled,

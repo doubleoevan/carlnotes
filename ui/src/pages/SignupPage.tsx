@@ -1,24 +1,24 @@
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
 import { useEffect, useState } from "react"
-import { useSearchParams } from "react-router-dom"
 import { authClient, passSignupGate } from "@/clients/authClient"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { Button } from "@/components/primitives/button"
 import { SessionLayout } from "@/components/session/SessionLayout"
 import { TurnstileWidget } from "@/components/session/TurnstileWidget"
 import { usePageTitle } from "@/hooks/usePageTitle"
+import { useSearchParams } from "@/hooks/useSearchParams"
 import { toSafeRedirectPath } from "@/lib/utils"
 
 /**
- * The signup page. oauth is one click, no gate at all. the password path is revealed on request,
- * and is the only path that needs a passing Turnstile check with a token.
- * The token count is incremented when a token is spent to issue a new one.
+ * Renders the signup page, with one-click OAuth and a password form on request behind a Turnstile check.
  */
 export function SignupPage() {
 	usePageTitle("Sign up")
-	// where to land once the account exists, so an invitee opening a topic link comes back to it
-	const [searchParams] = useSearchParams()
+	// the path a signup returns to, from the next param
+	const searchParams = useSearchParams()
 	const redirectPath = toSafeRedirectPath(searchParams.get("next"))
+	// the cta param for analytics, which names the button that brought this visitor here
+	const ctaParam = searchParams.get("cta")
 	const [turnstileToken, setTurnstileToken] = useState<string | null>(null)
 	const [error, setError] = useState<string | null>(null)
 	const [isSubmitting, setIsSubmitting] = useState(false)
@@ -28,12 +28,12 @@ export function SignupPage() {
 
 	// remember which button brought this visitor here, so signup_completed can track what converted
 	useEffect(() => {
-		const ctaTag = toCtaTag(new URLSearchParams(window.location.search).get("cta"))
+		const ctaTag = toCtaTag(ctaParam)
 		if (ctaTag) {
 			// biome-ignore lint/suspicious/noDocumentCookie: the Cookie Store API it prefers is missing in Safari
 			document.cookie = `${SIGNUP_CTA_COOKIE_NAME}=${ctaTag}; max-age=1800; path=/`
 		}
-	}, [])
+	}, [ctaParam])
 
 	// validates the turnstile token, then creates the account with a password
 	const handlePasswordSignup = async (email: string, password: string): Promise<void> => {

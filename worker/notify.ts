@@ -1,5 +1,8 @@
-// after a scheduled Scan succeeds, email its new Findings to the Topic's subscribers
+// email a finished Scan's outcome. a scheduled Scan emails the Topic's subscribers, and a manual Scan emails whoever started it.
+// the links in both build on the app's base url
+import { appBaseUrl } from "@shared/appUrl"
 import { toScanFailureLabel } from "@shared/scanFailure"
+import { toTopicPath } from "@shared/seo"
 import { and, desc, eq, gte } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, type scans, subscriptions, topicEmailSends, type topics, users } from "../db/schema"
@@ -63,8 +66,8 @@ export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void
 	const allowedSummaryUrls = await topicFindingUrls(topic.id)
 
 	// the links back into the app for the email, both undefined when no app base url is configured
-	const appUrl = toAppUrl()
-	const topicUrl = appUrl ? `${appUrl}/topics/${topic.id}` : undefined
+	const appUrl = appBaseUrl()
+	const topicUrl = appUrl ? `${appUrl}${toTopicPath(topic)}` : undefined
 
 	// the props that every recipient's email renders from, minus the per-recipient unsubscribe link
 	const subject =
@@ -146,8 +149,8 @@ export async function sendManualScanEmail(userId: string, topic: Topic, scan: Sc
 	}
 
 	// the links back into the app for the email, both undefined when no app base url is configured
-	const appUrl = toAppUrl()
-	const topicUrl = appUrl ? `${appUrl}/topics/${topic.id}` : undefined
+	const appUrl = appBaseUrl()
+	const topicUrl = appUrl ? `${appUrl}${toTopicPath(topic)}` : undefined
 
 	// a failed Scan reports why it stopped. a succeeded one reports its new Findings and Carl's recap of them
 	const emailProps: ManualScanEmailProps =
@@ -217,15 +220,10 @@ async function loadTopicEmailSubscribers(topicId: string): Promise<Recipient[]> 
 		.where(canEmailSubscription)
 }
 
-// the app's base url without a trailing slash, or undefined if it isn't configured. every link in the email builds on it
-function toAppUrl(): string | undefined {
-	return Bun.env.BETTER_AUTH_URL?.replace(/\/$/, "")
-}
-
 // the recipient's signed one-click unsubscribe url, or undefined when the app base url isn't configured
 async function toUnsubscribeUrl(userId: string, topicId: string): Promise<string | undefined> {
 	// without an app base url, there is nowhere for the link to point
-	const appUrl = toAppUrl()
+	const appUrl = appBaseUrl()
 	if (!appUrl) {
 		return undefined
 	}

@@ -364,3 +364,16 @@
 		display: none;
 	}
 }
+
+/* with JavaScript off, immediately show the content that waits to fade in on scroll and every closed homepage section */
+@media (scripting: none) {
+	[data-reveal] {
+		/* biome-ignore lint/complexity/noImportantStyles: only an important opacity wins over a running animation */
+		opacity: 1 !important;
+	}
+
+	[data-slot="accordion-content"][data-state="closed"] {
+		/* biome-ignore lint/complexity/noImportantStyles: overrides the hidden class on a closed accordion body */
+		display: block !important;
+	}
+}

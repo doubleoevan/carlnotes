@@ -110,7 +110,10 @@ function ScanRow({
 						className="group after:border-separator-strong relative isolate flex w-full items-center gap-3 py-2.5 pr-1 pl-2 text-left before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden hover:before:bg-accent-foreground/20"
 						aria-describedby={undefined}
 					>
-						<span className="shrink-0 text-sm">{toScanTimestamp(scan)}</span>
+						{/* the time is formatted in the local time zone, so the server's markup can differ */}
+						<span className="shrink-0 text-sm" suppressHydrationWarning>
+							{toScanTimestamp(scan)}
+						</span>
 						<ScanStat scan={scan} />
 						<PopoverAnchor asChild>
 							<span className="grid size-11 shrink-0 place-items-center sm:size-7">

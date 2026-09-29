@@ -1,9 +1,10 @@
 // a public Topic's RSS feed: the Findings Carl kept, in the format a reader app understands
+import { toTopicFeedPath, toTopicPath } from "@shared/seo"
 import { desc, eq } from "drizzle-orm"
 import { db } from "../../db"
 import { findings, resources, topics, users } from "../../db/schema"
 
-// how many Findings a feed carries. a feed reader wants the recent ones, and an unbounded feed grows forever
+// how many of the newest Findings a feed includes
 const FEED_ITEM_LIMIT = 50
 
 // what an entry in the feed says
@@ -43,13 +44,14 @@ export async function toTopicFeedXml(topicId: string, appUrl: string): Promise<s
 		.orderBy(desc(resources.createdAt))
 		.limit(FEED_ITEM_LIMIT)
 
-	const topicUrl = `${appUrl}/topics/${topic.id}`
+	// return the topic's RSS feed, linked to the topic page, with the owner named in its description
+	const topicUrl = `${appUrl}${toTopicPath(topic)}`
 	const topicOwner = topic.owner ? ` Brewed by ${topic.owner}.` : ""
 	return toRssXml({
 		title: `${topic.name} · CarlNotes`,
 		description: `${topic.prompt || "What Carl found for this topic."}${topicOwner}`,
 		linkUrl: topicUrl,
-		feedUrl: `${topicUrl}/feed.xml`,
+		feedUrl: `${appUrl}${toTopicFeedPath(topic.id)}`,
 		items: findingRows.map((findingRow) => ({ ...findingRow, title: findingRow.title ?? findingRow.url })),
 	})
 }

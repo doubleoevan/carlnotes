@@ -1,5 +1,7 @@
 // the server-rendered blog pages: Markdown under content/blog/, rendered to HTML in Hono
 import { readdirSync, readFileSync } from "node:fs"
+import { appUrl } from "@shared/appUrl"
+import { toPageTitle } from "@shared/seo"
 import { Hono } from "hono"
 import Markdown from "markdown-to-jsx"
 import { createElement } from "react"
@@ -86,8 +88,27 @@ export function toContentHtml({
 	// the rendered content under the header
 	bodyHtml: string
 }): string {
-	const escapedTitle = Bun.escapeHTML(title)
-	return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${escapedTitle} — CarlNotes</title><meta name="description" content="${Bun.escapeHTML(description)}"><link rel="canonical" href="${canonicalUrl}">${jsonLd}<style>${PAGE_STYLE}</style></head><body><main><header><a href="/">☕ CarlNotes</a></header>${bodyHtml}</main></body></html>`
+	return [
+		"<!doctype html>",
+		'<html lang="en">',
+		"<head>",
+		'<meta charset="UTF-8">',
+		'<meta name="viewport" content="width=device-width, initial-scale=1.0">',
+		`<title>${Bun.escapeHTML(toPageTitle(title))}</title>`,
+		`<meta name="description" content="${Bun.escapeHTML(description)}">`,
+		`<link rel="canonical" href="${canonicalUrl}">`,
+		'<link rel="alternate" type="application/rss+xml" title="CarlNotes" href="/feed.xml">',
+		jsonLd,
+		`<style>${PAGE_STYLE}</style>`,
+		"</head>",
+		"<body>",
+		"<main>",
+		'<header><a href="/">☕ CarlNotes</a></header>',
+		bodyHtml,
+		"</main>",
+		"</body>",
+		"</html>",
+	].join("\n")
 }
 
 /**
@@ -100,18 +121,25 @@ export function toPageHtml(markdown: string): string {
 // one section's index: every page listed newest first, no JSON-LD of its own
 function serveIndex(section: Section): string {
 	const { title, description } = SECTIONS[section]
+	// one card per page: its linked title, its date, and its description
 	const cards = loadPages(section)
 		.map(
-			(page) =>
-				`<article class="post-card"><h2><a href="/${section}/${page.slug}">${Bun.escapeHTML(page.title)}</a></h2><div class="post-date">${page.date}</div><p>${Bun.escapeHTML(page.description)}</p></article>`,
+			(page) => `
+				<article class="post-card">
+					<h2><a href="/${section}/${page.slug}">${Bun.escapeHTML(page.title)}</a></h2>
+					<div class="post-date">${page.date}</div>
+					<p>${Bun.escapeHTML(page.description)}</p>
+				</article>`,
 		)
 		.join("")
 	return toContentHtml({
 		title,
 		description,
-		canonicalUrl: `${contentAppUrl()}/${section}`,
+		canonicalUrl: `${appUrl()}/${section}`,
 		jsonLd: "",
-		bodyHtml: `<h1>${title}</h1>${cards}`,
+		bodyHtml: `
+			<h1>${title}</h1>
+			${cards}`,
 	})
 }
 
@@ -122,8 +150,8 @@ function servePage(section: Section, slug: string): string | null {
 		return null
 	}
 
-	// the page carries its section's structured data beside its title and canonical url
-	const canonicalUrl = `${contentAppUrl()}/${section}/${page.slug}`
+	// the page includes its section's structured data beside its title and canonical url
+	const canonicalUrl = `${appUrl()}/${section}/${page.slug}`
 	const jsonLd = toJsonLdTag({
 		"@context": "https://schema.org",
 		"@type": SECTIONS[section].jsonLdType,
@@ -137,7 +165,12 @@ function servePage(section: Section, slug: string): string | null {
 		description: page.description,
 		canonicalUrl,
 		jsonLd,
-		bodyHtml: `<article><h1>${Bun.escapeHTML(page.title)}</h1><div class="post-date">${page.date}</div>${toPageHtml(page.body)}</article>`,
+		bodyHtml: `
+			<article>
+				<h1>${Bun.escapeHTML(page.title)}</h1>
+				<div class="post-date">${page.date}</div>
+				${toPageHtml(page.body)}
+			</article>`,
 	})
 }
 
@@ -148,8 +181,3 @@ export const contentRoute = new Hono()
 		const html = servePage("blog", context.req.param("slug"))
 		return html ? context.html(html) : context.text("Not found", 404)
 	})
-
-// the app's public base url, the same source every other shell route reads
-function contentAppUrl(): string {
-	return (Bun.env.BETTER_AUTH_URL ?? "http://localhost:5173").replace(/\/$/, "")
-}

@@ -4,10 +4,10 @@
 
 ## Always-on
 - Bun is the runtime and package manager: `bun install`, `bun run <script>`, `bunx <pkg>`, `bun test`. Never npm/npx/node.
-- The UI is a Vite SPA: `bun run dev:ui` / `bun run build:ui`. Do not use Bun's full-stack server pattern (`Bun.serve` HTML imports, `bun --hot`); that scaffold was removed.
-- Modular monolith: `ui/` (React SPA), `api/` (Hono), `worker/` (Temporal), `db/` (Drizzle + Neon Postgres), `shared/` (cross-module contracts). One `package.json` at the repo root; never add another.
+- The UI is a TanStack Start app on Vite: `bun run dev:ui` / `bun run build:ui`. Public pages render on the server, and the api renders them through the ui's server build. Do not use Bun's full-stack server pattern (`Bun.serve` HTML imports, `bun --hot`); that scaffold was removed.
+- Modular monolith: `ui/` (TanStack Start), `api/` (Hono), `worker/` (Temporal), `db/` (Drizzle + Neon Postgres), `shared/` (cross-module contracts). One `package.json` at the repo root; never add another.
 - Postgres access goes through Drizzle in `db/`. Don't reach for `Bun.sql`, `pg`, or raw clients.
-- Verification gate before any hand-off: `bunx biome check .` + `bunx tsc -b` + `bun scripts/check-workflow-bundles.ts` + `bun test` (enforced on push by `scripts/preflight.sh`).
+- Verification gate before any hand-off: `bunx biome check .` + `bun scripts/check-ui-boundary.ts` + `bunx tsc -b` + `bun scripts/check-workflow-bundles.ts` + `bun test` (enforced on push by `scripts/preflight.sh`).
 
 ## Skills
 Skills load from `.claude/skills/` (canonical copies at `.agents/skills/`). Follow them; they are not restated here.

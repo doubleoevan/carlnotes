@@ -1,9 +1,9 @@
 import type { TopicResponse } from "@shared/contracts"
 import { ADMIN_QUOTA } from "@shared/plans"
 import { isBudgetError, toScanFailureLabel } from "@shared/scanFailure"
+import { useNavigate } from "@tanstack/react-router"
 import { CirclePause, Coffee } from "lucide-react"
 import { useEffect, useRef } from "react"
-import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { sendManualScan, sendStopScan } from "@/clients/topicClient"
 import { IconButton } from "@/components/common/IconButton"
@@ -36,7 +36,7 @@ export function TopicScanButton({
 	// polling starts on the click, before the scan row arrives
 	usePollWhileScanning(isScanning || isRunningScan, onScanned)
 	// a scan that fails while the user is on the page shows the failure
-	useScanFailureToast(topic?.scans, () => navigate("/plans"))
+	useScanFailureToast(topic?.scans, () => navigate({ to: "/plans" }))
 
 	// trigger a scan. the optimistic flag holds the running state until the new scan row arrives in a reload
 	const handleManualScan = async (): Promise<void> => {
@@ -103,7 +103,7 @@ export function TopicScanButton({
 							toast(blockedLine, {
 								action: {
 									label: isSpendExhausted ? "See account" : "See plans",
-									onClick: () => navigate(isSpendExhausted ? "/account" : "/plans"),
+									onClick: () => navigate({ to: isSpendExhausted ? "/account" : "/plans" }),
 								},
 							})
 						}

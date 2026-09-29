@@ -11,6 +11,7 @@ export {
 } from "./attach"
 export { type ChatReplyPart, type ChatReplyStream, type ChatTurnInput, streamChatReply } from "./chat"
 export { type RankedTopicFinding, searchTopicFindings } from "./chat/retrieve"
+export { notifyIndexNow } from "./indexNow"
 export { lookupPodcast } from "./ingest/podcast"
 export {
 	fetchLinkPreviewImage,

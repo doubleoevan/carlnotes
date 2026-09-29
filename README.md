@@ -16,23 +16,23 @@ Carl stays up. You stay informed.
 
 ## Stack
 
-Bun + TypeScript · React SPA (Vite + Tailwind + shadcn) · TanStack Query · Hono · Better Auth · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl + TwitterAPI.io · Langfuse · LLM Guard · Sentry + PostHog
+Bun + TypeScript · React (TanStack Start + Vite + Tailwind + shadcn) · TanStack Query · Hono · Better Auth · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl + TwitterAPI.io · Langfuse · LLM Guard · Sentry + PostHog
 
 ## Architecture
 
-CarlNotes is a modular monolith with boundaries enforced by TypeScript: one repository, one `package.json`, five modules.
+CarlNotes is a modular monolith: one repository, one `package.json`, five modules.
 
-1. `ui/` is a React SPA.
-2. `api/` is a Hono server that serves the built SPA and every `/api` route.
+1. `ui/` is a TanStack Start React app. Its public pages render on the server for a visitor, and every page renders in the browser for a signed-in user.
+2. `api/` is a Hono server that serves every `/api` route, the `/mcp` server and its oauth discovery documents, the document routes (the sitemap, the feeds, the llms files, the IndexNow key, and security.txt), the blog and release pages, and the built docs, and renders every other page through the ui's server build.
 3. `worker/` holds the scan pipeline and the Temporal workflows.
 4. `db/` holds the Drizzle schema.
 5. `shared/` holds the zod contracts, enums, plans, and Source definitions.
 
-That list is the dependency order: each module imports only from the ones below it. `tsconfig` project references make an illegal import a compile error.
+That list is the dependency order: each module imports only from the ones below it. `scripts/check-ui-boundary.ts` fails the preflight when the ui imports the api, the worker, or the db folder as a value.
 
 ```mermaid
 flowchart
-    Browser --> App["app (Hono api + SPA)"]
+    Browser --> App["app (Hono api + ui server)"]
     App --> Postgres[(DB)]
     App -->|starts workflows| Temporal
     Temporal --> Worker[temporal-worker]
@@ -47,7 +47,7 @@ Four processes run in production:
 
 | Process | What it does |
 |---|---|
-| `app` | Serves the SPA and the api. Chat replies and uploads run in-process. |
+| `app` | Serves the api and the ui, rendering public pages on the server. Chat replies and uploads run in-process. |
 | `temporal-worker` | One process hosts three Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
 | scheduler | `bun worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
 | `llm-guard` | The content scanner is its own service (see below). |
@@ -130,7 +130,7 @@ bun run dev          # api, ui, temporal, and worker together (concurrently, col
 bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server) and create a limited dev key; carl-down stops it
                      # scans run as Temporal workflows, so dev:temporal must be up for any scan to happen, not just for attachments
 bun run dev:ui       # Vite dev server (UI); wraps itself in doppler run
-bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; the Vite dev server proxies /api here
+bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; the Vite dev server proxies /api, /mcp, and the api's own pages and documents here
 bun run dev:worker   # scheduled-scan sweep loop (set SCHEDULE_INTERVAL_MS); `bun run schedule` runs one sweep, as a cron would
 bun run dev:temporal # Temporal worker for topic scans and attachment processing; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
 bun run dev:temporal:watch # the same worker, restarted on save; what `bun run dev` uses. a restart mid-review leaves that scan waiting out its 30-minute activity timeout before it fails
@@ -176,7 +176,7 @@ Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium
 Checks — run the full gate with one command (enforced on push by `scripts/preflight.sh`):
 
 ```bash
-bun run check       # biome + tsc + workflow bundles + bun test
+bun run check       # biome + ui boundary + tsc + workflow bundles + bun test
 ```
 
 Or run them individually:
@@ -201,9 +201,10 @@ bun run smoke:x            # just the X smoke test: one account's tweets and wha
 bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its limit
 bun run smoke:subscribers  # just the subscriber-count smoke test: both subscription paths against real rows, rolled back after
 bun run smoke:profile      # just the profile smoke test: the header's distinct people against the footer's summed rows
+bun run smoke:seo          # just the seo smoke test: builds the ui, then checks every public page arrives whole to a browser without JavaScript on its first render, and that only public topics are listed
 bun run smoke:chat         # just the topic chat retrieval smoke test (question → ranked findings → assembled context)
 bun run smoke:eval         # just the eval-harness smoke test: one tiny labeled fixture through the real gate and scoring
-bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, and detach succession
+bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, detach succession, and the team page gate
 bun run smoke:room         # just the team chat-room smoke test: the access matrix, isolation, budget rejection, mention rows, and the room lock
 bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a viewer may open, one per holding team, and the unseen count
 bun run smoke:mcp          # just the mcp smoke test: what a visitor reads, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, the edit tools, and the rate limit

@@ -5,9 +5,10 @@ import {
 	USER_SEARCH_MIN_CHARS,
 	type UserSearchResult,
 } from "@shared/contracts"
+import { toTopicPath } from "@shared/seo"
+import { useNavigate } from "@tanstack/react-router"
 import { Search, X } from "lucide-react"
 import { type KeyboardEvent, useEffect, useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { searchUsers } from "@/clients/profileClient"
 import { searchTeams } from "@/clients/teamClient"
 import { sendTopicFindingOpened } from "@/clients/topicClient"
@@ -137,14 +138,14 @@ export function SearchBar() {
 	// open the topic, team, or user profile page, or the resource in a new tab, then clear the search
 	const openSearchSuggestion = (suggestion: SearchResultSuggestion): void => {
 		if (suggestion.type === "topic") {
-			navigate(`/topics/${suggestion.topic.id}`)
+			void navigate({ to: toTopicPath(suggestion.topic) })
 		} else if (suggestion.type === "team") {
-			navigate(`/teams/${suggestion.team.teamId}`)
+			void navigate({ to: "/teams/$teamId", params: { teamId: suggestion.team.teamId } })
 		} else if (suggestion.type === "user") {
-			navigate(`/profiles/${suggestion.user.userId}`)
+			void navigate({ to: "/profiles/$userId", params: { userId: suggestion.user.userId } })
 		} else {
 			void sendTopicFindingOpened(suggestion.resource.findingId)
-			window.open(suggestion.resource.url, "_blank", "noopener,noreferrer")
+			window.open(suggestion.resource.url, "_blank", "noopener")
 		}
 		handleClearSearch()
 	}

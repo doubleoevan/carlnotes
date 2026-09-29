@@ -1,7 +1,7 @@
 import type { TopicResponse } from "@shared/contracts"
 import { maxTopicFindingsOptions, visibilities } from "@shared/enums"
+import { useNavigate } from "@tanstack/react-router"
 import { useRef, useState } from "react"
-import { useNavigate } from "react-router"
 import { toast } from "sonner"
 import {
 	DailyTopicLimitError,
@@ -101,7 +101,7 @@ export function EditTopicModal({
 		} catch (error) {
 			// surface an error as a toast. the modal stays open so a failed upload retries on the next Save
 			console.error("topic save failed", error)
-			showSaveError(error, () => navigate("/plans"))
+			showSaveError(error, () => navigate({ to: "/plans" }))
 		} finally {
 			setIsSaving(false)
 		}

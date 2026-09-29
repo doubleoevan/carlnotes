@@ -22,7 +22,8 @@ export function TopicSettingsCard({ topic }: { topic: TopicResponse }) {
 					<InfoSection label="Schedule">
 						{toScheduleLabel(topic.frequency, topic.scheduledTime, topic.scheduledDayOfWeek)}
 						{topic.isDailyFrequencyPaused && <PausedFrequencyNote />}
-						<div className="text-muted-foreground mt-0.5 text-xs">
+						{/* the age is relative to now, so the server's markup can differ */}
+						<div className="text-muted-foreground mt-0.5 text-xs" suppressHydrationWarning>
 							last scan {topic.lastScanAt ? toAgeLabel(topic.lastScanAt) : "never"}
 						</div>
 						{lastScanDuration && <div className="text-muted-foreground text-xs">{lastScanDuration} taken</div>}

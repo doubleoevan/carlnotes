@@ -123,14 +123,27 @@ export function isProviderPhotoUrl(imageUrl: string): boolean {
 	}
 }
 
+// the user columns that a published avatar is chosen from
+export const publishedAvatarColumns = {
+	avatarSource: users.avatarSource,
+	avatarKey: users.avatarKey,
+	image: users.image,
+}
+
 /**
  * Where a user's published avatar comes from.
  */
 export async function toPublishedAvatar(userId: string): Promise<PublishedAvatar> {
-	const [user] = await db
-		.select({ avatarSource: users.avatarSource, avatarKey: users.avatarKey, image: users.image })
-		.from(users)
-		.where(eq(users.id, userId))
+	const [user] = await db.select(publishedAvatarColumns).from(users).where(eq(users.id, userId))
+	return toPublishedAvatarFromUser(user)
+}
+
+/**
+ * Where a user's published avatar comes from, chosen from the user's avatar columns.
+ */
+export function toPublishedAvatarFromUser(
+	user: { avatarSource: string | null; avatarKey: string | null; image: string | null } | undefined,
+): PublishedAvatar {
 	// an uploaded image is served from this app's own storage, an oauth photo comes from its provider
 	if (user?.avatarSource === "upload" && user.avatarKey) {
 		return { avatarKey: user.avatarKey }

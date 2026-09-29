@@ -18,7 +18,7 @@ export type NoteTransport = {
 // how a save went wrong: a failed post retries, a rejected update stops the note from saving
 export type NoteSaveErrorReason = "failed" | "rejected"
 
-// where the note stands: edits are on their way, everything landed, or a post could not be made
+// the note's save status. unsaved means a post failed or was rejected
 export type NoteSaveStatus = "saving" | "saved" | "unsaved"
 
 // what the stream delivers back to the provider
@@ -192,11 +192,13 @@ export class NoteProvider {
 		const mergedUpdates = Y.mergeUpdates(this.pendingUpdates)
 		this.pendingUpdates = []
 
-		// a failed post keeps the edits pooled for the next flush. a rejected one can never send, so posting stops for good
+		// post the merged update, counted as in flight until the post returns
 		this.sendingCount += 1
-		const isUpdatesSent = await this.transport.sendUpdate(this.noteId, mergedUpdates).catch(() => false)
+		const sendUpdateResult = await this.transport.sendUpdate(this.noteId, mergedUpdates).catch(() => false)
 		this.sendingCount -= 1
-		if (isUpdatesSent === "rejected") {
+
+		// keep a rejected update pooled and stop posting for good
+		if (sendUpdateResult === "rejected") {
 			this.pendingUpdates.unshift(mergedUpdates)
 			this.hasRejectedUpdate = true
 			this.onSaveStatus("unsaved")
@@ -204,7 +206,7 @@ export class NoteProvider {
 			return
 		}
 		// a post that only failed waits for the next flush with its edits still pooled
-		if (!isUpdatesSent) {
+		if (!sendUpdateResult) {
 			this.pendingUpdates.unshift(mergedUpdates)
 			this.onSaveStatus("unsaved")
 			this.onSaveError("failed")

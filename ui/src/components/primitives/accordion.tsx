@@ -39,12 +39,21 @@ function AccordionTrigger({ className, children, ...props }: React.ComponentProp
 	)
 }
 
-// the collapsible body, height-animated open/closed.
-function AccordionContent({ className, children, ...props }: React.ComponentProps<typeof AccordionPrimitive.Content>) {
+// the collapsible body, height-animated open and closed. a forceMount body stays in the HTML and hides with no animation when closed
+function AccordionContent({
+	className,
+	children,
+	forceMount,
+	...props
+}: React.ComponentProps<typeof AccordionPrimitive.Content>) {
 	return (
 		<AccordionPrimitive.Content
 			data-slot="accordion-content"
-			className="data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down"
+			forceMount={forceMount}
+			className={cn(
+				"data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down",
+				forceMount && "data-[state=closed]:hidden",
+			)}
 			{...props}
 		>
 			<div className={cn("pb-2", className)}>{children}</div>

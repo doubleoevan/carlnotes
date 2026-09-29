@@ -1,6 +1,6 @@
+import { useLocation } from "@tanstack/react-router"
 import { Columns3Cog, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
 import { useState } from "react"
-import { useLocation } from "react-router-dom"
 import { authClient } from "@/clients/authClient"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { CoffeeRings } from "@/components/branding/CoffeeRings"
@@ -15,7 +15,7 @@ import { buttonVariants } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { signOutAndReload } from "@/components/session/signOut"
-import { useRememberedSignedIn } from "@/hooks/useRememberedSignedIn"
+import { useIsSignedInBeforeSession } from "@/hooks/useIsSignedInBeforeSession"
 import { useTheme } from "@/hooks/useTheme"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn, toSafeRedirectPath } from "@/lib/utils"
@@ -50,7 +50,7 @@ export function Header() {
 	// the admin link renders only for admins
 	const isAdmin = session?.user.role === "admin"
 	// the headline shimmers on every route change. keying the wrapper by pathname remounts it to replay
-	const { pathname } = useLocation()
+	const pathname = useLocation({ select: (location) => location.pathname })
 	// a click on a home link while already on the home page reloads the feed
 	const { reheat } = useTopicFeed()
 	function handleHomeClick(event: React.MouseEvent): void {
@@ -62,7 +62,7 @@ export function Header() {
 	}
 
 	// the hero pitches the app to a visitor. it only shows on the home page to logged-out visitors.
-	const isHeroShown = !useRememberedSignedIn() && pathname === "/"
+	const isHeroShown = !useIsSignedInBeforeSession() && pathname === "/"
 	return (
 		<header className="bg-hero text-hero-foreground relative overflow-hidden">
 			{isHeroShown && <CoffeeRings />}
@@ -164,6 +164,8 @@ export function Header() {
 						>
 							<img
 								src="/carl-hero.png"
+								width={472}
+								height={535}
 								alt="Carl, holding a raccoon and a machine learning textbook"
 								className="w-28 pb-6 -mb-4 sm:w-52"
 							/>
@@ -209,8 +211,8 @@ function HeaderMenu({
 	isAdmin: boolean
 	userId: string
 }) {
-	// the path highlights the open page's row, and sends the login back to where the visitor started
-	const { pathname } = useLocation()
+	// the path highlights the open page's option, and sends the login back to where the visitor started
+	const pathname = useLocation({ select: (location) => location.pathname })
 	// the one badge sums every unread chat mention, note change, and topic invitation
 	const chatMentions = useAllChatMentions()
 	const noteBadges = useAllNoteBadges()

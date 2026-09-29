@@ -1,6 +1,6 @@
 // the chat room conversation state for one team topic
 import { hasAllMention, hasModelMention, isModelChatMessage } from "@shared/chatMentions"
-import { CHAT_ROOM_ATTACHMENT_LIMIT, type ChatAttachment, type ChatRoomMessage } from "@shared/contracts"
+import type { ChatAttachment, ChatRoomMessage } from "@shared/contracts"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { fetchChatRoomMessageLinkPreviews, fetchChatRoomMessages, sendChatRoomMessage } from "@/clients/chatRoomClient"
@@ -13,14 +13,17 @@ import { publishTopicChanged } from "@/stores/chatPanelStore"
 // starts very high because prepending lowers it, and it may never go below zero
 export const FIRST_ITEM_INDEX_START = 1_000_000
 
+// why a post was rejected privately to its poster: Carl's spent budget, too many files, or an unreadable file
+export type ChatRoomRejection = "budget" | "attachmentLimitReached" | "attachmentRejected"
+
 export type ChatRoomState = {
 	chatMessages: ChatRoomMessage[]
 	isLoaded: boolean
 	// true if the chat room routes answered 404, so the panel can fall back to nothing
 	isRejected: boolean
-	// Carl's budget rejection, delivered only to the poster it answered
-	rejectionReason: string | null
-	clearRejectionReason: () => void
+	// why the poster's last post was rejected, shown only to that poster
+	rejection: ChatRoomRejection | null
+	clearRejection: () => void
 	// whether carl owes the chat room an answer, for the shimmer under the chat messages
 	isMessageLoading: boolean
 	// resolves false when the post failed
@@ -52,7 +55,7 @@ export function useChatRoom({ topicId, teamId, userId }: UseChatRoomOptions): Ch
 	const [chatMessages, setChatMessages] = useState<ChatRoomMessage[]>([])
 	const [isLoaded, setIsLoaded] = useState(false)
 	const [isRejected, setIsRejected] = useState(false)
-	const [rejectionReason, setRejectionReason] = useState<string | null>(null)
+	const [rejection, setRejection] = useState<ChatRoomRejection | null>(null)
 	// whether carl owes the chat room an answer. a send that addressed him sets it, and his reply clears it
 	const [isMessageLoading, setIsMessageLoading] = useState(false)
 
@@ -185,23 +188,18 @@ export function useChatRoom({ topicId, teamId, userId }: UseChatRoomOptions): Ch
 			replyToChatMessageId,
 			attachments,
 		).catch(() => null)
-		if (postChatMessageResult === "attachmentLimitReached") {
-			setRejectionReason(
-				`That would pass the ${CHAT_ROOM_ATTACHMENT_LIMIT} files you can share in this chat room. Delete some to share more.`,
-			)
+		// too many files and an unreadable file each say so and post nothing
+		if (postChatMessageResult === "attachmentLimitReached" || postChatMessageResult === "attachmentRejected") {
+			setRejection(postChatMessageResult)
 			return false
 		}
-		// unreadable files and a failed post each say so and post nothing
-		if (postChatMessageResult === "attachmentRejected") {
-			setRejectionReason("Those files didn't post. One of them may be unreadable.")
-			return false
-		}
+		// a failed post says so and posts nothing
 		if (postChatMessageResult === null) {
 			toast("That didn't post. Try again.")
 			return false
 		}
 		// a posted chat message may still show the budget gate's rejection in place of carl's reply
-		setRejectionReason(postChatMessageResult.rejectionReason)
+		setRejection(postChatMessageResult.rejectionReason === null ? null : "budget")
 
 		// a post that gives carl the chat turn starts the wait his reply or rejection ends
 		const repliedTo =
@@ -255,9 +253,9 @@ export function useChatRoom({ topicId, teamId, userId }: UseChatRoomOptions): Ch
 		chatMessages,
 		isLoaded,
 		isRejected,
-		rejectionReason,
+		rejection,
 		isMessageLoading,
-		clearRejectionReason: () => setRejectionReason(null),
+		clearRejection: () => setRejection(null),
 		postChatMessage,
 		reloadChatMessages,
 		loadEarlierChatMessages: loadOlderChatMessages,

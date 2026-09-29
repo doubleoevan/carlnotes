@@ -1,6 +1,6 @@
+import { useNavigate } from "@tanstack/react-router"
 import { Minus, Plus } from "lucide-react"
 import { useState } from "react"
-import { useNavigate } from "react-router-dom"
 import { toast } from "sonner"
 import { sendDeleteJoinRequest, sendJoinRequest } from "@/clients/teamClient"
 import { Button } from "@/components/primitives/button"
@@ -32,7 +32,7 @@ export function JoinTeamButton({
 	// a logged-out visitor is sent to sign up. a signed-in user toggles their join request
 	const handleChangeRequest = async (): Promise<void> => {
 		if (!isSignedIn) {
-			navigate("/signup?cta=team-join")
+			void navigate({ to: "/signup", search: { cta: "team-join" } })
 			return
 		}
 		if (isJoinRequested) {

@@ -4,5 +4,5 @@ coverageReporter = ["text", "lcov"]
 coverageDir = "coverage"
 # test files are not measured
 coverageSkipTestFiles = true
-# generated migration SQL, doppler-run smoke checks, and the eval and tooling scripts are not unit-covered surface
-coveragePathIgnorePatterns = ["db/migrations/**", "**/*.smoke.ts", "evals/**", "scripts/**"]
+# generated migration SQL, smoke checks, the eval and tooling scripts, and a test's fake ui bundle are not measured
+coveragePathIgnorePatterns = ["db/migrations/**", "**/*.smoke.ts", "evals/**", "scripts/**", "**/carl-bundle-*/**"]

@@ -1,17 +1,17 @@
-// the seo files for the shell routes: the live sitemap, the JSON-LD structured data,
-// and the machine-readable discovery files beside them: llms.txt, llms-full.txt, and security.txt
+// the seo files and the public topic queries they read. the files are the sitemap, llms.txt, llms-full.txt,
+// security.txt, and the JSON-LD structured data
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import { PLANS } from "@shared/plans"
-import { and, desc, eq } from "drizzle-orm"
+import type { PublicTopic } from "@shared/contracts"
+import { toJsonLdText, toMetaDescription, toTopicPath } from "@shared/seo"
+import { and, desc, eq, exists, inArray, or, type SQL, sql } from "drizzle-orm"
 import { db } from "../db"
-import { findings, resources, scans, teams, topics } from "../db/schema"
-import { loadReleases } from "./releases"
-import { isShown } from "./topic/permissions"
+import { findings, resources, scans, teams, teamTopics, topics } from "../db/schema"
+import { loadReleases, toReleasePath } from "./releases"
+import { isPublicAndShown } from "./topic/permissions"
 
-// the SPA routes the sitemap always lists, and the discovery files this module generates
-// biome-ignore format: one line keeps the list under the comment-density hook's limit
-const STATIC_ROUTES = ["/", "/plans", "/terms", "/privacy", "/llms.txt", "/llms-full.txt", "/feed.xml", "/.well-known/security.txt"]
+// the pages the sitemap always lists
+const STATIC_ROUTES = ["/", "/topics", "/plans", "/terms", "/privacy"]
 
 // how many topics llms.txt lists
 const LLMS_TOPIC_LIMIT = 50
@@ -19,24 +19,25 @@ const LLMS_TOPIC_LIMIT = 50
 // where the docs markdown lives, resolved from this file so the api reads it from any working directory
 const DOCS_ROOT = join(import.meta.dir, "..", "docs", "src", "content", "docs")
 
-// the official CarlNotes accounts, which tell a search engine that this site and its social profiles are one organization.
-const ORGANIZATION_PROFILES = [
-	"https://x.com/notesofcarl",
-	"https://bsky.app/profile/notesofcarl.bsky.social",
-	"https://www.reddit.com/user/notesofcarl/",
-]
-
 /**
  * The sitemap, built from live data on each request: the static routes, the blog pages, and every public Topic.
- * Profile pages keep their canonical url and preview card but are too thin to promote to a crawler.
+ * Profile pages are too thin to promote to a crawler, and a team is listed only once it has a public topic.
  * The docs are absent because they are statically built files instead of anything this route can read, and the docs site emits its own sitemap.
  */
 export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Promise<string> {
 	// the public topics, each one added to the sitemap as its own page
-	const topicRows = await publicTopicRows()
+	const publicTopics = await loadPublicTopics()
 
-	// the public teams, each with its own page
-	const teamRows = await db.select({ id: teams.id }).from(teams).where(eq(teams.isPublic, true))
+	// the public teams with a public topic to list, each with its own page
+	const teamRows = await db
+		.select({ id: teams.id })
+		.from(teams)
+		.where(
+			and(
+				eq(teams.isPublic, true),
+				exists(db.select({ id: topics.id }).from(topics).where(toTeamPublicTopicsFilter(teams.id))),
+			),
+		)
 
 	// the releases index and every published release's own page, each release dated by when it went out
 	const releaseRows = await loadReleases()
@@ -45,24 +46,61 @@ export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Pr
 	const entries = [
 		...STATIC_ROUTES.map((path) => toSitemapEntry(`${appUrl}${path === "/" ? "" : path}`)),
 		...blogPaths.map((path) => toSitemapEntry(`${appUrl}${path}`)),
-		...topicRows.map((topicRow) => toSitemapEntry(`${appUrl}/topics/${topicRow.id}`, topicRow.updatedAt)),
+		...publicTopics.map((publicTopic) =>
+			toSitemapEntry(`${appUrl}${toTopicPath(publicTopic)}`, new Date(publicTopic.feedUpdatedAt)),
+		),
 		...teamRows.map((teamRow) => toSitemapEntry(`${appUrl}/teams/${teamRow.id}`)),
 		toSitemapEntry(`${appUrl}/releases`),
-		...releaseRows.map((release) =>
-			toSitemapEntry(`${appUrl}/releases/${encodeURIComponent(release.tag)}`, release.releasedAt),
-		),
+		...releaseRows.map((release) => toSitemapEntry(`${appUrl}${toReleasePath(release.tag)}`, release.releasedAt)),
 	]
 	return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${entries.join("")}</urlset>`
 }
 
 /**
- * Every topic the sitemap and llms.txt may name, from the one query they share.
+ * Every public Topic with enough findings to show, most recently changed first.
  */
-export async function publicTopicRows(): Promise<{ id: string; name: string; visibility: string; updatedAt: Date }[]> {
-	return db
-		.select({ id: topics.id, name: topics.name, visibility: topics.visibility, updatedAt: topics.updatedAt })
+export async function loadPublicTopics(): Promise<PublicTopic[]> {
+	// read the shown public topics, most recently changed first
+	const topicRows = await db
+		.select(publicTopicColumns)
 		.from(topics)
-		.where(and(eq(topics.visibility, "public"), isShown))
+		.where(isPublicAndShown)
+		.orderBy(desc(topics.updatedAt))
+
+	// shape each row as the PublicTopic contract, with its description written and feedUpdatedAt as an ISO string
+	return topicRows.map((topicRow) => ({
+		id: topicRow.id,
+		name: topicRow.name,
+		description: toTopicDescription(topicRow),
+		feedUpdatedAt: topicRow.feedUpdatedAt.toISOString(),
+	}))
+}
+
+// the summary of the newest succeeded scan that kept a finding, as a subquery on a topic row. drizzle drops the
+// table name from a top-level column in a one-table select, so each subquery nests in an outer sql fragment
+const lastScanSummaryQuery = sql`(select ${scans.scanSummary} from ${scans} where ${scans.topicId} = ${topics.id} and ${scans.status} = 'succeeded' and ${scans.keptCount} > 0 and ${scans.scanSummary} <> '' order by ${scans.startedAt} desc limit 1)`
+export const lastScanSummary = sql<string | null>`${lastScanSummaryQuery}`
+
+// when a topic's feed last gained a finding, or the topic's creation time if it has none
+const newestFindingCreatedAtQuery = sql`(select max(${findings.createdAt}) from ${findings} where ${findings.topicId} = ${topics.id})`
+const topicFeedUpdatedAt = sql<Date>`coalesce(${newestFindingCreatedAtQuery}, ${topics.createdAt})`.mapWith(
+	topics.createdAt,
+)
+
+// the columns of a public topic row. the prompt and the scan summary are what its description is written from
+const publicTopicColumns = {
+	id: topics.id,
+	name: topics.name,
+	prompt: topics.prompt,
+	feedUpdatedAt: topicFeedUpdatedAt,
+	scanSummary: lastScanSummary,
+}
+
+/**
+ * Returns a topic's description from its last scan's summary, else its prompt, else its name.
+ */
+export function toTopicDescription(topicRow: { name: string; prompt: string; scanSummary: string | null }): string {
+	return toMetaDescription(topicRow.scanSummary || topicRow.prompt || topicRow.name)
 }
 
 // one docs or blog page as llms.txt links to it: where it lives, what it is called, and its own words
@@ -79,7 +117,7 @@ export function loadDocsPages(): DiscoveryPage[] {
 		if (entry.isFile() && entry.name.endsWith(".md")) {
 			filePaths.push(entry.name)
 		}
-		// a section directory holds one more level of pages and nothing deeper
+		// a section directory contains one more level of pages and nothing deeper
 		if (entry.isDirectory()) {
 			for (const nested of readdirSync(join(DOCS_ROOT, entry.name))) {
 				if (nested.endsWith(".md")) {
@@ -120,20 +158,20 @@ function toDocsPage(filePath: string): DiscoveryPage | null {
 	return { path: pagePath, title, description, body: match[2].trim() }
 }
 
+// what llms.txt is built from: the site's origin, the docs and blog pages it links, and the public topics it lists
+type ToLlmsTxtOptions = {
+	appUrl: string
+	docsPages: DiscoveryPage[]
+	blogPages: { slug: string; title: string; description: string }[]
+	publicTopics: PublicTopic[]
+}
+
 /**
  * The llms.txt convention: the product, one line on what it is, then sections of links a model can follow.
  */
-export function toLlmsTxt(
-	appUrl: string,
-	docsPages: DiscoveryPage[],
-	blogPages: { slug: string; title: string; description: string }[],
-	topicRows: { id: string; name: string; visibility: string; updatedAt: Date }[],
-): string {
-	// the newest public topics under the limit
-	const publicTopics = topicRows
-		.filter((topicRow) => topicRow.visibility === "public")
-		.sort((first, second) => second.updatedAt.getTime() - first.updatedAt.getTime())
-		.slice(0, LLMS_TOPIC_LIMIT)
+export function toLlmsTxt({ appUrl, docsPages, blogPages, publicTopics }: ToLlmsTxtOptions): string {
+	// the first public topics under the limit, most recently changed first
+	const listedPublicTopics = publicTopics.slice(0, LLMS_TOPIC_LIMIT)
 
 	// the sections in reading order: what this is, the manual, the writing, then what people read here
 	const lines = [
@@ -159,19 +197,22 @@ export function toLlmsTxt(
 		// the newest public reading on the site
 		"## Topics",
 		"",
-		...publicTopics.map((topicRow) => `- [${topicRow.name}](${appUrl}/topics/${topicRow.id})`),
+		...listedPublicTopics.map((publicTopic) => `- [${publicTopic.name}](${appUrl}${toTopicPath(publicTopic)})`),
 	]
 	return `${lines.join("\n")}\n`
+}
+
+// what llms-full.txt is built from: the site's origin and the docs and blog pages whose text it includes
+type ToLlmsFullTxtOptions = {
+	appUrl: string
+	docsPages: DiscoveryPage[]
+	blogPages: { slug: string; title: string; body: string }[]
 }
 
 /**
  * The long form: the full markdown text of the docs and blog, one document after another.
  */
-export function toLlmsFullTxt(
-	appUrl: string,
-	docsPages: DiscoveryPage[],
-	blogPages: { slug: string; title: string; body: string }[],
-): string {
+export function toLlmsFullTxt({ appUrl, docsPages, blogPages }: ToLlmsFullTxtOptions): string {
 	// each document opens with its title and canonical url
 	const documents = [
 		...docsPages.map((docsPage) => `# ${docsPage.title}\n${appUrl}${docsPage.path}\n\n${docsPage.body}`),
@@ -206,46 +247,11 @@ function toSitemapEntry(url: string, lastModified?: Date): string {
  * which would otherwise let a name like "</script>…" break out of the block.
  */
 export function toJsonLdTag(data: object): string {
-	return `<script type="application/ld+json">${JSON.stringify(data).replaceAll("<", "\\u003c")}</script>`
+	return `<script type="application/ld+json">${toJsonLdText(data)}</script>`
 }
 
 /**
- * The Organization schema for the homepage shell.
- */
-export function toOrganizationLd(appUrl: string): object {
-	return {
-		"@context": "https://schema.org",
-		"@type": "Organization",
-		name: "CarlNotes",
-		url: appUrl,
-		logo: `${appUrl}/carl-hero.png`,
-		sameAs: ORGANIZATION_PROFILES,
-	}
-}
-
-/**
- * The SoftwareApplication schema for the homepage shell, its offers are built from the pricing tiers.
- */
-export function toSoftwareApplicationLd(appUrl: string): object {
-	return {
-		"@context": "https://schema.org",
-		"@type": "SoftwareApplication",
-		name: "CarlNotes",
-		url: appUrl,
-		applicationCategory: "NewsApplication",
-		operatingSystem: "Web",
-		// one offer per plan, priced at its monthly rate
-		offers: Object.entries(PLANS).map(([plan, planConfig]) => ({
-			"@type": "Offer",
-			name: `${plan[0]?.toUpperCase()}${plan.slice(1)}`,
-			price: (planConfig.priceMonthlyCents / 100).toFixed(2),
-			priceCurrency: "USD",
-		})),
-	}
-}
-
-/**
- * The CreativeWork schema for a public Topic's page, dated to its last succeeded Scan.
+ * The CreativeWork schema for a public Topic's page.
  * The author and publisher fields say this is a user's work hosted on CarlNotes, not the site describing itself.
  */
 export function toCreativeWorkLd(work: {
@@ -274,17 +280,16 @@ export function toCreativeWorkLd(work: {
 
 /**
  * The Topic's last succeeded Scan, or null before its first.
- * It dates the page's CreativeWork and names the Scan whose Findings the hasPart list includes.
  */
-export async function lastScan(topicId: string): Promise<{ id: string; startedAt: Date } | null> {
+export async function lastScan(topicId: string): Promise<{ id: string } | null> {
 	// use the newest succeeded scan for this topic
-	const [row] = await db
-		.select({ id: scans.id, startedAt: scans.startedAt })
+	const [scanRow] = await db
+		.select({ id: scans.id })
 		.from(scans)
 		.where(and(eq(scans.topicId, topicId), eq(scans.status, "succeeded")))
 		.orderBy(desc(scans.startedAt))
 		.limit(1)
-	return row ?? null
+	return scanRow ?? null
 }
 
 // one finding as the scan email shows it: the resource's title and link, and the relevance explanation
@@ -292,7 +297,6 @@ export type ScanFinding = { title: string | null; url: string; relevanceExplanat
 
 /**
  * A Scan's Findings joined to their Resources, ranked by relevance: the same rows the scan email renders.
- * The topic page's structured data and its noscript body both are built from these.
  */
 export async function scanFindings(scanId: string): Promise<ScanFinding[]> {
 	// ranked by relevance like the email and the feed's default sort
@@ -329,19 +333,26 @@ export function toFindingListLd(findingRows: ScanFinding[]): object | null {
 }
 
 /**
- * The Findings as a noscript section for the topic page's body: the ranked list the scan email shows.
- * A crawler that runs no JavaScript reads this where it would otherwise find an empty SPA shell.
- * A browser renders the SPA instead, so people don't see it.
+ * Filters to the public topics a team owns or that are shared with it.
  */
-export function toFindingListHtml(topicName: string, description: string, findingRows: ScanFinding[]): string {
-	// one linked line per finding, the email's own content. an untitled resource is named by its url
-	const items = findingRows
-		.map(
-			(row) =>
-				`<li><a href="${Bun.escapeHTML(row.url)}">${Bun.escapeHTML(row.title ?? row.url)}</a> — ${Bun.escapeHTML(row.relevanceExplanation)}</li>`,
-		)
-		.join("")
-	// the list and its heading only render when the scan kept something
-	const findingList = items ? `<h2>Carl's Top ${findingRows.length}</h2><ol>${items}</ol>` : ""
-	return `<noscript><section><h1>${Bun.escapeHTML(topicName)}</h1><p>${Bun.escapeHTML(description)}</p>${findingList}</section></noscript>`
+export function toTeamPublicTopicsFilter(teamId: string | typeof teams.id): SQL | undefined {
+	return and(
+		eq(topics.visibility, "public"),
+		or(
+			eq(topics.teamId, teamId),
+			inArray(
+				topics.id,
+				db.select({ topicId: teamTopics.topicId }).from(teamTopics).where(eq(teamTopics.teamId, teamId)),
+			),
+		),
+	)
+}
+
+/**
+ * Loads when a topic's feed last gained a finding, or the topic's creation time if it has none.
+ */
+export async function loadTopicFeedUpdatedAt(topicId: string): Promise<Date | null> {
+	// read the topic's newest finding time, or its creation time if it has none
+	const [topicRow] = await db.select({ feedUpdatedAt: topicFeedUpdatedAt }).from(topics).where(eq(topics.id, topicId))
+	return topicRow?.feedUpdatedAt ?? null
 }

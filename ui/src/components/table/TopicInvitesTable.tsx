@@ -1,4 +1,5 @@
 import type { ActivityResponse } from "@shared/contracts"
+import { toTopicPath } from "@shared/seo"
 import { sendDeleteTopicInvite } from "@/clients/activityClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { type SentInviteRow, SentInvitesTable } from "@/components/table/SentInvitesTable"
@@ -24,7 +25,10 @@ export function TopicInvitesTable({
 	const inviteRows = invites.map((inviteRow) => ({
 		inviteId: inviteRow.inviteId,
 		target: (
-			<AnchorLink href={`/topics/${inviteRow.topicId}`} className="text-link hover:underline">
+			<AnchorLink
+				href={toTopicPath({ id: inviteRow.topicId, name: inviteRow.name })}
+				className="text-link hover:underline"
+			>
 				{inviteRow.name}
 			</AnchorLink>
 		),

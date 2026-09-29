@@ -236,6 +236,7 @@ function ResourceInfo({
 					<div className="min-w-0 flex-1">
 						<AnchorLink
 							href={resource.url}
+							isUserContent
 							onClick={() => topicHandlers.openTopicFinding(resource.findingId)}
 							className="text-link inline-flex items-start gap-1 text-sm font-semibold hover:underline"
 						>
@@ -252,7 +253,7 @@ function ResourceInfo({
 				{isLinkPreviewLoading && <LinkPreviewLoading />}
 				{linkPreview && (
 					<div className="mb-3">
-						<LinkPreviewCard linkPreview={linkPreview} className="max-w-full" />
+						<LinkPreviewCard linkPreview={linkPreview} className="max-w-full" isUserContent />
 					</div>
 				)}
 

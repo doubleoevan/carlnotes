@@ -1,13 +1,12 @@
 // the state of the user's chat rooms and their chat mention badge counts
 import type { ChatMention, ChatRoom } from "@shared/contracts"
-import { useSyncExternalStore } from "react"
 import { toStoreListeners } from "@/stores/storeListeners"
 
 // the chat rooms that the user opened this session
 const openedChatRoomKeys = new Set<string>()
 // the chat rooms that the chat panel last read
 let chatRooms: ChatRoom[] = []
-const { subscribe, publish, getVersion } = toStoreListeners()
+const { publish, useStoreVersion } = toStoreListeners()
 
 // a chat room's key. the team's own chat room takes "team" in the topic slot, like the chat stream keys
 function toChatRoomKey(topicId: string | null, teamId: string): string {
@@ -15,7 +14,7 @@ function toChatRoomKey(topicId: string | null, teamId: string): string {
 }
 
 /**
- * Mark a chat room opened, re-rendering every badge that shows it then run the listener callbacks.
+ * Marks a chat room opened, which clears its badges everywhere they show.
  */
 export function markChatRoomOpened(topicId: string | null, teamId: string): void {
 	openedChatRoomKeys.add(toChatRoomKey(topicId, teamId))
@@ -23,19 +22,18 @@ export function markChatRoomOpened(topicId: string | null, teamId: string): void
 }
 
 /**
- * Update the shared list of all chat rooms
+ * Replaces the chat rooms with what the chat panel last read.
  */
-export function setChatRooms(rooms: ChatRoom[]): void {
-	chatRooms = rooms
+export function setChatRooms(updatedChatRooms: ChatRoom[]): void {
+	chatRooms = updatedChatRooms
 	publish()
 }
 
 /**
- * The unopened chat mentions waiting on a topic.
- * A user that already has chat mentions passes them. everything else reads what the panel last polled.
+ * The unopened chat mentions waiting on a topic from the chat rooms the panel last read.
  */
 export function useTopicMentions(topicId: string): ChatMention[] {
-	useSyncExternalStore(subscribe, getVersion)
+	useStoreVersion()
 	const chatMentions = chatRooms
 		.filter((chatRoom) => chatRoom.topicId === topicId)
 		.flatMap((chatRoom) => chatRoom.chatMentions)
@@ -43,11 +41,10 @@ export function useTopicMentions(topicId: string): ChatMention[] {
 }
 
 /**
- * The unopened chat mentions waiting on a team.
- * A user that already has chat mentions passes them. everything else reads what the panel last polled.
+ * The unopened chat mentions waiting on a team, from the chat rooms the panel last read.
  */
 export function useTeamMentions(teamId: string): ChatMention[] {
-	useSyncExternalStore(subscribe, getVersion)
+	useStoreVersion()
 	const chatRoom = chatRooms.find((chatRoom) => chatRoom.teamId === teamId && chatRoom.topicId === null)
 	return openedChatRoomKeys.has(toChatRoomKey(null, teamId)) ? [] : (chatRoom?.chatMentions ?? [])
 }
@@ -58,12 +55,12 @@ export function useTeamMentions(teamId: string): ChatMention[] {
  * room is opened instead of on the next poll.
  */
 export function useChatRooms(): ChatRoom[] {
-	useSyncExternalStore(subscribe, getVersion)
+	useStoreVersion()
 	return toChatRooms()
 }
 
 /**
- * What that hook renders, without the subscription, so it can be read outside a component.
+ * The chat rooms useChatRooms returns, read without the subscription outside a component.
  */
 export function toChatRooms(): ChatRoom[] {
 	return chatRooms.map((chatRoom) =>
@@ -77,7 +74,7 @@ export function toChatRooms(): ChatRoom[] {
  * The unopened chat mentions waiting in topic chat rooms.
  */
 export function useAllTopicChatMentions(): ChatMention[] {
-	useSyncExternalStore(subscribe, getVersion)
+	useStoreVersion()
 	return toChatRooms().flatMap((chatRoom) => (chatRoom.topicId === null ? [] : chatRoom.chatMentions))
 }
 
@@ -85,13 +82,13 @@ export function useAllTopicChatMentions(): ChatMention[] {
  * The unopened chat mentions waiting in team chat rooms.
  */
 export function useAllTeamChatMentions(): ChatMention[] {
-	useSyncExternalStore(subscribe, getVersion)
+	useStoreVersion()
 	return toChatRooms().flatMap((chatRoom) => (chatRoom.topicId === null ? chatRoom.chatMentions : []))
 }
 
 /** Every unopened chat mention the user has. */
 export function useAllChatMentions(): ChatMention[] {
-	useSyncExternalStore(subscribe, getVersion)
+	useStoreVersion()
 	return chatRooms.flatMap((chatRoom) =>
 		openedChatRoomKeys.has(toChatRoomKey(chatRoom.topicId, chatRoom.teamId)) ? [] : chatRoom.chatMentions,
 	)

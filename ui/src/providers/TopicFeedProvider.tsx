@@ -1,8 +1,8 @@
 import type { TopicFeedResponse } from "@shared/contracts"
 import { resourceKinds as allResourceKinds } from "@shared/enums"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useLocation, useMatch } from "@tanstack/react-router"
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react"
-import { useLocation } from "react-router-dom"
 import { authClient } from "@/clients/authClient"
 import {
 	fetchTopicFeed,
@@ -34,12 +34,16 @@ type TopicFeedValue = ReturnType<typeof useTopicFeedState>
 // the topic feed context shares one state instance via a single top-level provider, null unless set
 const TopicFeedContext = createContext<TopicFeedValue | null>(null)
 
-// owns the single topic feed instance and shares it with all descendant components
+/**
+ * Owns the single topic feed instance and shares it with every descendant component.
+ */
 export function TopicFeedProvider({ children }: { children: ReactNode }) {
 	return <TopicFeedContext.Provider value={useTopicFeedState()}>{children}</TopicFeedContext.Provider>
 }
 
-// returns the shared topic feed context value. throws an error if used outside of the provider
+/**
+ * Returns the shared topic feed context value, and throws if used outside the provider.
+ */
 export function useTopicFeed(): TopicFeedValue {
 	const contextValue = useContext(TopicFeedContext)
 	if (!contextValue) {
@@ -48,15 +52,22 @@ export function useTopicFeed(): TopicFeedValue {
 	return contextValue
 }
 
-// returns the topic feed handlers. throws an error if used outside the provider
+/**
+ * Returns the topic feed handlers, and throws if used outside the provider.
+ */
 export function useTopicFeedActions(): TopicFeedHandlers {
 	return useTopicFeed().handlers
 }
 
-// whether anyone is signed in, used to hide the per-user finding buttons from a visitor
+/**
+ * Returns whether anyone is signed in.
+ */
 export function useIsSignedIn(): boolean {
 	return useTopicFeed().isSignedIn
 }
+
+// how long a feed the server loads stays fresh in the browser
+const LOADED_FEED_STALE_MS = 60_000
 
 // the topic feed state the provider owns
 function useTopicFeedState() {
@@ -74,10 +85,18 @@ function useTopicFeedState() {
 	const [tagFilters, setTagFilters] = useState<string[]>([])
 	const [tagMatchMode, setTagMatchMode] = useState<TagMatchMode>("any")
 
+	// the visitor's feed the homepage route loads on the server. the feed seeds only the visitor's query,
+	// so the server render and the browser's first render show the same sections
+	const loadedTopicFeed = useMatch({ from: "/_layout/", shouldThrow: false })?.loaderData
+	const signedInUserId = session?.user.id ?? null
+	const visitorTopicFeed = signedInUserId === null ? (loadedTopicFeed ?? undefined) : undefined
 	// tanstack caches the topic feed keyed by the signed-in user
 	const queryClient = useQueryClient()
 	const { data: topicFeed = null, refetch } = useQuery({
-		queryKey: ["topic-feed", session?.user.id ?? null],
+		queryKey: ["topic-feed", signedInUserId],
+		initialData: visitorTopicFeed,
+		// a feed the server loads skips the browser's refetch on mount
+		staleTime: visitorTopicFeed ? LOADED_FEED_STALE_MS : 0,
 		// log a failed load, then rethrow so the query records the error
 		queryFn: async () => {
 			try {
@@ -202,7 +221,7 @@ function useTopicFeedState() {
 		[openTopicFinding, consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding],
 	)
 	const filteredTopicFeed = useMemo(
-		() => filterTopicFeed(topicFeed, resourceKinds, findingFilter, sort, tagFilters, tagMatchMode),
+		() => filterTopicFeed({ topicFeed, resourceKinds, findingFilter, sort, tagFilters, tagMatchMode }),
 		[topicFeed, resourceKinds, findingFilter, sort, tagFilters, tagMatchMode],
 	)
 	return {
@@ -234,15 +253,25 @@ function useTopicFeedState() {
 	}
 }
 
+// the topic feed and every filter and sort the feed controls set
+type FilterTopicFeedOptions = {
+	topicFeed: TopicFeedResponse | null
+	resourceKinds: Set<ResourceKind>
+	findingFilter: TopicFindingFilter
+	sort: TopicFindingSort
+	tagFilters: string[]
+	tagMatchMode: TagMatchMode
+}
+
 // filter and sort the topic feed
-function filterTopicFeed(
-	topicFeed: TopicFeedResponse | null,
-	resourceKinds: Set<ResourceKind>,
-	findingFilter: TopicFindingFilter,
-	sort: TopicFindingSort,
-	tagFilters: string[],
-	tagMatchMode: TagMatchMode,
-): TopicFeedResponse | null {
+function filterTopicFeed({
+	topicFeed,
+	resourceKinds,
+	findingFilter,
+	sort,
+	tagFilters,
+	tagMatchMode,
+}: FilterTopicFeedOptions): TopicFeedResponse | null {
 	if (!topicFeed) {
 		return null
 	}
@@ -273,7 +302,7 @@ function matchesTagFilters(topicTags: string[], tagFilters: string[], tagMatchMo
 		return true
 	}
 
-	// count the selected tags the topic has, then answer per match mode
+	// count the selected tags that the topic has, then compare the count per match mode
 	const matchedTagCount = tagFilters.filter((tag) => topicTags.includes(tag)).length
 	if (tagMatchMode === "any") {
 		return matchedTagCount > 0

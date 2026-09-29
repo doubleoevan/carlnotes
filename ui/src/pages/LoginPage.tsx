@@ -1,9 +1,9 @@
 import { useState } from "react"
-import { useSearchParams } from "react-router-dom"
 import { authClient } from "@/clients/authClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { SessionLayout } from "@/components/session/SessionLayout"
 import { usePageTitle } from "@/hooks/usePageTitle"
+import { useSearchParams } from "@/hooks/useSearchParams"
 import { toAuthorizeReturnPath, toSafeRedirectPath } from "@/lib/utils"
 
 /**
@@ -13,8 +13,8 @@ export function LoginPage() {
 	usePageTitle("Log in")
 	const [error, setError] = useState<string | null>(null)
 	const [isSubmitting, setIsSubmitting] = useState(false)
-	// where sign-in returns the visitor to. an mcp client's authorize request, otherwise the next param
-	const [searchParams] = useSearchParams()
+	// the path sign-in returns to, an mcp client's authorize request or else the next param
+	const searchParams = useSearchParams()
 	const redirectPath = toSafeRedirectPath(toAuthorizeReturnPath(searchParams) ?? searchParams.get("next"))
 
 	// logs in with the existing account's email and password

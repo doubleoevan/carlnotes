@@ -8,7 +8,7 @@ import { countUnseenChatMentions, loadChatRooms } from "./rooms"
 // one id per run, and every fixture id derives from it, so a parallel run never collides
 const runId = `rooms-smoke-${Date.now()}-${Math.random().toString(36).slice(2)}`
 const memberId = `${runId}-member`
-const outsiderId = `${runId}-outsider`
+const nonMemberId = `${runId}-non-member`
 const teamAId = `${runId}-team-a`
 const teamBId = `${runId}-team-b`
 const ownedTopicId = `${runId}-owned`
@@ -40,8 +40,8 @@ function toUserRow(id: string): {
 
 // the two people, two teams, and two topics the checks below read
 async function seed(): Promise<void> {
-	// the two accounts: one on both teams, and the outsider whose empty list proves membership is the key
-	await db.insert(users).values([toUserRow(memberId), toUserRow(outsiderId)])
+	// the two accounts: one on both teams, and the non-member whose empty list proves membership is the key
+	await db.insert(users).values([toUserRow(memberId), toUserRow(nonMemberId)])
 
 	// team A is made first, so the newer team B and its topics sort ahead of it
 	await db.insert(teams).values({ id: teamAId, name: `${runId} A`, isPublic: true })
@@ -73,7 +73,7 @@ async function cleanUp(): Promise<void> {
 	// the memberships and the teams, then the two accounts
 	await db.delete(teamMembers).where(inArray(teamMembers.teamId, [teamAId, teamBId]))
 	await db.delete(teams).where(inArray(teams.id, [teamAId, teamBId]))
-	await db.delete(users).where(inArray(users.id, [memberId, outsiderId]))
+	await db.delete(users).where(inArray(users.id, [memberId, nonMemberId]))
 }
 
 async function run(): Promise<void> {
@@ -110,15 +110,15 @@ async function run(): Promise<void> {
 	)
 
 	// membership is the whole key, so someone on neither team has nothing to open
-	const outsiderChatRooms = await loadChatRooms(outsiderId)
-	check("an outsider gets no rooms at all", outsiderChatRooms.length === 0, outsiderChatRooms)
+	const nonMemberChatRooms = await loadChatRooms(nonMemberId)
+	check("a non-member gets no rooms at all", nonMemberChatRooms.length === 0, nonMemberChatRooms)
 
 	// the badge count follows the chat mention rows, and a seen row stops counting
 	const beforeMentionCount = await countUnseenChatMentions(memberId)
 	// one chat message and one chat mention row, which is what a badge counts
 	const [chatMessageRow] = await db
 		.insert(chatRoomMessages)
-		.values({ topicId: null, teamId: teamAId, authorUserId: outsiderId, authorUsername: outsiderId, content: "x" })
+		.values({ topicId: null, teamId: teamAId, authorUserId: nonMemberId, authorUsername: nonMemberId, content: "x" })
 		.returning({ id: chatRoomMessages.id })
 	if (!chatMessageRow) {
 		throw new Error("the fixture chat message did not insert")

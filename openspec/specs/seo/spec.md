@@ -12,11 +12,212 @@ The app SHALL serve `robots.txt` allowing all crawlers and naming the sitemap's 
 - **WHEN** a crawler fetches `/robots.txt`
 - **THEN** it is allowed to crawl and told where `/sitemap.xml` lives
 
-### Requirement: The sitemap lists every public page from live data
+### Requirement: The site feed carries releases alongside the blog
 
-`GET /sitemap.xml` SHALL be generated from a live query, never a committed file: the static routes (`/`, `/plans`, `/terms`, `/privacy`), the releases index and every published release's own page, the blog index and every post, and every public shown Topic's page. A Topic that stops qualifying SHALL leave the sitemap on the next request. Profile pages SHALL NOT be listed: they keep their canonical url and preview tags for anyone who shares a link, but a page of a username and two counts is too thin to promote to a crawler.
+`GET /feed.xml` SHALL include an item per published, non-prerelease release beside the blog posts it
+already carries, ordered newest first across both. Each release item SHALL link to that release's own
+page and SHALL be dated by its publication date.
 
-Documentation pages SHALL NOT be listed. They are built files in the docs site rather than content this route can read, and the docs site emits its own sitemap covering them. Both sitemaps are reachable at the origin, and `robots.txt` continues to point at this one.
+#### Scenario: A published release appears in the feed
+
+- **WHEN** a release has been published and is not a prerelease
+- **THEN** `/feed.xml` includes an item for it, ordered by its publication date among the blog items
+
+#### Scenario: A prerelease is withheld from the feed
+
+- **WHEN** a stored release is flagged as a prerelease
+- **THEN** no item for it appears in `/feed.xml`
+
+### Requirement: The changelog path redirects to the releases page
+
+`GET /changelog` SHALL respond with a permanent redirect to `/releases`, so that a link written
+against the conventional path reaches the page instead of a 404.
+
+#### Scenario: The conventional path reaches the page
+
+- **WHEN** `/changelog` is requested
+- **THEN** the response is a permanent redirect to `/releases`
+
+### Requirement: Every page declares its own canonical URL and title
+
+Every route the sitemap lists, and every profile with a public Topic, SHALL declare its own absolute canonical URL and its own title: `{topic name} — CarlNotes` for a Topic, `{team name} — CarlNotes` for a team, `{username} — CarlNotes` for a profile, `{page name} — CarlNotes` for the public topics, plans, terms, and privacy pages. The site-wide title in `__root.tsx` SHALL be the homepage's title and the fallback for a page with no subject of its own, and any page but the homepage that uses the fallback SHALL declare no canonical url.
+
+#### Scenario: A topic page is not a homepage duplicate
+
+- **WHEN** a crawler fetches a public Topic's page
+- **THEN** the canonical link names that Topic's own URL and the title names the Topic
+
+#### Scenario: A page with no subject keeps the site-wide head
+
+- **WHEN** a crawler fetches a page other than the homepage whose route declares no head of its own
+- **THEN** the site-wide title is in the HTML, exactly once, and no canonical link
+
+#### Scenario: The plans, terms, and privacy pages are not homepage duplicates
+
+- **WHEN** a crawler fetches `/plans`, `/terms`, or `/privacy`
+- **THEN** the canonical link names that page's own URL, the title names the page, and the page's own description and card title and url are in the head, with no script run
+
+Each page the sitemap lists, and every profile page, SHALL also declare its own meta description, written from that page's own subject instead of shared across the site. A public Topic's description SHALL come from the summary of its latest succeeded scan that kept a Finding, or from the Topic's prompt when no such scan has written one, or from its name when both are empty, as plain words with the markdown removed, clipped to 160 characters on a word boundary. The site-wide description SHALL remain only on the homepage and on pages that are left out of search results or have no subject of their own.
+
+#### Scenario: A public topic describes itself
+
+- **WHEN** a crawler reads a public Topic page
+- **THEN** its meta description is written from that Topic's own text, and differs from the site-wide description
+
+#### Scenario: A topic with no scan summary falls back to its prompt
+
+- **WHEN** a public Topic has no succeeded scan to summarize
+- **THEN** its meta description is written from the Topic's prompt
+
+#### Scenario: A description has no markdown
+
+- **WHEN** a scan summary includes links, emphasis, headings, or list marks
+- **THEN** the meta description has the summary's words without the markdown
+
+### Requirement: The public topics page and the homepage lead crawlers into the public topics
+
+The site SHALL serve a page at `/topics` listing every public Topic that has at least `MINIMUM_SHOWN_FINDINGS` Findings, with its name and a one-line description, rendered by the server, and the sitemap SHALL list that page. No other page SHALL gain a section for the public topics page.
+
+The homepage SHALL render a visitor's Featured and Popular sections on the server, five topics per page, with a row of page links under each section whose urls name the section's page, so a crawler can follow them through every public Topic the public topics page lists. A section the accordion has closed SHALL still be in the HTML, hidden, so its first page and its page links are reachable too. Every section on the homepage SHALL page the same way for a signed-in user.
+
+#### Scenario: A crawler reaches a topic without running scripts
+
+- **WHEN** a client with no JavaScript loads the public topics page or the homepage
+- **THEN** it finds a link to every public Topic, on the homepage by following each section's page links
+
+#### Scenario: Paging is a navigation
+
+- **WHEN** a user follows a section's page link
+- **THEN** the section shows that page's five topics, the url records the section's page, and the page does not reload
+
+#### Scenario: The public topics page lists only shown public topics
+
+- **WHEN** `/topics` is rendered
+- **THEN** it lists every public Topic with at least `MINIMUM_SHOWN_FINDINGS` Findings, and no other Topic
+
+### Requirement: A finding's link is marked as user content
+
+Every link to a finding's source SHALL open in a new tab and have `rel="noopener ugc"`. Anyone can create a public Topic and choose its Sources, so a finding's link is user content: it stays in the page, visible and crawlable, and search engines read it as a link the site does not vouch for. It SHALL NOT include `noreferrer`, so the linked site sees the visit come from CarlNotes. A link the site itself chose, such as the footer's, is not marked.
+
+#### Scenario: A public topic's finding links are user content
+
+- **WHEN** a client with no JavaScript loads a public Topic page
+- **THEN** every finding link in the page has `rel="noopener ugc"` and opens in a new tab
+
+### Requirement: A topic url includes a slug and redirects to the current slug
+
+A Topic's url SHALL be its id followed by a url-safe form of its name, as `/topics/<id>/<slug>`, or its id alone when the name has no url-safe characters. The id SHALL remain what resolves the Topic, so a renamed Topic keeps working and the api's routes take the id alone.
+
+A request by id alone or with a stale slug SHALL redirect permanently to the Topic's current url, and a request for the current url SHALL NOT redirect. The sitemap, the canonical, the card url, the emails, and every link a server-rendered page includes SHALL use the current url. A link built from an id alone, such as a navigation right after a Topic is created, SHALL reach the current url through the redirect.
+
+#### Scenario: A url by id alone redirects to the slugged url
+
+- **WHEN** a request arrives by id alone for a Topic whose name has url-safe characters
+- **THEN** it redirects permanently to that Topic's current slugged url
+
+#### Scenario: A renamed topic redirects from its old slug
+
+- **WHEN** a request arrives with a slug that no longer matches the Topic's name
+- **THEN** it redirects permanently to the current slugged url, and the Topic still resolves
+
+#### Scenario: A name with no url-safe characters keeps the id url
+
+- **WHEN** a request arrives by id alone for a Topic whose name has no url-safe characters
+- **THEN** the page renders without a redirect, and `/topics/<id>` is its canonical url when the Topic is public and has at least `MINIMUM_SHOWN_FINDINGS` Findings
+
+### Requirement: Search engines are told when a public topic changes
+
+The app SHALL notify IndexNow when a Topic is created public, when an edit makes a Topic public, when a rename moves a public Topic's url, and when a Scan that runs to the end changes what a public Topic shows, and SHALL serve the key file that IndexNow verifies at the site root. A rename SHALL send the old url beside the new one, so the engine finds the redirect. An edit that makes a public Topic private or invite, and the deletion of a public Topic, SHALL send its old url, so the engine drops it. Every edit path SHALL notify alike: the topic editor, the chat, and the MCP tools.
+
+A Scan SHALL count as changing a Topic when it added or removed at least one Finding on it. A Scan that only re-scored the Findings the Topic already had SHALL NOT notify.
+
+A failed notification SHALL NOT fail the Scan.
+
+#### Scenario: A scan that changed a public topic notifies
+
+- **WHEN** a Scan adds or removes a Finding on a public Topic
+- **THEN** IndexNow is notified of that Topic's url
+
+#### Scenario: A scan that changed nothing stays quiet
+
+- **WHEN** a Scan on a public Topic succeeds without adding or removing a Finding
+- **THEN** IndexNow is not notified
+
+#### Scenario: A failed notification does not fail the scan
+
+- **WHEN** the IndexNow request is rejected or times out
+- **THEN** the Scan finishes as it otherwise would
+
+#### Scenario: A public topic that leaves the index notifies its old url
+
+- **WHEN** an edit makes a public Topic private, or a public Topic is deleted
+- **THEN** IndexNow is notified of the url the Topic had
+
+#### Scenario: A renamed public topic notifies both urls
+
+- **WHEN** an edit renames a public Topic so its slug changes
+- **THEN** IndexNow is notified of the new url and the old one
+
+### Requirement: A page that is not there responds as missing
+
+A request for a Topic, profile, or team that does not exist SHALL respond with status 404, so a search engine drops the url instead of indexing an empty page, and SHALL render the page itself, so a browser shows the page's own missing message.
+
+#### Scenario: A missing topic is a 404
+
+- **WHEN** a client requests a Topic page for an id that resolves to no Topic
+- **THEN** the response status is 404, and in a browser the page shows the missing-topic message
+
+### Requirement: Pages with nothing to rank are kept out of search results
+
+The sign-in, sign-up, and password reset pages, the pages behind the `_signedIn` layout (`/account`, `/activity`, `/admin`, `/mcp/consent`), the teams list, a private team's page, and an invite link that does not resolve SHALL declare `robots` `noindex, follow`, a live invite link and a Topic page that is not public SHALL declare `noindex, nofollow`, and the sign-in, sign-up, password reset, and teams list pages SHALL also declare their own title. A public Topic with fewer than `MINIMUM_SHOWN_FINDINGS` Findings SHALL be `noindex` and SHALL declare no canonical url until it has them. A team or a profile with no public Topic SHALL be `noindex`, SHALL declare no canonical url, and SHALL be left out of the sitemap, and a team's public Topic count SHALL include the public Topics shared with it. `llms.txt`, `llms-full.txt`, and `security.txt` SHALL be served with an `X-Robots-Tag: noindex` header, and the sitemap SHALL list pages only.
+
+#### Scenario: A sign-in page is not indexed
+
+- **WHEN** a crawler fetches `/login`
+- **THEN** the page declares `noindex, follow` and the title names the page
+
+#### Scenario: A public topic below the findings minimum is not indexed
+
+- **WHEN** a crawler fetches a public Topic with fewer than `MINIMUM_SHOWN_FINDINGS` Findings
+- **THEN** the page declares `noindex` and no canonical url, and keeps its card and its feed link
+
+#### Scenario: An empty profile is not indexed
+
+- **WHEN** a crawler fetches the profile of a user with no public Topic
+- **THEN** the page declares `noindex` and no canonical url, and the sitemap does not list it
+
+### Requirement: The sitemap and structured data date a topic by its content
+
+A public Topic's sitemap `lastmod` and its structured data's `dateModified` SHALL be when the Topic last gained a Finding, or when it was created when it has none, so a follow or a settings edit does not announce a change.
+
+#### Scenario: A settings edit leaves the date alone
+
+- **WHEN** an owner edits a public Topic's frequency
+- **THEN** the Topic's `lastmod` in the sitemap is unchanged
+
+### Requirement: A page url never ends in a slash
+
+A request for any page path longer than `/` that ends in a slash, other than a `/docs` path, SHALL redirect permanently to the same path without it, keeping the query. The docs site keeps its own trailing-slash urls.
+
+#### Scenario: A trailing slash redirects
+
+- **WHEN** a client requests `/topics/?popular=2`
+- **THEN** it is redirected permanently to `/topics?popular=2`
+
+### Requirement: Feeds and the site's name are discoverable
+
+Every page the ui renders, and every blog and release page, SHALL link the site-wide feed as an RSS alternate, and a public Topic's page SHALL also link its own feed. The homepage SHALL declare `WebSite` structured data with the site's name and url.
+
+#### Scenario: A topic page links its feed
+
+- **WHEN** a crawler reads a public Topic page
+- **THEN** the head links the site-wide feed and the Topic's own feed as RSS alternates
+
+### Requirement: The sitemap lists every page worth ranking from live data
+
+`GET /sitemap.xml` SHALL be generated from a live query, never a committed file, and SHALL list pages only: the static routes (`/`, `/topics`, `/plans`, `/terms`, `/privacy`), the releases index and every published release's own page, the blog index and every post, every public shown Topic's page at its slugged url, and every public team with at least one public Topic, owned or shared with it. A Topic that stops qualifying SHALL leave the sitemap on the next request. Profile pages SHALL NOT be listed: a profile with a public Topic keeps its canonical url, every profile keeps its preview tags for anyone who shares a link, and a page of a username and two counts is too thin to promote to a crawler.
+
+Documentation pages SHALL NOT be listed. They are built files in the docs site instead of content this route can read, and the docs site emits its own sitemap covering them. Both sitemaps are reachable at the origin, and `robots.txt` continues to point at this one.
 
 #### Scenario: A public topic is listed
 
@@ -43,77 +244,27 @@ Documentation pages SHALL NOT be listed. They are built files in the docs site r
 - **WHEN** a crawler looks for the documentation pages
 - **THEN** it finds them in the sitemap the docs site emits, with absolute URLs against the production origin
 
-### Requirement: Every server-rendered page declares its own canonical URL and title
+### Requirement: Structured data describes the site and its public topics
 
-The shell's hardcoded homepage canonical url and static title SHALL be the fallback only. Every route the sitemap lists SHALL replace both with its own absolute URL and its own title: `{topic name} — CarlNotes` for a Topic, `{username} — CarlNotes` for a profile, `{page name} — CarlNotes` for the SPA-drawn pages (plans, terms, privacy). A page the SPA draws entirely on its own still gets a server handler, because a title set client-side on mount is invisible to a crawler and leaves the shell's homepage canonical url in place, which is the duplicate-content bug this requirement exists to fix.
+The homepage SHALL include `WebSite`, `Organization`, and `SoftwareApplication` JSON-LD, the application's offers built from the pricing tiers. A public Topic's page SHALL include `CreativeWork` JSON-LD with the Topic's name, description, URL, `dateModified` from when the Topic last gained a Finding (or its creation time when it has none), the owner as `author`, and CarlNotes as `publisher` and `isPartOf`, so a crawler reads the Topic as a user's work hosted on the site instead of the site describing itself. The CreativeWork SHALL include the last succeeded Scan's Findings as a ranked `hasPart` ItemList, each entry the finding's title, link, and relevance explanation. A private or invite Topic's page SHALL include its card preview tags alone, with no CreativeWork. The persona credit SHALL have `data-nosnippet`, so a search snippet never quotes it as if it described the site.
 
-#### Scenario: A topic page is not a homepage duplicate
-
-- **WHEN** a crawler fetches a public Topic's page
-- **THEN** the canonical link names that Topic's own URL and the title names the Topic
-
-#### Scenario: The fallback still stands
-
-- **WHEN** a route without an injecting handler serves the shell
-- **THEN** the shell's own canonical url and title answer, exactly one of each
-
-#### Scenario: A listed SPA page is not a homepage duplicate
-
-- **WHEN** a crawler fetches `/plans`, `/terms`, or `/privacy`
-- **THEN** the canonical link names that page's own URL and the title names the page, with no script run
-
-### Requirement: Structured data describes the app and its public topics
-
-The homepage SHALL carry `Organization` and `SoftwareApplication` JSON-LD, the application's offers built from the pricing tiers. A public Topic's page SHALL carry `CreativeWork` JSON-LD with the Topic's name, description, URL, `dateModified` from its last succeeded Scan, the owner as `author`, and CarlNotes as `publisher` and `isPartOf`, so a crawler reads the Topic as a user's work hosted on the site rather than the site describing itself. The CreativeWork SHALL carry the last succeeded Scan's Findings as a ranked `hasPart` ItemList — each entry the finding's title, link, and relevance explanation, the same content the scan email shows — so a machine reader gets the page's substance, not just its label. The same list SHALL render as a `noscript` section in the page body — the Topic's name, its description, and the ranked linked Findings — so a crawler that runs no JavaScript reads real content where the SPA shell is otherwise empty; browsers render the SPA instead, so no person ever sees it. A private or invite Topic's page SHALL carry its card preview tags alone: no CreativeWork and no noscript body, since a non-public Topic's page never discloses its work. The persona credit SHALL carry `data-nosnippet`, so a search snippet never quotes it as if it described the site.
-
-#### Scenario: The homepage describes the product
+#### Scenario: The homepage describes the site and the product
 
 - **WHEN** a crawler fetches `/`
-- **THEN** the head carries Organization and SoftwareApplication JSON-LD with offers matching the pricing tiers
+- **THEN** the head includes WebSite, Organization, and SoftwareApplication JSON-LD, with offers matching the pricing tiers
 
 #### Scenario: A topic page describes its work
 
 - **WHEN** a crawler fetches a public Topic's page
-- **THEN** the head carries CreativeWork JSON-LD dated to the last succeeded Scan
+- **THEN** the head includes CreativeWork JSON-LD dated to when the Topic last gained a Finding
 
 #### Scenario: A topic page lists its findings
 
 - **WHEN** a crawler fetches a public Topic's page whose last succeeded Scan kept Findings
-- **THEN** the CreativeWork carries a hasPart ItemList ranking each Finding with its title, link, and relevance explanation
-
-#### Scenario: A script-less crawler reads the findings
-
-- **WHEN** a crawler that runs no JavaScript fetches a public Topic's page
-- **THEN** the body's noscript section gives it the Topic's name, description, and the ranked linked Findings
+- **THEN** the CreativeWork includes a hasPart ItemList ranking each Finding with its title, link, and relevance explanation
 
 #### Scenario: A non-public topic discloses nothing
 
 - **WHEN** a crawler fetches a private or invite Topic's page
-- **THEN** the response carries the card preview tags only, with no CreativeWork and no noscript findings
-
-### Requirement: The site feed carries releases alongside the blog
-
-`GET /feed.xml` SHALL include an item per published, non-prerelease release beside the blog posts it
-already carries, ordered newest first across both. Each release item SHALL link to that release's own
-page and SHALL be dated by its publication date.
-
-#### Scenario: A published release appears in the feed
-
-- **WHEN** a release has been published and is not a prerelease
-- **THEN** `/feed.xml` includes an item for it, ordered by its publication date among the blog items
-
-#### Scenario: A prerelease is withheld from the feed
-
-- **WHEN** a stored release is flagged as a prerelease
-- **THEN** no item for it appears in `/feed.xml`
-
-### Requirement: The changelog path redirects to the releases page
-
-`GET /changelog` SHALL respond with a permanent redirect to `/releases`, so that a link written
-against the conventional path reaches the page instead of a 404.
-
-#### Scenario: The conventional path reaches the page
-
-- **WHEN** `/changelog` is requested
-- **THEN** the response is a permanent redirect to `/releases`
+- **THEN** the response includes the card preview tags only, with no CreativeWork and no findings
 

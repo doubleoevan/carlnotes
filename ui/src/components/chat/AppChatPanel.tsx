@@ -1,7 +1,6 @@
-// the one shared chat panel that the app shell mounts
 import type { ChatRoom } from "@shared/contracts"
+import { useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useState } from "react"
-import { useNavigate, useSearchParams } from "react-router-dom"
 import { fetchTopicInviteBadges } from "@/clients/activityClient"
 import { authClient } from "@/clients/authClient"
 import type { ChatPage } from "@/clients/chatClient"
@@ -9,11 +8,12 @@ import { fetchChatMentionCount, fetchChatRooms } from "@/clients/chatRoomClient"
 import { fetchNoteBadges } from "@/clients/noteClient"
 import { ChatCallToActionPanel } from "@/components/chat/ChatCallToActionPanel"
 import type { ChatRoomOption } from "@/components/chat/ChatOptionsMenu"
-import { ChatLoadingPanel, ChatPill, renderOnTop } from "@/components/chat/ChatPanelWidget"
+import { ChatLoadingPanel, ChatPill } from "@/components/chat/ChatPanelWidget"
 import { ChatRoomPanel } from "@/components/chat/ChatRoomPanel"
 import { PrivateChatPanel } from "@/components/chat/PrivateChatPanel"
 import { Button } from "@/components/primitives/button"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
+import { useSearchParams } from "@/hooks/useSearchParams"
 import { isWideScreen } from "@/lib/utils"
 import {
 	type ChatId,
@@ -31,10 +31,11 @@ import { setChatRooms, toFirstChatMention, useAllChatMentions, useChatRooms } fr
 import { setNoteBadges } from "@/stores/noteBadgeStore"
 import { setTopicInviteBadges } from "@/stores/topicInviteStore"
 
-// how often the chat mention and note badges are polled, kept under a minute
-const CHAT_MENTION_POLL_MS = 45_000
+// how often the chat mention, note, and topic invitation badges are polled, kept under a minute
+const BADGE_POLL_MS = 45_000
+
 /**
- * The chat menu's dropdown options, one row for each chat room the user can open plus one to join the page's team.
+ * The chat menu's dropdown options, one option for each chat room the user can open plus an option to join the page's team.
  */
 function toChatRoomOptions(
 	chatRoomOptions: ChatRoom[],
@@ -51,7 +52,7 @@ function toChatRoomOptions(
 		chatMentions: chatRoomOption.chatMentions,
 		chatRoomMembers: chatRoomOption.chatRoomMembers,
 		onSelect: () => {
-			// a row with mentions loads the earliest one, so reading forward passes the rest in order
+			// open the chat room at its earliest chat mention, if any, so reading forward passes the rest in order
 			const chatId: ChatId = { kind: "room", teamId: chatRoomOption.teamId, topicId: chatRoomOption.topicId }
 			const firstChatMention = toFirstChatMention(chatRoomOption.chatMentions)
 			if (firstChatMention) {
@@ -62,7 +63,7 @@ function toChatRoomOptions(
 		},
 	}))
 
-	// the join team option, whose row opens up the join panel instead of the chat messages
+	// add the join team option, which opens the join panel, if the page's team has no chat room in the list
 	const joinTeam = pageContext?.joinTeam
 	if (!joinTeam || chatRoomOptions.some((room) => room.teamId === joinTeam.teamId)) {
 		return toMenuOrder(chatRoomChoices)
@@ -144,15 +145,14 @@ function useOpenNewTopicChatOnEmptyFeed(pageContext: ChatPageContext | null, pan
 }
 
 /**
- * The single global chat panel in the app shell layout
+ * The one chat panel that every page in the layout shares.
  */
 export function AppChatPanel() {
 	const { data: session } = authClient.useSession()
 	const { panelState, chatId, pageContext } = useChatPanel()
 	// the chat rooms, each with the user's unread chat mentions in it
 	const chatRooms = useChatRooms()
-	const [searchParams] = useSearchParams()
-	// whether the chat room list has answered yet
+	// whether the chat room list has loaded yet
 	const [hasLoadedChatRooms, setHasLoadedChatRooms] = useState(false)
 
 	// the chat rooms for the dropdown menu, re-read whenever the badge count says something changed
@@ -174,47 +174,11 @@ export function AppChatPanel() {
 		updateChatRooms()
 	}, [updateChatRooms])
 
-	// the chat mentions badge poll reloads the chat rooms whenever it says something changed
-	useEffect(() => {
-		if (!userId) {
-			return
-		}
-		let previousChatMentionCount = -1
-		const readCount = (): void => {
-			fetchChatMentionCount()
-				.then((chatMentionCount) => {
-					if (chatMentionCount !== previousChatMentionCount) {
-						previousChatMentionCount = chatMentionCount
-						updateChatRooms()
-					}
-				})
-				.catch(() => {})
-		}
-
-		// the note badges are a short list of only what is waiting, read outright on every poll
-		const readNoteBadges = (): void => {
-			fetchNoteBadges()
-				.then(setNoteBadges)
-				.catch(() => {})
-		}
-		// read the topic invitations waiting for an answer
-		const readTopicInvites = (): void => {
-			fetchTopicInviteBadges()
-				.then(setTopicInviteBadges)
-				.catch(() => {})
-		}
-		const readBadges = (): void => {
-			readCount()
-			readNoteBadges()
-			readTopicInvites()
-		}
-		readBadges()
-		const badgePollInterval = setInterval(readBadges, CHAT_MENTION_POLL_MS)
-		return () => clearInterval(badgePollInterval)
-	}, [userId, updateChatRooms])
+	// poll the chat mention, note, and topic invitation badges
+	usePollBadges(userId, updateChatRooms)
 
 	// a chat mention badge links to its team or topic page
-	const linkedTeamId = searchParams.get("chat")
+	const linkedTeamId = useSearchParams().get("chat")
 	const linkedTopicId = pageContext?.topicId ?? null
 	useEffect(() => {
 		if (linkedTeamId) {
@@ -242,7 +206,7 @@ export function AppChatPanel() {
 		setChatPanelState(isWideScreen() ? "open" : "enlarged")
 	}
 
-	// opening before the chat rooms answered leaves nothing selected, so the choice is made again once they load
+	// pick the default chat for an open panel once the chat rooms load. a panel opened earlier has nothing selected
 	useEffect(() => {
 		if (panelState !== "collapsed" && hasLoadedChatRooms) {
 			pickDefaultChat()
@@ -255,17 +219,17 @@ export function AppChatPanel() {
 	// every chat mention for a chat that the user hasn't opened
 	const chatMentions = useAllChatMentions()
 
+	// only show the button if the chat is collapsed
 	if (panelState === "collapsed") {
-		return renderOnTop(<ChatPill onOpenChat={openPanel} chatMentions={chatMentions} />)
+		return <ChatPill onOpenChat={openPanel} chatMentions={chatMentions} />
 	}
-
-	const chatRoomChoices = toChatRoomOptions(chatRooms, chatId, pageContext)
 
 	// the private chat opens on the topic this page shows, or on a team when this page or the open chat room names one
 	const privateChatId = toPrivateChatId(pageContext, chatId)
 	const openPrivateChat = privateChatId ? () => setChatId(privateChatId) : undefined
-	// offer the new-topic chat in the menu to any signed-in user
+	// show the new-topic chat in the menu to any signed-in user
 	const openNewTopicChat = toOpenNewTopicChat(Boolean(session), chatId)
+	const chatRoomChoices = toChatRoomOptions(chatRooms, chatId, pageContext)
 	if (chatId?.kind === "private") {
 		return (
 			<PrivateChatPanel
@@ -314,13 +278,57 @@ export function AppChatPanel() {
 		)
 	}
 
-	// nothing is selected while the chat rooms have not answered yet
+	// show a user the loading panel while the chat rooms load and nothing is selected
 	if (session && !hasLoadedChatRooms) {
-		return <ChatLoadingPanel isEnlarged={panelState === "enlarged"} onPanelStateChange={setChatPanelState} />
+		return <ChatLoadingPanel isEnlarged={panelState === "enlarged"} onPanelState={setChatPanelState} />
 	}
 
 	// show a visitor the panel that asks for an account
 	return <NoConversationPanel panelState={panelState} />
+}
+
+// poll the chat mention count, the note badges, and the topic invitations while a user is signed in
+function usePollBadges(userId: string | undefined, updateChatRooms: () => void): void {
+	useEffect(() => {
+		if (!userId) {
+			return
+		}
+		// reload the chat rooms whenever the chat mention count changes
+		let previousChatMentionCount = -1
+		const readChatMentionCount = (): void => {
+			fetchChatMentionCount()
+				.then((chatMentionCount) => {
+					if (chatMentionCount !== previousChatMentionCount) {
+						previousChatMentionCount = chatMentionCount
+						updateChatRooms()
+					}
+				})
+				.catch(() => {})
+		}
+
+		// the note badges are a short list of only what is waiting, read outright on every poll
+		const readNoteBadges = (): void => {
+			fetchNoteBadges()
+				.then(setNoteBadges)
+				.catch(() => {})
+		}
+		// read the topic invitations waiting for an answer
+		const readTopicInviteBadges = (): void => {
+			fetchTopicInviteBadges()
+				.then(setTopicInviteBadges)
+				.catch(() => {})
+		}
+
+		// read every badge once now, then again on each poll
+		const readBadges = (): void => {
+			readChatMentionCount()
+			readNoteBadges()
+			readTopicInviteBadges()
+		}
+		readBadges()
+		const badgePollInterval = setInterval(readBadges, BADGE_POLL_MS)
+		return () => clearInterval(badgePollInterval)
+	}, [userId, updateChatRooms])
 }
 
 // the panel where a visitor has no conversation to open, which asks for an account
@@ -333,7 +341,7 @@ function NoConversationPanel({ panelState }: { panelState: ChatPanelState }) {
 			actionLine="Sign up to begin the conversation"
 			placeholder="Carl is waiting for your topic…"
 		>
-			<Button className="shrink-0" onClick={() => navigate("/signup?cta=chat")}>
+			<Button className="shrink-0" onClick={() => navigate({ to: "/signup", search: { cta: "chat" } })}>
 				Sign up
 			</Button>
 		</ChatCallToActionPanel>

@@ -4,6 +4,9 @@ set -euo pipefail
 # lint and format check
 bunx biome check .
 
+# check that the ui imports the api, the worker, and the db folder as types only
+bun scripts/check-ui-boundary.ts
+
 # type-check the whole project via the solution file
 bunx tsc -b
 

@@ -1,9 +1,10 @@
 // the user profile api client
 import type { ProfileResponse, UserSearchResult } from "@shared/contracts"
+import { apiClient } from "./apiClient"
 
 // a user's public profile by id, or null if there is no such user
 export async function fetchProfile(userId: string): Promise<ProfileResponse | null> {
-	const response = await fetch(`/api/profiles/${encodeURIComponent(userId)}`)
+	const response = await apiClient.api.profiles[":userId"].$get({ param: { userId } })
 	return response.ok ? ((await response.json()) as ProfileResponse) : null
 }
 
@@ -75,7 +76,7 @@ export type TeamMenuOption = {
 
 // the user's teams with this profile's status in each, for the Team Up menu
 export async function fetchTeamOptions(profileUserId: string): Promise<TeamMenuOption[]> {
-	const response = await fetch(`/api/profiles/${profileUserId}/team-up`)
+	const response = await fetch(`/api/profiles/${encodeURIComponent(profileUserId)}/team-up`)
 	if (!response.ok) {
 		throw new Error(`team-up menu failed: ${response.status}`)
 	}

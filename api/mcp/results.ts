@@ -8,7 +8,7 @@ import { isAllowed } from "../authorization"
 import { toTopicSourceLabel } from "../tool/topicTools"
 import { loadTopicFindings, setBookmarked, setConsumed, setRating } from "../topic/findings"
 import { loadTopicAccessAndFindings } from "../topic/helpers"
-import { isShown } from "../topic/permissions"
+import { isPublicAndShown } from "../topic/permissions"
 import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 
 // the most charactersthat one page returns, under a client's limit on one result
@@ -96,7 +96,7 @@ export async function listTopics(
 	const publicRows = await db
 		.select(topicColumns)
 		.from(topics)
-		.where(and(eq(topics.visibility, "public"), isShown))
+		.where(isPublicAndShown)
 		.orderBy(desc(topics.subscriberCount), desc(topics.createdAt))
 		.limit(MCP_TOPIC_LIST_LIMIT)
 

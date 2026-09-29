@@ -9,17 +9,26 @@ const ROUTE_ID_SHAPES: Record<string, string> = {
 	invite: ":token",
 }
 
+// the routes whose segment after the id is the page's name as a slug, and the shape it reports as
+const ROUTE_SLUG_SHAPES: Record<string, string> = {
+	topics: ":slug",
+}
+
 /**
- * The path as the report names it, with an id segment replaced by its route's shape.
+ * The path as the report names it, with an id segment and a topic's slug replaced by their route's shapes.
  */
 export function toReportedPath(pathname: string): string {
 	// read the route and what follows it, leaving a path with neither alone
 	const [, route, idSegment, ...restSegments] = pathname.split("/")
 	const idShape = route ? ROUTE_ID_SHAPES[route] : undefined
-	if (!idShape || !idSegment) {
+	if (!route || !idShape || !idSegment) {
 		return pathname
 	}
-	return ["", route, idShape, ...restSegments].join("/")
+	// replace the slug after a topic's id with the slug shape. the slug is the topic's name
+	const [slugSegment, ...laterSegments] = restSegments
+	const slugShape = ROUTE_SLUG_SHAPES[route]
+	const reportedSegments = slugShape && slugSegment ? [slugShape, ...laterSegments] : restSegments
+	return ["", route, idShape, ...reportedSegments].join("/")
 }
 
 /**
@@ -55,13 +64,14 @@ export function toReportedEvent(capturedEvent: CaptureResult | null): CaptureRes
 	if (!capturedEvent?.properties) {
 		return capturedEvent
 	}
-	// the url carries the path a second time, so both are rewritten or the id ships in the one that was missed
+	// replace the id and the slug in the full url that posthog sends with every event
 	const currentUrl = capturedEvent.properties.$current_url
 	if (typeof currentUrl === "string") {
 		const reportedUrl = new URL(currentUrl)
 		reportedUrl.pathname = toReportedPath(reportedUrl.pathname)
 		capturedEvent.properties.$current_url = reportedUrl.toString()
 	}
+	// replace the id and the slug in the path that posthog sends with the url
 	const pathname = capturedEvent.properties.$pathname
 	if (typeof pathname === "string") {
 		capturedEvent.properties.$pathname = toReportedPath(pathname)

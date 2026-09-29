@@ -16,7 +16,7 @@ import {
 // how wide the byline avatar renders, beside the owner's username in the footer
 const AVATAR_SIZE = 56
 
-// what the card says about a Topic. the avatar is named, not loaded, so the key below costs nothing to build
+// what a Topic's card and page head are built from. the avatar is named, not loaded, so the key below costs nothing to build
 export type TopicPreview = {
 	topicId: string
 	title: string
@@ -28,6 +28,9 @@ export type TopicPreview = {
 	ownerAvatar: PublishedAvatar
 	keptCount: number
 	sourceCount: number
+	// the topic page's description. a public topic uses its last scan summary, prompt, or name,
+	// and any other topic names only its owner and how many findings Carl kept
+	description: string
 }
 
 /**
