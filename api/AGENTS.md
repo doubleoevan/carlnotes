@@ -2,14 +2,17 @@
 
 Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregates the `/api` routes.
 
-- `requestTracing.ts` — the first middleware: it names a traced request's Sentry transaction by its route and attaches
-  its query count, the pool's counts, and the event loop's lag. `index.ts` serves `/api/health`, which the platform
-  polls and which sends no query, and `/api/health/deep`, which runs one query and returns the pool's counts for a
-  monitor. Neither looks up a session.
+- `index.ts` opens each request's memo (`db/requestMemo.ts`) in its first middleware, and its `onError` reports an
+  error no route handles to Sentry and keeps Hono's 500. `requestTracing.ts` runs next: it names a traced request's
+  Sentry transaction by its route and attaches its query count, the pool's counts, and the event loop's lag.
+  `index.ts` also serves `/api/health`, which the platform polls and which sends no query, and `/api/health/deep`,
+  which runs one query and returns the pool's counts for a monitor. Neither looks up a session.
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `share/`, `tool/`, `mcp/`. Root files serve more than one domain
   (auth, billing, admin, avatars, favicons, profiles, SEO, and `content.ts` for the blog under `content/blog/`).
 - `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key, and
-  security.txt. `seo.ts` builds what they read, and the JSON-LD the topic page head includes.
+  security.txt. `seo.ts` builds what they read, and the JSON-LD the topic page head includes. The blog and docs
+  Markdown are read through `ttlCache.ts`, which keeps the parsed pages for a minute, so a new file appears within
+  that minute without a restart.
 - `share/pageHead.ts` — the `/api/<page>/:id/head` routes that return a topic, profile, team, or invite page's
   `PageHead`, which each ui route's `head()` turns into tags.
 - `releases.ts` — the `/releases` index and each release's own page, both

@@ -2,6 +2,7 @@
 import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
 import { and, eq, inArray, or, type SQLWrapper, sql } from "drizzle-orm"
 import { db } from "../../db"
+import { memoizeInRequest } from "../../db/requestMemo"
 import { findings, invites, scans, subscriptions, teamMembers, teamTopics, topics, users } from "../../db/schema"
 
 // a topic row, the shape every check in this file takes
@@ -39,24 +40,29 @@ export async function toTopicRole(
 		return "owner"
 	}
 
-	// membership in any team that has the topic grants the role: the owning team beside the shared-into ones
-	const sharedTeamIds = db
-		.select({ teamId: teamTopics.teamId })
-		.from(teamTopics)
-		.where(eq(teamTopics.topicId, topic.id))
-	const topicTeamMatches = [inArray(teamMembers.teamId, sharedTeamIds)]
-	if (topic.teamId) {
-		topicTeamMatches.push(eq(teamMembers.teamId, topic.teamId))
-	}
+	// the team role, read at most once per request for this user and topic
+	return memoizeInRequest(`topic-role:${userId}:${topic.id}:${topic.teamId ?? ""}`, async () => {
+		// membership in any team that has the topic grants the role: the owning team beside the shared-into ones
+		const sharedTeamIds = db
+			.select({ teamId: teamTopics.teamId })
+			.from(teamTopics)
+			.where(eq(teamTopics.topicId, topic.id))
+		const topicTeamMatches = [inArray(teamMembers.teamId, sharedTeamIds)]
+		if (topic.teamId) {
+			topicTeamMatches.push(eq(teamMembers.teamId, topic.teamId))
+		}
 
-	// one query covers every team that has it
-	const [membership] = await db
-		.select({ role: teamMembers.role })
-		.from(teamMembers)
-		.where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true), or(...topicTeamMatches)))
-		.orderBy(teamMembers.role)
-		.limit(1)
-	return membership?.role ?? null
+		// one query covers every team that has it
+		const [membership] = await db
+			.select({ role: teamMembers.role })
+			.from(teamMembers)
+			.where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true), or(...topicTeamMatches)))
+			.orderBy(teamMembers.role)
+			.limit(1)
+
+		// leader sorts before member, so a user who leads any of those teams is a leader here
+		return membership?.role ?? null
+	})
 }
 
 /**

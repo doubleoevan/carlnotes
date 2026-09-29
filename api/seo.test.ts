@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import type { PublicTopic } from "@shared/contracts"
 import { documentsRoute } from "./documents"
-import { loadDocsPages, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toTopicDescription } from "./seo"
+import { loadDocsPages, toFindingListLd, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toTopicDescription } from "./seo"
 
 // a public topic as loadPublicTopics returns it
 const PUBLIC_TOPIC = {
@@ -21,10 +21,10 @@ const BLOG_PAGE = {
 }
 
 // the convention: an H1, a blockquote one-liner, then the linked sections
-test("llms.txt follows the convention", () => {
+test("llms.txt follows the convention", async () => {
 	const llmsTxt = toLlmsTxt({
 		appUrl: "https://carlnotes.com",
-		docsPages: loadDocsPages(),
+		docsPages: await loadDocsPages(),
 		blogPages: [BLOG_PAGE],
 		publicTopics: [PUBLIC_TOPIC],
 	})
@@ -43,10 +43,10 @@ test("llms.txt follows the convention", () => {
 })
 
 // the long form includes the docs and blog text whole, and no topic content
-test("llms-full.txt includes page bodies and no topics", () => {
+test("llms-full.txt includes page bodies and no topics", async () => {
 	const llmsFullTxt = toLlmsFullTxt({
 		appUrl: "https://carlnotes.com",
-		docsPages: loadDocsPages(),
+		docsPages: await loadDocsPages(),
 		blogPages: [BLOG_PAGE],
 	})
 
@@ -57,8 +57,8 @@ test("llms-full.txt includes page bodies and no topics", () => {
 })
 
 // the docs loader parses the folded frontmatter every docs page uses
-test("every docs page parses with a title and description", () => {
-	const docsPages = loadDocsPages()
+test("every docs page parses with a title and description", async () => {
+	const docsPages = await loadDocsPages()
 	expect(docsPages.length).toBeGreaterThan(5)
 
 	// no page comes back with an empty field
@@ -150,4 +150,28 @@ test("/pricing redirects permanently to /plans", async () => {
 	const response = await documentsRoute.request("/pricing")
 	expect(response.status).toBe(301)
 	expect(response.headers.get("Location")).toBe("/plans")
+})
+
+// a finding without a relevance explanation keeps its entry and its position, with no description field at all
+test("the finding list leaves out an empty description", () => {
+	const findingList = toFindingListLd([
+		{ title: "An explained finding", url: "https://example.test/1", relevanceExplanation: "Why it matters." },
+		{ title: null, url: "https://example.test/2", relevanceExplanation: "" },
+	])
+
+	// the untitled finding is named by its url, and only the explained one has a description
+	expect(findingList).toStrictEqual({
+		"@type": "ItemList",
+		name: "Carl's Top 2",
+		itemListElement: [
+			{
+				"@type": "ListItem",
+				position: 1,
+				name: "An explained finding",
+				url: "https://example.test/1",
+				description: "Why it matters.",
+			},
+			{ "@type": "ListItem", position: 2, name: "https://example.test/2", url: "https://example.test/2" },
+		],
+	})
 })

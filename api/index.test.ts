@@ -4,6 +4,7 @@ import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@shared/contracts"
+import * as monitoring from "@shared/monitoring"
 import { connectionPool } from "../db"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import server from "./index"
@@ -125,6 +126,20 @@ test("the deep health check responds 503 when the database fails", async () => {
 	expect(response.cacheControl).toBe("no-store")
 	expect(JSON.parse(response.body)).toMatchObject({ status: "unavailable" })
 	expect(consoleErrorSpy).toHaveBeenCalled()
+})
+
+// a route whose query fails, as one does after waiting past the pool's timeout, responds 500 and reports the error
+test("an error no route handles responds 500 and is reported", async () => {
+	spyOn(console, "error").mockImplementation(() => {})
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	const poolTimeout = new Error("timeout exceeded when trying to connect")
+	const response = await requestWithQueryStub("/api/topic-feed", () => Promise.reject(poolTimeout))
+
+	// Hono's plain 500, and one report of drizzle's query error, whose cause is the pool's timeout
+	expect(response.status).toBe(500)
+	expect(response.body).toBe("Internal Server Error")
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+	expect(reportErrorSpy).toHaveBeenCalledWith(expect.objectContaining({ cause: poolTimeout }), "api-route")
 })
 
 // a missing endpoint must stay an api failure a fetch client can read

@@ -246,46 +246,56 @@ export const topicDrafts = pgTable("topic_drafts", {
 })
 
 // a source is a topic input that scans pull resources from
-export const sources = pgTable("sources", {
-	id: primaryId(),
-	// the topic this source feeds
-	topicId: text("topic_id")
-		.notNull()
-		.references(() => topics.id, { onDelete: "cascade" }),
-	// the source kind: url, rss, reddit, YouTube, podcast, search, bluesky, x, composio, or plugin
-	kind: sourceKind("kind").notNull(),
-	config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
-	// the async screening status and its failure reason
-	status: sourceStatus("status").notNull().default("pending"),
-	error: text("error"),
-	// created and updated timestamps
-	...timestamps(),
-})
+export const sources = pgTable(
+	"sources",
+	{
+		id: primaryId(),
+		// the topic this source feeds
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		// the source kind: url, rss, reddit, YouTube, podcast, search, bluesky, x, composio, or plugin
+		kind: sourceKind("kind").notNull(),
+		config: jsonb("config").$type<Record<string, unknown>>().notNull().default({}),
+		// the async screening status and its failure reason
+		status: sourceStatus("status").notNull().default("pending"),
+		error: text("error"),
+		// created and updated timestamps
+		...timestamps(),
+	},
+	// the feed build and the topic page read a topic's sources by its id
+	(table) => [index("sources_topic_id_idx").on(table.topicId)],
+)
 
 // an attachment is a file or url that adds context to a topic
-export const attachments = pgTable("attachments", {
-	id: primaryId(),
-	// the topic this attachment adds context to
-	topicId: text("topic_id")
-		.notNull()
-		.references(() => topics.id, { onDelete: "cascade" }),
-	// where the raw file lives in object storage, plus its original name, type, and size
-	objectKey: text("object_key").notNull(),
-	filename: text("filename").notNull(),
-	contentType: text("content_type").notNull(),
-	byteSize: integer("byte_size").notNull(),
-	// the context the processing workflow fills once the attachment is ready. empty until then
-	context: text("context").notNull().default(""),
-	// the async processing status, its failure reason, and the extracted length and chunk fan-out
-	status: attachmentStatus("status").notNull().default("pending"),
-	error: text("error"),
-	charCount: integer("char_count"),
-	chunkCount: integer("chunk_count"),
-	// origin URL for a URL-ingested attachment. null for file uploads
-	sourceUrl: text("source_url"),
-	// created and updated timestamps
-	...timestamps(),
-})
+export const attachments = pgTable(
+	"attachments",
+	{
+		id: primaryId(),
+		// the topic this attachment adds context to
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		// where the raw file lives in object storage, plus its original name, type, and size
+		objectKey: text("object_key").notNull(),
+		filename: text("filename").notNull(),
+		contentType: text("content_type").notNull(),
+		byteSize: integer("byte_size").notNull(),
+		// the context the processing workflow fills once the attachment is ready. empty until then
+		context: text("context").notNull().default(""),
+		// the async processing status, its failure reason, and the extracted length and chunk fan-out
+		status: attachmentStatus("status").notNull().default("pending"),
+		error: text("error"),
+		charCount: integer("char_count"),
+		chunkCount: integer("chunk_count"),
+		// origin URL for a URL-ingested attachment. null for file uploads
+		sourceUrl: text("source_url"),
+		// created and updated timestamps
+		...timestamps(),
+	},
+	// the feed build and the topic page read a topic's attachments by its id
+	(table) => [index("attachments_topic_id_idx").on(table.topicId)],
+)
 
 // a scan is the record for a single execution of the topic's pipeline
 export const scans = pgTable(
@@ -417,8 +427,15 @@ export const findings = pgTable(
 		// created and updated timestamps
 		...timestamps(),
 	},
-	// one finding per topic and resource. re-scoring updates the existing row instead of adding another
-	(table) => [unique("findings_topic_resource_unique").on(table.topicId, table.resourceId)],
+	(table) => [
+		// one finding per topic and resource. re-scoring updates the existing row instead of adding another
+		unique("findings_topic_resource_unique").on(table.topicId, table.resourceId),
+		// a topic's findings, most relevant first, for the feed's ranked read and the topic page.
+		// nulls first is what a plain descending order means, so an index scan returns both reads' rows already in order
+		index("findings_topic_relevance_idx").on(table.topicId, table.relevanceScore.desc().nullsFirst()),
+		// one scan's findings, for a public topic page's structured data and a scan email
+		index("findings_scan_id_idx").on(table.scanId),
+	],
 )
 
 // a consumption is the record of a user marking a topic finding as consumed

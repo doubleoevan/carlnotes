@@ -11,10 +11,10 @@ import { loadTopicAccessAndFindings } from "../topic/helpers"
 import { isPublicAndShown } from "../topic/permissions"
 import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 
-// the most charactersthat one page returns, under a client's limit on one result
+// the most characters that one page returns, under a client's limit on one result
 export const MCP_PAGE_MAX_CHARS = 40_000
 
-// the most findingsthat one page returns, and the most a search ranks
+// the most findings that one page returns, and the most a search ranks
 export const MCP_PAGE_SIZE = 20
 const MCP_SEARCH_LIMIT = 40
 
@@ -124,13 +124,30 @@ export async function readTopicFeed(
 		return null
 	}
 
-	// load the findings and pack the page. only a user's read joins their consumed and bookmark rows
+	// read one row more than fits on a page, from the cursor's offset, so the page knows whether any finding remains.
+	// only a user's read joins their consumed and bookmark rows
+	const offset = fromCursor(cursor)
+	const pageWindow = { offset, rowCount: MCP_PAGE_SIZE + 1 }
 	const topicFindings =
 		toolCaller.kind === "user"
-			? (await loadTopicAccessAndFindings(topic, toolCaller.userId)).topicFindings
-			: await loadTopicFindings(topic.id, null)
+			? (await loadTopicAccessAndFindings({ topic, userId: toolCaller.userId, pageWindow })).topicFindings
+			: await loadTopicFindings({ topicId: topic.id, userId: null, pageWindow })
+
+	// shape each finding for the tool caller, and pack the page from the window
 	const mcpFindings = topicFindings.map((finding) => toMcpFinding(toolCaller, finding))
-	return packPage(mcpFindings, fromCursor(cursor), MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE)
+	return packPageFromWindow(mcpFindings, offset)
+}
+
+/**
+ * Packs one page from a window of entries read at an offset, with the cursor that continues past the page.
+ * The window has one entry more than fits on a page, so a cursor is returned only if an entry remains after the page.
+ */
+export function packPageFromWindow<Item>(windowItems: Item[], offset: number): McpPage<Item> {
+	const windowPage = packPage(windowItems, 0, MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE)
+	return {
+		items: windowPage.items,
+		nextCursor: windowPage.nextCursor ? toCursor(offset + windowPage.items.length) : null,
+	}
 }
 
 // what a search returns, a page of findings or a message saying why it could not run

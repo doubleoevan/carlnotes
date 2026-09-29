@@ -137,6 +137,10 @@ Every list result SHALL paginate with an opaque cursor and include a next cursor
 - **WHEN** the next Finding's full explanation would overflow the page's character budget
 - **THEN** the page ends before it and that Finding leads the next page, intact
 
+#### Scenario: A feed past the topic page's read limit still pages to its end
+- **WHEN** a Topic has more Findings than the topic page's read limit
+- **THEN** following the cursor returns every Finding
+
 ### Requirement: The server creates Topics and suggests Sources for a connected account
 The server SHALL expose `create_topic` and `suggest_sources`. Each SHALL return the connect-an-account result to a visitor. `create_topic` SHALL take a name, a prompt, Sources as source option and value pairs, and invite emails, run the `createTopicFromDraft` Topic Tool, and return the new Topic's id and name, annotated `destructiveHint: true`. `suggest_sources` SHALL take a name and a prompt, run the `suggestTopicDraftSources` Topic Tool, and return the suggestions, annotated `readOnlyHint: true` and `openWorldHint: true`.
 

@@ -1,5 +1,5 @@
 // the server-rendered blog pages: Markdown under content/blog/, rendered to HTML in Hono
-import { readdirSync, readFileSync } from "node:fs"
+import { readdir } from "node:fs/promises"
 import { appUrl } from "@shared/appUrl"
 import { toPageTitle } from "@shared/seo"
 import { Hono } from "hono"
@@ -7,6 +7,7 @@ import Markdown from "markdown-to-jsx"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { toJsonLdTag } from "./seo"
+import { cacheForTtl } from "./ttlCache"
 
 // the content directories, resolved from this file so the api serves them from any working directory
 const CONTENT_ROOT = `${import.meta.dir}/../content`
@@ -21,24 +22,36 @@ type Section = keyof typeof SECTIONS
 // one page: its frontmatter fields, the slug from its filename, and the Markdown body
 type ContentPage = { slug: string; title: string; description: string; date: string; body: string }
 
+// how long a section's parsed pages are kept before a read lists and parses its files again
+const PAGES_TTL_MS = 60_000
+
+// each section's page loader, which keeps the parsed pages for the ttl
+const sectionPageLoaders = {
+	blog: cacheForTtl(() => readPages("blog"), PAGES_TTL_MS),
+} satisfies Record<Section, () => Promise<ContentPage[]>>
+
 /**
- * Every page under one section's folder, newest first. Read per request, so a new page ships by adding a file.
+ * Returns every page under one section's folder, newest first.
+ * The files are read again once the kept pages are a minute old, so a new page ships by adding a file and appears within that minute.
  */
-export function loadPages(section: Section): ContentPage[] {
-	// one page per markdown file, skipping any file whose frontmatter is missing a field
-	const pages = readdirSync(`${CONTENT_ROOT}/${section}`)
-		.filter((filename) => filename.endsWith(".md"))
-		.flatMap((filename) => {
-			const page = toPage(section, filename)
-			return page ? [page] : []
-		})
-	return pages.sort((first, second) => second.date.localeCompare(first.date))
+export function loadPages(section: Section): Promise<ContentPage[]> {
+	return sectionPageLoaders[section]()
 }
 
-// parse one file into a page, or null if its frontmatter is incomplete
-function toPage(section: Section, filename: string): ContentPage | null {
-	const source = readFileSync(`${CONTENT_ROOT}/${section}/${filename}`, "utf8")
-	const match = source.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
+// read every page under one section's folder, newest first, skipping any file whose frontmatter is missing a field
+async function readPages(section: Section): Promise<ContentPage[]> {
+	const filenames = (await readdir(`${CONTENT_ROOT}/${section}`)).filter((filename) => filename.endsWith(".md"))
+	const pages = await Promise.all(
+		filenames.map(async (filename) =>
+			toPage(filename, await Bun.file(`${CONTENT_ROOT}/${section}/${filename}`).text()),
+		),
+	)
+	return pages.filter((page) => page !== null).sort((first, second) => second.date.localeCompare(first.date))
+}
+
+// parse one file's Markdown into a page, or null if its frontmatter is incomplete
+function toPage(filename: string, markdown: string): ContentPage | null {
+	const match = markdown.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
 	if (!match?.[1] || match[2] === undefined) {
 		return null
 	}
@@ -119,10 +132,10 @@ export function toPageHtml(markdown: string): string {
 }
 
 // one section's index: every page listed newest first, no JSON-LD of its own
-function serveIndex(section: Section): string {
+async function serveIndex(section: Section): Promise<string> {
 	const { title, description } = SECTIONS[section]
 	// one card per page: its linked title, its date, and its description
-	const cards = loadPages(section)
+	const cards = (await loadPages(section))
 		.map(
 			(page) => `
 				<article class="post-card">
@@ -144,8 +157,8 @@ function serveIndex(section: Section): string {
 }
 
 // one page by its slug with its structured data, or null for a slug matching no file
-function servePage(section: Section, slug: string): string | null {
-	const page = loadPages(section).find((page) => page.slug === slug)
+async function servePage(section: Section, slug: string): Promise<string | null> {
+	const page = (await loadPages(section)).find((page) => page.slug === slug)
 	if (!page) {
 		return null
 	}
@@ -176,8 +189,8 @@ function servePage(section: Section, slug: string): string | null {
 
 // the content routes: the blog's index and its page route
 export const contentRoute = new Hono()
-	.get("/blog", (context) => context.html(serveIndex("blog")))
-	.get("/blog/:slug", (context) => {
-		const html = servePage("blog", context.req.param("slug"))
+	.get("/blog", async (context) => context.html(await serveIndex("blog")))
+	.get("/blog/:slug", async (context) => {
+		const html = await servePage("blog", context.req.param("slug"))
 		return html ? context.html(html) : context.text("Not found", 404)
 	})

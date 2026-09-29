@@ -8,7 +8,9 @@ import type { Context } from "hono"
 import { Hono } from "hono"
 import { serveStatic } from "hono/bun"
 import { compress } from "hono/compress"
+import { HTTPException } from "hono/http-exception"
 import { db, readPoolGauges } from "../db"
+import { runWithRequestMemo } from "../db/requestMemo"
 import { startTelemetry } from "../worker"
 import { apiRoute } from "./api"
 import { auth, reportForwardedChain } from "./auth"
@@ -59,7 +61,12 @@ const CONTENT_SECURITY_POLICY = [
 
 // one server serves the api, the pages, and the built ui
 const server = new Hono<AppEnv>()
-	// name each traced request by its route and count its queries, first so the count covers every other middleware
+	// report an error no route handles to Sentry, and respond 500 as Hono's own handler does
+	.onError(reportRouteError)
+	// give each request its own memo, first so every later middleware and route reads through the memo
+	.use((_context, next) => runWithRequestMemo(next))
+	// name each traced request by its route and count its queries,
+	// ahead of the rest so the count includes every other middleware's queries
 	.use(traceRequest)
 	// gzip every text response over a kilobyte. the defaults skip images and anything already compressed
 	.use(compress())
@@ -199,6 +206,20 @@ async function checkDatabaseHealth(context: Context): Promise<Response> {
 	// a result responds with the query's latency and the pool's counts
 	const databaseLatencyMs = Math.round(performance.now() - startedAt)
 	return context.json({ status: "ok", databaseLatencyMs, pool: readPoolGauges() })
+}
+
+// log and report an error no route handles, and respond 500 as Hono's own handler does
+function reportRouteError(error: Error, context: Context): Response {
+	// an HTTPException is the response a route chose, returned as is
+	if (error instanceof HTTPException) {
+		const response = error.getResponse()
+		return context.newResponse(response.body, response)
+	}
+
+	// any other error is logged and reported, and the request gets Hono's plain 500
+	console.error(error)
+	reportError(error, "api-route")
+	return context.text("Internal Server Error", 500)
 }
 
 // a hashed filename never changes contents, so it caches for a year

@@ -1,9 +1,10 @@
 // the authorization gate
-import { dailyFrequencies, isAdminRole } from "@shared/enums"
-import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, type UserAccess, userBudgetCents } from "@shared/plans"
+import { dailyFrequencies } from "@shared/enums"
+import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, userBudgetCents } from "@shared/plans"
 import { and, count, eq, gte, inArray, sql } from "drizzle-orm"
 import { db } from "../db"
-import { chatTurns, scans, subscriptions, teamMembers, teamTopics, topics, users } from "../db/schema"
+import { loadUserAccess } from "../db/quotas"
+import { chatTurns, scans, subscriptions, teamMembers, teamTopics, topics } from "../db/schema"
 import { assertNever, canRateTopic, canSeeTopic, toTopicEditRole } from "./topic/permissions"
 import { loadBillingAccess, scansToday, startOfUtcMonth } from "./topic/quotas"
 
@@ -17,6 +18,9 @@ export type Capability = "topic:view" | "topic:edit" | "topic:delete" | "topic:i
 // the user's budget and the admin role test live in shared, where the worker can read them
 export { isAdminRole } from "@shared/enums"
 export { type UserAccess, userBudgetCents } from "@shared/plans"
+
+// the user's access row, read at most once per request by the loader that the api shares with the worker
+export { loadUserAccess }
 
 /**
  * Whether the user may execute a capability, optionally on a given topic.
@@ -81,21 +85,6 @@ async function decideTopicCapability(
 		// a new capability fails to compile here
 		default:
 			return assertNever(capability)
-	}
-}
-
-/**
- * This user's admin status, billing plan, and budget override, read together.
- */
-export async function loadUserAccess(userId: string): Promise<UserAccess> {
-	const [user] = await db
-		.select({ role: users.role, plan: users.plan, budgetOverrideCents: users.budgetOverrideCents })
-		.from(users)
-		.where(eq(users.id, userId))
-	return {
-		isAdmin: isAdminRole(user?.role),
-		plan: user?.plan ?? "free",
-		budgetOverrideCents: user?.budgetOverrideCents ?? null,
 	}
 }
 

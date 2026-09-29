@@ -23,7 +23,7 @@ import { isAllowed, isMonthlySpendExhausted, loadDailyFrequencyAuthorization, lo
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadPendingTopicInvites } from "../invite/invites"
 import { loadFeaturedTopics } from "./featuring"
-import { loadTopicFindings } from "./findings"
+import { type FindingPageWindow, loadTopicFindings } from "./findings"
 import { subscriptionActivatedAt, toTopicRole, verifiedEmailQuery } from "./permissions"
 import { scansRemaining } from "./quotas"
 
@@ -112,12 +112,20 @@ export async function attachTeamBookmarks(
 	topicId: string,
 	owningTeamId: string | null,
 ): Promise<void> {
+	// no findings have no bookmarks to attach
+	if (topicFindings.length === 0) {
+		return
+	}
+
 	// build the subquery to check if a user belongs to the team that owns the topic
 	const topicTeamIds = db.select({ teamId: teamTopics.teamId }).from(teamTopics).where(eq(teamTopics.topicId, topicId))
 	const isTopicOwningMember = or(
 		inArray(teamMembers.teamId, topicTeamIds),
 		owningTeamId ? eq(teamMembers.teamId, owningTeamId) : sql`false`,
 	)
+
+	// the ids of the findings being returned
+	const findingIds = topicFindings.map((topicFinding) => topicFinding.findingId)
 
 	// select the bookmarks from the team that owns the topic
 	const teamBookmarkRows = await db
@@ -134,6 +142,8 @@ export async function attachTeamBookmarks(
 			and(eq(teamMembers.userId, bookmarks.userId), eq(teamMembers.isActive, true), isTopicOwningMember),
 		)
 		.innerJoin(users, eq(users.id, bookmarks.userId))
+		// on these findings alone, so a page of the findings reads only that page's bookmarks
+		.where(inArray(bookmarks.findingId, findingIds))
 
 	// attach the team bookmarks to the topic findings
 	const bookmarksByFindingId = Map.groupBy(teamBookmarkRows, (row) => row.findingId)
@@ -169,20 +179,32 @@ export async function toInviteAndScanFields(
 	}
 }
 
-// the user's topic access and the findings it gates
-export async function loadTopicAccessAndFindings(
-	topic: typeof topics.$inferSelect,
-	userId: string | null,
-): Promise<{ isAdmin: boolean; topicFindings: Awaited<ReturnType<typeof loadTopicFindings>> }> {
+// the topic, the user whose access gates its findings, and an optional page window of the findings
+type LoadTopicAccessAndFindingsOptions = {
+	topic: typeof topics.$inferSelect
+	userId: string | null
+	pageWindow?: FindingPageWindow
+}
+
+// the user's topic access and the findings it gates, up to the read limit or within one page window
+export async function loadTopicAccessAndFindings({
+	topic,
+	userId,
+	pageWindow,
+}: LoadTopicAccessAndFindingsOptions): Promise<{
+	isAdmin: boolean
+	topicFindings: Awaited<ReturnType<typeof loadTopicFindings>>
+}> {
 	// only the owner and admins can see the spend
 	const { isAdmin } = userId ? await loadUserAccess(userId) : { isAdmin: false }
 
 	// the topic findings with this user's consumed state, gated by when an invite was accepted
-	const topicFindings = await loadTopicFindings(
-		topic.id,
+	const topicFindings = await loadTopicFindings({
+		topicId: topic.id,
 		userId,
-		await topicSubscriptionStartDate(topic, userId, isAdmin),
-	)
+		subscriberActivatedAt: await topicSubscriptionStartDate(topic, userId, isAdmin),
+		pageWindow,
+	})
 	await attachTeamBookmarks(topicFindings, topic.id, topic.teamId)
 	await attachTopicFindingFaviconPaths(topicFindings)
 	return { isAdmin, topicFindings }

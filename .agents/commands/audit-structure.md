@@ -254,6 +254,7 @@ Check for:
    - `toReportedPath` and its route shape tables in `ui/src/lib/visitAnalytics.ts` (now `shared/reportedPath.ts`)
    - the `@opentelemetry/sdk-node` dependency and its `NodeSDK` in `worker/telemetry.ts` (now a `NodeTracerProvider`
      from `@opentelemetry/sdk-trace-node`)
+   - `loadUserAccess` in `api/authorization.ts` (now the one in `db/quotas.ts`, which `api/authorization.ts` re-exports)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

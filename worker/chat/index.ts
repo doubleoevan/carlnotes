@@ -377,11 +377,14 @@ export async function buildTopicChatPrompt(
 	chatContext: ChatContext,
 	editTopicBlock: string = EMPTY_EDIT_TOPIC_BLOCK,
 ): Promise<BuiltPrompt> {
-	const [{ template, name, registryPrompt }, glossaryBlock, conductBlock] = await Promise.all([
-		fetchPromptTemplate("chat-topic"),
-		toGlossaryBlock(TOPIC_CHAT_GLOSSARY_LINE),
-		toConductBlock(),
-	])
+	const [{ template, name, registryPrompt }, glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock] =
+		await Promise.all([
+			fetchPromptTemplate("chat-topic"),
+			toGlossaryBlock(TOPIC_CHAT_GLOSSARY_LINE),
+			toConductBlock(),
+			toDocsGuideBlock(),
+			toOpenNewTopicBlock(),
+		])
 
 	// fill the template, composing each list block first. the app's own blocks stay unfenced
 	const prompt = writePrompt(
@@ -397,7 +400,7 @@ export async function buildTopicChatPrompt(
 			chatAttachmentContext: chatContext.chatAttachmentContext || "None.",
 			docsBlock: chatContext.docsBlock || "None.",
 		},
-		{ editTopicBlock, glossaryBlock, conductBlock },
+		{ editTopicBlock, glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock },
 	)
 	return { prompt, name, registryPrompt }
 }
@@ -433,6 +436,22 @@ async function toConductBlock(): Promise<string> {
 	return writePrompt(template, {})
 }
 
+/**
+ * How a chat reads the docs sections retrieved for the question, written once for every chat prompt.
+ */
+async function toDocsGuideBlock(): Promise<string> {
+	const { template } = await fetchPromptTemplate("chat-docs-guide")
+	return writePrompt(template, {})
+}
+
+/**
+ * What a chat about findings does if a reader asks for a new topic, written once for the topic chat and the team room.
+ */
+async function toOpenNewTopicBlock(): Promise<string> {
+	const { template } = await fetchPromptTemplate("chat-open-new-topic")
+	return writePrompt(template, {})
+}
+
 // the edit block for a turn with the topic tools, or "None." for a turn without them
 async function toEditTopicBlock(tools: ChatTurnInput["tools"]): Promise<string> {
 	if (!tools) {
@@ -451,9 +470,10 @@ export async function buildNewTopicChatPrompt(
 	topicsRemaining?: number,
 	leaderTeams?: TopicDraftTeam[],
 ): Promise<BuiltPrompt> {
-	const [{ template, name, registryPrompt }, glossaryBlock] = await Promise.all([
+	const [{ template, name, registryPrompt }, glossaryBlock, docsGuideBlock] = await Promise.all([
 		fetchPromptTemplate("chat-new-topic"),
 		toGlossaryBlock(NEW_TOPIC_CHAT_GLOSSARY_LINE),
+		toDocsGuideBlock(),
 	])
 	// write the prompt with the docs, the topic draft, and the teams fenced as data and the app's own blocks unfenced
 	const prompt = writePrompt(
@@ -466,6 +486,7 @@ export async function buildNewTopicChatPrompt(
 		{
 			topicLimitBlock: toTopicLimitBlock(topicsRemaining),
 			glossaryBlock,
+			docsGuideBlock,
 			scanFrequencies: toScanFrequenciesSentence(),
 		},
 	)
@@ -540,11 +561,14 @@ function toTopicLimitBlock(topicsRemaining?: number): string {
  * Builds the team chat room's system prompt from the 'chat-team.md' template, reading across every topic the team holds.
  */
 export async function buildTeamChatPrompt(teamContext: TeamChatContext): Promise<BuiltPrompt> {
-	const [{ template, name, registryPrompt }, glossaryBlock, conductBlock] = await Promise.all([
-		fetchPromptTemplate("chat-team"),
-		toGlossaryBlock(TEAM_CHAT_GLOSSARY_LINE),
-		toConductBlock(),
-	])
+	const [{ template, name, registryPrompt }, glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock] =
+		await Promise.all([
+			fetchPromptTemplate("chat-team"),
+			toGlossaryBlock(TEAM_CHAT_GLOSSARY_LINE),
+			toConductBlock(),
+			toDocsGuideBlock(),
+			toOpenNewTopicBlock(),
+		])
 
 	// fill the template, composing each list block first. the app's own blocks stay unfenced
 	const prompt = writePrompt(
@@ -557,7 +581,7 @@ export async function buildTeamChatPrompt(teamContext: TeamChatContext): Promise
 			scanSummariesBlock: toScanSummariesBlock(teamContext.scanSummaries),
 			docsBlock: teamContext.docsBlock || "None.",
 		},
-		{ glossaryBlock, conductBlock },
+		{ glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock },
 	)
 	return { prompt, name, registryPrompt }
 }

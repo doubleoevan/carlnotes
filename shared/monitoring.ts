@@ -317,6 +317,7 @@ const reportedStages = [
 	"prompt-registry",
 	"billing",
 	"page-render",
+	"api-route",
 ] as const
 
 // one of the stages above

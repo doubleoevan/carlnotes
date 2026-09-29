@@ -24,17 +24,18 @@ export const documentsRoute = new Hono()
 	.get("/pricing", (context) => context.redirect("/plans", 301))
 	// the llms.txt index: what this site is, its docs and blog, and the most recently changed public topics
 	.get("/llms.txt", async (context) => {
-		const llmsTxt = toLlmsTxt({
-			appUrl: appUrl(),
-			docsPages: loadDocsPages(),
-			blogPages: loadPages("blog"),
-			publicTopics: await loadPublicTopics(),
-		})
+		const [docsPages, blogPages, publicTopics] = await Promise.all([
+			loadDocsPages(),
+			loadPages("blog"),
+			loadPublicTopics(),
+		])
+		const llmsTxt = toLlmsTxt({ appUrl: appUrl(), docsPages, blogPages, publicTopics })
 		return context.body(llmsTxt, 200, { ...toDocumentHeaders("text/plain; charset=utf-8", 900), ...NOINDEX_HEADER })
 	})
 	// the long form of llms.txt, with the docs and blog bodies in full
-	.get("/llms-full.txt", (context) => {
-		const llmsFullTxt = toLlmsFullTxt({ appUrl: appUrl(), docsPages: loadDocsPages(), blogPages: loadPages("blog") })
+	.get("/llms-full.txt", async (context) => {
+		const [docsPages, blogPages] = await Promise.all([loadDocsPages(), loadPages("blog")])
+		const llmsFullTxt = toLlmsFullTxt({ appUrl: appUrl(), docsPages, blogPages })
 		return context.body(llmsFullTxt, 200, {
 			...toDocumentHeaders("text/plain; charset=utf-8", 900),
 			...NOINDEX_HEADER,
@@ -42,7 +43,7 @@ export const documentsRoute = new Hono()
 	})
 	// the site-wide feed: the blog posts and the release notes
 	.get("/feed.xml", async (context) => {
-		const blogItems = loadPages("blog").map((page) => ({
+		const blogItems = (await loadPages("blog")).map((page) => ({
 			title: page.title,
 			url: `${appUrl()}/blog/${page.slug}`,
 			explanation: page.description,
@@ -84,7 +85,7 @@ export const documentsRoute = new Hono()
 	})
 	// the crawler map of every public page, generated from live data on each request
 	.get("/sitemap.xml", async (context) => {
-		const blogPaths = ["/blog", ...loadPages("blog").map((blogPage) => `/blog/${blogPage.slug}`)]
+		const blogPaths = ["/blog", ...(await loadPages("blog")).map((blogPage) => `/blog/${blogPage.slug}`)]
 		return context.body(
 			await toSitemapXml(appUrl(), blogPaths),
 			200,

@@ -91,7 +91,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 	const [{ isAdmin, topicFindings }, topicSourceRows, rawAttachmentRows, scanRows, directSubscription, inviteAndScanFields, [ownerRow], teamFields, isDailyFrequencyPaused, canRate, canEdit] =
 		await traceRequestStage("topic_page.reads", () => Promise.all([
 			// the user's access and the findings it gates
-			loadTopicAccessAndFindings(topic, userId),
+			loadTopicAccessAndFindings({ topic, userId }),
 			// every Source row, narrowed for visibility once the reads finish
 			db.select().from(sources).where(eq(sources.topicId, topic.id)),
 			// the attachment rows, their generated context narrowed once the reads finish

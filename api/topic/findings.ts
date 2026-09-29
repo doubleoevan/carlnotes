@@ -3,6 +3,7 @@ import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import type { TopicFinding } from "@shared/contracts"
 import { bookmarkPayload, consumedPayload, findingFeedbackPayload, ratingPayload } from "@shared/contracts"
+import { reportThresholdCrossing } from "@shared/monitoring"
 import { toUrlHost } from "@shared/sources"
 import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm"
 import { Hono } from "hono"
@@ -22,15 +23,33 @@ import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { canBookmarkFinding, canRateFinding, isTopicFindingVisible, toTopicRole } from "./permissions"
 
+// the most findings one read of a topic returns, about forty times the largest topic in production
+export const TOPIC_FINDINGS_READ_LIMIT = 1000
+
+// one page of a topic's findings in relevance order: the row it starts at and how many rows it reads
+export type FindingPageWindow = { offset: number; rowCount: number }
+
+// the topic whose findings are read, the user reading them, the invite gate, and an optional page window
+type LoadTopicFindingsOptions = {
+	topicId: string
+	userId: string | null
+	// when an invite topic's subscription activated. null reads no findings, and undefined skips the gate
+	subscriberActivatedAt?: Date | null
+	// one page of the findings, which can reach past the read limit
+	pageWindow?: FindingPageWindow
+}
+
 /**
- * Load a topic's findings joined to their resources with the user's consumed state, most relevant first.
- * An "invite" visibility topic requires a subscription activation date to load findings.
+ * Loads a topic's findings joined to their resources with the user's consumed state, most relevant first,
+ * up to the read limit or within one page window.
+ * An "invite" visibility topic requires a subscription activation date to load findings, and a read that reaches the limit sends a warning.
  */
-export async function loadTopicFindings(
-	topicId: string,
-	userId: string | null,
-	subscriberActivatedAt?: Date | null,
-): Promise<TopicFinding[]> {
+export async function loadTopicFindings({
+	topicId,
+	userId,
+	subscriberActivatedAt,
+	pageWindow,
+}: LoadTopicFindingsOptions): Promise<TopicFinding[]> {
 	// no active subscription on an invite topic means no findings at all
 	if (subscriberActivatedAt === null) {
 		return []
@@ -78,7 +97,22 @@ export async function loadTopicFindings(
 				.leftJoin(consumptions, and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId)))
 				.leftJoin(bookmarks, and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId)))
 		: findingQuery
-	const findingRows = await markedQuery.where(findingFilter).orderBy(desc(findings.relevanceScore))
+
+	// the most relevant first, with the id breaking ties so every page window reads the same order
+	const findingRows = await markedQuery
+		.where(findingFilter)
+		.orderBy(desc(findings.relevanceScore), findings.id)
+		.limit(pageWindow?.rowCount ?? TOPIC_FINDINGS_READ_LIMIT)
+		.offset(pageWindow?.offset ?? 0)
+
+	// a whole topic's read that reaches the limit is reported, so the limit can be raised before a real topic reaches it
+	if (!pageWindow && findingRows.length >= TOPIC_FINDINGS_READ_LIMIT) {
+		reportThresholdCrossing({
+			condition: "topic-findings-read-limit",
+			message: "a topic's finding read reached its limit",
+			values: { findingCount: findingRows.length, readLimit: TOPIC_FINDINGS_READ_LIMIT },
+		})
+	}
 
 	// shape each row into a topic finding and set its isConsumed flag
 	return findingRows.map(toTopicFinding)

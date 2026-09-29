@@ -1,7 +1,10 @@
-// the computed invite limit: each factor read alone, then the floor and the limit doubling for accepted invites
+// the computed invite limit: each factor read alone, then the floor and the limit doubling for accepted invites.
+// the access row: read once per request, and on every call outside one
 import { expect, test } from "bun:test"
 import { PLANS } from "@shared/plans"
-import { toInviteLimit } from "./quotas"
+import { connectionPool } from "./index"
+import { loadUserAccess, toInviteLimit } from "./quotas"
+import { runWithRequestMemo } from "./requestMemo"
 
 // each plan's own base, so a limit change in the plans table cannot leave these expectations behind
 const FREE_BASE = PLANS.free.inviteLimit
@@ -65,4 +68,47 @@ test("a connected recipient doubles the limit", () => {
 	expect(toInviteLimit({ plan: "free", accountAgeDays: 1, acceptedShare: 0, isConnectedRecipient: true })).toBe(
 		Math.max(1, Math.floor(FREE_BASE / 5 / 2)) * 2,
 	)
+})
+
+// the access row as the database returns it: a plain user on the plus plan with no budget override
+const USER_ACCESS_ROW = ["user", "plus", null]
+
+// runs the calls with the pool's query swapped for a stub that counts its calls, and returns the count.
+// the pool's own query comes back however the calls end
+async function countAccessQueries(runCalls: () => Promise<unknown>): Promise<number> {
+	const poolQuery = connectionPool.query
+	let queryCount = 0
+	connectionPool.query = (() => {
+		queryCount += 1
+		return Promise.resolve({ rows: [USER_ACCESS_ROW], fields: [] })
+	}) as unknown as typeof connectionPool.query
+
+	// run the calls, then put the pool's own query back
+	try {
+		await runCalls()
+		return queryCount
+	} finally {
+		connectionPool.query = poolQuery
+	}
+}
+
+// a topic page's permission checks each ask for the access row, and the request sends one read for every check
+test("the access row is read once per request", async () => {
+	let userAccessList: unknown[] = []
+	const queryCount = await countAccessQueries(async () => {
+		userAccessList = await runWithRequestMemo(() => Promise.all([1, 2, 3].map(() => loadUserAccess("user-1"))))
+	})
+
+	expect(queryCount).toBe(1)
+	expect(userAccessList).toEqual(Array(3).fill({ isAdmin: false, plan: "plus", budgetOverrideCents: null }))
+})
+
+// the worker checks quotas outside any request, so each of its checks reads the row
+test("the access row is read on every call outside a request", async () => {
+	const queryCount = await countAccessQueries(async () => {
+		await loadUserAccess("user-1")
+		await loadUserAccess("user-1")
+	})
+
+	expect(queryCount).toBe(2)
 })

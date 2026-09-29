@@ -1,6 +1,6 @@
 // the seo files and the public topic queries they read. the files are the sitemap, llms.txt, llms-full.txt,
 // security.txt, and the JSON-LD structured data
-import { readdirSync, readFileSync } from "node:fs"
+import { readdir } from "node:fs/promises"
 import { join } from "node:path"
 import type { PublicTopic } from "@shared/contracts"
 import { toJsonLdText, toMetaDescription, toTopicPath } from "@shared/seo"
@@ -9,6 +9,7 @@ import { db } from "../db"
 import { findings, resources, scans, teams, teamTopics, topics } from "../db/schema"
 import { loadReleases, toReleasePath } from "./releases"
 import { isPublicAndShown } from "./topic/permissions"
+import { cacheForTtl } from "./ttlCache"
 
 // the pages the sitemap always lists
 const STATIC_ROUTES = ["/", "/topics", "/plans", "/terms", "/privacy"]
@@ -18,6 +19,9 @@ const LLMS_TOPIC_LIMIT = 50
 
 // where the docs markdown lives, resolved from this file so the api reads it from any working directory
 const DOCS_ROOT = join(import.meta.dir, "..", "docs", "src", "content", "docs")
+
+// how long the parsed docs pages are kept before a read lists and parses their files again
+const DOCS_PAGES_TTL_MS = 60_000
 
 /**
  * The sitemap, built from live data on each request: the static routes, the blog pages, and every public Topic.
@@ -107,19 +111,22 @@ export function toTopicDescription(topicRow: { name: string; prompt: string; sca
 export type DiscoveryPage = { path: string; title: string; description: string; body: string }
 
 /**
- * The docs pages read straight from their Markdown, in reading order: the intro and quickstart first,
- * then the rest by path.
+ * Returns the docs pages read from their Markdown, in reading order: the intro and quickstart first, then the rest by path.
+ * The files are read again once the kept pages are a minute old.
  */
-export function loadDocsPages(): DiscoveryPage[] {
+export const loadDocsPages = cacheForTtl(readDocsPages, DOCS_PAGES_TTL_MS)
+
+// read every docs page from its file, in reading order
+async function readDocsPages(): Promise<DiscoveryPage[]> {
 	// every markdown file under the docs tree, one level of section directories deep
 	const filePaths: string[] = []
-	for (const entry of readdirSync(DOCS_ROOT, { withFileTypes: true })) {
+	for (const entry of await readdir(DOCS_ROOT, { withFileTypes: true })) {
 		if (entry.isFile() && entry.name.endsWith(".md")) {
 			filePaths.push(entry.name)
 		}
 		// a section directory contains one more level of pages and nothing deeper
 		if (entry.isDirectory()) {
-			for (const nested of readdirSync(join(DOCS_ROOT, entry.name))) {
+			for (const nested of await readdir(join(DOCS_ROOT, entry.name))) {
 				if (nested.endsWith(".md")) {
 					filePaths.push(`${entry.name}/${nested}`)
 				}
@@ -130,16 +137,15 @@ export function loadDocsPages(): DiscoveryPage[] {
 	// the entry points lead and everything else follows its path
 	const toRank = (path: string): string => (path === "index.md" ? "0" : path === "quickstart.md" ? "1" : `2${path}`)
 	const orderedPaths = filePaths.sort((first, second) => toRank(first).localeCompare(toRank(second)))
-	return orderedPaths.flatMap((filePath) => {
-		const page = toDocsPage(filePath)
-		return page ? [page] : []
-	})
+	const docsPages = await Promise.all(
+		orderedPaths.map(async (filePath) => toDocsPage(filePath, await Bun.file(join(DOCS_ROOT, filePath)).text())),
+	)
+	return docsPages.filter((docsPage) => docsPage !== null)
 }
 
-// parse one docs file: the single-line title, the folded description, and the body past the frontmatter
-function toDocsPage(filePath: string): DiscoveryPage | null {
-	const source = readFileSync(join(DOCS_ROOT, filePath), "utf8")
-	const match = source.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
+// parse one docs file's Markdown: the single-line title, the folded description, and the body past the frontmatter
+function toDocsPage(filePath: string, markdown: string): DiscoveryPage | null {
+	const match = markdown.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/)
 	if (!match?.[1] || match[2] === undefined) {
 		return null
 	}
@@ -309,8 +315,9 @@ export async function scanFindings(scanId: string): Promise<ScanFinding[]> {
 }
 
 /**
- * The Findings as a schema.org ItemList for the CreativeWork's hasPart: rank, title, link, and relevance explanation.
- * Null if the Scan kept nothing.
+ * Returns the Findings as a schema.org ItemList for the CreativeWork's hasPart:
+ * rank, title, link, and the relevance explanation if a Finding has one.
+ * Returns null if the Scan kept nothing.
  */
 export function toFindingListLd(findingRows: ScanFinding[]): object | null {
 	// a scan that kept nothing adds no list
@@ -318,7 +325,8 @@ export function toFindingListLd(findingRows: ScanFinding[]): object | null {
 		return null
 	}
 
-	// one ListItem per finding. an untitled resource is named by its url, the email's own fallback
+	// one ListItem per finding. an untitled resource is named by its url, the email's own fallback,
+	// and a finding without a relevance explanation has no description
 	return {
 		"@type": "ItemList",
 		name: `Carl's Top ${findingRows.length}`,
@@ -327,7 +335,7 @@ export function toFindingListLd(findingRows: ScanFinding[]): object | null {
 			position: index + 1,
 			name: findingRow.title ?? findingRow.url,
 			url: findingRow.url,
-			description: findingRow.relevanceExplanation,
+			...(findingRow.relevanceExplanation ? { description: findingRow.relevanceExplanation } : {}),
 		})),
 	}
 }

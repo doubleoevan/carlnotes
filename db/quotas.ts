@@ -1,8 +1,9 @@
 // per-user scan-quota checks
 import { dailyFrequencies, isAdminRole } from "@shared/enums"
-import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan } from "@shared/plans"
+import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, type UserAccess } from "@shared/plans"
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm"
 import { db } from "."
+import { memoizeInRequest } from "./requestMemo"
 import { billingSubscriptions, invites, scans, teamMembers, topics, users } from "./schema"
 
 // the invite-limit factors: a first-week account reaches a fifth of its base, a sender whose week-old
@@ -51,11 +52,22 @@ export async function incrementDaySuggestionCount(userId: string): Promise<boole
 	return true
 }
 
-// return the user's role and billing plan
-export async function loadUserAccess(userId: string): Promise<{ isAdmin: boolean; plan: Plan }> {
-	// one row read of the two access fields, defaulting a missing user to a plain free user
-	const [user] = await db.select({ role: users.role, plan: users.plan }).from(users).where(eq(users.id, userId))
-	return { isAdmin: isAdminRole(user?.role), plan: user?.plan ?? "free" }
+/**
+ * Returns the user's admin status, billing plan, and budget override, read at most once per request.
+ */
+export function loadUserAccess(userId: string): Promise<UserAccess> {
+	return memoizeInRequest(`user-access:${userId}`, async () => {
+		// one row read of the three access fields, defaulting a missing user to a plain free user
+		const [user] = await db
+			.select({ role: users.role, plan: users.plan, budgetOverrideCents: users.budgetOverrideCents })
+			.from(users)
+			.where(eq(users.id, userId))
+		return {
+			isAdmin: isAdminRole(user?.role),
+			plan: user?.plan ?? "free",
+			budgetOverrideCents: user?.budgetOverrideCents ?? null,
+		}
+	})
 }
 
 // how many topic scans ran for the user since utc midnight, scheduled and manual combined

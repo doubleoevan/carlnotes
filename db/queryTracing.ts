@@ -2,6 +2,10 @@
 import { AsyncLocalStorage } from "node:async_hooks"
 import type { Pool, PoolClient } from "@neondatabase/serverless"
 import { type Span, startQuerySpan } from "@shared/monitoring"
+import { clearRequestMemo } from "./requestMemo"
+
+// a statement that changes rows: an insert, an update, or a delete, alone or inside a with statement
+const WRITE_STATEMENT_PATTERN = /^\s*(insert|update|delete)\b|^\s*with\b[\s\S]*\b(insert|update|delete)\b/i
 
 // how many statements one request has sent, and the request's span that their spans are parented to
 type RequestQueries = { queryCount: number; requestSpan: Span | undefined }
@@ -40,10 +44,17 @@ export function traceQueries(pool: Pool): void {
 	})
 }
 
-// wraps a client's query, so each statement sent during a traced request is counted and traced under that request
+// wraps a client's query, so each statement sent during a traced request is counted and traced under that request,
+// and a write clears the memo of the request that sent it
 function traceClientQueries(client: PoolClient): void {
 	const sendQuery = client.query.bind(client) as (...queryArguments: unknown[]) => unknown
 	client.query = ((...queryArguments: unknown[]) => {
+		// a write clears the request's memo, so the request's next read of the user's access or a topic role goes to the database
+		const statement = toStatement(queryArguments[0])
+		if (WRITE_STATEMENT_PATTERN.test(statement)) {
+			clearRequestMemo()
+		}
+
 		// a statement outside any request, such as a Scan's, is neither counted nor traced
 		const requestQueries = requestQueryStore.getStore()
 		if (!requestQueries) {
@@ -55,7 +66,7 @@ function traceClientQueries(client: PoolClient): void {
 		}
 
 		// the query's span, which ends when the statement's result returns
-		const endQuerySpan = startQuerySpan(toStatement(queryArguments[0]), requestQueries.requestSpan)
+		const endQuerySpan = startQuerySpan(statement, requestQueries.requestSpan)
 		const callback = queryArguments.at(-1)
 		try {
 			// a callback-style query ends its span in its callback

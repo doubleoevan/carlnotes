@@ -1,7 +1,17 @@
 // mcp read test: pages, cursors, the tool caller's finding shape, and the bound-topic rule
 import { expect, test } from "bun:test"
 import type { TopicFinding } from "@shared/contracts"
-import { CONNECT_ACCOUNT_TEXT, fromCursor, packPage, toCursor, toMcpFinding, toToolTopicId } from "./results"
+import { TOPIC_FINDINGS_READ_LIMIT } from "../topic/findings"
+import {
+	CONNECT_ACCOUNT_TEXT,
+	fromCursor,
+	MCP_PAGE_SIZE,
+	packPage,
+	packPageFromWindow,
+	toCursor,
+	toMcpFinding,
+	toToolTopicId,
+} from "./results"
 
 // a topic finding with an explanation of the given length
 function topicFinding(index: number, explanationChars = 40): TopicFinding {
@@ -55,6 +65,27 @@ test("a page stops at the item limit", () => {
 	const packedPage = packPage(items, 0, 100_000, 2)
 	expect(packedPage.items.length).toBe(2)
 	expect(fromCursor(packedPage.nextCursor)).toBe(2)
+})
+
+// a feed longer than the topic page's read limit pages to its last finding, reading one window from each cursor,
+// whether a page ends at the item limit or at the character budget
+test("a feed past the read limit pages to its end by windows", () => {
+	const feed = Array.from({ length: TOPIC_FINDINGS_READ_LIMIT + 45 }, (_, index) =>
+		toMcpFinding({ kind: "visitor" }, topicFinding(index, index % 7 === 0 ? 6000 : 40)),
+	)
+	const pagedFindingIds: string[] = []
+	let cursor: string | null = null
+
+	// follow each cursor, reading one finding more than fits on a page from its offset, as the feed read does
+	do {
+		const offset = fromCursor(cursor)
+		const windowPage = packPageFromWindow(feed.slice(offset, offset + MCP_PAGE_SIZE + 1), offset)
+		pagedFindingIds.push(...windowPage.items.map((finding) => finding.findingId))
+		cursor = windowPage.nextCursor
+	} while (cursor)
+
+	// every finding, once each, in order
+	expect(pagedFindingIds).toEqual(feed.map((finding) => finding.findingId))
 })
 
 // a cursor round-trips its offset. null, garbage, or a negative one reads as the start

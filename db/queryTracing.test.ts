@@ -1,11 +1,13 @@
 // the per-request query count: each request counts only its own statements, including the ones it waited for a client to send,
-// and each statement of a database transaction is counted once
+// and each statement of a database transaction is counted once.
+// a write clears the memo of the request that sent it
 import { expect, test } from "bun:test"
 import { EventEmitter } from "node:events"
 import { Pool } from "@neondatabase/serverless"
 import { sql } from "drizzle-orm"
 import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless"
 import { readQueryCount, runWithQueryCount, traceQueries } from "./queryTracing"
+import { memoizeInRequest, runWithRequestMemo } from "./requestMemo"
 
 // the result every statement returns, with no database behind the test's clients
 const EMPTY_RESULT = { rows: [], fields: [], rowCount: 0, command: "SELECT" }
@@ -80,4 +82,30 @@ test("a statement outside any request is not counted", async () => {
 	expect(result.rows).toEqual([])
 	expect(await requestQueryCount).toBe(1)
 	expect(readQueryCount()).toBe(0)
+})
+
+// a select keeps the request's memo, and an update clears it, so only the read after the update reads again
+test("a write statement clears the memo of the request that sent it", async () => {
+	const database = createTracedDatabase()
+	let readCount = 0
+	const readUserAccess = async (): Promise<number> => {
+		readCount += 1
+		return readCount
+	}
+
+	// read, select, read, update, read, all inside one request
+	await runWithRequestMemo(async () => {
+		await memoizeInRequest("user-access:user-1", readUserAccess)
+		await database.execute(sql`select 1`)
+		await memoizeInRequest("user-access:user-1", readUserAccess)
+		await database.execute(sql`update users set plan = 'plus'`)
+		await memoizeInRequest("user-access:user-1", readUserAccess)
+
+		// an update inside a with statement clears the memo too
+		await database.execute(sql`with changed as (update users set plan = 'free' returning id) select id from changed`)
+		await memoizeInRequest("user-access:user-1", readUserAccess)
+	})
+
+	// only the first read and the read after each write ran
+	expect(readCount).toBe(3)
 })

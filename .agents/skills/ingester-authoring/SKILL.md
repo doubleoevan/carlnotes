@@ -12,7 +12,7 @@ An ingester turns one kind of Source into Resources. One ingester per source kin
 - Naming: `<kind>Ingester` (e.g. `rssIngester`, `redditIngester`, `composioIngester`).
 - Output: Resources only. Ingesters never score, rank, or touch Findings — that's the review pipeline's job.
 - One `composioIngester` covers all Composio toolkits: toolkit variety lives in Source config, not in ingester code.
-- Credentials come from the Source's referenced Integration, resolved through the established config path. Never read keys inline; never assume an Integration exists (`integration_id` is nullable — RSS needs none).
+- Credentials are the operator's keys, read from the environment (`YOUTUBE_API_KEY`, `REDDIT_CLIENT_ID`, `TWITTERAPI_IO_API_KEY`), and a Source's config names only what to read. Never write a key into code or a Source, and never assume one is set: RSS needs none.
 - Keyless first: prefer credential-free access (RSS) as the baseline; Integration-backed variants layer on top, never replace the fallback.
 - Idempotent: re-scanning the same Source must not duplicate Resources. Dedupe on the Resource's canonical URL.
 - Rate limits and retries are handled by the ingester, with limits declared as constants at the top of the file, not buried in call sites.
