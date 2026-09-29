@@ -1,32 +1,48 @@
 // starts and stops LLM call tracing to Langfuse
 import { LangfuseSpanProcessor } from "@langfuse/otel"
-import { startActiveObservation } from "@langfuse/tracing"
+import { setLangfuseTracerProvider, startActiveObservation } from "@langfuse/tracing"
 import { LangfuseVercelAiSdkIntegration } from "@langfuse/vercel-ai-sdk"
-import { NodeSDK } from "@opentelemetry/sdk-node"
+import { AlwaysOnSampler, NodeTracerProvider } from "@opentelemetry/sdk-trace-node"
+import { isMonitoringStarted } from "@shared/monitoring"
 import { registerTelemetry } from "ai"
 import type { Budget } from "./budget"
 
-// the running SDK instance, held so shutdown can flush it. null means telemetry never started
-let telemetrySDK: NodeSDK | null = null
+// Langfuse's own tracer provider, kept so shutdown can flush it. null means telemetry never started
+let langfuseTracerProvider: NodeTracerProvider | null = null
 
 /**
- * Starts LLM call tracing to Langfuse, or no-ops when Langfuse keys are unset.
+ * Starts tracing model calls to Langfuse, or does nothing if the Langfuse keys are unset.
+ * Langfuse keeps its own tracer provider, which records every model call whatever Sentry samples.
+ * Start Sentry first. If Sentry runs, Sentry keeps the global provider and Langfuse's stays beside it,
+ * and if Sentry does not run, Langfuse's provider is the global one.
  */
 export function startTelemetry(): void {
-	// already started. a second call must not spin up a duplicate SDK instance
-	if (telemetrySDK) {
+	// already started. a second call must not create a second provider
+	if (langfuseTracerProvider) {
 		return
 	}
 
-	// both keys are required. the client and span processor read them from env themselves
+	// both keys are required. the span processor reads them from env itself
 	if (!Bun.env.LANGFUSE_PUBLIC_KEY || !Bun.env.LANGFUSE_SECRET_KEY) {
 		return
 	}
 
-	// export every ai-sdk call as a Langfuse-shaped span, then start the exporter
-	telemetrySDK = new NodeSDK({ spanProcessors: [new LangfuseSpanProcessor()] })
-	telemetrySDK.start()
-	registerTelemetry(new LangfuseVercelAiSdkIntegration())
+	// the sampler records every model call, including one inside a request Sentry did not sample
+	langfuseTracerProvider = new NodeTracerProvider({
+		sampler: new AlwaysOnSampler(),
+		spanProcessors: [new LangfuseSpanProcessor()],
+	})
+
+	// beside Sentry, Langfuse's observations use this provider and Sentry keeps the global one and its context.
+	// alone, this provider is the global one, with the context that nests a stage's calls inside it
+	if (isMonitoringStarted()) {
+		setLangfuseTracerProvider(langfuseTracerProvider)
+	} else {
+		langfuseTracerProvider.register()
+	}
+
+	// every AI SDK call is traced through Langfuse's provider
+	registerTelemetry(new LangfuseVercelAiSdkIntegration({ tracer: langfuseTracerProvider.getTracer("ai") }))
 }
 
 /**
@@ -60,13 +76,13 @@ export async function traceStage<Result>(
  */
 export async function shutdownTelemetry(): Promise<void> {
 	// nothing to flush if telemetry never started
-	if (!telemetrySDK) {
+	if (!langfuseTracerProvider) {
 		return
 	}
 
 	// a telemetry flush failure must never fail the process it is tracing
 	try {
-		await telemetrySDK.shutdown()
+		await langfuseTracerProvider.shutdown()
 	} catch (error) {
 		console.error("telemetry shutdown failed", error)
 	}

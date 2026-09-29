@@ -1,4 +1,5 @@
 // the Temporal client that the api and the sweep use to start durable workflows
+import type { ThresholdCrossing } from "@shared/monitoring"
 import { Client, Connection, WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from "@temporalio/client"
 import type { ScanTrigger } from "./workflows/run-topic-scan-activities"
 
@@ -16,6 +17,16 @@ const SOURCE_WORKFLOW = "screenSourceWorkflow"
 
 // how long a task queue description may take before the scan sweep gives up on it and continues
 const QUEUE_DESCRIBE_TIMEOUT_MS = 10_000
+
+// Temporal's TASK_QUEUE_TYPE_ACTIVITY, the Scan queue's activity side, where a Scan's activities wait for a scan slot
+const ACTIVITY_TASK_QUEUE_TYPE = 2
+
+// how long the oldest waiting Scan activity may wait for a slot before the backlog is reported
+const SCAN_BACKLOG_ALERT_MS = 15 * 60 * 1000
+
+// the Scan queue's pollers and its activity backlog: how many tasks wait, and how long the oldest one has waited,
+// which is null if the server cannot say
+export type ScanQueueDescription = { pollerCount: number; backlogCount: number; oldestBacklogAgeMs: number | null }
 
 // whether the Scan was handed to Temporal, and a call that waits for it to end.
 // it is a call, not a promise, so a process that only starts a Scan opens no long-poll and exits on its own
@@ -107,23 +118,65 @@ export async function cancelTopicScanWorkflow(topicId: string): Promise<ScanCanc
 }
 
 /**
- * How many workers are polling the Scan queue. Zero here is the signal to alert on:
- * it means no Scan will run at all, however healthy the api looks.
+ * Describes the Scan queue: how many workers poll it, and how many Scan activities wait for a slot and for how long.
+ * Zero pollers means no Scan will run at all, however healthy the api looks.
  */
-export async function countScanQueuePollers(): Promise<number> {
+export async function describeScanQueue(): Promise<ScanQueueDescription> {
 	const client = await getClient()
 
-	// a describe that never responds would hang the sweep before it starts a single Scan
+	// a describe that never responds would hang the sweep before it starts a single Scan.
+	// the time limit's timer stops once the describe finishes, so the one-shot sweep can exit
+	let timeLimitTimer: ReturnType<typeof setTimeout> | undefined
+	const timeLimit = new Promise<never>((_resolve, reject) => {
+		timeLimitTimer = setTimeout(
+			() => reject(new Error("describing the scan task queue timed out")),
+			QUEUE_DESCRIBE_TIMEOUT_MS,
+		)
+	})
+
+	// the stats a current server reports, and the backlog hint an older one returns instead
 	const queue = await Promise.race([
 		client.workflowService.describeTaskQueue({
 			namespace: client.options.namespace,
 			taskQueue: { name: SCAN_TASK_QUEUE },
+			taskQueueType: ACTIVITY_TASK_QUEUE_TYPE,
+			reportStats: true,
+			includeTaskQueueStatus: true,
 		}),
-		new Promise<never>((_, reject) =>
-			setTimeout(() => reject(new Error("describing the scan task queue timed out")), QUEUE_DESCRIBE_TIMEOUT_MS),
-		),
-	])
-	return queue.pollers?.length ?? 0
+		timeLimit,
+	]).finally(() => clearTimeout(timeLimitTimer))
+
+	// a server without stats gives a depth from its hint and no age
+	const pollerCount = queue.pollers?.length ?? 0
+	if (!queue.stats) {
+		return { pollerCount, backlogCount: Number(queue.taskQueueStatus?.backlogCountHint ?? 0), oldestBacklogAgeMs: null }
+	}
+	const backlogAge = queue.stats.approximateBacklogAge
+	return {
+		pollerCount,
+		backlogCount: Number(queue.stats.approximateBacklogCount ?? 0),
+		oldestBacklogAgeMs: backlogAge
+			? Number(backlogAge.seconds ?? 0) * 1000 + Math.round((backlogAge.nanos ?? 0) / 1_000_000)
+			: null,
+	}
+}
+
+/**
+ * Returns the Scan queue's backlog as a threshold crossing if its oldest Scan activity
+ * has waited over 15 minutes for a slot, and null otherwise, including if the server cannot say how long.
+ */
+export function toScanBacklogCrossing({
+	backlogCount,
+	oldestBacklogAgeMs,
+}: ScanQueueDescription): ThresholdCrossing | null {
+	if (oldestBacklogAgeMs === null || oldestBacklogAgeMs <= SCAN_BACKLOG_ALERT_MS) {
+		return null
+	}
+	return {
+		condition: "scan-backlog",
+		message: "a scan waited over 15 minutes for a slot",
+		values: { backlogCount, oldestBacklogAgeMs },
+	}
 }
 
 // the reused Temporal client instance, connected to the TEMPORAL_ADDRESS endpoint on first use

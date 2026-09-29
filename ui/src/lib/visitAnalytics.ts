@@ -1,38 +1,15 @@
 // visit analytics: how many people open which page, with nothing stored on their device and nobody identified
+import { toReportedPath } from "@shared/reportedPath"
 import posthog, { type CaptureResult } from "posthog-js"
 
-// the routes whose second segment is an id, and the shape each one reports as
-const ROUTE_ID_SHAPES: Record<string, string> = {
-	topics: ":id",
-	profiles: ":userId",
-	teams: ":teamId",
-	invite: ":token",
-}
+// the property of a web vitals event with one metric in it, which repeats the page's url
+const WEB_VITALS_METRIC_PATTERN = /^\$web_vitals_\w+_event$/
 
-// the routes whose segment after the id is the page's name as a slug, and the shape it reports as
-const ROUTE_SLUG_SHAPES: Record<string, string> = {
-	topics: ":slug",
-}
+// a value that reads as an absolute url
+const ABSOLUTE_URL_PATTERN = /^https?:\/\//
 
 /**
- * The path as the report names it, with an id segment and a topic's slug replaced by their route's shapes.
- */
-export function toReportedPath(pathname: string): string {
-	// read the route and what follows it, leaving a path with neither alone
-	const [, route, idSegment, ...restSegments] = pathname.split("/")
-	const idShape = route ? ROUTE_ID_SHAPES[route] : undefined
-	if (!route || !idShape || !idSegment) {
-		return pathname
-	}
-	// replace the slug after a topic's id with the slug shape. the slug is the topic's name
-	const [slugSegment, ...laterSegments] = restSegments
-	const slugShape = ROUTE_SLUG_SHAPES[route]
-	const reportedSegments = slugShape && slugSegment ? [slugShape, ...laterSegments] : restSegments
-	return ["", route, idShape, ...reportedSegments].join("/")
-}
-
-/**
- * Starts the visit analytics, or does nothing when no key is set, which is the self-host path.
+ * Starts the visit analytics, or does nothing if no key is set, which is the self-host path.
  */
 export function startVisitAnalytics(): void {
 	const projectKey = import.meta.env.VITE_POSTHOG_KEY
@@ -54,29 +31,51 @@ export function startVisitAnalytics(): void {
 		capture_pageview: false,
 		// the leave is what gives a session its exit page and its duration
 		capture_pageleave: true,
+		// each page's web vitals, with no element or resource url attached, from code the app bundles itself
+		capture_performance: { web_vitals: true, web_vitals_attribution: false },
+		disable_external_dependency_loading: true,
 	})
+
+	// the web vitals code loads as the app's own chunk after startup, then its capture starts.
+	// a chunk that is blocked or gone after a deploy loses only the web vitals
+	import("posthog-js/dist/web-vitals").then(() => posthog.webVitalsAutocapture?.startIfEnabled()).catch(() => undefined)
 }
 
 /**
- * Every event as it is sent, with each id taken out of the path and the url posthog attaches to all of them.
+ * Returns each event as it is sent, with every id taken out of the paths and urls it includes, with no query string
+ * or fragment left on a url: the page's url, which posthog attaches to all of them, the previous page's path,
+ * the referrer, and the urls inside each web vitals metric.
  */
 export function toReportedEvent(capturedEvent: CaptureResult | null): CaptureResult | null {
 	if (!capturedEvent?.properties) {
 		return capturedEvent
 	}
-	// replace the id and the slug in the full url that posthog sends with every event
-	const currentUrl = capturedEvent.properties.$current_url
-	if (typeof currentUrl === "string") {
-		const reportedUrl = new URL(currentUrl)
-		reportedUrl.pathname = toReportedPath(reportedUrl.pathname)
-		capturedEvent.properties.$current_url = reportedUrl.toString()
-	}
-	// replace the id and the slug in the path that posthog sends with the url
-	const pathname = capturedEvent.properties.$pathname
-	if (typeof pathname === "string") {
-		capturedEvent.properties.$pathname = toReportedPath(pathname)
+
+	// the event's own paths and urls, then each web vitals metric's
+	rewritePathsAndUrls(capturedEvent.properties)
+	for (const [propertyName, metric] of Object.entries(capturedEvent.properties)) {
+		if (WEB_VITALS_METRIC_PATTERN.test(propertyName) && typeof metric === "object" && metric !== null) {
+			rewritePathsAndUrls(metric)
+		}
 	}
 	return capturedEvent
+}
+
+// replace the id and the slug in every path property and every url of a set of properties,
+// and cut each url to its origin and its path, in place
+function rewritePathsAndUrls(properties: Record<string, unknown>): void {
+	for (const [propertyName, value] of Object.entries(properties)) {
+		// a path is named for one, such as $pathname and $prev_pageview_pathname
+		if (typeof value === "string" && propertyName.endsWith("pathname")) {
+			properties[propertyName] = toReportedPath(value)
+		}
+
+		// a url is reported as its origin and its path's shape, so a token in its query string or fragment never leaves
+		if (typeof value === "string" && ABSOLUTE_URL_PATTERN.test(value) && URL.canParse(value)) {
+			const parsedUrl = new URL(value)
+			properties[propertyName] = `${parsedUrl.origin}${toReportedPath(parsedUrl.pathname)}`
+		}
+	}
 }
 
 /**

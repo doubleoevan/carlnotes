@@ -1,7 +1,7 @@
 // scans every Topic scheduled by its frequency and emails its new Findings to subscribers
 import { shutdownAnalytics } from "@shared/analytics"
 import { isDailyFrequency } from "@shared/enums"
-import { reportError, shutdownMonitoring, startMonitoring } from "@shared/monitoring"
+import { reportError, reportThresholdCrossing, shutdownMonitoring, startMonitoring } from "@shared/monitoring"
 import { and, eq, isNotNull, isNull, lt, ne, sql } from "drizzle-orm"
 import { db } from "../db"
 import { dailyTopicIdsWithinLimit, scansRemainingToday } from "../db/quotas"
@@ -10,7 +10,7 @@ import { resetMonthlyBudgets } from "./litellm"
 import { scanTopic, startTopicScan } from "./scan"
 import { screenPendingSources } from "./screen"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
-import { countScanQueuePollers, SCAN_TASK_QUEUE } from "./temporal-client"
+import { describeScanQueue, SCAN_TASK_QUEUE, type ScanQueueDescription, toScanBacklogCrossing } from "./temporal-client"
 import { MAX_SCAN_DURATION_MS } from "./workflows/stage-timeouts"
 
 // one day in milliseconds, the daily frequency window and the base that the weekly window multiplies
@@ -56,7 +56,7 @@ export const runScheduledTopicScans = toExclusiveTask(async (): Promise<TopicSwe
 	await screenPendingSources()
 
 	// scans run on Temporal, so a queue with no worker for it means nothing is scanning while every caller still
-	await reportUnpolledScanQueue()
+	await reportScanQueue()
 
 	// the Topics scheduled for this sweep, and a summary of what the sweep does for logging
 	const scheduledTopics = await loadScheduledTopics()
@@ -142,20 +142,34 @@ async function startUndispatchedScans(): Promise<void> {
 }
 
 /**
- * Report when nothing is polling the Scan queue
+ * Reports a Scan queue that nothing polls, and a backlog whose oldest Scan has waited over 15 minutes for a slot.
+ * A failed read is logged and never fails the sweep.
  */
-async function reportUnpolledScanQueue(): Promise<void> {
-	// this check polls whether a reachable server has a worker for the queue, so it never fails the sweep itself
+export async function reportScanQueue(
+	readScanQueue: () => Promise<ScanQueueDescription> = describeScanQueue,
+): Promise<void> {
+	// a failed read is logged, and the sweep goes on
+	let scanQueue: ScanQueueDescription
 	try {
-		// no poller means no scans will run
-		if ((await countScanQueuePollers()) === 0) {
-			console.error("no temporal worker is polling the scan queue, so no scans will run")
-			reportError(new Error("no temporal worker is polling the scan queue"), "scheduled-scan", {
-				taskQueue: SCAN_TASK_QUEUE,
-			})
-		}
+		scanQueue = await readScanQueue()
 	} catch (error) {
 		console.error("could not read the scan task queue", error)
+		return
+	}
+
+	// no poller means no scans will run
+	if (scanQueue.pollerCount === 0) {
+		console.error("no temporal worker is polling the scan queue, so no scans will run")
+		reportError(new Error("no temporal worker is polling the scan queue"), "scheduled-scan", {
+			taskQueue: SCAN_TASK_QUEUE,
+		})
+	}
+
+	// a backlog past its limit means the scans run, but late
+	const backlogCrossing = toScanBacklogCrossing(scanQueue)
+	if (backlogCrossing) {
+		console.error(backlogCrossing.message, backlogCrossing.values)
+		reportThresholdCrossing(backlogCrossing)
 	}
 }
 
@@ -278,9 +292,10 @@ function isWeekend(now: Date): boolean {
 
 // run one sweep and exit, so a platform cron can invoke this file on a schedule
 if (import.meta.main) {
-	// trace and monitor the scan path. both no-op without their keys
-	startTelemetry()
+	// monitor, then trace, the scan path, in that order so Langfuse keeps its own provider beside Sentry's.
+	// both do nothing without their keys
 	startMonitoring()
+	startTelemetry()
 
 	// run one sweep now, then keep on looping only if an interval is set
 	const intervalMs = Number(Bun.env.SCHEDULE_INTERVAL_MS ?? "0")

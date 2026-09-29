@@ -249,6 +249,11 @@ Check for:
    - `ChatRoomState.rejectionReason` and `clearRejectionReason` (now `rejection` and `clearRejection`, a
      `ChatRoomRejection` kind that `ChatRoomRejectionNotice` in `ui/src/components/chat/ChatRoomPanel.tsx` renders)
    - `/topics/<id>` as a topic's canonical url (now `/topics/<id>/<slug>`, from `toTopicPath` in `shared/seo.ts`)
+   - `countScanQueuePollers` (now `describeScanQueue` in `worker/temporal-client.ts`) and `reportUnpolledScanQueue`
+     (now `reportScanQueue` in `worker/schedule.ts`)
+   - `toReportedPath` and its route shape tables in `ui/src/lib/visitAnalytics.ts` (now `shared/reportedPath.ts`)
+   - the `@opentelemetry/sdk-node` dependency and its `NodeSDK` in `worker/telemetry.ts` (now a `NodeTracerProvider`
+     from `@opentelemetry/sdk-trace-node`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

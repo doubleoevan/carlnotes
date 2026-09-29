@@ -48,6 +48,9 @@ The api serves the browser bundle and renders pages through the server build, be
   query string as `URLSearchParams` through `useSearchParams` in `hooks/useSearchParams.ts`.
   `useIsSignedInBeforeSession` in `hooks/useIsSignedInBeforeSession.ts` says whether the page shows as signed in. The
   page load's session cookie decides until Better Auth's session request finishes, and the session decides after.
+  An element that fades in as it scrolls into view takes its class from `useRevealClassName` in
+  `hooks/useRevealClassName.ts`, which shows a server-rendered element before any script runs, so nothing a crawler
+  or a browser without scripts reads starts hidden.
 - Imports: `@shared/*`, plus types only from the api, worker, and db, such as `AppType` and `auth`.
   `scripts/check-ui-boundary.ts` fails a value import from the api, worker, or db.
 - `.tsx` is exempt from the comment-groups hook; keep the comment style anyway.

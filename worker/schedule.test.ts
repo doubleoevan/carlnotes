@@ -1,13 +1,15 @@
-// schedule tests for frequency, scheduling, taking, and topic sweep summary decisions
-import { expect, test } from "bun:test"
+// schedule tests for frequency, scheduling, taking, topic sweep summary decisions, and the scan queue report
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import {
 	frequencyWindowMs,
 	isTopicScheduled,
 	isWithinDailyTopicLimit,
+	reportScanQueue,
 	staleScanWindowMs,
 	type TopicSweepSummary,
 	toExclusiveTask,
 } from "./schedule"
+import { toScanBacklogCrossing } from "./temporal-client"
 import {
 	FINISH_ATTEMPTS,
 	FINISH_TIMEOUT_MS,
@@ -34,6 +36,11 @@ function toDeferredTask<Value>(): { promise: Promise<Value>; resolve: (value: Va
 function emptyTopicSweepSummary(): TopicSweepSummary {
 	return { scheduled: 1, started: 0, skippedOverQuota: 0, skippedOverDailyLimit: 0, failed: 0 }
 }
+
+// put each spied console method back after each test, whether its assertions pass or not
+afterEach(() => {
+	mock.restore()
+})
 
 // the daily frequency waits a day before a re-scan, the weekly frequency waits seven
 test("frequencyWindowMs is a day for daily and a week for weekly", () => {
@@ -150,4 +157,42 @@ test("the sweep runs only the daily Topics inside their owner's allowance", () =
 
 	// an owner with no daily Topics in this sweep has no allowance read, and no daily Topic to run either
 	expect(isWithinDailyTopicLimit({ id: "kept", frequency: "daily" }, undefined)).toBe(false)
+})
+
+// a Scan queue with a worker polling it and nothing waiting
+const HEALTHY_SCAN_QUEUE = { pollerCount: 1, backlogCount: 0, oldestBacklogAgeMs: 0 }
+
+// the sweep reports a queue nothing polls, and a backlog whose oldest Scan waited past 15 minutes
+test("reportScanQueue reports a queue nothing polls and a backlog past its limit", async () => {
+	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
+	await reportScanQueue(async () => HEALTHY_SCAN_QUEUE)
+	expect(consoleErrorSpy).not.toHaveBeenCalled()
+
+	// a queue nothing polls
+	await reportScanQueue(async () => ({ ...HEALTHY_SCAN_QUEUE, pollerCount: 0 }))
+	expect(String(consoleErrorSpy.mock.calls.at(-1)?.[0])).toContain("no temporal worker is polling the scan queue")
+
+	// a queue whose oldest Scan has waited 20 minutes
+	await reportScanQueue(async () => ({ pollerCount: 1, backlogCount: 12, oldestBacklogAgeMs: 20 * 60 * 1000 }))
+	expect(consoleErrorSpy.mock.calls.at(-1)).toEqual([
+		"a scan waited over 15 minutes for a slot",
+		{ backlogCount: 12, oldestBacklogAgeMs: 20 * 60 * 1000 },
+	])
+})
+
+// a describe that fails is logged, and the sweep goes on
+test("reportScanQueue never fails the sweep", async () => {
+	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
+	await expect(reportScanQueue(() => Promise.reject(new Error("temporal unreachable")))).resolves.toBeUndefined()
+	expect(consoleErrorSpy.mock.calls[0]?.[0]).toBe("could not read the scan task queue")
+})
+
+// an older server gives a depth and no age, so its backlog is never reported as past the limit
+test("toScanBacklogCrossing needs a known age past 15 minutes", () => {
+	const backedUpQueue = { pollerCount: 1, backlogCount: 40 }
+	expect(toScanBacklogCrossing({ ...backedUpQueue, oldestBacklogAgeMs: null })).toBeNull()
+	expect(toScanBacklogCrossing({ ...backedUpQueue, oldestBacklogAgeMs: 15 * 60 * 1000 })).toBeNull()
+	expect(toScanBacklogCrossing({ ...backedUpQueue, oldestBacklogAgeMs: 16 * 60 * 1000 })?.condition).toBe(
+		"scan-backlog",
+	)
 })

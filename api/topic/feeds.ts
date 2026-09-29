@@ -1,5 +1,6 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
+import { traceRequestStage } from "@shared/monitoring"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm"
 import { db } from "../../db"
@@ -118,46 +119,54 @@ export async function buildTopicFeeds(
 
 	// the user's own topics, and the topics they subscribe to but don't own. both read newest first.
 	// an unordered select leaves the order to the database, which moves a row after any update to it
-	const [ownersTopics, subscribedTopics, { featuredTopics, popularTopics }] = await Promise.all([
-		userId
-			? db.select().from(topics).where(eq(topics.ownerId, userId)).orderBy(desc(topics.createdAt))
-			: Promise.resolve([]),
-		// subscribed topics never include one this user owns
-		userId && activeSubscriptionTopicIds
-			? db
-					.select()
-					.from(topics)
-					.where(and(ne(topics.ownerId, userId), inArray(topics.id, activeSubscriptionTopicIds)))
-					.orderBy(desc(topics.createdAt))
-			: Promise.resolve([]),
-		publicSectionTopics(userId),
-	])
+	const [ownersTopics, subscribedTopics, { featuredTopics, popularTopics }] = await traceRequestStage(
+		"topic_feed.sections",
+		() =>
+			Promise.all([
+				userId
+					? db.select().from(topics).where(eq(topics.ownerId, userId)).orderBy(desc(topics.createdAt))
+					: Promise.resolve([]),
+				// subscribed topics never include one this user owns
+				userId && activeSubscriptionTopicIds
+					? db
+							.select()
+							.from(topics)
+							.where(and(ne(topics.ownerId, userId), inArray(topics.id, activeSubscriptionTopicIds)))
+							.orderBy(desc(topics.createdAt))
+					: Promise.resolve([]),
+				publicSectionTopics(userId),
+			]),
+	)
 
 	// fetch every loaded topic's feed data in one batch keyed by topic id, then build each feed in memory
 	const combinedTopics = [...ownersTopics, ...subscribedTopics, ...featuredTopics, ...popularTopics]
-	const topicFeedData = await loadTopicFeedData(
-		combinedTopics.map((topic) => topic.id),
-		userId,
+	const topicFeedData = await traceRequestStage("topic_feed.data", () =>
+		loadTopicFeedData(
+			combinedTopics.map((topic) => topic.id),
+			userId,
+		),
 	)
 
 	// build each section's feeds from the batched data
-	const ownerTopicFeeds = ownersTopics.map((topic) =>
-		buildTopicFeed(topic, userId, includeConsumedResources, topicFeedData),
-	)
-	const subscribedTopicFeeds = subscribedTopics.map((topic) =>
-		buildTopicFeed(topic, userId, includeConsumedResources, topicFeedData),
-	)
-	const featuredTopicFeeds = featuredTopics.map((topic) =>
-		buildTopicFeed(topic, userId, includeConsumedResources, topicFeedData),
-	)
-	const popularTopicFeeds = popularTopics.map((topic) =>
-		buildTopicFeed(topic, userId, includeConsumedResources, topicFeedData),
+	const toTopicFeeds = (sectionTopics: (typeof topics.$inferSelect)[]): TopicFeed[] =>
+		sectionTopics.map((topic) => buildTopicFeed(topic, userId, includeConsumedResources, topicFeedData))
+	const [ownerTopicFeeds, subscribedTopicFeeds, featuredTopicFeeds, popularTopicFeeds] = traceRequestStage(
+		"topic_feed.assemble",
+		() =>
+			[
+				toTopicFeeds(ownersTopics),
+				toTopicFeeds(subscribedTopics),
+				toTopicFeeds(featuredTopics),
+				toTopicFeeds(popularTopics),
+			] as const,
 	)
 
 	// fill every feed's favicon paths in one query
-	await attachTopicFindingFaviconPaths(
-		[...ownerTopicFeeds, ...subscribedTopicFeeds, ...featuredTopicFeeds, ...popularTopicFeeds].flatMap(
-			(topicFeed) => topicFeed.findings,
+	await traceRequestStage("topic_feed.favicons", () =>
+		attachTopicFindingFaviconPaths(
+			[...ownerTopicFeeds, ...subscribedTopicFeeds, ...featuredTopicFeeds, ...popularTopicFeeds].flatMap(
+				(topicFeed) => topicFeed.findings,
+			),
 		),
 	)
 

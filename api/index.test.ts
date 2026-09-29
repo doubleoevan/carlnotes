@@ -1,9 +1,10 @@
 // tests for the rules that decide whether a request is served by the api, a client file, the ui's server, or a 404
-import { expect, test } from "bun:test"
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@shared/contracts"
+import { connectionPool } from "../db"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import server from "./index"
 
@@ -61,12 +62,69 @@ async function request(path: string, method = "GET"): Promise<ResponseSnapshot> 
 	}
 }
 
+// a request sent with the pool's query swapped for a stub that counts its calls.
+// the pool's own query comes back however the request ends
+async function requestWithQueryStub(
+	path: string,
+	queryStub: () => Promise<unknown>,
+): Promise<ResponseSnapshot & { queryCount: number }> {
+	const poolQuery = connectionPool.query
+	let queryCount = 0
+	connectionPool.query = (() => {
+		queryCount += 1
+		return queryStub()
+	}) as typeof connectionPool.query
+
+	// restore the pool's own query on the way out
+	try {
+		return { ...(await request(path)), queryCount }
+	} finally {
+		connectionPool.query = poolQuery
+	}
+}
+
+// the result a trivial query returns
+const SELECT_ONE_RESULT = { rows: [{ "?column?": 1 }], fields: [], rowCount: 1, command: "SELECT" }
+
+// put each spied console method back after each test, whether its assertions pass or not
+afterEach(() => {
+	mock.restore()
+})
+
 // the platform polls the health route to decide whether to cycle the container,
 // so the route responds from the process alone
 test("the health route responds without reaching the database", async () => {
-	const response = await request("/api/health")
+	const response = await requestWithQueryStub("/api/health", () => Promise.resolve(SELECT_ONE_RESULT))
 	expect(response.status).toBe(200)
 	expect(JSON.parse(response.body)).toEqual({ status: "ok" })
+	expect(response.queryCount).toBe(0)
+})
+
+// a monitor polls the deep health check to learn that the database responds, and never reads a cached result
+test("the deep health check runs one query and responds with the pool's counts", async () => {
+	const response = await requestWithQueryStub("/api/health/deep", () => Promise.resolve(SELECT_ONE_RESULT))
+	expect(response.status).toBe(200)
+	expect(response.cacheControl).toBe("no-store")
+	expect(response.queryCount).toBe(1)
+
+	// the query's latency and the pool's three counts
+	expect(JSON.parse(response.body)).toEqual({
+		status: "ok",
+		databaseLatencyMs: expect.any(Number),
+		pool: { totalCount: expect.any(Number), idleCount: expect.any(Number), waitingCount: expect.any(Number) },
+	})
+})
+
+// a database that fails makes the deep health check fail, so a monitor alerts
+test("the deep health check responds 503 when the database fails", async () => {
+	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
+	const response = await requestWithQueryStub("/api/health/deep", () => Promise.reject(new Error("connection refused")))
+
+	// the failure is logged, and the response says the database is unavailable
+	expect(response.status).toBe(503)
+	expect(response.cacheControl).toBe("no-store")
+	expect(JSON.parse(response.body)).toMatchObject({ status: "unavailable" })
+	expect(consoleErrorSpy).toHaveBeenCalled()
 })
 
 // a missing endpoint must stay an api failure a fetch client can read

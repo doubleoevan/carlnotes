@@ -2,6 +2,7 @@
 import { zValidator } from "@hono/zod-validator"
 import { appUrl } from "@shared/appUrl"
 import { signupGatePayload } from "@shared/contracts"
+import { traceRequestStage } from "@shared/monitoring"
 import { type Context, Hono } from "hono"
 import { getCookie, setCookie } from "hono/cookie"
 import { z } from "zod"
@@ -131,7 +132,7 @@ export const apiRoute = new Hono<AppEnv>()
 		const includeConsumed = context.req.valid("query").all === "true"
 		// merge in the topic-creation quota. a signed-out visitor has none so gets zero
 		const [topicFeeds, remainingNewTopics, ownedTopicLimit, dailyTopicQuota] = await Promise.all([
-			buildTopicFeeds(userId, includeConsumed),
+			traceRequestStage("topic_feed.build", () => buildTopicFeeds(userId, includeConsumed)),
 			userId ? topicsRemaining(userId) : Promise.resolve(0),
 			userId ? topicLimit(userId) : Promise.resolve(0),
 			userId ? loadDailyTopicQuota(userId) : Promise.resolve({ limit: 0, remainingTopics: 0 }),

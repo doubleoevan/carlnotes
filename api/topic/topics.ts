@@ -4,7 +4,7 @@ import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
 import type { TopicResponse, UpdateTopicPayload } from "@shared/contracts"
 import { suggestSourcesPayload, updateTopicPayload } from "@shared/contracts"
-import { reportError } from "@shared/monitoring"
+import { reportError, traceRequestStage } from "@shared/monitoring"
 import { toTopicPath } from "@shared/seo"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, desc, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm"
@@ -77,8 +77,11 @@ type InviteeRejection = { status: "inviteeRejected"; email: string } | { status:
  */
 export async function loadTopicPage(userId: string | null, topicId: string): Promise<TopicResponse | null> {
 	// load the topic behind the visibility gate. a hidden topic looks identical to a missing one
-	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
-	if (!topic || !(await isAllowed(userId, "topic:view", topic))) {
+	const topic = await traceRequestStage("topic_page.gate", async () => {
+		const [topicRow] = await db.select().from(topics).where(eq(topics.id, topicId))
+		return topicRow && (await isAllowed(userId, "topic:view", topicRow)) ? topicRow : null
+	})
+	if (!topic) {
 		return null
 	}
 
@@ -86,7 +89,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 	const isTopicOwner = topic.ownerId === userId
 	// biome-ignore format: one line keeps the destructure under the comment-density hook's limit
 	const [{ isAdmin, topicFindings }, topicSourceRows, rawAttachmentRows, scanRows, directSubscription, inviteAndScanFields, [ownerRow], teamFields, isDailyFrequencyPaused, canRate, canEdit] =
-		await Promise.all([
+		await traceRequestStage("topic_page.reads", () => Promise.all([
 			// the user's access and the findings it gates
 			loadTopicAccessAndFindings(topic, userId),
 			// every Source row, narrowed for visibility once the reads finish
@@ -135,7 +138,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 			toDailyFrequencyPaused(topic, isTopicOwner),
 			isAllowed(userId, "topic:rate", topic),
 			isAllowed(userId, "topic:edit", topic),
-		])
+		]))
 
 	// a Source that has not passed its llm-guard screen is only seen by someone who may edit the list.
 	// an editor's save reconciles sources by deletion, so hiding a row from them would delete it
@@ -585,7 +588,9 @@ export const topicsRoute = new Hono<AppEnv>()
 	})
 	.get("/topics/:id", async (context) => {
 		// the topic detail payload, gated by visibility. a signed-out visitor may only view a public topic
-		const topicPage = await loadTopicPage(currentUser(context), context.req.param("id"))
+		const topicPage = await traceRequestStage("topic_page.load", () =>
+			loadTopicPage(currentUser(context), context.req.param("id")),
+		)
 		if (topicPage) {
 			return context.json(topicPage)
 		}

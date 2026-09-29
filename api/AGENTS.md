@@ -2,6 +2,10 @@
 
 Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregates the `/api` routes.
 
+- `requestTracing.ts` — the first middleware: it names a traced request's Sentry transaction by its route and attaches
+  its query count, the pool's counts, and the event loop's lag. `index.ts` serves `/api/health`, which the platform
+  polls and which sends no query, and `/api/health/deep`, which runs one query and returns the pool's counts for a
+  monitor. Neither looks up a session.
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `share/`, `tool/`, `mcp/`. Root files serve more than one domain
   (auth, billing, admin, avatars, favicons, profiles, SEO, and `content.ts` for the blog under `content/blog/`).
 - `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key, and

@@ -1,9 +1,17 @@
 // the Temporal worker process
 import { shutdownAnalytics } from "@shared/analytics"
 import { shutdownMonitoring, startMonitoring } from "@shared/monitoring"
+import { type ExtraGaugesReading, startRuntimeGauges } from "@shared/runtimeGauges"
 import { NativeConnection, Worker } from "@temporalio/worker"
+import { readPoolGauges } from "../db"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
-import { ATTACHMENT_TASK_QUEUE, SCAN_TASK_QUEUE, SOURCE_TASK_QUEUE } from "./temporal-client"
+import {
+	ATTACHMENT_TASK_QUEUE,
+	describeScanQueue,
+	SCAN_TASK_QUEUE,
+	SOURCE_TASK_QUEUE,
+	toScanBacklogCrossing,
+} from "./temporal-client"
 import * as attachmentActivities from "./workflows/process-attachment-activities"
 import * as scanActivities from "./workflows/run-topic-scan-activities"
 import * as sourceActivities from "./workflows/screen-source-activities"
@@ -39,9 +47,10 @@ async function connectWithRetry(): Promise<NativeConnection> {
 
 // connect to Temporal, build a worker per queue, and poll until the process stops
 async function run(): Promise<void> {
-	// tracing and monitoring for this worker's model calls. both no-op without their keys
-	startTelemetry()
+	// monitoring, then tracing for this worker's model calls, in that order so Langfuse keeps its own provider beside Sentry's.
+	// both do nothing without their keys
 	startMonitoring()
+	startTelemetry()
 
 	// a Worker polls exactly one queue and takes one workflowsPath
 	const connection = await connectWithRetry()
@@ -73,6 +82,10 @@ async function run(): Promise<void> {
 		}),
 	])
 
+	// log the pool, the event loop delay, and the scan queue once a minute, and warn on a backed-up queue.
+	// the reporter starts once the workflow bundles are built, so building them never reads as a stall
+	startRuntimeGauges({ processName: "worker", readPoolGauges, readExtraGauges: readScanQueueGauges })
+
 	// any worker stopping ends the process
 	const runningWorkers = workers.map((worker) => worker.run())
 	try {
@@ -92,6 +105,13 @@ async function run(): Promise<void> {
 		await shutdownAnalytics()
 		await shutdownMonitoring()
 	}
+}
+
+// the scan queue's numbers for the minute line, and its backlog if the oldest waiting Scan has waited too long
+async function readScanQueueGauges(): Promise<ExtraGaugesReading> {
+	const scanQueue = await describeScanQueue()
+	const backlogCrossing = toScanBacklogCrossing(scanQueue)
+	return { gauges: { scanQueue }, thresholdCrossings: backlogCrossing ? [backlogCrossing] : [] }
 }
 
 // a worker failure exits with an error code

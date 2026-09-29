@@ -33,9 +33,9 @@ import { TopicScanButton } from "@/components/topic/TopicScanButton.tsx"
 import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
 import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
 import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
-import { useIsHydrating, useLoadInBrowser, useOrigin } from "@/hooks/useBrowserValue"
-import { useIsVisible } from "@/hooks/useIsVisible"
+import { useLoadInBrowser, useOrigin } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
+import { useRevealClassName } from "@/hooks/useRevealClassName"
 import { useSearchParams } from "@/hooks/useSearchParams"
 import { matchesTopicFindingFilter } from "@/lib/topicFindingFilters"
 import { toSortedTopicFindings } from "@/lib/topicFindingSorts"
@@ -485,20 +485,17 @@ function GatedSignedOutActions({ returnPath, ctaTag }: { returnPath: string; cta
 // the index of the last section in view when the page opens
 const LAST_TOP_SECTION_INDEX = 1
 
-// a section that stays hidden until scrolled into view, then plays the staggered hydrate animation. a top section
-// of a server-rendered page keeps the animation class from the server's html and animates before any script runs
+// a section that plays the staggered hydrate animation as it appears. a server-rendered page shows every section before
+// any script runs and animates only the top ones, and a page rendered in the browser reveals each section as it scrolls into view
 function HydrateSection({ index, children }: { index: number; children: React.ReactNode }) {
-	const { ref, isVisible } = useIsVisible<HTMLDivElement>()
-	const isHydrating = useIsHydrating()
-	const [isAnimatedInServerHtml] = useState(isHydrating && index <= LAST_TOP_SECTION_INDEX)
+	const { ref, revealClassName } = useRevealClassName<HTMLDivElement>({
+		isAnimatedOnServer: index <= LAST_TOP_SECTION_INDEX,
+	})
 	return (
 		<div
 			ref={ref}
 			data-reveal
-			className={cn(
-				isVisible || isAnimatedInServerHtml ? "animate-hydrate" : "opacity-0",
-				"motion-reduce:animate-none motion-reduce:opacity-100",
-			)}
+			className={cn(revealClassName, "motion-reduce:animate-none motion-reduce:opacity-100")}
 			style={{ animationDelay: `${Math.min(index, 3) * 50}ms` }}
 		>
 			{children}

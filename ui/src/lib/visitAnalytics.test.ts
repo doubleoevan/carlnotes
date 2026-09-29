@@ -1,33 +1,6 @@
 // the path a visit reports, which never includes an id
 import { expect, test } from "bun:test"
-import { toReportedEvent, toReportedPath } from "./visitAnalytics"
-
-// a topic id in the path would make one report row per topic, and would attach that topic to a signed-out visitor
-test("an id segment reports as its route's shape", () => {
-	expect(toReportedPath("/topics/bffe43c2-f706-4f92-88bd-df0c9fd8f9e8")).toBe("/topics/:id")
-	expect(toReportedPath("/profiles/MUS2ooDu0NOPZ4HcwbnokUOofwr4tMWa")).toBe("/profiles/:userId")
-	expect(toReportedPath("/teams/team-1")).toBe("/teams/:teamId")
-	expect(toReportedPath("/invite/a-long-invite-token")).toBe("/invite/:token")
-})
-
-// a route that holds no id reports as it is, including the one whose name matches a route that does
-test("a path with no id is reported unchanged", () => {
-	expect(toReportedPath("/")).toBe("/")
-	expect(toReportedPath("/teams")).toBe("/teams")
-	expect(toReportedPath("/activity")).toBe("/activity")
-	expect(toReportedPath("/mcp/consent")).toBe("/mcp/consent")
-})
-
-// anything after the id keeps its place, so a deeper route still reads as one page
-test("a segment after the id is kept", () => {
-	expect(toReportedPath("/teams/team-1/settings")).toBe("/teams/:teamId/settings")
-})
-
-// a topic's slug is its name, and a private topic's name never reaches the report
-test("a topic's slug is reported by its shape", () => {
-	expect(toReportedPath("/topics/bffe43c2/getting-a-literary-agent")).toBe("/topics/:id/:slug")
-	expect(toReportedPath("/topics/bffe43c2")).toBe("/topics/:id")
-})
+import { toReportedEvent } from "./visitAnalytics"
 
 // the settings that keep a visit off the device and unidentified, asserted on the visitAnalytics.ts source
 test("the client is configured to store nothing and identify nobody", async () => {
@@ -58,7 +31,7 @@ test("nothing in the ui identifies a visitor", async () => {
 
 // posthog attaches the url to every event and captures the page leave on its own, so sanitizing the one page view
 // this app captures would still ship the id in the url and in every automatic event
-test("every event has its id taken out of both the url and the path", () => {
+test("every event has its id taken out of both the url and the path, and the url's query string dropped", () => {
 	const reportedEvent = toReportedEvent({
 		event: "$pageleave",
 		properties: {
@@ -66,8 +39,71 @@ test("every event has its id taken out of both the url and the path", () => {
 			$pathname: "/topics/bffe43c2-f706-4f92-88bd-df0c9fd8f9e8",
 		},
 	} as never)
-	expect(reportedEvent?.properties.$current_url).toBe("https://carlnotes.com/topics/:id?ref=x")
+	expect(reportedEvent?.properties.$current_url).toBe("https://carlnotes.com/topics/:id")
 	expect(reportedEvent?.properties.$pathname).toBe("/topics/:id")
+})
+
+// the previous page's path, which posthog attaches to a page view and a page leave, loses its id too
+test("the previous page's path has its id taken out", () => {
+	const reportedEvent = toReportedEvent({
+		event: "$pageview",
+		properties: { $prev_pageview_pathname: "/profiles/5f3c9a", $referrer: "https://carlnotes.com/invite/abc123" },
+	} as never)
+	expect(reportedEvent?.properties.$prev_pageview_pathname).toBe("/profiles/:userId")
+	expect(reportedEvent?.properties.$referrer).toBe("https://carlnotes.com/invite/:token")
+})
+
+// a web vitals event repeats the url inside each metric, as the metric's url and as its navigation's
+test("every web vitals metric has its id taken out of its urls", () => {
+	const topicUrl = "https://carlnotes.com/topics/bffe43c2/agents-weekly?token=secret-vitals"
+	const reportedEvent = toReportedEvent({
+		event: "$web_vitals",
+		properties: {
+			$current_url: topicUrl,
+			$web_vitals_LCP_value: 1840,
+			$web_vitals_LCP_event: { name: "LCP", value: 1840, $current_url: topicUrl, navigationURL: topicUrl },
+			$web_vitals_INP_event: { name: "INP", value: 96, $current_url: topicUrl },
+		},
+	} as never)
+
+	// the event's url and every metric's report the route's shape, and the id is nowhere
+	const reportedUrl = "https://carlnotes.com/topics/:id/:slug"
+	expect(reportedEvent?.properties.$current_url).toBe(reportedUrl)
+	expect(reportedEvent?.properties.$web_vitals_LCP_event).toMatchObject({
+		$current_url: reportedUrl,
+		navigationURL: reportedUrl,
+	})
+	expect(reportedEvent?.properties.$web_vitals_INP_event).toMatchObject({ $current_url: reportedUrl })
+	expect(JSON.stringify(reportedEvent)).not.toContain("bffe43c2")
+	expect(JSON.stringify(reportedEvent)).not.toContain("secret")
+})
+
+// the web vitals start from the app's own chunk, with attribution off and no script loaded from posthog's asset host
+test("the web vitals are captured without attribution or an external script", async () => {
+	const visitAnalyticsSource = await Bun.file(new URL("./visitAnalytics.ts", import.meta.url)).text()
+	expect(visitAnalyticsSource).toContain("capture_performance: { web_vitals: true, web_vitals_attribution: false }")
+	expect(visitAnalyticsSource).toContain("disable_external_dependency_loading: true")
+	expect(visitAnalyticsSource).toContain('import("posthog-js/dist/web-vitals")')
+})
+
+// a token in the page's address, a referrer's query string, and a fragment never leave the browser,
+// while the campaign property posthog records on its own stays
+test("no url keeps its query string or its fragment", () => {
+	const reportedEvent = toReportedEvent({
+		event: "$pageview",
+		properties: {
+			$current_url: "https://carlnotes.com/reset-password?token=secret-reset#form",
+			$referrer: "https://news.example.com/item?id=secret-referrer",
+			$session_entry_url: "https://carlnotes.com/unsubscribe?token=secret-unsubscribe",
+			utm_source: "newsletter",
+		},
+	} as never)
+	expect(reportedEvent?.properties).toEqual({
+		$current_url: "https://carlnotes.com/reset-password",
+		$referrer: "https://news.example.com/item",
+		$session_entry_url: "https://carlnotes.com/unsubscribe",
+		utm_source: "newsletter",
+	})
 })
 
 // an event with nothing to rewrite passes through, so the hook never drops one

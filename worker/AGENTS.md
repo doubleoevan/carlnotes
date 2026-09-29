@@ -9,6 +9,10 @@ Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker), `sch
   every model call, through LiteLLM; `litellm.ts` — the user keys those calls bill to: created, replaced, read, and
   reset on the first of the month by the sweep; `favicons.ts` — a host's favicon, fetched once when review reads a
   page on it.
+- `telemetry.ts` traces model calls in Langfuse on its own tracer provider beside Sentry's, and both processes start
+  Sentry before it. `temporal.ts` logs the pool, the event loop delay, and the scan queue once a minute, and the sweep
+  reports a queue nothing polls and a backlog older than 15 minutes, both through `describeScanQueue` in
+  `temporal-client.ts`.
 - Every scan stage charges the Scan's one Budget (`budget.ts`); nothing spends outside it.
 - `indexNow.ts` tells search engines a public Topic's urls changed. A missing `INDEXNOW_KEY` sends nothing, and a
   failed send never fails its caller.

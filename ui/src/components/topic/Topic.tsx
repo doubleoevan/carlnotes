@@ -15,7 +15,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { TeamLink } from "@/components/team/TeamLink"
 import { TopicInfo } from "@/components/topic/TopicInfo"
-import { useIsVisible } from "@/hooks/useIsVisible"
+import { useRevealClassName } from "@/hooks/useRevealClassName"
 import {
 	POPOVER_PANEL_CLASS,
 	RAIL_BARE_ICON_INSET,
@@ -46,12 +46,13 @@ export function Topic({ topic, index }: TopicProps) {
 	// bookmarked rows sort first, so this count is exactly how many of the rows shown are pinned instead of being numbered
 	const pinnedShownCount = resourcesShown.filter((resource) => resource.isBookmarked).length
 
-	const { ref, isVisible } = useIsVisible<HTMLDivElement>()
+	// a card the server rendered is shown at once, and one rendered in the browser fades in as it scrolls into view
+	const { ref, revealClassName } = useRevealClassName<HTMLDivElement>({ isAnimatedOnServer: false })
 	return (
 		<div
 			ref={ref}
 			data-reveal
-			className={cn("py-1.5", isVisible ? "animate-hydrate" : "opacity-0")}
+			className={cn("py-1.5", revealClassName)}
 			style={{ animationDelay: `${Math.min(index, 3) * 50}ms` }}
 		>
 			{/* header: the title takes the whole row and wraps instead of truncating, with the credit and

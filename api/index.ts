@@ -1,11 +1,14 @@
 // the server that owns the origin
 import { extname, resolve } from "node:path"
 import { reportError, startMonitoring } from "@shared/monitoring"
+import { startRuntimeGauges } from "@shared/runtimeGauges"
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins"
+import { sql } from "drizzle-orm"
 import type { Context } from "hono"
 import { Hono } from "hono"
 import { serveStatic } from "hono/bun"
 import { compress } from "hono/compress"
+import { db, readPoolGauges } from "../db"
 import { startTelemetry } from "../worker"
 import { apiRoute } from "./api"
 import { auth, reportForwardedChain } from "./auth"
@@ -18,6 +21,7 @@ import { mcpRoute } from "./mcp/server"
 import { resolveToolCaller } from "./mcp/toolCaller"
 import { toolCallerRateLimiter } from "./rateLimit"
 import { releasesRoute } from "./releases"
+import { traceRequest } from "./requestTracing"
 
 // where build:docs writes the Starlight site, relative to the repo root the server runs from
 const DOCS_BUNDLE_ROOT = "./docs/dist"
@@ -28,15 +32,21 @@ const UI_CLIENT_ROOT = "./ui/dist/client"
 // where build:ui writes the ui's server entry, which renders every page no other route serves
 const UI_SERVER_ENTRY = "ui/dist/server/server.js"
 
+// how long the deep health check waits for the database before it responds 503
+const DEEP_HEALTH_TIMEOUT_MS = 2000
+
 // the ui's server handler, as the server entry exports it
 type UiServer = { fetch: (request: Request) => Promise<Response> }
 
 // the ui builds its typed api client from this definition
 export type AppType = typeof apiRoute
 
-// start error monitoring, analytics tracking
+// start monitoring, then tracing for model calls, in that order so Langfuse keeps its own provider beside Sentry's
 startMonitoring()
 startTelemetry()
+
+// log the process's pool and event loop delay once a minute
+startRuntimeGauges({ processName: "api", readPoolGauges })
 
 // the default policy, used unless a route sets its own. its image list allows a composer's local preview,
 // a release body's screenshots on github, and the photo host an avatar redirects to
@@ -49,6 +59,8 @@ const CONTENT_SECURITY_POLICY = [
 
 // one server serves the api, the pages, and the built ui
 const server = new Hono<AppEnv>()
+	// name each traced request by its route and count its queries, first so the count covers every other middleware
+	.use(traceRequest)
 	// gzip every text response over a kilobyte. the defaults skip images and anything already compressed
 	.use(compress())
 	// the content security policy, set on the way back out so every route includes it. a route that set its own keeps it
@@ -65,6 +77,8 @@ const server = new Hono<AppEnv>()
 	})
 	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
 	.get("/api/health", (context) => context.json({ status: "ok" }))
+	// the deep health check a monitor polls, with one trivial query and no session lookup either
+	.get("/api/health/deep", checkDatabaseHealth)
 	// an icon request reads one row and never a session, so it sits ahead of the api tree too
 	.route("/api", faviconsRoute)
 	// the oauth discovery documents an mcp client reads under /.well-known, with or without a path appended
@@ -158,6 +172,33 @@ async function renderUiPage(request: Request): Promise<Response> {
 	const headers = new Headers(page.headers)
 	headers.set("Cache-Control", "no-cache")
 	return new Response(page.body, { status: page.status, statusText: page.statusText, headers })
+}
+
+// respond with one trivial query's latency and the pool's counts, or with 503 if the query fails or takes too long.
+// a monitor must never read a cached result
+async function checkDatabaseHealth(context: Context): Promise<Response> {
+	context.header("Cache-Control", "no-store")
+	const startedAt = performance.now()
+
+	// the query, or a failure once the time limit passes, whichever comes first
+	let timeLimitTimer: ReturnType<typeof setTimeout> | undefined
+	const timeLimit = new Promise<never>((_resolve, reject) => {
+		timeLimitTimer = setTimeout(() => reject(new Error("the database took over two seconds")), DEEP_HEALTH_TIMEOUT_MS)
+	})
+
+	// a failure or a timeout responds 503, and the time limit's timer is cleared however the query ends
+	try {
+		await Promise.race([db.execute(sql`select 1`), timeLimit])
+	} catch (error) {
+		console.error("the deep health check's query failed", error)
+		return context.json({ status: "unavailable", pool: readPoolGauges() }, 503)
+	} finally {
+		clearTimeout(timeLimitTimer)
+	}
+
+	// a result responds with the query's latency and the pool's counts
+	const databaseLatencyMs = Math.round(performance.now() - startedAt)
+	return context.json({ status: "ok", databaseLatencyMs, pool: readPoolGauges() })
 }
 
 // a hashed filename never changes contents, so it caches for a year
