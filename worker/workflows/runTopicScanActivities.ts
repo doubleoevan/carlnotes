@@ -2,6 +2,7 @@
 import { propagateAttributes, startActiveObservation } from "@langfuse/tracing"
 import { trackEvent } from "@shared/analytics"
 import { appBaseUrl } from "@shared/appUrl"
+import { reportError } from "@shared/monitoring"
 import { toTopicPath } from "@shared/seo"
 import { asyncLocalStorage } from "@temporalio/activity"
 import { and, count, eq, isNull } from "drizzle-orm"
@@ -13,10 +14,9 @@ import type { SourceOutcome } from "../ingest"
 import { ingestFromTopicSources } from "../ingest"
 import type { NewResource } from "../ingest/ingester"
 import { loadUserLiteLLMKey } from "../litellm"
-import { sendManualScanEmail, sendTopicScanEmail } from "../notify"
 import type { ReviewSummary } from "../review"
 import { reviewScan } from "../review"
-import { HEARTBEAT_INTERVAL_MS } from "./stage-timeouts"
+import { HEARTBEAT_INTERVAL_MS } from "./stageTimeouts"
 
 // a persisted Scan row, and the aggregate that ingest hands to review
 type Scan = typeof scans.$inferSelect
@@ -103,14 +103,12 @@ export async function reviewForScan(
 }
 
 /**
- * Finishes the Scan by storing its counts and cost, telling IndexNow if a public topic gained or lost a finding,
- * and emailing the owner or the subscribers.
+ * Finishes the Scan by storing its counts and cost, and telling IndexNow if a public topic gained or lost a finding.
  */
 export async function finishScan(
 	scanId: string,
 	topicId: string,
 	ownerId: string,
-	trigger: ScanTrigger,
 	ingestResult: IngestStageResult,
 	reviewResult: ReviewStageResult,
 ): Promise<void> {
@@ -150,7 +148,7 @@ export async function finishScan(
 		trackEvent("first_scan_completed", ownerId, { plan: topicOwner?.plan ?? "free", topicId })
 	}
 
-	// load the topic for the IndexNow notification and the emails, and stop if the topic was deleted
+	// load the topic for the IndexNow notification, and stop if the topic was deleted
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
 	if (!topic) {
 		return
@@ -161,13 +159,6 @@ export async function finishScan(
 	if (appUrl && topic.visibility === "public" && review.addedOrFilteredFindingCount > 0) {
 		await notifyIndexNow([`${appUrl}${toTopicPath(topic)}`])
 	}
-
-	// whoever triggered a manual scan is emailed, and a scheduled Scan goes to the Topic's subscribers instead
-	if (trigger === "creation" || trigger === "manual") {
-		await sendManualScanEmail(ownerId, topic, finishedScan)
-		return
-	}
-	await sendTopicScanEmail(topic, finishedScan)
 }
 
 /**
@@ -206,6 +197,14 @@ async function recordScanProgress(scanId: string, budget: Budget): Promise<void>
 			fetched: budget.fetchCounts.fetchedCount,
 		})
 		.where(eq(scans.id, scanId))
+}
+
+/**
+ * Reports a Scan whose email workflow could not be started. The Scan is already complete, so nothing else changes.
+ */
+export async function reportScanEmailNotStarted(scanId: string, reason: string): Promise<void> {
+	console.error(`the email workflow for scan ${scanId} could not be started: ${reason}`)
+	reportError(new Error("a scan email workflow could not be started"), "email", { scanId, reason })
 }
 
 /**

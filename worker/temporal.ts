@@ -4,6 +4,7 @@ import { shutdownMonitoring, startMonitoring } from "@shared/monitoring"
 import { type ExtraGaugesReading, startRuntimeGauges } from "@shared/runtimeGauges"
 import { NativeConnection, Worker } from "@temporalio/worker"
 import { readPoolGauges, toPositiveInteger } from "../db"
+import { readRedisExtraGauges } from "../db/redis"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import {
 	ATTACHMENT_TASK_QUEUE,
@@ -11,10 +12,12 @@ import {
 	SCAN_TASK_QUEUE,
 	SOURCE_TASK_QUEUE,
 	toScanBacklogCrossing,
-} from "./temporal-client"
-import * as attachmentActivities from "./workflows/process-attachment-activities"
-import * as scanActivities from "./workflows/run-topic-scan-activities"
-import * as sourceActivities from "./workflows/screen-source-activities"
+} from "./temporalClient"
+import * as attachmentActivities from "./workflows/processAttachmentActivities"
+import * as scanActivities from "./workflows/runTopicScanActivities"
+import * as sourceActivities from "./workflows/screenSourceActivities"
+import { SCAN_EMAIL_TASK_QUEUE } from "./workflows/sendScanEmail"
+import * as scanEmailActivities from "./workflows/sendScanEmailActivities"
 
 // the SDK shuts a Worker down on its own on SIGINT/SIGTERM, but gives an in-flight activity zero time to finish
 const SHUTDOWN_GRACE_MS = 2 * 60 * 1000
@@ -22,6 +25,10 @@ const SHUTDOWN_GRACE_MS = 2 * 60 * 1000
 // how many scan activities may run at once on this replica, from the SCAN_CONCURRENCY setting or the default
 const DEFAULT_SCAN_CONCURRENCY = 8
 const SCAN_CONCURRENCY = toPositiveInteger(Bun.env.SCAN_CONCURRENCY, DEFAULT_SCAN_CONCURRENCY)
+
+// how many scan email activities may run at once on this replica. a few keep each wait for a Resend slot short,
+// and the rest of a burst waits in the Temporal queue
+const SCAN_EMAIL_CONCURRENCY = 4
 
 // how often and how long to keep retrying the first connection
 const CONNECT_RETRY_DELAY_MS = 3 * 1000
@@ -59,7 +66,7 @@ async function run(): Promise<void> {
 		// extracts an attachment's text, screens it with llm-guard, and generates its context
 		Worker.create({
 			connection,
-			workflowsPath: new URL("./workflows/process-attachment.ts", import.meta.url).pathname,
+			workflowsPath: new URL("./workflows/processAttachment.ts", import.meta.url).pathname,
 			activities: attachmentActivities,
 			taskQueue: ATTACHMENT_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
@@ -67,25 +74,34 @@ async function run(): Promise<void> {
 		// runs one dispatched Scan: ingest, review, and the final write
 		Worker.create({
 			connection,
-			workflowsPath: new URL("./workflows/run-topic-scan.ts", import.meta.url).pathname,
+			workflowsPath: new URL("./workflows/runTopicScan.ts", import.meta.url).pathname,
 			activities: scanActivities,
 			taskQueue: SCAN_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: SCAN_CONCURRENCY,
 		}),
+		// emails a completed Scan's outcome, one activity per Resend call
+		Worker.create({
+			connection,
+			workflowsPath: new URL("./workflows/sendScanEmail.ts", import.meta.url).pathname,
+			activities: scanEmailActivities,
+			taskQueue: SCAN_EMAIL_TASK_QUEUE,
+			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: SCAN_EMAIL_CONCURRENCY,
+		}),
 		// fetches a url Source's page and screens it with llm-guard
 		Worker.create({
 			connection,
-			workflowsPath: new URL("./workflows/screen-source.ts", import.meta.url).pathname,
+			workflowsPath: new URL("./workflows/screenSource.ts", import.meta.url).pathname,
 			activities: sourceActivities,
 			taskQueue: SOURCE_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 		}),
 	])
 
-	// log the pool, the event loop delay, and the scan queue once a minute, and warn on a backed-up queue.
-	// the reporter starts once the workflow bundles are built, so building them never reads as a stall
-	startRuntimeGauges({ processName: "worker", readPoolGauges, readExtraGauges: readScanQueueGauges })
+	// log the pool, the event loop delay, the scan queue, and Redis once a minute, and warn on a backed-up queue or a
+	// Redis connection that is down. it starts after the workflow bundles build, so building them never reads as a stall
+	startRuntimeGauges({ processName: "worker", readPoolGauges, readExtraGauges: readWorkerExtraGauges })
 
 	// any worker stopping ends the process
 	const runningWorkers = workers.map((worker) => worker.run())
@@ -108,11 +124,15 @@ async function run(): Promise<void> {
 	}
 }
 
-// the scan queue's numbers for the minute line, and its backlog if the oldest waiting Scan has waited too long
-async function readScanQueueGauges(): Promise<ExtraGaugesReading> {
-	const scanQueue = await describeScanQueue()
+// the scan queue's numbers and the Redis gauges for the minute line, with the scan backlog if the oldest waiting Scan
+// has waited too long and Redis-down if the command connection is down
+async function readWorkerExtraGauges(): Promise<ExtraGaugesReading> {
+	const [scanQueue, redisExtraGauges] = await Promise.all([describeScanQueue(), readRedisExtraGauges()])
 	const backlogCrossing = toScanBacklogCrossing(scanQueue)
-	return { gauges: { scanQueue }, thresholdCrossings: backlogCrossing ? [backlogCrossing] : [] }
+	return {
+		gauges: { scanQueue, ...redisExtraGauges.gauges },
+		thresholdCrossings: [...(backlogCrossing ? [backlogCrossing] : []), ...redisExtraGauges.thresholdCrossings],
+	}
 }
 
 // a worker failure exits with an error code

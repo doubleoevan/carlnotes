@@ -30,6 +30,11 @@ const INCREMENT_RATE_LIMIT_WINDOW_SCRIPT = [
 const DECREMENT_RATE_LIMIT_WINDOW_SCRIPT =
 	"if redis.call('EXISTS', KEYS[1]) == 1 then return redis.call('DECR', KEYS[1]) end return 0"
 
+// a script that takes a rate limit slot if no other call holds it, for the slot's length. the script's reply is 0 if this
+// call took the slot, or the milliseconds until the slot frees. the slot expires on the Redis server's clock
+const TAKE_RATE_LIMIT_SLOT_SCRIPT =
+	"if redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) then return 0 end return math.max(redis.call('PTTL', KEYS[1]), 1)"
+
 // the commands that the store sends, and the connection methods and properties that the store uses
 type RedisCommandMethod = "get" | "set" | "del" | "send" | "publish"
 type RedisConnectionMethod = "connected" | "connect" | "close" | "onclose" | "subscribe"
@@ -76,6 +81,9 @@ export type CacheJsonOptions<Value> = { key: string; ttlMs: number; load: () => 
 // a JSON value to write under a key for the time to live
 export type SaveRedisJsonOptions = { key: string; value: unknown; ttlMs: number }
 export type ReplaceRedisJsonOptions = SaveRedisJsonOptions
+
+// the key of a rate limit slot, and how long one call holds the slot
+export type TakeRateLimitSlotOptions = { key: string; slotMs: number }
 
 // one message on one channel, to publish or to deliver
 export type PublishToChannelOptions = { channel: string; channelMessage: string }
@@ -193,6 +201,20 @@ export async function decrementRateLimitWindow(key: string): Promise<void> {
 	await runWithRedis("decrementRateLimitWindow", (client) =>
 		client.send("EVAL", [DECREMENT_RATE_LIMIT_WINDOW_SCRIPT, "1", key]),
 	)
+}
+
+/**
+ * Takes a rate limit slot that every process shares. Returns 0 if this call took the slot,
+ * the milliseconds until the slot frees if another call holds it, or null if Redis could not run the script.
+ */
+export async function takeRateLimitSlot({ key, slotMs }: TakeRateLimitSlotOptions): Promise<number | null> {
+	// run the script, then return the wait. the reply's number may arrive as an integer or a big integer, and anything
+	// else is a failure
+	const scriptReply: unknown = await runWithRedis("takeRateLimitSlot", (client) =>
+		client.send("EVAL", [TAKE_RATE_LIMIT_SLOT_SCRIPT, "1", key, String(slotMs)]),
+	)
+	const waitMs = Number(scriptReply)
+	return scriptReply === null || !Number.isFinite(waitMs) ? null : waitMs
 }
 
 /**

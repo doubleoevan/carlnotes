@@ -15,7 +15,7 @@ import {
 	toScheduledTopicFilter,
 	toStaleScanFilter,
 } from "./schedule"
-import { toScanBacklogCrossing } from "./temporal-client"
+import { toScanBacklogCrossing } from "./temporalClient"
 import {
 	FINISH_ATTEMPTS,
 	FINISH_TIMEOUT_MS,
@@ -27,7 +27,7 @@ import {
 	REVIEW_ATTEMPTS,
 	REVIEW_TIMEOUT_MS,
 	REVIEW_TOTAL_TIMEOUT_MS,
-} from "./workflows/stage-timeouts"
+} from "./workflows/stageTimeouts"
 
 // one day in milliseconds, the daily frequency window
 const DAY_MS = 24 * 60 * 60 * 1000

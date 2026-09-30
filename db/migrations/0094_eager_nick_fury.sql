@@ -1,0 +1,3 @@
+ALTER TABLE "topic_email_sends" ADD COLUMN "scan_id" text;--> statement-breakpoint
+ALTER TABLE "topic_email_sends" ADD CONSTRAINT "topic_email_sends_scan_id_scans_id_fk" FOREIGN KEY ("scan_id") REFERENCES "public"."scans"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
+CREATE UNIQUE INDEX "topic_email_sends_scan_recipient_unique" ON "topic_email_sends" USING btree ("scan_id","recipient_user_id");

@@ -8,7 +8,7 @@ import { embedVector } from "./models"
 import { loadResourcesToReview } from "./review/filter"
 import { loadScan } from "./scan"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
-import { finishScan, ingestForScan, reviewForScan } from "./workflows/run-topic-scan-activities"
+import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
 
 // a real feed that reliably carries more entries than the limit admits, plus a matching topic context
 const FEED_URL = "https://simonwillison.net/atom/everything/"
@@ -145,7 +145,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	const startedAt = Date.now()
 	const ingestResult = await ingestForScan(smokeScan.id, topicId)
 	const reviewResult = await reviewForScan(smokeScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
-	await finishScan(smokeScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
+	await finishScan(smokeScan.id, topicId, ownerId, ingestResult, reviewResult)
 	const elapsedMs = Date.now() - startedAt
 
 	// re-read the row, whose counts and cost the closing stage wrote
@@ -241,7 +241,7 @@ async function scanAgain(topicId: string, ownerId: string): Promise<{ scoredCoun
 	// drive the stages in order, then read back what the closing stage wrote
 	const ingestResult = await ingestForScan(smokeScan.id, topicId)
 	const reviewResult = await reviewForScan(smokeScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
-	await finishScan(smokeScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
+	await finishScan(smokeScan.id, topicId, ownerId, ingestResult, reviewResult)
 	const topicScan = await loadScan(smokeScan.id)
 	return {
 		scoredCount: reviewResult.review.scoredResourceIds.length,

@@ -19,10 +19,16 @@ with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep t
   reset on the first of the month by the reset job; `favicons.ts` — a host's favicon, fetched once when review reads a
   page on it.
 - `telemetry.ts` traces model calls in Langfuse on its own tracer provider beside Sentry's, and both processes start
-  Sentry before it. `temporal.ts` logs the pool, the event loop delay, and the scan queue once a minute, and the sweep
+  Sentry before it. `temporal.ts` logs the pool, the event loop delay, the scan queue, and Redis once a minute, and the sweep
   reports a queue nothing polls and a backlog older than 15 minutes, both through `describeScanQueue` in
-  `temporal-client.ts`.
+  `temporalClient.ts`.
 - Every scan stage charges the Scan's one Budget (`budget.ts`); nothing spends outside it.
+- A completed Scan's email runs in its own workflow, `workflows/sendScanEmail.ts`, on the `scan-emails` queue that
+  the file names, with its own Worker in `temporal.ts`. The scan workflow starts it as a child workflow that outlives
+  the Scan's own, so a retrying email never holds up or fails the Scan. `notify.ts` plans a digest's batches, and each
+  activity sends one batch or one report and records the accepted sends with the Scan's id, so a retry never mails
+  anyone twice. `email.ts` sends through Resend, and every call from the api or the worker first takes a rate limit
+  slot shared in Redis, which one call holds for 200 milliseconds, so calls leave evenly spaced at five a second.
 - `indexNow.ts` tells search engines a public Topic's urls changed. A missing `INDEXNOW_KEY` sends nothing, and a
   failed send never fails its caller.
 - A Resource's content hash is taken in the dedupe stage, over the title and snippet as they stand then.

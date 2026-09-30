@@ -3,7 +3,7 @@ import { reportError } from "@shared/monitoring"
 import { and, count, eq } from "drizzle-orm"
 import { db } from "../db"
 import { sources } from "../db/schema"
-import { startSourceScreenWorkflow } from "./temporal-client"
+import { startSourceScreenWorkflow } from "./temporalClient"
 
 // how long a Topic's first Scan can wait for its Sources to finish their llm-guard screen, and how often it checks
 const SCREEN_WAIT_MS = 30_000

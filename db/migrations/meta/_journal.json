@@ -659,6 +659,13 @@
       "when": 1790727991382,
       "tag": "0093_first_machine_man",
       "breakpoints": true
+    },
+    {
+      "idx": 94,
+      "version": "7",
+      "when": 1790803611308,
+      "tag": "0094_eager_nick_fury",
+      "breakpoints": true
     }
   ]
 }

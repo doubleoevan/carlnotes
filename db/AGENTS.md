@@ -14,12 +14,13 @@ Drizzle + Neon Postgres, and the Redis store.
   Lower the replica count or `DATABASE_POOL_MAX` until the connection pools fit.
 - `redis.ts` — the Redis store, on Bun's built-in client from `REDIS_URL`.
   `runWithRedis` runs one operation and returns null on any failure, and `cacheJson` returns a cached value, or loads the value and caches it.
-  `incrementRateLimitWindow` is the rate limit window counter behind every shared limiter.
+  `incrementRateLimitWindow` is the fixed window counter behind the api's shared limiters, and `takeRateLimitSlot`
+  is the slot that one call holds at a time, behind the Resend limit that the api and the worker share.
   `publishToChannel` and `subscribeToChannel` are the fan-out, and each process subscribes on one subscriber connection.
   `readAndResetRedisGauges` returns the minute line's counts.
   The store reconnects with no limit on attempts, and the reconnect delay doubles from one second up to 30 seconds.
   If an operation returns null, the caller goes on without Redis.
-  Sessions read Postgres, a cache calls its loader, and a limiter allows the request.
+  Sessions read Postgres, a cache calls its loader, a limiter allows the request, and a Resend call goes out without a slot.
 - `claim.ts` — `runWithClaim` runs the sweep and the budget reset under a database-level claim.
   The claim is a transaction-level advisory lock keyed by the claim's name.
   The lock works through the connection pooler and releases with the transaction no matter how the task ends.

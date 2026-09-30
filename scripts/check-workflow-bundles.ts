@@ -10,10 +10,10 @@ import { bundleWorkflowCode } from "@temporalio/worker"
 // the worker takes one workflowsPath per queue, and every one of them is a file in this directory
 const WORKFLOWS_DIRECTORY = join(import.meta.dir, "..", "worker", "workflows")
 
-// a workflow entry point is a .ts file that is not an activities module, a generated entrypoint, or a test
+// a workflow entry point is a .ts file that is not an activities module, the shared stage timeouts, or a test
 function toWorkflowPaths(): string[] {
 	return readdirSync(WORKFLOWS_DIRECTORY)
-		.filter((name) => name.endsWith(".ts") && !/-activities\.ts$|\.test\.ts$|^stage-timeouts\.ts$/.test(name))
+		.filter((name) => name.endsWith(".ts") && !/Activities\.ts$|\.test\.ts$|^stageTimeouts\.ts$/.test(name))
 		.map((name) => join(WORKFLOWS_DIRECTORY, name))
 }
 

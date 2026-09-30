@@ -1,11 +1,11 @@
-// email a finished Scan's outcome. a scheduled Scan emails the Topic's subscribers, and a manual Scan emails whoever started it.
-// the links in both build on the app's base url
+// email a finished Scan's outcome. a scheduled Scan emails the Topic's subscribers in batches,
+// and any other Scan emails whoever ran it or created the Topic. the links in both build on the app's base url
 import { appBaseUrl } from "@shared/appUrl"
 import { toScanFailureLabel } from "@shared/scanFailure"
 import { toTopicPath } from "@shared/seo"
-import { and, desc, eq, gte } from "drizzle-orm"
+import { and, desc, eq, inArray } from "drizzle-orm"
 import { db } from "../db"
-import { findings, resources, type scans, subscriptions, topicEmailSends, type topics, users } from "../db/schema"
+import { findings, resources, scans, subscriptions, topicEmailSends, topics, users } from "../db/schema"
 import {
 	type ManualScanEmailProps,
 	renderManualScanEmail,
@@ -18,13 +18,24 @@ import {
 	type TopicScanEmailFinding,
 	type TopicScanEmailProps,
 } from "../emails/topic-scan-email"
-import { type EmailKind, type EmailMessage, sendEmail, sendEmailBatches } from "./email"
+import {
+	type EmailKind,
+	type EmailMessage,
+	isSendableAddress,
+	RESEND_BATCH_LIMIT,
+	type ResendCallResult,
+	reportDroppedAddresses,
+	sendScanEmailCall,
+} from "./email"
 import { signUnsubscribeToken } from "./unsubscribe"
 
-// a persisted Topic and Scan, and one recipient of the email: the subscriber's user id and address
-type Topic = typeof topics.$inferSelect
-type Scan = typeof scans.$inferSelect
+// the Scan and Topic columns that an email reads, and one recipient's user id and address
+type EmailScan = Pick<typeof scans.$inferSelect, "id" | "status" | "scanSummary" | "error">
+type EmailTopic = Pick<typeof topics.$inferSelect, "id" | "name">
 type Recipient = { userId: string; email: string }
+
+// Resend's result for a Scan's email, or skipped if no one was left to send it to
+export type ScanEmailOutcome = ResendCallResult | { outcome: "skipped" }
 
 /**
  * Persist an accepted sent email for the topic and who received it
@@ -46,58 +57,250 @@ export async function createTopicEmailSend({
 	}
 }
 
-// email a scheduled topic Scan's outcome to the Topic's email subscribers
-export async function sendTopicScanEmail(topic: Topic, scan: Scan): Promise<void> {
-	// only a "succeeded" Scan emails. a failed or still-running one has no final outcome to send
-	if (scan.status !== "succeeded") {
-		return
+/**
+ * Returns the user ids that a Scan's digest sends to, in batches of up to a hundred, or none if the Scan sends no digest.
+ * Subscribers that the Scan's email already reached and addresses Resend would reject are left out.
+ */
+export async function planScanDigest(scanId: string): Promise<string[][]> {
+	// only a succeeded Scan of a Topic that still exists sends a digest
+	const emailScanTopic = await loadEmailScanTopic(scanId)
+	if (emailScanTopic?.scan.status !== "succeeded") {
+		return []
 	}
 
-	// skip the subscribers an earlier attempt of this send already reached, so a retried activity never emails anyone twice
-	const recipients = await loadTopicEmailSubscribers(topic.id)
-	const alreadySentUserIds = await loadTopicScanEmailRecipients(topic.id, scan)
-	const unsentRecipients = recipients.filter((recipient) => !alreadySentUserIds.has(recipient.userId))
-	if (unsentRecipients.length === 0) {
-		return
+	// the Topic's current email subscribers, minus the ones that an earlier attempt already reached
+	const unsentRecipients = await loadUnsentRecipients({ scanId, topicId: emailScanTopic.topic.id })
+
+	// drop and report the addresses that Resend would reject. one of them fails a whole batch
+	const sendableRecipients = unsentRecipients.filter((recipient) => isSendableAddress(recipient.email))
+	if (sendableRecipients.length < unsentRecipients.length) {
+		reportDroppedAddresses("topic-scan", unsentRecipients.length - sendableRecipients.length)
 	}
 
+	// batch the user ids within Resend's per-call limit, one batch for each call
+	const recipientUserIdBatches: string[][] = []
+	for (let start = 0; start < sendableRecipients.length; start += RESEND_BATCH_LIMIT) {
+		const recipientBatch = sendableRecipients.slice(start, start + RESEND_BATCH_LIMIT)
+		recipientUserIdBatches.push(recipientBatch.map((recipient) => recipient.userId))
+	}
+	return recipientUserIdBatches
+}
+
+// one digest batch to send, with its Scan and the user ids planned for it
+export type SendScanDigestBatchOptions = { scanId: string; recipientUserIds: string[] }
+
+/**
+ * Sends one digest batch to the planned recipients who still get it, and records each accepted send with its Scan.
+ */
+export async function sendScanDigestBatch({
+	scanId,
+	recipientUserIds,
+}: SendScanDigestBatchOptions): Promise<ScanEmailOutcome> {
+	// a Topic deleted since the plan sends nothing
+	const emailScanTopic = await loadEmailScanTopic(scanId)
+	if (!emailScanTopic) {
+		return { outcome: "skipped" }
+	}
+
+	// recheck the planned recipients now, leaving out anyone who unsubscribed, turned email off, or was already sent to
+	const { scan, topic } = emailScanTopic
+	const unsentRecipients = await loadUnsentRecipients({ scanId, topicId: topic.id, recipientUserIds })
+	const sendableRecipients = unsentRecipients.filter((recipient) => isSendableAddress(recipient.email))
+	if (sendableRecipients.length === 0) {
+		return { outcome: "skipped" }
+	}
+
+	// render every recipient's email from the same Scan, then send them in one call
+	const { subject, sharedProps } = await toTopicScanEmailProps(topic, scan)
+	const messages = await Promise.all(
+		sendableRecipients.map((recipient) => toTopicScanMessage(recipient, topic.id, subject, sharedProps)),
+	)
+	const scanEmailCallResult = await sendScanEmailCall({ scanId, messages })
+
+	// record the accepted sends at once, so that a retry never sends this batch again
+	if (scanEmailCallResult.outcome === "accepted") {
+		await recordScanEmailSends({
+			scanId,
+			topicId: topic.id,
+			emailKind: "topic-scan",
+			recipientUserIds: sendableRecipients.map((recipient) => recipient.userId),
+		})
+	}
+	return scanEmailCallResult
+}
+
+// one manual-scan report to send, with its Scan and whoever ran the Scan or created the Topic
+export type SendScanReportOptions = { scanId: string; recipientUserId: string }
+
+/**
+ * Emails whoever ran a manual Scan, or created the Topic, once the Scan ends, whether it found something, found nothing,
+ * or failed. Skips the send if the report already reached them.
+ */
+export async function sendScanReport({ scanId, recipientUserId }: SendScanReportOptions): Promise<ScanEmailOutcome> {
+	// a running Scan has no outcome to report yet, and a deleted Topic has nothing to report on
+	const emailScanTopic = await loadEmailScanTopic(scanId)
+	if (!emailScanTopic || emailScanTopic.scan.status === "running") {
+		return { outcome: "skipped" }
+	}
+
+	// skip a recipient that the report already reached, and a user who no longer exists
+	const [sentUserIds, [recipientUser]] = await Promise.all([
+		loadScanEmailRecipientUserIds(scanId),
+		db.select({ email: users.email }).from(users).where(eq(users.id, recipientUserId)),
+	])
+	if (sentUserIds.has(recipientUserId) || !recipientUser) {
+		return { outcome: "skipped" }
+	}
+
+	// send one email, with the subject built from the same props that the body renders from
+	const { scan, topic } = emailScanTopic
+	const emailProps = await toManualScanEmailProps(topic, scan)
+	const message: EmailMessage = {
+		to: recipientUser.email,
+		subject: toManualScanSubject(emailProps),
+		emailContent: await renderManualScanEmail(emailProps),
+		plainTextContent: await renderManualScanEmailText(emailProps),
+		emailKind: "manual-scan",
+	}
+	const scanEmailCallResult = await sendScanEmailCall({ scanId, messages: [message] })
+
+	// record the accepted send, so a retry never sends the report twice
+	if (scanEmailCallResult.outcome === "accepted") {
+		await recordScanEmailSends({
+			scanId,
+			topicId: topic.id,
+			emailKind: "manual-scan",
+			recipientUserIds: [recipientUserId],
+		})
+	}
+	return scanEmailCallResult
+}
+
+// a Scan and its Topic as an email reads them, or null if the Scan is gone or its Topic was deleted
+async function loadEmailScanTopic(scanId: string): Promise<{ scan: EmailScan; topic: EmailTopic } | null> {
+	const [emailScanTopic] = await db
+		.select({
+			scan: { id: scans.id, status: scans.status, scanSummary: scans.scanSummary, error: scans.error },
+			topic: { id: topics.id, name: topics.name },
+		})
+		.from(scans)
+		.innerJoin(topics, eq(scans.topicId, topics.id))
+		.where(eq(scans.id, scanId))
+	return emailScanTopic ?? null
+}
+
+// the Scan and the Topic whose email subscribers to read, and for a batch, the user ids that were planned for it
+type LoadUnsentRecipientsOptions = { scanId: string; topicId: string; recipientUserIds?: string[] }
+
+// the Topic's current email subscribers that the Scan's email has not reached yet
+async function loadUnsentRecipients({
+	scanId,
+	topicId,
+	recipientUserIds,
+}: LoadUnsentRecipientsOptions): Promise<Recipient[]> {
+	// only an active subscription with email on gets mail. unsubscribing deactivates the row instead of deleting it
+	const emailSubscriptionFilter = and(
+		eq(subscriptions.topicId, topicId),
+		eq(subscriptions.isActive, true),
+		eq(subscriptions.isEmailEnabled, true),
+		recipientUserIds ? inArray(subscriptions.subscriberUserId, recipientUserIds) : undefined,
+	)
+
+	// read the subscribers and the Scan's sent rows together. one subscription row per user and Topic means no address repeats
+	const [subscriberRows, sentUserIds] = await Promise.all([
+		db
+			.select({ userId: users.id, email: users.email })
+			.from(subscriptions)
+			.innerJoin(users, eq(subscriptions.subscriberUserId, users.id))
+			.where(emailSubscriptionFilter),
+		loadScanEmailRecipientUserIds(scanId),
+	])
+	return subscriberRows.filter((subscriberRow) => !sentUserIds.has(subscriberRow.userId))
+}
+
+// the user ids that the Scan's email already reached
+async function loadScanEmailRecipientUserIds(scanId: string): Promise<Set<string>> {
+	// a closed account leaves its row's recipient null, and is no longer a recipient anyway
+	const sentRows = await db
+		.select({ recipientUserId: topicEmailSends.recipientUserId })
+		.from(topicEmailSends)
+		.where(eq(topicEmailSends.scanId, scanId))
+	return new Set(sentRows.flatMap((sentRow) => (sentRow.recipientUserId ? [sentRow.recipientUserId] : [])))
+}
+
+// the accepted sends of a Scan's email to record
+type RecordScanEmailSendsOptions = {
+	scanId: string
+	topicId: string
+	emailKind: EmailKind
+	recipientUserIds: string[]
+}
+
+// record the accepted sends of a Scan's email, once per recipient however many times the send is retried
+async function recordScanEmailSends({
+	scanId,
+	topicId,
+	emailKind,
+	recipientUserIds,
+}: RecordScanEmailSendsOptions): Promise<void> {
+	await db
+		.insert(topicEmailSends)
+		.values(recipientUserIds.map((recipientUserId) => ({ topicId, emailKind, recipientUserId, scanId })))
+		.onConflictDoNothing({ target: [topicEmailSends.scanId, topicEmailSends.recipientUserId] })
+}
+
+// the subject and the props that every recipient's digest renders from, minus the per-recipient unsubscribe link
+async function toTopicScanEmailProps(
+	topic: EmailTopic,
+	scan: EmailScan,
+): Promise<{ subject: string; sharedProps: TopicScanEmailProps }> {
 	// the Scan's new Findings. an empty scan still sends the email with Carl's aside instead of a list
-	const newFindings = await newFindingsForScan(scan)
+	const newFindings = await newFindingsForScan(scan.id)
 	const allowedSummaryUrls = await topicFindingUrls(topic.id)
 
-	// the links back into the app for the email, both undefined when no app base url is configured
+	// the links back into the app for the email, both undefined if no app base url is configured
 	const appUrl = appBaseUrl()
 	const topicUrl = appUrl ? `${appUrl}${toTopicPath(topic)}` : undefined
 
-	// the props that every recipient's email renders from, minus the per-recipient unsubscribe link
+	// the subject counts the new Findings, and says so if there are none
 	const subject =
 		newFindings.length === 0
 			? `Notes on ${topic.name}: nothing new`
 			: `Notes on ${topic.name}: ${newFindings.length} finding${newFindings.length === 1 ? "" : "s"}`
-	const sharedProps: TopicScanEmailProps = {
-		topicName: topic.name,
-		findingCount: newFindings.length,
-		findings: newFindings,
-		// the recap reads above the list. a scan that failed to summarize leaves it out instead of sending an empty block
-		scanSummary: scan.scanSummary ?? undefined,
-		allowedSummaryUrls,
-		// the header, heading, and footer link back to the app and to this topic
-		appUrl,
-		topicUrl,
+	return {
+		subject,
+		sharedProps: {
+			topicName: topic.name,
+			findingCount: newFindings.length,
+			findings: newFindings,
+			// the recap reads above the list. a scan that failed to summarize leaves it out instead of sending an empty block
+			scanSummary: scan.scanSummary ?? undefined,
+			allowedSummaryUrls,
+			// the header, heading, and footer link back to the app and to this topic
+			appUrl,
+			topicUrl,
+		},
+	}
+}
+
+// the props that a manual-scan report renders from. a failed Scan says why it stopped, and a succeeded one lists its new Findings
+async function toManualScanEmailProps(topic: EmailTopic, scan: EmailScan): Promise<ManualScanEmailProps> {
+	// the links back into the app for the email, both undefined if no app base url is configured
+	const appUrl = appBaseUrl()
+	const topicUrl = appUrl ? `${appUrl}${toTopicPath(topic)}` : undefined
+	if (scan.status === "failed") {
+		return { status: "failed", topicName: topic.name, failureReason: toScanFailureLabel(scan.error), appUrl, topicUrl }
 	}
 
-	// render every recipient's email, then send them in one batch call instead of one POST per subscriber
-	const messages = await Promise.all(
-		unsentRecipients.map((recipient) => toTopicScanMessage(recipient, topic.id, subject, sharedProps)),
-	)
-	const accepted = await sendEmailBatches(messages)
-
-	// record the accepted sends in one insert, which is what the retry check reads
-	const acceptedRows = unsentRecipients
-		.filter((_, index) => accepted[index])
-		.map((recipient) => ({ topicId: topic.id, emailKind: "topic-scan" as const, recipientUserId: recipient.userId }))
-	if (acceptedRows.length > 0) {
-		await db.insert(topicEmailSends).values(acceptedRows)
+	// a succeeded Scan reports its new Findings and Carl's recap of them
+	return {
+		status: "succeeded",
+		topicName: topic.name,
+		findings: await newFindingsForScan(scan.id),
+		scanSummary: scan.scanSummary ?? undefined,
+		allowedSummaryUrls: await topicFindingUrls(topic.id),
+		appUrl,
+		topicUrl,
 	}
 }
 
@@ -121,68 +324,8 @@ async function toTopicScanMessage(
 	}
 }
 
-// the user ids this topic-scan's email already reached
-async function loadTopicScanEmailRecipients(topicId: string, scan: Scan): Promise<Set<string>> {
-	// an invitee with no account or a closed account both leave the recipient null
-	const sentRows = await db
-		.select({ recipientUserId: topicEmailSends.recipientUserId })
-		.from(topicEmailSends)
-		.where(
-			and(
-				eq(topicEmailSends.topicId, topicId),
-				eq(topicEmailSends.emailKind, "topic-scan"),
-				gte(topicEmailSends.sentAt, scan.startedAt),
-			),
-		)
-	return new Set(sentRows.flatMap((sentRow) => (sentRow.recipientUserId ? [sentRow.recipientUserId] : [])))
-}
-
-// email whoever started a manual Scan once it ends, whether it found something, found nothing, or failed
-export async function sendManualScanEmail(userId: string, topic: Topic, scan: Scan): Promise<void> {
-	// a running Scan has no outcome to report yet, and a missing user has no address
-	if (scan.status === "running") {
-		return
-	}
-	const [user] = await db.select({ email: users.email }).from(users).where(eq(users.id, userId))
-	if (!user) {
-		return
-	}
-
-	// the links back into the app for the email, both undefined when no app base url is configured
-	const appUrl = appBaseUrl()
-	const topicUrl = appUrl ? `${appUrl}${toTopicPath(topic)}` : undefined
-
-	// a failed Scan reports why it stopped. a succeeded one reports its new Findings and Carl's recap of them
-	const emailProps: ManualScanEmailProps =
-		scan.status === "failed"
-			? { status: "failed", topicName: topic.name, failureReason: toScanFailureLabel(scan.error), appUrl, topicUrl }
-			: {
-					status: "succeeded",
-					topicName: topic.name,
-					findings: await newFindingsForScan(scan),
-					scanSummary: scan.scanSummary ?? undefined,
-					allowedSummaryUrls: await topicFindingUrls(topic.id),
-					appUrl,
-					topicUrl,
-				}
-
-	// send one email, with the subject built from the same props the body renders from
-	const isAccepted = await sendEmail({
-		to: user.email,
-		subject: toManualScanSubject(emailProps),
-		emailContent: await renderManualScanEmail(emailProps),
-		plainTextContent: await renderManualScanEmailText(emailProps),
-		emailKind: "manual-scan",
-	})
-	await createTopicEmailSend({ topicId: topic.id, emailKind: "manual-scan", recipientUserId: userId, isAccepted })
-}
-
 // every url the Topic has a Finding for to use as the email's allowlist links
-async function topicFindingUrls(topicId: string | null): Promise<string[]> {
-	if (!topicId) {
-		return []
-	}
-
+async function topicFindingUrls(topicId: string): Promise<string[]> {
 	// the Topic's Findings joined to their Resource for the urls the recap can link
 	const findingRows = await db
 		.select({ url: resources.url })
@@ -193,34 +336,17 @@ async function topicFindingUrls(topicId: string | null): Promise<string[]> {
 }
 
 // the Findings this Scan surfaced, joined to their Resources for the email
-async function newFindingsForScan(scan: Scan): Promise<TopicScanEmailFinding[]> {
+async function newFindingsForScan(scanId: string): Promise<TopicScanEmailFinding[]> {
 	// this topic scan's Findings joined to their Resource for the title, link
 	return db
 		.select({ title: resources.title, url: resources.url, relevanceExplanation: findings.relevanceExplanation })
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.where(eq(findings.scanId, scan.id))
+		.where(eq(findings.scanId, scanId))
 		.orderBy(desc(findings.relevanceScore))
 }
 
-// the Topic's subscribers to email
-async function loadTopicEmailSubscribers(topicId: string): Promise<Recipient[]> {
-	// only an active subscription with email on gets mail, unsubscribing deactivates the row instead of deleting it
-	const canEmailSubscription = and(
-		eq(subscriptions.topicId, topicId),
-		eq(subscriptions.isActive, true),
-		eq(subscriptions.isEmailEnabled, true),
-	)
-
-	// one subscription row per user per topic, so no address repeats
-	return db
-		.select({ userId: users.id, email: users.email })
-		.from(subscriptions)
-		.innerJoin(users, eq(subscriptions.subscriberUserId, users.id))
-		.where(canEmailSubscription)
-}
-
-// the recipient's signed one-click unsubscribe url, or undefined when the app base url isn't configured
+// the recipient's signed one-click unsubscribe url, or undefined if the app base url isn't configured
 async function toUnsubscribeUrl(userId: string, topicId: string): Promise<string | undefined> {
 	// without an app base url, there is nowhere for the link to point
 	const appUrl = appBaseUrl()

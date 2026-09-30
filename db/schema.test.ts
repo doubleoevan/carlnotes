@@ -13,6 +13,7 @@ import {
 	oauthConsents,
 	resources,
 	subscriptions,
+	topicEmailSends,
 	topicPromptVersions,
 	topics,
 } from "./schema"
@@ -213,6 +214,15 @@ test("chat_turns cascades from both parents and indexes topic and time", () => {
 	expect(allMigrationsSql()).toMatch(/chat_turns_user_id_users_id_fk.*ON DELETE cascade/)
 	expect(allMigrationsSql()).toMatch(/chat_turns_topic_id_topics_id_fk.*ON DELETE cascade/)
 	expect(allMigrationsSql()).toMatch(/CREATE INDEX (IF NOT EXISTS )?"chat_turns_topic_created_idx"/)
+})
+
+// a Scan's email rows name the Scan, once per recipient, and an invite's row names no Scan
+test("topic_email_sends names its Scan, set null on delete, and is unique per Scan and recipient", () => {
+	expect(topicEmailSends.scanId.notNull).toBe(false)
+	expect(allMigrationsSql()).toMatch(/topic_email_sends_scan_id_scans_id_fk.*ON DELETE set null/)
+	expect(allMigrationsSql()).toContain(
+		`CREATE UNIQUE INDEX "topic_email_sends_scan_recipient_unique" ON "topic_email_sends" USING btree ("scan_id","recipient_user_id")`,
+	)
 })
 
 // the embedding model name is stored by review and filtered on by chat retrieval

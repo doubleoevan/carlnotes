@@ -1,6 +1,6 @@
 // the source llm-guard screening workflow
 import { proxyActivities } from "@temporalio/workflow"
-import type * as activities from "./screen-source-activities"
+import type * as activities from "./screenSourceActivities"
 
 // one bounded fetch plus one llm-guard screen, so the per-attempt timeout is short
 const { screenSource, failSource } = proxyActivities<typeof activities>({

@@ -565,18 +565,25 @@ export const invites = pgTable(
 )
 
 // an email that a topic sent that resend accepted to be tracked by the admin page
-export const topicEmailSends = pgTable("topic_email_sends", {
-	id: primaryId(),
-	// the topic the email was about
-	topicId: text("topic_id")
-		.notNull()
-		.references(() => topics.id, { onDelete: "cascade" }),
-	// who received the email, null for an invitee with no account yet
-	recipientUserId: text("recipient_user_id").references(() => users.id, { onDelete: "set null" }),
-	// which kind of email went out: topic-scan, manual-scan, or topic-invite
-	emailKind: text("email_kind").notNull(),
-	sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
-})
+export const topicEmailSends = pgTable(
+	"topic_email_sends",
+	{
+		id: primaryId(),
+		// the topic the email was about
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		// who received the email, null for an invitee with no account yet
+		recipientUserId: text("recipient_user_id").references(() => users.id, { onDelete: "set null" }),
+		// which kind of email went out: topic-scan, manual-scan, or topic-invite
+		emailKind: text("email_kind").notNull(),
+		// the Scan that sent the email. null for an invite, and for a scan email older than this column
+		scanId: text("scan_id").references(() => scans.id, { onDelete: "set null" }),
+		sentAt: timestamp("sent_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// one row per Scan and recipient, so a retried send is recorded once. rows without a Scan never collide
+	(table) => [uniqueIndex("topic_email_sends_scan_recipient_unique").on(table.scanId, table.recipientUserId)],
+)
 
 // a team is a named set of people that holds topics together. it is a permissions and identity object
 export const teams = pgTable(

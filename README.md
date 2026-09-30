@@ -48,7 +48,7 @@ These processes run in production:
 | Process | What it does |
 |---|---|
 | `app` | Serves the api and the ui, rendering public pages on the server. Chat replies and uploads run in-process. |
-| `temporal-worker` | One process hosts three Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
+| `temporal-worker` | One process hosts four Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, scan emails, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
 | scheduler | `bun worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed in one query from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. A database claim keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
 | budget reset | `bun worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces a few keys at a time, under the same kind of database claim as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
 | `llm-guard` | The content scanner is its own service (see below). |
@@ -57,16 +57,16 @@ Every process above runs on Northflank, which deploys on a git trigger. `app` an
 
 ### Scan
 
-A topic Scan is one Temporal workflow:
+A topic Scan is one Temporal workflow, and its email is a second one:
 
 ```mermaid
 flowchart
-    Ingest[Ingest Sources] --> Screen[Screen · LLM Guard] --> Score[Score · LiteLLM] --> Review[Keep best Findings] --> Email[Email subscribers]
+    Ingest[Ingest Sources] --> Screen[Screen · LLM Guard] --> Score[Score · LiteLLM] --> Review[Keep best Findings] -->|second workflow| Email[Email subscribers · Resend]
 ```
 
 Each step costs more but handles fewer Resources. Embeddings filter and rank what the Sources found. A cheap model scores what passes. A more expensive model re-scores the best Findings and writes each Finding's relevance explanation. The cheap model then writes the scan report.
 
-Temporal persists every step and retries failed activities. That is why there is no outbox table: the subscriber email is the workflow's last activity, so a crash before it sends resumes there instead of losing it. Emails outside workflows (verification, password reset, reports) send directly through Resend. A failure is reported to Sentry instead of replayed.
+Temporal persists every step and retries failed activities. That is why there is no outbox table: once a Scan is complete, its workflow starts the email workflow on the `scan-emails` queue, which runs one activity per Resend call. A rate limit waits for Resend's `retry-after`, a 5xx backs off, and a send that fails for good is reported to Sentry without failing the Scan. Each accepted batch records its sends with the Scan, so a retry never mails anyone twice. Emails outside workflows (verification, password reset, invites, flag notices) send directly through Resend, and a failure is reported to Sentry instead of replayed. Every call to Resend, from the app or the worker, first takes a rate limit slot held in Redis, which one call holds for 200 milliseconds. Calls leave evenly spaced at five a second, half of Resend's ten.
 
 ### Chat
 
@@ -86,7 +86,7 @@ Chat is signed-in only. Every chat turn writes a row, because every chat turn is
 
 Two components update while you watch them: a team chat room, and a Tasting Note several people are editing. Both push over Server-Sent Events, and neither runs a WebSocket server.
 
-The fan-out between instances is Redis pub/sub. The instance that stored a change delivers the change to its own subscribers through an in-process `EventEmitter` first and then publishes the change. Every other instance re-broadcasts what it receives to its own subscribers. The instance that published skips its own echo. The same Redis holds the sessions, the caches for the mention count and the topic page's scan poll, and the shared limiters, so more than one `app` replica can run at once. Every database connection goes through Neon's connection pooler. There is no socket tier to operate.
+The fan-out between instances is Redis pub/sub. The instance that stored a change delivers the change to its own subscribers through an in-process `EventEmitter` first and then publishes the change. Every other instance re-broadcasts what it receives to its own subscribers. The instance that published skips its own echo. The same Redis holds the sessions, the caches for the mention count and the topic page's scan poll, the shared limiters, and the Resend limit that the worker shares too, so more than one `app` replica can run at once. Every database connection goes through Neon's connection pooler. There is no socket tier to operate.
 
 ```mermaid
 flowchart

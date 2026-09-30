@@ -1,6 +1,6 @@
 // the attachment processing workflow
 import { proxyActivities } from "@temporalio/workflow"
-import type * as activities from "./process-attachment-activities"
+import type * as activities from "./processAttachmentActivities"
 
 // activity proxies with a generous timeout for extraction and the per-chunk model calls
 const { extractAttachmentText, summarizeChunk, finalizeAttachment, finalizeTableAttachment, failAttachment } =

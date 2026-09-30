@@ -1,16 +1,18 @@
-// a live smoke test for a full topic Scan, ingestion then review: seed a topic with two sources, scan, check the outputs.
+// a live smoke test for a full topic Scan, ingestion then review: seed a topic with two sources, scan, check the outputs,
+// and send the Scan's report to Resend's test inbox.
 // run it with: bun run smoke:scan. needs the LiteLLM proxy at LITELLM_BASE_URL, the latest migration, and Doppler secrets
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { db } from "../db"
-import { findings, resources, scans, sources, topics, users } from "../db/schema"
+import { findings, resources, scans, sources, topicEmailSends, topics, users } from "../db/schema"
 import { buildContextPrompt } from "./attach"
 // the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
 import { buildSearchPrompt } from "./ingest/search"
+import { sendScanReport } from "./notify"
 import { buildScorePrompt } from "./review/score"
 import { buildScanReportPrompt } from "./review/summarize"
 import { loadScan } from "./scan"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
-import { finishScan, ingestForScan, reviewForScan } from "./workflows/run-topic-scan-activities"
+import { finishScan, ingestForScan, reviewForScan } from "./workflows/runTopicScanActivities"
 
 // a real feed that is reliably up, plus a topic context that matches it so relevant resources pass the relevance gate
 const FEED_URL = "https://simonwillison.net/atom/everything/"
@@ -28,12 +30,13 @@ const runId = Date.now()
 
 // seed a fake owner, a topic whose context matches the feed, and an RSS source with no API key
 async function seedTestData(): Promise<{ topicId: string; userId: string }> {
-	// a fake owner. deleting it on cleanup cascades to the topic, source, scan, and findings
+	// a fake owner at Resend's test inbox, which accepts the report without delivering it anywhere.
+	// deleting the owner on cleanup cascades to the topic, source, scan, findings, and send rows
 	const [user] = await db
 		.insert(users)
 		.values({
 			name: "scan-smoke",
-			email: `scan-smoke+${runId}@example.test`,
+			email: `delivered+scan-smoke-${runId}@resend.dev`,
 			username: `scan-smoke-${runId}`,
 			usernameNormalized: `scansmoke${runId}`,
 		})
@@ -72,7 +75,7 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	}
 	const ingestResult = await ingestForScan(smokeScan.id, topicId)
 	const reviewResult = await reviewForScan(smokeScan.id, topicId, ownerId, ingestResult, ingestResult.budget)
-	await finishScan(smokeScan.id, topicId, ownerId, "creation", ingestResult, reviewResult)
+	await finishScan(smokeScan.id, topicId, ownerId, ingestResult, reviewResult)
 
 	// re-read the scan row, whose counts and cost the closing stage wrote
 	const topicScan = await loadScan(smokeScan.id)
@@ -130,8 +133,22 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 	console.log(`\nepisodes ingested  : ${episodes.length} (with transcripts: ${countWithTranscripts(episodes)})`)
 	console.log(`episodes scraped   : ${scrapedEpisodes} (a stored body without a transcript means Firecrawl ran)`)
 
+	// send the Scan's report twice, the way a retry would. one email goes out, and one row names the Scan
+	const firstReportOutcome = await sendScanReport({ scanId: smokeScan.id, recipientUserId: ownerId })
+	const secondReportOutcome = await sendScanReport({ scanId: smokeScan.id, recipientUserId: ownerId })
+	const reportRows = await db
+		.select({ recipientUserId: topicEmailSends.recipientUserId })
+		.from(topicEmailSends)
+		.where(eq(topicEmailSends.scanId, smokeScan.id))
+	console.log(`report sends       : ${firstReportOutcome.outcome}, then ${secondReportOutcome.outcome}`)
+
 	// the smoke assertions
 	const results: [string, boolean][] = [
+		// scan email checks. a second run finds the first run's row and sends nothing
+		["the report was accepted", firstReportOutcome.outcome === "accepted"],
+		["a second report run sent nothing", secondReportOutcome.outcome === "skipped"],
+		["one send row names the Scan", reportRows.length === 1],
+
 		// topic scan checks
 		["scan succeeded", topicScan.status === "succeeded"],
 		["found resources", topicScan.foundCount > 0],

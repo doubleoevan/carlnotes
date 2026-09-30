@@ -2,8 +2,8 @@
 import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "../db"
 import { scans } from "../db/schema"
-import { cancelTopicScanWorkflow, type ScanCancel, type ScanStart, startTopicScanWorkflow } from "./temporal-client"
-import type { ScanTrigger } from "./workflows/run-topic-scan-activities"
+import { cancelTopicScanWorkflow, type ScanCancel, type ScanStart, startTopicScanWorkflow } from "./temporalClient"
+import type { ScanTrigger } from "./workflows/runTopicScanActivities"
 
 // a persisted Scan row
 type Scan = typeof scans.$inferSelect

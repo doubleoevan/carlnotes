@@ -4,7 +4,7 @@ import { eq, inArray } from "drizzle-orm"
 import { db } from "../db"
 import { resources, scans, sources, topics, users } from "../db/schema"
 import { FIRECRAWL_COST_PER_FETCH } from "./budget"
-import { ingestForScan } from "./workflows/run-topic-scan-activities"
+import { ingestForScan } from "./workflows/runTopicScanActivities"
 
 // a page that lists links to other sites
 const INDEX_URL = "https://news.ycombinator.com/"

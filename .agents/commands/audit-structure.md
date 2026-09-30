@@ -94,7 +94,7 @@ Check for:
    - `keepChatAttachments` (now `storeTopicChatAttachments`); it stores every attachment a topic chat turn
      sent, not only the kept ones, and a team chat stores none
    - `runTopicScan`/`processTopicScan` (now `startTopicScan`/`startScanFor` in `worker/scan.ts`;
-     the pipeline itself is `worker/workflows/run-topic-scan-activities.ts`)
+     the pipeline itself is `worker/workflows/runTopicScanActivities.ts`)
    - `toFilteredFindings` (now `toSortedFindings`)
    - `toOfferedUrls`/`OfferedUrlSources` (now `toPossibleSourceUrls`/`PromptSourceUrls` in `ui/src/lib/utils.ts`
      and `EditTopicModal.tsx`), `ScanNoteText` (now `SafeNoteText`), `loadScan` in the scan activities
@@ -251,7 +251,7 @@ Check for:
    - `ChatRoomState.rejectionReason` and `clearRejectionReason` (now `rejection` and `clearRejection`, a
      `ChatRoomRejection` kind that `ChatRoomRejectionNotice` in `ui/src/components/chat/ChatRoomPanel.tsx` renders)
    - `/topics/<id>` as a topic's canonical url (now `/topics/<id>/<slug>`, from `toTopicPath` in `shared/seo.ts`)
-   - `countScanQueuePollers` (now `describeScanQueue` in `worker/temporal-client.ts`) and `reportUnpolledScanQueue`
+   - `countScanQueuePollers` (now `describeScanQueue` in `worker/temporalClient.ts`) and `reportUnpolledScanQueue`
      (now `reportScanQueue` in `worker/schedule.ts`)
    - `toReportedPath` and its route shape tables in `ui/src/lib/visitAnalytics.ts` (now `shared/reportedPath.ts`)
    - the `@opentelemetry/sdk-node` dependency and its `NodeSDK` in `worker/telemetry.ts` (now a `NodeTracerProvider`
@@ -282,6 +282,14 @@ Check for:
      `api/rateLimit.ts` (now `toolCallerRateLimitStore` over the same counter)
    - `RATE_WINDOW_MS` in `api/rateLimit.ts`, `FLAG_WINDOW_MS` in `api/flagContent.ts`, and `CREDENTIAL_RATE_WINDOW_SECONDS`
      in `api/auth.ts` (now `RATE_LIMIT_WINDOW_MS`, `FLAG_RATE_LIMIT_WINDOW_MS`, and `CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS`)
+   - `sendTopicScanEmail` in `worker/notify.ts` (now `planScanDigest` and `sendScanDigestBatch`), `sendManualScanEmail`
+     (now `sendScanReport`), and `finishScan`'s `trigger` argument (now `sendScanEmailWorkflow` in
+     `worker/workflows/sendScanEmail.ts`)
+   - `worker/temporal-client.ts` and the kebab-case files in `worker/workflows/`: `run-topic-scan.ts`,
+     `run-topic-scan-activities.ts`, `process-attachment.ts`, `process-attachment-activities.ts`, `screen-source.ts`,
+     `screen-source-activities.ts`, and `stage-timeouts.ts` (now `worker/temporalClient.ts`, `runTopicScan.ts`,
+     `runTopicScanActivities.ts`, `processAttachment.ts`, `processAttachmentActivities.ts`, `screenSource.ts`,
+     `screenSourceActivities.ts`, and `stageTimeouts.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

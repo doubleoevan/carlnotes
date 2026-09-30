@@ -1,7 +1,7 @@
 // the Temporal client that the api and the sweep use to start durable workflows
 import type { ThresholdCrossing } from "@shared/monitoring"
 import { Client, Connection, WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from "@temporalio/client"
-import type { ScanTrigger } from "./workflows/run-topic-scan-activities"
+import type { ScanTrigger } from "./workflows/runTopicScanActivities"
 
 // the task queue the attachment worker polls, and the workflow it runs started by name
 export const ATTACHMENT_TASK_QUEUE = "attachment-processing"
@@ -181,11 +181,12 @@ export function toScanBacklogCrossing({
 
 // the reused Temporal client instance, connected to the TEMPORAL_ADDRESS endpoint on first use
 function getClient(): Promise<Client> {
-	// build the connection once and reuse it for every subsequent workflow start
-	if (!clientPromise) {
-		clientPromise = Connection.connect({ address: Bun.env.TEMPORAL_ADDRESS }).then(
-			(connection) => new Client({ connection }),
-		)
-	}
+	// connect once and reuse the client. clear a failed connection so the next call connects again
+	clientPromise ??= Connection.connect({ address: Bun.env.TEMPORAL_ADDRESS })
+		.then((connection) => new Client({ connection }))
+		.catch((error: unknown) => {
+			clientPromise = undefined
+			throw error
+		})
 	return clientPromise
 }

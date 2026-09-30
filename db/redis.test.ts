@@ -1,5 +1,5 @@
-// Redis store tests over fake clients: null on a failure, the cache, the rate limit window counter, the gauges,
-// pub/sub, and reconnects
+// Redis store tests over fake clients: null on a failure, the cache, the rate limit window counter, the rate limit slot,
+// the gauges, pub/sub, and reconnects
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import {
 	cacheJson,
@@ -16,15 +16,17 @@ import {
 	runWithRedis,
 	setRedisClientBuilder,
 	subscribeToChannel,
+	takeRateLimitSlot,
 } from "./redis"
 
 // a channel listener, with the message and channel arguments that Bun's client passes
 type ChannelListener = (channelMessage: string, channel: string) => void
 
-// the fake server that every fake client shares: the stored values, the clients subscribed to each channel,
-// the failures to fake, a connect count, and a gate that holds every subscribe until a test opens it
+// the fake server that every fake client shares: the stored values, when each rate limit slot frees, the clients
+// subscribed to each channel, the failures to fake, a connect count, and a gate that holds every subscribe until a test opens it
 type FakeRedisServer = {
 	storedValueByKey: Map<string, string>
+	slotFreesAtByKey: Map<string, number>
 	subscribedClientsByChannel: Map<string, Set<FakeRedisClient>>
 	// what a test sets and reads: the failures to fake, the connect count, and the subscribe gate
 	remainingConnectFailureCount: number
@@ -60,6 +62,19 @@ function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisClient {
 		}
 		fakeRedisServer.storedValueByKey.set(key, String(Number(storedCount) - 1))
 		return Number(storedCount) - 1
+	}
+
+	// take a rate limit slot that no call holds, or return the milliseconds until the slot frees, as the slot script does
+	const takeSlot = (key: string, slotMs: number): number => {
+		const now = Date.now()
+		const slotFreesAt = fakeRedisServer.slotFreesAtByKey.get(key) ?? 0
+
+		// a free slot is held until the slot's length has passed
+		if (slotFreesAt <= now) {
+			fakeRedisServer.slotFreesAtByKey.set(key, now + slotMs)
+			return 0
+		}
+		return slotFreesAt - now
 	}
 
 	// the fake client's state, then the client methods that the store calls
@@ -116,6 +131,12 @@ function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisClient {
 		async send(_command: string, commandArguments: string[]): Promise<unknown> {
 			throwIfCommandFailing()
 			const [script = "", , key = "", rateLimitWindowMs = "0"] = commandArguments
+
+			// the slot script takes the slot or returns the wait
+			if (script.includes("'NX'")) {
+				const [, , , slotMs = "0"] = commandArguments
+				return takeSlot(key, Number(slotMs))
+			}
 			if (!script.includes("INCR")) {
 				return decrementKey(key)
 			}
@@ -189,6 +210,7 @@ beforeEach(() => {
 	// a fresh server with no clients
 	fakeRedisServer = {
 		storedValueByKey: new Map(),
+		slotFreesAtByKey: new Map(),
 		subscribedClientsByChannel: new Map(),
 		remainingConnectFailureCount: 0,
 		remainingSubscribeFailureCount: 0,
@@ -298,6 +320,18 @@ test("decrementRateLimitWindow lowers an open rate limit window and leaves a clo
 	// a refund on a key whose rate limit window expired creates nothing
 	await decrementRateLimitWindow("expired")
 	expect(fakeRedisServer.storedValueByKey.has("expired")).toBe(false)
+})
+
+// one call holds a rate limit slot for its length, the next call waits about that long, and a failed take returns null
+test("takeRateLimitSlot takes a free slot, returns the wait while another call holds it, and returns null while Redis is down", async () => {
+	// one call takes the slot, and the next has to wait about the slot's whole length
+	const rateLimitSlot = { key: "s", slotMs: 60_000 }
+	expect(await takeRateLimitSlot(rateLimitSlot)).toBe(0)
+	expect(await takeRateLimitSlot(rateLimitSlot)).toBeGreaterThan(59_000)
+
+	// a take returns null while commands fail
+	fakeRedisServer.isCommandFailing = true
+	expect(await takeRateLimitSlot(rateLimitSlot)).toBeNull()
 })
 
 // a command connection that cannot connect crosses the Redis-down threshold with the minute's error count

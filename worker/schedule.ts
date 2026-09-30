@@ -11,8 +11,8 @@ import { runWithConcurrency } from "./concurrency"
 import { scanTopic, startTopicScan } from "./scan"
 import { screenPendingSources } from "./screen"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
-import { describeScanQueue, SCAN_TASK_QUEUE, type ScanQueueDescription, toScanBacklogCrossing } from "./temporal-client"
-import { FINISH_TOTAL_TIMEOUT_MS, INGEST_TOTAL_TIMEOUT_MS, MAX_SCAN_DURATION_MS } from "./workflows/stage-timeouts"
+import { describeScanQueue, SCAN_TASK_QUEUE, type ScanQueueDescription, toScanBacklogCrossing } from "./temporalClient"
+import { FINISH_TOTAL_TIMEOUT_MS, INGEST_TOTAL_TIMEOUT_MS, MAX_SCAN_DURATION_MS } from "./workflows/stageTimeouts"
 
 // one day in milliseconds, the daily frequency window and the base that the weekly window multiplies
 const DAY_MS = 24 * 60 * 60 * 1000

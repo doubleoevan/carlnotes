@@ -1,8 +1,17 @@
 // the durable Scan: it runs the pipeline's three stages as activities
-import { CancellationScope, isCancellation, proxyActivities } from "@temporalio/workflow"
+import {
+	CancellationScope,
+	isCancellation,
+	ParentClosePolicy,
+	patched,
+	proxyActivities,
+	startChild,
+} from "@temporalio/workflow"
 // a relative import. temporal bundles workflow code with webpack, which has no @shared alias
 import { toScanFailureReason } from "../../shared/scanFailure"
-import type * as scanActivities from "./run-topic-scan-activities"
+import type * as scanActivities from "./runTopicScanActivities"
+// the workflow that emails a completed Scan's outcome, and the queue that it runs on
+import { SCAN_EMAIL_TASK_QUEUE, type ScanEmailWorkflowInput, sendScanEmailWorkflow } from "./sendScanEmail"
 // the attempt counts the retry policies that the temporal activities read
 import {
 	FINISH_ATTEMPTS,
@@ -15,7 +24,7 @@ import {
 	REVIEW_ATTEMPTS,
 	REVIEW_TIMEOUT_MS,
 	REVIEW_TOTAL_TIMEOUT_MS,
-} from "./stage-timeouts"
+} from "./stageTimeouts"
 
 // ingest activity may be retried: it dedupes on canonical url
 const { ingestForScan } = proxyActivities<typeof scanActivities>({
@@ -34,7 +43,7 @@ const { reviewForScan } = proxyActivities<typeof scanActivities>({
 })
 
 // the closing writes are idempotent, so they may retry. they are short enough not to need a heartbeat
-const { finishScan, failScan, stopScan } = proxyActivities<typeof scanActivities>({
+const { finishScan, failScan, stopScan, reportScanEmailNotStarted } = proxyActivities<typeof scanActivities>({
 	startToCloseTimeout: FINISH_TIMEOUT_MS,
 	scheduleToCloseTimeout: FINISH_TOTAL_TIMEOUT_MS,
 	retry: { maximumAttempts: FINISH_ATTEMPTS },
@@ -50,8 +59,9 @@ export async function runTopicScanWorkflow(
 	ownerId: string,
 	trigger: scanActivities.ScanTrigger,
 ): Promise<void> {
-	// the Budget is built by the first stage and goes between stages as a value
+	// the Budget spent so far, and the status that the finishScan activity saved
 	let spentBudget: scanActivities.IngestStageResult["budget"] | undefined
+	let finishedScanStatus: scanActivities.IngestStageResult["status"] | undefined
 
 	// a stage that throws an error ends the Scan as failed with whatever it had already spent
 	try {
@@ -66,7 +76,8 @@ export async function runTopicScanWorkflow(
 			await stopCancelledScan(scanId)
 			return
 		}
-		await finishScan(scanId, topicId, ownerId, trigger, ingestResult, reviewResult)
+		await finishScan(scanId, topicId, ownerId, ingestResult, reviewResult)
+		finishedScanStatus = ingestResult.status
 	} catch (error) {
 		// a cancel that lands while a stage is waiting rejects that stage instead of returning through it
 		if (isCancellation(error)) {
@@ -75,9 +86,40 @@ export async function runTopicScanWorkflow(
 		}
 		await failScan(scanId, toScanFailureReason(error), spentBudget)
 	}
+
+	// email a completed Scan's outcome from its own workflow, outside the try so nothing here can fail the Scan.
+	// a Scan replaying a closing write from before the patch already sent its email, so the patch marker skips the start
+	const isScanEmailDue = trigger !== "scheduled" || finishedScanStatus === "succeeded"
+	if (finishedScanStatus !== undefined && isScanEmailDue && patched("scan-email-workflow")) {
+		// a scheduled Scan's digest goes to the subscribers, and any other Scan reports to whoever ran it or created the Topic
+		await startScanEmail(
+			trigger === "scheduled"
+				? { trigger, scanId, topicId }
+				: { trigger, scanId, topicId, reportRecipientUserId: ownerId },
+		)
+	}
 }
 
 // save a Scan the user cancelled
 function stopCancelledScan(scanId: string): Promise<void> {
 	return CancellationScope.nonCancellable(() => stopScan(scanId))
+}
+
+// start the Scan's email as a child that outlives this workflow, so the Topic's next Scan never waits on it.
+// a child that already exists for the Scan is left alone, and any other failure to start is reported
+async function startScanEmail(scanEmailWorkflowInput: ScanEmailWorkflowInput): Promise<void> {
+	try {
+		await startChild(sendScanEmailWorkflow, {
+			workflowId: `scan-email-${scanEmailWorkflowInput.scanId}`,
+			taskQueue: SCAN_EMAIL_TASK_QUEUE,
+			parentClosePolicy: ParentClosePolicy.ABANDON,
+			args: [scanEmailWorkflowInput],
+		})
+	} catch (error) {
+		// a child with this id is the Scan's email, already on its way
+		if (error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError") {
+			return
+		}
+		await reportScanEmailNotStarted(scanEmailWorkflowInput.scanId, toScanFailureReason(error))
+	}
 }

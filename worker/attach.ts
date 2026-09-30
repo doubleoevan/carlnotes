@@ -11,7 +11,7 @@ import { writePrompt } from "./prompts/write.ts"
 import { toFetchableUrl } from "./publicFetch"
 import { fetchContent } from "./scrape"
 import { deleteAttachment, MAX_KEY_FILENAME_CHARS, toAttachmentKey, uploadAttachment } from "./store"
-import { startAttachmentWorkflow } from "./temporal-client"
+import { startAttachmentWorkflow } from "./temporalClient"
 
 // a rejection safe to show the user as written: their file or url, not an infra failure like a misconfigured llm proxy
 export class AttachmentValidationError extends Error {}
