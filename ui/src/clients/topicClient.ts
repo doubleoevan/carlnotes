@@ -153,9 +153,18 @@ export type TopicPageResult =
 	| { status: "gated"; topicName: string | null }
 	| { status: "missing" }
 
-// fetch one topic's page, or how it is gated if this user may not see it
-export async function fetchTopicPage(topicId: string): Promise<TopicPageResult> {
-	const response = await apiClient.api.topics[":id"].$get({ param: { id: topicId } })
+// whether a fetch is the poll that repeats while a scan runs
+export type FetchTopicPageOptions = { isPoll?: boolean }
+
+// fetch one topic's page, or how the topic is gated if this user may not see the topic
+export async function fetchTopicPage(
+	topicId: string,
+	{ isPoll = false }: FetchTopicPageOptions = {},
+): Promise<TopicPageResult> {
+	const response = await apiClient.api.topics[":id"].$get({
+		param: { id: topicId },
+		query: isPoll ? { poll: "1" } : {},
+	})
 	if (response.ok) {
 		return { status: "visible", topic: topicResponse.parse(await response.json()) }
 	}

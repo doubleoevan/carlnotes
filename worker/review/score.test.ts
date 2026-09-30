@@ -1,12 +1,12 @@
 // score tests for the promotion threshold, the content ttl, bounded concurrency, and the score prompt
 import { expect, test } from "bun:test"
 import { canScoreResource, newBudget } from "../budget"
+import { runWithConcurrency } from "../concurrency"
 import { isContentStale } from "../scrape"
 import {
 	buildScorePrompt,
 	isPromoted,
 	isSnippetComplete,
-	runWithConcurrency,
 	toFetchedContentFields,
 	toFindingReviewFields,
 	toPageTitleField,

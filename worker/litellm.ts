@@ -8,6 +8,10 @@ import { and, eq, isNotNull, lt } from "drizzle-orm"
 import { db } from "../db"
 import { startOfUtcMonth } from "../db/quotas"
 import { users } from "../db/schema"
+import { runWithConcurrency } from "./concurrency"
+
+// how many key replacements the reset runs against the proxy at once
+const MONTHLY_BUDGET_RESET_CONCURRENCY = 4
 
 /**
  * Loads a user's own LiteLLM key, or undefined if they have none and the master key is billed.
@@ -18,8 +22,8 @@ export async function loadUserLiteLLMKey(userId: string): Promise<string | undef
 }
 
 /**
- * Create a virtual key for a user at their monthly budget. It has no window of its own; the sweep
- * replaces it on the first.
+ * Creates a virtual key for a user at their monthly budget.
+ * The user's spend starts again at zero only when the monthly budget reset replaces the key on the first.
  */
 export async function provisionLiteLLMKey(email: string, budgetCents: number): Promise<string> {
 	// ask the proxy for a budgeted key aliased to the user's email and the creation time
@@ -138,31 +142,34 @@ export async function replaceUserLiteLLMKey(userId: string): Promise<boolean> {
 }
 
 // how many keys the monthly reset replaced, and how many it could not
-export type BudgetResetSummary = { replaced: number; failed: number }
+export type BudgetResetSummary = { replacedCount: number; failedCount: number }
 
 /**
- * Replace every key created before the current month began, so each user's budget starts the month at zero. One
- * attempt per user: a failure is reported, and that user's key is tried again by the next sweep.
+ * Replaces every key created before the current month began, so each user's spend starts the month at zero.
+ * One attempt per user. A failure is reported, and the next reset tries that user's key again.
  */
-export async function resetMonthlyBudgets(): Promise<BudgetResetSummary> {
+export async function resetMonthlyBudgets(
+	replaceLiteLLMKey: (userId: string) => Promise<boolean> = replaceUserLiteLLMKey,
+): Promise<BudgetResetSummary> {
 	// the users whose key predates the month. a user with no key has nothing to reset
 	const dueUsers = await db
 		.select({ id: users.id })
 		.from(users)
 		.where(and(isNotNull(users.litellmVirtualKey), lt(users.litellmKeyCreatedAt, startOfUtcMonth(new Date()))))
 
-	// each replacement is its own attempt, and a failed one leaves the row for the next sweep
-	const resetSummary: BudgetResetSummary = { replaced: 0, failed: 0 }
-	for (const user of dueUsers) {
-		const isReplaced = await replaceUserLiteLLMKey(user.id).catch((error: unknown) => {
+	// replace each due user's key. a failed replacement leaves that key due for the next reset
+	const replaceLiteLLMKeyResults = await runWithConcurrency(dueUsers, MONTHLY_BUDGET_RESET_CONCURRENCY, (user) =>
+		replaceLiteLLMKey(user.id).catch((error: unknown) => {
 			// a read that fails before the replacement starts is this user's failure, never the reset's
 			console.error(`monthly budget reset could not replace the key for user ${user.id}`, error)
-			reportError(error, "scheduled-scan", { userId: user.id })
+			reportError(error, "billing", { userId: user.id })
 			return false
-		})
-		resetSummary[isReplaced ? "replaced" : "failed"]++
-	}
-	return resetSummary
+		}),
+	)
+
+	// count the replaced keys and the failed replacements
+	const replacedKeysCount = replaceLiteLLMKeyResults.filter(Boolean).length
+	return { replacedCount: replacedKeysCount, failedCount: dueUsers.length - replacedKeysCount }
 }
 
 // the proxy base url and master key, required for every admin call

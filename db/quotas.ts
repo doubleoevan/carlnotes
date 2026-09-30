@@ -3,8 +3,12 @@ import { dailyFrequencies, isAdminRole } from "@shared/enums"
 import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, type UserAccess } from "@shared/plans"
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm"
 import { db } from "."
+import { incrementRateLimitWindow, isWithinRateLimit } from "./redis"
 import { memoizeInRequest } from "./requestMemo"
 import { billingSubscriptions, invites, scans, teamMembers, topics, users } from "./schema"
+
+// one day in milliseconds, the suggestion rate limit window and the unit that invite and account ages are measured in
+const DAY_MS = 24 * 60 * 60 * 1000
 
 // the invite-limit factors: a first-week account reaches a fifth of its base, a sender whose week-old
 const YOUNG_ACCOUNT_DAYS = 7
@@ -22,12 +26,9 @@ const DAILY_TEAM_LIMIT = 20
 // how many source-suggestion model calls a user may make in a day, so nobody drains the budget on suggestions
 const DAILY_SUGGESTION_LIMIT = 300
 
-// today's suggestion counts by user, cleared when the utc day rolls over
-let dayStartTime = ""
-const suggestionCountsByUserId = new Map<string, number>()
-
 /**
- * Increment the suggestion count today. return false if none are left. Admins bypass the limit.
+ * Counts one suggestion against the user's UTC day and returns whether the suggestion is within the daily limit.
+ * An admin bypasses the limit, and a suggestion that Redis could not count is allowed.
  */
 export async function incrementDaySuggestionCount(userId: string): Promise<boolean> {
 	// an admin is not limited, so their count is never incremented
@@ -36,20 +37,16 @@ export async function incrementDaySuggestionCount(userId: string): Promise<boole
 		return true
 	}
 
-	// a new utc day drops every count
-	const todayStartTime = startOfUtcDay(new Date()).toISOString()
-	if (dayStartTime !== todayStartTime) {
-		dayStartTime = todayStartTime
-		suggestionCountsByUserId.clear()
-	}
+	// count the suggestion in today's rate limit window and return whether the count is within the daily limit
+	const rateLimitWindowHit = await incrementRateLimitWindow(toSuggestionRateLimitWindowKey(userId, new Date()), DAY_MS)
+	return isWithinRateLimit(rateLimitWindowHit, DAILY_SUGGESTION_LIMIT)
+}
 
-	// reject past the daily suggestion limit or increment the suggestion count today
-	const suggestionCount = suggestionCountsByUserId.get(userId) ?? 0
-	if (suggestionCount >= DAILY_SUGGESTION_LIMIT) {
-		return false
-	}
-	suggestionCountsByUserId.set(userId, suggestionCount + 1)
-	return true
+/**
+ * Returns the Redis key for a user's suggestion count on the UTC day of the given time.
+ */
+export function toSuggestionRateLimitWindowKey(userId: string, now: Date): string {
+	return `suggestions:${startOfUtcDay(now).toISOString().slice(0, 10)}:${userId}`
 }
 
 /**
@@ -135,7 +132,7 @@ export function toInviteLimit(input: {
 
 // the sender's accepted invite ratio among user invitations at least a week old
 async function acceptedInviteRatio(userId: string): Promise<number | null> {
-	const measuredThrough = new Date(Date.now() - REPUTATION_AGE_DAYS * 24 * 60 * 60 * 1000)
+	const latestMeasuredInvitedAt = new Date(Date.now() - REPUTATION_AGE_DAYS * DAY_MS)
 	const [inviteRows] = await db
 		.select({ measured: count(), accepted: count(sql`case when ${invites.usedCount} > 0 then 1 end`) })
 		.from(invites)
@@ -144,7 +141,7 @@ async function acceptedInviteRatio(userId: string): Promise<number | null> {
 				eq(invites.invitedByUserId, userId),
 				// only user invitations have an outcome someone chose
 				or(isNotNull(invites.email), isNotNull(invites.invitedUserId)),
-				lte(invites.invitedAt, measuredThrough),
+				lte(invites.invitedAt, latestMeasuredInvitedAt),
 			),
 		)
 	if (!inviteRows || inviteRows.measured === 0) {
@@ -163,9 +160,9 @@ async function inviteLimitToday(userId: string, isConnectedRecipient = false): P
 		return ADMIN_QUOTA
 	}
 
-	// the account's age and its acceptance record feed the invite limit formula
+	// read the user's account age and accepted invite ratio, then return the invite limit
 	const [userRow] = await db.select({ createdAt: users.createdAt }).from(users).where(eq(users.id, userId))
-	const accountAgeDays = userRow ? (Date.now() - userRow.createdAt.getTime()) / (24 * 60 * 60 * 1000) : 0
+	const accountAgeDays = userRow ? (Date.now() - userRow.createdAt.getTime()) / DAY_MS : 0
 	const acceptedShare = await acceptedInviteRatio(userId)
 	return toInviteLimit({ plan, accountAgeDays, acceptedShare, isConnectedRecipient })
 }

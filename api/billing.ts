@@ -14,6 +14,7 @@ import { billingSubscriptions, users } from "../db/schema"
 import { replaceUserLiteLLMKey } from "../worker"
 import { isAllowed } from "./authorization"
 import { type AppEnv, currentUser } from "./currentUser"
+import { refreshSessionUser } from "./sessions"
 import { scansToday } from "./topic/quotas"
 
 // a paid plan is any plan but free. only paid plans map to a Stripe price
@@ -254,9 +255,11 @@ async function applySubscriptionState(subscription: Stripe.Subscription): Promis
 	await syncUserPlan(userId, paidSubscription.plan)
 }
 
-// set users.plan to the updated plan and reissue the LiteLLM key with the new plan's budget
+// set users.plan and the user's sessions to the updated plan, then reissue the LiteLLM key with the new plan's budget
 async function syncUserPlan(userId: string, plan: Plan): Promise<void> {
+	// write the plan to the row, then to the user's sessions
 	await db.update(users).set({ plan }).where(eq(users.id, userId))
+	await refreshSessionUser(userId)
 
 	// a failed reissue leaves the key sized to the old plan's budget, so retry before reporting the failure
 	for (let attempt = 0; attempt < MAX_REPLACE_LITELLM_KEY_ATTEMPTS; attempt++) {

@@ -42,6 +42,12 @@ export type ReviewStageResult = { review: ReviewSummary; budget: Budget }
  * so a second ingest attempt reaches the same set of resources instead of ingesting again.
  */
 export async function ingestForScan(scanId: string, topicId: string): Promise<IngestStageResult> {
+	// record when a worker first picks up the Scan. a retried ingest keeps the first attempt's time
+	await db
+		.update(scans)
+		.set({ pickedUpAt: new Date() })
+		.where(and(eq(scans.id, scanId), isNull(scans.pickedUpAt)))
+
 	// the Budget is made here instead of in the workflow
 	const budget = toStageBudget(newBudget())
 	return traceScanStage("scan-ingest", scanId, topicId, () =>

@@ -117,8 +117,8 @@ test("a promoted prerelease is stored", async () => {
 			release: { ...PUBLISHED_RELEASE, prerelease: false },
 		})
 
-		// the route acts on it instead of dropping it as an action it does not know
-		expect(promotedText).not.toContain("ignored")
+		// the route stores the promoted release under its tag
+		expect(promotedText).toBe(JSON.stringify({ stored: "v0.4.0" }))
 	} finally {
 		restoreSecret(previousSecret)
 	}
@@ -172,8 +172,10 @@ test("an edit to a published release is stored", async () => {
 	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
-		// a stored edit is anything but a dropped action
-		expect(await postWebhook({ action: "edited", release: PUBLISHED_RELEASE })).not.toContain("ignored")
+		// the edited release is stored under its tag
+		expect(await postWebhook({ action: "edited", release: PUBLISHED_RELEASE })).toBe(
+			JSON.stringify({ stored: "v0.4.0" }),
+		)
 	} finally {
 		restoreSecret(previousSecret)
 	}

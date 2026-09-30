@@ -75,7 +75,7 @@ if ! docker info >/dev/null 2>&1; then
   docker info >/dev/null 2>&1 || { echo "docker did not start within 60s: open Docker Desktop and retry" >&2; exit 1; }
 fi
 
-# bring up the compose services (litellm proxy and temporal dev server) with secrets injected
+# bring up the compose services (litellm proxy, temporal dev server, and Redis) with secrets injected
 $COMPOSE up -d
 
 # wait for temporal to accept connections: compose returns once the container is created, well before the server binds 7233

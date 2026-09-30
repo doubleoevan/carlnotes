@@ -1,0 +1,1 @@
+ALTER TABLE "scans" ADD COLUMN "picked_up_at" timestamp with time zone;

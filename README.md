@@ -43,16 +43,17 @@ flowchart
     Worker --> Resend[Email]
 ```
 
-Four processes run in production:
+These processes run in production:
 
 | Process | What it does |
 |---|---|
 | `app` | Serves the api and the ui, rendering public pages on the server. Chat replies and uploads run in-process. |
 | `temporal-worker` | One process hosts three Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
-| scheduler | `bun worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
+| scheduler | `bun worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed in one query from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. A database claim keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
+| budget reset | `bun worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces a few keys at a time, under the same kind of database claim as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
 | `llm-guard` | The content scanner is its own service (see below). |
 
-Every process above runs on Northflank, which deploys on a git trigger. Managed alongside: Neon Postgres (pgvector), object storage through Bun's S3 client (R2 today; the `S3_*` env values pick the target), a self-hosted Temporal server, Resend, and Stripe. Model calls go through a LiteLLM proxy in front of Fireworks: every user gets a virtual key with a monthly budget, and the [litellm config](litellm-config.yaml) maps role names to models so a model swap is a config edit.
+Every process above runs on Northflank, which deploys on a git trigger. `app` and `temporal-worker` each run as replicas. The state that every `app` replica shares lives in Redis. Temporal gives each scan to one worker. Managed alongside: Neon Postgres (pgvector), a single-node Redis addon reached as `REDIS_URL`, object storage through Bun's S3 client (R2 today, picked by the `S3_*` env values), a self-hosted Temporal server, Resend, and Stripe. Model calls go through a LiteLLM proxy in front of Fireworks: every user gets a virtual key with a monthly budget, and the [litellm config](litellm-config.yaml) maps role names to models so a model swap is a config edit.
 
 ### Scan
 
@@ -85,21 +86,21 @@ Chat is signed-in only. Every chat turn writes a row, because every chat turn is
 
 Two components update while you watch them: a team chat room, and a Tasting Note several people are editing. Both push over Server-Sent Events, and neither runs a WebSocket server.
 
-The fan-out between instances is Postgres `LISTEN/NOTIFY`. Each process holds one dedicated listen connection and re-broadcasts to its own subscribers through an in-process `EventEmitter`, so a second instance costs a connection instead of a service. There is no Redis and no socket tier to operate.
+The fan-out between instances is Redis pub/sub. The instance that stored a change delivers the change to its own subscribers through an in-process `EventEmitter` first and then publishes the change. Every other instance re-broadcasts what it receives to its own subscribers. The instance that published skips its own echo. The same Redis holds the sessions, the caches for the mention count and the topic page's scan poll, and the shared limiters, so more than one `app` replica can run at once. Every database connection goes through Neon's connection pooler. There is no socket tier to operate.
 
 ```mermaid
 flowchart
     Writer[Writer's browser] -->|POST| App1["app instance A"]
     App1 --> Postgres[(Postgres)]
-    App1 -->|pg_notify| Postgres
-    Postgres -->|LISTEN| App2["app instance B"]
+    App1 -->|publish| Redis[(Redis)]
+    Redis -->|subscribe| App2["app instance B"]
     App1 -->|SSE| ReaderA[Reader on A]
     App2 -->|SSE| ReaderB[Reader on B]
 ```
 
-A chat room notifies the new message's id and subscribers read the row. A note cannot: a Yjs update is larger than a notify payload, so the instance that merged it delivers the bytes to its own subscribers directly and the notify is only an alert telling the other instances to resync. The note's ydoc stays the source of truth and its `html` column is regenerated on save, so a plain page load never starts the editor.
+A chat room publishes the new chat message's id and any topic tool calls from that chat turn, and subscribers read the row. A note publishes a poke. A Yjs update can be far larger than any message worth publishing, so the instance that merged the update delivers the bytes to its own subscribers directly and the poke tells the other instances to resync. The note's ydoc stays the source of truth and its `html` column is regenerated on save, so a plain page load never starts the editor.
 
-One deployment detail is load-bearing: `LISTEN` needs the direct Neon connection string, because the pooler never delivers notifications to a listener. `pg_notify` itself goes through the pooler like any other statement. A listen connection that drops reconnects with a backoff from one second to thirty. A note's stream pauses while its tab is hidden.
+Nothing published while a subscriber was disconnected is replayed. A chat stream catches up from its cursor on the next chat message. A note resyncs on the next poke, or when its stream closes at the fifteen-minute age limit. A Redis connection that drops reconnects with a backoff from one second to thirty. While Redis is unreachable, a session is read from Postgres, each cache calls its loader, each limit allows the request, and the storing instance still delivers to its own subscribers. A note's stream pauses while its tab is hidden.
 
 ### Content screening (LLM Guard)
 
@@ -107,7 +108,7 @@ LLM Guard screens untrusted text before any model reads it, protecting the app f
 
 Two kinds of text are screened, each at its entry point:
 
-- **A document a user hands us** — topic and chat attachments, before context is generated. Detectors: prompt injection, secrets, invisible text, adult content, toxicity.
+- **A document that a user gives us** — topic and chat attachments, before context is generated. Detectors: prompt injection, secrets, invisible text, adult content, toxicity.
 - **A fetched page** — url Sources, before the page is shown or scored. The same set, minus secrets.
 
 Each screen is one HTTP call with a 2.5-second timeout, and it never blocks the pipeline: on failure the text passes through unflagged. The prompt loader's unconditional untrusted-data fence still applies, and Exa always filters for moderate content.
@@ -137,11 +138,12 @@ bun install
 bun run dev          # api, ui, temporal, and worker together (concurrently, colored per process); run carl-up first for the Docker infra
                      # `mkdir -p logs && bun run dev 2>&1 | tee logs/dev.log` keeps a copy to tail from another shell; logs/ is gitignored
                      # every line is prefixed with its process, so `grep '^\[api\]' logs/dev.log` reads one of them
-bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server) and create a limited dev key; carl-down stops it
+bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server, Redis) and create a limited dev key; carl-down stops it
                      # scans run as Temporal workflows, so dev:temporal must be up for any scan to happen, not just for attachments
 bun run dev:ui       # Vite dev server (UI); wraps itself in doppler run
 bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; the Vite dev server proxies /api, /mcp, and the api's own pages and documents here
 bun run dev:worker   # scheduled-scan sweep loop (set SCHEDULE_INTERVAL_MS); `bun run schedule` runs one sweep, as a cron would
+bun run reset:monthly-budgets # replace every LiteLLM key created before the month began, as the daily cron does. a later run in the same month replaces only the keys that an earlier run failed to replace
 bun run dev:temporal # Temporal worker for topic scans and attachment processing; needs a Temporal server (docker-compose `temporal`, or `temporal server start-dev`)
 bun run dev:temporal:watch # the same worker, restarted on save; what `bun run dev` uses. a restart mid-review leaves that scan waiting out its 30-minute activity timeout before it fails
 bun run dev:email    # react-email preview server for the templates in emails/ (localhost:3011); no doppler needed

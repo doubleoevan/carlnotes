@@ -33,7 +33,8 @@ import { startOfUtcMonth } from "./quotas"
 const MAX_FEED_FINDINGS_PER_TOPIC = 25
 
 // the featured and popular id lists are the same for every visitor
-// ponytail: per-process cache, move it to a shared store if the api ever runs replicas that must agree
+// ponytail: per-process cache, so other replicas serve the old order for up to a minute after a rank change.
+// use cacheJson if that minute matters
 const SECTION_ID_CACHE_TTL_MS = 60_000
 let topicSectionIdCache: { value: { featuredIds: string[]; popularIds: string[] }; loadedAt: number } | null = null
 

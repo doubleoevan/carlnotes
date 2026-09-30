@@ -14,6 +14,7 @@ import { Hono } from "hono"
 import { db } from "../db"
 import { users } from "../db/schema"
 import { type AppEnv, currentUser } from "./currentUser"
+import { refreshSessionUser } from "./sessions"
 
 // how many proposals a username batch offers. enough for a real choice, small enough to stay a cheap query
 const USERNAME_BATCH_SIZE = 5
@@ -87,13 +88,16 @@ export async function saveUsername(userId: string, username: string): Promise<Se
 	return saveChosenUsername(userId, username)
 }
 
-// write a username the user chose. the unique index on the normalized form settles a race
+// write a username that the user chose to the row and to the user's sessions.
+// the unique index on the normalized username settles a race
 async function saveChosenUsername(userId: string, username: string): Promise<"taken" | null> {
 	try {
+		// write the row, then the user's sessions
 		await db
 			.update(users)
 			.set({ username, usernameNormalized: toNormalizedUsername(username) })
 			.where(eq(users.id, userId))
+		await refreshSessionUser(userId)
 		return null
 	} catch (error) {
 		// only a unique violation means a concurrent write took the name after the check. anything else rethrows

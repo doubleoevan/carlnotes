@@ -9,6 +9,7 @@ import { Hono } from "hono"
 import { serveStatic } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { db, readPoolGauges } from "../db"
+import { readRedisExtraGauges } from "../db/redis"
 import { runWithRequestMemo } from "../db/requestMemo"
 import { startTelemetry } from "../worker"
 import { apiRoute } from "./api"
@@ -47,8 +48,8 @@ export type AppType = typeof apiRoute
 startMonitoring()
 startTelemetry()
 
-// log the process's pool and event loop delay once a minute
-startRuntimeGauges({ processName: "api", readPoolGauges })
+// log the process's connection pool, event loop delay, and Redis gauges once a minute
+startRuntimeGauges({ processName: "api", readPoolGauges, readExtraGauges: readRedisExtraGauges })
 
 // the default policy, used unless a route sets its own. its image list allows a composer's local preview,
 // a release body's screenshots on github, and the photo host an avatar redirects to
@@ -226,5 +227,6 @@ function setBundleCacheControl(_path: string, context: Context): void {
 	context.header("Cache-Control", isHashedAsset ? "public, max-age=31536000, immutable" : "no-cache")
 }
 
-// in dev this runs on port 3000, and vite forwards /api, /mcp, and the api's own pages and documents to it
-export default { port: 3000, fetch: server.fetch, idleTimeout: 120 }
+// Bun serves on the port in PORT, or on 3000 if PORT is unset.
+// in dev, vite forwards /api, /mcp, and the api's own pages and documents to port 3000
+export default { fetch: server.fetch, idleTimeout: 120 }

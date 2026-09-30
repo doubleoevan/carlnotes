@@ -1,12 +1,13 @@
-// the one per-tool-caller rate limit
+// the one per-tool-caller rate limit, counted in Redis so every api replica shares one rate limit window
 import type { Context } from "hono"
-import { rateLimiter } from "hono-rate-limiter"
+import { type ClientRateLimitInfo, rateLimiter, type Store } from "hono-rate-limiter"
+import { decrementRateLimitWindow, deleteRedisKey, incrementRateLimitWindow } from "../db/redis"
 import type { AppEnv } from "./currentUser"
 import { resolveClientAddress } from "./trustedProxies"
 
-// how many requests one tool caller may make in one window, and how long the window is
+// how many requests one tool caller may make in one rate limit window, and how long the rate limit window is
 export const CALLER_RATE_LIMIT = 30
-const RATE_WINDOW_MS = 60_000
+const RATE_LIMIT_WINDOW_MS = 60_000
 
 // the bucket that visitors share if no client address can be trusted
 const SHARED_BUCKET = "shared"
@@ -33,12 +34,33 @@ function toRateLimitToolCaller(context: Context<AppEnv>): RateLimitToolCaller {
 	}
 }
 
-// the one limiter instance
-// ponytail: the in-memory store is per process. move it to a shared store once the api runs replicas
+/**
+ * The limiter's store, which counts each limiter key's hits in a Redis rate limit window.
+ * The store returns zero hits for a hit that Redis could not count, so the request passes.
+ */
+export const toolCallerRateLimitStore: Store<AppEnv> = {
+	increment: async (key: string): Promise<ClientRateLimitInfo> => {
+		// count the hit in Redis. return zero hits and a full rate limit window if Redis could not count the hit
+		const rateLimitWindowHit = await incrementRateLimitWindow(toRateLimitWindowKey(key), RATE_LIMIT_WINDOW_MS)
+		return rateLimitWindowHit
+			? { totalHits: rateLimitWindowHit.count, resetTime: new Date(rateLimitWindowHit.resetAt) }
+			: { totalHits: 0, resetTime: new Date(Date.now() + RATE_LIMIT_WINDOW_MS) }
+	},
+	decrement: (key: string): Promise<void> => decrementRateLimitWindow(toRateLimitWindowKey(key)),
+	resetKey: (key: string): Promise<void> => deleteRedisKey(toRateLimitWindowKey(key)),
+}
+
+// the per-tool-caller limiter, which counts hits in the Redis store
 export const toolCallerRateLimiter = rateLimiter<AppEnv>({
-	windowMs: RATE_WINDOW_MS,
+	windowMs: RATE_LIMIT_WINDOW_MS,
 	limit: CALLER_RATE_LIMIT,
 	standardHeaders: "draft-6",
 	keyGenerator: (context) => toRateLimitKey(toRateLimitToolCaller(context)),
 	handler: (context) => context.json({ error: "rate limited" }, 429),
+	store: toolCallerRateLimitStore,
 })
+
+// the Redis key that one limiter key's hits count under
+function toRateLimitWindowKey(rateLimitKey: string): string {
+	return `rate-limit:${rateLimitKey}`
+}

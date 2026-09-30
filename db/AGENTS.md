@@ -1,10 +1,29 @@
 # db/
 
-Drizzle + Neon Postgres.
+Drizzle + Neon Postgres, and the Redis store.
 
 - `schema.ts` — the one schema registry.
-- `index.ts` — the pooled client and the pool's counts. The pool opens up to `DATABASE_POOL_MAX` connections,
-  40 by default, and a request waiting for a connection fails after `DATABASE_CONNECT_TIMEOUT_MS`, 10 seconds by default.
+- `index.ts` — the pooled client and the connection pool's counts.
+  The connection pool opens up to `DATABASE_POOL_MAX` connections, 40 by default,
+  and a request waiting for a connection fails after `DATABASE_CONNECT_TIMEOUT_MS`, 10 seconds by default.
+  Every api replica, every worker replica, the sweep, and the monthly budget reset can run at once,
+  and each opens its own connection pool.
+  The connection pools' sizes together must fit the connection pooler's server-side pool for one user and database.
+  That server-side pool is 0.9 times the Neon compute's `max_connections`.
+  `max_connections` is 112 at 0.25 CU, 225 at 0.5 CU, and 450 at 1 CU.
+  Lower the replica count or `DATABASE_POOL_MAX` until the connection pools fit.
+- `redis.ts` — the Redis store, on Bun's built-in client from `REDIS_URL`.
+  `runWithRedis` runs one operation and returns null on any failure, and `cacheJson` returns a cached value, or loads the value and caches it.
+  `incrementRateLimitWindow` is the rate limit window counter behind every shared limiter.
+  `publishToChannel` and `subscribeToChannel` are the fan-out, and each process subscribes on one subscriber connection.
+  `readAndResetRedisGauges` returns the minute line's counts.
+  The store reconnects with no limit on attempts, and the reconnect delay doubles from one second up to 30 seconds.
+  If an operation returns null, the caller goes on without Redis.
+  Sessions read Postgres, a cache calls its loader, and a limiter allows the request.
+- `claim.ts` — `runWithClaim` runs the sweep and the budget reset under a database-level claim.
+  The claim is a transaction-level advisory lock keyed by the claim's name.
+  The lock works through the connection pooler and releases with the transaction no matter how the task ends.
+  A sweep or reset that starts while the claim is held does nothing.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, and budget
   override, which the api and the worker share.
 - `requestMemo.ts` — the reads one request repeats, its user's access and each topic role, kept in the request's

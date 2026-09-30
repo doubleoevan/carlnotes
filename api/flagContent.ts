@@ -6,18 +6,16 @@ import { toTopicPath } from "@shared/seo"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
+import { decrementRateLimitWindow, incrementRateLimitWindow, isWithinRateLimit } from "../db/redis"
 import { teams, topics, users } from "../db/schema"
 import { sendEmail } from "../worker/email"
 import { type AppEnv, currentUser } from "./currentUser"
 import { toTeamRole } from "./team/members"
 import { canSeeTopic } from "./topic/permissions"
 
-// how many flags one user may send in a day
+// how many flags one user may send in a one-day rate limit window, which starts at the window's first flag
 const DAILY_FLAG_LIMIT = 10
-
-// how many flags each account has sent, and when its day started.
-const flagCounts = new Map<string, { count: number; windowStartedAt: number }>()
-const FLAG_WINDOW_MS = 24 * 60 * 60 * 1000
+const FLAG_RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000
 
 // the result from a flag content request
 export type FlagContentResult = "sent" | "unknownSubject" | "limitReached" | "notConfigured" | "failed"
@@ -33,7 +31,7 @@ export async function flagContent(userId: string, payload: FlagContentPayload): 
 	}
 
 	// count this account's flags before resolving anything, so a flood costs no queries
-	if (!canFlag(userId)) {
+	if (!(await canFlag(userId))) {
 		return "limitReached"
 	}
 
@@ -54,7 +52,7 @@ export async function flagContent(userId: string, payload: FlagContentPayload): 
 
 	// a report the mailer rejected never reached support, and its spent slot comes back for the retry
 	if (!isAccepted) {
-		refundFlag(userId)
+		await refundFlag(userId)
 		return "failed"
 	}
 	return "sent"
@@ -108,30 +106,26 @@ function toFlagHtml(subject: { label: string; path: string }, sender: string, re
 	].join("\n")
 }
 
-// whether this user can still flag content. limited to avoid getting spammed.
-function canFlag(userId: string): boolean {
-	const now = Date.now()
-	const userFlagCount = flagCounts.get(userId)
-	// the first flag, or one after the day has run out resets the counter
-	if (!userFlagCount || now - userFlagCount.windowStartedAt > FLAG_WINDOW_MS) {
-		flagCounts.set(userId, { count: 1, windowStartedAt: now })
-		return true
-	}
-
-	// check this flag against the day's limit
-	if (userFlagCount.count >= DAILY_FLAG_LIMIT) {
-		return false
-	}
-	userFlagCount.count += 1
-	return true
+/**
+ * Counts one flag against the user's daily rate limit window and returns whether the count is within the limit.
+ * A flag that Redis could not count is allowed.
+ */
+export async function canFlag(userId: string): Promise<boolean> {
+	// count the flag in the user's daily rate limit window and return whether the count is within the limit
+	const rateLimitWindowHit = await incrementRateLimitWindow(toFlagRateLimitWindowKey(userId), FLAG_RATE_LIMIT_WINDOW_MS)
+	return isWithinRateLimit(rateLimitWindowHit, DAILY_FLAG_LIMIT)
 }
 
-// give a spent flag content slot back for a report the mailer rejected
-function refundFlag(userId: string): void {
-	const userFlagCount = flagCounts.get(userId)
-	if (userFlagCount && userFlagCount.count > 0) {
-		userFlagCount.count -= 1
-	}
+/**
+ * Refunds one flag for a report that the mailer rejected.
+ */
+export function refundFlag(userId: string): Promise<void> {
+	return decrementRateLimitWindow(toFlagRateLimitWindowKey(userId))
+}
+
+// the Redis key that a user's flags count under
+function toFlagRateLimitWindowKey(userId: string): string {
+	return `flags:${userId}`
 }
 
 // the flag content route

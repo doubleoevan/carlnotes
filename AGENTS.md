@@ -8,8 +8,9 @@ types only. The api and the worker import db, every module imports shared, and s
 
 - `ui/` — the TanStack Start app: the file routes under `ui/src/routes/`, the pages they render, components, typed API clients, and the stores behind them. A public page renders on the server for a visitor and a crawler. The sign-in pages, a route behind sign-in, and every route when the request brings a session cookie render in the browser.
 - `api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards, page head data, and the document routes (the sitemap, the feeds, the llms files, the IndexNow key, and security.txt).
-- `worker/` — Temporal workflows, the scan pipeline, ingesters, chat replies, link previews, prompts, email delivery.
-- `db/` — Drizzle schema, migrations, quotas. Neon Postgres.
+- `worker/` — Temporal workflows, the scan pipeline, ingesters, chat replies, link previews, prompts, email delivery,
+  the scheduled sweep, and the monthly budget reset.
+- `db/` — Drizzle schema, migrations, quotas, the Redis store, and the database claim. Neon Postgres and Redis.
 - `shared/` — what every module may import: the zod contracts, enums, plans, and Source definitions.
 - `infra/` — the service configs the app runs beside: litellm, llm-guard, and the Northflank pipelines.
 - `content/blog/` — the blog posts `api/content.ts` serves.

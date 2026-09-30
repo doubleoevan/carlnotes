@@ -268,6 +268,20 @@ Check for:
      `api/chat/chatTurns.ts`), `writeReplyStream` (now `api/chat/replyStream.ts`), and `api/chat/turns.test.ts` (now
      `chatTurns.test.ts` and `replyStream.test.ts`)
    - `ledger` and the `chat ledger` in comments (now a `chat turn row`, or a `spend row` where the point is what it bills)
+   - `DATABASE_URL_DIRECT` and `toDirectConnectionString` in `api/note/noteStream.ts` (removed: the chat and note
+     fan-out is Redis pub/sub through `publishToChannel` and `subscribeToChannel` in `db/redis.ts`), and with them
+     the brokers' own `Client`, `listener`, `listenRetryMs`, and `NOTIFY_TOOL_CALLS_MAX_BYTES`
+   - `toExclusiveTask` in `worker/schedule.ts` (now `runWithClaim` in `db/claim.ts`), `isTopicScheduled`, and
+     `loadScheduledTopics` with its JS filter (now `toScheduledTopicFilter` in `worker/schedule.ts`), and the reset inside the sweep
+     (now `worker/resetMonthlyBudgets.ts` and `bun run reset:monthly-budgets`)
+   - `MAX_CONCURRENT_SCAN_ACTIVITIES` in `worker/temporal.ts` (now `SCAN_CONCURRENCY`, read from the setting of
+     that name)
+   - `runWithConcurrency` in `worker/review/score.ts` (now `worker/concurrency.ts`)
+   - `flagCounts` in `api/flagContent.ts` and `suggestionCountsByUserId` with `dayStartTime` in `db/quotas.ts`
+     (removed: both count through `incrementRateLimitWindow` in `db/redis.ts`), and `hono-rate-limiter`'s memory store in
+     `api/rateLimit.ts` (now `toolCallerRateLimitStore` over the same counter)
+   - `RATE_WINDOW_MS` in `api/rateLimit.ts`, `FLAG_WINDOW_MS` in `api/flagContent.ts`, and `CREDENTIAL_RATE_WINDOW_SECONDS`
+     in `api/auth.ts` (now `RATE_LIMIT_WINDOW_MS`, `FLAG_RATE_LIMIT_WINDOW_MS`, and `CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

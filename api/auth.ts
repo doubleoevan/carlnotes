@@ -1,4 +1,5 @@
-// the app's Better Auth instance: email/password and Google/GitHub sign-in, sessions in Neon via the Drizzle adapter
+// the app's Better Auth instance: email/password and Google/GitHub sign-in, with sessions read from Redis first
+// and kept in Postgres through the Drizzle adapter
 import { trackEvent } from "@shared/analytics"
 import { appBaseUrl } from "@shared/appUrl"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
@@ -12,12 +13,14 @@ import { createAuthMiddleware } from "better-auth/api"
 import { mcp } from "better-auth/plugins"
 import { and, eq, like } from "drizzle-orm"
 import { db } from "../db"
+import { deleteRedisKey, incrementRateLimitWindow, runWithRedis } from "../db/redis"
 import * as schema from "../db/schema"
 import { renderAuthEmail, renderAuthEmailText } from "../emails/auth-email"
 import { isInternalAddress, provisionLiteLLMKey } from "../worker"
 import { sendEmail } from "../worker/email"
 import { userBudgetCents } from "./authorization"
 import { isBreachedPassword } from "./passwords"
+import { cacheSession } from "./sessions"
 import { saveDefaultUserTeam } from "./team/teams"
 import { ipAddressOptions, resolveClientAddress, trustedProxies } from "./trustedProxies"
 import { saveDefaultUsername, toAssignedUsername, toFreeUsernames } from "./usernames"
@@ -50,11 +53,30 @@ const RESET_TOKEN_LIFETIME_SECONDS = 60 * 60
 const MIN_PASSWORD_LENGTH = 12
 
 // how hard the credential endpoints are rate-limited
-const CREDENTIAL_RATE_WINDOW_SECONDS = 60
+const CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS = 60
 const CREDENTIAL_RATE_MAX = 10
 
 // the signed-in user that the session middleware sets on Hono's request context
 export type SessionUser = typeof auth.$Infer.Session.user
+
+/**
+ * The Redis storage that Better Auth uses for sessions, verification tokens, and rate limit counts.
+ * A failed read is a miss, and a failed count is zero. Better Auth passes each key's time to live in seconds.
+ */
+const sessionSecondaryStorage = {
+	get: (key: string): Promise<string | null> => runWithRedis("session get", (client) => client.get(key)),
+	set: async (key: string, value: string, ttlSeconds?: number): Promise<void> => {
+		await runWithRedis("session set", (client) =>
+			ttlSeconds ? client.set(key, value, "EX", ttlSeconds) : client.set(key, value),
+		)
+	},
+	delete: deleteRedisKey,
+	increment: async (key: string, ttlSeconds: number): Promise<number> => {
+		// count the hit on the key's rate limit window and return the count, or zero if Redis could not count the hit
+		const rateLimitWindowHit = await incrementRateLimitWindow(key, ttlSeconds * 1000)
+		return rateLimitWindowHit?.count ?? 0
+	},
+}
 
 // whether a phone on the same network may sign in against this server. dev only
 const isLanDevOriginTrusted = Boolean(Bun.env.LAN_DEV_URL) && Bun.env.DOPPLER_ENVIRONMENT === "dev"
@@ -192,6 +214,13 @@ const { options: _mcpOptions, ...mcpPlugin } = mcp({
 
 export const auth = betterAuth({
 	database: drizzleAdapter(db, { provider: "pg", schema, usePlural: true }),
+	// a session is read from Redis first and kept in Postgres, so an unreachable Redis never signs anyone out.
+	// Better Auth's rate limit counts live in Redis alone
+	secondaryStorage: sessionSecondaryStorage,
+	session: { storeSessionInDatabase: true },
+	// a verification value is read from Redis first and kept in Postgres,
+	// so an unreachable Redis never breaks a sign-in, a password reset, or a verification link
+	verification: { storeInDatabase: true },
 	// better auth derives trustedOrigins from baseURL itself
 	baseURL: Bun.env.BETTER_AUTH_URL,
 	// these are appended to that derived origin
@@ -235,11 +264,11 @@ export const auth = betterAuth({
 		enabled: true,
 		// the paths where a request is a login attempt or sends mail. everything else keeps the default rate limit
 		customRules: {
-			"/sign-in/email": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
-			"/sign-up/email": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
-			"/request-password-reset": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
-			"/reset-password": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
-			"/change-password": { window: CREDENTIAL_RATE_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
+			"/sign-in/email": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
+			"/sign-up/email": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
+			"/request-password-reset": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
+			"/reset-password": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
+			"/change-password": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 		},
 	},
 	// a non-blocking verification email on signup, whose link lives a day instead of the default hour
@@ -350,6 +379,34 @@ export const auth = betterAuth({
 						})
 				},
 			},
+			delete: {
+				// delete the Redis copy of each session that Better Auth deletes from Postgres,
+				// including a session that the user's active-sessions list missed
+				after: (session) => deleteRedisKey(session.token),
+			},
+			update: {
+				// store a refreshed session in Redis if Redis holds no copy.
+				// a session that Redis lost or never held is stored at its next daily refresh
+				after: async (session, context) => {
+					// a refresh that matched no Postgres row passes no session, and Better Auth already extended the Redis copy.
+					// delete the Redis copy that the request's cookie names
+					if (!session) {
+						const revokedSessionToken = await context?.getSignedCookie(
+							context.context.authCookies.sessionToken.name,
+							context.context.secret,
+						)
+						if (revokedSessionToken) {
+							await deleteRedisKey(revokedSessionToken)
+						}
+						return
+					}
+
+					// a failed write must not fail the request
+					await cacheSession(session).catch((error) => {
+						console.error(`could not cache the session for user ${session.userId}`, error)
+					})
+				},
+			},
 		},
 	},
 })
@@ -388,11 +445,16 @@ export async function verifyGateToken(token: string): Promise<boolean> {
 	return Date.now() < expiresAt
 }
 
-// clears all outstanding password reset tokens on password reset
+// delete every outstanding reset-password link of a user from Postgres and from Redis
 async function clearResetPasswordTokens(userId: string): Promise<void> {
-	await db
+	// delete the user's reset-password rows and return each row's identifier
+	const deletedVerifications = await db
 		.delete(schema.verifications)
 		.where(and(like(schema.verifications.identifier, "reset-password:%"), eq(schema.verifications.value, userId)))
+		.returning({ identifier: schema.verifications.identifier })
+
+	// delete each row's Redis copy, which Better Auth keys by the row's identifier
+	await Promise.all(deletedVerifications.map(({ identifier }) => deleteRedisKey(`verification:${identifier}`)))
 }
 
 // sends the reset-password link

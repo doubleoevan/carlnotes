@@ -9,9 +9,10 @@ undefined when unset, for the emails and notifications that skip without a link.
 
 `monitoring.ts` starts Sentry in the api and the worker and defines what tracing reads and writes: the traces sampler,
 a request's transaction name and measurements, the stage and query spans, the send-time scrub, and the threshold
-warnings. `runtimeGauges.ts` logs a long-running process's pool and event loop delay once a minute, over the histogram
-in `eventLoopDelay.ts`, and `reportedPath.ts` names a page by its route's shape, for PostHog's page views and Sentry's
-page renders alike.
+warnings. `runtimeGauges.ts` logs a long-running process's connection pool and event loop delay once a minute, reading
+the delay from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its host name,
+so the replicas' lines can be told apart.
+`reportedPath.ts` names a page by its route's shape, for PostHog's page views and Sentry's page renders alike.
 
 - This module imports nothing app-level. It may not reach into `ui`, `api`, `worker`, or `db`, which
   is what lets all four depend on it.

@@ -55,7 +55,8 @@
 		"carl-down": "bash scripts/carl-down.sh",
 		"litellm:restart": "doppler run -- docker compose restart litellm",
 		"llm-guard:up": "docker compose up -d llm-guard",
-		"schedule": "doppler run -- bun worker/schedule.ts"
+		"schedule": "doppler run -- bun worker/schedule.ts",
+		"reset:monthly-budgets": "doppler run -- bun worker/resetMonthlyBudgets.ts"
 	},
 	"dependencies": {
 		"@ai-sdk/openai": "^4.0.14",

@@ -9,8 +9,10 @@ import { toTopicPath } from "@shared/seo"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, desc, eq, inArray, isNotNull, isNull, notInArray } from "drizzle-orm"
 import { Hono } from "hono"
+import { z } from "zod"
 import { db } from "../../db"
 import { incrementDaySuggestionCount } from "../../db/quotas"
+import { cacheJson } from "../../db/redis"
 import {
 	attachments,
 	chatRoomAttachments,
@@ -53,6 +55,12 @@ import {
 import { loadDirectSubscription } from "./permissions"
 import { type PromptVersionOrigin, savePromptVersion } from "./promptVersions"
 import { startOfUtcMonth } from "./quotas"
+
+// the query flag that marks a topic page request as a poll reload
+const topicPageQuery = z.object({ poll: z.literal("1").optional() })
+
+// how long Redis caches a topic page for poll reloads
+const TOPIC_PAGE_POLL_TTL_MS = 2000
 
 // the outcome of a topic creation request
 type CreateTopicResult =
@@ -624,11 +632,22 @@ export const topicsRoute = new Hono<AppEnv>()
 		}
 		return context.json({ topics: await loadTeamTopicOptions(userId, context.req.query("excludeTeam")) })
 	})
-	.get("/topics/:id", async (context) => {
-		// the topic detail payload, gated by visibility. a signed-out visitor may only view a public topic
-		const topicPage = await traceRequestStage("topic_page.load", () =>
-			loadTopicPage(currentUser(context), context.req.param("id")),
-		)
+	.get("/topics/:id", zValidator("query", topicPageQuery), async (context) => {
+		// the topic detail payload's traced loader, gated by visibility. a signed-out visitor may only view a public topic
+		const userId = currentUser(context)
+		const topicId = context.req.param("id")
+		const loadTracedTopicPage = (): Promise<TopicResponse | null> =>
+			traceRequestStage("topic_page.load", () => loadTopicPage(userId, topicId))
+
+		// serve a poll reload from a short Redis cache per user and topic, and any other request from the database
+		const isPoll = context.req.valid("query").poll === "1"
+		const topicPage = isPoll
+			? await cacheJson({
+					key: `topic-page:${userId ?? "visitor"}:${topicId}`,
+					ttlMs: TOPIC_PAGE_POLL_TTL_MS,
+					load: loadTracedTopicPage,
+				})
+			: await loadTracedTopicPage()
 		if (topicPage) {
 			return context.json(topicPage)
 		}

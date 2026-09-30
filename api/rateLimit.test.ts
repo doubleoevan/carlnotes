@@ -1,9 +1,16 @@
-// rate limit tests: a request's limiter key, and the client address that a visitor resolves to behind Cloudflare
-import { expect, test } from "bun:test"
+// rate limit tests: a request's limiter key, the client address that a visitor resolves to behind Cloudflare,
+// and the store that counts each limiter key's hits in Redis
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { getIp } from "better-auth/api"
+import * as redis from "../db/redis"
 import { auth } from "./auth"
-import { toRateLimitKey } from "./rateLimit"
+import { toolCallerRateLimitStore, toRateLimitKey } from "./rateLimit"
 import { ipAddressOptions, resolveClientAddress } from "./trustedProxies"
+
+// put the spied Redis functions back after each test
+afterEach(() => {
+	mock.restore()
+})
 
 // a few of Cloudflare's published ranges, read the way production reads TRUSTED_PROXIES
 const CLOUDFLARE_IP_ADDRESS_OPTIONS = {
@@ -48,4 +55,32 @@ test("Better Auth and the limiter resolve the same client address", () => {
 	const request = new Request("http://localhost/mcp", { headers: { "x-forwarded-for": "203.0.113.7" } })
 	expect(auth.options.advanced?.ipAddress).toBe(ipAddressOptions)
 	expect(resolveClientAddress(request)).toBe(getIp(request, auth.options))
+})
+
+// the store counts a limiter key under a prefixed Redis key and returns the count as the limiter's hits and reset time
+test("the store maps a counted rate limit window to hits and a reset time", async () => {
+	const resetAt = Date.now() + 30_000
+	const incrementRateLimitWindowSpy = spyOn(redis, "incrementRateLimitWindow").mockResolvedValue({ count: 3, resetAt })
+	expect(await toolCallerRateLimitStore.increment("user:user-1")).toEqual({
+		totalHits: 3,
+		resetTime: new Date(resetAt),
+	})
+	expect(incrementRateLimitWindowSpy).toHaveBeenCalledWith("rate-limit:user:user-1", 60_000)
+})
+
+// the store returns zero hits for a hit that Redis could not count, so the request passes
+test("the store allows a request while Redis is unreachable", async () => {
+	spyOn(redis, "incrementRateLimitWindow").mockResolvedValue(null)
+	const rateLimitInfo = await toolCallerRateLimitStore.increment("user:user-1")
+	expect(rateLimitInfo.totalHits).toBe(0)
+})
+
+// a refund and a reset go to the same Redis key that the hits count under
+test("the store refunds and resets the limiter key's Redis key", async () => {
+	const decrementRateLimitWindowSpy = spyOn(redis, "decrementRateLimitWindow").mockResolvedValue(undefined)
+	const deleteRedisKeySpy = spyOn(redis, "deleteRedisKey").mockResolvedValue(undefined)
+	await toolCallerRateLimitStore.decrement("shared")
+	await toolCallerRateLimitStore.resetKey("shared")
+	expect(decrementRateLimitWindowSpy).toHaveBeenCalledWith("rate-limit:shared")
+	expect(deleteRedisKeySpy).toHaveBeenCalledWith("rate-limit:shared")
 })

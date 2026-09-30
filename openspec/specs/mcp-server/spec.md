@@ -116,7 +116,7 @@ The visitor path's only model call SHALL be the search embedding, and it SHALL r
 - **THEN** the embedding runs on that user's LiteLLM key
 
 ### Requirement: One per-caller rate limit covers MCP and the chat
-The api SHALL apply one rate limiter to both MCP routes and to the private chat turn `POST` routes. The limiter is a fixed window of one minute with one limit for every caller, keyed by the user a session or an accepted bearer token names, else by the client address, else by one shared bucket. The client address SHALL be resolved by Better Auth's own `getIp` with the same options object Better Auth is configured with: the rightmost `x-forwarded-for` entry outside every range in `TRUSTED_PROXIES`, so Better Auth and the limiter always name the same client. Each process SHALL check the first request that came through Cloudflare, and warn if `TRUSTED_PROXIES` is set and that request resolves to no client address or to an internal one. A token that resolves to no user is a visitor and never a key of its own. A request past the limit SHALL be rejected with 429 and perform no work.
+The api SHALL apply one rate limiter to both MCP routes and to the private chat turn `POST` routes. The limiter is a fixed window of one minute with one limit for every caller, keyed by the user a session or an accepted bearer token names, else by the client address, else by one shared bucket. The client address SHALL be resolved by Better Auth's own `getIp` with the same options object Better Auth is configured with: the rightmost `x-forwarded-for` entry outside every range in `TRUSTED_PROXIES`, so Better Auth and the limiter always name the same client. Each process SHALL check the first request that came through Cloudflare, and warn if `TRUSTED_PROXIES` is set and that request resolves to no client address or to an internal one. A token that resolves to no user is a visitor and never a key of its own. A request past the limit SHALL be rejected with 429 and perform no work. The counts SHALL live in Redis through the Redis store's fixed-window counter, keyed the same way, so every api replica counts against one window and no process holds a count of its own. While Redis is unreachable the limiter SHALL allow the request, since the limit guards spend and not data.
 
 #### Scenario: A visitor past the limit is rejected
 - **WHEN** one client address sends more MCP requests in a minute than the limit
@@ -149,6 +149,14 @@ The api SHALL apply one rate limiter to both MCP routes and to the private chat 
 - **GIVEN** `TRUSTED_PROXIES` is set
 - **WHEN** the first request with a `cf-ray` header resolves to no client address or to an internal one
 - **THEN** the api logs one warning with the request's x-forwarded-for header, and checks no other request for the rest of the process
+
+#### Scenario: Two replicas share one window
+- **WHEN** one caller's requests are split across two api processes inside one minute
+- **THEN** the requests past the limit are rejected whichever process receives them, since both count in Redis
+
+#### Scenario: Redis down allows the request
+- **WHEN** Redis is unreachable and a caller sends an MCP request
+- **THEN** the request is allowed, and no error reaches the caller
 
 ### Requirement: Results fit the client's limit, Findings whole or not at all
 Every list result SHALL paginate with an opaque cursor and include a next cursor when more remains. A page SHALL be packed under a character budget well inside a client's result limit of about 30,000 tokens, adding Findings in order until the next would overflow and always including at least one. A Finding SHALL never be returned with a truncated relevance explanation. Trimming returns fewer Findings. Results SHALL include structured content beside their text.

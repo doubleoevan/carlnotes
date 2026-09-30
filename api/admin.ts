@@ -32,6 +32,7 @@ import { isAdminRole, isAllowed, userBudgetCents } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { readStripeTotalRevenueCents } from "./billing"
 import { type AppEnv, currentUser } from "./currentUser"
+import { refreshSessionUser } from "./sessions"
 import { loadAdminTeamTopics, loadTeamSummaries, toSpendByTeamId } from "./team/helpers"
 import { startOfUtcMonth } from "./topic/quotas"
 
@@ -283,6 +284,9 @@ export async function setUserRole(
 	if (!updated) {
 		return "missing"
 	}
+
+	// write the role to the user's sessions, then reissue the LiteLLM key for the new role
+	await refreshSessionUser(targetUserId)
 	await replaceUserLiteLLMKey(targetUserId)
 	return "set"
 }

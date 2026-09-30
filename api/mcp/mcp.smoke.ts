@@ -20,7 +20,7 @@ import {
 import { apiRoute } from "../api"
 import { auth } from "../auth"
 import type { AppEnv } from "../currentUser"
-import { CALLER_RATE_LIMIT, toolCallerRateLimiter } from "../rateLimit"
+import { CALLER_RATE_LIMIT, toolCallerRateLimiter, toolCallerRateLimitStore, toRateLimitKey } from "../rateLimit"
 import { CONNECT_ACCOUNT_TEXT } from "./results"
 import { mcpRoute } from "./server"
 
@@ -433,6 +433,9 @@ async function checkUser(accessToken: string): Promise<void> {
 // check the per-tool-caller rate limit. a bearer nobody holds resolves to a visitor, so the requests share the visitor bucket
 async function checkRateLimit(): Promise<void> {
 	const limitedRoute = new Hono<AppEnv>().use("/mcp/*", toolCallerRateLimiter).route("/", mcpRoute)
+
+	// start the visitor bucket's rate limit window empty. Redis may already count other visitor requests from the last minute
+	await toolCallerRateLimitStore.resetKey(toRateLimitKey({ userId: null, clientAddress: null }))
 
 	// send one more initialize than the limit allows, all as that visitor
 	const statuses: number[] = []

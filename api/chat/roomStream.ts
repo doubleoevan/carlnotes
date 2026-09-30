@@ -1,25 +1,32 @@
-// the chat room's fan-out across instances
+// the chat room's fan-out across instances over Redis pub/sub.
+// a stored chat message reaches this instance's subscribers directly and every other instance through the channel
 import { EventEmitter } from "node:events"
-import { Client } from "@neondatabase/serverless"
 import type { RoomTopicToolCalls } from "@shared/contracts"
-import { sql } from "drizzle-orm"
-import { db } from "../../db"
-import { toDirectConnectionString } from "../note/noteStream"
+import { publishToChannel, subscribeToChannel } from "../../db/redis"
 
-// the one channel every instance listens on. the payload names the topic, the team, and the chat message id
+// the one channel that every instance subscribes to. the payload names the sending instance, the topic, the team,
+// and the chat message id. a fifth part holds the chat turn's tool calls if a topic tool left any
 export const CHAT_ROOM_CHANNEL = "room_messages"
+
+// this instance's id in each payload, so this instance can skip the echo of its own payload
+const instanceId = crypto.randomUUID()
 
 // this instance's subscribers, keyed by topic and team id through the emitter's event names
 const chatRoomEvents = new EventEmitter()
 chatRoomEvents.setMaxListeners(0)
 
-// the dedicated connection, held once per process
-let listener: Client | null = null
+// the tool calls that a chat message arrives with if no topic tool left any
+const EMPTY_ROOM_TOPIC_TOOL_CALLS: RoomTopicToolCalls = { topicSaves: [], topicSaveRejections: [] }
 
-// the reconnect delay doubles on repeated failures and resets once a listen succeeds
-const LISTEN_RETRY_MIN_MS = 1000
-const LISTEN_RETRY_MAX_MS = 30_000
-let listenRetryMs = LISTEN_RETRY_MIN_MS
+// one chat room: the topic, or null for the team's own chat room, and the team
+type ToChatRoomKeyOptions = { topicId: string | null; teamId: string }
+
+// what one payload names: the sending instance, the chat room, the chat message, and what a topic tool left
+export type ToChatRoomPayloadOptions = ToChatRoomKeyOptions & {
+	senderInstanceId: string
+	chatMessageId: number
+	roomToolCalls: RoomTopicToolCalls
+}
 
 /**
  * Listens on this instance for a chat room's new chat message ids, each with what a topic tool left in that chat turn,
@@ -30,98 +37,79 @@ export function onChatRoomMessage(
 	teamId: string,
 	handler: (chatMessageId: number, roomToolCalls: RoomTopicToolCalls) => void,
 ): () => void {
-	startChatRoomListener()
-	// the team's own chat room keys on the literal "team" where a topic id would sit
-	chatRoomEvents.on(`${topicId ?? "team"}:${teamId}`, handler)
-	return () => chatRoomEvents.off(`${topicId ?? "team"}:${teamId}`, handler)
+	// subscribe this instance to the channel, then register the handler under the chat room's key
+	subscribeToChannel(CHAT_ROOM_CHANNEL, deliverChatRoomPayload)
+	chatRoomEvents.on(toChatRoomKey({ topicId, teamId }), handler)
+	return () => chatRoomEvents.off(toChatRoomKey({ topicId, teamId }), handler)
 }
 
-// how much of pg_notify's 8000 byte payload the tool calls may take, leaving room for the ids that go with them
-const NOTIFY_TOOL_CALLS_MAX_BYTES = 7_000
-
 /**
- * Tells every instance a chat message was stored, with what a topic tool left, after the insert commits.
+ * Tells every instance that a chat message was stored, with what a topic tool left, after the insert commits.
+ * This instance's subscribers get the chat message id first, even if publishing to the channel fails.
  */
 export async function notifyChatRoomMessage(
 	topicId: string | null,
 	teamId: string,
 	chatMessageId: number,
-	roomToolCalls: RoomTopicToolCalls = { topicSaves: [], topicSaveRejections: [] },
+	roomToolCalls: RoomTopicToolCalls = EMPTY_ROOM_TOPIC_TOOL_CALLS,
 ): Promise<void> {
-	// pg_notify works through the pooler. only LISTEN needs the direct connection.
-	// the tool calls are sent as base64url json, which has no colon to split on
+	// deliver to this instance's subscribers, then publish to every other instance
+	chatRoomEvents.emit(toChatRoomKey({ topicId, teamId }), chatMessageId, roomToolCalls)
+	await publishToChannel({
+		channel: CHAT_ROOM_CHANNEL,
+		channelMessage: toChatRoomPayload({ senderInstanceId: instanceId, topicId, teamId, chatMessageId, roomToolCalls }),
+	})
+}
+
+/**
+ * Returns the payload that an instance publishes for a stored chat message.
+ * The tool calls are JSON encoded as base64url, whose alphabet has no colon to split on.
+ */
+export function toChatRoomPayload({
+	senderInstanceId,
+	topicId,
+	teamId,
+	chatMessageId,
+	roomToolCalls,
+}: ToChatRoomPayloadOptions): string {
+	// join the parts with colons, with the tool calls as a fifth part only if a topic tool left any
 	const hasToolCalls =
 		roomToolCalls.topicSaves.length > 0 ||
 		roomToolCalls.topicSaveRejections.length > 0 ||
 		roomToolCalls.proposedToUserId !== undefined ||
 		roomToolCalls.isTopicEditCancelled === true
-	const toolCallsPart = hasToolCalls ? Buffer.from(JSON.stringify(roomToolCalls)).toString("base64url") : ""
-	// drop tool calls too large for pg_notify's 8000 bytes, so the chat message still arrives
-	const toolCallsSuffix = toolCallsPart.length <= NOTIFY_TOOL_CALLS_MAX_BYTES ? `:${toolCallsPart}` : ""
-	const payload = `${topicId ?? "team"}:${teamId}:${chatMessageId}${toolCallsSuffix}`
-	// best-effort delivery: a failed notify is logged, and the cursor catch-up covers the gap
-	try {
-		await db.execute(sql`select pg_notify(${CHAT_ROOM_CHANNEL}, ${payload})`)
-	} catch (error) {
-		console.error("room notify failed", error)
-	}
+	const toolCallsSuffix = hasToolCalls ? `:${Buffer.from(JSON.stringify(roomToolCalls)).toString("base64url")}` : ""
+	return `${senderInstanceId}:${toChatRoomKey({ topicId, teamId })}:${chatMessageId}${toolCallsSuffix}`
 }
 
-// start the chat room listener once. a dropped connection schedules its own reconnect
-function startChatRoomListener(): void {
-	if (listener) {
+// re-emit another instance's payload to this instance's subscribers for the payload's chat room
+function deliverChatRoomPayload(chatRoomPayload: string): void {
+	// the payload is senderInstanceId:topicId:teamId:chatMessageId, plus the tool calls if a topic tool left any
+	const [senderInstanceId, topicId, teamId, chatMessageId, toolCallsPart] = chatRoomPayload.split(":")
+
+	// skip the echo of this instance's own payload and a payload missing a part, then emit to the chat room's subscribers
+	if (senderInstanceId === instanceId || !topicId || !teamId || !chatMessageId) {
 		return
 	}
-
-	// the api client takes the slot before connecting, so overlapping starts cannot open two
-	const client = new Client({ connectionString: toDirectConnectionString() })
-	listener = client
-
-	// each notification re-emits to this instance's subscribers for that topic
-	client.on("notification", (notification) => {
-		// the payload is topicId:teamId:messageId, with the tool calls as a fourth part when a topic tool left any
-		const [topicId, teamId, chatMessageId, toolCallsPart] = (notification.payload ?? "").split(":")
-		if (topicId && teamId && chatMessageId) {
-			chatRoomEvents.emit(`${topicId}:${teamId}`, Number(chatMessageId), toRoomTopicToolCalls(toolCallsPart))
-		}
-	})
-
-	// neon closes an idle connection with a clean "end", which stalls the stream exactly like an error
-	client.on("error", (error) => {
-		console.error("room listener error", error)
-		scheduleChatRoomRelisten(client)
-	})
-	client.on("end", () => scheduleChatRoomRelisten(client))
-
-	// connect and listen. a failure schedules the next attempt
-	client
-		.connect()
-		.then(() => client.query(`LISTEN ${CHAT_ROOM_CHANNEL}`))
-		// a successful listen resets the retry delay
-		.then(() => {
-			listenRetryMs = LISTEN_RETRY_MIN_MS
-		})
-		.catch((error) => {
-			console.error("room listener connect failed", error)
-			scheduleChatRoomRelisten(client)
-		})
+	chatRoomEvents.emit(`${topicId}:${teamId}`, Number(chatMessageId), toRoomTopicToolCalls(toolCallsPart))
 }
 
-// drop a dead client and reconnect after the backoff
-function scheduleChatRoomRelisten(client: Client): void {
-	if (listener !== client) {
-		return
-	}
-
-	// the slot clears now, and the timer stays unreferenced, so an idle process can still exit
-	listener = null
-	setTimeout(startChatRoomListener, listenRetryMs).unref()
-	listenRetryMs = Math.min(listenRetryMs * 2, LISTEN_RETRY_MAX_MS)
+// a chat room's key in the emitter and the payload. the team's own chat room has "team" in place of a topic id
+function toChatRoomKey({ topicId, teamId }: ToChatRoomKeyOptions): string {
+	return `${topicId ?? "team"}:${teamId}`
 }
 
-// the tool calls a notification sent, decoded from base64url JSON, or none when it sent none
+// the tool calls in a payload's fifth part, decoded from base64url JSON
 function toRoomTopicToolCalls(toolCallsPart: string | undefined): RoomTopicToolCalls {
-	return toolCallsPart
-		? (JSON.parse(Buffer.from(toolCallsPart, "base64url").toString()) as RoomTopicToolCalls)
-		: { topicSaves: [], topicSaveRejections: [] }
+	// a payload with no fifth part has no tool calls
+	if (!toolCallsPart) {
+		return EMPTY_ROOM_TOPIC_TOOL_CALLS
+	}
+
+	// a fifth part that does not decode counts as no tool calls, so the chat message still arrives
+	try {
+		return JSON.parse(Buffer.from(toolCallsPart, "base64url").toString()) as RoomTopicToolCalls
+	} catch {
+		return EMPTY_ROOM_TOPIC_TOOL_CALLS
+	}
 }

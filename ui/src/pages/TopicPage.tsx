@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import { authClient } from "@/clients/authClient"
 import {
+	type FetchTopicPageOptions,
 	fetchTopicPage,
 	sendTopicFeatureOrder,
 	sendTopicFindingBookmark,
@@ -238,7 +239,7 @@ type UseTopicPagePayloadOptions = { topicId: string; topicSlug: string | undefin
 function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions): {
 	topic: TopicResponse | null | undefined
 	gatedTopic: { topicName: string | null } | null
-	reloadTopicPage: () => Promise<void>
+	reloadTopicPage: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
 } {
 	const navigate = useNavigate()
 	// the public topic either topic route loads on the server, or nothing
@@ -259,16 +260,19 @@ function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions)
 	const [gatedTopic, setGatedTopic] = useState<{ topicName: string | null } | null>(null)
 
 	// fetch the topic page payload, which says whether the topic is visible, gated to this user, or missing
-	const reloadTopicPage = useCallback(async () => {
-		try {
-			const topicPage = await fetchTopicPage(topicId)
-			setTopic(topicPage.status === "visible" ? topicPage.topic : null)
-			setGatedTopic(topicPage.status === "gated" ? { topicName: topicPage.topicName } : null)
-		} catch (error) {
-			console.error("topic page load failed", error)
-			setTopic(null)
-		}
-	}, [topicId])
+	const reloadTopicPage = useCallback(
+		async (fetchTopicPageOptions: FetchTopicPageOptions = {}) => {
+			try {
+				const topicPage = await fetchTopicPage(topicId, fetchTopicPageOptions)
+				setTopic(topicPage.status === "visible" ? topicPage.topic : null)
+				setGatedTopic(topicPage.status === "gated" ? { topicName: topicPage.topicName } : null)
+			} catch (error) {
+				console.error("topic page load failed", error)
+				setTopic(null)
+			}
+		},
+		[topicId],
+	)
 	// keep the topic if its id matches the url, otherwise show the skeleton, then reload the page payload. the first
 	// load skips while hydrating the public topic the server loaded, unless a scan was running, whose findings may have changed since
 	const resetAndReloadTopicPage = useCallback((): void => {

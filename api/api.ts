@@ -3,9 +3,11 @@ import { zValidator } from "@hono/zod-validator"
 import { appUrl } from "@shared/appUrl"
 import { signupGatePayload } from "@shared/contracts"
 import { traceRequestStage } from "@shared/monitoring"
+import { isAPIError } from "better-auth/api"
 import { Hono } from "hono"
 import { getCookie, setCookie } from "hono/cookie"
 import { z } from "zod"
+import { cacheJson } from "../db/redis"
 import { activityRoute } from "./activity"
 import { adminRoute } from "./admin"
 import {
@@ -20,6 +22,7 @@ import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "./authorizatio
 import { avatarsRoute } from "./avatars"
 import { billingRoute } from "./billing"
 import { chatAttachmentsRoute } from "./chat/attachments"
+import { toUnseenChatMentionCountKey } from "./chat/mentions"
 import { privateChatRoute } from "./chat/privateChat"
 import { chatRoomRoute } from "./chat/room"
 import { countUnseenChatMentions, loadChatRooms } from "./chat/rooms"
@@ -62,15 +65,18 @@ const PASSWORD_RESET_REQUEST_PATH = "/request-password-reset"
 // the mcp plugin's authorize endpoint. it shows the consent page only when the request sends prompt=consent
 const MCP_AUTHORIZE_PATH = "/mcp/authorize"
 
+// how long the unseen chat mention count is served from Redis
+const UNSEEN_CHAT_MENTION_COUNT_TTL_MS = 10_000
+
 // the "All" vs. "Unread" topic finding toggle
 const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional() })
 
 // the api tree, mounted on the server in api/index.ts
 export const apiRoute = new Hono<AppEnv>()
 	.basePath("/api")
-	// resolves the session once per request, so every route it wraps gets the currentUser
+	// resolve the session once per request, so every route that the middleware wraps gets the currentUser
 	.use("*", async (context, next) => {
-		const session = await auth.api.getSession({ headers: context.req.raw.headers })
+		const session = await auth.api.getSession({ headers: context.req.raw.headers }).catch(toSignedOutSession)
 		context.set("user", session?.user ?? null)
 		await next()
 	})
@@ -122,10 +128,17 @@ export const apiRoute = new Hono<AppEnv>()
 		const userId = currentUser(context)
 		return context.json({ rooms: userId ? await loadChatRooms(userId) : [] })
 	})
-	// the unseen chat mention count alone, which is one indexed select
+	// the unseen chat mention count alone, from one indexed select that Redis caches briefly
 	.get("/rooms/mention-count", async (context) => {
 		const userId = currentUser(context)
-		return context.json({ count: userId ? await countUnseenChatMentions(userId) : 0 })
+		const unseenChatMentionCount = userId
+			? await cacheJson({
+					key: toUnseenChatMentionCountKey(userId),
+					ttlMs: UNSEEN_CHAT_MENTION_COUNT_TTL_MS,
+					load: () => countUnseenChatMentions(userId),
+				})
+			: 0
+		return context.json({ count: unseenChatMentionCount })
 	})
 	// public: a signed-out visitor gets featured and popular, just no "yours"
 	.get("/topic-feed", renderedCacheHeaders, zValidator("query", topicFeedQuery), async (context) => {
@@ -233,3 +246,12 @@ export const apiRoute = new Hono<AppEnv>()
 	// the admin console routes
 	.route("/", adminRoute)
 	.route("/", featuringRoute)
+
+// a session read that Better Auth rejects as unauthorized reads as signed out. the session's Postgres row is gone.
+// any other failure still fails the request
+function toSignedOutSession(error: unknown): null {
+	if (isAPIError(error) && error.statusCode === 401) {
+		return null
+	}
+	throw error
+}

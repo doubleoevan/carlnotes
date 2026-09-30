@@ -73,7 +73,7 @@ COPY --from=build /app/docs/dist ./docs/dist
 # the docs markdown source, which the docs:embed deploy job chunks and embeds for chat
 COPY docs/src/content/docs ./docs/src/content/docs
 
-# the api listens on 3000, matching the port api/index.ts exports
+# the port that bun serves the api on if PORT is unset
 EXPOSE 3000
 USER bun
 CMD ["doppler", "run", "--", "bun", "api/index.ts"]

@@ -22,6 +22,13 @@ services:
       - "127.0.0.1:8001:8000"
     volumes:
       - ./infra/llm-guard/scanners.yml:/home/user/app/config/scanners.yml
+  # the Redis behind the api's sessions, response caches, shared limiters, and the chat and note fan-out.
+  # bun's client needs Redis 7.2 or later
+  redis:
+    image: redis:7.4-alpine
+    # loopback only. the local Redis has no password and must not answer the local network
+    ports:
+      - "127.0.0.1:6379:6379"
   # temporal dev server for local attachment-workflow development: a single-binary, in-memory server on 7233 (ui on 8233).
   temporal:
     image: temporalio/admin-tools:1.31

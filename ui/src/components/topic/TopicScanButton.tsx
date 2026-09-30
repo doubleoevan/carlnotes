@@ -3,9 +3,9 @@ import { ADMIN_QUOTA } from "@shared/plans"
 import { isBudgetError, toScanFailureLabel } from "@shared/scanFailure"
 import { useNavigate } from "@tanstack/react-router"
 import { CirclePause, Coffee } from "lucide-react"
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { toast } from "sonner"
-import { sendManualScan, sendStopScan } from "@/clients/topicClient"
+import { type FetchTopicPageOptions, sendManualScan, sendStopScan } from "@/clients/topicClient"
 import { IconButton } from "@/components/common/IconButton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useManualScanProgress, usePollWhileScanning } from "@/hooks/useTopicScan"
@@ -27,14 +27,16 @@ export function TopicScanButton({
 	onScanned,
 }: {
 	topic: TopicResponse | null | undefined
-	onScanned: () => Promise<void>
+	onScanned: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
 }) {
 	const navigate = useNavigate()
 	const { isScanning, isRunningScan, isCancellingScan, startScan, stopScan, cancelScan, stopCancelling } =
 		useManualScanProgress(topic?.scans)
 
-	// polling starts on the click, before the scan row arrives
-	usePollWhileScanning(isScanning || isRunningScan, onScanned)
+	// poll from the click, before the scan row arrives, with every reload marked as a poll.
+	// the reload function stays the same across renders, so the poll does not restart and the poll's delay can grow
+	const reloadTopicPageAsPoll = useCallback(() => onScanned({ isPoll: true }), [onScanned])
+	usePollWhileScanning(isScanning || isRunningScan, reloadTopicPageAsPoll)
 	// a scan that fails while the user is on the page shows the failure
 	useScanFailureToast(topic?.scans, () => navigate({ to: "/plans" }))
 

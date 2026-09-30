@@ -1,29 +1,38 @@
-// broker tests for the in-process note fan-out
-import { afterEach, beforeEach, expect, test } from "bun:test"
-import { connectionPool } from "../../db"
-import { notifyNoteUpdate, onNoteUpdate, toDirectConnectionString } from "./noteStream"
+// note broker tests: the local update bytes, the poke to the other instances, and the skipped echo
+import { afterAll, expect, mock, spyOn, test } from "bun:test"
+import * as redis from "../../db/redis"
+import { notifyNoteUpdate, onNoteUpdate } from "./noteStream"
 
-// the pool's own query, put back after each test
-const poolQuery = connectionPool.query
-afterEach(() => {
-	connectionPool.query = poolQuery
+// the payloads that this instance published, and the channel handler that the broker subscribed with
+const publishedNotePayloads: string[] = []
+let deliverNotePoke: (notePayload: string) => void = () => {}
+spyOn(redis, "publishToChannel").mockImplementation(async ({ channelMessage }: redis.PublishToChannelOptions) => {
+	publishedNotePayloads.push(channelMessage)
+	return true
 })
 
-// fail every query, as if the cross-instance notify cannot reach a database
-beforeEach(() => {
-	const unreachableDatabaseError = new Error("database unreachable")
-	connectionPool.query = (() => Promise.reject(unreachableDatabaseError)) as unknown as typeof connectionPool.query
+// keep the channel handler that the broker subscribes with, so a test can deliver another instance's poke
+spyOn(redis, "subscribeToChannel").mockImplementation(
+	(_channel: string, onChannelMessage: (channelMessage: string) => void) => {
+		deliverNotePoke = onChannelMessage
+	},
+)
+
+// put the spied Redis functions back after the last test
+afterAll(() => {
+	mock.restore()
 })
 
-// a local notify delivers the update bytes straight to this instance's subscribers
-test("a subscriber receives a locally merged update", async () => {
+// a local notify delivers the update bytes straight to this instance's subscribers and pokes the other instances
+test("a subscriber receives a locally merged update, and the poke to the other instances names this instance", async () => {
 	// collect what the subscriber sees
-	const received: (string | null)[] = []
-	const stopListening = onNoteUpdate("n1", (update) => received.push(update))
+	const receivedNoteUpdates: (string | null)[] = []
+	const stopListening = onNoteUpdate("n1", (update) => receivedNoteUpdates.push(update))
 
-	// the local emit is synchronous even when the cross-instance notify cannot reach a database
+	// the local emit delivers the update bytes, and the published poke names this instance and the note
 	await notifyNoteUpdate("n1", "dXBkYXRl")
-	expect(received).toEqual(["dXBkYXRl"])
+	expect(receivedNoteUpdates).toEqual(["dXBkYXRl"])
+	expect(publishedNotePayloads.at(-1)).toMatch(/^[0-9a-f-]{36}:n1$/)
 	stopListening()
 })
 
@@ -47,37 +56,17 @@ test("unsubscribe stops delivery and keys stay per note", async () => {
 	stopB()
 })
 
-// neon's pooler accepts a LISTEN and then delivers no notifications, and raises no error doing it.
-// a pooled url here would silently stop note edits from reaching the app's other instances
-test("toDirectConnectionString never hands LISTEN a pooled host", () => {
-	const original = { direct: process.env.DATABASE_URL_DIRECT, databaseUrl: process.env.DATABASE_URL }
-	try {
-		// the direct url wins outright when it is configured
-		process.env.DATABASE_URL_DIRECT = "postgres://user@ep-cool-1.us-east-2.aws.neon.tech/carlnotes"
-		process.env.DATABASE_URL = "postgres://user@ep-cool-1-pooler.us-east-2.aws.neon.tech/carlnotes"
-		expect(toDirectConnectionString()).toBe("postgres://user@ep-cool-1.us-east-2.aws.neon.tech/carlnotes")
+// the echo of this instance's own poke is skipped, and another instance's poke asks for a resync
+test("the sender's own poke is skipped and another instance's poke asks for a resync", async () => {
+	// one subscriber, one local update
+	const receivedNoteUpdates: (string | null)[] = []
+	const stopListening = onNoteUpdate("n2", (update) => receivedNoteUpdates.push(update))
+	await notifyNoteUpdate("n2", "bytes")
 
-		// without one, the pooled host is rewritten to its direct form
-		process.env.DATABASE_URL_DIRECT = ""
-		expect(toDirectConnectionString()).toBe("postgres://user@ep-cool-1.us-east-2.aws.neon.tech/carlnotes")
-		expect(toDirectConnectionString()).not.toContain("-pooler.")
-
-		// no database at all means no listener to start, instead of a broken connection string
-		process.env.DATABASE_URL = ""
-		expect(toDirectConnectionString()).toBeFalsy()
-	} finally {
-		// an absent variable is restored by removing it, since "" is a value the code reads differently
-		if (original.direct === undefined) {
-			delete process.env.DATABASE_URL_DIRECT
-		} else {
-			process.env.DATABASE_URL_DIRECT = original.direct
-		}
-
-		// restore the pooled url the same way
-		if (original.databaseUrl === undefined) {
-			delete process.env.DATABASE_URL
-		} else {
-			process.env.DATABASE_URL = original.databaseUrl
-		}
-	}
+	// this instance's own poke changes nothing, and another instance's poke delivers a null
+	deliverNotePoke(publishedNotePayloads.at(-1) as string)
+	expect(receivedNoteUpdates).toEqual(["bytes"])
+	deliverNotePoke("other-instance:n2")
+	expect(receivedNoteUpdates).toEqual(["bytes", null])
+	stopListening()
 })

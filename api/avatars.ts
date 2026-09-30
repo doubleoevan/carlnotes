@@ -11,6 +11,7 @@ import { teams, users } from "../db/schema"
 import { attachmentStream, deleteAttachment, uploadAttachment } from "../worker"
 import { type AppEnv, currentUser } from "./currentUser"
 import { toVersionedImageHeaders } from "./edgeCache"
+import { refreshSessionUser } from "./sessions"
 import { toTeamRole } from "./team/members"
 
 // an avatar is shown at 64 pixels and under, so a large file buys nothing and costs storage on every account
@@ -208,8 +209,10 @@ async function replaceAvatar(
 	avatarSource: (typeof avatarSources)[number],
 	avatarKey: string | null,
 ): Promise<void> {
+	// read the previous key, then write the avatar to the row and to the user's sessions
 	const previousKey = await toAvatarKey(userId)
 	await db.update(users).set({ avatarSource, avatarKey }).where(eq(users.id, userId))
+	await refreshSessionUser(userId)
 
 	// the users row is already optimistically updated. a failed delete leaves an unused file instead of a broken avatar
 	if (previousKey && previousKey !== avatarKey) {

@@ -14,7 +14,8 @@ const SHUTDOWN_FLUSH_MS = 2000
 // how long a threshold alert stays quiet after it is sent, per condition, however long the condition lasts
 const THRESHOLD_ALERT_QUIET_MS = 60 * 60 * 1000
 
-// when each condition last sent its alert from this process
+// when each condition last sent its alert from this process. each replica sends its own warning for a condition,
+// and the condition's fingerprint groups the replicas' warnings in one Sentry issue
 const thresholdAlertSentAt = new Map<string, number>()
 
 // the paths never traced: the health checks, which the platform and a monitor poll all day

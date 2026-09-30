@@ -316,6 +316,8 @@ export const scans = pgTable(
 		finishedAt: timestamp("finished_at", { withTimezone: true }),
 		// when the scan's workflow was accepted. null means it was never started
 		dispatchedAt: timestamp("dispatched_at", { withTimezone: true }),
+		// when a worker first began the scan's first stage. null while the dispatched scan waits for a scan slot
+		pickedUpAt: timestamp("picked_up_at", { withTimezone: true }),
 		// when the user stopped the scan
 		stoppedAt: timestamp("stopped_at", { withTimezone: true }),
 		// true if the owner triggered this scan by hand with "Run now". scheduled and seeded scans stay false

@@ -3,7 +3,7 @@ import { shutdownAnalytics } from "@shared/analytics"
 import { shutdownMonitoring, startMonitoring } from "@shared/monitoring"
 import { type ExtraGaugesReading, startRuntimeGauges } from "@shared/runtimeGauges"
 import { NativeConnection, Worker } from "@temporalio/worker"
-import { readPoolGauges } from "../db"
+import { readPoolGauges, toPositiveInteger } from "../db"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import {
 	ATTACHMENT_TASK_QUEUE,
@@ -19,8 +19,9 @@ import * as sourceActivities from "./workflows/screen-source-activities"
 // the SDK shuts a Worker down on its own on SIGINT/SIGTERM, but gives an in-flight activity zero time to finish
 const SHUTDOWN_GRACE_MS = 2 * 60 * 1000
 
-// how many scan activities may run at once
-const MAX_CONCURRENT_SCAN_ACTIVITIES = 8
+// how many scan activities may run at once on this replica, from the SCAN_CONCURRENCY setting or the default
+const DEFAULT_SCAN_CONCURRENCY = 8
+const SCAN_CONCURRENCY = toPositiveInteger(Bun.env.SCAN_CONCURRENCY, DEFAULT_SCAN_CONCURRENCY)
 
 // how often and how long to keep retrying the first connection
 const CONNECT_RETRY_DELAY_MS = 3 * 1000
@@ -70,7 +71,7 @@ async function run(): Promise<void> {
 			activities: scanActivities,
 			taskQueue: SCAN_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
-			maxConcurrentActivityTaskExecutions: MAX_CONCURRENT_SCAN_ACTIVITIES,
+			maxConcurrentActivityTaskExecutions: SCAN_CONCURRENCY,
 		}),
 		// fetches a url Source's page and screens it with llm-guard
 		Worker.create({

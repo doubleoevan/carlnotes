@@ -1,13 +1,22 @@
 # worker/
 
-Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker), `schedule.ts`
-(the sweep that starts due scans), `worker/index.ts` (what api may import).
+Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker,
+with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep that starts scheduled scans),
+`resetMonthlyBudgets.ts` (the monthly budget reset, a daily job run as `bun run reset:monthly-budgets`),
+`worker/index.ts` (what api may import).
+
+- The sweep and the reset each run under a database claim from `db/claim.ts`,
+  so two overlapping runs cannot do the work twice. The sweep selects scheduled Topics in one SQL query
+  and reads each owner's quota once. The sweep closes out a picked-up Scan that runs past its stages' total timeouts,
+  and a Scan still waiting for a worker past the ingest and finish stages' total timeouts.
+  `concurrency.ts` runs tasks a few at a time for the review's scoring, the sweep's reads of each owner's daily Topics,
+  and the reset's replacements.
 
 - `workflows/` — Temporal workflows and activities; `ingest/` — one ingester per Source kind,
   `ingester.ts` is the interface; `review/` — filtering and scoring; `chat/` — Carl's streamed
   chat replies and their retrieval; `prompts/` — model-facing Markdown templates; `models.ts` —
   every model call, through LiteLLM; `litellm.ts` — the user keys those calls bill to: created, replaced, read, and
-  reset on the first of the month by the sweep; `favicons.ts` — a host's favicon, fetched once when review reads a
+  reset on the first of the month by the reset job; `favicons.ts` — a host's favicon, fetched once when review reads a
   page on it.
 - `telemetry.ts` traces model calls in Langfuse on its own tracer provider beside Sentry's, and both processes start
   Sentry before it. `temporal.ts` logs the pool, the event loop delay, and the scan queue once a minute, and the sweep

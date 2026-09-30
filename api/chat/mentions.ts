@@ -3,6 +3,7 @@ import { toMentionedUserIds } from "@shared/chatMentions"
 import type { ChatMention } from "@shared/contracts"
 import { and, desc, eq, inArray, isNull, type SQL } from "drizzle-orm"
 import { db } from "../../db"
+import { deleteRedisKey } from "../../db/redis"
 import { chatRoomMentions, chatRoomMessages, teamMembers, users } from "../../db/schema"
 import { decryptChatText } from "./encryption"
 import { toTopicFilter } from "./roomTurns"
@@ -56,10 +57,13 @@ type UnseenChatMentionRow = {
 
 // every unseen chat mention row for this user under the given room filter, latest first
 async function loadUnseenChatMentions(userId: string, roomFilter: SQL | undefined): Promise<UnseenChatMentionRow[]> {
+	// the chat messages table again under the replied_to alias, to read each replied-to chat message's author
 	const repliedChatMessages = db
 		.select({ id: chatRoomMessages.id, authorUserId: chatRoomMessages.authorUserId })
 		.from(chatRoomMessages)
 		.as("replied_to")
+
+	// select each unseen chat mention with its chat message and the replied-to author, latest first
 	return db
 		.select({
 			topicId: chatRoomMessages.topicId,
@@ -98,13 +102,18 @@ export async function loadTopicChatMentions(
 		return new Map()
 	}
 
-	// group the unseen rows for these topics under each topic
+	// the unseen rows for these topics, and the map that groups the chat mentions by topic
 	const chatMentionRows = await loadUnseenChatMentions(userId, inArray(chatRoomMessages.topicId, topicIds))
 	const chatMentionsByTopicId = new Map<string, ChatMention[]>()
+
+	// group each row under its topic
 	for (const chatMentionRow of chatMentionRows) {
+		// skip a chat mention with no topic, from a team's own chat room
 		if (chatMentionRow.topicId === null) {
 			continue
 		}
+
+		// add the row under its topic
 		const chatMentions = chatMentionsByTopicId.get(chatMentionRow.topicId) ?? []
 		chatMentions.push(toChatMention(chatMentionRow, userId))
 		chatMentionsByTopicId.set(chatMentionRow.topicId, chatMentions)
@@ -113,7 +122,14 @@ export async function loadTopicChatMentions(
 }
 
 /**
- * Save the chat mentions as seen for a user and topic or team chat.
+ * Returns the Redis key that the user's unseen chat mention count is cached under.
+ */
+export function toUnseenChatMentionCountKey(userId: string): string {
+	return `unseen-chat-mention-count:${userId}`
+}
+
+/**
+ * Saves a user's chat mentions in one chat room as seen and deletes the user's cached unseen count.
  */
 export async function saveSeenChatMentions(userId: string, topicId: string | null, teamId: string): Promise<void> {
 	// the chat room messages for a topic or team chat
@@ -133,6 +149,9 @@ export async function saveSeenChatMentions(userId: string, topicId: string | nul
 				inArray(chatRoomMentions.messageId, chatRoomMessageIds),
 			),
 		)
+
+	// delete the user's cached unseen count
+	await deleteRedisKey(toUnseenChatMentionCountKey(userId))
 }
 
 // the user id of the author that a chat message was replied to or null for @carl
@@ -169,12 +188,14 @@ export async function loadTeamChatMentions(
 		return new Map()
 	}
 
-	// group the unseen rows in these teams' own chat rooms under each team
+	// the unseen rows in these teams' own chat rooms, and the map that groups the chat mentions by team
 	const chatMentionRows = await loadUnseenChatMentions(
 		userId,
 		and(isNull(chatRoomMessages.topicId), inArray(chatRoomMessages.teamId, teamIds)),
 	)
 	const chatMentionsByTeamId = new Map<string, ChatMention[]>()
+
+	// group each row under its team
 	for (const chatMentionRow of chatMentionRows) {
 		const chatMentions = chatMentionsByTeamId.get(chatMentionRow.teamId) ?? []
 		chatMentions.push(toChatMention(chatMentionRow, userId))

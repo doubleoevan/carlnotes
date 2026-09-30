@@ -1,10 +1,26 @@
-// the computed invite limit: each factor read alone, then the floor and the limit doubling for accepted invites.
-// the access row: read once per request, and on every call outside one
-import { expect, test } from "bun:test"
+// quota tests: the suggestion rate limit window key, the daily suggestion limit, each invite limit factor alone, the floor, and a connected recipient's doubled limit.
+// the access row is read once per request, and on every call outside a request
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { PLANS } from "@shared/plans"
 import { connectionPool } from "./index"
-import { loadUserAccess, toInviteLimit } from "./quotas"
+import { incrementDaySuggestionCount, loadUserAccess, toInviteLimit, toSuggestionRateLimitWindowKey } from "./quotas"
+import * as redis from "./redis"
 import { runWithRequestMemo } from "./requestMemo"
+
+// put the spied Redis counter back after each test
+afterEach(() => {
+	mock.restore()
+})
+
+// the suggestion rate limit window key names the utc day and changes at utc midnight
+test("the suggestion rate limit window key names the utc day", () => {
+	expect(toSuggestionRateLimitWindowKey("user-1", new Date("2026-09-29T23:59:59Z"))).toBe(
+		"suggestions:2026-09-29:user-1",
+	)
+	expect(toSuggestionRateLimitWindowKey("user-1", new Date("2026-09-30T00:00:00Z"))).toBe(
+		"suggestions:2026-09-30:user-1",
+	)
+})
 
 // each plan's own base, so a limit change in the plans table cannot leave these expectations behind
 const FREE_BASE = PLANS.free.inviteLimit
@@ -111,4 +127,20 @@ test("the access row is read on every call outside a request", async () => {
 	})
 
 	expect(queryCount).toBe(2)
+})
+
+// the daily suggestion limit allows the three hundredth suggestion, rejects the next, and allows one that Redis could not count
+test("the daily suggestion limit allows up to 300 suggestions and allows one that Redis could not count", async () => {
+	// a plain user, and a rate limit window that returns the three hundredth hit, the next, and no count
+	const incrementRateLimitWindowSpy = spyOn(redis, "incrementRateLimitWindow")
+	const incrementDaySuggestionCountResults: boolean[] = []
+
+	// count one suggestion for each hit, then check which suggestions were within the limit
+	await countAccessQueries(async () => {
+		for (const rateLimitWindowHit of [{ count: 300, resetAt: 0 }, { count: 301, resetAt: 0 }, null]) {
+			incrementRateLimitWindowSpy.mockResolvedValueOnce(rateLimitWindowHit)
+			incrementDaySuggestionCountResults.push(await incrementDaySuggestionCount("user-1"))
+		}
+	})
+	expect(incrementDaySuggestionCountResults).toEqual([true, false, true])
 })

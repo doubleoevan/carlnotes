@@ -1,4 +1,5 @@
 // the gauges each long-running process logs once a minute, and the Sentry warnings a crossed threshold sends
+import { hostname } from "node:os"
 import { readEventLoopDelay, resetEventLoopDelay, startEventLoopDelay } from "./eventLoopDelay"
 import { reportThresholdCrossing, type ThresholdCrossing } from "./monitoring"
 
@@ -54,10 +55,12 @@ export async function reportRuntimeGauges({
 		},
 	)
 
-	// log the line, then warn for each threshold the minute crossed
+	// log the line, then warn for each threshold that the minute crossed.
+	// the instance field names the replica by its host name
 	const line = {
 		gauges: "runtime",
 		process: processName,
+		instance: hostname(),
 		pool,
 		eventLoopDelayMs: eventLoopDelay,
 		...extraGauges.gauges,

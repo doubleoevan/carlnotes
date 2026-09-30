@@ -1,13 +1,19 @@
-// schedule tests for frequency, scheduling, taking, topic sweep summary decisions, and the scan queue report
+// schedule tests: the frequency window, the scheduled topic and stale scan filters, starting the scheduled Topics' Scans,
+// the topic sweep summary, the stale window, the sweep without the budget reset, the daily topic limit, and the scan queue report
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { db } from "../db"
+import * as quotas from "../db/quotas"
+import { scans, topics } from "../db/schema"
+import * as scan from "./scan"
 import {
 	frequencyWindowMs,
-	isTopicScheduled,
 	isWithinDailyTopicLimit,
 	reportScanQueue,
 	staleScanWindowMs,
+	startScheduledTopicScans,
 	type TopicSweepSummary,
-	toExclusiveTask,
+	toScheduledTopicFilter,
+	toStaleScanFilter,
 } from "./schedule"
 import { toScanBacklogCrossing } from "./temporal-client"
 import {
@@ -23,18 +29,23 @@ import {
 	REVIEW_TOTAL_TIMEOUT_MS,
 } from "./workflows/stage-timeouts"
 
-// a promise the test resolves on its own schedule, plus the resolver, so a wrapped task can be kept open deliberately
-function toDeferredTask<Value>(): { promise: Promise<Value>; resolve: (value: Value) => void } {
-	let resolve!: (value: Value) => void
-	const promise = new Promise<Value>((resolved) => {
-		resolve = resolved
-	})
-	return { promise, resolve }
-}
+// one day in milliseconds, the daily frequency window
+const DAY_MS = 24 * 60 * 60 * 1000
 
 // a fresh zeroed topic sweep summary to fold outcomes into
 function emptyTopicSweepSummary(): TopicSweepSummary {
 	return { scheduled: 1, started: 0, skippedOverQuota: 0, skippedOverDailyLimit: 0, failed: 0 }
+}
+
+// the sql and the parameters that a select of the scheduled Topics renders on a given day
+function toScheduledTopicQuery(now: Date): { sql: string; params: unknown[] } {
+	return db.select({ id: topics.id }).from(topics).where(toScheduledTopicFilter(now)).toSQL()
+}
+
+// a scheduled weekly Topic with only the fields that startScheduledTopicScans reads.
+// the daily topic limit never skips a weekly Topic
+function toScheduledTopic(id: string): typeof topics.$inferSelect {
+	return { id, ownerId: "owner-1", frequency: "weekly" } as never
 }
 
 // put each spied console method back after each test, whether its assertions pass or not
@@ -44,75 +55,125 @@ afterEach(() => {
 
 // the daily frequency waits a day before a re-scan, the weekly frequency waits seven
 test("frequencyWindowMs is a day for daily and a week for weekly", () => {
-	const day = 24 * 60 * 60 * 1000
-	expect(frequencyWindowMs("daily")).toBe(day)
-	expect(frequencyWindowMs("weekly")).toBe(7 * day)
+	expect(frequencyWindowMs("daily")).toBe(DAY_MS)
+	expect(frequencyWindowMs("weekly")).toBe(7 * DAY_MS)
 })
 
-// a Topic is scheduled when it has never scanned or its last scan is older than the frequency window
-test("isTopicScheduled gates on the frequency window", () => {
-	const now = new Date("2026-07-24T12:00:00Z")
-	// a Topic that has never scanned is always scheduled
-	expect(isTopicScheduled({ frequency: "daily" }, undefined, now)).toBe(true)
-	// a daily Topic scanned an hour ago is not scheduled, two days ago is
-	expect(isTopicScheduled({ frequency: "daily" }, new Date("2026-07-24T11:00:00Z"), now)).toBe(false)
-	expect(isTopicScheduled({ frequency: "daily" }, new Date("2026-07-22T12:00:00Z"), now)).toBe(true)
-	// a weekly Topic scanned six days ago is not scheduled yet
-	expect(isTopicScheduled({ frequency: "weekly" }, new Date("2026-07-18T12:00:00Z"), now)).toBe(false)
+// the scheduled topic filter is one sql predicate.
+// a topic is scheduled if it has no completed scan, or if its last completed scan is older than its frequency window
+test("the scheduled topic filter reads the last completed scan in sql with the day and week windows", () => {
+	// a wednesday, so daily and weekdays both read the day window
+	const now = new Date("2026-07-22T12:00:00Z")
+	const { sql, params } = toScheduledTopicQuery(now)
+
+	// the subquery over completed scans, and the null branch for a topic never scanned
+	expect(sql).toContain('max("scans"."started_at")')
+	expect(sql).toContain("<> 'running'")
+	expect(sql).toContain("is null")
+
+	// the weekly branch reads a week back and the daily branch a day back, for daily and weekdays alike
+	expect(params).toEqual([
+		"weekly",
+		new Date(now.getTime() - 7 * DAY_MS),
+		"daily",
+		"weekdays",
+		new Date(now.getTime() - DAY_MS),
+	])
 })
 
-// a failed scan spends the frequency window like any other
-test("isTopicScheduled holds a Topic back after a failed scan until the window elapses", () => {
-	const now = new Date("2026-07-24T12:00:00Z")
-	// a daily Topic whose scan failed an hour ago should not get scheduled again yet
-	expect(isTopicScheduled({ frequency: "daily" }, new Date("2026-07-24T11:00:00Z"), now)).toBe(false)
-	// once a full day has passed, the Topic is scheduled again
-	expect(isTopicScheduled({ frequency: "daily" }, new Date("2026-07-23T11:00:00Z"), now)).toBe(true)
+// a scanned weekdays topic drops out of the day window on a weekend and comes back on monday
+test("the scheduled topic filter drops a scanned weekdays topic on a weekend", () => {
+	// a saturday leaves only daily in the day window's frequencies
+	const saturday = new Date("2026-07-25T12:00:00Z")
+	expect(toScheduledTopicQuery(saturday).params).toEqual([
+		"weekly",
+		new Date(saturday.getTime() - 7 * DAY_MS),
+		"daily",
+		new Date(saturday.getTime() - DAY_MS),
+	])
+
+	// monday puts weekdays back in the day window
+	const monday = new Date("2026-07-27T12:00:00Z")
+	expect(toScheduledTopicQuery(monday).params).toContain("weekdays")
 })
 
-// a weekdays Topic shares daily's window but never fires on a weekend, even once the window has elapsed
-test("isTopicScheduled holds a weekdays Topic back on a weekend", () => {
-	// last scanned Thursday, so the daily window elapses by Friday
-	const lastScan = new Date("2026-07-23T12:00:00Z")
-	expect(isTopicScheduled({ frequency: "weekdays" }, lastScan, new Date("2026-07-24T12:00:00Z"))).toBe(true)
-	// Saturday and Sunday stay held back even though the window keeps growing
-	expect(isTopicScheduled({ frequency: "weekdays" }, lastScan, new Date("2026-07-25T12:00:00Z"))).toBe(false)
-	expect(isTopicScheduled({ frequency: "weekdays" }, lastScan, new Date("2026-07-26T12:00:00Z"))).toBe(false)
-	// topic scan is due again on Monday
-	expect(isTopicScheduled({ frequency: "weekdays" }, lastScan, new Date("2026-07-27T12:00:00Z"))).toBe(true)
+// the stale filter measures a picked-up scan from its pickup and a scan that no worker picked up from its dispatch
+test("the stale filter measures a picked-up scan from its pickup and a queued scan from its dispatch", () => {
+	const now = new Date("2026-07-22T12:00:00Z")
+	const { sql, params } = db.select({ id: scans.id }).from(scans).where(toStaleScanFilter(now)).toSQL()
+
+	// the picked-up branch compares the pickup time, and the queued branch compares the dispatch time
+	expect(sql).toContain('"scans"."picked_up_at" is not null and "scans"."picked_up_at" <')
+	expect(sql).toContain('"scans"."picked_up_at" is null and "scans"."dispatched_at" <')
+
+	// the pickup cutoff is the stale window, and the dispatch cutoff is the ingest and finish total timeouts plus the margin.
+	// a comparison against a timestamp column sends its date as an iso string
+	const staleScanMarginMs = 15 * 60 * 1000
+	expect(params).toEqual([
+		"running",
+		new Date(now.getTime() - staleScanWindowMs()).toISOString(),
+		new Date(now.getTime() - (INGEST_TOTAL_TIMEOUT_MS + FINISH_TOTAL_TIMEOUT_MS + staleScanMarginMs)).toISOString(),
+	])
 })
 
-// a Topic's first scan outranks the weekend rule, so a weekdays Topic created on a Saturday is not left empty until Monday
-test("isTopicScheduled still schedules a new weekdays Topic on a weekend", () => {
-	expect(isTopicScheduled({ frequency: "weekdays" }, undefined, new Date("2026-07-25T12:00:00Z"))).toBe(true)
-})
+// one owner's remaining scan count is read once, and each start lowers the sweep's copy of that count
+test("ten scheduled topics of one owner with two remaining scans read the quota once, start two, and skip eight", async () => {
+	// ten weekly topics of one owner, and the counts that the spies record
+	const scheduledTopics = Array.from({ length: 10 }, (_, index) => toScheduledTopic(`topic-${index}`))
+	let remainingScanCountLoadCount = 0
+	const startedTopicIds: string[] = []
 
-// a running Scan never spends the window: isTopicScheduled reads completed Scans only
-test("isTopicScheduled treats a topic with only a pending running scan as due", () => {
-	const now = new Date("2026-07-24T12:00:00Z")
-	expect(isTopicScheduled({ frequency: "daily" }, undefined, now)).toBe(true)
-})
-
-// a call made while the wrapped task is still running is skipped, instead of overlapping it
-test("toExclusiveTask skips a call made while the previous call is still running", async () => {
-	const deferredTask = toDeferredTask<string>()
-	let callCount = 0
-	const exclusiveTask = toExclusiveTask(() => {
-		callCount++
-		return deferredTask.promise
+	// a quota read that counts its calls, and a start that always succeeds
+	spyOn(quotas, "scansRemainingToday").mockImplementation(async () => {
+		remainingScanCountLoadCount++
+		return 2
+	})
+	spyOn(scan, "startTopicScan").mockImplementation(async (topicId): Promise<scan.TopicScanStart> => {
+		startedTopicIds.push(topicId)
+		return { status: "started", scan: {} as never, whenFinished: async () => {} }
 	})
 
-	// the first call starts the task and is still waiting for it when the second call arrives
-	const firstCall = exclusiveTask()
-	const secondCall = await exclusiveTask()
-	expect(secondCall).toBeNull()
-	expect(callCount).toBe(1)
+	// start the scheduled Topics' Scans
+	const topicSweepSummary = await startScheduledTopicScans({ scheduledTopics, dailyTopicIdsByOwner: new Map() })
 
-	// releasing the first call lets a later call through again
-	deferredTask.resolve("done")
-	expect(await firstCall).toBe("done")
-	expect(await exclusiveTask()).not.toBeNull()
-	expect(callCount).toBe(2)
+	// one read, two starts, eight skipped over quota
+	expect(remainingScanCountLoadCount).toBe(1)
+	expect(startedTopicIds).toEqual(["topic-0", "topic-1"])
+	expect(topicSweepSummary).toEqual({
+		scheduled: 10,
+		started: 2,
+		skippedOverQuota: 8,
+		skippedOverDailyLimit: 0,
+		failed: 0,
+	})
+})
+
+// a scan that Temporal reports as already running spends no quota, and a start that throws an error counts as failed
+test("a running scan spends nothing and a failed start is counted", async () => {
+	// a busy topic and a broken topic under one owner with one remaining scan, and a quiet console
+	spyOn(console, "error").mockImplementation(() => {})
+	spyOn(quotas, "scansRemainingToday").mockResolvedValue(1)
+	spyOn(scan, "startTopicScan").mockImplementation(async (topicId): Promise<scan.TopicScanStart> => {
+		if (topicId === "broken") {
+			throw new Error("temporal unreachable")
+		}
+		return { status: "running" }
+	})
+
+	// start the scheduled Topics' Scans
+	const topicSweepSummary = await startScheduledTopicScans({
+		scheduledTopics: [toScheduledTopic("busy"), toScheduledTopic("broken")],
+		dailyTopicIdsByOwner: new Map(),
+	})
+
+	// the busy topic spends nothing and the broken topic counts as failed
+	expect(topicSweepSummary).toEqual({
+		scheduled: 2,
+		started: 0,
+		skippedOverQuota: 0,
+		skippedOverDailyLimit: 0,
+		failed: 1,
+	})
 })
 
 // the sweep hands each Scan to Temporal and does not wait, so its summary count starts
@@ -137,6 +198,12 @@ test("the stale scan window clears the longest a Scan may legally run", () => {
 	// the window clears the across-attempts total, not the sum of one attempt per stage
 	expect(MAX_SCAN_DURATION_MS).toBe(INGEST_TOTAL_TIMEOUT_MS + REVIEW_TOTAL_TIMEOUT_MS + FINISH_TOTAL_TIMEOUT_MS)
 	expect(staleScanWindowMs()).toBeGreaterThan(MAX_SCAN_DURATION_MS)
+})
+
+// the monthly budget reset runs as its own daily job, so the sweep's source never names resetMonthlyBudgets
+test("the sweep never calls the monthly budget reset", async () => {
+	const scheduleSource = await Bun.file(new URL("./schedule.ts", import.meta.url)).text()
+	expect(scheduleSource).not.toContain("resetMonthlyBudgets")
 })
 
 // the daily topic limit binds the Topics already there, not only the ones being written
