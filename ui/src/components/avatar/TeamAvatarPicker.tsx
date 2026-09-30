@@ -24,7 +24,7 @@ export function TeamAvatarPicker({
 	isDisabled,
 	className,
 }: {
-	team: Pick<TeamIdentity, "teamId" | "name" | "hasAvatar">
+	team: Pick<TeamIdentity, "teamId" | "name" | "avatarVersion">
 	// a chosen image not yet uploaded, shown in place of whatever the team has today
 	previewUrl?: string | null
 	onAvatarChange: (avatarFile: File) => void

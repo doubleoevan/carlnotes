@@ -1,4 +1,5 @@
-// the LiteLLM proxy admin api: each user's budgeted key, its replacement, its spend, and the reset on the first
+// the LiteLLM keys: loading the key that is billed for a user's model calls,
+// and the proxy admin api for each user's budgeted key, its replacement, its spend, and the reset on the first
 
 import { isAdminRole } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
@@ -7,6 +8,14 @@ import { and, eq, isNotNull, lt } from "drizzle-orm"
 import { db } from "../db"
 import { startOfUtcMonth } from "../db/quotas"
 import { users } from "../db/schema"
+
+/**
+ * Loads a user's own LiteLLM key, or undefined if they have none and the master key is billed.
+ */
+export async function loadUserLiteLLMKey(userId: string): Promise<string | undefined> {
+	const [user] = await db.select({ litellmVirtualKey: users.litellmVirtualKey }).from(users).where(eq(users.id, userId))
+	return user?.litellmVirtualKey ?? undefined
+}
 
 /**
  * Create a virtual key for a user at their monthly budget. It has no window of its own; the sweep

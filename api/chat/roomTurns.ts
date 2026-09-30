@@ -4,17 +4,22 @@ import { reportError } from "@shared/monitoring"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, type SQL, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
 import { db } from "../../db"
-import { chatRoomAttachments, chatRoomMessages, chatRoomSummaries, type topics, users } from "../../db/schema"
-import { type ChatReplyPart, getAttachmentBytes, MODEL_CHAT_TURN_FAILED_REJECTION } from "../../worker"
+import { chatRoomAttachments, chatRoomMessages, chatRoomSummaries, type topics } from "../../db/schema"
+import {
+	type ChatReplyPart,
+	getAttachmentBytes,
+	loadUserLiteLLMKey,
+	MODEL_CHAT_TURN_FAILED_REJECTION,
+} from "../../worker"
 import { streamChatReply } from "../../worker/chat"
 import { fetchPromptTemplate } from "../../worker/prompts/fetch"
 import { writePrompt } from "../../worker/prompts/write"
 import { isAllowed } from "../authorization"
 import { type ChatTurnToolCalls, toChatTopicTools, toTopicEditPreviewTools } from "../tool/chatTools"
+import { recordChatRoomTurn } from "./chatTurns"
 import { decryptChatText, encryptChatText } from "./encryption"
 import { saveLinkPreviews } from "./linkPreviews"
 import { notifyChatRoomMessage } from "./roomStream"
-import { recordChatRoomTurn } from "./turns"
 
 // how many chat messages the window includes before the summary takes over
 const CHAT_ROOM_WINDOW_MESSAGES = 30
@@ -31,8 +36,8 @@ export function toTopicFilter(column: PgColumn, topicId: string | null): SQL {
 }
 
 /**
- * Carl's completion: billed through the chat ledger to the member whose chat message addressed him,
- * including the window plus the running summary plus the topic's retrieved findings.
+ * Runs Carl's chat room turn from the window, the running summary, and the topic's findings.
+ * The turn is billed in a chat turn row to the member whose chat message addressed him.
  */
 export async function runModelChatRoomTurn(
 	billedUserId: string,
@@ -42,17 +47,13 @@ export async function runModelChatRoomTurn(
 	promptChatMessageId: number,
 ): Promise<void> {
 	// the billed member's LiteLLM key. carl's completion spends on their account
-	const [billedMember] = await db
-		.select({ litellmVirtualKey: users.litellmVirtualKey })
-		.from(users)
-		.where(eq(users.id, billedUserId))
+	const litellmApiKey = await loadUserLiteLLMKey(billedUserId)
 	// a member with no key cannot be billed, so carl posts his own rejection instead of a reply
-	if (!billedMember?.litellmVirtualKey) {
+	if (!litellmApiKey) {
 		reportError(new Error(`chat room turn for user ${billedUserId} with no litellm key`), "chat", { teamId })
 		await postModelRejection(topic?.id ?? null, teamId, promptChatMessageId, MODEL_CHAT_TURN_FAILED_REJECTION)
 		return
 	}
-	const litellmApiKey = billedMember.litellmVirtualKey
 
 	// the lock serializes the chat messages read and the summary roll
 	const question = await db.transaction(async (transaction) => {
@@ -120,8 +121,14 @@ export async function runModelChatRoomTurn(
 	// carl's first link fetches its link preview card in the background, like a member's chat message
 	void saveLinkPreviews(reply, teamId).catch((error) => console.error("chat room link preview failed", error))
 
-	// the ledger is updated after carl's answer is stored, naming the chat message carl answered
-	await recordChatRoomTurn(billedUserId, topic?.id ?? null, teamId, promptChatMessageId, completion)
+	// save the chat turn row after carl's answer is stored, naming the chat message that carl answered
+	await recordChatRoomTurn({
+		userId: billedUserId,
+		topicId: topic?.id ?? null,
+		teamId,
+		chatRoomMessageId: promptChatMessageId,
+		completion,
+	})
 	// the fan-out runs only after the insert commits. every listener's re-read finds the chat message
 	await notifyChatRoomMessage(
 		topic?.id ?? null,

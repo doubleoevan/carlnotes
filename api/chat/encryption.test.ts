@@ -1,7 +1,7 @@
 // chat text encryption tests. how stored text is written, read back, and rejected when it fails to verify
 import { expect, test } from "bun:test"
+import { toChatTurnRow } from "./chatTurns"
 import { decryptChatText, encryptChatText } from "./encryption"
-import { toChatTurnRow } from "./turns"
 
 // a valid 32-byte key for the encryption cases, set around each case and always restored
 const TEST_KEY = Buffer.alloc(32, 7).toString("base64")
@@ -57,7 +57,16 @@ test("tampered ciphertext decrypts to null", () => {
 // a persisted chat turn row's text goes to storage encrypted, so the database never holds the readable conversation
 test("a persisted chat turn's row stores ciphertext", () => {
 	withChatTextKey(() => {
-		const chatTurnRow = toChatTurnRow("user-1", "topic-1", 1000, 0, true, "who is hiring?", "four of them are")
+		const chatTurnRow = toChatTurnRow({
+			userId: "user-1",
+			page: { topicId: "topic-1" },
+			totalTokens: 1000,
+			searchCount: 0,
+			isPersisted: true,
+			question: "who is hiring?",
+			answer: "four of them are",
+			toolCalls: [],
+		})
 		expect(String(chatTurnRow.question).startsWith("enc1:")).toBe(true)
 		expect(decryptChatText(String(chatTurnRow.answer))).toBe("four of them are")
 	})

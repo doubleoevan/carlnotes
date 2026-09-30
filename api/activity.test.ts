@@ -87,7 +87,7 @@ function subscriptionRow(topicId: string): Parameters<typeof toSubscriptionRows>
 	return {
 		topicId,
 		name: `topic ${topicId}`,
-		owner: { userId: "owner-1", username: "Owner", avatarSource: null },
+		owner: { userId: "owner-1", username: "Owner", avatarSource: null, avatarVersion: null },
 		team: null,
 		visibility: "public",
 		subscribedAt: new Date("2026-07-01T00:00:00Z"),

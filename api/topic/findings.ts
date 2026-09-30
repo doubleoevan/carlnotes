@@ -119,7 +119,7 @@ export async function loadTopicFindings({
 }
 
 // the joined row a finding read returns: the finding, its resource metadata, and the user's own columns
-type TopicFindingRow = {
+export type TopicFindingRow = {
 	findingId: string
 	scanId: string
 	resourceId: string

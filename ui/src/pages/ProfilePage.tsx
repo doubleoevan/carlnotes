@@ -334,7 +334,7 @@ function ProfileHeader({
 						<UserAvatar
 							userId={profile.userId}
 							username={profile.username}
-							avatarSource={profile.avatarSource}
+							avatarVersion={profile.avatarVersion}
 							className="size-16"
 						/>
 						<h1 className="font-display text-2xl">{profile.username}</h1>

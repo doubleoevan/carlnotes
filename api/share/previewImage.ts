@@ -12,6 +12,13 @@ export const PREVIEW_HEIGHT = 630
 // bump this when the card's design changes. Slack and X cache preview images hard and ignore cache headers.
 export const PREVIEW_TEMPLATE_VERSION = "v3"
 
+/**
+ * Returns the version that a card's url names: a short hash of its storage key, which changes with the card.
+ */
+export function toPreviewVersion(previewKey: string): string {
+	return Bun.hash(previewKey).toString(36)
+}
+
 // the muted color each card's footer prints its counts in
 export const CARD_MUTED_COLOR = "#b9a68e"
 

@@ -49,7 +49,10 @@ const cursorArgument = z.string().optional().describe("The cursor a previous pag
 export function registerTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
 	registerReadTools(mcpServer, toolCaller, routeTopicId)
 	registerMarkTools(mcpServer, toolCaller)
-	registerTopicTools(mcpServer, toolCaller, routeTopicId)
+	// register the topic tools. confirmation is left to the client
+	registerTopicFieldTools(mcpServer, toolCaller, routeTopicId)
+	registerTopicSourceTools(mcpServer, toolCaller, routeTopicId)
+	registerNewTopicTools(mcpServer, toolCaller)
 }
 
 // register the read tools and the consumed write
@@ -162,8 +165,8 @@ function registerMarkTools(mcpServer: McpServer, toolCaller: ToolCaller): void {
 	)
 }
 
-// register the topic tools. confirmation is left to the client
-function registerTopicTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
+// register the tools that rewrite an existing topic's prompt and settings
+function registerTopicFieldTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
 	mcpServer.registerTool(
 		"update_topic_prompt",
 		{
@@ -174,17 +177,12 @@ function registerTopicTools(mcpServer: McpServer, toolCaller: ToolCaller, routeT
 			annotations: { readOnlyHint: false, destructiveHint: true },
 		},
 		async ({ topic_id, prompt }) => {
-			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
-			if ("rejection" in toolTopic || toolCaller.kind !== "user") {
-				return "rejection" in toolTopic ? toTextResult(toolTopic.rejection, true) : toTextResult(CONNECT_ACCOUNT_TEXT)
+			const topicEditCall = toTopicEditCall({ toolCaller, routeTopicId, topicId: topic_id })
+			if ("rejectionResult" in topicEditCall) {
+				return topicEditCall.rejectionResult
 			}
 			// save the prompt. the tool checks edit rights itself
-			const updateTopicPromptResult = await updateTopicPrompt({
-				userId: toolCaller.userId,
-				topicId: toolTopic.topicId,
-				prompt,
-				origin: "mcp",
-			})
+			const updateTopicPromptResult = await updateTopicPrompt({ ...topicEditCall, prompt, origin: "mcp" })
 			return updateTopicPromptResult.status === "saved"
 				? toTextResult(`Saved the new prompt for ${updateTopicPromptResult.topicName}. The next brew reads it.`)
 				: toTextResult(toRejectionText(updateTopicPromptResult.status), true)
@@ -200,14 +198,13 @@ function registerTopicTools(mcpServer: McpServer, toolCaller: ToolCaller, routeT
 			annotations: { readOnlyHint: false, destructiveHint: true },
 		},
 		async ({ topic_id, ...topicFields }) => {
-			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
-			if ("rejection" in toolTopic || toolCaller.kind !== "user") {
-				return "rejection" in toolTopic ? toTextResult(toolTopic.rejection, true) : toTextResult(CONNECT_ACCOUNT_TEXT)
+			const topicEditCall = toTopicEditCall({ toolCaller, routeTopicId, topicId: topic_id })
+			if ("rejectionResult" in topicEditCall) {
+				return topicEditCall.rejectionResult
 			}
 			// save the named settings. the tool checks edit rights itself
 			const updateTopicFieldsResult = await updateTopicFields({
-				userId: toolCaller.userId,
-				topicId: toolTopic.topicId,
+				...topicEditCall,
 				topicFields,
 				promptVersionOrigin: "mcp",
 			})
@@ -216,6 +213,10 @@ function registerTopicTools(mcpServer: McpServer, toolCaller: ToolCaller, routeT
 				: toTextResult(toUpdateTopicFieldsText(updateTopicFieldsResult), true)
 		},
 	)
+}
+
+// register the tools that add a source to an existing topic and remove one
+function registerTopicSourceTools(mcpServer: McpServer, toolCaller: ToolCaller, routeTopicId: string | null): void {
 	mcpServer.registerTool(
 		"add_source",
 		{
@@ -226,18 +227,12 @@ function registerTopicTools(mcpServer: McpServer, toolCaller: ToolCaller, routeT
 			annotations: { readOnlyHint: false, destructiveHint: true },
 		},
 		async ({ topic_id, sourceOption, value }) => {
-			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
-			if ("rejection" in toolTopic || toolCaller.kind !== "user") {
-				return "rejection" in toolTopic ? toTextResult(toolTopic.rejection, true) : toTextResult(CONNECT_ACCOUNT_TEXT)
+			const topicEditCall = toTopicEditCall({ toolCaller, routeTopicId, topicId: topic_id })
+			if ("rejectionResult" in topicEditCall) {
+				return topicEditCall.rejectionResult
 			}
 			// add the source. the tool checks edit rights itself
-			const addTopicSourceResult = await addTopicSource({
-				userId: toolCaller.userId,
-				topicId: toolTopic.topicId,
-				sourceOption,
-				value,
-				origin: "mcp",
-			})
+			const addTopicSourceResult = await addTopicSource({ ...topicEditCall, sourceOption, value, origin: "mcp" })
 			return toTextResult(
 				toAddTopicSourceText(addTopicSourceResult),
 				addTopicSourceResult.status === "missing" || addTopicSourceResult.status === "forbidden",
@@ -254,17 +249,12 @@ function registerTopicTools(mcpServer: McpServer, toolCaller: ToolCaller, routeT
 			annotations: { readOnlyHint: false, destructiveHint: true },
 		},
 		async ({ topic_id, sourceId }) => {
-			const toolTopic = toToolTopicId(routeTopicId, topic_id ?? null)
-			if ("rejection" in toolTopic || toolCaller.kind !== "user") {
-				return "rejection" in toolTopic ? toTextResult(toolTopic.rejection, true) : toTextResult(CONNECT_ACCOUNT_TEXT)
+			const topicEditCall = toTopicEditCall({ toolCaller, routeTopicId, topicId: topic_id })
+			if ("rejectionResult" in topicEditCall) {
+				return topicEditCall.rejectionResult
 			}
 			// remove the source. the tool checks edit rights itself
-			const removeTopicSourceResult = await removeTopicSource({
-				userId: toolCaller.userId,
-				topicId: toolTopic.topicId,
-				sourceId,
-				origin: "mcp",
-			})
+			const removeTopicSourceResult = await removeTopicSource({ ...topicEditCall, sourceId, origin: "mcp" })
 			if (removeTopicSourceResult.status !== "saved") {
 				return toTextResult(toRejectionText(removeTopicSourceResult.status), true)
 			}
@@ -276,6 +266,32 @@ function registerTopicTools(mcpServer: McpServer, toolCaller: ToolCaller, routeT
 			)
 		},
 	)
+}
+
+// what an edit tool call resolves to: the topic that the route or the argument names, and a connected account
+type ToTopicEditCallOptions = { toolCaller: ToolCaller; routeTopicId: string | null; topicId: string | undefined }
+
+// the account that an edit tool saves as and the topic it edits, or the result that rejects the call.
+// a missing or mismatched topic is rejected before a caller with no connected account is
+function toTopicEditCall({
+	toolCaller,
+	routeTopicId,
+	topicId,
+}: ToTopicEditCallOptions): { userId: string; topicId: string } | { rejectionResult: CallToolResult } {
+	const toolTopic = toToolTopicId(routeTopicId, topicId ?? null)
+	if ("rejection" in toolTopic) {
+		return { rejectionResult: toTextResult(toolTopic.rejection, true) }
+	}
+
+	// an edit saves as a connected account
+	if (toolCaller.kind !== "user") {
+		return { rejectionResult: toTextResult(CONNECT_ACCOUNT_TEXT) }
+	}
+	return { userId: toolCaller.userId, topicId: toolTopic.topicId }
+}
+
+// register the tools that start a new topic: the source suggestions and the create
+function registerNewTopicTools(mcpServer: McpServer, toolCaller: ToolCaller): void {
 	mcpServer.registerTool(
 		"suggest_sources",
 		{

@@ -18,7 +18,7 @@ export function TeamOption({
 	team,
 	onSelect,
 }: {
-	team: { teamId: string; name: string; hasAvatar: boolean }
+	team: { teamId: string; name: string; avatarVersion: string | null }
 	onSelect: () => void
 }) {
 	return (

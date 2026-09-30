@@ -2,7 +2,7 @@ import type { AdminConsoleResponse, AdminTeamRow, AdminTotals, AdminUserRow } fr
 import { plans } from "@shared/enums"
 import { Settings, ShieldUser } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
-import { authClient } from "@/clients/authClient"
+import { authClient, toSessionProfileIdentity } from "@/clients/authClient"
 import { fetchAdminConsole } from "@/clients/billingClient"
 import { ManageAdminsModal } from "@/components/admin/ManageAdminsModal"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -75,14 +75,7 @@ export function AdminPage() {
 					</Button>
 				</div>
 				{/* the admin viewing the console, with a link to their profile */}
-				<UserProfileLink
-					user={{
-						userId: session.user.id,
-						username: session.user.username ?? "",
-						avatarSource: session.user.avatarSource ?? null,
-					}}
-					className="mt-2 text-sm"
-				/>
+				<UserProfileLink user={toSessionProfileIdentity(session.user)} className="mt-2 text-sm" />
 			</div>
 			<div className="px-safe">
 				<TotalSummaries totals={adminConsole.totals} users={adminConsole.users} teams={adminConsole.teams} />

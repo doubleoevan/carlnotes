@@ -1,7 +1,7 @@
 // the invites that name a person, by email or by @username
 import { zValidator } from "@hono/zod-validator"
 import type { Invite, TopicInviteBadge, UserInvitePayload } from "@shared/contracts"
-import { type ProfileIdentity, userInvitePayload } from "@shared/contracts"
+import { userInvitePayload } from "@shared/contracts"
 import { toNormalizedUsername } from "@shared/usernames"
 import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { type Context, Hono } from "hono"
@@ -237,21 +237,6 @@ export async function checkTopicInvitees(
 		return { status: "inviteLimit" }
 	}
 	return { status: "ok", invitedUserIdByEmail, newInvites, reinvitedEmails }
-}
-
-// the invitee's account when the invite resolved to one, otherwise null
-export function toInvitee(inviteRow: {
-	inviteeUserId: string | null
-	inviteeUsername: string | null
-	inviteeAvatarSource: string | null
-}): ProfileIdentity | null {
-	return inviteRow.inviteeUserId && inviteRow.inviteeUsername
-		? {
-				userId: inviteRow.inviteeUserId,
-				username: inviteRow.inviteeUsername,
-				avatarSource: inviteRow.inviteeAvatarSource,
-			}
-		: null
 }
 
 /**

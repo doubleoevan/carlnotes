@@ -1,6 +1,7 @@
 // tests for the document routes, the seo files they serve, and a topic's description
 import { expect, test } from "bun:test"
 import type { PublicTopic } from "@shared/contracts"
+import { connectionPool } from "../db"
 import { documentsRoute } from "./documents"
 import { loadDocsPages, toFindingListLd, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toTopicDescription } from "./seo"
 
@@ -71,14 +72,24 @@ test("every docs page parses with a title and description", async () => {
 
 // the site feed responds as rss with the blog inside it
 test("/feed.xml serves the site feed as rss", async () => {
-	const response = await documentsRoute.request("/feed.xml")
+	// read no releases, so the feed holds the blog alone
+	const poolQuery = connectionPool.query
+	connectionPool.query = (() => Promise.resolve({ rows: [], fields: [] })) as unknown as typeof connectionPool.query
 
-	// the rss content type, and a blog link in the body
-	expect(response.status).toBe(200)
-	expect(response.headers.get("Content-Type")).toBe("application/rss+xml; charset=utf-8")
-	const feedXml = await response.text()
-	expect(feedXml).toContain("<rss")
-	expect(feedXml).toContain("/blog/")
+	// request the feed
+	try {
+		const response = await documentsRoute.request("/feed.xml")
+
+		// the rss content type, and a blog link in the body
+		expect(response.status).toBe(200)
+		expect(response.headers.get("Content-Type")).toBe("application/rss+xml; charset=utf-8")
+		const feedXml = await response.text()
+		expect(feedXml).toContain("<rss")
+		expect(feedXml).toContain("/blog/")
+	} finally {
+		// put the pool's own query back, whether the assertions pass or not
+		connectionPool.query = poolQuery
+	}
 })
 
 // the vulnerability contact file, served from the route

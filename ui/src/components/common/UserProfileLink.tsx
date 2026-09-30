@@ -38,7 +38,7 @@ export function UserProfileLink({
 			<UserAvatar
 				userId={user.userId}
 				username={user.username}
-				avatarSource={user.avatarSource}
+				avatarVersion={user.avatarVersion}
 				className={avatarClassName}
 			/>
 			{label ? (

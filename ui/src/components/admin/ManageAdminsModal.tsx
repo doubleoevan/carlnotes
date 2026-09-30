@@ -63,7 +63,7 @@ export function ManageAdminsModal({
 							<UserAvatar
 								userId={admin.id}
 								username={admin.username}
-								avatarSource={admin.avatarSource}
+								avatarVersion={admin.avatarVersion}
 								className="size-6"
 							/>
 							<span className="min-w-0 flex-1 truncate">
@@ -139,7 +139,7 @@ function AddAdminMenu({ users, onAddAdmin }: { users: AdminUserRow[]; onAddAdmin
 							<UserAvatar
 								userId={user.id}
 								username={user.username}
-								avatarSource={user.avatarSource}
+								avatarVersion={user.avatarVersion}
 								className="size-5 shrink-0"
 							/>
 							<span className="min-w-0 flex-1 truncate">

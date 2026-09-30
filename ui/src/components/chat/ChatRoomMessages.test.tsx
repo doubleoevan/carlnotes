@@ -13,6 +13,7 @@ function chatRoomMessage(overrides: Partial<ChatRoomMessage>): ChatRoomMessage {
 		authorUserId: "member-1",
 		authorUsername: "ana",
 		authorAvatarSource: null,
+		authorAvatarVersion: null,
 		replyToChatMessageId: null,
 		content: "hello room",
 		createdAt: "2026-08-18T12:00:00.000Z",

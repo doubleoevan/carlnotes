@@ -14,6 +14,7 @@ import { Hono } from "hono"
 import { db } from "../../db"
 import { canCreateTeamToday, loadUserAccess } from "../../db/quotas"
 import { invites, subscriptions, teamMembers, teams, teamTopics, topics, users } from "../../db/schema"
+import { deleteAttachment } from "../../worker"
 import { isLeaderRole } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
 import { canSeeTopic } from "../topic/permissions"
@@ -353,10 +354,10 @@ export async function deleteTeam(userId: string, teamId: string): Promise<Delete
 
 	// the count and the delete share one transaction over the locked team row, since a team member joining
 	// concurrently would otherwise keep active subscriptions to topics that the team deletion gives back to their owner
-	const isTeamDeleted = await db.transaction(async (transaction) => {
+	const deletedTeam = await db.transaction(async (transaction) => {
 		const [teamRow] = await transaction.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId)).for("update")
 		if (!teamRow) {
-			return false
+			return null
 		}
 
 		// any other active team members mean the team is not deleted
@@ -365,7 +366,7 @@ export async function deleteTeam(userId: string, teamId: string): Promise<Delete
 			.from(teamMembers)
 			.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true)))
 		if (teamMemberRows.some((memberRow) => memberRow.userId !== userId)) {
-			return false
+			return null
 		}
 
 		// delivery ends before the row is deleted, while the team membership list still shows who to deactivate
@@ -374,13 +375,21 @@ export async function deleteTeam(userId: string, teamId: string): Promise<Delete
 			teamId,
 			teamMemberRows.map((memberRow) => memberRow.userId),
 		)
-		await transaction.delete(teams).where(eq(teams.id, teamId))
-		return true
+		const [deletedTeamRow] = await transaction
+			.delete(teams)
+			.where(eq(teams.id, teamId))
+			.returning({ avatarKey: teams.avatarKey })
+		return deletedTeamRow ?? null
 	})
 
 	// the team outlived the delete because someone else is on it, so the caller assigns it to a new team leader
-	if (!isTeamDeleted) {
+	if (!deletedTeam) {
 		return updateTeamLeader(userId, teamId)
+	}
+
+	// delete the team's avatar image once the row is gone. a failed delete leaves an unused file, never a broken team
+	if (deletedTeam.avatarKey) {
+		await deleteAttachment(deletedTeam.avatarKey)
 	}
 	return { status: "deleted" }
 }

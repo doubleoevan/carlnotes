@@ -1,3 +1,4 @@
+import { toAvatarVersion } from "@shared/avatars"
 import { useLocation } from "@tanstack/react-router"
 import { Columns3Cog, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
 import { useState } from "react"
@@ -102,7 +103,7 @@ export function Header() {
 							<UserMenu
 								userId={session.user.id}
 								username={session.user.username}
-								avatarSource={session.user.avatarSource}
+								avatarVersion={toAvatarVersion(session.user)}
 								isAdmin={isAdmin}
 							/>
 						) : (

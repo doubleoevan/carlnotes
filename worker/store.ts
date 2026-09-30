@@ -18,9 +18,13 @@ export function toAttachmentKey(topicId: string, attachmentId: string, filename:
 	return `topics/${topicId}/attachments/${attachmentId}/${safeFilename}`
 }
 
-// delete a stored object. used as best-effort cleanup when ingestion fails after the upload
+// delete a stored object as a best-effort cleanup. a failure is logged instead of throwing an error
 export async function deleteAttachment(attachmentKey: string): Promise<void> {
-	await bucket().delete(attachmentKey)
+	try {
+		await bucket().delete(attachmentKey)
+	} catch (error) {
+		console.error(`attachment delete failed for ${attachmentKey}`, error)
+	}
 }
 
 // whether a stored object exists

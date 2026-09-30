@@ -2,7 +2,7 @@
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
-import type { TopicResponse, UpdateTopicPayload } from "@shared/contracts"
+import type { ProfileIdentity, TopicResponse, UpdateTopicPayload } from "@shared/contracts"
 import { suggestSourcesPayload, updateTopicPayload } from "@shared/contracts"
 import { reportError, traceRequestStage } from "@shared/monitoring"
 import { toTopicPath } from "@shared/seo"
@@ -21,8 +21,9 @@ import {
 	topics,
 	users,
 } from "../../db/schema"
-import { deleteAttachment, notifyIndexNow, suggestSources } from "../../worker"
+import { deleteAttachment, loadUserLiteLLMKey, notifyIndexNow, suggestSources } from "../../worker"
 import { isAllowed } from "../authorization"
+import { withAvatarVersion } from "../avatars"
 import { deleteChatAttachments } from "../chat/attachments"
 import { loadTopicChatMentions } from "../chat/mentions"
 import type { AnalyticsProperties } from "../currentUser"
@@ -88,50 +89,21 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 	// the page's independent reads run together
 	const isTopicOwner = topic.ownerId === userId
 	// biome-ignore format: one line keeps the destructure under the comment-density hook's limit
-	const [{ isAdmin, topicFindings }, topicSourceRows, rawAttachmentRows, scanRows, directSubscription, inviteAndScanFields, [ownerRow], teamFields, isDailyFrequencyPaused, canRate, canEdit] =
+	const [{ isAdmin, topicFindings }, topicSourceRows, rawAttachmentRows, scanRows, directSubscription, inviteAndScanFields, owner, teamFields, isDailyFrequencyPaused, canRate, canEdit] =
 		await traceRequestStage("topic_page.reads", () => Promise.all([
 			// the user's access and the findings it gates
 			loadTopicAccessAndFindings({ topic, userId }),
-			// every Source row, narrowed for visibility once the reads finish
+			// every Source row, and the attachment rows and their context, each narrowed once the reads finish
 			db.select().from(sources).where(eq(sources.topicId, topic.id)),
-			// the attachment rows, their generated context narrowed once the reads finish
-			db
-				.select({
-					id: attachments.id,
-					filename: attachments.filename,
-					sourceUrl: attachments.sourceUrl,
-					status: attachments.status,
-					context: attachments.context,
-				})
-				.from(attachments)
-				.where(eq(attachments.topicId, topic.id)),
-			// every scan column, newest first
-			db
-				.select({
-					id: scans.id,
-					status: scans.status,
-					startedAt: scans.startedAt,
-					finishedAt: scans.finishedAt,
-					stoppedAt: scans.stoppedAt,
-					foundCount: scans.foundCount,
-					keptCount: scans.keptCount,
-					filteredCount: scans.filteredCount,
-					cost: scans.cost,
-					error: scans.error,
-					scanSummary: scans.scanSummary,
-				})
-				.from(scans)
-				.where(eq(scans.topicId, topic.id))
-				.orderBy(desc(scans.startedAt)),
+			loadTopicAttachmentRows(topic.id),
+			// every scan, newest first
+			loadTopicScanRows(topic.id),
 			// this user's own subscription state. a signed-out visitor subscribes to nothing
 			userId ? loadDirectSubscription(userId, topic.id) : null,
 			// the owner-only extras: the invite list, the manual scan quota, and whether their spend is used up
 			toInviteAndScanFields(userId, topic, isTopicOwner),
 			// the topic owner's username, avatar and profile page id
-			db
-				.select({ userId: users.id, username: users.username, avatarSource: users.avatarSource })
-				.from(users)
-				.where(eq(users.id, topic.ownerId)),
+			loadTopicOwner(topic.ownerId),
 			// the team fields, read once: the badge, the user's membership, and the byline credit all follow from them
 			toTeamFields(topic.id, topic.teamId, userId),
 			// whether the owner's daily topics outgrew their plan, and what this user may do here
@@ -140,29 +112,14 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 			isAllowed(userId, "topic:edit", topic),
 		]))
 
-	// a Source that has not passed its llm-guard screen is only seen by someone who may edit the list.
-	// an editor's save reconciles sources by deletion, so hiding a row from them would delete it
-	const sourceSummaries = topicSourceRows
-		.filter((topicSource) => topicSource.status === "ready" || isAdmin || canEdit)
-		.map((topicSource) => ({
-			id: topicSource.id,
-			sourceKind: topicSource.kind,
-			summary: toSourceSummary(topicSource.kind, topicSource.config),
-			value: toSourceValue(topicSource.kind, topicSource.config),
-			status: topicSource.status,
-			error: topicSource.error,
-		}))
-
 	// every later scan reads the generated context, so the owner and admins see it to edit it, and nobody else does
+	const canSeeOwnerDetails = isAdmin || isTopicOwner
 	const attachmentRows = rawAttachmentRows.map((attachment) => ({
 		...attachment,
-		context: isAdmin || isTopicOwner ? attachment.context : null,
+		context: canSeeOwnerDetails ? attachment.context : null,
 	}))
 	// a stopped scan is left out of the history and the last-succeeded scan. the month's cost still counts it
-	const scanHistory = toScanHistory(scanRows, isAdmin || isTopicOwner)
-
-	// this user's own subscription state
-	const isSubscribed = directSubscription?.isActive === true
+	const scanHistory = toScanHistory(scanRows, canSeeOwnerDetails)
 
 	// the owner-only extras, unpacked from their grouped read
 	const { inviteRows, manualScansRemaining, manualScanLimit, isSpendExhausted } = inviteAndScanFields
@@ -170,19 +127,16 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 	// the latest succeeded scan feeds the schedule section, with its recap and duration beside it
 	const { lastSucceededTopicScan, scanSummary, lastScanDurationMs } = toLastTopicScanFields(scanHistory, scanRows)
 
-	// this month's total scan spend, for the owner or an admin, summed from the raw scans since the first of the utc month
-	const monthStart = startOfUtcMonth(new Date())
-	const monthCostDollars =
-		isAdmin || isTopicOwner
-			? scanRows.filter((scan) => scan.startedAt >= monthStart).reduce((sum, scan) => sum + Number(scan.cost), 0)
-			: null
+	// a Source that has not passed its llm-guard screen is only seen by someone who may edit the list.
+	// an editor's save deletes every source it does not list, so hiding a row from them would delete it
+	const visibleTopicSourceRows = topicSourceRows.filter(
+		(topicSource) => topicSource.status === "ready" || isAdmin || canEdit,
+	)
 	return {
 		// the topic identity and its editable fields
 		id: topic.id,
 		name: topic.name,
-		owner: ownerRow
-			? { userId: ownerRow.userId, username: ownerRow.username, avatarSource: ownerRow.avatarSource }
-			: null,
+		owner,
 		prompt: topic.prompt,
 		tags: topic.tags,
 		frequency: topic.frequency,
@@ -193,7 +147,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		// what this user may do with the topic
 		isTopicOwner,
 		isDailyFrequencyPaused,
-		isSubscribed,
+		isSubscribed: directSubscription?.isActive === true,
 		// the user's unseen chat room mentions, for the count badge on the page's title
 		chatMentions: (await loadTopicChatMentions(userId, [topic.id])).get(topic.id) ?? [],
 		canRate,
@@ -204,11 +158,11 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		createdAt: topic.createdAt.toISOString(),
 		lastScanAt: lastSucceededTopicScan?.startedAt ?? null,
 		lastScanDurationMs,
-		monthCostDollars,
+		monthCostDollars: canSeeOwnerDetails ? toMonthCostDollars(scanRows) : null,
 		scanSummary,
 		// everything connected to the topic
 		attachments: attachmentRows,
-		sources: sourceSummaries,
+		sources: visibleTopicSourceRows.map((topicSource) => toTopicSourceSummary(topicSource)),
 		scans: scanHistory,
 		findings: topicFindings,
 		invites: inviteRows,
@@ -218,6 +172,93 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		...teamFields,
 		isOnTeam: topic.teamId !== null,
 		...(await toFeaturedTopics(topic.featureOrder, isAdmin)),
+	}
+}
+
+// the attachment rows that a topic page lists
+async function loadTopicAttachmentRows(
+	topicId: string,
+): Promise<Pick<typeof attachments.$inferSelect, "id" | "filename" | "sourceUrl" | "status" | "context">[]> {
+	return db
+		.select({
+			id: attachments.id,
+			filename: attachments.filename,
+			sourceUrl: attachments.sourceUrl,
+			status: attachments.status,
+			context: attachments.context,
+		})
+		.from(attachments)
+		.where(eq(attachments.topicId, topicId))
+}
+
+// the scan columns that a topic page shows
+type TopicScanRow = Pick<
+	typeof scans.$inferSelect,
+	// when the scan ran and how it ended
+	| "id"
+	| "status"
+	| "startedAt"
+	| "finishedAt"
+	| "stoppedAt"
+	| "error"
+	// what it found and kept, what it cost, and its recap
+	| "foundCount"
+	| "keptCount"
+	| "filteredCount"
+	| "cost"
+	| "scanSummary"
+>
+
+// a topic's scans, newest first
+async function loadTopicScanRows(topicId: string): Promise<TopicScanRow[]> {
+	return db
+		.select({
+			id: scans.id,
+			status: scans.status,
+			startedAt: scans.startedAt,
+			finishedAt: scans.finishedAt,
+			stoppedAt: scans.stoppedAt,
+			foundCount: scans.foundCount,
+			keptCount: scans.keptCount,
+			filteredCount: scans.filteredCount,
+			cost: scans.cost,
+			error: scans.error,
+			scanSummary: scans.scanSummary,
+		})
+		.from(scans)
+		.where(eq(scans.topicId, topicId))
+		.orderBy(desc(scans.startedAt))
+}
+
+// the topic owner's public identity, or null if the owner's row is gone
+async function loadTopicOwner(ownerId: string): Promise<ProfileIdentity | null> {
+	const [ownerRow] = await db
+		.select({
+			userId: users.id,
+			username: users.username,
+			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
+		})
+		.from(users)
+		.where(eq(users.id, ownerId))
+	return ownerRow ? withAvatarVersion(ownerRow) : null
+}
+
+// this month's total scan spend, summed from the raw scans since the first of the utc month
+function toMonthCostDollars(scanRows: Pick<TopicScanRow, "startedAt" | "cost">[]): number {
+	const monthStart = startOfUtcMonth(new Date())
+	return scanRows.filter((scan) => scan.startedAt >= monthStart).reduce((sum, scan) => sum + Number(scan.cost), 0)
+}
+
+// one Source as the topic page lists it
+function toTopicSourceSummary(topicSource: typeof sources.$inferSelect): TopicResponse["sources"][number] {
+	return {
+		id: topicSource.id,
+		sourceKind: topicSource.kind,
+		summary: toSourceSummary(topicSource.kind, topicSource.config),
+		value: toSourceValue(topicSource.kind, topicSource.config),
+		status: topicSource.status,
+		error: topicSource.error,
 	}
 }
 
@@ -494,7 +535,7 @@ export async function deleteTopic(
 		.select({ objectKey: attachments.objectKey })
 		.from(attachments)
 		.where(eq(attachments.topicId, topicId))
-	await Promise.all(attachmentRows.map((attachmentRow) => deleteAttachment(attachmentRow.objectKey).catch(() => {})))
+	await Promise.all(attachmentRows.map((attachmentRow) => deleteAttachment(attachmentRow.objectKey)))
 	await deleteChatAttachments(topicId)
 
 	// the chat room's shared files leave object storage too. a pending upload has no object yet
@@ -504,7 +545,7 @@ export async function deleteTopic(
 		.where(eq(chatRoomAttachments.topicId, topicId))
 	await Promise.all(
 		roomAttachmentRows.map((attachmentRow) =>
-			attachmentRow.objectKey ? deleteAttachment(attachmentRow.objectKey).catch(() => {}) : undefined,
+			attachmentRow.objectKey ? deleteAttachment(attachmentRow.objectKey) : undefined,
 		),
 	)
 
@@ -562,10 +603,7 @@ export const topicsRoute = new Hono<AppEnv>()
 		}
 
 		// the suggestion's model call bills to the user's own limited key
-		const [userRow] = await db
-			.select({ litellmVirtualKey: users.litellmVirtualKey })
-			.from(users)
-			.where(eq(users.id, userId))
+		const litellmApiKey = await loadUserLiteLLMKey(userId)
 		// propose sources from the topic's own text
 		const { name, prompt, attachmentContext, excludeSources, limit } = context.req.valid("json")
 		const suggestedSources = await suggestSources({
@@ -574,7 +612,7 @@ export const topicsRoute = new Hono<AppEnv>()
 			attachmentContext,
 			excludeSources,
 			limit,
-			litellmApiKey: userRow?.litellmVirtualKey ?? undefined,
+			litellmApiKey,
 		})
 		return context.json({ sources: suggestedSources })
 	})

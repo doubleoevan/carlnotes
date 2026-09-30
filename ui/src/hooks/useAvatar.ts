@@ -1,11 +1,12 @@
 // the avatar setting, read from the session and updated through it
+import { toAvatarVersion } from "@shared/avatars"
 import { authClient } from "@/clients/authClient"
 import { sendAvatarSource, uploadAvatar } from "@/clients/profileClient"
-import { refreshAvatars } from "@/hooks/useAvatarVersion"
 
-// the current image, whether there is a provider photo to offer, and the two ways to change it
+// the current image and its url's version, whether there is a provider photo to show, and the functions that change it
 type AvatarSetting = {
 	avatarSource: string
+	avatarVersion: string | null
 	hasProviderPhoto: boolean
 	setAvatarSource: (nextSource: "generated" | "oauth") => Promise<void>
 	uploadAvatarFile: (file: File) => Promise<string | null>
@@ -27,27 +28,26 @@ export function useAvatar(): AvatarSetting {
 	// swap between the generated image and the oauth provider's photo
 	async function setAvatarSource(nextSource: "generated" | "oauth"): Promise<void> {
 		try {
-			// the session and every drawn avatar re-read after the change lands
+			// save the source, then refresh the session, which every copy of this user's avatar follows
 			await sendAvatarSource(nextSource)
 			refreshAuthSession()
-			refreshAvatars()
 		} catch (error) {
 			console.error("avatar source change failed", error)
 		}
 	}
 
-	// send an uploaded file, answering with the rejection if there is one and refreshing when there is not
+	// send an uploaded file, returning the rejection if there is one and refreshing the session if not
 	async function uploadPhoto(file: File): Promise<string | null> {
 		const rejection = await uploadAvatar(file)
 		if (!rejection) {
 			refreshAuthSession()
-			refreshAvatars()
 		}
 		return rejection
 	}
 
 	return {
 		avatarSource: session?.user.avatarSource ?? "generated",
+		avatarVersion: toAvatarVersion(session?.user ?? {}),
 		hasProviderPhoto: Boolean(providerImageUrl),
 		setAvatarSource,
 		uploadAvatarFile: uploadPhoto,

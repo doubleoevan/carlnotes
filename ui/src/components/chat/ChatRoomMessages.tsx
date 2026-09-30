@@ -307,7 +307,7 @@ const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 		<ChatAuthor
 			authorUserId={chatMessage.authorUserId}
 			authorUsername={chatMessage.authorUsername}
-			avatarSource={chatMessage.authorAvatarSource}
+			avatarVersion={chatMessage.authorAvatarVersion}
 			isOwnChatMessage={isOwnChatMessage}
 		>
 			<div className={cn("group flex w-full flex-col", isOwnChatMessage ? "items-end" : "items-start")}>

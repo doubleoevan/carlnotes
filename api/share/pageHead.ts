@@ -9,10 +9,10 @@ import type { AppEnv } from "../currentUser"
 import { toInviteTarget } from "../invite/invites"
 import { lastScan, loadTopicFeedUpdatedAt, scanFindings, toCreativeWorkLd, toFindingListLd } from "../seo"
 import { toInvitedTeamPreview, toProfilePreview, toTeamPreview, toTopicPreview } from "./preview"
-import { toCountLabel } from "./previewImage"
-import type { ProfilePreview } from "./profileImage"
-import type { TeamPreview } from "./teamImage"
-import type { TopicPreview } from "./topicImage"
+import { toCountLabel, toPreviewVersion } from "./previewImage"
+import { type ProfilePreview, toProfilePreviewKey } from "./profileImage"
+import { type TeamPreview, toTeamPreviewKey } from "./teamImage"
+import { type TopicPreview, toTopicPreviewKey } from "./topicImage"
 
 // the page head routes: a topic's, a profile's, a team's, and an invitation's
 export const pageHeadRoute = new Hono<AppEnv>()
@@ -70,13 +70,17 @@ export const pageHeadRoute = new Hono<AppEnv>()
 		const invitedTeamPreview = "teamId" in inviteTarget ? await toInvitedTeamPreview(inviteTarget.teamId) : null
 		const invitedTopicPreview = "topicId" in inviteTarget ? await toTopicPreview(inviteTarget.topicId) : null
 		const name = invitedTeamPreview?.name ?? invitedTopicPreview?.title
-		if (!name) {
+		// find the card's storage key. the image url names the key's version
+		const invitePreviewKey =
+			(invitedTeamPreview && toTeamPreviewKey(invitedTeamPreview)) ??
+			(invitedTopicPreview && toTopicPreviewKey(invitedTopicPreview))
+		if (!name || !invitePreviewKey) {
 			return context.json({ error: "not found" }, 404)
 		}
 		return context.json(
 			toInvitePageHead({
 				name,
-				imageUrl: `${appUrl()}/api/invites/${token}/preview.png`,
+				imageUrl: `${appUrl()}/api/invites/${token}/preview.png?v=${toPreviewVersion(invitePreviewKey)}`,
 				inviteUrl: `${appUrl()}/invite/${token}`,
 				kind: invitedTeamPreview ? "team" : "topic",
 			}),
@@ -100,7 +104,7 @@ export function toTopicPageHead({ topicPreview, appUrl, jsonLd }: ToTopicPageHea
 		description: topicPreview.description,
 		canonicalUrl: isIndexed ? pageUrl : null,
 		cardUrl: pageUrl,
-		imageUrl: `${appUrl}/api/topics/${topicPreview.topicId}/preview.png`,
+		imageUrl: `${appUrl}/api/topics/${topicPreview.topicId}/preview.png?v=${toPreviewVersion(toTopicPreviewKey(topicPreview))}`,
 		feedUrl: isPublicTopic ? `${appUrl}${toTopicFeedPath(topicPreview.topicId)}` : null,
 		isIndexed,
 		jsonLd,
@@ -121,7 +125,7 @@ export function toProfilePageHead(profilePreview: ProfilePreview, appUrl: string
 		// a profile is indexed and names a canonical url only once it has a public topic
 		canonicalUrl: profilePreview.publicTopicCount > 0 ? pageUrl : null,
 		cardUrl: pageUrl,
-		imageUrl: `${appUrl}/api/profiles/${profilePreview.userId}/preview.png`,
+		imageUrl: `${appUrl}/api/profiles/${profilePreview.userId}/preview.png?v=${toPreviewVersion(toProfilePreviewKey(profilePreview))}`,
 		feedUrl: null,
 		isIndexed: profilePreview.publicTopicCount > 0,
 		jsonLd: null,
@@ -142,7 +146,7 @@ export function toTeamPageHead(teamPreview: TeamPreview, appUrl: string): PageHe
 		// a team is indexed and names a canonical url only once it has a public topic
 		canonicalUrl: teamPreview.topicCount > 0 ? pageUrl : null,
 		cardUrl: pageUrl,
-		imageUrl: `${appUrl}/api/teams/${teamPreview.teamId}/preview.png`,
+		imageUrl: `${appUrl}/api/teams/${teamPreview.teamId}/preview.png?v=${toPreviewVersion(toTeamPreviewKey(teamPreview))}`,
 		feedUrl: null,
 		isIndexed: teamPreview.topicCount > 0,
 		jsonLd: null,

@@ -1,4 +1,6 @@
 // the avatar a user publishes: an upload they chose, the photo their provider supplied, or the username initials
+import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
+import type { ProfileIdentity } from "@shared/contracts"
 import type { avatarSources } from "@shared/enums"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
@@ -8,6 +10,7 @@ import { db } from "../db"
 import { teams, users } from "../db/schema"
 import { attachmentStream, deleteAttachment, uploadAttachment } from "../worker"
 import { type AppEnv, currentUser } from "./currentUser"
+import { toVersionedImageHeaders } from "./edgeCache"
 import { toTeamRole } from "./team/members"
 
 // an avatar is shown at 64 pixels and under, so a large file buys nothing and costs storage on every account
@@ -93,7 +96,7 @@ export async function uploadTeamAvatar(
 
 	// the row already points at the new object. a failed delete leaves an unused file, never a broken avatar
 	if (previous?.avatarKey && previous.avatarKey !== avatarKey) {
-		await deleteAttachment(previous.avatarKey).catch((error) => console.error("team avatar cleanup failed", error))
+		await deleteAttachment(previous.avatarKey)
 	}
 	return null
 }
@@ -107,6 +110,9 @@ export async function saveAvatarSource(userId: string, avatarSource: "generated"
 
 // where a published avatar comes from: a stored object, a url from the user's oauth provider
 export type PublishedAvatar = { avatarKey: string } | { imageUrl: string } | null
+
+// how long the browser and the edge cache the redirect to a provider photo
+const PROVIDER_PHOTO_CACHE_CONTROL = "public, max-age=3600"
 
 // the provider photo origins an avatar may redirect to. users.image comes from the browser and is not trusted
 export const PROVIDER_PHOTO_ORIGINS = new Set([
@@ -156,6 +162,40 @@ export function toPublishedAvatarFromUser(
 	return null
 }
 
+/**
+ * Returns a user's joined columns with the version that their avatar url names in place of the storage key.
+ */
+export function withAvatarVersion<UserColumns extends { avatarSource: string | null; avatarKey: string | null }>(
+	userColumns: UserColumns,
+): Omit<UserColumns, "avatarKey"> & { avatarVersion: string | null } {
+	// replace the storage key with the version that the avatar url names. the key stays in the api
+	const { avatarKey, ...identity } = userColumns
+	return { ...identity, avatarVersion: toAvatarVersion({ avatarSource: userColumns.avatarSource, avatarKey }) }
+}
+
+// a person's left-joined columns: all null, or the whole object null, if the join found no account
+type JoinedProfileColumns = {
+	userId: string | null
+	username: string | null
+	avatarSource: string | null
+	avatarKey: string | null
+}
+
+/**
+ * Returns a left-joined person's public identity, or null if the join found no account.
+ */
+export function toProfileIdentity(profileColumns: JoinedProfileColumns | null): ProfileIdentity | null {
+	if (!profileColumns?.userId || !profileColumns.username) {
+		return null
+	}
+	return {
+		userId: profileColumns.userId,
+		username: profileColumns.username,
+		avatarSource: profileColumns.avatarSource,
+		avatarVersion: toAvatarVersion(profileColumns),
+	}
+}
+
 // the object key for a user's uploaded avatar, or null when they have none stored
 async function toAvatarKey(userId: string): Promise<string | null> {
 	const [user] = await db.select({ avatarKey: users.avatarKey }).from(users).where(eq(users.id, userId))
@@ -173,14 +213,20 @@ async function replaceAvatar(
 
 	// the users row is already optimistically updated. a failed delete leaves an unused file instead of a broken avatar
 	if (previousKey && previousKey !== avatarKey) {
-		await deleteAttachment(previousKey).catch((error) => console.error("avatar cleanup failed", error))
+		await deleteAttachment(previousKey)
 	}
 }
 
 // serve a stored avatar with its unique key as the cache validator
 function serveAvatar(context: Context<AppEnv>, avatarKey: string): Response {
+	// set the cache headers, long only for a url that names the key's own version
+	const isCurrentVersion = context.req.query("v") === toAvatarKeyVersion(avatarKey)
+	for (const [headerName, headerValue] of Object.entries(toVersionedImageHeaders(isCurrentVersion))) {
+		context.header(headerName, headerValue)
+	}
+
+	// validate by the key and never let the browser guess the type
 	context.header("ETag", `"${avatarKey}"`)
-	context.header("Cache-Control", "public, max-age=300")
 	context.header("X-Content-Type-Options", "nosniff")
 	// a validator match responds with headers only, so nothing streams from storage
 	if (context.req.header("if-none-match") === `"${avatarKey}"`) {
@@ -199,8 +245,10 @@ export const avatarsRoute = new Hono<AppEnv>()
 		if (!published) {
 			return context.json({ error: "not found" }, 404)
 		}
-		// a provider photo lives at the provider, so the browser is sent there instead of proxied through here
+		// redirect to a provider photo at its provider and cache the redirect for an hour at most.
+		// the provider can change the photo without a new version
 		if ("imageUrl" in published) {
+			context.header("Cache-Control", PROVIDER_PHOTO_CACHE_CONTROL)
 			return context.redirect(published.imageUrl, 302)
 		}
 		return serveAvatar(context, published.avatarKey)

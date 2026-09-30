@@ -2,7 +2,7 @@ import type { ActivityResponse, BillingState } from "@shared/contracts"
 import { User } from "lucide-react"
 import { useEffect, useState } from "react"
 import { fetchActivity } from "@/clients/activityClient"
-import { authClient } from "@/clients/authClient"
+import { authClient, toSessionProfileIdentity } from "@/clients/authClient"
 import { fetchBillingState } from "@/clients/billingClient"
 import { AccountBudget, PlanButton } from "@/components/account/AccountBudget"
 import { AccountSettings } from "@/components/account/AccountSettings"
@@ -52,13 +52,7 @@ export function AccountPage() {
 	}
 
 	// the username row's user from the session for the user's own page or the payload from an admin's link
-	const user = isOwnView
-		? {
-				userId: session.user.id,
-				username: session.user.username,
-				avatarSource: session.user.avatarSource ?? null,
-			}
-		: activity?.user
+	const user = isOwnView ? toSessionProfileIdentity(session.user) : activity?.user
 	return (
 		<main className={PAGE_CLASS}>
 			{/* the page title with the same icon as its header menu item, and the plan button to the right */}

@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator"
 import { appUrl } from "@shared/appUrl"
 import { signupGatePayload } from "@shared/contracts"
 import { traceRequestStage } from "@shared/monitoring"
-import { type Context, Hono } from "hono"
+import { Hono } from "hono"
 import { getCookie, setCookie } from "hono/cookie"
 import { z } from "zod"
 import { activityRoute } from "./activity"
@@ -20,10 +20,11 @@ import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "./authorizatio
 import { avatarsRoute } from "./avatars"
 import { billingRoute } from "./billing"
 import { chatAttachmentsRoute } from "./chat/attachments"
+import { privateChatRoute } from "./chat/privateChat"
 import { chatRoomRoute } from "./chat/room"
 import { countUnseenChatMentions, loadChatRooms } from "./chat/rooms"
-import { chatRoute } from "./chat/turns"
 import { type AppEnv, currentUser } from "./currentUser"
+import { renderedCacheHeaders } from "./edgeCache"
 import { flagContentRoute } from "./flagContent"
 import { invitesRoute, toInviteTarget } from "./invite/invites"
 import { userInvitesRoute } from "./invite/userInvites"
@@ -38,6 +39,7 @@ import {
 	toCachedProfilePreviewPng,
 	toCachedTeamPreviewPng,
 	toCachedTopicPreviewPng,
+	toPreviewPngResponse,
 	toProfilePreview,
 	toTeamPreview,
 	toTopicPreview,
@@ -126,7 +128,7 @@ export const apiRoute = new Hono<AppEnv>()
 		return context.json({ count: userId ? await countUnseenChatMentions(userId) : 0 })
 	})
 	// public: a signed-out visitor gets featured and popular, just no "yours"
-	.get("/topic-feed", zValidator("query", topicFeedQuery), async (context) => {
+	.get("/topic-feed", renderedCacheHeaders, zValidator("query", topicFeedQuery), async (context) => {
 		const userId = currentUser(context)
 		// only include consumed topic findings unless the api client asks for the "All" view
 		const includeConsumed = context.req.valid("query").all === "true"
@@ -154,7 +156,7 @@ export const apiRoute = new Hono<AppEnv>()
 	// the manual scan route
 	.route("/", scansRoute)
 	// the chat routes
-	.route("/", chatRoute)
+	.route("/", privateChatRoute)
 	// the team chat routes
 	.route("/", chatRoomRoute)
 	// the note routes and their comment threads
@@ -231,11 +233,3 @@ export const apiRoute = new Hono<AppEnv>()
 	// the admin console routes
 	.route("/", adminRoute)
 	.route("/", featuringRoute)
-
-// the png response of a link-preview card, with the card's cache-control header
-function toPreviewPngResponse(context: Context, previewPng: { bytes: Uint8Array; cacheControl: string }): Response {
-	return context.body(previewPng.bytes as unknown as ArrayBuffer, 200, {
-		"Content-Type": "image/png",
-		"Cache-Control": previewPng.cacheControl,
-	})
-}

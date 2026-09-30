@@ -1,7 +1,7 @@
 {
 	"apiVersion": "v1.2",
 	"name": "release-main",
-	"description": "Build main, run migrate, deploy app and temporal-worker, then embed docs",
+	"description": "Build main, run migrate, deploy app, purge the edge's pages, deploy temporal-worker, then embed docs",
 	"spec": {
 		"kind": "Workflow",
 		"spec": {
@@ -47,6 +47,21 @@
 						"target": { "id": "app", "type": "service" }
 					},
 					"condition": "running"
+				},
+				{
+					"kind": "JobRun",
+					"ref": "run-edge-purge",
+					"spec": {
+						"jobId": "edge-purge",
+						"deployment": {
+							"internal": {
+								"id": "${refs.build-image.nfObjectId}",
+								"branch": "${refs.build-image.branch}",
+								"buildId": "${refs.build-image.id}"
+							}
+						}
+					},
+					"condition": "success"
 				},
 				{
 					"kind": "Release",

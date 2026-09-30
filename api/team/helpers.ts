@@ -1,4 +1,5 @@
 // the database helpers for the team api
+import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
 import type { OwnerTopic, TeamPageResponse, TeamSearchResult, TeamSummary, TeamsPageResponse } from "@shared/contracts"
 import { USER_SEARCH_LIMIT, USER_SEARCH_MIN_CHARS } from "@shared/contracts"
 import { toNormalizedUsername } from "@shared/usernames"
@@ -8,8 +9,8 @@ import { db } from "../../db"
 import { chatTurns, invites, scans, teamMembers, teams, teamTopics, topics, users } from "../../db/schema"
 import { loadTopics } from "../activity"
 import { isAllowed, isLeaderRole } from "../authorization"
+import { toProfileIdentity } from "../avatars"
 import { loadTeamChatMentions } from "../chat/mentions"
-import { toInvitee } from "../invite/userInvites"
 import { toTopicTableRows } from "../topic/helpers"
 import { verifiedEmailQuery } from "../topic/permissions"
 import { startOfUtcMonth } from "../topic/quotas"
@@ -38,10 +39,13 @@ export async function loadTeamsPage(userId: string): Promise<TeamsPageResponse> 
 			description: teams.description,
 			avatarKey: teams.avatarKey,
 			invitedAt: invites.invitedAt,
-			// the sender's identity or null if their account has closed
-			senderUserId: senders.id,
-			senderUsername: senders.username,
-			senderAvatarSource: senders.avatarSource,
+			// the sender's account, null if it has closed
+			sender: {
+				userId: senders.id,
+				username: senders.username,
+				avatarSource: senders.avatarSource,
+				avatarKey: senders.avatarKey,
+			},
 		})
 		.from(invites)
 		.innerJoin(teams, eq(teams.id, invites.teamId))
@@ -72,20 +76,13 @@ export async function loadTeamsPage(userId: string): Promise<TeamsPageResponse> 
 		teamId: inviteRow.teamId,
 		name: inviteRow.name,
 		isPublic: inviteRow.isPublic,
-		hasAvatar: inviteRow.avatarKey !== null,
+		avatarVersion: toAvatarKeyVersion(inviteRow.avatarKey),
 		description: inviteRow.description,
 		memberCount: countsByTeamId.get(inviteRow.teamId)?.memberCount ?? 0,
 		topicCount: countsByTeamId.get(inviteRow.teamId)?.topicCount ?? 0,
 		scanSpendCents: spendByTeamId.get(inviteRow.teamId)?.scanCents ?? 0,
 		chatSpendCents: spendByTeamId.get(inviteRow.teamId)?.chatCents ?? 0,
-		sender:
-			inviteRow.senderUserId && inviteRow.senderUsername
-				? {
-						userId: inviteRow.senderUserId,
-						username: inviteRow.senderUsername,
-						avatarSource: inviteRow.senderAvatarSource,
-					}
-				: null,
+		sender: toProfileIdentity(inviteRow.sender),
 		invitedAt: inviteRow.invitedAt.toISOString(),
 	}))
 
@@ -108,9 +105,15 @@ async function loadSentTeamInvites(userId: string): Promise<TeamsPageResponse["s
 			inviteeEmail: invites.email,
 			invitedAt: invites.invitedAt,
 			// the invitee's account fields, null until the invitation names or resolves to an account
-			inviteeUserId: inviteeId,
-			inviteeUsername: sql<string | null>`coalesce(${users.username}, ${usersByEmail.username})`,
-			inviteeAvatarSource: sql<string | null>`coalesce(${users.avatarSource}, ${usersByEmail.avatarSource})`,
+			invitee: {
+				userId: inviteeId,
+				username: sql<string | null>`coalesce(${users.username}, ${usersByEmail.username})`,
+				avatarSource: sql<string | null>`coalesce(${users.avatarSource}, ${usersByEmail.avatarSource})`,
+				// the key of the account that the id names. a coalesce here could return the other account's key
+				avatarKey: sql<
+					string | null
+				>`case when ${users.id} is not null then ${users.avatarKey} else ${usersByEmail.avatarKey} end`,
+			},
 			joinedAt: teamMembers.createdAt,
 		})
 		.from(invites)
@@ -134,9 +137,9 @@ async function loadSentTeamInvites(userId: string): Promise<TeamsPageResponse["s
 		inviteId: inviteRow.inviteId,
 		teamId: inviteRow.teamId,
 		name: inviteRow.name,
-		hasAvatar: inviteRow.teamAvatarKey !== null,
+		avatarVersion: toAvatarKeyVersion(inviteRow.teamAvatarKey),
 		inviteeEmail: inviteRow.inviteeEmail,
-		invitee: toInvitee(inviteRow),
+		invitee: toProfileIdentity(inviteRow.invitee),
 		invitedAt: inviteRow.invitedAt.toISOString(),
 		joinedAt: inviteRow.joinedAt?.toISOString() ?? null,
 	}))
@@ -146,7 +149,7 @@ async function loadSentTeamInvites(userId: string): Promise<TeamsPageResponse["s
 export type TeamUpMenuOption = {
 	teamId: string
 	name: string
-	hasAvatar: boolean
+	avatarVersion: string | null
 	role: "leader" | "member"
 	status: "member" | "invited" | "none"
 	// an invite to the profile user, and whether the user may delete it: a leader may delete any
@@ -208,7 +211,7 @@ export async function loadTeamUpMenu(userId: string, profileUserId: string): Pro
 		return {
 			teamId: teamRow.teamId,
 			name: teamRow.name,
-			hasAvatar: teamRow.avatarKey !== null,
+			avatarVersion: toAvatarKeyVersion(teamRow.avatarKey),
 			role: teamRow.role,
 			status: membersByTeamId.has(teamRow.teamId)
 				? ("member" as const)
@@ -267,7 +270,7 @@ export async function searchTeams(query: string, userId: string | null): Promise
 	return teamRows.map((teamRow) => ({
 		teamId: teamRow.teamId,
 		name: teamRow.name,
-		hasAvatar: teamRow.avatarKey !== null,
+		avatarVersion: toAvatarKeyVersion(teamRow.avatarKey),
 	}))
 }
 
@@ -349,10 +352,13 @@ export async function loadTeamSummaries(userId: string): Promise<TeamSummary[]> 
 			isPublic: teams.isPublic,
 			description: teams.description,
 			avatarKey: teams.avatarKey,
-			// who invited the user, null when they joined on their own or the inviter's account closed
-			inviterUserId: inviters.id,
-			inviterUsername: inviters.username,
-			inviterAvatarSource: inviters.avatarSource,
+			// who invited the user, null if they joined on their own or the inviter's account closed
+			inviter: {
+				userId: inviters.id,
+				username: inviters.username,
+				avatarSource: inviters.avatarSource,
+				avatarKey: inviters.avatarKey,
+			},
 		})
 		.from(teamMembers)
 		.innerJoin(teams, eq(teams.id, teamMembers.teamId))
@@ -377,16 +383,13 @@ export async function loadTeamSummaries(userId: string): Promise<TeamSummary[]> 
 	// what each team's topics cost this month, and the user's unseen team chat room mentions
 	const spendByTeamId = await toSpendByTeamId(teamIds)
 	const mentionsByTeamId = await loadTeamChatMentions(userId, teamIds)
-	return teamRows.map(({ avatarKey, inviterUserId, inviterUsername, inviterAvatarSource, ...row }) => ({
+	return teamRows.map(({ avatarKey, inviter, ...row }) => ({
 		...row,
-		invitedBy:
-			inviterUserId && inviterUsername
-				? { userId: inviterUserId, username: inviterUsername, avatarSource: inviterAvatarSource }
-				: null,
+		invitedBy: toProfileIdentity(inviter),
 		isOnlyLeader: isLeaderRole(row.role) && (leaderCountByTeamId.get(row.teamId) ?? 0) <= 1,
 		memberCount: countsByTeamId.get(row.teamId)?.memberCount ?? 1,
 		topicCount: countsByTeamId.get(row.teamId)?.topicCount ?? 0,
-		hasAvatar: avatarKey !== null,
+		avatarVersion: toAvatarKeyVersion(avatarKey),
 		scanSpendCents: spendByTeamId.get(row.teamId)?.scanCents ?? 0,
 		chatSpendCents: spendByTeamId.get(row.teamId)?.chatCents ?? 0,
 		chatMentions: mentionsByTeamId.get(row.teamId) ?? [],
@@ -427,7 +430,7 @@ export async function loadPublicTeams(userId: string): Promise<TeamSummary[]> {
 		name: teamRow.name,
 		description: teamRow.description,
 		isPublic: teamRow.isPublic,
-		hasAvatar: teamRow.avatarKey !== null,
+		avatarVersion: toAvatarKeyVersion(teamRow.avatarKey),
 		memberCount: countsByTeamId.get(teamRow.teamId)?.memberCount ?? 0,
 		topicCount: countsByTeamId.get(teamRow.teamId)?.topicCount ?? 0,
 		// a team's spend is its members' business, so a profile visitor is told none of it
@@ -524,6 +527,7 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 				userId: users.id,
 				username: users.username,
 				avatarSource: users.avatarSource,
+				avatarKey: users.avatarKey,
 				role: teamMembers.role,
 				isMemberVisible: teamMembers.isMemberVisible,
 				isActive: teamMembers.isActive,
@@ -556,13 +560,14 @@ export async function loadTeamPage(userId: string | null, teamId: string): Promi
 		name: team.name,
 		description: team.description,
 		isPublic: team.isPublic,
-		hasAvatar: team.avatarKey !== null,
+		avatarVersion: toAvatarKeyVersion(team.avatarKey),
 		role,
 		hasRequestedToJoin,
 		members: shownMembers.map((memberRow) => ({
 			userId: memberRow.userId,
 			username: memberRow.username,
 			avatarSource: memberRow.avatarSource,
+			avatarVersion: toAvatarVersion(memberRow),
 			role: memberRow.role,
 			isMemberVisible: memberRow.isMemberVisible,
 			isActive: memberRow.isActive,

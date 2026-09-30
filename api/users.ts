@@ -48,7 +48,15 @@ async function setNewTeamLeaders(userId: string): Promise<void> {
 		}
 
 		// nobody else is on the team, so it is deleted with the account. its topics return to their topic owners
-		await db.delete(teams).where(eq(teams.id, teamId))
+		const [deletedTeamRow] = await db
+			.delete(teams)
+			.where(eq(teams.id, teamId))
+			.returning({ avatarKey: teams.avatarKey })
+
+		// delete the team's avatar image too. a failed delete leaves an unused file, and the account still closes
+		if (deletedTeamRow?.avatarKey) {
+			await deleteAttachment(deletedTeamRow.avatarKey)
+		}
 	}
 }
 
@@ -89,7 +97,7 @@ export async function deleteUser(
 
 	// delete the avatar object if they uploaded one
 	if (user.avatarKey) {
-		await deleteAttachment(user.avatarKey).catch((error) => console.error("avatar delete failed", error))
+		await deleteAttachment(user.avatarKey)
 	}
 
 	// delete the user row which cascades to sessions, accounts, subscriptions, bookmarks, and the rest.

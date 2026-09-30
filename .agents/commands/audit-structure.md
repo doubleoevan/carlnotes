@@ -41,6 +41,8 @@ Check for:
    names that reached `main` belong here. A name renamed within the branch
    that introduced it never shipped, so nothing can still reference it.
    - `--prompt-only` (now `coderabbit review --agent`)
+   - `coderabbit review --type all` and a separate `coderabbit auth login` (now `--include-untracked` beside
+     `--base-commit <origin/main sha>` and an inline `--api-key`)
    - `src/` paths from before the `ui/` restructure: `frontend.tsx`,
      `index.css`, `styles/globals.css`, `build.ts`
    - `bun-plugin-tailwind`, `Bun.serve` HTML imports (removed Bun full-stack
@@ -255,6 +257,17 @@ Check for:
    - the `@opentelemetry/sdk-node` dependency and its `NodeSDK` in `worker/telemetry.ts` (now a `NodeTracerProvider`
      from `@opentelemetry/sdk-trace-node`)
    - `loadUserAccess` in `api/authorization.ts` (now the one in `db/quotas.ts`, which `api/authorization.ts` re-exports)
+   - `useAvatarVersion` and `refreshAvatars` in `ui/src/hooks/useAvatarVersion.ts` (removed: each payload's
+     `avatarVersion`, from `toAvatarVersion` in `shared/avatars.ts`)
+   - a team's `hasAvatar` and a chat room's `teamHasAvatar` (now `avatarVersion` and `teamAvatarVersion`)
+   - `toClientAddress` in `api/rateLimit.ts` (now `resolveClientAddress` in `api/trustedProxies.ts`)
+   - `reportForwardedChain` in `api/auth.ts` (now `checkTrustedProxies`), and "the forwarded chain" in comments (now the
+     x-forwarded-for header)
+   - `api/chat/turns.ts` (now `api/chat/privateChat.ts`) and its `chatRoute` (now `privateChatRoute`). its `ChatPage`,
+     `saveChatTurn`, `toChatTurnRow`, `recordChatRoomTurn`, `loadChatTurns`, and `clearChatTurns` (now
+     `api/chat/chatTurns.ts`), `writeReplyStream` (now `api/chat/replyStream.ts`), and `api/chat/turns.test.ts` (now
+     `chatTurns.test.ts` and `replyStream.test.ts`)
+   - `ledger` and the `chat ledger` in comments (now a `chat turn row`, or a `spend row` where the point is what it bills)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

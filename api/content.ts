@@ -6,6 +6,7 @@ import { Hono } from "hono"
 import Markdown from "markdown-to-jsx"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
+import { renderedCacheHeaders } from "./edgeCache"
 import { toJsonLdTag } from "./seo"
 import { cacheForTtl } from "./ttlCache"
 
@@ -189,8 +190,8 @@ async function servePage(section: Section, slug: string): Promise<string | null>
 
 // the content routes: the blog's index and its page route
 export const contentRoute = new Hono()
-	.get("/blog", async (context) => context.html(await serveIndex("blog")))
-	.get("/blog/:slug", async (context) => {
+	.get("/blog", renderedCacheHeaders, async (context) => context.html(await serveIndex("blog")))
+	.get("/blog/:slug", renderedCacheHeaders, async (context) => {
 		const html = await servePage("blog", context.req.param("slug"))
 		return html ? context.html(html) : context.text("Not found", 404)
 	})

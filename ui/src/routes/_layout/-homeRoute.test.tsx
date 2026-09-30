@@ -27,7 +27,7 @@ function toFeedTopic({ id, name }: ToFeedTopicOptions): TopicFeed {
 		scheduledTime: "07:00",
 		scheduledDayOfWeek: "monday",
 		maxTopicFindings: 10,
-		owner: { userId: "u1", username: "carl", avatarSource: "" },
+		owner: { userId: "u1", username: "carl", avatarSource: "", avatarVersion: null },
 		isTopicOwner: false,
 		newCount: 0,
 		isOnTeam: false,

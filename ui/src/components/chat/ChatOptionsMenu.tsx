@@ -18,7 +18,7 @@ export type ChatRoomOption = {
 	name: string
 	isActive: boolean
 	// the team the chat room belongs to, shown as its avatar
-	team: { teamId: string; name: string; hasAvatar: boolean }
+	team: { teamId: string; name: string; avatarVersion: string | null }
 	// whether to highlight the chat room option because it belongs to the current page's team or topic
 	isHighlighted?: boolean
 	// a team's own chat room, marked with the team icon
@@ -26,7 +26,7 @@ export type ChatRoomOption = {
 	// the chat mentions for the badge and tooltip
 	chatMentions?: ChatMention[]
 	// the chat room members that the chat room option's hover tooltip lists
-	chatRoomMembers?: { userId: string; username: string; avatarSource: string | null }[]
+	chatRoomMembers?: { userId: string; username: string; avatarVersion: string | null }[]
 	onSelect: () => void
 }
 
@@ -62,7 +62,7 @@ export function hasChatOptions(menu: ChatOptionsMenuProps): boolean {
 // the avatar and name the trigger shows for the chat room currently open, whether a team chat room or the private chat
 export type CurrentChatRoomOption = {
 	name: string
-	team?: { teamId: string; name: string; hasAvatar: boolean }
+	team?: { teamId: string; name: string; avatarVersion: string | null }
 	isPrivate?: boolean
 }
 
@@ -179,7 +179,7 @@ export function ChatOptionsMenu({
 												<UserAvatar
 													userId={chatRoomMember.userId}
 													username={chatRoomMember.username}
-													avatarSource={chatRoomMember.avatarSource}
+													avatarVersion={chatRoomMember.avatarVersion}
 													className="size-4"
 												/>
 												{chatRoomMember.username}

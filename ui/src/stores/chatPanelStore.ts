@@ -30,7 +30,7 @@ export type ChatPageContext = {
 	teamId: string | null
 	name: string
 	// set where the user is not on the team, so the panel offers joining instead of the chat messages
-	joinTeam: { teamId: string; name: string; hasAvatar: boolean; hasRequestedToJoin: boolean } | null
+	joinTeam: { teamId: string; name: string; avatarVersion: string | null; hasRequestedToJoin: boolean } | null
 	// what this page is about: its teams, its topics, or both
 	pageTeamIds?: string[]
 	pageTopicIds?: string[]

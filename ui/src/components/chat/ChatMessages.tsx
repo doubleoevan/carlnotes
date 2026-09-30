@@ -42,7 +42,7 @@ export type ChatTurn = {
 const VIRTUALIZE_FROM_CHAT_TURNS = 30
 
 // who a chat message renders as: the account when one exists, and the recorded name either way
-export type ChatMessageAuthor = { userId: string | null; username: string; avatarSource: string | null }
+export type ChatMessageAuthor = { userId: string | null; username: string; avatarVersion: string | null }
 
 /**
  * The scrollable chat message list. It starts short and grows with the conversation, then it scrolls inside its own box.
@@ -268,7 +268,7 @@ function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: nu
 		<ChatAuthor
 			authorUserId={author.userId}
 			authorUsername={author.username}
-			avatarSource={author.avatarSource}
+			avatarVersion={author.avatarVersion}
 			isOwnChatMessage
 		>
 			<div className="group flex w-full flex-col items-end">

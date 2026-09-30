@@ -1,4 +1,5 @@
 // the public profile: who a username belongs to, and the Topics they own.
+import { toAvatarVersion } from "@shared/avatars"
 import {
 	type ProfileResponse,
 	type Topic,
@@ -12,6 +13,7 @@ import { Hono } from "hono"
 import { db } from "../db"
 import { subscriptions, topics, users } from "../db/schema"
 import { isAllowed } from "./authorization"
+import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
 import { loadPublicTeams, loadTeamSummaries, loadTeamUpMenu } from "./team/helpers"
 import { toTopicTableRows } from "./topic/helpers"
@@ -32,16 +34,17 @@ export async function searchUsers(query: string): Promise<UserSearchResult[]> {
 
 	// sort shorter names first, so an exact match ranks above a name that contains it
 	const userRows = await db
-		.select({ userId: users.id, username: users.username, avatarSource: users.avatarSource })
+		.select({
+			userId: users.id,
+			username: users.username,
+			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
+		})
 		.from(users)
 		.where(like(users.usernameNormalized, `%${normalizedUsername}%`))
 		.orderBy(sql`length(${users.usernameNormalized})`)
 		.limit(USER_SEARCH_LIMIT)
-	return userRows.map((userRow) => ({
-		userId: userRow.userId,
-		username: userRow.username,
-		avatarSource: userRow.avatarSource,
-	}))
+	return userRows.map(withAvatarVersion)
 }
 
 /**
@@ -50,7 +53,13 @@ export async function searchUsers(query: string): Promise<UserSearchResult[]> {
  */
 export async function loadProfile(profileUserId: string, userId: string | null): Promise<ProfileResponse | null> {
 	const [user] = await db
-		.select({ id: users.id, username: users.username, createdAt: users.createdAt, avatarSource: users.avatarSource })
+		.select({
+			id: users.id,
+			username: users.username,
+			createdAt: users.createdAt,
+			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
+		})
 		.from(users)
 		.where(eq(users.id, profileUserId))
 	if (!user) {
@@ -63,6 +72,7 @@ export async function loadProfile(profileUserId: string, userId: string | null):
 		userId: user.id,
 		username: user.username,
 		avatarSource: user.avatarSource,
+		avatarVersion: toAvatarVersion(user),
 		joinedAt: user.createdAt.toISOString(),
 		subscriberCount: await countDistinctSubscribers(user.id),
 		includesNonPublicTopics,

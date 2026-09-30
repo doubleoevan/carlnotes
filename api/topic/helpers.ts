@@ -1,4 +1,5 @@
 // the helpers for the topic's reads and writes
+import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
 import type { Invite, Topic, TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contracts"
 import { isDailyFrequency } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
@@ -134,6 +135,7 @@ export async function attachTeamBookmarks(
 			userId: users.id,
 			username: users.username,
 			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
 		})
 		.from(bookmarks)
 		.innerJoin(findings, and(eq(bookmarks.findingId, findings.id), eq(findings.topicId, topicId)))
@@ -152,6 +154,7 @@ export async function attachTeamBookmarks(
 			userId: bookmark.userId,
 			username: bookmark.username,
 			avatarSource: bookmark.avatarSource,
+			avatarVersion: toAvatarVersion(bookmark),
 		}))
 	}
 }
@@ -232,7 +235,9 @@ export async function toTeamFields(
 	// the byline's link to the owning team, which only a credited team gets
 	const isPublicTeam = teamRow?.isPublic === true
 	const toTeamLink = (isCredited: boolean): TopicResponse["teamLink"] =>
-		isCredited && teamId && teamRow ? { teamId, name: teamRow.name, hasAvatar: teamRow.avatarKey !== null } : null
+		isCredited && teamId && teamRow
+			? { teamId, name: teamRow.name, avatarVersion: toAvatarKeyVersion(teamRow.avatarKey) }
+			: null
 
 	// the teams that have this topic: the owning team in the topic's own column, and one shared row for each
 	const sharedTeamRows = await db

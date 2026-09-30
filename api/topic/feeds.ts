@@ -1,4 +1,5 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
+import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
 import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
 import { traceRequestStage } from "@shared/monitoring"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
@@ -22,7 +23,7 @@ import {
 import { memberTopicIds, subscribedTopicIds } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
 import { attachTopicFindingFaviconPaths } from "../favicons"
-import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
+import { filteredTopicFindings, newTopicFindingCount, type TopicFindingRow, toTopicFinding } from "./findings"
 import { toScheduledTimeLabel } from "./helpers"
 import { isPublicAndShown } from "./permissions"
 import { startOfUtcMonth } from "./quotas"
@@ -183,150 +184,28 @@ export async function buildTopicFeeds(
 
 // fetch every dataset the topic feeds need across all topic ids at once, each grouped by topic id
 async function loadTopicFeedData(topicIds: string[], userId: string | null) {
-	// a signed-out visitor has no history. sql`false` stands in where drizzle's typing rejects comparing user_id to null
-	const consumptionJoinCondition = userId
-		? and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
-		: sql`false`
-	const bookmarkJoinCondition = userId
-		? and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId))
-		: sql`false`
-	// rank each topic's findings by relevance so the feed query can stop at MAX_FEED_FINDINGS_PER_TOPIC per topic
-	const rankedFindings = db
-		.select({
-			findingId: findings.id,
-			rowNumber:
-				sql<number>`row_number() over (partition by ${findings.topicId} order by ${findings.relevanceScore} desc, ${findings.id})`.as(
-					"row_number",
-				),
-		})
-		.from(findings)
-		.where(inArray(findings.topicId, topicIds))
-		.as("ranked_findings")
-
 	// run the topic-batched queries together, plus the subscription and membership queries for the signed-in user
 	// biome-ignore format: one line keeps the destructure under the comment-density hook's limit
 	const [findingRows, sourceRows, attachmentRows, scanRows, monthCostRows, subscribedTopicIdSet, memberTopicIdSet, ownerRows, teamRows, mentionsByTopic, teamCountRows] =
 		await Promise.all([
-			// join each topic finding with its resource. a left join adds the user's consumed date when one exists
-			db
-				.select({
-					// the owning topic's id groups the rows
-					topicId: findings.topicId,
-					// the topic finding's identity, the scan that produced it, and its resource metadata
-					findingId: findings.id,
-					scanId: findings.scanId,
-					resourceId: resources.id,
-					url: resources.url,
-					resourceKind: resources.kind,
-					title: resources.title,
-					resourceCreatedAt: resources.createdAt,
-					fetchedAt: resources.fetchedAt,
-					// the topic finding's metadata, the engagement score, and the user's consumed and bookmarked dates
-					relevanceScore: findings.relevanceScore,
-					relevanceExplanation: findings.relevanceExplanation,
-					viewCount: findings.viewCount,
-					rating: findings.rating,
-					engagement: resources.engagement,
-					consumedAt: consumptions.consumedAt,
-					bookmarkedAt: bookmarks.createdAt,
-				})
-				// join the resource and the user's consumed and bookmark rows
-				.from(findings)
-				.innerJoin(resources, eq(findings.resourceId, resources.id))
-				.leftJoin(consumptions, consumptionJoinCondition)
-				.leftJoin(bookmarks, bookmarkJoinCondition)
-				.innerJoin(
-					rankedFindings,
-					and(eq(rankedFindings.findingId, findings.id), lte(rankedFindings.rowNumber, MAX_FEED_FINDINGS_PER_TOPIC)),
-				)
-				.where(inArray(findings.topicId, topicIds))
-				.orderBy(desc(findings.relevanceScore)),
-
-			// every topic's sources, grouped by topic id. the llm-guard screening status is included to show the owner
-			db
-				.select({
-					topicId: sources.topicId,
-					id: sources.id,
-					kind: sources.kind,
-					config: sources.config,
-					status: sources.status,
-					error: sources.error,
-				})
-				.from(sources)
-				.where(inArray(sources.topicId, topicIds)),
-
-			// select every topic's attachments, including the topic id to group by
-			db
-				.select({
-					topicId: attachments.topicId,
-					id: attachments.id,
-					filename: attachments.filename,
-					sourceUrl: attachments.sourceUrl,
-					status: attachments.status,
-				})
-				.from(attachments)
-				.where(inArray(attachments.topicId, topicIds)),
-
-			// select the most recent succeeded scan per topic. the distinct-on keeps the summary from that same latest row
-			db
-				.selectDistinctOn([scans.topicId], {
-					topicId: scans.topicId,
-					startedAt: scans.startedAt,
-					finishedAt: scans.finishedAt,
-					scanSummary: scans.scanSummary,
-					cost: scans.cost,
-				})
-				// sort so that the latest succeeded scan is the distinct row kept per topic
-				.from(scans)
-				.where(and(inArray(scans.topicId, topicIds), eq(scans.status, "succeeded")))
-				.orderBy(scans.topicId, desc(scans.startedAt)),
-
-			// sum this month's scan spend per topic for the owner-gated cost line
-			db
-				.select({ topicId: scans.topicId, monthCost: sql<string>`coalesce(sum(${scans.cost}), 0)` })
-				.from(scans)
-				.where(and(inArray(scans.topicId, topicIds), gte(scans.startedAt, startOfUtcMonth(new Date()))))
-				.groupBy(scans.topicId),
-
+			// each topic's best findings, with the user's consumed and bookmarked dates
+			loadFeedFindingRows(topicIds, userId),
+			// every topic's sources and attachments
+			loadFeedSourceRows(topicIds),
+			loadFeedAttachmentRows(topicIds),
+			// each topic's latest succeeded scan, and this month's scan spend, which only the owner sees
+			loadLastSucceededScanRows(topicIds),
+			loadMonthCostRows(topicIds),
 			// the topics this signed-in user is subscribed to, in one query. a signed-out visitor is subscribed to none
 			userId ? subscribedTopicIds(userId, topicIds) : Promise.resolve(new Set<string>()),
 			userId ? memberTopicIds(userId, topicIds) : Promise.resolve(new Set<string>()),
-
-			// select each topic's owner with a single query across every topic instead of a lookup per row
-			db
-				.select({
-					topicId: topics.id,
-					userId: users.id,
-					username: users.username,
-					avatarSource: users.avatarSource,
-				})
-				.from(topics)
-				.innerJoin(users, eq(users.id, topics.ownerId))
-				.where(inArray(topics.id, topicIds)),
-
-			// each loaded topic's owning team with whether the user belongs
-			db
-				.select({
-					topicId: topics.id,
-					teamId: teams.id,
-					name: teams.name,
-					avatarKey: teams.avatarKey,
-					isPublic: teams.isPublic,
-					memberUserId: teamMembers.userId,
-				})
-				.from(topics)
-				.innerJoin(teams, eq(teams.id, topics.teamId))
-				.leftJoin(teamMembers, and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, userId ?? ""), eq(teamMembers.isActive, true)))
-				.where(inArray(topics.id, topicIds)),
+			// each topic's owner, and its owning team with whether the user belongs
+			loadFeedOwnerRows(topicIds),
+			loadFeedTeamRows(topicIds, userId),
 			// the user's unseen chat room mentions, for the count badge on each topic's name
 			loadTopicChatMentions(userId, topicIds),
-
 			// how many teams hold each topic, which the topic roast shows under the follower count
-			db
-				.select({ topicId: teamTopics.topicId, teamCount: count() })
-				.from(teamTopics)
-				.where(inArray(teamTopics.topicId, topicIds))
-				.groupBy(teamTopics.topicId),
+			loadSharedTeamCountRows(topicIds),
 		])
 
 	// group each dataset by topic id so that a feed can read its slice in memory
@@ -350,10 +229,196 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 				.filter((teamRow) => teamRow.isPublic || teamRow.memberUserId !== null)
 				.map((teamRow) => [
 					teamRow.topicId,
-					{ teamId: teamRow.teamId, name: teamRow.name, hasAvatar: teamRow.avatarKey !== null },
+					{ teamId: teamRow.teamId, name: teamRow.name, avatarVersion: toAvatarKeyVersion(teamRow.avatarKey) },
 				]),
 		),
 	}
+}
+
+// each topic's findings joined with their resources, at most MAX_FEED_FINDINGS_PER_TOPIC per topic by relevance
+async function loadFeedFindingRows(
+	topicIds: string[],
+	userId: string | null,
+): Promise<(TopicFindingRow & { topicId: string })[]> {
+	// a signed-out visitor has no history, so each join condition is sql`false`.
+	// drizzle's typing rejects comparing user_id to null
+	const consumptionJoinCondition = userId
+		? and(eq(consumptions.findingId, findings.id), eq(consumptions.userId, userId))
+		: sql`false`
+	const bookmarkJoinCondition = userId
+		? and(eq(bookmarks.findingId, findings.id), eq(bookmarks.userId, userId))
+		: sql`false`
+	// rank each topic's findings by relevance so the feed query can stop at MAX_FEED_FINDINGS_PER_TOPIC per topic
+	const rankedFindings = db
+		.select({
+			findingId: findings.id,
+			rowNumber:
+				sql<number>`row_number() over (partition by ${findings.topicId} order by ${findings.relevanceScore} desc, ${findings.id})`.as(
+					"row_number",
+				),
+		})
+		.from(findings)
+		.where(inArray(findings.topicId, topicIds))
+		.as("ranked_findings")
+
+	// join each topic finding with its resource. a left join adds the user's consumed date if one exists
+	return (
+		db
+			.select({
+				// the owning topic's id groups the rows
+				topicId: findings.topicId,
+				// the topic finding's identity, the scan that produced it, and its resource metadata
+				findingId: findings.id,
+				scanId: findings.scanId,
+				resourceId: resources.id,
+				url: resources.url,
+				resourceKind: resources.kind,
+				title: resources.title,
+				resourceCreatedAt: resources.createdAt,
+				fetchedAt: resources.fetchedAt,
+				// the topic finding's metadata, the engagement score, and the user's consumed and bookmarked dates
+				relevanceScore: findings.relevanceScore,
+				relevanceExplanation: findings.relevanceExplanation,
+				viewCount: findings.viewCount,
+				rating: findings.rating,
+				engagement: resources.engagement,
+				consumedAt: consumptions.consumedAt,
+				bookmarkedAt: bookmarks.createdAt,
+			})
+			// join the resource and the user's consumed and bookmark rows
+			.from(findings)
+			.innerJoin(resources, eq(findings.resourceId, resources.id))
+			.leftJoin(consumptions, consumptionJoinCondition)
+			.leftJoin(bookmarks, bookmarkJoinCondition)
+			.innerJoin(
+				rankedFindings,
+				and(eq(rankedFindings.findingId, findings.id), lte(rankedFindings.rowNumber, MAX_FEED_FINDINGS_PER_TOPIC)),
+			)
+			.where(inArray(findings.topicId, topicIds))
+			.orderBy(desc(findings.relevanceScore))
+	)
+}
+
+// every topic's sources, with the llm-guard screening status the owner sees
+async function loadFeedSourceRows(
+	topicIds: string[],
+): Promise<Pick<typeof sources.$inferSelect, "topicId" | "id" | "kind" | "config" | "status" | "error">[]> {
+	return db
+		.select({
+			topicId: sources.topicId,
+			id: sources.id,
+			kind: sources.kind,
+			config: sources.config,
+			status: sources.status,
+			error: sources.error,
+		})
+		.from(sources)
+		.where(inArray(sources.topicId, topicIds))
+}
+
+// every topic's attachments, with the topic id to group by
+async function loadFeedAttachmentRows(
+	topicIds: string[],
+): Promise<Pick<typeof attachments.$inferSelect, "topicId" | "id" | "filename" | "sourceUrl" | "status">[]> {
+	return db
+		.select({
+			topicId: attachments.topicId,
+			id: attachments.id,
+			filename: attachments.filename,
+			sourceUrl: attachments.sourceUrl,
+			status: attachments.status,
+		})
+		.from(attachments)
+		.where(inArray(attachments.topicId, topicIds))
+}
+
+// the most recent succeeded scan per topic. the distinct-on keeps the summary from that same latest row
+async function loadLastSucceededScanRows(
+	topicIds: string[],
+): Promise<Pick<typeof scans.$inferSelect, "topicId" | "startedAt" | "finishedAt" | "scanSummary" | "cost">[]> {
+	return (
+		db
+			.selectDistinctOn([scans.topicId], {
+				topicId: scans.topicId,
+				startedAt: scans.startedAt,
+				finishedAt: scans.finishedAt,
+				scanSummary: scans.scanSummary,
+				cost: scans.cost,
+			})
+			// sort so that the latest succeeded scan is the distinct row kept per topic
+			.from(scans)
+			.where(and(inArray(scans.topicId, topicIds), eq(scans.status, "succeeded")))
+			.orderBy(scans.topicId, desc(scans.startedAt))
+	)
+}
+
+// this month's scan spend per topic
+async function loadMonthCostRows(
+	topicIds: string[],
+): Promise<(Pick<typeof scans.$inferSelect, "topicId"> & { monthCost: string })[]> {
+	return db
+		.select({ topicId: scans.topicId, monthCost: sql<string>`coalesce(sum(${scans.cost}), 0)` })
+		.from(scans)
+		.where(and(inArray(scans.topicId, topicIds), gte(scans.startedAt, startOfUtcMonth(new Date()))))
+		.groupBy(scans.topicId)
+}
+
+// each topic's owner, in one query across every topic
+async function loadFeedOwnerRows(
+	topicIds: string[],
+): Promise<
+	({ topicId: string; userId: string } & Pick<typeof users.$inferSelect, "username" | "avatarSource" | "avatarKey">)[]
+> {
+	return db
+		.select({
+			topicId: topics.id,
+			userId: users.id,
+			username: users.username,
+			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
+		})
+		.from(topics)
+		.innerJoin(users, eq(users.id, topics.ownerId))
+		.where(inArray(topics.id, topicIds))
+}
+
+// each topic's owning team, with the user's id if they are an active member
+async function loadFeedTeamRows(
+	topicIds: string[],
+	userId: string | null,
+): Promise<
+	({ topicId: string; teamId: string; memberUserId: string | null } & Pick<
+		typeof teams.$inferSelect,
+		"name" | "avatarKey" | "isPublic"
+	>)[]
+> {
+	return db
+		.select({
+			topicId: topics.id,
+			teamId: teams.id,
+			name: teams.name,
+			avatarKey: teams.avatarKey,
+			isPublic: teams.isPublic,
+			memberUserId: teamMembers.userId,
+		})
+		.from(topics)
+		.innerJoin(teams, eq(teams.id, topics.teamId))
+		.leftJoin(
+			teamMembers,
+			and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, userId ?? ""), eq(teamMembers.isActive, true)),
+		)
+		.where(inArray(topics.id, topicIds))
+}
+
+// how many teams each topic is shared with. the owning team has no row here
+async function loadSharedTeamCountRows(
+	topicIds: string[],
+): Promise<(Pick<typeof teamTopics.$inferSelect, "topicId"> & { teamCount: number })[]> {
+	return db
+		.select({ topicId: teamTopics.topicId, teamCount: count() })
+		.from(teamTopics)
+		.where(inArray(teamTopics.topicId, topicIds))
+		.groupBy(teamTopics.topicId)
 }
 
 // build a topic's feed from the batched data with no queries of its own
@@ -408,7 +473,12 @@ function buildTopicFeed(
 		maxTopicFindings: topic.maxTopicFindings,
 		// the topic owner to show
 		owner: ownerRow
-			? { userId: ownerRow.userId, username: ownerRow.username, avatarSource: ownerRow.avatarSource }
+			? {
+					userId: ownerRow.userId,
+					username: ownerRow.username,
+					avatarSource: ownerRow.avatarSource,
+					avatarVersion: toAvatarVersion(ownerRow),
+				}
 			: null,
 		isTopicOwner,
 		isOnTeam: topic.teamId !== null,

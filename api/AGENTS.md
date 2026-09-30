@@ -32,7 +32,12 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
 - `topic/topicDrafts.ts` — the new-topic chat's Topic Draft row, written by the chat turn that changed it and read
   back when the conversation loads.
 - `rateLimit.ts` — the one per-tool-caller rate limit, shared by the chat turn routes and the mcp routes, keyed by the
-  user or by the client address `trustedProxies.ts` vouches for.
+  user or by the client address. `trustedProxies.ts` reads that address exactly as Better Auth does: the rightmost
+  `x-forwarded-for` entry outside the Cloudflare ranges `TRUSTED_PROXIES` lists.
+- `edgeCache.ts` — what the edge may cache: a signed-out page, the blog and release pages, and the signed-out feed for a
+  minute under the `rendered` tag, and a versioned avatar or card for a year in the browser and a day at the edge.
+  `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag right after the app
+  deploys.
 - Every authority check routes through `authorization.ts` and the role helpers; inline
   `role ===` / `plan ===` comparisons are banned outside it (`authorization.test.ts` greps).
 - Request bodies validate with zod payloads from `shared/contracts.ts` via `zValidator`.

@@ -1,38 +1,36 @@
-import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@shared/avatars"
+import { AVATAR_COLOR, toAvatarInitials, toAvatarTint, toAvatarVersion } from "@shared/avatars"
 import { useState } from "react"
-import { useAvatarVersion } from "@/hooks/useAvatarVersion"
+import { authClient } from "@/clients/authClient"
 import { AVATAR_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 /**
  * A user's avatar: their stored image, or their initials on a tinted circle.
- * The avatar route resolves which image the user publishes, so the img only asks by id.
+ * The image url names the avatar's version, so a changed avatar is a new url.
  */
 export function UserAvatar({
 	userId,
 	username,
-	avatarSource,
+	avatarVersion,
 	className,
 }: {
 	userId: string
 	username: string
-	// where the image comes from. anything but "generated" means the avatar route serves one
-	avatarSource?: string | null
+	// the version that the avatar url names, or null for the initials
+	avatarVersion: string | null
 	className?: string
 }) {
-	// the version changes when an upload arrives, which is what re-fetches an image the url already named
-	const avatarVersion = useAvatarVersion()
-	const [isImageBroken, setIsImageBroken] = useState(false)
-	const hasAvatar = Boolean(avatarSource) && avatarSource !== "generated" && !isImageBroken
+	// draw the signed-in user's own avatar at the session's version, which an upload or a source change refreshes
+	const { data: session } = authClient.useSession()
+	const shownAvatarVersion = session?.user.id === userId ? toAvatarVersion(session.user) : avatarVersion
+
+	// the image url at the avatar's version, and the url that failed to load, which shows the initials instead
+	const imageUrl = shownAvatarVersion === null ? null : `/api/avatars/${userId}?v=${shownAvatarVersion}`
+	const [brokenImageUrl, setBrokenImageUrl] = useState<string | null>(null)
 	return (
 		<span className={cn(AVATAR_CLASS, "size-8", className)}>
-			{hasAvatar ? (
-				<img
-					src={`/api/avatars/${userId}?v=${avatarVersion}`}
-					alt=""
-					onError={() => setIsImageBroken(true)}
-					className="size-full object-cover"
-				/>
+			{imageUrl && imageUrl !== brokenImageUrl ? (
+				<img src={imageUrl} alt="" onError={() => setBrokenImageUrl(imageUrl)} className="size-full object-cover" />
 			) : (
 				<AvatarInitials userId={userId} username={username} />
 			)}

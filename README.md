@@ -32,7 +32,7 @@ That list is the dependency order: each module imports only from the ones below 
 
 ```mermaid
 flowchart
-    Browser --> App["app (Hono api + ui server)"]
+    Browser --> Edge[Cloudflare] --> App["app (Hono api + ui server)"]
     App --> Postgres[(DB)]
     App -->|starts workflows| Temporal
     Temporal --> Worker[temporal-worker]
@@ -114,6 +114,16 @@ Each screen is one HTTP call with a 2.5-second timeout, and it never blocks the 
 
 The scanner also redacts personal details in place, so even a document can come back rewritten. Callers must use the returned text. A detector flags content at a score of 0.8 or above, measured with `bun run eval --guard-only` against articles that merely *discuss* prompt injection, not taken from the vendor default. The update check boots each new release, runs that eval, and files an issue with the measured false-positive and catch rates needed to decide whether to upgrade.
 
+### Caching at the edge
+
+Cloudflare sits in front of carlnotes.com and serves what it can cache, so the one `app` process renders only what changes from person to person.
+
+- A page rendered for a signed-out visitor, a blog or release page, and the signed-out feed look the same to every visitor. Cloudflare caches each for a minute, then serves that copy for up to another minute while it fetches a fresh one. The browser still asks Cloudflare on every load. A request with a session cookie always goes to the app, since the same url shows a signed-in user something else.
+- An avatar or a link-preview card names its version in its url, so the browser caches it for a year and Cloudflare for a day, and a new image gets a new url. Hashed assets are cached for a year.
+- Cloudflare compresses every text response on the way out, so the app sends them uncompressed.
+
+Every request reaches the app from a Cloudflare address, so `TRUSTED_PROXIES` lists Cloudflare's published ranges, and the client is the rightmost `x-forwarded-for` address outside them. Better Auth and the rate limiter read it with the same settings. None of Cloudflare's own settings live in this repo. The cache rules, the session cookie bypass, SSL, and the rule that lets Northflank renew its certificate are listed in the `cache-at-the-edge` change's design, under `openspec/changes/archive/`.
+
 Domain vocabulary is load-bearing and lives in `.agents/skills/domain-model/`.
 
 How the AI guardrails work lives in [docs/ai-scaffolding.md](docs/ai-scaffolding.md).
@@ -142,6 +152,7 @@ bun run smoke:coverage # run every smoke test script, one process each, writing 
                      # with SMOKE_SKIP_DEVELOPER_ONLY=1 it skips the six that need litellm or temporal. the Smoke workflow starts both as containers instead, and runs a temporal worker beside them, so it runs all sixteen
 bun run docs:embed   # chunk the docs markdown by section and embed the changed sections into docs_chunks, which chat quotes; run it after editing docs
 bun run docs:embed:prd # the same sync against the production database, the owner-run escape hatch until the deploy job runs it
+bun run edge:purge   # clear the pages and the signed-out feed that Cloudflare shares; the deploy job that runs right after the app deploys
 bun run sync:releases # re-read every published GitHub release into the releases table the /releases endpoint serves; it seeds history and repairs a missed webhook delivery, and is safe to re-run
 bun run sync:releases:prd # the same sync against the production database; run it once after the first deploy, since the table starts empty. the webhook writes it going forward
 bun run releases:preview <tag> "<title>" # store release-notes/<tag>.local.md in the dev releases table with the repo's screenshots inlined, so /releases and /releases/<tag> read as they will before the release exists on GitHub
@@ -201,15 +212,15 @@ bun run smoke:x            # just the X smoke test: one account's tweets and wha
 bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its limit
 bun run smoke:subscribers  # just the subscriber-count smoke test: both subscription paths against real rows, rolled back after
 bun run smoke:profile      # just the profile smoke test: the header's distinct people against the footer's summed rows
-bun run smoke:seo          # just the seo smoke test: builds the ui, then checks every public page arrives whole to a browser without JavaScript on its first render, and that only public topics are listed
+bun run smoke:seo          # just the seo smoke test: builds the ui, then checks every public page arrives whole to a browser without JavaScript on its first render, that only public topics are listed, that the edge may share a signed-out page and the feed but never a signed-in one, and that a card is immutable only at its version
 bun run smoke:chat         # just the topic chat retrieval smoke test (question → ranked findings → assembled context)
 bun run smoke:eval         # just the eval-harness smoke test: one tiny labeled fixture through the real gate and scoring
-bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, detach succession, and the team page gate
+bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, detach succession, the team page gate, its avatar versions, and who sent an invite or invited a member
 bun run smoke:room         # just the team chat-room smoke test: the access matrix, isolation, budget rejection, mention rows, and the room lock
 bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a viewer may open, one per holding team, and the unseen count
 bun run smoke:mcp          # just the mcp smoke test: what a visitor reads, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, the edit tools, and the rate limit
 bun run smoke:tools        # just the topic tools smoke test: the gate inside each tool, the prompt version writes, adding and removing sources up to the limit, and that no tool starts a scan
-bun run smoke:invites      # just the invite smoke test: link authority and races, resolution, who-may-invite, connections, and accept-equals-redeem
+bun run smoke:invites      # just the invite smoke test: link authority and races, resolution, who-may-invite, connections, accept-equals-redeem, and each sent invite's avatar version
 ```
 
 Run the reddit smoke test from the deployed environment, not just a laptop: 
@@ -221,6 +232,16 @@ The review smoke test reads `REVIEW_CONCURRENCY` and `MAX_SCORED_RESOURCES_PER_S
 ```bash
 REVIEW_CONCURRENCY=1 MAX_SCORED_RESOURCES_PER_SCAN=8 bun run smoke:review
 ```
+
+Load testing shows how many requests one api process can serve at once. [oha](https://github.com/hatoo/oha) (`brew install oha`) keeps a set number of requests going and reports the requests per second and how long the requests took, from the fastest to the slowest. Point it at the local dev api, never at carlnotes.com: the repo is public, the api has no rate limit, and a run against production costs real database time and sets off the Sentry warning for requests waiting on a database connection.
+
+```bash
+oha -c 50 -z 30s http://localhost:3000/api/topic-feed   # 50 requests at a time for 30 seconds, as a signed-out visitor
+curl -s http://localhost:3000/api/health/deep            # run it during the test to see the pool's open, idle, and waiting connections
+grep '"gauges"' logs/dev.log                             # the api's once-a-minute line: the pool and the event loop delay
+```
+
+Compare each run with one from before your change, not with production. A laptop reaches the dev database over the internet, so every query takes longer than it does next to the database.
 
 Evals (owner-run) measure the review pipeline against a labeled corpus. They run the real embed-filter and tiered scoring, so they spend money and are **not** part of `bun run check`. Fixtures and the labeling workflow live in [evals/README.md](evals/README.md):
 
@@ -254,7 +275,7 @@ docker build --platform=linux/amd64 --build-arg VITE_TURNSTILE_SITE_KEY=<site-ke
 
 `--platform=linux/amd64` matters on Apple Silicon. The Doppler CLI is copied from `dopplerhq/cli:3`, which publishes amd64 only.
 
-Migrations are a deploy job, not a start-up step. A push to `main` runs the `release-main` pipeline, which builds the image once, runs this job against it, and only then deploys `app` and `temporal-worker`, finishing with the docs embed. It runs in Northflank instead of GitHub Actions, and its definition is [infra/northflank/release-main.json](infra/northflank/release-main.json). `.github/workflows/` holds checks alone: the offline gate, the smoke suite, and the weekly LLM Guard version check. None of them deploy. So new code never meets an old schema:
+Migrations are a deploy job, not a start-up step. A push to `main` runs the `release-main` pipeline, which builds the image once, runs this job against it, and only then deploys `app`, purges the edge, deploys `temporal-worker`, and finishes with the docs embed. It runs in Northflank instead of GitHub Actions, and its definition is [infra/northflank/release-main.json](infra/northflank/release-main.json). `.github/workflows/` holds checks alone: the offline gate, the smoke suite, and the weekly LLM Guard version check. None of them deploy. So new code never meets an old schema:
 
 ```bash
 doppler run -- bun db/migrate.ts
@@ -276,6 +297,14 @@ The docs embeddings are a deploy job too. It re-embeds only the sections whose w
 doppler run -- bun worker/docsSync.ts
 # or
 bun run docs:embed
+```
+
+The edge purge is a deploy job too. It runs right after `app` deploys and clears the pages and the signed-out feed that Cloudflare shares, so no cached page names assets the old build had. It needs `CLOUDFLARE_ZONE_ID` and `CLOUDFLARE_API_TOKEN`. Without them, or if Cloudflare turns the purge down, the job logs why and the release goes on, since those pages leave the edge within two minutes anyway:
+
+```bash
+doppler run -- bun api/edgeCache.purge.ts
+# or
+bun run edge:purge
 ```
 
 Promote a candidate to production in Langfuse once a real scan's note reads right. The runtime falls back to the bundled template whenever a registry template asks for variables the code does not fill, so a stale label can never break a prompt. A prompt whose live wording differs from the bundled one is logged once per process.

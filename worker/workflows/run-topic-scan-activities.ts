@@ -12,6 +12,7 @@ import { notifyIndexNow } from "../indexNow"
 import type { SourceOutcome } from "../ingest"
 import { ingestFromTopicSources } from "../ingest"
 import type { NewResource } from "../ingest/ingester"
+import { loadUserLiteLLMKey } from "../litellm"
 import { sendManualScanEmail, sendTopicScanEmail } from "../notify"
 import type { ReviewSummary } from "../review"
 import { reviewScan } from "../review"
@@ -78,10 +79,7 @@ export async function reviewForScan(
 		withHeartbeat(stageBudget, async () => {
 			// the Scan row and the owner's LiteLLM proxy key
 			const scan = await requireScan(scanId)
-			const [owner] = await db
-				.select({ litellmVirtualKey: users.litellmVirtualKey })
-				.from(users)
-				.where(eq(users.id, ownerId))
+			const litellmApiKey = await loadUserLiteLLMKey(ownerId)
 
 			const review = await reviewScan(
 				scan,
@@ -89,7 +87,7 @@ export async function reviewForScan(
 				ingestResult.resources,
 				ingestResult.sourceOutcomes,
 				stageBudget,
-				owner?.litellmVirtualKey ?? undefined,
+				litellmApiKey,
 				stopSignal(),
 			)
 			await recordScanProgress(scanId, stageBudget)

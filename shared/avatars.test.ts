@@ -1,6 +1,15 @@
-// the avatar image: which letters a username draws, which tint a user id selects, and the contrast the palette can hold
+// avatar tests: which letters a username draws, which tint a user id selects, the contrast that the palette keeps,
+// and the version that an avatar url names
 import { describe, expect, it } from "bun:test"
-import { AVATAR_COLOR, AVATAR_TINT_MAX_LUMINANCE, AVATAR_TINTS, toAvatarInitials, toAvatarTint } from "./avatars"
+import {
+	AVATAR_COLOR,
+	AVATAR_TINT_MAX_LUMINANCE,
+	AVATAR_TINTS,
+	toAvatarInitials,
+	toAvatarKeyVersion,
+	toAvatarTint,
+	toAvatarVersion,
+} from "./avatars"
 
 // WCAG relative luminance for visibility
 function toRelativeLuminance(hex: string): number {
@@ -80,6 +89,38 @@ describe("toAvatarTint", () => {
 	it("does not depend on the username or the letters", () => {
 		const tints = ["user_1", "user_2", "user_3", "user_4", "user_5", "user_6", "user_7", "user_8"].map(toAvatarTint)
 		expect(new Set(tints).size).toBeGreaterThan(1)
+	})
+})
+
+describe("toAvatarVersion", () => {
+	// each upload writes a new key, so a new image always gets a new url
+	it("changes with the uploaded key", () => {
+		const firstVersion = toAvatarVersion({ avatarSource: "upload", avatarKey: "avatars/user_1/3f2a.png" })
+		const secondVersion = toAvatarVersion({ avatarSource: "upload", avatarKey: "avatars/user_1/9c1b.webp" })
+		expect(firstVersion).toBe("3f2a")
+		expect(secondVersion).toBe("9c1b")
+	})
+
+	it("keeps the same version for the same key", () => {
+		const avatar = { avatarSource: "upload", avatarKey: "avatars/user_1/3f2a.png" }
+		expect(toAvatarVersion(avatar)).toBe(toAvatarVersion({ ...avatar }))
+	})
+
+	it("names a provider photo oauth, whatever key is left over", () => {
+		expect(toAvatarVersion({ avatarSource: "oauth", avatarKey: null })).toBe("oauth")
+		expect(toAvatarVersion({ avatarSource: "oauth", avatarKey: "avatars/user_1/3f2a.png" })).toBe("oauth")
+	})
+
+	// the initials are drawn in the page, so they have no url to version
+	it("has no version for the initials or an upload without a key", () => {
+		expect(toAvatarVersion({ avatarSource: "generated", avatarKey: null })).toBeNull()
+		expect(toAvatarVersion({ avatarSource: "upload", avatarKey: null })).toBeNull()
+		expect(toAvatarVersion({ avatarSource: null })).toBeNull()
+	})
+
+	it("versions a team's key by its file name", () => {
+		expect(toAvatarKeyVersion("avatars/teams/team_1/5d6e.jpg")).toBe("5d6e")
+		expect(toAvatarKeyVersion(null)).toBeNull()
 	})
 })
 

@@ -45,7 +45,7 @@ const TEAM_CHAT_ROOM: ChatRoom = {
 	topicId: null,
 	name: "Agent Infra Crew",
 	teamName: "Agent Infra Crew",
-	teamHasAvatar: false,
+	teamAvatarVersion: null,
 	chatMentions: [],
 	chatRoomMembers: [],
 }
@@ -54,7 +54,7 @@ const TOPIC_CHAT_ROOM: ChatRoom = {
 	topicId: "topic-1",
 	name: "Speed reading",
 	teamName: "Agent Infra Crew",
-	teamHasAvatar: false,
+	teamAvatarVersion: null,
 	chatMentions: [],
 	chatRoomMembers: [],
 }
@@ -211,7 +211,7 @@ describe("toDefaultChatId", () => {
 		const pageContext = toPageContext({
 			teamId: "team-b",
 			name: "Lets Build",
-			joinTeam: { teamId: "team-b", name: "Lets Build", hasAvatar: false, hasRequestedToJoin: false },
+			joinTeam: { teamId: "team-b", name: "Lets Build", avatarVersion: null, hasRequestedToJoin: false },
 		})
 		expect(toDefaultChatId(pageContext, [TEAM_CHAT_ROOM])).toEqual({ kind: "room", teamId: "team-b", topicId: null })
 	})
@@ -243,7 +243,7 @@ test("a topic page with no room opens the way into the team that has it", () => 
 	const pageContext = toPageContext({
 		topicId: "topic-9",
 		name: "A topic",
-		joinTeam: { teamId: "team-z", name: "Their team", hasAvatar: false, hasRequestedToJoin: false },
+		joinTeam: { teamId: "team-z", name: "Their team", avatarVersion: null, hasRequestedToJoin: false },
 	})
 	expect(toDefaultChatId(pageContext, [])).toEqual({ kind: "room", teamId: "team-z", topicId: "topic-9" })
 })

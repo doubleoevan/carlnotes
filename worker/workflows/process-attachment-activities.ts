@@ -165,6 +165,6 @@ export async function failAttachment(attachmentId: string, message: string): Pro
 
 	// the row is already marked failed, so a missing object or a failed delete leaves nothing inconsistent
 	if (attachment) {
-		await deleteAttachment(attachment.objectKey).catch(() => {})
+		await deleteAttachment(attachment.objectKey)
 	}
 }

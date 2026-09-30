@@ -81,7 +81,7 @@ export async function ingestAttachment(attachmentUpload: AttachmentUpload): Prom
 			.delete(attachments)
 			.where(eq(attachments.id, attachmentId))
 			.catch(() => {})
-		await deleteAttachment(objectKey).catch(() => {})
+		await deleteAttachment(objectKey)
 		throw error
 	}
 }

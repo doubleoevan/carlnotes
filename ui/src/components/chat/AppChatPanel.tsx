@@ -45,7 +45,11 @@ function toChatRoomOptions(
 	const chatRoomChoices: ChatRoomOption[] = chatRoomOptions.map((chatRoomOption) => ({
 		key: `${chatRoomOption.topicId ?? "team"}:${chatRoomOption.teamId}`,
 		name: chatRoomOption.name,
-		team: { teamId: chatRoomOption.teamId, name: chatRoomOption.teamName, hasAvatar: chatRoomOption.teamHasAvatar },
+		team: {
+			teamId: chatRoomOption.teamId,
+			name: chatRoomOption.teamName,
+			avatarVersion: chatRoomOption.teamAvatarVersion,
+		},
 		isHighlighted: isPageChatRoom(chatRoomOption, pageContext),
 		isTeamRoom: chatRoomOption.topicId === null,
 		isActive: isSameChat(chatId, { kind: "room", teamId: chatRoomOption.teamId, topicId: chatRoomOption.topicId }),
@@ -76,7 +80,7 @@ function toChatRoomOptions(
 	chatRoomChoices.push({
 		key: `join:${joinTeam.teamId}`,
 		name: joinTeam.name,
-		team: { teamId: joinTeam.teamId, name: joinTeam.name, hasAvatar: joinTeam.hasAvatar },
+		team: { teamId: joinTeam.teamId, name: joinTeam.name, avatarVersion: joinTeam.avatarVersion },
 		isActive: isSameChat(chatId, joinChatId),
 		onSelect: () => setChatId(joinChatId),
 	})

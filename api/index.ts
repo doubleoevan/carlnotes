@@ -7,17 +7,17 @@ import { sql } from "drizzle-orm"
 import type { Context } from "hono"
 import { Hono } from "hono"
 import { serveStatic } from "hono/bun"
-import { compress } from "hono/compress"
 import { HTTPException } from "hono/http-exception"
 import { db, readPoolGauges } from "../db"
 import { runWithRequestMemo } from "../db/requestMemo"
 import { startTelemetry } from "../worker"
 import { apiRoute } from "./api"
-import { auth, reportForwardedChain } from "./auth"
+import { auth, checkTrustedProxies } from "./auth"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import { contentRoute } from "./content"
 import type { AppEnv } from "./currentUser"
 import { documentsRoute } from "./documents"
+import { setRenderedCacheHeaders } from "./edgeCache"
 import { faviconsRoute } from "./favicons"
 import { mcpRoute } from "./mcp/server"
 import { resolveToolCaller } from "./mcp/toolCaller"
@@ -68,8 +68,6 @@ const server = new Hono<AppEnv>()
 	// name each traced request by its route and count its queries,
 	// ahead of the rest so the count includes every other middleware's queries
 	.use(traceRequest)
-	// gzip every text response over a kilobyte. the defaults skip images and anything already compressed
-	.use(compress())
 	// the content security policy, set on the way back out so every route includes it. a route that set its own keeps it
 	.use(async (context, next) => {
 		await next()
@@ -77,9 +75,9 @@ const server = new Hono<AppEnv>()
 			context.header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
 		}
 	})
-	// one report of the forwarded chain, which names the proxies TRUSTED_PROXIES needs. a no-op once this is set
+	// check once per process that TRUSTED_PROXIES resolves the x-forwarded-for header, and warn if not
 	.use(async (context, next) => {
-		reportForwardedChain(context.req.header("x-forwarded-for") ?? null)
+		checkTrustedProxies(context.req.raw)
 		await next()
 	})
 	// the platform health check. it sits ahead of the api tree, so it never runs the session lookup
@@ -174,11 +172,11 @@ async function renderUiPage(request: Request): Promise<Response> {
 		return new Response("the ui failed to load", { status: 503 })
 	}
 
-	// render the page with a no-cache header, so a deploy reaches the user on their next request
+	// render the page. the browser revalidates every time, and the edge shares a signed-out page for a minute
 	const page = await uiServer.fetch(request)
-	const headers = new Headers(page.headers)
-	headers.set("Cache-Control", "no-cache")
-	return new Response(page.body, { status: page.status, statusText: page.statusText, headers })
+	const response = new Response(page.body, { status: page.status, statusText: page.statusText, headers: page.headers })
+	setRenderedCacheHeaders(request, response)
+	return response
 }
 
 // respond with one trivial query's latency and the pool's counts, or with 503 if the query fails or takes too long.

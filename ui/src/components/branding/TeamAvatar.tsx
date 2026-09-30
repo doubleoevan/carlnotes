@@ -1,35 +1,27 @@
 import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@shared/avatars"
 import type { TeamIdentity } from "@shared/contracts"
 import { useState } from "react"
-import { useAvatarVersion } from "@/hooks/useAvatarVersion"
 import { AVATAR_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 /**
  * A Team's avatar: its stored image, or its initials on a tinted circle.
- * The avatar route resolves which image the user publishes, so the img only asks by id.
+ * The image url names the avatar's version, so a new upload is a new url.
  */
 export function TeamAvatar({
 	team,
 	className,
 }: {
-	team: Pick<TeamIdentity, "teamId" | "name" | "hasAvatar">
+	team: Pick<TeamIdentity, "teamId" | "name" | "avatarVersion">
 	className?: string
 }) {
-	// the version changes when an upload arrives, which is what re-fetches an image the url already named
-	const avatarVersion = useAvatarVersion()
-	// an image the browser could not fetch falls back to the initials
-	const [isImageBroken, setIsImageBroken] = useState(false)
-	const isImageShown = team.hasAvatar && !isImageBroken
+	// the image url at the avatar's version, and the url that failed to load, which shows the initials instead
+	const imageUrl = team.avatarVersion === null ? null : `/api/team-avatars/${team.teamId}?v=${team.avatarVersion}`
+	const [brokenImageUrl, setBrokenImageUrl] = useState<string | null>(null)
 	return (
 		<span className={cn(AVATAR_CLASS, "size-8", className)}>
-			{isImageShown ? (
-				<img
-					src={`/api/team-avatars/${team.teamId}?v=${avatarVersion}`}
-					alt=""
-					onError={() => setIsImageBroken(true)}
-					className="size-full object-cover"
-				/>
+			{imageUrl && imageUrl !== brokenImageUrl ? (
+				<img src={imageUrl} alt="" onError={() => setBrokenImageUrl(imageUrl)} className="size-full object-cover" />
 			) : (
 				<svg viewBox="0 0 32 32" className="size-full" role="presentation">
 					<circle cx="16" cy="16" r="16" fill={toAvatarTint(team.teamId)} />

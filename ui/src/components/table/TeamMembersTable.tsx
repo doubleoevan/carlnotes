@@ -181,7 +181,7 @@ function MemberRow({
 					<UserAvatar
 						userId={member.userId}
 						username={member.username}
-						avatarSource={member.avatarSource}
+						avatarVersion={member.avatarVersion}
 						className="size-6"
 					/>
 					<AnchorLink href={`/profiles/${member.userId}`} className="text-link hover:underline">

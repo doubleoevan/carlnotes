@@ -231,7 +231,7 @@ async function storeTopicChatAttachment(
 			status: "ready",
 		})
 	} catch (error) {
-		await deleteAttachment(objectKey).catch(() => {})
+		await deleteAttachment(objectKey)
 		throw error
 	}
 	return true
@@ -404,7 +404,7 @@ export async function deleteKeptAttachment(userId: string, keptAttachmentId: str
 	// delete the chat attachment row, then best-effort delete the stored object the way that topic attachments do
 	await db.delete(chatAttachments).where(eq(chatAttachments.id, keptAttachment.id))
 	if (keptAttachment.objectKey) {
-		await deleteAttachment(keptAttachment.objectKey).catch(() => {})
+		await deleteAttachment(keptAttachment.objectKey)
 	}
 	return true
 }
@@ -429,7 +429,7 @@ export async function deleteChatAttachments(topicId: string, userId?: string): P
 
 	// a failed object delete leaves the row, so the next pass over the topic finds it again
 	const objectKeys = keptAttachments.map((keptAttachment) => keptAttachment.objectKey).filter(Boolean)
-	await Promise.all(objectKeys.map((objectKey) => deleteAttachment(objectKey as string).catch(() => {})))
+	await Promise.all(objectKeys.map((objectKey) => deleteAttachment(objectKey as string)))
 	await db.delete(chatAttachments).where(
 		inArray(
 			chatAttachments.id,
@@ -450,7 +450,7 @@ export async function deleteStoredChatAttachments(userId: string): Promise<void>
 
 	// only an attachment with an object key can be deleted from storage
 	const objectKeys = keptAttachments.map((keptAttachment) => keptAttachment.objectKey).filter(Boolean)
-	await Promise.all(objectKeys.map((objectKey) => deleteAttachment(objectKey as string).catch(() => {})))
+	await Promise.all(objectKeys.map((objectKey) => deleteAttachment(objectKey as string)))
 }
 
 // a chat attachment's routes, both scoped to the user who sent it

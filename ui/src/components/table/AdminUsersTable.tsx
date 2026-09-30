@@ -251,7 +251,7 @@ function UserRow({
 								<UserAvatar
 									userId={user.id}
 									username={user.username}
-									avatarSource={user.avatarSource}
+									avatarVersion={user.avatarVersion}
 									className="size-6"
 								/>
 								{user.username}

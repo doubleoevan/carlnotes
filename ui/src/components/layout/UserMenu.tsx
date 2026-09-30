@@ -19,12 +19,12 @@ import { useTopicInviteBadges } from "@/stores/topicInviteStore"
 export function UserMenu({
 	userId,
 	username,
-	avatarSource,
+	avatarVersion,
 	isAdmin,
 }: {
 	userId: string
 	username: string
-	avatarSource?: string | null
+	avatarVersion: string | null
 	isAdmin: boolean
 }) {
 	// the avatar's one badge sums every unread chat mention, note change, and topic invitation,
@@ -53,7 +53,7 @@ export function UserMenu({
 				<UserAvatar
 					userId={userId}
 					username={username}
-					avatarSource={avatarSource}
+					avatarVersion={avatarVersion}
 					className="size-9 border-2 border-white/55"
 				/>
 				{/* the one badge, its tooltip listing every waiting group under its own heading */}

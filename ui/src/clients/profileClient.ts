@@ -66,7 +66,7 @@ export async function sendDeleteAccount(): Promise<void> {
 export type TeamMenuOption = {
 	teamId: string
 	name: string
-	hasAvatar: boolean
+	avatarVersion: string | null
 	role: "leader" | "member"
 	status: "member" | "invited" | "none"
 	inviteId: string | null

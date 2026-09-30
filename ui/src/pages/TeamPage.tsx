@@ -27,7 +27,6 @@ import { AddTopicButton } from "@/components/team/AddTopicButton"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
-import { refreshAvatars } from "@/hooks/useAvatarVersion"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { toCountLabel } from "@/lib/labels"
@@ -45,7 +44,7 @@ function toTeamChatContext(viewedTeam: TeamPageResponse | null): ChatPageContext
 			? {
 					teamId: viewedTeam.teamId,
 					name: viewedTeam.name,
-					hasAvatar: viewedTeam.hasAvatar,
+					avatarVersion: viewedTeam.avatarVersion,
 					hasRequestedToJoin: viewedTeam.hasRequestedToJoin,
 				}
 			: null
@@ -291,7 +290,7 @@ function TeamDialogs({
 						teamId: teamPage.teamId,
 						name: teamPage.name,
 						description: teamPage.description,
-						hasAvatar: teamPage.hasAvatar,
+						avatarVersion: teamPage.avatarVersion,
 						isPublic: teamPage.isPublic,
 					}}
 					currentTopics={teamPage.topics.map((teamTopic) => ({ id: teamTopic.id, name: teamTopic.name }))}
@@ -468,12 +467,12 @@ function TeamHeaderAvatar({
 	team,
 	onChanged,
 }: {
-	team: { teamId: string; name: string; hasAvatar: boolean }
+	team: { teamId: string; name: string; avatarVersion: string | null }
 	onChanged: () => void
 }) {
 	const [isUploading, setIsUploading] = useState(false)
 
-	// upload at once. success re-fetches every rendered copy, and a rejection reads as a toast
+	// upload at once. success reloads the team with its new version, and a rejection shows a toast
 	const handleAvatarChange = async (avatarFile: File): Promise<void> => {
 		setIsUploading(true)
 		const rejection = await sendTeamAvatar(team.teamId, avatarFile).finally(() => setIsUploading(false))
@@ -481,9 +480,6 @@ function TeamHeaderAvatar({
 			toast.error(AVATAR_REJECTIONS[rejection] ?? "That image didn't reach Carl. Try again.")
 			return
 		}
-
-		// the rendered avatars refetch under a fresh version
-		refreshAvatars()
 		onChanged()
 	}
 

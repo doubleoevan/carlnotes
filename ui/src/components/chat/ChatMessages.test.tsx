@@ -27,7 +27,7 @@ test("a future timestamp clamps to just now", () => {
 })
 
 // the user whose questions the private chat renders
-const USER = { userId: "user-1", username: "ana", avatarSource: null }
+const USER = { userId: "user-1", username: "ana", avatarVersion: null }
 
 // one question and its reply, rendered with whatever it was sent with
 function renderChatTurn(attachments: ChatMessageAttachment[]): Promise<string> {

@@ -1,13 +1,21 @@
 // the Activity page's payload, the user's own or, for an admin, any user's
-import type { ActivityResponse, ActivityScan, ChatMention, OwnerTopic, SubscriptionRow } from "@shared/contracts"
+import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
+import type {
+	ActivityResponse,
+	ActivityScan,
+	ChatMention,
+	OwnerTopic,
+	SubscriptionRow,
+	TeamIdentity,
+} from "@shared/contracts"
 import { and, count, desc, eq, gt, gte, inArray, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
 import { invites, scans, subscriptions, teamMembers, teams, topicEmailSends, topics, users } from "../db/schema"
 import { isAdminRole, isAllowed, monthlySpendDollars, userBudgetCents } from "./authorization"
+import { toProfileIdentity, withAvatarVersion } from "./avatars"
 import { loadTopicChatMentions } from "./chat/mentions"
 import type { AppEnv } from "./currentUser"
-import { toInvitee } from "./invite/userInvites"
 import { startOfUtcMonth } from "./topic/quotas"
 
 // the topic rows that toActivityTopics reads
@@ -51,6 +59,7 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 			budgetOverrideCents: users.budgetOverrideCents,
 			username: users.username,
 			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
 		})
 		.from(users)
 		.where(eq(users.id, user.id))
@@ -67,7 +76,12 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 		.select({
 			topicId: topics.id,
 			name: topics.name,
-			owner: { userId: users.id, username: users.username, avatarSource: users.avatarSource },
+			owner: {
+				userId: users.id,
+				username: users.username,
+				avatarSource: users.avatarSource,
+				avatarKey: users.avatarKey,
+			},
 			team: {
 				teamId: teams.id,
 				name: teams.name,
@@ -102,10 +116,13 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 			inviteeEmail: invites.email,
 			invitedAt: invites.invitedAt,
 			subscribedAt: subscriptions.createdAt,
-			// the invitee's account fields, null until the invitation names or resolves to an account
-			inviteeUserId: users.id,
-			inviteeUsername: users.username,
-			inviteeAvatarSource: users.avatarSource,
+			// the invitee's account, null until the invitation names or resolves to one
+			invitee: {
+				userId: users.id,
+				username: users.username,
+				avatarSource: users.avatarSource,
+				avatarKey: users.avatarKey,
+			},
 		})
 		.from(invites)
 		.innerJoin(topics, eq(invites.topicId, topics.id))
@@ -132,7 +149,12 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 
 	return {
 		// whose activity this is, for the page's profile link
-		user: { userId: user.id, username: userRow?.username ?? "", avatarSource: userRow?.avatarSource ?? null },
+		user: {
+			userId: user.id,
+			username: userRow?.username ?? "",
+			avatarSource: userRow?.avatarSource ?? null,
+			avatarVersion: toAvatarVersion(userRow ?? {}),
+		},
 		scanSpendCents: Math.round(monthlySpend.scanDollars * 100),
 		chatSpendCents: Math.round(monthlySpend.chatDollars * 100),
 		budgetCents: userBudgetCents({
@@ -142,9 +164,10 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 		}),
 		topics: await loadTopics(ownedTopicIds, isOwnView ? user.id : null),
 		subscriptions: toSubscriptionRows([
-			// the joined team columns convert to the team's identity before the rows merge
+			// convert the joined owner and team columns to their identities before the rows merge
 			...subscriptionRows.map((subscriptionRow) => ({
 				...subscriptionRow,
+				owner: withAvatarVersion(subscriptionRow.owner),
 				team: toTeamIdentity(subscriptionRow.team),
 			})),
 			...(await loadInvitedTopicSubscriptions(user)),
@@ -155,7 +178,7 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 			name: inviteRow.name,
 			// the email address if the sender typed one, null on a username invitation
 			inviteeEmail: inviteRow.inviteeEmail,
-			invitee: toInvitee(inviteRow),
+			invitee: toProfileIdentity(inviteRow.invitee),
 			invitedAt: inviteRow.invitedAt.toISOString(),
 			subscribedAt: inviteRow.subscribedAt?.toISOString() ?? null,
 		})),
@@ -179,7 +202,12 @@ export async function loadInvitedTopicSubscriptions(user: {
 			inviteId: invites.id,
 			topicId: topics.id,
 			name: topics.name,
-			owner: { userId: users.id, username: users.username, avatarSource: users.avatarSource },
+			owner: {
+				userId: users.id,
+				username: users.username,
+				avatarSource: users.avatarSource,
+				avatarKey: users.avatarKey,
+			},
 			team: {
 				teamId: teams.id,
 				name: teams.name,
@@ -221,7 +249,7 @@ export async function loadInvitedTopicSubscriptions(user: {
 	return [...newestByTopic.values()].toReversed().map((scanRow) => ({
 		topicId: scanRow.topicId,
 		name: scanRow.name,
-		owner: scanRow.owner,
+		owner: withAvatarVersion(scanRow.owner),
 		team: toTeamIdentity(scanRow.team),
 		visibility: scanRow.visibility,
 		subscribedAt: scanRow.invitedAt,
@@ -240,12 +268,12 @@ function toTeamIdentity(team: {
 	isPublic: boolean | null
 	// set only where the user is an active member, which is what lets a private team be named
 	memberUserId: string | null
-}): { teamId: string; name: string; hasAvatar: boolean } | null {
+}): TeamIdentity | null {
 	// a private team is named to its own members alone, so an outside subscriber or invitee sees the owner instead
 	if (team.teamId === null || team.name === null || (!team.isPublic && team.memberUserId === null)) {
 		return null
 	}
-	return { teamId: team.teamId, name: team.name, hasAvatar: team.avatarKey !== null }
+	return { teamId: team.teamId, name: team.name, avatarVersion: toAvatarKeyVersion(team.avatarKey) }
 }
 
 /**

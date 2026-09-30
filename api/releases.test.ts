@@ -1,6 +1,7 @@
 // the release notes rules that hold without a database: the summary split, the webhook's signature check,
 // and what a GitHub release object becomes as a row
 import { expect, test } from "bun:test"
+import { connectionPool } from "../db"
 import { isSignedByGitHub, releasesRoute, toReleaseSummary, toReleaseUpsert } from "./releases"
 
 // the header GitHub signs with, and the signature it would send for a body
@@ -106,20 +107,18 @@ test("a form encoded body is rejected with the reason", async () => {
 	}
 })
 
-// promoting a prerelease fires released instead of published, and the promoted release has to land
+// promoting a prerelease fires released instead of published, and the promoted release is still stored
 test("a promoted prerelease is stored", async () => {
 	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
-		const body = JSON.stringify({ action: "released", release: { ...PUBLISHED_RELEASE, prerelease: false } })
-		const response = await releasesRoute.request("/api/webhooks/github", {
-			method: "POST",
-			body,
-			headers: { [SIGNATURE_HEADER]: await toSignature(body) },
+		const promotedText = await postWebhook({
+			action: "released",
+			release: { ...PUBLISHED_RELEASE, prerelease: false },
 		})
 
 		// the route acts on it instead of dropping it as an action it does not know
-		expect(await response.text()).not.toContain("ignored")
+		expect(promotedText).not.toContain("ignored")
 	} finally {
 		restoreSecret(previousSecret)
 	}
@@ -147,16 +146,25 @@ test("a correctly signed request passes", async () => {
 	}
 })
 
-// post one signed webhook payload and read the response text
+// post one signed webhook payload with the pool's query swapped for a stub that accepts the write,
+// and read the response text
 async function postWebhook(payload: object): Promise<string> {
 	const body = JSON.stringify(payload)
+	const poolQuery = connectionPool.query
+	connectionPool.query = (() => Promise.resolve({ rows: [], fields: [] })) as unknown as typeof connectionPool.query
+
 	// post the delivery signed the way GitHub signs one
-	const response = await releasesRoute.request("/api/webhooks/github", {
-		method: "POST",
-		body,
-		headers: { [SIGNATURE_HEADER]: await toSignature(body) },
-	})
-	return response.text()
+	try {
+		const response = await releasesRoute.request("/api/webhooks/github", {
+			method: "POST",
+			body,
+			headers: { [SIGNATURE_HEADER]: await toSignature(body) },
+		})
+		return await response.text()
+	} finally {
+		// put the pool's own query back, no matter how the post ends
+		connectionPool.query = poolQuery
+	}
 }
 
 // an edit to a published release is stored, so a fixed typo reaches the page without a sync

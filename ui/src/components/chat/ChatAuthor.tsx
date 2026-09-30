@@ -12,14 +12,14 @@ import { cn } from "@/lib/utils"
 export function ChatAuthor({
 	authorUserId,
 	authorUsername,
-	avatarSource,
+	avatarVersion,
 	isOwnChatMessage,
 	children,
 }: {
 	// Carl is null. A deleted member is also null. Their account reference is gone while their recorded name stays
 	authorUserId: string | null
 	authorUsername: string
-	avatarSource?: string | null
+	avatarVersion?: string | null
 	// whether the user wrote this one
 	isOwnChatMessage?: boolean
 	children: React.ReactNode
@@ -31,7 +31,7 @@ export function ChatAuthor({
 		<UserAvatar
 			userId={authorUserId ?? ""}
 			username={authorUsername}
-			avatarSource={avatarSource ?? null}
+			avatarVersion={avatarVersion ?? null}
 			className="size-6"
 		/>
 	)

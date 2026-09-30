@@ -23,7 +23,6 @@ import { Input } from "@/components/primitives/input"
 import { Switch } from "@/components/primitives/switch"
 import { Textarea } from "@/components/primitives/textarea"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { refreshAvatars } from "@/hooks/useAvatarVersion"
 import { useObjectUrl } from "@/hooks/useObjectUrl"
 import { cn } from "@/lib/utils"
 
@@ -37,7 +36,7 @@ const REJECTION_REASONS: Record<CreateTeamRejection, string> = {
 type TopicOption = { id: string; name: string }
 
 // the team being edited or absent while one is being created
-type EditedTeam = Pick<TeamIdentity, "teamId" | "name" | "hasAvatar"> & {
+type EditedTeam = Pick<TeamIdentity, "teamId" | "name" | "avatarVersion"> & {
 	description: string | null
 	isPublic: boolean
 }
@@ -162,7 +161,7 @@ export function EditTeamModal({
 			setRejection(saveRejection ?? "That team didn't get made. Try again.")
 			return null
 		}
-		setCreatedTeam({ teamId: newTeamId, name, hasAvatar: false, description, isPublic })
+		setCreatedTeam({ teamId: newTeamId, name, avatarVersion: null, description, isPublic })
 		return newTeamId
 	}
 
@@ -215,9 +214,12 @@ export function EditTeamModal({
 	}
 
 	// the avatar the team shows: the file just uploaded, otherwise whatever the team has today
-	const previewTeam = { teamId: editedTeam?.teamId ?? "", name: name || "Team", hasAvatar: false }
+	const previewTeam = { teamId: editedTeam?.teamId ?? "", name: name || "Team", avatarVersion: null }
 	const avatarUrl = useObjectUrl(avatarFile)
-	const previewAvatarUrl = avatarUrl ?? (editedTeam?.hasAvatar ? `/api/team-avatars/${editedTeam.teamId}` : null)
+	const storedAvatarUrl = editedTeam?.avatarVersion
+		? `/api/team-avatars/${editedTeam.teamId}?v=${editedTeam.avatarVersion}`
+		: null
+	const previewAvatarUrl = avatarUrl ?? storedAvatarUrl
 
 	// leaving the field checks the name so a taken one shows early. the save checks again, and that is what rejects it
 	const handleNameBlur = (): void => {
@@ -388,7 +390,6 @@ async function saveTeam({
 		if (rejection) {
 			return AVATAR_REJECTIONS[rejection] ?? "That image didn't reach Carl. Try again."
 		}
-		refreshAvatars()
 	}
 
 	// a created team opens its page with the image in place

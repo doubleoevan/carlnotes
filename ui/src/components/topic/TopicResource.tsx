@@ -142,7 +142,7 @@ export function TopicResource({
 													<UserAvatar
 														userId={saver.userId}
 														username={saver.username}
-														avatarSource={saver.avatarSource}
+														avatarVersion={saver.avatarVersion}
 														className="size-4"
 													/>
 												</span>

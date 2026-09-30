@@ -16,21 +16,21 @@ test("the proxy's spent-budget answer is the one that rejects", () => {
 test("the rejection wording is written once", () => {
 	expect(SPENT_BUDGET_REJECTION).toContain("empty mug")
 	// the wording is not spelled out again anywhere in the chat module
-	const chatSources = ["room.ts", "roomTurns.ts", "turns.ts"].map((name) =>
-		readFileSync(join(import.meta.dir, name), "utf8"),
+	const chatFileTexts = ["room.ts", "roomTurns.ts", "privateChat.ts"].map((fileName) =>
+		readFileSync(join(import.meta.dir, fileName), "utf8"),
 	)
-	const spelledOut = chatSources.filter((source) => source.includes("empty mug"))
-	expect(spelledOut).toEqual([])
+	const wordingFileTexts = chatFileTexts.filter((chatFileText) => chatFileText.includes("empty mug"))
+	expect(wordingFileTexts).toEqual([])
 })
 
 /**
  * A budget rejection that is returned after the message posts has to reach the user. Both chat paths answer it themselves.
  */
 test("both chat paths answer a budget rejection instead of only logging it", () => {
-	for (const name of ["room.ts", "turns.ts"]) {
-		const source = readFileSync(join(import.meta.dir, name), "utf8")
-		expect(source).toContain("isBudgetRejection")
-		expect(source).toContain("SPENT_BUDGET_REJECTION")
+	for (const fileName of ["room.ts", "privateChat.ts"]) {
+		const chatFileText = readFileSync(join(import.meta.dir, fileName), "utf8")
+		expect(chatFileText).toContain("isBudgetRejection")
+		expect(chatFileText).toContain("SPENT_BUDGET_REJECTION")
 	}
 })
 

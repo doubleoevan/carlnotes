@@ -1,5 +1,6 @@
 // the admin console data: a per-user table of status and cost, and platform totals with a contribution figure
 import { zValidator } from "@hono/zod-validator"
+import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
 import type {
 	AdminTeamRow,
 	AdminTotals,
@@ -28,6 +29,7 @@ import {
 import { readLiteLLMKeySpend, replaceUserLiteLLMKey } from "../worker"
 import { loadActivity } from "./activity"
 import { isAdminRole, isAllowed, userBudgetCents } from "./authorization"
+import { withAvatarVersion } from "./avatars"
 import { readStripeTotalRevenueCents } from "./billing"
 import { type AppEnv, currentUser } from "./currentUser"
 import { loadAdminTeamTopics, loadTeamSummaries, toSpendByTeamId } from "./team/helpers"
@@ -62,6 +64,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 				email: users.email,
 				username: users.username,
 				avatarSource: users.avatarSource,
+				avatarKey: users.avatarKey,
 				role: users.role,
 				plan: users.plan,
 				// the override, signup and last-login times, and the key that bills topic scans
@@ -118,6 +121,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			email: user.email,
 			username: user.username,
 			avatarSource: user.avatarSource,
+			avatarVersion: toAvatarVersion(user),
 			role: user.role,
 			plan: user.plan,
 			createdAt: user.createdAt.toISOString(),
@@ -149,11 +153,12 @@ export async function loadAdminTeamMembers(teamId: string): Promise<TeamPageResp
 	}
 
 	// the same columns the team page's members table reads, so the same table renders them
-	return db
+	const teamMemberRows = await db
 		.select({
 			userId: users.id,
 			username: users.username,
 			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
 			role: teamMembers.role,
 			isMemberVisible: teamMembers.isMemberVisible,
 			isActive: teamMembers.isActive,
@@ -161,6 +166,7 @@ export async function loadAdminTeamMembers(teamId: string): Promise<TeamPageResp
 		.from(teamMembers)
 		.innerJoin(users, eq(users.id, teamMembers.userId))
 		.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true)))
+	return teamMemberRows.map(withAvatarVersion)
 }
 
 /**
@@ -216,7 +222,7 @@ export async function loadAdminTeams(): Promise<AdminTeamRow[]> {
 			name: team.name,
 			isPublic: team.isPublic,
 			createdAt: team.createdAt.toISOString(),
-			hasAvatar: team.avatarKey !== null,
+			avatarVersion: toAvatarKeyVersion(team.avatarKey),
 			memberCount: memberCountByTeam.get(team.teamId) ?? 0,
 			topicCount: topicCountByTeam.get(team.teamId) ?? 0,
 			scanSpendCents: spendByTeam.get(team.teamId)?.scanCents ?? 0,

@@ -3,7 +3,7 @@ import { X } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
 import { sendAcceptInvite, sendDeclineInvite } from "@/clients/activityClient"
-import { authClient } from "@/clients/authClient"
+import { authClient, toSessionProfileIdentity } from "@/clients/authClient"
 import { fetchTeamPage, sendRemoveTopicFromTeam } from "@/clients/teamClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
@@ -388,18 +388,10 @@ function TeamSubtablesRow({
 // the Invited by cell: who invited the user, or their own profile when they joined on their own
 function InvitedByCell({ invitedBy }: { invitedBy: ProfileIdentity | null }) {
 	const { data: session } = authClient.useSession()
-	const shown =
-		invitedBy ??
-		(session
-			? {
-					userId: session.user.id,
-					username: session.user.username ?? "",
-					avatarSource: session.user.avatarSource ?? null,
-				}
-			: null)
+	const invitedByProfile = invitedBy ?? (session ? toSessionProfileIdentity(session.user) : null)
 	return (
 		<td className="py-2 pr-4 whitespace-nowrap">
-			{shown && <UserProfileLink user={shown} avatarClassName="size-5" isNewTab />}
+			{invitedByProfile && <UserProfileLink user={invitedByProfile} avatarClassName="size-5" isNewTab />}
 		</td>
 	)
 }

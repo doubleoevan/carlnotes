@@ -18,7 +18,7 @@ const TEAM_ROOM: ChatRoom = {
 	topicId: null,
 	name: "Agent Infra Crew",
 	teamName: "Agent Infra Crew",
-	teamHasAvatar: false,
+	teamAvatarVersion: null,
 	chatMentions: [CHAT_MENTION],
 	chatRoomMembers: [],
 }

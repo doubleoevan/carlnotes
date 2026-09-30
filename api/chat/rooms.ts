@@ -1,8 +1,10 @@
 // every chat room one user can open, for the chat panel's switch chat rooms menu
+import { toAvatarKeyVersion } from "@shared/avatars"
 import type { ChatRoom } from "@shared/contracts"
 import { and, count, eq, inArray, isNull } from "drizzle-orm"
 import { db } from "../../db"
 import { chatRoomMentions, teamMembers, teams, teamTopics, topics, users } from "../../db/schema"
+import { withAvatarVersion } from "../avatars"
 import { loadTeamChatMentions, loadTopicChatMentions } from "./mentions"
 
 /**
@@ -52,7 +54,7 @@ export async function loadChatRooms(userId: string): Promise<ChatRoom[]> {
 			topicId: null,
 			name: teamRow.name,
 			teamName: teamRow.name,
-			teamHasAvatar: teamRow.avatarKey !== null,
+			teamAvatarVersion: toAvatarKeyVersion(teamRow.avatarKey),
 			chatMentions: teamChatMentions.get(teamRow.teamId) ?? [],
 			chatRoomMembers: membersByTeamId.get(teamRow.teamId) ?? [],
 			createdAt: teamRow.createdAt,
@@ -65,7 +67,7 @@ export async function loadChatRooms(userId: string): Promise<ChatRoom[]> {
 							topicId: topicRow.topicId,
 							name: topicRow.name,
 							teamName: teamById.get(topicRow.teamId)?.name ?? "",
-							teamHasAvatar: teamById.get(topicRow.teamId)?.avatarKey != null,
+							teamAvatarVersion: toAvatarKeyVersion(teamById.get(topicRow.teamId)?.avatarKey ?? null),
 							// each chat room counts only what was said in it, so a topic two teams hold never counts twice in a total
 							chatMentions: (topicChatMentions.get(topicRow.topicId) ?? []).filter(
 								(mention) => mention.teamId === topicRow.teamId,
@@ -90,18 +92,19 @@ async function loadTeamMembersByTeam(teamIds: string[]): Promise<Map<string, Cha
 			userId: users.id,
 			username: users.username,
 			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
 		})
 		.from(teamMembers)
 		.innerJoin(users, eq(users.id, teamMembers.userId))
 		.where(and(inArray(teamMembers.teamId, teamIds), eq(teamMembers.isActive, true)))
 		.orderBy(users.username)
 
-	// each team's list, in the username order the query returned
+	// each team's chat room members, in the username order that the query returned
 	const membersByTeamId = new Map<string, ChatRoom["chatRoomMembers"]>()
-	for (const memberRow of memberRows) {
-		const teamList = membersByTeamId.get(memberRow.teamId) ?? []
-		teamList.push({ userId: memberRow.userId, username: memberRow.username, avatarSource: memberRow.avatarSource })
-		membersByTeamId.set(memberRow.teamId, teamList)
+	for (const { teamId, ...memberColumns } of memberRows) {
+		const chatRoomMembers = membersByTeamId.get(teamId) ?? []
+		chatRoomMembers.push(withAvatarVersion(memberColumns))
+		membersByTeamId.set(teamId, chatRoomMembers)
 	}
 	return membersByTeamId
 }

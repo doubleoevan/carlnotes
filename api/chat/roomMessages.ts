@@ -1,4 +1,5 @@
 // the read path for a team's chat room: loading chat messages, their link preview cards, and the deduped SSE delta
+import { toAvatarVersion } from "@shared/avatars"
 import type { ChatLinkPreview, ChatRoomMessage } from "@shared/contracts"
 import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm"
 import { db } from "../../db"
@@ -19,7 +20,11 @@ export async function loadChatRoomMessages(
 ): Promise<ChatRoomMessage[]> {
 	// the latest chat messages under a limit, reversed back into id order. the author avatar is null for carl or a closed account
 	const latestChatMessageRows = await db
-		.select({ chatMessage: chatRoomMessages, authorAvatarSource: users.avatarSource })
+		.select({
+			chatMessage: chatRoomMessages,
+			authorAvatarSource: users.avatarSource,
+			authorAvatarKey: users.avatarKey,
+		})
 		.from(chatRoomMessages)
 		.leftJoin(users, eq(users.id, chatRoomMessages.authorUserId))
 		.where(
@@ -34,7 +39,11 @@ export async function loadChatRoomMessages(
 		.limit(CHAT_ROOM_LOAD_LIMIT)
 	const chatMessageRows = latestChatMessageRows
 		.reverse()
-		.map(({ chatMessage, authorAvatarSource }) => ({ ...chatMessage, authorAvatarSource }))
+		.map(({ chatMessage, authorAvatarSource, authorAvatarKey }) => ({
+			...chatMessage,
+			authorAvatarSource,
+			authorAvatarVersion: toAvatarVersion({ avatarSource: authorAvatarSource, avatarKey: authorAvatarKey }),
+		}))
 
 	// each chat message's shared files, fetched once for only the loaded chat messages
 	const attachmentRows =
@@ -84,6 +93,7 @@ export async function loadChatRoomMessages(
 			authorUserId: chatMessageRow.authorUserId,
 			authorUsername: chatMessageRow.authorUsername,
 			authorAvatarSource: chatMessageRow.authorAvatarSource,
+			authorAvatarVersion: chatMessageRow.authorAvatarVersion,
 			replyToChatMessageId: chatMessageRow.replyToMessageId,
 			content: contentByChatMessageId.get(chatMessageRow.id) ?? "",
 			createdAt: chatMessageRow.createdAt.toISOString(),

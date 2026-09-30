@@ -2,7 +2,7 @@ import type { TeamSummary, TeamsPageResponse } from "@shared/contracts"
 import { Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
-import { authClient } from "@/clients/authClient"
+import { authClient, toSessionProfileIdentity } from "@/clients/authClient"
 import { fetchTeams, sendDeleteTeam, sendRemoveTeamMember } from "@/clients/teamClient"
 import { fetchAddableTopics } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
@@ -108,16 +108,7 @@ export function TeamsPage() {
 				</Button>
 			</div>
 			{/* whose teams these are, with a link to their profile */}
-			{session && (
-				<UserProfileLink
-					user={{
-						userId: session.user.id,
-						username: session.user.username ?? "",
-						avatarSource: session.user.avatarSource ?? null,
-					}}
-					className="mt-2 text-sm"
-				/>
-			)}
+			{session && <UserProfileLink user={toSessionProfileIdentity(session.user)} className="mt-2 text-sm" />}
 			{/* mt-2 plus the first accordion trigger's own padding matches the account page's mt-6 gap */}
 			<div className="mt-2">
 				{/* the loading state, then the two accordion sections */}

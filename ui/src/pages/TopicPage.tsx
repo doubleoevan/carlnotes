@@ -85,7 +85,7 @@ export function TopicPage() {
 						? {
 								teamId: joinTeam.teamId,
 								name: joinTeam.name,
-								hasAvatar: joinTeam.hasAvatar,
+								avatarVersion: joinTeam.avatarVersion,
 								hasRequestedToJoin: topic.hasRequestedToJoin,
 							}
 						: null,

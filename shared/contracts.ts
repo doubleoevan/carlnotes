@@ -2,7 +2,7 @@
 import { z } from "zod"
 import {
 	attachmentStatuses,
-	avatarSources,
+	type avatarSources,
 	type chatAttachmentKinds,
 	daysOfWeek,
 	editableSourceKinds,
@@ -39,8 +39,9 @@ export type ChatRoomMessage = {
 	// the author's account if it still exists, and the name recorded at post-time
 	authorUserId: string | null
 	authorUsername: string
-	// the author's current avatar, null for carl or for a departed member
+	// the author's current avatar and the version that its url names, null for carl or for a departed member
 	authorAvatarSource: (typeof avatarSources)[number] | null
+	authorAvatarVersion: string | null
 	replyToChatMessageId: number | null
 	content: string
 	createdAt: string
@@ -171,8 +172,8 @@ export type TeamPageResponse = {
 	name: string
 	description: string | null
 	isPublic: boolean
-	// its own uploaded image, otherwise the initials and tint its name and id draw
-	hasAvatar: boolean
+	// the version of its own uploaded image, or null for the initials and tint drawn from its name and id
+	avatarVersion: string | null
 	// what the user is to this team, which decides the leader controls and the full team
 	role: (typeof teamRoles)[number] | null
 	// whether the user has asked to join, which flips the join button to a withdraw
@@ -181,6 +182,7 @@ export type TeamPageResponse = {
 		userId: string
 		username: string
 		avatarSource: (typeof avatarSources)[number] | null
+		avatarVersion: string | null
 		role: (typeof teamRoles)[number]
 		isMemberVisible: boolean
 		// false is a request to join, shown to team leaders who can activate a new member
@@ -270,6 +272,15 @@ export const chatMention = z.object({
 })
 export type ChatMention = z.infer<typeof chatMention>
 
+// the user identity for a profile page link, with the avatar's source and the version that its url names
+export const profileIdentity = z.object({
+	userId: z.string(),
+	username: z.string(),
+	avatarSource: z.string().nullable(),
+	avatarVersion: z.string().nullable(),
+})
+export type ProfileIdentity = z.infer<typeof profileIdentity>
+
 // one chat room the chat panel's menu offers: a team's own conversation, or one about a topic it has
 export const chatRoom = z.object({
 	teamId: z.string(),
@@ -279,14 +290,12 @@ export const chatRoom = z.object({
 	name: z.string(),
 	// the team the chat room belongs to, which tells two chat rooms of one topic apart
 	teamName: z.string(),
-	// its own uploaded image, otherwise the initials and tint its name and id draw
-	teamHasAvatar: z.boolean(),
+	// the version of the team's own uploaded image, or null for the initials and tint drawn from its name and id
+	teamAvatarVersion: z.string().nullable(),
 	// the user's unseen mentions in this chat room, badged on the menu row
 	chatMentions: z.array(chatMention),
 	// the holding team's active members, listed in the switcher row's hover tooltip
-	chatRoomMembers: z.array(
-		z.object({ userId: z.string(), username: z.string(), avatarSource: z.enum(avatarSources).nullable() }),
-	),
+	chatRoomMembers: z.array(profileIdentity),
 })
 export type ChatRoom = z.infer<typeof chatRoom>
 
@@ -385,14 +394,12 @@ export type TeamsPageResponse = {
 	})[]
 }
 
-// the user identity for a profile page link
-export type ProfileIdentity = { userId: string; username: string; avatarSource: string | null }
-
 // how a Team is shown with its name, avatar and id to link
 export type TeamIdentity = {
 	teamId: string
 	name: string
-	hasAvatar: boolean
+	// the version of its own uploaded image, or null for the initials and tint drawn from its name and id
+	avatarVersion: string | null
 }
 
 // the Activity payload: whose it is, metered variable spend against the budget, owned topics,
@@ -801,6 +808,7 @@ export type AdminUserRow = {
 	username: string
 	// where the avatar comes from. oauth provider, uploaded by user, or generated username initials
 	avatarSource: string
+	avatarVersion: string | null
 	role: string
 	plan: Plan
 	createdAt: string
@@ -827,8 +835,8 @@ export type AdminTeamRow = {
 	name: string
 	isPublic: boolean
 	createdAt: string
-	// its own uploaded image, otherwise the initials and tint its name and id draw
-	hasAvatar: boolean
+	// the version of its own uploaded image, or null for the initials and tint drawn from its name and id
+	avatarVersion: string | null
 	memberCount: number
 	topicCount: number
 	// month-to-date spend in cents across the team's topics, split by what produced it
@@ -867,18 +875,10 @@ export type Topic = {
 }
 
 // a user profile search result
-export type UserSearchResult = {
-	userId: string
-	username: string
-	avatarSource: string
-}
+export type UserSearchResult = ProfileIdentity
 
 // a public team the search bar found, in the shape its avatar and link both read
-export type TeamSearchResult = {
-	teamId: string
-	name: string
-	hasAvatar: boolean
-}
+export type TeamSearchResult = TeamIdentity
 
 // how long a query must be before it can search users, and how many matches can be returned
 export const USER_SEARCH_MIN_CHARS = 2
@@ -890,6 +890,7 @@ export type ProfileResponse = {
 	username: string
 	// where the avatar comes from. oauth provider, uploaded by user, or generated username initials
 	avatarSource: string
+	avatarVersion: string | null
 	joinedAt: string
 	// distinct people, not summed rows. the same person subscribed to multiple Topics counts once here
 	subscriberCount: number
@@ -937,9 +938,7 @@ export const topicFinding = z.object({
 	isConsumed: z.boolean(),
 	isBookmarked: z.boolean(),
 	// the teammates who bookmarked this finding, for the Bookmarked view's Team scope. empty off a team
-	teamBookmarks: z
-		.array(z.object({ userId: z.string(), username: z.string(), avatarSource: z.enum(avatarSources).nullable() }))
-		.default([]),
+	teamBookmarks: z.array(profileIdentity).default([]),
 	// the resource's captured engagement score, like a reddit score. null if no ingester recorded one
 	engagement: z.number().nullable(),
 })
@@ -959,7 +958,7 @@ export const topicFeed = z.object({
 	// how many findings a scan is set to keep for this topic
 	maxTopicFindings: z.number(),
 	// the topic owner
-	owner: z.object({ userId: z.string(), username: z.string(), avatarSource: z.string() }).nullable(),
+	owner: profileIdentity.nullable(),
 	// isTopicOwner gates attachment downloads. newCount is the user's unconsumed count for the "# new" badge
 	isTopicOwner: z.boolean(),
 	newCount: z.number(),
@@ -974,8 +973,8 @@ export const topicFeed = z.object({
 		.object({
 			teamId: z.string(),
 			name: z.string(),
-			// its own uploaded image, otherwise the initials and tint its name and id draw
-			hasAvatar: z.boolean(),
+			// the version of its own uploaded image, or null for the initials and tint drawn from its name and id
+			avatarVersion: z.string().nullable(),
 		})
 		.nullable(),
 	// canRate hides the rating row on a topic the user only reads

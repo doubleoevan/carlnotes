@@ -1,6 +1,19 @@
 // broker tests for the in-process note fan-out
-import { expect, test } from "bun:test"
+import { afterEach, beforeEach, expect, test } from "bun:test"
+import { connectionPool } from "../../db"
 import { notifyNoteUpdate, onNoteUpdate, toDirectConnectionString } from "./noteStream"
+
+// the pool's own query, put back after each test
+const poolQuery = connectionPool.query
+afterEach(() => {
+	connectionPool.query = poolQuery
+})
+
+// fail every query, as if the cross-instance notify cannot reach a database
+beforeEach(() => {
+	const unreachableDatabaseError = new Error("database unreachable")
+	connectionPool.query = (() => Promise.reject(unreachableDatabaseError)) as unknown as typeof connectionPool.query
+})
 
 // a local notify delivers the update bytes straight to this instance's subscribers
 test("a subscriber receives a locally merged update", async () => {
@@ -59,6 +72,8 @@ test("toDirectConnectionString never hands LISTEN a pooled host", () => {
 		} else {
 			process.env.DATABASE_URL_DIRECT = original.direct
 		}
+
+		// restore the pooled url the same way
 		if (original.databaseUrl === undefined) {
 			delete process.env.DATABASE_URL
 		} else {

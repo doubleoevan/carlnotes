@@ -32,6 +32,7 @@ import { streamVideoAttachment } from "./attachments"
 import { decryptChatText, encryptChatText } from "./encryption"
 import { loadLinkPreviewImage, saveLinkPreviews } from "./linkPreviews"
 import { saveChatMentions, saveSeenChatMentions } from "./mentions"
+import { chatBodyLimit } from "./privateChat"
 import { prepareChatRoomAttachments, storeChatRoomAttachment } from "./roomAttachments"
 import {
 	CHAT_ROOM_LOAD_LIMIT,
@@ -42,7 +43,6 @@ import {
 } from "./roomMessages"
 import { notifyChatRoomMessage, onChatRoomMessage } from "./roomStream"
 import { postModelRejection, runModelChatRoomTurn, toTopicFilter } from "./roomTurns"
-import { chatBodyLimit } from "./turns"
 
 // how long one SSE stream may stay open. the api client's cursor resume makes the reconnect free
 const CHAT_ROOM_STREAM_MAX_AGE_MS = 15 * 60 * 1000
@@ -279,7 +279,7 @@ async function clearChatRoom(context: Context, topicId: string | null, teamId: s
 	// shared text has no stored object. only the attachment file rows reach storage
 	for (const chatRoomAttachment of chatRoomAttachmentRows) {
 		if (chatRoomAttachment.objectKey) {
-			await deleteAttachment(chatRoomAttachment.objectKey).catch(() => {})
+			await deleteAttachment(chatRoomAttachment.objectKey)
 		}
 	}
 
@@ -337,7 +337,7 @@ async function deleteChatRoomAttachment(
 	// the row is deleted first, then the object, best-effort, the same order topic attachments delete in
 	await db.delete(chatRoomAttachments).where(eq(chatRoomAttachments.id, chatRoomAttachment.id))
 	if (chatRoomAttachment.objectKey) {
-		await deleteAttachment(chatRoomAttachment.objectKey).catch(() => {})
+		await deleteAttachment(chatRoomAttachment.objectKey)
 	}
 	return context.json({ ok: true })
 }
@@ -378,7 +378,7 @@ async function deleteChatRoomMessage(
 	// each deleted row's stored object gets deleted too, best effort
 	for (const chatRoomAttachment of chatRoomAttachmentRows) {
 		if (chatRoomAttachment.objectKey) {
-			await deleteAttachment(chatRoomAttachment.objectKey).catch(() => {})
+			await deleteAttachment(chatRoomAttachment.objectKey)
 		}
 	}
 

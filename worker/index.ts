@@ -20,10 +20,18 @@ export {
 	toLinkPreviewUrls,
 	toNormalizedLinkPreviewUrl,
 } from "./linkPreview"
-// the user keys the model calls bill to
-export { deleteLiteLLMKey, provisionLiteLLMKey, readLiteLLMKeySpend, replaceUserLiteLLMKey } from "./litellm"
+// each user's LiteLLM key
+export {
+	deleteLiteLLMKey,
+	loadUserLiteLLMKey,
+	provisionLiteLLMKey,
+	readLiteLLMKeySpend,
+	replaceUserLiteLLMKey,
+} from "./litellm"
 export { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "./models"
 export { sendManualScanEmail } from "./notify"
+// whether an address is loopback, private, link-local, or reserved
+export { isInternalAddress } from "./publicFetch"
 export { loadScan, scanTopic, startTopicScan, stopTopicScan } from "./scan"
 export { failStaleScans, runScheduledTopicScans } from "./schedule"
 export { toYoutubeVideoId } from "./scrape"

@@ -37,6 +37,27 @@ export function toAvatarTint(userId: string): string {
 	return AVATAR_TINTS[toStableHash(userId) % AVATAR_TINTS.length] as string
 }
 
+/**
+ * Returns the version in a user's avatar url, which is the upload's key id, oauth, or null for the initials.
+ */
+export function toAvatarVersion(avatar: { avatarSource?: string | null; avatarKey?: string | null }): string | null {
+	// return one fixed version for a provider photo, which lives at its provider
+	if (avatar.avatarSource === "oauth") {
+		return "oauth"
+	}
+	// return the upload's key id, and null for the initials, which have no url
+	return avatar.avatarSource === "upload" ? toAvatarKeyVersion(avatar.avatarKey ?? null) : null
+}
+
+/**
+ * Returns a stored avatar's version: the random id that each upload puts in its key's file name.
+ */
+export function toAvatarKeyVersion(avatarKey: string | null): string | null {
+	// take the file name after the key's last slash and drop its extension
+	const fileName = avatarKey?.split("/").pop()
+	return fileName ? fileName.replace(/\.[^.]+$/, "") : null
+}
+
 // djb2, which is small, stable across runtimes, and spreads short ids well enough to select one of the six tint buckets.
 function toStableHash(text: string): number {
 	let hash = 5381

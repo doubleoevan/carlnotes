@@ -55,12 +55,17 @@ This runs Biome, the type check, and the test suite. All three must be green.
 The agent shell has no Doppler-injected secrets, so check for the key without
 printing it: doppler run -- bash -c 'test -n "$CODERABBIT_API_KEY"'.
 
-If present, authenticate and run CodeRabbit under Doppler in the background.
-Defer variable expansion into the Doppler-injected subshell (a bare
-`--api-key "$CODERABBIT_API_KEY"` expands empty in the outer shell before
-doppler run starts):
-- doppler run -- bash -c 'coderabbit auth login --api-key "$CODERABBIT_API_KEY"'
-- doppler run -- bash -c 'coderabbit review --agent --type all --base main'
+If present, run CodeRabbit under Doppler in the background. The review takes the
+key inline, so it needs no separate login. Defer variable expansion into the
+Doppler-injected subshell (a bare `--api-key "$CODERABBIT_API_KEY"` expands empty
+in the outer shell before doppler run starts). Compare against origin/main's
+commit, since a local main goes stale: run `git fetch origin main` and
+`git rev-parse origin/main`, and paste that sha in:
+- doppler run -- bash -c 'coderabbit review --agent --include-untracked --base-commit <origin/main sha> --api-key "$CODERABBIT_API_KEY"'
+  The last line it prints lists the reviewedFiles. Count the pass only if every
+  changed file is in that list, new files included. The new files have turned up
+  staged after the reviews run, so run `git reset -q` once they finish and stage
+  paths on purpose at the commit step.
   If the key is not set (in Doppler or the shell), or CodeRabbit rejects it
   (e.g. a user key where the CLI needs an agentic key), report that CodeRabbit
   was skipped and why, and continue — never fail the ritual on a missing or

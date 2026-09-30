@@ -3,11 +3,12 @@
 import { PLANS } from "@shared/plans"
 import { and, count, eq, inArray } from "drizzle-orm"
 import { connectionPool, db } from "../../db"
-import { subscriptions, teamMembers, teams, teamTopics, topicEmailSends, topics, users } from "../../db/schema"
+import { invites, subscriptions, teamMembers, teams, teamTopics, topicEmailSends, topics, users } from "../../db/schema"
+import { attachmentExists, uploadAttachment } from "../../worker"
 import { isLeaderRole } from "../authorization"
 import { canSeeTopic, toTopicRole } from "../topic/permissions"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
-import { loadTeamPage } from "./helpers"
+import { loadTeamPage, loadTeamSummaries, loadTeamsPage } from "./helpers"
 import {
 	approveJoinTeamRequest,
 	deleteJoinTeamRequest,
@@ -230,10 +231,20 @@ async function checkLastLeaderRule(): Promise<void> {
 // 6. deleting the team returns its owned topic to the creator and drops its share rows
 async function checkTeamDeletion(): Promise<void> {
 	console.log("\n=== 6. team deletion ===")
+	// the team has an avatar image, stored for real, so the delete can be seen to remove it
+	const deletedTeamAvatarKey = `avatars/teams/${toId("team-del")}/smoke-${runId}.png`
+	await uploadAttachment(deletedTeamAvatarKey, new Uint8Array([137, 80, 78, 71]), "image/png")
+	await db
+		.update(teams)
+		.set({ avatarKey: deletedTeamAvatarKey })
+		.where(eq(teams.id, toId("team-del")))
+
+	// a leader alone on the team deletes it outright, and its avatar image is deleted too
 	check(
 		(await deleteTeam(toId("owner"), toId("team-del"))).status === "deleted",
 		"deleteTeam answers deleted for a leader alone on the team",
 	)
+	check(!(await attachmentExists(deletedTeamAvatarKey)), "the deleted team's avatar image is gone from storage")
 
 	// a team with other members survives: leadership passes to the oldest member and the caller leaves
 	const deleteTeamResult = await deleteTeam(toId("limit-leader"), toId("team-limit"))
@@ -402,6 +413,26 @@ async function checkTeamPageGate(): Promise<void> {
 	)
 	check((await loadTeamPage(null, toId("no-such-team"))).status === "missing", "an unknown id is missing")
 
+	// give the team and a member a stored avatar. the keys are never read from storage here
+	const teamAvatarKey = `avatars/teams/${teamId}/team-${runId}.png`
+	const memberAvatarKey = `avatars/${toId("leader-b")}/member-${runId}.png`
+	await db.update(teams).set({ avatarKey: teamAvatarKey }).where(eq(teams.id, teamId))
+	await db
+		.update(users)
+		.set({ avatarSource: "upload", avatarKey: memberAvatarKey })
+		.where(eq(users.id, toId("leader-b")))
+
+	// the page names each avatar's version, the id in its key, for the team and for the member
+	const avatarPageResult = await loadTeamPage(toId("leader-b"), teamId)
+	const avatarMembers = avatarPageResult.status === "visible" ? avatarPageResult.team.members : []
+	const leaderMember = avatarMembers.find((member) => member.userId === toId("leader-b"))
+	check(
+		avatarPageResult.status === "visible" &&
+			avatarPageResult.team.avatarVersion === `team-${runId}` &&
+			leaderMember?.avatarVersion === `member-${runId}`,
+		"the team page names the team's and a member's avatar version",
+	)
+
 	// the route returns the gate to a signed-out visitor as a 403 with the team's name and no join request
 	const server = (await import("../index")).default
 	const gateResponse = await server.fetch(new Request(`http://localhost:3000/api/teams/${teamId}/page`))
@@ -414,6 +445,42 @@ async function checkTeamPageGate(): Promise<void> {
 	// a public team's page is whole for a signed-out visitor
 	await db.update(teams).set({ isPublic: true }).where(eq(teams.id, teamId))
 	check((await loadTeamPage(null, teamId)).status === "visible", "a public team's page is whole for a visitor")
+}
+
+// 12. a received invite names its sender, and a membership names whoever invited the member
+async function checkInviteIdentities(): Promise<void> {
+	console.log("\n=== 12. sender and inviter identities ===")
+	// invite the joiner twice: once from the member who got an avatar in section 11, and once from a closed account
+	await db.insert(invites).values([
+		{ teamId: toId("team-roles"), invitedUserId: toId("joiner"), invitedByUserId: toId("leader-b") },
+		{ teamId: toId("team-limit"), invitedUserId: toId("joiner"), invitedByUserId: null },
+	])
+	const { receivedInvites } = await loadTeamsPage(toId("joiner"))
+	const memberInvite = receivedInvites.find((receivedInvite) => receivedInvite.teamId === toId("team-roles"))
+	const closedSenderInvite = receivedInvites.find((receivedInvite) => receivedInvite.teamId === toId("team-limit"))
+	check(
+		memberInvite?.sender?.userId === toId("leader-b") && memberInvite.sender.avatarVersion === `member-${runId}`,
+		"a received invite names its sender and the sender's avatar version",
+	)
+	check(closedSenderInvite?.sender === null, "an invite whose sender's account closed names no sender")
+
+	// the member invited the joiner into team-hold, and nobody invited the member
+	await db
+		.update(teamMembers)
+		.set({ invitedByUserId: toId("leader-b") })
+		.where(and(eq(teamMembers.teamId, toId("team-hold")), eq(teamMembers.userId, toId("joiner"))))
+
+	// read team-hold as the joiner and the member each see it on their teams page
+	const joinerTeamSummaries = await loadTeamSummaries(toId("joiner"))
+	const memberTeamSummaries = await loadTeamSummaries(toId("member"))
+	const invitedTeamSummary = joinerTeamSummaries.find((teamSummary) => teamSummary.teamId === toId("team-hold"))
+	const uninvitedTeamSummary = memberTeamSummaries.find((teamSummary) => teamSummary.teamId === toId("team-hold"))
+	check(
+		invitedTeamSummary?.invitedBy?.userId === toId("leader-b") &&
+			invitedTeamSummary.invitedBy.avatarVersion === `member-${runId}`,
+		"a membership names its inviter and the inviter's avatar version",
+	)
+	check(uninvitedTeamSummary?.invitedBy === null, "a membership nobody invited names no inviter")
 }
 
 // log a passing check, or throw an error so the run stops loudly at the first wrong answer
@@ -496,6 +563,8 @@ async function smokeTest(): Promise<number> {
 		await checkJoinRequests()
 		// the team page and the gate a private team shows a non-member
 		await checkTeamPageGate()
+		// the sender that an invite names and the inviter that a membership names
+		await checkInviteIdentities()
 		// every check passed
 		console.log("\n=== smoke PASSED ===")
 		return 0

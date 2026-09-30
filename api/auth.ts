@@ -14,12 +14,12 @@ import { and, eq, like } from "drizzle-orm"
 import { db } from "../db"
 import * as schema from "../db/schema"
 import { renderAuthEmail, renderAuthEmailText } from "../emails/auth-email"
-import { provisionLiteLLMKey } from "../worker"
+import { isInternalAddress, provisionLiteLLMKey } from "../worker"
 import { sendEmail } from "../worker/email"
 import { userBudgetCents } from "./authorization"
 import { isBreachedPassword } from "./passwords"
 import { saveDefaultUserTeam } from "./team/teams"
-import { trustedProxies } from "./trustedProxies"
+import { ipAddressOptions, resolveClientAddress, trustedProxies } from "./trustedProxies"
 import { saveDefaultUsername, toAssignedUsername, toFreeUsernames } from "./usernames"
 
 // how long a signup-gate token stays valid
@@ -117,34 +117,69 @@ export function toSignupAvatarSource(image: string | null | undefined): "oauth" 
 	return image ? "oauth" : "generated"
 }
 
-// set already when the proxies are configured, so nothing is reported
-let hasReportedForwardedChain = trustedProxies.length > 0
+// whether this process has checked TRUSTED_PROXIES against a request. each process checks only one request
+let hasCheckedTrustedProxies = false
 
 /**
- * Log the first request's forwarded chain once, naming the proxy hops TRUSTED_PROXIES should be set to.
+ * Logs a warning once per process if TRUSTED_PROXIES is unset or misses a hop behind Cloudflare.
  */
-export function reportForwardedChain(forwardedFor: string | null): void {
-	// one report per boot, and none at all once the proxies are configured
-	if (hasReportedForwardedChain) {
+export function checkTrustedProxies(request: Request): void {
+	// run the check once per process, on a request through Cloudflare if TRUSTED_PROXIES is set
+	const isThroughCloudflare = request.headers.has("cf-ray")
+	if (hasCheckedTrustedProxies || (trustedProxies.length > 0 && !isThroughCloudflare)) {
 		return
 	}
-	hasReportedForwardedChain = true
+	hasCheckedTrustedProxies = true
 
+	// log a warning if TRUSTED_PROXIES is unset or misses a hop in this request's x-forwarded-for header
+	const trustedProxiesWarning = toTrustedProxiesWarning({
+		forwardedFor: request.headers.get("x-forwarded-for"),
+		clientAddress: resolveClientAddress(request),
+		trustedProxyCount: trustedProxies.length,
+	})
+	if (trustedProxiesWarning) {
+		console.warn(trustedProxiesWarning)
+	}
+}
+
+// one request's x-forwarded-for header, the client address it resolved to, and how many proxies are in TRUSTED_PROXIES
+type ToTrustedProxiesWarningOptions = {
+	forwardedFor: string | null
+	clientAddress: string | null
+	trustedProxyCount: number
+}
+
+/**
+ * Returns the warning to log for an x-forwarded-for header, or null if TRUSTED_PROXIES resolves it to a public client.
+ */
+export function toTrustedProxiesWarning({
+	forwardedFor,
+	clientAddress,
+	trustedProxyCount,
+}: ToTrustedProxiesWarningOptions): string | null {
 	// the header's comma-separated hops, cleaned of padding and empties
 	const hops = (forwardedFor ?? "")
 		.split(",")
 		.map((hop) => hop.trim())
 		.filter(Boolean)
 
-	// no header at all means the platform is not forwarding, and there is no address to read
+	// if TRUSTED_PROXIES is set, warn unless the header resolved to a public client.
+	// no address or an internal one means the platform added a hop that TRUSTED_PROXIES lacks
+	if (trustedProxyCount > 0) {
+		return clientAddress && !isInternalAddress(clientAddress)
+			? null
+			: `TRUSTED_PROXIES leaves x-forwarded-for "${hops.join(", ")}" at ${clientAddress ?? "no address"}. ` +
+					"Add the hop after Cloudflare's to TRUSTED_PROXIES"
+	}
+
+	// if TRUSTED_PROXIES is unset, a missing header means the platform is not forwarding, and there is no address to read
 	if (hops.length === 0) {
-		console.warn("no x-forwarded-for on the first request, so no client address can be resolved at all")
-		return
+		return "no x-forwarded-for on the first request, so no client address can be resolved at all"
 	}
 	// everything after the leading address is a proxy, and those are what TRUSTED_PROXIES names
-	console.warn(
+	return (
 		`TRUSTED_PROXIES is unset and x-forwarded-for arrived with ${hops.length} hop(s). ` +
-			`Set it to the proxy hop(s) behind the user: ${hops.slice(1).join(", ") || "(none, the header holds only the user)"}`,
+		`Set it to the proxy hop(s) behind the user: ${hops.slice(1).join(", ") || "(none, the header has only the user)"}`
 	)
 }
 
@@ -191,9 +226,8 @@ export const auth = betterAuth({
 	account: { accountLinking: { enabled: true } },
 	// reject a breached password wherever one is being set, and canonicalize the address wherever one arrives
 	hooks: { before: beforeCredentialRequest },
-	// resolve the client address through the named proxies
-	advanced:
-		trustedProxies.length > 0 ? { ipAddress: { trustedProxies, ipAddressHeaders: ["x-forwarded-for"] } } : undefined,
+	// resolve the client address through the trusted proxies
+	advanced: { ipAddress: ipAddressOptions },
 	// the oauth server for the mcp server. a client registers itself, then the user signs in and consents
 	plugins: [mcpPlugin],
 	// rate limiting for credential endpoints

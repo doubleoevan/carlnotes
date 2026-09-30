@@ -29,12 +29,20 @@ test("toTopicPageHead names the topic, its card, and its structured data", () =>
 	expect(head.cardTitle).toBe("Agents")
 	expect(head.description).toBe("What agents are shipping this week.")
 	expect(head.canonicalUrl).toBe("https://carlnotes.com/topics/t1/agents")
-	expect(head.imageUrl).toBe("https://carlnotes.com/api/topics/t1/preview.png")
+	expect(head.imageUrl).toStartWith("https://carlnotes.com/api/topics/t1/preview.png?v=")
 
 	// a public topic is indexed and names its feed and its structured data
 	expect(head.isIndexed).toBe(true)
 	expect(head.feedUrl).toBe("https://carlnotes.com/topics/t1/feed.xml")
 	expect(head.jsonLd).toEqual({ "@type": "CreativeWork" })
+})
+
+// the platforms cache a card by its url, so a card that changes has to move to a new url
+test("toTopicPageHead names a new card version once the topic is retitled, and the same one otherwise", () => {
+	const toImageUrl = (topicPreview: TopicPreview): string =>
+		toTopicPageHead({ topicPreview, appUrl: "https://carlnotes.com", jsonLd: null }).imageUrl
+	expect(toImageUrl({ ...TOPIC_PREVIEW, title: "Agents at work" })).not.toBe(toImageUrl(TOPIC_PREVIEW))
+	expect(toImageUrl({ ...TOPIC_PREVIEW })).toBe(toImageUrl(TOPIC_PREVIEW))
 })
 
 // a private topic's head keeps its card and has no structured data
@@ -62,7 +70,7 @@ test("toTeamPageHead writes the team's card and counts", () => {
 	)
 
 	// the card image, the canonical url, the description's counts, and the card title
-	expect(head.imageUrl).toBe("https://carlnotes.com/api/teams/tm1/preview.png")
+	expect(head.imageUrl).toStartWith("https://carlnotes.com/api/teams/tm1/preview.png?v=")
 	expect(head.canonicalUrl).toBe("https://carlnotes.com/teams/tm1")
 	expect(head.description).toBe("Raccoon Crew on CarlNotes. 1 member, 3 public topics.")
 	expect(head.cardTitle).toBe("Raccoon Crew — CarlNotes")
@@ -94,7 +102,7 @@ test("toProfilePageHead writes the profile's card and counts", () => {
 	)
 
 	// the card image, the canonical url, and the description's counts
-	expect(head.imageUrl).toBe("https://carlnotes.com/api/profiles/u1/preview.png")
+	expect(head.imageUrl).toStartWith("https://carlnotes.com/api/profiles/u1/preview.png?v=")
 	expect(head.canonicalUrl).toBe("https://carlnotes.com/profiles/u1")
 	expect(head.description).toBe("carl on CarlNotes. 1 public topic, 2 followers.")
 })

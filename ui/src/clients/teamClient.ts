@@ -9,7 +9,6 @@ import {
 	type TeamsPageResponse,
 	type UpdateTeamPayload,
 } from "@shared/contracts"
-import { refreshAvatars } from "@/hooks/useAvatarVersion"
 import { apiClient, readApiErrorMessage } from "./apiClient"
 
 // how creating a team was rejected, for the modal to show which way it went
@@ -154,8 +153,6 @@ export async function sendTeamAvatar(teamId: string, avatarFile: File): Promise<
 	body.append("avatar", avatarFile)
 	const response = await fetch(`/api/teams/${teamId}/avatar`, { method: "POST", body })
 	if (response.ok) {
-		// every rendered copy of this team's avatar re-fetches
-		refreshAvatars()
 		return null
 	}
 

@@ -27,8 +27,8 @@ export function UserAvatarPicker({
 }) {
 	const [isUploading, setIsUploading] = useState(false)
 	const [updateRejection, setUpdateRejection] = useState<string | null>(null)
-	// the source comes from the session, so a finished upload re-renders every picker at once
-	const { avatarSource, uploadAvatarFile } = useAvatar()
+	// the version comes from the session, so a finished upload re-renders every picker at once
+	const { avatarVersion, uploadAvatarFile } = useAvatar()
 
 	// upload the avatar photo. the hook refreshes the session on success, which updates every avatar on the page
 	async function handleUploadAvatarFile(avatarFile: File): Promise<void> {
@@ -71,7 +71,7 @@ export function UserAvatarPicker({
 		<div>
 			<FileDropZone onDropFiles={handleDropFiles} overlay={<AvatarDropOverlay />} className="w-fit">
 				<label className={cn("group relative block size-14 cursor-pointer", className)} aria-label="Change your avatar">
-					<UserAvatar userId={userId} username={username} avatarSource={avatarSource} className="size-full" />
+					<UserAvatar userId={userId} username={username} avatarVersion={avatarVersion} className="size-full" />
 					{/* the camera overlay appears on hover or keyboard focus */}
 					<span className="absolute inset-0 grid place-items-center rounded-full bg-black/55 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100">
 						<Camera className="size-5 text-white" />

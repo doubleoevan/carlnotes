@@ -48,6 +48,7 @@
 		"db:seed": "doppler run -- bun api/seed.ts",
 		"docs:embed": "doppler run -- bun worker/docsSync.ts",
 		"docs:embed:prd": "doppler run --config prd -- bun worker/docsSync.ts",
+		"edge:purge": "doppler run -- bun api/edgeCache.purge.ts",
 		"prompts:sync": "doppler run -- bun worker/prompts/sync.ts",
 		"prompts:sync:prd": "doppler run --config prd -- bun worker/prompts/sync.ts",
 		"carl-up": "bash scripts/carl-up.sh",

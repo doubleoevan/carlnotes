@@ -35,7 +35,7 @@ export async function deleteTopicAttachment(userId: string, attachmentId: string
 
 	// delete the row, then best-effort delete the stored object
 	await db.delete(attachments).where(eq(attachments.id, attachment.id))
-	await deleteAttachment(attachment.objectKey).catch(() => {})
+	await deleteAttachment(attachment.objectKey)
 	return true
 }
 

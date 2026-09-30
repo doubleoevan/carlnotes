@@ -1,17 +1,20 @@
 // the link preview of a topic, a team, a profile, or an invitation, and its card image cached in storage
 import { and, count, eq } from "drizzle-orm"
+import type { Context } from "hono"
 import { db } from "../../db"
 import { findings, sources, teamMembers, teams, topics, users } from "../../db/schema"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "../../worker"
 import { publishedAvatarColumns, toPublishedAvatar, toPublishedAvatarFromUser } from "../avatars"
+import { toVersionedImageHeaders } from "../edgeCache"
 import { countDistinctSubscribers } from "../profiles"
 import { lastScanSummary, toTeamPublicTopicsFilter, toTopicDescription } from "../seo"
+import { toPreviewVersion } from "./previewImage"
 import { type ProfilePreview, toProfilePreviewKey, toProfilePreviewPng } from "./profileImage"
 import { type TeamPreview, toTeamPreviewKey, toTeamPreviewPng } from "./teamImage"
 import { type TopicPreview, toTopicPreviewKey, toTopicPreviewPng } from "./topicImage"
 
-// how long a crawler and a browser may hold a preview. the key only changes when the preview does.
-const PREVIEW_CACHE_CONTROL = "public, max-age=31536000, immutable"
+// a card's png bytes, and the version that its url names
+export type PreviewPng = { bytes: Uint8Array; version: string }
 
 /**
  * What a Topic's preview shows, or null if no Topic has that id.
@@ -69,32 +72,38 @@ export async function toTopicPreview(topicId: string): Promise<TopicPreview | nu
  * A Topic's preview bytes, rendered on the first request and read from storage after.
  * Rendering the image requires a font parse and a rasterize, so it only happens once per distinct preview.
  */
-export async function toCachedTopicPreviewPng(
-	preview: TopicPreview,
-): Promise<{ bytes: Uint8Array; cacheControl: string }> {
-	return toCachedPng(toTopicPreviewKey(preview), () => toTopicPreviewPng(preview))
+export async function toCachedTopicPreviewPng(topicPreview: TopicPreview): Promise<PreviewPng> {
+	return toCachedPng(toTopicPreviewKey(topicPreview), () => toTopicPreviewPng(topicPreview))
 }
 
 /**
  * A profile's preview bytes, rendered on the first request and read from storage after.
  * Rendering the image requires a font parse and a rasterize, so it only happens once per distinct preview.
  */
-export async function toCachedProfilePreviewPng(
-	preview: ProfilePreview,
-): Promise<{ bytes: Uint8Array; cacheControl: string }> {
-	return toCachedPng(toProfilePreviewKey(preview), () => toProfilePreviewPng(preview))
+export async function toCachedProfilePreviewPng(profilePreview: ProfilePreview): Promise<PreviewPng> {
+	return toCachedPng(toProfilePreviewKey(profilePreview), () => toProfilePreviewPng(profilePreview))
+}
+
+/**
+ * Returns a card's png response, cached long only if the url names the card's current version.
+ */
+export function toPreviewPngResponse(context: Context, previewPng: PreviewPng): Response {
+	// return the png, cached long only if the url names the card's current version
+	const isCurrentVersion = context.req.query("v") === previewPng.version
+	return context.body(previewPng.bytes as unknown as ArrayBuffer, 200, {
+		"Content-Type": "image/png",
+		...toVersionedImageHeaders(isCurrentVersion),
+	})
 }
 
 // track pending render by their preview key
 const pendingRenderByPreviewKey = new Map<string, Promise<Uint8Array>>()
 
 // the stored bytes for the key, or a render and store on the first request for this exact preview
-async function toCachedPng(
-	previewKey: string,
-	renderPng: () => Promise<Uint8Array>,
-): Promise<{ bytes: Uint8Array; cacheControl: string }> {
+async function toCachedPng(previewKey: string, renderPng: () => Promise<Uint8Array>): Promise<PreviewPng> {
+	const previewVersion = toPreviewVersion(previewKey)
 	if (await attachmentExists(previewKey)) {
-		return { bytes: await getAttachmentBytes(previewKey), cacheControl: PREVIEW_CACHE_CONTROL }
+		return { bytes: await getAttachmentBytes(previewKey), version: previewVersion }
 	}
 
 	// a miss joins the render already running for this key, or starts one and drops the entry once settled
@@ -104,7 +113,7 @@ async function toCachedPng(
 		pendingRenderByPreviewKey.set(previewKey, render)
 		render.finally(() => pendingRenderByPreviewKey.delete(previewKey)).catch(() => {})
 	}
-	return { bytes: await render, cacheControl: PREVIEW_CACHE_CONTROL }
+	return { bytes: await render, version: previewVersion }
 }
 
 // render the png and store it, so the next fetch of this exact preview is a storage read
@@ -155,7 +164,7 @@ export async function toTeamPreview(teamId: string): Promise<TeamPreview | null>
  */
 export async function toCachedInvitePreviewPng(
 	target: { teamId: string } | { topicId: string },
-): Promise<{ bytes: Uint8Array; cacheControl: string } | null> {
+): Promise<PreviewPng | null> {
 	// a team's card ignores the public check here, since the token already opens the team
 	if ("teamId" in target) {
 		const teamPreview = await toInvitedTeamPreview(target.teamId)
@@ -205,8 +214,6 @@ async function toTeamPreviewWithCounts(team: {
 /**
  * A team's preview image bytes, rendered on the first request and read from storage after.
  */
-export async function toCachedTeamPreviewPng(
-	preview: TeamPreview,
-): Promise<{ bytes: Uint8Array; cacheControl: string }> {
-	return toCachedPng(toTeamPreviewKey(preview), () => toTeamPreviewPng(preview))
+export async function toCachedTeamPreviewPng(teamPreview: TeamPreview): Promise<PreviewPng> {
+	return toCachedPng(toTeamPreviewKey(teamPreview), () => toTeamPreviewPng(teamPreview))
 }

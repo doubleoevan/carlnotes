@@ -1,7 +1,8 @@
-// a live smoke test that loadPublicTopics and the sitemap list only public topics, and every public page arrives whole
-// to a browser without JavaScript on its route's first render. a request with a session cookie gets the app as the
-// browser renders it, and a crawler gets the page a browser gets. bun run smoke:seo builds the ui, then runs this test
-// under doppler
+// a live smoke test that loadPublicTopics and the sitemap list only public topics,
+// and every public page arrives whole to a browser without JavaScript on its route's first render.
+// a request with a session cookie gets the app as the browser renders it, and a crawler gets what a browser gets.
+// the edge may share a signed-out page and the feed, and a card is immutable only at its version.
+// bun run smoke:seo builds the ui, then runs this test under doppler
 import { resolve } from "node:path"
 import type { PageHead } from "@shared/contracts"
 import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
@@ -9,7 +10,11 @@ import { toTopicPath } from "@shared/seo"
 import { eq, inArray, max } from "drizzle-orm"
 import { connectionPool, db } from "../db"
 import { findings, resources, scans, teamMembers, teams, topics, users } from "../db/schema"
+import { deleteAttachment } from "../worker"
+import { RENDERED_CACHE_TAG } from "./edgeCache"
 import { loadPublicTopics, loadTopicFeedUpdatedAt, toSitemapXml } from "./seo"
+import { toTopicPreview } from "./share/preview"
+import { toTopicPreviewKey } from "./share/topicImage"
 
 // where build:ui writes the ui's server entry
 const UI_SERVER_ENTRY = "ui/dist/server/server.js"
@@ -233,7 +238,53 @@ try {
 		"a crawler gets another public topic page than a browser",
 	)
 	console.log("seo smoke: a crawler gets the same page as a browser")
+
+	// through the api, the public topic page and the signed-out feed are sent uncompressed
+	// and shared at the edge under the tag that the release purge clears.
+	// the same urls with a session cookie are private
+	for (const renderedPath of [publicTopicPath, "/api/topic-feed"]) {
+		const signedOutResponse = await fetch(`${API_ORIGIN}${renderedPath}`, {
+			headers: { "user-agent": BROWSER_USER_AGENT },
+		})
+		const signedInResponse = await fetch(`${API_ORIGIN}${renderedPath}`, { headers: { cookie: SESSION_COOKIE } })
+		failUnless(
+			signedOutResponse.headers.get("cdn-cache-control") === "max-age=60, stale-while-revalidate=60",
+			`${renderedPath} is not shared at the edge`,
+		)
+		failUnless(signedOutResponse.headers.get("cache-tag") === RENDERED_CACHE_TAG, `${renderedPath} has no purge tag`)
+		failUnless(
+			signedOutResponse.headers.get("content-encoding") === null,
+			`${renderedPath} is compressed at the origin`,
+		)
+		failUnless(
+			signedInResponse.headers.get("cache-control") === "private, no-cache" &&
+				signedInResponse.headers.get("cdn-cache-control") === null,
+			`${renderedPath} is shared for a session cookie`,
+		)
+	}
+
+	// the public topic's card url names its version, and the card is immutable only at that version
+	const publicTopicHead = (await (await fetch(`${API_ORIGIN}/api/topics/${topicIds.public}/head`)).json()) as PageHead
+	const cardUrl = new URL(publicTopicHead.imageUrl)
+	failUnless(cardUrl.searchParams.has("v"), "the public topic's card url names no version")
+	const currentCardResponse = await fetch(`${API_ORIGIN}${cardUrl.pathname}${cardUrl.search}`)
+	const oldCardResponse = await fetch(`${API_ORIGIN}${cardUrl.pathname}?v=old`)
+	failUnless(
+		currentCardResponse.headers.get("cache-control") === "public, max-age=31536000, immutable",
+		"the card at its current version is not immutable",
+	)
+	failUnless(
+		oldCardResponse.headers.get("cache-control") === "public, max-age=60",
+		"the card at an old version is not cached for a minute",
+	)
+	console.log("seo smoke: the edge shares a signed-out page and the feed, and a card is immutable at its version")
 } finally {
+	// delete the card that this run rendered, while its topic still names the card's key
+	const publicTopicPreview = await toTopicPreview(topicIds.public)
+	if (publicTopicPreview) {
+		await deleteAttachment(toTopicPreviewKey(publicTopicPreview))
+	}
+
 	// stop the api this run served, then delete the fixtures. the findings cascade with the topics, the members with
 	// the team, and the scans with the owner
 	apiServer?.stop(true)

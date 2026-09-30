@@ -72,7 +72,7 @@ test("toScheduleLabel names the day only for weekly", () => {
 test("matchesTopicFindingFilter's team scope includes a teammate's bookmark and mine excludes it", () => {
 	const teammateSaved = topicFinding({
 		isBookmarked: false,
-		teamBookmarks: [{ userId: "u2", username: "teammate", avatarSource: null }],
+		teamBookmarks: [{ userId: "u2", username: "teammate", avatarSource: null, avatarVersion: null }],
 	})
 	expect(matchesTopicFindingFilter(teammateSaved, "bookmarked", "team")).toBe(true)
 	expect(matchesTopicFindingFilter(teammateSaved, "bookmarked", "mine")).toBe(false)

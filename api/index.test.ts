@@ -46,29 +46,42 @@ async function createBundleDirectory(): Promise<string> {
 type ResponseSnapshot = {
 	status: number
 	body: string
+	// the headers that the tests read
 	cacheControl: string | null
+	edgeCacheControl: string | null
+	contentEncoding: string | null
 	contentType: string | null
 	location: string | null
 }
 
 // a request against the composed app, exactly as the runtime would deliver it
-async function request(path: string, method = "GET"): Promise<ResponseSnapshot> {
-	const response = await server.fetch(new Request(`http://localhost:3000${path}`, { method }))
+async function request(path: string, requestInit: RequestInit = {}): Promise<ResponseSnapshot> {
+	const response = await server.fetch(new Request(`http://localhost:3000${path}`, requestInit))
 	return {
 		status: response.status,
 		body: await response.text(),
 		cacheControl: response.headers.get("Cache-Control"),
+		edgeCacheControl: response.headers.get("CDN-Cache-Control"),
+		contentEncoding: response.headers.get("Content-Encoding"),
 		contentType: response.headers.get("Content-Type"),
 		location: response.headers.get("Location"),
 	}
 }
 
+// what a stubbed request sends: its path, the stub that every query calls, and any request headers
+type RequestWithQueryStubOptions = {
+	path: string
+	queryStub: () => Promise<unknown>
+	requestInit?: RequestInit
+}
+
 // a request sent with the pool's query swapped for a stub that counts its calls.
-// the pool's own query comes back however the request ends
-async function requestWithQueryStub(
-	path: string,
-	queryStub: () => Promise<unknown>,
-): Promise<ResponseSnapshot & { queryCount: number }> {
+// the pool's own query comes back no matter how the request ends
+async function requestWithQueryStub({
+	path,
+	queryStub,
+	requestInit,
+}: RequestWithQueryStubOptions): Promise<ResponseSnapshot & { queryCount: number }> {
 	const poolQuery = connectionPool.query
 	let queryCount = 0
 	connectionPool.query = (() => {
@@ -78,14 +91,15 @@ async function requestWithQueryStub(
 
 	// restore the pool's own query on the way out
 	try {
-		return { ...(await request(path)), queryCount }
+		return { ...(await request(path, requestInit)), queryCount }
 	} finally {
 		connectionPool.query = poolQuery
 	}
 }
 
-// the result a trivial query returns
+// the result that a trivial query returns, and the result of a query that finds nothing
 const SELECT_ONE_RESULT = { rows: [{ "?column?": 1 }], fields: [], rowCount: 1, command: "SELECT" }
+const NO_ROWS_RESULT = { rows: [], fields: [], rowCount: 0, command: "SELECT" }
 
 // put each spied console method back after each test, whether its assertions pass or not
 afterEach(() => {
@@ -95,15 +109,21 @@ afterEach(() => {
 // the platform polls the health route to decide whether to cycle the container,
 // so the route responds from the process alone
 test("the health route responds without reaching the database", async () => {
-	const response = await requestWithQueryStub("/api/health", () => Promise.resolve(SELECT_ONE_RESULT))
+	const response = await requestWithQueryStub({
+		path: "/api/health",
+		queryStub: () => Promise.resolve(SELECT_ONE_RESULT),
+	})
 	expect(response.status).toBe(200)
 	expect(JSON.parse(response.body)).toEqual({ status: "ok" })
 	expect(response.queryCount).toBe(0)
 })
 
-// a monitor polls the deep health check to learn that the database responds, and never reads a cached result
+// a monitor polls the deep health check to learn that the database responds and never reads a cached result
 test("the deep health check runs one query and responds with the pool's counts", async () => {
-	const response = await requestWithQueryStub("/api/health/deep", () => Promise.resolve(SELECT_ONE_RESULT))
+	const response = await requestWithQueryStub({
+		path: "/api/health/deep",
+		queryStub: () => Promise.resolve(SELECT_ONE_RESULT),
+	})
 	expect(response.status).toBe(200)
 	expect(response.cacheControl).toBe("no-store")
 	expect(response.queryCount).toBe(1)
@@ -119,7 +139,10 @@ test("the deep health check runs one query and responds with the pool's counts",
 // a database that fails makes the deep health check fail, so a monitor alerts
 test("the deep health check responds 503 when the database fails", async () => {
 	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
-	const response = await requestWithQueryStub("/api/health/deep", () => Promise.reject(new Error("connection refused")))
+	const response = await requestWithQueryStub({
+		path: "/api/health/deep",
+		queryStub: () => Promise.reject(new Error("connection refused")),
+	})
 
 	// the failure is logged, and the response says the database is unavailable
 	expect(response.status).toBe(503)
@@ -133,7 +156,7 @@ test("an error no route handles responds 500 and is reported", async () => {
 	spyOn(console, "error").mockImplementation(() => {})
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	const poolTimeout = new Error("timeout exceeded when trying to connect")
-	const response = await requestWithQueryStub("/api/topic-feed", () => Promise.reject(poolTimeout))
+	const response = await requestWithQueryStub({ path: "/api/topic-feed", queryStub: () => Promise.reject(poolTimeout) })
 
 	// Hono's plain 500, and one report of drizzle's query error, whose cause is the pool's timeout
 	expect(response.status).toBe(500)
@@ -158,16 +181,53 @@ test("a page path is rendered by the ui's server", async () => {
 	const bundleDirectory = await createBundleDirectory()
 	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123"))
 
-	// the page revalidates, so a deploy reaches the user on their next request
+	// the browser revalidates, so a deploy reaches the user on their next request.
+	// the edge shares the page for a minute
 	expect(response.status).toBe(200)
 	expect(response.body).toBe(PAGE_HTML)
 	expect(response.cacheControl).toBe("no-cache")
+	expect(response.edgeCacheControl).toBe("max-age=60, stale-while-revalidate=60")
+})
+
+// the same url renders differently for a signed-in user, so the edge never caches their page
+test("a page rendered for a session cookie is private", async () => {
+	const bundleDirectory = await createBundleDirectory()
+	const cookieHeaders = { cookie: "__Secure-better-auth.session_token=abc" }
+	const response = await withWorkingDirectory(bundleDirectory, () =>
+		request("/topics/abc123", { headers: cookieHeaders }),
+	)
+
+	expect(response.status).toBe(200)
+	expect(response.cacheControl).toBe("private, no-cache")
+	expect(response.edgeCacheControl).toBeNull()
+})
+
+// the signed-out feed is the same for every visitor, so the edge shares it and compresses it on the way out
+test("the signed-out feed is shared at the edge and sent uncompressed, and a signed-in feed is private", async () => {
+	const acceptEncodingHeader = { "accept-encoding": "gzip, br" }
+	const signedOutResponse = await requestWithQueryStub({
+		path: "/api/topic-feed",
+		queryStub: () => Promise.resolve(NO_ROWS_RESULT),
+		requestInit: { headers: acceptEncodingHeader },
+	})
+	const signedInResponse = await requestWithQueryStub({
+		path: "/api/topic-feed",
+		queryStub: () => Promise.resolve(NO_ROWS_RESULT),
+		requestInit: { headers: { ...acceptEncodingHeader, cookie: "better-auth.session_token=abc" } },
+	})
+
+	// only the signed-out feed is shared at the edge, and the api compresses neither
+	expect(signedOutResponse.status).toBe(200)
+	expect(signedOutResponse.edgeCacheControl).toBe("max-age=60, stale-while-revalidate=60")
+	expect(signedOutResponse.contentEncoding).toBeNull()
+	expect(signedInResponse.cacheControl).toBe("private, no-cache")
+	expect(signedInResponse.edgeCacheControl).toBeNull()
 })
 
 // a HEAD request for a page renders it like a GET and returns the headers without the body
 test("a HEAD request for a page path responds with the page's headers and no body", async () => {
 	const bundleDirectory = await createBundleDirectory()
-	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123", "HEAD"))
+	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123", { method: "HEAD" }))
 
 	expect(response.status).toBe(200)
 	expect(response.body).toBe("")
@@ -229,7 +289,7 @@ test("an unknown docs path responds with the docs 404 page", async () => {
 // the fallback is for reads. a write to a path nothing handles is a 404, not a page
 test("a write to an unknown path responds 404, never a page", async () => {
 	const bundleDirectory = await createBundleDirectory()
-	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123", "POST"))
+	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123", { method: "POST" }))
 
 	expect(response.status).toBe(404)
 	expect(response.body).not.toBe(PAGE_HTML)

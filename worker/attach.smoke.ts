@@ -122,7 +122,7 @@ async function smokeTest(): Promise<number> {
 	} finally {
 		// the owner cascade drops the rows but not the bucket object, so delete the object explicitly, then the owner
 		if (objectKey) {
-			await deleteAttachment(objectKey).catch(() => {})
+			await deleteAttachment(objectKey)
 		}
 		await db.delete(users).where(eq(users.id, userId))
 	}

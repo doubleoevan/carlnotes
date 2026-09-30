@@ -10,6 +10,7 @@ import { canCreateInvitesToday, toInviteLimit } from "../../db/quotas"
 import { invites, subscriptions, teamMembers, teams, topics, users } from "../../db/schema"
 import { isConnected } from "../connections"
 import type { AnalyticsProperties } from "../currentUser"
+import { loadTeamsPage } from "../team/helpers"
 import { acceptInviteToken, createTeamInvite, createTopicInvite, toInviteRejection } from "./invites"
 import type { UserInviteRejection } from "./userInvites"
 import { acceptInvite, createUserInvite, declineInvite } from "./userInvites"
@@ -446,6 +447,37 @@ async function checkDailyCount(): Promise<void> {
 	console.log(`PASS  ${recipients.length} username invites count for nothing, ${limit} email rows use the day up`)
 }
 
+// 10. a sent team invite names each invitee's avatar version, read from the account that the invite resolved to
+async function checkSentInviteAvatarVersions(): Promise<void> {
+	console.log("\n=== 10. sent invite avatar versions ===")
+	// a leader's team, an invitee named by account, and an invitee reached by address alone
+	const sender = await createUser("avatar10-sender")
+	const team = await createTeam("avatar10", sender.id)
+	const accountInvitee = await createUser("avatar10-account")
+	const addressInvitee = await createUser("avatar10-email")
+
+	// each invitee uploaded an avatar under its own key id. the keys are never read from storage here
+	for (const invitee of [accountInvitee, addressInvitee]) {
+		await db
+			.update(users)
+			.set({ avatarSource: "upload", avatarKey: `avatars/${invitee.id}/${invitee.name}-${runId}.png` })
+			.where(eq(users.id, invitee.id))
+	}
+
+	// one invite resolved to the account, and one sent to the address
+	await insertInvite({ teamId: team.id, invitedUserId: accountInvitee.id, invitedByUserId: sender.id })
+	await insertInvite({ teamId: team.id, email: addressInvitee.email, invitedByUserId: sender.id })
+
+	// each invitee's version is the one in its own account's key
+	const { sentInvites } = await loadTeamsPage(sender.id)
+	const versionByInviteeId = new Map(
+		sentInvites.map((sentInvite) => [sentInvite.invitee?.userId, sentInvite.invitee?.avatarVersion]),
+	)
+	assert.equal(versionByInviteeId.get(accountInvitee.id), `avatar10-account-${runId}`, "the account invitee's version")
+	assert.equal(versionByInviteeId.get(addressInvitee.id), `avatar10-email-${runId}`, "the address invitee's version")
+	console.log("PASS  each sent invite names its invitee's own avatar version")
+}
+
 // the users row one label seeds, shared by the single and batch inserts
 function toUserValues(
 	label: string,
@@ -562,12 +594,14 @@ try {
 	await checkUseLimitRace()
 	await checkTeamLimitRefund()
 	await checkSpentAndReusedLinks()
-	// then resolution, the invite-access setting, connections, accepting and declining, and the daily count
+	// then resolution, the invite-access setting, connections, accepting and declining, the daily count,
+	// and each sent invite's avatar version
 	await checkResolution()
 	await checkInviteAccess()
 	await checkIsConnected()
 	await checkAcceptAndDecline()
 	await checkDailyCount()
+	await checkSentInviteAvatarVersions()
 	// reaching here means every assert held
 	console.log("\n=== invite smoke PASSED ===")
 } catch (error) {

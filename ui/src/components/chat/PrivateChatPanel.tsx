@@ -1,3 +1,4 @@
+import { toAvatarVersion } from "@shared/avatars"
 import { useNavigate } from "@tanstack/react-router"
 import { lazy, Suspense, useState } from "react"
 import { authClient } from "@/clients/authClient"
@@ -155,7 +156,7 @@ export function PrivateChatPanel({
 						author={{
 							userId: session?.user.id ?? null,
 							username: session?.user.username ?? "you",
-							avatarSource: session?.user.avatarSource ?? null,
+							avatarVersion: toAvatarVersion(session?.user ?? {}),
 						}}
 					/>
 				</Suspense>

@@ -8,6 +8,7 @@ import { Hono } from "hono"
 import { db } from "../db"
 import { releases } from "../db/schema"
 import { toContentHtml, toPageHtml } from "./content"
+import { renderedCacheHeaders } from "./edgeCache"
 
 // what a release body puts above its auto-generated pull request list. the index renders only what
 // sits above it, and a body written without it renders whole
@@ -148,6 +149,8 @@ export function toReleaseUpsert(release: ReleasePayload["release"]): ReleaseUpse
 // one release as a card on the index: its name, its date, and the summary above the sentinel
 function toReleaseCard(release: ReleaseRow): string {
 	const releasedOn = release.releasedAt.toISOString().slice(0, 10)
+
+	// return the card, linked to the release's own page
 	return `
 		<article class="post-card">
 			<h2><a href="${toReleasePath(release.tag)}">${Bun.escapeHTML(release.name)}</a></h2>
@@ -200,10 +203,10 @@ export async function serveRelease(tag: string): Promise<string | null> {
 
 // the release routes: the index, one release's page, and the webhook that writes the table
 export const releasesRoute = new Hono()
-	.get("/releases", async (context) => {
+	.get("/releases", renderedCacheHeaders, async (context) => {
 		return context.html(await serveReleaseIndex())
 	})
-	.get("/releases/:tag", async (context) => {
+	.get("/releases/:tag", renderedCacheHeaders, async (context) => {
 		const page = await serveRelease(context.req.param("tag"))
 		return page ? context.html(page) : context.notFound()
 	})

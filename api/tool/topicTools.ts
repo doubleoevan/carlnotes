@@ -12,8 +12,8 @@ import { DEFAULT_SOURCES, toCustomSourceOption, toSourceSummary, toSourceValue }
 import { and, desc, eq } from "drizzle-orm"
 import { db } from "../../db"
 import { incrementDaySuggestionCount } from "../../db/quotas"
-import { scans, sources, teams, topics, users } from "../../db/schema"
-import { type SuggestedSource, suggestSources } from "../../worker"
+import { scans, sources, teams, topics } from "../../db/schema"
+import { loadUserLiteLLMKey, type SuggestedSource, suggestSources } from "../../worker"
 import { EXA_COST_PER_SEARCH, X_COST_PER_READ } from "../../worker/budget"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
@@ -532,17 +532,13 @@ export async function suggestTopicDraftSources({
 	}
 
 	// the model call bills to the user's own key
-	const [userRow] = await db
-		.select({ litellmVirtualKey: users.litellmVirtualKey })
-		.from(users)
-		.where(eq(users.id, userId))
 	const suggestedSources = await suggestSources({
 		name,
 		prompt,
 		attachmentContext: "",
 		excludeSources: [],
 		limit: MAX_TOPIC_SOURCES,
-		litellmApiKey: userRow?.litellmVirtualKey ?? undefined,
+		litellmApiKey: await loadUserLiteLLMKey(userId),
 	})
 	return { status: "ok", sources: suggestedSources }
 }

@@ -1,5 +1,6 @@
 // the note routes: a page's note list, the note lifecycle, the ydoc snapshot and update sync, and the live stream
 import { zValidator } from "@hono/zod-validator"
+import { toAvatarVersion } from "@shared/avatars"
 import type { Note, NotesResponse } from "@shared/contracts"
 import { noteCreatePayload, noteSyncPayload, noteUpdatePayload } from "@shared/contracts"
 import { and, eq, inArray, ne, or, sql } from "drizzle-orm"
@@ -465,13 +466,23 @@ export const notesRoute = new Hono<AppEnv>()
 		// look up the requested ids, at most fifty
 		const userIds = (context.req.valid("query").ids ?? "").split(",").filter(Boolean).slice(0, 50)
 		const userRows = userIds.length
-			? await db.select({ id: users.id, username: users.username }).from(users).where(inArray(users.id, userIds))
+			? await db
+					.select({
+						id: users.id,
+						username: users.username,
+						avatarSource: users.avatarSource,
+						avatarKey: users.avatarKey,
+					})
+					.from(users)
+					.where(inArray(users.id, userIds))
 			: []
+
+		// return each comment author with an avatar url that names its version
 		return context.json({
 			users: userRows.map((userRow) => ({
 				id: userRow.id,
 				username: userRow.username,
-				avatarUrl: `/api/avatars/${userRow.id}`,
+				avatarUrl: `/api/avatars/${userRow.id}?v=${toAvatarVersion(userRow) ?? ""}`,
 			})),
 		})
 	})
