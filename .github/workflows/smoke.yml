@@ -1,7 +1,7 @@
 name: Smoke
 
-# the whole smoke suite, against the dev database, the real source APIs, object storage, and the litellm
-# and temporal containers this workflow starts. it writes real rows and spends real model credit, so it
+# the whole smoke suite, against the dev database, the real source APIs, object storage, and the litellm,
+# temporal, and Redis containers this workflow starts. it writes real rows and spends real model credit, so it
 # runs on each push to main or by hand, never on the pr path.
 # it needs a DOPPLER_TOKEN repository secret holding a dev-config service token.
 on:
@@ -38,25 +38,31 @@ jobs:
       - run: bun install --frozen-lockfile
       # the doppler cli injects the same dev secrets a local smoke run uses
       - uses: dopplerhq/cli-action@v3
-      # start the services six suites need: litellm for every model and embedding call, temporal for the
-      # attachment workflow. both read the same doppler secrets a developer's compose run reads
-      - run: doppler run -- docker compose up -d litellm temporal
+      # apply the commit's migrations to the dev database, so the suites run against the schema that the commit expects
+      - run: bun run db:migrate
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      # start the services the suites need: litellm for every model and embedding call, temporal for the
+      # attachment workflow, and Redis for the sessions, the rate limits, and the fan-out.
+      # they read the same doppler secrets that a developer's compose run reads
+      - run: doppler run -- docker compose up -d litellm temporal redis
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       # fail with the container logs when they never answer
-      - name: Wait for litellm and temporal
+      - name: Wait for litellm, temporal, and Redis
         run: |
           for attempt in $(seq 1 60); do
             litellm=$(curl -s -o /dev/null -m 5 -w "%{http_code}" http://localhost:4000/health/readiness || echo 000)
             temporal=$(curl -s -o /dev/null -m 5 -w "%{http_code}" http://localhost:8233 || echo 000)
-            if [ "$litellm" = "200" ] && [ "$temporal" = "200" ]; then
-              echo "litellm and temporal ready after $attempt attempts"
+            redis=$(docker compose exec -T redis redis-cli ping 2>/dev/null || echo none)
+            if [ "$litellm" = "200" ] && [ "$temporal" = "200" ] && [ "$redis" = "PONG" ]; then
+              echo "litellm, temporal, and Redis ready after $attempt attempts"
               exit 0
             fi
             sleep 5
           done
-          echo "litellm answered $litellm and temporal answered $temporal, so the suites that need them cannot run"
-          docker compose logs --tail 40 litellm temporal
+          echo "litellm answered $litellm, temporal answered $temporal, and Redis answered $redis, so the suites that need them cannot run"
+          docker compose logs --tail 40 litellm temporal redis
           exit 1
       # the attachment suite needs a worker polling temporal's queues, not just the server behind them.
       # nohup keeps it running across the steps that follow, and its log is printed if it never polls
