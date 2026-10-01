@@ -26,7 +26,7 @@ import {
 	type ChatReplyStream,
 	type ChatTurnInput,
 	isBudgetRejection,
-	loadUserLiteLLMKey,
+	loadOrProvisionUserLiteLLMKey,
 	SPENT_BUDGET_REJECTION,
 	streamChatReply,
 } from "../../worker"
@@ -55,9 +55,8 @@ export const chatBodyLimit = bodyLimit({
 	onError: (context) => context.json({ error: "Those attachments are too large." }, 413),
 })
 
-// the outcomes of a chat turn request.
-// an allowed chat turn names its user, whether it keeps its text, what it may change, and the user's LiteLLM key.
-// a spent budget names its user too
+// the outcomes of a chat turn request. a spent budget names its user.
+// an allowed chat turn names its user, whether the chat turn keeps its text, and what the chat turn may change
 export type ChatTurnAuthorization =
 	| {
 			status: "allowed"
@@ -65,7 +64,6 @@ export type ChatTurnAuthorization =
 			isTopicOwner: boolean
 			isPersisted: boolean
 			canEditTopic: boolean
-			litellmApiKey?: string
 			// how many more topics the plan allows, and the teams that carl may put the topic on.
 			// both are set only on the new-topic chat
 			topicsRemaining?: number
@@ -99,14 +97,18 @@ export async function authorizeChatTurn(userId: string | null, topicId: string):
 		return { status: "budget", userId }
 	}
 
-	// ask the gate whether the chat turn keeps its text and whether the user may edit the topic,
-	// and load the user's LiteLLM key
-	const [isPersisted, canEditTopic, litellmApiKey] = await Promise.all([
+	// ask the gate whether the chat turn keeps its text and whether the user may edit the topic
+	const [isPersistAllowed, canEditTopic] = await Promise.all([
 		isAllowed(userId, "chat:persist"),
 		isAllowed(userId, "topic:edit", topic),
-		loadUserLiteLLMKey(userId),
 	])
-	return { status: "allowed", userId, isTopicOwner: topic.ownerId === userId, isPersisted, canEditTopic, litellmApiKey }
+	return {
+		status: "allowed",
+		userId,
+		isTopicOwner: topic.ownerId === userId,
+		isPersisted: isPersistAllowed,
+		canEditTopic,
+	}
 }
 
 /**
@@ -125,12 +127,9 @@ export async function authorizeTeamChatTurn(userId: string | null, teamId: strin
 		return { status: "budget", userId }
 	}
 
-	// ask the gate whether the chat turn keeps its text, and load the user's LiteLLM key
-	const [isPersisted, litellmApiKey] = await Promise.all([
-		isAllowed(userId, "chat:persist"),
-		loadUserLiteLLMKey(userId),
-	])
-	return { status: "allowed", userId, isTopicOwner: false, isPersisted, canEditTopic: false, litellmApiKey }
+	// ask the gate whether the chat turn keeps its text
+	const isPersistAllowed = await isAllowed(userId, "chat:persist")
+	return { status: "allowed", userId, isTopicOwner: false, isPersisted: isPersistAllowed, canEditTopic: false }
 }
 
 /**
@@ -146,21 +145,19 @@ export async function authorizeNewTopicChatTurn(userId: string | null): Promise<
 		return { status: "budget", userId }
 	}
 
-	// ask the gate whether the chat turn keeps its text, and load how many more topics the plan allows,
-	// the user's LiteLLM key, and the teams they belong to
-	const [isPersisted, remainingTopics, litellmApiKey, teamSummaries] = await Promise.all([
+	// ask the gate whether the chat turn keeps its text.
+	// load how many more topics the plan allows and the teams that the user belongs to
+	const [isPersistAllowed, remainingTopics, teamSummaries] = await Promise.all([
 		isAllowed(userId, "chat:persist"),
 		topicsRemaining(userId),
-		loadUserLiteLLMKey(userId),
 		loadTeamSummaries(userId),
 	])
 	return {
 		status: "allowed",
 		userId,
 		isTopicOwner: false,
-		isPersisted,
+		isPersisted: isPersistAllowed,
 		canEditTopic: false,
-		litellmApiKey,
 		topicsRemaining: remainingTopics,
 		// the teams that the user leads, which carl may put the topic on
 		leaderTeams: teamSummaries
@@ -253,6 +250,9 @@ async function answerChatTurn(
 	const { userId } = authorization
 	const topicDraft = page.newTopic ? await toNewTopicChatDraft(userId, chatTurnPayload.topicDraft) : undefined
 
+	// the LiteLLM key that the chat turn bills, created first if the user has none
+	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId)
+
 	// stream the reply from the page's own material: one topic, every topic that the team holds, or the topic draft.
 	// the tools record what they did in the tool calls
 	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
@@ -277,7 +277,7 @@ async function answerChatTurn(
 		chatAttachments,
 		userId,
 		isTopicOwner: authorization.isTopicOwner,
-		litellmApiKey: authorization.litellmApiKey,
+		litellmApiKey,
 	})
 	if (!chatReply) {
 		return context.json({ error: "not found" }, 404)
@@ -298,7 +298,7 @@ async function answerChatTurn(
 		isPersisted: authorization.isPersisted,
 		toolCalls,
 		analyticsProperties,
-		litellmApiKey: authorization.litellmApiKey,
+		litellmApiKey,
 	})
 }
 
@@ -382,7 +382,7 @@ type StreamedChatTurn = {
 	toolCalls: ChatTurnToolCalls
 	// the properties that the analytics event is sent with, and the LiteLLM key for the attachment summaries
 	analyticsProperties: AnalyticsProperties
-	litellmApiKey?: string
+	litellmApiKey: string
 }
 
 // stream a chat reply to the user, then save the chat turn whether the stream finished or broke

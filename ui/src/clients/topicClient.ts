@@ -283,9 +283,14 @@ export async function sendSubscriptionEmail(
 	)
 }
 
-// trigger a manual scan, returning the manual scans left today. throws an error with the api's own rejection reason
-export async function sendManualScan(topicId: string): Promise<number> {
+// trigger a manual scan, returning the manual scans left today, or "budget" if a spent budget rejects the scan.
+// throw an error for any other failure, with the api's own rejection reason
+export async function sendManualScan(topicId: string): Promise<number | "budget"> {
 	const response = await apiClient.api.topics[":id"].scan.$post({ param: { id: topicId } })
+	// a 402 means the key that the scan bills has spent its budget
+	if (response.status === 402) {
+		return "budget"
+	}
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `scan request failed: ${response.status}`)
 	}

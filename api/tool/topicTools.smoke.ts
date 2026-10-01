@@ -5,6 +5,7 @@ import { EMPTY_TOPIC_DRAFT, MAX_TOPIC_SOURCES, type TopicDraft, type UpdateTopic
 import { count, eq, inArray } from "drizzle-orm"
 import { connectionPool, db } from "../../db"
 import { scans, sources, topicPromptVersions, topics, users } from "../../db/schema"
+import { deleteUserLiteLLMKey } from "../../worker"
 import { updateTopic } from "../topic/topics"
 import {
 	addTopicSource,
@@ -76,8 +77,10 @@ async function seed(): Promise<string> {
 	return otherTopicSource?.id ?? ""
 }
 
-// delete both users. every other fixture row cascades from them
+// delete the LiteLLM key that the created topic's first scan may have created for the owner, then both users.
+// every other fixture row cascades from the users
 async function cleanUp(): Promise<void> {
+	await deleteUserLiteLLMKey(ownerId)
 	await db.delete(users).where(inArray(users.id, [ownerId, otherUserId]))
 }
 

@@ -2,7 +2,13 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
-import { isBudgetError, toScanFailureLabel, toScanFailureReason } from "./scanFailure"
+import {
+	isBudgetError,
+	SCAN_SPENT_BUDGET_LABEL,
+	SCHEDULED_SCAN_SPENT_BUDGET_REASON,
+	toScanFailureLabel,
+	toScanFailureReason,
+} from "./scanFailure"
 
 // the proxy's rejection, as it reaches the workflow: wrapped by the AI sdk's retry and then by temporal
 function temporalFailure(): Error {
@@ -25,9 +31,16 @@ test("the stored reason comes from the cause, not temporal's wrapper", () => {
 
 	// and that reason is what turns the scan into a budget failure the user can act on
 	expect(isBudgetError(reason)).toBe(true)
-	expect(toScanFailureLabel(reason)).toBe("Carl hit this month's budget.")
+	expect(toScanFailureLabel(reason)).toBe("Carl hit this month's coffee budget.")
 	// temporal's own message is not a budget failure
 	expect(isBudgetError("Activity task failed")).toBe(false)
+})
+
+// the reason that the sweep saves for an owner whose budget is spent reads as the budget label
+test("the scheduled Scan's budget reason reads as the budget label", () => {
+	expect(isBudgetError(SCHEDULED_SCAN_SPENT_BUDGET_REASON)).toBe(true)
+	expect(toScanFailureLabel(SCHEDULED_SCAN_SPENT_BUDGET_REASON)).toBe(SCAN_SPENT_BUDGET_LABEL)
+	expect(SCAN_SPENT_BUDGET_LABEL).toBe("Carl hit this month's coffee budget.")
 })
 
 // a failure with nothing wrapped keeps its own message

@@ -1,26 +1,29 @@
 // starting a Scan by hand from the topic page
 import { trackEvent } from "@shared/analytics"
 import { reportError } from "@shared/monitoring"
+import { SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
 import { scans, topics } from "../../db/schema"
-import { failStaleScans, loadScan, startTopicScan, stopTopicScan } from "../../worker"
+import { failStaleScans, isUserLiteLLMKeyBudgetExhausted, loadScan, startTopicScan, stopTopicScan } from "../../worker"
 import { isAllowed, loadManualScanAuthorization } from "../authorization"
 import { reportManualScanOverage } from "../billing"
 import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 
-// the outcomes of a manual scan request. status: running means a scan is already in flight for the topic
+// the outcomes of a manual scan request. status: running means a scan is already in flight for the topic.
+// status: budget means the key that the scan bills has spent its whole budget
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ManualScanResult = { status: "started"; remainingScans: number } | { status: "forbidden" } | { status: "quota" } | { status: "running" }
+export type ManualScanResult = { status: "started"; remainingScans: number } | { status: "forbidden" } | { status: "quota" } | { status: "budget" } | { status: "running" }
 
 // the outcomes of a stop request. status: idle means the Topic had no Scan running to stop
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type StopScanResult = { status: "stopped" } | { status: "idle" } | { status: "forbidden" }
 
 /**
- * Start a manual scan for the owner or an admin, enforcing the daily quota. The scan runs without blocking the request.
+ * Starts a manual scan for the owner or an admin. The scan runs without blocking the request.
+ * Enforces the daily quota and the budget of the key that the scan bills.
  */
 export async function runManualScan(
 	userId: string,
@@ -39,6 +42,12 @@ export async function runManualScan(
 			trackEvent("scan_quota_reached", userId, { ...analyticsProperties, topicId })
 		}
 		return authorization
+	}
+
+	// reject the scan if the requesting user's LiteLLM key has spent its budget. the scan bills that key.
+	// the rejection comes before any scan row or overage. a failed budget read starts the scan
+	if (await isUserLiteLLMKeyBudgetExhausted(userId)) {
+		return { status: "budget" }
 	}
 
 	// close out any hung scans first, so a stuck scan row doesn't block a new manual scan indefinitely
@@ -116,6 +125,11 @@ export const scansRoute = new Hono<AppEnv>()
 		// a scan already in flight is a conflict, not a quota or authorization failure
 		if (scanResult.status === "running") {
 			return context.json({ error: "a scan is already running" }, 409)
+		}
+
+		// reject the scan with the budget label if the budget is spent
+		if (scanResult.status === "budget") {
+			return context.json({ error: SCAN_SPENT_BUDGET_LABEL }, 402)
 		}
 
 		// an exhausted quota and a non-owner topic scan fail differently

@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { attachments, topics, users } from "../db/schema"
 import { buildTopicScanContext, ingestAttachment } from "./attach"
+import { deleteUserLiteLLMKey } from "./litellm"
 import { attachmentExists, deleteAttachment } from "./store"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 
@@ -120,10 +121,12 @@ async function smokeTest(): Promise<number> {
 		console.log(`\n=== smoke ${isPassed ? "PASSED" : "FAILED"} ===`)
 		return isPassed ? 0 : 1
 	} finally {
-		// the owner cascade drops the rows but not the bucket object, so delete the object explicitly, then the owner
+		// delete the bucket object and the owner's LiteLLM key, then the owner.
+		// the owner cascade drops only the rows
 		if (objectKey) {
 			await deleteAttachment(objectKey)
 		}
+		await deleteUserLiteLLMKey(userId)
 		await db.delete(users).where(eq(users.id, userId))
 	}
 }

@@ -7,7 +7,7 @@ import { chatRoomAttachments } from "../../db/schema"
 import {
 	extractText,
 	generateImageContext,
-	loadUserLiteLLMKey,
+	loadOrProvisionUserLiteLLMKey,
 	toCanonicalContentType,
 	toChatRoomAttachmentKey,
 	uploadAttachment,
@@ -166,7 +166,7 @@ export async function storeChatRoomAttachment(
 async function describeChatRoomImage(attachmentId: string, userId: string, dataUrl: string): Promise<void> {
 	try {
 		// the description fills the row's context and marks it ready
-		const context = await generateImageContext(dataUrl, await loadUserLiteLLMKey(userId))
+		const context = await generateImageContext(dataUrl, await loadOrProvisionUserLiteLLMKey(userId))
 		await db
 			.update(chatRoomAttachments)
 			.set({ context: encryptChatText(context), status: "ready" })

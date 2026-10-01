@@ -47,7 +47,9 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   minute under the `rendered` tag, and a versioned avatar or card for a year in the browser and a day at the edge.
   `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag right after the app
   deploys.
-- `auth.ts` gives Better Auth the Redis store as its secondary storage and keeps sessions in Postgres too.
+- `auth.ts` creates each new user's LiteLLM key in the user create hook. If the LiteLLM proxy fails or times out,
+  the hook reports the failure, and the user is created without a key. The user's first model call creates the key.
+  `auth.ts` gives Better Auth the Redis store as its secondary storage and keeps sessions in Postgres too.
   A session is read from Redis first, and from Postgres if Redis has no copy or is down.
   Verification values, such as reset links and OAuth state, are kept in both stores and read the same way.
   The session hooks delete a session's Redis copy if Better Auth deletes the session's row,

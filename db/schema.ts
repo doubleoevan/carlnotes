@@ -95,9 +95,11 @@ export const users = pgTable(
 		// where the public avatar comes from, and the stored object for it
 		avatarSource: avatarSource("avatar_source").notNull().default("generated"),
 		avatarKey: text("avatar_key"),
-		// this user's litellm virtual key, provisioned with a spend budget at signup. null only before signup completes
+		// this user's LiteLLM virtual key, which has the user's spend budget.
+		// null until the key is created, at signup or at the user's first model call if the proxy failed at signup
 		litellmVirtualKey: text("litellm_virtual_key"),
-		// when that key was created. a key created before the current month is due for the monthly reset
+		// when that key was created, and the signup time while the user has no key.
+		// a key created before the current month is due for the monthly reset
 		litellmKeyCreatedAt: timestamp("litellm_key_created_at", { withTimezone: true }).defaultNow().notNull(),
 		// the platform role: "admin" or "user". plain text to match Better Auth's admin plugin shape
 		role: text("role").notNull().default("user"),

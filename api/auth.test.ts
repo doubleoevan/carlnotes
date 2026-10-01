@@ -1,16 +1,51 @@
-// auth tests: a signup's default avatar, the warning logged if TRUSTED_PROXIES is unset or misses a proxy hop,
-// the session hooks that keep Redis in sync with Postgres, and the verification values kept in both
+// auth tests: a signup's LiteLLM key and default avatar, the session hooks that keep Redis in sync with Postgres,
+// the verification values kept in both, and the warning logged if TRUSTED_PROXIES is unset or misses a proxy hop
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import * as monitoring from "@shared/monitoring"
 import { connectionPool } from "../db"
 import * as redis from "../db/redis"
+import * as litellm from "../worker/litellm"
 import { auth, toSignupAvatarSource, toTrustedProxiesWarning } from "./auth"
 import * as sessions from "./sessions"
+import * as usernames from "./usernames"
 
 // the connection pool's own query, put back after each test along with the spied functions
 const originalConnectionPoolQuery = connectionPool.query
 afterEach(() => {
 	connectionPool.query = originalConnectionPoolQuery
 	mock.restore()
+})
+
+// run the user create hook for an oauth signup with no username of its own.
+// return the data that the user is created with
+async function runUserCreateHook(): Promise<Record<string, unknown>> {
+	spyOn(usernames, "toAssignedUsername").mockResolvedValue("steady-owl-12")
+	const signupUser = { email: "new@example.com", name: "New User", emailVerified: true, image: null }
+	const userCreateHookResult = await auth.options.databaseHooks?.user?.create?.before?.(
+		signupUser as never,
+		{ path: "/callback/:id" } as never,
+	)
+	return (userCreateHookResult as { data: Record<string, unknown> }).data
+}
+
+// a signup whose LiteLLM key creation fails or times out still creates the user with no key and reports the failure
+test("a signup whose key creation fails creates the user with no key and reports the failure", async () => {
+	// make the key creation time out, spy on the error report, and quiet the console
+	spyOn(litellm, "provisionLiteLLMKey").mockRejectedValue(new DOMException("The operation timed out.", "TimeoutError"))
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	spyOn(console, "error").mockImplementation(() => {})
+
+	// the user is created with a username and no key, and the failure is reported once
+	const newUser = await runUserCreateHook()
+	expect(newUser).toMatchObject({ email: "new@example.com", username: "steady-owl-12" })
+	expect(newUser.litellmVirtualKey).toBeUndefined()
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+})
+
+// a signup whose LiteLLM key creation succeeds stores the key on the new user
+test("a signup whose key creation succeeds creates the user with the key", async () => {
+	spyOn(litellm, "provisionLiteLLMKey").mockResolvedValue("sk-new")
+	expect((await runUserCreateHook()).litellmVirtualKey).toBe("sk-new")
 })
 
 // an oauth signup defaults to the provider's photo, a password signup never has one

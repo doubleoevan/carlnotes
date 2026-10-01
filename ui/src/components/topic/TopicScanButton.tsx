@@ -1,6 +1,6 @@
 import type { TopicResponse } from "@shared/contracts"
 import { ADMIN_QUOTA } from "@shared/plans"
-import { isBudgetError, toScanFailureLabel } from "@shared/scanFailure"
+import { isBudgetError, SCAN_SPENT_BUDGET_LABEL, toScanFailureLabel } from "@shared/scanFailure"
 import { useNavigate } from "@tanstack/react-router"
 import { CirclePause, Coffee } from "lucide-react"
 import { useCallback, useEffect, useRef } from "react"
@@ -40,14 +40,20 @@ export function TopicScanButton({
 	// a scan that fails while the user is on the page shows the failure
 	useScanFailureToast(topic?.scans, () => navigate({ to: "/plans" }))
 
-	// trigger a scan. the optimistic flag holds the running state until the new scan row arrives in a reload
+	// trigger a scan. the optimistic flag holds the running state until the new scan row arrives in a reload.
+	// a scan rejected because of the budget clears the optimistic flag and shows the budget toast
 	const handleManualScan = async (): Promise<void> => {
 		if (!topic) {
 			return
 		}
 		startScan()
 		await runTopicScan({
-			send: () => sendManualScan(topic.id),
+			send: async () => {
+				if ((await sendManualScan(topic.id)) === "budget") {
+					stopScan()
+					showSpentBudgetToast(() => navigate({ to: "/plans" }))
+				}
+			},
 			reloadTopicFeed: onScanned,
 			revert: stopScan,
 			logLabel: "manual scan failed",
@@ -175,11 +181,18 @@ function useScanFailureToast(scans: TopicResponse["scans"] | undefined, onSeePla
 			}
 			announcedScanIds.current.add(failedScan.id)
 			// a spent budget is the one failure the user can do something about
-			toast.error(toScanFailureLabel(failedScan.error), {
-				action: isBudgetError(failedScan.error) ? { label: "See plans", onClick: onSeePlans } : undefined,
-			})
+			if (isBudgetError(failedScan.error)) {
+				showSpentBudgetToast(onSeePlans)
+				continue
+			}
+			toast.error(toScanFailureLabel(failedScan.error))
 		}
 	}, [scans, onSeePlans])
+}
+
+// show the budget toast with its See plans action. the id makes a second budget toast replace the first
+function showSpentBudgetToast(onSeePlans: () => void): void {
+	toast.error(SCAN_SPENT_BUDGET_LABEL, { id: "spent-budget", action: { label: "See plans", onClick: onSeePlans } })
 }
 
 /**

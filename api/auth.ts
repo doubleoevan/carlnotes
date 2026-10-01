@@ -302,7 +302,7 @@ export const auth = betterAuth({
 			inviteAccess: { type: "string", required: false, input: false, returned: true },
 		},
 	},
-	// provision the key for every new user. the password path also requires a passing turnstile check
+	// try to create a LiteLLM key for every new user. the password path also requires a passing turnstile check
 	databaseHooks: {
 		user: {
 			create: {
@@ -316,11 +316,16 @@ export const auth = betterAuth({
 						}
 					}
 
-					// create a litellm key for the new user, budgeted at the free plan they start on
+					// create a LiteLLM key for the new user, budgeted at the free plan that the user starts on.
+					// if the LiteLLM proxy fails or times out, the user has no key. the user's first model call creates the key
 					const litellmVirtualKey = await provisionLiteLLMKey(
 						user.email,
 						userBudgetCents({ isAdmin: false, plan: "free", budgetOverrideCents: null }),
-					)
+					).catch((error: unknown) => {
+						console.error("could not create a litellm key at signup", error)
+						reportError(error, "billing", { signupPath: context?.path ?? "unknown" })
+						return undefined
+					})
 
 					// the provider's own handle is kept when it is well-formed and nobody holds it. GitHub's
 					// mapper proposes it on the user, and everything else falls back to a generated name

@@ -242,13 +242,6 @@ The schema SHALL define `sessions`, `accounts`, and `verifications` tables shape
 - **WHEN** `bunx tsc -b` runs against the repository
 - **THEN** `db/schema.ts` compiles and exports a Drizzle table for each of `sessions`, `accounts`, and `verifications`, named consistently with the plural `users` table
 
-### Requirement: A user's LiteLLM virtual key is stored on the user row
-The `users` table SHALL carry a nullable column recording the user's provisioned LiteLLM virtual key. The column SHALL only ever be null before signup completes; a fully created user row SHALL always carry a non-null key.
-
-#### Scenario: A created user always has a key
-- **WHEN** a `users` row exists that was created through the signup flow
-- **THEN** its LiteLLM virtual key column is non-null
-
 ### Requirement: Better Auth's `accounts` table is distinct from Integration
 `accounts` (Better Auth-managed) SHALL represent only sign-in identity: the credential or OAuth grant a user authenticates with. The existing `Integration` entity SHALL remain the sole representation of a connected external account used for sourcing or delivery (e.g. Composio-managed Gmail). Neither SHALL substitute for the other: a Source or Subscription MUST NOT resolve credentials through `accounts`, and sign-in MUST NOT be implemented through `integrations`.
 
@@ -695,4 +688,15 @@ The change SHALL include one generated migration creating the four tables, appli
 #### Scenario: The migration creates the tables
 - **WHEN** the migration runs against an empty schema
 - **THEN** `topic_prompt_versions`, `oauth_applications`, `oauth_access_tokens`, and `oauth_consents` exist with their references and indexes
+
+### Requirement: A user's LiteLLM virtual key is stored on the user row, and null until it is created
+The `users` table SHALL have a nullable column that records the user's LiteLLM virtual key, beside the time that the key was created. The column SHALL be null only while the user has no key: during signup, and after a signup whose key creation failed, until the user's first model call creates and stores one. A key stored after signup SHALL record its own creation time, so the monthly budget reset treats it as created that month.
+
+#### Scenario: A signup that created a key stores it
+- **WHEN** a user signs up and the proxy creates their key
+- **THEN** their key column is non-null
+
+#### Scenario: A key created after signup records its own time
+- **WHEN** a user whose signup could not create a key makes their first model call
+- **THEN** the created key is stored, and its creation time is the time it was stored
 

@@ -33,7 +33,7 @@ type Scan = typeof scans.$inferSelect
  * Reviews a Scan's discovered Resources, writes Findings and returns the counts, outcome, and summary.
  * topicId is a parameter because a deleted topic clears the Scan row's own topic id.
  * The Budget already includes what ingestion spent, so review's limits read the Scan's whole spend.
- * litellmApiKey bills its LLM calls to the topic owner's virtual key, falling back to the master key when absent.
+ * litellmApiKey bills the review's model calls to the virtual key of the user that the Scan bills.
  */
 export async function reviewScan(
 	scan: Scan,

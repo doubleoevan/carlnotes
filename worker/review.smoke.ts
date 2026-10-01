@@ -4,6 +4,7 @@ import { cosineSimilarity } from "ai"
 import { and, eq, inArray, isNotNull, like } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, scans, sources, topics, users } from "../db/schema"
+import { deleteUserLiteLLMKey } from "./litellm"
 import { embedVector } from "./models"
 import { loadResourcesToReview } from "./review/filter"
 import { loadScan } from "./scan"
@@ -355,7 +356,9 @@ async function smokeTest(): Promise<number> {
 		console.log(`\n=== smoke ${isAllPassed ? "PASSED" : "FAILED"} ===`)
 		return isAllPassed ? 0 : 1
 	} finally {
-		// delete the fake owner however the checks came out
+		// delete the LiteLLM key that the fake owner's first ingest created, then the owner.
+		// the deletes run no matter how the checks came out
+		await deleteUserLiteLLMKey(userId)
 		await db.delete(users).where(eq(users.id, userId))
 	}
 }

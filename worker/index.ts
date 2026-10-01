@@ -23,7 +23,9 @@ export {
 // each user's LiteLLM key
 export {
 	deleteLiteLLMKey,
-	loadUserLiteLLMKey,
+	deleteUserLiteLLMKey,
+	isUserLiteLLMKeyBudgetExhausted,
+	loadOrProvisionUserLiteLLMKey,
 	provisionLiteLLMKey,
 	readLiteLLMKeySpend,
 	replaceUserLiteLLMKey,

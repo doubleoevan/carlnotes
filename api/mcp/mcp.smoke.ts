@@ -17,6 +17,7 @@ import {
 	topics,
 	users,
 } from "../../db/schema"
+import { deleteUserLiteLLMKey } from "../../worker"
 import { apiRoute } from "../api"
 import { auth } from "../auth"
 import type { AppEnv } from "../currentUser"
@@ -110,8 +111,10 @@ async function seed(): Promise<void> {
 	)
 }
 
-// delete every fixture. the user delete cascades through the topic
+// delete the LiteLLM key that the created topic's first scan may have created for the user, then every fixture.
+// the user delete cascades through the topic
 async function cleanUp(): Promise<void> {
+	await deleteUserLiteLLMKey(ownerId)
 	await db.delete(users).where(eq(users.id, ownerId))
 	await db.delete(resources).where(inArray(resources.url, resourceUrls))
 	if (registeredClientId) {

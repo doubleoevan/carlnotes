@@ -31,7 +31,7 @@ test("renderManualScanEmail reports a failed scan's reason", async () => {
 	const html = await renderManualScanEmail({
 		status: "failed",
 		topicName: "LLM tooling",
-		failureReason: "Carl hit this month's budget.",
+		failureReason: "Carl hit this month's coffee budget.",
 	})
 
 	// matched without their apostrophes, which the renderer escapes to HTML entities

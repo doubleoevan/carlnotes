@@ -2,7 +2,7 @@
 import { ApplicationFailure } from "@temporalio/activity"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
-import { attachments, topics, users } from "../../db/schema"
+import { attachments, topics } from "../../db/schema"
 import {
 	extractText,
 	generateAttachmentContext,
@@ -15,6 +15,7 @@ import {
 } from "../attach"
 import { CHUNK_CHARS, chunk, MAX_CHUNKS } from "../chunk"
 import { screenText, toFlaggedReason } from "../guard"
+import { loadOrProvisionUserLiteLLMKey } from "../litellm"
 import { deleteAttachment, getAttachmentBytes } from "../store"
 
 // the most characters the workflow can process, so that chunk payloads stay well under Temporal's per-message limit
@@ -108,16 +109,20 @@ export async function summarizeChunk(attachmentId: string, chunkText: string): P
 	return generateAttachmentContext(chunkText, await topicOwnerModelKey(attachmentId))
 }
 
-// the LiteLLM key of the owner of the attachment's topic, or undefined when they have none and the master key bills it
-async function topicOwnerModelKey(attachmentId: string): Promise<string | undefined> {
-	// select the attachment's topic owner and return their LiteLLM key
-	const [owner] = await db
-		.select({ litellmVirtualKey: users.litellmVirtualKey })
+// the LiteLLM key of the owner of the attachment's topic, created first if the owner has none
+async function topicOwnerModelKey(attachmentId: string): Promise<string> {
+	// select the attachment's topic owner
+	const [attachmentTopic] = await db
+		.select({ ownerId: topics.ownerId })
 		.from(attachments)
 		.innerJoin(topics, eq(attachments.topicId, topics.id))
-		.innerJoin(users, eq(topics.ownerId, users.id))
 		.where(eq(attachments.id, attachmentId))
-	return owner?.litellmVirtualKey ?? undefined
+
+	// fail an attachment that is gone, then return the topic owner's key
+	if (!attachmentTopic) {
+		throw ApplicationFailure.nonRetryable(`attachment ${attachmentId} not found`, "AttachmentNotFound")
+	}
+	return loadOrProvisionUserLiteLLMKey(attachmentTopic.ownerId)
 }
 
 // merge the chunk summaries into one limited context, mark the attachment ready, and record its counts

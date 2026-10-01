@@ -7,7 +7,7 @@ import { auth } from "../auth"
 import type { AnalyticsProperties } from "../currentUser"
 
 // who is calling, resolved once to a visitor or a user
-export type ToolCaller = { kind: "visitor" } | { kind: "user"; userId: string; plan: string; litellmApiKey?: string }
+export type ToolCaller = { kind: "visitor" } | { kind: "user"; userId: string; plan: string }
 
 // resolve the tool caller. an accepted bearer token means a user, anything else is a visitor
 export async function resolveToolCaller(headers: Headers): Promise<ToolCaller> {
@@ -21,21 +21,13 @@ export async function resolveToolCaller(headers: Headers): Promise<ToolCaller> {
 		return { kind: "visitor" }
 	}
 
-	// read the user's plan and litellm key
-	const [user] = await db
-		.select({ plan: users.plan, litellmVirtualKey: users.litellmVirtualKey })
-		.from(users)
-		.where(eq(users.id, mcpSession.userId))
+	// read the user's plan
+	const [user] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, mcpSession.userId))
 	// treat a token whose user is gone as a visitor
 	if (!user) {
 		return { kind: "visitor" }
 	}
-	return {
-		kind: "user",
-		userId: mcpSession.userId,
-		plan: user.plan,
-		litellmApiKey: user.litellmVirtualKey ?? undefined,
-	}
+	return { kind: "user", userId: mcpSession.userId, plan: user.plan }
 }
 
 // build an mcp call's analytics properties. it has no user agent

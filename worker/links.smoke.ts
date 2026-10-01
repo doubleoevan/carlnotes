@@ -4,6 +4,7 @@ import { eq, inArray } from "drizzle-orm"
 import { db } from "../db"
 import { resources, scans, sources, topics, users } from "../db/schema"
 import { FIRECRAWL_COST_PER_FETCH } from "./budget"
+import { deleteUserLiteLLMKey } from "./litellm"
 import { ingestForScan } from "./workflows/runTopicScanActivities"
 
 // a page that lists links to other sites
@@ -139,8 +140,10 @@ async function readStoredResourceUrls(): Promise<Set<string>> {
 	return new Set(resourceRows.map((resourceRow) => resourceRow.url))
 }
 
-// delete the seeded owner, which cascades to the topic, its Sources, its Scans
+// delete the LiteLLM key that the seeded owner's first ingest created, then the owner.
+// the owner delete cascades to the topic, its Sources, and its Scans
 async function cleanUp(userId: string, urlsBefore: Set<string>): Promise<void> {
+	await deleteUserLiteLLMKey(userId)
 	await db.delete(users).where(eq(users.id, userId))
 	const addedUrls = [...(await readStoredResourceUrls())].filter((url) => !urlsBefore.has(url))
 	if (addedUrls.length > 0) {

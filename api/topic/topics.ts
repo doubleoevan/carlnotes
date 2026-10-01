@@ -23,7 +23,7 @@ import {
 	topics,
 	users,
 } from "../../db/schema"
-import { deleteAttachment, loadUserLiteLLMKey, notifyIndexNow, suggestSources } from "../../worker"
+import { deleteAttachment, loadOrProvisionUserLiteLLMKey, notifyIndexNow, suggestSources } from "../../worker"
 import { isAllowed } from "../authorization"
 import { withAvatarVersion } from "../avatars"
 import { deleteChatAttachments } from "../chat/attachments"
@@ -605,13 +605,13 @@ export const topicsRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
+		// the suggestion's model call bills to the user's own LiteLLM key, created first if the user has none
+		const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId)
+
 		// suggesting is not scanning, so it draws on its own daily limit instead of the scan quota
 		if (!(await incrementDaySuggestionCount(userId))) {
 			return context.json({ error: "daily suggestion limit reached" }, 429)
 		}
-
-		// the suggestion's model call bills to the user's own limited key
-		const litellmApiKey = await loadUserLiteLLMKey(userId)
 		// propose sources from the topic's own text
 		const { name, prompt, attachmentContext, excludeSources, limit } = context.req.valid("json")
 		const suggestedSources = await suggestSources({

@@ -7,6 +7,7 @@ import { findings, resources, scans, sources, topicEmailSends, topics, users } f
 import { buildContextPrompt } from "./attach"
 // the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
 import { buildSearchPrompt } from "./ingest/search"
+import { deleteUserLiteLLMKey } from "./litellm"
 import { sendScanReport } from "./notify"
 import { buildScorePrompt } from "./review/score"
 import { buildScanReportPrompt } from "./review/summarize"
@@ -280,6 +281,8 @@ async function smokeTest(): Promise<number> {
 		console.log(`\n=== smoke ${isPassed ? "PASSED" : "FAILED"} ===`)
 		return isPassed ? 0 : 1
 	} finally {
+		// delete the LiteLLM key that the owner's first ingest created, then the owner
+		await deleteUserLiteLLMKey(userId)
 		await db.delete(users).where(eq(users.id, userId))
 	}
 }

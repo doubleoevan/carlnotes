@@ -13,7 +13,7 @@ import { and, desc, eq } from "drizzle-orm"
 import { db } from "../../db"
 import { incrementDaySuggestionCount } from "../../db/quotas"
 import { scans, sources, teams, topics } from "../../db/schema"
-import { loadUserLiteLLMKey, type SuggestedSource, suggestSources } from "../../worker"
+import { loadOrProvisionUserLiteLLMKey, type SuggestedSource, suggestSources } from "../../worker"
 import { EXA_COST_PER_SEARCH, X_COST_PER_READ } from "../../worker/budget"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
@@ -526,19 +526,22 @@ export async function suggestTopicDraftSources({
 	if (!userId) {
 		return { status: "forbidden" }
 	}
+	// the model call bills to the user's own LiteLLM key, created first if the user has none
+	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId)
+
 	// draw on the daily suggestion limit
 	if (!(await incrementDaySuggestionCount(userId))) {
 		return { status: "limit" }
 	}
 
-	// the model call bills to the user's own key
+	// suggest sources from the topic draft's name and prompt
 	const suggestedSources = await suggestSources({
 		name,
 		prompt,
 		attachmentContext: "",
 		excludeSources: [],
 		limit: MAX_TOPIC_SOURCES,
-		litellmApiKey: await loadUserLiteLLMKey(userId),
+		litellmApiKey,
 	})
 	return { status: "ok", sources: suggestedSources }
 }

@@ -7,17 +7,22 @@ with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep t
 
 - The sweep and the reset each run under a database claim from `db/claim.ts`,
   so two overlapping runs cannot do the work twice. The sweep selects scheduled Topics in one SQL query
-  and reads each owner's quota once. The sweep closes out a picked-up Scan that runs past its stages' total timeouts,
+  and reads each owner's quota and key budget once. For a Topic whose owner's key has spent its budget, the sweep saves
+  a failed Scan with the budget reason instead of starting a Scan. The Topics of an owner with no key, or of an owner
+  whose budget read fails, are scanned as usual.
+  The sweep closes out a picked-up Scan that runs past its stages' total timeouts,
   and a Scan still waiting for a worker past the ingest and finish stages' total timeouts.
-  `concurrency.ts` runs tasks a few at a time for the review's scoring, the sweep's reads of each owner's daily Topics,
-  and the reset's replacements.
+  `concurrency.ts` runs tasks a few at a time for the review's scoring, the sweep's reads of each owner's daily Topics
+  and key budget, and the reset's replacements.
 
 - `workflows/` — Temporal workflows and activities; `ingest/` — one ingester per Source kind,
   `ingester.ts` is the interface; `review/` — filtering and scoring; `chat/` — Carl's streamed
   chat replies and their retrieval; `prompts/` — model-facing Markdown templates; `models.ts` —
-  every model call, through LiteLLM; `litellm.ts` — the user keys those calls bill to: created, replaced, read, and
-  reset on the first of the month by the reset job; `favicons.ts` — a host's favicon, fetched once when review reads a
-  page on it.
+  every model call, through LiteLLM; `litellm.ts` — the user keys that those calls bill to. A key is created at
+  signup, or by `loadOrProvisionUserLiteLLMKey` before a user's first model call if that user has no key. A key is
+  also replaced, read, and reset on the first of the month by the reset job. Every proxy admin call times out after
+  five seconds. A Scan creates its owner's missing key before any Source runs. `favicons.ts` — a host's favicon,
+  fetched once when review reads a page on it.
 - `telemetry.ts` traces model calls in Langfuse on its own tracer provider beside Sentry's, and both processes start
   Sentry before it. `temporal.ts` logs the pool, the event loop delay, the scan queue, and Redis once a minute, and the sweep
   reports a queue nothing polls and a backlog older than 15 minutes, both through `describeScanQueue` in

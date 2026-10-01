@@ -290,6 +290,8 @@ Check for:
      `screen-source-activities.ts`, and `stage-timeouts.ts` (now `worker/temporalClient.ts`, `runTopicScan.ts`,
      `runTopicScanActivities.ts`, `processAttachment.ts`, `processAttachmentActivities.ts`, `screenSource.ts`,
      `screenSourceActivities.ts`, and `stageTimeouts.ts`)
+   - `loadUserLiteLLMKey` (now `loadOrProvisionUserLiteLLMKey` in `worker/litellm.ts`), and `ToolCaller`'s
+     `litellmApiKey` in `api/mcp/toolCaller.ts` (removed)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

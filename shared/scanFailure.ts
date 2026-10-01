@@ -1,11 +1,19 @@
-// how a stored Scan failure reads to a person, shared by the ui and the worker's emails
+// how a stored Scan failure reads to a person, shared by the ui, the api, and the worker
 const BUDGET_ERROR_PATTERN = /budget has been exceeded/i
 
+// how a spent budget reads to a person, on a failed Scan and on a rejected manual scan
+export const SCAN_SPENT_BUDGET_LABEL = "Carl hit this month's coffee budget."
+
+// the failure reason stored on a scheduled Scan that never started because its owner's budget is spent
+export const SCHEDULED_SCAN_SPENT_BUDGET_REASON =
+	"Carl ran out of coffee this month, so the scheduled scan didn't start"
+
 /**
- * Whether a stored scan failure is the owner's monthly spend-limit being hit.
+ * Whether a stored scan failure is a spent monthly budget.
+ * The failure is either the proxy's rejection or the reason that the sweep saves.
  */
 export function isBudgetError(error: string | null): boolean {
-	return error !== null && BUDGET_ERROR_PATTERN.test(error)
+	return error !== null && (error === SCHEDULED_SCAN_SPENT_BUDGET_REASON || BUDGET_ERROR_PATTERN.test(error))
 }
 
 /**
@@ -14,7 +22,7 @@ export function isBudgetError(error: string | null): boolean {
 export function toScanFailureLabel(error: string | null): string {
 	// the budget limit is an expected wall, not a malfunction, so it gets plain words
 	if (isBudgetError(error)) {
-		return "Carl hit this month's budget."
+		return SCAN_SPENT_BUDGET_LABEL
 	}
 	if (!error) {
 		return "This one didn't brew."

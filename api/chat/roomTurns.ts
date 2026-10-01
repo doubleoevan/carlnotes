@@ -8,7 +8,7 @@ import { chatRoomAttachments, chatRoomMessages, chatRoomSummaries, type topics }
 import {
 	type ChatReplyPart,
 	getAttachmentBytes,
-	loadUserLiteLLMKey,
+	loadOrProvisionUserLiteLLMKey,
 	MODEL_CHAT_TURN_FAILED_REJECTION,
 } from "../../worker"
 import { streamChatReply } from "../../worker/chat"
@@ -46,11 +46,13 @@ export async function runModelChatRoomTurn(
 	teamId: string,
 	promptChatMessageId: number,
 ): Promise<void> {
-	// the billed member's LiteLLM key. carl's completion spends on their account
-	const litellmApiKey = await loadUserLiteLLMKey(billedUserId)
-	// a member with no key cannot be billed, so carl posts his own rejection instead of a reply
+	// the billed member's LiteLLM key, created first if the member has none. carl's completion spends on that key
+	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(billedUserId).catch((error: unknown) => {
+		reportError(error, "chat", { teamId, userId: billedUserId })
+		return null
+	})
+	// post carl's own rejection instead of a reply if the member's key could not be loaded or created
 	if (!litellmApiKey) {
-		reportError(new Error(`chat room turn for user ${billedUserId} with no litellm key`), "chat", { teamId })
 		await postModelRejection(topic?.id ?? null, teamId, promptChatMessageId, MODEL_CHAT_TURN_FAILED_REJECTION)
 		return
 	}

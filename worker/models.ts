@@ -3,7 +3,8 @@ import { createOpenAI } from "@ai-sdk/openai"
 import { type EmbeddingModel, embed, embedMany, type LanguageModel } from "ai"
 import { EMBED_DIMENSIONS } from "../db/schema"
 
-// litellmApiKey bills a scan to its topic owner's key. callers with no user context use the master key
+// litellmApiKey bills a call to the key of the user that the call is made for.
+// a call with no litellmApiKey, such as the search Source's query generation, uses the master key
 
 // how long one model request may run before it aborts
 const MODEL_TIMEOUT_MS = Number(Bun.env.MODEL_TIMEOUT_MS ?? "120000")

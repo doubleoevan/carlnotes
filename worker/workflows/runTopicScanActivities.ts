@@ -13,7 +13,7 @@ import { notifyIndexNow } from "../indexNow"
 import type { SourceOutcome } from "../ingest"
 import { ingestFromTopicSources } from "../ingest"
 import type { NewResource } from "../ingest/ingester"
-import { loadUserLiteLLMKey } from "../litellm"
+import { loadOrProvisionUserLiteLLMKey } from "../litellm"
 import type { ReviewSummary } from "../review"
 import { reviewScan } from "../review"
 import { HEARTBEAT_INTERVAL_MS } from "./stageTimeouts"
@@ -47,6 +47,11 @@ export async function ingestForScan(scanId: string, topicId: string): Promise<In
 		.update(scans)
 		.set({ pickedUpAt: new Date() })
 		.where(and(eq(scans.id, scanId), isNull(scans.pickedUpAt)))
+
+	// create the LiteLLM key of the Scan's owner if the owner has none, before any Source runs.
+	// the Scan fails before spending on ingest if the proxy cannot create the key
+	const { ownerId } = await requireScan(scanId)
+	await loadOrProvisionUserLiteLLMKey(ownerId)
 
 	// the Budget is made here instead of in the workflow
 	const budget = toStageBudget(newBudget())
@@ -85,7 +90,7 @@ export async function reviewForScan(
 		withHeartbeat(stageBudget, async () => {
 			// the Scan row and the owner's LiteLLM proxy key
 			const scan = await requireScan(scanId)
-			const litellmApiKey = await loadUserLiteLLMKey(ownerId)
+			const litellmApiKey = await loadOrProvisionUserLiteLLMKey(ownerId)
 
 			const review = await reviewScan(
 				scan,
