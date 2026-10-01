@@ -3,6 +3,7 @@ import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import {
+	FIRST_SCAN_SPENT_BUDGET_REASON,
 	isBudgetError,
 	SCAN_SPENT_BUDGET_LABEL,
 	SCHEDULED_SCAN_SPENT_BUDGET_REASON,
@@ -41,6 +42,12 @@ test("the scheduled Scan's budget reason reads as the budget label", () => {
 	expect(isBudgetError(SCHEDULED_SCAN_SPENT_BUDGET_REASON)).toBe(true)
 	expect(toScanFailureLabel(SCHEDULED_SCAN_SPENT_BUDGET_REASON)).toBe(SCAN_SPENT_BUDGET_LABEL)
 	expect(SCAN_SPENT_BUDGET_LABEL).toBe("Carl hit this month's coffee budget.")
+})
+
+// the reason stored on a first Scan whose owner's budget is spent reads as the budget label
+test("the first Scan's budget reason reads as the budget label", () => {
+	expect(isBudgetError(FIRST_SCAN_SPENT_BUDGET_REASON)).toBe(true)
+	expect(toScanFailureLabel(FIRST_SCAN_SPENT_BUDGET_REASON)).toBe(SCAN_SPENT_BUDGET_LABEL)
 })
 
 // a failure with nothing wrapped keeps its own message

@@ -1,8 +1,9 @@
-// account close tests: a failed revocation stops the close only if Redis is configured,
-// and a revocation that fails after the close has begun is reported
+// account close tests: a failed revocation before the close begins and after the close has begun,
+// and a LiteLLM key created while the account was closing
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
 import { connectionPool } from "../db"
+import * as litellm from "../worker/litellm"
 import type { AnalyticsProperties } from "./currentUser"
 import * as sessions from "./sessions"
 import { deleteUser } from "./users"
@@ -15,7 +16,7 @@ const ANALYTICS_PROPERTIES: AnalyticsProperties = {
 	isInAppBrowser: false,
 }
 
-// the connection pool's own query and the environment's Redis url, put back after each test along with the spied revocation
+// the connection pool's own query and the environment's Redis url, put back after each test along with the spies
 const originalConnectionPoolQuery = connectionPool.query
 const originalRedisUrl = Bun.env.REDIS_URL
 afterEach(() => {
@@ -78,4 +79,61 @@ test("a second failed revocation is reported and the close goes on", async () =>
 	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({ userId: "user-1" })
+})
+
+// the LiteLLM key that the user row select returns, and the LiteLLM key that the user row delete returns
+type StubUserRowLiteLLMKeysOptions = {
+	selectedUserRowLiteLLMKey: string | null
+	deletedUserRowLiteLLMKey: string | null
+}
+
+// stub the connection pool so that the user row select and the user row delete each return a LiteLLM key
+function stubUserRowLiteLLMKeys({
+	selectedUserRowLiteLLMKey,
+	deletedUserRowLiteLLMKey,
+}: StubUserRowLiteLLMKeysOptions): void {
+	connectionPool.query = ((queryConfig: { text: string }) => {
+		// return the user row with its LiteLLM key for the user row select
+		if (queryConfig.text.includes('"avatar_key"')) {
+			return Promise.resolve({ rows: [["user-1", null, selectedUserRowLiteLLMKey]], fields: [], rowCount: 1 })
+		}
+
+		// return the deleted row's LiteLLM key for the user row delete, and no rows for any other query
+		const deletedUserRows = queryConfig.text.startsWith('delete from "users"') ? [[deletedUserRowLiteLLMKey]] : []
+		return Promise.resolve({ rows: deletedUserRows, fields: [], rowCount: deletedUserRows.length })
+	}) as unknown as typeof connectionPool.query
+}
+
+// a model call can create a key after the close read the user's row, and the close deletes that key from the proxy
+test("a LiteLLM key created while the account was closing is deleted from the proxy", async () => {
+	// no configured Redis, and a spy on the key delete
+	delete Bun.env.REDIS_URL
+	spyOn(sessions, "revokeUserSessions").mockResolvedValue(false)
+	const deleteLiteLLMKeySpy = spyOn(litellm, "deleteLiteLLMKey").mockResolvedValue(undefined)
+
+	// the close reads a user row with no key, and the delete of that row returns a key
+	stubUserRowLiteLLMKeys({ selectedUserRowLiteLLMKey: null, deletedUserRowLiteLLMKey: "sk-late" })
+	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(deleteLiteLLMKeySpy.mock.calls).toEqual([["sk-late"]])
+
+	// a failed delete of the key is reported, and the close still finishes
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	spyOn(console, "error").mockImplementation(() => {})
+	deleteLiteLLMKeySpy.mockRejectedValue(new Error("litellm key/delete failed: 500"))
+	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({ userId: "user-1" })
+})
+
+// a close that read the user's key deletes that key once, even though the row delete returns the same key
+test("a LiteLLM key that the close already deleted is not deleted a second time", async () => {
+	// no configured Redis, and a spy on the key delete
+	delete Bun.env.REDIS_URL
+	spyOn(sessions, "revokeUserSessions").mockResolvedValue(false)
+	const deleteLiteLLMKeySpy = spyOn(litellm, "deleteLiteLLMKey").mockResolvedValue(undefined)
+
+	// the close reads the user's key, and the delete of the user's row returns the same key
+	stubUserRowLiteLLMKeys({ selectedUserRowLiteLLMKey: "sk-stored", deletedUserRowLiteLLMKey: "sk-stored" })
+	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(deleteLiteLLMKeySpy.mock.calls).toEqual([["sk-stored"]])
 })

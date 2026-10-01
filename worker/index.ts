@@ -33,7 +33,7 @@ export {
 export { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "./models"
 // whether an address is loopback, private, link-local, or reserved
 export { isInternalAddress } from "./publicFetch"
-export { loadScan, scanTopic, startTopicScan, stopTopicScan } from "./scan"
+export { failUnstartedScan, loadScan, scanTopic, startTopicScan, stopTopicScan } from "./scan"
 export { failStaleScans, runScheduledTopicScans } from "./schedule"
 export { toYoutubeVideoId } from "./scrape"
 export { screenPendingSources, screenTopicSources } from "./screen"

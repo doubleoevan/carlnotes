@@ -4,7 +4,7 @@ import { trackEvent } from "@shared/analytics"
 import { appBaseUrl } from "@shared/appUrl"
 import { reportError } from "@shared/monitoring"
 import { toTopicPath } from "@shared/seo"
-import { asyncLocalStorage } from "@temporalio/activity"
+import { ApplicationFailure, asyncLocalStorage } from "@temporalio/activity"
 import { and, count, eq, isNull } from "drizzle-orm"
 import { db } from "../../db"
 import { findings, scans, topics, users } from "../../db/schema"
@@ -48,10 +48,16 @@ export async function ingestForScan(scanId: string, topicId: string): Promise<In
 		.set({ pickedUpAt: new Date() })
 		.where(and(eq(scans.id, scanId), isNull(scans.pickedUpAt)))
 
+	// run no Source for a Scan that is already marked failed.
+	// throw the Scan's own failure reason as a failure that Temporal does not retry
+	const scan = await requireScan(scanId)
+	if (scan.status === "failed") {
+		throw ApplicationFailure.nonRetryable(scan.error ?? "the scan was already marked failed", "ScanAlreadyFailed")
+	}
+
 	// create the LiteLLM key of the Scan's owner if the owner has none, before any Source runs.
 	// the Scan fails before spending on ingest if the proxy cannot create the key
-	const { ownerId } = await requireScan(scanId)
-	await loadOrProvisionUserLiteLLMKey(ownerId)
+	await loadOrProvisionUserLiteLLMKey(scan.ownerId)
 
 	// the Budget is made here instead of in the workflow
 	const budget = toStageBudget(newBudget())

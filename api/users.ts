@@ -121,7 +121,19 @@ export async function deleteUser(
 	}
 
 	// delete the user row which cascades to sessions, accounts, subscriptions, bookmarks, and the rest.
-	await db.delete(users).where(eq(users.id, targetUserId))
+	const [deletedUserRow] = await db
+		.delete(users)
+		.where(eq(users.id, targetUserId))
+		.returning({ litellmVirtualKey: users.litellmVirtualKey })
+
+	// delete a LiteLLM key that was stored while the account was closing.
+	// a failed delete is reported, and the close goes on
+	if (deletedUserRow?.litellmVirtualKey && deletedUserRow.litellmVirtualKey !== user.litellmVirtualKey) {
+		await deleteLiteLLMKey(deletedUserRow.litellmVirtualKey).catch((error: unknown) => {
+			console.error(`could not delete the litellm key stored while closing the account of user ${targetUserId}`, error)
+			reportError(error, "api-route", { userId: targetUserId })
+		})
+	}
 
 	// the row is gone, so this analytics event is the only record of who closed it
 	trackEvent("account_deleted", actingUserId, {

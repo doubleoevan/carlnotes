@@ -141,6 +141,13 @@ test("a failed admin call throws an error with the status and without the respon
 	await expect(deleteLiteLLMKey("sk-test")).rejects.toThrow(/^litellm key\/delete failed: 500$/)
 })
 
+// a key that the proxy does not know is already deleted, so the delete returns without an error
+test("deleting a key that the proxy does not know returns without an error", async () => {
+	const proxyRequests = stubProxy(() => new Response("key not found", { status: 404 }))
+	await deleteLiteLLMKey("sk-test")
+	expect(proxyRequests.map((proxyRequest) => proxyRequest.path)).toEqual(["/key/delete"])
+})
+
 // the budget read returns the spend and the maximum budget.
 // a key that the proxy does not know, a response with no spend, and a failed request each read as null
 test("the budget read parses the spend and the maximum budget, and reads a failure as null", async () => {
@@ -218,7 +225,49 @@ test("a missing key is created at the user's budget and stored with its creation
 	expect(keyUpdate?.text).toContain('"litellm_key_created_at"')
 	expect(keyUpdate?.text).toContain('"users"."id" = $')
 	expect(keyUpdate?.text).toContain('"litellm_virtual_key" is null')
-	expect(keyUpdate?.values).toEqual(expect.arrayContaining(["sk-new", "user-1"]))
+
+	// and only if the row still has the role, plan, and budget override that the budget was computed from
+	expect(keyUpdate?.text).toContain('"users"."role" = $')
+	expect(keyUpdate?.text).toContain('"users"."plan" = $')
+	expect(keyUpdate?.text).toContain('"budget_override_cents" is not distinct from $')
+	expect(keyUpdate?.values).toEqual(expect.arrayContaining(["sk-new", "user-1", "user", "free", 1234]))
+})
+
+// if the user's budget changes while the key is created, the conditional update matches no row.
+// the key is deleted, and a second key is created at the new budget
+test("a budget that changes while the key is created deletes the created key and creates a key at the new budget", async () => {
+	// the first read finds a $12.34 budget override and the second read finds a $50 budget override, both with no key.
+	// an update matches the row only if the update names the $50 budget override that the row has now
+	const userRows = [toUserRow(null), ["carl@example.com", null, "user", "free", 5000]]
+	const sentQueries = stubConnectionPool((sentQuery) => {
+		if (!sentQuery.text.startsWith("update")) {
+			return userRows.splice(0, 1)
+		}
+		return sentQuery.values.includes(5000) ? [["user-1"]] : []
+	})
+
+	// a proxy that creates a different key for each request
+	let createdKeyCount = 0
+	const proxyRequests = stubProxy((path) =>
+		Response.json(path === "/key/generate" ? { key: `sk-${++createdKeyCount}` } : {}),
+	)
+
+	// the first key is deleted, and the second key is created at the new budget and returned
+	expect(await loadOrProvisionUserLiteLLMKey("user-1")).toBe("sk-2")
+	expect(proxyRequests.map((proxyRequest) => proxyRequest.path)).toEqual([
+		"/key/generate",
+		"/key/delete",
+		"/key/generate",
+	])
+	expect(proxyRequests[0]?.body).toMatchObject({ max_budget: 12.34 })
+	expect(proxyRequests[1]?.body).toEqual({ keys: ["sk-1"] })
+	expect(proxyRequests[2]?.body).toMatchObject({ max_budget: 50 })
+
+	// the first update names the first key and the old budget override.
+	// the second update names the second key and the new budget override
+	const keyUpdates = sentQueries.filter((sentQuery) => sentQuery.text.startsWith("update"))
+	expect(keyUpdates[0]?.values).toEqual(expect.arrayContaining(["sk-1", 1234]))
+	expect(keyUpdates[1]?.values).toEqual(expect.arrayContaining(["sk-2", 5000]))
 })
 
 // two first model calls race. the call whose update stored nothing deletes its own key and returns the stored key
@@ -264,6 +313,23 @@ test("a failed store deletes the created key and throws the store's error", asyn
 	await expect(loadOrProvisionUserLiteLLMKey("user-1")).rejects.toThrow('Failed query: update "users"')
 	expect(proxyRequests.map((proxyRequest) => proxyRequest.path)).toEqual(["/key/generate", "/key/delete"])
 	expect(proxyRequests[1]?.body).toEqual({ keys: ["sk-new"] })
+})
+
+// an update can store the key and still throw an error. the key that the user's row has is kept and returned
+test("an update that stores the key and still throws an error keeps and returns the stored key", async () => {
+	// the first read finds no key, the update throws an error, and the second read finds the created key on the row
+	const userRows = [toUserRow(null), toUserRow("sk-new")]
+	stubConnectionPool((sentQuery) => {
+		if (sentQuery.text.startsWith("update")) {
+			throw new Error("connection lost")
+		}
+		return userRows.splice(0, 1)
+	})
+	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
+
+	// the created key is returned and never deleted
+	expect(await loadOrProvisionUserLiteLLMKey("user-1")).toBe("sk-new")
+	expect(proxyRequests.map((proxyRequest) => proxyRequest.path)).toEqual(["/key/generate"])
 })
 
 // a key that the proxy cannot create and a user whose row is gone each throw an error
@@ -323,9 +389,9 @@ test("an attachment summary fails before its model call if the owner's key canno
 // a replacement creates the new key at the user's current budget and stores the new key on the user's row.
 // the old key is deleted only after the store
 test("a key replacement creates the new key at the user's budget, stores the new key, and then deletes the old key", async () => {
-	// a user with a stored key and a $12.34 budget override
+	// a user with a stored key and a $12.34 budget override, whose update stores the new key
 	const sentQueries = stubConnectionPool((sentQuery) =>
-		sentQuery.text.startsWith("update") ? [] : [toUserRow("sk-old")],
+		sentQuery.text.startsWith("update") ? [["user-1"]] : [toUserRow("sk-old")],
 	)
 	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
 
@@ -338,6 +404,19 @@ test("a key replacement creates the new key at the user's budget, stores the new
 	// the update stores the new key on that user's row
 	const keyUpdate = sentQueries.find((sentQuery) => sentQuery.text.startsWith("update"))
 	expect(keyUpdate?.values).toEqual(expect.arrayContaining(["sk-new", "user-1"]))
+})
+
+// a user whose row is deleted while the new key is created has no row to store the key on.
+// the new key is deleted, and the old key is kept
+test("a key replacement for a user whose row is gone deletes the new key and keeps the old key", async () => {
+	// a user with a stored key, whose update matches no row
+	stubConnectionPool((sentQuery) => (sentQuery.text.startsWith("update") ? [] : [toUserRow("sk-old")]))
+	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
+
+	// the replacement returns true, and the only key deleted is the new key
+	expect(await replaceUserLiteLLMKey("user-1")).toBe(true)
+	expect(proxyRequests.map((proxyRequest) => proxyRequest.path)).toEqual(["/key/generate", "/key/delete"])
+	expect(proxyRequests[1]?.body).toEqual({ keys: ["sk-new"] })
 })
 
 // a user with no key has nothing to replace. a replacement that fails returns false and leaves the old key stored

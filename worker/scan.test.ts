@@ -1,7 +1,83 @@
-// toScanSummary self-checks
-import { expect, test } from "bun:test"
+// scan tests: toScanSummary self-checks, what scanTopic does with a Scan row if the workflow start is rejected or fails,
+// and which Scan rows failUnstartedScan marks failed
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { connectionPool } from "../db"
+import type { scans } from "../db/schema"
 import { toScanSummary } from "./ingest"
 import type { NewResource } from "./ingest/ingester"
+import { failUnstartedScan, scanTopic } from "./scan"
+import * as temporalClient from "./temporalClient"
+
+// the connection pool's own query, put back after each test along with the spies
+const originalConnectionPoolQuery = connectionPool.query
+afterEach(() => {
+	connectionPool.query = originalConnectionPoolQuery
+	mock.restore()
+})
+
+// an open Scan row with only its id set
+const OPEN_SCAN = { id: "scan-1" } as typeof scans.$inferSelect
+
+// a query that the stubbed connection pool was sent
+type SentQuery = { text: string; values: unknown[] }
+
+// stub the connection pool to return no rows, and return each query that the stub is sent
+function stubConnectionPool(): SentQuery[] {
+	const sentQueries: SentQuery[] = []
+	connectionPool.query = ((queryConfig: { text: string }, values: unknown[]) => {
+		sentQueries.push({ text: queryConfig.text, values })
+		return Promise.resolve({ rows: [], fields: [], rowCount: 0 })
+	}) as unknown as typeof connectionPool.query
+	return sentQueries
+}
+
+// a start that Temporal rejects as already running keeps an existing row and marks that row dispatched.
+// a row that the caller opened is deleted
+test("a rejected start keeps an existing Scan row and marks that row dispatched, and deletes a row that the caller opened", async () => {
+	// a workflow start that is rejected as already running
+	spyOn(temporalClient, "startTopicScanWorkflow").mockResolvedValue({ status: "running" })
+
+	// an existing row gets a dispatchedAt and is never deleted
+	const existingRowSentQueries = stubConnectionPool()
+	expect(await scanTopic(OPEN_SCAN, "topic-1", "owner-1", "creation", true)).toEqual({ status: "running" })
+	expect(existingRowSentQueries).toHaveLength(1)
+	expect(existingRowSentQueries[0]?.text).toStartWith('update "scans" set "dispatched_at" = $1')
+	expect(existingRowSentQueries[0]?.values).toContain("scan-1")
+
+	// a row that the caller opened is deleted
+	const openedRowSentQueries = stubConnectionPool()
+	expect(await scanTopic(OPEN_SCAN, "topic-1", "owner-1", "manual")).toEqual({ status: "running" })
+	expect(openedRowSentQueries).toHaveLength(1)
+	expect(openedRowSentQueries[0]?.text).toStartWith('delete from "scans"')
+	expect(openedRowSentQueries[0]?.values).toEqual(["scan-1"])
+})
+
+// if the start throws an error, scanTopic keeps an existing row, sends no query, and throws the same error
+test("a start that throws an error keeps an existing Scan row and sends no query", async () => {
+	spyOn(temporalClient, "startTopicScanWorkflow").mockRejectedValue(new Error("temporal unreachable"))
+	const sentQueries = stubConnectionPool()
+	await expect(scanTopic(OPEN_SCAN, "topic-1", "owner-1", "creation", true)).rejects.toThrow("temporal unreachable")
+	expect(sentQueries).toEqual([])
+})
+
+// the update matches only a running Scan that is not manual, never dispatched, and never picked up
+test("failUnstartedScan marks failed only a running Scan that is not manual, not dispatched, and not picked up", async () => {
+	const sentQueries = stubConnectionPool()
+	await failUnstartedScan("scan-1", "the failure reason")
+
+	// one update saves the status, the reason, and the finish time
+	expect(sentQueries).toHaveLength(1)
+	expect(sentQueries[0]?.text).toStartWith('update "scans" set "status" = $1, "error" = $2, "finished_at" = $3')
+
+	// the update names each condition of an unstarted Scan
+	expect(sentQueries[0]?.text).toContain('"scans"."status" = $')
+	expect(sentQueries[0]?.text).toContain('"scans"."is_manual" = $')
+	expect(sentQueries[0]?.text).toContain('"scans"."dispatched_at" is null')
+	expect(sentQueries[0]?.text).toContain('"scans"."picked_up_at" is null')
+	expect(sentQueries[0]?.values).toEqual(
+		expect.arrayContaining(["failed", "the failure reason", "scan-1", "running", false]),
+	)
+})
 
 // a fake Resource with just the url and resource kind
 function resource(url: string): NewResource {

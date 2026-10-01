@@ -4,7 +4,7 @@
 import { isAdminRole } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
 import { userBudgetCents } from "@shared/plans"
-import { and, eq, isNotNull, isNull, lt } from "drizzle-orm"
+import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm"
 import { db } from "../db"
 import { startOfUtcMonth } from "../db/quotas"
 import { users } from "../db/schema"
@@ -19,8 +19,12 @@ const LITELLM_ADMIN_TIMEOUT_MS = 5000
 // a key's recorded spend and its maximum budget in dollars. a key with no maximum budget has a null budget
 export type LiteLLMKeyBudget = { spendDollars: number; maxBudgetDollars: number | null }
 
-// a user's stored key, and the email and budget that a new key for the user is created with
-type LiteLLMKeyOwner = { email: string; litellmVirtualKey: string | null; budgetCents: number }
+// a user's stored key, the email and budget that a new key for the user is created with,
+// and the role, plan, and budget override that the budget is computed from
+type LiteLLMKeyOwner = Pick<
+	typeof users.$inferSelect,
+	"email" | "litellmVirtualKey" | "role" | "plan" | "budgetOverrideCents"
+> & { budgetCents: number }
 
 /**
  * Loads the key billed for a user's model calls. Creates and stores a key at the user's budget if the user has none.
@@ -39,24 +43,50 @@ export async function loadOrProvisionUserLiteLLMKey(userId: string): Promise<str
 	// create a key at the user's budget
 	const provisionedLiteLLMKey = await provisionLiteLLMKey(litellmKeyOwner.email, litellmKeyOwner.budgetCents)
 
-	// store the key only if no other call stored a key first. the creation time keeps the key out of this month's reset
+	// store the key only if the user still has no key and still has the budget that the key was created at.
+	// the creation time keeps the key out of this month's reset
 	const updatedUserIds = await db
 		.update(users)
 		.set({ litellmVirtualKey: provisionedLiteLLMKey, litellmKeyCreatedAt: new Date() })
-		.where(and(eq(users.id, userId), isNull(users.litellmVirtualKey)))
+		.where(
+			and(
+				eq(users.id, userId),
+				isNull(users.litellmVirtualKey),
+				eq(users.role, litellmKeyOwner.role),
+				eq(users.plan, litellmKeyOwner.plan),
+				sql`${users.budgetOverrideCents} is not distinct from ${litellmKeyOwner.budgetOverrideCents}`,
+			),
+		)
 		.returning({ id: users.id })
-		.catch(async (error: unknown) => {
-			// the store failed, so delete the created key and throw the store's error
-			await deleteUnstoredLiteLLMKey(userId, provisionedLiteLLMKey)
-			throw error
-		})
+		.catch((storeError: unknown) => checkFailedLiteLLMKeyStore({ userId, key: provisionedLiteLLMKey, storeError }))
 	if (updatedUserIds.length > 0) {
 		return provisionedLiteLLMKey
 	}
 
-	// another call stored a key first, so delete this call's key and return the stored key
+	// another call stored a key first, or the user's budget changed. delete this call's key and load the key again
 	await deleteUnstoredLiteLLMKey(userId, provisionedLiteLLMKey)
 	return loadOrProvisionUserLiteLLMKey(userId)
+}
+
+// the user, the created key, and the error that the store of that key threw
+type CheckFailedLiteLLMKeyStoreOptions = { userId: string; key: string; storeError: unknown }
+
+// check a store that threw an error. the key counts as stored if the user's row has the key.
+// otherwise the key is deleted from the proxy and the store's error is thrown
+async function checkFailedLiteLLMKeyStore({
+	userId,
+	key,
+	storeError,
+}: CheckFailedLiteLLMKeyStoreOptions): Promise<{ id: string }[]> {
+	// an update can store the key and still throw an error, so read the user's row again
+	const litellmKeyOwner = await loadLiteLLMKeyOwner(userId)
+	if (litellmKeyOwner?.litellmVirtualKey === key) {
+		return [{ id: userId }]
+	}
+
+	// the key was not stored, so delete the key from the proxy and throw the store's error
+	await deleteUnstoredLiteLLMKey(userId, key)
+	throw storeError
 }
 
 // delete a created key that was not stored. a failed delete is reported instead of throwing an error
@@ -124,6 +154,12 @@ export async function deleteLiteLLMKey(key: string): Promise<void> {
 		body: JSON.stringify({ keys: [key] }),
 		signal: AbortSignal.timeout(LITELLM_ADMIN_TIMEOUT_MS),
 	})
+
+	// a key that the proxy does not know is already deleted
+	if (response.status === 404) {
+		return
+	}
+
 	// log the proxy's response body and throw an error that names only the status
 	if (!response.ok) {
 		console.error(`litellm key/delete failed: ${response.status}`, await response.text())
@@ -195,16 +231,19 @@ export async function replaceUserLiteLLMKey(userId: string): Promise<boolean> {
 	// the new key is stored before the old one is retired, so a store that fails leaves the user on the old key
 	try {
 		const replacementKey = await provisionLiteLLMKey(litellmKeyOwner.email, budgetCents)
-		try {
-			await db
-				.update(users)
-				.set({ litellmVirtualKey: replacementKey, litellmKeyCreatedAt: new Date() })
-				.where(eq(users.id, userId))
-		} catch (error) {
-			// the db update failed to store the new key, so delete it from the proxy
-			await deleteLiteLLMKey(replacementKey)
-			throw error
+		const updatedUserIds = await db
+			.update(users)
+			.set({ litellmVirtualKey: replacementKey, litellmKeyCreatedAt: new Date() })
+			.where(eq(users.id, userId))
+			.returning({ id: users.id })
+			.catch((storeError: unknown) => checkFailedLiteLLMKeyStore({ userId, key: replacementKey, storeError }))
+
+		// the user's row is gone, so delete the new key that no row has
+		if (updatedUserIds.length === 0) {
+			await deleteUnstoredLiteLLMKey(userId, replacementKey)
+			return true
 		}
+
 		// the new key is stored, so an old one the proxy would not retire is reported, not a failure
 		await deleteLiteLLMKey(litellmVirtualKey).catch((error: unknown) => {
 			console.error(`litellm could not retire the old key for user ${userId}`, error)
@@ -276,7 +315,7 @@ async function loadLiteLLMKeyOwner(userId: string): Promise<LiteLLMKeyOwner | un
 		plan: user.plan,
 		budgetOverrideCents: user.budgetOverrideCents,
 	})
-	return { email: user.email, litellmVirtualKey: user.litellmVirtualKey, budgetCents }
+	return { ...user, budgetCents }
 }
 
 // the proxy base url and master key, required for every admin call

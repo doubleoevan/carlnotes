@@ -81,6 +81,23 @@ export async function scanTopic(
 }
 
 /**
+ * Marks a Scan failed with a reason, only if the Scan is still running and was never dispatched or picked up by a worker.
+ * A Scan that a user started by hand is left running.
+ */
+export async function failUnstartedScan(scanId: string, failureReason: string): Promise<void> {
+	// mark the Scan failed only if the Scan is still unstarted.
+	// a manual start sets isManual before the Scan's workflow starts, and a worker sets pickedUpAt before any Source runs
+	const isUnstartedScan = and(
+		eq(scans.id, scanId),
+		eq(scans.status, "running"),
+		eq(scans.isManual, false),
+		isNull(scans.dispatchedAt),
+		isNull(scans.pickedUpAt),
+	)
+	await db.update(scans).set({ status: "failed", error: failureReason, finishedAt: new Date() }).where(isUnstartedScan)
+}
+
+/**
  * Stop the Scan a Topic is running. The workflow saves its own row from here, persisting when it was stopped,
  * so the Scan keeps the Findings it wrote and the money it spent while giving its daily scan back.
  */

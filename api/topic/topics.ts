@@ -375,7 +375,8 @@ export async function createTopic(
 		return { topicId: topic.id, firstScan }
 	})
 
-	// screen the url Sources this topic was created with, then hand the open scan to Temporal
+	// screen the url Sources that this topic was created with, then start the first Scan,
+	// or mark the first Scan failed if the owner's key budget is spent
 	startFirstScan(topicId, firstScan, userId).catch((error) => {
 		console.error(`could not start first scan for topic ${topicId}`, error)
 		reportError(error, "first-scan", { topicId, userId })

@@ -3,6 +3,7 @@ import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
 import type { Invite, Topic, TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contracts"
 import { isDailyFrequency } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
+import { FIRST_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
 import { and, count, desc, eq, exists, inArray, isNull, notInArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { dailyScanLimit, dailyTopicIdsWithinLimit } from "../../db/quotas"
@@ -19,7 +20,14 @@ import {
 	topics,
 	users,
 } from "../../db/schema"
-import { lookupPodcast, scanTopic, screenPendingSources, screenTopicSources } from "../../worker"
+import {
+	failUnstartedScan,
+	isUserLiteLLMKeyBudgetExhausted,
+	lookupPodcast,
+	scanTopic,
+	screenPendingSources,
+	screenTopicSources,
+} from "../../worker"
 import { isAllowed, isMonthlySpendExhausted, loadDailyFrequencyAuthorization, loadUserAccess } from "../authorization"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadPendingTopicInvites } from "../invite/invites"
@@ -417,11 +425,31 @@ export function startPendingSourceScreens(topicId: string): void {
 	})
 }
 
-// screen the new Topic's url Sources with llm-guard, then start the Scan
+/**
+ * Screens the new Topic's url Sources with llm-guard, then starts the Topic's first Scan.
+ * If the owner's key budget is spent, the first Scan is marked failed instead of started.
+ */
 export async function startFirstScan(topicId: string, firstScan: Scan | undefined, ownerId: string): Promise<void> {
+	// read the owner's key budget before the wait for the Source screens.
+	// a read that throws an error is reported, and the budget counts as not spent
+	const isOwnerBudgetExhausted = await isUserLiteLLMKeyBudgetExhausted(ownerId).catch((error: unknown) => {
+		console.error(`could not read the key budget for the first scan of topic ${topicId}`, error)
+		reportError(error, "first-scan", { topicId, ownerId })
+		return false
+	})
+
+	// mark the first Scan failed if the owner's budget is spent, and start the Source screens without the wait
+	if (firstScan && isOwnerBudgetExhausted) {
+		await failUnstartedScan(firstScan.id, FIRST_SCAN_SPENT_BUDGET_REASON)
+		await screenPendingSources(topicId)
+		return
+	}
+
+	// screen the Topic's url Sources and wait for the screens, then start the first Scan.
+	// the Scan row was opened at creation, so a rejected or failed start leaves the row in place
 	await screenTopicSources(topicId)
 	if (firstScan) {
-		await scanTopic(firstScan, topicId, ownerId, "creation")
+		await scanTopic(firstScan, topicId, ownerId, "creation", true)
 	}
 }
 

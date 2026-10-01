@@ -10,7 +10,7 @@ import { dailyTopicIdsWithinLimit, scansRemainingToday } from "../db/quotas"
 import { scans, topics } from "../db/schema"
 import { runWithConcurrency } from "./concurrency"
 import { isUserLiteLLMKeyBudgetExhausted } from "./litellm"
-import { scanTopic, startTopicScan } from "./scan"
+import { failUnstartedScan, scanTopic, startTopicScan } from "./scan"
 import { screenPendingSources } from "./screen"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import { describeScanQueue, SCAN_TASK_QUEUE, type ScanQueueDescription, toScanBacklogCrossing } from "./temporalClient"
@@ -206,8 +206,9 @@ async function saveFailedScan(topic: Topic): Promise<void> {
  * an orphaned scan row recovers on the next sweep instead of waiting out a window.
  * A start that the engine rejects means that Scan is already running, and that rejection sets the dispatch marker,
  * so a scan row is only ever retried until it is genuinely dispatched.
+ * A Scan whose owner's key budget is spent is marked failed instead of started, unless a user started the Scan by hand.
  */
-async function startUndispatchedScans(): Promise<void> {
+export async function startUndispatchedScans(): Promise<void> {
 	// only rows still open and still attached to a Topic
 	const undispatchedScans = await db
 		.select()
@@ -223,7 +224,23 @@ async function startUndispatchedScans(): Promise<void> {
 	// the scan row records what it was opened for, so the sweep starts it the way its original caller would have
 	for (const scan of undispatchedScans) {
 		try {
-			await db.update(scans).set({ startedAt: new Date() }).where(eq(scans.id, scan.id))
+			// mark the Scan failed instead of starting the Scan if the owner's key budget is spent.
+			// the key budget of a manual Scan's owner was read before the user started that Scan
+			if (!scan.isManual && (await isUserLiteLLMKeyBudgetExhausted(scan.ownerId))) {
+				await failUnstartedScan(scan.id, SCHEDULED_SCAN_SPENT_BUDGET_REASON)
+				continue
+			}
+
+			// set the Scan's start time to now and start the Scan,
+			// unless the Scan stopped running after the sweep read the row
+			const runningScanIds = await db
+				.update(scans)
+				.set({ startedAt: new Date() })
+				.where(and(eq(scans.id, scan.id), eq(scans.status, "running")))
+				.returning({ id: scans.id })
+			if (runningScanIds.length === 0) {
+				continue
+			}
 			await scanTopic(scan, scan.topicId as string, scan.ownerId, scan.isManual ? "manual" : "scheduled", true)
 		} catch (error) {
 			// the row stays undispatched, so the next sweep attempts it again

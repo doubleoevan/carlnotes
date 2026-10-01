@@ -10,6 +10,9 @@ with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep t
   and reads each owner's quota and key budget once. For a Topic whose owner's key has spent its budget, the sweep saves
   a failed Scan with the budget reason instead of starting a Scan. The Topics of an owner with no key, or of an owner
   whose budget read fails, are scanned as usual.
+  Before the sweep starts a Scan row that was opened and never dispatched, the sweep reads the row owner's key budget
+  and marks the row failed with the budget reason if that budget is spent.
+  A Scan that a user started by hand starts without the budget read.
   The sweep closes out a picked-up Scan that runs past its stages' total timeouts,
   and a Scan still waiting for a worker past the ingest and finish stages' total timeouts.
   `concurrency.ts` runs tasks a few at a time for the review's scoring, the sweep's reads of each owner's daily Topics

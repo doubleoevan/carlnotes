@@ -8,12 +8,19 @@ export const SCAN_SPENT_BUDGET_LABEL = "Carl hit this month's coffee budget."
 export const SCHEDULED_SCAN_SPENT_BUDGET_REASON =
 	"Carl ran out of coffee this month, so the scheduled scan didn't start"
 
+// the failure reason stored on a Topic's first Scan that never started because its owner's budget is spent
+export const FIRST_SCAN_SPENT_BUDGET_REASON =
+	"Carl ran out of coffee this month, so the topic's first scan didn't start"
+
+// the stored failure reasons of a Scan that never started because its owner's budget is spent
+const UNSTARTED_SCAN_SPENT_BUDGET_REASONS = [SCHEDULED_SCAN_SPENT_BUDGET_REASON, FIRST_SCAN_SPENT_BUDGET_REASON]
+
 /**
  * Whether a stored scan failure is a spent monthly budget.
- * The failure is either the proxy's rejection or the reason that the sweep saves.
+ * The failure is either the proxy's rejection or the reason stored on a Scan that never started.
  */
 export function isBudgetError(error: string | null): boolean {
-	return error !== null && (error === SCHEDULED_SCAN_SPENT_BUDGET_REASON || BUDGET_ERROR_PATTERN.test(error))
+	return error !== null && (UNSTARTED_SCAN_SPENT_BUDGET_REASONS.includes(error) || BUDGET_ERROR_PATTERN.test(error))
 }
 
 /**
