@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test"
 import { newBudget } from "../budget"
 import {
+	dedupeResources,
 	gateResources,
 	hasNearDuplicateKey,
 	isNearDuplicate,
@@ -9,6 +10,7 @@ import {
 	normalizeText,
 	rankBySimilarity,
 	toContentHash,
+	toScoreContextText,
 } from "./filter"
 import { emptyReviewOutcome } from "./track"
 
@@ -130,7 +132,7 @@ test("the gate lets a resource the topic holds through below the bar and drops a
 		typeof gateResources
 	>[0][number]
 	const newResource = { ...topicResource, id: "new" }
-	const topicContext = { name: "t", text: "t", embedding: [1, 0], contextHash: "hash" }
+	const topicContext = { name: "t", text: "t", embedding: [1, 0], contextHash: "hash", scoreText: "t" }
 	const relevantResources = await gateResources(
 		[topicResource, newResource],
 		topicContext,
@@ -141,4 +143,48 @@ test("the gate lets a resource the topic holds through below the bar and drops a
 		new Set(["topic-resource"]),
 	)
 	expect(relevantResources.map((relevantResource) => relevantResource.resource.id)).toEqual(["topic-resource"])
+})
+
+// two url Source pages titled by the same url segment would hash and embed alike, and the dedupe keeps both
+test("the dedupe passes a url Source's own page through untouched", async () => {
+	// two pages with the same fallback title and the same vector
+	const firstPage = { ...toTestResource("first-page"), title: "jobs", snippet: null }
+	const secondPage = { ...firstPage, id: "second-page" }
+	const relevantResources = [firstPage, secondPage].map((resource) => ({
+		resource,
+		embedding: [1, 0],
+		similarity: 0.2,
+	}))
+	const resourcesToScore = await dedupeResources({
+		relevantResources,
+		candidateIds: ["first-page", "second-page"],
+		reviewOutcome: emptyReviewOutcome(),
+		urlSourcePageIds: new Set(["first-page", "second-page"]),
+	})
+	expect(resourcesToScore.map((resource) => resource.id)).toEqual(["first-page", "second-page"])
+})
+
+// the score prompt reads the liked or bookmarked pages, then the rated down pages, up to ten of each, by title and host
+test("toScoreContextText lists the example pages after the context text", () => {
+	// a topic with no example pages scores against its context text alone
+	expect(toScoreContextText("context", { likedOrBookmarkedPages: [], ratedDownPages: [] })).toBe("context")
+
+	// a page with no title shows its url, and the list stops at ten pages
+	const bookmarkedPages = Array.from({ length: 12 }, (_, i) => ({
+		title: i === 1 ? null : `Page ${i}`,
+		url: `https://www.example.com/${i}`,
+	}))
+	const ratedDownPages = [{ title: "Junk", url: "https://junk.example/a" }]
+	const scoreContextLines = toScoreContextText("context", {
+		likedOrBookmarkedPages: bookmarkedPages,
+		ratedDownPages,
+	}).split("\n")
+	expect(scoreContextLines.slice(0, 5)).toEqual([
+		"context",
+		"",
+		"[pages the reader liked or bookmarked]",
+		"- Page 0 (example.com)",
+		"- https://www.example.com/1 (example.com)",
+	])
+	expect(scoreContextLines.slice(13)).toEqual(["", "[pages the reader rated down]", "- Junk (junk.example)"])
 })

@@ -1,5 +1,6 @@
 // the unpaid stages that decide
 import { reportError } from "@shared/monitoring"
+import { toHostWithoutWww } from "@shared/seo"
 import { cosineSimilarity } from "ai"
 import { and, cosineDistance, eq, inArray, isNotNull, lt, notInArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"
@@ -7,6 +8,7 @@ import { EMBED_MODEL_NAME, findings, resources, sources } from "../../db/schema"
 import { toTopicContextHash } from "../attach"
 import { type Budget, canSpend, charge, EMBED_COST_PER_MILLION_TOKENS, tokenCost } from "../budget"
 import type { NewResource } from "../ingest/ingester"
+import { toCanonicalUrl } from "../ingest/normalize"
 import { embedVector, embedVectors } from "../models"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
@@ -19,21 +21,39 @@ const RELEVANCE_THRESHOLDS: Record<Resource["kind"], number> = { read: 0.35, wat
 // the text limit that bounds embedding tokens and spend
 const MAX_EMBED_CHARS = 8000
 
+// how many example pages of each kind the score prompt lists
+const MAX_SCORE_EXAMPLE_PAGES = 10
+
 // qwen3 is instruction-aware, so the query side is wrapped with this task instruction while documents stay plain
 const EMBED_QUERY_INSTRUCTION = "Given a topic's interest description, retrieve web resources relevant to it"
 
 // a persisted Resource record
 export type Resource = typeof resources.$inferSelect
 
-// the topic's derived context loaded once per Scan
-// the topic's context: what the gate embeds, and the hash a Finding records
-export type TopicContext = { name: string; text: string; embedding: number[]; contextHash: string }
+// the topic's context. what the gate embeds, the hash that a Finding records, and the text that the score prompt reads.
+// the score text adds the pages that the topic's users liked, bookmarked, or rated down. the hash leaves those pages out
+export type TopicContext = { name: string; text: string; embedding: number[]; contextHash: string; scoreText: string }
+
+// a page from the topic's feed that the score prompt shows as an example
+export type ScoreExamplePage = { title: string | null; url: string }
+
+// the example pages. the pages that the topic's users liked or bookmarked, and the pages that they rated down
+export type ScoreExamplePages = { likedOrBookmarkedPages: ScoreExamplePage[]; ratedDownPages: ScoreExamplePage[] }
 
 // a Resource that cleared the relevance gate, with the embedding and the similarity score that ranks it
 export type RelevantResource = { resource: Resource; embedding: number[]; similarity: number }
 
 // the content hashes and embeddings this Scan dedupes each new Resource against
 export type DedupeKeys = { contentHashes: Set<string>; embeddings: number[][] }
+
+// the Resources the dedupe walks in ranked order, the Scan's candidates, its running totals, and the url Sources'
+// own pages, which it passes through
+type DedupeResourcesOptions = {
+	relevantResources: RelevantResource[]
+	candidateIds: string[]
+	reviewOutcome: ReviewOutcome
+	urlSourcePageIds: Set<string>
+}
 
 // what the relevance gate makes of one Resource: a relevant one for the ranked pass, or an outcome to record now
 type RelevanceGateOutcome = { status: "relevant"; relevantResource: RelevantResource } | ResourceOutcome
@@ -56,16 +76,11 @@ export async function loadResourcesToReview(
 	// the urls this scan discovered (already deduped by ingestion)
 	const urls = discoveredResources.map((resource) => resource.url)
 
-	// the addresses this Topic watches, which every Scan pulls again
-	const urlSources = await db
-		.select({ config: sources.config })
-		.from(sources)
-		.where(and(eq(sources.topicId, topicId), eq(sources.kind, "url")))
-	const sourceUrls = urlSources
-		.map((urlSource) => urlSource.config?.url)
-		.filter((url): url is string => typeof url === "string")
+	// the url Sources' own pages, which every Scan reads again
+	const urlSourcePageUrls = await loadUrlSourcePageUrls(topicId)
 
-	// the Resources already reviewed against this context and content
+	// the Resources already reviewed against this context and content, and the Resources rated thumbs down.
+	// a Resource rated thumbs down never scores again
 	const reviewedResourceIds = db
 		.select({ id: findings.resourceId })
 		.from(findings)
@@ -73,17 +88,19 @@ export async function loadResourcesToReview(
 		.where(
 			and(
 				eq(findings.topicId, topicId),
-				eq(findings.reviewedContextHash, topicContextHash),
-				sql`${findings.reviewedContentHash} is not distinct from ${resources.contentHash}`,
+				or(
+					and(
+						eq(findings.reviewedContextHash, topicContextHash),
+						sql`${findings.reviewedContentHash} is not distinct from ${resources.contentHash}`,
+					),
+					eq(findings.rating, "down"),
+				),
 			),
 		)
 
 	// a Resource is worth scoring when no Finding has reviewed it against this context and content.
-	// a watched url Source is re-read every Scan, whatever it scored last time
-	const needsScoring =
-		sourceUrls.length > 0
-			? or(notInArray(resources.id, reviewedResourceIds), inArray(resources.url, sourceUrls))
-			: notInArray(resources.id, reviewedResourceIds)
+	// a url Source's own page is re-read every Scan, whatever it scored last time
+	const needsScoring = or(notInArray(resources.id, reviewedResourceIds), inArray(resources.url, urlSourcePageUrls))
 
 	// the Resources this Scan may score: the ones it discovered, plus every Resource the Topic already
 	// holds a Finding for, since a bookmarked or rated Finding outlives the feed it came from
@@ -98,6 +115,23 @@ export async function loadResourcesToReview(
 }
 
 /**
+ * Loads the canonical urls of a Topic's url Sources, which are the urls of the pages those Sources read.
+ */
+export async function loadUrlSourcePageUrls(topicId: string): Promise<string[]> {
+	// the Topic's url Sources
+	const urlSources = await db
+		.select({ config: sources.config })
+		.from(sources)
+		.where(and(eq(sources.topicId, topicId), eq(sources.kind, "url")))
+
+	// each saved url in the canonical form that the url ingester stores its page under
+	return urlSources
+		.map((urlSource) => urlSource.config?.url)
+		.filter((url): url is string => typeof url === "string")
+		.map(toCanonicalUrl)
+}
+
+/**
  * Builds the one context text a Scan reviews against: the topic's name, its prompt, and its attachments.
  */
 export function toTopicContextText(topicScanContext: { name: string; context: string }): string {
@@ -106,26 +140,63 @@ export function toTopicContextText(topicScanContext: { name: string; context: st
 }
 
 /**
- * Embed the topic's context for the relevance gate: its name, its prompt, and its attachments' contexts.
+ * Builds the score prompt's text from the context text, then the pages that the topic's users liked or bookmarked,
+ * then the pages that they rated down.
  */
-export async function loadTopicContext(
-	topicScanContext: { name: string; context: string },
-	budget: Budget,
-	litellmApiKey?: string,
-): Promise<TopicContext> {
+export function toScoreContextText(contextText: string, scoreExamplePages: ScoreExamplePages): string {
+	// list each kind of example page by title and host, under a label like an attachment's. a kind with no pages is left out
+	const toExampleSections = (label: string, examplePages: ScoreExamplePage[]): string[] => {
+		const examplePageLines = examplePages
+			.slice(0, MAX_SCORE_EXAMPLE_PAGES)
+			.map(({ title, url }) => `- ${title ?? url} (${toHostWithoutWww(url)})`)
+		return examplePageLines.length > 0 ? [`[${label}]\n${examplePageLines.join("\n")}`] : []
+	}
+	return [
+		contextText,
+		...toExampleSections("pages the reader liked or bookmarked", scoreExamplePages.likedOrBookmarkedPages),
+		...toExampleSections("pages the reader rated down", scoreExamplePages.ratedDownPages),
+	].join("\n\n")
+}
+
+// the topic's scan context, the example pages for the score prompt, the Scan's Budget,
+// and the key that the embedding bills
+type LoadTopicContextOptions = {
+	topicScanContext: { name: string; context: string }
+	scoreExamplePages: ScoreExamplePages
+	budget: Budget
+	litellmApiKey?: string
+}
+
+/**
+ * Embeds the topic's context for the relevance gate: its name, its prompt, and its attachments' contexts.
+ * The text that the score prompt reads also lists the example pages.
+ */
+export async function loadTopicContext({
+	topicScanContext,
+	scoreExamplePages,
+	budget,
+	litellmApiKey,
+}: LoadTopicContextOptions): Promise<TopicContext> {
 	// always include the topic name in the scan context
 	const text = toTopicContextText(topicScanContext)
 
 	// embed the context as the query side once and update the estimated embedding cost
 	const embedding = await embedQuery(text, litellmApiKey)
 	charge(budget, "embedding", tokenCost(estimateEmbedTokens(text), EMBED_COST_PER_MILLION_TOKENS))
-	return { name: topicScanContext.name, text, embedding, contextHash: toTopicContextHash(text) }
+	return {
+		name: topicScanContext.name,
+		text,
+		embedding,
+		contextHash: toTopicContextHash(text),
+		scoreText: toScoreContextText(text, scoreExamplePages),
+	}
 }
 
 /**
  * Embed every candidate and keep the ones relevant to the topic, recording the outcome of the ones dropped.
  * Embedding is the only metered work here, so a candidate past the Scan's limit is deferred instead of being embedded.
- * A candidate the Topic already holds a Finding for passes whatever it measures, so a changed context scores it again.
+ * A candidate in gateExemptResourceIds passes whatever it measures: a Resource the Topic already holds a Finding for,
+ * and a url Source's own page.
  */
 export async function gateResources(
 	resourcesToReview: Resource[],
@@ -134,7 +205,7 @@ export async function gateResources(
 	budget: Budget,
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
-	topicResourceIds: Set<string> = new Set(),
+	gateExemptResourceIds: Set<string> = new Set(),
 ): Promise<RelevantResource[]> {
 	// embed the candidates with no stored vector in batched calls first, one HTTP request per chunk
 	const embeddedBatchOutcome = await embedMissingVectors(resourcesToReview, budget, litellmApiKey, stopSignal)
@@ -146,7 +217,12 @@ export async function gateResources(
 		if (stopSignal?.aborted) {
 			break
 		}
-		const gateOutcome = gateResource(resource, embeddedBatchOutcome, topicContext, topicResourceIds.has(resource.id))
+		const gateOutcome = gateResource(
+			resource,
+			embeddedBatchOutcome,
+			topicContext,
+			gateExemptResourceIds.has(resource.id),
+		)
 		if (gateOutcome.status === "relevant") {
 			relevantResources.push(gateOutcome.relevantResource)
 			continue
@@ -163,17 +239,26 @@ export async function gateResources(
 /**
  * Drop the relevant Resources that duplicate one this Scan already let through, returning the rest in ranked order.
  * This walk stays sequential, so the highest-ranked member of a duplicate set is the one that wins the slot.
+ * A url Source's own page is never dropped.
  */
-export async function dedupeResources(
-	relevantResources: RelevantResource[],
-	candidateIds: string[],
-	reviewOutcome: ReviewOutcome,
-): Promise<Resource[]> {
+export async function dedupeResources({
+	relevantResources,
+	candidateIds,
+	reviewOutcome,
+	urlSourcePageIds,
+}: DedupeResourcesOptions): Promise<Resource[]> {
 	const dedupeKeys: DedupeKeys = { contentHashes: new Set(), embeddings: [] }
 	const resourcesToScore: Resource[] = []
 
 	// each Resource compares against what came before it, so the dedupe keys grow as the walk goes
 	for (const relevantResource of relevantResources) {
+		// a url Source's own page goes on to the model. its title is often only its url's last path segment
+		if (urlSourcePageIds.has(relevantResource.resource.id)) {
+			resourcesToScore.push(relevantResource.resource)
+			continue
+		}
+
+		// any other Resource is dropped if it duplicates one before it, and kept otherwise
 		const dedupeOutcome = await dedupeResource(relevantResource, candidateIds, dedupeKeys)
 		if (dedupeOutcome) {
 			trackOutcomes(reviewOutcome, dedupeOutcome)
@@ -198,7 +283,7 @@ function gateResource(
 	resource: Resource,
 	embeddedBatch: EmbeddedBatchOutcome,
 	topicContext: TopicContext,
-	isTopicResource: boolean,
+	isGateExempt: boolean,
 ): RelevanceGateOutcome {
 	// reuse a Resource's existing global embedding
 	const embedding = resource.embedding ?? embeddedBatch.embeddings.get(resource.id)
@@ -206,10 +291,10 @@ function gateResource(
 		return embeddedBatch.failedIds.has(resource.id) ? { status: "failed" } : { status: "deferred" }
 	}
 
-	// the relevance gate, measured against this resource kind's own bar. a Resource the Topic already holds a Finding
-	// for is in the feed, so a changed context scores it again instead of gating it out
+	// the relevance gate, measured against this resource kind's own bar. an exempt Resource goes on to the model
+	// whatever it measures
 	const similarity = cosineSimilarity(embedding, topicContext.embedding)
-	if (!isTopicResource && !isRelevant(similarity, resource.kind)) {
+	if (!isGateExempt && !isRelevant(similarity, resource.kind)) {
 		return { status: "filtered", reason: "below relevance threshold" }
 	}
 

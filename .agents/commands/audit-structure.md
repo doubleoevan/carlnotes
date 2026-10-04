@@ -290,8 +290,20 @@ Check for:
      `screen-source-activities.ts`, and `stage-timeouts.ts` (now `worker/temporalClient.ts`, `runTopicScan.ts`,
      `runTopicScanActivities.ts`, `processAttachment.ts`, `processAttachmentActivities.ts`, `screenSource.ts`,
      `screenSourceActivities.ts`, and `stageTimeouts.ts`)
+   - `monthlySpendDollars` in `api/authorization.ts` (now in `db/quotas.ts`, re-exported by `api/authorization.ts`), and
+     `updateTopicFieldsPayload.shape` as a tool's input (now `toUpdateTopicFieldsShape()` in `api/tool/topicTools.ts`)
+   - `isUniqueViolation` in `api/usernames.ts` (now in `db/index.ts`)
    - `loadUserLiteLLMKey` (now `loadOrProvisionUserLiteLLMKey` in `worker/litellm.ts`), and `ToolCaller`'s
      `litellmApiKey` in `api/mcp/toolCaller.ts` (removed)
+   - `TopicSectionPagination` and `toPageLinkClass` in `TopicSection.tsx` (now `Pagination` and `toPageControlClass`
+     in `ui/src/components/common/Pagination.tsx`), `MAX_HISTORY_SCANS` (now `SCANS_PER_PAGE`) and
+     `EXPANDED_HISTORY_CLASS` (removed) in `TopicScanHistory.tsx`, `RateTopicFindingButton` in `TopicResource.tsx` (now
+     `RatingThumbs` in `ui/src/components/common/RatingThumbs.tsx`), `THEME_SCRIPT` (now
+     `FIRST_PAINT_SCRIPT` in `ui/src/routes/__root.tsx`), `SCHEME_PREFIXES` (now `URI_SCHEME_PREFIXES` in
+     `AnchorLink.tsx`), `CARD_SKELETONS` in `TopicSkeleton.tsx` (removed), and `toHost` in `worker/suggest.ts` (now
+     `toHostWithoutWww` in `shared/seo.ts`)
+   - `CardNode` in `api/share/previewImage.ts` (now `CardElement`), with every share card's `*Node` locals (now
+     `*Element`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

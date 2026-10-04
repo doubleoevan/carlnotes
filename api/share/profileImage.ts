@@ -2,7 +2,7 @@
 import type { PublishedAvatar } from "../avatars"
 import {
 	CARD_MUTED_COLOR,
-	type CardNode,
+	type CardElement,
 	PREVIEW_TEMPLATE_VERSION,
 	toAvatarIdentity,
 	toBrandIcon,
@@ -44,7 +44,7 @@ export async function toProfilePreviewPng(card: ProfilePreview): Promise<Uint8Ar
 }
 
 // the profile owner title display: the image they publish, or their initials in their tint, then their username
-function toProfileOwner(profilePreview: ProfilePreview, avatarImage: string | null): CardNode {
+function toProfileOwner(profilePreview: ProfilePreview, avatarImage: string | null): CardElement {
 	const avatar = avatarImage
 		? toOwnerPhoto(avatarImage, AVATAR_SIZE)
 		: toOwnerInitials(profilePreview.userId, profilePreview.username, AVATAR_SIZE)
@@ -61,7 +61,7 @@ function toProfileOwner(profilePreview: ProfilePreview, avatarImage: string | nu
 }
 
 // the footer with the profile's count labels, one in each corner
-function toProfileFooter(card: ProfilePreview): CardNode {
+function toProfileFooter(card: ProfilePreview): CardElement {
 	return {
 		type: "div",
 		props: {

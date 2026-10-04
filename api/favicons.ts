@@ -1,5 +1,6 @@
-// a host's stored favicon: the route that serves it, and the path a finding and a link preview name it by
-import type { ChatLinkPreview, TopicFinding } from "@shared/contracts"
+// the route that serves a host's stored favicon, and the path that a finding, a link preview,
+// and a podcast episode chapter name the favicon by
+import type { ChatLinkPreview, PodcastEpisodeChapter, TopicFinding } from "@shared/contracts"
 import { toUrlHost } from "@shared/sources"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { Hono } from "hono"
@@ -46,6 +47,23 @@ export async function attachLinkPreviewFaviconPaths(chatLinkPreviews: ChatLinkPr
 	// each card names its own host's path, or null
 	for (const linkPreview of chatLinkPreviews) {
 		linkPreview.faviconPath = toStoredFaviconPath(toUrlHost(linkPreview.url), faviconHosts)
+	}
+}
+
+/**
+ * Fills each podcast episode chapter's faviconPath from its source url's host, in one query for the episode.
+ */
+export async function attachPodcastEpisodeChapterFaviconPaths(
+	podcastEpisodeChapters: PodcastEpisodeChapter[],
+): Promise<void> {
+	// the hosts with a stored icon, looked up once for the podcast episode
+	const hosts = podcastEpisodeChapters
+		.map((podcastEpisodeChapter) => toUrlHost(podcastEpisodeChapter.sourceUrl))
+		.filter((host): host is string => host !== null)
+	const faviconHosts = await loadFaviconHosts([...new Set(hosts)])
+	// set each chapter's favicon path, or null if its host has no stored icon
+	for (const podcastEpisodeChapter of podcastEpisodeChapters) {
+		podcastEpisodeChapter.faviconPath = toStoredFaviconPath(toUrlHost(podcastEpisodeChapter.sourceUrl), faviconHosts)
 	}
 }
 

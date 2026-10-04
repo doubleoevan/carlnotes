@@ -26,7 +26,7 @@ export function toBrowserPlatform(userAgent: string): BrowserPlatform {
 		return "android"
 	}
 
-	// iPadOS reports as a Mac with touch, so the touch check is what tells it from a desktop Safari
+	// match an iOS device by name. an iPad on iPadOS reports as a Mac and reads as other
 	const isIosDevice = /iPhone|iPad|iPod/.test(userAgent)
 	return isIosDevice ? "ios" : "other"
 }

@@ -1,26 +1,45 @@
 // the authorization gate
 import { dailyFrequencies } from "@shared/enums"
 import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, userBudgetCents } from "@shared/plans"
-import { and, count, eq, gte, inArray, sql } from "drizzle-orm"
+import { and, count, eq, inArray } from "drizzle-orm"
 import { db } from "../db"
-import { loadUserAccess } from "../db/quotas"
-import { chatTurns, scans, subscriptions, teamMembers, teamTopics, topics } from "../db/schema"
+import { canRenderPodcastEpisode, loadUserAccess, monthlySpendDollars, toMonthlySpendCents } from "../db/quotas"
+import { subscriptions, teamMembers, teamTopics, topics } from "../db/schema"
 import { assertNever, canRateTopic, canSeeTopic, toTopicEditRole } from "./topic/permissions"
-import { loadBillingAccess, scansToday, startOfUtcMonth } from "./topic/quotas"
+import { loadBillingAccess, scansToday } from "./topic/quotas"
 
 // the topic fields that every resource capability needs: identity, owner, visibility, and the team that owns it
 type GatedTopic = Pick<typeof topics.$inferSelect, "id" | "ownerId" | "visibility" | "teamId">
 
 // the gated capabilities that "isAllowed" decides
-// biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type Capability = "topic:view" | "topic:edit" | "topic:delete" | "topic:invite" | "topic:rate" | "topic:create" | "scan:request" | "scan:manual" | "chat:send" | "chat:persist" | "admin:console" | "admin:setRole" | "admin:setBudget" | "admin:setFeatureOrder" | "admin:deleteUser"
+export type Capability =
+	// a topic and its scans
+	| "topic:view"
+	| "topic:edit"
+	| "topic:delete"
+	| "topic:invite"
+	| "topic:rate"
+	| "topic:create"
+	| "scan:request"
+	| "scan:manual"
+	// chat, and a topic's podcast episodes
+	| "chat:send"
+	| "chat:persist"
+	| "podcastEpisode:render"
+	| "podcastEpisode:remove"
+	// the admin console
+	| "admin:console"
+	| "admin:setRole"
+	| "admin:setBudget"
+	| "admin:setFeatureOrder"
+	| "admin:deleteUser"
 
 // the user's budget and the admin role test live in shared, where the worker can read them
 export { isAdminRole } from "@shared/enums"
 export { type UserAccess, userBudgetCents } from "@shared/plans"
 
-// the user's access row, read at most once per request by the loader that the api shares with the worker
-export { loadUserAccess }
+// the user's access row and the month's spend, from the loaders that the api shares with the worker
+export { loadUserAccess, monthlySpendDollars }
 
 /**
  * Whether the user may execute a capability, optionally on a given topic.
@@ -67,11 +86,10 @@ async function decideTopicCapability(
 		// the topic owner and the owning team's members, while the owner is still on it
 		case "topic:edit":
 			return topic ? (await toTopicEditRole(userId, topic)) !== null : false
-		// only the topic owner may delete
+		// only the topic owner may delete the topic, manage its invite list, or remove one of its podcast episodes
 		case "topic:delete":
-			return Boolean(userId) && topic?.ownerId === userId
-		// only the topic owner can manage the invite list
 		case "topic:invite":
+		case "podcastEpisode:remove":
 			return Boolean(userId) && topic?.ownerId === userId
 		// creating a topic is gated by the plan's topic limit
 		case "topic:create":
@@ -82,6 +100,10 @@ async function decideTopicCapability(
 		// a manual scan needs the owner to be within their daily quota
 		case "scan:manual":
 			return userId && topic ? (await loadManualScanAuthorization(userId, topic)).status === "allowed" : false
+		// an admin or a paid plan renders every podcast episode, and the free plan renders one per topic.
+		// the admin role and the plan are the topic owner's
+		case "podcastEpisode:render":
+			return topic ? canRenderPodcastEpisode(topic) : false
 		// a new capability fails to compile here
 		default:
 			return assertNever(capability)
@@ -99,29 +121,9 @@ export function isLeaderRole(role: "leader" | "member"): boolean {
  * Whether the user has spent their monthly budget, so the proxy would reject the model calls a scan or a chat turn makes.
  */
 export async function isMonthlySpendExhausted(userId: string): Promise<boolean> {
-	// scans and chat draw from one budget pool, so both are summed against the same budget
-	const [userAccess, spend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
-	const spentCents = Math.round(spend.scanDollars * 100) + Math.round(spend.chatDollars * 100)
-	return spentCents >= userBudgetCents(userAccess)
-}
-
-/**
- * This month's recorded spend for the user, split into scans and chat buckets
- */
-export async function monthlySpendDollars(userId: string): Promise<{ scanDollars: number; chatDollars: number }> {
-	// both sums use the same UTC month boundary the budget resets on
-	const monthStart = startOfUtcMonth(new Date())
-	const [[scanRow], [chatRow]] = await Promise.all([
-		db
-			.select({ dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
-			.from(scans)
-			.where(and(eq(scans.ownerId, userId), gte(scans.startedAt, monthStart))),
-		db
-			.select({ dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
-			.from(chatTurns)
-			.where(and(eq(chatTurns.userId, userId), gte(chatTurns.createdAt, monthStart))),
-	])
-	return { scanDollars: Number(scanRow?.dollars ?? 0), chatDollars: Number(chatRow?.dollars ?? 0) }
+	// sum the scan, chat, and podcast episode spend against the user's one budget
+	const [userAccess, monthlySpend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
+	return toMonthlySpendCents(monthlySpend) >= userBudgetCents(userAccess)
 }
 
 /**

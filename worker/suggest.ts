@@ -1,12 +1,15 @@
 // proposes Sources a Topic could follow, read from its own title, prompt, and attachments
+import { toHostWithoutWww } from "@shared/seo"
 import { customSourceKeys, toGoogleNewsPublisherFeedUrl, toPublisherDomain } from "@shared/sources"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import { fetchAuthorFeed } from "./ingest/bluesky"
 import { FeedStatusError, fetchFeed } from "./ingest/feed"
+import type { NewResource } from "./ingest/ingester"
 import { toCanonicalUrl } from "./ingest/normalize"
 import { searchPodcasts } from "./ingest/podcast"
 import { fetchSubredditFeed, toSubredditName } from "./ingest/reddit"
+import { parseResults, runSearch } from "./ingest/search"
 import { readHandle } from "./ingest/x"
 import { toAtomUrl, toYoutubeSourceId } from "./ingest/youtube"
 import { cheapModel } from "./models"
@@ -35,6 +38,10 @@ const VERIFY_TIMEOUT_MS = 8000
 
 // how many extra sources to ask for beyond what the topic can hold
 const SUGGESTION_HEADROOM = 3
+
+// how many web search pages the model reads, and how much of the topic's text the search query takes
+const MAX_WEB_SEARCH_PAGES = 10
+const MAX_WEB_SEARCH_QUERY_CHARS = 300
 
 // the model's answer. every field is required, so a namedSource missing its value is filtered out
 const suggestionSchema = z.object({
@@ -146,7 +153,7 @@ export function toSourceKey(source: SuggestedSource): string {
 	if (source.sourceOption === "url") {
 		return `url:${canonicalUrl}`
 	}
-	return `rss:${toHost(canonicalUrl)}`
+	return `rss:${toHostWithoutWww(canonicalUrl)}`
 }
 
 /**
@@ -169,11 +176,15 @@ async function generateSourceSuggestions(suggestionContext: SuggestionContext): 
 	const excludedSources = suggestionContext.excludeSources
 		.map((source) => `- ${source.sourceOption}: ${source.value}`)
 		.join("\n")
+
+	// load the pages that a web search for the topic finds, and write the prompt with them
+	const webSearchResources = await loadWebSearchResources(suggestionContext)
+	const webSearchPages = toWebSearchPages(webSearchResources)
 	const { template, name, registryPrompt } = await fetchPromptTemplate("suggest-sources")
 	const builtPrompt = {
 		prompt: writePrompt(
 			template,
-			{ topicContext, excludedSources: excludedSources || "None." },
+			{ topicContext, excludedSources: excludedSources || "None.", webSearchPages },
 			{ maxSuggestions: String(suggestionContext.limit + SUGGESTION_HEADROOM) },
 		),
 		name,
@@ -188,11 +199,49 @@ async function generateSourceSuggestions(suggestionContext: SuggestionContext): 
 			prompt: builtPrompt.prompt,
 			...promptTelemetry(builtPrompt),
 		})
-		return output.sources.filter((source) => source.value.trim())
+
+		// leave out a search result proposed as a page to follow. one article never changes
+		const webSearchUrls = new Set(webSearchResources.map(({ url }) => toCanonicalUrl(url)))
+		const isWebSearchResult = (source: SuggestedSource): boolean =>
+			source.sourceOption === "url" && webSearchUrls.has(toCanonicalUrl(source.value))
+		return output.sources.filter((source) => source.value.trim() && !isWebSearchResult(source))
 	} catch (error) {
+		// report the failed call, and suggest nothing
 		console.error("source suggestion generation failed", error)
 		return []
 	}
+}
+
+/**
+ * Returns the pages that a web search for the topic finds, or none without a search key or after a failed search.
+ */
+export async function loadWebSearchResources({ name, prompt }: SuggestionContext): Promise<NewResource[]> {
+	// a deployment with no search key suggests from the topic's words alone
+	if (!Bun.env.EXA_API_KEY) {
+		return []
+	}
+
+	// search for the topic's title and the start of its prompt
+	try {
+		const searchResponse = await runSearch(`${name}: ${prompt}`.slice(0, MAX_WEB_SEARCH_QUERY_CHARS))
+		return parseResults(searchResponse).resources.slice(0, MAX_WEB_SEARCH_PAGES)
+	} catch (error) {
+		// a search that fails leaves the model with the topic's words alone
+		console.error("source suggestion web search failed", error)
+		return []
+	}
+}
+
+/**
+ * Lists each web search page's title, host, and address on its own line, or "None." if there are none.
+ */
+export function toWebSearchPages(webSearchResources: NewResource[]): string {
+	const webSearchPageLines = webSearchResources.map((webSearchResource) => {
+		const host = toHostWithoutWww(webSearchResource.url)
+		const title = webSearchResource.title?.replace(/\s+/g, " ").trim() || host
+		return `- ${title} (${host}): ${webSearchResource.url}`
+	})
+	return webSearchPageLines.join("\n") || "None."
 }
 
 // whether a namedSource can actually be read, fetched the way its own ingester reads it
@@ -293,14 +342,5 @@ async function readSuggestedSource(suggestedSource: SuggestedSource): Promise<vo
 	const response = await fetchPublicUrl(suggestedSource.value, { signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS) })
 	if (!response.ok) {
 		throw new FeedStatusError(suggestedSource.value, response.status)
-	}
-}
-
-// a url's host, or the url itself if it does not parse, so that something still identifies an unparseable source
-function toHost(url: string): string {
-	try {
-		return new URL(url).hostname.replace(/^www\./, "").toLowerCase()
-	} catch {
-		return url
 	}
 }

@@ -50,7 +50,7 @@ export const searchIngester: SourceIngester = async (source: Source) => {
 }
 
 // the shape of Exa's search response
-type SearchResponse = {
+export type SearchResponse = {
 	results: { url?: string; title?: string | null; highlights?: string[] }[]
 	costDollars?: { total?: number }
 }
@@ -131,8 +131,10 @@ async function runSearches(searchQueries: string[]): Promise<SearchResponse[]> {
 	return searchResponses
 }
 
-// run one query using Exa search. the API key is required, so a missing key or a failed response throws an error
-async function runSearch(query: string): Promise<SearchResponse> {
+/**
+ * Runs one Exa search query and returns its response, throwing an error on a missing key or a failed response.
+ */
+export async function runSearch(query: string): Promise<SearchResponse> {
 	// Exa requires an API key. without one this Source cannot run at all, so throw an error
 	const apiKey = Bun.env.EXA_API_KEY
 	if (!apiKey) {

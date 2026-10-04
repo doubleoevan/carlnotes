@@ -5,6 +5,7 @@ import { CoffeeSteam } from "@/components/branding/CoffeeSteam"
 import { AppChatPanel } from "@/components/chat/AppChatPanel"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
+import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
 import { Toaster } from "@/components/primitives/sonner"
 import { SearchBar } from "@/components/search/SearchBar"
 
@@ -33,6 +34,8 @@ export function Layout() {
 			<Footer />
 			{/* the shared chat panel instance, mounted here so a route change doesn't remove it */}
 			<AppChatPanel />
+			{/* the podcast's audio element and the podcast player, mounted here so playback outlives a route change */}
+			<PodcastEpisodeAudio />
 			{/* the toast host */}
 			<Toaster />
 		</div>

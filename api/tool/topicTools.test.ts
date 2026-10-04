@@ -3,7 +3,13 @@ import { expect, test } from "bun:test"
 import { MAX_TOPIC_SOURCES } from "@shared/contracts"
 import { SCAN_COST_CENTS } from "@shared/plans"
 import { savePromptVersion } from "../topic/promptVersions"
-import { isSameTopicSource, toNewTopicSource, toTopicSourceCostDelta } from "./topicTools"
+import {
+	isSameTopicSource,
+	toNewTopicSource,
+	toPodcastFieldDescription,
+	toTopicSourceCostDelta,
+	toUpdateTopicFieldsShape,
+} from "./topicTools"
 
 // a topic with scans spreads its mean scan cost across its ready sources
 test("the cost delta is the mean recent scan cost shared across the ready sources", () => {
@@ -118,4 +124,27 @@ test("the version write skips an unchanged prompt and saves a changed one", asyn
 		previousPrompt: "same",
 	})
 	expect(insertedRows).toEqual([{ topicId: "topic-1", prompt: "new", savedByUserId: "user-1", origin: "chat" }])
+})
+
+// the podcast switch is offered only if episode rendering is configured, in the schema and in the description
+test("the settings tool offers the podcast switch only if a speech model is configured", () => {
+	const originalSpeechModel = Bun.env.PODCAST_SPEECH_MODEL
+	try {
+		// with the speech model set empty, the tool has no switch to offer
+		Bun.env.PODCAST_SPEECH_MODEL = ""
+		expect(Object.keys(toUpdateTopicFieldsShape())).not.toContain("isPodcastEnabled")
+		expect(toPodcastFieldDescription()).toBe("")
+
+		// with the default speech model, both adapters get the field and the sentence that describes it
+		delete Bun.env.PODCAST_SPEECH_MODEL
+		expect(Object.keys(toUpdateTopicFieldsShape())).toContain("isPodcastEnabled")
+		expect(toPodcastFieldDescription()).toContain("isPodcastEnabled")
+	} finally {
+		// put the setting back as the environment had it
+		if (originalSpeechModel === undefined) {
+			delete Bun.env.PODCAST_SPEECH_MODEL
+		} else {
+			Bun.env.PODCAST_SPEECH_MODEL = originalSpeechModel
+		}
+	}
 })

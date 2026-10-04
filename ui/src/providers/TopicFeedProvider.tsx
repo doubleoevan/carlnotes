@@ -60,6 +60,31 @@ export function useTopicFeedActions(): TopicFeedHandlers {
 }
 
 /**
+ * Returns the topic feed handlers for a page that holds its own payload. Each sends its action, then reloads the page.
+ */
+export function usePageTopicFeedHandlers(reloadPage: () => void | Promise<void>): TopicFeedHandlers {
+	return useMemo(() => {
+		// send the action, then reload the page
+		const runThenReload = async (sendTopicFindingAction: () => Promise<void>): Promise<void> => {
+			try {
+				await sendTopicFindingAction()
+				await reloadPage()
+			} catch (error) {
+				console.error("topic finding action failed", error)
+			}
+		}
+		return {
+			openTopicFinding: (findingId) => void runThenReload(() => sendTopicFindingOpened(findingId)),
+			consumeTopicFinding: (findingId, isConsumed) =>
+				void runThenReload(() => sendTopicFindingConsumed(findingId, isConsumed)),
+			rateTopicFinding: (findingId, rating) => void runThenReload(() => sendTopicFindingRating(findingId, rating)),
+			bookmarkTopicFinding: (findingId, isBookmarked) =>
+				void runThenReload(() => sendTopicFindingBookmark(findingId, isBookmarked)),
+		}
+	}, [reloadPage])
+}
+
+/**
  * Returns whether anyone is signed in.
  */
 export function useIsSignedIn(): boolean {

@@ -13,6 +13,7 @@ import {
 	users,
 } from "../../db/schema"
 import { isAdminRole } from "../authorization"
+import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 
 // the transaction shape the membership writes run inside
@@ -260,9 +261,9 @@ export async function deactivateTeamTopicSubscriptions(
 			.innerJoin(teamMembers, and(eq(teamMembers.teamId, topics.teamId), eq(teamMembers.isActive, true)))
 			.where(and(eq(teamMembers.userId, userId), notInArray(topics.teamId, [teamId])))
 
-	// the rows deactivate instead of being deleted
+	// the rows deactivate instead of being deleted, and the user's podcast feed token for each of those topics is deleted
 	for (const userId of userIds) {
-		await transaction
+		const deactivatedSubscriptionRows = await transaction
 			.update(subscriptions)
 			.set({ isActive: false, isEmailEnabled: false })
 			.where(
@@ -273,6 +274,8 @@ export async function deactivateTeamTopicSubscriptions(
 					notInArray(subscriptions.topicId, ownedTopicIds(userId)),
 				),
 			)
+			.returning({ topicId: subscriptions.topicId })
+		await Promise.all(deactivatedSubscriptionRows.map(({ topicId }) => deletePodcastFeedToken({ topicId, userId })))
 	}
 
 	// update each topic's subscriber count

@@ -3,7 +3,15 @@
 import { afterEach, expect, setSystemTime, test } from "bun:test"
 import type { TopicFinding } from "@shared/contracts"
 import { toScanRecapPlaceholder } from "@/components/topic/TopicScanRecap"
-import { durationMsBetween, toAgeLabel, toDurationLabel, toScheduleLabel, toTimeLabel } from "./labels"
+import {
+	durationMsBetween,
+	toAgeLabel,
+	toClockLabel,
+	toDurationLabel,
+	toPodcastEpisodeDurationLabel,
+	toScheduleLabel,
+	toTimeLabel,
+} from "./labels"
 import { matchesTopicFindingFilter } from "./topicFindingFilters"
 import { toSortedTopicFindings } from "./topicFindingSorts"
 import { toPossibleSourceUrls } from "./topicPromptUrls"
@@ -68,6 +76,21 @@ test("toScheduleLabel names the day only for weekly", () => {
 	expect(toScheduleLabel("weekly", "09:00", "friday")).toBe("Weekly on Friday at 9:00 AM")
 })
 
+// a clock label pads the seconds and adds the hours from one hour up
+test("toClockLabel reads minutes and seconds, and hours from one hour up", () => {
+	expect(toClockLabel(0)).toBe("0:00")
+	expect(toClockLabel(230.7)).toBe("3:50")
+	expect(toClockLabel(1690)).toBe("28:10")
+	expect(toClockLabel(3723)).toBe("1:02:03")
+})
+
+// a duration label rounds to whole minutes and shows at least one minute
+test("toPodcastEpisodeDurationLabel rounds to whole minutes, and never reads zero", () => {
+	expect(toPodcastEpisodeDurationLabel(1690)).toBe("28 min")
+	expect(toPodcastEpisodeDurationLabel(20)).toBe("1 min")
+	expect(toPodcastEpisodeDurationLabel(null)).toBe("1 min")
+})
+
 // the team scope widens bookmarked to every member's saves, and mine keeps only the user's own
 test("matchesTopicFindingFilter's team scope includes a teammate's bookmark and mine excludes it", () => {
 	const teammateSaved = topicFinding({
@@ -115,6 +138,16 @@ test("matchesTopicFindingFilter filters by the active view", () => {
 	expect(matchesTopicFindingFilter(consumedTopicFinding, "unread")).toBe(false)
 	expect(matchesTopicFindingFilter(consumedTopicFinding, "bookmarked")).toBe(false)
 	expect(matchesTopicFindingFilter(bookmarkedTopicFinding, "bookmarked")).toBe(true)
+})
+
+// a finding rated thumbs down shows only in the rated down view, and that view shows nothing else
+test("matchesTopicFindingFilter shows a finding rated down only in the rated down view", () => {
+	const ratedDownTopicFinding = topicFinding({ rating: "down", isBookmarked: true })
+	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "all")).toBe(false)
+	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "unread")).toBe(false)
+	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "bookmarked")).toBe(false)
+	expect(matchesTopicFindingFilter(ratedDownTopicFinding, "ratedDown")).toBe(true)
+	expect(matchesTopicFindingFilter(topicFinding({ rating: "up" }), "ratedDown")).toBe(false)
 })
 
 // bookmarked findings pin first in every mode, and each group orders internally by the active sort

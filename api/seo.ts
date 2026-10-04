@@ -3,10 +3,16 @@
 import { readdir } from "node:fs/promises"
 import { join } from "node:path"
 import type { PublicTopic } from "@shared/contracts"
+import { PODCAST_SHOW_NAME } from "@shared/podcastEpisodes"
 import { toJsonLdText, toMetaDescription, toTopicPath } from "@shared/seo"
 import { and, desc, eq, exists, inArray, or, type SQL, sql } from "drizzle-orm"
-import { db } from "../db"
+import { db, isFindingShown } from "../db"
 import { findings, resources, scans, teams, teamTopics, topics } from "../db/schema"
+import {
+	loadPublicPodcastEpisodeRows,
+	type PublicPodcastEpisodeRow,
+	toPublicPodcastEpisodePages,
+} from "./podcast/podcastSeo"
 import { loadReleases, toReleasePath } from "./releases"
 import { isPublicAndShown } from "./topic/permissions"
 import { cacheForTtl } from "./ttlCache"
@@ -14,8 +20,9 @@ import { cacheForTtl } from "./ttlCache"
 // the pages the sitemap always lists
 const STATIC_ROUTES = ["/", "/topics", "/plans", "/terms", "/privacy"]
 
-// how many topics llms.txt lists
+// how many topics llms.txt lists, and how many podcast episodes
 const LLMS_TOPIC_LIMIT = 50
+const LLMS_PODCAST_EPISODE_LIMIT = 50
 
 // where the docs markdown lives, resolved from this file so the api reads it from any working directory
 const DOCS_ROOT = join(import.meta.dir, "..", "docs", "src", "content", "docs")
@@ -43,6 +50,10 @@ export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Pr
 			),
 		)
 
+	// the published podcast episodes of those topics, each with its own page
+	const publicPodcastEpisodeRows = await loadPublicPodcastEpisodeRows(publicTopics.map((publicTopic) => publicTopic.id))
+	const publicPodcastEpisodePages = toPublicPodcastEpisodePages({ appUrl, publicTopics, publicPodcastEpisodeRows })
+
 	// the releases index and every published release's own page, each release dated by when it went out
 	const releaseRows = await loadReleases()
 
@@ -52,6 +63,10 @@ export async function toSitemapXml(appUrl: string, blogPaths: string[] = []): Pr
 		...blogPaths.map((path) => toSitemapEntry(`${appUrl}${path}`)),
 		...publicTopics.map((publicTopic) =>
 			toSitemapEntry(`${appUrl}${toTopicPath(publicTopic)}`, new Date(publicTopic.feedUpdatedAt)),
+		),
+		// a podcast episode's page, dated by when the podcast episode published
+		...publicPodcastEpisodePages.map((podcastEpisodePage) =>
+			toSitemapEntry(podcastEpisodePage.url, podcastEpisodePage.publishedAt ?? undefined),
 		),
 		...teamRows.map((teamRow) => toSitemapEntry(`${appUrl}/teams/${teamRow.id}`)),
 		toSitemapEntry(`${appUrl}/releases`),
@@ -164,20 +179,38 @@ function toDocsPage(filePath: string, markdown: string): DiscoveryPage | null {
 	return { path: pagePath, title, description, body: match[2].trim() }
 }
 
-// what llms.txt is built from: the site's origin, the docs and blog pages it links, and the public topics it lists
+// what llms.txt is built from. the public topics' podcast episodes come newest first
 type ToLlmsTxtOptions = {
 	appUrl: string
 	docsPages: DiscoveryPage[]
 	blogPages: { slug: string; title: string; description: string }[]
 	publicTopics: PublicTopic[]
+	publicPodcastEpisodeRows: PublicPodcastEpisodeRow[]
 }
 
 /**
  * The llms.txt convention: the product, one line on what it is, then sections of links a model can follow.
  */
-export function toLlmsTxt({ appUrl, docsPages, blogPages, publicTopics }: ToLlmsTxtOptions): string {
+export function toLlmsTxt({
+	appUrl,
+	docsPages,
+	blogPages,
+	publicTopics,
+	publicPodcastEpisodeRows,
+}: ToLlmsTxtOptions): string {
 	// the first public topics under the limit, most recently changed first
 	const listedPublicTopics = publicTopics.slice(0, LLMS_TOPIC_LIMIT)
+
+	// the newest podcast episodes under the limit, each line linking the title to the podcast episode's page
+	const podcastEpisodeLines = toPublicPodcastEpisodePages({
+		appUrl,
+		publicTopics,
+		publicPodcastEpisodeRows: publicPodcastEpisodeRows.slice(0, LLMS_PODCAST_EPISODE_LIMIT),
+	}).map(({ url, title, description }) => `- [${title}](${url}): ${description}`)
+
+	// the podcast section, which a site with no published episode leaves out
+	const podcastSection =
+		podcastEpisodeLines.length > 0 ? ["", `## ${PODCAST_SHOW_NAME}`, "", ...podcastEpisodeLines] : []
 
 	// the sections in reading order: what this is, the manual, the writing, then what people read here
 	const lines = [
@@ -204,6 +237,8 @@ export function toLlmsTxt({ appUrl, docsPages, blogPages, publicTopics }: ToLlms
 		"## Topics",
 		"",
 		...listedPublicTopics.map((publicTopic) => `- [${publicTopic.name}](${appUrl}${toTopicPath(publicTopic)})`),
+		// the newest podcast episodes of the public topics
+		...podcastSection,
 	]
 	return `${lines.join("\n")}\n`
 }
@@ -310,7 +345,7 @@ export async function scanFindings(scanId: string): Promise<ScanFinding[]> {
 		.select({ title: resources.title, url: resources.url, relevanceExplanation: findings.relevanceExplanation })
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.where(eq(findings.scanId, scanId))
+		.where(and(eq(findings.scanId, scanId), isFindingShown))
 		.orderBy(desc(findings.relevanceScore))
 }
 

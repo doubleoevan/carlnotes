@@ -60,8 +60,7 @@ function TopicSkeleton() {
 				{/* "# new" count */}
 				<div className="bg-muted h-4 w-12 shrink-0 animate-pulse rounded" />
 			</div>
-			{/* the rows sit in the same translucent card as the real list,
-			    so the steam still reads through, and nothing shifts when the feed arrives */}
+			{/* the rows sit in the same card as the real list, so nothing shifts when the feed arrives */}
 			<div className={cn(RESOURCE_LIST_CARD_CLASS, "mt-1.5 p-1")}>
 				{RESOURCE_SKELETONS.map((resourceKey) => (
 					<ResourceSkeleton key={resourceKey} />

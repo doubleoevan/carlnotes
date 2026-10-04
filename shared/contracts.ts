@@ -10,6 +10,7 @@ import {
 	inviteAccesses,
 	maxTopicFindingsOptions,
 	noteVisibilities,
+	podcastEpisodeSpeakers,
 	ratings,
 	resourceKinds,
 	scanStatuses,
@@ -406,9 +407,10 @@ export type TeamIdentity = {
 export type ActivityResponse = {
 	// whose activity this is: the user's own, or the user an admin is viewing
 	user: ProfileIdentity
-	// this month's spend in cents, split between scans and chat so that the meter can show the two apart
+	// this month's spend in cents, split into scans, chat, and podcast episodes, and the monthly budget
 	scanSpendCents: number
 	chatSpendCents: number
+	podcastEpisodeSpendCents: number
 	budgetCents: number
 	topics: OwnerTopic[]
 	subscriptions: SubscriptionRow[]
@@ -661,16 +663,20 @@ const maxTopicFindingsPayload = z
 // the time of day a scan runs, as HH:MM
 export const scheduledTimePayload = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM")
 
+// the settings that a topic and a topic draft both have. each is optional, so a call names only the settings it changes
+export const topicSettingsShape = {
+	name: z.string().trim().min(1).max(TOPIC_NAME_CHARS).optional(),
+	tags: topicDraftTagsPayload.optional(),
+	visibility: z.enum(visibilities).optional(),
+	frequency: z.enum(frequencies).optional(),
+	scheduledTime: scheduledTimePayload.optional(),
+	scheduledDayOfWeek: z.enum(daysOfWeek).optional(),
+	maxTopicFindings: maxTopicFindingsPayload.optional(),
+}
+
+// a change to a saved topic's settings. the settings that a topic draft shares, and whether the topic's podcast is on
 export const updateTopicFieldsPayload = z
-	.object({
-		name: z.string().trim().min(1).max(TOPIC_NAME_CHARS).optional(),
-		tags: topicDraftTagsPayload.optional(),
-		visibility: z.enum(visibilities).optional(),
-		frequency: z.enum(frequencies).optional(),
-		scheduledTime: scheduledTimePayload.optional(),
-		scheduledDayOfWeek: z.enum(daysOfWeek).optional(),
-		maxTopicFindings: maxTopicFindingsPayload.optional(),
-	})
+	.object({ ...topicSettingsShape, isPodcastEnabled: z.boolean().optional() })
 	.refine((fields) => Object.values(fields).some((value) => value !== undefined), "name at least one field")
 export type UpdateTopicFieldsPayload = z.infer<typeof updateTopicFieldsPayload>
 
@@ -706,6 +712,8 @@ export const topicDraftPayload = z.object({
 	scheduledTime: scheduledTimePayload.default("09:00"),
 	scheduledDayOfWeek: z.enum(daysOfWeek).default("wednesday"),
 	maxTopicFindings: maxTopicFindingsPayload.default(10),
+	// whether the topic's podcast is on. absent on an instance with no speech model, which has no podcast
+	isPodcastEnabled: z.boolean().optional(),
 })
 export type TopicDraft = z.infer<typeof topicDraftPayload>
 
@@ -1040,15 +1048,122 @@ export const topicScan = z.object({
 	costDollars: z.number().nullable(),
 	// why the scan failed
 	error: z.string().nullable(),
+	// the scan's published podcast episode, null if the scan has none or the user may not listen to it
+	podcastEpisode: z.object({ id: z.string(), season: z.number(), episodeNumber: z.number() }).nullable(),
 })
 
 // one scan's recap, loaded per scan instead of returned with the history
 export const scanNote = z.object({ scanSummary: z.string().nullable() })
 export type TopicScan = z.infer<typeof topicScan>
 
+// one chapter of a podcast episode as the player shows it
+export const podcastEpisodeChapter = z.object({
+	position: z.number(),
+	title: z.string(),
+	// the finding that the chapter narrates, null once a scan filtered the finding out. the source url stays
+	findingId: z.string().nullable(),
+	sourceUrl: z.string(),
+	// the chapter's own rating, which rates a chapter whose finding was filtered out
+	rating: z.enum(ratings).nullable(),
+	// the path of the source host's stored favicon, null except on a podcast episode's own page
+	faviconPath: z.string().nullable(),
+	startSeconds: z.number(),
+	endSeconds: z.number(),
+})
+export type PodcastEpisodeChapter = z.infer<typeof podcastEpisodeChapter>
+
+// a podcast episode as the player shows it. a rendering or failed episode has its status, no audio,
+// and its title once written
+export const podcastEpisode = z.object({
+	id: z.string(),
+	topicId: z.string(),
+	status: z.enum(["rendering", "published", "failed"]),
+	title: z.string().nullable(),
+	description: z.string().nullable(),
+	// the publish year, the episode number within that year, the length, and the publish time.
+	// all are null until the podcast episode publishes
+	season: z.number().nullable(),
+	episodeNumber: z.number().nullable(),
+	durationSeconds: z.number().nullable(),
+	publishedAt: z.string().nullable(),
+	// the podcast episode's own page, null until the podcast episode publishes
+	pagePath: z.string().nullable(),
+	// the stable audio url, null until the podcast episode publishes.
+	// the cover's url at each size, null until the episode has a title
+	audioUrl: z.string().nullable(),
+	coverUrl: z.string().nullable(),
+	smallCoverUrl: z.string().nullable(),
+	chapters: z.array(podcastEpisodeChapter),
+	// where the user stopped listening and whether the user finished. zero and false for a visitor
+	progressSeconds: z.number(),
+	isCompleted: z.boolean(),
+})
+export type PodcastEpisode = z.infer<typeof podcastEpisode>
+
+// a season's episodes for the podcast episodes' card, newest first, without their chapters
+export const seasonPodcastEpisodes = z.object({ podcastEpisodes: z.array(podcastEpisode) })
+export type SeasonPodcastEpisodes = z.infer<typeof seasonPodcastEpisodes>
+
+// one block of a podcast episode's transcript. a chapter under its title,
+// or the cold open, a transition, or the sign-off under no heading
+export const podcastEpisodeTranscriptBlock = z.object({
+	heading: z.string().nullable(),
+	turns: z.array(z.object({ speakerName: z.string(), text: z.string() })),
+})
+export type PodcastEpisodeTranscriptBlock = z.infer<typeof podcastEpisodeTranscriptBlock>
+
+// a podcast episode's own page. the episode with its chapters, the topic with its visibility and byline,
+// the findings that the chapters narrate, whether the user may rate those findings, and the transcript
+export const podcastEpisodePageResponse = z.object({
+	podcastEpisode,
+	topic: topicFeed
+		.pick({ id: true, name: true, prompt: true, owner: true, teamLink: true })
+		.extend({ visibility: z.enum(visibilities) }),
+	topicFindings: z.array(topicFinding),
+	canRate: z.boolean(),
+	transcript: z.array(podcastEpisodeTranscriptBlock),
+})
+export type PodcastEpisodePageResponse = z.infer<typeof podcastEpisodePageResponse>
+
+// what the player saves as a user listens. the user's progress, whether playback just started,
+// and whether playback ended
+export const podcastEpisodeListenPayload = z.object({
+	progressSeconds: z.number().int().min(0),
+	isPlaybackStart: z.boolean().optional(),
+	isCompleted: z.boolean().optional(),
+})
+export type PodcastEpisodeListenPayload = z.infer<typeof podcastEpisodeListenPayload>
+
+// the body that turns a topic's podcast switch on or off
+export const topicPodcastPayload = z.object({ isPodcastEnabled: z.boolean() })
+
+// a topic's podcast as its page shows it
+export const topicPodcast = z.object({
+	// whether the owner has the podcast on
+	isEnabled: z.boolean(),
+	// whether the owner's plan still renders a podcast episode for this topic
+	canRenderPodcastEpisode: z.boolean(),
+	// whether this user may remove a podcast episode
+	canRemovePodcastEpisodes: z.boolean(),
+	// the latest podcast episode that the user may listen to, with its chapters
+	latestPodcastEpisode: podcastEpisode.nullable(),
+	// the topic's newest podcast episode if it is rendering or failed to render, without chapters,
+	// and if the user may see it. null once a later episode publishes
+	unpublishedPodcastEpisode: podcastEpisode.nullable(),
+	// the seasons that have a published podcast episode, newest first
+	seasons: z.array(z.number()),
+	// the latest season's podcast episodes
+	latestSeasonPodcastEpisodes: seasonPodcastEpisodes,
+	// the public podcast feed, for a public topic with a published episode, and null for every other topic
+	publicFeedUrl: z.string().nullable(),
+})
+export type TopicPodcast = z.infer<typeof topicPodcast>
+
 // a topic's full payload. the topic feed shape plus everything the detail page needs
 export const topicResponse = topicFeed.extend({
 	visibility: z.enum(visibilities),
+	// the topic's podcast, null on an instance with no speech model
+	podcast: topicPodcast.nullable(),
 	// the scan history, latest first
 	scans: z.array(topicScan),
 	// the topic's pending invites, both the addresses it named and the links it created. empty for anyone but the owner
@@ -1238,6 +1353,9 @@ export type PageHead = {
 	imageUrl: string
 	// the page's rss feed, for a public topic, and null for every other page
 	feedUrl: string | null
+	// a public topic's podcast feed once the topic has an episode, and an episode page's audio
+	podcastFeedUrl?: string | null
+	audioUrl?: string | null
 	isIndexed: boolean
 	jsonLd: object | null
 }
@@ -1253,3 +1371,31 @@ export type PublicTopic = {
 
 // the key of one homepage topic section
 export type TopicSectionKey = (typeof topicSectionKeys)[number]
+
+// the length limits of a podcast episode's title and description
+export const PODCAST_EPISODE_TITLE_MAX_CHARS = 60
+export const PODCAST_EPISODE_DESCRIPTION_MAX_CHARS = 155
+
+// one spoken turn of a podcast episode. its speaker, its words as speech, and an optional short delivery style
+export const podcastEpisodeTurnPayload = z.object({
+	speaker: z.enum(podcastEpisodeSpeakers),
+	text: z.string().trim().min(1),
+	style: z.string().trim().min(1).optional(),
+})
+export type PodcastEpisodeTurn = z.infer<typeof podcastEpisodeTurnPayload>
+
+// one chapter of a podcast episode's script. the Finding that the chapter narrates, its title, and its turns
+export const podcastEpisodeChapterScriptPayload = z.object({
+	findingId: z.string().min(1),
+	title: z.string().trim().min(1),
+	turns: z.array(podcastEpisodeTurnPayload).min(1),
+})
+export type PodcastEpisodeChapterScript = z.infer<typeof podcastEpisodeChapterScriptPayload>
+
+// a podcast episode's entire script. the cold open, the themed segments in order, and the sign-off.
+// each segment has the short transition into the segment, then its chapters
+export type PodcastEpisodeScript = {
+	coldOpen: PodcastEpisodeTurn[]
+	segments: { transition: PodcastEpisodeTurn[]; chapters: PodcastEpisodeChapterScript[] }[]
+	signOff: PodcastEpisodeTurn[]
+}

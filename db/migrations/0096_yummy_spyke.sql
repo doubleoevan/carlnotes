@@ -1,0 +1,1 @@
+ALTER TABLE "findings" ADD COLUMN "is_from_custom_source" boolean DEFAULT false NOT NULL;

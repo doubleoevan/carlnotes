@@ -5,6 +5,9 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* only a browser with JavaScript */
+@custom-variant scripted (&:is(.scripted *));
+
 /* only devices that actually hover */
 @custom-variant can-hover (@media (hover: hover));
 
@@ -54,6 +57,7 @@
 	--color-separator-strong: var(--separator-strong);
 	--color-separator-sunken: var(--separator-sunken);
 	--color-spend-chat: var(--spend-chat);
+	--color-spend-podcast-episode: var(--spend-podcast-episode);
 	--radius-sm: calc(var(--radius) - 4px);
 	--radius-md: calc(var(--radius) - 2px);
 	--radius-lg: var(--radius);
@@ -100,6 +104,8 @@
 	--ring-line: rgba(120, 96, 72, 0.18);
 	/* the budget's chat segment, espresso against the orange brews segment */
 	--spend-chat: #6b4a26;
+	/* the budget's podcast episode segment, a roast brown between the scan and chat segments */
+	--spend-podcast-episode: #a8703a;
 }
 
 /* Dark roast, dark mode. the background sits a step lighter and the cards a step darker */
@@ -141,6 +147,8 @@
 	--ring-line: rgba(201, 186, 153, 0.18);
 	/* the budget's chat segment, cream against the orange brews segment */
 	--spend-chat: #f0e6d6;
+	/* the budget's podcast episode segment, a caramel between the scan and chat segments */
+	--spend-podcast-episode: #c99a5b;
 }
 
 /* add extra horizontal padding to handle safe-area insets on landscape mobile, falling back to the standard 1rem gutter */

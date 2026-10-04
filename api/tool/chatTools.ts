@@ -10,9 +10,10 @@ import {
 	type TopicDraft,
 	type TopicToolCalls,
 	topicDraftTeamPayload,
-	updateTopicFieldsPayload,
+	topicSettingsShape,
 	updateTopicPromptPayload,
 } from "@shared/contracts"
+import { isPodcastEpisodeRenderingConfigured } from "@shared/podcastEpisodes"
 import { type Tool, tool } from "ai"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
@@ -25,6 +26,8 @@ import {
 	removeTopicSource,
 	type SuggestTopicDraftSourcesResult,
 	suggestTopicDraftSources,
+	toPodcastFieldDescription,
+	toUpdateTopicFieldsShape,
 	type UpdateTopicFieldsResult,
 	updateTopicFields,
 	updateTopicPrompt,
@@ -143,8 +146,8 @@ function toUpdateTopicPromptTool({ userId, topicId, toolCalls }: EditTopicToolBi
 // the tool that changes the topic's fields
 function toUpdateTopicFieldsTool({ userId, topicId, toolCalls }: EditTopicToolBinding): Tool {
 	return tool({
-		description: `Change the topic's title, its tags, its visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day it brews as HH:MM and the day a weekly brew runs, or how many findings a brew keeps (5, 10, 15, or 20). Name only the fields to change. ${CONFIRMATION_RULE}`,
-		inputSchema: updateTopicFieldsPayload,
+		description: `Change the topic's title, its tags, its visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day it brews as HH:MM and the day a weekly brew runs, or how many findings a brew keeps (5, 10, 15, or 20).${toPodcastFieldDescription()} Name only the fields to change. ${CONFIRMATION_RULE}`,
+		inputSchema: z.object(toUpdateTopicFieldsShape()),
 		execute: async (topicFields) => {
 			toolCalls.count += 1
 			const updateTopicFieldsResult = await updateTopicFields({
@@ -251,7 +254,7 @@ type NewTopicToolBinding = {
 
 // the topic draft fields one call may write. an omitted field keeps its value, so no default may stand in for one
 const topicDraftFieldsPayload = z.object({
-	...updateTopicFieldsPayload.shape,
+	...topicSettingsShape,
 	// the topic draft's name, which may be empty here
 	name: z.string().trim().max(TOPIC_NAME_CHARS).optional(),
 	prompt: z.string().trim().max(TOPIC_PROMPT_CHARS).optional(),
@@ -274,9 +277,8 @@ export function toNewTopicChatTools(newTopicToolBinding: NewTopicToolBinding): R
 // the tool that writes the topic draft. each call replaces the fields it names and saves the whole of it for the card
 function toDraftTopicTool({ toolCalls, topicDraft }: NewTopicToolBinding): Tool {
 	return tool({
-		description:
-			"Write what the reader has settled into the topic draft shown beside this chat: the title, the prompt, the sources as option and value pairs, who may read it as public, invite, or private, the team it joins as the id and name from the reader's teams, the tags, how often it brews, the time of day it brews as HH:MM and the day a weekly brew runs, how many findings a brew keeps, or the invite emails. Name only the fields to change: a field you leave out keeps what the draft already holds, so clear one by naming it empty, sources, tags and invites as an empty list, the title and prompt as an empty string, and the team as null. Call it as soon as an answer settles.",
-		inputSchema: topicDraftFieldsPayload,
+		description: `Write what the reader has settled into the topic draft shown beside this chat: the title, the prompt, the sources as option and value pairs, who may read it as public, invite, or private, the team it joins as the id and name from the reader's teams, the tags, how often it brews, the time of day it brews as HH:MM and the day a weekly brew runs, how many findings a brew keeps, or the invite emails.${toPodcastFieldDescription()} Name only the fields to change: a field you leave out keeps what the draft already holds, so clear one by naming it empty, sources, tags and invites as an empty list, the title and prompt as an empty string, and the team as null. Call it as soon as an answer settles.`,
+		inputSchema: topicDraftFieldsPayload.extend(toUpdateTopicFieldsShape()),
 		execute: async (topicDraftFields) => {
 			toolCalls.count += 1
 			// the named fields replace the topic draft's
@@ -284,6 +286,11 @@ function toDraftTopicTool({ toolCalls, topicDraft }: NewTopicToolBinding): Tool 
 				topicDraft,
 				Object.fromEntries(Object.entries(topicDraftFields).filter(([, value]) => value !== undefined)),
 			)
+
+			// a new topic's podcast starts on, on an instance where podcast episodes render
+			if (isPodcastEpisodeRenderingConfigured() && topicDraft.isPodcastEnabled === undefined) {
+				topicDraft.isPodcastEnabled = true
+			}
 			toolCalls.topicDraft = { ...topicDraft }
 			return `The draft now reads: ${toTopicDraftSummary(topicDraft)}`
 		},
@@ -363,7 +370,11 @@ function toTopicDraftSummary(topicDraft: TopicDraft): string {
 	const topicSources = topicDraft.sources
 		.map((topicSource) => `${topicSource.sourceOption} ${topicSource.value}`.trim())
 		.join(", ")
-	return `title "${topicDraft.name}", prompt "${topicDraft.prompt}", sources [${topicSources}], visibility ${topicDraft.visibility}, team ${topicDraft.team?.name ?? "none"}, tags [${topicDraft.tags.join(", ")}], brews ${topicDraft.frequency}, keeps ${topicDraft.maxTopicFindings}, invites [${topicDraft.inviteEmails.join(", ")}].`
+
+	// the podcast setting, on an instance where podcast episodes render
+	const podcastSummary =
+		topicDraft.isPodcastEnabled === undefined ? "" : `, podcast ${topicDraft.isPodcastEnabled ? "on" : "off"}`
+	return `title "${topicDraft.name}", prompt "${topicDraft.prompt}", sources [${topicSources}], visibility ${topicDraft.visibility}, team ${topicDraft.team?.name ?? "none"}, tags [${topicDraft.tags.join(", ")}], brews ${topicDraft.frequency}, keeps ${topicDraft.maxTopicFindings}, invites [${topicDraft.inviteEmails.join(", ")}]${podcastSummary}.`
 }
 
 /**
@@ -447,6 +458,11 @@ export function toUpdateTopicFieldsText(
 	if (updateTopicFieldsResult.status === "empty") {
 		return "Name at least one field: the title, the tags, the visibility, how often it brews, when it brews, or how many findings a brew keeps."
 	}
+
+	// explain the plan's podcast episode limit, the plan's daily limit, or the gate's rejection
+	if (updateTopicFieldsResult.status === "podcastPlan") {
+		return "This topic has used the one podcast episode the free plan gives each topic. Its podcast stays off until its owner moves to a paid plan."
+	}
 	return updateTopicFieldsResult.status === "dailyFrequency"
 		? `A daily topic does not fit the plan right now. The limit is ${updateTopicFieldsResult.limit}.`
 		: toRejectionText(updateTopicFieldsResult.status)
@@ -458,6 +474,11 @@ function toUpdateTopicFieldsReason(
 ): string {
 	if (updateTopicFieldsResult.status === "empty") {
 		return "No setting was named."
+	}
+
+	// give the reason for the plan's podcast episode limit, the plan's daily limit, or the gate's rejection
+	if (updateTopicFieldsResult.status === "podcastPlan") {
+		return "The free plan gives each topic one podcast episode."
 	}
 	return updateTopicFieldsResult.status === "dailyFrequency"
 		? CREATE_REJECTION_LINES.dailyFrequency

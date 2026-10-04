@@ -146,3 +146,29 @@ export function toBytesLabel(bytes: number): string {
 	// one decimal reads cleanly at every unit
 	return `${size.toFixed(1)} ${units[unitIndex]}`
 }
+
+/**
+ * Returns a number of seconds as minutes and seconds, with the hours if there are any, such as 3:50 or 1:02:03.
+ */
+export function toClockLabel(totalSeconds: number): string {
+	// split the seconds into whole hours, minutes, and seconds
+	const wholeSeconds = Math.max(0, Math.floor(totalSeconds))
+	const hours = Math.floor(wholeSeconds / 3600)
+	const minutes = Math.floor((wholeSeconds % 3600) / 60)
+	const paddedSeconds = String(wholeSeconds % 60).padStart(2, "0")
+	return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${paddedSeconds}` : `${minutes}:${paddedSeconds}`
+}
+
+/**
+ * Returns a podcast episode's duration in whole minutes, such as 28 min. Never less than 1 min.
+ */
+export function toPodcastEpisodeDurationLabel(durationSeconds: number | null): string {
+	return `${Math.max(1, Math.round((durationSeconds ?? 0) / 60))} min`
+}
+
+/**
+ * Returns the day that a podcast episode published, such as Sep 25, in the local time zone. Empty for a null date.
+ */
+export function toPodcastEpisodeDateLabel(publishedAt: string | null): string {
+	return publishedAt ? new Date(publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""
+}

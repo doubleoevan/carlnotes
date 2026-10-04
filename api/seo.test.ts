@@ -13,6 +13,16 @@ const PUBLIC_TOPIC = {
 	feedUpdatedAt: "2026-08-20T00:00:00.000Z",
 } satisfies PublicTopic
 
+// a published podcast episode of the public topic, as loadPublicPodcastEpisodeRows returns it
+const PUBLIC_PODCAST_EPISODE_ROW = {
+	topicId: "topic-public",
+	season: 2026,
+	episodeNumber: 3,
+	publishedAt: new Date("2026-08-21T00:00:00.000Z"),
+	title: "A quieter grinder",
+	description: "A burr set that grinds a third quieter.",
+}
+
 // one blog page in the shape loadPages returns
 const BLOG_PAGE = {
 	slug: "what-is-carlnotes",
@@ -28,8 +38,18 @@ test("llms.txt follows the convention", async () => {
 		docsPages: await loadDocsPages(),
 		blogPages: [BLOG_PAGE],
 		publicTopics: [PUBLIC_TOPIC],
+		publicPodcastEpisodeRows: [PUBLIC_PODCAST_EPISODE_ROW],
 	})
 	expect(llmsTxt.startsWith("# CarlNotes\n\n> ")).toBe(true)
+
+	// a podcast episode links to its own page at a path after its topic's path, with its description
+	const podcastEpisodeUrl = "https://carlnotes.com/topics/topic-public/coffee-gear-reviews/episodes/2026/3"
+	expect(llmsTxt).toContain(`- [A quieter grinder](${podcastEpisodeUrl}): A burr set that grinds a third quieter.`)
+	expect(llmsTxt.indexOf("## Topics")).toBeLessThan(llmsTxt.indexOf("## Coffee Break podcast with Carl and Vienna"))
+
+	// a site with no published episode has no podcast section
+	const llmsTxtOptions = { appUrl: "https://carlnotes.com", docsPages: [], blogPages: [], publicTopics: [PUBLIC_TOPIC] }
+	expect(toLlmsTxt({ ...llmsTxtOptions, publicPodcastEpisodeRows: [] })).not.toContain("## Coffee Break podcast")
 
 	// a topic links to its page by slug and id
 	expect(llmsTxt).toContain("(https://carlnotes.com/topics/topic-public/coffee-gear-reviews)")

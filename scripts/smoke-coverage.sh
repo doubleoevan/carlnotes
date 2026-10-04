@@ -6,13 +6,16 @@ cd "$(dirname "$0")/.." || exit 1
 
 # the smoke files that only a developer's machine can run: they need litellm on 4000 for their model
 # and embedding calls, or temporal on 7233 for the attachment workflow, both of which docker compose
-# runs locally. everything else runs anywhere, since it needs only the dev database and the outside apis
+# runs locally. everything else runs anywhere, since it needs only the dev database and the outside apis.
+# the podcast episode smoke also needs ffmpeg
 DEVELOPER_ONLY_SMOKE_FILES=(
 	worker/scan.smoke.ts
 	worker/attach.smoke.ts
 	worker/search.smoke.ts
 	worker/review.smoke.ts
 	worker/chat.smoke.ts
+	worker/speech.smoke.ts
+	worker/podcast/podcastEpisode.smoke.ts
 	scripts/eval-pipeline.smoke.ts
 )
 
@@ -33,6 +36,8 @@ SMOKE_FILES=(
 	worker/reddit.smoke.ts
 	worker/x.smoke.ts
 	worker/links.smoke.ts
+	worker/speech.smoke.ts
+	worker/podcast/podcastEpisode.smoke.ts
 	worker/review.smoke.ts
 	worker/chat.smoke.ts
 	scripts/eval-pipeline.smoke.ts
@@ -44,6 +49,7 @@ SMOKE_FILES=(
 	api/invite/invites.smoke.ts
 	api/mcp/mcp.smoke.ts
 	api/tool/topicTools.smoke.ts
+	api/podcast/podcastEpisodes.smoke.ts
 )
 
 # each run writes coverage/lcov.info, kept aside per smoke file so one upload can send them all

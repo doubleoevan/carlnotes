@@ -107,6 +107,44 @@ export async function deleteResourceContent(contentKey: string): Promise<void> {
 	await bucket().delete(contentKey)
 }
 
+// how long a presigned podcast episode audio url works. the url only has to last until a download or a playback starts
+const PODCAST_EPISODE_AUDIO_URL_LIFETIME_SECONDS = 60 * 60
+
+// the object key for a Podcast Episode's finished audio
+export function toPodcastEpisodeAudioKey(podcastEpisodeId: string): string {
+	return `episodes/${podcastEpisodeId}/audio.mp3`
+}
+
+// the object key for one chapter's audio, which exists only while its Podcast Episode renders
+export function toPodcastEpisodeChapterKey(podcastEpisodeId: string, position: number): string {
+	return `episodes/${podcastEpisodeId}/chapters/${position}.wav`
+}
+
+// a podcast episode object's key, the local file, and the file's content type
+type UploadPodcastEpisodeFileOptions = { key: string; filePath: string; contentType: string }
+
+// upload a local file to object storage under a podcast episode key, streamed instead of read into memory
+export async function uploadPodcastEpisodeFile({
+	key,
+	filePath,
+	contentType,
+}: UploadPodcastEpisodeFileOptions): Promise<void> {
+	await bucket().write(key, Bun.file(filePath), { type: contentType })
+}
+
+// a podcast episode object's key, and the local file to write it to
+type DownloadPodcastEpisodeFileOptions = { key: string; filePath: string }
+
+// download a stored podcast episode object to a local file, streamed instead of read into memory
+export async function downloadPodcastEpisodeFile({ key, filePath }: DownloadPodcastEpisodeFileOptions): Promise<void> {
+	await Bun.write(filePath, bucket().file(key))
+}
+
+// a presigned url that reads a Podcast Episode's audio from object storage, with range requests
+export function toPodcastEpisodeAudioUrl(audioKey: string): string {
+	return bucket().file(audioKey).presign({ expiresIn: PODCAST_EPISODE_AUDIO_URL_LIFETIME_SECONDS, method: "GET" })
+}
+
 // build the S3 client from env, throwing if any value is unset
 function bucket(): Bun.S3Client {
 	// every S3_* value is required. a missing one fails loudly

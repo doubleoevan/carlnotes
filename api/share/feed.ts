@@ -1,7 +1,7 @@
 // a public Topic's RSS feed: the Findings Carl kept, in the format a reader app understands
 import { toTopicFeedPath, toTopicPath } from "@shared/seo"
-import { desc, eq } from "drizzle-orm"
-import { db } from "../../db"
+import { and, desc, eq } from "drizzle-orm"
+import { db, isFindingShown } from "../../db"
 import { findings, resources, topics, users } from "../../db/schema"
 
 // how many of the newest Findings a feed includes
@@ -40,7 +40,7 @@ export async function toTopicFeedXml(topicId: string, appUrl: string): Promise<s
 		})
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.where(eq(findings.topicId, topicId))
+		.where(and(eq(findings.topicId, topicId), isFindingShown))
 		.orderBy(desc(resources.createdAt))
 		.limit(FEED_ITEM_LIMIT)
 
@@ -108,8 +108,10 @@ function toRssItem(item: FeedItem): string {
 	return `<item>\n${tags.join("\n")}\n</item>\n`
 }
 
-// xml 1.0 rejects most control characters even escaped, so they are dropped before escaping
-function toXmlText(text: string): string {
+/**
+ * Escapes text for xml, after dropping the control characters that xml 1.0 rejects even escaped.
+ */
+export function toXmlText(text: string): string {
 	const kept = [...text].filter((character) => {
 		const code = character.charCodeAt(0)
 		return code === 0x9 || code === 0xa || code === 0xd || code >= 0x20

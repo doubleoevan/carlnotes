@@ -10,9 +10,11 @@ import {
 	FindingCards,
 	footerBrandLink,
 	LinkOrText,
+	PodcastEpisodeSection,
 	ScanSummarySection,
 	summaryLink,
 	type TopicScanEmailFinding,
+	type TopicScanEmailPodcastEpisode,
 } from "./topic-scan-email"
 
 // the topic and links every manual-scan email includes, plus the outcome that decides what the body says.
@@ -23,7 +25,14 @@ export type ManualScanEmailProps = {
 	appUrl?: string
 	topicUrl?: string
 } & (
-	| { status: "succeeded"; findings: TopicScanEmailFinding[]; scanSummary?: string; allowedSummaryUrls?: string[] }
+	| {
+			status: "succeeded"
+			findings: TopicScanEmailFinding[]
+			scanSummary?: string
+			allowedSummaryUrls?: string[]
+			// the scan's podcast episode, omitted if the scan has no podcast episode to show
+			podcastEpisode?: TopicScanEmailPodcastEpisode
+	  }
 	| { status: "failed"; failureReason: string }
 )
 
@@ -41,9 +50,11 @@ export default function ManualScanEmail(props: ManualScanEmailProps): ReactEleme
 				.{toClosingNote(props)}
 			</EmailIntro>
 
-			{/* a succeeded scan shows the AI recap summary and its findings. a failed one says what stopped it */}
+			{/* a succeeded scan shows its podcast episode, the AI recap summary, and its findings.
+			    a failed one says what stopped it */}
 			{props.status === "succeeded" ? (
 				<>
+					<PodcastEpisodeSection podcastEpisode={props.podcastEpisode} />
 					<ScanSummarySection
 						scanSummary={props.scanSummary}
 						allowedUrls={new Set(props.allowedSummaryUrls ?? props.findings.map((finding) => finding.url))}
@@ -126,9 +137,10 @@ function toSummaryLead(props: ManualScanEmailProps): string {
 		return "Carl finished the brew you started and found nothing new worth your time on "
 	}
 
-	// a scan that turned something up counts it
+	// count the findings, and name the podcast episode if the scan has one
 	const noun = props.findings.length === 1 ? "finding" : "findings"
-	return `Carl finished the brew you started, with ${props.findings.length} new ${noun} worth your time on `
+	const podcastEpisodeNote = props.podcastEpisode ? " and a new Coffee Break episode" : ""
+	return `Carl finished the brew you started, with ${props.findings.length} new ${noun} worth your time${podcastEpisodeNote} on `
 }
 
 // the inbox preheader: the same sentence as the summary line, without the link

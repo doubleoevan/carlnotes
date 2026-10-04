@@ -104,6 +104,7 @@ const TOPIC = {
 	isDailyFrequencyPaused: false,
 	featureOrder: null,
 	featuredTopics: null,
+	podcast: null,
 } satisfies TopicResponse
 
 // the real fetch, restored after the tests

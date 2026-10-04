@@ -100,8 +100,8 @@ const server = new Hono<AppEnv>()
 	.use("/mcp/*", toolCallerRateLimiter)
 	.route("/", mcpRoute)
 	.route("/", apiRoute)
-	// the release pages and the GitHub webhook that writes the rows they read. the webhook sits under
-	// /api, so it is mounted ahead of the catch-all below instead of beside the other page routes
+	// the release pages and the GitHub webhook that writes the rows they read. the webhook's path comes
+	// after /api, so it is mounted ahead of the catch-all below instead of beside the other page routes
 	.route("/", releasesRoute)
 	// an unmatched /api path is an api failure. a fetch client must read a 404, not fail parsing an HTML page
 	.all("/api/*", (context) => context.json({ error: "not found" }, 404))

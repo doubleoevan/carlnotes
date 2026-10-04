@@ -71,6 +71,29 @@ export async function traceStage<Result>(
 	})
 }
 
+// one podcast episode render's trace. its Topic and Scan, the speech tier, each chapter's attempt count,
+// how long the render took, and its cost
+export type PodcastEpisodeRenderTrace = {
+	podcastEpisodeId: string
+	topicId: string
+	scanId: string | null
+	speechTier: string
+	chapterAttemptCounts: number[]
+	// the seconds from the row's creation to its publish
+	renderSeconds: number
+	costDollars: number
+	costPerAudioMinuteDollars: number
+}
+
+/**
+ * Records one podcast episode render as its own Langfuse trace, or nothing without Langfuse keys.
+ */
+export async function tracePodcastEpisodeRender(podcastEpisodeRenderTrace: PodcastEpisodeRenderTrace): Promise<void> {
+	await startActiveObservation("episode-render", async (span) => {
+		span.update({ metadata: podcastEpisodeRenderTrace })
+	})
+}
+
 /**
  * Flushes pending spans before the process exits. Safe to call whether or not telemetry started.
  */

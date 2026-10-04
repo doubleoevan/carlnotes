@@ -7,7 +7,7 @@ import { reportThresholdCrossing } from "@shared/monitoring"
 import { toUrlHost } from "@shared/sources"
 import { and, desc, eq, gt, isNotNull, sql } from "drizzle-orm"
 import { Hono } from "hono"
-import { db } from "../../db"
+import { db, isFindingShown } from "../../db"
 import {
 	bookmarks,
 	consumptions,
@@ -37,6 +37,8 @@ type LoadTopicFindingsOptions = {
 	subscriberActivatedAt?: Date | null
 	// one page of the findings, which can reach past the read limit
 	pageWindow?: FindingPageWindow
+	// whether to leave out the findings rated thumbs down
+	isRatedDownExcluded?: boolean
 }
 
 /**
@@ -49,16 +51,19 @@ export async function loadTopicFindings({
 	userId,
 	subscriberActivatedAt,
 	pageWindow,
+	isRatedDownExcluded = false,
 }: LoadTopicFindingsOptions): Promise<TopicFinding[]> {
 	// no active subscription on an invite topic means no findings at all
 	if (subscriberActivatedAt === null) {
 		return []
 	}
 
-	// the activation gate keeps only findings whose scan started after the user's subscription activated
-	const findingFilter = subscriberActivatedAt
+	// the activation gate keeps only findings whose scan started after the user's subscription activated,
+	// and a read that leaves out the findings rated thumbs down keeps only the shown findings
+	const topicFindingFilter = subscriberActivatedAt
 		? and(eq(findings.topicId, topicId), gt(scans.startedAt, subscriberActivatedAt))
 		: eq(findings.topicId, topicId)
+	const findingFilter = isRatedDownExcluded ? and(topicFindingFilter, isFindingShown) : topicFindingFilter
 
 	// a user's own columns are consumed and bookmarked. a visitor's are null
 	const userColumns = userId
@@ -351,10 +356,10 @@ export function filteredTopicFindings(topicFindings: TopicFinding[], includeCons
 }
 
 /**
- * "# new" is the count of topic findings that the user has not consumed.
+ * "# new" is the count of topic findings that the user has not consumed, leaving out the findings rated thumbs down.
  */
 export function newTopicFindingCount(topicFindings: TopicFinding[]): number {
-	return topicFindings.filter((finding) => !finding.isConsumed).length
+	return topicFindings.filter((finding) => !finding.isConsumed && finding.rating !== "down").length
 }
 
 // the per-finding routes. rating, consume, bookmark, and record a view need a signed-in user.

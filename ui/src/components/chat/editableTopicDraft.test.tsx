@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/contracts"
 import { renderToStaticMarkup } from "react-dom/server"
-import { toEditableTopicDraft } from "./editableTopicDraft"
+import { type EditableTopicFields, toEditableTopicDraft } from "./editableTopicDraft"
 import { TopicDraftCard } from "./TopicDraftCard"
 
 test("a topic maps to a topic draft, dropping an invite with no email and a source of a kind no option offers", () => {
@@ -16,6 +16,7 @@ test("a topic maps to a topic draft, dropping an invite with no email and a sour
 		scheduledTime: "09:00",
 		scheduledDayOfWeek: "wednesday",
 		maxTopicFindings: 10,
+		podcast: null,
 		sources: [
 			{ id: "source-1", sourceKind: "search", summary: "" },
 			{ id: "source-2", sourceKind: "reddit", summary: "r/basketball" },
@@ -53,6 +54,7 @@ test("toEditableTopicDraft previews a proposal over the topic", () => {
 		scheduledTime: "09:00",
 		scheduledDayOfWeek: "wednesday" as const,
 		maxTopicFindings: 10,
+		podcast: null,
 		sources: [
 			{ id: "source-1", sourceKind: "reddit" as const, summary: "r/basketball" },
 			{ id: "source-2", sourceKind: "rss" as const, summary: "hoopsrumors.com" },
@@ -81,4 +83,25 @@ test("a topic draft holding only a team is empty", () => {
 	expect(renderToStaticMarkup(<TopicDraftCard topicDraft={teamOnlyDraft} />)).toBe("")
 	// anything the user actually dictated brings it back
 	expect(renderToStaticMarkup(<TopicDraftCard topicDraft={{ ...teamOnlyDraft, name: "Hoops" }} />)).toContain("Hoops")
+})
+
+// the podcast setting reads as proposed, then as saved, and a topic with no podcast has none to show
+test("toEditableTopicDraft reads the podcast from the proposal, then the topic, and leaves it out with no podcast", () => {
+	const topic = {
+		name: "Where to hoop",
+		prompt: "Pickup basketball near San Mateo",
+		visibility: "invite",
+		team: null,
+		tags: [],
+		frequency: "weekly",
+		scheduledTime: "09:00",
+		scheduledDayOfWeek: "wednesday",
+		maxTopicFindings: 10,
+		podcast: { isEnabled: true },
+		sources: [],
+		invites: [],
+	} as unknown as EditableTopicFields
+	expect(toEditableTopicDraft(topic).isPodcastEnabled).toBe(true)
+	expect(toEditableTopicDraft(topic, { isPodcastEnabled: false }).isPodcastEnabled).toBe(false)
+	expect(toEditableTopicDraft({ ...topic, podcast: null }).isPodcastEnabled).toBeUndefined()
 })

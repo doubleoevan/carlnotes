@@ -34,6 +34,7 @@ export function AccountBudget({
 					<SpendSection
 						scanSpendCents={activity.scanSpendCents}
 						chatSpendCents={activity.chatSpendCents}
+						podcastEpisodeSpendCents={activity.podcastEpisodeSpendCents}
 						budgetCents={activity.budgetCents}
 					/>
 				)}
@@ -67,18 +68,21 @@ const BUDGET_MESSAGES = [
 	{ budgetUsedPercent: 0, line: "Full pot." },
 ] as const
 
-// the progress bar of metered spend against the monthly budget, scans and chat as their own segments of one bar
+// the progress bar of metered spend against the monthly budget, with scans, podcast episodes,
+// and chat as segments of one bar
 function SpendSection({
 	scanSpendCents,
 	chatSpendCents,
+	podcastEpisodeSpendCents,
 	budgetCents,
 }: {
 	scanSpendCents: number
 	chatSpendCents: number
+	podcastEpisodeSpendCents: number
 	budgetCents: number
 }) {
 	// each segment's share of the budget, and the total the label reads
-	const totalCents = scanSpendCents + chatSpendCents
+	const totalCents = scanSpendCents + chatSpendCents + podcastEpisodeSpendCents
 	const toPercent = (cents: number) => (budgetCents > 0 ? Math.min(100, (cents / budgetCents) * 100) : 0)
 
 	// the budget percent and message
@@ -95,18 +99,25 @@ function SpendSection({
 				</span>
 			</div>
 
-			{/* one bar, two segments. the scan segment sits left in the primary color and the chat segment right in spend-chat */}
+			{/* the budget percentage segments. scans in the primary color, then podcast episodes, then chat */}
 			<div className="bg-muted mt-2 flex h-3 overflow-hidden rounded-full">
 				<div className="bg-primary h-full" style={{ width: `${toPercent(scanSpendCents)}%` }} />
+				<div className="bg-spend-podcast-episode h-full" style={{ width: `${toPercent(podcastEpisodeSpendCents)}%` }} />
 				<div className="bg-spend-chat h-full" style={{ width: `${toPercent(chatSpendCents)}%` }} />
 			</div>
 
-			{/* the key, so the two segments are readable without hovering */}
+			{/* the key to each budget percent segment. the podcast episode entry shows only if there is podcast episode spend */}
 			<div className="text-muted-foreground mt-2 flex gap-4 text-xs">
 				<span className="flex items-center gap-1.5">
 					<span className="bg-primary size-2 rounded-full" />
 					Brews {toCentsLabel(scanSpendCents)}
 				</span>
+				{podcastEpisodeSpendCents > 0 && (
+					<span className="flex items-center gap-1.5">
+						<span className="bg-spend-podcast-episode size-2 rounded-full" />
+						Coffee Break podcast {toCentsLabel(podcastEpisodeSpendCents)}
+					</span>
+				)}
 				<span className="flex items-center gap-1.5">
 					<span className="bg-spend-chat size-2 rounded-full" />
 					Coffee talk {toCentsLabel(chatSpendCents)}

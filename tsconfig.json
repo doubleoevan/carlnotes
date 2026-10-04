@@ -8,6 +8,7 @@
 		{ "path": "./api" },
 		{ "path": "./worker" },
 		{ "path": "./ui" },
-		{ "path": "./scripts" }
+		{ "path": "./scripts" },
+		{ "path": "./evals" }
 	]
 }

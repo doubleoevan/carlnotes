@@ -1,5 +1,6 @@
 // the ingest stage: run a topic's Sources through their ingesters, dedupe what they find, and store it
 import { reportError } from "@shared/monitoring"
+import { toDefaultSource } from "@shared/sources"
 import { eq, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { resources, type scans, sources } from "../../db/schema"
@@ -47,7 +48,7 @@ export type SourceOutcome =
 
 // what the Sources turned up, aggregated across all of them. cost is what they charged, which adds to the Scan's Budget
 export type ScanSummary = {
-	resources: IngestedResource[]
+	resources: (IngestedResource & { isFromCustomSource: boolean })[]
 	foundCount: number
 	costDollars: number
 	status: Scan["status"]
@@ -80,7 +81,7 @@ export async function ingestFromTopicSources(topicId: string, budget: Budget): P
 	if (ingestOutcome.summary.resources.length > 0) {
 		const resourceRows = await db
 			.insert(resources)
-			.values(ingestOutcome.summary.resources.map(({ fetchedBody, ...resource }) => resource))
+			.values(ingestOutcome.summary.resources.map(({ fetchedBody, isFromCustomSource, ...resource }) => resource))
 			.onConflictDoUpdate({
 				target: resources.url,
 				set: { engagement: sql`coalesce(excluded.engagement, ${resources.engagement})` },
@@ -142,7 +143,7 @@ export function isAnsweredRefusal(error: unknown): boolean {
  */
 export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
 	// dedupe the found Resources across Sources by canonical url
-	const resourceByUrl = new Map<string, IngestedResource>()
+	const resourceByUrl = new Map<string, IngestedResource & { isFromCustomSource: boolean }>()
 	const problemSources: ProblemSource[] = []
 	let costDollars = 0
 	for (const outcome of outcomes) {
@@ -157,15 +158,22 @@ export function toScanSummary(outcomes: SourceOutcome[]): ScanSummary {
 			continue
 		}
 
-		// sum this Source's cost and merge its Resources, keeping the first one seen per canonical url
+		// sum this Source's cost. a Source of no default kind is a custom Source
 		costDollars += outcome.costDollars
+		const isCustomSource = toDefaultSource(outcome.sourceKind) === null
+
+		// merge its Resources, keeping the first one seen per canonical url, and mark a Resource that any custom Source found
 		for (const resource of outcome.resources) {
 			const canonicalUrl = toCanonicalUrl(resource.url)
-			if (!resourceByUrl.has(canonicalUrl)) {
-				// a Resource with no title would render as a bare host, so derive one from its snippet or url
-				const title = resource.title?.trim() || toFallbackTitle(canonicalUrl, resource.snippet)
-				resourceByUrl.set(canonicalUrl, { ...resource, url: canonicalUrl, title })
+			const seenResource = resourceByUrl.get(canonicalUrl)
+			if (seenResource) {
+				seenResource.isFromCustomSource ||= isCustomSource
+				continue
 			}
+
+			// a Resource with no title would render as a bare host, so derive one from its snippet or url
+			const title = resource.title?.trim() || toFallbackTitle(canonicalUrl, resource.snippet)
+			resourceByUrl.set(canonicalUrl, { ...resource, url: canonicalUrl, title, isFromCustomSource: isCustomSource })
 		}
 	}
 

@@ -13,9 +13,10 @@ const SITE_DESCRIPTION = "Carl keeps up with your topics and turns what matters 
 // the site-wide share card image, the default for a page with no head of its own
 const SITE_IMAGE_URL = `${SITE_URL}/opengraph-image.png`
 
-// the script that sets the theme class before first paint. a theme saved in localStorage wins over the OS setting,
-// and the theme-color meta tag follows the resolved theme's hero color
-const THEME_SCRIPT = `(() => {
+// the script that adds the scripted class and sets the theme class before first paint.
+// a theme saved in localStorage wins over the OS setting, and the theme-color meta tag follows the theme's hero color
+const FIRST_PAINT_SCRIPT = `(() => {
+  document.documentElement.classList.add("scripted")
   try {
     const savedTheme = localStorage.getItem("theme")
     const isDark = savedTheme ? savedTheme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches
@@ -53,7 +54,7 @@ export const Route = createRootRoute({
 			{ name: "twitter:description", content: SITE_DESCRIPTION },
 			{ name: "twitter:image", content: SITE_IMAGE_URL },
 		],
-		scripts: [{ children: THEME_SCRIPT }],
+		scripts: [{ children: FIRST_PAINT_SCRIPT }],
 		links: [
 			{ rel: "icon", href: "/favicon.ico", sizes: "any" },
 			{ rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },

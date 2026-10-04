@@ -1,12 +1,26 @@
 // the workflow that emails a finished Scan's outcome. a scheduled Scan sends its digest one batch at a time, and any
 // other Scan sends its report to whoever ran it or created the Topic
-import { ActivityFailure, ApplicationFailure, proxyActivities } from "@temporalio/workflow"
+import {
+	ActivityFailure,
+	ApplicationFailure,
+	condition,
+	defineSignal,
+	proxyActivities,
+	setHandler,
+} from "@temporalio/workflow"
 import type { ResendFailure } from "../email"
 import type { ScanTrigger } from "./runTopicScanActivities"
 import type * as emailActivities from "./sendScanEmailActivities"
 
 // the task queue that this workflow and its activities run on, kept apart from the scan activities' slots
 export const SCAN_EMAIL_TASK_QUEUE = "scan-emails"
+
+// the signal that ends the email's wait for the Podcast Episode's outline. the signal is sent once the title is saved,
+// once the outline fails for good, if the plan fails or finds nothing to render, or if the render never started
+export const podcastEpisodeOutlineSettledSignal = defineSignal("episode-outline-settled")
+
+// how long an email waits for the outline signal before it sends without the podcast episode section
+const PODCAST_EPISODE_OUTLINE_WAIT_MS = 10 * 60 * 1000
 
 // how long one send may take, and how its retries back off: 15 seconds, doubling up to 10 minutes apart, for at most
 // 10 attempts, about 45 minutes in all
@@ -30,18 +44,30 @@ const { reportUndeliveredScanEmail } = proxyActivities<typeof emailActivities>({
 	retry: { maximumAttempts: 3 },
 })
 
-// the Scan whose email this is and what asked for it. a manual or creation Scan also names who gets its report
-export type ScanEmailWorkflowInput =
-	| { trigger: Extract<ScanTrigger, "scheduled">; scanId: string; topicId: string }
-	| { trigger: Exclude<ScanTrigger, "scheduled">; scanId: string; topicId: string; reportRecipientUserId: string }
+// the Scan whose email this is, what asked for it, and whether the Scan starts a podcast episode workflow.
+// a manual or creation Scan also names who gets its report
+export type ScanEmailWorkflowInput = { scanId: string; topicId: string; isPodcastEpisodeReadyToRender?: boolean } & (
+	| { trigger: Extract<ScanTrigger, "scheduled"> }
+	| { trigger: Exclude<ScanTrigger, "scheduled">; reportRecipientUserId: string }
+)
 
 /**
  * Sends a finished Scan's email, the digest one batch at a time or the report to whoever ran the Scan or created the
- * Topic. A send that fails for good or runs out of attempts is reported, and the next batch still goes out.
+ * Topic. Either email first waits for the outline of a podcast episode that is ready to render.
+ * A send that fails for good or runs out of attempts is reported, and the next batch still goes out.
  */
 export async function sendScanEmailWorkflow(scanEmailWorkflowInput: ScanEmailWorkflowInput): Promise<void> {
 	// the Scan that every send and report names
 	const { scanId, topicId } = scanEmailWorkflowInput
+
+	// wait for the outline of the Scan's Podcast Episode, and send without the Podcast Episode once the wait runs out
+	if (scanEmailWorkflowInput.isPodcastEpisodeReadyToRender) {
+		let isPodcastEpisodeOutlineSettled = false
+		setHandler(podcastEpisodeOutlineSettledSignal, () => {
+			isPodcastEpisodeOutlineSettled = true
+		})
+		await condition(() => isPodcastEpisodeOutlineSettled, PODCAST_EPISODE_OUTLINE_WAIT_MS)
+	}
 
 	// a manual or creation Scan sends its report, and a report that does not go out is reported
 	if (scanEmailWorkflowInput.trigger !== "scheduled") {

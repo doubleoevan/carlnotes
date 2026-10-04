@@ -5,7 +5,6 @@ import {
 	addTopicSourcePayload,
 	createTopicPayload,
 	removeTopicSourcePayload,
-	updateTopicFieldsPayload,
 	updateTopicPromptPayload,
 } from "@shared/contracts"
 import { ratings } from "@shared/enums"
@@ -22,6 +21,8 @@ import {
 	createTopicFromDraft,
 	removeTopicSource,
 	suggestTopicDraftSources,
+	toPodcastFieldDescription,
+	toUpdateTopicFieldsShape,
 	updateTopicFields,
 	updateTopicPrompt,
 } from "../tool/topicTools"
@@ -193,8 +194,9 @@ function registerTopicFieldTools(mcpServer: McpServer, toolCaller: ToolCaller, r
 		{
 			title: "Change a topic's title or settings",
 			description:
-				"Change the topic's name, its tags, its visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day it brews as HH:MM and the day a weekly brew runs, or how many findings a brew keeps (5, 10, 15, or 20). Name only the fields to change. No brew starts.",
-			inputSchema: z.object({ topic_id: topicIdArgument, ...updateTopicFieldsPayload.shape }),
+				"Change the topic's name, its tags, its visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day it brews as HH:MM and the day a weekly brew runs, or how many findings a brew keeps (5, 10, 15, or 20)." +
+				`${toPodcastFieldDescription()} Name only the fields to change. No brew starts.`,
+			inputSchema: z.object({ topic_id: topicIdArgument, ...toUpdateTopicFieldsShape() }),
 			annotations: { readOnlyHint: false, destructiveHint: true },
 		},
 		async ({ topic_id, ...topicFields }) => {
@@ -316,8 +318,7 @@ function registerNewTopicTools(mcpServer: McpServer, toolCaller: ToolCaller): vo
 		"create_topic",
 		{
 			title: "Create a topic",
-			description:
-				"Create a topic for the connected account from a name, a prompt, sources as option and value pairs, invite emails, a visibility of public, invite, or private, the team it joins as the id and name of a team the account leads, tags, how often it brews (daily, weekdays, or weekly), and how many findings a brew keeps (5, 10, 15, or 20). Unsaid fields take the editor's defaults: shared by invite, weekly on Wednesday, ten findings. Its first brew starts.",
+			description: `Create a topic for the connected account from a name, a prompt, sources as option and value pairs, invite emails, a visibility of public, invite, or private, the team it joins as the id and name of a team the account leads, tags, how often it brews (daily, weekdays, or weekly), and how many findings a brew keeps (5, 10, 15, or 20).${toPodcastFieldDescription()} Unsaid fields take the editor's defaults: shared by invite, weekly on Wednesday, ten findings. Its first brew starts.`,
 			inputSchema: createTopicPayload,
 			annotations: { readOnlyHint: false, destructiveHint: true },
 		},

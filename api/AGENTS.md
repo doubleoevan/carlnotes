@@ -7,8 +7,9 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   Sentry transaction by its route and attaches its query count, the pool's counts, and the event loop's lag.
   `index.ts` also serves `/api/health`, which the platform polls and which sends no query, and `/api/health/deep`,
   which runs one query and returns the pool's counts for a monitor. Neither looks up a session.
-- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `share/`, `tool/`, `mcp/`. Root files serve more than one domain
-  (auth, billing, admin, avatars, favicons, profiles, SEO, and `content.ts` for the blog under `content/blog/`).
+- Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `share/`, `tool/`, `mcp/`. Root files
+  serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, and `content.ts` for the blog
+  under `content/blog/`).
 - `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key, and
   security.txt. `seo.ts` builds what they read, and the JSON-LD the topic page head includes. The blog and docs
   Markdown are read through `ttlCache.ts`, which keeps the parsed pages for a minute, so a new file appears within
@@ -30,8 +31,24 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   A note's poke has no update bytes, and the other replicas resync.
   Nothing missed while a subscriber was down is replayed.
   Chat catches up from its cursor, and a note resyncs on the next poke or when the note stream reaches the age limit.
-- `mcp/` — the mcp server: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and the transport), `tools.ts` (the tools it registers, with their schemas and annotations), `toolCaller.ts` (the tool caller: the visitor or user a bearer token resolves to), and
+- `mcp/` — the mcp server: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and the transport), `tools.ts` (the
+  tools it registers, with their schemas and annotations), `toolCaller.ts` (the tool caller: the visitor or user a
+  bearer token resolves to), and
   `results.ts` (what each tool returns for a visitor or a user, paged under a client's result limit).
+- `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
+  the next unplayed episode, one episode with its files and its preview card, a listener's progress, a chapter's
+  rating, the podcast switch, and removing an episode), `helpers.ts` (the reads behind them: the topic page's
+  podcast, a season's episodes, one episode by its id, and a podcast episode page, each limited to what the user may
+  listen to), `podcastSeo.ts` (the public episodes that the sitemap and llms.txt list, and the PodcastSeries and
+  PodcastEpisode structured data that `seo.ts` and `share/pageHead.ts` read),
+  `podcastEpisodeFiles.ts` (the audio, chapters, and transcript responses), `podcastFeedTokens.ts` (a listener's feed
+  token, and building, caching, and responding with a feed, or a 304 for a current copy), and `podcastFeeds.ts` (a
+  listener's feed url and its reset, an episode's files at paths after a feed token, and the covers).
+  `share/podcastFeed.ts` builds the feed, `share/podcastCover.ts` draws the covers over
+  `docs/design/podcast/cover-base.png`, and
+  `share/podcastEpisodeImage.ts` draws an episode page's link-preview card.
+  `documents.ts` serves a public Topic's feed at `/topics/:id/podcast.xml` and a listener's own at
+  `/podcast-feeds/:token.xml`.
 - `tool/` — `topicTools.ts` (the Topic Tools, each with its own gate check) and the chat adapters in
   `chatTools.ts`: the edit tools bound to a chat's topic, and the draft tools of the new-topic chat. The mcp adapter is
   in `mcp/tools.ts`.

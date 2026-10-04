@@ -129,12 +129,15 @@ export function ScrollBox({
 	copyMarkdown,
 	scrollToTopOn,
 	className,
+	boxClassName,
 }: {
 	children: React.ReactNode
 	copyMarkdown?: string
 	scrollToTopOn?: unknown
 	// the scrolling element's own classes, for a caller that bounds its height
 	className?: string
+	// the bordered box's classes, for a caller that lets the box shrink
+	boxClassName?: string
 }) {
 	const scrollBoxRef = useRef<HTMLDivElement>(null)
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the value is the trigger, read through the ref
@@ -142,7 +145,7 @@ export function ScrollBox({
 		scrollBoxRef.current?.scrollTo({ top: 0 })
 	}, [scrollToTopOn])
 	return (
-		<div className="group border-primary/50 relative rounded-md border">
+		<div className={cn("group border-primary/50 relative rounded-md border", boxClassName)}>
 			<div ref={scrollBoxRef} className={cn("max-h-72 overflow-y-auto p-2", HIGHLIGHT_SCROLLBAR_CLASS, className)}>
 				{children}
 			</div>

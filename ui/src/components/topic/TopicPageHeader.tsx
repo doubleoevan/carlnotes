@@ -2,11 +2,9 @@ import type { TopicResponse } from "@shared/contracts"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Badge } from "@/components/primitives/badge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TeamLink } from "@/components/team/TeamLink"
-import { TopicInfoPopover } from "@/components/topic/Topic"
+import { TopicByline, TopicInfoPopover } from "@/components/topic/Topic"
 import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
 import { cn, toSubscribeTooltip } from "@/lib/utils"
 import { setChatPanelState } from "@/stores/chatPanelStore"
@@ -55,13 +53,9 @@ export function TopicHeader({ topic }: { topic: TopicResponse }) {
 					/>
 				</h1>
 			</div>
-			{/* the credit is derived: the team for anyone who can open its page, the creator otherwise */}
+			{/* the byline */}
 			<div className="mt-2">
-				{topic.teamLink ? (
-					<TeamLink team={topic.teamLink} className="text-sm" />
-				) : (
-					topic.owner && <UserProfileLink user={topic.owner} label="Brewed by" className="text-sm" />
-				)}
+				<TopicByline topic={topic} className="text-sm" />
 			</div>
 			{/* tags row, left out entirely by an untagged topic so there is no empty gap */}
 			{topic.tags.length > 0 && (

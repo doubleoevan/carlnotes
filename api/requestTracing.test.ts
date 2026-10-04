@@ -52,3 +52,21 @@ test("an untraced request runs as it is", async () => {
 	expect(response.status).toBe(201)
 	expect(await response.json()).toEqual({ topicId: "abc" })
 })
+
+// a podcast feed token's routes are named by their patterns, so a trace never includes the token
+test("a podcast feed token never reaches a request's name", async () => {
+	// an app that keeps the route that each request is named by
+	const requestRoutes: string[] = []
+	const app = new Hono()
+		.use(async (context, next) => {
+			await next()
+			requestRoutes.push(toRequestRoute(context))
+		})
+		.get("/podcast-feeds/:tokenFile", (context) => context.text("feed"))
+		.get("/api/podcast-feeds/:token/episodes/:id/:file", (context) => context.text("audio"))
+
+	// the feed itself, then one of its podcast episode's files
+	await app.request("/podcast-feeds/a-secret-token.xml")
+	await app.request("/api/podcast-feeds/a-secret-token/episodes/episode-1/audio.mp3")
+	expect(requestRoutes).toEqual(["/podcast-feeds/:tokenFile", "/api/podcast-feeds/:token/episodes/:id/:file"])
+})

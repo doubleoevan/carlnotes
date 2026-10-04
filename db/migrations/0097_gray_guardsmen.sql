@@ -1,0 +1,1 @@
+ALTER TABLE "episode_chapters" ADD COLUMN "rating" "rating";

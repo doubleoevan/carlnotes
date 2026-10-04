@@ -4,6 +4,7 @@ import { and, eq } from "drizzle-orm"
 import { db } from "../db"
 import { subscriptions, topics } from "../db/schema"
 import { verifyUnsubscribeToken } from "../worker"
+import { deletePodcastFeedToken } from "./podcast/podcastFeedTokens"
 import { updateTopicSubscriberCount } from "./topic/subscriberCounts"
 
 /**
@@ -29,6 +30,9 @@ export async function unsubscribe(unsubscribeToken: string | undefined): Promise
 			)
 		await updateTopicSubscriberCount(unsubscribePayload.topicId, transaction)
 	})
+
+	// delete the recipient's podcast feed token for the topic
+	await deletePodcastFeedToken({ topicId: unsubscribePayload.topicId, userId: unsubscribePayload.userId })
 
 	// the topic id and name for the confirmation page, falling back when the topic has since been deleted
 	const [topic] = await db.select({ name: topics.name }).from(topics).where(eq(topics.id, unsubscribePayload.topicId))

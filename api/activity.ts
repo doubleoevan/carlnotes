@@ -157,6 +157,7 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 		},
 		scanSpendCents: Math.round(monthlySpend.scanDollars * 100),
 		chatSpendCents: Math.round(monthlySpend.chatDollars * 100),
+		podcastEpisodeSpendCents: Math.round(monthlySpend.podcastEpisodeDollars * 100),
 		budgetCents: userBudgetCents({
 			isAdmin: isAdminRole(userRow?.role),
 			plan: userRow?.plan ?? "free",

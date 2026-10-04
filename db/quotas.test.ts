@@ -1,9 +1,20 @@
 // quota tests: the suggestion rate limit window key, the daily suggestion limit, each invite limit factor alone, the floor, and a connected recipient's doubled limit.
-// the access row is read once per request, and on every call outside a request
+// the access row is read once per request, and on every call outside a request.
+// the month's spend sums scans, chat, and podcast episodes.
+// episodes stop rendering at 80 percent of the monthly budget, and after the first episode of a topic on the free plan
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { PLANS } from "@shared/plans"
 import { connectionPool } from "./index"
-import { incrementDaySuggestionCount, loadUserAccess, toInviteLimit, toSuggestionRateLimitWindowKey } from "./quotas"
+import {
+	canRenderPodcastEpisode,
+	incrementDaySuggestionCount,
+	isPodcastEpisodeBudgetShareExhausted,
+	loadUserAccess,
+	monthlySpendDollars,
+	toInviteLimit,
+	toMonthlySpendCents,
+	toSuggestionRateLimitWindowKey,
+} from "./quotas"
 import * as redis from "./redis"
 import { runWithRequestMemo } from "./requestMemo"
 
@@ -143,4 +154,117 @@ test("the daily suggestion limit allows up to 300 suggestions and allows one tha
 		}
 	})
 	expect(incrementDaySuggestionCountResults).toEqual([true, false, true])
+})
+
+// the rows that the podcast episode checks read. the stub picks each row by a pattern in the query's SQL
+type PodcastEpisodeQueryRows = {
+	accessRow: unknown[]
+	spendDollars: [string, string, string]
+	podcastEpisodeCount: number
+}
+
+// runs the calls with the connection pool's query swapped for a stub that returns the given podcast episode query rows.
+// the connection pool's own query is put back no matter how the calls end
+async function withPodcastEpisodeQueryRows<Result>(
+	podcastEpisodeQueryRows: PodcastEpisodeQueryRows,
+	runCalls: () => Promise<Result>,
+): Promise<Result> {
+	const originalConnectionPoolQuery = connectionPool.query
+	const [scanDollars, chatDollars, podcastEpisodeDollars] = podcastEpisodeQueryRows.spendDollars
+	const spendSums = [
+		{ fromClause: `from "scans"`, dollars: scanDollars },
+		{ fromClause: `from "chat_turns"`, dollars: chatDollars },
+		{ fromClause: `from "episodes"`, dollars: podcastEpisodeDollars },
+	]
+
+	// return the podcast episode count for a count, one table's spend sum for a sum, and the access row for anything else
+	connectionPool.query = ((queryConfig: string | { text: string }) => {
+		const queryText = typeof queryConfig === "string" ? queryConfig : queryConfig.text
+		if (queryText.includes("count(")) {
+			return Promise.resolve({ rows: [[podcastEpisodeQueryRows.podcastEpisodeCount]], fields: [] })
+		}
+
+		// return the spend sum of the table that the query reads
+		if (queryText.includes("sum(")) {
+			const spendSumDollars = spendSums.find(({ fromClause }) => queryText.includes(fromClause))?.dollars ?? "0"
+			return Promise.resolve({ rows: [[spendSumDollars]], fields: [] })
+		}
+		return Promise.resolve({ rows: [podcastEpisodeQueryRows.accessRow], fields: [] })
+	}) as unknown as typeof connectionPool.query
+
+	// run the calls, then put the connection pool's own query back
+	try {
+		return await runCalls()
+	} finally {
+		connectionPool.query = originalConnectionPoolQuery
+	}
+}
+
+// podcast episode cost counts in the month's spend beside scans and chat
+test("monthly spend sums scans, chat, and episodes", async () => {
+	const podcastEpisodeQueryRows = {
+		accessRow: USER_ACCESS_ROW,
+		spendDollars: ["2.50", "1.25", "0.41"],
+		podcastEpisodeCount: 0,
+	}
+	const monthlySpend = await withPodcastEpisodeQueryRows(podcastEpisodeQueryRows as PodcastEpisodeQueryRows, () =>
+		monthlySpendDollars("user-1"),
+	)
+	expect(monthlySpend).toEqual({ scanDollars: 2.5, chatDollars: 1.25, podcastEpisodeDollars: 0.41 })
+	expect(toMonthlySpendCents(monthlySpend)).toBe(416)
+})
+
+// a plus user's budget is 1500 cents, so podcast episodes stop rendering at 1200 cents of spend and not one cent before
+test("episodes stop rendering at 80 percent of the monthly budget", async () => {
+	const toPodcastEpisodeQueryRows = (scanDollars: string): PodcastEpisodeQueryRows => ({
+		accessRow: USER_ACCESS_ROW,
+		spendDollars: [scanDollars, "0", "0"],
+		podcastEpisodeCount: 0,
+	})
+	expect(
+		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("11.99"), () =>
+			isPodcastEpisodeBudgetShareExhausted("user-1"),
+		),
+	).toBe(false)
+	expect(
+		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("12.00"), () =>
+			isPodcastEpisodeBudgetShareExhausted("user-1"),
+		),
+	).toBe(true)
+	expect(
+		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("14.00"), () =>
+			isPodcastEpisodeBudgetShareExhausted("user-1"),
+		),
+	).toBe(true)
+})
+
+// a topic whose owner is on a paid plan always renders, and a topic on the free plan renders only its first episode
+test("a paid plan always renders an episode, and a topic on the free plan renders only its first", async () => {
+	const topic = { id: "topic-1", ownerId: "user-1" }
+	const toPodcastEpisodeQueryRows = (plan: string, podcastEpisodeCount: number): PodcastEpisodeQueryRows => ({
+		accessRow: ["user", plan, null],
+		spendDollars: ["0", "0", "0"],
+		podcastEpisodeCount,
+	})
+
+	// a paid plan renders with podcast episodes already published, and a free plan stops after its first episode
+	expect(
+		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("plus", 5), () => canRenderPodcastEpisode(topic)),
+	).toBe(true)
+	expect(
+		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("free", 0), () => canRenderPodcastEpisode(topic)),
+	).toBe(true)
+	expect(
+		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("free", 1), () => canRenderPodcastEpisode(topic)),
+	).toBe(false)
+
+	// an admin on the free plan always renders
+	const adminPodcastEpisodeQueryRows: PodcastEpisodeQueryRows = {
+		accessRow: ["admin", "free", null],
+		spendDollars: ["0", "0", "0"],
+		podcastEpisodeCount: 3,
+	}
+	expect(await withPodcastEpisodeQueryRows(adminPodcastEpisodeQueryRows, () => canRenderPodcastEpisode(topic))).toBe(
+		true,
+	)
 })

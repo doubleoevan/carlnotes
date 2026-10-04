@@ -1,11 +1,11 @@
 // the helpers for the topic's reads and writes
 import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
-import type { Invite, Topic, TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contracts"
+import type { Invite, ProfileIdentity, Topic, TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contracts"
 import { isDailyFrequency } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
 import { FIRST_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
 import { and, count, desc, eq, exists, inArray, isNull, notInArray, or, sql } from "drizzle-orm"
-import { db } from "../../db"
+import { db, isFindingShown } from "../../db"
 import { dailyScanLimit, dailyTopicIdsWithinLimit } from "../../db/quotas"
 import {
 	bookmarks,
@@ -29,6 +29,7 @@ import {
 	screenTopicSources,
 } from "../../worker"
 import { isAllowed, isMonthlySpendExhausted, loadDailyFrequencyAuthorization, loadUserAccess } from "../authorization"
+import { withAvatarVersion } from "../avatars"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadPendingTopicInvites } from "../invite/invites"
 import { loadFeaturedTopics } from "./featuring"
@@ -112,6 +113,7 @@ export function toScanHistory(
 			filteredCount: scan.filteredCount,
 			costDollars: canSeeSpend ? Number(scan.cost) : null,
 			error: scan.error,
+			podcastEpisode: null,
 		}))
 }
 
@@ -190,11 +192,13 @@ export async function toInviteAndScanFields(
 	}
 }
 
-// the topic, the user whose access gates its findings, and an optional page window of the findings
+// the topic, the user whose access gates its findings, an optional page window of the findings,
+// and whether to leave out the findings rated thumbs down
 type LoadTopicAccessAndFindingsOptions = {
 	topic: typeof topics.$inferSelect
 	userId: string | null
 	pageWindow?: FindingPageWindow
+	isRatedDownExcluded?: boolean
 }
 
 // the user's topic access and the findings it gates, up to the read limit or within one page window
@@ -202,6 +206,7 @@ export async function loadTopicAccessAndFindings({
 	topic,
 	userId,
 	pageWindow,
+	isRatedDownExcluded,
 }: LoadTopicAccessAndFindingsOptions): Promise<{
 	isAdmin: boolean
 	topicFindings: Awaited<ReturnType<typeof loadTopicFindings>>
@@ -215,10 +220,27 @@ export async function loadTopicAccessAndFindings({
 		userId,
 		subscriberActivatedAt: await topicSubscriptionStartDate(topic, userId, isAdmin),
 		pageWindow,
+		isRatedDownExcluded,
 	})
 	await attachTeamBookmarks(topicFindings, topic.id, topic.teamId)
 	await attachTopicFindingFaviconPaths(topicFindings)
 	return { isAdmin, topicFindings }
+}
+
+/**
+ * Loads the topic owner's public identity, or null if the owner's row is gone.
+ */
+export async function loadTopicOwner(ownerId: string): Promise<ProfileIdentity | null> {
+	const [ownerRow] = await db
+		.select({
+			userId: users.id,
+			username: users.username,
+			avatarSource: users.avatarSource,
+			avatarKey: users.avatarKey,
+		})
+		.from(users)
+		.where(eq(users.id, ownerId))
+	return ownerRow ? withAvatarVersion(ownerRow) : null
 }
 
 // the team fields for the team page includes the owning team, the user's membership and rooms, how many teams
@@ -585,7 +607,7 @@ async function loadFindingsKeptAndResourcesSeen(
 		db
 			.select({ topicId: findings.topicId, kept: count() })
 			.from(findings)
-			.where(inArray(findings.topicId, topicIds))
+			.where(and(inArray(findings.topicId, topicIds), isFindingShown))
 			.groupBy(findings.topicId),
 		db
 			.select({

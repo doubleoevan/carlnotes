@@ -2,7 +2,7 @@
 import { reportError } from "@shared/monitoring"
 import { toSourceSummary, toUrlHost } from "@shared/sources"
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm"
-import { db } from "../../db"
+import { db, isFindingShown } from "../../db"
 import {
 	attachments,
 	chatAttachments,
@@ -213,6 +213,7 @@ async function rankTopicFindings(
 		.where(
 			and(
 				inArray(findings.topicId, topicIds),
+				isFindingShown,
 				isNotNull(resources.embedding),
 				eq(resources.embeddingModel, EMBED_MODEL_NAME),
 			),
@@ -259,8 +260,10 @@ export function toRelevanceThenRecencyOrder<Row extends { distance: number; foun
 	)
 }
 
-// a resource's stored Markdown, falling back to its native snippet
-async function readResourceText(contentKey: string | null, snippet: string | null): Promise<string> {
+/**
+ * Reads a Resource's stored Markdown, or its snippet if no content was stored or the read failed.
+ */
+export async function readResourceText(contentKey: string | null, snippet: string | null): Promise<string> {
 	// a resource that was never offloaded has only its snippet
 	if (!contentKey) {
 		return snippet ?? ""
@@ -270,9 +273,9 @@ async function readResourceText(contentKey: string | null, snippet: string | nul
 	try {
 		return await getResourceContent(contentKey)
 	} catch (error) {
-		// the chat turn still falls back to the snippet, so the failure is only reported
-		console.error(`chat could not read stored content ${contentKey}`, error)
-		reportError(error, "chat")
+		// report the failure and return the snippet instead of the stored content
+		console.error(`could not read stored content ${contentKey}`, error)
+		reportError(error, "object-storage")
 		return snippet ?? ""
 	}
 }

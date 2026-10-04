@@ -33,10 +33,10 @@ const CARD_BACKGROUND = "#2a1f14"
 const CARD_COLOR = "#f0e6d6"
 const CARD_ACCENT = "#f09050"
 
-// one node of the card's markup tree, which is the shape satori reads instead of React elements
-export type CardNode = {
+// one element of the card's markup, in the React element shape that satori reads
+export type CardElement = {
 	type: string
-	props: { style?: Record<string, unknown>; children?: (CardNode | string)[] | string } & Record<string, unknown>
+	props: { style?: Record<string, unknown>; children?: (CardElement | string)[] | string } & Record<string, unknown>
 }
 
 /**
@@ -56,8 +56,8 @@ export function toAvatarIdentity(avatar: PublishedAvatar): string {
  * The card frame drawn around a preview card's rows: satori generates the svg, resvg rasterizes
  * it at the card's own width, so the png comes out at exactly the size the platforms crop to.
  */
-export async function toCardPng(rows: CardNode[]): Promise<Uint8Array> {
-	const frame: CardNode = {
+export async function toCardPng(rows: CardElement[]): Promise<Uint8Array> {
+	const frame: CardElement = {
 		type: "div",
 		props: {
 			style: {
@@ -147,7 +147,7 @@ async function toAvatarBytes(response: Response): Promise<Uint8Array | null> {
 /**
  * The published user image, cropped to fit the same circle the initials draw.
  */
-export function toOwnerPhoto(ownerImage: string, size: number): CardNode {
+export function toOwnerPhoto(ownerImage: string, size: number): CardElement {
 	return {
 		type: "img",
 		props: {
@@ -162,7 +162,7 @@ export function toOwnerPhoto(ownerImage: string, size: number): CardNode {
 /**
  * The default username initials image that the app renders, its letters scaled to the circle.
  */
-export function toOwnerInitials(userId: string, username: string, size: number): CardNode {
+export function toOwnerInitials(userId: string, username: string, size: number): CardElement {
 	return {
 		type: "div",
 		props: {
@@ -185,7 +185,7 @@ export function toOwnerInitials(userId: string, username: string, size: number):
 /**
  * The brand line in the top left corner of a preview card.
  */
-export function toBrandIcon(): CardNode {
+export function toBrandIcon(): CardElement {
 	return {
 		type: "div",
 		props: {
@@ -196,7 +196,7 @@ export function toBrandIcon(): CardNode {
 }
 
 // the coffee mug icon, drawn from the same paths CoffeeMug.tsx renders
-function toMug(): CardNode {
+function toMug(): CardElement {
 	const steamWisps = [11.5, 15, 18.5].map((offset) => ({
 		type: "path",
 		props: {

@@ -3,10 +3,12 @@ import { expect, test } from "bun:test"
 import { FeedStatusError } from "./ingest/feed"
 import {
 	isTemporaryFailure,
+	loadWebSearchResources,
 	type SuggestedSource,
 	type SuggestionContext,
 	toSourceKey,
 	toTopicContext,
+	toWebSearchPages,
 } from "./suggest"
 
 // one proposed source, so a case names only the option and value it varies
@@ -148,4 +150,33 @@ test("the topic context stays clipped whatever the attachment includes", () => {
 	const topicContext = toTopicContext(toSuggestionContext({ attachmentContext: "a".repeat(10_000) }))
 	expect(topicContext.length).toBe(4000)
 	expect(topicContext.startsWith("Title: Raccoons")).toBe(true)
+})
+
+// the model reads each page that the web search found, and a deployment with no search key gets no web search pages
+test("toWebSearchPages lists each page the search found, and none without a search key", async () => {
+	const realFetch = globalThis.fetch
+	const realSearchKey = Bun.env.EXA_API_KEY
+	try {
+		// a search that finds one page lists its title, host, and address
+		Bun.env.EXA_API_KEY = "test-search-key"
+		const searchResponseBody = { results: [{ url: "https://www.raccoon.example/feeding", title: "Feeding raccoons" }] }
+		globalThis.fetch = (async () => new Response(JSON.stringify(searchResponseBody))) as unknown as typeof fetch
+		const webSearchResources = await loadWebSearchResources(toSuggestionContext({}))
+		expect(toWebSearchPages(webSearchResources)).toBe(
+			"- Feeding raccoons (raccoon.example): https://www.raccoon.example/feeding",
+		)
+
+		// with no search key, there are no results and the list says none
+		delete Bun.env.EXA_API_KEY
+		expect(await loadWebSearchResources(toSuggestionContext({}))).toEqual([])
+		expect(toWebSearchPages([])).toBe("None.")
+	} finally {
+		// put fetch and the search key back as the environment had them
+		globalThis.fetch = realFetch
+		if (realSearchKey === undefined) {
+			delete Bun.env.EXA_API_KEY
+		} else {
+			Bun.env.EXA_API_KEY = realSearchKey
+		}
+	}
 })

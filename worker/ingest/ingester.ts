@@ -11,6 +11,9 @@ export type FetchedBody = { markdown: string; etag: string | null; lastModified:
 // a Resource an ingester finds, optionally including a body it fetched
 export type IngestedResource = NewResource & { fetchedBody?: FetchedBody }
 
+// a Resource that a Scan found, and whether a custom Source found it
+export type DiscoveredResource = NewResource & { isFromCustomSource: boolean }
+
 // the ingester for one source kind. it takes a Source and returns the Resources it fetched plus the cost it incurred
 export type SourceIngester = (source: Source) => Promise<IngestResult>
 

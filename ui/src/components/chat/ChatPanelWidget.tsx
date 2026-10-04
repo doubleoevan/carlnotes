@@ -20,6 +20,7 @@ import { useIsMounted } from "@/hooks/useBrowserValue"
 import { useKeyboardViewport } from "@/hooks/useKeyboardViewport"
 import { cn } from "@/lib/utils"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
+import { useIsPodcastPlayerShown } from "@/stores/podcastEpisodePlayerStore"
 
 // the loading chat message that the chat panel shows while the chat history is loading
 export function ChatMessagesLoading() {
@@ -115,13 +116,16 @@ export function ChatPanelWidget({
 
 // the minimized state is a labeled pill button with a chat mentions badge on its top right corner
 export function ChatPill({ onOpenChat, chatMentions }: { onOpenChat: () => void; chatMentions?: ChatMention[] }) {
+	// the pill sits above the podcast player while the podcast player shows
+	const isPodcastPlayerShown = useIsPodcastPlayerShown()
 	return (
 		<BodyPortal>
 			<button
 				type="button"
 				onClick={onOpenChat}
 				className={cn(
-					"bg-primary text-primary-foreground font-display bottom-safe fixed right-3 z-50 flex items-center gap-2 rounded-full py-2.5 pr-4 pl-3 text-sm transition-transform hover:scale-105",
+					"bg-primary text-primary-foreground font-display fixed right-3 z-50 flex items-center gap-2 rounded-full py-2.5 pr-4 pl-3 text-sm transition-transform hover:scale-105",
+					isPodcastPlayerShown ? "bottom-[calc(6rem+env(safe-area-inset-bottom))]" : "bottom-safe",
 					CHAT_PANEL_ELEVATION_CLASS,
 				)}
 			>

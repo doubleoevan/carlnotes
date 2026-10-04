@@ -6,6 +6,7 @@ const ROUTE_ID_SHAPES = new Map([
 	["profiles", ":userId"],
 	["teams", ":teamId"],
 	["invite", ":token"],
+	["podcast-feeds", ":token"],
 ])
 
 // the routes whose segment after the id is the page's name as a slug, and the shape it reports as

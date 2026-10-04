@@ -1,6 +1,7 @@
-import type { TopicFinding } from "@shared/contracts"
+import type { PodcastEpisode, TopicFinding } from "@shared/contracts"
 import type * as React from "react"
 import { useState } from "react"
+import { PodcastEpisodeChapterPill, useIsFindingChapterPlaying } from "@/components/podcast/PodcastEpisodePill"
 import { TopicResource } from "@/components/topic/TopicResource"
 import { RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
@@ -22,6 +23,8 @@ type TopicFindingsSectionProps = {
 	topic: { id: string; name: string; prompt: string }
 	// the unread count for the title row, built by the page that has the whole topic
 	newCountInfo?: React.ReactNode
+	// the topic's latest podcast episode, whose chapters put a pill on the findings that they narrate
+	latestPodcastEpisode?: PodcastEpisode | null
 }
 
 // the collapsible topic findings list, limited to five rows with the homepage expander
@@ -33,6 +36,7 @@ export function TopicFindingsSection({
 	handlers,
 	topic,
 	newCountInfo,
+	latestPodcastEpisode,
 }: TopicFindingsSectionProps) {
 	const [isExpanded, setIsExpanded] = useState(false)
 	// limit the rows unless expanded
@@ -45,7 +49,7 @@ export function TopicFindingsSection({
 			{/* topic finding rows, each drawing its own dashed separator */}
 			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
 				{topicFindingsShown.map((finding, index) => (
-					<TopicResource
+					<TopicFindingRow
 						key={finding.findingId}
 						resource={finding}
 						rank={finding.isBookmarked ? null : index - pinnedShownCount + 1}
@@ -53,6 +57,7 @@ export function TopicFindingsSection({
 						isBookmarkable={isBookmarkable}
 						resourceHandlers={handlers}
 						topic={topic}
+						latestPodcastEpisode={latestPodcastEpisode}
 					/>
 				))}
 				{topicFindingsShown.length === 0 && (
@@ -71,5 +76,28 @@ export function TopicFindingsSection({
 				/>
 			)}
 		</CollapsibleSection>
+	)
+}
+
+// one topic finding's row, with the pill of the latest podcast episode's chapter that narrates the finding,
+// highlighted while the chapter plays
+function TopicFindingRow({
+	latestPodcastEpisode,
+	...topicResourceProps
+}: React.ComponentProps<typeof TopicResource> & { latestPodcastEpisode?: PodcastEpisode | null }) {
+	// the chapter that narrates this finding, and whether it is playing
+	const { findingId } = topicResourceProps.resource
+	const findingChapter = latestPodcastEpisode?.chapters.find((chapter) => chapter.findingId === findingId)
+	const isChapterPlaying = useIsFindingChapterPlaying(latestPodcastEpisode, findingId)
+	return (
+		<TopicResource
+			{...topicResourceProps}
+			isChapterPlaying={isChapterPlaying}
+			podcastEpisodeChapterPill={
+				latestPodcastEpisode && findingChapter ? (
+					<PodcastEpisodeChapterPill podcastEpisode={latestPodcastEpisode} chapter={findingChapter} />
+				) : undefined
+			}
+		/>
 	)
 }

@@ -14,6 +14,7 @@ import {
 	toProposeTopicEditTool,
 	toRejectionText,
 	toSuggestionsText,
+	toUpdateTopicFieldsText,
 } from "./chatTools"
 
 // the tools bound to one topic
@@ -130,6 +131,7 @@ test("draftTopic writes the named fields, leaves the rest, and clears on an empt
 		prompt: "Runs after work",
 		visibility: "public",
 		sources: [{ sourceOption: "reddit", value: "Sourdough" }],
+		isPodcastEnabled: true,
 	})
 	expect(toolCalls.topicDraft).toEqual(topicDraft)
 	expect(toolCalls.count).toBe(1)
@@ -137,6 +139,44 @@ test("draftTopic writes the named fields, leaves the rest, and clears on an empt
 	// an empty list clears the sources the call before it left standing
 	await newTopicTools.draftTopic?.execute?.({ sources: [] }, { toolCallId: "call-2", messages: [], context: undefined })
 	expect(topicDraft.sources).toEqual([])
+})
+
+// a new topic draft's podcast starts on, Carl can turn it off, and an instance with no speech model has no podcast
+test("draftTopic starts the podcast on, keeps it off once named, and leaves it out with no speech model", async () => {
+	const originalSpeechModel = Bun.env.PODCAST_SPEECH_MODEL
+	try {
+		// a new-topic chat on an instance with the default speech model
+		delete Bun.env.PODCAST_SPEECH_MODEL
+		const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+		const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT }
+		const newTopicTools = toNewTopicChatTools({ userId: "user-1", toolCalls, topicDraft, analyticsProperties })
+		const toolCallOptions = { toolCallId: "call-1", messages: [], context: undefined }
+
+		// name the podcast off, then write another field
+		await newTopicTools.draftTopic?.execute?.({ isPodcastEnabled: false }, toolCallOptions)
+		expect(topicDraft.isPodcastEnabled).toBe(false)
+		await newTopicTools.draftTopic?.execute?.({ name: "Hoops" }, toolCallOptions)
+		expect(topicDraft.isPodcastEnabled).toBe(false)
+
+		// with the speech model set empty, a draft has no podcast setting
+		Bun.env.PODCAST_SPEECH_MODEL = ""
+		const draftWithoutPodcast: TopicDraft = { ...EMPTY_TOPIC_DRAFT }
+		const toolsWithoutPodcast = toNewTopicChatTools({
+			userId: "user-1",
+			toolCalls,
+			topicDraft: draftWithoutPodcast,
+			analyticsProperties,
+		})
+		await toolsWithoutPodcast.draftTopic?.execute?.({ name: "Hoops" }, toolCallOptions)
+		expect(draftWithoutPodcast.isPodcastEnabled).toBeUndefined()
+	} finally {
+		// put the setting back as the environment had it
+		if (originalSpeechModel === undefined) {
+			delete Bun.env.PODCAST_SPEECH_MODEL
+		} else {
+			Bun.env.PODCAST_SPEECH_MODEL = originalSpeechModel
+		}
+	}
 })
 
 // the cancel tool takes a preview off the card and saves nothing
@@ -185,4 +225,12 @@ test("openNewTopicChat opens the chat without counting as a save", async () => {
 	// check the count stays zero
 	expect(toolCalls).toEqual({ count: 0, topicSaves: [], topicSaveRejections: [], isNewTopicChatOpened: true })
 	expect(toolText).toContain("opening beside this one")
+})
+
+// the plan's rejection of the podcast switch has its own text
+test("a rejected podcast switch names the free plan's one episode", () => {
+	expect(toUpdateTopicFieldsText({ status: "podcastPlan" })).toContain(
+		"one podcast episode the free plan gives each topic",
+	)
+	expect(toUpdateTopicFieldsText({ status: "forbidden" })).toBe(toRejectionText("forbidden"))
 })

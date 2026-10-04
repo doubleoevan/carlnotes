@@ -1,11 +1,11 @@
-// per-user scan-quota checks
+// per-user limits, the month's spend, and the podcast episode checks
 import { dailyFrequencies, isAdminRole } from "@shared/enums"
-import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, type UserAccess } from "@shared/plans"
+import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, type UserAccess, userBudgetCents } from "@shared/plans"
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm"
 import { db } from "."
 import { incrementRateLimitWindow, isWithinRateLimit } from "./redis"
 import { memoizeInRequest } from "./requestMemo"
-import { billingSubscriptions, invites, scans, teamMembers, topics, users } from "./schema"
+import { billingSubscriptions, chatTurns, invites, podcastEpisodes, scans, teamMembers, topics, users } from "./schema"
 
 // one day in milliseconds, the suggestion rate limit window and the unit that invite and account ages are measured in
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -19,6 +19,12 @@ const CONNECTED_LIMIT_FACTOR = 2
 
 // how old a user invitation must be before its outcome counts toward a sender's reputation
 const REPUTATION_AGE_DAYS = 7
+
+// the share of the monthly budget at which podcast episodes stop rendering. scans keep running on the rest
+const PODCAST_EPISODE_BUDGET_SHARE = 0.8
+
+// a user's recorded spend this month in dollars, split into scans, chat, and podcast episodes
+type MonthlySpend = { scanDollars: number; chatDollars: number; podcastEpisodeDollars: number }
 
 // how many teams a user may create in a day
 const DAILY_TEAM_LIMIT = 20
@@ -232,6 +238,72 @@ export async function loadBillingAccess(
 		hasPaymentMethod: subscriptionRow?.hasPaymentMethod ?? false,
 		billingInterval: subscriptionRow?.billingInterval ?? "monthly",
 	}
+}
+
+/**
+ * Returns this month's recorded spend for the user, split into scans, chat, and podcast episodes.
+ */
+export async function monthlySpendDollars(userId: string): Promise<MonthlySpend> {
+	// sum each table's cost since the start of the UTC month, which the budget resets on
+	const monthStart = startOfUtcMonth(new Date())
+	const [[scanSpendRow], [chatSpendRow], [podcastEpisodeSpendRow]] = await Promise.all([
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
+			.from(scans)
+			.where(and(eq(scans.ownerId, userId), gte(scans.startedAt, monthStart))),
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
+			.from(chatTurns)
+			.where(and(eq(chatTurns.userId, userId), gte(chatTurns.createdAt, monthStart))),
+		db
+			.select({ dollars: sql<string>`coalesce(sum(${podcastEpisodes.cost}), 0)` })
+			.from(podcastEpisodes)
+			.where(and(eq(podcastEpisodes.ownerId, userId), gte(podcastEpisodes.createdAt, monthStart))),
+	])
+	return {
+		scanDollars: Number(scanSpendRow?.dollars ?? 0),
+		chatDollars: Number(chatSpendRow?.dollars ?? 0),
+		podcastEpisodeDollars: Number(podcastEpisodeSpendRow?.dollars ?? 0),
+	}
+}
+
+/**
+ * Returns a month's spend in cents, summed across scans, chat, and podcast episodes.
+ */
+export function toMonthlySpendCents({ scanDollars, chatDollars, podcastEpisodeDollars }: MonthlySpend): number {
+	return Math.round(scanDollars * 100) + Math.round(chatDollars * 100) + Math.round(podcastEpisodeDollars * 100)
+}
+
+/**
+ * Whether the user's monthly spend has reached the share of their budget at which podcast episodes stop rendering.
+ */
+export async function isPodcastEpisodeBudgetShareExhausted(userId: string): Promise<boolean> {
+	// compare the month's spend with the podcast episode share of the user's budget
+	const [userAccess, monthlySpend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
+	return toMonthlySpendCents(monthlySpend) >= userBudgetCents(userAccess) * PODCAST_EPISODE_BUDGET_SHARE
+}
+
+/**
+ * Whether a Topic may render a Podcast Episode on its owner's plan.
+ */
+export async function canRenderPodcastEpisode(topic: { id: string; ownerId: string }): Promise<boolean> {
+	// allow any number of Podcast Episodes if the Topic's owner is an admin or on a paid plan
+	const ownerAccess = await loadUserAccess(topic.ownerId)
+	if (ownerAccess.isAdmin || ownerAccess.plan !== "free") {
+		return true
+	}
+
+	// allow the free plan one Podcast Episode per Topic. a removed Podcast Episode still counts, and a failed one does not
+	const [podcastEpisodeCountRow] = await db
+		.select({ count: count() })
+		.from(podcastEpisodes)
+		.where(
+			and(
+				eq(podcastEpisodes.topicId, topic.id),
+				inArray(podcastEpisodes.status, ["rendering", "published", "removed"]),
+			),
+		)
+	return (podcastEpisodeCountRow?.count ?? 0) === 0
 }
 
 // utc midnight starting from the given moment's day. quota days roll over at utc midnight

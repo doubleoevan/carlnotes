@@ -1,4 +1,6 @@
 // the tailwind class strings shared across pages
+import { cn } from "@/lib/utils"
+
 /**
  * The highlight treatment over the shared button shape, for the one main action a page view has.
  */
@@ -12,10 +14,51 @@ export const SEARCH_BAR_ICON_CLASS =
 	"text-muted-foreground hover:text-foreground grid min-h-11 w-8 shrink-0 place-items-center rounded-md sm:min-h-9"
 
 /**
+ * A list row with a dashed separator over it. The first row has no separator.
+ */
+export const DASHED_ROW_CLASS =
+	"after:border-separator-strong relative after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden"
+
+/**
+ * A round play button in the primary color, with a button's shadow. Each button adds its own size class.
+ */
+export const PLAY_BUTTON_CLASS =
+	"bg-primary text-primary-foreground hover:bg-primary/90 shadow-lift grid shrink-0 place-items-center rounded-full transition-colors"
+
+/**
+ * Shows a control only in a browser with JavaScript.
+ */
+export const SCRIPTED_ONLY_CLASS = "hidden scripted:inline-flex"
+
+/**
+ * The muted look that a row's play button adds if its podcast episode or chapter is not the one in the player.
+ */
+export const PLAY_BUTTON_MUTED_CLASS = "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground border"
+
+/**
+ * The cover with the show's name and no title, which shows behind a podcast cover while the cover loads.
+ */
+export const COVER_PLACEHOLDER_CLASS = "bg-[url(/podcast-cover-placeholder.jpg)] bg-cover"
+
+/**
+ * The cover that says the hosts are recording.
+ * It replaces the cover placeholder for a podcast episode that is rendering.
+ */
+export const COVER_RECORDING_CLASS = "bg-[url(/podcast-cover-recording.jpg)]"
+
+/**
  * The bordered button treatment shared by the feed toolbar's controls.
  */
 export const MENU_BUTTON_CLASS =
 	"bg-card text-muted-foreground hover:text-foreground inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm shadow-lift sm:min-h-9"
+
+/**
+ * A skip or playback rate button beside a play button.
+ */
+export const PLAYBACK_CONTROL_BUTTON_CLASS = cn(
+	MENU_BUTTON_CLASS,
+	"bg-muted hover:bg-accent min-w-11 justify-center font-bold sm:min-w-9",
+)
 
 /**
  * The thin visible scrollbar, sized on both axes for vertical and horizontal overflow alike.
@@ -126,10 +169,9 @@ export const POPOVER_HEADING_CLASS = "font-display mb-2 text-center text-lg"
 export const INFO_CARD_CLASS = "border-separator bg-card h-fit rounded-lg border p-5 text-sm shadow-lift"
 
 /**
- * The card around a numbered list of resources. Its background is mostly transparent, and the steam
- * rings drifting behind the page read through it. The dark card has more fill than the light one.
+ * The card around a list of rows, such as a topic's findings, its podcast episodes, or its scan history.
  */
-export const RESOURCE_LIST_CARD_CLASS = "border-separator/60 bg-card/35 dark:bg-card/55 rounded-lg border shadow-lift"
+export const RESOURCE_LIST_CARD_CLASS = "border-separator bg-card rounded-lg border shadow-lift"
 
 /**
  * The inset that lines up a right-aligned row with the quota line above it. Text takes the full inset.

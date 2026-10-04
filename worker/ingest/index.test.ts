@@ -81,3 +81,28 @@ test("isAnsweredRefusal separates the host declining from a fault in this code",
 	expect(isAnsweredRefusal("not an error at all")).toBe(false)
 	expect(isAnsweredRefusal(undefined)).toBe(false)
 })
+
+// a page that a custom Source found is marked, even if the web search found it first, and a search-only page is not
+test("a Resource that any custom Source found is marked as found by one", () => {
+	const scanSummary = toScanSummary([
+		toSourceOutcome({
+			sourceId: "src_search",
+			sourceKind: "search",
+			resources: [{ url: "https://example.test/both", kind: "read" as const }],
+		}),
+		toSourceOutcome({
+			sourceId: "src_search",
+			sourceKind: "search",
+			resources: [{ url: "https://example.test/only", kind: "read" as const }],
+		}),
+		toSourceOutcome({
+			sourceId: "src_rss",
+			sourceKind: "rss",
+			resources: [{ url: "https://example.test/both", kind: "read" as const }],
+		}),
+	])
+	const isFromCustomSourceByUrl = Object.fromEntries(
+		scanSummary.resources.map((resource) => [resource.url, resource.isFromCustomSource]),
+	)
+	expect(isFromCustomSourceByUrl).toEqual({ "https://example.test/both": true, "https://example.test/only": false })
+})

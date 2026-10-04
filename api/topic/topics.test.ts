@@ -20,6 +20,7 @@ function scanRow(id: string, status: TopicScan["status"]): TopicScan {
 		filteredCount: 0,
 		costDollars: null,
 		error: null,
+		podcastEpisode: null,
 	}
 }
 

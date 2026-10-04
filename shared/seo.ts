@@ -125,6 +125,34 @@ export function toTopicFeedPath(topicId: string): string {
 }
 
 /**
+ * Returns a topic's podcast feed path, which names the topic by id alone so a renamed topic keeps its feed url.
+ */
+export function toPodcastFeedPath(topicId: string): string {
+	return `/topics/${topicId}/podcast.xml`
+}
+
+/**
+ * Returns a podcast episode page's path, which comes after its topic page's path.
+ */
+export function toPodcastEpisodePath(
+	topic: { id: string; name: string },
+	podcastEpisode: { season: number | null; episodeNumber: number | null },
+): string {
+	return `${toTopicPath(topic)}/episodes/${podcastEpisode.season}/${podcastEpisode.episodeNumber}`
+}
+
+/**
+ * Returns a url's host in lowercase without a leading www, or the url itself if it does not parse.
+ */
+export function toHostWithoutWww(url: string): string {
+	try {
+		return new URL(url).hostname.replace(/^www\./, "").toLowerCase()
+	} catch {
+		return url
+	}
+}
+
+/**
  * Builds a page's meta description, the text's plain words on one line, clipped at a word to fit a search result.
  */
 export function toMetaDescription(text: string): string {

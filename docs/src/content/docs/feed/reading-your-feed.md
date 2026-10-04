@@ -29,10 +29,14 @@ the finding's popover, says why it *matters*.
 Open a finding's popover for its controls:
 
 - **Rate this finding**: thumbs up or thumbs down, and a box to tell Carl why. What you write there
-goes back to him as feedback on the finding.
+goes back to him as feedback on the finding. A thumbs down hides the finding from your feed for good,
+and Carl scores pages like it lower from then on. The **Rated down** view in **Filters** shows them,
+in case you change your mind.
 - **Mark read**: your feed keeps track of the things you haven't read yet. The **All**
-view mutes what you've already read, and the **Unread** view hides it entirely. Bookmark anything
-you'll want to keep at the top.
+view mutes what you've already read, and the **Unread** view hides it entirely.
+- **Bookmark**: a bookmarked finding stays at the top of your feed and is never filtered out. Carl
+reads your latest bookmarks and thumbs up when he scores what a brew finds, so pages like them rank
+higher, and Coffee Break brings them back.
 
 ![The finding popover's controls: Bookmark, Mark read, Rate this finding, and the box for telling
 Carl why](../../../assets/screenshots/feed-thumbs-and-consumed.png)

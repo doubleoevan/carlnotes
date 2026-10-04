@@ -39,9 +39,11 @@ FROM oven/bun:1.3.14 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
-# the Certificate Authority bundle the Doppler CLI verifies api.doppler.com against. the bun image ships without one
+# the Certificate Authority bundle that the Doppler CLI verifies api.doppler.com against.
+# the bun image ships without one.
+# the worker joins and encodes a podcast episode's audio with ffmpeg
 RUN apt-get update \
-	&& apt-get install -y --no-install-recommends ca-certificates \
+	&& apt-get install -y --no-install-recommends ca-certificates ffmpeg \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Doppler injects the secrets at start. copied from its own published image rather than curled at build time,
@@ -60,6 +62,9 @@ COPY db ./db
 COPY emails ./emails
 COPY worker ./worker
 COPY api ./api
+
+# the illustration that every podcast cover is drawn over
+COPY docs/design/podcast/cover-base.png ./docs/design/podcast/cover-base.png
 
 # the blog's markdown, which the api renders per request. the docs moved to the Starlight site above
 COPY content ./content

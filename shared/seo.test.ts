@@ -2,9 +2,12 @@
 import { expect, test } from "bun:test"
 import {
 	isTopicSlugStale,
+	toHostWithoutWww,
 	toJsonLdText,
 	toMetaDescription,
 	toPageTitle,
+	toPodcastEpisodePath,
+	toPodcastFeedPath,
 	toTopicFeedPath,
 	toTopicPath,
 	toTopicSlug,
@@ -67,6 +70,23 @@ test("isTopicSlugStale compares the url's slug with the name's", () => {
 // a topic's feed keeps the id-only path whatever the topic's name
 test("toTopicFeedPath uses the id alone", () => {
 	expect(toTopicFeedPath(TOPIC_ID)).toBe(`/topics/${TOPIC_ID}/feed.xml`)
+})
+
+// a topic's podcast feed keeps the id-only path too, and an episode's page path comes after its topic's own path
+test("toPodcastFeedPath uses the id alone, and toPodcastEpisodePath adds the season and episode number to the topic's path", () => {
+	expect(toPodcastFeedPath(TOPIC_ID)).toBe(`/topics/${TOPIC_ID}/podcast.xml`)
+	const podcastEpisodePath = toPodcastEpisodePath(
+		{ id: TOPIC_ID, name: "Home Espresso" },
+		{ season: 2026, episodeNumber: 3 },
+	)
+	expect(podcastEpisodePath).toBe(`/topics/${TOPIC_ID}/home-espresso/episodes/2026/3`)
+})
+
+// a host reads in lowercase without its www, and a url that does not parse is returned unchanged
+test("toHostWithoutWww drops a leading www and returns an unparseable url unchanged", () => {
+	expect(toHostWithoutWww("https://www.Example.com/a/b?c=1")).toBe("example.com")
+	expect(toHostWithoutWww("https://news.example.com/")).toBe("news.example.com")
+	expect(toHostWithoutWww("not a url")).toBe("not a url")
 })
 
 // a name that closes a script tag is written with no raw "<", and still parses back to the same name

@@ -16,7 +16,7 @@ Carl stays up. You stay informed.
 
 ## Stack
 
-Bun + TypeScript · React (TanStack Start + Vite + Tailwind + shadcn) · TanStack Query · Hono · Better Auth · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks · Vercel AI SDK + Zod · Exa + Firecrawl + TwitterAPI.io · Langfuse · LLM Guard · Sentry + PostHog
+Bun + TypeScript · React (TanStack Start + Vite + Tailwind + shadcn) · TanStack Query · Hono · Better Auth · Drizzle + Neon Postgres (pgvector) · Temporal · LiteLLM → Fireworks + Gemini speech · Vercel AI SDK + Zod · Exa + Firecrawl + TwitterAPI.io · Langfuse · LLM Guard · Sentry + PostHog
 
 ## Architecture
 
@@ -48,7 +48,7 @@ These processes run in production:
 | Process | What it does |
 |---|---|
 | `app` | Serves the api and the ui, rendering public pages on the server. Chat replies and uploads run in-process. |
-| `temporal-worker` | One process hosts four Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, scan emails, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
+| `temporal-worker` | One process hosts five Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, scan emails, podcast episode renders, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
 | scheduler | `bun worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed in one query from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. A database claim keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
 | budget reset | `bun worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces a few keys at a time, under the same kind of database claim as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
 | `llm-guard` | The content scanner is its own service (see below). |
@@ -57,16 +57,19 @@ Every process above runs on Northflank, which deploys on a git trigger. `app` an
 
 ### Scan
 
-A topic Scan is one Temporal workflow, and its email is a second one:
+A topic Scan is one Temporal workflow, its email is a second one, and its podcast episode is a third:
 
 ```mermaid
 flowchart
     Ingest[Ingest Sources] --> Screen[Screen · LLM Guard] --> Score[Score · LiteLLM] --> Review[Keep best Findings] -->|second workflow| Email[Email subscribers · Resend]
+    Review -->|third workflow| Episode[Render the podcast episode · Gemini speech + ffmpeg]
 ```
 
 Each step costs more but handles fewer Resources. Embeddings filter and rank what the Sources found. A cheap model scores what passes. A more expensive model re-scores the best Findings and writes each Finding's relevance explanation. The cheap model then writes the scan report.
 
 Temporal persists every step and retries failed activities. That is why there is no outbox table: once a Scan is complete, its workflow starts the email workflow on the `scan-emails` queue, which runs one activity per Resend call. A rate limit waits for Resend's `retry-after`, a 5xx backs off, and a send that fails for good is reported to Sentry without failing the Scan. Each accepted batch records its sends with the Scan, so a retry never mails anyone twice. Emails outside workflows (verification, password reset, invites, flag notices) send directly through Resend, and a failure is reported to Sentry instead of replayed. Every call to Resend, from the app or the worker, first takes a rate limit slot held in Redis, which one call holds for 200 milliseconds. Calls leave evenly spaced at five a second, half of Resend's ten.
+
+A succeeded Scan also starts the podcast episode workflow on the `episode-renders` queue. One outline call saves the episode's title, one script call per segment writes the two hosts' turns, each chapter renders as one two-speaker Gemini speech call through LiteLLM's pass-through, and ffmpeg joins the chapters into one MP3 in object storage. A scheduled Scan's chapters render on Gemini's Flex tier. The Scan's email waits for the outline, so that the email can name the episode. A Scan's episode never holds up the Topic's next Scan.
 
 ### Chat
 
@@ -184,6 +187,8 @@ doppler run -- bun scripts/backfill-resource-content.ts   # upload existing reso
 
 The content scanner (LLM Guard, see Architecture above) is optional too: `bun run llm-guard:up` and set `LLM_GUARD_URL`. Error monitoring and product analytics are the same: when `SENTRY_DSN` and `POSTHOG_API_KEY` are not set, the monitoring and analytics are off but the app behaves the same. A visitor's search on the MCP server is optional the same way: `bun run carl-up` creates a budgeted `LITELLM_PUBLIC_KEY` for it. Without one, the search answers that it needs an account, and every other tool still works.
 
+The podcast needs a `GEMINI_API_KEY` on the LiteLLM service and ffmpeg (`brew install ffmpeg`). `PODCAST_SPEECH_MODEL` names the speech model (default `gemini-3.8-flash-tts`), `PODCAST_RENDER_CONCURRENCY` sets how many render activities one worker runs at once, and `PODCAST_HOST_VOICE` and `PODCAST_COHOST_VOICE` name the two voices. To run without the podcast, set `PODCAST_SPEECH_MODEL` empty. No episode renders and the topic page shows no player.
+
 Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium plans and a Stripe webhook derives the active plan. It needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the per-plan `STRIPE_PRICE_*` ids, and a metered `STRIPE_PRICE_MANUAL_SCAN_OVERAGE` (see `.env.example`). Until they're set, checkout, the Customer Portal, metered overage, and the admin console's Stripe net-revenue line are static. The gate, plans, and quotas all work without Stripe.
 
 Checks — run the full gate with one command (enforced on push by `scripts/preflight.sh`):
@@ -211,6 +216,8 @@ bun run smoke:attach       # just the URL-attachment smoke test (Firecrawl → s
 bun run smoke:search       # just the web search smoke test (context → LLM queries → Exa → Resources)
 bun run smoke:reddit       # just the reddit access smoke test: a subreddit and a search Source through each mode, reporting which one answered
 bun run smoke:x            # just the X smoke test: one account's tweets and what they cost, plus the lookup that vets a suggested account
+bun run smoke:speech       # just the podcast speech smoke test: a two-speaker clip on each Gemini tier
+bun run smoke:podcast-episode  # just the podcast episode smoke test: one episode from its plan to its removal. needs ffmpeg
 bun run smoke:review       # just the review smoke test: the paid section buys its best survivors, bounded by its limit
 bun run smoke:subscribers  # just the subscriber-count smoke test: both subscription paths against real rows, rolled back after
 bun run smoke:profile      # just the profile smoke test: the header's distinct people against the footer's summed rows
@@ -222,6 +229,7 @@ bun run smoke:room         # just the team chat-room smoke test: the access matr
 bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a viewer may open, one per holding team, and the unseen count
 bun run smoke:mcp          # just the mcp smoke test: what a visitor reads, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, the edit tools, and the rate limit
 bun run smoke:tools        # just the topic tools smoke test: the gate inside each tool, the prompt version writes, adding and removing sources up to the limit, and that no tool starts a scan
+bun run smoke:podcast-episodes # just the podcast episode routes smoke test: access, audio, feeds, covers, and removal
 bun run smoke:invites      # just the invite smoke test: link authority and races, resolution, who-may-invite, connections, accept-equals-redeem, and each sent invite's avatar version
 ```
 
@@ -245,12 +253,13 @@ grep '"gauges"' logs/dev.log                             # the api's once-a-minu
 
 Compare each run with one from before your change, not with production. A laptop reaches the dev database over the internet, so every query takes longer than it does next to the database.
 
-Evals (owner-run) measure the review pipeline against a labeled corpus. They run the real embed-filter and tiered scoring, so they spend money and are **not** part of `bun run check`. Fixtures and the labeling workflow live in [evals/README.md](evals/README.md):
+Evals (owner-run) measure the review pipeline against a labeled corpus, and the podcast episode script writer against promptfoo cases. They run the real embed-filter and tiered scoring, or the real script writer, so they spend money and are **not** part of `bun run check`. Fixtures and the labeling workflow live in [evals/README.md](evals/README.md):
 
 ```bash
 bun run eval                      # measure every fixture: precision, recall, cost per topic, and scanner false positives
 bun run eval --export <topicId>   # write an unlabeled fixture from a real Topic's Resources, ready to label
 bun run eval --guard-only         # only LLM Guard's false-positive and attack-catch rates; no model spend
+bun run eval:podcast-episode-script  # promptfoo cases for the podcast episode script writer, about 30 cents a run
 ```
 
 A weekly GitHub Action (`.github/workflows/llm-guard-update.yml`) watches Docker Hub for new LLM Guard releases, boots the candidate on the runner, runs the guard-only eval against it, and files an issue with both measured rates, so a scanner upgrade arrives as a pre-measured decision, never an unchecked version bump. Read the two rates together: a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate.

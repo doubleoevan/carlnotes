@@ -31,6 +31,7 @@ export {
 	replaceUserLiteLLMKey,
 } from "./litellm"
 export { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "./models"
+export { deleteTopicPodcastEpisodeAudio, removePodcastEpisode } from "./podcast/removePodcastEpisode"
 // whether an address is loopback, private, link-local, or reserved
 export { isInternalAddress } from "./publicFetch"
 export { failUnstartedScan, loadScan, scanTopic, startTopicScan, stopTopicScan } from "./scan"
@@ -46,6 +47,7 @@ export {
 	toChatAttachmentKey,
 	toChatRoomAttachmentKey,
 	toLinkPreviewImageKey,
+	toPodcastEpisodeAudioUrl,
 	uploadAttachment,
 } from "./store"
 export { type SuggestedSource, suggestSources, toSourceKey } from "./suggest"

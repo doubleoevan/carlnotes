@@ -1,10 +1,9 @@
-import type { TopicFeedResponse, TopicSectionKey } from "@shared/contracts"
+import type { TopicFeedResponse } from "@shared/contracts"
 import { getRouteApi, Link } from "@tanstack/react-router"
-import { ChevronLeft, ChevronRight } from "lucide-react"
-import { type MouseEvent, type ReactNode, useLayoutEffect, useRef } from "react"
+import type { MouseEvent } from "react"
+import { Pagination } from "@/components/common/Pagination"
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
-import { toPaginationSlots } from "@/lib/paginationSlots"
-import { MENU_BUTTON_CLASS, RAIL_TEXT_INSET } from "@/lib/styleClasses"
+import { RAIL_TEXT_INSET } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { Topic } from "./Topic"
 
@@ -57,7 +56,30 @@ export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 				))}
 				{/* the links to the section's pages */}
 				{pageCount > 1 && (
-					<TopicSectionPagination sectionKey={section.key} pageNumber={pageNumber} pageCount={pageCount} />
+					<Pagination
+						ariaLabel={`${SECTION_TITLE[section.key]} pages`}
+						pageNumber={pageNumber}
+						pageCount={pageCount}
+						renderPageLink={({ linkedPageNumber, label, className, isCurrentPage, onClick }) => (
+							<Link
+								to="/"
+								search={(search) => ({
+									...search,
+									[section.key]: linkedPageNumber === 1 ? undefined : linkedPageNumber,
+								})}
+								replace
+								resetScroll={false}
+								// mark a link active only on an exact url match.
+								// a partial match also marks the first page's link active
+								activeOptions={{ exact: true }}
+								onClick={onClick}
+								aria-current={isCurrentPage ? "page" : undefined}
+								className={className}
+							>
+								{label}
+							</Link>
+						)}
+					/>
 				)}
 			</AccordionContent>
 		</AccordionItem>
@@ -74,122 +96,4 @@ function scrollTriggerToTop(event: MouseEvent<HTMLButtonElement>): void {
 	if (!isOpenBeforeClick) {
 		setTimeout(() => trigger.scrollIntoView({ behavior: "instant", block: "start" }), SCROLL_SETTLE_DELAY_MS)
 	}
-}
-
-// a centered row of links to a section's pages, between a previous and a next link
-function TopicSectionPagination({
-	sectionKey,
-	pageNumber,
-	pageCount,
-}: {
-	sectionKey: TopicSectionKey
-	pageNumber: number
-	pageCount: number
-}) {
-	// save where the clicked link sits on screen. the new page's topics change the height above the link
-	const clickedLinkRef = useRef<{ link: HTMLElement; top: number; linkedPageNumber: number } | null>(null)
-	const saveClickedLinkTop = (event: MouseEvent<HTMLAnchorElement>, linkedPageNumber: number): void => {
-		clickedLinkRef.current = {
-			link: event.currentTarget,
-			top: event.currentTarget.getBoundingClientRect().top,
-			linkedPageNumber,
-		}
-	}
-
-	// scroll the clicked link back to the height it was clicked at, once the page it links to is on screen
-	useLayoutEffect(() => {
-		const clickedLink = clickedLinkRef.current
-		if (clickedLink?.linkedPageNumber !== pageNumber) {
-			return
-		}
-		if (clickedLink.link.isConnected) {
-			window.scrollBy(0, clickedLink.link.getBoundingClientRect().top - clickedLink.top)
-		}
-		clickedLinkRef.current = null
-	}, [pageNumber])
-
-	// one link in the row, to a page of this section
-	const renderPageLink = ({
-		linkedPageNumber,
-		label,
-		isCurrent = false,
-		isDisabled = false,
-	}: {
-		linkedPageNumber: number
-		label: ReactNode
-		isCurrent?: boolean
-		isDisabled?: boolean
-	}) =>
-		// a disabled previous or next arrow is a span instead of a link to the page already shown
-		isDisabled ? (
-			<span aria-disabled className={cn(toPageLinkClass(false), "pointer-events-none opacity-50")}>
-				{label}
-			</span>
-		) : (
-			<Link
-				to="/"
-				search={(search) => ({ ...search, [sectionKey]: linkedPageNumber === 1 ? undefined : linkedPageNumber })}
-				replace
-				resetScroll={false}
-				// mark a link active only on an exact url match. a partial match also marks the first page's link active
-				activeOptions={{ exact: true }}
-				onClick={(event) => saveClickedLinkTop(event, linkedPageNumber)}
-				aria-current={isCurrent ? "page" : undefined}
-				className={toPageLinkClass(isCurrent)}
-			>
-				{label}
-			</Link>
-		)
-	return (
-		<nav aria-label={`${SECTION_TITLE[sectionKey]} pages`} className="flex justify-center py-2">
-			<ul className="flex flex-wrap items-center justify-center gap-1">
-				<li>
-					{renderPageLink({
-						linkedPageNumber: pageNumber - 1,
-						label: <ChevronLeft aria-label="Previous page" />,
-						isDisabled: pageNumber === 1,
-					})}
-				</li>
-				{toPaginationSlots({ pageNumber, pageCount }).map((paginationSlot) =>
-					typeof paginationSlot === "string" ? (
-						<li
-							key={paginationSlot}
-							aria-hidden
-							className={cn(PAGINATION_SLOT_CLASS, "text-muted-foreground text-center")}
-						>
-							…
-						</li>
-					) : (
-						<li key={paginationSlot}>
-							{renderPageLink({
-								linkedPageNumber: paginationSlot,
-								label: paginationSlot,
-								isCurrent: paginationSlot === pageNumber,
-							})}
-						</li>
-					),
-				)}
-				<li>
-					{renderPageLink({
-						linkedPageNumber: pageNumber + 1,
-						label: <ChevronRight aria-label="Next page" />,
-						isDisabled: pageNumber === pageCount,
-					})}
-				</li>
-			</ul>
-		</nav>
-	)
-}
-
-// every slot in the row is one width, gaps included, so a row of a given length never shifts sideways
-const PAGINATION_SLOT_CLASS = "w-10 shrink-0"
-
-// a page link looks like a menu button, and the current page's link has the highlight color
-function toPageLinkClass(isCurrent: boolean): string {
-	return cn(
-		MENU_BUTTON_CLASS,
-		PAGINATION_SLOT_CLASS,
-		"justify-center px-0",
-		isCurrent && "bg-primary text-primary-foreground border-primary hover:text-primary-foreground",
-	)
 }

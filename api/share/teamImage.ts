@@ -2,7 +2,7 @@
 import type { PublishedAvatar } from "../avatars"
 import {
 	CARD_MUTED_COLOR,
-	type CardNode,
+	type CardElement,
 	PREVIEW_TEMPLATE_VERSION,
 	toAvatarIdentity,
 	toBrandIcon,
@@ -44,7 +44,7 @@ export async function toTeamPreviewPng(previewCard: TeamPreview): Promise<Uint8A
 }
 
 // the team title display: the image it publishes, or its initials in its tint, then its name
-function toTeamIdentity(teamPreview: TeamPreview, avatarImage: string | null): CardNode {
+function toTeamIdentity(teamPreview: TeamPreview, avatarImage: string | null): CardElement {
 	// the initials fall back to the team's name and id
 	const avatar = avatarImage
 		? toOwnerPhoto(avatarImage, AVATAR_SIZE)
@@ -59,7 +59,7 @@ function toTeamIdentity(teamPreview: TeamPreview, avatarImage: string | null): C
 }
 
 // the name alone. a team's page lives at its id instead of a printable address
-function toTeamName(teamPreview: TeamPreview): CardNode {
+function toTeamName(teamPreview: TeamPreview): CardElement {
 	return {
 		type: "div",
 		props: {
@@ -70,7 +70,7 @@ function toTeamName(teamPreview: TeamPreview): CardNode {
 }
 
 // the footer with the team's count labels, one in each corner
-function toTeamFooter(card: TeamPreview): CardNode {
+function toTeamFooter(card: TeamPreview): CardElement {
 	return {
 		type: "div",
 		props: {

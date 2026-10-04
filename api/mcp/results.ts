@@ -135,10 +135,11 @@ export async function readTopicFeed(
 	const pageWindow = { offset, rowCount: MCP_PAGE_SIZE + 1 }
 	const topicFindings =
 		toolCaller.kind === "user"
-			? (await loadTopicAccessAndFindings({ topic, userId: toolCaller.userId, pageWindow })).topicFindings
-			: await loadTopicFindings({ topicId: topic.id, userId: null, pageWindow })
+			? (await loadTopicAccessAndFindings({ topic, userId: toolCaller.userId, pageWindow, isRatedDownExcluded: true }))
+					.topicFindings
+			: await loadTopicFindings({ topicId: topic.id, userId: null, pageWindow, isRatedDownExcluded: true })
 
-	// shape each finding for the tool caller, and pack the page from the window
+	// shape each finding for the tool caller and pack the page from the window
 	const mcpFindings = topicFindings.map((finding) => toMcpFinding(toolCaller, finding))
 	return packPageFromWindow(mcpFindings, offset)
 }

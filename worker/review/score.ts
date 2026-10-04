@@ -23,6 +23,7 @@ import { fetchAndStoreHostFavicon, settleFaviconFetches } from "../favicons"
 import { screenText, toFlaggedReason } from "../guard"
 import { isTitleFromUrlFallback } from "../ingest/normalize"
 import { cheapModel, isBudgetRejection, scoreModel } from "../models"
+import { linkPodcastEpisodeChapters, toPodcastEpisodeChapterRatingSql } from "../podcast/podcastEpisodeChapters"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
 import { filterPremiumPrompt, writePrompt } from "../prompts/write"
@@ -33,6 +34,9 @@ import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track
 
 // the cheap model score that earns a premium model re-score and a relevance explanation. the environment can override it
 const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? "0.6")
+
+// what a finding that a custom Source found adds to its relevance score. the user chose that Source for the topic
+const CUSTOM_SOURCE_SCORE_BONUS = 0.05
 
 // how many resources the paid fetch-and-scoring section works concurrently
 const REVIEW_CONCURRENCY = Number(Bun.env.REVIEW_CONCURRENCY ?? "4")
@@ -67,12 +71,13 @@ export async function fetchAndScoreResources(
 	topicContext: TopicContext,
 	reviewOutcome: ReviewOutcome,
 	budget: Budget,
+	customSourceUrls: ReadonlySet<string>,
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
 ): Promise<string[]> {
 	// each Resource checks the limit before it starts
 	const paidOutcomes = await runWithConcurrency(resourcesToScore, REVIEW_CONCURRENCY, (resource) =>
-		fetchAndScoreResource(resource, scan, topicId, topicContext, budget, litellmApiKey, stopSignal),
+		fetchAndScoreResource(resource, scan, topicId, topicContext, budget, customSourceUrls, litellmApiKey, stopSignal),
 	)
 	for (const paidOutcome of paidOutcomes) {
 		trackOutcomes(reviewOutcome, paidOutcome)
@@ -94,6 +99,7 @@ async function fetchAndScoreResource(
 	topicId: string,
 	topicContext: TopicContext,
 	budget: Budget,
+	customSourceUrls: ReadonlySet<string>,
 	litellmApiKey?: string,
 	stopSignal?: AbortSignal,
 ): Promise<ResourceOutcome> {
@@ -120,24 +126,25 @@ async function fetchAndScoreResource(
 		}
 
 		// score the scanner's text, not the original, so any personal details it redacted never reach a model
-		const scoredResource = await scoreResource(screenVerdict.text, topicContext.text, budget, litellmApiKey)
-		const isFindingNew = await upsertFinding({
+		const scoredResource = await scoreResource(screenVerdict.text, topicContext.scoreText, budget, litellmApiKey)
+		const upsertFindingResult = await upsertFinding({
 			scan,
 			topicId,
 			resource,
 			score: scoredResource.score,
 			relevanceExplanation: scoredResource.relevanceExplanation,
 			topicContextHash: topicContext.contextHash,
+			isFromCustomSource: customSourceUrls.has(resource.url),
 		})
 
 		// the kept outcome includes the feed-facing details that the report cites
 		const keptFinding = {
 			title: resource.title,
 			url: resource.url,
-			// the score and note come from the tiered scoring call
-			relevanceScore: scoredResource.score,
+			// the stored score, with any custom Source bonus, and the note from the tiered scoring call
+			relevanceScore: upsertFindingResult.relevanceScore,
 			relevanceExplanation: scoredResource.relevanceExplanation,
-			isNew: isFindingNew,
+			isNew: upsertFindingResult.isNew,
 		}
 		return { status: "kept", finding: keptFinding }
 	} catch (error) {
@@ -356,7 +363,7 @@ export function toFindingReviewFields(review: {
 	}
 }
 
-// the scan, topic, and resource a finding belongs to, and the review it records
+// the scan, topic, and resource a finding belongs to, the review it records, and whether a custom Source found it
 type UpsertFindingOptions = {
 	scan: Scan
 	topicId: string
@@ -364,9 +371,14 @@ type UpsertFindingOptions = {
 	score: number
 	relevanceExplanation: string
 	topicContextHash: string
+	// whether a custom Source found the resource in this Scan
+	isFromCustomSource: boolean
 }
 
-// upsert one finding per topic and resource, and return whether the finding is new to the topic
+// whether the upsert added the finding to the topic, and the relevance score that it stored
+type UpsertFindingResult = { isNew: boolean; relevanceScore: number }
+
+// upsert one finding per topic and resource, and return whether the finding is new and the score that it stored
 async function upsertFinding({
 	scan,
 	topicId,
@@ -374,7 +386,8 @@ async function upsertFinding({
 	score,
 	relevanceExplanation,
 	topicContextHash,
-}: UpsertFindingOptions): Promise<boolean> {
+	isFromCustomSource,
+}: UpsertFindingOptions): Promise<UpsertFindingResult> {
 	// build the whole of what a re-score may change
 	const review = toFindingReviewFields({
 		scanId: scan.id,
@@ -384,18 +397,36 @@ async function upsertFinding({
 		contentHash: resource.contentHash,
 	})
 
+	// a finding that a custom Source found, in this Scan or an earlier one, gets the score bonus on every re-score
+	const insertedScore = isFromCustomSource ? clampScore(score + CUSTOM_SOURCE_SCORE_BONUS) : score
+	const isFromCustomSourceSql = sql<boolean>`(${findings.isFromCustomSource} or ${isFromCustomSource}::boolean)`
+	const customSourceBonusSql = sql`case when ${isFromCustomSourceSql} then ${CUSTOM_SOURCE_SCORE_BONUS}::real else 0 end`
+	const updatedScoreSql = sql<number>`least(1, ${score}::real + ${customSourceBonusSql})`
+
 	// upsert the topic finding. postgres returns xmax as zero for an inserted row and non-zero for an updated row
+	const topicResourceRef = { topicId, resourceId: resource.id }
 	const [findingRow] = await db
 		.insert(findings)
-		// the finding includes the relevance score and explanation, plus the scan that produced them
-		.values({ topicId, resourceId: resource.id, ...review })
+		// the finding includes the relevance score and explanation, the scan that produced them, and a chapter's rating
+		.values({
+			...topicResourceRef,
+			...review,
+			relevanceScore: insertedScore,
+			isFromCustomSource,
+			rating: toPodcastEpisodeChapterRatingSql(topicResourceRef),
+		})
 		// a re-score hits the topic and resource unique constraint, so update that row in place
 		.onConflictDoUpdate({
 			target: [findings.topicId, findings.resourceId],
-			set: review,
+			set: { ...review, relevanceScore: updatedScoreSql, isFromCustomSource: isFromCustomSourceSql },
 		})
-		.returning({ isNew: sql<boolean>`(xmax = 0)` })
-	return findingRow?.isNew ?? false
+		.returning({ id: findings.id, isNew: sql<boolean>`(xmax = 0)`, relevanceScore: findings.relevanceScore })
+
+	// link a new finding to the chapters that narrated its resource
+	if (findingRow?.isNew) {
+		await linkPodcastEpisodeChapters({ ...topicResourceRef, findingId: findingRow.id })
+	}
+	return { isNew: findingRow?.isNew ?? false, relevanceScore: findingRow?.relevanceScore ?? insertedScore }
 }
 
 /**

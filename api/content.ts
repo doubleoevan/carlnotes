@@ -77,6 +77,8 @@ const PAGE_STYLE = `
 	body { margin: 0; background: #f4f1ea; color: #2b2b2b; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; line-height: 1.6; }
 	main { max-width: 42rem; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
 	a { color: #7c4a1e; }
+	/* an image wider than the column shrinks to the column's width */
+	img { max-width: 100%; height: auto; }
 	/* the wordmark in the header, then the type a page and an index card set */
 	header a { text-decoration: none; font-weight: 700; font-size: 18px; }
 	h1 { font-size: 28px; line-height: 1.25; }

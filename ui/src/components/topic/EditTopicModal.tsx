@@ -1,8 +1,9 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicPodcast, TopicResponse } from "@shared/contracts"
 import { maxTopicFindingsOptions, visibilities } from "@shared/enums"
 import { useNavigate } from "@tanstack/react-router"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
+import { sendTopicPodcast, type TopicPodcastResult } from "@/clients/podcastEpisodeClient"
 import {
 	DailyTopicLimitError,
 	sendAttachmentContext,
@@ -11,12 +12,14 @@ import {
 	sendUpdateTopic,
 	uploadTopicAttachment,
 } from "@/clients/topicClient"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { FieldLabel } from "@/components/common/FieldLabel"
 import { InviteEditor, sendPendingUsernameInvites } from "@/components/invite/InviteEditor"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
+import { Switch } from "@/components/primitives/switch"
 import { TagPicker } from "@/components/topic/TagPicker"
 import { cn } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
@@ -241,6 +244,19 @@ export function EditTopicModal({
 					/>
 				</div>
 
+				{/* the podcast switch, for a saved topic that has a podcast */}
+				{topic?.podcast && (
+					<div>
+						<FieldLabel>Podcast</FieldLabel>
+						<PodcastSwitch
+							topicPodcast={topic.podcast}
+							isPodcastEnabled={fields.isPodcastEnabled}
+							isTopicOwner={topic.isTopicOwner}
+							onPodcastChange={fields.setIsPodcastEnabled}
+						/>
+					</div>
+				)}
+
 				{/* the footer actions */}
 				<DialogFooter>
 					<Button variant="outline" onClick={onClose} disabled={isSaving}>
@@ -253,6 +269,46 @@ export function EditTopicModal({
 				</DialogFooter>
 			</DialogContent>
 		</Dialog>
+	)
+}
+
+// the topic's podcast, whether the switch is on, whether the user owns the topic, and the switch's change callback
+type PodcastSwitchProps = {
+	topicPodcast: TopicPodcast
+	isPodcastEnabled: boolean
+	isTopicOwner: boolean
+	onPodcastChange: (isPodcastEnabled: boolean) => void
+}
+
+/**
+ * The podcast switch, with the free plan's limit and the owner's plans link if the podcast cannot render.
+ */
+export function PodcastSwitch({ topicPodcast, isPodcastEnabled, isTopicOwner, onPodcastChange }: PodcastSwitchProps) {
+	return (
+		<div className="flex items-center justify-between gap-3">
+			<div className="flex flex-col gap-0.5">
+				{/* whether the podcast is on */}
+				<span className="text-muted-foreground">
+					{isPodcastEnabled ? "Coffee Break episode after every brew" : "Coffee Break is off"}
+				</span>
+				{/* the free plan's limit, and the owner's link to the plans page */}
+				{!topicPodcast.canRenderPodcastEpisode && (
+					<span className="text-muted-foreground text-xs">The free plan gives each topic one episode</span>
+				)}
+				{!topicPodcast.canRenderPodcastEpisode && isTopicOwner && (
+					<AnchorLink href="/plans" className="text-link text-xs hover:underline">
+						Upgrade for an episode after every brew
+					</AnchorLink>
+				)}
+			</div>
+			{/* the switch */}
+			<Switch
+				aria-label="Coffee Break podcast"
+				checked={isPodcastEnabled}
+				onCheckedChange={onPodcastChange}
+				className="h-7.5 w-13 [&>span]:size-6"
+			/>
+		</div>
 	)
 }
 
@@ -277,6 +333,13 @@ async function saveTopic({
 		topicId = topic.id
 	} else {
 		topicId = await sendCreateTopic(payload)
+	}
+
+	// save the podcast switch if it changed
+	if (topic?.podcast && fields.isPodcastEnabled !== topic.podcast.isEnabled) {
+		showTopicPodcastFailureToast(
+			await sendTopicPodcast({ topicId: topic.id, isPodcastEnabled: fields.isPodcastEnabled }),
+		)
 	}
 
 	// upload the new attachment files one at a time, dropping each from the pending list as it uploads
@@ -333,4 +396,13 @@ function showSaveError(error: unknown, onSeePlans: () => void): void {
 		return
 	}
 	toast.error(error instanceof Error ? error.message : "Save failed. Carl suggests trying again.")
+}
+
+// show a toast that says why the podcast switch did not save, and nothing if it saved
+function showTopicPodcastFailureToast(topicPodcastResult: TopicPodcastResult): void {
+	if (topicPodcastResult === "planRejected") {
+		toast.error("The free plan gives each topic one episode. A paid plan keeps the mugs out.")
+	} else if (topicPodcastResult === "failed") {
+		toast.error("The podcast switch didn't save. Carl suggests trying again.")
+	}
 }

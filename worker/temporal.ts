@@ -14,6 +14,8 @@ import {
 	toScanBacklogCrossing,
 } from "./temporalClient"
 import * as attachmentActivities from "./workflows/processAttachmentActivities"
+import { PODCAST_EPISODE_TASK_QUEUE } from "./workflows/renderPodcastEpisode"
+import * as podcastEpisodeActivities from "./workflows/renderPodcastEpisodeActivities"
 import * as scanActivities from "./workflows/runTopicScanActivities"
 import * as sourceActivities from "./workflows/screenSourceActivities"
 import { SCAN_EMAIL_TASK_QUEUE } from "./workflows/sendScanEmail"
@@ -29,6 +31,14 @@ const SCAN_CONCURRENCY = toPositiveInteger(Bun.env.SCAN_CONCURRENCY, DEFAULT_SCA
 // how many scan email activities may run at once on this replica. a few keep each wait for a Resend slot short,
 // and the rest of a burst waits in the Temporal queue
 const SCAN_EMAIL_CONCURRENCY = 4
+
+// how many podcast episode activities may run at once on this replica, from PODCAST_RENDER_CONCURRENCY or the default.
+// the rest of a burst of renders waits in the Temporal queue
+const DEFAULT_PODCAST_RENDER_CONCURRENCY = 16
+const PODCAST_RENDER_CONCURRENCY = toPositiveInteger(
+	Bun.env.PODCAST_RENDER_CONCURRENCY,
+	DEFAULT_PODCAST_RENDER_CONCURRENCY,
+)
 
 // how often and how long to keep retrying the first connection
 const CONNECT_RETRY_DELAY_MS = 3 * 1000
@@ -88,6 +98,15 @@ async function run(): Promise<void> {
 			taskQueue: SCAN_EMAIL_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: SCAN_EMAIL_CONCURRENCY,
+		}),
+		// renders a succeeded Scan's Podcast Episode, one activity per script call and per chapter
+		Worker.create({
+			connection,
+			workflowsPath: new URL("./workflows/renderPodcastEpisode.ts", import.meta.url).pathname,
+			activities: podcastEpisodeActivities,
+			taskQueue: PODCAST_EPISODE_TASK_QUEUE,
+			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: PODCAST_RENDER_CONCURRENCY,
 		}),
 		// fetches a url Source's page and screens it with llm-guard
 		Worker.create({

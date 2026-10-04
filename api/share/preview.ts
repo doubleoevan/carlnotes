@@ -1,13 +1,18 @@
 // the link preview of a topic, a team, a profile, or an invitation, and its card image cached in storage
 import { and, count, eq } from "drizzle-orm"
 import type { Context } from "hono"
-import { db } from "../../db"
+import { db, isFindingShown } from "../../db"
 import { findings, sources, teamMembers, teams, topics, users } from "../../db/schema"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "../../worker"
 import { publishedAvatarColumns, toPublishedAvatar, toPublishedAvatarFromUser } from "../avatars"
 import { toVersionedImageHeaders } from "../edgeCache"
 import { countDistinctSubscribers } from "../profiles"
 import { lastScanSummary, toTeamPublicTopicsFilter, toTopicDescription } from "../seo"
+import {
+	type PodcastEpisodePreview,
+	toPodcastEpisodePreviewKey,
+	toPodcastEpisodePreviewPng,
+} from "./podcastEpisodeImage"
 import { toPreviewVersion } from "./previewImage"
 import { type ProfilePreview, toProfilePreviewKey, toProfilePreviewPng } from "./profileImage"
 import { type TeamPreview, toTeamPreviewKey, toTeamPreviewPng } from "./teamImage"
@@ -37,7 +42,10 @@ export async function toTopicPreview(topicId: string): Promise<TopicPreview | nu
 			.from(topics)
 			.innerJoin(users, eq(users.id, topics.ownerId))
 			.where(eq(topics.id, topicId)),
-		db.select({ kept: count() }).from(findings).where(eq(findings.topicId, topicId)),
+		db
+			.select({ kept: count() })
+			.from(findings)
+			.where(and(eq(findings.topicId, topicId), isFindingShown)),
 		db
 			.select({ sources: count() })
 			.from(sources)
@@ -74,6 +82,17 @@ export async function toTopicPreview(topicId: string): Promise<TopicPreview | nu
  */
 export async function toCachedTopicPreviewPng(topicPreview: TopicPreview): Promise<PreviewPng> {
 	return toCachedPng(toTopicPreviewKey(topicPreview), () => toTopicPreviewPng(topicPreview))
+}
+
+/**
+ * A podcast episode's preview bytes, rendered on the first request and read from storage after.
+ */
+export async function toCachedPodcastEpisodePreviewPng(
+	podcastEpisodePreview: PodcastEpisodePreview,
+): Promise<PreviewPng> {
+	return toCachedPng(toPodcastEpisodePreviewKey(podcastEpisodePreview), () =>
+		toPodcastEpisodePreviewPng(podcastEpisodePreview),
+	)
 }
 
 /**

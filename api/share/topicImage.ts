@@ -2,7 +2,7 @@
 import type { PublishedAvatar } from "../avatars"
 import {
 	CARD_MUTED_COLOR,
-	type CardNode,
+	type CardElement,
 	PREVIEW_TEMPLATE_VERSION,
 	toAvatarIdentity,
 	toBrandIcon,
@@ -55,7 +55,7 @@ export async function toTopicPreviewPng(card: TopicPreview): Promise<Uint8Array>
 }
 
 // the Topic's own name as the card title
-function toTopicTitle(title: string): CardNode {
+function toTopicTitle(title: string): CardElement {
 	return {
 		type: "div",
 		props: { style: { display: "flex", fontSize: 76, lineHeight: 1.1, maxWidth: "100%" }, children: title },
@@ -63,7 +63,7 @@ function toTopicTitle(title: string): CardNode {
 }
 
 // the footer with the topic owner's username and finding counts
-function toTopicFooter(card: TopicPreview, ownerImage: string | null): CardNode {
+function toTopicFooter(card: TopicPreview, ownerImage: string | null): CardElement {
 	return {
 		type: "div",
 		props: {
@@ -83,7 +83,7 @@ function toTopicFooter(card: TopicPreview, ownerImage: string | null): CardNode 
 }
 
 // the topic owner display: the image they publish, or their initials in their tint, then their username
-function toTopicOwner(topicPreview: TopicPreview, ownerImage: string | null): CardNode {
+function toTopicOwner(topicPreview: TopicPreview, ownerImage: string | null): CardElement {
 	return {
 		type: "div",
 		props: {

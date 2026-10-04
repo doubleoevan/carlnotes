@@ -34,3 +34,8 @@ test("a route named like an object key is reported unchanged", () => {
 	expect(toReportedPath("/constructor/x")).toBe("/constructor/x")
 	expect(toReportedPath("/toString/x")).toBe("/toString/x")
 })
+
+// a feed token opens a listener's private feed, so no report may include a feed token
+test("a podcast feed token reports as its route's shape", () => {
+	expect(toReportedPath("/podcast-feeds/Zm9vYmFyLXRva2Vu.xml")).toBe("/podcast-feeds/:token")
+})

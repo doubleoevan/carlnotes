@@ -9,6 +9,7 @@ import { buildContextPrompt } from "./attach"
 import { buildSearchPrompt } from "./ingest/search"
 import { deleteUserLiteLLMKey } from "./litellm"
 import { sendScanReport } from "./notify"
+import { buildOutlinePrompt, buildSegmentPrompt } from "./podcast/generatePodcastEpisodeScript"
 import { buildScorePrompt } from "./review/score"
 import { buildScanReportPrompt } from "./review/summarize"
 import { loadScan } from "./scan"
@@ -244,10 +245,37 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		},
 	})
 
+	// the podcast episode's outline prompt and segment prompt, over one sample finding in a one-segment outline
+	const samplePodcastEpisodeFinding = {
+		findingId: "finding-1",
+		title: "Sample",
+		sourceHost: "a.test",
+		snippet: "sample summary",
+		relevanceExplanation: "note",
+		content: "sample content",
+	}
+	const scriptInput = {
+		topicName: "sample topic",
+		topicPrompt: "sample topic prompt",
+		podcastEpisodeFindings: [samplePodcastEpisodeFinding],
+	}
+	const outlineResult = await buildOutlinePrompt(scriptInput)
+	const sampleOutline = {
+		title: "Sample episode",
+		description: "A sample.",
+		segments: [{ theme: "sample", chapters: [{ findingId: "finding-1", minutes: 2 }] }],
+	}
+	const segmentResult = await buildSegmentPrompt({ ...scriptInput, outline: sampleOutline, segmentIndex: 0 })
+
 	// report whether the registry actually served this run's prompts, or the worker ran on the bundled Markdown alone
-	const servedFromRegistry = [scoreResult, searchResult, contextResult, reportResult].some(
-		(result) => result.registryPrompt && !result.registryPrompt.isFallback,
-	)
+	const servedFromRegistry = [
+		scoreResult,
+		searchResult,
+		contextResult,
+		reportResult,
+		outlineResult,
+		segmentResult,
+	].some((result) => result.registryPrompt && !result.registryPrompt.isFallback)
 	console.log(`registry serving  : ${servedFromRegistry ? "prompts served from Langfuse" : "bundled markdown only"}`)
 
 	// each prompt renders to a non-empty string
@@ -256,6 +284,8 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		["search prompt", searchResult.prompt],
 		["attachment context prompt", contextResult.prompt],
 		["scan report prompt", reportResult.prompt],
+		["episode outline prompt", outlineResult.prompt],
+		["episode segment prompt", segmentResult.prompt],
 	]
 	return builtPrompts.flatMap(([label, prompt]) => [
 		[`${label} renders`, prompt.length > 0],

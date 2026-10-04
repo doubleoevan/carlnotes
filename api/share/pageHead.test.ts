@@ -1,6 +1,16 @@
-// the page heads of a topic, a team, an invitation, and a profile
+// page head tests: the heads of a topic page, a podcast episode page, a team page, an invite page, and a profile page
 import { expect, test } from "bun:test"
-import { toInvitePageHead, toProfilePageHead, toTeamPageHead, toTopicPageHead } from "./pageHead"
+
+// a show cover's url is signed with the app's auth secret
+Bun.env.BETTER_AUTH_SECRET ??= "page-head-test-secret"
+
+import {
+	toInvitePageHead,
+	toPodcastEpisodePageHead,
+	toProfilePageHead,
+	toTeamPageHead,
+	toTopicPageHead,
+} from "./pageHead"
 import type { TopicPreview } from "./topicImage"
 
 // a public topic's preview as toTopicPreview returns it
@@ -142,4 +152,73 @@ test("toTopicPageHead leaves a public topic with too few findings unindexed", ()
 	expect(head.canonicalUrl).toBeNull()
 	expect(head.feedUrl).toBe("https://carlnotes.com/topics/t1/feed.xml")
 	expect(head.cardUrl).toBe("https://carlnotes.com/topics/t1/agents")
+})
+
+// a published podcast episode of the public topic, as the episode page's head reads it
+const PODCAST_EPISODE_ROW = {
+	id: "episode-1",
+	topicId: "t1",
+	scanId: "scan-1",
+	status: "published" as const,
+	title: "Agents ship, and the evals follow",
+	description: "What shipped this week and why the evals matter.",
+	season: 2026,
+	episodeNumber: 14,
+	audioKey: "episodes/episode-1/audio.mp3",
+	audioByteSize: 3_520_000,
+	durationSeconds: 1690,
+	publishedAt: new Date("2026-10-01T09:00:00Z"),
+}
+
+// a podcast episode page's head names its own title and description, its card, its audio, and its structured data
+test("toPodcastEpisodePageHead names the episode, its card, its audio, and valid PodcastEpisode data", () => {
+	// the head of the podcast episode's page, and the page's url
+	const head = toPodcastEpisodePageHead({
+		topicPreview: TOPIC_PREVIEW,
+		podcastEpisodeRow: PODCAST_EPISODE_ROW,
+		appUrl: "https://carlnotes.com",
+	})
+	const podcastEpisodeUrl = "https://carlnotes.com/topics/t1/agents/episodes/2026/14"
+
+	// the title, the description, and the canonical url of an indexed page
+	expect(head.title).toBe("Agents ship, and the evals follow · Agents — CarlNotes")
+	expect(head.description).toBe("What shipped this week and why the evals matter.")
+	expect(head.canonicalUrl).toBe(podcastEpisodeUrl)
+	expect(head.isIndexed).toBe(true)
+
+	// the podcast episode's own card image, whose url changes with its title, then the audio and the topic's podcast feed
+	const retitledHead = toPodcastEpisodePageHead({
+		topicPreview: TOPIC_PREVIEW,
+		podcastEpisodeRow: { ...PODCAST_EPISODE_ROW, title: "A new title" },
+		appUrl: "https://carlnotes.com",
+	})
+	expect(head.imageUrl).toStartWith("https://carlnotes.com/api/episodes/episode-1/preview.png?v=")
+	expect(retitledHead.imageUrl).not.toBe(head.imageUrl)
+	expect(head.audioUrl).toBe("https://carlnotes.com/api/episodes/episode-1/audio.mp3")
+	expect(head.podcastFeedUrl).toBe("https://carlnotes.com/topics/t1/podcast.xml")
+
+	// the structured data survives a round trip through JSON and has what a PodcastEpisode requires
+	const jsonLd = JSON.parse(JSON.stringify(head.jsonLd))
+	expect(jsonLd).toMatchObject({
+		"@type": "PodcastEpisode",
+		name: "Agents ship, and the evals follow",
+		url: podcastEpisodeUrl,
+		datePublished: "2026-10-01T09:00:00.000Z",
+		duration: "PT28M10S",
+		episodeNumber: 14,
+		partOfSeason: { "@type": "PodcastSeason", seasonNumber: 2026 },
+		associatedMedia: { contentUrl: "https://carlnotes.com/api/episodes/episode-1/audio.mp3" },
+		partOfSeries: { "@type": "PodcastSeries", webFeed: "https://carlnotes.com/topics/t1/podcast.xml" },
+	})
+})
+
+// a public topic that is not shown yet keeps its podcast episode pages out of search, like its own page
+test("toPodcastEpisodePageHead leaves an episode of a topic that is not yet shown unindexed", () => {
+	const head = toPodcastEpisodePageHead({
+		topicPreview: { ...TOPIC_PREVIEW, keptCount: 0 },
+		podcastEpisodeRow: PODCAST_EPISODE_ROW,
+		appUrl: "https://carlnotes.com",
+	})
+	expect(head.isIndexed).toBe(false)
+	expect(head.canonicalUrl).toBeNull()
 })

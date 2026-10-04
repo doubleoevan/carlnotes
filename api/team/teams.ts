@@ -11,15 +11,15 @@ import {
 import { toUsernameWithDigits } from "@shared/usernames"
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
 import { Hono } from "hono"
-import { db } from "../../db"
+import { db, isUniqueViolation } from "../../db"
 import { canCreateTeamToday, loadUserAccess } from "../../db/quotas"
 import { invites, subscriptions, teamMembers, teams, teamTopics, topics, users } from "../../db/schema"
 import { deleteAttachment } from "../../worker"
 import { isLeaderRole } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
+import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { canSeeTopic } from "../topic/permissions"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
-import { isUniqueViolation } from "../usernames"
 import { loadTeamPage, loadTeamsPage, searchTeams } from "./helpers"
 import {
 	approveJoinTeamRequest,
@@ -237,9 +237,9 @@ export async function removeTopicFromTeam(userId: string, teamId: string, topicI
 	}
 
 	// scoped to this team, so a stale id cannot detach through it
-	await db.transaction(async (transaction) => {
+	const deactivatedSubscriberUserIds = await db.transaction(async (transaction) => {
 		// the team's active members, whose subscriptions the deactivation below is scoped to
-		const memberRows = await transaction
+		const teamMemberRows = await transaction
 			.select({ userId: teamMembers.userId })
 			.from(teamMembers)
 			.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true)))
@@ -291,24 +291,39 @@ export async function removeTopicFromTeam(userId: string, teamId: string, topicI
 			.innerJoin(topics, eq(topics.teamId, teamMembers.teamId))
 			.where(and(eq(topics.id, topicId), eq(teamMembers.isActive, true)))
 
-		// everyone else loses the subscription it fanned out
-		const memberIds = memberRows.map((memberRow) => memberRow.userId).filter((id) => id !== topic?.ownerId)
-		if (memberIds.length > 0) {
-			await transaction
-				.update(subscriptions)
-				.set({ isActive: false, isEmailEnabled: false })
-				.where(
-					and(
-						eq(subscriptions.topicId, topicId),
-						inArray(subscriptions.subscriberUserId, memberIds),
-						notInArray(subscriptions.subscriberUserId, coveredMemberIds),
-						notInArray(subscriptions.subscriberUserId, owningTeamMemberIds),
-					),
-				)
-			// the stored count updates after the deactivations
-			await updateTopicSubscriberCount(topicId, transaction)
+		// leave out the topic's owner, and stop if no other member is left
+		const teamMemberIds = teamMemberRows
+			.map((teamMemberRow) => teamMemberRow.userId)
+			.filter((id) => id !== topic?.ownerId)
+		if (teamMemberIds.length === 0) {
+			return []
 		}
+
+		// everyone else loses the subscription it fanned out
+		const deactivatedSubscriptionRows = await transaction
+			.update(subscriptions)
+			.set({ isActive: false, isEmailEnabled: false })
+			.where(
+				and(
+					eq(subscriptions.topicId, topicId),
+					inArray(subscriptions.subscriberUserId, teamMemberIds),
+					notInArray(subscriptions.subscriberUserId, coveredMemberIds),
+					notInArray(subscriptions.subscriberUserId, owningTeamMemberIds),
+				),
+			)
+			.returning({ subscriberUserId: subscriptions.subscriberUserId })
+
+		// update the stored count after the deactivations, and return the members who lost a subscription
+		await updateTopicSubscriberCount(topicId, transaction)
+		return deactivatedSubscriptionRows.map((deactivatedSubscriptionRow) => deactivatedSubscriptionRow.subscriberUserId)
 	})
+
+	// delete the podcast feed token of each member who lost the subscription
+	await Promise.all(
+		deactivatedSubscriberUserIds.map((deactivatedSubscriberUserId) =>
+			deletePodcastFeedToken({ topicId, userId: deactivatedSubscriberUserId }),
+		),
+	)
 	return true
 }
 

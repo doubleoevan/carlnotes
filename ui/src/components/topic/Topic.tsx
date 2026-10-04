@@ -33,6 +33,20 @@ const MAX_RESOURCES = 5
 // the topic feed and its position in the section. the position staggers the entrance animation
 type TopicProps = { topic: TopicFeed; index: number }
 
+// the team and the owner that a topic's byline chooses between
+type TopicBylineProps = { topic: Pick<TopicFeed, "teamLink" | "owner">; className?: string }
+
+/**
+ * A topic's byline, which names the team for anyone who can open the team's page and the topic's owner otherwise.
+ */
+export function TopicByline({ topic, className }: TopicBylineProps) {
+	// name the team if there is a team link, and the owner otherwise
+	if (topic.teamLink) {
+		return <TeamLink team={topic.teamLink} className={className} />
+	}
+	return topic.owner ? <UserProfileLink user={topic.owner} label="Brewed by" className={className} /> : null
+}
+
 /**
  * A single topic in the feed. The topic header, then up to five topic resource rows.
  * It stays hidden until scrolled into view, then plays the hydrate animation.
@@ -55,7 +69,7 @@ export function Topic({ topic, index }: TopicProps) {
 			className={cn("py-1.5", revealClassName)}
 			style={{ animationDelay: `${Math.min(index, 3) * 50}ms` }}
 		>
-			{/* header: the title takes the whole row and wraps instead of truncating, with the credit and
+			{/* header: the title takes the whole row and wraps instead of truncating, with the byline and
 			    the actions sharing the line below it */}
 			<div>
 				<div className="flex items-center gap-2">
@@ -69,13 +83,9 @@ export function Topic({ topic, index }: TopicProps) {
 					<TopicInfoPopover topic={topic} />
 				</div>
 				<div className="flex items-center justify-between gap-3">
-					{/* the credit is derived: the team for anyone who can open its page, the creator otherwise */}
+					{/* the topic creator byline */}
 					<div className="min-w-0">
-						{topic.teamLink ? (
-							<TeamLink team={topic.teamLink} className="mt-1 pl-4 text-xs" />
-						) : (
-							topic.owner && <UserProfileLink user={topic.owner} label="Brewed by" className="mt-1 pl-4 text-xs" />
-						)}
+						<TopicByline topic={topic} className="mt-1 pl-4 text-xs" />
 					</div>
 					{/* the "# new" count opens the info content, and the subscribe toggle sits to its right.
 					    the row ends in the share icon, so it takes the bare-icon inset */}

@@ -7,6 +7,7 @@ import { db } from "../../db"
 import { invites, subscriptions, topics, users } from "../../db/schema"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
+import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { loadOwnedTopic, verifiedEmailQuery } from "./permissions"
 import { updateTopicSubscriberCount } from "./subscriberCounts"
 
@@ -40,6 +41,9 @@ export async function setTopicSubscription(userId: string, topicId: string, isSu
 			// the count moves with the row, in the same transaction, so no read sees one without the other
 			await updateTopicSubscriberCount(topicId, transaction)
 		})
+
+		// delete the user's podcast feed token for the topic
+		await deletePodcastFeedToken({ topicId, userId })
 		return true
 	}
 
@@ -68,6 +72,9 @@ export async function deleteTopicSubscription(userId: string, topicId: string): 
 			)
 		await updateTopicSubscriberCount(topicId, transaction)
 	})
+
+	// delete the user's podcast feed token for the topic
+	await deletePodcastFeedToken({ topicId, userId })
 }
 
 /**
@@ -103,6 +110,10 @@ export async function deleteTopicInvite(ownerId: string, topicId: string, invite
 			.delete(subscriptions)
 			.where(and(eq(subscriptions.topicId, topicId), inArray(subscriptions.subscriberUserId, inviteeId)))
 		await updateTopicSubscriberCount(topicId, transaction)
+
+		// delete each invitee's podcast feed token for the topic
+		const inviteeRows = await inviteeId
+		await Promise.all(inviteeRows.map((inviteeRow) => deletePodcastFeedToken({ topicId, userId: inviteeRow.id })))
 	})
 	return true
 }

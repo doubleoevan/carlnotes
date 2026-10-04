@@ -12,7 +12,7 @@ import { type Budget, newBudget, toResumedBudget } from "../budget"
 import { notifyIndexNow } from "../indexNow"
 import type { SourceOutcome } from "../ingest"
 import { ingestFromTopicSources } from "../ingest"
-import type { NewResource } from "../ingest/ingester"
+import type { DiscoveredResource } from "../ingest/ingester"
 import { loadOrProvisionUserLiteLLMKey } from "../litellm"
 import type { ReviewSummary } from "../review"
 import { reviewScan } from "../review"
@@ -26,7 +26,7 @@ export type ScanTrigger = "manual" | "scheduled" | "creation"
 
 // what ingest leaves for the stages after it
 export type IngestStageResult = {
-	resources: NewResource[]
+	resources: DiscoveredResource[]
 	foundCount: number
 	status: Scan["status"]
 	problemSources: Scan["problemSources"]
@@ -216,6 +216,15 @@ async function recordScanProgress(scanId: string, budget: Budget): Promise<void>
 export async function reportScanEmailNotStarted(scanId: string, reason: string): Promise<void> {
 	console.error(`the email workflow for scan ${scanId} could not be started: ${reason}`)
 	reportError(new Error("a scan email workflow could not be started"), "email", { scanId, reason })
+}
+
+/**
+ * Reports a Scan whose podcast episode workflow could not be started.
+ * The Scan is already complete, so nothing else changes.
+ */
+export async function reportPodcastEpisodeRenderNotStarted(scanId: string, reason: string): Promise<void> {
+	console.error(`the episode workflow for scan ${scanId} could not be started: ${reason}`)
+	reportError(new Error("an episode workflow could not be started"), "podcast-episode", { scanId, reason })
 }
 
 /**

@@ -15,12 +15,13 @@ they brew, and how many brews you can run by hand in a day.
 
 | | Free | Plus | Premium |
 |---|---|---|---|
-| Price, monthly billing | $0 | $15/month | $29/month |
-| Price, yearly billing | $0 | $150/year | $290/year |
+| Price, monthly billing | $0 | $20/month | $40/month |
+| Price, yearly billing | $0 | $200/year | $400/year |
 | Topics | 3 | 10 | 25 |
 | Topics on a daily schedule | 1 | 3 monthly · 4 yearly | 6 monthly · 7 yearly |
 | Brews a day | 5 | 15 monthly · 20 yearly | 30 monthly · 40 yearly |
 | Members per team you lead | 10 | Unlimited | Unlimited |
+| Coffee Break podcast episodes | 1 per topic | After every brew | After every brew |
 
 Yearly billing is ten times the monthly price instead of twelve: two months for free. Yearly plans get higher daily limits
 instead of overage, because a yearly subscription has no monthly invoice to bill overage to.
@@ -42,12 +43,12 @@ Without a card, and on the free plan, the daily limit is a hard stop until midni
 plans don't bill overage; their higher daily limits are the tradeoff.
 
 There is a monthly limit. Your account page shows **Carl's coffee fund**: the month's AI model spend against
-your plan's monthly limit. The plans page states each limit as an estimate, "About 30, 100, or 200 Brews
+your plan's monthly limit. The plans page states each limit as an estimate, "About 30, 150, or 350 Brews
 a month" for **Free**, **Plus**, and **Premium** plans. If your coffee fund budget fills up, 
 your brews are paused until it resets on the first of the month, UTC.
 
 ![Carl's coffee fund on the account page: the month's spend against the plan's monthly limit, split
-into brews and Coffee Talk, with the day's brews and the current plan
+into brews, the Coffee Break podcast, and Coffee Talk, with the day's brews and the current plan
 below](../../../assets/screenshots/account-coffee-fund.png)
 
 ## Track your budget

@@ -1,17 +1,20 @@
 // review turns a Scan's discovered Resources into topic findings
-import { and, eq, inArray, or, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull, max, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { bookmarks, findings, resources, type scans, teamMembers, teamTopics, topics } from "../../db/schema"
 import { buildTopicScanContext, toTopicContextHash } from "../attach"
 import type { Budget } from "../budget"
-import type { NewResource } from "../ingest/ingester"
+import type { DiscoveredResource } from "../ingest/ingester"
 import { traceStage } from "../telemetry"
 import {
 	dedupeResources,
 	gateResources,
 	loadResourcesToReview,
 	loadTopicContext,
+	loadUrlSourcePageUrls,
 	rankBySimilarity,
+	type ScoreExamplePage,
+	type ScoreExamplePages,
 	toTopicContextText,
 } from "./filter"
 import { fetchAndScoreResources } from "./score"
@@ -29,6 +32,12 @@ export type { ReviewSummary } from "./track"
 // a persisted Scan record
 type Scan = typeof scans.$inferSelect
 
+// the topic's owner and owning team, which decide whose bookmarks count
+type BookmarkTopic = { ownerId: string; teamId: string | null }
+
+// one of the topic's bookmarked findings, with its page
+type BookmarkedFindingRow = ScoreExamplePage & { findingId: string }
+
 /**
  * Reviews a Scan's discovered Resources, writes Findings and returns the counts, outcome, and summary.
  * topicId is a parameter because a deleted topic clears the Scan row's own topic id.
@@ -38,7 +47,7 @@ type Scan = typeof scans.$inferSelect
 export async function reviewScan(
 	scan: Scan,
 	topicId: string,
-	discoveredResources: NewResource[],
+	discoveredResources: DiscoveredResource[],
 	scannedSources: ScannedSource[],
 	budget: Budget,
 	litellmApiKey?: string,
@@ -66,16 +75,29 @@ export async function reviewScan(
 		.select({ resourceId: findings.resourceId })
 		.from(findings)
 		.where(eq(findings.topicId, topicId))
-	const topicResourceIds = new Set(topicResourceRows.map((topicResourceRow) => topicResourceRow.resourceId))
+
+	// the url Sources' own pages pass the gate and skip the dedupe, so the model reads a page the user picked
+	const urlSourcePageUrls = new Set(await loadUrlSourcePageUrls(topicId))
+	const urlSourcePageIds = new Set(
+		resourcesToReview.filter((resource) => urlSourcePageUrls.has(resource.url)).map((resource) => resource.id),
+	)
+
+	// the Resources that pass the gate whatever they measure
+	const gateExemptResourceIds = new Set([
+		...topicResourceRows.map((topicResourceRow) => topicResourceRow.resourceId),
+		...urlSourcePageIds,
+	])
 
 	// the running totals for this review. each stage below traces as its own span with what it spent
 	const reviewOutcome = emptyReviewOutcome()
 
-	// embed the topic's effective context once for the relevance gate
+	// embed the topic's effective context once for the relevance gate.
+	// the score prompt also reads the pages that the topic's users liked, bookmarked, or rated down
 	if (stopSignal?.aborted) {
 		return emptyReviewSummary()
 	}
-	const topicContext = await loadTopicContext(topicScanContext, budget, litellmApiKey)
+	const scoreExamplePages = await loadScoreExamplePages(topicId)
+	const topicContext = await loadTopicContext({ topicScanContext, scoreExamplePages, budget, litellmApiKey })
 
 	// the first pass embeds every resource up for review and keeps the ones relevant to the topic
 	const relevantResources = await traceStage(
@@ -89,27 +111,37 @@ export async function reviewScan(
 				budget,
 				litellmApiKey,
 				stopSignal,
-				topicResourceIds,
+				gateExemptResourceIds,
 			),
 		(relevantResources) => ({ toReviewCount: resourcesToReview.length, relevantCount: relevantResources.length }),
 	)
 
-	// the second pass dedupes the surviving resources best-first, so a limit defers the least relevant resources. a topic
-	// Resource walks first, so a new near-duplicate of it is the one dropped and no limit defers its second review
+	// the second pass dedupes the surviving resources best-first, so a limit defers the least relevant resources. an
+	// exempt Resource walks first, so a new near-duplicate of it is the one dropped and no limit defers its review
 	const resourceIdsToReview = resourcesToReview.map((resource) => resource.id)
 	const rankedResources = rankBySimilarity(relevantResources)
-	const topicResourcesFirst = [
-		...rankedResources.filter((rankedResource) => topicResourceIds.has(rankedResource.resource.id)),
-		...rankedResources.filter((rankedResource) => !topicResourceIds.has(rankedResource.resource.id)),
+	const gateExemptResourcesFirst = [
+		...rankedResources.filter((rankedResource) => gateExemptResourceIds.has(rankedResource.resource.id)),
+		...rankedResources.filter((rankedResource) => !gateExemptResourceIds.has(rankedResource.resource.id)),
 	]
 	const resourcesToScore = await traceStage(
 		"dedupe",
 		budget,
-		() => dedupeResources(topicResourcesFirst, resourceIdsToReview, reviewOutcome),
+		() =>
+			dedupeResources({
+				relevantResources: gateExemptResourcesFirst,
+				candidateIds: resourceIdsToReview,
+				reviewOutcome,
+				urlSourcePageIds,
+			}),
 		(toScore) => ({ relevantCount: relevantResources.length, toScoreCount: toScore.length }),
 	)
 
-	// the paid stage: fetch each of those Resources and score it under the Scan's limits
+	// the paid stage: fetch each of those Resources and score it under the Scan's limits.
+	// a Resource that a custom Source found this Scan earns its Finding a score bonus
+	const customSourceUrls = new Set(
+		discoveredResources.filter(({ isFromCustomSource }) => isFromCustomSource).map(({ url }) => url),
+	)
 	const scoredResourceIds = await traceStage(
 		"score",
 		budget,
@@ -121,6 +153,7 @@ export async function reviewScan(
 				topicContext,
 				reviewOutcome,
 				budget,
+				customSourceUrls,
 				litellmApiKey,
 				stopSignal,
 			),
@@ -177,20 +210,86 @@ async function filterTopicFindings(
 		return { keptFindingUrls: new Set(), filteredFindingCount: 0 }
 	}
 
-	// the topic's findings with their ranking scores, the url each one points at, and when it was found
+	// the findings bookmarked by someone who still has access
+	const bookmarkedFindingRows = await loadBookmarkedFindingRows(topicId, topic)
+	const bookmarkedFindingIds = bookmarkedFindingRows.map(({ findingId }) => findingId)
+
+	// the topic's findings with their ranking scores, when each was found, the url it points at,
+	// and whether a user bookmarked or rated it
 	const findingRows = await db
 		.select({
 			id: findings.id,
 			relevanceScore: findings.relevanceScore,
 			createdAt: findings.createdAt,
-			rating: findings.rating,
 			url: resources.url,
+			isBookmarkedOrRated:
+				sql<boolean>`(${inArray(findings.id, bookmarkedFindingIds)} or ${isNotNull(findings.rating)})`.mapWith(Boolean),
 		})
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
 		.where(eq(findings.topicId, topicId))
 
-	// the finding ids bookmarked by someone who still has access
+	// decide which findings fall outside the limit. a re-score can lower a score,
+	// and filtering by score alone would delete a finding its user bookmarked
+	const filteredIds = findingIdsToFilter(findingRows, topic.maxTopicFindings)
+	if (filteredIds.length > 0) {
+		await db.delete(findings).where(inArray(findings.id, filteredIds))
+	}
+
+	// return the urls of the findings that remain, and how many were filtered out
+	const filteredIdSet = new Set(filteredIds)
+	const keptFindingUrls = new Set(
+		findingRows.filter((findingRow) => !filteredIdSet.has(findingRow.id)).map((findingRow) => findingRow.url),
+	)
+	return { keptFindingUrls, filteredFindingCount: filteredIds.length }
+}
+
+// load the pages that the score prompt shows as examples. the bookmarked pages by newest bookmark,
+// then the other pages rated thumbs up, then the pages rated thumbs down, each rated group best-scored first
+async function loadScoreExamplePages(topicId: string): Promise<ScoreExamplePages> {
+	// the topic's owner and owning team decide whose bookmarks count
+	const [topic] = await db
+		.select({ ownerId: topics.ownerId, teamId: topics.teamId })
+		.from(topics)
+		.where(eq(topics.id, topicId))
+	if (!topic) {
+		return { likedOrBookmarkedPages: [], ratedDownPages: [] }
+	}
+
+	// the bookmarked findings, and the topic's rated findings best-scored first
+	const [bookmarkedFindingRows, ratedFindingRows] = await Promise.all([
+		loadBookmarkedFindingRows(topicId, topic),
+		db
+			.select({ findingId: findings.id, title: resources.title, url: resources.url, rating: findings.rating })
+			.from(findings)
+			.innerJoin(resources, eq(findings.resourceId, resources.id))
+			.where(and(eq(findings.topicId, topicId), isNotNull(findings.rating)))
+			.orderBy(desc(findings.relevanceScore)),
+	])
+
+	// a rating of thumbs down outweighs a bookmark, and a liked finding that is also bookmarked is listed once
+	const ratedDownPages = ratedFindingRows.filter((ratedFindingRow) => ratedFindingRow.rating === "down")
+	const ratedDownFindingIds = new Set(ratedDownPages.map((ratedDownPage) => ratedDownPage.findingId))
+	const bookmarkedFindingIds = new Set(
+		bookmarkedFindingRows.map((bookmarkedFindingRow) => bookmarkedFindingRow.findingId),
+	)
+	const likedOrBookmarkedPages = [
+		...bookmarkedFindingRows.filter((bookmarkedFindingRow) => !ratedDownFindingIds.has(bookmarkedFindingRow.findingId)),
+		...ratedFindingRows.filter(
+			(ratedFindingRow) => ratedFindingRow.rating === "up" && !bookmarkedFindingIds.has(ratedFindingRow.findingId),
+		),
+	]
+	return { likedOrBookmarkedPages, ratedDownPages }
+}
+
+/**
+ * Loads the topic's findings that someone who still has access bookmarked, with their pages, newest bookmark first.
+ */
+export async function loadBookmarkedFindingRows(
+	topicId: string,
+	topic: BookmarkTopic,
+): Promise<BookmarkedFindingRow[]> {
+	// a bookmark counts if its user owns the topic or is an active member of a team that holds it
 	const holderHasAccess = or(
 		eq(bookmarks.userId, topic.ownerId),
 		topic.teamId
@@ -211,32 +310,19 @@ async function filterTopicFindings(
 				.where(and(eq(teamTopics.topicId, topicId), eq(teamMembers.isActive, true))),
 		),
 	)
-	const bookmarkedRows = await db
-		.selectDistinct({ findingId: bookmarks.findingId })
-		.from(bookmarks)
-		.innerJoin(findings, eq(bookmarks.findingId, findings.id))
-		.where(and(eq(findings.topicId, topicId), holderHasAccess))
 
-	// decide which findings fall outside the limit. a re-score can lower a score,
-	// and filtering by score alone would delete a finding its user bookmarked
-	const bookmarkedIds = new Set(bookmarkedRows.map((bookmarkRow) => bookmarkRow.findingId))
-	const filteredIds = findingIdsToFilter(
-		findingRows.map((findingRow) => ({
-			...findingRow,
-			isBookmarkedOrRated: bookmarkedIds.has(findingRow.id) || findingRow.rating !== null,
-		})),
-		topic.maxTopicFindings,
+	// the bookmarked findings of the topic with their pages
+	return (
+		db
+			.select({ findingId: bookmarks.findingId, title: resources.title, url: resources.url })
+			.from(bookmarks)
+			.innerJoin(findings, eq(bookmarks.findingId, findings.id))
+			.innerJoin(resources, eq(findings.resourceId, resources.id))
+			.where(and(eq(findings.topicId, topicId), holderHasAccess))
+			// one row per finding, ordered by its newest bookmark
+			.groupBy(bookmarks.findingId, resources.title, resources.url)
+			.orderBy(desc(max(bookmarks.createdAt)))
 	)
-	if (filteredIds.length > 0) {
-		await db.delete(findings).where(inArray(findings.id, filteredIds))
-	}
-
-	// return the urls of the findings that remain, and how many were filtered out
-	const filteredIdSet = new Set(filteredIds)
-	const keptFindingUrls = new Set(
-		findingRows.filter((findingRow) => !filteredIdSet.has(findingRow.id)).map((findingRow) => findingRow.url),
-	)
-	return { keptFindingUrls, filteredFindingCount: filteredIds.length }
 }
 
 /**

@@ -3,11 +3,17 @@
 import { appUrl } from "@shared/appUrl"
 import type { PageHead } from "@shared/contracts"
 import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
-import { toPageTitle, toTopicFeedPath, toTopicPath } from "@shared/seo"
+import { toPageTitle, toPodcastEpisodePath, toPodcastFeedPath, toTopicFeedPath, toTopicPath } from "@shared/seo"
+import { eq } from "drizzle-orm"
 import { Hono } from "hono"
+import { db } from "../../db"
+import { topics } from "../../db/schema"
 import type { AppEnv } from "../currentUser"
 import { toInviteTarget } from "../invite/invites"
+import { loadPublicPodcastEpisode, loadPublishedPodcastEpisodeRows, type PodcastEpisodeRow } from "../podcast/helpers"
+import { toPodcastEpisodeLd, toPodcastSeries, toPodcastSeriesLd } from "../podcast/podcastSeo"
 import { lastScan, loadTopicFeedUpdatedAt, scanFindings, toCreativeWorkLd, toFindingListLd } from "../seo"
+import { toPodcastEpisodePreview, toPodcastEpisodePreviewKey } from "./podcastEpisodeImage"
 import { toInvitedTeamPreview, toProfilePreview, toTeamPreview, toTopicPreview } from "./preview"
 import { toCountLabel, toPreviewVersion } from "./previewImage"
 import { type ProfilePreview, toProfilePreviewKey } from "./profileImage"
@@ -40,7 +46,41 @@ export const pageHeadRoute = new Hono<AppEnv>()
 			findingList: toFindingListLd(findingRows),
 			appUrl: appUrl(),
 		})
-		return context.json(toTopicPageHead({ topicPreview, appUrl: appUrl(), jsonLd: creativeWork }))
+
+		// name the podcast feed and the podcast series if the topic has a published podcast episode
+		const [topic] = await db.select().from(topics).where(eq(topics.id, topicPreview.topicId))
+		const hasPublishedPodcastEpisode = topic ? (await loadPublishedPodcastEpisodeRows(topic, null)).length > 0 : false
+		const podcastFeedUrl = hasPublishedPodcastEpisode ? `${appUrl()}${toPodcastFeedPath(topicPreview.topicId)}` : null
+		const jsonLd = podcastFeedUrl
+			? [creativeWork, toPodcastSeriesLd(toPodcastSeries(topicPreview, appUrl()))]
+			: creativeWork
+		return context.json(toTopicPageHead({ topicPreview, appUrl: appUrl(), jsonLd, podcastFeedUrl }))
+	})
+	// what a public topic's podcast episode page puts in its head. a private or invite topic's episode page gets no head
+	.get("/topics/:id/episodes/:season/:episodeNumber/head", async (context) => {
+		// respond 404 to a season or an episode number that is not a whole number
+		const { id: topicId, season, episodeNumber } = context.req.param()
+		const seasonNumber = Number(season)
+		const podcastEpisodeNumber = Number(episodeNumber)
+		if (!Number.isInteger(seasonNumber) || !Number.isInteger(podcastEpisodeNumber)) {
+			return context.json({ error: "not found" }, 404)
+		}
+
+		// the topic's preview, and the published podcast episode at that season and episode number
+		const [topicPreview, publicPodcastEpisode] = await Promise.all([
+			toTopicPreview(topicId),
+			loadPublicPodcastEpisode({ topicId, season: seasonNumber, episodeNumber: podcastEpisodeNumber }),
+		])
+		if (!topicPreview || !publicPodcastEpisode) {
+			return context.json({ error: "not found" }, 404)
+		}
+		return context.json(
+			toPodcastEpisodePageHead({
+				topicPreview,
+				podcastEpisodeRow: publicPodcastEpisode.podcastEpisodeRow,
+				appUrl: appUrl(),
+			}),
+		)
 	})
 	// what a profile page puts in its head
 	.get("/profiles/:userId/head", async (context) => {
@@ -87,13 +127,19 @@ export const pageHeadRoute = new Hono<AppEnv>()
 		)
 	})
 
-// what a Topic page's head is built from. jsonLd is null for a page with no structured data
-type ToTopicPageHeadOptions = { topicPreview: TopicPreview; appUrl: string; jsonLd: object | null }
+// what a Topic page's head is built from. jsonLd is null for a page with no structured data,
+// and podcastFeedUrl is set once the topic has a published podcast episode
+type ToTopicPageHeadOptions = {
+	topicPreview: TopicPreview
+	appUrl: string
+	jsonLd: object | null
+	podcastFeedUrl?: string | null
+}
 
 /**
- * A Topic page's head: its title, its card, its canonical url, its feed, and its structured data if given.
+ * A Topic page's head: its title, its card, its canonical url, its feeds, and its structured data if given.
  */
-export function toTopicPageHead({ topicPreview, appUrl, jsonLd }: ToTopicPageHeadOptions): PageHead {
+export function toTopicPageHead({ topicPreview, appUrl, jsonLd, podcastFeedUrl }: ToTopicPageHeadOptions): PageHead {
 	// a public topic names its feed, and is indexed with a canonical url once it is shown
 	const isPublicTopic = topicPreview.visibility === "public"
 	const isIndexed = isPublicTopic && topicPreview.keptCount >= MINIMUM_SHOWN_FINDINGS
@@ -106,8 +152,62 @@ export function toTopicPageHead({ topicPreview, appUrl, jsonLd }: ToTopicPageHea
 		cardUrl: pageUrl,
 		imageUrl: `${appUrl}/api/topics/${topicPreview.topicId}/preview.png?v=${toPreviewVersion(toTopicPreviewKey(topicPreview))}`,
 		feedUrl: isPublicTopic ? `${appUrl}${toTopicFeedPath(topicPreview.topicId)}` : null,
+		podcastFeedUrl: podcastFeedUrl ?? null,
 		isIndexed,
 		jsonLd,
+	}
+}
+
+// the public topic, the podcast episode, and the app's url that a podcast episode page's head is built from
+type ToPodcastEpisodePageHeadOptions = {
+	topicPreview: TopicPreview
+	podcastEpisodeRow: PodcastEpisodeRow
+	appUrl: string
+}
+
+/**
+ * Builds a public podcast episode page's head, which is indexed once its topic is shown.
+ */
+export function toPodcastEpisodePageHead({
+	topicPreview,
+	podcastEpisodeRow,
+	appUrl,
+}: ToPodcastEpisodePageHeadOptions): PageHead {
+	// the podcast episode's page path comes after its topic's page path, and is indexed once the topic is shown
+	const pageUrl = `${appUrl}${toPodcastEpisodePath({ id: topicPreview.topicId, name: topicPreview.title }, podcastEpisodeRow)}`
+	const isIndexed = topicPreview.keptCount >= MINIMUM_SHOWN_FINDINGS
+
+	// the episode's title, its audio, its topic's podcast, and its card's key
+	const podcastEpisodeTitle = podcastEpisodeRow.title ?? topicPreview.title
+	const audioUrl = `${appUrl}/api/episodes/${podcastEpisodeRow.id}/audio.mp3`
+	const podcastSeries = toPodcastSeries(topicPreview, appUrl)
+	const podcastEpisodePreviewKey = toPodcastEpisodePreviewKey(
+		toPodcastEpisodePreview(podcastEpisodeRow, topicPreview.title),
+	)
+	return {
+		title: toPageTitle(`${podcastEpisodeTitle} · ${topicPreview.title}`),
+		cardTitle: podcastEpisodeTitle,
+		description: podcastEpisodeRow.description ?? "",
+		canonicalUrl: isIndexed ? pageUrl : null,
+		cardUrl: pageUrl,
+		// the episode's own card, its topic's podcast feed, and its audio
+		imageUrl: `${appUrl}/api/episodes/${podcastEpisodeRow.id}/preview.png?v=${toPreviewVersion(podcastEpisodePreviewKey)}`,
+		feedUrl: null,
+		podcastFeedUrl: podcastSeries.feedUrl,
+		audioUrl,
+		isIndexed,
+		jsonLd: toPodcastEpisodeLd({
+			name: podcastEpisodeTitle,
+			description: podcastEpisodeRow.description ?? "",
+			url: pageUrl,
+			publishedAt: podcastEpisodeRow.publishedAt ?? new Date(),
+			durationSeconds: podcastEpisodeRow.durationSeconds ?? 0,
+			// where the podcast episode sits in the series
+			season: podcastEpisodeRow.season ?? 0,
+			episodeNumber: podcastEpisodeRow.episodeNumber ?? 0,
+			audioUrl,
+			series: podcastSeries,
+		}),
 	}
 }
 

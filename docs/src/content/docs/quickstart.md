@@ -61,10 +61,11 @@ Saving the topic starts its first brew. You land on your new topic page with **"
 arriving](../../assets/screenshots/quickstart-first-scan-running.png)
 
 A brew takes a few minutes. When it finishes, the topic feed fills in: ranked findings, each with a note
-from Carl on why it matters, and a recap of what he read and kept.
+from Carl on why it matters, and a recap of what he read and kept. A few minutes later the brew's
+Coffee Break episode lands above them, with Carl and Vienna talking the findings through.
 
-![The finished first brew: ten ranked findings, the brew diary reading read 50 kept 10, and the
-topic's settings](../../assets/screenshots/quickstart-first-findings.png)
+![The finished first brew: its Coffee Break episode above the ranked findings, each finding tagged
+with its chapter](../../assets/screenshots/quickstart-first-findings.png)
 
 That's the loop. Carl brews on the schedule from here, and each brew's findings land in your feed
 and, if you leave emails on, in your inbox.

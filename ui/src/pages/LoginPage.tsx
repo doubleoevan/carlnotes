@@ -31,7 +31,7 @@ export function LoginPage() {
 		window.location.href = redirectPath
 	}
 
-	// hands off to the provider's oauth redirect
+	// open the provider's oauth sign-in
 	const handleOAuthLogin = (provider: "google" | "github"): void => {
 		void authClient.signIn.social({ provider, callbackURL: redirectPath })
 	}

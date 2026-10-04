@@ -1,6 +1,7 @@
 // the app's database client. a pooled Neon connection bound to the domain schema
 import { Pool } from "@neondatabase/serverless"
 import type { PoolGauges } from "@shared/runtimeGauges"
+import { sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/neon-serverless"
 import { traceQueries } from "./queryTracing"
 import * as schema from "./schema"
@@ -24,6 +25,21 @@ traceQueries(connectionPool)
 
 // drizzle client bound to the full domain schema. consumers import table definitions from the schema directly
 export const db = drizzle(connectionPool, { schema })
+
+// a finding is shown unless a user rated the finding thumbs down
+export const isFindingShown = sql<boolean>`${schema.findings.rating} is distinct from 'down'`
+
+/**
+ * Whether an error is Postgres rejecting a duplicate key, checked through each cause that a driver wraps the error in.
+ */
+export function isUniqueViolation(error: unknown): boolean {
+	for (let cause = error; cause; cause = (cause as { cause?: unknown }).cause) {
+		if ((cause as { code?: string }).code === "23505") {
+			return true
+		}
+	}
+	return false
+}
 
 /**
  * Returns the pool's counts: its open clients, the idle ones, and the requests waiting for one.

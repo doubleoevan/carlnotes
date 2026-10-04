@@ -1,11 +1,12 @@
 # shared/
 
-What every module may import, and the reason the boundary holds: `contracts.ts` is the zod request
-and response shapes the api validates with and the ui parses against, `enums.ts` and `plans.ts` hold
-the values both sides compare, `sources.ts` defines the Sources an ingester reads, `seo.ts` builds topic
-slugs and paths, meta descriptions, and the site's structured data, and `appUrl.ts` reads the app's base url
-from `BETTER_AUTH_URL` for server code: `appUrl()` falls back to the local dev server, and `appBaseUrl()` is
-undefined when unset, for the emails and notifications that skip without a link.
+What every module may import, and the reason the boundary holds: `contracts.ts` is the zod request and response shapes
+that the api validates with and the ui parses against, `enums.ts` and `plans.ts` hold the values that both sides
+compare, `sources.ts` defines the Sources that an ingester reads, `seo.ts` builds topic slugs and paths, meta
+descriptions, and the site's structured data, `podcastEpisodes.ts` holds the podcast episode settings, a cover's key and
+path, the show's and the hosts' names, and a turn's transcript text, and `appUrl.ts` reads the app's base url from
+`BETTER_AUTH_URL` for server code: `appUrl()` falls back to the local dev server, and `appBaseUrl()` is undefined if
+unset, for the emails and notifications that skip without a link.
 
 `monitoring.ts` starts Sentry in the api and the worker and defines what tracing reads and writes: the traces sampler,
 a request's transaction name and measurements, the stage and query spans, the send-time scrub, and the threshold

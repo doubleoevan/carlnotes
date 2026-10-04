@@ -14,6 +14,7 @@ export type EditableTopicFields = Pick<
 	| "scheduledTime"
 	| "scheduledDayOfWeek"
 	| "maxTopicFindings"
+	| "podcast"
 > & {
 	sources: Pick<TopicResponse["sources"][number], "id" | "sourceKind" | "summary">[]
 	invites: Pick<TopicResponse["invites"][number], "email">[]
@@ -21,7 +22,7 @@ export type EditableTopicFields = Pick<
 
 /**
  * A topic's fields in the card's shape, with each source as its option key and summary, the team it is on,
- * and its email invites. A source of a kind no option offers is left out. Given a proposal, the topic reads as it
+ * its email invites, and whether its podcast is on. A source of a kind no option offers is left out. Given a proposal, the topic reads as it
  * would with that change applied.
  */
 export function toEditableTopicDraft(
@@ -48,6 +49,8 @@ export function toEditableTopicDraft(
 		scheduledTime: proposedTopicEdit?.scheduledTime ?? topic.scheduledTime,
 		scheduledDayOfWeek: proposedTopicEdit?.scheduledDayOfWeek ?? topic.scheduledDayOfWeek,
 		maxTopicFindings: proposedTopicEdit?.maxTopicFindings ?? topic.maxTopicFindings,
+		// the podcast setting as proposed or as saved, absent for a topic with no podcast
+		isPodcastEnabled: topic.podcast ? (proposedTopicEdit?.isPodcastEnabled ?? topic.podcast.isEnabled) : undefined,
 	}
 }
 

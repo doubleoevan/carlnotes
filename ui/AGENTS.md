@@ -25,6 +25,14 @@ The api serves the browser bundle and renders pages through the server build, be
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/share/` — the share menus for a topic and a team, over the options they both use.
 - `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use.
+- `components/podcast/` — the podcast's components, `PodcastEpisodePlayer.tsx` (the topic page's player),
+  `PodcastEpisodePlayerCard.tsx` (a published podcast episode's card with its seek bar, also on the podcast episode
+  page), `PodcastEpisodeChapters.tsx` (the card's chapter list), `PodcastEpisodeChaptersTable.tsx` (the episode
+  page's chapters table), `PodcastEpisodesCard.tsx` (the topic page's podcast episodes by season),
+  `PodcastFeedDialog.tsx` (the dialog that adds the podcast feed to a podcast app),
+  `PodcastEpisodePill.tsx` (the pills on findings and scan history rows), `PodcastEpisodeCover.tsx` (an episode's cover
+  square), and `PodcastEpisodeAudio.tsx`, the one audio element and the podcast player that `Layout` mounts.
+  `stores/podcastEpisodePlayerStore.ts` drives that element, so playback continues from one page to the next.
 - `components/note/` — the Tasting Notes section, table, and dialog, and the lazily imported
   BlockNote editor with its yjs SSE provider, comment threads, and the comment "@" mention menu.
   The editor chunk loads only when a note dialog opens, so it never runs on the server.

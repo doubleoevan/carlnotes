@@ -12,11 +12,14 @@ import chatOpenNewTopicTemplate from "./chat-open-new-topic.md" with { type: "te
 import chatRoomTurnTemplate from "./chat-room-turn.md" with { type: "text" }
 import chatTeamTemplate from "./chat-team.md" with { type: "text" }
 import chatTopicTemplate from "./chat-topic.md" with { type: "text" }
+import outlinePodcastEpisodeTemplate from "./outline-podcast-episode.md" with { type: "text" }
+import podcastEpisodeHostsTemplate from "./podcast-episode-hosts.md" with { type: "text" }
 import searchTopicTemplate from "./search-topic.md" with { type: "text" }
 import suggestSourcesTemplate from "./suggest-sources.md" with { type: "text" }
 import summarizeResourceTemplate from "./summarize-resource.md" with { type: "text" }
 import summarizeTopicScanTemplate from "./summarize-topic-scan.md" with { type: "text" }
 import { stripFrontmatter } from "./write.ts"
+import writePodcastEpisodeSegmentTemplate from "./write-podcast-episode-segment.md" with { type: "text" }
 
 // the prompts this app serves, and their fallback templates for when the registry can't serve them
 export const FALLBACK_PROMPT_TEMPLATES = {
@@ -35,6 +38,9 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"chat-team": chatTeamTemplate,
 	"chat-room-turn": chatRoomTurnTemplate,
 	"suggest-sources": suggestSourcesTemplate,
+	"podcast-episode-hosts": podcastEpisodeHostsTemplate,
+	"outline-podcast-episode": outlinePodcastEpisodeTemplate,
+	"write-podcast-episode-segment": writePodcastEpisodeSegmentTemplate,
 } as const
 
 export type PromptName = keyof typeof FALLBACK_PROMPT_TEMPLATES

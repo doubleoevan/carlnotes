@@ -37,6 +37,11 @@ export function isDailyFrequency(frequency: string): boolean {
 // the day a weekly scan runs on. ignored for non-weekly frequencies
 export const daysOfWeek = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const
 export const scanStatuses = ["running", "succeeded", "failed"] as const
+// a podcast episode's status. rendering until it publishes or fails,
+// and removed once its topic's owner or an admin removes it
+export const podcastEpisodeStatuses = ["rendering", "published", "failed", "removed"] as const
+// who speaks a turn of a podcast episode
+export const podcastEpisodeSpeakers = ["host", "cohost"] as const
 // an attachment's async processing status: pending === stored and queued, ready === processed, or failed
 export const attachmentStatuses = ["pending", "ready", "failed"] as const
 // what a kept chat attachment originally was, shared by the db enum and the chat payload's zod schema

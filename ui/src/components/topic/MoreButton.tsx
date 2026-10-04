@@ -1,15 +1,19 @@
 import { Button } from "@/components/primitives/button"
 import { cn } from "@/lib/utils"
 
-// the "+ # more / show less" toggle shared by the topic feed and the topic page's findings and history sections
+/**
+ * The more and less toggle under a card.
+ */
 export function MoreButton({
 	isExpanded,
 	moreLabel,
+	lessLabel = "show less ",
 	onToggle,
 	className,
 }: {
 	isExpanded: boolean
 	moreLabel: string
+	lessLabel?: string
 	onToggle: () => void
 	className?: string
 }) {
@@ -24,7 +28,7 @@ export function MoreButton({
 			)}
 		>
 			{/* the label has the underline on hover, and the larger arrow stays outside it so the line stays flat */}
-			<span className="underline-offset-4 group-hover:underline">{isExpanded ? "show less " : moreLabel}</span>
+			<span className="underline-offset-4 group-hover:underline">{isExpanded ? lessLabel : moreLabel}</span>
 			<span className="text-lg leading-none">{isExpanded ? "▴" : "▾"}</span>
 		</Button>
 	)

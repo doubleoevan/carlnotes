@@ -1,6 +1,6 @@
 // the Budget crosses a Temporal activity boundary between the topic Scan's stages
 import { describe, expect, test } from "bun:test"
-import { type Budget, canScoreResource, canSpend, charge, newBudget, toResumedBudget } from "./budget"
+import { type Budget, canScoreResource, canSpend, charge, newBudget, speechCost, toResumedBudget } from "./budget"
 
 // what Temporal does to a value that crosses an activity boundary
 function acrossActivityBoundary(budget: Budget): Budget {
@@ -145,5 +145,24 @@ describe("a Scan the user stopped", () => {
 		expect(canScoreResource(budget, stopController.signal)).toBe(true)
 		stopController.abort()
 		expect(canScoreResource(budget, stopController.signal)).toBe(false)
+	})
+})
+
+describe("a speech call's cost", () => {
+	// a million text input tokens and a million audio output tokens, to read the rates off the result
+	const speechUsage = { inputTokens: 1_000_000, audioTokens: 1_000_000 }
+
+	test("uses the 2026 rates through the end of 2026, and flex halves the text input alone", () => {
+		// price a call from the last second of 2026 on each tier
+		const renderedAt = new Date("2026-12-31T23:59:59Z")
+		expect(speechCost({ speechTier: "standard", ...speechUsage, renderedAt })).toBeCloseTo(9.5)
+		expect(speechCost({ speechTier: "flex", ...speechUsage, renderedAt })).toBeCloseTo(9.25)
+	})
+
+	test("doubles both tiers from January 1, 2027 UTC", () => {
+		// price a call from the first second of 2027 on each tier
+		const renderedAt = new Date("2027-01-01T00:00:00Z")
+		expect(speechCost({ speechTier: "standard", ...speechUsage, renderedAt })).toBeCloseTo(19)
+		expect(speechCost({ speechTier: "flex", ...speechUsage, renderedAt })).toBeCloseTo(18.5)
 	})
 })

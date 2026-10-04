@@ -2,21 +2,19 @@ import { type TopicResponse, toCtaTag } from "@shared/contracts"
 import { isTopicSlugStale, toTopicPath } from "@shared/seo"
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
 import type * as React from "react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { authClient } from "@/clients/authClient"
 import {
 	type FetchTopicPageOptions,
 	fetchTopicPage,
 	sendTopicFeatureOrder,
-	sendTopicFindingBookmark,
-	sendTopicFindingConsumed,
-	sendTopicFindingOpened,
-	sendTopicFindingRating,
 	sendTopicSubscription,
 } from "@/clients/topicClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { NotesSection } from "@/components/note/NotesSection"
+import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
+import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { ShareTopic } from "@/components/share/ShareTopic"
@@ -41,7 +39,7 @@ import { useSearchParams } from "@/hooks/useSearchParams"
 import { matchesTopicFindingFilter } from "@/lib/topicFindingFilters"
 import { toSortedTopicFindings } from "@/lib/topicFindingSorts"
 import { cn, NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
-import { type TopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
+import { type TopicFeedHandlers, usePageTopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
 import { useRegisterChatContext, useTopicChangeCount } from "@/stores/chatPanelStore"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
@@ -119,7 +117,7 @@ export function TopicPage() {
 			: null,
 	)
 
-	// reload the page after running a topic feed handler
+	// run a topic action, then reload the page
 	const runThenReload = useCallback(
 		async (handler: () => Promise<void>) => {
 			try {
@@ -131,17 +129,9 @@ export function TopicPage() {
 		},
 		[reloadTopicPage],
 	)
-	const topicHandlers: TopicFeedHandlers = useMemo(
-		() => ({
-			openTopicFinding: (findingId) => runThenReload(() => sendTopicFindingOpened(findingId)),
-			consumeTopicFinding: (findingId, isConsumed) =>
-				runThenReload(() => sendTopicFindingConsumed(findingId, isConsumed)),
-			rateTopicFinding: (findingId, rating) => runThenReload(() => sendTopicFindingRating(findingId, rating)),
-			bookmarkTopicFinding: (findingId, isBookmarked) =>
-				runThenReload(() => sendTopicFindingBookmark(findingId, isBookmarked)),
-		}),
-		[runThenReload],
-	)
+
+	// the topic feed handlers, which reload the page after each action
+	const topicHandlers = usePageTopicFeedHandlers(reloadTopicPage)
 
 	// toggle this user's subscription
 	const handleSubscriptionToggle = async (): Promise<void> => {
@@ -213,8 +203,27 @@ export function TopicPage() {
 					<HydrateSection index={0}>
 						<TopicHeader topic={topic} />
 					</HydrateSection>
+					{/* the podcast episode player */}
+					<HydrateSection index={1}>
+						<PodcastEpisodePlayer
+							topic={topic}
+							topicHandlers={topicHandlers}
+							scanControl={
+								<TopicScanButton
+									topic={topic}
+									onScanned={reloadTopicPage}
+									shouldPollTopicPage={false}
+									scanHint="to try again..."
+								/>
+							}
+						/>
+					</HydrateSection>
 					<TopicFindings topic={topic} topicHandlers={topicHandlers} />
-					<TopicCards topic={topic} onMakeTopicPublic={() => setOpenDialog("make-public")} />
+					<TopicCards
+						topic={topic}
+						onMakeTopicPublic={() => setOpenDialog("make-public")}
+						onReloadTopicPage={reloadTopicPage}
+					/>
 					<TopicDialogs
 						topic={topic}
 						openDialog={openDialog}
@@ -318,7 +327,7 @@ function TopicFindings({ topic, topicHandlers }: { topic: TopicResponse; topicHa
 	)
 	const viewKey = `${findingFilter}-${sort}-${bookmarkScope}-${[...resourceKinds].sort().join()}`
 	return (
-		<HydrateSection key={viewKey} index={1}>
+		<HydrateSection key={viewKey} index={2}>
 			<TopicFindingsSection
 				topicFindings={topicFindings}
 				hasAnyFindings={topic.findings.length > 0}
@@ -327,29 +336,43 @@ function TopicFindings({ topic, topicHandlers }: { topic: TopicResponse; topicHa
 				handlers={topicHandlers}
 				topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
 				newCountInfo={topic.newCount > 0 ? <NewCountInfo topic={topic} /> : undefined}
+				latestPodcastEpisode={topic.podcast?.latestPodcastEpisode}
 			/>
 		</HydrateSection>
 	)
 }
 
 /**
- * The topic info card on the left, its scan history and settings on the right.
+ * The topic info card and its settings on the left, its podcast episodes, scan history, and notes on the right.
  */
-function TopicCards({ topic, onMakeTopicPublic }: { topic: TopicResponse; onMakeTopicPublic: () => void }) {
+function TopicCards({
+	topic,
+	onMakeTopicPublic,
+	onReloadTopicPage,
+}: {
+	topic: TopicResponse
+	onMakeTopicPublic: () => void
+	onReloadTopicPage: () => Promise<void>
+}) {
 	return (
-		<HydrateSection index={2}>
+		<HydrateSection index={3}>
 			<div className="grid gap-x-8 lg:grid-cols-[32rem_minmax(0,1fr)]">
-				<TopicInfoCard topic={topic} onMakeTopicPublic={onMakeTopicPublic} />
+				{/* the topic info card, then the settings card under it */}
+				<div className="min-w-0">
+					<TopicInfoCard topic={topic} onMakeTopicPublic={onMakeTopicPublic} />
+					<TopicSettingsCard topic={topic} />
+				</div>
 				{/* a grid item sizes to its widest content unless told not to, so long urls inside these cards
 				    would push the column past the viewport instead of truncating */}
 				<div className="min-w-0">
+					{/* the podcast episodes card */}
+					<PodcastEpisodesCard topic={topic} onPodcastEpisodeRemoved={onReloadTopicPage} />
 					<TopicScanHistory
 						scans={topic.scans}
 						allowedUrls={new Set(topic.findings.map((finding) => finding.url))}
 						findings={topic.findings}
 						topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
 					/>
-					<TopicSettingsCard topic={topic} />
 					{/* the notes on this topic, expanded by default with no note bodies loaded */}
 					<NotesSection pageType="topic" pageId={topic.id} titleClassName="font-display text-lg" />
 				</div>
@@ -487,7 +510,7 @@ function GatedSignedOutActions({ returnPath, ctaTag }: { returnPath: string; cta
 }
 
 // the index of the last section in view when the page opens
-const LAST_TOP_SECTION_INDEX = 1
+const LAST_TOP_SECTION_INDEX = 2
 
 // a section that plays the staggered hydrate animation as it appears. a server-rendered page shows every section before
 // any script runs and animates only the top ones, and a page rendered in the browser reveals each section as it scrolls into view

@@ -30,6 +30,9 @@ export type TopicFields = {
 	setVisibility: (visibility: Visibility) => void
 	maxTopicFindings: number
 	setMaxTopicFindings: (maxTopicFindings: number) => void
+	// whether the topic's podcast is on
+	isPodcastEnabled: boolean
+	setIsPodcastEnabled: (isPodcastEnabled: boolean) => void
 	// the follower invites queued for the save
 	emailInvites: string[]
 	setEmailInvites: (emailInvites: string[]) => void
@@ -68,6 +71,8 @@ export function useTopicFields(topic: TopicResponse | undefined, isMakingTopicPu
 	// a new topic defaults to invite for sharing without showing up automatically in the popular section
 	const [visibility, setVisibility] = useState<Visibility>(toStartingVisibility(topic, isMakingTopicPublic))
 	const [maxTopicFindings, setMaxTopicFindings] = useState(topic?.maxTopicFindings ?? 10)
+	// a new topic's podcast starts on
+	const [isPodcastEnabled, setIsPodcastEnabled] = useState(topic?.podcast?.isEnabled ?? true)
 	// the email address invite pills to edit
 	const [emailInvites, setEmailInvites] = useState(
 		() => topic?.invites.flatMap((invite) => (invite.email ? [invite.email] : [])) ?? [],
@@ -116,6 +121,8 @@ export function useTopicFields(topic: TopicResponse | undefined, isMakingTopicPu
 		setVisibility,
 		maxTopicFindings,
 		setMaxTopicFindings,
+		isPodcastEnabled,
+		setIsPodcastEnabled,
 		emailInvites,
 		setEmailInvites,
 		usernameInvites,

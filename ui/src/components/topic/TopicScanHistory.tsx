@@ -4,6 +4,8 @@ import { fetchScanNote } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { randomThinkingLine } from "@/components/chat/thinkingLines"
+import { Pagination } from "@/components/common/Pagination"
+import { PodcastEpisodeNumberPill } from "@/components/podcast/PodcastEpisodePill"
 import {
 	Popover,
 	PopoverAnchor,
@@ -14,18 +16,16 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
 import { type AllowedScanNoteUrls, TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
-import { POPOVER_PANEL_CLASS, RESOURCE_LIST_CARD_CLASS, THIN_SCROLLBAR_CLASS } from "@/lib/styleClasses"
+import { DASHED_ROW_CLASS, POPOVER_PANEL_CLASS, RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { CollapsibleSection } from "./CollapsibleSection"
-import { MoreButton } from "./MoreButton"
 
-// the most scan rows shown before the "+ # older" expander
-const MAX_HISTORY_SCANS = 5
+// how many scan rows the history shows on one page
+const SCANS_PER_PAGE = 5
 
-// how tall the expanded history list grows before it scrolls, about ten rows at 64px each.
-const EXPANDED_HISTORY_CLASS = "max-h-160 overflow-y-auto"
-
-// the collapsible scan history, newest first, limited until expanded
+/**
+ * The collapsible scan history, newest first, one page of scans at a time.
+ */
 export function TopicScanHistory({
 	scans,
 	allowedUrls,
@@ -38,21 +38,19 @@ export function TopicScanHistory({
 	// names the topic in each diary's copied Markdown
 	topic: { id: string; name: string; prompt: string }
 }) {
-	const [isExpanded, setIsExpanded] = useState(false)
-	// limit the rows unless expanded
-	const scansShown = isExpanded ? scans : scans.slice(0, MAX_HISTORY_SCANS)
-	const olderCount = scans.length - MAX_HISTORY_SCANS
+	// the page that was opened, and the page shown, which stays within the history's pages
+	const [openedPageNumber, setOpenedPageNumber] = useState(1)
+	const pageCount = Math.ceil(scans.length / SCANS_PER_PAGE)
+	const pageNumber = Math.min(openedPageNumber, Math.max(1, pageCount))
+
+	// the page's scans
+	const pageStartIndex = (pageNumber - 1) * SCANS_PER_PAGE
+	const pageScans = scans.slice(pageStartIndex, pageStartIndex + SCANS_PER_PAGE)
 	return (
 		<CollapsibleSection value="history" title="Brew diary">
 			{/* one row per scan, each drawing its own dashed separator */}
-			<div
-				className={cn(
-					RESOURCE_LIST_CARD_CLASS,
-					"bg-card p-1 dark:bg-card",
-					isExpanded && [EXPANDED_HISTORY_CLASS, THIN_SCROLLBAR_CLASS],
-				)}
-			>
-				{scansShown.map((scan) => (
+			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
+				{pageScans.map((scan) => (
 					<ScanRow
 						key={scan.id}
 						scan={scan}
@@ -61,15 +59,17 @@ export function TopicScanHistory({
 						topic={topic}
 					/>
 				))}
-				{scansShown.length === 0 && (
+				{pageScans.length === 0 && (
 					<p className="text-muted-foreground py-3 pl-2 text-sm">{"Carl hasn't scanned this topic yet."}</p>
 				)}
 			</div>
-			{olderCount > 0 && (
-				<MoreButton
-					isExpanded={isExpanded}
-					moreLabel={`+ ${olderCount} older `}
-					onToggle={() => setIsExpanded(!isExpanded)}
+			{/* the page numbers under the card */}
+			{pageCount > 1 && (
+				<Pagination
+					ariaLabel="Brew diary pages"
+					pageNumber={pageNumber}
+					pageCount={pageCount}
+					onOpenPage={setOpenedPageNumber}
 				/>
 			)}
 		</CollapsibleSection>
@@ -104,28 +104,40 @@ function ScanRow({
 
 	return (
 		<Popover onOpenChange={handleOpenScanNote}>
-			<Tooltip>
-				<TooltipTrigger asChild>
-					<PopoverTrigger
-						className="group after:border-separator-strong relative isolate flex w-full items-center gap-3 py-2.5 pr-1 pl-2 text-left before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden hover:before:bg-accent-foreground/20"
-						aria-describedby={undefined}
-					>
-						{/* the time is formatted in the local time zone, so the server's markup can differ */}
-						<span className="shrink-0 text-sm" suppressHydrationWarning>
-							{toScanTimestamp(scan)}
-						</span>
-						<ScanStat scan={scan} />
-						<PopoverAnchor asChild>
-							<span className="grid size-11 shrink-0 place-items-center sm:size-7">
-								<NoteIcon />
+			{/* the scan row, which draws the dashed separator and holds the trigger and the podcast episode pill */}
+			<div className={DASHED_ROW_CLASS}>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<PopoverTrigger
+							className="group relative isolate flex w-full items-center gap-3 py-2.5 pr-1 pl-2 text-left before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors hover:before:bg-accent-foreground/20"
+							aria-describedby={undefined}
+						>
+							{/* the time is formatted in the local time zone, so the server's markup can differ */}
+							<span className="shrink-0 text-sm" suppressHydrationWarning>
+								{toScanTimestamp(scan)}
 							</span>
-						</PopoverAnchor>
-					</PopoverTrigger>
-				</TooltipTrigger>
-				{/* the whole row is the trigger, so a centered tooltip would show in the middle of it.
-				    it sits at the right instead, over the note the row opens */}
-				<TooltipContent align="end">A brew note from Carl</TooltipContent>
-			</Tooltip>
+							<ScanStat scan={scan} />
+							{/* the space under the podcast episode pill, which sits over the row */}
+							{scan.podcastEpisode && <span className="w-14 shrink-0" aria-hidden="true" />}
+							<PopoverAnchor asChild>
+								<span className="grid size-11 shrink-0 place-items-center sm:size-7">
+									<NoteIcon />
+								</span>
+							</PopoverAnchor>
+						</PopoverTrigger>
+					</TooltipTrigger>
+					{/* the whole row is the trigger, so a centered tooltip would show in the middle of it.
+					    it sits at the right instead, over the note the row opens */}
+					<TooltipContent align="end">A brew note from Carl</TooltipContent>
+				</Tooltip>
+				{/* the pill of the scan's podcast episode, which plays the podcast episode */}
+				{scan.podcastEpisode && (
+					<PodcastEpisodeNumberPill
+						podcastEpisode={scan.podcastEpisode}
+						className="absolute top-1/2 right-13 z-10 -translate-y-1/2 sm:right-10"
+					/>
+				)}
+			</div>
 			<ScanNote
 				scan={scan}
 				scanSummary={scanSummary}

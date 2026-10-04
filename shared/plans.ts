@@ -37,7 +37,7 @@ export const SCAN_COST_CENTS = 10
 
 // yearly is a flat 10x monthly on every plan, two months free, computed here
 const YEARLY_MONTHS = 10
-const MONTHLY_PRICE_CENTS = { free: 0, plus: 1500, premium: 2900 } as const satisfies Record<Plan, number>
+const MONTHLY_PRICE_CENTS = { free: 0, plus: 2000, premium: 4000 } as const satisfies Record<Plan, number>
 
 // the yearly billing interval has higher limits because it can't include metered overage.
 export const PLANS = {
@@ -54,7 +54,7 @@ export const PLANS = {
 		priceMonthlyCents: MONTHLY_PRICE_CENTS.free,
 		priceYearlyCents: MONTHLY_PRICE_CENTS.free * YEARLY_MONTHS,
 	},
-	// $15/mo, $150/yr
+	// $20 a month, $200 a year
 	plus: {
 		rank: 1,
 		topicLimit: 10,
@@ -63,11 +63,11 @@ export const PLANS = {
 		inviteLimit: 30,
 		dailyTopicLimit: { monthly: 3, yearly: 4 },
 		dailyScanLimit: { monthly: 15, yearly: 20 },
-		monthlyBudgetCents: 1000,
+		monthlyBudgetCents: 1500,
 		priceMonthlyCents: MONTHLY_PRICE_CENTS.plus,
 		priceYearlyCents: MONTHLY_PRICE_CENTS.plus * YEARLY_MONTHS,
 	},
-	// $29/mo, $290/yr
+	// $40 a month, $400 a year
 	premium: {
 		rank: 2,
 		topicLimit: 25,
@@ -76,7 +76,7 @@ export const PLANS = {
 		inviteLimit: 50,
 		dailyTopicLimit: { monthly: 6, yearly: 7 },
 		dailyScanLimit: { monthly: 30, yearly: 40 },
-		monthlyBudgetCents: 2000,
+		monthlyBudgetCents: 3500,
 		priceMonthlyCents: MONTHLY_PRICE_CENTS.premium,
 		priceYearlyCents: MONTHLY_PRICE_CENTS.premium * YEARLY_MONTHS,
 	},

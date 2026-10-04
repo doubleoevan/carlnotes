@@ -6,7 +6,7 @@ import { FileDropZone } from "@/components/common/FileDropZone"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { toAttachmentFileKey } from "@/components/topic/TopicAttachmentEditor"
 import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
-import { FILE_PICKER_ACCEPT } from "@/lib/utils"
+import { cn, FILE_PICKER_ACCEPT } from "@/lib/utils"
 
 // how tall the prompt box may grow before it scrolls
 const MAX_PROMPT_BOX_HEIGHT_PX = 200
@@ -70,7 +70,8 @@ export function TopicPromptComposer({
 		>
 			{/* what is staged shows as chips above the box, each is removable until Save uploads it */}
 			{pendingFiles.length > 0 && <PendingAttachmentChips pendingFiles={pendingFiles} onRemoveFile={onRemoveFile} />}
-			<div className="flex items-end gap-2">
+			{/* on a phone the box takes its own row, with the paperclip and the clear button on the row under it */}
+			<div className="flex flex-wrap items-end gap-2 sm:flex-nowrap">
 				<AttachButton onSelect={onAddFiles} />
 				<textarea
 					ref={promptBoxRef}
@@ -80,9 +81,9 @@ export function TopicPromptComposer({
 					onPaste={handlePaste}
 					placeholder={placeholder}
 					aria-label="Carl's prompt"
-					className="placeholder:text-muted-foreground min-w-0 flex-1 resize-none bg-transparent py-2 text-base leading-relaxed outline-none sm:py-1 sm:text-sm"
+					className="placeholder:text-muted-foreground min-w-0 flex-1 resize-none bg-transparent py-2 text-base leading-relaxed outline-none max-sm:order-first max-sm:basis-full sm:py-1 sm:text-sm"
 				/>
-				{/* a clear button wipes the box, and hands focus back, appearing only when there is something in the input */}
+				{/* the clear button empties the box and focuses it again. it shows only if the box has text */}
 				{prompt !== "" && (
 					<button
 						type="button"
@@ -91,7 +92,7 @@ export function TopicPromptComposer({
 							onPromptChange("")
 							promptBoxRef.current?.focus()
 						}}
-						className={ICON_BUTTON_CLASS}
+						className={cn(ICON_BUTTON_CLASS, "max-sm:ml-auto")}
 					>
 						<X className="size-4" />
 					</button>

@@ -7,7 +7,7 @@ import { useIsEditingTopic, useProposedTopicEdit, useTopicChangeCount } from "@/
 // the topic a read returned, with the topic id it was read for
 type TopicReadResult = { topicId: string; topic: EditableTopicFields | null }
 
-// the topic the card shows, and whether it reads as carl proposed it instead of as it is saved
+// the topic draft that the card shows, and whether the card shows carl's proposal instead of the saved topic
 export type EditableTopicDraft = { topicDraft: TopicDraft; isTopicEditProposed: boolean }
 
 /**
@@ -61,7 +61,10 @@ export function useEditableTopicDraft(topicId: string | null): EditableTopicDraf
 		// the two drafts match once the proposal is saved
 		const savedTopicDraft = toEditableTopicDraft(topic)
 		const proposedTopicDraft = toEditableTopicDraft(topic, proposedTopicEdit)
+
+		// the card reads as proposed if the proposal changes the topic draft
 		const isTopicEditProposed = JSON.stringify(proposedTopicDraft) !== JSON.stringify(savedTopicDraft)
-		return { topicDraft: isTopicEditProposed ? proposedTopicDraft : savedTopicDraft, isTopicEditProposed }
+		const topicDraft = isTopicEditProposed ? proposedTopicDraft : savedTopicDraft
+		return { topicDraft, isTopicEditProposed }
 	}, [topic, proposedTopicEdit])
 }

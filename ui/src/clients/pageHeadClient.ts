@@ -1,12 +1,28 @@
 // the api client for the page head of a topic, profile, team, or join page
 import type { PageHead } from "@shared/contracts"
 import { apiClient } from "./apiClient"
+import type { PodcastEpisodePageParams } from "./podcastEpisodeClient"
 
 /**
  * A topic page's head, or null if no topic has that id. A private or invite topic still gets its card.
  */
 export function fetchTopicPageHead(topicId: string): Promise<PageHead | null> {
 	return readPageHead(apiClient.api.topics[":id"].head.$get({ param: { id: topicId } }))
+}
+
+/**
+ * A public podcast episode page's head, or null if the topic is not public or has no such episode.
+ */
+export function fetchPodcastEpisodePageHead({
+	topicId,
+	season,
+	episodeNumber,
+}: PodcastEpisodePageParams): Promise<PageHead | null> {
+	return readPageHead(
+		apiClient.api.topics[":id"].episodes[":season"][":episodeNumber"].head.$get({
+			param: { id: topicId, season, episodeNumber },
+		}),
+	)
 }
 
 /**

@@ -4,7 +4,7 @@ import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contrac
 import { traceRequestStage } from "@shared/monitoring"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, lte, ne, sql } from "drizzle-orm"
-import { db } from "../../db"
+import { db, isFindingShown } from "../../db"
 import {
 	attachments,
 	bookmarks,
@@ -259,7 +259,7 @@ async function loadFeedFindingRows(
 				),
 		})
 		.from(findings)
-		.where(inArray(findings.topicId, topicIds))
+		.where(and(inArray(findings.topicId, topicIds), isFindingShown))
 		.as("ranked_findings")
 
 	// join each topic finding with its resource. a left join adds the user's consumed date if one exists
@@ -295,7 +295,7 @@ async function loadFeedFindingRows(
 				rankedFindings,
 				and(eq(rankedFindings.findingId, findings.id), lte(rankedFindings.rowNumber, MAX_FEED_FINDINGS_PER_TOPIC)),
 			)
-			.where(inArray(findings.topicId, topicIds))
+			.where(and(inArray(findings.topicId, topicIds), isFindingShown))
 			.orderBy(desc(findings.relevanceScore))
 	)
 }

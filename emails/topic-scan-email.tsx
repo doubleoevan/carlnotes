@@ -1,6 +1,6 @@
 // the topic-scan email: a designed, deliverable summary of a scheduled Scan's new Findings.
 // authored as a react-email template, so it can be previewed with `bun run dev:email` and rendered to html at send time
-import { Body, Container, Head, Heading, Hr, Html, Link, Preview, Section, Text } from "@react-email/components"
+import { Body, Container, Head, Heading, Hr, Html, Img, Link, Preview, Section, Text } from "@react-email/components"
 import { render } from "@react-email/render"
 import Markdown from "markdown-to-jsx"
 import type { CSSProperties, ReactElement, ReactNode } from "react"
@@ -25,7 +25,12 @@ export type TopicScanEmailProps = {
 	topicUrl?: string
 	// the recipient's signed one-click unsubscribe link, omitted when the app base url isn't configured
 	unsubscribeUrl?: string
+	// this scan's podcast episode, omitted if the scan has no podcast episode to show
+	podcastEpisode?: TopicScanEmailPodcastEpisode
 }
+
+// the scan's podcast episode as the email shows it, with its title, its url, and its cover url at email width
+export type TopicScanEmailPodcastEpisode = { title: string; url?: string; coverUrl?: string }
 
 // the template. a header, a one-line summary, spaced Finding cards, and a plain footer
 export default function TopicScanEmail({
@@ -37,19 +42,24 @@ export default function TopicScanEmail({
 	appUrl,
 	topicUrl,
 	unsubscribeUrl,
+	podcastEpisode,
 }: TopicScanEmailProps): ReactElement {
+	// the summary line up to the topic name, shown in the preheader and the intro
+	const summaryLeadText = summaryLead({ findingCount, hasPodcastEpisode: Boolean(podcastEpisode) })
 	return (
 		// the inbox preheader is the same sentence as the summary line, without the link
-		<EmailShell preview={`${summaryLead(findingCount)}${topicName}.${closingNote(findingCount)}`} appUrl={appUrl}>
+		<EmailShell preview={`${summaryLeadText}${topicName}.${closingNote(findingCount)}`} appUrl={appUrl}>
 			{/* the topic heading, then Carl's one-line summary with the topic name linking to its page */}
 			<EmailIntro heading={`Notes on ${topicName}`}>
-				{summaryLead(findingCount)}
+				{summaryLeadText}
 				<LinkOrText href={topicUrl} style={summaryLink}>
 					{topicName}
 				</LinkOrText>
 				.{closingNote(findingCount)}
 			</EmailIntro>
 
+			{/* the podcast episode, the recap, and the findings */}
+			<PodcastEpisodeSection podcastEpisode={podcastEpisode} />
 			<ScanSummarySection
 				scanSummary={scanSummary}
 				allowedUrls={new Set(allowedSummaryUrls ?? findings.map((finding) => finding.url))}
@@ -139,6 +149,44 @@ export function ScanSummarySection({
 		<Section style={summaryCard}>
 			<Text style={summaryLabel}>{"Carl's notes"}</Text>
 			<Markdown options={toSummaryMarkdownOptions(allowedUrls)}>{scanSummary}</Markdown>
+		</Section>
+	)
+}
+
+/**
+ * The scan's podcast episode section, with its heading and with its title and cover linked to the podcast episode.
+ */
+export function PodcastEpisodeSection({
+	podcastEpisode,
+}: {
+	podcastEpisode?: TopicScanEmailPodcastEpisode
+}): ReactElement | null {
+	// a scan with no podcast episode is sent without the section
+	if (!podcastEpisode) {
+		return null
+	}
+	return (
+		<Section style={summaryCard}>
+			{/* the heading and the title line */}
+			<Text style={summaryLabel}>Coffee Break podcast with Carl and Vienna</Text>
+			<Text style={podcastEpisodeTitleLine}>
+				{"Today's episode: "}
+				<LinkOrText href={podcastEpisode.url} style={summaryLink}>
+					{podcastEpisode.title}
+				</LinkOrText>
+			</Text>
+
+			{/* the cover, linked to the podcast episode */}
+			{podcastEpisode.coverUrl && podcastEpisode.url ? (
+				<Link href={podcastEpisode.url}>
+					<Img
+						src={podcastEpisode.coverUrl}
+						width="600"
+						alt={`Cover of ${podcastEpisode.title}`}
+						style={podcastEpisodeCover}
+					/>
+				</Link>
+			) : null}
 		</Section>
 	)
 }
@@ -253,6 +301,11 @@ TopicScanEmail.PreviewProps = {
 	appUrl: "https://carlnotes.example.com",
 	topicUrl: "https://carlnotes.example.com/topics/preview-topic",
 	unsubscribeUrl: "https://carlnotes.example.com/api/unsubscribe?token=preview",
+	podcastEpisode: {
+		title: "Structured output grows up, and the evals follow",
+		url: "https://carlnotes.example.com/topics/preview-topic?episode=preview-episode",
+		coverUrl: "https://carlnotes.example.com/api/podcast-covers/episode/preview-episode/preview-key-600.jpg",
+	},
 } satisfies TopicScanEmailProps
 
 // render the template to an HTML string for sending. the worker calls this at send-email time
@@ -266,13 +319,22 @@ export function renderTopicScanEmailText(props: TopicScanEmailProps): Promise<st
 	return render(<TopicScanEmail {...props} />, { plainText: true })
 }
 
-// summary line up to the topic name that closes it. the visible line links that name, the preheader does not
-function summaryLead(findingCount: number): string {
+// summary line up to the topic name that closes it. the visible line links that name, the preheader does not.
+// with findings and a podcast episode, the line names the podcast episode too
+function summaryLead({
+	findingCount,
+	hasPodcastEpisode,
+}: {
+	findingCount: number
+	hasPodcastEpisode: boolean
+}): string {
 	if (findingCount === 0) {
 		return "Carl brewed a fresh pot and found nothing new worth your time on "
 	}
+	// count the findings, and name the podcast episode if there is one
 	const noun = findingCount === 1 ? "finding" : "findings"
-	return `Carl brewed a fresh cup of ${findingCount} new ${noun} worth your time on `
+	const podcastEpisodeNote = hasPodcastEpisode ? " and a new Coffee Break episode" : ""
+	return `Carl brewed a fresh cup of ${findingCount} new ${noun} worth your time${podcastEpisodeNote} on `
 }
 
 // a scan that came up empty gets Carl's aside in his own voice, so an empty email still reads as intentional
@@ -373,6 +435,15 @@ function toSummaryMarkdownOptions(allowedUrls?: AllowedNoteUrls) {
 		},
 	}
 }
+// the podcast episode's title line, and its cover,
+// which fills the section's width up to the 600 pixels that it is served at
+const podcastEpisodeTitleLine: CSSProperties = {
+	color: "#4b4b4b",
+	fontSize: "15px",
+	lineHeight: "1.5",
+	margin: "0 0 10px",
+}
+const podcastEpisodeCover: CSSProperties = { borderRadius: "8px", display: "block", height: "auto", width: "100%" }
 const card: CSSProperties = {
 	backgroundColor: "#faf8f4",
 	border: "1px solid #efeae0",

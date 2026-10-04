@@ -1,13 +1,12 @@
 import type { ChatLinkPreview, TopicFinding } from "@shared/contracts"
-import { Bookmark, Check, Circle, ExternalLink, ThumbsDown, ThumbsUp } from "lucide-react"
+import { Bookmark, Check, Circle, ExternalLink } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useState } from "react"
 import { fetchTopicFindingLinkPreview, sendFindingFeedback } from "@/clients/topicClient"
-import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { HostFavicon } from "@/components/common/HostFavicon"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
-import { Button } from "@/components/primitives/button"
+import { RatingThumbs } from "@/components/common/RatingThumbs"
 import { Input } from "@/components/primitives/input"
 import {
 	Popover,
@@ -20,7 +19,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { InfoSection } from "@/components/topic/TopicInfo"
 import { ScrollBox, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
 import { toAgeLabel } from "@/lib/labels"
-import { POPOVER_HEADING_CLASS, POPOVER_PANEL_CLASS } from "@/lib/styleClasses"
+import { DASHED_ROW_CLASS, POPOVER_HEADING_CLASS, POPOVER_PANEL_CLASS } from "@/lib/styleClasses"
 import { cn, RESOURCE_KIND_ICON } from "@/lib/utils"
 import { type TopicFeedHandlers, useIsSignedIn, useTopicFeedActions } from "@/providers/TopicFeedProvider"
 
@@ -33,6 +32,9 @@ type TopicResourceProps = {
 	resourceHandlers?: TopicFeedHandlers
 	// names the topic in the note popover's copied Markdown
 	topic: { id: string; name: string; prompt: string }
+	// the pill of the podcast episode chapter that narrates this finding, and whether the chapter is playing
+	podcastEpisodeChapterPill?: React.ReactNode
+	isChapterPlaying?: boolean
 }
 
 /**
@@ -46,6 +48,8 @@ export function TopicResource({
 	isBookmarkable,
 	resourceHandlers,
 	topic,
+	podcastEpisodeChapterPill,
+	isChapterPlaying = false,
 }: TopicResourceProps) {
 	// the topic page passes handlers that reload their own payload. the homepage falls back to the shared provider's handlers
 	const providerHandlers = useTopicFeedActions()
@@ -54,22 +58,12 @@ export function TopicResource({
 	// signed-out visitors don't get the per-user read and rating buttons
 	const isSignedIn = useIsSignedIn()
 
-	const ResourceIcon = RESOURCE_KIND_ICON[resource.resourceKind]
 	// the whole row opens the note popup for the topic finding and hovering it shows the hint
 	const [isNoteOpen, setIsNoteOpen] = useState(false)
 	const handleNoteOpenChange = (isOpen: boolean): void => {
 		setIsNoteOpen(isOpen)
 	}
 	const [isHintOpen, setIsHintOpen] = useState(false)
-	// unread rows are bold and consumed rows are muted
-	const titleClass = cn(
-		"max-w-full truncate text-left text-sm group-hover:text-foreground",
-		resource.isConsumed ? "text-muted-foreground font-normal" : "text-foreground font-semibold",
-	)
-	const metadataClass = cn(
-		"mt-0.5 text-xs group-hover:text-foreground/80",
-		resource.isConsumed ? "text-muted-foreground/70" : "text-muted-foreground",
-	)
 	// the bookmark mark's label and tooltip, shared so the two never drift apart
 	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
 	// the hover highlight paints on a rounded under-layer, so the separator above the row stays straight
@@ -82,7 +76,12 @@ export function TopicResource({
 				onClick={() => handleNoteOpenChange(true)}
 				onMouseEnter={() => setIsHintOpen(true)}
 				onMouseLeave={() => setIsHintOpen(false)}
-				className="group after:border-separator-strong relative isolate flex cursor-pointer before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors after:absolute after:inset-x-2 after:top-0 after:border-t after:border-dashed first:after:hidden hover:before:bg-accent-foreground/20"
+				className={cn(
+					DASHED_ROW_CLASS,
+					"group isolate flex cursor-pointer before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors hover:before:bg-accent-foreground/20",
+					// the finding whose chapter is playing stays highlighted
+					isChapterPlaying && "before:bg-muted/70",
+				)}
 			>
 				{/* the rank, in the slot the bookmark mark takes over once the finding is bookmarked.
 				    on a phone the taller slot starts at the row top, level with the title */}
@@ -112,49 +111,11 @@ export function TopicResource({
 						<TooltipContent>{bookmarkLabel}</TooltipContent>
 					</Tooltip>
 				)}
-				<div
-					// the left padding clears the rank slot, and the right one is the row's own inset
-					className="flex min-w-0 flex-1 items-start gap-2.5 py-3 pr-3 pl-9"
-				>
-					<ResourceIcon
-						className={cn(
-							"mt-0.5 size-4 shrink-0 text-muted-foreground group-hover:text-foreground",
-							resource.isConsumed && "opacity-60",
-						)}
-						aria-label={resource.resourceKind}
-					/>
-					<div className="min-w-0 flex-1">
-						{/* the title opens the note, and is what a keyboard user tabs to for it */}
-						<div className="truncate">
-							<PopoverTrigger onClick={(event) => event.stopPropagation()} className={titleClass}>
-								{resource.title ?? resource.url}
-							</PopoverTrigger>
-						</div>
-						<div className={cn(metadataClass, "flex items-center gap-1.5")}>
-							<ResourceMetadata resource={resource} />
-							{/* the teammates who kept this finding */}
-							{resource.teamBookmarks.length > 0 && (
-								<span className="flex items-center gap-0.5">
-									{resource.teamBookmarks.map((saver) => (
-										<Tooltip key={saver.userId}>
-											<TooltipTrigger asChild>
-												<span>
-													<UserAvatar
-														userId={saver.userId}
-														username={saver.username}
-														avatarVersion={saver.avatarVersion}
-														className="size-4"
-													/>
-												</span>
-											</TooltipTrigger>
-											<TooltipContent>{`${saver.username} kept this`}</TooltipContent>
-										</Tooltip>
-									))}
-								</span>
-							)}
-						</div>
-					</div>
-				</div>
+				{/* the left padding clears the rank slot, and the right padding is the row's own inset */}
+				<TopicFindingSummary resource={resource} className="flex-1 py-3 pr-3 pl-9">
+					{/* the pill of the podcast episode chapter that narrates this finding */}
+					{podcastEpisodeChapterPill}
+				</TopicFindingSummary>
 				{/* the note and its hint both anchor here, off the row's right edge */}
 				<Tooltip open={isHintOpen && !isNoteOpen} onOpenChange={setIsHintOpen}>
 					<TooltipTrigger asChild>
@@ -177,8 +138,75 @@ export function TopicResource({
 	)
 }
 
-// the resource info popover
-function ResourceInfo({
+// the finding, whether its kind icon shows, and the children that follow the age on the metadata line
+type TopicFindingSummaryProps = {
+	resource: TopicFinding
+	isResourceKindIconShown?: boolean
+	className?: string
+	children?: React.ReactNode
+}
+
+/**
+ * A topic finding as its row shows it, with its kind icon, title, favicon, host, and age.
+ * It renders inside a Popover, whose trigger is its title, and inside an element with the group class.
+ */
+export function TopicFindingSummary({
+	resource,
+	isResourceKindIconShown = true,
+	className,
+	children,
+}: TopicFindingSummaryProps) {
+	const ResourceIcon = RESOURCE_KIND_ICON[resource.resourceKind]
+	// unread rows are bold and consumed rows are muted
+	const titleClass = cn(
+		"max-w-full truncate text-left text-sm group-hover:text-foreground",
+		resource.isConsumed ? "text-muted-foreground font-normal" : "text-foreground font-semibold",
+	)
+	const metadataClass = cn(
+		"mt-0.5 text-xs group-hover:text-foreground/80",
+		resource.isConsumed ? "text-muted-foreground/70" : "text-muted-foreground",
+	)
+	return (
+		<div className={cn("flex min-w-0 items-start gap-2.5", className)}>
+			{/* the resource kind icon */}
+			{isResourceKindIconShown && (
+				<ResourceIcon
+					className={cn(
+						"mt-0.5 size-4 shrink-0 text-muted-foreground group-hover:text-foreground",
+						resource.isConsumed && "opacity-60",
+					)}
+					aria-label={resource.resourceKind}
+				/>
+			)}
+			<div className="min-w-0 flex-1">
+				{/* the title opens the note, and links out in a browser without JavaScript.
+				    the line is the title's height, level with the icon */}
+				<div className="truncate text-sm">
+					<PopoverTrigger asChild>
+						<AnchorLink
+							href={resource.url}
+							isUserContent
+							onClick={(event) => event.preventDefault()}
+							className={titleClass}
+						>
+							{resource.title ?? resource.url}
+						</AnchorLink>
+					</PopoverTrigger>
+				</div>
+				{/* the metadata line, then the children */}
+				<div className={cn(metadataClass, "flex flex-wrap items-center gap-1.5")}>
+					<ResourceMetadata resource={resource} />
+					{children}
+				</div>
+			</div>
+		</div>
+	)
+}
+
+/**
+ * The topic finding's note popover, with the link out, the link preview, Carl's notes, and the user's buttons.
+ */
+export function ResourceInfo({
 	resource,
 	topicFindingRank,
 	topic,
@@ -319,9 +347,6 @@ function ResourceInfo({
 	)
 }
 
-// a thumbs up or down toggle for the rating row
-type RateTopicFindingButtonProps = { isActive: boolean; label: string; onClick: () => void; children: React.ReactNode }
-
 /**
  * The rating block: the thumbs set the rating, and a click also sends whatever words sit in the box.
  * The words are stored as written and never fed to scoring.
@@ -339,9 +364,9 @@ function TopicFindingRating({
 	const [isTopicFindingRatingSent, setIsTopicFindingRatingSent] = useState(false)
 	const [isSendingTopicFindingRating, setIsSendingTopicFindingRating] = useState(false)
 
-	// a thumb click toggles the rating and sends the box's words with it when there are any
-	const handleRateTopicFinding = async (thumb: "up" | "down"): Promise<void> => {
-		onRateTopicFinding(rating === thumb ? null : thumb)
+	// a thumb click sets or clears the rating and sends the box's words with the rating if there are any
+	const handleRateTopicFinding = async (nextRating: "up" | "down" | null): Promise<void> => {
+		onRateTopicFinding(nextRating)
 		if (!topicFindingFeedback.trim() || isSendingTopicFindingRating) {
 			return
 		}
@@ -373,38 +398,9 @@ function TopicFindingRating({
 						className="h-8 flex-1 text-xs"
 					/>
 				)}
-				<RateTopicFindingButton
-					isActive={rating === "up"}
-					label="Thumbs up"
-					onClick={() => void handleRateTopicFinding("up")}
-				>
-					<ThumbsUp className="size-4" />
-				</RateTopicFindingButton>
-				<RateTopicFindingButton
-					isActive={rating === "down"}
-					label="Thumbs down"
-					onClick={() => void handleRateTopicFinding("down")}
-				>
-					<ThumbsDown className="size-4" />
-				</RateTopicFindingButton>
+				<RatingThumbs rating={rating} onRate={(nextRating) => void handleRateTopicFinding(nextRating)} />
 			</div>
 		</div>
-	)
-}
-
-function RateTopicFindingButton({ isActive, label, onClick, children }: RateTopicFindingButtonProps) {
-	return (
-		<Button
-			type="button"
-			variant={isActive ? "default" : "outline"}
-			size="icon"
-			aria-label={label}
-			aria-pressed={isActive}
-			onClick={onClick}
-			className="size-11 sm:size-9"
-		>
-			{children}
-		</Button>
 	)
 }
 

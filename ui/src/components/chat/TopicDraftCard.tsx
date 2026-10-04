@@ -57,9 +57,16 @@ export function TopicDraftCard({
 	const topicSourceLines = toTopicSourceLines({ topicDraft, isNewTopicDraft: !topicId })
 	const tagsLabel = topicDraft.tags.join(", ") || "None"
 	const scheduleLabel = toScheduleLabel(topicDraft.frequency, topicDraft.scheduledTime, topicDraft.scheduledDayOfWeek)
+
+	// the card shrinks and scrolls if the chat panel runs short, as it does over a phone keyboard,
+	// so the composer under it stays whole
 	return (
-		<section className="shrink-0 border-t px-3 py-2 text-sm" aria-label={heading}>
-			<ScrollBox scrollToTopOn={topicDraft} className="max-h-48 overscroll-contain sm:max-h-72">
+		<section className="flex min-h-0 shrink flex-col border-t px-3 py-2 text-sm" aria-label={heading}>
+			<ScrollBox
+				scrollToTopOn={topicDraft}
+				boxClassName="flex min-h-0 flex-col"
+				className="max-h-48 min-h-0 overscroll-contain sm:max-h-72"
+			>
 				{/* the heading centers over the fields, so the dismiss button sits in the corner */}
 				<div className="relative">
 					<h2 className={POPOVER_HEADING_CLASS}>{heading}</h2>
@@ -112,6 +119,7 @@ export function TopicDraftCard({
 							<TopicDraftField label="Max findings" fieldText={String(topicDraft.maxTopicFindings)}>
 								{topicDraft.maxTopicFindings} findings per brew
 							</TopicDraftField>
+							<TopicDraftPodcastField isPodcastEnabled={topicDraft.isPodcastEnabled} />
 							<TopicDraftField label="Visibility" fieldText={topicDraft.visibility}>
 								{VISIBILITY_LABELS[topicDraft.visibility]}
 							</TopicDraftField>
@@ -196,6 +204,19 @@ function toTopicSourceLines({
 		(defaultSource) => !topicDraftSourceKeys.has(defaultSource.key),
 	).map((defaultSource) => defaultSource.label)
 	return [...missingDefaultSourceLabels, ...topicDraftSources]
+}
+
+// the field that says whether the topic's podcast is on
+function TopicDraftPodcastField({ isPodcastEnabled }: { isPodcastEnabled?: boolean }) {
+	// a topic with no podcast shows no podcast field
+	if (isPodcastEnabled === undefined) {
+		return null
+	}
+	return (
+		<TopicDraftField label="Podcast" fieldText={String(isPodcastEnabled)}>
+			{isPodcastEnabled ? "Coffee Break episode after every brew" : "Off"}
+		</TopicDraftField>
+	)
 }
 
 // one labeled field of the topic draft

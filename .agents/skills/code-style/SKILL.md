@@ -5,9 +5,9 @@ description: >
   editing, reviewing, or refactoring ANY TypeScript, JavaScript, or JSX code:
   every new function, every fix, every generated file, even one-line changes.
   Covers mandatory comment groups, comment voice, top-down file order,
-  file-count discipline, naming, import paths, early returns, object
-  parameters, and type modeling. If code is being produced or changed, this
-  skill applies.
+  when to split long files and functions, naming, import paths, early returns,
+  object parameters, and type modeling. If code is being produced or changed,
+  this skill applies.
 ---
 
 # Code Style
@@ -142,18 +142,34 @@ or public function comes first; helpers follow below it in call order.
     function normalizeTitle(raw: string) { ... }
     function scoreArticle(article: Article) { ... }
 
-### 4. Fewest files possible
+### 4. Split a file logically when it gets too long
 
-- A helper lives in its consumer's file until a **third** consumer appears. Extract on the third, not the second.
-- No barrel files (`index.ts` re-exports). No one-function-per-file.
-- Growing an existing file beats creating a new one.
-- Creating a new file requires stating why in the change description, and new files only appear in an approved file tree.
+When a file grows too long to follow in one read, split it along its logical
+lines. Readability decides, not how many callers the moved code has: a piece
+with one caller moves just as readily as a piece with three.
+
+- **Too long** is roughly 400 lines, or sooner when the file holds a second
+  concern. A file that is one list by design, such as a schema, a contract file,
+  or a route table, stays whole.
+- **Split by concern.** A second topic living inside a file moves into a module
+  named for that topic, next to the rest of its domain: podcast code inside the
+  scorer moves to the podcast folder, and podcast search data inside the site's
+  search file moves beside the other podcast code.
+- **A new module holds a whole concern.** No one-function-per-file, and no
+  barrel files (`index.ts` re-exports).
+- **Watch the import graph.** Never move code into a module that would drag a
+  heavy dependency into a light file's imports. Leave that piece where its
+  dependencies already are.
+- State why each new file exists in the change description, and update the docs
+  that list the module's files in the same change.
 
 ### 5. Screen-sized functions
 
 A function should fit on one screen, roughly 40 lines. When it grows past
-that, comment groups become the section markers first; split into a helper
-only when the groups stop fitting, and split **within the same file**.
+that, split it at its comment groups into named helpers, each one step of the
+flow, so the function reads as the list of its steps. A helper stays in the
+same file unless it belongs to another concern, and then it moves with that
+concern under rule 4.
 
 ### 6. Early returns, nesting limit of 2
 

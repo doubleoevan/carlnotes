@@ -11,7 +11,7 @@ import {
 } from "@shared/usernames"
 import { eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
-import { db } from "../db"
+import { db, isUniqueViolation } from "../db"
 import { users } from "../db/schema"
 import { type AppEnv, currentUser } from "./currentUser"
 import { refreshSessionUser } from "./sessions"
@@ -123,18 +123,6 @@ export async function saveDefaultUsername(userId: string, username: string): Pro
 		return null
 	}
 	return usernameWithDigits
-}
-
-/**
- * Whether an error is postgres rejecting a duplicate key, checked through the causes a driver wraps it in.
- */
-export function isUniqueViolation(error: unknown): boolean {
-	for (let cause = error; cause; cause = (cause as { cause?: unknown }).cause) {
-		if ((cause as { code?: string }).code === "23505") {
-			return true
-		}
-	}
-	return false
 }
 
 // the username update route

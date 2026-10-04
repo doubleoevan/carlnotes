@@ -1,7 +1,7 @@
 // the app's core database tables, one per domain concept
 
 // enum value sets that live in @shared so that db pgEnums, api validation, and ui rendering can read one source
-import type { TopicDraft } from "@shared/contracts"
+import type { PodcastEpisodeScript, TopicDraft } from "@shared/contracts"
 import {
 	attachmentStatuses,
 	avatarSources,
@@ -13,6 +13,7 @@ import {
 	maxTopicFindingsOptions,
 	noteVisibilities,
 	plans,
+	podcastEpisodeStatuses,
 	promptVersionOrigins,
 	ratings,
 	resourceKinds,
@@ -50,8 +51,9 @@ export const resourceKind = pgEnum("resource_kind", resourceKinds)
 export const visibility = pgEnum("visibility", visibilities)
 export const frequency = pgEnum("frequency", frequencies)
 export const dayOfWeek = pgEnum("day_of_week", daysOfWeek)
-// the enums for a scan's outcome, a finding, and a user's account
+// the enums for a scan's outcome, a podcast episode's status, a finding, and a user's account
 export const scanStatus = pgEnum("scan_status", scanStatuses)
+export const podcastEpisodeStatus = pgEnum("episode_status", podcastEpisodeStatuses)
 export const sourceVisibility = pgEnum("source_visibility", sourceVisibilities)
 export const rating = pgEnum("rating", ratings)
 export const plan = pgEnum("plan", plans)
@@ -225,6 +227,8 @@ export const topics = pgTable(
 		maxTopicFindings: integer("max_results").notNull().default(10),
 		// the unique subscriber count for the topic's active subscribers, not including the owner
 		subscriberCount: integer("subscriber_count").notNull().default(0),
+		// whether the owner has the topic's podcast on
+		isPodcastEnabled: boolean("is_podcast_enabled").notNull().default(true),
 		// created and updated timestamps
 		...timestamps(),
 	},
@@ -420,6 +424,8 @@ export const findings = pgTable(
 		reviewedContentHash: text("reviewed_content_hash"),
 		// the visibility of the source that produced this finding. the pipeline doesn't populate this, so it defaults to public
 		sourceVisibility: sourceVisibility("source_visibility").notNull().default("public"),
+		// whether a custom Source found this finding
+		isFromCustomSource: boolean("is_from_custom_source").notNull().default(false),
 		// the owner's optional rating
 		rating: rating("rating"),
 		// who cast the current thumb and the role held then. nothing reads these for scoring
@@ -585,6 +591,136 @@ export const topicEmailSends = pgTable(
 	},
 	// one row per Scan and recipient, so a retried send is recorded once. rows without a Scan never collide
 	(table) => [uniqueIndex("topic_email_sends_scan_recipient_unique").on(table.scanId, table.recipientUserId)],
+)
+
+// one podcast episode of a topic, narrating the topic's findings as a two-speaker script
+export const podcastEpisodes = pgTable(
+	"episodes",
+	{
+		id: primaryId(),
+		// the topic, cleared instead of being cascaded so that a deleted topic's podcast episodes keep their spend history
+		topicId: text("topic_id").references(() => topics.id, { onDelete: "set null" }),
+		// the user that the podcast episode bills, who is its scan's owner
+		ownerId: text("owner_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// the scan that started the podcast episode
+		scanId: text("scan_id").references(() => scans.id, { onDelete: "set null" }),
+		// the podcast episode status. rendering until it publishes or fails,
+		// and removed once the topic's owner or an admin removes it. error holds a failure reason
+		status: podcastEpisodeStatus("status").notNull().default("rendering"),
+		error: text("error"),
+		// the title and the description, written before any audio renders
+		title: text("title"),
+		description: text("description"),
+		// the publish year and the episode number within that year, both assigned only on publish
+		season: integer("season"),
+		episodeNumber: integer("number"),
+		// the stored audio's object key, its byte size, and its length in seconds
+		audioKey: text("audio_key"),
+		audioByteSize: integer("audio_byte_size"),
+		durationSeconds: integer("duration_seconds"),
+		// the speech model that rendered the podcast episode, and what the script and the speech cost in dollars
+		model: text("model"),
+		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
+		// the script that passed its checks, and when the podcast episode published
+		script: jsonb("script").$type<PodcastEpisodeScript>(),
+		publishedAt: timestamp("published_at", { withTimezone: true }),
+		// created and updated timestamps
+		...timestamps(),
+	},
+	// one podcast episode per scan and one episode number per topic and season.
+	// covers the topic's episode list and the monthly spend sum
+	(table) => [
+		uniqueIndex("episodes_scan_unique").on(table.scanId),
+		uniqueIndex("episodes_topic_season_number_unique").on(table.topicId, table.season, table.episodeNumber),
+		index("episodes_topic_published_idx").on(table.topicId, table.publishedAt),
+		index("episodes_owner_created_idx").on(table.ownerId, table.createdAt),
+	],
+)
+
+// one chapter of a published podcast episode. a chapter narrates one finding
+export const podcastEpisodeChapters = pgTable(
+	"episode_chapters",
+	{
+		id: primaryId(),
+		// the podcast episode that the chapter belongs to
+		podcastEpisodeId: text("episode_id")
+			.notNull()
+			.references(() => podcastEpisodes.id, { onDelete: "cascade" }),
+		// the chapter's place in the podcast episode, from zero
+		position: integer("position").notNull(),
+		// the finding that the chapter narrates, cleared if a scan filters the finding out.
+		// the resource stays after the finding is cleared
+		findingId: text("finding_id").references(() => findings.id, { onDelete: "set null" }),
+		resourceId: text("resource_id")
+			.notNull()
+			.references(() => resources.id, { onDelete: "cascade" }),
+		// the chapter's own title and its finding's source url, which stay after the finding is filtered out
+		title: text("title").notNull(),
+		sourceUrl: text("source_url").notNull(),
+		// a user's rating of a chapter whose finding was filtered out. the topic's next finding of the resource takes the rating
+		rating: rating("rating"),
+		// where the chapter starts and ends in the audio, in seconds
+		startSeconds: real("start_seconds").notNull(),
+		endSeconds: real("end_seconds").notNull(),
+	},
+	// one chapter per position. the resource and finding indexes serve the deletes of a resource or a finding
+	(table) => [
+		uniqueIndex("episode_chapters_episode_position_unique").on(table.podcastEpisodeId, table.position),
+		index("episode_chapters_resource_id_idx").on(table.resourceId),
+		index("episode_chapters_finding_id_idx").on(table.findingId),
+	],
+)
+
+// one user's plays, progress, and completion of one podcast episode
+export const podcastEpisodeListens = pgTable(
+	"episode_listens",
+	{
+		id: primaryId(),
+		// the podcast episode and the user
+		podcastEpisodeId: text("episode_id")
+			.notNull()
+			.references(() => podcastEpisodes.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// how many times the user started or downloaded the podcast episode, how far playback got,
+		// and when playback reached the end
+		playCount: integer("play_count").notNull().default(0),
+		progressSeconds: integer("progress_seconds").notNull().default(0),
+		completedAt: timestamp("completed_at", { withTimezone: true }),
+		// created and updated timestamps
+		...timestamps(),
+	},
+	// one row per listener and podcast episode. covers the read of a listener's unplayed episodes
+	(table) => [
+		uniqueIndex("episode_listens_episode_user_unique").on(table.podcastEpisodeId, table.userId),
+		index("episode_listens_user_id_idx").on(table.userId),
+	],
+)
+
+// one listener's podcast feed token for one private or invite topic
+export const podcastFeedTokens = pgTable(
+	"episode_feed_tokens",
+	{
+		id: primaryId(),
+		// the topic and the user
+		topicId: text("topic_id")
+			.notNull()
+			.references(() => topics.id, { onDelete: "cascade" }),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// the random value in the listener's feed url, which alone authorizes a request
+		token: text("token").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// one token per listener and topic. the unique token index covers the lookup by a feed url's token
+	(table) => [
+		uniqueIndex("episode_feed_tokens_token_unique").on(table.token),
+		uniqueIndex("episode_feed_tokens_topic_user_unique").on(table.topicId, table.userId),
+	],
 )
 
 // a team is a named set of people that holds topics together. it is a permissions and identity object

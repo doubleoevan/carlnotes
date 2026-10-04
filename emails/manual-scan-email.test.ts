@@ -1,4 +1,5 @@
-// manual-scan email tests: the rendered HTML reports each outcome, and the subject matches the body
+// manual-scan email tests: the rendered HTML reports each outcome and names the scan's podcast episode,
+// and the subject matches the body
 import { expect, test } from "bun:test"
 import { renderManualScanEmail, toManualScanSubject } from "./manual-scan-email"
 
@@ -17,6 +18,25 @@ test("renderManualScanEmail lists a succeeded scan's findings under its recap", 
 	expect(html).toContain("https://a.com/1")
 	expect(html).toContain("you started this brew yourself")
 	expect(html).not.toContain("Unsubscribe")
+})
+
+// a manual scan with a podcast episode shows the podcast episode section
+test("renderManualScanEmail shows the episode section with its title, link, and cover", async () => {
+	// render a succeeded scan with a podcast episode that has a url and a cover
+	const podcastEpisodeUrl = "https://carlnotes.example.com/topics/abc?episode=episode-1"
+	const coverUrl = "https://carlnotes.example.com/api/podcast-covers/episode/episode-1/key-600.jpg"
+	const html = await renderManualScanEmail({
+		status: "succeeded",
+		topicName: "LLM tooling",
+		findings: [{ title: "Agent news", url: "https://a.com/1", relevanceExplanation: "covers agents" }],
+		podcastEpisode: { title: "Evals grow up", url: podcastEpisodeUrl, coverUrl },
+	})
+
+	// the heading, the title, and the cover. the title and the cover both link to the podcast episode
+	expect(html).toContain("Coffee Break podcast with Carl and Vienna")
+	expect(html).toContain("Evals grow up")
+	expect(html).toContain(coverUrl)
+	expect(html.split(`href="${podcastEpisodeUrl}"`).length - 1).toBe(2)
 })
 
 // a scan that found nothing still sends an email to the user waiting on the results
@@ -48,4 +68,24 @@ test("toManualScanSubject follows the scan outcome", () => {
 	expect(toManualScanSubject({ status: "failed", topicName: "LLM tooling", failureReason: "nope" })).toBe(
 		"Your brew of LLM tooling didn't finish",
 	)
+})
+
+// the summary line names the podcast episode only if the scan has a podcast episode
+test("renderManualScanEmail names a new episode in its summary line if the scan has one", async () => {
+	// a scan with a podcast episode names the podcast episode in its summary line
+	const succeededScanEmailProps = {
+		status: "succeeded" as const,
+		topicName: "LLM tooling",
+		findings: [{ title: "Agent news", url: "https://a.com/1", relevanceExplanation: "covers agents" }],
+	}
+	const podcastEpisodeEmailHtml = await renderManualScanEmail({
+		...succeededScanEmailProps,
+		podcastEpisode: { title: "Evals grow up" },
+	})
+	expect(podcastEpisodeEmailHtml).toContain("with 1 new finding worth your time and a new Coffee Break episode on ")
+
+	// a scan with no podcast episode has the line without the podcast episode
+	const noPodcastEpisodeEmailHtml = await renderManualScanEmail(succeededScanEmailProps)
+	expect(noPodcastEpisodeEmailHtml).toContain("with 1 new finding worth your time on ")
+	expect(noPodcastEpisodeEmailHtml).not.toContain("Coffee Break episode")
 })

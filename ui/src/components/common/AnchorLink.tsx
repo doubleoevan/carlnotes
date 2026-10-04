@@ -2,8 +2,8 @@ import { defaultParseSearch, Link } from "@tanstack/react-router"
 import type * as React from "react"
 import { SITE_URL } from "@/lib/pageHead"
 
-// the schemes that open in the same tab with no target or rel, like a mail client, dialer, or code editor
-const SCHEME_PREFIXES = ["mailto:", "tel:", "sms:", "cursor:", "vscode:"]
+// the uri schemes that open another app in the same tab with no target or rel, like a mail client or a podcast app
+const URI_SCHEME_PREFIXES = ["mailto:", "tel:", "sms:", "cursor:", "vscode:", "podcast:", "pcast:"]
 
 // the paths the server renders itself: the docs site, the blog, and the releases. the client router has no routes for them
 const SERVER_RENDERED_PREFIXES = ["/docs", "/blog", "/releases"]
@@ -18,8 +18,8 @@ export function AnchorLink({
 	children,
 	...props
 }: React.ComponentProps<"a"> & { href: string; isUserContent?: boolean }) {
-	// a scheme link hands off to another app, so it gets no target and no rel
-	if (SCHEME_PREFIXES.some((prefix) => href.startsWith(prefix))) {
+	// a uri scheme link opens another app, so it gets no target and no rel
+	if (URI_SCHEME_PREFIXES.some((prefix) => href.startsWith(prefix))) {
 		return (
 			<a href={href} {...props}>
 				{children}

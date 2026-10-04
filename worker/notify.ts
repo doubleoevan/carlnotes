@@ -1,11 +1,21 @@
 // email a finished Scan's outcome. a scheduled Scan emails the Topic's subscribers in batches,
 // and any other Scan emails whoever ran it or created the Topic. the links in both build on the app's base url
 import { appBaseUrl } from "@shared/appUrl"
+import { toPodcastCoverPath } from "@shared/podcastEpisodes"
 import { toScanFailureLabel } from "@shared/scanFailure"
 import { toTopicPath } from "@shared/seo"
 import { and, desc, eq, inArray } from "drizzle-orm"
-import { db } from "../db"
-import { findings, resources, scans, subscriptions, topicEmailSends, topics, users } from "../db/schema"
+import { db, isFindingShown } from "../db"
+import {
+	findings,
+	podcastEpisodes,
+	resources,
+	scans,
+	subscriptions,
+	topicEmailSends,
+	topics,
+	users,
+} from "../db/schema"
 import {
 	type ManualScanEmailProps,
 	renderManualScanEmail,
@@ -16,6 +26,7 @@ import {
 	renderTopicScanEmail,
 	renderTopicScanEmailText,
 	type TopicScanEmailFinding,
+	type TopicScanEmailPodcastEpisode,
 	type TopicScanEmailProps,
 } from "../emails/topic-scan-email"
 import {
@@ -279,7 +290,37 @@ async function toTopicScanEmailProps(
 			// the header, heading, and footer link back to the app and to this topic
 			appUrl,
 			topicUrl,
+			// the Scan's Podcast Episode, if it has a title and is rendering or published
+			podcastEpisode: await toScanEmailPodcastEpisode({ scanId: scan.id, topicUrl }),
 		},
+	}
+}
+
+// the Scan whose Podcast Episode to read, and the Topic's url that the Podcast Episode's link builds on
+type ToScanEmailPodcastEpisodeOptions = { scanId: string; topicUrl?: string }
+
+// the Scan's Podcast Episode as the Scan's email shows it, with a link that opens the Podcast Episode by its id
+async function toScanEmailPodcastEpisode({
+	scanId,
+	topicUrl,
+}: ToScanEmailPodcastEpisodeOptions): Promise<TopicScanEmailPodcastEpisode | undefined> {
+	// read the Scan's Podcast Episode, and show the Podcast Episode only if it has a title and is rendering or published
+	const [podcastEpisode] = await db
+		.select({ id: podcastEpisodes.id, title: podcastEpisodes.title, status: podcastEpisodes.status })
+		.from(podcastEpisodes)
+		.where(eq(podcastEpisodes.scanId, scanId))
+	const isPodcastEpisodeShown = podcastEpisode?.status === "rendering" || podcastEpisode?.status === "published"
+	if (!podcastEpisode?.title || !isPodcastEpisodeShown) {
+		return undefined
+	}
+
+	// build the Podcast Episode's link and its cover's url
+	const appUrl = appBaseUrl()
+	const coverPath = toPodcastCoverPath({ kind: "episode", id: podcastEpisode.id, title: podcastEpisode.title }, 600)
+	return {
+		title: podcastEpisode.title,
+		url: topicUrl ? `${topicUrl}?episode=${podcastEpisode.id}` : undefined,
+		coverUrl: appUrl ? `${appUrl}${coverPath}` : undefined,
 	}
 }
 
@@ -301,6 +342,7 @@ async function toManualScanEmailProps(topic: EmailTopic, scan: EmailScan): Promi
 		allowedSummaryUrls: await topicFindingUrls(topic.id),
 		appUrl,
 		topicUrl,
+		podcastEpisode: await toScanEmailPodcastEpisode({ scanId: scan.id, topicUrl }),
 	}
 }
 
@@ -342,7 +384,7 @@ async function newFindingsForScan(scanId: string): Promise<TopicScanEmailFinding
 		.select({ title: resources.title, url: resources.url, relevanceExplanation: findings.relevanceExplanation })
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.where(eq(findings.scanId, scanId))
+		.where(and(eq(findings.scanId, scanId), isFindingShown))
 		.orderBy(desc(findings.relevanceScore))
 }
 

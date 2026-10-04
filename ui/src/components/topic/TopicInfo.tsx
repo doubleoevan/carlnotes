@@ -53,6 +53,9 @@ const VISIBILITY_METADATA = {
 // the prompt length that fills the scroll box's max-h-72 limit
 const SCROLLING_PROMPT_CHARS = 900
 
+// a dashed separator between two sections
+const DASHED_SEPARATOR_CLASS = "border-separator-strong border-t border-dashed"
+
 /**
  * The topic info content shared by the homepage popovers and the topic page card, isCard is used to distinguish the info variant
  */
@@ -73,7 +76,7 @@ export function TopicInfo(props: TopicInfoProps) {
 		<>
 			{/* the card gets its own header from the accordion wrapping it, so this title is popover-only */}
 			{!props.isCard && <h2 className={POPOVER_HEADING_CLASS}>Topic roast</h2>}
-			{/* the sections run together. a solid rule stands over Visibility and over the closing row */}
+			{/* the sections run together, with a dashed separator above the popover's visibility and the closing row */}
 			<div>
 				{/* a failed newest scan is stated plainly, so a topic whose sources are dead doesn't read as one that
 				    found nothing. card only, since the feed payload has no scan history */}
@@ -131,24 +134,8 @@ export function TopicInfo(props: TopicInfoProps) {
 				{/* the topic sources are only in the popover */}
 				{!props.isCard && <TopicSourcesSection sources={topic.sources} />}
 
-				{/* who may see the topic, under its own rule. the card always shows it, and the popup
-				    shows it only when it is not public. most feed topics are public, so showing it
-				    everywhere would add nothing */}
-				{(props.isCard || topic.visibility !== "public") && (
-					<>
-						<div className="bg-separator h-px" />
-						<TopicVisibility visibility={topic.visibility} />
-					</>
-				)}
-
-				{/* the second rule stands over the closing row */}
-				<div className="bg-separator h-px" />
-
-				{/* the team count on the left and the follower count on the right close the roast in one plain row */}
-				<div className="flex items-center justify-between gap-3 pt-3 text-sm">
-					<span>{`${topic.teamCount.toLocaleString()} team${topic.teamCount === 1 ? "" : "s"}`}</span>
-					<span>{`${topic.subscriberCount.toLocaleString()} follower${topic.subscriberCount === 1 ? "" : "s"}`}</span>
-				</div>
+				{/* the popover's visibility, then the team and follower counts */}
+				<TopicInfoFooter {...props} />
 			</div>
 		</>
 	)
@@ -241,16 +228,42 @@ function AttachmentPill({
 	)
 }
 
-// the visibility row: who may see the topic, with the icon that stands for it
-function TopicVisibility({ visibility }: { visibility: TopicResponse["visibility"] }) {
+// the end of the topic info. the popover's visibility for a topic that is not public,
+// then the closing row, each under a dashed separator
+function TopicInfoFooter(props: TopicInfoProps) {
+	const { topic } = props
+	return (
+		<>
+			{/* who may see the topic, in the popover of a topic that is not public */}
+			{!props.isCard && topic.visibility !== "public" && (
+				<>
+					<div className={DASHED_SEPARATOR_CLASS} />
+					<InfoSection label="Visibility">
+						<TopicVisibility visibility={topic.visibility} />
+					</InfoSection>
+				</>
+			)}
+
+			{/* the closing row, with the team count on the left and the follower count on the right */}
+			<div className={DASHED_SEPARATOR_CLASS} />
+			<div className="flex items-center justify-between gap-3 pt-3 text-sm">
+				<span>{`${topic.teamCount.toLocaleString()} team${topic.teamCount === 1 ? "" : "s"}`}</span>
+				<span>{`${topic.subscriberCount.toLocaleString()} follower${topic.subscriberCount === 1 ? "" : "s"}`}</span>
+			</div>
+		</>
+	)
+}
+
+/**
+ * The topic's visibility, with its icon.
+ */
+export function TopicVisibility({ visibility }: { visibility: TopicResponse["visibility"] }) {
 	const visibilityMetadata = VISIBILITY_METADATA[visibility]
 	return (
-		<InfoSection label="Visibility">
-			<span className="flex items-center gap-1.5">
-				<visibilityMetadata.icon className="size-3.5" />
-				{visibilityMetadata.label}
-			</span>
-		</InfoSection>
+		<span className="inline-flex items-center gap-1.5">
+			<visibilityMetadata.icon className="size-3.5" />
+			{visibilityMetadata.label}
+		</span>
 	)
 }
 

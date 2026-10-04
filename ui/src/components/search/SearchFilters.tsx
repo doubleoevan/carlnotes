@@ -17,7 +17,7 @@ import { authClient } from "@/clients/authClient"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
-import { TOPIC_FINDING_FILTERS } from "@/lib/topicFindingFilters"
+import { TOPIC_FINDING_FILTERS, type TopicFindingFilter } from "@/lib/topicFindingFilters"
 import { cn, RESOURCE_KIND_ICON } from "@/lib/utils"
 import { type ResourceKind, type TagMatchMode, tagMatchModes, useTopicFeed } from "@/providers/TopicFeedProvider"
 import { usePageActions } from "@/stores/pageActionsStore"
@@ -25,6 +25,14 @@ import { usePageActions } from "@/stores/pageActionsStore"
 // which kinds of results the typeahead offers, all on until the user turns one off
 export const SEARCH_RESULT_TYPES = ["topics", "findings", "teams", "users"] as const
 export type SearchResultType = (typeof SEARCH_RESULT_TYPES)[number]
+
+// each feed view's label in the filters menu
+const TOPIC_FINDING_FILTER_LABELS: Record<TopicFindingFilter, string> = {
+	all: "All",
+	unread: "Unread",
+	bookmarked: "Bookmarked",
+	ratedDown: "Rated down",
+}
 
 // how the selected tags narrow the feed, one mode at a time
 const TAG_MATCH_OPTIONS: Record<TagMatchMode, { label: string; Icon: LucideIcon }> = {
@@ -37,8 +45,8 @@ const TAG_MATCH_OPTIONS: Record<TagMatchMode, { label: string; Icon: LucideIcon 
 /**
  * The Filters dropdown at the end of the search bar.
  * The resource kinds to show in the topic feed.
- * The "All / Unread / Bookmarked" filter as radios, and which kinds of search results to show.
- * The "Bookmarked" filter requires a signed-in user session.
+ * The "All / Unread / Bookmarked / Rated down" filter as radios, and which kinds of search results to show.
+ * The "Bookmarked" and "Rated down" filters require a signed-in user session.
  */
 export function SearchFilters({
 	searchResultTypes,
@@ -63,7 +71,7 @@ export function SearchFilters({
 	const hasTeamBookmarks = Boolean(usePageActions()?.hasTeamBookmarks)
 	const { data: session } = authClient.useSession()
 	const topicFindingFilterOptions = TOPIC_FINDING_FILTERS.filter(
-		(filterOption) => filterOption !== "bookmarked" || Boolean(session),
+		(filterOption) => (filterOption !== "bookmarked" && filterOption !== "ratedDown") || Boolean(session),
 	)
 	// the dropdown is controlled so selecting an option closes the menu
 	const [isOpen, setIsOpen] = useState(false)
@@ -126,7 +134,7 @@ export function SearchFilters({
 									<RadioRow
 										key={filterOption}
 										radioGroupName="feed-findingFilter"
-										label={filterOption}
+										label={TOPIC_FINDING_FILTER_LABELS[filterOption]}
 										isActive={findingFilter === filterOption}
 										onChange={() => {
 											setFindingFilter(filterOption)

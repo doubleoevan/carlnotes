@@ -13,6 +13,7 @@ services:
       - DATABASE_URL=${LITELLM_DATABASE_URL}
       - LITELLM_MASTER_KEY=${LITELLM_MASTER_KEY}
       - FIREWORKS_API_KEY=${FIREWORKS_API_KEY}
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
   # the llm-guard scanner that screens an uploaded document and a fetched page before any model reads either.
   # it's a separate service because it runs in python and the app runtime is bun. unset LLM_GUARD_URL to run without it
   llm-guard:

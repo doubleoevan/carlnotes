@@ -2,7 +2,7 @@
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
-import type { ProfileIdentity, TopicResponse, UpdateTopicPayload } from "@shared/contracts"
+import type { TopicDraft, TopicResponse, UpdateTopicPayload } from "@shared/contracts"
 import { suggestSourcesPayload, updateTopicPayload } from "@shared/contracts"
 import { reportError, traceRequestStage } from "@shared/monitoring"
 import { toTopicPath } from "@shared/seo"
@@ -13,25 +13,22 @@ import { z } from "zod"
 import { db } from "../../db"
 import { incrementDaySuggestionCount } from "../../db/quotas"
 import { cacheJson } from "../../db/redis"
+import { attachments, chatRoomAttachments, invites, scans, sources, subscriptions, topics } from "../../db/schema"
 import {
-	attachments,
-	chatRoomAttachments,
-	invites,
-	scans,
-	sources,
-	subscriptions,
-	topics,
-	users,
-} from "../../db/schema"
-import { deleteAttachment, loadOrProvisionUserLiteLLMKey, notifyIndexNow, suggestSources } from "../../worker"
+	deleteAttachment,
+	deleteTopicPodcastEpisodeAudio,
+	loadOrProvisionUserLiteLLMKey,
+	notifyIndexNow,
+	suggestSources,
+} from "../../worker"
 import { isAllowed } from "../authorization"
-import { withAvatarVersion } from "../avatars"
 import { deleteChatAttachments } from "../chat/attachments"
 import { loadTopicChatMentions } from "../chat/mentions"
 import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { startInviteEmails } from "../invite/emails"
 import { checkTopicInvitees } from "../invite/userInvites"
+import { loadTopicPodcast } from "../podcast/helpers"
 import { releaseFeatureOrder } from "./featuring"
 import { newTopicFindingCount } from "./findings"
 import {
@@ -39,6 +36,7 @@ import {
 	type DailyFrequencyRejection,
 	loadTeamTopicOptions,
 	loadTopicAccessAndFindings,
+	loadTopicOwner,
 	startFirstScan,
 	startPendingSourceScreens,
 	toDailyFrequencyPaused,
@@ -96,9 +94,24 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 
 	// the page's independent reads run together
 	const isTopicOwner = topic.ownerId === userId
-	// biome-ignore format: one line keeps the destructure under the comment-density hook's limit
-	const [{ isAdmin, topicFindings }, topicSourceRows, rawAttachmentRows, scanRows, directSubscription, inviteAndScanFields, owner, teamFields, isDailyFrequencyPaused, canRate, canEdit] =
-		await traceRequestStage("topic_page.reads", () => Promise.all([
+	const [
+		// the user's access with the findings, then the sources, the attachments, and the scans
+		{ isAdmin, topicFindings },
+		topicSourceRows,
+		rawAttachmentRows,
+		scanRows,
+		// the user's subscription, the owner-only extras, the owner, and the team
+		directSubscription,
+		inviteAndScanFields,
+		owner,
+		teamFields,
+		// whether a daily frequency is paused, what the user may do on the topic, and the podcast
+		isDailyFrequencyPaused,
+		canRate,
+		canEdit,
+		{ podcast, podcastEpisodeByScanId },
+	] = await traceRequestStage("topic_page.reads", () =>
+		Promise.all([
 			// the user's access and the findings it gates
 			loadTopicAccessAndFindings({ topic, userId }),
 			// every Source row, and the attachment rows and their context, each narrowed once the reads finish
@@ -118,7 +131,10 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 			toDailyFrequencyPaused(topic, isTopicOwner),
 			isAllowed(userId, "topic:rate", topic),
 			isAllowed(userId, "topic:edit", topic),
-		]))
+			// the topic's podcast, and each scan's podcast episode for the scan history
+			loadTopicPodcast(topic, userId),
+		]),
+	)
 
 	// every later scan reads the generated context, so the owner and admins see it to edit it, and nobody else does
 	const canSeeOwnerDetails = isAdmin || isTopicOwner
@@ -126,8 +142,12 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		...attachment,
 		context: canSeeOwnerDetails ? attachment.context : null,
 	}))
-	// a stopped scan is left out of the history and the last-succeeded scan. the month's cost still counts it
-	const scanHistory = toScanHistory(scanRows, canSeeOwnerDetails)
+	// a stopped scan is left out of the history and the last-succeeded scan. the month's cost still counts it.
+	// each scan in the history gets its published podcast episode
+	const scanHistory = toScanHistory(scanRows, canSeeOwnerDetails).map((topicScan) => ({
+		...topicScan,
+		podcastEpisode: podcastEpisodeByScanId.get(topicScan.id) ?? null,
+	}))
 
 	// the owner-only extras, unpacked from their grouped read
 	const { inviteRows, manualScansRemaining, manualScanLimit, isSpendExhausted } = inviteAndScanFields
@@ -172,6 +192,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		attachments: attachmentRows,
 		sources: visibleTopicSourceRows.map((topicSource) => toTopicSourceSummary(topicSource)),
 		scans: scanHistory,
+		podcast,
 		findings: topicFindings,
 		invites: inviteRows,
 		manualScansRemaining,
@@ -238,20 +259,6 @@ async function loadTopicScanRows(topicId: string): Promise<TopicScanRow[]> {
 		.orderBy(desc(scans.startedAt))
 }
 
-// the topic owner's public identity, or null if the owner's row is gone
-async function loadTopicOwner(ownerId: string): Promise<ProfileIdentity | null> {
-	const [ownerRow] = await db
-		.select({
-			userId: users.id,
-			username: users.username,
-			avatarSource: users.avatarSource,
-			avatarKey: users.avatarKey,
-		})
-		.from(users)
-		.where(eq(users.id, ownerId))
-	return ownerRow ? withAvatarVersion(ownerRow) : null
-}
-
 // this month's total scan spend, summed from the raw scans since the first of the utc month
 function toMonthCostDollars(scanRows: Pick<TopicScanRow, "startedAt" | "cost">[]): number {
 	const monthStart = startOfUtcMonth(new Date())
@@ -293,12 +300,15 @@ export function notifyIndexNowOfTopicChange({
 	void notifyIndexNow(changedPaths.map((changedPath) => `${appUrl()}${changedPath}`))
 }
 
+// the editor's topic fields, and whether the new topic's podcast is on. left out, the podcast starts on
+type CreateTopicPayload = UpdateTopicPayload & Pick<TopicDraft, "isPodcastEnabled">
+
 /**
  * Creates a topic for the user with its invites and sources, enforcing the topic limit.
  */
 export async function createTopic(
 	userId: string,
-	payload: UpdateTopicPayload,
+	payload: CreateTopicPayload,
 	analyticsProperties: AnalyticsProperties,
 	// where the first prompt version is saved from. the editor unless a topic tool says otherwise
 	origin: PromptVersionOrigin = "editor",
@@ -338,6 +348,7 @@ export async function createTopic(
 				scheduledDayOfWeek,
 				visibility,
 				maxTopicFindings,
+				isPodcastEnabled: payload.isPodcastEnabled,
 			})
 			.returning()
 		if (!topic) {
@@ -558,7 +569,11 @@ export async function deleteTopic(
 		),
 	)
 
-	// the delete cascades to sources, findings, invites, and subscriptions. a scan keeps its row with a null topic
+	// delete the podcast episodes' audio from object storage, with any chapter audio that a render left behind
+	await deleteTopicPodcastEpisodeAudio(topicId)
+
+	// the delete cascades to sources, findings, invites, and subscriptions.
+	// a scan and a podcast episode keep their rows with a null topic
 	await db.transaction(async (transaction) => {
 		await releaseFeatureOrder(topicId, transaction)
 		await transaction.delete(topics).where(eq(topics.id, topicId))

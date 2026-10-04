@@ -12,6 +12,31 @@ import { useManualScanProgress, usePollWhileScanning } from "@/hooks/useTopicSca
 import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS, RAIL_ICON_INSET } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
+// how long after a scan finishes the page keeps looking for the podcast episode that the scan starts
+const PODCAST_EPISODE_START_WAIT_MS = 90_000
+
+// whether a podcast episode of this topic is rendering, or its latest scan just finished and may still start an episode
+function isPodcastEpisodePending(topic: TopicResponse | null | undefined): boolean {
+	// a topic with no podcast has no episode pending, and a rendering episode is pending
+	const topicPodcast = topic?.podcast
+	if (!topic || !topicPodcast) {
+		return false
+	}
+	if (topicPodcast.unpublishedPodcastEpisode?.status === "rendering") {
+		return true
+	}
+
+	// the latest scan succeeded within the wait with no podcast episode yet, on a topic whose scans render an episode
+	const [latestScan] = topic.scans
+	const elapsedSinceScanMs = latestScan?.finishedAt ? Date.now() - new Date(latestScan.finishedAt).getTime() : null
+	const isScanAwaitingPodcastEpisode =
+		latestScan?.status === "succeeded" &&
+		!latestScan.podcastEpisode &&
+		elapsedSinceScanMs !== null &&
+		elapsedSinceScanMs < PODCAST_EPISODE_START_WAIT_MS
+	return topicPodcast.isEnabled && topicPodcast.canRenderPodcastEpisode && isScanAwaitingPodcastEpisode
+}
+
 // whether this user may brew this topic. only an owner gets a remaining scan count in the payload
 export function isManualScanShown(topic: TopicResponse | null | undefined): boolean {
 	return topic?.manualScansRemaining != null
@@ -25,20 +50,31 @@ export function isManualScanShown(topic: TopicResponse | null | undefined): bool
 export function TopicScanButton({
 	topic,
 	onScanned,
+	shouldPollTopicPage = true,
+	scanHint,
 }: {
 	topic: TopicResponse | null | undefined
 	onScanned: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
+	// whether this button runs the page's poll and the scan failure toast
+	shouldPollTopicPage?: boolean
+	// the words after the scan button, which hide while a scan runs
+	scanHint?: string
 }) {
 	const navigate = useNavigate()
 	const { isScanning, isRunningScan, isCancellingScan, startScan, stopScan, cancelScan, stopCancelling } =
 		useManualScanProgress(topic?.scans)
 
-	// poll from the click, before the scan row arrives, with every reload marked as a poll.
+	// poll from the click, before the scan row arrives, and while the scan's podcast episode renders.
 	// the reload function stays the same across renders, so the poll does not restart and the poll's delay can grow
 	const reloadTopicPageAsPoll = useCallback(() => onScanned({ isPoll: true }), [onScanned])
-	usePollWhileScanning(isScanning || isRunningScan, reloadTopicPageAsPoll)
+	// ponytail: a podcast episode on the flex tier can render for hours,
+	// and the page polls every 30 seconds the whole time. slow the poll during a long render if those reads add load
+	usePollWhileScanning(
+		shouldPollTopicPage && (isScanning || isRunningScan || isPodcastEpisodePending(topic)),
+		reloadTopicPageAsPoll,
+	)
 	// a scan that fails while the user is on the page shows the failure
-	useScanFailureToast(topic?.scans, () => navigate({ to: "/plans" }))
+	useScanFailureToast(shouldPollTopicPage ? topic?.scans : undefined, () => navigate({ to: "/plans" }))
 
 	// trigger a scan. the optimistic flag holds the running state until the new scan row arrives in a reload.
 	// a scan rejected because of the budget clears the optimistic flag and shows the budget toast
@@ -103,58 +139,66 @@ export function TopicScanButton({
 	if (isScanBlocked) {
 		const blockedLine = isSpendExhausted ? "You are out of budget this month." : "You have used today's brews."
 		return (
+			<>
+				<Tooltip>
+					<TooltipTrigger asChild>
+						<button
+							type="button"
+							onClick={() =>
+								toast(blockedLine, {
+									action: {
+										label: isSpendExhausted ? "See account" : "See plans",
+										onClick: () => navigate({ to: isSpendExhausted ? "/account" : "/plans" }),
+									},
+								})
+							}
+							className={cn(MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS)}
+						>
+							<Coffee className="size-4 fill-none" />
+							Brew
+						</button>
+					</TooltipTrigger>
+					<TooltipContent side="bottom">{blockedLine}</TooltipContent>
+				</Tooltip>
+				{/* the scan hint */}
+				{scanHint}
+			</>
+		)
+	}
+
+	// the scan button stays disabled until the day's remaining scan count loads
+	return (
+		<>
 			<Tooltip>
 				<TooltipTrigger asChild>
 					<button
 						type="button"
-						onClick={() =>
-							toast(blockedLine, {
-								action: {
-									label: isSpendExhausted ? "See account" : "See plans",
-									onClick: () => navigate({ to: isSpendExhausted ? "/account" : "/plans" }),
-								},
-							})
-						}
-						className={cn(MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS)}
+						onClick={handleManualScan}
+						disabled={manualScansRemaining === null}
+						className={cn(
+							MENU_BUTTON_CLASS,
+							MENU_BUTTON_HIGHLIGHT_CLASS,
+							"disabled:pointer-events-none disabled:opacity-50",
+						)}
 					>
 						<Coffee className="size-4 fill-none" />
 						Brew
 					</button>
 				</TooltipTrigger>
-				<TooltipContent side="bottom">{blockedLine}</TooltipContent>
-			</Tooltip>
-		)
-	}
-
-	// the brew button stays disabled until the day's remaining scan count loads
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<button
-					type="button"
-					onClick={handleManualScan}
-					disabled={manualScansRemaining === null}
-					className={cn(
-						MENU_BUTTON_CLASS,
-						MENU_BUTTON_HIGHLIGHT_CLASS,
-						"disabled:pointer-events-none disabled:opacity-50",
+				<TooltipContent side="bottom">
+					Scan this topic for new findings
+					{manualScansRemaining !== null && manualScanLimit !== null && (
+						<span className="block">
+							{manualScanLimit >= ADMIN_QUOTA
+								? "Unlimited scans"
+								: `${manualScansRemaining} of ${manualScanLimit} daily scans left`}
+						</span>
 					)}
-				>
-					<Coffee className="size-4 fill-none" />
-					Brew
-				</button>
-			</TooltipTrigger>
-			<TooltipContent side="bottom">
-				Scan this topic for new findings
-				{manualScansRemaining !== null && manualScanLimit !== null && (
-					<span className="block">
-						{manualScanLimit >= ADMIN_QUOTA
-							? "Unlimited scans"
-							: `${manualScansRemaining} of ${manualScanLimit} daily scans left`}
-					</span>
-				)}
-			</TooltipContent>
-		</Tooltip>
+				</TooltipContent>
+			</Tooltip>
+			{/* the scan hint */}
+			{scanHint}
+		</>
 	)
 }
 

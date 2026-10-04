@@ -1,5 +1,6 @@
 // the head tags a route's head() returns, built from the api's page head or from a page's own title and path
 import type { PageHead } from "@shared/contracts"
+import { PODCAST_SHOW_NAME } from "@shared/podcastEpisodes"
 import { toJsonLdText, toPageTitle } from "@shared/seo"
 
 // the site's origin in production
@@ -30,6 +31,13 @@ export function toHeadTags(pageHead: PageHead | null | undefined): HeadTags {
 			{ property: "og:image", content: pageHead.imageUrl },
 			{ property: "og:image:alt", content: pageHead.cardTitle },
 			{ property: "og:url", content: pageHead.cardUrl },
+			// a podcast episode page's audio
+			...(pageHead.audioUrl
+				? [
+						{ property: "og:audio", content: pageHead.audioUrl },
+						{ property: "og:audio:type", content: "audio/mpeg" },
+					]
+				: []),
 			{ name: "twitter:card", content: "summary_large_image" },
 			{ name: "twitter:title", content: pageHead.cardTitle },
 			{ name: "twitter:description", content: pageHead.description },
@@ -39,6 +47,17 @@ export function toHeadTags(pageHead: PageHead | null | undefined): HeadTags {
 			...(pageHead.canonicalUrl ? [{ rel: "canonical", href: pageHead.canonicalUrl }] : []),
 			...(pageHead.feedUrl
 				? [{ rel: "alternate", type: "application/rss+xml", title: pageHead.cardTitle, href: pageHead.feedUrl }]
+				: []),
+			// the topic's podcast feed
+			...(pageHead.podcastFeedUrl
+				? [
+						{
+							rel: "alternate",
+							type: "application/rss+xml",
+							title: PODCAST_SHOW_NAME,
+							href: pageHead.podcastFeedUrl,
+						},
+					]
 				: []),
 		],
 		scripts: pageHead.jsonLd ? [toJsonLdScript(pageHead.jsonLd)] : [],
