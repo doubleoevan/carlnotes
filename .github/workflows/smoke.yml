@@ -36,6 +36,8 @@ jobs:
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
           restore-keys: ${{ runner.os }}-bun-
       - run: bun install --frozen-lockfile
+      # install ffmpeg as the Dockerfile does. the podcast suites encode episode audio and draw covers with it
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       # the doppler cli injects the same dev secrets a local smoke run uses
       - uses: dopplerhq/cli-action@v3
       # apply the commit's migrations to the dev database, so the suites run against the schema that the commit expects
