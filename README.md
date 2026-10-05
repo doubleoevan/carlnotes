@@ -13,6 +13,7 @@ Carl stays up. You stay informed.
 <br clear="left" />
 
 [![codecov](https://codecov.io/gh/doubleoevan/carlnotes/branch/main/graph/badge.svg)](https://codecov.io/gh/doubleoevan/carlnotes)
+[![evals](https://img.shields.io/endpoint?url=https%3A%2F%2Fraw.githubusercontent.com%2Fdoubleoevan%2Fcarlnotes%2Fmain%2Fevals%2Fresults%2Fbadge.json)](evals/README.md)
 
 ## Stack
 
@@ -69,7 +70,33 @@ Each step costs more but handles fewer Resources. Embeddings filter and rank wha
 
 Temporal persists every step and retries failed activities. That is why there is no outbox table: once a Scan is complete, its workflow starts the email workflow on the `scan-emails` queue, which runs one activity per Resend call. A rate limit waits for Resend's `retry-after`, a 5xx backs off, and a send that fails for good is reported to Sentry without failing the Scan. Each accepted batch records its sends with the Scan, so a retry never mails anyone twice. Emails outside workflows (verification, password reset, invites, flag notices) send directly through Resend, and a failure is reported to Sentry instead of replayed. Every call to Resend, from the app or the worker, first takes a rate limit slot held in Redis, which one call holds for 200 milliseconds. Calls leave evenly spaced at five a second, half of Resend's ten.
 
-A succeeded Scan also starts the podcast episode workflow on the `episode-renders` queue. One outline call saves the episode's title, one script call per segment writes the two hosts' turns, each chapter renders as one two-speaker Gemini speech call through LiteLLM's pass-through, and ffmpeg joins the chapters into one MP3 in object storage. A scheduled Scan's chapters render on Gemini's Flex tier. The Scan's email waits for the outline, so that the email can name the episode. A Scan's episode never holds up the Topic's next Scan.
+A succeeded Scan also starts the podcast episode workflow, described under Podcast below.
+
+### Podcast
+
+Every Topic has a podcast with two AI hosts, Carl and Vienna. A succeeded Scan starts its episode as a child workflow on the `episode-renders` queue, and an episode never holds up the Topic's next Scan.
+
+```mermaid
+flowchart
+    Scan[Succeeded Scan] -->|child workflow| Plan[Plan · up to 15 Findings]
+    Plan --> Outline[Outline · title and description]
+    Outline -.->|signal| Email[Scan email names the episode]
+    Outline --> Segments[One script call per segment]
+    Segments --> Speech[One Gemini speech call per chapter]
+    Speech --> Encode[ffmpeg joins the chapters into one MP3]
+    Encode --> Publish[(Object storage · season and episode number)]
+    Publish --> Feeds[RSS feeds · public or per listener]
+    Publish --> Player[Topic page player · docked player]
+    Publish --> Page[Episode page with its transcript]
+```
+
+The plan picks up to fifteen Findings: the Scan's new ones first, then the ones a user liked or bookmarked, then the Topic's best that no episode has covered, then ones that earlier episodes covered. A Finding rated thumbs down is never narrated. The outline call saves the episode's title and description and signals the Scan's email workflow, which waits for that signal so the email can name the episode. One script call per segment writes the two hosts' turns against the outline, in up to three drafts: a draft that fails a check is retried with the reason, and a third draft is repaired instead of failing the episode. The sign-off ends on two fixed lines and then a goodbye that the writer words differently every time. The prompts are in `worker/prompts/`.
+
+Each chapter renders as one two-speaker Gemini speech call through LiteLLM's pass-through. A manual Scan's chapters render on the standard tier, and a scheduled Scan's on Gemini's Flex tier, where a chapter may wait up to six hours for capacity. A chapter whose speech fails for good is left out, and the episode publishes the rest. ffmpeg joins the chapters into one MP3 in object storage, and the publish gives the episode its season, the UTC year, and its number within that season.
+
+An episode reaches listeners three ways. A public Topic has a public RSS feed at `/topics/:id/podcast.xml`, a private or invite Topic gives each listener their own feed at `/podcast-feeds/:token.xml`, and each is cached in Redis while it lists up to 100 episodes. The topic page has the player, a docked player follows the listener from page to page, and when an episode ends, the next unplayed episode from the listener's other Topics starts. Each published episode has its own page with its transcript, rendered on the server for a public Topic. Every episode page has its preview card, so a shared link previews no matter what the Topic's visibility is, and a private or invite Topic's episode page is noindex and shows the Topic's gate to anyone who may not see the Topic. Covers are drawn over `docs/design/podcast/cover-base.png`.
+
+`PODCAST_SPEECH_MODEL` set empty turns episodes off, and `PODCAST_RENDER_CONCURRENCY` (16 by default) limits the episode activities on each worker replica. The free plan renders one episode per Topic, and episodes pause once a user's monthly spend passes 80 percent of the budget, so scans keep running.
 
 ### Chat
 
@@ -116,7 +143,7 @@ Two kinds of text are screened, each at its entry point:
 
 Each screen is one HTTP call with a 2.5-second timeout, and it never blocks the pipeline: on failure the text passes through unflagged. The prompt loader's unconditional untrusted-data fence still applies, and Exa always filters for moderate content.
 
-The scanner also redacts personal details in place, so even a document can come back rewritten. Callers must use the returned text. A detector flags content at a score of 0.8 or above, measured with `bun run eval --guard-only` against articles that merely *discuss* prompt injection, not taken from the vendor default. The update check boots each new release, runs that eval, and files an issue with the measured false-positive and catch rates needed to decide whether to upgrade.
+The scanner also redacts personal details in place, so even a document can come back rewritten. Callers must use the returned text. A detector flags content at a score of 0.8 or above. Measured with `bun run eval:review-pipeline --guard-only` on 2026-10-04, that threshold flags 2 of 4 articles that merely *discuss* prompt injection and catches all 6 known attacks. A long article can also take a CPU scanner past the 2.5-second timeout, where the screen fails open. The false positives and the timeouts need fixing before the scanner screens production pages. The update check boots each new release, runs that eval, and files an issue with the measured false-positive and catch rates needed to decide whether to upgrade.
 
 ### Caching at the edge
 
@@ -133,6 +160,54 @@ Domain vocabulary is load-bearing and lives in `.agents/skills/domain-model/`.
 How the AI guardrails work lives in [docs/ai-scaffolding.md](docs/ai-scaffolding.md).
 
 Feature work lands change-by-change through [OpenSpec](https://github.com/Fission-AI/OpenSpec) — specs and in-flight changes live in `openspec/`.
+
+## Evals
+
+An eval measures what a model-facing prompt writes, an output that has no one exact value for a test to check. Each promptfoo eval runs made-up cases through the same function that the app calls, with the prompt templates in git, and grades every output: in code where it can, such as links, lengths, ids, and the tools a chat turn called, and by a second model against a written rubric where it takes judgment. A model's output varies from run to run, so an eval reports how often each case passes. The evals make real model calls, so they run locally and never in `bun run check`. CI runs only the guard-only measurement, which makes no model calls.
+
+```mermaid
+flowchart
+    Cases[Made-up cases] --> Provider[Provider · calls the app's own function]
+    Templates[(worker/prompts/*.md in git)] --> Provider
+    Provider --> LiteLLM[LiteLLM proxy]
+    LiteLLM --> Output[Output under test]
+    Output --> Code[Checks in code]
+    Output --> Rubrics[Rubrics · graded by a different model]
+    Code --> Report[Report · pass rate per case]
+    Rubrics --> Report
+    Report --> Results[(logs/eval-*.json · full results)]
+    Report --> Badge[(evals/results · the README badge)]
+```
+
+| Eval | What it measures | Command |
+|---|---|---|
+| Review pipeline | Precision, recall, and cost of the relevance gate and the scoring prompt over hand-labeled fixtures, plus LLM Guard's false-positive and catch rates | `bun run eval:review-pipeline` |
+| Podcast episode script | The outline and segment prompts: chapters cite real Findings, every claim is supported, quotes are short and named, the title and description fit, and the goodbye is left to the show | `bun run eval:podcast-episode-script` |
+| Scan report | Carl's note on every scan: links every kept finding and nothing else, says nothing the scan data lacks, names a failed source, stays short | `bun run eval:scan-report` |
+| Topic chat | The topic chat: opens by answering the question, credits the findings only with what they say, marks what comes from outside them, links only real finding urls, stays brief | `bun run eval:topic-chat` |
+| Topic chat tools | The topic chat's edit tools, in the solo chat and the team room: a change is proposed before it is saved, a yes saves it, a question or an instruction inside a finding calls nothing, and no reply claims an action that no tool made | `bun run eval:topic-chat-tools` |
+| New-topic chat | The chat that makes a topic: writes what the user says to the draft, creates the topic only after a yes, never calls a change saved that no tool saved | `bun run eval:new-topic-chat` |
+| Source suggestions | The suggested Sources, end to end through Exa and the readability checks: the share of new suggestions that resolve and read, enough readable sources, every one on topic and still publishing | `bun run eval:source-suggestions` |
+
+The review pipeline's first baseline, from two public topics' fixtures on 2026-10-04: 77% precision and 81% recall for Dev Tools for Builders, 88% and 100% for AI Coding Tools, and $0.09 a fixture. LLM Guard 0.3.16 caught all 6 known attacks and flagged 2 of 4 articles that only discuss injection. The fixtures, their labels, and what the numbers can and cannot say are in [evals/README.md](evals/README.md).
+
+Every eval whose prompt reads outside material that a case can hold also has a case with an instruction planted in that material, which the output must not follow. The source suggester reads live search results, which a case cannot hold. Every promptfoo eval shares `evals/evalHarness.ts`, which runs the cases, grades the rubrics on a model other than the one under test, prints the report, and saves the full results. Each run also saves its pass count to `evals/results/`, which the evals badge at the top of this README reads, so commit `evals/results/` after the runs it should show. Run an eval before shipping a change to its prompt or its model, with `--repeat 3` to see how often each case passes. Each eval costs cents to a dollar a run, and the review pipeline's cost depends on its fixtures.
+
+```bash
+bun run eval:scan-report --repeat 3                 # run each case three times and print a pass rate per case
+bun run eval:review-pipeline --with-examples        # score with the topic's rated and bookmarked pages as examples
+bun run eval:review-pipeline --guard-only           # only LLM Guard's false-positive and catch rates, with no model spend
+```
+
+A review pipeline fixture is exported from the database that holds a public topic's ratings, read-only, and its page text goes to a gitignored page cache:
+
+```bash
+doppler run --config prd -- bun evals/review-pipeline/reviewPipelineEval.ts --export <topicId>
+```
+
+A weekly GitHub Action (`.github/workflows/llm-guard-update.yml`) watches Docker Hub for new LLM Guard releases, boots the candidate on the runner, runs the guard-only eval against it, and files an issue with the measured false-positive and catch rates, so a scanner upgrade arrives as a pre-measured decision, never an unchecked version bump. Read the two rates together: a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate.
+
+How each eval works, how to read its report, and how to write a new one live in [evals/README.md](evals/README.md).
 
 ## Development
 
@@ -223,7 +298,7 @@ bun run smoke:subscribers  # just the subscriber-count smoke test: both subscrip
 bun run smoke:profile      # just the profile smoke test: the header's distinct people against the footer's summed rows
 bun run smoke:seo          # just the seo smoke test: builds the ui, then checks every public page arrives whole to a browser without JavaScript on its first render, that only public topics are listed, that the edge may share a signed-out page and the feed but never a signed-in one, and that a card is immutable only at its version
 bun run smoke:chat         # just the topic chat retrieval smoke test (question → ranked findings → assembled context)
-bun run smoke:eval         # just the eval-harness smoke test: one tiny labeled fixture through the real gate and scoring
+bun run smoke:eval         # just the review pipeline eval's smoke test: one tiny labeled fixture through the real gate and scoring
 bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, detach succession, the team page gate, its avatar versions, and who sent an invite or invited a member
 bun run smoke:room         # just the team chat-room smoke test: the access matrix, isolation, budget rejection, mention rows, and the room lock
 bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a viewer may open, one per holding team, and the unseen count
@@ -253,16 +328,7 @@ grep '"gauges"' logs/dev.log                             # the api's once-a-minu
 
 Compare each run with one from before your change, not with production. A laptop reaches the dev database over the internet, so every query takes longer than it does next to the database.
 
-Evals (owner-run) measure the review pipeline against a labeled corpus, and the podcast episode script writer against promptfoo cases. They run the real embed-filter and tiered scoring, or the real script writer, so they spend money and are **not** part of `bun run check`. Fixtures and the labeling workflow live in [evals/README.md](evals/README.md):
-
-```bash
-bun run eval                      # measure every fixture: precision, recall, cost per topic, and scanner false positives
-bun run eval --export <topicId>   # write an unlabeled fixture from a real Topic's Resources, ready to label
-bun run eval --guard-only         # only LLM Guard's false-positive and attack-catch rates; no model spend
-bun run eval:podcast-episode-script  # promptfoo cases for the podcast episode script writer, about 30 cents a run
-```
-
-A weekly GitHub Action (`.github/workflows/llm-guard-update.yml`) watches Docker Hub for new LLM Guard releases, boots the candidate on the runner, runs the guard-only eval against it, and files an issue with both measured rates, so a scanner upgrade arrives as a pre-measured decision, never an unchecked version bump. Read the two rates together: a scanner that flags nothing scores a perfect false-positive rate, and one that flags everything scores a perfect catch rate.
+The evals and their `eval:*` scripts are described under [Evals](#evals).
 
 Prompt registry (owner-run): git is the source of truth for prompt wording (`worker/prompts/*.md`); this pushes it up to Langfuse as the `production` version each prompt is served from. Idempotent: an unchanged prompt creates no new version. Needs `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` set. `--candidate` uploads under the `candidate` label instead, leaving the served `production` label untouched until someone promotes the version in Langfuse by hand — the deploy job runs that form, while these two scripts write `production` directly.
 

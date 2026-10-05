@@ -138,7 +138,7 @@ test("the transcript names each speaker, escapes the script's text, and drops th
 				],
 			},
 		],
-		signOff: [{ speaker: "host", text: "I've got more reading to do." }],
+		signOff: [{ speaker: "host", text: "Well, I've got more reading to do." }],
 	}
 	const transcriptHtml = toTranscriptHtml("A quieter grinder", podcastEpisodeScript)
 

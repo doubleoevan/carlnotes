@@ -253,12 +253,18 @@ async function buildModelRoomQuestion(
 	const chatRoomAttachmentsBlock = await toChatRoomAttachmentsBlock(transaction, topicId, teamId)
 
 	// one question through the versioned template: the summary, the attachments, and the chat messages
+	return toModelRoomQuestion({ summary: summaryRow?.summary ?? "Nothing yet.", chatRoomAttachmentsBlock, chatMessages })
+}
+
+// the template variables of a room turn's question, with the running summary, the room's shared files, and the transcript
+type ModelRoomQuestionVariables = { summary: string; chatRoomAttachmentsBlock: string; chatMessages: string }
+
+/**
+ * Writes a room turn's question from the chat-room-turn template.
+ */
+export async function toModelRoomQuestion(modelRoomQuestionVariables: ModelRoomQuestionVariables): Promise<string> {
 	const { template } = await fetchPromptTemplate("chat-room-turn")
-	return writePrompt(
-		template,
-		{},
-		{ summary: summaryRow?.summary ?? "Nothing yet.", chatRoomAttachmentsBlock, chatMessages },
-	)
+	return writePrompt(template, {}, modelRoomQuestionVariables)
 }
 
 // the chat messages put each author's username into the content which tells carl who asked what

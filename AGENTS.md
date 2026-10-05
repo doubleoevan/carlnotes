@@ -14,6 +14,8 @@ types only. The api and the worker import db, every module imports shared, and s
 - `shared/` — what every module may import: the zod contracts, enums, plans, and Source definitions.
 - `infra/` — the service configs the app runs beside: litellm, llm-guard, and the Northflank pipelines.
 - `content/blog/` — the blog posts `api/content.ts` serves.
+- `evals/` — the evals that measure the model-facing prompts and the review pipeline, one folder each, and
+  `evalHarness.ts`, which the promptfoo evals share. They make real model calls, so no eval runs in `bun test`.
 
 Each module has its own AGENTS.md with entry points, layout, and commands.
 
@@ -31,7 +33,7 @@ Each module has its own AGENTS.md with entry points, layout, and commands.
 | Email template or send | `emails/*.tsx`, `worker/email.ts`, `worker/notify.ts` | — | `ui/` |
 | Release notes | `api/releases.ts`, the convention in `docs/release-notes.md` | domain-model | `ui/` except the footer link |
 | Docs page | `docs/src/content/`, its shared pieces in `docs/src/components/`, then `bun run docs:embed` | — | `docs/dist/` (built) |
-| Eval work | `evals/README.md`, `.github/workflows/llm-guard-update.yml` | — | app modules |
+| Eval work | `evals/README.md`, `evals/evalHarness.ts`, `evals/<eval>/`, `.github/workflows/llm-guard-update.yml` | prompt-authoring | app modules except the function the eval calls |
 | Podcast episode, player, feed, or cover | `worker/podcast/`, `worker/workflows/renderPodcastEpisode.ts`, `api/podcast/`, `api/share/podcastFeed.ts`, `api/share/podcastCover.ts`, `worker/speech.ts`, `shared/podcastEpisodes.ts`, `ui/src/components/podcast/`, `ui/src/pages/PodcastEpisodePage.tsx` | domain-model, prompt-authoring | `db/migrations/` |
 | MCP tool, Topic Tool, or the Add to AI dialog | `api/mcp/`, `api/tool/`, `ui/src/components/common/AddToAiDialog.tsx` | domain-model | `worker/` except `worker/index.ts` and `worker/budget.ts` exports |
 

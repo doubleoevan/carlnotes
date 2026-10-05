@@ -13,7 +13,7 @@ type PodcastEpisodeRouteData = { head: PageHead | undefined; podcastEpisodePage:
 type LoadPodcastEpisodeRouteOptions = { topicId: string; topicSlug: string; season: string; episodeNumber: string }
 
 /**
- * Loads a public podcast episode's head and page on the server, and redirects a url with a stale slug.
+ * Loads a podcast episode's head and a public episode's page on the server, and redirects a url with a stale slug.
  * In the browser loadPodcastEpisodeRoute returns no head and no page.
  */
 async function loadPodcastEpisodeRoute({
@@ -25,10 +25,13 @@ async function loadPodcastEpisodeRoute({
 	// read the head and the podcast episode page on the server
 	const [podcastEpisodeHead, podcastEpisodePage] = await loadPageOnServer({
 		fetchPageHead: () => fetchPodcastEpisodePageHead({ topicId, season, episodeNumber }),
-		fetchPage: () => fetchPodcastEpisodePage({ topicId, season, episodeNumber }),
+		fetchPage: () =>
+			fetchPodcastEpisodePage({ topicId, season, episodeNumber }).then((podcastEpisodePageResult) =>
+				podcastEpisodePageResult.status === "visible" ? podcastEpisodePageResult.podcastEpisodePage : null,
+			),
 	})
 
-	// respond 404 for a podcast episode that the api does not know, or an episode whose topic is not public
+	// respond 404 for a podcast episode that the api does not know
 	if (podcastEpisodeHead === null) {
 		throw notFound()
 	}
@@ -42,11 +45,11 @@ async function loadPodcastEpisodeRoute({
 	return { head: podcastEpisodeHead, podcastEpisodePage }
 }
 
-// a podcast episode's page, at a path after its topic's path. the server renders a public topic's episode,
-// and any other topic's episode loads in the browser for a user who may listen to the episode
+// a podcast episode's page, at a path after its topic's path. every published episode has its card in its head.
+// the server renders a public topic's episode, and the browser renders any other episode or its topic's gate
 export const Route = createFileRoute("/_layout/topics/$topicId_/$topicSlug_/episodes/$season/$episodeNumber")({
 	loader: ({ params }) => loadPodcastEpisodeRoute(params),
-	// a page with no head, such as a private or invite topic's episode, is left out of search results
+	// a page with no head is left out of search results, and a private or invite topic's episode head is noindex
 	head: ({ loaderData }) => (loaderData?.head ? toHeadTags(loaderData.head) : toNoindexHeadTags()),
 	component: PodcastEpisodePage,
 	// the podcast episode page renders a missing episode too, with a 404 status

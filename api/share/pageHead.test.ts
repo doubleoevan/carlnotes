@@ -212,6 +212,27 @@ test("toPodcastEpisodePageHead names the episode, its card, its audio, and valid
 	})
 })
 
+// an invite topic's podcast episode page has its card alone
+test("toPodcastEpisodePageHead gives an invite topic's episode its card alone", () => {
+	const head = toPodcastEpisodePageHead({
+		topicPreview: { ...TOPIC_PREVIEW, visibility: "invite" },
+		podcastEpisodeRow: PODCAST_EPISODE_ROW,
+		appUrl: "https://carlnotes.com",
+	})
+
+	// the episode's title, description, and card
+	expect(head.cardTitle).toBe("Agents ship, and the evals follow")
+	expect(head.description).toBe("What shipped this week and why the evals matter.")
+	expect(head.imageUrl).toStartWith("https://carlnotes.com/api/episodes/episode-1/preview.png?v=")
+
+	// no index, no audio, no feed, and no structured data
+	expect(head.isIndexed).toBe(false)
+	expect(head.canonicalUrl).toBeNull()
+	expect(head.audioUrl).toBeNull()
+	expect(head.podcastFeedUrl).toBeNull()
+	expect(head.jsonLd).toBeNull()
+})
+
 // a public topic that is not shown yet keeps its podcast episode pages out of search, like its own page
 test("toPodcastEpisodePageHead leaves an episode of a topic that is not yet shown unindexed", () => {
 	const head = toPodcastEpisodePageHead({

@@ -36,13 +36,13 @@ import {
 	type DailyFrequencyRejection,
 	loadTeamTopicOptions,
 	loadTopicAccessAndFindings,
+	loadTopicGateResponse,
 	loadTopicOwner,
 	startFirstScan,
 	startPendingSourceScreens,
 	toDailyFrequencyPaused,
 	toFeaturedTopics,
 	toInviteAndScanFields,
-	toInviteTopic,
 	toLastTopicScanFields,
 	toNewSourceRow,
 	toPodcastNames,
@@ -667,11 +667,9 @@ export const topicsRoute = new Hono<AppEnv>()
 		if (topicPage) {
 			return context.json(topicPage)
 		}
-		// an invite topic responds with how it is gated
-		const inviteTopic = await toInviteTopic(context.req.param("id"))
-		return inviteTopic
-			? context.json({ error: "forbidden", gatedVisibility: "invite", topicName: inviteTopic.name }, 403)
-			: context.json({ error: "not found" }, 404)
+		// respond 403 with the gate of an invite or private topic, or 404 for a missing topic
+		const topicGateResponse = await loadTopicGateResponse(topicId)
+		return topicGateResponse ? context.json(topicGateResponse, 403) : context.json({ error: "not found" }, 404)
 	})
 	.patch("/topics/:id", zValidator("json", updateTopicPayload), async (context) => {
 		// reject a signed-out visitor

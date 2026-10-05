@@ -19,8 +19,8 @@ export const SHOWN_CHAPTER_COUNT = 3
 const CHAPTER_NUMBER_SLOT_CLASS =
 	"text-muted-foreground absolute top-0 left-0 grid size-11 place-items-center sm:top-1.5 sm:size-8"
 
-// where a chapter's thumbs sit in its row, over the row's click area
-const THUMBS_SLOT_CLASS = "relative z-10 flex shrink-0 items-center gap-2 pr-3"
+// where a chapter's thumbs sit in its row, over the row's click area. a phone shows no chapter thumbs
+const THUMBS_SLOT_CLASS = "relative z-10 hidden shrink-0 items-center gap-2 pr-3 sm:flex"
 
 // what a chapter's topic finding note reads. the topic's findings that the user sees, the topic that a note names,
 // whether the user may rate and bookmark the findings, and the calls behind the note's buttons

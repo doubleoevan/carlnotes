@@ -127,11 +127,10 @@ the topic follower, never the reader:
   end until it lands on why it matters.
 
 Every chapter SHALL therefore end on its Finding's relevance explanation. Now and then one host SHALL call the other by
-name, once or twice in a segment at most. The writer's sign-off SHALL close on what the episode added up to and write
-no goodbye. Every Podcast Episode SHALL then end on the same goodbye, added after the sign-off with each line given to its
-host: Carl has more reading to do, Vienna says he always does, Carl calls it another great coffee break, Vienna asks
-whether it was as good for him as it was for her, Carl says not in front of the Raccoon, and Vienna says see you next
-coffee break. The hosts' names SHALL appear in copy only: the prompts, the UI,
+name, once or twice in a segment at most. The writer's sign-off SHALL close on what the episode added up to. Every
+Podcast Episode SHALL then have Carl say he has more reading to do and Vienna say he always does, two lines added after
+the sign-off with each given to its host, and SHALL end on a short goodbye that the writer adds after them in the hosts'
+own words, unscripted and different every episode. The writer SHALL never write the two fixed lines itself. The hosts' names SHALL appear in copy only: the prompts, the UI,
 the feeds, and the transcript. They SHALL never appear in the schema or in identifiers.
 
 #### Scenario: The writer gets the stored content
@@ -192,7 +191,8 @@ the feeds, and the transcript. They SHALL never appear in the schema or in ident
 #### Scenario: The Podcast Episode ends on the hosts' goodbye
 
 - **WHEN** a Podcast Episode's script is built from its segments
-- **THEN** it ends on the last segment's sign-off and then the goodbye, each goodbye line said by its own host
+- **THEN** it ends on the last segment's sign-off, then Carl's and Vienna's two fixed lines, each said by its own host,
+  then the last segment's own goodbye
 
 ### Requirement: The title is saved before any audio renders
 
@@ -220,23 +220,23 @@ fails for good, so the Scan's email never waits on a render. A signal that finds
 
 The writer's output SHALL be validated against a schema before anything is rendered. It SHALL have a title of at most 60
 characters, specific to what the chapters cover, in the host's voice and never clickbait. It SHALL have a description of
-at most 155 characters, a short cold open that names the show and its hosts in a sentence or two before it turns to
+at most 155 characters that starts with "Carl and Vienna talk about", a short cold open that names the show and its hosts in a sentence or two before it turns to
 the topic, segments joined by short transitions, one chapter per Finding that includes the Finding's id, and a
-sign-off. A prompt SHALL list its Findings under short numbers from 1 and SHALL never show a
+sign-off and a goodbye. A prompt SHALL list its Findings under short numbers from 1 and SHALL never show a
 Finding's stored id, and a chapter's number SHALL be mapped back to the Finding's stored id before the output is
-checked. The cold open, each transition, each chapter, and the sign-off SHALL each be a list of turns, and a turn SHALL
+checked. The cold open, each transition, each chapter, the sign-off, and the goodbye SHALL each be a list of turns, and a turn SHALL
 be a speaker, text, and an optional short style. The text SHALL read as natural speech, with fillers like "well", short
 replies like "Right.", and inline vocal tags in the syntax that Gemini's speech prompting guide defines.
 
 A first or second draft SHALL be rejected, and the call retried, if a chapter cites a Finding id outside the input set
 or writes a Finding twice, a segment does not have one chapter for each of its Findings, the outline plans more than 30
 minutes, the title or the description is over its limit, a chapter has more than three quotations or a quotation over 30
-words, or the first segment has no cold open or the last no sign-off. Only a quoted span of six words or more SHALL
+words, or the first segment has no cold open or the last no sign-off or no goodbye. Only a quoted span of six words or more SHALL
 count as a quotation. A retried call SHALL be told why its last draft was rejected, with the numbers that the check
 measured, so the next draft can fix it. A call's third draft SHALL be repaired instead of rejected: a long title or
 description SHALL be cut at a word boundary, a chapter for a Finding outside the input set, a second chapter for one
-Finding, and a chapter that quotes too much SHALL be left out, and a missing chapter, cold open, or sign-off and a plan
-over 30 minutes SHALL be accepted. Every draft SHALL have a chapter title over 80 characters cut and a planned chapter
+Finding, and a chapter that quotes too much SHALL be left out, and a missing chapter, cold open, sign-off, or goodbye and a
+plan over 30 minutes SHALL be accepted. Every draft SHALL have a chapter title over 80 characters cut and a planned chapter
 length outside one to eight minutes brought within it, with no rejection. Only a draft that does not match the schema on
 every try, a script with no chapter left, a script call that finds the budget spent, speech that renders no chapter, or
 a failure of the encoder, the database, or object storage SHALL fail the Podcast Episode. A chapter whose speech fails
@@ -512,4 +512,39 @@ missing.
 
 - **WHEN** an owner deletes a Topic with three published Podcast Episodes
 - **THEN** the three audio objects are deleted, and a request for any of their audio urls responds as missing
+
+### Requirement: A draft names each chapter's Finding in an integer field
+
+The outline call's and the segment calls' schemas SHALL have each chapter name its Finding by the number its prompt
+listed it under, in an integer field, so a draft cannot put other text where the number goes. A segment's prompt SHALL
+say that its list starts at 1 in every segment, whatever a Finding's place in the whole episode. A number the prompt did
+not list SHALL be kept as the draft wrote it and checked as a Finding outside the input set.
+
+#### Scenario: A draft cannot cite a Finding with text
+
+- **WHEN** the outline call writes its chapters
+- **THEN** each chapter's Finding is an integer, mapped back to the Finding's stored id before the outline is checked
+
+#### Scenario: A number the prompt did not list is rejected
+
+- **GIVEN** a segment whose prompt lists two Findings as 1 and 2
+- **WHEN** a first draft's chapter names 3
+- **THEN** the draft is rejected as citing a Finding outside its input, and the call is retried
+
+### Requirement: A sign-off or a goodbye never repeats the goodbye's fixed lines
+
+The goodbye's fixed lines SHALL be Carl's "Well, I've got more reading to do." and Vienna's "You always do.", held once in
+the code, and the segment prompt SHALL quote them from there. A segment check SHALL reject a last segment whose sign-off
+or goodbye has a turn that repeats one of those lines, ignoring case, end punctuation, and a leading "well", and the call
+SHALL be retried with that reason. The last draft's repair SHALL drop such a turn instead of rejecting the draft.
+
+#### Scenario: An earlier draft that repeats a fixed line is retried
+
+- **WHEN** a first draft's goodbye has the turn "I've got more reading to do!"
+- **THEN** the draft is rejected for repeating a line that the show adds itself, and the call is retried
+
+#### Scenario: The last draft drops the repeated turn
+
+- **WHEN** the last draft's goodbye repeats a fixed line beside a turn of its own
+- **THEN** the repeated turn is left out and the goodbye keeps its own turn
 

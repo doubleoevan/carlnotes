@@ -29,8 +29,9 @@ export type TopicScanEmailProps = {
 	podcastEpisode?: TopicScanEmailPodcastEpisode
 }
 
-// the scan's podcast episode as the email shows it, with its title, its url, and its cover url at email width
-export type TopicScanEmailPodcastEpisode = { title: string; url?: string; coverUrl?: string }
+// the scan's podcast episode as the email shows the podcast episode, with its title, description, and url.
+// the cover url is at email width
+export type TopicScanEmailPodcastEpisode = { title: string; description?: string; url?: string; coverUrl?: string }
 
 // the template. a header, a one-line summary, spaced Finding cards, and a plain footer
 export default function TopicScanEmail({
@@ -154,7 +155,7 @@ export function ScanSummarySection({
 }
 
 /**
- * The scan's podcast episode section, with its heading and with its title and cover linked to the podcast episode.
+ * Renders the scan's podcast episode section, with its heading, its linked title and cover, and its description.
  */
 export function PodcastEpisodeSection({
 	podcastEpisode,
@@ -186,6 +187,14 @@ export function PodcastEpisodeSection({
 						style={podcastEpisodeCover}
 					/>
 				</Link>
+			) : null}
+
+			{/* the description under its heading, if the podcast episode has a description */}
+			{podcastEpisode.description ? (
+				<>
+					<Text style={podcastEpisodeSummaryLabel}>Episode summary</Text>
+					<Text style={podcastEpisodeDescriptionText}>{podcastEpisode.description}</Text>
+				</>
 			) : null}
 		</Section>
 	)
@@ -303,6 +312,8 @@ TopicScanEmail.PreviewProps = {
 	unsubscribeUrl: "https://carlnotes.example.com/api/unsubscribe?token=preview",
 	podcastEpisode: {
 		title: "Structured output grows up, and the evals follow",
+		description:
+			"Carl and Vienna talk about structured output that finally holds its schema, and the evals that check it.",
 		url: "https://carlnotes.example.com/topics/preview-topic?episode=preview-episode",
 		coverUrl: "https://carlnotes.example.com/api/podcast-covers/episode/preview-episode/preview-key-600.jpg",
 	},
@@ -435,13 +446,20 @@ function toSummaryMarkdownOptions(allowedUrls?: AllowedNoteUrls) {
 		},
 	}
 }
-// the podcast episode's title line, and its cover,
-// which fills the section's width up to the 600 pixels that it is served at
+// the podcast episode's title line, the description's heading and text, and the cover.
+// the cover fills the section's width up to the 600 pixels that the cover is served at
 const podcastEpisodeTitleLine: CSSProperties = {
 	color: "#4b4b4b",
 	fontSize: "15px",
 	lineHeight: "1.5",
 	margin: "0 0 10px",
+}
+const podcastEpisodeSummaryLabel: CSSProperties = { ...summaryLabel, margin: "14px 0 6px" }
+const podcastEpisodeDescriptionText: CSSProperties = {
+	color: "#4b4b4b",
+	fontSize: "14px",
+	lineHeight: "1.5",
+	margin: "0",
 }
 const podcastEpisodeCover: CSSProperties = { borderRadius: "8px", display: "block", height: "auto", width: "100%" }
 const card: CSSProperties = {

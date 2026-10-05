@@ -1,11 +1,11 @@
-// eval harness smoke: runs one tiny labeled fixture through the real harness, the same embedding, relevance
+// review pipeline eval smoke: runs one tiny labeled fixture through the real review path, the same embedding, relevance
 // gate, and tiered scoring a Scan uses. Proves the pipeline works end to end before anyone labels a 50-resource
 // corpus. it makes a handful of paid model calls (pennies), so it is owner-run and never part of bun test: bun run smoke:eval
-import { shutdownTelemetry, startTelemetry } from "../worker"
-import { type EvalFixture, measureFixture } from "./eval-pipeline"
+import { shutdownTelemetry, startTelemetry } from "../../worker"
+import { type EvalFixture, measureFixture } from "./reviewPipelineEval"
 
 // a topic and four labeled Resources: two squarely on-topic, one adjacent, one from a different world entirely.
-// the labels are one-obvious-call each, since the smoke checks that the harness runs, not how well the model judges
+// the labels are one-obvious-call each, since the smoke checks that the eval runs, not how well the model judges
 const SMOKE_FIXTURE: EvalFixture = {
 	topic: {
 		name: "LLM tooling",
@@ -65,16 +65,16 @@ const SMOKE_FIXTURE: EvalFixture = {
 	],
 }
 
-// run the harness over the fixture and check the shape of what comes back, printing PASS/FAIL per check
+// run the eval over the fixture and check the shape of what comes back, printing PASS/FAIL per check
 async function smokeTest(): Promise<number> {
-	const result = await measureFixture("smoke", SMOKE_FIXTURE)
+	const result = await measureFixture({ name: "smoke", fixture: SMOKE_FIXTURE })
 	console.log(result)
 
-	// the checks: the ratios are real numbers in range, every Resource was judged, the run charged real spend,
-	// and both scanner rates are honest about whether a scanner was configured
+	// check the ratios, the judged Resources, the spend, and both scanner rates. a configured scanner's rate is a ratio,
+	// or null if the scanner screened none of the texts. with no scanner configured, both rates are null
 	const isRatioValid = (ratio: number): boolean => Number.isFinite(ratio) && ratio >= 0 && ratio <= 1
 	const isRateShapeValid = (rate: number | null): boolean =>
-		Bun.env.LLM_GUARD_URL ? rate !== null && isRatioValid(rate) : rate === null
+		Bun.env.LLM_GUARD_URL ? rate === null || isRatioValid(rate) : rate === null
 	const checks: [string, boolean][] = [
 		["precision is a ratio", isRatioValid(result.precision)],
 		["recall is a ratio", isRatioValid(result.recall)],

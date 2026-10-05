@@ -10,8 +10,9 @@ import { usePageNoteBadges } from "@/stores/noteBadgeStore"
 // how many bullets a tooltip section lists before folding the rest into a count
 const LISTED_TOOLTIP_LINE_COUNT = 4
 
-// one bullet of a tooltip section, keyed by the thing it names
-type TooltipLine = { key: string; line: React.ReactNode }
+// one line of a tooltip section, keyed by the thing that it names.
+// a marker, such as an avatar, shows in place of the line's bullet
+export type TooltipLine = { key: string; line: React.ReactNode; marker?: React.ReactNode }
 
 /**
  * Bolds a label in a tooltip: a user, a topic, a team, or a note.
@@ -20,14 +21,21 @@ export function TooltipLabel({ children }: { children: string }) {
 	return <span className="font-semibold">{children}</span>
 }
 
-// one tooltip section: its heading, then one bullet per line, the first four listed and the rest counted
-function TooltipSection({ heading, tooltipLines }: { heading: string; tooltipLines: TooltipLine[] }) {
+/**
+ * One tooltip section, with an optional heading over its lines, the first LISTED_TOOLTIP_LINE_COUNT listed and the rest counted.
+ */
+export function TooltipSection({ heading, tooltipLines }: { heading?: string; tooltipLines: TooltipLine[] }) {
+	// a section whose lines have markers shows each marker in place of a bullet
+	const hasMarkers = tooltipLines.some((tooltipLine) => tooltipLine.marker)
 	return (
 		<div>
-			<p className="font-semibold">{heading}</p>
-			<ul className="list-disc pl-4">
-				{tooltipLines.slice(0, LISTED_TOOLTIP_LINE_COUNT).map(({ key, line }) => (
-					<li key={key}>{line}</li>
+			{heading ? <p className="font-semibold">{heading}</p> : null}
+			<ul className={hasMarkers ? "mt-0.5 space-y-0.5" : "list-disc pl-4"}>
+				{tooltipLines.slice(0, LISTED_TOOLTIP_LINE_COUNT).map(({ key, line, marker }) => (
+					<li key={key} className={hasMarkers ? "flex items-center gap-1.5" : undefined}>
+						{marker}
+						{line}
+					</li>
 				))}
 			</ul>
 			{tooltipLines.length > LISTED_TOOLTIP_LINE_COUNT && (

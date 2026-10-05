@@ -5,6 +5,7 @@ import { Plus } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { authClient } from "@/clients/authClient"
 import { fetchPodcastEpisodePage } from "@/clients/podcastEpisodeClient"
+import type { GatedTopicVisibility } from "@/clients/topicClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeChaptersTable } from "@/components/podcast/PodcastEpisodeChaptersTable"
 import { PodcastEpisodeCover } from "@/components/podcast/PodcastEpisodeCover"
@@ -16,6 +17,7 @@ import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { MoreButton } from "@/components/topic/MoreButton"
 import { TopicByline } from "@/components/topic/Topic"
 import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import {
 	CollapsibleSectionSkeleton,
 	ExpanderSkeleton,
@@ -50,6 +52,9 @@ export function PodcastEpisodePage() {
 		loadedPodcastEpisodePage ?? undefined,
 	)
 
+	// the visibility of the episode's invite or private topic if the user may not see the topic, or null
+	const [gatedVisibility, setGatedVisibility] = useState<GatedTopicVisibility | null>(null)
+
 	// whether the podcast feed dialog or the new topic dialog is open
 	const [isPodcastFeedDialogOpen, setIsPodcastFeedDialogOpen] = useState(false)
 	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
@@ -57,8 +62,18 @@ export function PodcastEpisodePage() {
 	// load in the browser unless the server already loaded this podcast episode page and set the page title
 	const loadPodcastEpisodePage = useCallback((): void => {
 		fetchPodcastEpisodePage({ topicId, season, episodeNumber })
-			.then(setPodcastEpisodePage)
-			.catch(() => setPodcastEpisodePage(null))
+			.then((podcastEpisodePageResult) => {
+				setPodcastEpisodePage(
+					podcastEpisodePageResult.status === "visible" ? podcastEpisodePageResult.podcastEpisodePage : null,
+				)
+				setGatedVisibility(
+					podcastEpisodePageResult.status === "gated" ? podcastEpisodePageResult.topicGate.visibility : null,
+				)
+			})
+			.catch(() => {
+				setPodcastEpisodePage(null)
+				setGatedVisibility(null)
+			})
 	}, [topicId, season, episodeNumber])
 	const pageId = `${topicId}/${season}/${episodeNumber}`
 	useLoadInBrowser({ pageId, isLoadedOnServer: Boolean(loadedPodcastEpisodePage), loadPage: loadPodcastEpisodePage })
@@ -95,11 +110,23 @@ export function PodcastEpisodePage() {
 
 	const topicHandlers = usePageTopicFeedHandlers(loadPodcastEpisodePage)
 
-	// the loading skeleton, or the line for a podcast episode that did not load
+	// the loading skeleton, the topic's gate, or the line for an episode that did not load
 	if (podcastEpisodePage === undefined) {
 		return (
 			<main className={PAGE_CLASS}>
 				<PodcastEpisodeSkeleton />
+			</main>
+		)
+	}
+	if (podcastEpisodePage === null && gatedVisibility) {
+		return (
+			<main className={PAGE_CLASS}>
+				<PodcastEpisodeSkeleton />
+				<TopicGateNotice
+					visibility={gatedVisibility}
+					isSignedIn={Boolean(session)}
+					returnPath={`/topics/${topicId}/${topicSlug ?? "topic"}/episodes/${season}/${episodeNumber}`}
+				/>
 			</main>
 		)
 	}

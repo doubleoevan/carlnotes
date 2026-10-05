@@ -251,17 +251,9 @@ export async function loadAccessiblePodcastEpisode({
 type PodcastEpisodePageRef = { topicId: string; season: number; episodeNumber: number }
 
 /**
- * Loads a published podcast episode of a public topic by its season and episode number, with its topic, or null.
+ * Loads the published podcast episode at a season and episode number, with its topic of any visibility, or null.
  */
-export async function loadPublicPodcastEpisode(
-	podcastEpisodePageRef: PodcastEpisodePageRef,
-): Promise<{ podcastEpisodeRow: PodcastEpisodeRow; topic: TopicRow } | null> {
-	const publishedPodcastEpisode = await loadPublishedPodcastEpisode(podcastEpisodePageRef)
-	return publishedPodcastEpisode?.topic.visibility === "public" ? publishedPodcastEpisode : null
-}
-
-// the published podcast episode at a season and episode number, with its topic. the topic may have any visibility
-async function loadPublishedPodcastEpisode({
+export async function loadPublishedPodcastEpisode({
 	topicId,
 	season,
 	episodeNumber,
@@ -277,6 +269,21 @@ async function loadPublishedPodcastEpisode({
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
 		.where(and(isPodcastEpisodeAtPageRef, eq(podcastEpisodes.status, "published")))
+	return isPodcastEpisodeRenderingConfigured() && publishedPodcastEpisode ? publishedPodcastEpisode : null
+}
+
+/**
+ * Loads a published podcast episode by its id, with its topic of any visibility, or null.
+ */
+export async function loadPublishedPodcastEpisodeById(
+	podcastEpisodeId: string,
+): Promise<{ podcastEpisodeRow: PodcastEpisodeRow; topic: TopicRow } | null> {
+	// the published podcast episode with that id, with its topic
+	const [publishedPodcastEpisode] = await db
+		.select({ podcastEpisodeRow: podcastEpisodeColumns, topic: topics })
+		.from(podcastEpisodes)
+		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
+		.where(and(eq(podcastEpisodes.id, podcastEpisodeId), eq(podcastEpisodes.status, "published")))
 	return isPodcastEpisodeRenderingConfigured() && publishedPodcastEpisode ? publishedPodcastEpisode : null
 }
 

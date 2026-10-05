@@ -1,9 +1,7 @@
-// the podcast episode script eval's promptfoo providers. the writer under test, and the model that grades a rubric.
-// both call the LiteLLM proxy through worker/models.ts
+// the podcast episode script eval's promptfoo provider, the writer under test.
+// the writer calls the LiteLLM proxy through worker/models.ts
 import type { PodcastEpisodeScript } from "@shared/contracts"
-import { generateText, type ModelMessage } from "ai"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
-import { chatModel } from "../../worker/models"
 import {
 	generatePodcastEpisodeOutline,
 	generatePodcastEpisodeSegment,
@@ -30,9 +28,6 @@ export const podcastEpisodeScriptWriter: ApiProvider = {
 	id: () => "podcast-episode-script-writer",
 	callApi: writeCasePodcastEpisode,
 }
-
-// the grader for every rubric, on a different model from the model that writes the script
-export const rubricGrader: ApiProvider = { id: () => "chat-model", callApi: gradeRubric }
 
 // write one case's podcast episode with one unchecked draft of the outline call and of each segment call.
 // the writer builds its own prompts from the case's variables, so the prompt that promptfoo rendered is not read
@@ -70,15 +65,4 @@ async function writeCasePodcastEpisode(
 		}
 		return { error: error.message, metadata: { outline, segments }, cost: costDollars }
 	}
-}
-
-// grade one rubric. promptfoo sends its grading prompt as a JSON list of chat messages, the first a system message
-async function gradeRubric(gradingPrompt: string): Promise<ProviderResponse> {
-	const { text, usage } = await generateText({
-		model: chatModel(),
-		messages: JSON.parse(gradingPrompt) as ModelMessage[],
-		allowSystemInMessages: true,
-	})
-	const tokenUsage = { total: usage.totalTokens, prompt: usage.inputTokens, completion: usage.outputTokens }
-	return { output: text, tokenUsage }
 }

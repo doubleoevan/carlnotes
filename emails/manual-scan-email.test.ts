@@ -21,7 +21,7 @@ test("renderManualScanEmail lists a succeeded scan's findings under its recap", 
 })
 
 // a manual scan with a podcast episode shows the podcast episode section
-test("renderManualScanEmail shows the episode section with its title, link, and cover", async () => {
+test("renderManualScanEmail shows the episode section with its title, link, cover, and description", async () => {
 	// render a succeeded scan with a podcast episode that has a url and a cover
 	const podcastEpisodeUrl = "https://carlnotes.example.com/topics/abc?episode=episode-1"
 	const coverUrl = "https://carlnotes.example.com/api/podcast-covers/episode/episode-1/key-600.jpg"
@@ -29,12 +29,19 @@ test("renderManualScanEmail shows the episode section with its title, link, and 
 		status: "succeeded",
 		topicName: "LLM tooling",
 		findings: [{ title: "Agent news", url: "https://a.com/1", relevanceExplanation: "covers agents" }],
-		podcastEpisode: { title: "Evals grow up", url: podcastEpisodeUrl, coverUrl },
+		podcastEpisode: {
+			title: "Evals grow up",
+			description: "Carl and Vienna talk about three agents worth a query.",
+			url: podcastEpisodeUrl,
+			coverUrl,
+		},
 	})
 
-	// the heading, the title, and the cover. the title and the cover both link to the podcast episode
+	// the heading, the title, the description, and the cover. the title and the cover both link to the podcast episode
 	expect(html).toContain("Coffee Break podcast with Carl and Vienna")
 	expect(html).toContain("Evals grow up")
+	expect(html).toContain("Episode summary")
+	expect(html).toContain("Carl and Vienna talk about three agents worth a query.")
 	expect(html).toContain(coverUrl)
 	expect(html.split(`href="${podcastEpisodeUrl}"`).length - 1).toBe(2)
 })

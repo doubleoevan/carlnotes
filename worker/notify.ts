@@ -299,14 +299,20 @@ async function toTopicScanEmailProps(
 // the Scan whose Podcast Episode to read, and the Topic's url that the Podcast Episode's link builds on
 type ToScanEmailPodcastEpisodeOptions = { scanId: string; topicUrl?: string }
 
-// the Scan's Podcast Episode as the Scan's email shows it, with a link that opens the Podcast Episode by its id
+// the Scan's Podcast Episode as the Scan's email shows the Podcast Episode,
+// with its description and a link that opens the Podcast Episode by its id
 async function toScanEmailPodcastEpisode({
 	scanId,
 	topicUrl,
 }: ToScanEmailPodcastEpisodeOptions): Promise<TopicScanEmailPodcastEpisode | undefined> {
 	// read the Scan's Podcast Episode, and show the Podcast Episode only if it has a title and is rendering or published
 	const [podcastEpisode] = await db
-		.select({ id: podcastEpisodes.id, title: podcastEpisodes.title, status: podcastEpisodes.status })
+		.select({
+			id: podcastEpisodes.id,
+			title: podcastEpisodes.title,
+			description: podcastEpisodes.description,
+			status: podcastEpisodes.status,
+		})
 		.from(podcastEpisodes)
 		.where(eq(podcastEpisodes.scanId, scanId))
 	const isPodcastEpisodeShown = podcastEpisode?.status === "rendering" || podcastEpisode?.status === "published"
@@ -319,6 +325,7 @@ async function toScanEmailPodcastEpisode({
 	const coverPath = toPodcastCoverPath({ kind: "episode", id: podcastEpisode.id, title: podcastEpisode.title }, 600)
 	return {
 		title: podcastEpisode.title,
+		description: podcastEpisode.description ?? undefined,
 		url: topicUrl ? `${topicUrl}?episode=${podcastEpisode.id}` : undefined,
 		coverUrl: appUrl ? `${appUrl}${coverPath}` : undefined,
 	}

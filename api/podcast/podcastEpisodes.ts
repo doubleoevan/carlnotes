@@ -20,12 +20,15 @@ import { type AppEnv, currentUser } from "../currentUser"
 import { toPodcastEpisodePreview } from "../share/podcastEpisodeImage"
 import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share/preview"
 import { updateTopicFields } from "../tool/topicTools"
+import { toTopicGateResponse } from "../topic/helpers"
 import { canRateTopic } from "../topic/permissions"
 import {
 	type AccessiblePodcastEpisode,
 	loadAccessiblePodcastEpisode,
 	loadPodcastEpisode,
 	loadPodcastEpisodePage,
+	loadPublishedPodcastEpisode,
+	loadPublishedPodcastEpisodeById,
 	loadSeasonPodcastEpisodes,
 } from "./helpers"
 import {
@@ -166,10 +169,22 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 	})
 	// a podcast episode page with the episode, its topic, and its transcript, for anyone who may listen to the episode
 	.get("/topics/:id/episodes/:season/:episodeNumber", zValidator("param", podcastEpisodePageParam), async (context) => {
-		// load the podcast episode page that the url names, or respond 404
+		// return the podcast episode page that the url names if the user may listen to the episode
+		const userId = currentUser(context)
 		const { id: topicId, season, episodeNumber } = context.req.valid("param")
-		const podcastEpisodePage = await loadPodcastEpisodePage({ topicId, season, episodeNumber }, currentUser(context))
-		return podcastEpisodePage ? context.json(podcastEpisodePage) : context.json({ error: "not found" }, 404)
+		const podcastEpisodePage = await loadPodcastEpisodePage({ topicId, season, episodeNumber }, userId)
+		if (podcastEpisodePage) {
+			return context.json(podcastEpisodePage)
+		}
+
+		// respond 403 with the topic's gate to a user or visitor who may not see an invite or private topic, or 404.
+		// only an invite topic's gate names the topic
+		const publishedPodcastEpisode = await loadPublishedPodcastEpisode({ topicId, season, episodeNumber })
+		const podcastEpisodeTopic = publishedPodcastEpisode?.topic
+		const isTopicHidden =
+			podcastEpisodeTopic !== undefined && !(await isAllowed(userId, "topic:view", podcastEpisodeTopic))
+		const topicGateResponse = isTopicHidden && podcastEpisodeTopic ? toTopicGateResponse(podcastEpisodeTopic) : null
+		return topicGateResponse ? context.json(topicGateResponse, 403) : context.json({ error: "not found" }, 404)
 	})
 	.put("/topics/:id/podcast", zValidator("json", topicPodcastPayload), async (context) => {
 		// save the podcast switch through updateTopicFields
@@ -244,21 +259,18 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 			? toPodcastEpisodeTranscriptResponse(context, accessiblePodcastEpisode.podcastEpisodeRow)
 			: context.json({ error: "not found" }, 404)
 	})
-	// the link-preview card that a social platform fetches for a public topic's published podcast episode
+	// the link-preview card that a social platform fetches for a published podcast episode of any topic
 	.get("/episodes/:id/preview.png", async (context) => {
-		// respond 404 unless a visitor may listen to the podcast episode and the episode has published
-		const publicPodcastEpisode = await loadAccessiblePodcastEpisode({
-			userId: null,
-			podcastEpisodeId: context.req.param("id"),
-		})
-		if (publicPodcastEpisode?.podcastEpisodeRow.status !== "published") {
+		// respond 404 unless the podcast episode has published
+		const publishedPodcastEpisode = await loadPublishedPodcastEpisodeById(context.req.param("id"))
+		if (!publishedPodcastEpisode) {
 			return context.json({ error: "not found" }, 404)
 		}
 
 		// draw the preview card on its first request, and read the card from storage after
 		const podcastEpisodePreview = toPodcastEpisodePreview(
-			publicPodcastEpisode.podcastEpisodeRow,
-			publicPodcastEpisode.topic.name,
+			publishedPodcastEpisode.podcastEpisodeRow,
+			publishedPodcastEpisode.topic.name,
 		)
 		return toPreviewPngResponse(context, await toCachedPodcastEpisodePreviewPng(podcastEpisodePreview))
 	})

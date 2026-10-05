@@ -467,3 +467,24 @@ substituting.
 
     // right
     // the yearly interval has the higher limits
+### 18. Keep it DRY
+
+One piece of logic lives in one place. Anything duplicated is a candidate for
+drying up, from the second copy on: extract it into a shared function and call
+it from every place, in the same change. Two copies drift: a fix lands in one
+and the other stays broken.
+
+- Search before writing. A helper, a type, or a check a few files over is the
+  one to reuse, never retyped.
+- Put the shared function in the module that owns the concept, and export it
+  from there.
+- A type is shared the same way: a second hand-written copy of a type is a
+  duplicate too.
+- Code that only looks alike but means different things stays separate.
+
+    // wrong — the same gate parsing in the topic client and the episode client
+    const body = (await response.json().catch(() => null)) as GateBody | null
+    if (body?.gatedVisibility !== "invite" && body?.gatedVisibility !== "private") { ... }
+
+    // right — one reader in the topic client, called from both
+    const topicGate = await readTopicGate(response)

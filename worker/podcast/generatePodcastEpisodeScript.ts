@@ -1,18 +1,21 @@
 // the model calls that write a Podcast Episode's script drafts, the prompts that they send,
 // and the retry that writes drafts until one passes its checks. a call returns its draft unchecked, with its cost
 import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@shared/contracts"
+import { PODCAST_EPISODE_SPEAKER_NAMES } from "@shared/podcastEpisodes"
 import { generateText, NoObjectGeneratedError, Output } from "ai"
 import { PREMIUM_COST_PER_MILLION_TOKENS, tokenCost } from "../budget"
 import { scoreModel } from "../models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
 import { writePrompt } from "../prompts/write"
 import {
+	GOODBYE_OPENING_TURNS,
 	type PodcastEpisodeFinding,
 	type PodcastEpisodeOutline,
 	type PodcastEpisodeSegment,
 	podcastEpisodeOutlinePayload,
 	podcastEpisodeSegmentPayload,
 	RejectedScriptError,
+	toGoodbyeOpeningLine,
 } from "./podcastEpisodeScript"
 
 // the script model reasons before it writes. low effort keeps a call to seconds instead of over a minute
@@ -73,9 +76,9 @@ export async function generatePodcastEpisodeOutline(
 	const { podcastEpisodeFindings } = generatePodcastEpisodeOutlineOptions
 	const segments = outlineDraft.segments.map((segment) => ({
 		...segment,
-		chapters: segment.chapters.map((chapter) => ({
+		chapters: segment.chapters.map(({ findingNumber, ...chapter }) => ({
 			...chapter,
-			findingId: toListedFindingId(chapter.findingId, podcastEpisodeFindings),
+			findingId: toListedFindingId(findingNumber, podcastEpisodeFindings),
 		})),
 	}))
 	const costDollars = tokenCost(usage.totalTokens ?? 0, PREMIUM_COST_PER_MILLION_TOKENS)
@@ -100,9 +103,9 @@ export async function generatePodcastEpisodeSegment(
 
 	// map each chapter's Finding number back to its id, and price the call
 	const segmentFindings = toSegmentFindings(generatePodcastEpisodeSegmentOptions)
-	const chapters = segmentDraft.chapters.map((chapter) => ({
+	const chapters = segmentDraft.chapters.map(({ findingNumber, ...chapter }) => ({
 		...chapter,
-		findingId: toListedFindingId(chapter.findingId, segmentFindings),
+		findingId: toListedFindingId(findingNumber, segmentFindings),
 	}))
 	const costDollars = tokenCost(usage.totalTokens ?? 0, PREMIUM_COST_PER_MILLION_TOKENS)
 	return { scriptDraft: { ...segmentDraft, chapters }, costDollars }
@@ -122,10 +125,10 @@ export function throwScriptDraftError(error: unknown): never {
 }
 
 /**
- * Returns the id of the Finding that a prompt listed under the number, or the number itself if the prompt listed none.
+ * Returns the id of the Finding that a prompt listed under the number, or the number as text if the prompt listed none.
  */
-export function toListedFindingId(findingNumber: string, listedFindings: PodcastEpisodeFinding[]): string {
-	return listedFindings[Number(findingNumber) - 1]?.findingId ?? findingNumber
+export function toListedFindingId(findingNumber: number, listedFindings: PodcastEpisodeFinding[]): string {
+	return listedFindings[findingNumber - 1]?.findingId ?? String(findingNumber)
 }
 
 /**
@@ -189,7 +192,8 @@ export async function buildSegmentPrompt(
 	const { outline, segmentIndex, podcastEpisodeFindings } = generatePodcastEpisodeSegmentOptions
 	const segmentFindings = toSegmentFindings(generatePodcastEpisodeSegmentOptions)
 
-	// write the prompt. the template's cold open and sign-off rules read the segment's number and the segment count
+	// write the prompt. the template's cold open and sign-off rules read the segment's number, the segment count,
+	// and the goodbye's opening turns
 	const prompt = writePrompt(
 		template,
 		{
@@ -204,6 +208,7 @@ export async function buildSegmentPrompt(
 			hostsBlock: await toHostsBlock(),
 			segmentNumber: String(segmentIndex + 1),
 			segmentCount: String(outline.segments.length),
+			goodbyeOpening: toGoodbyeOpeningSentence(),
 		},
 	)
 	return { prompt, name, registryPrompt }
@@ -215,6 +220,15 @@ export async function buildSegmentPrompt(
 export function toLimitedWords(text: string, maxWords: number): string {
 	const words = text.trim().split(/\s+/)
 	return words.length <= maxWords ? text.trim() : words.slice(0, maxWords).join(" ")
+}
+
+// the goodbye's opening turns as the segment prompt quotes them, each named by its speaker and without end punctuation
+function toGoodbyeOpeningSentence(): string {
+	const quotedTurns = GOODBYE_OPENING_TURNS.map(
+		(goodbyeOpeningTurn) =>
+			`${PODCAST_EPISODE_SPEAKER_NAMES[goodbyeOpeningTurn.speaker]} saying "${toGoodbyeOpeningLine(goodbyeOpeningTurn)}"`,
+	)
+	return quotedTurns.join(" and ")
 }
 
 // the two hosts and how each one talks, as a block for the outline prompt and the segment prompt
@@ -238,7 +252,7 @@ function toSegmentFindings({
 	})
 }
 
-// list each Finding for a prompt under a number from 1, which the prompt uses as the Finding's id
+// list each Finding for a prompt under a number from 1. a draft names each Finding by that number
 function toFindingsBlock(podcastEpisodeFindings: (PodcastEpisodeFinding & { minutes?: number })[]): string {
 	return podcastEpisodeFindings
 		.map((podcastEpisodeFinding, i) => {
@@ -248,7 +262,7 @@ function toFindingsBlock(podcastEpisodeFindings: (PodcastEpisodeFinding & { minu
 				? [`planned length: about ${plannedWordCount} words`]
 				: []
 			return [
-				`finding id: ${i + 1}`,
+				`finding number: ${i + 1}`,
 				`title: ${podcastEpisodeFinding.title}`,
 				`source: ${podcastEpisodeFinding.sourceHost}`,
 				...plannedLengthLines,

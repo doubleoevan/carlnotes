@@ -23,6 +23,7 @@ import type { AppEnv } from "../currentUser"
 import { documentsRoute } from "../documents"
 import { toSitemapXml } from "../seo"
 import { updateTopicFields } from "../tool/topicTools"
+import { loadTopicGateResponse } from "../topic/helpers"
 import { setTopicSubscription } from "../topic/subscriptions"
 import { loadTopicPage } from "../topic/topics"
 import { podcastEpisodesRoute } from "./podcastEpisodes"
@@ -40,12 +41,16 @@ const subscriberId = `${runId}-subscriber`
 // the host of the chapter's source, which has a stored favicon
 const chapterSourceHost = `${runId}.example`
 
-// the public, invite, and paid topics, the public and invite topics' podcast episodes, and the chapter's resource
+// the public, invite, paid, and private topics
 const publicTopicId = `${runId}-public`
 const inviteTopicId = `${runId}-invite`
 const paidTopicId = `${runId}-paid`
+const privateTopicId = `${runId}-private`
+
+// the public, invite, and private topics' podcast episodes, and the chapter's resource and finding
 const publicPodcastEpisodeId = `${runId}-public-episode`
 const invitePodcastEpisodeId = `${runId}-invite-episode`
+const privatePodcastEpisodeId = `${runId}-private-episode`
 const resourceId = `${runId}-resource`
 const findingId = `${runId}-finding`
 
@@ -123,9 +128,9 @@ function toPodcastEpisodeRow({
 	}
 }
 
-// a free owner with a public and an invite topic, a paid owner with one topic,
+// a free owner with a public and an invite topic, a paid owner with a topic and a private topic,
 // a subscriber who joined the invite topic just now,
-// and one published podcast episode on the public and the invite topic
+// and one published podcast episode on the public, the invite, and the private topic
 async function seed(): Promise<void> {
 	await db.insert(users).values([toUserRow(ownerId), toUserRow(paidOwnerId, "plus"), toUserRow(subscriberId)])
 	await db.insert(topics).values([
@@ -138,10 +143,12 @@ async function seed(): Promise<void> {
 			visibility: "private",
 			isPodcastEnabled: false,
 		},
+		{ id: privateTopicId, ownerId: paidOwnerId, name: `${runId} private`, visibility: "private" },
 	])
 	await db.insert(scans).values([
 		{ id: `${publicPodcastEpisodeId}-scan`, topicId: publicTopicId, ownerId, status: "succeeded" },
 		{ id: `${invitePodcastEpisodeId}-scan`, topicId: inviteTopicId, ownerId, status: "succeeded" },
+		{ id: `${privatePodcastEpisodeId}-scan`, topicId: privateTopicId, ownerId: paidOwnerId, status: "succeeded" },
 	])
 
 	// the podcast episodes, with one chapter on the public topic's episode that narrates one finding
@@ -150,6 +157,7 @@ async function seed(): Promise<void> {
 		.values([
 			toPodcastEpisodeRow({ id: publicPodcastEpisodeId, topicId: publicTopicId, topicOwnerId: ownerId }),
 			toPodcastEpisodeRow({ id: invitePodcastEpisodeId, topicId: inviteTopicId, topicOwnerId: ownerId }),
+			toPodcastEpisodeRow({ id: privatePodcastEpisodeId, topicId: privateTopicId, topicOwnerId: paidOwnerId }),
 		])
 	await db.insert(resources).values({ id: resourceId, url: `https://episodes-smoke.example/${runId}`, kind: "read" })
 	const findingTopicAndScanIds = { topicId: publicTopicId, scanId: `${publicPodcastEpisodeId}-scan` }
@@ -201,6 +209,10 @@ try {
 	// the subscriber joined after the invite topic's podcast episode published, and the owner may listen to every episode
 	const lateSubscriberResponse = await request({ path: `/episodes/${invitePodcastEpisodeId}`, userId: subscriberId })
 	check("a subscriber cannot read an episode from before they joined", lateSubscriberResponse.status === 404)
+	check(
+		"an invite topic's episode page stays closed to a subscriber who joined after the episode published",
+		(await request({ path: `/topics/${inviteTopicId}/episodes/2026/1`, userId: subscriberId })).status === 404,
+	)
 	const subscriberSeasonPodcastEpisodes = await (
 		await request({ path: `/topics/${inviteTopicId}/episodes?season=2026`, userId: subscriberId })
 	).json()
@@ -498,16 +510,21 @@ try {
 		(await request({ path: new URL(resetFeedUrl).pathname, userId: null })).status === 404,
 	)
 
-	// an invite topic's podcast episode has no page for a visitor, and the sitemap never lists the episode.
+	// an invite topic's podcast episode page shows a visitor the topic's gate, and the sitemap never lists the episode.
 	// the topic's owner still opens the page
 	check(
 		"the sitemap lists nothing of the invite topic",
 		!(await toSitemapXml("https://carlnotes.example.com")).includes(inviteTopicId),
 	)
 	const invitePodcastEpisodePath = `/topics/${inviteTopicId}/episodes/2026/1`
+	const visitorInvitePodcastEpisodeResponse = await request({ path: invitePodcastEpisodePath, userId: null })
+	const visitorInvitePodcastEpisodeBody = await visitorInvitePodcastEpisodeResponse.json()
 	check(
-		"an invite topic's episode has no page for a visitor",
-		(await request({ path: invitePodcastEpisodePath, userId: null })).status === 404,
+		"an invite topic's episode page is gated for a visitor, naming the topic",
+		visitorInvitePodcastEpisodeResponse.status === 403 &&
+			visitorInvitePodcastEpisodeBody.gatedVisibility === "invite" &&
+			typeof visitorInvitePodcastEpisodeBody.topicName === "string",
+		visitorInvitePodcastEpisodeBody,
 	)
 	const ownerInvitePodcastEpisodePage = await (
 		await request({ path: invitePodcastEpisodePath, userId: ownerId })
@@ -517,9 +534,58 @@ try {
 		ownerInvitePodcastEpisodePage.podcastEpisode?.id === invitePodcastEpisodeId &&
 			ownerInvitePodcastEpisodePage.topic?.visibility === "invite",
 	)
+
+	// a private topic's podcast episode page shows a visitor and a signed-in non-member the topic's gate without its name.
+	// the topic's owner still opens the page, and the sitemap never lists the episode
+	const privatePodcastEpisodePath = `/topics/${privateTopicId}/episodes/2026/1`
+	const gatedUsers = [
+		{ gatedUserLabel: "a visitor", gatedUserId: null },
+		{ gatedUserLabel: "a signed-in non-member", gatedUserId: subscriberId },
+	]
+	for (const { gatedUserLabel, gatedUserId } of gatedUsers) {
+		// the gate that the user gets, with no name in it
+		const privateGateResponse = await request({ path: privatePodcastEpisodePath, userId: gatedUserId })
+		const privateGateBody = await privateGateResponse.json()
+		check(
+			`a private topic's episode page is gated for ${gatedUserLabel}, without the topic's name`,
+			privateGateResponse.status === 403 &&
+				privateGateBody.gatedVisibility === "private" &&
+				privateGateBody.topicName === null,
+			privateGateBody,
+		)
+	}
 	check(
-		"an invite topic's episode page stays closed to a subscriber who joined after the episode published",
-		(await request({ path: invitePodcastEpisodePath, userId: subscriberId })).status === 404,
+		"a private topic's episode page opens for its owner",
+		(await request({ path: privatePodcastEpisodePath, userId: paidOwnerId })).status === 200,
+	)
+	check(
+		"the sitemap lists nothing of the private topic",
+		!(await toSitemapXml("https://carlnotes.example.com")).includes(privateTopicId),
+	)
+
+	// the topic page's gate names only an invite topic, and a public topic has no gate
+	const privateTopicGateResponse = await loadTopicGateResponse(privateTopicId)
+	check(
+		"a private topic's gate has no name",
+		privateTopicGateResponse?.gatedVisibility === "private" && privateTopicGateResponse.topicName === null,
+		privateTopicGateResponse,
+	)
+	const inviteTopicGateResponse = await loadTopicGateResponse(inviteTopicId)
+	check(
+		"an invite topic's gate names the topic",
+		inviteTopicGateResponse?.gatedVisibility === "invite" && inviteTopicGateResponse.topicName === `${runId} invite`,
+		inviteTopicGateResponse,
+	)
+	check("a public topic has no gate", (await loadTopicGateResponse(publicTopicId)) === null)
+
+	// a private topic's podcast episode has its link-preview card, served without a session
+	const privatePreviewResponse = await request({
+		path: `/episodes/${privatePodcastEpisodeId}/preview.png`,
+		userId: null,
+	})
+	check(
+		"a private topic's episode card loads without a session",
+		privatePreviewResponse.status === 200 && privatePreviewResponse.headers.get("Content-Type") === "image/png",
 	)
 	const publicPodcastEpisodePage = await (
 		await request({ path: `/topics/${publicTopicId}/episodes/2026/1`, userId: null })

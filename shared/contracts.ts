@@ -1190,6 +1190,15 @@ export const topicResponse = topicFeed.extend({
 })
 export type TopicResponse = z.infer<typeof topicResponse>
 
+// the 403 that a topic page or a podcast episode page responds with to someone who may not see an invite or private
+// topic. only an invite topic's gate names the topic
+export const topicGateResponse = z.object({
+	error: z.literal("forbidden"),
+	gatedVisibility: z.enum(visibilities).exclude(["public"]),
+	topicName: z.string().nullable().catch(null),
+})
+export type TopicGateResponse = z.infer<typeof topicGateResponse>
+
 // a source in the update payload
 export const updateTopicSource = z.union([
 	z.object({ id: z.string() }),
@@ -1392,7 +1401,7 @@ export const podcastEpisodeChapterScriptPayload = z.object({
 })
 export type PodcastEpisodeChapterScript = z.infer<typeof podcastEpisodeChapterScriptPayload>
 
-// a podcast episode's entire script. the cold open, the themed segments in order, and the sign-off.
+// a podcast episode's entire script. the cold open, the themed segments in order, and the sign-off and goodbye.
 // each segment has the short transition into the segment, then its chapters
 export type PodcastEpisodeScript = {
 	coldOpen: PodcastEpisodeTurn[]

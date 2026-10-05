@@ -1,6 +1,14 @@
 // the helpers for the topic's reads and writes
 import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
-import type { Invite, ProfileIdentity, Topic, TopicResponse, TopicScan, UpdateTopicPayload } from "@shared/contracts"
+import type {
+	Invite,
+	ProfileIdentity,
+	Topic,
+	TopicGateResponse,
+	TopicResponse,
+	TopicScan,
+	UpdateTopicPayload,
+} from "@shared/contracts"
 import { isDailyFrequency } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
 import { FIRST_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
@@ -44,19 +52,33 @@ export type DailyFrequencyRejection = { status: "dailyFrequency"; limit: number 
 export type NewTopicSource = Extract<UpdateTopicPayload["sources"][number], { sourceKind: string }>
 export type Scan = typeof scans.$inferSelect
 
-// the invite topic's name for this id, or null if there is none
-export async function toInviteTopic(topicId: string): Promise<{ name: string | null } | null> {
-	// the visibility says whether there is a gate, and the name is what it shows
+/**
+ * Loads the gate response of an invite or private topic, or null for a public or missing topic.
+ */
+export async function loadTopicGateResponse(topicId: string): Promise<TopicGateResponse | null> {
+	// load the topic's visibility and name, and build its gate
 	const [topic] = await db
 		.select({ visibility: topics.visibility, name: topics.name })
 		.from(topics)
 		.where(eq(topics.id, topicId))
-	// an invite topic is the only one with a gate
-	if (topic?.visibility !== "invite") {
+	return topic ? toTopicGateResponse(topic) : null
+}
+
+/**
+ * Returns the gate response of an invite or private topic, naming only an invite topic, or null for a public topic.
+ */
+export function toTopicGateResponse(
+	topic: Pick<typeof topics.$inferSelect, "visibility" | "name">,
+): TopicGateResponse | null {
+	// a public topic has no gate
+	if (topic.visibility === "public") {
 		return null
 	}
-	// the name alone. a null result already says there is no invite topic to gate
-	return { name: topic.name }
+	return {
+		error: "forbidden",
+		gatedVisibility: topic.visibility,
+		topicName: topic.visibility === "invite" ? topic.name : null,
+	}
 }
 
 // the latest succeeded topic scan with its recap and duration

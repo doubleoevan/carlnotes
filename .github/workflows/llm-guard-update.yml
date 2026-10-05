@@ -38,6 +38,7 @@ jobs:
 
       # boot the candidate and measure it. continue-on-error, because a failed measurement must still notify
       # the readiness poll hits the same endpoint the scan calls use, and model download makes the first answer slow
+      # the measurement gives each text a minute. a runner screens a long article slower than the app's 2.5-second timeout
       - id: measure
         if: steps.check.outputs.update == 'true'
         continue-on-error: true
@@ -54,7 +55,7 @@ jobs:
             fi
             sleep 10
           done
-          LLM_GUARD_URL=http://localhost:8001 bun scripts/eval-pipeline.ts --guard-only | tee measurement.txt
+          LLM_GUARD_URL=http://localhost:8001 LLM_GUARD_TIMEOUT_MS=60000 bun evals/review-pipeline/reviewPipelineEval.ts --guard-only | tee measurement.txt
 
       # close upgrade llm-guard GitHub issues that the pinned version has caught up with or a newer release has replaced.
       # the titles use this workflow's own fixed format. anything not matching the current pair is considered done.
@@ -98,7 +99,7 @@ jobs:
           if [[ -f measurement.txt ]]; then
             measurement="Measured on this runner against the eval corpus:"$'\n\n```\n'"$(cat measurement.txt)"$'\n```'
           else
-            measurement="Measurement failed in ci — run locally: bump the compose tag, \`docker compose up -d llm-guard\`, then \`bun run eval --guard-only\`."
+            measurement="Measurement failed in ci — run locally: bump the compose tag, \`docker compose up -d llm-guard\`, then \`bun run eval:review-pipeline --guard-only\`."
           fi
           gh issue create --title "$title" --body "A newer \`llm-guard-api\` image is on Docker Hub: **$LATEST** (pinned: \`$PINNED\`).
 

@@ -5,15 +5,10 @@ import {
 	PODCAST_EPISODE_TITLE_MAX_CHARS,
 	type PodcastEpisodeChapterScript,
 } from "@shared/contracts"
+import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
+import { chatModel } from "../../worker/models"
 import {
-	type Assertion,
-	type AssertionValueFunctionContext,
-	type EvaluateResult,
-	evaluate,
-	type GradingResult,
-	type TestCase,
-} from "promptfoo"
-import {
+	isRepeatedGoodbyeOpeningTurn,
 	MAX_PODCAST_EPISODE_MINUTES,
 	type PodcastEpisodeSegment,
 	RejectedScriptError,
@@ -21,24 +16,19 @@ import {
 	toCheckedPodcastEpisodeSegment,
 	toScriptMinutes,
 } from "../../worker/podcast/podcastEpisodeScript"
+import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { PODCAST_EPISODE_SCRIPT_CASES, type PodcastEpisodeScriptCase } from "./podcastEpisodeScriptCases"
 import {
 	type PodcastEpisodeScriptVariables,
 	podcastEpisodeScriptWriter,
-	rubricGrader,
 	type WrittenPodcastEpisode,
 } from "./podcastEpisodeScriptProviders"
-
-// turn the prompt registry off. the eval measures the bundled templates in git.
-// turn promptfoo's own usage telemetry off too
-delete Bun.env.LANGFUSE_PUBLIC_KEY
-Bun.env.PROMPTFOO_DISABLE_TELEMETRY = "true"
 
 // a script from a thin input has to run under this many minutes
 const MAX_THIN_PODCAST_EPISODE_MINUTES = 7
 
-// where the full results are written, for reading a script after a check fails. logs/ is gitignored
-const RESULTS_PATH = "logs/eval-podcast-episode-script.json"
+// the words that outline-podcast-episode.md tells the writer to open each description with
+const DESCRIPTION_OPENING = "Carl and Vienna talk about"
 
 // what every rubric tells the grader about the writer's output
 const OUTPUT_SHAPE_RUBRIC =
@@ -50,7 +40,7 @@ const SUPPORT_RUBRIC = [
 	"A factual specific is a name, a number, a date, a price, a quotation, or an event.",
 	"Fail the output if a host states a factual specific that the source material does not have, or one that contradicts it.",
 	"Never fail the output for a host's reaction, opinion, joke, or question, for everyday reasoning about what the source material says, for a number rounded or said the way a person says it, or for the show's own words.",
-	"The show is Coffee Break, the carlnotes.com podcast, and its hosts are Carl and Vienna. The cold open may name the show, carlnotes.com, and the hosts, and a host may mention Carl's backstory: he never sleeps, drinks coffee, reads everything, finished the internet, and holds a raccoon and a machine learning textbook in his picture, or Vienna's: she is interested in everything, has more interests than hours in the day, a stack of half-read books, and a new obsession every week, and follows her topics on CarlNotes. The show closes on its fixed goodbye, in which Carl has more reading to do, Vienna says he always does, Carl calls it another great coffee break, Vienna asks whether it was as good for him as it was for her, Carl says not in front of the Raccoon, and Vienna says see you next coffee break.",
+	"The show is Coffee Break, the carlnotes.com podcast, and its hosts are Carl and Vienna. The cold open may name the show, carlnotes.com, and the hosts, and a host may mention Carl's backstory: he never sleeps, drinks coffee, reads everything, finished the internet, and holds a raccoon and a machine learning textbook in his picture, or Vienna's: she is interested in everything, has more interests than hours in the day, a stack of half-read books, and a new obsession every week, and follows her topics on CarlNotes. The show closes on Carl saying he has more reading to do and Vienna saying he always does, then a short goodbye in the hosts' own words.",
 ].join(" ")
 
 // the rubric that fails a chapter for copying its source or for a quote with no named source.
@@ -86,60 +76,49 @@ const DETERMINISTIC_ASSERTIONS: Assertion[] = [
 		metric: `the script is within ${MAX_PODCAST_EPISODE_MINUTES} minutes`,
 		value: gradeRunningTime,
 	},
+	{ type: "javascript", metric: `the description opens with "${DESCRIPTION_OPENING}"`, value: gradeDescriptionOpening },
+	{ type: "javascript", metric: "the writer leaves the goodbye's opening turns out", value: gradeGoodbyeOpening },
 ]
 
-// run every case, four at a time, with nothing saved to promptfoo's own database
-const evalRecord = await evaluate(
-	{
-		description: "episode script writer",
-		// the writer builds its own prompts from a case's variables, so this prompt only labels the run
-		prompts: ["an episode for {{topicName}}"],
-		providers: [podcastEpisodeScriptWriter],
-		// every case's grader and its checks that need no model. a list in a case's variables stays one value
-		defaultTest: {
-			options: { provider: rubricGrader, disableVarExpansion: true },
-			assert: DETERMINISTIC_ASSERTIONS,
-		},
-		tests: PODCAST_EPISODE_SCRIPT_CASES.map(toTestCase),
-		writeLatestResults: false,
-	},
-	{ cache: false, maxConcurrency: 4 },
-)
+// run every case. the grader is on a different model from the model that writes the script
+await runEval({
+	name: "podcast-episode-script",
+	description: "podcast episode script writer",
+	provider: podcastEpisodeScriptWriter,
+	grader: toRubricGrader(chatModel()),
+	defaultAssertions: DETERMINISTIC_ASSERTIONS,
+	testCases: PODCAST_EPISODE_SCRIPT_CASES.map(toTestCase),
+	toCaseLine,
+})
 
-// save the full results, print the report, and fail the run if any case failed or broke
-const evaluateSummary = await evalRecord.toEvaluateSummary()
-await Bun.write(RESULTS_PATH, JSON.stringify(evaluateSummary, null, 2))
-printReport(evaluateSummary.results)
-const { successes: successCount, failures: failureCount, errors: errorCount, tokenUsage } = evaluateSummary.stats
-console.log(
-	`\n${successCount} passed, ${failureCount} failed, ${errorCount} broke.`,
-	`grading used ${tokenUsage.assertions?.total} tokens`,
-)
-console.log(`full results: ${RESULTS_PATH}`)
-process.exitCode = failureCount + errorCount > 0 ? 1 : 0
-
-// one promptfoo test for a case. its variables, the rubrics over its source material,
+// one promptfoo test for a case. its variables, the rubrics over its source material plus the case's own rubric,
 // and the short-script check if its input is thin
 function toTestCase(podcastEpisodeScriptCase: PodcastEpisodeScriptCase): TestCase {
-	const { description, unsupportedClaims, isThinInput, ...podcastEpisodeScriptVariables } = podcastEpisodeScriptCase
+	const {
+		description,
+		unsupportedClaims,
+		isThinInput,
+		rubric: caseRubric,
+		...podcastEpisodeScriptVariables
+	} = podcastEpisodeScriptCase
 
-	// the grader reads what the writer was given, and what the case says the Findings leave out
-	const podcastEpisodeScriptVariablesJson = JSON.stringify(podcastEpisodeScriptVariables, null, 2)
-	const sourceMaterial = `Source material, as the script's writer was given it:\n${podcastEpisodeScriptVariablesJson}`
+	// what the case says the Findings leave out
 	const unsupportedClaimsRubric = unsupportedClaims
 		? `The source material does not say ${unsupportedClaims}. Fail the output if a host states any of that as a fact.`
 		: ""
 
-	// the support, quote, and title rubrics, each with the source material after it
-	const rubricAssertions: Assertion[] = [
-		{ metric: "says only what the findings support", rubric: `${SUPPORT_RUBRIC} ${unsupportedClaimsRubric}` },
-		{ metric: "paraphrases, and names the source of a quote", rubric: QUOTE_RUBRIC },
-		{ metric: "the title and the description are specific", rubric: TITLE_RUBRIC },
-	].map(({ metric, rubric }) => ({
-		type: "llm-rubric",
-		metric,
-		value: `${OUTPUT_SHAPE_RUBRIC} ${rubric.trim()}\n\n${sourceMaterial}`,
-	}))
+	// the support, quote, and title rubrics, plus the case's own rubric, each with the source material after it
+	const rubricAssertions = toRubricAssertions({
+		outputShapeRubric: OUTPUT_SHAPE_RUBRIC,
+		caseRubrics: [
+			{ metric: "says only what the findings support", rubric: `${SUPPORT_RUBRIC} ${unsupportedClaimsRubric}` },
+			{ metric: "paraphrases, and names the source of a quote", rubric: QUOTE_RUBRIC },
+			{ metric: "the title and the description are specific", rubric: TITLE_RUBRIC },
+			...(caseRubric ? [{ metric: description, rubric: caseRubric }] : []),
+		],
+		materialLabel: "Source material, as the script's writer was given it",
+		material: podcastEpisodeScriptVariables,
+	})
 
 	// a thin input also has to yield a short script
 	const thinInputAssertions: Assertion[] = isThinInput
@@ -200,6 +179,25 @@ function gradeRunningTime(writerOutput: string): GradingResult {
 	)
 }
 
+// fail the check unless the description opens with DESCRIPTION_OPENING
+function gradeDescriptionOpening(writerOutput: string): GradingResult {
+	const { description } = toWrittenPodcastEpisode(writerOutput).outline
+	return toGradingResult(
+		description.startsWith(DESCRIPTION_OPENING) ? undefined : `the description opens "${description.slice(0, 40)}"`,
+	)
+}
+
+// fail the check if the writer's sign-off or goodbye repeats a turn of GOODBYE_OPENING_TURNS, which
+// toPodcastEpisodeScript adds
+function gradeGoodbyeOpening(_writerOutput: string, context: AssertionValueFunctionContext): GradingResult {
+	const segments = context.providerResponse?.metadata?.segments as PodcastEpisodeSegment[]
+	const writerClosingTurns = segments.flatMap((segment) => [...(segment.signOff ?? []), ...(segment.goodbye ?? [])])
+
+	// find a turn that repeats a goodbye opening turn, in any case and punctuation
+	const repeatedTurn = writerClosingTurns.find(isRepeatedGoodbyeOpeningTurn)
+	return toGradingResult(repeatedTurn && `the writer wrote "${repeatedTurn.text}"`)
+}
+
 // fail the check unless a thin input's script has one chapter for each Finding and runs under the thin-input limit
 function gradeShortScript(writerOutput: string, context: AssertionValueFunctionContext): GradingResult {
 	const chapterCount = toChapters(writerOutput).length
@@ -217,36 +215,11 @@ function gradeShortScript(writerOutput: string, context: AssertionValueFunctionC
 	)
 }
 
-// print each case with its chapter count, length, and writing cost, then one line for each check
-function printReport(evaluateResults: EvaluateResult[]): void {
-	for (const evaluateResult of evaluateResults.toSorted((first, second) => first.testIdx - second.testIdx)) {
-		console.log(`\n${evaluateResult.success ? "PASS" : "FAIL"}  ${evaluateResult.testCase.description}`)
-
-		// a case whose writer broke has no output and no checks, only the error
-		const writerOutput = evaluateResult.response?.output
-		if (typeof writerOutput !== "string") {
-			console.log(`      broke: ${evaluateResult.error}`)
-			continue
-		}
-
-		// print the case's chapter count, length, and writing cost
-		const scriptMinutes = toScriptMinutes(toWrittenPodcastEpisode(writerOutput).podcastEpisodeScript)
-		const writeCostDollars = (evaluateResult.cost ?? 0).toFixed(4)
-		console.log(
-			`      ${toChapters(writerOutput).length} chapters, ${scriptMinutes.toFixed(1)} minutes, $${writeCostDollars} to write`,
-		)
-
-		// print one line for each check, with a failed check's reason
-		for (const checkResult of evaluateResult.gradingResult?.componentResults ?? []) {
-			const failureReasonSuffix = checkResult.pass ? "" : `: ${checkResult.reason}`
-			console.log(`      ${checkResult.pass ? "pass" : "FAIL"}  ${checkResult.assertion?.metric}${failureReasonSuffix}`)
-		}
-	}
-}
-
-// a check's result as promptfoo reads it. a check with no failure reason passes
-function toGradingResult(failureReason?: string): GradingResult {
-	return { pass: !failureReason, score: failureReason ? 0 : 1, reason: failureReason ?? "passed" }
+// a case's chapter count, length, and writing cost
+function toCaseLine(writerOutput: string, evaluateResult: EvaluateResult): string {
+	const scriptMinutes = toScriptMinutes(toWrittenPodcastEpisode(writerOutput).podcastEpisodeScript)
+	const writeCostDollars = (evaluateResult.cost ?? 0).toFixed(4)
+	return `${toChapters(writerOutput).length} chapters, ${scriptMinutes.toFixed(1)} minutes, $${writeCostDollars} to write`
 }
 
 // the writer's JSON output read back into its outline and script

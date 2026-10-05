@@ -304,6 +304,9 @@ Check for:
      `toHostWithoutWww` in `shared/seo.ts`)
    - `CardNode` in `api/share/previewImage.ts` (now `CardElement`), with every share card's `*Node` locals (now
      `*Element`)
+   - `scripts/eval-pipeline.ts`, `scripts/eval-pipeline.smoke.ts`, and `scripts/eval-pipeline.test.ts` (now
+     `reviewPipelineEval.ts`, `reviewPipelineEval.smoke.ts`, and `reviewPipelineEval.test.ts`, in `evals/review-pipeline/`), the bare `bun run eval` script (now
+     `bun run eval:review-pipeline`), and fixtures at `evals/<topicId>.json` (now `evals/review-pipeline/<topicId>.json`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

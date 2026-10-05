@@ -1,6 +1,6 @@
 // eval tests for the two ratios the README publishes, including empty denominators that would otherwise be NaN
 import { expect, test } from "bun:test"
-import { toPrecisionRecall } from "./eval-pipeline"
+import { toPrecisionRecall } from "./reviewPipelineEval"
 
 // the ordinary case: some hits, some misses, some missed relevant items
 test("toPrecisionRecall counts hits against predictions and against labels", () => {

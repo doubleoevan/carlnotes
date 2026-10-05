@@ -16,7 +16,7 @@ DEVELOPER_ONLY_SMOKE_FILES=(
 	worker/chat.smoke.ts
 	worker/speech.smoke.ts
 	worker/podcast/podcastEpisode.smoke.ts
-	scripts/eval-pipeline.smoke.ts
+	evals/review-pipeline/reviewPipelineEval.smoke.ts
 )
 
 # whether this file is one of them
@@ -40,7 +40,7 @@ SMOKE_FILES=(
 	worker/podcast/podcastEpisode.smoke.ts
 	worker/review.smoke.ts
 	worker/chat.smoke.ts
-	scripts/eval-pipeline.smoke.ts
+	evals/review-pipeline/reviewPipelineEval.smoke.ts
 	api/topic/subscriberCounts.smoke.ts
 	api/profiles.smoke.ts
 	api/team/teams.smoke.ts

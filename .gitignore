@@ -63,3 +63,6 @@ coverage
 # release note drafts, written here and passed to `gh release create --notes-file`.
 # the published copy lives on the release and in the releases table, never in the repo
 *.local.md
+
+# review pipeline page bodies, written by the fixture export. third-party pages stay out of git
+evals/review-pipeline/page-cache/

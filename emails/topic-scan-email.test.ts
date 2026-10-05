@@ -98,7 +98,7 @@ test("renderTopicScanEmail renders the recap with formatting and only kept-findi
 })
 
 // a scan with a podcast episode shows the podcast episode section
-test("renderTopicScanEmail shows the episode section with its title, link, and cover", async () => {
+test("renderTopicScanEmail shows the episode section with its title, link, cover, and description", async () => {
 	// render a scan email with a podcast episode that has a url and a cover
 	const podcastEpisodeUrl = "https://carlnotes.example.com/topics/abc?episode=episode-1"
 	const coverUrl = "https://carlnotes.example.com/api/podcast-covers/episode/episode-1/key-600.jpg"
@@ -106,14 +106,21 @@ test("renderTopicScanEmail shows the episode section with its title, link, and c
 		topicName: "LLM tooling",
 		findingCount: 0,
 		findings: [],
-		podcastEpisode: { title: "Evals <finally> grow up", url: podcastEpisodeUrl, coverUrl },
+		podcastEpisode: {
+			title: "Evals <finally> grow up",
+			description: "Carl and Vienna talk about three agents worth a query.",
+			url: podcastEpisodeUrl,
+			coverUrl,
+		},
 	})
 
-	// the heading, the title line with the title escaped, and the cover at email width.
+	// the heading, the title line with the title escaped, the description, and the cover at email width.
 	// the title and the cover both link to the podcast episode
 	expect(html).toContain("Coffee Break podcast with Carl and Vienna")
 	expect(html).toContain("Today&#x27;s episode: ")
 	expect(html).toContain("Evals &lt;finally&gt; grow up")
+	expect(html).toContain("Episode summary")
+	expect(html).toContain("Carl and Vienna talk about three agents worth a query.")
 	expect(html.split(`href="${podcastEpisodeUrl}"`).length - 1).toBe(2)
 	expect(html).toMatch(
 		new RegExp(`<img[^>]*src="${coverUrl}"[^>]*width="600"|<img[^>]*width="600"[^>]*src="${coverUrl}"`),
@@ -143,6 +150,10 @@ test("renderTopicScanEmail names a new episode in its summary line if the scan h
 		podcastEpisode: { title: "Evals grow up" },
 	})
 	expect(podcastEpisodeEmailHtml).toContain("2 new findings worth your time and a new Coffee Break episode on ")
+
+	// a podcast episode with no description shows no description
+	expect(podcastEpisodeEmailHtml).not.toContain("Episode summary")
+	expect(podcastEpisodeEmailHtml).not.toContain("talk about")
 
 	// a scan with no podcast episode has the line without the podcast episode
 	const noPodcastEpisodeEmailHtml = await renderTopicScanEmail(topicScanEmailProps)

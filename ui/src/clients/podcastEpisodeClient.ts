@@ -10,6 +10,7 @@ import {
 } from "@shared/contracts"
 import { z } from "zod"
 import { apiClient } from "./apiClient"
+import { readTopicGate, type TopicGate } from "./topicClient"
 
 // what a podcast feed url request returns
 const podcastFeedUrlResponse = z.object({ podcastFeedUrl: z.string() })
@@ -30,18 +31,30 @@ export async function fetchPodcastEpisode(podcastEpisodeId: string): Promise<Pod
 }
 
 /**
- * Loads a podcast episode's page, or null if the topic has no such episode or the user may not listen to the episode.
+ * Loads a podcast episode's page, the gate in front of its topic, or nothing if the topic has no such episode.
  */
 export async function fetchPodcastEpisodePage({
 	topicId,
 	season,
 	episodeNumber,
-}: PodcastEpisodePageParams): Promise<PodcastEpisodePageResponse | null> {
+}: PodcastEpisodePageParams): Promise<PodcastEpisodePageResult> {
 	const response = await apiClient.api.topics[":id"].episodes[":season"][":episodeNumber"].$get({
 		param: { id: topicId, season, episodeNumber },
 	})
-	return response.ok ? podcastEpisodePageResponse.parse(await response.json()) : null
+	if (response.ok) {
+		return { status: "visible", podcastEpisodePage: podcastEpisodePageResponse.parse(await response.json()) }
+	}
+
+	// a gated podcast episode shows the gate in front of its topic, and any other response is a missing episode
+	const topicGate = await readTopicGate(response)
+	return topicGate ? { status: "gated", topicGate } : { status: "missing" }
 }
+
+// what asking for a podcast episode page got: the page, the gate in front of its topic, or nothing
+export type PodcastEpisodePageResult =
+	| { status: "visible"; podcastEpisodePage: PodcastEpisodePageResponse }
+	| { status: "gated"; topicGate: TopicGate }
+	| { status: "missing" }
 
 // a season's number and its podcast episodes
 export type FetchedSeason = { season: number; seasonPodcastEpisodes: SeasonPodcastEpisodes }

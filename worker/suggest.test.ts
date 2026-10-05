@@ -1,13 +1,16 @@
-// source suggestion tests that identify when two Sources have the same source key
+// source suggestion tests: the source key, the advertised feed link, the show name match, and the option prefix
 import { expect, test } from "bun:test"
 import { FeedStatusError } from "./ingest/feed"
 import {
+	isSameShowName,
 	isTemporaryFailure,
 	loadWebSearchResources,
 	type SuggestedSource,
 	type SuggestionContext,
+	toAdvertisedFeedHref,
 	toSourceKey,
 	toTopicContext,
+	toValueWithoutOption,
 	toWebSearchPages,
 } from "./suggest"
 
@@ -15,6 +18,42 @@ import {
 const source = (sourceOption: SuggestedSource["sourceOption"], value: string): SuggestedSource => ({
 	sourceOption,
 	value,
+})
+
+test("a page's link tags advertise its rss or atom feed in either attribute order", () => {
+	// an rss link, with its entity-encoded query decoded
+	const rssPage = '<head><link rel="alternate" type="application/rss+xml" href="/feed.xml?a=1&amp;b=2"></head>'
+	expect(toAdvertisedFeedHref(rssPage)).toBe("/feed.xml?a=1&b=2")
+
+	// an atom link whose href comes first, after a stylesheet link
+	const atomPage =
+		'<link rel="stylesheet" href="/site.css"><link href="https://example.com/atom.xml" type="application/atom+xml" rel="alternate">'
+	expect(toAdvertisedFeedHref(atomPage)).toBe("https://example.com/atom.xml")
+
+	// a page whose links advertise no feed
+	expect(toAdvertisedFeedHref('<link rel="icon" href="/favicon.ico">')).toBeUndefined()
+})
+
+test("a podcast suggestion matches a show if either name holds the other", () => {
+	// either name may hold the other, no matter the case or the punctuation
+	expect(isSameShowName({ suggestedName: "Voxwomen", showName: "Voxwomen Cycling Show" })).toBe(true)
+	expect(isSameShowName({ suggestedName: "the cycling podcast", showName: "The Cycling Podcast" })).toBe(true)
+
+	// a show of another name does not match, and neither does an empty name
+	expect(
+		isSameShowName({ suggestedName: "Women's Cycling Podcast", showName: "Star Trek The Next Conversation" }),
+	).toBe(false)
+	expect(isSameShowName({ suggestedName: "!!!", showName: "Voxwomen" })).toBe(false)
+})
+
+test("a value loses its option prefix and keeps everything else", () => {
+	// the option prefix goes in upper or lower case, with the space after the prefix
+	expect(toValueWithoutOption(source("googleNews", "googleNews:cyclingweekly.com"))).toBe("cyclingweekly.com")
+	expect(toValueWithoutOption(source("x", "X: cycling"))).toBe("cycling")
+
+	// a url's own scheme and another option's name stay
+	expect(toValueWithoutOption(source("rss", "https://example.com/feed.xml"))).toBe("https://example.com/feed.xml")
+	expect(toValueWithoutOption(source("reddit", "x:cycling"))).toBe("x:cycling")
 })
 
 // a subreddit reads the same no matter how it was written, normalized by the ingester's own rule

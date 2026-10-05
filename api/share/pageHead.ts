@@ -10,7 +10,11 @@ import { db } from "../../db"
 import { topics } from "../../db/schema"
 import type { AppEnv } from "../currentUser"
 import { toInviteTarget } from "../invite/invites"
-import { loadPublicPodcastEpisode, loadPublishedPodcastEpisodeRows, type PodcastEpisodeRow } from "../podcast/helpers"
+import {
+	loadPublishedPodcastEpisode,
+	loadPublishedPodcastEpisodeRows,
+	type PodcastEpisodeRow,
+} from "../podcast/helpers"
 import { toPodcastEpisodeLd, toPodcastSeries, toPodcastSeriesLd } from "../podcast/podcastSeo"
 import { lastScan, loadTopicFeedUpdatedAt, scanFindings, toCreativeWorkLd, toFindingListLd } from "../seo"
 import { toPodcastEpisodePreview, toPodcastEpisodePreviewKey } from "./podcastEpisodeImage"
@@ -56,7 +60,7 @@ export const pageHeadRoute = new Hono<AppEnv>()
 			: creativeWork
 		return context.json(toTopicPageHead({ topicPreview, appUrl: appUrl(), jsonLd, podcastFeedUrl }))
 	})
-	// what a public topic's podcast episode page puts in its head. a private or invite topic's episode page gets no head
+	// what a podcast episode page puts in its head. a private or invite topic's episode serves its card alone
 	.get("/topics/:id/episodes/:season/:episodeNumber/head", async (context) => {
 		// respond 404 to a season or an episode number that is not a whole number
 		const { id: topicId, season, episodeNumber } = context.req.param()
@@ -67,17 +71,17 @@ export const pageHeadRoute = new Hono<AppEnv>()
 		}
 
 		// the topic's preview, and the published podcast episode at that season and episode number
-		const [topicPreview, publicPodcastEpisode] = await Promise.all([
+		const [topicPreview, publishedPodcastEpisode] = await Promise.all([
 			toTopicPreview(topicId),
-			loadPublicPodcastEpisode({ topicId, season: seasonNumber, episodeNumber: podcastEpisodeNumber }),
+			loadPublishedPodcastEpisode({ topicId, season: seasonNumber, episodeNumber: podcastEpisodeNumber }),
 		])
-		if (!topicPreview || !publicPodcastEpisode) {
+		if (!topicPreview || !publishedPodcastEpisode) {
 			return context.json({ error: "not found" }, 404)
 		}
 		return context.json(
 			toPodcastEpisodePageHead({
 				topicPreview,
-				podcastEpisodeRow: publicPodcastEpisode.podcastEpisodeRow,
+				podcastEpisodeRow: publishedPodcastEpisode.podcastEpisodeRow,
 				appUrl: appUrl(),
 			}),
 		)
@@ -158,7 +162,7 @@ export function toTopicPageHead({ topicPreview, appUrl, jsonLd, podcastFeedUrl }
 	}
 }
 
-// the public topic, the podcast episode, and the app's url that a podcast episode page's head is built from
+// the topic, the podcast episode, and the app's url that a podcast episode page's head is built from
 type ToPodcastEpisodePageHeadOptions = {
 	topicPreview: TopicPreview
 	podcastEpisodeRow: PodcastEpisodeRow
@@ -166,16 +170,18 @@ type ToPodcastEpisodePageHeadOptions = {
 }
 
 /**
- * Builds a public podcast episode page's head, which is indexed once its topic is shown.
+ * Builds a podcast episode page's head, with the card alone for an episode of a private or invite topic.
  */
 export function toPodcastEpisodePageHead({
 	topicPreview,
 	podcastEpisodeRow,
 	appUrl,
 }: ToPodcastEpisodePageHeadOptions): PageHead {
-	// the podcast episode's page path comes after its topic's page path, and is indexed once the topic is shown
+	// the podcast episode's page path comes after its topic's page path.
+	// a public topic's episode page is indexed once the topic is shown
 	const pageUrl = `${appUrl}${toPodcastEpisodePath({ id: topicPreview.topicId, name: topicPreview.title }, podcastEpisodeRow)}`
-	const isIndexed = topicPreview.keptCount >= MINIMUM_SHOWN_FINDINGS
+	const isPublicTopic = topicPreview.visibility === "public"
+	const isIndexed = isPublicTopic && topicPreview.keptCount >= MINIMUM_SHOWN_FINDINGS
 
 	// the episode's title, its audio, its topic's podcast, and its card's key
 	const podcastEpisodeTitle = podcastEpisodeRow.title ?? topicPreview.title
@@ -184,18 +190,29 @@ export function toPodcastEpisodePageHead({
 	const podcastEpisodePreviewKey = toPodcastEpisodePreviewKey(
 		toPodcastEpisodePreview(podcastEpisodeRow, topicPreview.title),
 	)
-	return {
+
+	// the head that every podcast episode page has, with its titles, its description, and its card
+	const cardPageHead = {
 		title: toPageTitle(`${podcastEpisodeTitle} · ${topicPreview.title}`),
 		cardTitle: podcastEpisodeTitle,
 		description: podcastEpisodeRow.description ?? "",
 		canonicalUrl: isIndexed ? pageUrl : null,
 		cardUrl: pageUrl,
-		// the episode's own card, its topic's podcast feed, and its audio
 		imageUrl: `${appUrl}/api/episodes/${podcastEpisodeRow.id}/preview.png?v=${toPreviewVersion(podcastEpisodePreviewKey)}`,
 		feedUrl: null,
+		isIndexed,
+	}
+
+	// a private or invite topic's episode page has its card alone
+	if (!isPublicTopic) {
+		return { ...cardPageHead, podcastFeedUrl: null, audioUrl: null, jsonLd: null }
+	}
+
+	// a public topic's episode page adds its topic's podcast feed, its audio, and its structured data
+	return {
+		...cardPageHead,
 		podcastFeedUrl: podcastSeries.feedUrl,
 		audioUrl,
-		isIndexed,
 		jsonLd: toPodcastEpisodeLd({
 			name: podcastEpisodeTitle,
 			description: podcastEpisodeRow.description ?? "",

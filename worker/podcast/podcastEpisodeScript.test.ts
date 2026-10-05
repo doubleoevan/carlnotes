@@ -44,6 +44,7 @@ function toSegment(firstChapterText = "The grinder is quieter now."): PodcastEpi
 			{ findingId: "finding-2", title: "Hard water", turns: [toHostTurn("Hard water sours the shot.")] },
 		],
 		signOff: [toHostTurn("That is the lot.")],
+		goodbye: [toHostTurn("Same time next brew.")],
 	}
 }
 
@@ -238,7 +239,7 @@ test("every segment draft has its long chapter titles cut, with no rejection", (
 	expect(checkedSegment.chapters[0]?.title.length).toBeLessThanOrEqual(80)
 })
 
-test("toCheckedPodcastEpisodeSegment rejects a first segment with no cold open and a last with no sign-off", () => {
+test("toCheckedPodcastEpisodeSegment rejects a first segment with no cold open and a last with no sign-off or goodbye", () => {
 	// the cold open belongs to the first segment
 	expect(() =>
 		toCheckedPodcastEpisodeSegment({ segment: { ...toSegment(), coldOpen: [] }, outline, segmentIndex: 0 }),
@@ -246,40 +247,60 @@ test("toCheckedPodcastEpisodeSegment rejects a first segment with no cold open a
 	expect(() =>
 		toCheckedPodcastEpisodeSegment({ segment: { ...toSegment(), signOff: undefined }, outline, segmentIndex: 0 }),
 	).toThrow("the last segment has no sign-off")
+	expect(() =>
+		toCheckedPodcastEpisodeSegment({ segment: { ...toSegment(), goodbye: undefined }, outline, segmentIndex: 0 }),
+	).toThrow("the last segment has no goodbye")
 
-	// a middle segment needs no cold open and no sign-off
+	// a middle segment needs no cold open, no sign-off, and no goodbye
 	const [segment] = outline.segments
 	const threeSegmentOutline = { ...outline, segments: segment ? [segment, segment, segment] : [] }
-	const middleSegment = { ...toSegment(), coldOpen: undefined, signOff: undefined }
+	const middleSegment = { ...toSegment(), coldOpen: undefined, signOff: undefined, goodbye: undefined }
 	expect(() =>
 		toCheckedPodcastEpisodeSegment({ segment: middleSegment, outline: threeSegmentOutline, segmentIndex: 1 }),
 	).not.toThrow()
 })
 
-test("toPodcastEpisodeScript ends on the writer's closing turns, then the goodbye", () => {
-	// the sign-off is the last segment's closing turns, then the goodbye with each line's speaker
+test("a last segment that repeats a goodbye opening turn is rejected, and the last draft's repair drops the turn", () => {
+	// an earlier draft whose goodbye repeats a goodbye opening turn, in any case and punctuation and without its
+	// leading "well", is rejected
+	const goodbye = [toHostTurn("I've got MORE reading to do!"), toHostTurn("Bye now.")]
+	const repeatingSegment = { ...toSegment(), goodbye }
+	expect(() => toCheckedPodcastEpisodeSegment({ segment: repeatingSegment, outline, segmentIndex: 0 })).toThrow(
+		"which the show adds itself",
+	)
+
+	// the last draft keeps every other closing turn and drops the repeated one
+	const repairedSegment = toCheckedPodcastEpisodeSegment({
+		segment: repeatingSegment,
+		outline,
+		segmentIndex: 0,
+		isLastScriptDraft: true,
+	})
+	expect(repairedSegment.goodbye?.map((turn) => turn.text)).toEqual(["Bye now."])
+	expect(repairedSegment.signOff?.map((turn) => turn.text)).toEqual(["That is the lot."])
+})
+
+test("toPodcastEpisodeScript ends on the sign-off, the goodbye's opening turns, then the last segment's goodbye", () => {
+	// the script's sign-off is the last segment's sign-off, the goodbye's opening turns, then the last segment's goodbye
 	const segment = toSegment()
-	const closingTurns = segment.signOff ?? []
 	const podcastEpisodeScript = toPodcastEpisodeScript([segment])
-	expect(podcastEpisodeScript.signOff.slice(0, closingTurns.length)).toEqual(closingTurns)
-	const goodbyeTurns = podcastEpisodeScript.signOff.slice(closingTurns.length)
-	expect(goodbyeTurns.map((turn) => `${turn.speaker}: ${turn.text}`)).toEqual([
-		"host: I've got more reading to do.",
+	expect(podcastEpisodeScript.signOff.map((turn) => `${turn.speaker}: ${turn.text}`)).toEqual([
+		"host: That is the lot.",
+		"host: Well, I've got more reading to do.",
 		"cohost: You always do.",
-		"host: Another great coffee break.",
-		"cohost: Was it as good for you as it was for me?",
-		"host: Not in front of the Raccoon.",
-		"cohost: See you next coffee break.",
+		"host: Same time next brew.",
 	])
 
 	// the cold open and the chapters are the segment's own
 	expect(podcastEpisodeScript.coldOpen).toHaveLength(1)
 	expect(podcastEpisodeScript.segments[0]?.chapters).toHaveLength(2)
 
-	// a script with no cold open and no sign-off still ends on the goodbye
-	const bareScript = toPodcastEpisodeScript([{ ...toSegment(), coldOpen: undefined, signOff: undefined }])
+	// a script with no cold open, no sign-off, and no goodbye still ends on the goodbye's opening turns
+	const bareScript = toPodcastEpisodeScript([
+		{ ...toSegment(), coldOpen: undefined, signOff: undefined, goodbye: undefined },
+	])
 	expect(bareScript.coldOpen).toHaveLength(0)
-	expect(bareScript.signOff).toEqual(goodbyeTurns)
+	expect(bareScript.signOff.map((turn) => turn.text)).toEqual(["Well, I've got more reading to do.", "You always do."])
 })
 
 test("toPodcastEpisodeScript keeps a script past thirty minutes", () => {

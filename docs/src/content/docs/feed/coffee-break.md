@@ -29,9 +29,10 @@ Subscribe buttons beside it and the small player docked at the bottom](../../../
 
 - **Chapters.** One per finding. The scrubber is split by chapter, and the chapter list shows each
   one's source and times. A thumbs up or down on a chapter rates its finding, the same as rating
-  it in the list. A finding you like or bookmark comes back in later episodes, right after the
-  brew's new findings, and one you rate down is never covered again. A chapter whose finding has left the list
-  keeps its own rating, and the finding takes it if Carl finds that page again.
+  it in the list. On a phone, tap a chapter to open its finding and rate it there. A finding you
+  like or bookmark comes back in later episodes, right after the brew's new findings, and one you
+  rate down is never covered again. A chapter whose finding has left the list keeps its own
+  rating, and the finding takes it if Carl finds that page again.
 - **Speed and skips.** Back 15 seconds, forward 30, and a speed control.
 - **It keeps playing.** Go to another page and the episode keeps playing in a small player at the
   bottom of the screen. Your phone's lock screen shows the episode and skips chapters.

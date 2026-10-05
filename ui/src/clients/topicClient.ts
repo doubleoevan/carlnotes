@@ -13,9 +13,11 @@ import {
 	scanNote,
 	suggestSourcesResponse,
 	type TopicFeedResponse,
+	type TopicGateResponse,
 	type TopicResponse,
 	topicCreateResponse,
 	topicFeedResponse,
+	topicGateResponse,
 	topicResponse,
 	type UpdateTopicPayload,
 } from "@shared/contracts"
@@ -147,10 +149,16 @@ export async function sendTopicFindingOpened(findingId: string): Promise<void> {
 	)
 }
 
+// the visibility of a gated topic: invite or private
+export type GatedTopicVisibility = TopicGateResponse["gatedVisibility"]
+
+// the gate in front of an invite or private topic, with its visibility and an invite topic's name
+export type TopicGate = { visibility: GatedTopicVisibility; topicName: string | null }
+
 // what asking for a topic page got: the topic, the gate in front of it, or no such topic at all
 export type TopicPageResult =
 	| { status: "visible"; topic: TopicResponse }
-	| { status: "gated"; topicName: string | null }
+	| { status: "gated"; topicGate: TopicGate }
 	| { status: "missing" }
 
 // whether a fetch is the poll that repeats while a scan runs
@@ -168,12 +176,21 @@ export async function fetchTopicPage(
 	if (response.ok) {
 		return { status: "visible", topic: topicResponse.parse(await response.json()) }
 	}
-	// a gated topic shows how it is gated. the values are checked instead of trusted
-	const body = (await response.json().catch(() => null)) as { gatedVisibility?: unknown; topicName?: unknown } | null
-	if (body?.gatedVisibility !== "invite") {
-		return { status: "missing" }
+	// a gated topic shows its gate, and any other response is a missing topic
+	const topicGate = await readTopicGate(response)
+	return topicGate ? { status: "gated", topicGate } : { status: "missing" }
+}
+
+/**
+ * Reads the gate from a topic page or podcast episode page response, or returns null if the response names no gate.
+ */
+export async function readTopicGate(response: { json: () => Promise<unknown> }): Promise<TopicGate | null> {
+	// check the body against the gate's contract instead of trusting it
+	const topicGateResult = topicGateResponse.safeParse(await response.json().catch(() => null))
+	if (!topicGateResult.success) {
+		return null
 	}
-	return { status: "gated", topicName: typeof body?.topicName === "string" ? body.topicName : null }
+	return { visibility: topicGateResult.data.gatedVisibility, topicName: topicGateResult.data.topicName }
 }
 
 /**

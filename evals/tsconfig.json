@@ -1,6 +1,6 @@
 {
 	"extends": "../tsconfig.base.json",
 	"compilerOptions": { "paths": { "@shared/*": ["../shared/*"] } },
-	"references": [{ "path": "../worker" }, { "path": "../shared" }],
+	"references": [{ "path": "../api" }, { "path": "../worker" }, { "path": "../db" }, { "path": "../shared" }],
 	"include": ["**/*.ts"]
 }

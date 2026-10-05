@@ -3,6 +3,7 @@
 import {
 	PODCAST_EPISODE_DESCRIPTION_MAX_CHARS,
 	PODCAST_EPISODE_TITLE_MAX_CHARS,
+	type PodcastEpisodeChapterScript,
 	type PodcastEpisodeScript,
 	type PodcastEpisodeTurn,
 	podcastEpisodeChapterScriptPayload,
@@ -32,14 +33,10 @@ const MAX_CHAPTER_QUOTES = 3
 // the text inside straight or curly double quotation marks
 const QUOTED_TEXT_PATTERN = /["“]([^"“”]+)["”]/g
 
-// the goodbye that ends every Podcast Episode, after the writer's closing turns
-const GOODBYE_TURNS: PodcastEpisodeTurn[] = [
-	{ speaker: "host", text: "I've got more reading to do." },
+// the turns that open every Podcast Episode's goodbye, after the last segment's sign-off
+export const GOODBYE_OPENING_TURNS: PodcastEpisodeTurn[] = [
+	{ speaker: "host", text: "Well, I've got more reading to do." },
 	{ speaker: "cohost", text: "You always do." },
-	{ speaker: "host", text: "Another great coffee break." },
-	{ speaker: "cohost", text: "Was it as good for you as it was for me?" },
-	{ speaker: "host", text: "Not in front of the Raccoon." },
-	{ speaker: "cohost", text: "See you next coffee break." },
 ]
 
 // one Finding as a script prompt lists it
@@ -53,7 +50,7 @@ export type PodcastEpisodeFinding = {
 }
 
 // the outline that the first call writes. the Podcast Episode's title and description, and its segments in order.
-// each segment has its theme and its Findings' planned minutes. the checks below apply the length limits
+// each chapter has the number that its Finding is listed under and its minutes. the checks below apply the limits
 export const podcastEpisodeOutlinePayload = z.object({
 	title: z.string().trim().min(1),
 	description: z.string().trim().min(1),
@@ -61,22 +58,35 @@ export const podcastEpisodeOutlinePayload = z.object({
 		.array(
 			z.object({
 				theme: z.string().trim().min(1),
-				chapters: z.array(z.object({ findingId: z.string().min(1), minutes: z.number() })).min(1),
+				chapters: z.array(z.object({ findingNumber: z.number().int(), minutes: z.number() })).min(1),
 			}),
 		)
 		.min(1),
 })
-export type PodcastEpisodeOutline = z.infer<typeof podcastEpisodeOutlinePayload>
+export type PodcastEpisodeOutlinePayload = z.infer<typeof podcastEpisodeOutlinePayload>
 
-// what one segment call writes. the transition into the segment and the segment's chapters.
-// the Podcast Episode's first segment also has the cold open, and its last segment also has the sign-off
+// the outline with each chapter's Finding number mapped back to the Finding's id
+export type PodcastEpisodeOutline = Omit<PodcastEpisodeOutlinePayload, "segments"> & {
+	segments: { theme: string; chapters: { findingId: string; minutes: number }[] }[]
+}
+
+// what one segment call writes. the transition into the segment and its chapters, each with its Finding's number.
+// the first segment also has the cold open, and the last segment also has the sign-off and the goodbye
 export const podcastEpisodeSegmentPayload = z.object({
 	coldOpen: z.array(podcastEpisodeTurnPayload).optional(),
 	transition: z.array(podcastEpisodeTurnPayload),
-	chapters: z.array(podcastEpisodeChapterScriptPayload).min(1),
+	chapters: z
+		.array(podcastEpisodeChapterScriptPayload.omit({ findingId: true }).extend({ findingNumber: z.number().int() }))
+		.min(1),
 	signOff: z.array(podcastEpisodeTurnPayload).optional(),
+	goodbye: z.array(podcastEpisodeTurnPayload).optional(),
 })
-export type PodcastEpisodeSegment = z.infer<typeof podcastEpisodeSegmentPayload>
+export type PodcastEpisodeSegmentPayload = z.infer<typeof podcastEpisodeSegmentPayload>
+
+// the segment with each chapter's Finding number mapped back to the Finding's id
+export type PodcastEpisodeSegment = Omit<PodcastEpisodeSegmentPayload, "chapters"> & {
+	chapters: PodcastEpisodeChapterScript[]
+}
 
 // a script draft, or a whole script, that failed a check
 export class RejectedScriptError extends Error {}
@@ -153,7 +163,7 @@ export function toCheckedPodcastEpisodeSegment({
 }
 
 /**
- * Builds the script from the segments that have a chapter, ending on the last segment's sign-off or the default one.
+ * Builds the script from the segments that have a chapter, ending on the last segment's sign-off and goodbye.
  * Throws a RejectedScriptError if no segment has a chapter.
  */
 export function toPodcastEpisodeScript(segments: PodcastEpisodeSegment[]): PodcastEpisodeScript {
@@ -163,14 +173,36 @@ export function toPodcastEpisodeScript(segments: PodcastEpisodeSegment[]): Podca
 		throw new RejectedScriptError("the script has no chapter")
 	}
 
-	// the cold open from the first segment, the narrated segments, and the last segment's closing turns,
-	// then the goodbye
-	const closingTurns = segments.at(-1)?.signOff ?? []
+	// return the first segment's cold open, the narrated segments, and the last segment's sign-off,
+	// then the goodbye's opening turns and the last segment's goodbye
+	const lastSegment = segments.at(-1)
 	return {
 		coldOpen: segments[0]?.coldOpen ?? [],
 		segments: narratedSegments.map(({ transition, chapters }) => ({ transition, chapters })),
-		signOff: [...closingTurns, ...GOODBYE_TURNS],
+		signOff: [...(lastSegment?.signOff ?? []), ...GOODBYE_OPENING_TURNS, ...(lastSegment?.goodbye ?? [])],
 	}
+}
+
+/**
+ * Returns a goodbye opening turn's text without its end punctuation.
+ */
+export function toGoodbyeOpeningLine(goodbyeOpeningTurn: PodcastEpisodeTurn): string {
+	return goodbyeOpeningTurn.text.replace(/[.!?]+$/, "")
+}
+
+/**
+ * Checks whether a turn repeats a goodbye opening turn, ignoring case, end punctuation, and a leading "well".
+ */
+export function isRepeatedGoodbyeOpeningTurn(turn: PodcastEpisodeTurn): boolean {
+	const turnText = toComparableTurnText(turn)
+	return GOODBYE_OPENING_TURNS.some((goodbyeOpeningTurn) => turnText.includes(toComparableTurnText(goodbyeOpeningTurn)))
+}
+
+// a turn's text in lower case, without its end punctuation and a leading "well"
+function toComparableTurnText(turn: PodcastEpisodeTurn): string {
+	return toGoodbyeOpeningLine(turn)
+		.toLowerCase()
+		.replace(/^well,?\s+/, "")
 }
 
 /**
@@ -301,8 +333,8 @@ type CheckPodcastEpisodeSegmentOptions = {
 	isLastSegment: boolean
 }
 
-// throw a RejectedScriptError if the chapters do not match the outlined Findings one for one,
-// a chapter quotes too much, the first segment has no cold open, or the last segment has no sign-off
+// throw a RejectedScriptError if the chapters do not match the outlined Findings one for one, a chapter quotes too much,
+// the first segment has no cold open, or the last has no sign-off, no goodbye, or a repeated goodbye opening turn
 function checkPodcastEpisodeSegment({
 	segment,
 	outlinedFindingIds,
@@ -335,17 +367,32 @@ function checkPodcastEpisodeSegment({
 		)
 	}
 
-	// reject a first segment with no cold open and a last segment with no sign-off
+	// reject a first segment with no cold open
 	if (isFirstSegment && !segment.coldOpen?.length) {
 		throw new RejectedScriptError("the first segment has no cold open")
 	}
+
+	// reject a last segment with no sign-off or no goodbye
 	if (isLastSegment && !segment.signOff?.length) {
 		throw new RejectedScriptError("the last segment has no sign-off")
 	}
+	if (isLastSegment && !segment.goodbye?.length) {
+		throw new RejectedScriptError("the last segment has no goodbye")
+	}
+
+	// reject a sign-off or a goodbye that repeats a goodbye opening turn
+	const repeatedOpeningTurn = [...(segment.signOff ?? []), ...(segment.goodbye ?? [])].find(
+		isRepeatedGoodbyeOpeningTurn,
+	)
+	if (repeatedOpeningTurn) {
+		throw new RejectedScriptError(
+			`the sign-off or the goodbye repeats "${repeatedOpeningTurn.text}", which the show adds itself`,
+		)
+	}
 }
 
-// repair the last segment draft. leave out each chapter of an unknown or repeated Finding,
-// and each chapter that quotes too much
+// repair the last segment draft. leave out each chapter of an unknown or repeated Finding, each chapter that quotes too
+// much, and each sign-off or goodbye turn that repeats a goodbye opening turn
 function toRepairedPodcastEpisodeSegment(
 	segment: PodcastEpisodeSegment,
 	outlinedFindingIds: string[],
@@ -359,8 +406,10 @@ function toRepairedPodcastEpisodeSegment(
 		return isNewOutlinedFinding && isQuotedWithinLimit(chapter.turns)
 	})
 
-	// return the segment with its kept chapters, even if no chapter is kept
-	return { ...segment, chapters }
+	// return the segment with its kept chapters, even if no chapter is kept, and its other closing turns
+	const signOff = segment.signOff?.filter((turn) => !isRepeatedGoodbyeOpeningTurn(turn))
+	const goodbye = segment.goodbye?.filter((turn) => !isRepeatedGoodbyeOpeningTurn(turn))
+	return { ...segment, chapters, signOff, goodbye }
 }
 
 // a text within the character limit. a longer text is cut at its last word boundary and ends in an ellipsis

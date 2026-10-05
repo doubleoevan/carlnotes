@@ -254,7 +254,7 @@ async function savePodcastEpisodeAsPublished({
 	})
 }
 
-// tell IndexNow about a public Topic's new podcast episode page. a private or invite Topic has no public page
+// tell IndexNow about a public Topic's new podcast episode page. a private or invite Topic's episode page is noindex
 async function notifyPodcastEpisodePage({
 	topicId,
 	season,

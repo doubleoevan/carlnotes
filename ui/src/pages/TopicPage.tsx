@@ -1,4 +1,4 @@
-import { type TopicResponse, toCtaTag } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts"
 import { isTopicSlugStale, toTopicPath } from "@shared/seo"
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
 import type * as React from "react"
@@ -10,13 +10,11 @@ import {
 	fetchTopicPage,
 	sendTopicFeatureOrder,
 	sendTopicSubscription,
+	type TopicGate,
 } from "@/clients/topicClient"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { NotesSection } from "@/components/note/NotesSection"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
-import { Button, buttonVariants } from "@/components/primitives/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
@@ -25,6 +23,7 @@ import { NewCountInfo } from "@/components/topic/Topic"
 import { isFollowTopicInMenu, TopicActionBar, toTopicActionOptions } from "@/components/topic/TopicActions"
 import { TopicEditorChoiceDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
+import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
 import { TopicHeader } from "@/components/topic/TopicPageHeader"
 import { type FeatureOrderMove, TopicRankDialog } from "@/components/topic/TopicRankDialog"
@@ -35,7 +34,6 @@ import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
 import { useLoadInBrowser, useOrigin } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
-import { useSearchParams } from "@/hooks/useSearchParams"
 import { matchesTopicFindingFilter } from "@/lib/topicFindingFilters"
 import { toSortedTopicFindings } from "@/lib/topicFindingSorts"
 import { cn, NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
@@ -52,7 +50,7 @@ type TopicDialog = "edit-choice" | "edit" | "make-public" | "share" | "rank" | "
 export function TopicPage() {
 	const { topicId = "", topicSlug } = useParams({ strict: false })
 	// the topic page payload, how the topic is gated, and its reload
-	const { topic, gatedTopic, reloadTopicPage } = useTopicPagePayload({ topicId, topicSlug })
+	const { topic, topicGate, reloadTopicPage } = useTopicPagePayload({ topicId, topicSlug })
 	// the page's origin for the topic-bound mcp url
 	const origin = useOrigin()
 	const navigate = useNavigate()
@@ -192,7 +190,7 @@ export function TopicPage() {
 			{!topic && (
 				<TopicPagePlaceholder
 					isLoading={topic === undefined}
-					gatedTopic={gatedTopic}
+					topicGate={topicGate}
 					isSignedIn={Boolean(session)}
 					topicId={topicId}
 				/>
@@ -247,7 +245,7 @@ type UseTopicPagePayloadOptions = { topicId: string; topicSlug: string | undefin
 // the topic page payload and how the topic is gated, seeded by the server's read and reloaded on a new topic id or a chat change
 function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions): {
 	topic: TopicResponse | null | undefined
-	gatedTopic: { topicName: string | null } | null
+	topicGate: TopicGate | null
 	reloadTopicPage: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
 } {
 	const navigate = useNavigate()
@@ -265,8 +263,8 @@ function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions)
 	const loadedTopic = loadedTopicById ?? loadedTopicBySlug
 	// the topic page payload. undefined while loading, null if missing or not visible
 	const [topic, setTopic] = useState<TopicResponse | null | undefined>(loadedTopic ?? undefined)
-	// the gate in front of an invite topic this user may not see, with the topic's name if the api sends the name
-	const [gatedTopic, setGatedTopic] = useState<{ topicName: string | null } | null>(null)
+	// the gate in front of an invite or private topic that the user may not see
+	const [topicGate, setTopicGate] = useState<TopicGate | null>(null)
 
 	// fetch the topic page payload, which says whether the topic is visible, gated to this user, or missing
 	const reloadTopicPage = useCallback(
@@ -274,7 +272,7 @@ function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions)
 			try {
 				const topicPage = await fetchTopicPage(topicId, fetchTopicPageOptions)
 				setTopic(topicPage.status === "visible" ? topicPage.topic : null)
-				setGatedTopic(topicPage.status === "gated" ? { topicName: topicPage.topicName } : null)
+				setTopicGate(topicPage.status === "gated" ? topicPage.topicGate : null)
 			} catch (error) {
 				console.error("topic page load failed", error)
 				setTopic(null)
@@ -286,7 +284,7 @@ function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions)
 	// load skips while hydrating the public topic the server loaded, unless a scan was running, whose findings may have changed since
 	const resetAndReloadTopicPage = useCallback((): void => {
 		setTopic((previousTopic) => (previousTopic?.id === topicId ? previousTopic : undefined))
-		setGatedTopic(null)
+		setTopicGate(null)
 		void reloadTopicPage()
 	}, [reloadTopicPage, topicId])
 	const isLoadedOnServer =
@@ -307,7 +305,7 @@ function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions)
 			void reloadTopicPage()
 		}
 	}, [topicChangeCount, reloadTopicPage])
-	return { topic, gatedTopic, reloadTopicPage }
+	return { topic, topicGate, reloadTopicPage }
 }
 
 /**
@@ -438,73 +436,26 @@ function TopicDialogs({
 // what shows in place of the topic
 function TopicPagePlaceholder({
 	isLoading,
-	gatedTopic,
+	topicGate,
 	isSignedIn,
 	topicId,
 }: {
 	isLoading: boolean
-	gatedTopic: { topicName: string | null } | null
+	topicGate: TopicGate | null
 	isSignedIn: boolean
 	topicId: string
 }) {
 	if (isLoading) {
 		return <TopicSkeleton />
 	}
-	if (!gatedTopic) {
+	if (!topicGate) {
 		return <p className="text-muted-foreground mt-6 text-sm">{"Carl couldn't find this topic. He checked twice."}</p>
 	}
-	// the page's skeleton behind the notice. the title is shown for an invite topic the user does not have access to
+	// the page's skeleton behind the notice, titled with an invite topic's name
 	return (
 		<>
-			<TopicSkeleton topicTitle={gatedTopic.topicName ?? undefined} />
-			<TopicGateNotice isSignedIn={isSignedIn} topicId={topicId} />
-		</>
-	)
-}
-
-/**
- * What a user sees when they open a topic they don't have access to: the page's skeleton behind a notice.
- */
-function TopicGateNotice({ isSignedIn, topicId }: { isSignedIn: boolean; topicId: string }) {
-	const navigate = useNavigate()
-
-	// where a visitor returns after signing up
-	const returnPath = `?next=${encodeURIComponent(`/topics/${topicId}`)}`
-	// which arrival a signup gets attributed to for analytics
-	const searchParams = useSearchParams()
-	const ctaTag = toCtaTag(searchParams.get("src")) ?? "gate"
-	return (
-		<Dialog open onOpenChange={() => navigate({ to: "/" })}>
-			{/* the gate's own actions are the only ways out, so there is no ✕ */}
-			<DialogContent className="sm:max-w-md" hideCloseButton>
-				<DialogTitle>This topic is invite-only</DialogTitle>
-				<DialogDescription>
-					{isSignedIn ? "Ask the topic owner for an invite to see it." : "Sign up to see it."}
-				</DialogDescription>
-				<DialogFooter>
-					{isSignedIn ? (
-						// the only action a signed-in user has here is leaving
-						<Button onClick={() => navigate({ to: "/" })}>Back to CarlNotes</Button>
-					) : (
-						<GatedSignedOutActions returnPath={returnPath} ctaTag={ctaTag} />
-					)}
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
-	)
-}
-
-// the signed-out visitor's call-to-action links, which return to this topic after login or signup
-function GatedSignedOutActions({ returnPath, ctaTag }: { returnPath: string; ctaTag: string }) {
-	return (
-		<>
-			<AnchorLink href={`/login${returnPath}`} className={buttonVariants({ variant: "outline" })}>
-				Log in
-			</AnchorLink>
-			{/* cta names the arrival for the signup_completed event */}
-			<AnchorLink href={`/signup${returnPath}&cta=${ctaTag}`} className={buttonVariants({ variant: "default" })}>
-				Sign up
-			</AnchorLink>
+			<TopicSkeleton topicTitle={topicGate.topicName ?? undefined} />
+			<TopicGateNotice visibility={topicGate.visibility} isSignedIn={isSignedIn} returnPath={`/topics/${topicId}`} />
 		</>
 	)
 }

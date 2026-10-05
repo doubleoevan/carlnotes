@@ -37,8 +37,8 @@ import {
 } from "./retrieve"
 import { type SearchTotal, webSearchTool } from "./search"
 
-// how many model steps one chat turn search may take
-const MAX_TURN_STEPS = 8
+// how many model steps one chat turn may take
+export const MAX_TURN_STEPS = 8
 
 // the reply's token limit, bounding what one chat turn can spend on expensive output tokens
 const MAX_TURN_OUTPUT_TOKENS = 3000
@@ -452,8 +452,10 @@ async function toOpenNewTopicBlock(): Promise<string> {
 	return writePrompt(template, {})
 }
 
-// the edit block for a turn with the topic tools, or "None." for a turn without them
-async function toEditTopicBlock(tools: ChatTurnInput["tools"]): Promise<string> {
+/**
+ * Returns the edit block for a turn with the topic tools, or "None." for a turn without the topic tools.
+ */
+export async function toEditTopicBlock(tools: ChatTurnInput["tools"]): Promise<string> {
 	if (!tools) {
 		return EMPTY_EDIT_TOPIC_BLOCK
 	}

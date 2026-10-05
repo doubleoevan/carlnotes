@@ -189,7 +189,9 @@ no cover, as its wireframe has none. The next and previous controls SHALL skip t
 
 ### Requirement: A chapter's thumbs rate its Finding, or the chapter once its Finding is filtered out
 
-Each chapter in the player SHALL offer thumbs to a user who may rate the Topic's Findings. If the Topic still has the
+Each chapter in the player SHALL offer thumbs to a user who may rate the Topic's Findings, on a screen at least as wide
+as the `sm` breakpoint. On a narrower screen the chapter rows SHALL show no thumbs, so the titles have the row's width,
+and a chapter's Finding is rated from the note that its row opens. If the Topic still has the
 chapter's Finding, the thumbs SHALL write the same rating as that Finding's thumbs in the feed, through the same route
 and the same permission. If a Scan filtered the Finding out, the thumbs SHALL write a rating on the chapter itself under
 the same permission. A later Finding of the chapter's Resource on the same Topic SHALL take the newest chapter rating,
@@ -212,6 +214,11 @@ thumbs.
 
 - **WHEN** a signed-out visitor opens a public Topic's player
 - **THEN** its chapters show no thumbs
+
+#### Scenario: A phone shows no chapter thumbs
+
+- **WHEN** an owner opens the player on a phone
+- **THEN** its chapters show no thumbs, and a chapter's row opens its Finding's note, which has the Finding's thumbs
 
 ### Requirement: Narrated Findings show a pill, and the one that is playing is highlighted
 

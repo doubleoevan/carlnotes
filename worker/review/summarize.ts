@@ -162,8 +162,10 @@ function toSourcesBlock(scannedSources: ScannedSource[]): string {
 		.join("\n")
 }
 
-// the Scan's total spend with its per-stage breakdown, ingestion first as it is charged
-function toCostLine(budget: Budget): string {
+/**
+ * Returns the Scan's total spend with its per-stage breakdown, ingestion first as it is charged.
+ */
+export function toCostLine(budget: Budget): string {
 	const { ingestion, embedding, fetch, scoringCheap, scoringPremium } = budget.stageCosts
 	return `total $${budget.spentDollars.toFixed(4)} — ingestion $${ingestion.toFixed(4)}, embedding $${embedding.toFixed(4)}, fetch $${fetch.toFixed(4)}, cheap scoring $${scoringCheap.toFixed(4)}, premium scoring $${scoringPremium.toFixed(4)}`
 }

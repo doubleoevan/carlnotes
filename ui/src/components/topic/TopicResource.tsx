@@ -2,11 +2,14 @@ import type { ChatLinkPreview, TopicFinding } from "@shared/contracts"
 import { Bookmark, Check, Circle, ExternalLink } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useState } from "react"
+import { authClient, toSessionProfileIdentity } from "@/clients/authClient"
 import { fetchTopicFindingLinkPreview, sendFindingFeedback } from "@/clients/topicClient"
+import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { HostFavicon } from "@/components/common/HostFavicon"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { RatingThumbs } from "@/components/common/RatingThumbs"
+import { TooltipLabel, TooltipSection } from "@/components/common/UpdateCountBadge"
 import { Input } from "@/components/primitives/input"
 import {
 	Popover,
@@ -64,7 +67,7 @@ export function TopicResource({
 		setIsNoteOpen(isOpen)
 	}
 	const [isHintOpen, setIsHintOpen] = useState(false)
-	// the bookmark mark's label and tooltip, shared so the two never drift apart
+	// the bookmark mark's accessible name
 	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
 	// the hover highlight paints on a rounded under-layer, so the separator above the row stays straight
 	return (
@@ -108,7 +111,9 @@ export function TopicResource({
 						>
 							<Bookmark className="size-3.75 fill-current" strokeWidth={2.5} />
 						</TooltipTrigger>
-						<TooltipContent>{bookmarkLabel}</TooltipContent>
+						<TooltipContent>
+							<BookmarkMarkTooltip teamBookmarks={resource.teamBookmarks} />
+						</TooltipContent>
 					</Tooltip>
 				)}
 				{/* the left padding clears the rank slot, and the right padding is the row's own inset */}
@@ -135,6 +140,35 @@ export function TopicResource({
 				/>
 			</div>
 		</Popover>
+	)
+}
+
+// the bookmark mark's tooltip, with the remove hint over everyone who kept the finding, the user first
+function BookmarkMarkTooltip({ teamBookmarks }: { teamBookmarks: TopicFinding["teamBookmarks"] }) {
+	// the user, then each team member who kept the finding
+	const { data: session } = authClient.useSession()
+	const sessionUser = session?.user
+	const userBookmarks = sessionUser ? [toSessionProfileIdentity(sessionUser)] : []
+	const teamMemberBookmarks = teamBookmarks.filter((teamBookmark) => teamBookmark.userId !== sessionUser?.id)
+
+	// each bookmarking user by username, beside the user's avatar
+	const bookmarkedByLines = [...userBookmarks, ...teamMemberBookmarks].map((bookmarkingUser) => ({
+		key: bookmarkingUser.userId,
+		line: <TooltipLabel>{bookmarkingUser.username}</TooltipLabel>,
+		marker: (
+			<UserAvatar
+				userId={bookmarkingUser.userId}
+				username={bookmarkingUser.username}
+				avatarVersion={bookmarkingUser.avatarVersion}
+				className="size-4"
+			/>
+		),
+	}))
+	return (
+		<div className="space-y-1">
+			<p>Remove your bookmark</p>
+			<TooltipSection tooltipLines={bookmarkedByLines} />
+		</div>
 	)
 }
 
