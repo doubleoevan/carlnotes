@@ -8,7 +8,7 @@ import {
 	SCAN_SPENT_BUDGET_LABEL,
 	SCHEDULED_SCAN_SPENT_BUDGET_REASON,
 	toScanFailureLabel,
-	toScanFailureReason,
+	toWorkflowFailureReason,
 } from "./scanFailure"
 
 // the proxy's rejection, as it reaches the workflow: wrapped by the AI sdk's retry and then by temporal
@@ -26,7 +26,7 @@ function temporalFailure(): Error {
  * The reason has to come from the cause chain instead.
  */
 test("the stored reason comes from the cause, not temporal's wrapper", () => {
-	const reason = toScanFailureReason(temporalFailure())
+	const reason = toWorkflowFailureReason(temporalFailure())
 	expect(reason).toContain("Budget has been exceeded")
 	expect(reason).not.toBe("Activity task failed")
 
@@ -52,15 +52,15 @@ test("the first Scan's budget reason reads as the budget label", () => {
 
 // a failure with nothing wrapped keeps its own message
 test("an unwrapped failure keeps its message", () => {
-	expect(toScanFailureReason(new Error("every source rejected"))).toBe("every source rejected")
-	expect(toScanFailureReason("a plain string")).toBe("a plain string")
+	expect(toWorkflowFailureReason(new Error("every source rejected"))).toBe("every source rejected")
+	expect(toWorkflowFailureReason("a plain string")).toBe("a plain string")
 })
 
 // a cause that points back at itself must not spin the walk
 test("a self-referencing cause terminates", () => {
 	const circular: Error & { cause?: unknown } = new Error("the outer one")
 	circular.cause = circular
-	expect(toScanFailureReason(circular)).toBe("the outer one")
+	expect(toWorkflowFailureReason(circular)).toBe("the outer one")
 })
 
 /**
@@ -75,6 +75,6 @@ test("a budget rejection ends the scan, not one resource", () => {
 	// and the reason that reaches the user is the budget one, with a way out of it
 	const budgetReason = "Budget has been exceeded! Current cost: 3.008, Max budget: 3.0"
 	expect(
-		isBudgetError(toScanFailureReason(new Error("Activity task failed", { cause: new Error(budgetReason) }))),
+		isBudgetError(toWorkflowFailureReason(new Error("Activity task failed", { cause: new Error(budgetReason) }))),
 	).toBe(true)
 })

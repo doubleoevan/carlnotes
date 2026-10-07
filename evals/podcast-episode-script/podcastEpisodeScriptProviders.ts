@@ -1,5 +1,4 @@
-// the podcast episode script eval's promptfoo provider, the writer under test.
-// the writer calls the LiteLLM proxy through worker/models.ts
+// the podcast episode script eval's promptfoo provider, which runs the script writer under test
 import type { PodcastEpisodeScript } from "@shared/contracts"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import {

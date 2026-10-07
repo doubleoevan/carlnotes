@@ -5,10 +5,17 @@ import { desc, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
 import { canRenderPodcastEpisode, isPodcastEpisodeBudgetShareExhausted } from "../../db/quotas"
 import { findings, podcastEpisodeChapters, podcastEpisodes, resources, scans, topics } from "../../db/schema"
+import { toCanonicalUrl } from "../ingest/normalize"
 import { loadBookmarkedFindingRows } from "../review"
+import { loadUrlSourcePageUrls } from "../review/filter"
+import { clampScore } from "../review/score"
 
 // how many Findings one Podcast Episode narrates at most
 export const MAX_PODCAST_EPISODE_FINDINGS = 15
+
+// the score bonus that a bookmark, a thumbs up, and a url Source's own page each give a Finding when picking a Podcast
+// Episode's Findings. the three add up, and the score stays at 1 or below
+const PODCAST_EPISODE_SCORE_BONUS = 0.2
 
 // a Finding planned for a Podcast Episode, with its Resource and its source url
 export type PlannedFinding = { findingId: string; resourceId: string; sourceUrl: string }
@@ -19,11 +26,14 @@ export type PodcastEpisodePlan = { podcastEpisodeId: string; plannedFindings: Pl
 // the Scan that a Podcast Episode is planned for, its Topic, and the user that the Podcast Episode's calls bill
 export type PlanPodcastEpisodeOptions = { scanId: string; topicId: string; billedUserId: string }
 
-// one of a Topic's Findings, with the Scan that found it, a user's rating of it, and whether a user bookmarked it
+// one of a Topic's Findings, with the Scan that found the Finding, its relevance score, a user's rating of the Finding,
+// whether a user bookmarked the Finding, and whether its page is one of the Topic's url Sources
 export type TopicFindingRow = PlannedFinding & {
 	scanId: string
+	relevanceScore: number
 	rating: (typeof findings.$inferSelect)["rating"]
 	isBookmarked: boolean
+	isUrlSourcePage: boolean
 }
 
 // the Topic's Findings best first, the Resources that a Podcast Episode already narrated,
@@ -99,7 +109,7 @@ export async function planPodcastEpisode({
 }
 
 /**
- * Orders a Topic's Findings for a Podcast Episode, the Scan's own first and liked or bookmarked ones next.
+ * Picks a Topic's Findings for a Podcast Episode by score with its bonuses, and orders the picked Findings with the Scan's own first.
  */
 export function toPlannedFindings({
 	topicFindingRows,
@@ -122,29 +132,47 @@ export function toPlannedFindings({
 	// the rows arrive best first, so each group keeps its score order
 	const scanFindingRows = unnarratedFindingRows.filter((topicFindingRow) => topicFindingRow.scanId === scanId)
 
-	// split the rest into the Findings that a user rated thumbs up or bookmarked,
-	// the others that no Podcast Episode narrated, and the others that a Podcast Episode narrated
-	const isLikedOrBookmarked = (topicFindingRow: TopicFindingRow): boolean =>
-		topicFindingRow.rating === "up" || topicFindingRow.isBookmarked
-	const likedOrBookmarkedFindingRows = narratableFindingRows.filter(
-		(topicFindingRow) => !scanFindingRows.includes(topicFindingRow) && isLikedOrBookmarked(topicFindingRow),
+	// split the Topic's other Findings into bonus Findings, unnarrated Findings with no bonus, and narrated Findings.
+	// a Finding has a bonus if a user liked or bookmarked the Finding, or if its page is a url Source's page
+	const hasScoreBonus = (topicFindingRow: TopicFindingRow): boolean =>
+		topicFindingRow.rating === "up" || topicFindingRow.isBookmarked || topicFindingRow.isUrlSourcePage
+	const scoreBonusFindingRows = narratableFindingRows.filter(
+		(topicFindingRow) => !scanFindingRows.includes(topicFindingRow) && hasScoreBonus(topicFindingRow),
 	)
 	const otherUnnarratedFindingRows = unnarratedFindingRows.filter(
-		(topicFindingRow) => topicFindingRow.scanId !== scanId && !isLikedOrBookmarked(topicFindingRow),
+		(topicFindingRow) => topicFindingRow.scanId !== scanId && !hasScoreBonus(topicFindingRow),
 	)
 	const otherNarratedFindingRows = narratableFindingRows.filter(
-		(topicFindingRow) => isNarrated(topicFindingRow) && !isLikedOrBookmarked(topicFindingRow),
+		(topicFindingRow) => isNarrated(topicFindingRow) && !hasScoreBonus(topicFindingRow),
 	)
 
-	// put the liked and bookmarked Findings right after the Scan's own, ahead of the Topic's others, and stop at the limit
+	// rank the Scan's own and the bonus Findings by score with their bonuses, and keep the best.
+	// the sort is stable, so the Scan's own come first on a tie
+	const rankedFindingRows = [...scanFindingRows, ...scoreBonusFindingRows].sort(
+		(firstFindingRow, secondFindingRow) => toScoreWithBonuses(secondFindingRow) - toScoreWithBonuses(firstFindingRow),
+	)
+	const pickedFindingRows = new Set(rankedFindingRows.slice(0, MAX_PODCAST_EPISODE_FINDINGS))
+	const isFindingPicked = (topicFindingRow: TopicFindingRow): boolean => pickedFindingRows.has(topicFindingRow)
+
+	// return the picked Findings with the Scan's own first, then fill the rest of the limit with the Topic's other Findings
 	return [
-		...scanFindingRows,
-		...likedOrBookmarkedFindingRows,
+		...scanFindingRows.filter(isFindingPicked),
+		...scoreBonusFindingRows.filter(isFindingPicked),
 		...otherUnnarratedFindingRows,
 		...otherNarratedFindingRows,
 	]
 		.slice(0, MAX_PODCAST_EPISODE_FINDINGS)
 		.map(({ findingId, resourceId, sourceUrl }) => ({ findingId, resourceId, sourceUrl }))
+}
+
+// add a score bonus for each of a Finding's bookmark, thumbs up, and url Source page, keeping the score at 1 or below
+function toScoreWithBonuses(topicFindingRow: TopicFindingRow): number {
+	const bonusCount = [
+		topicFindingRow.isBookmarked,
+		topicFindingRow.rating === "up",
+		topicFindingRow.isUrlSourcePage,
+	].filter(Boolean).length
+	return clampScore(topicFindingRow.relevanceScore + bonusCount * PODCAST_EPISODE_SCORE_BONUS)
 }
 
 // log why a Scan renders no Podcast Episode, and return null as its plan
@@ -161,25 +189,27 @@ async function loadPlannedFindings({
 	scanId: string
 	topic: typeof topics.$inferSelect
 }): Promise<PlannedFinding[]> {
-	// load the Resources that the Topic's Podcast Episodes narrated, and the Findings that someone with access bookmarked.
-	// a failed or removed Podcast Episode has no chapters
-	const [narratedChapterRows, bookmarkedFindingRows] = await Promise.all([
+	// load the Resources that the Topic's Podcast Episodes narrated, the Findings that someone with access bookmarked,
+	// and the pages of the Topic's url Sources. a failed or removed Podcast Episode has no chapters
+	const [narratedChapterRows, bookmarkedFindingRows, urlSourcePageUrls] = await Promise.all([
 		db
 			.select({ resourceId: podcastEpisodeChapters.resourceId })
 			.from(podcastEpisodeChapters)
 			.innerJoin(podcastEpisodes, eq(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodes.id))
 			.where(eq(podcastEpisodes.topicId, topic.id)),
 		loadBookmarkedFindingRows(topic.id, topic),
+		loadUrlSourcePageUrls(topic.id),
 	])
 
 	// load the Topic's Findings, best first, each marked if it is bookmarked
 	const bookmarkedFindingIds = bookmarkedFindingRows.map(({ findingId }) => findingId)
-	const topicFindingRows = await db
+	const findingRows = await db
 		.select({
 			findingId: findings.id,
 			resourceId: findings.resourceId,
 			sourceUrl: resources.url,
 			scanId: findings.scanId,
+			relevanceScore: findings.relevanceScore,
 			rating: findings.rating,
 			isBookmarked: inArray(findings.id, bookmarkedFindingIds).mapWith(Boolean),
 		})
@@ -187,6 +217,13 @@ async function loadPlannedFindings({
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
 		.where(eq(findings.topicId, topic.id))
 		.orderBy(desc(findings.relevanceScore))
+
+	// mark each Finding whose page is one of the Topic's url Sources, compared by canonical url
+	const urlSourcePageUrlSet = new Set(urlSourcePageUrls)
+	const topicFindingRows = findingRows.map((findingRow) => ({
+		...findingRow,
+		isUrlSourcePage: urlSourcePageUrlSet.has(toCanonicalUrl(findingRow.sourceUrl)),
+	}))
 
 	// order the Findings, with the narrated ones last
 	const narratedResourceIds = new Set(narratedChapterRows.map((narratedChapterRow) => narratedChapterRow.resourceId))

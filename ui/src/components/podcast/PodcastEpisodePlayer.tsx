@@ -1,4 +1,5 @@
 import type { PodcastEpisode, TopicResponse } from "@shared/contracts"
+import { PODCAST_NAME } from "@shared/podcastEpisodes"
 import { toPodcastEpisodePath } from "@shared/seo"
 import { useEffect, useState } from "react"
 import { fetchPodcastEpisode } from "@/clients/podcastEpisodeClient"
@@ -6,6 +7,7 @@ import { PodcastEpisodeCover } from "@/components/podcast/PodcastEpisodeCover"
 import { PodcastEpisodePlaybackPill } from "@/components/podcast/PodcastEpisodePill"
 import { PodcastEpisodePlayerCard } from "@/components/podcast/PodcastEpisodePlayerCard"
 import { PodcastFeedDialog } from "@/components/podcast/PodcastFeedDialog"
+import { RemovePodcastEpisodeDialog } from "@/components/podcast/RemovePodcastEpisodeDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { isManualScanShown } from "@/components/topic/TopicScanButton"
 import { useSearchParams } from "@/hooks/useSearchParams"
@@ -17,22 +19,29 @@ import { usePodcastEpisodePlayer } from "@/stores/podcastEpisodePlayerStore"
 // how often a podcast episode that is still rendering is checked for its audio
 const RENDERING_POLL_MS = 5_000
 
-// the topic, the calls behind a chapter's topic finding note,
-// and the scan button for a podcast episode that failed to render
+// the topic, the calls behind a chapter's topic finding note, the scan button for a podcast episode that failed to render,
+// and the call that runs after the podcast episode is removed
 type PodcastEpisodePlayerProps = {
 	topic: TopicResponse
 	topicHandlers: TopicFeedHandlers
 	scanControl: React.ReactNode
+	onPodcastEpisodeRemoved: () => Promise<void>
 }
 
 /**
  * The topic page's podcast episode player, or nothing if no podcast episode shows or is about to render.
  */
-export function PodcastEpisodePlayer({ topic, topicHandlers, scanControl }: PodcastEpisodePlayerProps) {
-	// the loaded episode, the episode that this player shows, and whether the podcast feed dialog is open
+export function PodcastEpisodePlayer({
+	topic,
+	topicHandlers,
+	scanControl,
+	onPodcastEpisodeRemoved,
+}: PodcastEpisodePlayerProps) {
+	// the loaded episode, the episode that this player shows, and whether the podcast feed or remove dialog is open
 	const { podcastEpisode: loadedPodcastEpisode } = usePodcastEpisodePlayer()
 	const { podcastEpisode, willScanRenderPodcastEpisode } = useShownPodcastEpisode(topic)
 	const [isPodcastFeedDialogOpen, setIsPodcastFeedDialogOpen] = useState(false)
+	const [isRemovePodcastEpisodeDialogOpen, setIsRemovePodcastEpisodeDialogOpen] = useState(false)
 	if (!podcastEpisode && !willScanRenderPodcastEpisode) {
 		return null
 	}
@@ -47,7 +56,7 @@ export function PodcastEpisodePlayer({ topic, topicHandlers, scanControl }: Podc
 	) : undefined
 	const titleAside = isPodcastEpisodeLoaded ? <PodcastEpisodePlaybackPill /> : unplayedTitleAside
 	return (
-		<CollapsibleSection value="podcast" title="Coffee Break podcast" titleAside={titleAside} className="mt-2">
+		<CollapsibleSection value="podcast" title={PODCAST_NAME} titleAside={titleAside} className="mt-2">
 			{/* a published podcast episode's player card, or the card of an episode with no audio */}
 			{podcastEpisode?.status === "published" ? (
 				<PodcastEpisodePlayerCard
@@ -61,6 +70,9 @@ export function PodcastEpisodePlayer({ topic, topicHandlers, scanControl }: Podc
 						topicHandlers,
 					}}
 					onOpenPodcastFeedDialog={() => setIsPodcastFeedDialogOpen(true)}
+					onRemovePodcastEpisode={
+						topic.podcast?.canRemovePodcastEpisodes ? () => setIsRemovePodcastEpisodeDialogOpen(true) : undefined
+					}
 				/>
 			) : (
 				<UnpublishedPodcastEpisodeCard
@@ -70,6 +82,14 @@ export function PodcastEpisodePlayer({ topic, topicHandlers, scanControl }: Podc
 			)}
 			{/* the podcast feed dialog */}
 			{isPodcastFeedDialogOpen && <PodcastFeedDialog topic={topic} onClose={() => setIsPodcastFeedDialogOpen(false)} />}
+			{/* the dialog that confirms removing the podcast episode */}
+			{isRemovePodcastEpisodeDialogOpen && podcastEpisode && (
+				<RemovePodcastEpisodeDialog
+					podcastEpisode={podcastEpisode}
+					onPodcastEpisodeRemoved={onPodcastEpisodeRemoved}
+					onClose={() => setIsRemovePodcastEpisodeDialogOpen(false)}
+				/>
+			)}
 		</CollapsibleSection>
 	)
 }
@@ -136,7 +156,7 @@ function useShownPodcastEpisode(topic: TopicResponse): ShownPodcastEpisodeState 
 	// every other user gets the latest episode
 	const failedPodcastEpisode = isManualScanShown(topic) ? unpublishedPodcastEpisode : null
 	return {
-		podcastEpisode: failedPodcastEpisode ?? podcast?.latestPodcastEpisode ?? null,
+		podcastEpisode: failedPodcastEpisode ?? topic.latestPodcastEpisode,
 		willScanRenderPodcastEpisode: false,
 	}
 }
@@ -169,7 +189,7 @@ function UnpublishedPodcastEpisodeCard({ podcastEpisode, scanControl }: Unpublis
 			/>
 			<div className="flex min-w-0 flex-col gap-1">
 				{/* the podcast episode's title, or the show's name until the title is written */}
-				<div className="text-lg leading-snug font-bold">{podcastEpisode.title ?? "Coffee Break podcast"}</div>
+				<div className="text-lg leading-snug font-bold">{podcastEpisode.title ?? PODCAST_NAME}</div>
 				{/* the recording line while the podcast episode renders, or the failure line */}
 				{podcastEpisode.status === "rendering" && (
 					<p className="text-base font-semibold sm:text-lg">
@@ -181,7 +201,7 @@ function UnpublishedPodcastEpisodeCard({ podcastEpisode, scanControl }: Unpublis
 					</p>
 				)}
 				{podcastEpisode.status !== "rendering" && (
-					<p className="text-muted-foreground text-sm">Coffee Break podcast failed to record.</p>
+					<p className="text-muted-foreground text-sm">{`${PODCAST_NAME} failed to record.`}</p>
 				)}
 				{/* the scan button, under a failed podcast episode's line */}
 				{podcastEpisode.status !== "rendering" && scanControl && (

@@ -1,6 +1,10 @@
 {
 	"name": "podcast-episode-script",
-	"passedRunCount": 14,
+	"passedRunCount": 12,
 	"runCount": 15,
-	"ranOn": "2026-10-05"
+	"ranOn": "2026-10-05",
+	"commit": "fdfb55e",
+	"hasUncommittedChanges": true,
+	"writerModelIds": ["score-model"],
+	"graderModelId": "chat-model"
 }

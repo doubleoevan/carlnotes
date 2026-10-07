@@ -46,6 +46,12 @@ For each extracted attachment the row shows a **content** expander: the text
 Carl actually took from the file, which you can read and edit. The editor describes it:
 "What Carl read from the file. Every brew reads it."
 
+A short file keeps its words. Up to 20,000 characters, about six pages of text, Carl stores the text
+exactly as written, so a list of names, places, or terms reaches every brew complete. A longer file is
+summarized, and the summary keeps the gist instead of every detail.
+
+If Carl can't read a file, its row says why. A scanned PDF may have no text to read, so attach a copy whose text can be selected.
+
 A spreadsheet or CSV keeps its rows. Instead of a summary, Carl stores the first 150 rows as they
 are, under a line naming the file, each sheet, and its columns. A longer file notes how many rows were left out.
 
@@ -60,6 +66,7 @@ Background that changes how Carl reads your prompt:
 - A screenshot or image, for a product.
 - A product spec or README, for a competitor or ecosystem topic.
 - A list of what you've already seen, applied to, or bought.
+- A list of names to follow or to leave out, with the prompt saying which.
 
 ## What to leave out
 

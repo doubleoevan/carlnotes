@@ -6,16 +6,20 @@ Dependency order: `ui` → `api` / `worker` → `db` → `shared`. The boundary 
 preflight check (`scripts/check-ui-boundary.ts`) and by convention elsewhere. The ui imports api, worker, and db as
 types only. The api and the worker import db, every module imports shared, and shared imports nothing app-level.
 
-- `ui/` — the TanStack Start app: the file routes under `ui/src/routes/`, the pages they render, components, typed API clients, and the stores behind them. A public page renders on the server for a visitor and a crawler. The sign-in pages, a route behind sign-in, and every route when the request brings a session cookie render in the browser.
-- `api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards, page head data, and the document routes (the sitemap, the feeds, the llms files, the IndexNow key, and security.txt).
+- `ui/` — the TanStack Start app: the file routes under `ui/src/routes/`, the pages they render, components, typed API
+  clients, and the stores behind them. A public page renders on the server for a visitor and a crawler. The sign-in
+  pages, a route behind sign-in, and every route when the request brings a session cookie render in the browser.
+- `api/` — the Hono server: routes, authorization, billing, chat rooms, tasting notes, teams, invites, share cards, page
+  head data, and the document routes (the sitemap, the feeds, the llms files, the IndexNow key, and security.txt).
 - `worker/` — Temporal workflows, the scan pipeline, ingesters, chat replies, link previews, prompts, email delivery,
   the scheduled sweep, and the monthly budget reset.
 - `db/` — Drizzle schema, migrations, quotas, the Redis store, and the database claim. Neon Postgres and Redis.
 - `shared/` — what every module may import: the zod contracts, enums, plans, and Source definitions.
 - `infra/` — the service configs the app runs beside: litellm, llm-guard, and the Northflank pipelines.
 - `content/blog/` — the blog posts `api/content.ts` serves.
-- `evals/` — the evals that measure the model-facing prompts and the review pipeline, one folder each, and
-  `evalHarness.ts`, which the promptfoo evals share. They make real model calls, so no eval runs in `bun test`.
+- `evals/` — the evals that measure the model-facing prompts, their graders, and the review pipeline, one folder each,
+  and `evalHarness.ts`, which the promptfoo evals share. They make real model calls, so no eval runs in `bun test`.
+  The Evals workflow runs the promptfoo evals in CI, report-only.
 
 Each module has its own AGENTS.md with entry points, layout, and commands.
 
@@ -33,7 +37,7 @@ Each module has its own AGENTS.md with entry points, layout, and commands.
 | Email template or send | `emails/*.tsx`, `worker/email.ts`, `worker/notify.ts` | — | `ui/` |
 | Release notes | `api/releases.ts`, the convention in `docs/release-notes.md` | domain-model | `ui/` except the footer link |
 | Docs page | `docs/src/content/`, its shared pieces in `docs/src/components/`, then `bun run docs:embed` | — | `docs/dist/` (built) |
-| Eval work | `evals/README.md`, `evals/evalHarness.ts`, `evals/<eval>/`, `.github/workflows/llm-guard-update.yml` | prompt-authoring | app modules except the function the eval calls |
+| Eval work | `evals/README.md`, `evals/evalHarness.ts`, `evals/<eval>/`, `.github/workflows/evals.yml`, `.github/workflows/llm-guard-update.yml` | prompt-authoring | app modules except the function the eval calls |
 | Podcast episode, player, feed, or cover | `worker/podcast/`, `worker/workflows/renderPodcastEpisode.ts`, `api/podcast/`, `api/share/podcastFeed.ts`, `api/share/podcastCover.ts`, `worker/speech.ts`, `shared/podcastEpisodes.ts`, `ui/src/components/podcast/`, `ui/src/pages/PodcastEpisodePage.tsx` | domain-model, prompt-authoring | `db/migrations/` |
 | MCP tool, Topic Tool, or the Add to AI dialog | `api/mcp/`, `api/tool/`, `ui/src/components/common/AddToAiDialog.tsx` | domain-model | `worker/` except `worker/index.ts` and `worker/budget.ts` exports |
 
@@ -48,29 +52,37 @@ Generated or archived paths that burn context:
 - `ui/dist/`, `docs/dist/` — built UI and docs output
 - `coverage/` — test coverage output
 - `openspec/changes/archive/` — archived OpenSpec changes
-- `.agents/skills/{ai-sdk,vercel-react-best-practices,web-design-guidelines,impeccable,ponytail}/` — vendored skills, loaded on demand
+- `.agents/skills/{ai-sdk,vercel-react-best-practices,web-design-guidelines,impeccable,ponytail}/` — vendored skills,
+  loaded on demand
 - `bun.lock`, `skills-lock.json` — lockfiles
 - `node_modules/`
 
 ## Verification
 
-`bun run check` is the gate: Biome, the ui boundary check, `tsc -b`, the Temporal workflow bundle check, and the test
-suite.
+`bun run check` is the gate: Biome, the ui boundary check, `tsc -b`, the Temporal workflow bundle check, and the test suite.
 Green before any hand-off.
 
 ## Rules (always-on)
 
 - Comment every logical group: `//` comment line(s) above every group of 2+ statements, one line preferred.
 - One package.json. Folders separate concerns; packages separate deployments.
-- State lives in module scope behind exported functions, in a `ui/src/stores/` module, or in a hook. Author a class only for an `Error` subclass, or for many instances with their own lifecycle that something outside holds, as `ui/src/components/note/noteProvider.ts` does. A single-instance class is a singleton, which is a module with extra steps.
+- State lives in module scope behind exported functions, in a `ui/src/stores/` module, or in a hook. Author a class only
+  for an `Error` subclass, or for many instances with their own lifecycle that something outside holds, as
+  `ui/src/components/note/noteProvider.ts` does. A single-instance class is a singleton, which is a module with extra steps.
 - Domain nouns and rejected terms: the `domain-model` skill is the single source.
 - Follow vs subscribe: the domain-model skill owns the rule. Copy says follow, identifiers say subscribe.
 - Bash runs from the repo root: relative paths only, never prefix commands with cd. Scripts and hooks assume repo-root cwd.
-- Diagnostic and probe commands must be static: never `$(...)`, backticks, `${...}` expansion, or `find -exec` — permission rules cannot auto-allow these, so every use prompts. Read files with the Read tool; extract JSON with `jq`, preferred over `python3 -c`.
-- Never print secret values. Check presence with `grep -c '^NAME=' .env`; the agent shell has no Doppler-injected secrets, so verify env wiring by running the real command under `doppler run` and reading its output.
+- Diagnostic and probe commands must be static: never `$(...)`, backticks, `${...}` expansion, or `find -exec` —
+  permission rules cannot auto-allow these, so every use prompts. Read files with the Read tool; extract JSON with `jq`,
+  preferred over `python3 -c`.
+- Never print secret values. Check presence with `grep -c '^NAME=' .env`; the agent shell has no Doppler-injected
+  secrets, so verify env wiring by running the real command under `doppler run` and reading its output.
 - Check `package.json` scripts before opening the README; the README's Development section explains them.
-- Per-process scripts are `dev:<module>` / `build:<module>`; bare `dev` is the multi-process orchestrator, and no bare `build` exists — the Dockerfile runs the `build:<module>` scripts itself. When adding or changing package.json scripts, update the README Development section in the same change.
-- Structure changes update the docs in the same change: a new, moved, renamed, or deleted folder, entry point, or script is included in the module's AGENTS.md, and in the root module map or routing table when it changes what they say.
+- Per-process scripts are `dev:<module>` / `build:<module>`; bare `dev` is the multi-process orchestrator, and no bare
+  `build` exists — the Dockerfile runs the `build:<module>` scripts itself. When adding or changing package.json
+  scripts, update the README Development section in the same change.
+- Structure changes update the docs in the same change: a new, moved, renamed, or deleted folder, entry point, or script
+  is included in the module's AGENTS.md, and in the root module map or routing table when it changes what they say.
 - Commits: ask first. "go ahead" at session start pre-approves commits for that session. Never push unless explicitly asked to.
 - Ship via /ship. Archive OpenSpec changes with the CLI (`openspec archive <name> --yes`), never /opsx:archive.
 
@@ -79,7 +91,10 @@ Green before any hand-off.
 Rules agents and reviewers must honor, source copies at `.agents/skills/`:
 
 - domain-model: the canonical domain vocabulary and its rejected terms
-- ingester-authoring: ingesters return Resources only, never Findings; idempotent by canonical URL; one failing Source never aborts a Scan batch
-- prompt-authoring: model-facing prompts live as versioned markdown under `worker/prompts/` with frontmatter and `{{variable}}` bodies, loaded by thin builders; never inline string literals; Carl addresses a "reader" where the app's code says "user"
+- ingester-authoring: ingesters return Resources only, never Findings; idempotent by canonical URL; one failing Source
+  never aborts a Scan batch
+- prompt-authoring: model-facing prompts live as versioned markdown under `worker/prompts/` with frontmatter and
+  `{{variable}}` bodies, loaded by thin builders; never inline string literals; Carl addresses a "reader" where the
+  app's code says "user"
 - code-style, jsx-conventions, git-discipline: shared readability and git rules
 - vendored guidance: vercel-react-best-practices, web-design-guidelines, ai-sdk, impeccable, ponytail

@@ -8,7 +8,8 @@ sidebar:
 ---
 
 A team is a group of people sharing topics together. Everyone on the team reads the same feed, edits
-the same topics, and talks in a group chat with Carl on the team's topics. The Coffee Talk panel travels with you. Its **…** menu lists every one of your
+the same topics, and talks in a group chat with Carl on the team's topics. The Coffee Talk panel travels with you. Its
+**…** menu lists every one of your
 chat rooms from any page, and it stays on the one you picked as you move around. 
 
 ![The Teams page: your teams with their roles, members, topics, monthly spend, and a chat
@@ -35,10 +36,13 @@ determines whether the team has a public page.
 
 ## Add a topic to a team
 
-**Team Up** sits on every topic or profile page. It lists the teams you lead. Pick one to add a topic or team member. 
-An invited team member will see the invitation on their profile page. It will be up to them to accept by setting themself to **Active**.
+**Team Up** sits on most topic pages and on your profile page. It lists the teams you lead. Pick one to add a topic or
+team member. On an episode page, **Add topic to team** in the actions menu opens the same list for the episode's topic. On a topic
+page where **Join Team** takes Team Up's place, the same option in the actions menu opens the list too.
+An invited team member will see the invitation on their profile page. It will be up to them to accept by setting
+themself to **Active**.
 
-![The Team Up menu on a topic page, listing the viewer's teams and New
+![The Team Up menu on a topic page, listing your teams and New
 team](../../../assets/screenshots/teams-team-up-menu.png)
 
 ![Your teams on a profile page: each team's role and who invited you, an Active toggle per row, and

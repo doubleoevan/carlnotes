@@ -16,6 +16,7 @@ import {
 	toInstallDeeplink,
 	toSortedAiProviders,
 } from "@/lib/installDeeplinks"
+import { MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
 import { copyToClipboard } from "@/lib/utils"
 
 // the brand logos from simple-icons. it has none for ChatGPT, VS Code, or xAI, so a lucide icon stands in for the
@@ -104,7 +105,7 @@ export function AddToAiDialog({ mcpServer, onClose }: { mcpServer: McpServer; on
 							/>
 						),
 					)}
-					<div className="bg-border my-1 h-px" />
+					<div className={MENU_DIVIDER_CLASS} />
 					<CopyLinkOption
 						label="Copy server URL"
 						icon={<Link className={SHARE_OPTION_ICON_CLASS} />}

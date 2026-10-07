@@ -21,6 +21,9 @@ const RELEVANCE_THRESHOLDS: Record<Resource["kind"], number> = { read: 0.35, wat
 // the text limit that bounds embedding tokens and spend
 const MAX_EMBED_CHARS = 8000
 
+// the topic context limit for the score prompt and the scan summary. the limit fits the prompt and one full-length attachment
+const MAX_TOPIC_CONTEXT_CHARS = 24_000
+
 // how many example pages of each kind the score prompt lists
 const MAX_SCORE_EXAMPLE_PAGES = 10
 
@@ -30,8 +33,8 @@ const EMBED_QUERY_INSTRUCTION = "Given a topic's interest description, retrieve 
 // a persisted Resource record
 export type Resource = typeof resources.$inferSelect
 
-// the topic's context. what the gate embeds, the hash that a Finding records, and the text that the score prompt reads.
-// the score text adds the pages that the topic's users liked, bookmarked, or rated down. the hash leaves those pages out
+// the topic's context. the hash covers all of the context, and the gate embeds the start of the context.
+// the score text adds the pages that the topic's users liked, bookmarked, or rated down
 export type TopicContext = { name: string; text: string; embedding: number[]; contextHash: string; scoreText: string }
 
 // a page from the topic's feed that the score prompt shows as an example
@@ -136,7 +139,7 @@ export async function loadUrlSourcePageUrls(topicId: string): Promise<string[]> 
  */
 export function toTopicContextText(topicScanContext: { name: string; context: string }): string {
 	const { name, context } = topicScanContext
-	return [name, context.trim()].filter(Boolean).join("\n\n").slice(0, MAX_EMBED_CHARS)
+	return [name, context.trim()].filter(Boolean).join("\n\n").slice(0, MAX_TOPIC_CONTEXT_CHARS)
 }
 
 /**
@@ -168,7 +171,7 @@ type LoadTopicContextOptions = {
 }
 
 /**
- * Embeds the topic's context for the relevance gate: its name, its prompt, and its attachments' contexts.
+ * Embeds the start of the topic's context for the relevance gate: its name, its prompt, and its attachments' contexts.
  * The text that the score prompt reads also lists the example pages.
  */
 export async function loadTopicContext({
@@ -180,9 +183,10 @@ export async function loadTopicContext({
 	// always include the topic name in the scan context
 	const text = toTopicContextText(topicScanContext)
 
-	// embed the context as the query side once and update the estimated embedding cost
-	const embedding = await embedQuery(text, litellmApiKey)
-	charge(budget, "embedding", tokenCost(estimateEmbedTokens(text), EMBED_COST_PER_MILLION_TOKENS))
+	// embed the start of the context as the query side once and update the estimated embedding cost
+	const contextTextToEmbed = text.slice(0, MAX_EMBED_CHARS)
+	const embedding = await embedQuery(contextTextToEmbed, litellmApiKey)
+	charge(budget, "embedding", tokenCost(estimateEmbedTokens(contextTextToEmbed), EMBED_COST_PER_MILLION_TOKENS))
 	return {
 		name: topicScanContext.name,
 		text,

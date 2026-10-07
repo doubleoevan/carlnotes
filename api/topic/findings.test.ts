@@ -2,7 +2,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import type { TopicFinding } from "@shared/contracts"
 import * as monitoring from "@shared/monitoring"
-import { connectionPool } from "../../db"
+import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"
 import {
 	type FindingPageWindow,
 	filteredTopicFindings,
@@ -67,19 +67,14 @@ async function readTopicFindingsWithStub(
 	rowCount: number,
 	pageWindow?: FindingPageWindow,
 ): Promise<{ topicFindings: TopicFinding[]; sentValues: unknown[] }> {
-	const poolQuery = connectionPool.query
-	let sentValues: unknown[] = []
-	connectionPool.query = ((_queryConfig: unknown, values: unknown[]) => {
-		sentValues = values
-		return Promise.resolve({ rows: Array.from({ length: rowCount }, (_, index) => findingRow(index)), fields: [] })
-	}) as unknown as typeof connectionPool.query
+	const sentQueries = stubConnectionPool(() => Array.from({ length: rowCount }, (_, index) => findingRow(index)))
 
 	// read, then put the pool's own query back
 	try {
 		const topicFindings = await loadTopicFindings({ topicId: "topic-1", userId: null, pageWindow })
-		return { topicFindings, sentValues }
+		return { topicFindings, sentValues: sentQueries.at(-1)?.values ?? [] }
 	} finally {
-		connectionPool.query = poolQuery
+		restoreConnectionPool()
 	}
 }
 

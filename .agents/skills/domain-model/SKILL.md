@@ -5,11 +5,14 @@ description: The CarlNotes domain vocabulary. Use whenever naming types, tables,
 
 # CarlNotes domain model
 
-> A **Topic** (owner = creator) is configured with context and **Sources**; each **Scan** discovers **Resources** and appends **Findings** to the topic's **Feed** and may render a **Podcast Episode** that narrates them; users hold **Subscriptions**, a **Team** holds Topics together with a shared room on each, and **Integrations** will connect Sources in and deliveries out.
+> A **Topic** (owner = creator) is configured with context and **Sources**; each **Scan** discovers **Resources** and
+> appends **Findings** to the topic's **Feed** and may render a **Podcast Episode** that narrates them; users hold
+> **Subscriptions**, a **Team** holds Topics together with a shared room on each, and **Integrations** will connect
+> Sources in and deliveries out.
 
 | Entity | Is | Notes                                                                                                                                                                                                                                                                                                                                                                       |
 |---|---|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Topic | the configuration | name, context doc, attachments (file in R2 + distilled context, generated once by the processing workflow after upload), frequency, visibility (public / invite / private), owner_id; the page url is `/topics/<id>/<slug>`, where the **slug** is the name as url-safe words (`toTopicSlug` in `shared/seo.ts`), or `/topics/<id>` alone for a name with no url-safe characters. The id alone resolves the Topic, and a url by id alone or with a stale slug redirects to the current url. A public Topic is **shown** once it has at least `MINIMUM_SHOWN_FINDINGS` Findings (`isPublicAndShown`). The public topics page, the homepage's Featured and Popular sections, the sitemap, `llms.txt`, and the public part of the MCP topic list include a public Topic only once it is shown |
+| Topic | the configuration | name, context doc, attachments (file in R2 + context, written once by the processing workflow after upload: a short file as written, a long one summarized), frequency, visibility (public / invite / private), owner_id; the page url is `/topics/<id>/<slug>`, where the **slug** is the name as url-safe words (`toTopicSlug` in `shared/seo.ts`), or `/topics/<id>` alone for a name with no url-safe characters. The id alone resolves the Topic, and a url by id alone or with a stale slug redirects to the current url. A public Topic is **shown** once it has at least `MINIMUM_SHOWN_FINDINGS` Findings (`isPublicAndShown`). The public topics page, the homepage's Featured and Popular sections, the sitemap, `llms.txt`, and the public part of the MCP topic list include a public Topic only once it is shown |
 | Prompt Version | one saved text of a Topic's prompt | `topic_prompt_versions`: one row for the first prompt and one for every change, with the prompt, who saved it, when, and its `origin`: editor, chat, or mcp. An unchanged save writes nothing. `saved_by_user_id` goes null when that account closes. Rows are never updated and have no version number. The time order is the history |
 | Topic Tool | one action Carl or an agent takes on a Topic, or to make one | `api/tool/`: `updateTopicPrompt`, `updateTopicFields`, `addTopicSource`, `removeTopicSource`, `createTopicFromDraft`, `suggestTopicDraftSources`. Each takes the user and asks its own gate: `topic:edit` on the Topic for the edit tools, `topic:create` and the daily suggestion limit for the draft tools. Two **adapters** expose them. The chat adapter takes the Topic from the chat's page and binds the tools only for a user the gate grants `topic:edit`, in the private chat and in a Topic's team chat room alike. Carl proposes a change in words and calls a tool only in a later turn, after the user says yes. On the proposing turn he calls `proposeTopicEdit`, which saves nothing and only puts the Topic's card in front of the user, so the card shows while an edit is under way and not otherwise. It and `cancelTopicEdit`, which takes the change back off the card, are the chat adapter's alone: the MCP adapter offers neither, since its client runs its own approval. Both are bound on the same `topic:edit` grant as the ones that save, and neither is bound among the tools a consent may be forced to call, so a yes can never be satisfied by a tool that saves nothing. A proposal stands only until Carl cancels it with `cancelTopicEdit` or a Topic Tool saves, so a yes answering some later question never re-forces a save that already happened. The MCP adapter takes the Topic as an argument, or from the topic-bound route, and leaves confirmation to the client. Editing never starts a Scan. The new-topic chat adds `draftTopic`, which writes the Topic Draft |
 | Topic Draft | the form Carl fills in the new-topic chat | `topic_drafts`, one row per user, holding a name, a prompt, Sources as source option and value pairs, invite emails, the visibility, the team it joins, and the settings. The browser sends it with every turn, takes it back from the tool calls the reply streams, and reads the stored one back when the conversation loads. The files the user attached stay in the browser until the topic exists. `createTopicFromDraft` saves it through the editor's own create path, and the row is deleted when the topic is created or the chat is cleared |
@@ -36,20 +39,44 @@ description: The CarlNotes domain vocabulary. Use whenever naming types, tables,
 
 ## Layering rules
 - Integration = the credential; Source = an input use of it; delivery = an output use of it. Connected once, reused everywhere.
-- Ingester = worker code turning a Source into Resources (see ingester-authoring). One composio ingester; toolkit variety lives in Source config, not code.
-- `shared/sources.ts` holds both source tables: the default Sources every new Topic starts with, and the options the custom picker offers. An entry names the Source kind it saves as and builds its config, so a new Source is an entry instead of a kind or a special case. An option is not always a kind: Google News saves as `rss`.
-- Topic authority is `topic.owner_id`; the single platform override is an `admin` (`users.role`). Every authority **and** entitlement check routes through one `isAllowed(user, capability, resource)` gate — never a scattered `role ===` or `tier ===`. The gate resolves a user's **effective role** on a Topic — owner / leader / member / none, the strongest grant across the owning and holding teams. Topic access is still "a Subscription path exists."
-- Entitlements come from the user's **plan** (`free`/`plus`/`premium`), derived from the active Billing Subscription (free = no row) and resolved by the gate.
-- Invites are consent-based: the Invite row above holds the kinds and their lifecycle. A topic invite grants topic-page view and stands as a pending subscription offer; a team invite offers the join. On invite Topics a subscriber sees only Findings from Scans started after their activation; the owner always sees full history. One Scan serves every subscriber — the amortization the pricing model assumes.
-- A Podcast Episode is rendered output, never an input: an ingested show's episode is a `listen` Resource from the `podcast` Source kind, and only a Topic's own rendered audio is a Podcast Episode. Podcast Episode cost counts in the billed user's monthly spend beside Scan and chat cost.
-- A Resource is raw and global; a Finding is scored and topic-scoped. Don't blur them. A Resource may include a captured `engagement` count (like a reddit score) that read-side ranking uses.
+- Ingester = worker code turning a Source into Resources (see ingester-authoring). One composio ingester; toolkit
+  variety lives in Source config, not code.
+- `shared/sources.ts` holds both source tables: the default Sources every new Topic starts with, and the options the
+  custom picker offers. An entry names the Source kind it saves as and builds its config, so a new Source is an entry
+  instead of a kind or a special case. An option is not always a kind: Google News saves as `rss`.
+- Topic authority is `topic.owner_id`; the single platform override is an `admin` (`users.role`). Every authority
+  **and** entitlement check routes through one `isAllowed(user, capability, resource)` gate — never a scattered `role ===`
+  or `tier ===`. The gate resolves a user's **effective role** on a Topic — owner / leader / member / none, the
+  strongest grant across the owning and holding teams. Topic access is still "a Subscription path exists."
+- Entitlements come from the user's **plan** (`free`/`plus`/`premium`), derived from the active Billing Subscription
+  (free = no row) and resolved by the gate.
+- Invites are consent-based: the Invite row above holds the kinds and their lifecycle. A topic invite grants topic-page
+  view and stands as a pending subscription offer; a team invite offers the join. On invite Topics a subscriber sees
+  only Findings from Scans started after their activation; the owner always sees full history. One Scan serves every
+  subscriber — the amortization the pricing model assumes.
+- A Podcast Episode is rendered output, never an input: an ingested show's episode is a `listen` Resource from the
+  `podcast` Source kind, and only a Topic's own rendered audio is a Podcast Episode. Podcast Episode cost counts in the
+  billed user's monthly spend beside Scan and chat cost.
+- A Resource is raw and global; a Finding is scored and topic-scoped. Don't blur them. A Resource may include a captured
+  `engagement` count (like a reddit score) that read-side ranking uses.
 - A Scan closes by filtering the Topic to its `max_results` best Findings by relevance; bookmarked Findings are never filtered.
-- A Scan traces every Source that did not deliver normally in `scans.problem_sources`: one that fell back to a keyless path records its `fallbackMode`, one that failed records its `reason`. A problem is independent of `status` — a Scan whose Sources all succeeded, some of them through a fallback, is still `succeeded`.
-- A Scan has **one Budget**, created before ingestion. Every stage charges into it — `ingestion` (the Sources' own spend: Exa for `search` and TwitterAPI.io for `x`), `embedding`, `fetch`, `scoringCheap`, `scoringPremium` — so `Scan.cost` is that Budget's total and `stage_costs` is its breakdown, and the one spend limit sees everything the Scan charges. Never sum a separately tracked ingestion number alongside it.
-- A paid ingester reports the dollars it really spent, never zero, and bounds one Scan's spend with its own read limit. The Budget is charged once after every Source returns, so a Source cannot consult it mid-run and the limit has to hold without one.
+- A Scan traces every Source that did not deliver normally in `scans.problem_sources`: one that fell back to a keyless
+  path records its `fallbackMode`, one that failed records its `reason`. A problem is independent of `status` — a Scan
+  whose Sources all succeeded, some of them through a fallback, is still `succeeded`.
+- A Scan has **one Budget**, created before ingestion. Every stage charges into it — `ingestion` (the Sources' own
+  spend: Exa for `search` and TwitterAPI.io for `x`), `embedding`, `fetch`, `scoringCheap`, `scoringPremium` — so
+  `Scan.cost` is that Budget's total and `stage_costs` is its breakdown, and the one spend limit sees everything the
+  Scan charges. Never sum a separately tracked ingestion number alongside it.
+- A paid ingester reports the dollars it really spent, never zero, and bounds one Scan's spend with its own read limit.
+  The Budget is charged once after every Source returns, so a Source cannot consult it mid-run and the limit has to hold
+  without one.
 
 ## Auth infrastructure is not domain vocabulary
-Better Auth manages `users`, `sessions`, `accounts`, `verifications` — identity/access plumbing, the same tier as `users` itself, never content-domain nouns. `accounts` is sign-in identity only (a password credential or an OAuth grant used to authenticate) and is never referenced by a Source or a Subscription. **Integration** stays the sole representation of a connected external account used for sourcing or delivery (e.g. Composio-managed Gmail) — never conflate the two, and never resolve Source/delivery credentials through `accounts`.
+Better Auth manages `users`, `sessions`, `accounts`, `verifications` — identity/access plumbing, the same tier as
+`users` itself, never content-domain nouns. `accounts` is sign-in identity only (a password credential or an OAuth grant
+used to authenticate) and is never referenced by a Source or a Subscription. **Integration** stays the sole
+representation of a connected external account used for sourcing or delivery (e.g. Composio-managed Gmail) — never
+conflate the two, and never resolve Source/delivery credentials through `accounts`.
 
 ## Rejected terms — never introduce
 - "Channel" (use Feed)
@@ -85,17 +112,26 @@ where a visitor branch should run instead. "Add to AI" is the install copy. Bett
 ## Page is the Topic or the Team a thing lives on
 A **page** is exactly one Topic or one Team, and it is what a Note sits on and what a private Chat Turn
 is addressed by. The one exception is the **new-topic chat**, a private conversation bound to neither, where Carl makes a
-Topic from a Topic Draft. Its Chat Turns store a null Topic and a null Team. `NotePageRef` and `ChatPage` are the same pair, and `notes` stores it as a nullable
+Topic from a Topic Draft. Its Chat Turns store a null Topic and a null Team. `NotePageRef` and `ChatPage` are the same
+pair, and `notes` stores it as a nullable
 `topic_id` and `team_id` under a check constraint. Never "scope", which already means the chat
 attachment's reach, an OAuth grant's permissions, and a Temporal `CancellationScope`. Never "subject",
 which already means an email's subject line and the target of a flagged report. A Note's own
-`private` / `team` / `public` setting is its **visibility**, never its scope. A **page number** is the other sense of the word, the position in a paged list, and identifiers say `pageNumber` (from 1), `pageIndex` (from 0), and `pageCount` so the two never meet in one name.
+`private` / `team` / `public` setting is its **visibility**, never its scope. A **page number** is the other sense of
+the word, the position in a paged list, and identifiers say `pageNumber` (from 1), `pageIndex` (from 0), and `pageCount`
+so the two never meet in one name.
 
 ## Follow and subscribe are one concept: follow is the client-facing word, subscribe is the code word
-Client-facing copy says **follow**, **follower**, and **following**. Every identifier says **subscribe**, **subscription**, and **subscriber** — tables, columns, types, functions, routes, and analytics events alike. The boundary is crossed exactly once, where a string is written for a user to read. Never rename a table toward the copy, and never let `follow` reach an identifier: a codebase that says both has two names for one thing and no way to tell which a given `follower_count` means.
+Client-facing copy says **follow**, **follower**, and **following**. Every identifier says **subscribe**,
+**subscription**, and **subscriber** — tables, columns, types, functions, routes, and analytics events alike. The
+boundary is crossed exactly once, where a string is written for a user to read. Never rename a table toward the copy,
+and never let `follow` reach an identifier: a codebase that says both has two names for one thing and no way to tell
+which a given `follower_count` means.
 
 ## Coffee Talk and brew are branding: code, comments, and agent docs say chat and scan
-Client-facing copy, the docs, release notes, the prompt markdown, and the tool descriptions and results Carl repeats say **Coffee Talk**, **brew**, and **steeping**. Every identifier, comment, AGENTS.md, skill, and OpenSpec change says **chat**, **scan**, and **loading**.
+Client-facing copy, the docs, release notes, the prompt markdown, and the tool descriptions and results Carl repeats say
+**Coffee Talk**, **brew**, and **steeping**. Every identifier, comment, AGENTS.md, skill, and OpenSpec change says
+**chat**, **scan**, and **loading**.
 
 ## Never "surface" for a page or a feature
 A **page** is a page. Say `/releases`, the team page, the topic editor, the webhook route: name the

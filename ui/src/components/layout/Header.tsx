@@ -18,7 +18,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { signOutAndReload } from "@/components/session/signOut"
 import { useIsSignedInBeforeSession } from "@/hooks/useIsSignedInBeforeSession"
 import { useTheme } from "@/hooks/useTheme"
-import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
+import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { useAllChatMentions } from "@/stores/chatRoomStore"
@@ -33,7 +33,7 @@ const MENU_BADGE_CLASS = "h-4 min-w-4 text-[0.625rem]"
 
 // Carl's pitch, shown inline on wide screens and inside the phone's note popover
 const CARL_PITCH =
-	"Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes."
+	"Carl doesn't check the news. The news checks in with Carl. Carl never sleeps. He drinks coffee and reads everything. He finished the internet. Now he checks nightly for new stuff. And when you drop by, he has notes and a podcast."
 
 // the desktop nav link's classes on the dark hero band. the current page is marked with a white wash at twice the hover fill
 function menuLinkClassName(pathname: string, href: string): string {
@@ -277,7 +277,7 @@ function HeaderMenu({
 				{isSignedIn ? (
 					// the user menu items form the block below a horizontal divider
 					<>
-						<div className="bg-border my-1 h-px" />
+						<div className={MENU_DIVIDER_CLASS} />
 						<UserMenuItems userId={userId} isAdmin={isAdmin} onNavigate={closeMenu} onSignOut={handleSignOut} />
 					</>
 				) : (

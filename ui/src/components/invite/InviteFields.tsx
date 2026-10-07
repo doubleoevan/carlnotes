@@ -10,7 +10,7 @@ import { Button } from "@/components/primitives/button"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { TagPill } from "@/components/topic/TagPicker"
 import { type EmailProvider, toEmailProviders } from "@/lib/emailProviders"
-import { MENU_OPTION_CLASS } from "@/lib/styleClasses"
+import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS } from "@/lib/styleClasses"
 import { copyToClipboard } from "@/lib/utils"
 
 // what the invite-by-link menu needs from its caller
@@ -133,8 +133,8 @@ function InviteLinkMenu({ inviteLink }: { inviteLink: InviteLink }) {
 							{emailProvider.label}
 						</button>
 					))}
-					{/* the Copy link row below a divider */}
-					<div className="bg-border my-1 h-px" />
+					{/* the Copy link option below a divider */}
+					<div className={MENU_DIVIDER_CLASS} />
 					<button type="button" onClick={() => void handleCopyLink()} className={MENU_OPTION_CLASS}>
 						<Link className="size-4 shrink-0" />
 						Copy link

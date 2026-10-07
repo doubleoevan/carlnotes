@@ -47,6 +47,7 @@ function toFeedTopic({ id, name }: ToFeedTopicOptions): TopicFeed {
 		attachments: [],
 		sources: [],
 		findings: [],
+		latestPodcastEpisode: null,
 	}
 }
 

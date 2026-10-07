@@ -186,7 +186,7 @@ async function check({ userId, topicId, scanId }: SeededRowIds): Promise<boolean
 	const results: [string, boolean][] = [
 		// the plan and the outline
 		["both findings were planned, the scan's best first", plannedFindings.length === 2],
-		["a rendering episode uses the free topic's one", !canRenderWhileRendering],
+		["a rendering episode uses the topic's one free-plan episode", !canRenderWhileRendering],
 		["the title was saved while the episode was rendering", outlinedPodcastEpisode?.status === "rendering"],
 		["the saved title is the outline's", outlinedPodcastEpisode?.title === outline.title],
 
@@ -210,7 +210,7 @@ async function check({ userId, topicId, scanId }: SeededRowIds): Promise<boolean
 
 		// the checks after a publish
 		["the scan plans no second episode", secondPodcastEpisodePlan === null],
-		["a free topic has used its episode", !canRenderAnotherPodcastEpisode],
+		["a published episode uses the topic's one free-plan episode", !canRenderAnotherPodcastEpisode],
 
 		// the removal
 		["the episode was removed", isPodcastEpisodeRemoved && removedPodcastEpisode?.status === "removed"],
@@ -225,8 +225,8 @@ async function check({ userId, topicId, scanId }: SeededRowIds): Promise<boolean
 		["its audio object is gone", !isAudioLeft],
 		["its cost still counts in the month's spend", monthlySpend.podcastEpisodeDollars > 0],
 		[
-			"a removed episode still uses the free topic's one",
-			!(await canRenderPodcastEpisode({ id: topicId, ownerId: userId })),
+			"a removed episode frees the topic's one free-plan episode",
+			await canRenderPodcastEpisode({ id: topicId, ownerId: userId }),
 		],
 	]
 

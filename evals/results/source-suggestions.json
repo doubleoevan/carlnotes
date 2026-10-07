@@ -1,6 +1,12 @@
 {
 	"name": "source-suggestions",
-	"passedRunCount": 12,
+	"passedRunCount": 14,
 	"runCount": 18,
-	"ranOn": "2026-10-05"
+	"ranOn": "2026-10-05",
+	"commit": "fdfb55e",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"cheap-model"
+	],
+	"graderModelId": "chat-model"
 }

@@ -1,5 +1,5 @@
-// the new-topic chat eval's promptfoo provider, the chat turn writer under test. the writer calls the LiteLLM proxy
-// through worker/models.ts with the tools that the new-topic chat offers, and records every tool call
+// the new-topic chat eval's promptfoo provider, which runs the chat turn writer with the new-topic chat's tools
+// and records every tool call
 import { generateText, stepCountIs, type Tool } from "ai"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import {
@@ -12,8 +12,9 @@ import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
 import { buildNewTopicChatPrompt, MAX_TURN_STEPS, toConsentStep, toModelMessages } from "../../worker/chat"
 import { webSearchTool } from "../../worker/chat/search"
 import { chatModel } from "../../worker/models"
-import { type RecordedToolCall, toRecordingTools, toStepsText } from "../evalHarness"
-import { type NewTopicChatCase, SUGGESTED_TOPIC_SOURCES } from "./newTopicChatCases"
+import { type RecordedToolCall, toRecordingTools } from "../evalHarness"
+import { toStepsText } from "../evalReplies"
+import { LEADER_TEAMS, type NewTopicChatCase, SUGGESTED_TOPIC_SOURCES } from "./newTopicChatCases"
 
 // how many more topics the plan lets the user hold
 const TOPICS_REMAINING = 3
@@ -62,7 +63,7 @@ async function writeCaseChatTurn(_renderedPrompt: string, context?: CallApiConte
 	})
 
 	// write the turn, forcing a saving tool on a consent the way a chat turn does
-	const chatPrompt = await buildNewTopicChatPrompt("", topicDraft, TOPICS_REMAINING, [])
+	const chatPrompt = await buildNewTopicChatPrompt("", topicDraft, TOPICS_REMAINING, LEADER_TEAMS)
 	const { steps, usage } = await generateText({
 		model: chatModel(),
 		system: chatPrompt.prompt,

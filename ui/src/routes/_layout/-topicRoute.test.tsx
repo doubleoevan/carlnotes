@@ -105,6 +105,7 @@ const TOPIC = {
 	featureOrder: null,
 	featuredTopics: null,
 	podcast: null,
+	latestPodcastEpisode: null,
 } satisfies TopicResponse
 
 // the real fetch, restored after the tests

@@ -1,35 +1,21 @@
-// the promptfoo eval of the topic chat reply. every case makes real calls on the local LiteLLM proxy.
-// the calls cost real money, so the eval is never part of bun test. run it with: bun run eval:topic-chat
+// the promptfoo eval of the topic chat reply, which makes real model calls. run the eval with: bun run eval:topic-chat
 import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
-import { scoreModel } from "../../worker/models"
-import { runEval, toGradingResult, toLinkUrls, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { chatModel } from "../../worker/models"
+import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toDisallowedLinkUrl, toProseParagraphs } from "../evalReplies"
 import { TOPIC_CHAT_CASES, type TopicChatCase } from "./topicChatCases"
 import { type TopicChatVariables, topicChatReplyWriter } from "./topicChatProviders"
+import { GRADER_MODEL, MATERIAL_LABEL, OPENING_RUBRIC, OUTPUT_SHAPE_RUBRIC, SUPPORT_RUBRIC } from "./topicChatRubrics"
 
 // turn web search off. a search returns "web search is not configured", so a reply's links come only from the material
 delete Bun.env.EXA_API_KEY
 
-// how many paragraphs a reply may have, its lists aside
+// how many paragraphs a reply may have, its lists and its headings aside
 const MAX_REPLY_PARAGRAPHS = 3
-
-// what every rubric tells the grader about the reply
-const OUTPUT_SHAPE_RUBRIC =
-	"The output is Carl's chat reply to a reader's question about one of their topics. Carl answers from the topic's findings and from his own knowledge."
-
-// the rubric that fails a reply for crediting the findings with what they do not say
-const SUPPORT_RUBRIC = [
-	"Everything the reply credits to the findings is in the topic material below.",
-	"Fail the output if it credits the findings with a fact the material does not have, or if it states a fact from outside the material without marking that it comes from outside the findings.",
-	"Never fail the output for Carl's reactions or opinions, or for everyday reasoning about what the findings say.",
-].join(" ")
-
-// the rubric that fails a reply that does not open by answering the question
-const OPENING_RUBRIC =
-	"The reply opens by answering the question. Fail the output if it opens with a greeting or with praise for the question, or ends with a sign-off."
 
 // the checks that every case gets and that need no model
 const DETERMINISTIC_ASSERTIONS: Assertion[] = [
-	{ type: "javascript", metric: "links only to the findings", value: gradeLinksToFindings },
+	{ type: "javascript", metric: "links only to the findings and the docs", value: gradeLinksToMaterial },
 	{ type: "javascript", metric: `has ${MAX_REPLY_PARAGRAPHS} paragraphs or fewer`, value: gradeParagraphCount },
 ]
 
@@ -38,7 +24,9 @@ await runEval({
 	name: "topic-chat",
 	description: "topic chat reply",
 	provider: topicChatReplyWriter,
-	grader: toRubricGrader(scoreModel()),
+	writerModels: [chatModel()],
+	grader: toRubricGrader(GRADER_MODEL),
+	gatePassRate: 0.9,
 	defaultAssertions: DETERMINISTIC_ASSERTIONS,
 	testCases: TOPIC_CHAT_CASES.map(toTestCase),
 	toCaseLine,
@@ -56,23 +44,24 @@ function toTestCase(topicChatCase: TopicChatCase): TestCase {
 			{ metric: "opens by answering the question", rubric: OPENING_RUBRIC },
 			{ metric: description, rubric },
 		],
-		materialLabel: "The question and the topic material, as the reply's writer was given them",
+		materialLabel: MATERIAL_LABEL,
 		material: topicChatVariables,
 	})
 	return { description, vars: topicChatVariables, assert: rubricAssertions }
 }
 
-// fail the check if the reply links anywhere but a finding's url
-function gradeLinksToFindings(replyText: string, context: AssertionValueFunctionContext): GradingResult {
+// fail the check if the reply links anywhere but a finding's url, the docs root, or a docs page in the material
+function gradeLinksToMaterial(replyText: string, context: AssertionValueFunctionContext): GradingResult {
+	// find the first link that is neither a finding's url nor a docs page
 	const { chatContext } = context.vars as TopicChatVariables
 	const findingUrls = chatContext.findings.map((finding) => finding.url)
-	const strayUrl = toLinkUrls(replyText).find((linkUrl) => !findingUrls.includes(linkUrl))
-	return toGradingResult(strayUrl && `the reply links ${strayUrl}`)
+	const disallowedLinkUrl = toDisallowedLinkUrl({ replyText, findingUrls, docsBlock: chatContext.docsBlock })
+	return toGradingResult(disallowedLinkUrl && `the reply links ${disallowedLinkUrl}`)
 }
 
-// fail the check if the reply has more than MAX_REPLY_PARAGRAPHS paragraphs that are not lists
+// fail the check if the reply has more than MAX_REPLY_PARAGRAPHS paragraphs that are not lists or headings
 function gradeParagraphCount(replyText: string): GradingResult {
-	const paragraphCount = toParagraphs(replyText).length
+	const paragraphCount = toProseParagraphs(replyText).length
 	return toGradingResult(
 		paragraphCount > MAX_REPLY_PARAGRAPHS ? `the reply has ${paragraphCount} paragraphs` : undefined,
 	)
@@ -80,11 +69,5 @@ function gradeParagraphCount(replyText: string): GradingResult {
 
 // a case's paragraph count and reply cost
 function toCaseLine(replyText: string, evaluateResult: EvaluateResult): string {
-	return `${toParagraphs(replyText).length} paragraphs, $${(evaluateResult.cost ?? 0).toFixed(4)} to write`
-}
-
-// the reply's blocks between blank lines, without the blocks that open with a list marker
-function toParagraphs(replyText: string): string[] {
-	const textBlocks = replyText.split(/\n\s*\n/).map((textBlock) => textBlock.trim())
-	return textBlocks.filter((textBlock) => textBlock && !/^([-*]|\d+\.)\s/.test(textBlock))
+	return `${toProseParagraphs(replyText).length} paragraphs, $${(evaluateResult.cost ?? 0).toFixed(4)} to write`
 }

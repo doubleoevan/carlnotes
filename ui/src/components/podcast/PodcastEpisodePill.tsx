@@ -1,10 +1,11 @@
 import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts"
-import { Headphones } from "lucide-react"
+import { Headphones, Pause, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {
-	playPodcastEpisode,
 	togglePlayback,
+	togglePodcastEpisodeChapterPlayback,
 	togglePodcastEpisodePlayback,
+	useIsPodcastEpisodePlaying,
 	usePlayerChapter,
 	usePodcastEpisodePlayer,
 } from "@/stores/podcastEpisodePlayerStore"
@@ -42,15 +43,10 @@ export function PodcastEpisodeChapterPill({ podcastEpisode, chapter, className }
 		<button
 			type="button"
 			aria-label={chapterPillLabel}
-			// keep the click from the row behind the pill. pause or play the player's chapter,
-			// and play the podcast episode from any other chapter
+			// keep the click from the row behind the pill
 			onClick={(event) => {
 				event.stopPropagation()
-				if (isPlayerChapter) {
-					togglePlayback()
-				} else {
-					void playPodcastEpisode(podcastEpisode, chapter.startSeconds)
-				}
+				togglePodcastEpisodeChapterPlayback(podcastEpisode, chapter)
 			}}
 			className={cn(
 				PILL_CLASS,
@@ -58,10 +54,30 @@ export function PodcastEpisodeChapterPill({ podcastEpisode, chapter, className }
 				className,
 			)}
 		>
-			<Headphones className="size-3" strokeWidth={2.5} />
-			{`E${podcastEpisode.episodeNumber} · ch ${chapter.position + 1}`}
+			<PodcastEpisodePillBody
+				text={`E${podcastEpisode.episodeNumber} · ch ${chapter.position + 1}`}
+				isPlaying={isChapterPlaying}
+			/>
 		</button>
 	)
+}
+
+/**
+ * The pill of the podcast episode chapter that narrates a finding, or nothing if no chapter narrates the finding.
+ */
+export function FindingChapterPill({
+	podcastEpisode,
+	findingId,
+	className,
+}: {
+	podcastEpisode: PodcastEpisode | null | undefined
+	findingId: string
+	className?: string
+}) {
+	const findingChapter = podcastEpisode?.chapters.find((chapter) => chapter.findingId === findingId)
+	return podcastEpisode && findingChapter ? (
+		<PodcastEpisodeChapterPill podcastEpisode={podcastEpisode} chapter={findingChapter} className={className} />
+	) : null
 }
 
 /**
@@ -92,12 +108,8 @@ export function useIsFindingChapterPlaying(
 	podcastEpisode: PodcastEpisode | null | undefined,
 	findingId: string,
 ): boolean {
-	const { podcastEpisode: loadedPodcastEpisode, isPlaying } = usePodcastEpisodePlayer()
 	const playerChapter = usePlayerChapter()
-	if (!podcastEpisode || loadedPodcastEpisode?.id !== podcastEpisode.id || !isPlaying) {
-		return false
-	}
-	return playerChapter?.findingId === findingId
+	return useIsPodcastEpisodePlaying(podcastEpisode?.id) && playerChapter?.findingId === findingId
 }
 
 /**
@@ -110,9 +122,7 @@ export function PodcastEpisodeNumberPill({
 	podcastEpisode: { id: string; episodeNumber: number }
 	className?: string
 }) {
-	// whether this pill's podcast episode is the loaded episode and playing
-	const { podcastEpisode: loadedPodcastEpisode, isPlaying } = usePodcastEpisodePlayer()
-	const isPodcastEpisodePlaying = loadedPodcastEpisode?.id === podcastEpisode.id && isPlaying
+	const isPodcastEpisodePlaying = useIsPodcastEpisodePlaying(podcastEpisode.id)
 	return (
 		<button
 			type="button"
@@ -124,8 +134,19 @@ export function PodcastEpisodeNumberPill({
 				className,
 			)}
 		>
-			<Headphones className="size-3" strokeWidth={2.5} />
-			{`E${podcastEpisode.episodeNumber}`}
+			<PodcastEpisodePillBody text={`E${podcastEpisode.episodeNumber}`} isPlaying={isPodcastEpisodePlaying} />
 		</button>
+	)
+}
+
+// a pill's headphones, its text, and the icon of what a click does
+function PodcastEpisodePillBody({ text, isPlaying }: { text: string; isPlaying: boolean }) {
+	const PlaybackIcon = isPlaying ? Pause : Play
+	return (
+		<>
+			<Headphones className="size-3" strokeWidth={2.5} />
+			{text}
+			<PlaybackIcon className="size-2.5 fill-current" strokeWidth={2.5} />
+		</>
 	)
 }

@@ -21,7 +21,7 @@ they brew, and how many brews you can run by hand in a day.
 | Topics on a daily schedule | 1 | 3 monthly · 4 yearly | 6 monthly · 7 yearly |
 | Brews a day | 5 | 15 monthly · 20 yearly | 30 monthly · 40 yearly |
 | Members per team you lead | 10 | Unlimited | Unlimited |
-| Coffee Break podcast episodes | 1 per topic | After every brew | After every brew |
+| Coffee Break podcast episodes | 1 at a time per topic | After every brew | After every brew |
 
 Yearly billing is ten times the monthly price instead of twelve: two months for free. Yearly plans get higher daily limits
 instead of overage, because a yearly subscription has no monthly invoice to bill overage to.
@@ -68,8 +68,7 @@ have. Canceling puts you back on the free plan's limits.
 Downgrading never deletes anything. Every topic, finding, and subscription stays. Two limits
 tighten:
 
-- If you're over the topic limit, you can't create new topics until you're back under it. Existing topics keep
-  working.
+- If you're over the topic limit, you can't create new topics until you're back under it. Existing topics keep working.
 - If you're over the new daily-schedule limit, your oldest daily topics keep their schedule and the newer ones
   stop brewing automatically. They keep their findings and still brew manually. A **Weekly**
   schedule removes them from the daily limit entirely.
@@ -77,5 +76,4 @@ tighten:
 ## Closing your account
 
 **Close account** is at the bottom of the account page. The page states the terms exactly: "Your
-topics, findings, subscriptions, and chats are removed with it. Any paid plan is canceled. This cannot be
-undone."
+topics, findings, subscriptions, and chats are removed with it. Any paid plan is canceled. This cannot be undone."

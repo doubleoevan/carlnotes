@@ -99,6 +99,8 @@ export function TeamPage() {
 							: []),
 					],
 					report: { subjectKind: "team", subjectId: viewedTeam.teamId, subjectLabel: viewedTeam.name },
+					// a leader gets the team topics' Add Topic button
+					hasNewTopicButton: viewedTeam.role === "leader",
 				}
 			: null,
 	)

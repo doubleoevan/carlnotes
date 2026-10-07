@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { sendDeleteJoinRequest, sendJoinRequest } from "@/clients/teamClient"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { MENU_BUTTON_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 /**
@@ -16,14 +17,15 @@ export function JoinTeamButton({
 	hasJoinRequest,
 	onChangeRequest,
 	isSignedIn,
-	className,
+	isHighlighted = true,
 }: {
 	teamId: string
 	teamName: string
 	hasJoinRequest: boolean
 	onChangeRequest: () => void
 	isSignedIn: boolean
-	className?: string
+	// whether this button is the page's one call to action
+	isHighlighted?: boolean
 }) {
 	const navigate = useNavigate()
 	// update the join button state on change
@@ -54,7 +56,11 @@ export function JoinTeamButton({
 	return (
 		<Tooltip>
 			<TooltipTrigger asChild>
-				<Button onClick={() => void handleChangeRequest()} className={cn("shrink-0", className)}>
+				<Button
+					variant={isHighlighted ? "default" : "ghost"}
+					onClick={() => void handleChangeRequest()}
+					className={cn("shrink-0", !isHighlighted && MENU_BUTTON_CLASS)}
+				>
 					{isJoinRequested ? <Minus className="size-4" /> : <Plus className="size-4" />}
 					Join Team
 				</Button>

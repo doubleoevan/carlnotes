@@ -1,0 +1,12 @@
+{
+	"name": "search-queries",
+	"passedRunCount": 12,
+	"runCount": 15,
+	"ranOn": "2026-10-05",
+	"commit": "fdfb55e",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"cheap-model"
+	],
+	"graderModelId": "chat-model"
+}

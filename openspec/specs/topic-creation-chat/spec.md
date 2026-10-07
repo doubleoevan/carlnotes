@@ -90,18 +90,24 @@ The chat menu SHALL offer a "Give Carl a topic. You know the one." row to a sign
 - **THEN** the panel shows the new-topic chat, and the Topic's own chats stay in the menu
 
 ### Requirement: The wizard asks who should see the Topic
-The `chat-new-topic.md` prompt SHALL tell Carl to ask, after the Sources and before the invites, whether the Topic is for everyone, for people the user invites, or for the user alone, and to write the answer into the draft with `draftTopic` as `public`, `invite`, or `private`. The Topic Draft SHALL hold a `visibility` that defaults to `invite`, the draft card SHALL show it, and `createTopicFromDraft` SHALL create the Topic with it.
+The `chat-new-topic.md` prompt SHALL tell Carl to ask, after the Sources and before the invites, whether the Topic is
+for everyone, for people the user invites, or for the user alone, and to write the answer into the draft with
+`draftTopic` as `public`, `invite`, or `private`. The Topic Draft SHALL hold a `visibility` that defaults to `invite`,
+the draft card SHALL show it, and `createTopicFromDraft` SHALL create the Topic with it.
 
 #### Scenario: A public Topic is asked for
 - **WHEN** a user says anyone should be able to read it
 - **THEN** the card reads Public, and the created Topic's visibility is `public`
 
 #### Scenario: The visibility is skipped
-- **WHEN** a user says yes to the Topic without answering who should see it
-- **THEN** the Topic is created shared by invite
+- **WHEN** a user who leads a team says yes to the Topic without answering who should see it
+- **THEN** the Topic is created shared by invite, on the team the user picked
 
 ### Requirement: The New Topic button offers the chat
-The New Topic button on the home, activity, and profile pages SHALL open a dialog with two choices, making the Topic in the form or making it with Carl, and the second SHALL open the panel on the new-topic chat. The team page's Add Topic SHALL keep opening the form, since the chat cannot put a Topic on a team.
+The New Topic button on the home, activity, profile, and Podcast Episode pages, on a Topic page for a signed-in user who
+may not scan the Topic, and the actions menu's New topic option SHALL open a dialog with two choices, making the Topic
+in the form or making it with Carl, and the second SHALL open the panel on the new-topic chat. The team page's Add Topic
+SHALL keep opening its picker, whose New topic option opens the same dialog.
 
 #### Scenario: A user chooses Carl
 - **WHEN** a signed-in user presses New Topic on the home page and picks making it with Carl
@@ -112,15 +118,30 @@ The New Topic button on the home, activity, and profile pages SHALL open a dialo
 - **THEN** the create form opens in place of the dialog
 
 ### Requirement: The wizard asks which team the Topic joins
-The `chat-new-topic.md` prompt SHALL list the teams the user leads, and SHALL tell Carl to ask, after the visibility step, whether the Topic should join one of them, writing the pick into the draft's `team` field, `{ teamId, name }`, with `draftTopic`, skipping the question when the user leads no team or the draft already names one. The Topic Draft SHALL hold a `team` that defaults to none, the draft card SHALL show its name, and `createTopicFromDraft` SHALL add the created Topic to it through the leader-only add-to-team path, reporting a rejected add beside the created Topic.
+The `chat-new-topic.md` prompt SHALL list the teams the user leads, and SHALL tell Carl that a public or invite Topic
+goes on one of them. After the visibility step, unless the draft is private or already names a team, Carl SHALL name the
+user's teams and ask which one the Topic goes on, writing the pick into the draft's `team` field, `{ teamId, name }`,
+with `draftTopic`. A user who wants no team, or who leads none, SHALL get a private Topic: Carl says so and writes the
+visibility as private. Carl's read-back before the yes SHALL include the team.
+
+The chat's create tool SHALL NOT create a public or invite draft that names no team. It SHALL return a line telling Carl
+to ask which team the Topic goes on, or to make it private, and SHALL create nothing.
+
+The Topic Draft SHALL hold a `team` that defaults to none, the draft card SHALL show its name, and
+`createTopicFromDraft` SHALL add the created Topic to it through the leader-only add-to-team path, reporting a rejected
+add beside the created Topic.
 
 #### Scenario: A leader team is picked
-- **WHEN** a user who leads a team says the topic is for that team
+- **WHEN** a user who leads a team makes a public Topic and picks that team
 - **THEN** the card shows the team, and the created Topic is on it
 
 #### Scenario: The user leads no team
 - **WHEN** a user on no team, or a member of teams they do not lead, makes a Topic with Carl
-- **THEN** Carl does not ask about teams, and the Topic is created on none
+- **THEN** Carl says the Topic will be private, and it is created private on no team
+
+#### Scenario: A shared draft with no team is not created
+- **WHEN** Carl calls the create tool on a public or invite draft that names no team
+- **THEN** no Topic is created, and the tool tells Carl to ask which team or to make it private
 
 #### Scenario: The add is rejected at the save
 - **WHEN** the draft names a team the user no longer leads
@@ -185,4 +206,27 @@ keep the conversation, since a stop returns before the server has written that t
 #### Scenario: A stopped reply keeps the conversation
 - **WHEN** the reader presses stop while Carl is still writing the reply that created the topic
 - **THEN** nothing is cleared, so the turn the server is still writing is not half removed
+
+### Requirement: Every page offers a way to create a topic
+
+Every page with the search bar SHALL let a user start a Topic. The pages with their own New Topic button are the home
+page, the Podcast Episode page, a user's own activity and profile pages, and a Topic page for a signed-in user who may
+not scan the Topic. The team page has its Add Topic button for a leader. A page with either button SHALL keep that
+button as the way in. Every other page SHALL offer New topic in the search bar's actions menu, which SHALL open the
+same new topic dialog and SHALL send a visitor to sign up first.
+
+#### Scenario: A user starts a topic from a topic page
+
+- **WHEN** a Topic's owner opens the actions menu on the Topic's page and picks New topic
+- **THEN** the new topic dialog opens with its two choices, and a saved topic opens its page
+
+#### Scenario: A page with its own button leaves the option out
+
+- **WHEN** a user opens the actions menu on the home page
+- **THEN** the menu offers no New topic
+
+#### Scenario: A visitor is sent to sign up
+
+- **WHEN** a visitor opens the actions menu on the plans page and picks New topic
+- **THEN** the sign-up page opens
 

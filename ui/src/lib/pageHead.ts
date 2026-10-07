@@ -31,13 +31,6 @@ export function toHeadTags(pageHead: PageHead | null | undefined): HeadTags {
 			{ property: "og:image", content: pageHead.imageUrl },
 			{ property: "og:image:alt", content: pageHead.cardTitle },
 			{ property: "og:url", content: pageHead.cardUrl },
-			// a podcast episode page's audio
-			...(pageHead.audioUrl
-				? [
-						{ property: "og:audio", content: pageHead.audioUrl },
-						{ property: "og:audio:type", content: "audio/mpeg" },
-					]
-				: []),
 			{ name: "twitter:card", content: "summary_large_image" },
 			{ name: "twitter:title", content: pageHead.cardTitle },
 			{ name: "twitter:description", content: pageHead.description },

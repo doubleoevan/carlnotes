@@ -1,4 +1,4 @@
-// how a stored Scan failure reads to a person, shared by the ui, the api, and the worker
+// how a stored Scan failure reads to a person, and the failure reason that a workflow stores
 const BUDGET_ERROR_PATTERN = /budget has been exceeded/i
 
 // how a spent budget reads to a person, on a failed Scan and on a rejected manual scan
@@ -39,10 +39,10 @@ export function toScanFailureLabel(error: string | null): string {
 }
 
 /**
- * The failure reason to store on a failed Scan. Temporal wraps whatever an activity threw in a failure whose
- * message is only "Activity task failed", so the deepest cause message is stored instead.
+ * Returns the deepest cause's message, which a workflow stores on a failed Scan, attachment, or podcast episode.
+ * Temporal wraps what an activity threw in a failure whose message is only "Activity task failed".
  */
-export function toScanFailureReason(error: unknown): string {
+export function toWorkflowFailureReason(error: unknown): string {
 	// walk the cause chain once, keeping each message and stopping at a cycle
 	const messages: string[] = []
 	const seen = new Set<unknown>()

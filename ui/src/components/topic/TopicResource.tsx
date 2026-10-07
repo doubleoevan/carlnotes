@@ -1,4 +1,4 @@
-import type { ChatLinkPreview, TopicFinding } from "@shared/contracts"
+import type { ChatLinkPreview, PodcastEpisode, TopicFinding } from "@shared/contracts"
 import { Bookmark, Check, Circle, ExternalLink } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useState } from "react"
@@ -10,6 +10,7 @@ import { HostFavicon } from "@/components/common/HostFavicon"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { RatingThumbs } from "@/components/common/RatingThumbs"
 import { TooltipLabel, TooltipSection } from "@/components/common/UpdateCountBadge"
+import { FindingChapterPill, useIsFindingChapterPlaying } from "@/components/podcast/PodcastEpisodePill"
 import { Input } from "@/components/primitives/input"
 import {
 	Popover,
@@ -35,9 +36,8 @@ type TopicResourceProps = {
 	resourceHandlers?: TopicFeedHandlers
 	// names the topic in the note popover's copied Markdown
 	topic: { id: string; name: string; prompt: string }
-	// the pill of the podcast episode chapter that narrates this finding, and whether the chapter is playing
-	podcastEpisodeChapterPill?: React.ReactNode
-	isChapterPlaying?: boolean
+	// the topic's latest podcast episode, whose chapters put a pill on the findings that the chapters narrate
+	latestPodcastEpisode?: PodcastEpisode | null
 }
 
 /**
@@ -51,8 +51,7 @@ export function TopicResource({
 	isBookmarkable,
 	resourceHandlers,
 	topic,
-	podcastEpisodeChapterPill,
-	isChapterPlaying = false,
+	latestPodcastEpisode,
 }: TopicResourceProps) {
 	// the topic page passes handlers that reload their own payload. the homepage falls back to the shared provider's handlers
 	const providerHandlers = useTopicFeedActions()
@@ -60,6 +59,8 @@ export function TopicResource({
 		resourceHandlers ?? providerHandlers
 	// signed-out visitors don't get the per-user read and rating buttons
 	const isSignedIn = useIsSignedIn()
+	// whether the chapter that narrates this finding is playing, which keeps the row highlighted
+	const isChapterPlaying = useIsFindingChapterPlaying(latestPodcastEpisode, resource.findingId)
 
 	// the whole row opens the note popup for the topic finding and hovering it shows the hint
 	const [isNoteOpen, setIsNoteOpen] = useState(false)
@@ -119,7 +120,7 @@ export function TopicResource({
 				{/* the left padding clears the rank slot, and the right padding is the row's own inset */}
 				<TopicFindingSummary resource={resource} className="flex-1 py-3 pr-3 pl-9">
 					{/* the pill of the podcast episode chapter that narrates this finding */}
-					{podcastEpisodeChapterPill}
+					<FindingChapterPill podcastEpisode={latestPodcastEpisode} findingId={resource.findingId} />
 				</TopicFindingSummary>
 				{/* the note and its hint both anchor here, off the row's right edge */}
 				<Tooltip open={isHintOpen && !isNoteOpen} onOpenChange={setIsHintOpen}>
@@ -133,6 +134,7 @@ export function TopicResource({
 				<ResourceInfo
 					resource={resource}
 					topicFindingRank={rank}
+					podcastEpisode={latestPodcastEpisode}
 					topic={topic}
 					isRatable={isRatable}
 					isBookmarkable={isBookmarkable}
@@ -243,6 +245,7 @@ export function TopicFindingSummary({
 export function ResourceInfo({
 	resource,
 	topicFindingRank,
+	podcastEpisode,
 	topic,
 	isRatable,
 	isBookmarkable,
@@ -252,6 +255,8 @@ export function ResourceInfo({
 	resource: TopicFinding
 	// the finding's rank among the topic's auto-kept findings, null if a bookmark pins it
 	topicFindingRank: number | null
+	// the podcast episode whose chapters put a pill on the findings that the chapters narrate
+	podcastEpisode?: PodcastEpisode | null
 	isRatable: boolean
 	isBookmarkable: boolean
 	// the feed handlers the row resolved, the page's or the shared provider's
@@ -305,8 +310,9 @@ export function ResourceInfo({
 							{resource.title ?? resource.url}
 							<ExternalLink className="mt-0.5 size-3.5 shrink-0" />
 						</AnchorLink>
-						<div className="text-muted-foreground mt-0.5 flex items-center gap-1.5 text-xs">
+						<div className="text-muted-foreground mt-0.5 flex flex-wrap items-center gap-1.5 text-xs">
 							<ResourceMetadata resource={resource} />
+							<FindingChapterPill podcastEpisode={podcastEpisode} findingId={resource.findingId} />
 						</div>
 					</div>
 				</div>

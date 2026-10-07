@@ -909,6 +909,19 @@ export type ProfileResponse = {
 	teams: TeamSummary[]
 }
 
+// one of the user's teams on another user's profile, with the user's role there and the profile user's status there
+export type ProfileTeamStatus = {
+	teamId: string
+	name: string
+	avatarVersion: string | null
+	role: "leader" | "member"
+	status: "member" | "invited" | "none"
+	// the team's pending invite to the profile user, and whether the user may delete the invite.
+	// a team leader may delete any invite, and a user may delete an invite that the user sent
+	inviteId: string | null
+	canDeleteInvite: boolean
+}
+
 // the account page's billing state
 export type BillingState = {
 	plan: Plan
@@ -951,6 +964,50 @@ export const topicFinding = z.object({
 	engagement: z.number().nullable(),
 })
 export type TopicFinding = z.infer<typeof topicFinding>
+
+// one chapter of a podcast episode, in the shape that the player shows
+export const podcastEpisodeChapter = z.object({
+	position: z.number(),
+	title: z.string(),
+	// the finding that the chapter narrates, null once a scan filtered the finding out. the source url stays
+	findingId: z.string().nullable(),
+	sourceUrl: z.string(),
+	// the chapter's own rating, which rates a chapter whose finding was filtered out
+	rating: z.enum(ratings).nullable(),
+	// the path of the source host's stored favicon, null except on a podcast episode's own page
+	faviconPath: z.string().nullable(),
+	startSeconds: z.number(),
+	endSeconds: z.number(),
+})
+export type PodcastEpisodeChapter = z.infer<typeof podcastEpisodeChapter>
+
+// a podcast episode in the shape that the player shows. a rendering or failed episode has its status, no audio,
+// and its title once written
+export const podcastEpisode = z.object({
+	id: z.string(),
+	topicId: z.string(),
+	status: z.enum(["rendering", "published", "failed"]),
+	title: z.string().nullable(),
+	description: z.string().nullable(),
+	// the publish year, the episode number within that year, the length, and the publish time.
+	// all are null until the podcast episode publishes
+	season: z.number().nullable(),
+	episodeNumber: z.number().nullable(),
+	durationSeconds: z.number().nullable(),
+	publishedAt: z.string().nullable(),
+	// the podcast episode's own page, null until the podcast episode publishes
+	pagePath: z.string().nullable(),
+	// the stable audio url, null until the podcast episode publishes.
+	// the cover's url at each size, null until the episode has a title
+	audioUrl: z.string().nullable(),
+	coverUrl: z.string().nullable(),
+	smallCoverUrl: z.string().nullable(),
+	chapters: z.array(podcastEpisodeChapter),
+	// where the user stopped listening and whether the user finished. zero and false for a visitor
+	progressSeconds: z.number(),
+	isCompleted: z.boolean(),
+})
+export type PodcastEpisode = z.infer<typeof podcastEpisode>
 
 // a topic feed. one Topic's header fields plus its topic finding rows
 export const topicFeed = z.object({
@@ -1013,6 +1070,8 @@ export const topicFeed = z.object({
 			status: z.enum(attachmentStatuses),
 			// the generated context that every later scan uses, for the owner and admins to edit. null for anyone else
 			context: z.string().nullable(),
+			// what a failed attachment tells the owner and admins. null unless the attachment failed, and null for anyone else
+			failureMessage: z.string().nullable(),
 		}),
 	),
 	// topic sources with a display summary derived server side from each source's config
@@ -1028,6 +1087,9 @@ export const topicFeed = z.object({
 		}),
 	),
 	findings: z.array(topicFinding),
+	// the latest published podcast episode that the user may listen to, with its chapters.
+	// null with none, or on an instance with no speech model
+	latestPodcastEpisode: podcastEpisode.nullable(),
 })
 export type TopicFeed = z.infer<typeof topicFeed>
 
@@ -1056,50 +1118,6 @@ export const topicScan = z.object({
 export const scanNote = z.object({ scanSummary: z.string().nullable() })
 export type TopicScan = z.infer<typeof topicScan>
 
-// one chapter of a podcast episode as the player shows it
-export const podcastEpisodeChapter = z.object({
-	position: z.number(),
-	title: z.string(),
-	// the finding that the chapter narrates, null once a scan filtered the finding out. the source url stays
-	findingId: z.string().nullable(),
-	sourceUrl: z.string(),
-	// the chapter's own rating, which rates a chapter whose finding was filtered out
-	rating: z.enum(ratings).nullable(),
-	// the path of the source host's stored favicon, null except on a podcast episode's own page
-	faviconPath: z.string().nullable(),
-	startSeconds: z.number(),
-	endSeconds: z.number(),
-})
-export type PodcastEpisodeChapter = z.infer<typeof podcastEpisodeChapter>
-
-// a podcast episode as the player shows it. a rendering or failed episode has its status, no audio,
-// and its title once written
-export const podcastEpisode = z.object({
-	id: z.string(),
-	topicId: z.string(),
-	status: z.enum(["rendering", "published", "failed"]),
-	title: z.string().nullable(),
-	description: z.string().nullable(),
-	// the publish year, the episode number within that year, the length, and the publish time.
-	// all are null until the podcast episode publishes
-	season: z.number().nullable(),
-	episodeNumber: z.number().nullable(),
-	durationSeconds: z.number().nullable(),
-	publishedAt: z.string().nullable(),
-	// the podcast episode's own page, null until the podcast episode publishes
-	pagePath: z.string().nullable(),
-	// the stable audio url, null until the podcast episode publishes.
-	// the cover's url at each size, null until the episode has a title
-	audioUrl: z.string().nullable(),
-	coverUrl: z.string().nullable(),
-	smallCoverUrl: z.string().nullable(),
-	chapters: z.array(podcastEpisodeChapter),
-	// where the user stopped listening and whether the user finished. zero and false for a visitor
-	progressSeconds: z.number(),
-	isCompleted: z.boolean(),
-})
-export type PodcastEpisode = z.infer<typeof podcastEpisode>
-
 // a season's episodes for the podcast episodes' card, newest first, without their chapters
 export const seasonPodcastEpisodes = z.object({ podcastEpisodes: z.array(podcastEpisode) })
 export type SeasonPodcastEpisodes = z.infer<typeof seasonPodcastEpisodes>
@@ -1111,19 +1129,6 @@ export const podcastEpisodeTranscriptBlock = z.object({
 	turns: z.array(z.object({ speakerName: z.string(), text: z.string() })),
 })
 export type PodcastEpisodeTranscriptBlock = z.infer<typeof podcastEpisodeTranscriptBlock>
-
-// a podcast episode's own page. the episode with its chapters, the topic with its visibility and byline,
-// the findings that the chapters narrate, whether the user may rate those findings, and the transcript
-export const podcastEpisodePageResponse = z.object({
-	podcastEpisode,
-	topic: topicFeed
-		.pick({ id: true, name: true, prompt: true, owner: true, teamLink: true })
-		.extend({ visibility: z.enum(visibilities) }),
-	topicFindings: z.array(topicFinding),
-	canRate: z.boolean(),
-	transcript: z.array(podcastEpisodeTranscriptBlock),
-})
-export type PodcastEpisodePageResponse = z.infer<typeof podcastEpisodePageResponse>
 
 // what the player saves as a user listens. the user's progress, whether playback just started,
 // and whether playback ended
@@ -1145,8 +1150,6 @@ export const topicPodcast = z.object({
 	canRenderPodcastEpisode: z.boolean(),
 	// whether this user may remove a podcast episode
 	canRemovePodcastEpisodes: z.boolean(),
-	// the latest podcast episode that the user may listen to, with its chapters
-	latestPodcastEpisode: podcastEpisode.nullable(),
 	// the topic's newest podcast episode if it is rendering or failed to render, without chapters,
 	// and if the user may see it. null once a later episode publishes
 	unpublishedPodcastEpisode: podcastEpisode.nullable(),
@@ -1190,6 +1193,29 @@ export const topicResponse = topicFeed.extend({
 })
 export type TopicResponse = z.infer<typeof topicResponse>
 
+// a podcast episode's page. the episode with its chapters, and the topic with its visibility, byline, and teams.
+// the findings that the chapters narrate, whether the user may rate the findings or remove the episode, and the transcript
+export const podcastEpisodePageResponse = z.object({
+	podcastEpisode,
+	topic: topicResponse.pick({
+		id: true,
+		name: true,
+		prompt: true,
+		visibility: true,
+		owner: true,
+		teamLink: true,
+		team: true,
+		roomTeams: true,
+		isTopicOwner: true,
+	}),
+	topicFindings: z.array(topicFinding),
+	canRate: z.boolean(),
+	// whether this user may remove the podcast episode
+	canRemovePodcastEpisode: z.boolean(),
+	transcript: z.array(podcastEpisodeTranscriptBlock),
+})
+export type PodcastEpisodePageResponse = z.infer<typeof podcastEpisodePageResponse>
+
 // the 403 that a topic page or a podcast episode page responds with to someone who may not see an invite or private
 // topic. only an invite topic's gate names the topic
 export const topicGateResponse = z.object({
@@ -1205,8 +1231,26 @@ export const updateTopicSource = z.union([
 	z.object({ sourceKind: z.enum(editableSourceKinds), config: z.record(z.string(), z.unknown()) }),
 ])
 
-// the limit the worker applies to a generated attachment context
-export const MAX_ATTACHMENT_CONTEXT_CHARS = 8000
+// the attachment context limit. a document this short is stored as written, and a longer one is summarized to fit
+export const MAX_ATTACHMENT_CONTEXT_CHARS = 20_000
+
+// the reason that the attachment workflow records for a file with no text, and the start of a flagged file's reason
+export const ATTACHMENT_NO_TEXT_REASON = "the file held no readable text"
+export const SCANNER_FLAGGED_REASON_PREFIX = "flagged by the scanner"
+
+/**
+ * Returns what a failed attachment tells its owner, from the reason that the attachment workflow recorded.
+ */
+export function toAttachmentFailureMessage(failureReason: string | null): string {
+	// a file with no text to read, then a file that the scanner flagged, then any other failure
+	if (failureReason === ATTACHMENT_NO_TEXT_REASON) {
+		return "Carl found no text in this file, like a scanned PDF. Attach a copy whose text can be selected."
+	}
+	if (failureReason?.startsWith(SCANNER_FLAGGED_REASON_PREFIX)) {
+		return "Carl's safety check flagged this file, so Carl won't read it."
+	}
+	return "Carl couldn't read this one."
+}
 
 // the source suggestions body
 export const suggestSourcesPayload = z.object({
@@ -1362,9 +1406,8 @@ export type PageHead = {
 	imageUrl: string
 	// the page's rss feed, for a public topic, and null for every other page
 	feedUrl: string | null
-	// a public topic's podcast feed once the topic has an episode, and an episode page's audio
+	// a public topic's podcast feed once the topic has an episode
 	podcastFeedUrl?: string | null
-	audioUrl?: string | null
 	isIndexed: boolean
 	jsonLd: object | null
 }

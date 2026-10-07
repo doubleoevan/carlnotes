@@ -2,9 +2,8 @@
 // a failed budget read starts the scan, and an admin's scan checks the admin's own budget
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import { SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
-import { getTableColumns } from "drizzle-orm"
 import { Hono } from "hono"
-import { connectionPool } from "../../db"
+import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
 import { topics } from "../../db/schema"
 import * as litellm from "../../worker/litellm"
 import * as scan from "../../worker/scan"
@@ -16,14 +15,13 @@ import { scansRoute } from "./scans"
 
 // the connection pool's own query, the real fetch, and the proxy settings that the budget read needs,
 // put back after each test along with the spies
-const originalConnectionPoolQuery = connectionPool.query
 const originalFetch = globalThis.fetch
 const originalProxySettings = {
 	LITELLM_BASE_URL: Bun.env.LITELLM_BASE_URL,
 	LITELLM_MASTER_KEY: Bun.env.LITELLM_MASTER_KEY,
 }
 afterEach(() => {
-	connectionPool.query = originalConnectionPoolQuery
+	restoreConnectionPool()
 	globalThis.fetch = originalFetch
 	mock.restore()
 
@@ -38,23 +36,19 @@ afterEach(() => {
 })
 
 // stub the connection pool to return one topic owned by owner-1, and a user whose key is sk-user
-function stubConnectionPool(): void {
+function stubOwnedTopicRows(): void {
 	// the topic row, with only its id and owner set
-	const topicValues: Record<string, string> = { id: "topic-1", ownerId: "owner-1" }
-	const topicRow = Object.keys(getTableColumns(topics)).map((columnName) => topicValues[columnName] ?? null)
+	const topicRow = toTableRow(topics, { id: "topic-1", ownerId: "owner-1" })
 
 	// return the topic row for the topic select
-	connectionPool.query = ((queryConfig: { text: string }) => {
-		if (queryConfig.text.includes('from "topics"')) {
-			return Promise.resolve({ rows: [topicRow], fields: [], rowCount: 1 })
+	stubConnectionPool(({ text }) => {
+		if (text.includes('from "topics"')) {
+			return [topicRow]
 		}
 
 		// return a user row for the user select that the budget read makes, and no rows for any other query
-		const userRows = queryConfig.text.includes('from "users"')
-			? [["owner@example.com", "sk-user", "user", "free", null]]
-			: []
-		return Promise.resolve({ rows: userRows, fields: [], rowCount: userRows.length })
-	}) as unknown as typeof connectionPool.query
+		return text.includes('from "users"') ? [["owner@example.com", "sk-user", "user", "free", null]] : []
+	})
 }
 
 // the spies on the scan start, the stale scan close-out, and the overage bill
@@ -99,7 +93,7 @@ async function sendManualScan(userId: string): Promise<Response> {
 // a spent budget rejects the scan with the budget label, before the stale scan close-out, the scan row, or the overage
 test("a manual Scan whose key has spent its budget returns 402 with the budget label and starts nothing", async () => {
 	// an owner past the daily limit with a card on file, whose key has spent its budget
-	stubConnectionPool()
+	stubOwnedTopicRows()
 	const { startTopicScanSpy, failStaleScansSpy, reportManualScanOverageSpy } = spyOnManualScan(true)
 	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(true)
 
@@ -117,7 +111,7 @@ test("a manual Scan whose key has spent its budget returns 402 with the budget l
 // a budget read that fails starts the scan
 test("a failed budget read starts the manual Scan", async () => {
 	// an owner with a key, and the proxy settings that the budget read needs
-	stubConnectionPool()
+	stubOwnedTopicRows()
 	const { startTopicScanSpy } = spyOnManualScan(false)
 	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
 	Bun.env.LITELLM_MASTER_KEY = "master"
@@ -138,7 +132,7 @@ test("a failed budget read starts the manual Scan", async () => {
 // an admin's scan bills the admin's own key, so the budget check reads the admin's budget
 test("an admin's manual Scan checks the admin's own budget", async () => {
 	// the topic owner's budget is spent, and the admin's is not
-	stubConnectionPool()
+	stubOwnedTopicRows()
 	const { startTopicScanSpy } = spyOnManualScan(false)
 	const isUserLiteLLMKeyBudgetExhaustedSpy = spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockImplementation(
 		async (userId) => userId === "owner-1",

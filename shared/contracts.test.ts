@@ -1,6 +1,7 @@
 // tests for the payload contracts that create and update topic are validated through
 import { expect, test } from "bun:test"
 import {
+	ATTACHMENT_NO_TEXT_REASON,
 	CHAT_HISTORY_ANSWER_CHARS,
 	CHAT_HISTORY_TOOL_CALL_INPUT_CHARS,
 	CHAT_HISTORY_TOOL_CALLS,
@@ -11,6 +12,7 @@ import {
 	MAX_TOPIC_SOURCES,
 	suggestSourcesPayload,
 	TOPIC_SAVE_TOOL_NAMES,
+	toAttachmentFailureMessage,
 	toSentToolCall,
 	toSentToolCalls,
 	toStandingTopicEditCall,
@@ -218,4 +220,12 @@ test("a topic edit proposal stands until it is cancelled or saved", () => {
 
 	// a proposal made after a save is standing again
 	expect(toStandingTopicEditCall([proposeCall, toToolCall("addSource"), proposeCall])).toBe(proposeCall)
+})
+
+// a failed attachment tells its owner why for each reason the owner can act on, and says Carl couldn't read the file otherwise
+test("toAttachmentFailureMessage names a file with no text and a flagged file", () => {
+	expect(toAttachmentFailureMessage(ATTACHMENT_NO_TEXT_REASON)).toContain("no text")
+	expect(toAttachmentFailureMessage("flagged by the scanner: PromptInjection")).toContain("flagged")
+	expect(toAttachmentFailureMessage("S3 GetObject failed")).toBe("Carl couldn't read this one.")
+	expect(toAttachmentFailureMessage(null)).toBe("Carl couldn't read this one.")
 })

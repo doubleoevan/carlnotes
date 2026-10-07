@@ -1,7 +1,7 @@
 import type { PodcastEpisodePageResponse, PodcastEpisodeTranscriptBlock } from "@shared/contracts"
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@shared/seo"
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
-import { Plus } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { authClient } from "@/clients/authClient"
 import { fetchPodcastEpisodePage } from "@/clients/podcastEpisodeClient"
@@ -11,12 +11,16 @@ import { PodcastEpisodeChaptersTable } from "@/components/podcast/PodcastEpisode
 import { PodcastEpisodeCover } from "@/components/podcast/PodcastEpisodeCover"
 import { PodcastEpisodePlayerCard } from "@/components/podcast/PodcastEpisodePlayerCard"
 import { PodcastFeedDialog } from "@/components/podcast/PodcastFeedDialog"
-import { Button } from "@/components/primitives/button"
+import { RemovePodcastEpisodeDialog } from "@/components/podcast/RemovePodcastEpisodeDialog"
+import { ShareTopic } from "@/components/share/ShareTopic"
 import { TableCard } from "@/components/table/TableCard"
+import { isAddTopicToTeamShown } from "@/components/team/AddTopicToTeamButton"
+import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { MoreButton } from "@/components/topic/MoreButton"
 import { TopicByline } from "@/components/topic/Topic"
-import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { toAddTopicToTeamOption, toShareTopicOption } from "@/components/topic/TopicActions"
+import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import {
 	CollapsibleSectionSkeleton,
@@ -34,6 +38,7 @@ import {
 } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { usePageTopicFeedHandlers } from "@/providers/TopicFeedProvider"
+import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
 /**
  * A podcast episode's own page at /topics/$topicId/$topicSlug/episodes/$season/$episodeNumber.
@@ -55,9 +60,10 @@ export function PodcastEpisodePage() {
 	// the visibility of the episode's invite or private topic if the user may not see the topic, or null
 	const [gatedVisibility, setGatedVisibility] = useState<GatedTopicVisibility | null>(null)
 
-	// whether the podcast feed dialog or the new topic dialog is open
+	// the podcast feed dialog's open state, the actions menu's open dialog, and the New Topic button's dialog
 	const [isPodcastFeedDialogOpen, setIsPodcastFeedDialogOpen] = useState(false)
-	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
+	const [openDialog, setOpenDialog] = useState<PodcastEpisodeDialog | null>(null)
+	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
 
 	// load in the browser unless the server already loaded this podcast episode page and set the page title
 	const loadPodcastEpisodePage = useCallback((): void => {
@@ -92,21 +98,13 @@ export function PodcastEpisodePage() {
 		}
 	}, [podcastEpisodePage, pageId, topicSlug, navigate])
 
-	// the new topic button opens the new topic dialog for a signed-in user, and sends a visitor to sign up first
+	// read the session, and register the actions menu
 	const { data: session } = authClient.useSession()
-	const handleNewTopic = (): void => {
-		if (session) {
-			setIsNewTopicOpen(true)
-		} else {
-			void navigate({ to: "/signup", search: { cta: "new-topic" } })
-		}
-	}
-
-	// a created topic closes the dialog and opens the topic's page
-	const handleTopicCreated = async (topicId: string): Promise<void> => {
-		setIsNewTopicOpen(false)
-		void navigate({ to: "/topics/$topicId", params: { topicId } })
-	}
+	useRegisterPodcastEpisodePageActions({
+		podcastEpisodePage,
+		isSignedIn: Boolean(session),
+		onOpenDialog: setOpenDialog,
+	})
 
 	const topicHandlers = usePageTopicFeedHandlers(loadPodcastEpisodePage)
 
@@ -156,10 +154,7 @@ export function PodcastEpisodePage() {
 								{topic.name}
 							</AnchorLink>
 						</p>
-						<Button className="shrink-0" onClick={handleNewTopic}>
-							<Plus className="size-4" />
-							New Topic
-						</Button>
+						<NewTopicButton onNewTopic={openNewTopicDialog} />
 					</div>
 					<h1 className="font-display mt-1.5 text-2xl leading-tight sm:text-3xl">{podcastEpisode.title}</h1>
 					{podcastEpisode.description && <p className="mt-1.5 text-sm">{podcastEpisode.description}</p>}
@@ -195,9 +190,63 @@ export function PodcastEpisodePage() {
 					onClose={() => setIsPodcastFeedDialogOpen(false)}
 				/>
 			)}
-			{/* the new topic dialog, mounted only while it is open so that its form starts empty */}
-			{isNewTopicOpen && <NewTopicDialog onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
+			{/* the dialog that the New Topic button opens */}
+			{newTopicDialog}
+			{/* the actions menu's share dialog, Add topic to team dialog, and remove dialog.
+			    a removed episode opens its topic's page */}
+			{openDialog === "share" && <ShareTopic topic={topic} isDialog onClose={() => setOpenDialog(null)} />}
+			{openDialog === "add-topic-to-team" && (
+				<AddTopicToTeamDialog
+					topic={topic}
+					onTopicTeamsChanged={loadPodcastEpisodePage}
+					onClose={() => setOpenDialog(null)}
+				/>
+			)}
+			{openDialog === "remove" && (
+				<RemovePodcastEpisodeDialog
+					podcastEpisode={podcastEpisode}
+					onPodcastEpisodeRemoved={() => void navigate({ to: topicPath })}
+					onClose={() => setOpenDialog(null)}
+				/>
+			)}
 		</main>
+	)
+}
+
+// the dialogs that the actions menu opens
+type PodcastEpisodeDialog = "share" | "add-topic-to-team" | "remove"
+
+// the loaded page, whether the user is signed in, and the call that opens one of the menu's dialogs
+type UseRegisterPodcastEpisodePageActionsOptions = {
+	podcastEpisodePage: PodcastEpisodePageResponse | null | undefined
+	isSignedIn: boolean
+	onOpenDialog: (podcastEpisodeDialog: PodcastEpisodeDialog) => void
+}
+
+// register the actions menu for the episode's topic, with Remove episode for a user who may remove the episode
+function useRegisterPodcastEpisodePageActions({
+	podcastEpisodePage,
+	isSignedIn,
+	onOpenDialog,
+}: UseRegisterPodcastEpisodePageActionsOptions): void {
+	const podcastEpisodeTopic = podcastEpisodePage?.topic
+	useRegisterPageActions(
+		podcastEpisodeTopic
+			? {
+					page: "Episode",
+					options: [
+						...(isAddTopicToTeamShown(podcastEpisodeTopic, isSignedIn)
+							? [toAddTopicToTeamOption(() => onOpenDialog("add-topic-to-team"))]
+							: []),
+						toShareTopicOption(() => onOpenDialog("share")),
+						...(podcastEpisodePage?.canRemovePodcastEpisode
+							? [{ label: "Remove episode", Icon: Trash2, onSelect: () => onOpenDialog("remove") }]
+							: []),
+					],
+					report: { subjectKind: "topic", subjectId: podcastEpisodeTopic.id, subjectLabel: podcastEpisodeTopic.name },
+					hasNewTopicButton: true,
+				}
+			: null,
 	)
 }
 

@@ -3,40 +3,26 @@
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
 import { FIRST_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
-import { connectionPool } from "../../db"
+import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"
 import * as litellm from "../../worker/litellm"
 import * as scan from "../../worker/scan"
 import * as screen from "../../worker/screen"
 import { type Scan, startFirstScan } from "./helpers"
 
 // the connection pool's own query, put back after each test along with the spies
-const originalConnectionPoolQuery = connectionPool.query
 afterEach(() => {
-	connectionPool.query = originalConnectionPoolQuery
+	restoreConnectionPool()
 	mock.restore()
 })
 
 // the first Scan row that creation opened, with only its id set
 const FIRST_SCAN = { id: "scan-1" } as Scan
 
-// a query that the stubbed connection pool was sent
-type SentQuery = { text: string; values: unknown[] }
-
 // the spies on the Source screens and the scan start
 type FirstScanSpies = {
 	screenPendingSourcesSpy: Mock<typeof screen.screenPendingSources>
 	screenTopicSourcesSpy: Mock<typeof screen.screenTopicSources>
 	scanTopicSpy: Mock<typeof scan.scanTopic>
-}
-
-// stub the connection pool to return no rows, and return each query that the stub is sent
-function stubConnectionPool(): SentQuery[] {
-	const sentQueries: SentQuery[] = []
-	connectionPool.query = ((queryConfig: { text: string }, values: unknown[]) => {
-		sentQueries.push({ text: queryConfig.text, values })
-		return Promise.resolve({ rows: [], fields: [], rowCount: 0 })
-	}) as unknown as typeof connectionPool.query
-	return sentQueries
 }
 
 // spy on the Source screens and the scan start, each stubbed to do nothing

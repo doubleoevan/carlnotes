@@ -20,6 +20,7 @@ import {
 import { useShareTopicActions } from "@/components/share/useShareTopicActions"
 import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
 import { canOpenShareSheet } from "@/lib/shareSheet"
+import { MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
 
 // what a disabled share option shows, which names the owner's way to fix it
 function toDisabledReason(isTopicOwner?: boolean): string {
@@ -119,7 +120,7 @@ export function ShareTopic({
 		<>
 			<ShareTargetOptions shareTargets={POST_PLATFORM_TARGETS} isEnabled={isPublic} {...shareTargetProps} />
 			{/* a divider above the options that share the topic to one person instead of posting it */}
-			<div className="bg-border my-1 h-px" />
+			<div className={MENU_DIVIDER_CLASS} />
 			{/* the only option providing an invite link that subscribes to the topic instead of the topic's url */}
 			{canInviteTopic && (
 				<InviteShareOption
@@ -145,7 +146,7 @@ export function ShareTopic({
 				))}
 			<ShareTargetOptions shareTargets={SEND_TARGETS} isEnabled={canShareTopic} {...shareTargetProps} />
 			{/* the copy link option sits under a divider */}
-			<div className="bg-border my-1 h-px" />
+			<div className={MENU_DIVIDER_CLASS} />
 			<CopyLinkOption
 				label={COPY_PAGE_LABEL}
 				icon={<Link className="size-4" />}
@@ -173,7 +174,7 @@ export function ShareTopic({
 			{/* a trigger for the report issue dialog from the home page icon only */}
 			{isIcon && (
 				<>
-					<div className="bg-border my-1 h-px" />
+					<div className={MENU_DIVIDER_CLASS} />
 					<button type="button" onClick={handleReportIssue} className={SHARE_OPTION_CLASS}>
 						<Flag className="size-4" />
 						Report issue

@@ -2,7 +2,7 @@
 // the verification values kept in both, and the warning logged if TRUSTED_PROXIES is unset or misses a proxy hop
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
-import { connectionPool } from "../db"
+import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as redis from "../db/redis"
 import * as litellm from "../worker/litellm"
 import { auth, toSignupAvatarSource, toTrustedProxiesWarning } from "./auth"
@@ -10,9 +10,8 @@ import * as sessions from "./sessions"
 import * as usernames from "./usernames"
 
 // the connection pool's own query, put back after each test along with the spied functions
-const originalConnectionPoolQuery = connectionPool.query
 afterEach(() => {
-	connectionPool.query = originalConnectionPoolQuery
+	restoreConnectionPool()
 	mock.restore()
 })
 
@@ -132,12 +131,7 @@ test("Better Auth keeps verification values in Postgres", () => {
 // a password reset deletes the user's other reset links from Postgres, and each link's Redis copy by its identifier
 test("a password reset deletes the user's other reset links from Postgres and from Redis", async () => {
 	// Postgres returns two deleted reset-password rows, and a spy records each Redis key delete
-	connectionPool.query = (() =>
-		Promise.resolve({
-			rows: [["reset-password:token-a"], ["reset-password:token-b"]],
-			fields: [],
-			rowCount: 2,
-		})) as unknown as typeof connectionPool.query
+	stubConnectionPool(() => [["reset-password:token-a"], ["reset-password:token-b"]])
 	const deleteRedisKeySpy = spyOn(redis, "deleteRedisKey").mockResolvedValue(undefined)
 
 	// reset the password and check that both Redis copies were deleted

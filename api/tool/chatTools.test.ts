@@ -4,6 +4,7 @@ import { EMPTY_TOPIC_DRAFT, TOPIC_SAVE_TOOL_NAMES, type TopicDraft } from "@shar
 import { toBrowserPlatform, toPlatform } from "@shared/userAgent"
 import {
 	type ChatTurnToolCalls,
+	TEAM_MISSING_TEXT,
 	toAddTopicSourceText,
 	toCancelTopicEditTool,
 	toChatTopicTools,
@@ -105,6 +106,19 @@ test("the new-topic chat offers draftTopic and createTopic, without the suggesti
 		analyticsProperties,
 	})
 	expect(Object.keys(newTopicTools)).toEqual(["draftTopic", "createTopic"])
+})
+
+// a public or invite draft that names no team is not created, and carl is told to ask which team the topic goes on
+test("createTopic asks for a team before it creates a public or invite topic", async () => {
+	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT, name: "Hoops", prompt: "Pickup games", visibility: "invite" }
+	const newTopicTools = toNewTopicChatTools({ userId: "user-1", toolCalls, topicDraft, analyticsProperties })
+	const createTopicText = await newTopicTools.createTopic?.execute?.(
+		{},
+		{ toolCallId: "call-1", messages: [], context: undefined },
+	)
+	expect(createTopicText).toBe(TEAM_MISSING_TEXT)
+	expect(toolCalls.topicSaves).toEqual([])
 })
 
 // draftTopic writes the named fields alone, and an empty value clears a field as the description promises

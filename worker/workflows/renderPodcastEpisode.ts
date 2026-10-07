@@ -2,7 +2,7 @@
 // and publish. a succeeded Scan starts the render as a child workflow that outlives the scan workflow
 import { getExternalWorkflowHandle, proxyActivities } from "@temporalio/workflow"
 // a relative import. temporal bundles workflow code with webpack, which has no @shared alias
-import { toScanFailureReason } from "../../shared/scanFailure"
+import { toWorkflowFailureReason } from "../../shared/scanFailure"
 import type { SpeechTier } from "../budget"
 import type * as podcastEpisodeActivities from "./renderPodcastEpisodeActivities"
 import type { ScanTrigger } from "./runTopicScanActivities"
@@ -151,7 +151,7 @@ export async function renderPodcastEpisodeWorkflow({
 			renderedChapterPositions,
 		})
 	} catch (error) {
-		await failPodcastEpisode({ podcastEpisodeId, reason: toScanFailureReason(error) })
+		await failPodcastEpisode({ podcastEpisodeId, reason: toWorkflowFailureReason(error) })
 	}
 }
 

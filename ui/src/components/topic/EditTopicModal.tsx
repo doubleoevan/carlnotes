@@ -1,5 +1,6 @@
 import type { TopicPodcast, TopicResponse } from "@shared/contracts"
 import { maxTopicFindingsOptions, visibilities } from "@shared/enums"
+import { PODCAST_NAME } from "@shared/podcastEpisodes"
 import { useNavigate } from "@tanstack/react-router"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
@@ -303,7 +304,7 @@ export function PodcastSwitch({ topicPodcast, isPodcastEnabled, isTopicOwner, on
 			</div>
 			{/* the switch */}
 			<Switch
-				aria-label="Coffee Break podcast"
+				aria-label={PODCAST_NAME}
 				checked={isPodcastEnabled}
 				onCheckedChange={onPodcastChange}
 				className="h-7.5 w-13 [&>span]:size-6"

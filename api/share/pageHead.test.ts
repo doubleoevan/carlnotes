@@ -186,7 +186,7 @@ test("toPodcastEpisodePageHead names the episode, its card, its audio, and valid
 	expect(head.canonicalUrl).toBe(podcastEpisodeUrl)
 	expect(head.isIndexed).toBe(true)
 
-	// the podcast episode's own card image, whose url changes with its title, then the audio and the topic's podcast feed
+	// the podcast episode's own card image, whose url changes with its title, then the topic's podcast feed
 	const retitledHead = toPodcastEpisodePageHead({
 		topicPreview: TOPIC_PREVIEW,
 		podcastEpisodeRow: { ...PODCAST_EPISODE_ROW, title: "A new title" },
@@ -194,8 +194,10 @@ test("toPodcastEpisodePageHead names the episode, its card, its audio, and valid
 	})
 	expect(head.imageUrl).toStartWith("https://carlnotes.com/api/episodes/episode-1/preview.png?v=")
 	expect(retitledHead.imageUrl).not.toBe(head.imageUrl)
-	expect(head.audioUrl).toBe("https://carlnotes.com/api/episodes/episode-1/audio.mp3")
 	expect(head.podcastFeedUrl).toBe("https://carlnotes.com/topics/t1/podcast.xml")
+
+	// the head has no audio url. a link preview then opens the page instead of playing the episode
+	expect(head).not.toHaveProperty("audioUrl")
 
 	// the structured data survives a round trip through JSON and has what a PodcastEpisode requires
 	const jsonLd = JSON.parse(JSON.stringify(head.jsonLd))
@@ -225,10 +227,9 @@ test("toPodcastEpisodePageHead gives an invite topic's episode its card alone", 
 	expect(head.description).toBe("What shipped this week and why the evals matter.")
 	expect(head.imageUrl).toStartWith("https://carlnotes.com/api/episodes/episode-1/preview.png?v=")
 
-	// no index, no audio, no feed, and no structured data
+	// no index, no feed, and no structured data
 	expect(head.isIndexed).toBe(false)
 	expect(head.canonicalUrl).toBeNull()
-	expect(head.audioUrl).toBeNull()
 	expect(head.podcastFeedUrl).toBeNull()
 	expect(head.jsonLd).toBeNull()
 })

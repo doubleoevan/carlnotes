@@ -1,5 +1,5 @@
-// the source suggestions eval's promptfoo provider, the suggester under test. the suggester searches with Exa,
-// calls the LiteLLM proxy through worker/models.ts, and reads every suggested Source the way its ingester will
+// the source suggestions eval's promptfoo provider, which runs the suggester under test.
+// the suggester searches with Exa and reads every suggested Source the way its ingester will
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import { toSourceSuggestions } from "../../worker/suggest"
 import { type SourceSuggestionsCase, SUGGESTION_LIMIT } from "./sourceSuggestionsCases"

@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@shared/contracts"
 import * as monitoring from "@shared/monitoring"
-import { connectionPool } from "../db"
+import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import server from "./index"
 
@@ -68,10 +68,11 @@ async function request(path: string, requestInit: RequestInit = {}): Promise<Res
 	}
 }
 
-// what a stubbed request sends: its path, the stub that every query calls, and any request headers
+// what a stubbed request sends: its path, the rows that every query returns, and any request headers.
+// a toQueryRows that throws an error fails every query
 type RequestWithQueryStubOptions = {
 	path: string
-	queryStub: () => Promise<unknown>
+	toQueryRows: () => unknown[]
 	requestInit?: RequestInit
 }
 
@@ -79,27 +80,21 @@ type RequestWithQueryStubOptions = {
 // the pool's own query comes back no matter how the request ends
 async function requestWithQueryStub({
 	path,
-	queryStub,
+	toQueryRows,
 	requestInit,
 }: RequestWithQueryStubOptions): Promise<ResponseSnapshot & { queryCount: number }> {
-	const poolQuery = connectionPool.query
-	let queryCount = 0
-	connectionPool.query = (() => {
-		queryCount += 1
-		return queryStub()
-	}) as typeof connectionPool.query
+	const sentQueries = stubConnectionPool(toQueryRows)
 
 	// restore the pool's own query on the way out
 	try {
-		return { ...(await request(path, requestInit)), queryCount }
+		return { ...(await request(path, requestInit)), queryCount: sentQueries.length }
 	} finally {
-		connectionPool.query = poolQuery
+		restoreConnectionPool()
 	}
 }
 
-// the result that a trivial query returns, and the result of a query that finds nothing
-const SELECT_ONE_RESULT = { rows: [{ "?column?": 1 }], fields: [], rowCount: 1, command: "SELECT" }
-const NO_ROWS_RESULT = { rows: [], fields: [], rowCount: 0, command: "SELECT" }
+// the rows that a trivial query returns
+const SELECT_ONE_ROWS = [{ "?column?": 1 }]
 
 // put each spied console method back after each test, whether its assertions pass or not
 afterEach(() => {
@@ -111,7 +106,7 @@ afterEach(() => {
 test("the health route responds without reaching the database", async () => {
 	const response = await requestWithQueryStub({
 		path: "/api/health",
-		queryStub: () => Promise.resolve(SELECT_ONE_RESULT),
+		toQueryRows: () => SELECT_ONE_ROWS,
 	})
 	expect(response.status).toBe(200)
 	expect(JSON.parse(response.body)).toEqual({ status: "ok" })
@@ -122,7 +117,7 @@ test("the health route responds without reaching the database", async () => {
 test("the deep health check runs one query and responds with the pool's counts", async () => {
 	const response = await requestWithQueryStub({
 		path: "/api/health/deep",
-		queryStub: () => Promise.resolve(SELECT_ONE_RESULT),
+		toQueryRows: () => SELECT_ONE_ROWS,
 	})
 	expect(response.status).toBe(200)
 	expect(response.cacheControl).toBe("no-store")
@@ -141,7 +136,9 @@ test("the deep health check responds 503 when the database fails", async () => {
 	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
 	const response = await requestWithQueryStub({
 		path: "/api/health/deep",
-		queryStub: () => Promise.reject(new Error("connection refused")),
+		toQueryRows: () => {
+			throw new Error("connection refused")
+		},
 	})
 
 	// the failure is logged, and the response says the database is unavailable
@@ -156,7 +153,12 @@ test("an error no route handles responds 500 and is reported", async () => {
 	spyOn(console, "error").mockImplementation(() => {})
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	const poolTimeout = new Error("timeout exceeded when trying to connect")
-	const response = await requestWithQueryStub({ path: "/api/topic-feed", queryStub: () => Promise.reject(poolTimeout) })
+	const response = await requestWithQueryStub({
+		path: "/api/topic-feed",
+		toQueryRows: () => {
+			throw poolTimeout
+		},
+	})
 
 	// Hono's plain 500, and one report of drizzle's query error, whose cause is the pool's timeout
 	expect(response.status).toBe(500)
@@ -207,12 +209,12 @@ test("the signed-out feed is shared at the edge and sent uncompressed, and a sig
 	const acceptEncodingHeader = { "accept-encoding": "gzip, br" }
 	const signedOutResponse = await requestWithQueryStub({
 		path: "/api/topic-feed",
-		queryStub: () => Promise.resolve(NO_ROWS_RESULT),
+		toQueryRows: () => [],
 		requestInit: { headers: acceptEncodingHeader },
 	})
 	const signedInResponse = await requestWithQueryStub({
 		path: "/api/topic-feed",
-		queryStub: () => Promise.resolve(NO_ROWS_RESULT),
+		toQueryRows: () => [],
 		requestInit: { headers: { ...acceptEncodingHeader, cookie: "better-auth.session_token=abc" } },
 	})
 

@@ -1,29 +1,38 @@
-import { Bot, EllipsisVertical, Flag } from "lucide-react"
+import { Bot, EllipsisVertical, Flag, Plus } from "lucide-react"
 import { useState } from "react"
 import { AddToAiDialog } from "@/components/common/AddToAiDialog"
 import { ReportIssueDialog } from "@/components/common/ReportIssueDialog.tsx"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { useOrigin } from "@/hooks/useBrowserValue"
 import { MENU_OPTION_CLASS, SEARCH_BAR_ICON_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
-import { usePageActions } from "@/stores/pageActionsStore"
+import { type PageActionOption, type PageActions, usePageActions } from "@/stores/pageActionsStore"
+
+// what the menu offers on a page that registers no actions
+const DEFAULT_PAGE_ACTIONS: PageActions = { page: "Page" }
 
 /**
- * The vertical dots menu at the end of the search bar. Each page registers its own options,
- * and a page that registers none shows no menu.
+ * The search bar's vertical dots menu, with the page's options, New topic, Add to AI, and Report issue.
  */
 export function PageActionMenu() {
-	const pageActions = usePageActions()
+	// the page's actions, which menu or dialog is open, the new topic dialog, and this site's origin
+	const pageActions = usePageActions() ?? DEFAULT_PAGE_ACTIONS
 	const [isOpen, setIsOpen] = useState(false)
 	const [isReporting, setIsReporting] = useState(false)
 	const [isAddingToAi, setIsAddingToAi] = useState(false)
+	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
+	const origin = useOrigin()
 
-	if (!pageActions) {
-		return null
-	}
 	const label = `${pageActions.page} actions`
 	// the mcp server the Add to AI dialog offers. the page's own, or the one at /mcp
-	const mcpServer = pageActions.mcp ?? { name: "CarlNotes", url: `${window.location.origin}/mcp` }
+	const mcpServer = pageActions.mcp ?? { name: "CarlNotes", url: `${origin}/mcp` }
+	// the page's options, then New topic on a page without its own New Topic button
+	const pageActionOptions: PageActionOption[] = [
+		...(pageActions.options ?? []),
+		...(pageActions.hasNewTopicButton ? [] : [{ label: "New topic", Icon: Plus, onSelect: openNewTopicDialog }]),
+	]
 	return (
 		<>
 			<Popover open={isOpen} onOpenChange={setIsOpen}>
@@ -40,20 +49,23 @@ export function PageActionMenu() {
 				</Tooltip>
 				{/* nothing takes focus on open */}
 				<PopoverContent align="end" alignOffset={-9} sideOffset={13} className="w-44" bodyClassName="p-1">
-					{pageActions.options?.map((pageAction) => (
+					{pageActionOptions.map((pageActionOption) => (
 						<button
-							key={pageAction.label}
+							key={pageActionOption.label}
 							type="button"
 							onClick={() => {
 								setIsOpen(false)
-								pageAction.onSelect()
+								pageActionOption.onSelect()
 							}}
 							className={MENU_OPTION_CLASS}
 						>
-							<pageAction.Icon
-								className={cn("size-4", pageAction.isActive ? "text-primary fill-current" : "text-muted-foreground")}
+							<pageActionOption.Icon
+								className={cn(
+									"size-4",
+									pageActionOption.isActive ? "text-primary fill-current" : "text-muted-foreground",
+								)}
 							/>
-							<span className="flex-1 text-left">{pageAction.label}</span>
+							<span className="flex-1 text-left">{pageActionOption.label}</span>
 						</button>
 					))}
 					{/* the Add to AI option */}
@@ -90,6 +102,8 @@ export function PageActionMenu() {
 					)}
 				</PopoverContent>
 			</Popover>
+			{/* the new topic dialog that the New topic option opens */}
+			{newTopicDialog}
 			{/* the Add to AI dialog mounts only while open. its state resets on each close */}
 			{isAddingToAi && <AddToAiDialog mcpServer={mcpServer} onClose={() => setIsAddingToAi(false)} />}
 			{/* the report issue dialog mounts only while open. its state resets on each close */}

@@ -1,6 +1,5 @@
 import type { ActivityResponse } from "@shared/contracts"
-import { useNavigate } from "@tanstack/react-router"
-import { Activity, Plus } from "lucide-react"
+import { Activity } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useState } from "react"
 import { fetchActivity } from "@/clients/activityClient"
@@ -10,13 +9,13 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
-import { Button } from "@/components/primitives/button"
 import { TopicInvitesTable } from "@/components/table/TopicInvitesTable.tsx"
 import { TopicSubscriptionsTable } from "@/components/table/TopicSubscriptionsTable"
-import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
 import { PAGE_CLASS } from "@/lib/styleClasses"
+import { useRegisterPageActions } from "@/stores/pageActionsStore"
 import { useTopicInviteBadges } from "@/stores/topicInviteStore"
 
 /**
@@ -26,17 +25,21 @@ export function ActivityPage() {
 	usePageTitle("Activity")
 	// the topic invitations waiting for the user's response, badged on the title
 	const topicInviteBadges = useTopicInviteBadges()
-	const navigate = useNavigate()
 	const { data: session } = authClient.useSession()
 	const [activity, setActivity] = useState<ActivityResponse | null>(null)
 	// a load the api rejected or did not respond to
 	const [isLoadFailed, setIsLoadFailed] = useState(false)
-	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
+
+	// the New Topic button's dialog
+	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
 
 	// the user whose activity the page shows, the userId param's user or else the signed-in user
 	const searchParams = useSearchParams()
 	const viewedUserId = searchParams.get("userId") ?? undefined
 	const isOwnView = !viewedUserId || viewedUserId === session?.user.id
+
+	// the search bar's menu leaves out New topic on the user's own activity, which has its own New Topic button
+	useRegisterPageActions({ page: "Activity", hasNewTopicButton: isOwnView })
 
 	// load the viewed user's activity
 	const reloadActivity = (): void => {
@@ -60,12 +63,6 @@ export function ActivityPage() {
 		}
 	}, [session, viewedUserId])
 
-	// a saved topic closes the modal and opens the topic it created
-	const handleTopicCreated = async (topicId: string): Promise<void> => {
-		setIsNewTopicOpen(false)
-		navigate({ to: "/topics/$topicId", params: { topicId } })
-	}
-
 	if (!session) {
 		return null
 	}
@@ -82,12 +79,7 @@ export function ActivityPage() {
 						{isOwnView && <UpdateCountBadge invites={topicInviteBadges} className="absolute -top-2 -right-3.5 z-10" />}
 					</span>
 				</h1>
-				{isOwnView && (
-					<Button className="shrink-0" onClick={() => setIsNewTopicOpen(true)}>
-						<Plus className="size-4" />
-						New Topic
-					</Button>
-				)}
+				{isOwnView && <NewTopicButton onNewTopic={openNewTopicDialog} />}
 			</div>
 			{/* the viewed user's profile link */}
 			{activity && <UserProfileLink user={activity.user} className="mt-2 text-sm" />}
@@ -98,7 +90,8 @@ export function ActivityPage() {
 			) : (
 				<CoffeeLoading />
 			)}
-			{isNewTopicOpen && <NewTopicDialog onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
+			{/* the dialog that the New Topic button opens */}
+			{newTopicDialog}
 		</main>
 	)
 }

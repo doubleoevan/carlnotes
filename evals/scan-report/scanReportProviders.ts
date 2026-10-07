@@ -1,5 +1,4 @@
-// the scan report eval's promptfoo provider, the writer under test.
-// the writer calls the LiteLLM proxy through worker/models.ts
+// the scan report eval's promptfoo provider, which runs the report writer under test
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import { newBudget } from "../../worker/budget"
 import { summarizeTopicScan } from "../../worker/review/summarize"

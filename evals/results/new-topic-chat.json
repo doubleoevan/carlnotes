@@ -1,6 +1,12 @@
 {
 	"name": "new-topic-chat",
-	"passedRunCount": 15,
-	"runCount": 15,
-	"ranOn": "2026-10-05"
+	"passedRunCount": 13,
+	"runCount": 18,
+	"ranOn": "2026-10-05",
+	"commit": "fdfb55e",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"chat-model"
+	],
+	"graderModelId": "score-model"
 }

@@ -8,7 +8,7 @@ sidebar:
   order: 4
 ---
 
-You don't have to fill in the form. Talk with Carl what you want to keep up with and you build the topic together in your words. 
+You don't have to fill in the form. Talk with Carl what you want to keep up with and you build the topic together in your words.
 The draft fills in below the conversation as you go, and one yes creates the topic with its first brew already running.
 
 ![Carl suggesting sources in the new-topic chat, with the draft's title and prompt filled in on the
@@ -18,8 +18,10 @@ card below](../../../assets/screenshots/chat-new-topic-draft.png)
 
 Open the Coffee Talk panel and press the switcher under its title, the current chat's name with a
 chevron. Pick **Give Carl a topic. You know the one.** It is there on every page for a signed-in user.
-Or press **New Topic** on the home, activity, or profile page and pick **Build with Carl**. Where the home
-or profile page has no topics yet, that same **Give Carl a topic. You know the one.** link appears and
+Or press **New Topic** on the home, activity, profile, or episode page, or on a topic page you can't brew, and pick
+**Build with Carl**. A page without that button has **New topic** in its actions menu. That option opens the same choice. The
+menu is the **⋮** button beside the sort and filter icons. Where the home or profile page has no topics yet, that same
+**Give Carl a topic. You know the one.** link appears and
 opens this chat.
 On a team page, the **New topic** option at the end of the Add Topic picker does the same, with the team
 already on the draft.
@@ -42,28 +44,30 @@ he goes back and rewrites that field.
    up, he proposes from what he knows and says those are unverified.
 4. **Who should see it.** Anyone, the people you invite, or just you. Skipping keeps it shared by
    invite.
-5. **Which team.** When you lead a team, he asks whether the topic should go on one, unless the draft already
-   names one. Skipping is fine.
+5. **Which team.** A public or invite topic goes on a team you lead, so he names your teams and asks which
+   one, unless the draft already names one. No team, or no team to lead, makes the topic private.
 6. **Who reads along.** Email addresses, one each. Skipping is fine.
 7. **A file.** Attach a PDF, a spreadsheet, or notes with the paperclip. It reaches Carl for that
    turn and waits in the draft. Skipping is fine.
 8. **The settings.** Tags, how often to brew (daily, weekdays, or weekly), the time and day it brews, and how many findings a brew
    keeps (5, 10, 15, or 20). Say what you want or skip it: weekly and ten are the defaults.
-   Ask for daily when your plan has no daily slot left and the save says so, with the draft kept for another
-   try.
+   Ask for daily when your plan has no daily slot left and the save says so, with the draft kept for another try.
 9. **The read-back.** He reads the draft back and asks for a yes. Yes creates the topic.
 
 ## The draft card
 
 Everything Carl has written down so far shows on the **Topic draft** card above the message box:
-the title, the prompt, the tags, the schedule, how many findings a brew keeps, the visibility, the team, the invites, the sources with the built-in web search first, and the files waiting. It is what the yes
+the title, the prompt, the tags, the schedule, how many findings a brew keeps, the visibility, the team, the invites,
+the sources with the built-in web search first, and the files waiting. It is what the yes
 saves, and the files upload to the new topic right after it is created. The one thing that can still fall
-short is the team: if you no longer lead it, the topic is created without it and a toast says so. **Clear chat** drops the conversation and the draft together.
+short is the team: if you no longer lead it, the topic is created without it and a toast says so. **Clear chat** drops
+the conversation and the draft together.
 
 ## After the yes
 
 The topic is created with what the draft holds. Anything you skipped takes the editor's defaults:
-shared by invite, no team, weekly on Wednesday morning, the top ten findings per brew. Its page opens with **Carl is Brewing…** already running, the people you
+shared by invite on the team you picked, weekly on Wednesday morning, the top ten findings per brew. Its page opens with
+**Carl is Brewing…** already running, the people you
 named get their invites, and the files you attached upload to it as attachments. The panel stays
 where it is, so you can start the next one. The schedule and everything else are yours to change on
 the topic page.

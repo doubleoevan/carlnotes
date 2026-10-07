@@ -1,4 +1,5 @@
 // attachment processing activities: the I/O steps the workflow calls. they run in the worker process, not the sandbox
+import { ATTACHMENT_NO_TEXT_REASON, MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts"
 import { ApplicationFailure } from "@temporalio/activity"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
@@ -20,20 +21,19 @@ import { deleteAttachment, getAttachmentBytes } from "../store"
 
 // the most characters the workflow can process, so that chunk payloads stay well under Temporal's per-message limit
 const MAX_PROCESS_CHARS = MAX_CHUNKS * CHUNK_CHARS
-// the most characters of merged context stored, bounding a scan's token cost. the environment can override it
-const MAX_CONTEXT_CHARS = Number(Bun.env.MAX_ATTACHMENT_CONTEXT_CHARS ?? "8000")
-// how long a table file's screen may run, longer than prose since its rows reach the prompt verbatim
-const TABLE_SCREEN_TIMEOUT_MS = Number(Bun.env.LLM_GUARD_TABLE_TIMEOUT_MS ?? "10000")
+// how long the screen of text stored as written may run, long enough for a busy scanner to finish.
+// a summarized document gets the scanner's default
+const VERBATIM_SCREEN_TIMEOUT_MS = 60_000
 
-// the extracted attachment chunks and total size, with a flagged reason or ready table text
+// the extracted attachment chunks and total size, with a flagged reason or the context stored as written
 export type ExtractedAttachment = {
 	chunks: string[]
 	charCount: number
 	flaggedReason: string | null
-	tableContext: string | null
+	verbatimContext: string | null
 }
 
-/** Extracts the stored file's text, screens it, and either writes its rows as table text or chunks it for summarization. */
+/** Extracts and screens the stored file's text, and returns the text as written or as chunks to summarize. */
 export async function extractAttachmentText(attachmentId: string): Promise<ExtractedAttachment> {
 	// load the row for its object key and content type, then read and extract the stored bytes
 	const [attachment] = await db.select().from(attachments).where(eq(attachments.id, attachmentId))
@@ -49,7 +49,7 @@ export async function extractAttachmentText(attachmentId: string): Promise<Extra
 
 	// fail a file with no readable text, like a scanned PDF or a chart-only workbook
 	if (!extractedText.trim()) {
-		throw ApplicationFailure.nonRetryable("the file held no readable text", "NoReadableText")
+		throw ApplicationFailure.nonRetryable(ATTACHMENT_NO_TEXT_REASON, "NoReadableText")
 	}
 
 	// a table file is screened over only the rows its table text can keep. the rest can never reach a
@@ -58,25 +58,24 @@ export async function extractAttachmentText(attachmentId: string): Promise<Extra
 	const clippedTableText = isTableFile ? toClippedTableText(extractedText) : null
 	const screenableText = (clippedTableText?.serializedText ?? extractedText).slice(0, MAX_PROCESS_CHARS)
 
-	// screen the document with llm-guard before any model reads it and skip it if it's flagged
-	const screenVerdict = await screenText(screenableText, "document", {
-		timeoutMs: isTableFile ? TABLE_SCREEN_TIMEOUT_MS : undefined,
+	// a table file and a short document are stored as written, with no model call in between
+	const isVerbatimAttachment = isTableFile || extractedText.length <= MAX_ATTACHMENT_CONTEXT_CHARS
+
+	// screen the text before any model reads the text, and stop at a flag. a page attached by url gets the whole check,
+	// and an owner's upload gets the upload check. a screen that never finishes passes the text
+	const screenVerdict = await screenText(screenableText, attachment.sourceUrl ? "document" : "upload", {
+		timeoutMs: isVerbatimAttachment ? VERBATIM_SCREEN_TIMEOUT_MS : undefined,
 	})
 	if (screenVerdict.isFlagged) {
 		return {
 			chunks: [],
 			charCount: extractedText.length,
 			flaggedReason: toFlaggedReason(screenVerdict),
-			tableContext: null,
+			verbatimContext: null,
 		}
 	}
 
-	// a configured scanner that did not answer fails table text instead of failing open. the throw lets the activity retry first
-	if (isTableFile && screenVerdict.outcome === "failed") {
-		throw new Error("this file's contents could not be checked by the scanner")
-	}
-
-	// a table file's rows are written from the screened text, with no model call at all
+	// a table file's rows are written from the screened text
 	if (isTableFile) {
 		const tableContext = toTableText({
 			serializedText: screenVerdict.text,
@@ -84,7 +83,13 @@ export async function extractAttachmentText(attachmentId: string): Promise<Extra
 			contentType: attachment.contentType,
 			skippedRows: clippedTableText?.skippedRows ?? 0,
 		})
-		return { chunks: [], charCount: extractedText.length, flaggedReason: null, tableContext }
+		return { chunks: [], charCount: extractedText.length, flaggedReason: null, verbatimContext: tableContext }
+	}
+
+	// a short document is its own context. redaction can lengthen the text, so the text is limited again
+	if (isVerbatimAttachment) {
+		const verbatimContext = screenVerdict.text.slice(0, MAX_ATTACHMENT_CONTEXT_CHARS)
+		return { chunks: [], charCount: extractedText.length, flaggedReason: null, verbatimContext }
 	}
 
 	// mark the cut on a document past the processing limit
@@ -95,7 +100,7 @@ export async function extractAttachmentText(attachmentId: string): Promise<Extra
 
 	// chunk the screened text, not the original, so any personal details it redacted never reach a model
 	const chunks = chunk(markedText, MAX_CHUNKS, CHUNK_CHARS)
-	return { chunks, charCount: extractedText.length, flaggedReason: null, tableContext: null }
+	return { chunks, charCount: extractedText.length, flaggedReason: null, verbatimContext: null }
 }
 
 // the line appended where a long document was cut
@@ -133,17 +138,17 @@ export async function finalizeAttachment(
 	chunkCount: number,
 ): Promise<void> {
 	// join the per-chunk notes and limit the merged context, then flip the attachment to ready
-	const context = summaries.join("\n\n").slice(0, MAX_CONTEXT_CHARS)
+	const context = summaries.join("\n\n").slice(0, MAX_ATTACHMENT_CONTEXT_CHARS)
 	await markAttachmentReady(attachmentId, context, charCount, chunkCount)
 }
 
-/** Stores table text as computed. The merged-context slice would cut table text mid-row. */
-export async function finalizeTableAttachment(
+/** Stores table text or a short document as written. The merged-context slice would cut table text mid-row. */
+export async function finalizeVerbatimAttachment(
 	attachmentId: string,
-	tableContext: string,
+	verbatimContext: string,
 	charCount: number,
 ): Promise<void> {
-	await markAttachmentReady(attachmentId, tableContext, charCount, 0)
+	await markAttachmentReady(attachmentId, verbatimContext, charCount, 0)
 }
 
 // flip the attachment to ready with its settled context and counts

@@ -16,12 +16,13 @@ import { NotesSection } from "@/components/note/NotesSection"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
 import { ShareTopic } from "@/components/share/ShareTopic"
+import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { NewCountInfo } from "@/components/topic/Topic"
-import { isFollowTopicInMenu, TopicActionBar, toTopicActionOptions } from "@/components/topic/TopicActions"
-import { TopicEditorChoiceDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { TopicActionBar, toTopicActionLayout, toTopicActionOptions } from "@/components/topic/TopicActions"
+import { TopicEditorChoiceDialog, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
@@ -42,7 +43,7 @@ import { useRegisterChatContext, useTopicChangeCount } from "@/stores/chatPanelS
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
 
 // the page's dialogs, one open at a time
-type TopicDialog = "edit-choice" | "edit" | "make-public" | "share" | "rank" | "delete"
+type TopicDialog = "edit-choice" | "edit" | "make-public" | "share" | "add-topic-to-team" | "rank" | "delete"
 
 /**
  * The topic page at /topics/$topicId/$topicSlug: header with owner actions, findings, scan history, and the info card.
@@ -58,18 +59,20 @@ export function TopicPage() {
 	const { data: session } = authClient.useSession()
 	// the shared feed state includes the homepage reload plus the finding filter this page's action bar reads
 	const { reloadTopicFeed: reloadHomePage, findingFilter } = useTopicFeed()
-	// the one dialog on screen, or null when none is open
+	// the open dialog, or null if no dialog is open
 	const [openDialog, setOpenDialog] = useState<TopicDialog | null>(null)
 	usePageTitle(topic?.name ?? null)
 
 	// the owning team a user on none of the topic's teams could join
 	const joinTeam = topic?.roomTeams.length === 0 ? topic.teamLink : null
-	const actionContext = {
+	// where the action bar puts each control, and the New Topic button's dialog
+	const topicActionLayout = toTopicActionLayout({
 		topic,
 		isSignedIn: Boolean(session),
 		isBookmarkedView: findingFilter === "bookmarked",
 		isJoinable: Boolean(joinTeam),
-	}
+	})
+	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
 
 	// what the shell's chat panel opens on while this topic is on screen
 	useRegisterChatContext(
@@ -92,7 +95,7 @@ export function TopicPage() {
 			: null,
 	)
 
-	// the search bar's menu includes this page's report row while the topic is on screen
+	// the search bar's menu includes this page's options and report option while the topic is on screen
 	useRegisterPageActions(
 		topic
 			? {
@@ -103,7 +106,8 @@ export function TopicPage() {
 					options: toTopicActionOptions({
 						topic,
 						isAdminUser: session?.user.role === "admin",
-						isFollowTopicInMenu: isFollowTopicInMenu(actionContext),
+						topicActionLayout,
+						onAddTopicToTeam: () => setOpenDialog("add-topic-to-team"),
 						onShareTopic: () => setOpenDialog("share"),
 						onToggleFollowTopic: () => void handleSubscriptionToggle(),
 						onRankFeaturedTopic: () => setOpenDialog("rank"),
@@ -111,6 +115,7 @@ export function TopicPage() {
 						onDeleteTopic: () => setOpenDialog("delete"),
 					}),
 					report: { subjectKind: "topic", subjectId: topic.id, subjectLabel: topic.name },
+					hasNewTopicButton: topicActionLayout.isNewTopicCallToAction,
 				}
 			: null,
 	)
@@ -169,8 +174,10 @@ export function TopicPage() {
 	return (
 		<main className="mx-auto max-w-5xl px-safe pt-3 pb-28">
 			<TopicActionBar
-				{...actionContext}
-				joinButton={
+				topic={topic}
+				isSignedIn={Boolean(session)}
+				topicActionLayout={topicActionLayout}
+				renderJoinButton={({ isHighlighted }) =>
 					joinTeam &&
 					topic && (
 						<JoinTeamButton
@@ -178,13 +185,17 @@ export function TopicPage() {
 							teamName={joinTeam.name}
 							hasJoinRequest={topic.hasRequestedToJoin}
 							isSignedIn={Boolean(session)}
+							isHighlighted={isHighlighted}
 							onChangeRequest={() => void reloadTopicPage()}
 						/>
 					)
 				}
 				scanControl={<TopicScanButton topic={topic} onScanned={reloadTopicPage} />}
+				onNewTopic={openNewTopicDialog}
 				onSubscriptionToggle={handleSubscriptionToggle}
 			/>
+			{/* the dialog that the New Topic button opens */}
+			{newTopicDialog}
 
 			{/* the loading skeleton, the not-found or not visible line, or the hydrating topic sections */}
 			{!topic && (
@@ -206,6 +217,7 @@ export function TopicPage() {
 						<PodcastEpisodePlayer
 							topic={topic}
 							topicHandlers={topicHandlers}
+							onPodcastEpisodeRemoved={reloadTopicPage}
 							scanControl={
 								<TopicScanButton
 									topic={topic}
@@ -227,6 +239,7 @@ export function TopicPage() {
 						openDialog={openDialog}
 						onOpenDialog={setOpenDialog}
 						onSaveTopic={handleSaveTopic}
+						onTopicTeamsChanged={() => void reloadTopicPage()}
 						onRankTopic={handleRankTopic}
 						onTopicDeleted={async () => {
 							await reloadHomePage()
@@ -334,7 +347,7 @@ function TopicFindings({ topic, topicHandlers }: { topic: TopicResponse; topicHa
 				handlers={topicHandlers}
 				topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
 				newCountInfo={topic.newCount > 0 ? <NewCountInfo topic={topic} /> : undefined}
-				latestPodcastEpisode={topic.podcast?.latestPodcastEpisode}
+				latestPodcastEpisode={topic.latestPodcastEpisode}
 			/>
 		</HydrateSection>
 	)
@@ -387,6 +400,7 @@ function TopicDialogs({
 	openDialog,
 	onOpenDialog,
 	onSaveTopic,
+	onTopicTeamsChanged,
 	onRankTopic,
 	onTopicDeleted,
 }: {
@@ -394,6 +408,7 @@ function TopicDialogs({
 	openDialog: TopicDialog | null
 	onOpenDialog: (dialog: TopicDialog | null) => void
 	onSaveTopic: () => Promise<void>
+	onTopicTeamsChanged: () => void
 	onRankTopic: (moves: FeatureOrderMove[]) => Promise<void>
 	onTopicDeleted: () => Promise<void>
 }) {
@@ -421,6 +436,13 @@ function TopicDialogs({
 					isDialog
 					onClose={() => onOpenDialog(null)}
 					onMakeTopicPublic={() => onOpenDialog("make-public")}
+				/>
+			)}
+			{openDialog === "add-topic-to-team" && (
+				<AddTopicToTeamDialog
+					topic={topic}
+					onTopicTeamsChanged={onTopicTeamsChanged}
+					onClose={() => onOpenDialog(null)}
 				/>
 			)}
 			{openDialog === "rank" && (

@@ -11,21 +11,21 @@ import { toResourceKind } from "./normalize"
 import { fetchVideos, playlistIdFromUrl } from "./youtube"
 
 // query and fetch limits
-const MAX_QUERIES = 5
+export const MAX_SEARCH_QUERIES = 5
 const RESULTS_PER_QUERY = 10
-// limit the user-controlled context sent to the model so a huge context cannot inflate token spend
-const MAX_CONTEXT_CHARS = 8000
 const FETCH_TIMEOUT_MS = 10_000
-// Exa is the current search provider and may be swapped later
+// the longest user-controlled context sent to the model, in characters. the limit bounds a huge context's token spend
+const MAX_CONTEXT_CHARS = 8000
+// Exa is the search provider
 const EXA_ENDPOINT = "https://api.exa.ai/search"
 
 // read the topic's context, generate queries from it, search per query, and merge the deduped Resources
 export const searchIngester: SourceIngester = async (source: Source) => {
 	// the context combines the topic's prompt with its attachments along with the topic name to be used for query generation
-	const { name, context } = await buildTopicScanContext(source.topicId)
+	const { name: topicName, context: topicContext } = await buildTopicScanContext(source.topicId)
 
 	// generate search queries from the context, then run them and keep whichever succeeds
-	const searchQueries = await generateSearchQueries(context, name)
+	const searchQueries = await generateSearchQueries({ topicContext, topicName })
 	const searchResponses = await runSearches(searchQueries)
 
 	// merge search query results. sum the per-search cost and collect the Resources
@@ -62,17 +62,25 @@ export async function buildSearchPrompt(context: string, name: string): Promise<
 	const topicContext = namedContext.slice(0, MAX_CONTEXT_CHARS)
 	const { template, name: promptName, registryPrompt } = await fetchPromptTemplate("search-topic")
 
-	// the topic's context is user-supplied text, not app-generated, so it gets fenced in the prompt as untrusted
-	const prompt = writePrompt(template, { topicContext }, { maxQueries: String(MAX_QUERIES) })
+	// fence the topic's user-supplied context in the prompt as untrusted
+	const prompt = writePrompt(template, { topicContext }, { maxQueries: String(MAX_SEARCH_QUERIES) })
 	return { prompt, name: promptName, registryPrompt }
 }
 
-// generate a limited list of search queries from the topic context using the cheap model
-async function generateSearchQueries(context: string, name: string): Promise<string[]> {
-	// fetch and write the prompt
-	const searchPrompt = await buildSearchPrompt(context, name)
+// the topic's context and its name, which the search queries are written from
+type GenerateSearchQueriesOptions = { topicContext: string; topicName: string }
 
-	// generateText's output setting returns structured output, linking the registry version to the trace
+/**
+ * Writes a limited list of search queries from the topic's context with the cheap model.
+ */
+export async function generateSearchQueries({
+	topicContext,
+	topicName,
+}: GenerateSearchQueriesOptions): Promise<string[]> {
+	// fetch and write the prompt
+	const searchPrompt = await buildSearchPrompt(topicContext, topicName)
+
+	// write the queries as structured output. promptTelemetry links the registry version to the trace
 	const { output } = await generateText({
 		model: cheapModel(),
 		output: Output.object({ schema: z.object({ queries: z.array(z.string()) }) }),
@@ -82,7 +90,7 @@ async function generateSearchQueries(context: string, name: string): Promise<str
 
 	// trim, drop blanks, and dedupe the model output, then limit it so a chatty model doesn't inflate the search call count
 	const queries = [...new Set(output.queries.map((query) => query.trim()).filter(Boolean))]
-	return queries.slice(0, MAX_QUERIES)
+	return queries.slice(0, MAX_SEARCH_QUERIES)
 }
 
 // turn a search response into deduped Resources plus the dollar cost that the provider reported for the search
@@ -184,7 +192,7 @@ async function expandYouTubePlaylists(resources: NewResource[]): Promise<NewReso
 	return [...resourceByUrl.values()]
 }
 
-// expand a single Resource into its playlist's videos when its url is a playlist page
+// expand a single Resource into its playlist's videos if its url is a playlist page
 async function expandYouTubePlaylist(resource: NewResource, apiKey: string): Promise<NewResource[]> {
 	// a non-playlist url has nothing to expand
 	const playlistId = playlistIdFromUrl(resource.url)

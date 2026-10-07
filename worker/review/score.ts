@@ -471,7 +471,9 @@ export function toFetchedContentFields(
 	}
 }
 
-// keep the model's score within the 0 to 1 range that the topic feed expects
-function clampScore(score: number): number {
+/**
+ * Returns the score limited to the 0 to 1 range.
+ */
+export function clampScore(score: number): number {
 	return Math.max(0, Math.min(1, score))
 }

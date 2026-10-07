@@ -1,12 +1,11 @@
-// the topic chat eval's promptfoo provider, the reply writer under test.
-// the writer calls the LiteLLM proxy through worker/models.ts
+// the topic chat eval's promptfoo provider, which runs the reply writer under test
 import { generateText, stepCountIs } from "ai"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
 import { buildTopicChatPrompt, MAX_TURN_STEPS, toModelMessages } from "../../worker/chat"
 import { webSearchTool } from "../../worker/chat/search"
 import { chatModel } from "../../worker/models"
-import { toStepsText } from "../evalHarness"
+import { toStepsText } from "../evalReplies"
 import type { TopicChatCase } from "./topicChatCases"
 
 // the variables that a case gives the reply writer. the question and the topic material

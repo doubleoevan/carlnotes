@@ -2,7 +2,7 @@
 // and a LiteLLM key created while the account was closing
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
-import { connectionPool } from "../db"
+import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as litellm from "../worker/litellm"
 import type { AnalyticsProperties } from "./currentUser"
 import * as sessions from "./sessions"
@@ -17,10 +17,9 @@ const ANALYTICS_PROPERTIES: AnalyticsProperties = {
 }
 
 // the connection pool's own query and the environment's Redis url, put back after each test along with the spies
-const originalConnectionPoolQuery = connectionPool.query
 const originalRedisUrl = Bun.env.REDIS_URL
 afterEach(() => {
-	connectionPool.query = originalConnectionPoolQuery
+	restoreConnectionPool()
 	mock.restore()
 
 	// a Redis url that the environment never set stays unset
@@ -36,12 +35,8 @@ function stubFailedRevocation(): { readQueryCount: () => number } {
 	spyOn(sessions, "revokeUserSessions").mockResolvedValue(false)
 
 	// every query returns no rows and is counted
-	let queryCount = 0
-	connectionPool.query = (() => {
-		queryCount++
-		return Promise.resolve({ rows: [], fields: [], rowCount: 0 })
-	}) as unknown as typeof connectionPool.query
-	return { readQueryCount: () => queryCount }
+	const sentQueries = stubConnectionPool()
+	return { readQueryCount: () => sentQueries.length }
 }
 
 // a configured Redis that is unreachable stops the close before anything is deleted
@@ -68,12 +63,7 @@ test("a second failed revocation is reported and the close goes on", async () =>
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 
 	// Postgres holds the user row with no avatar and no litellm key, and nothing else
-	connectionPool.query = ((queryConfig: { text: string }) =>
-		Promise.resolve({
-			rows: queryConfig.text.includes('"avatar_key"') ? [["user-1", null, null]] : [],
-			fields: [],
-			rowCount: 0,
-		})) as unknown as typeof connectionPool.query
+	stubConnectionPool(({ text }) => (text.includes('"avatar_key"') ? [["user-1", null, null]] : []))
 
 	// the close finishes and the report names the user
 	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
@@ -92,16 +82,15 @@ function stubUserRowLiteLLMKeys({
 	selectedUserRowLiteLLMKey,
 	deletedUserRowLiteLLMKey,
 }: StubUserRowLiteLLMKeysOptions): void {
-	connectionPool.query = ((queryConfig: { text: string }) => {
+	stubConnectionPool(({ text }) => {
 		// return the user row with its LiteLLM key for the user row select
-		if (queryConfig.text.includes('"avatar_key"')) {
-			return Promise.resolve({ rows: [["user-1", null, selectedUserRowLiteLLMKey]], fields: [], rowCount: 1 })
+		if (text.includes('"avatar_key"')) {
+			return [["user-1", null, selectedUserRowLiteLLMKey]]
 		}
 
 		// return the deleted row's LiteLLM key for the user row delete, and no rows for any other query
-		const deletedUserRows = queryConfig.text.startsWith('delete from "users"') ? [[deletedUserRowLiteLLMKey]] : []
-		return Promise.resolve({ rows: deletedUserRows, fields: [], rowCount: deletedUserRows.length })
-	}) as unknown as typeof connectionPool.query
+		return text.startsWith('delete from "users"') ? [[deletedUserRowLiteLLMKey]] : []
+	})
 }
 
 // a model call can create a key after the close read the user's row, and the close deletes that key from the proxy

@@ -55,25 +55,26 @@ Projecting only the first sheet silently drops data when sheet one is a cover pa
 - **WHEN** a workbook's sheets together exceed `MAX_TABLE_ROWS`
 - **THEN** the total rows written across all sheets does not exceed `MAX_TABLE_ROWS`
 
-### Requirement: A table file is screened, and is failed when it cannot be
+### Requirement: A table file is screened before its table text is stored
 
-A table file SHALL be screened as untrusted text before its table text is stored, on the same path as any other document, so redaction runs over its cells.
+A table file SHALL be screened as untrusted text before its table text is stored, on the same path as any other
+document, so a detector can reject it.
 
-The scanner fails open for every other input. A table file SHALL NOT be written as table text on an unscreened pass: when a scanner is configured and its screen does not complete, the attachment SHALL be failed with a reason naming that its contents could not be checked. A prose attachment survives an unscreened pass because the summarizer stands between it and the Scan prompt. Verbatim table text has no such step, and would put unchecked rows into the prompt on every Scan for as long as the file stays attached.
+A table file SHALL fail open like every other input. If a configured scanner's screen does not complete, the table text
+SHALL be stored unscreened and the failure logged and reported. The nonce-delimited fence around the topic context holds
+its rows as data in every Scan prompt.
 
-A deployment with no scanner url configured SHALL project normally. It has stated that it accepts unscreened text throughout, and failing every spreadsheet there would make the feature unavailable instead of defending anything.
-
-The screen for a table file SHALL be given a longer timeout before that verdict, so a slow screen finishes instead of failing the file.
+The screen for a table file SHALL be given a longer timeout, so a slow screen finishes instead of passing the file unscreened.
 
 #### Scenario: A spreadsheet is screened before table text
 
 - **WHEN** a table file is processed
-- **THEN** its text is screened and the table text is built from the screened text, so redacted entities never reach a Scan
+- **THEN** its text is screened and the table text is built from the screened text
 
-#### Scenario: An unscreenable spreadsheet is failed, not written as table text
+#### Scenario: An unscreenable spreadsheet is stored unscreened
 
 - **WHEN** a scanner is configured and it is unreachable, errors, or times out while screening a table file
-- **THEN** the attachment is failed with a reason naming that its contents could not be checked, and no context is stored
+- **THEN** the table text is stored, the attachment becomes ready, and the failure is logged and reported
 
 #### Scenario: A deployment without a scanner still projects
 
@@ -83,6 +84,6 @@ The screen for a table file SHALL be given a longer timeout before that verdict,
 
 #### Scenario: Redaction preserves the table's shape
 
-- **WHEN** the scanner redacts an entity inside a cell
+- **WHEN** the scanner redacts an entity inside a cell of a table file attached by url
 - **THEN** the substitution is in place and the commas, newlines, and column alignment of the table text are unchanged
 

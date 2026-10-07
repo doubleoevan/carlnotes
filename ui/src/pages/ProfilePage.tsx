@@ -1,34 +1,29 @@
-import type { OwnerTopic, ProfileResponse } from "@shared/contracts"
+import type { OwnerTopic, ProfileResponse, ProfileTeamStatus } from "@shared/contracts"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
-import { Pencil, Plus, Users, X } from "lucide-react"
+import { Pencil, Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { toast } from "sonner"
 import { fetchActivity } from "@/clients/activityClient"
 import { authClient } from "@/clients/authClient"
-import { fetchProfile, fetchTeamOptions, type TeamMenuOption } from "@/clients/profileClient"
-import { sendDeleteTeamInvite, sendRemoveTeamMember } from "@/clients/teamClient"
-import { fetchAddableTopics, sendUserInvite } from "@/clients/topicClient"
+import { fetchProfile, fetchProfileTeamStatuses } from "@/clients/profileClient"
+import { fetchAddableTopics } from "@/clients/topicClient"
 import { EditProfileModal } from "@/components/account/EditProfileModal"
 import { UserAvatarPicker } from "@/components/avatar/UserAvatarPicker"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { OwnerTopicsTable } from "@/components/table/OwnerTopicsTable"
 import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
 import { TopicsTable } from "@/components/table/TopicsTable"
 import { EditTeamModal } from "@/components/team/EditTeamModal"
-import { NewTeamOption, TeamOption } from "@/components/team/TeamUpButton"
-import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { InviteUserToTeamButton } from "@/components/team/InviteUserToTeamButton"
+import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { toCountLabel } from "@/lib/labels"
-import { CARD_CLASS, MENU_OPTION_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
+import { CARD_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useAllChatMentions } from "@/stores/chatRoomStore"
@@ -68,9 +63,9 @@ export function ProfilePage() {
 	const loadedProfile = profileRoute.useLoaderData({ select: (loaderData) => loaderData?.profile ?? null })
 	const [profile, setProfile] = useState<ProfileResponse | null>(loadedProfile)
 	const [isProfileMissing, setIsProfileMissing] = useState(false)
-	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
+	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog()
 	const [isEditingProfile, setIsEditingProfile] = useState(false)
-	const [isTeamingUp, setIsTeamingUp] = useState(false)
+	const [isNewTeamModalOpen, setIsNewTeamModalOpen] = useState(false)
 	const [addableTopics, setAddableTopics] = useState<{ id: string; name: string }[]>([])
 	usePageTitle(profile?.username ?? null)
 
@@ -93,19 +88,22 @@ export function ProfilePage() {
 		}
 	}, [isOwnProfile, handleLoadTopics])
 
-	// load the profile user's teams
-	const [teamOptions, setTeamOptions] = useState<TeamMenuOption[] | null>(null)
-	const handleLoadTeams = useCallback((): void => {
-		fetchTeamOptions(userId)
-			.then(setTeamOptions)
-			.catch(() => setTeamOptions([]))
+	// load the user's teams, each with the profile user's status there
+	const [profileTeamStatuses, setProfileTeamStatuses] = useState<ProfileTeamStatus[] | null>(null)
+	const handleLoadProfileTeamStatuses = useCallback((): void => {
+		fetchProfileTeamStatuses(userId)
+			.then(setProfileTeamStatuses)
+			.catch(() => setProfileTeamStatuses([]))
 	}, [userId])
-	useEffect(() => handleLoadTeams(), [handleLoadTeams])
+	useEffect(() => handleLoadProfileTeamStatuses(), [handleLoadProfileTeamStatuses])
 
 	// the teams shared with this profile for the chat context
 	const profileTeamIds = useMemo(
-		() => (teamOptions ?? []).filter((team) => team.status === "member").map((team) => team.teamId),
-		[teamOptions],
+		() =>
+			(profileTeamStatuses ?? [])
+				.filter((profileTeamStatus) => profileTeamStatus.status === "member")
+				.map((profileTeamStatus) => profileTeamStatus.teamId),
+		[profileTeamStatuses],
 	)
 	useRegisterChatContext(
 		profile
@@ -128,17 +126,18 @@ export function ProfilePage() {
 					options: toProfileActionOptions({
 						isOwnProfile,
 						onEditProfile: () => setIsEditingProfile(true),
-						onNewTeam: () => void handleOpenTeamUpMenu(),
+						onNewTeam: () => void handleOpenNewTeamModal(),
 					}),
 					report: { subjectKind: "profile", subjectId: profile.userId, subjectLabel: profile.username },
+					hasNewTopicButton: isOwnProfile,
 				}
 			: null,
 	)
 
-	// the team up menu loads its topic multiselect on open
-	const handleOpenTeamUpMenu = async (): Promise<void> => {
+	// load the topics that the New team modal offers, then open the modal
+	const handleOpenNewTeamModal = async (): Promise<void> => {
 		setAddableTopics(await fetchAddableTopics())
-		setIsTeamingUp(true)
+		setIsNewTeamModalOpen(true)
 	}
 
 	// load the profile, except while hydrating the profile the server loaded
@@ -153,12 +152,6 @@ export function ProfilePage() {
 	}, [userId])
 	useLoadInBrowser({ pageId: userId, isLoadedOnServer: loadedProfile !== null, loadPage: reloadProfilePage })
 
-	// close the new topic modal and forward to the topic page
-	const handleTopicCreated = async (topicId: string): Promise<void> => {
-		setIsNewTopicOpen(false)
-		navigate({ to: "/topics/$topicId", params: { topicId } })
-	}
-
 	// show the missing page or the loading page
 	if (isProfileMissing) {
 		return <main className={PAGE_CLASS}>No one here by that name.</main>
@@ -167,27 +160,24 @@ export function ProfilePage() {
 		return <CoffeeLoading />
 	}
 
-	// a logged-out visitor goes to the sign-up page, and a user on their own profile does not open the team up menu
-	const handleTeamUp = (): void => {
+	// send a visitor to the sign-up page, or open the New team modal with the profile user invited
+	const handleInviteUserToTeam = (): void => {
 		if (!session) {
 			void navigate({ to: "/signup", search: { cta: "profile-team-up" } })
 			return
 		}
-		if (isOwnProfile) {
-			return
-		}
-		void handleOpenTeamUpMenu()
+		void handleOpenNewTeamModal()
 	}
 
 	return (
 		<main className={PAGE_CLASS}>
-			{/* the profile owner can create a topic but not team up. a different user can team up with this profile user */}
+			{/* the profile owner can create a topic. a different user can invite the profile user to a team */}
 			<ProfileHeader
 				profile={profile}
-				teamOptions={teamOptions}
-				onLoadTeams={handleLoadTeams}
-				onNewTopic={session?.user.id === profile.userId ? () => setIsNewTopicOpen(true) : undefined}
-				onTeamUp={session?.user.id === profile.userId ? undefined : handleTeamUp}
+				profileTeamStatuses={profileTeamStatuses}
+				onLoadProfileTeamStatuses={handleLoadProfileTeamStatuses}
+				onNewTopic={session?.user.id === profile.userId ? openNewTopicDialog : undefined}
+				onInviteUserToTeam={session?.user.id === profile.userId ? undefined : handleInviteUserToTeam}
 			/>
 			{isEditingProfile && (
 				<EditProfileModal
@@ -197,11 +187,11 @@ export function ProfilePage() {
 					onUsernameChanged={handleReloadProfile}
 				/>
 			)}
-			{isTeamingUp && (
+			{isNewTeamModalOpen && (
 				<EditTeamModal
 					userTopics={addableTopics}
 					initialInvites={isOwnProfile ? [] : [{ username: profile.username }]}
-					onClose={() => setIsTeamingUp(false)}
+					onClose={() => setIsNewTeamModalOpen(false)}
 				/>
 			)}
 			<ProfileSections
@@ -211,7 +201,8 @@ export function ProfilePage() {
 				onLoadTopics={handleLoadTopics}
 				onReloadProfile={handleReloadProfile}
 			/>
-			{isNewTopicOpen && <NewTopicDialog onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
+			{/* the dialog that the New Topic button opens */}
+			{newTopicDialog}
 		</main>
 	)
 }
@@ -291,15 +282,15 @@ function ProfileSections({
 function ProfileHeader({
 	profile,
 	onNewTopic,
-	onTeamUp,
-	teamOptions,
-	onLoadTeams,
+	onInviteUserToTeam,
+	profileTeamStatuses,
+	onLoadProfileTeamStatuses,
 }: {
 	profile: ProfileResponse
 	onNewTopic?: () => void
-	onTeamUp?: () => void
-	teamOptions: TeamMenuOption[] | null
-	onLoadTeams: () => void
+	onInviteUserToTeam?: () => void
+	profileTeamStatuses: ProfileTeamStatus[] | null
+	onLoadProfileTeamStatuses: () => void
 }) {
 	const { data: session } = authClient.useSession()
 	// the unread chat mentions and note changes the user has, across topics and teams, summed on the avatar badge
@@ -340,25 +331,21 @@ function ProfileHeader({
 						<h1 className="font-display text-2xl">{profile.username}</h1>
 					</>
 				)}
-				{/* the right column: the owner's New Topic button on top. a different user sees the Team Up button. */}
+				{/* the right column: the owner's New Topic button on top. a different user sees the button that invites the
+				    profile user to a team */}
 				<div className="ml-auto flex flex-col items-end gap-1 self-start">
-					{onNewTopic && (
-						<Button className="shrink-0" onClick={onNewTopic}>
-							<Plus className="size-4" />
-							New Topic
-						</Button>
-					)}
-					{onTeamUp &&
+					{onNewTopic && <NewTopicButton onNewTopic={onNewTopic} />}
+					{onInviteUserToTeam &&
 						(session ? (
-							<ProfileTeamUpButton
-								userId={profile.userId}
-								username={profile.username}
-								teams={teamOptions}
-								onReload={onLoadTeams}
-								onCreateTeam={onTeamUp}
+							<InviteUserToTeamButton
+								profileUserId={profile.userId}
+								profileUsername={profile.username}
+								profileTeamStatuses={profileTeamStatuses}
+								onReloadProfileTeamStatuses={onLoadProfileTeamStatuses}
+								onNewTeam={onInviteUserToTeam}
 							/>
 						) : (
-							<Button className="shrink-0" onClick={onTeamUp}>
+							<Button className="shrink-0" onClick={onInviteUserToTeam}>
 								<Users className="size-4" />
 								Team Up
 							</Button>
@@ -370,183 +357,5 @@ function ProfileHeader({
 				Joined {joinDateLabel} · {profile.subscriberCount.toLocaleString()} followers
 			</p>
 		</header>
-	)
-}
-
-// every team the user belongs to with the action each team member status allows
-function ProfileTeamUpButton({
-	userId,
-	username,
-	teams,
-	onReload,
-	onCreateTeam,
-}: {
-	userId: string
-	username: string
-	teams: TeamMenuOption[] | null
-	onReload: () => void
-	onCreateTeam: () => void
-}) {
-	const [isOpen, setIsOpen] = useState(false)
-
-	// refetch the team options when the team up menu opens
-	const handleOpenChange = (isOpening: boolean): void => {
-		setIsOpen(isOpening)
-		if (isOpening) {
-			onReload()
-		}
-	}
-
-	// the Team Up button icon fills if a team has this profile user or their pending invite
-	const isTeamMember = (teams ?? []).some((team) => team.status !== "none")
-
-	// send the username an invitation to that team
-	const handleInviteTeamMember = async (teamMenuOption: TeamMenuOption): Promise<void> => {
-		const rejection = await sendUserInvite({ teamId: teamMenuOption.teamId }, { username })
-		if (rejection) {
-			toast.error(`The invitation to @${username} didn't go through.`)
-		} else {
-			toast(`Invited @${username} to ${teamMenuOption.name}.`)
-		}
-		onReload()
-	}
-
-	// a team leader removes a team member, unless they are removing themself and the team has only one leader
-	const handleRemoveTeamMember = async (teamMenuOption: TeamMenuOption): Promise<void> => {
-		if (await sendRemoveTeamMember(teamMenuOption.teamId, userId)) {
-			toast(`Removed @${username} from ${teamMenuOption.name}.`)
-		} else {
-			toast.error("A team must have at least one leader.")
-		}
-		onReload()
-	}
-
-	// delete the pending team invitation
-	const handleDeleteTeamInvite = async (teamMenuOption: TeamMenuOption): Promise<void> => {
-		if (teamMenuOption.inviteId) {
-			await sendDeleteTeamInvite(teamMenuOption.teamId, teamMenuOption.inviteId)
-			toast("Team invitation removed.")
-		}
-		onReload()
-	}
-
-	return (
-		<Popover open={isOpen} onOpenChange={handleOpenChange}>
-			<PopoverTrigger asChild>
-				<Button className="shrink-0">
-					<Users className={cn("size-4", isTeamMember && "fill-current")} />
-					Team Up
-				</Button>
-			</PopoverTrigger>
-			<PopoverContent align="end" className="w-64" bodyClassName="p-1">
-				{/* the user's teams, each menu option shaped by this profile's status there */}
-				{teams === null && <CoffeeLoading className="min-h-0 justify-start px-2 py-2 text-sm" />}
-				{(teams ?? []).map((team) =>
-					team.status === "none" ? (
-						<TeamOption key={team.teamId} team={team} onSelect={() => void handleInviteTeamMember(team)} />
-					) : (
-						<div key={team.teamId} className="flex items-center">
-							<span className={cn(MENU_OPTION_CLASS, "hover:bg-transparent min-w-0 flex-1")}>
-								<TeamAvatar team={team} className="size-5" />
-								<span className="truncate">{team.name}</span>
-							</span>
-							{team.status === "member" ? (
-								<RemoveTeamMemberButton
-									team={team}
-									username={username}
-									onRemove={() => void handleRemoveTeamMember(team)}
-								/>
-							) : team.canDeleteInvite ? (
-								<Tooltip>
-									<TooltipTrigger asChild>
-										<button
-											type="button"
-											onClick={() => void handleDeleteTeamInvite(team)}
-											aria-label={`Delete invitation to ${team.name}`}
-											className="text-muted-foreground hover:text-foreground rounded-md p-2"
-										>
-											<X className="size-4" />
-										</button>
-									</TooltipTrigger>
-									<TooltipContent>
-										Delete invitation to <span className="font-semibold">{team.name}</span>
-									</TooltipContent>
-								</Tooltip>
-							) : (
-								<Tooltip>
-									<TooltipTrigger asChild>
-										{/* a disabled button swallows hover, so the tooltip hangs on the wrapping span */}
-										<span className="rounded-md p-2">
-											<X className="text-muted-foreground size-4 opacity-50" />
-										</span>
-									</TooltipTrigger>
-									<TooltipContent>{"Must be a leader to delete another member's invitation"}</TooltipContent>
-								</Tooltip>
-							)}
-						</div>
-					),
-				)}
-				{/* the new team option, under a divider when teams are listed */}
-				{teams !== null && teams.length > 0 && <div className="bg-border my-1 h-px" />}
-				{teams !== null && (
-					<NewTeamOption
-						onCreate={() => {
-							setIsOpen(false)
-							onCreateTeam()
-						}}
-					/>
-				)}
-			</PopoverContent>
-		</Popover>
-	)
-}
-
-// the X on a team this profile belongs to, disabled with the reason for anyone but the team's leader
-function RemoveTeamMemberButton({
-	team,
-	username,
-	onRemove,
-}: {
-	team: TeamMenuOption
-	username: string
-	onRemove: () => void
-}) {
-	if (team.role !== "leader") {
-		return (
-			<Tooltip>
-				<TooltipTrigger asChild>
-					{/* a disabled button swallows hover, so the tooltip hangs on the wrapping span */}
-					<span className="rounded-md p-2">
-						<X className="text-muted-foreground size-4 opacity-50" />
-					</span>
-				</TooltipTrigger>
-				<TooltipContent>
-					{"Must be a leader to remove "}
-					<span className="font-semibold">{username}</span>
-					{" from "}
-					<span className="font-semibold">{team.name}</span>
-				</TooltipContent>
-			</Tooltip>
-		)
-	}
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<button
-					type="button"
-					onClick={onRemove}
-					aria-label={`Remove ${username} from ${team.name}`}
-					className="text-muted-foreground hover:text-foreground rounded-md p-2"
-				>
-					<X className="size-4" />
-				</button>
-			</TooltipTrigger>
-			<TooltipContent>
-				{"Remove "}
-				<span className="font-semibold">{username}</span>
-				{" from "}
-				<span className="font-semibold">{team.name}</span>
-			</TooltipContent>
-		</Tooltip>
 	)
 }

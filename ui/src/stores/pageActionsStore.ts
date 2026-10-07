@@ -22,6 +22,8 @@ export type PageActions = {
 	page: string
 	// what this page offers, like editing or deleting what it shows
 	options?: PageActionOption[]
+	// whether the page shows its own New Topic or Add Topic button. the menu then leaves out its New topic option
+	hasNewTopicButton?: boolean
 	// whether the bookmarked filter can scope to a team
 	hasTeamBookmarks?: boolean
 	// the mcp server that the Add to AI option installs

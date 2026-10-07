@@ -1,5 +1,6 @@
 // guard tests for the verdict reading: which detectors each type consults, the threshold, and the fail-open paths.
-import { expect, test } from "bun:test"
+import { expect, spyOn, test } from "bun:test"
+import * as monitoring from "@shared/monitoring"
 import { screenText, toFlaggedReason, toScreenVerdict } from "./guard"
 
 // each type reads only its own detectors out of the one scanner pass, so a hit outside them does not flag it
@@ -37,19 +38,41 @@ test("toScreenVerdict flags only at or above the threshold", () => {
 	expect(toScreenVerdict({ scanners: { PromptInjection: 0.8 } }, "page", "a page").isFlagged).toBe(true)
 })
 
-// a scanner that rejects without naming a score still counts, so a version that reports only validity is honored
-test("toScreenVerdict honors a rejection that includes no scores", () => {
-	expect(toScreenVerdict({ is_valid: false }, "page", "a page")).toEqual({
-		isFlagged: true,
-		detectors: ["unnamed"],
-		text: "a page",
-		outcome: "screened",
-	})
-
-	// a rejection alongside below-threshold scores is the scores' verdict, not a blanket rejection
+// a rejection alongside below-threshold scores is the scores' verdict, not a blanket rejection
+test("toScreenVerdict passes a rejection whose scores are all below the threshold", () => {
 	expect(toScreenVerdict({ is_valid: false, scanners: { PromptInjection: 0.1 } }, "page", "a page").isFlagged).toBe(
 		false,
 	)
+})
+
+// a rejection that names no scanner is a broken response, so the text passes and the failure is reported
+test("screenText passes the text if the scanner rejects it without naming a scanner", async () => {
+	// a configured scanner that rejects with no scores, with a quiet error log and report
+	const originalGuardUrl = Bun.env.LLM_GUARD_URL
+	const originalFetch = globalThis.fetch
+	Bun.env.LLM_GUARD_URL = "http://llm-guard.test"
+	globalThis.fetch = (async () => Response.json({ is_valid: false })) as unknown as typeof fetch
+	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+
+	// the text comes back unflagged as a failed screen
+	try {
+		expect(await screenText("a page", "page")).toEqual({
+			isFlagged: false,
+			detectors: [],
+			text: "a page",
+			outcome: "failed",
+		})
+
+		// the failure is reported once
+		expect(reportErrorSpy).toHaveBeenCalledTimes(1)
+	} finally {
+		// put back the scanner url, fetch, and the spies
+		Bun.env.LLM_GUARD_URL = originalGuardUrl
+		globalThis.fetch = originalFetch
+		consoleErrorSpy.mockRestore()
+		reportErrorSpy.mockRestore()
+	}
 })
 
 // personal details are redacted in place instead of rejecting the whole document

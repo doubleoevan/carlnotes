@@ -2,8 +2,7 @@
 // the key created before a first model call, the key replacement, and the monthly budget reset
 import { afterEach, beforeEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
-import { getTableColumns } from "drizzle-orm"
-import { connectionPool } from "../db"
+import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "../db/connectionPoolStub"
 import { startOfUtcMonth } from "../db/quotas"
 import { scans } from "../db/schema"
 import * as attach from "./attach"
@@ -22,7 +21,6 @@ import { ingestForScan } from "./workflows/runTopicScanActivities"
 
 // the real fetch, the connection pool's own query, and the proxy settings, put back after each test
 const originalFetch = globalThis.fetch
-const originalConnectionPoolQuery = connectionPool.query
 const originalBaseUrl = Bun.env.LITELLM_BASE_URL
 const originalMasterKey = Bun.env.LITELLM_MASTER_KEY
 
@@ -36,32 +34,25 @@ beforeEach(() => {
 // leave the run the way it was found
 afterEach(() => {
 	globalThis.fetch = originalFetch
-	connectionPool.query = originalConnectionPoolQuery
+	restoreConnectionPool()
 	restoreEnv("LITELLM_BASE_URL", originalBaseUrl)
 	restoreEnv("LITELLM_MASTER_KEY", originalMasterKey)
 	mock.restore()
 })
 
-// a query that the stubbed connection pool was sent, and a request that the stubbed proxy was sent
-type SentQuery = { text: string; values: unknown[] }
+// a request that the stubbed proxy was sent
 type ProxyRequest = { path: string; body: unknown; signal: AbortSignal | null | undefined }
 
 // each stubbed query's first word and each stubbed proxy request's path, in the order that the stubs were called
 const stubCallOrder: string[] = []
 
-// swap the connection pool's query for a stub that returns the rows that toQueryRows picks for each query.
+// stub the connection pool with the rows that toQueryRows picks, keeping each query's first word in the call order.
 // return the queries that the stub is sent. a toQueryRows that throws an error makes that query fail
-function stubConnectionPool(toQueryRows: (sentQuery: SentQuery) => unknown[][]): SentQuery[] {
-	const sentQueries: SentQuery[] = []
-	connectionPool.query = (async (queryConfig: { text: string }, values: unknown[]) => {
-		// keep the query and its first word, then return the rows for that query
-		const sentQuery = { text: queryConfig.text, values }
-		sentQueries.push(sentQuery)
-		stubCallOrder.push(queryConfig.text.split(" ")[0] ?? "")
-		const rows = toQueryRows(sentQuery)
-		return { rows, fields: [], rowCount: rows.length }
-	}) as unknown as typeof connectionPool.query
-	return sentQueries
+function stubConnectionPoolInCallOrder(toQueryRows: (sentQuery: SentQuery) => unknown[][]): SentQuery[] {
+	return stubConnectionPool((sentQuery) => {
+		stubCallOrder.push(sentQuery.text.split(" ")[0] ?? "")
+		return toQueryRows(sentQuery)
+	})
 }
 
 // swap fetch for a stub proxy that returns the response that toResponse builds for each request's path.
@@ -174,7 +165,7 @@ test("the budget read parses the spend and the maximum budget, and reads a failu
 // a user with no key, a key with no maximum, and a failed read each count as not spent
 test("a budget is spent only at or past its maximum, and never with no key, no maximum, or a failed read", async () => {
 	// a user whose key has spent less than, exactly, and more than its three dollar maximum
-	const sentQueries = stubConnectionPool(() => [toUserRow("sk-user")])
+	const sentQueries = stubConnectionPoolInCallOrder(() => [toUserRow("sk-user")])
 	for (const [spendDollars, isBudgetExhausted] of [
 		[2.99, false],
 		[3, true],
@@ -192,7 +183,7 @@ test("a budget is spent only at or past its maximum, and never with no key, no m
 	expect(await isUserLiteLLMKeyBudgetExhausted("user-1")).toBe(false)
 
 	// a user with no key counts as not spent, with no request sent to the proxy
-	stubConnectionPool(() => [toUserRow(null)])
+	stubConnectionPoolInCallOrder(() => [toUserRow(null)])
 	const proxyRequests = stubProxy(() => Response.json({ info: { spend: 5, max_budget: 3 } }))
 	expect(await isUserLiteLLMKeyBudgetExhausted("user-1")).toBe(false)
 	expect(proxyRequests).toHaveLength(0)
@@ -200,7 +191,7 @@ test("a budget is spent only at or past its maximum, and never with no key, no m
 
 // a stored key is returned without a call to the proxy
 test("a stored key is returned without a proxy call", async () => {
-	stubConnectionPool(() => [toUserRow("sk-stored")])
+	stubConnectionPoolInCallOrder(() => [toUserRow("sk-stored")])
 	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
 	expect(await loadOrProvisionUserLiteLLMKey("user-1")).toBe("sk-stored")
 	expect(proxyRequests).toHaveLength(0)
@@ -210,7 +201,7 @@ test("a stored key is returned without a proxy call", async () => {
 // the key and its creation time are stored on the user's row only if that row still has no key
 test("a missing key is created at the user's budget and stored with its creation time", async () => {
 	// a user with no key, whose conditional update stores the new key
-	const sentQueries = stubConnectionPool((sentQuery) =>
+	const sentQueries = stubConnectionPoolInCallOrder((sentQuery) =>
 		sentQuery.text.startsWith("update") ? [["user-1"]] : [toUserRow(null)],
 	)
 	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
@@ -239,7 +230,7 @@ test("a budget that changes while the key is created deletes the created key and
 	// the first read finds a $12.34 budget override and the second read finds a $50 budget override, both with no key.
 	// an update matches the row only if the update names the $50 budget override that the row has now
 	const userRows = [toUserRow(null), ["carl@example.com", null, "user", "free", 5000]]
-	const sentQueries = stubConnectionPool((sentQuery) => {
+	const sentQueries = stubConnectionPoolInCallOrder((sentQuery) => {
 		if (!sentQuery.text.startsWith("update")) {
 			return userRows.splice(0, 1)
 		}
@@ -274,7 +265,7 @@ test("a budget that changes while the key is created deletes the created key and
 test("a lost race deletes the created key and returns the stored key", async () => {
 	// the first read finds no key, the conditional update matches no row, and the second read finds the other call's key
 	const userRows = [toUserRow(null), toUserRow("sk-stored")]
-	stubConnectionPool((sentQuery) => (sentQuery.text.startsWith("update") ? [] : userRows.splice(0, 1)))
+	stubConnectionPoolInCallOrder((sentQuery) => (sentQuery.text.startsWith("update") ? [] : userRows.splice(0, 1)))
 	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
 
 	// the stored key is returned, and the created key is deleted
@@ -287,7 +278,7 @@ test("a lost race deletes the created key and returns the stored key", async () 
 test("a lost race whose key delete fails still returns the stored key and reports the failure", async () => {
 	// the lost race, a spy on the error report, and a proxy that creates the key and fails the delete
 	const userRows = [toUserRow(null), toUserRow("sk-stored")]
-	stubConnectionPool((sentQuery) => (sentQuery.text.startsWith("update") ? [] : userRows.splice(0, 1)))
+	stubConnectionPoolInCallOrder((sentQuery) => (sentQuery.text.startsWith("update") ? [] : userRows.splice(0, 1)))
 	const reportErrorSpy = quietErrorReports()
 	stubProxy((path) =>
 		path === "/key/generate" ? Response.json({ key: "sk-new" }) : new Response("no", { status: 500 }),
@@ -301,7 +292,7 @@ test("a lost race whose key delete fails still returns the stored key and report
 // if the store fails, the created key is deleted from the proxy and the store's error is thrown
 test("a failed store deletes the created key and throws the store's error", async () => {
 	// a user with no key and an update that fails, and a proxy that creates the key
-	stubConnectionPool((sentQuery) => {
+	stubConnectionPoolInCallOrder((sentQuery) => {
 		if (sentQuery.text.startsWith("update")) {
 			throw new Error("connection lost")
 		}
@@ -319,7 +310,7 @@ test("a failed store deletes the created key and throws the store's error", asyn
 test("an update that stores the key and still throws an error keeps and returns the stored key", async () => {
 	// the first read finds no key, the update throws an error, and the second read finds the created key on the row
 	const userRows = [toUserRow(null), toUserRow("sk-new")]
-	stubConnectionPool((sentQuery) => {
+	stubConnectionPoolInCallOrder((sentQuery) => {
 		if (sentQuery.text.startsWith("update")) {
 			throw new Error("connection lost")
 		}
@@ -335,12 +326,12 @@ test("an update that stores the key and still throws an error keeps and returns 
 // a key that the proxy cannot create and a user whose row is gone each throw an error
 test("a failed key creation and a missing user each throw an error", async () => {
 	// a user with no key and a proxy that cannot create a key
-	stubConnectionPool(() => [toUserRow(null)])
+	stubConnectionPoolInCallOrder(() => [toUserRow(null)])
 	stubFailingProxy()
 	await expect(loadOrProvisionUserLiteLLMKey("user-1")).rejects.toThrow("litellm key/generate failed: 500")
 
 	// a user whose row is gone
-	stubConnectionPool(() => [])
+	stubConnectionPoolInCallOrder(() => [])
 	await expect(loadOrProvisionUserLiteLLMKey("user-1")).rejects.toThrow("user user-1 not found")
 })
 
@@ -348,8 +339,8 @@ test("a failed key creation and a missing user each throw an error", async () =>
 // a key that the proxy cannot create fails the Scan
 test("a Scan whose owner's key cannot be created fails before its Sources run", async () => {
 	// a scan row owned by a user with no key
-	const scanRow = Object.keys(getTableColumns(scans)).map((columnName) => (columnName === "ownerId" ? "user-1" : null))
-	const sentQueries = stubConnectionPool((sentQuery) => {
+	const scanRow = toTableRow(scans, { ownerId: "user-1" })
+	const sentQueries = stubConnectionPoolInCallOrder((sentQuery) => {
 		if (sentQuery.text.includes('from "scans"')) {
 			return [scanRow]
 		}
@@ -370,7 +361,7 @@ test("a Scan whose owner's key cannot be created fails before its Sources run", 
 // a key that the proxy cannot create fails the summary, and an attachment that is gone throws an error
 test("an attachment summary fails before its model call if the owner's key cannot be created, and for a missing attachment", async () => {
 	// an attachment whose topic owner has no key, a proxy that cannot create a key, and a spy on the model call
-	const sentQueries = stubConnectionPool((sentQuery) =>
+	const sentQueries = stubConnectionPoolInCallOrder((sentQuery) =>
 		sentQuery.text.includes('from "attachments"') ? [["user-1"]] : [toUserRow(null)],
 	)
 	stubFailingProxy()
@@ -382,7 +373,7 @@ test("an attachment summary fails before its model call if the owner's key canno
 	expect(generateAttachmentContextSpy).not.toHaveBeenCalled()
 
 	// an attachment that is gone
-	stubConnectionPool(() => [])
+	stubConnectionPoolInCallOrder(() => [])
 	await expect(summarizeChunk("attachment-1", "chunk text")).rejects.toThrow("attachment attachment-1 not found")
 })
 
@@ -390,7 +381,7 @@ test("an attachment summary fails before its model call if the owner's key canno
 // the old key is deleted only after the store
 test("a key replacement creates the new key at the user's budget, stores the new key, and then deletes the old key", async () => {
 	// a user with a stored key and a $12.34 budget override, whose update stores the new key
-	const sentQueries = stubConnectionPool((sentQuery) =>
+	const sentQueries = stubConnectionPoolInCallOrder((sentQuery) =>
 		sentQuery.text.startsWith("update") ? [["user-1"]] : [toUserRow("sk-old")],
 	)
 	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
@@ -410,7 +401,7 @@ test("a key replacement creates the new key at the user's budget, stores the new
 // the new key is deleted, and the old key is kept
 test("a key replacement for a user whose row is gone deletes the new key and keeps the old key", async () => {
 	// a user with a stored key, whose update matches no row
-	stubConnectionPool((sentQuery) => (sentQuery.text.startsWith("update") ? [] : [toUserRow("sk-old")]))
+	stubConnectionPoolInCallOrder((sentQuery) => (sentQuery.text.startsWith("update") ? [] : [toUserRow("sk-old")]))
 	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
 
 	// the replacement returns true, and the only key deleted is the new key
@@ -422,19 +413,19 @@ test("a key replacement for a user whose row is gone deletes the new key and kee
 // a user with no key has nothing to replace. a replacement that fails returns false and leaves the old key stored
 test("a key replacement does nothing for a user with no key, and returns false if the replacement fails", async () => {
 	// a replacement for a user with no key returns true, with no request sent to the proxy
-	stubConnectionPool(() => [toUserRow(null)])
+	stubConnectionPoolInCallOrder(() => [toUserRow(null)])
 	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
 	expect(await replaceUserLiteLLMKey("user-1")).toBe(true)
 	expect(proxyRequests).toHaveLength(0)
 
 	// the replacement returns false if the proxy cannot create the new key, and nothing is stored
-	const sentQueries = stubConnectionPool(() => [toUserRow("sk-old")])
+	const sentQueries = stubConnectionPoolInCallOrder(() => [toUserRow("sk-old")])
 	stubFailingProxy()
 	expect(await replaceUserLiteLLMKey("user-1")).toBe(false)
 	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("update"))).toBe(false)
 
 	// a user with a stored key and an update that fails, and a proxy that creates the new key
-	stubConnectionPool((sentQuery) => {
+	stubConnectionPoolInCallOrder((sentQuery) => {
 		if (sentQuery.text.startsWith("update")) {
 			throw new Error("connection lost")
 		}
@@ -460,7 +451,7 @@ test("the month the reset compares a key against begins at utc midnight on the f
 // the reset replaces keys four at a time. one user's failed replacement is counted, and the other five keys are replaced
 test("the reset runs at most four replacements at once and counts a failure separately", async () => {
 	// six due users from the stubbed connection pool, as the array rows that the driver returns
-	stubConnectionPool(() => [["u1"], ["u2"], ["u3"], ["u4"], ["u5"], ["u6"]])
+	stubConnectionPoolInCallOrder(() => [["u1"], ["u2"], ["u3"], ["u4"], ["u5"], ["u6"]])
 
 	// a stand-in key replacement that counts how many replacements run at once and fails for u3
 	let inFlightCount = 0

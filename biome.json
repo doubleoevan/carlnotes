@@ -17,6 +17,7 @@
 			"!db/migrations",
 			"!docs/design",
 			"!docs/public",
+			"!evals/results",
 			"!ui/public",
 			"!ui/src/routeTree.gen.ts"
 		]

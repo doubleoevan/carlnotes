@@ -3,7 +3,7 @@
 import type { ChatToolCall } from "@shared/contracts"
 import type { ChatHistoryTurn } from "../../worker/chat"
 import type { ChatContext } from "../../worker/chat/retrieve"
-import { TOPIC_CHAT_CONTEXT } from "../topic-chat/topicChatCases"
+import { BURRNOTES_TOPIC_SOURCE_ID, TOPIC_CHAT_CONTEXT } from "../topic-chat/topicChatCases"
 
 // one case. what it tests, where the turn happens, the conversation so far, and the tool call that the turn has to make
 export type TopicChatToolsCase = {
@@ -36,6 +36,24 @@ const FORUM_FEED_PROPOSAL_CHAT_TURN: ChatHistoryTurn = {
 	answer:
 		"I'd add the Home-Barista forum feed as an rss source. It's where people post grinder noise measurements first. Say yes and I'll add it.",
 	toolCalls: [toProposeTopicEditCall({ addSources: [{ sourceOption: "rss", value: FORUM_FEED_URL }] })],
+}
+
+// carl's proposal to drop the burrnotes feed, with the proposeTopicEdit call that a chat turn replays
+const BURRNOTES_REMOVAL_PROPOSAL_CHAT_TURN: ChatHistoryTurn = {
+	question: "Drop the burrnotes feed, it's mostly reposts now.",
+	answer:
+		"I'd remove the burrnotes.example feed. The web search stays, and nothing else changes. Say yes and I'll remove it.",
+	toolCalls: [toProposeTopicEditCall({ removeSourceIds: [BURRNOTES_TOPIC_SOURCE_ID] })],
+}
+
+// the prompt that carl proposes for lever machines, and his proposal with the proposeTopicEdit call that a chat turn
+// replays
+const LEVER_TOPIC_PROMPT =
+	"Home espresso on lever machines: spring and manual levers, keeping them running, and recipes that suit them. Skip commercial machines."
+const LEVER_TOPIC_PROMPT_PROPOSAL_CHAT_TURN: ChatHistoryTurn = {
+	question: "Rewrite the prompt so it's about lever espresso machines.",
+	answer: `I'd change the prompt to: ${LEVER_TOPIC_PROMPT} Say yes and I'll save it.`,
+	toolCalls: [toProposeTopicEditCall({ prompt: LEVER_TOPIC_PROMPT })],
 }
 
 // the cases, each one turn about the same topic
@@ -77,6 +95,60 @@ export const TOPIC_CHAT_TOOLS_CASES: TopicChatToolsCase[] = [
 		history: [FORUM_FEED_PROPOSAL_CHAT_TURN],
 		question: "yes please",
 		expectedToolCall: { toolName: "addSource", isInputExpected: (input) => input.value === FORUM_FEED_URL },
+	},
+	{
+		description: "a source removal is proposed with the source's id",
+		chatKind: "solo",
+		history: [],
+		question: BURRNOTES_REMOVAL_PROPOSAL_CHAT_TURN.question,
+		expectedToolCall: {
+			toolName: "proposeTopicEdit",
+			isInputExpected: (input) =>
+				Array.isArray(input.removeSourceIds) && input.removeSourceIds.includes(BURRNOTES_TOPIC_SOURCE_ID),
+		},
+	},
+	{
+		description: "a yes to a proposed removal removes the source",
+		chatKind: "solo",
+		history: [BURRNOTES_REMOVAL_PROPOSAL_CHAT_TURN],
+		question: "yes",
+		expectedToolCall: {
+			toolName: "removeSource",
+			isInputExpected: (input) => input.sourceId === BURRNOTES_TOPIC_SOURCE_ID,
+		},
+	},
+	{
+		description: "a new prompt is proposed",
+		chatKind: "solo",
+		history: [],
+		question: LEVER_TOPIC_PROMPT_PROPOSAL_CHAT_TURN.question,
+		expectedToolCall: {
+			toolName: "proposeTopicEdit",
+			isInputExpected: (input) =>
+				String(input.prompt ?? "")
+					.toLowerCase()
+					.includes("lever"),
+		},
+	},
+	{
+		description: "a yes to a proposed prompt saves it",
+		chatKind: "solo",
+		history: [LEVER_TOPIC_PROMPT_PROPOSAL_CHAT_TURN],
+		question: "yes, save it",
+		expectedToolCall: {
+			toolName: "updateTopicPrompt",
+			isInputExpected: (input) =>
+				String(input.prompt ?? "")
+					.toLowerCase()
+					.includes("lever"),
+		},
+	},
+	{
+		description: "a decline takes the preview back and saves nothing",
+		chatKind: "solo",
+		history: [DAILY_PROPOSAL_CHAT_TURN],
+		question: "no, leave it on Saturdays",
+		expectedToolCall: { toolName: "cancelTopicEdit", isInputExpected: () => true },
 	},
 	{
 		description: "a question about the findings calls no tool",
@@ -133,8 +205,10 @@ export const TOPIC_CHAT_TOOLS_CASES: TopicChatToolsCase[] = [
 	},
 ]
 
-// a proposeTopicEdit call with the output that the real tool returns
-function toProposeTopicEditCall(proposedTopicEdit: Record<string, unknown>): ChatToolCall {
+/**
+ * Returns a proposeTopicEdit call with the output that the real tool returns.
+ */
+export function toProposeTopicEditCall(proposedTopicEdit: Record<string, unknown>): ChatToolCall {
 	return {
 		toolName: "proposeTopicEdit",
 		input: proposedTopicEdit,

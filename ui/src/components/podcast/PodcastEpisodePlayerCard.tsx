@@ -1,31 +1,22 @@
 import type { PodcastEpisode } from "@shared/contracts"
-import { AI_VOICES_NOTE } from "@shared/podcastEpisodes"
-import { Pause, Play, RotateCcw, RotateCw, Rss } from "lucide-react"
+import { Pause, Play, Rss } from "lucide-react"
 import { useState } from "react"
-import { AnchorLink } from "@/components/common/AnchorLink"
+import { PlaybackSpeedButton, SkipPlaybackButtons } from "@/components/podcast/PlaybackControlButtons"
 import {
 	type ChapterTopicFeed,
 	PodcastEpisodeChapters,
 	SHOWN_CHAPTER_COUNT,
 } from "@/components/podcast/PodcastEpisodeChapters"
+import { PodcastEpisodeDetails } from "@/components/podcast/PodcastEpisodeDetails"
+import { RemovePodcastEpisodeButton } from "@/components/podcast/RemovePodcastEpisodeDialog"
 import { MoreButton } from "@/components/topic/MoreButton"
-import { toClockLabel, toPodcastEpisodeDateLabel, toPodcastEpisodeDurationLabel } from "@/lib/labels"
-import {
-	INFO_CARD_CLASS,
-	MENU_BUTTON_CLASS,
-	PLAY_BUTTON_CLASS,
-	PLAYBACK_CONTROL_BUTTON_CLASS,
-	SCRIPTED_ONLY_CLASS,
-} from "@/lib/styleClasses"
+import { toClockLabel } from "@/lib/labels"
+import { toChapterIndexAt } from "@/lib/podcastEpisodePlayback"
+import { INFO_CARD_CLASS, MENU_BUTTON_CLASS, PLAY_BUTTON_CLASS, SCRIPTED_ONLY_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import {
-	cyclePlaybackRate,
 	playPodcastEpisode,
-	SKIP_BACK_SECONDS,
-	SKIP_FORWARD_SECONDS,
 	seekPlaybackTo,
-	skipPlaybackBy,
-	toChapterIndexAt,
 	togglePlayback,
 	usePlayerPositionSeconds,
 	usePodcastEpisodePlayer,
@@ -45,16 +36,19 @@ type PodcastEpisodePlayerCardProps = {
 	podcastEpisodePath?: string
 	chapterTopicFeed: ChapterTopicFeed
 	onOpenPodcastFeedDialog: () => void
+	// the call that opens the remove dialog, passed only if the user may remove the podcast episode
+	onRemovePodcastEpisode?: () => void
 }
 
 /**
- * A published podcast episode's player card, with the seek bar, the chapter list, and the podcast feed button.
+ * A published podcast episode's player card, with its seek bar, chapters, podcast feed button, and remove button.
  */
 export function PodcastEpisodePlayerCard({
 	podcastEpisode,
 	podcastEpisodePath,
 	chapterTopicFeed,
 	onOpenPodcastFeedDialog,
+	onRemovePodcastEpisode,
 }: PodcastEpisodePlayerCardProps) {
 	// the position that this card shows, and the chapter at that position.
 	// a podcast episode that is not loaded shows the user's saved progress
@@ -106,14 +100,25 @@ export function PodcastEpisodePlayerCard({
 					</div>
 
 					{/* the skip and playback rate buttons once the podcast episode is loaded,
-					    and the podcast feed button on a wide screen */}
+					    the podcast feed button on a wide screen, and the remove button */}
 					<div className="flex shrink-0 items-center gap-1.5">
-						{isPodcastEpisodeLoaded && <PlaybackControls playbackRate={playbackRate} />}
+						{isPodcastEpisodeLoaded && (
+							<>
+								<SkipPlaybackButtons />
+								<PlaybackSpeedButton playbackRate={playbackRate} />
+							</>
+						)}
 						<PodcastFeedButton
 							onOpenPodcastFeedDialog={onOpenPodcastFeedDialog}
 							className="hidden sm:flex"
 							label="Subscribe"
 						/>
+						{onRemovePodcastEpisode && (
+							<RemovePodcastEpisodeButton
+								episodeNumber={podcastEpisode.episodeNumber}
+								onRemovePodcastEpisode={onRemovePodcastEpisode}
+							/>
+						)}
 					</div>
 				</div>
 
@@ -146,80 +151,6 @@ export function PodcastEpisodePlayerCard({
 					className={SCRIPTED_ONLY_CLASS}
 				/>
 			)}
-		</>
-	)
-}
-
-// the podcast episode, the path of its own page if the title links there, and the index of the player's chapter
-type PodcastEpisodeDetailsProps = {
-	podcastEpisode: PodcastEpisode
-	podcastEpisodePath?: string
-	playerChapterIndex: number | null
-}
-
-// the podcast episode's season and episode number, its title, and a line with its date, its duration, its chapter count,
-// and the AI voices note. the player's chapter shows in place of that line if the episode is loaded
-function PodcastEpisodeDetails({ podcastEpisode, podcastEpisodePath, playerChapterIndex }: PodcastEpisodeDetailsProps) {
-	const playerChapter = playerChapterIndex === null ? undefined : podcastEpisode.chapters[playerChapterIndex]
-	return (
-		<div className="flex min-w-0 flex-1 flex-col gap-0.5">
-			{/* the season and episode number */}
-			<div className="text-muted-foreground font-display text-sm tracking-wide">
-				{`Season ${podcastEpisode.season} · Episode ${podcastEpisode.episodeNumber}`}
-			</div>
-			{/* the title, linked to the podcast episode's own page if there is a path */}
-			<div className="text-lg leading-snug font-bold">
-				{podcastEpisodePath ? (
-					<AnchorLink href={podcastEpisodePath} className="hover:underline">
-						{podcastEpisode.title}
-					</AnchorLink>
-				) : (
-					podcastEpisode.title
-				)}
-			</div>
-			{/* the player's chapter, or the date, duration, chapter count, and AI voices note */}
-			<div className="text-muted-foreground text-xs sm:text-[0.8125rem]" suppressHydrationWarning>
-				{playerChapter && playerChapterIndex !== null
-					? `Chapter ${playerChapterIndex + 1} of ${podcastEpisode.chapters.length} · ${playerChapter.title}`
-					: [
-							toPodcastEpisodeDateLabel(podcastEpisode.publishedAt),
-							toPodcastEpisodeDurationLabel(podcastEpisode.durationSeconds),
-							`${podcastEpisode.chapters.length} chapters`,
-							AI_VOICES_NOTE,
-						].join(" · ")}
-			</div>
-		</div>
-	)
-}
-
-// the skip back, skip forward, and playback rate buttons of the loaded podcast episode
-function PlaybackControls({ playbackRate }: { playbackRate: number }) {
-	return (
-		<>
-			<button
-				type="button"
-				aria-label={`Back ${SKIP_BACK_SECONDS} seconds`}
-				onClick={() => skipPlaybackBy(-SKIP_BACK_SECONDS)}
-				className={PLAYBACK_CONTROL_BUTTON_CLASS}
-			>
-				<RotateCcw className="size-4.5" />
-			</button>
-			<button
-				type="button"
-				aria-label={`Forward ${SKIP_FORWARD_SECONDS} seconds`}
-				onClick={() => skipPlaybackBy(SKIP_FORWARD_SECONDS)}
-				className={PLAYBACK_CONTROL_BUTTON_CLASS}
-			>
-				<RotateCw className="size-4.5" />
-			</button>
-			<button
-				type="button"
-				aria-label="Playback speed"
-				onClick={cyclePlaybackRate}
-				className={PLAYBACK_CONTROL_BUTTON_CLASS}
-			>
-				{`${playbackRate}x`}
-			</button>
 		</>
 	)
 }

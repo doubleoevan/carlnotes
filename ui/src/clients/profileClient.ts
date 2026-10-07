@@ -1,5 +1,5 @@
 // the user profile api client
-import type { ProfileResponse, UserSearchResult } from "@shared/contracts"
+import type { ProfileResponse, ProfileTeamStatus, UserSearchResult } from "@shared/contracts"
 import { apiClient } from "./apiClient"
 
 // a user's public profile by id, or null if there is no such user
@@ -62,25 +62,13 @@ export async function sendDeleteAccount(): Promise<void> {
 	}
 }
 
-// a Team Up menu option from the api: a user's team and their team member status
-export type TeamMenuOption = {
-	teamId: string
-	name: string
-	avatarVersion: string | null
-	role: "leader" | "member"
-	status: "member" | "invited" | "none"
-	inviteId: string | null
-	// whether the user may delete the invitation: a team leader can delete any. a team member can only delete their own.
-	canDeleteInvite: boolean
-}
-
-// the user's teams with this profile's status in each, for the Team Up menu
-export async function fetchTeamOptions(profileUserId: string): Promise<TeamMenuOption[]> {
-	const response = await fetch(`/api/profiles/${encodeURIComponent(profileUserId)}/team-up`)
+// the user's teams, each with the profile user's status there
+export async function fetchProfileTeamStatuses(profileUserId: string): Promise<ProfileTeamStatus[]> {
+	const response = await fetch(`/api/profiles/${encodeURIComponent(profileUserId)}/team-statuses`)
 	if (!response.ok) {
-		throw new Error(`team-up menu failed: ${response.status}`)
+		throw new Error(`profile team statuses load failed: ${response.status}`)
 	}
-	return ((await response.json()) as { teams: TeamMenuOption[] }).teams
+	return ((await response.json()) as { teams: ProfileTeamStatus[] }).teams
 }
 
 // set who may invite the user: anyone, connected senders, or nobody

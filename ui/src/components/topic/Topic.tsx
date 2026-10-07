@@ -9,6 +9,7 @@ import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
+import { LatestPodcastEpisodePlayButton } from "@/components/podcast/LatestPodcastEpisodePlayButton"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -16,19 +17,17 @@ import { ShareTopic } from "@/components/share/ShareTopic"
 import { TeamLink } from "@/components/team/TeamLink"
 import { TopicInfo } from "@/components/topic/TopicInfo"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
-import {
-	POPOVER_PANEL_CLASS,
-	RAIL_BARE_ICON_INSET,
-	RAIL_TEXT_INSET,
-	RESOURCE_LIST_CARD_CLASS,
-} from "@/lib/styleClasses"
+import { POPOVER_PANEL_CLASS, RAIL_BARE_ICON_INSET, RAIL_TEXT_INSET } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
-import { MoreButton } from "./MoreButton"
-import { TopicResource } from "./TopicResource"
+import { TopicFindingList } from "./TopicFindingsSection"
 
-// the max resource rows shown before the "+ # more" expander
-const MAX_RESOURCES = 5
+// the note icon's button and the play button beside the note icon, in a heading's own text flow and beside a heading.
+// each tap area reaches past the tile, so the icons sit close together on a phone too. inline, the first icon keeps
+// the gap from the title that a heading's row gives
+const INLINE_ICON_BUTTON_CLASS =
+	"relative ml-2.5 inline-grid size-5 -translate-y-1 place-items-center align-middle before:absolute before:-inset-3 before:content-['']"
+const ICON_BUTTON_CLASS = "relative grid size-7 place-items-center before:absolute before:-inset-2 before:content-['']"
 
 // the topic feed and its position in the section. the position staggers the entrance animation
 type TopicProps = { topic: TopicFeed; index: number }
@@ -52,14 +51,6 @@ export function TopicByline({ topic, className }: TopicBylineProps) {
  * It stays hidden until scrolled into view, then plays the hydrate animation.
  */
 export function Topic({ topic, index }: TopicProps) {
-	const [isExpanded, setIsExpanded] = useState(false)
-
-	// limit the resources shown unless the topic is expanded
-	const resourcesShown = isExpanded ? topic.findings : topic.findings.slice(0, MAX_RESOURCES)
-	const moreResourcesCount = topic.findings.length - MAX_RESOURCES
-	// bookmarked rows sort first, so this count is exactly how many of the rows shown are pinned instead of being numbered
-	const pinnedShownCount = resourcesShown.filter((resource) => resource.isBookmarked).length
-
 	// a card the server rendered is shown at once, and one rendered in the browser fades in as it scrolls into view
 	const { ref, revealClassName } = useRevealClassName<HTMLDivElement>({ isAnimatedOnServer: false })
 	return (
@@ -116,32 +107,17 @@ export function Topic({ topic, index }: TopicProps) {
 					</div>
 				)}
 			</div>
-			{/* resource rows, each drawing its own dashed separator */}
-			<div className={cn(RESOURCE_LIST_CARD_CLASS, "mt-1.5 p-1")}>
-				{resourcesShown.map((resource, index) => (
-					<TopicResource
-						key={resource.findingId}
-						resource={resource}
-						rank={resource.isBookmarked ? null : index - pinnedShownCount + 1}
-						isRatable={topic.canRate}
-						isBookmarkable={topic.isTopicOwner || topic.isTeamMember}
-						topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
-					/>
-				))}
-				{resourcesShown.length === 0 && (
-					<p className="text-muted-foreground py-3 pl-2 text-sm">
-						Nothing new worth your time yet. Carl has standards.
-					</p>
-				)}
-			</div>
-			{moreResourcesCount > 0 && (
-				<MoreButton
-					isExpanded={isExpanded}
-					moreLabel={`+ ${moreResourcesCount} more `}
-					onToggle={() => setIsExpanded(!isExpanded)}
-					className="pl-12"
-				/>
-			)}
+			{/* the topic finding rows, with the latest podcast episode's chapter pills */}
+			<TopicFindingList
+				topicFindings={topic.findings}
+				isRatable={topic.canRate}
+				isBookmarkable={topic.isTopicOwner || topic.isTeamMember}
+				topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
+				latestPodcastEpisode={topic.latestPodcastEpisode}
+				emptyText="Nothing new worth your time yet. Carl has standards."
+				className="mt-1.5"
+				moreButtonClassName="pl-12"
+			/>
 		</div>
 	)
 }
@@ -205,35 +181,48 @@ export function TopicInfoPopover({
 	const isHintOpen = hintFromCaller ?? hintOpenHere
 	const setIsHintOpen = onHintOpenChange ?? setHintOpenHere
 
-	// the topic note popover
-	const note = (
-		<Popover open={isOpen} onOpenChange={setIsOpen}>
-			<Tooltip open={isHintOpen && !isOpen} onOpenChange={setIsHintOpen}>
-				<TooltipTrigger asChild>
-					<PopoverTrigger
-						onClick={(event) => event.stopPropagation()}
-						className={cn(
-							"hover:opacity-75 shrink-0",
-							// for inline, the icon is a 20px tile in the text
-							isInline
-								? "relative ml-1 inline-grid size-5 -translate-y-1 place-items-center align-middle before:absolute before:-inset-3 before:content-['']"
-								: "grid size-11 place-items-center sm:size-7",
-						)}
-						aria-label="Topic details"
-					>
-						<NoteIcon />
-					</PopoverTrigger>
-				</TooltipTrigger>
-				<TooltipContent side="top">A topic note from Carl</TooltipContent>
-			</Tooltip>
-			<PopoverContent onClick={(event) => event.stopPropagation()} align="start" className={POPOVER_PANEL_CLASS}>
-				<PopoverCloseButton />
-				<TopicInfo topic={topic} />
-			</PopoverContent>
-		</Popover>
+	// the latest podcast episode's play button, then the topic note popover. inline, each icon is a tile in the text
+	const iconButtonClass = isInline ? INLINE_ICON_BUTTON_CLASS : ICON_BUTTON_CLASS
+	const iconButtons = (
+		<>
+			{topic.latestPodcastEpisode && (
+				<LatestPodcastEpisodePlayButton
+					podcastEpisode={topic.latestPodcastEpisode}
+					className={iconButtonClass}
+					// the play button's own tooltip replaces the note hint that a heading around the play button opens
+					onMouseEnter={() => setTimeout(() => setIsHintOpen(false), 0)}
+				/>
+			)}
+			<Popover open={isOpen} onOpenChange={setIsOpen}>
+				<Tooltip open={isHintOpen && !isOpen} onOpenChange={setIsHintOpen}>
+					<TooltipTrigger asChild>
+						<PopoverTrigger
+							onClick={(event) => event.stopPropagation()}
+							className={cn(
+								"hover:opacity-75 shrink-0",
+								iconButtonClass,
+								// inline, the note icon keeps a gap from the play button, whose tile overflows its slot
+								isInline && topic.latestPodcastEpisode && "ml-2",
+							)}
+							aria-label="Topic details"
+						>
+							<NoteIcon />
+						</PopoverTrigger>
+					</TooltipTrigger>
+					<TooltipContent side="top">A topic note from Carl</TooltipContent>
+				</Tooltip>
+				<PopoverContent onClick={(event) => event.stopPropagation()} align="start" className={POPOVER_PANEL_CLASS}>
+					<PopoverCloseButton />
+					<TopicInfo topic={topic} />
+				</PopoverContent>
+			</Popover>
+		</>
 	)
+
+	// inline, the icons sit in the heading's own text. beside a heading, a box around the icons keeps the row's gap from between the icons
+	const iconButtonGroup = isInline ? iconButtons : <div className="flex shrink-0 items-center">{iconButtons}</div>
 	if (!children) {
-		return note
+		return iconButtonGroup
 	}
 
 	// clicking the children opens the note popover
@@ -247,7 +236,7 @@ export function TopicInfoPopover({
 			className="flex min-w-0 cursor-pointer items-start gap-1"
 		>
 			{children}
-			{note}
+			{iconButtonGroup}
 		</div>
 	)
 }

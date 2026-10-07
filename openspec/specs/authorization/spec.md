@@ -211,15 +211,36 @@ Closing one's own account SHALL NOT be gated by this capability, since it needs 
 - **WHEN** a signed-in user closes their own account
 - **THEN** the route requires only their session, and does not ask the gate for `admin:deleteUser`
 
-### Requirement: The gate decides whether a Topic may render a Podcast Episode
+### Requirement: The gate decides whether a user may remove a Podcast Episode
+
+`isAllowed(user, "podcastEpisode:remove", topic)` SHALL decide whether a user may remove a Podcast Episode of a Topic. It SHALL
+be true for the Topic's owner and for an admin, and false for everyone else, a team leader and a subscriber included.
+The removal route SHALL ask the gate before it deletes anything, and the topic page SHALL read the same result to show
+the remove control.
+
+#### Scenario: The owner may remove
+
+- **WHEN** a Topic's owner asks to remove one of its Podcast Episodes
+- **THEN** the gate allows it
+
+#### Scenario: An admin may remove
+
+- **WHEN** an admin asks to remove a Podcast Episode of another user's Topic
+- **THEN** the gate allows it
+
+#### Scenario: A subscriber may not remove
+
+- **WHEN** a subscriber of the Topic asks to remove one of its Podcast Episodes
+- **THEN** the gate rejects it
+
+### Requirement: The gate decides whether a Topic may render a Podcast Episode, counting only rendering and published Podcast Episodes
 
 `isAllowed(user, "podcastEpisode:render", topic)` SHALL decide whether a Topic may render a Podcast Episode, read for the
 Topic's owner, whose plan funds it. It SHALL be true for an owner on a paid plan and for an owner who is an admin. For
-an owner on the free plan it SHALL be true only while that Topic has no rendering, published, or removed Podcast
-Episode, so each Topic on the free plan renders its first Podcast Episode and no more. A failed Podcast Episode does not
-count. The episode workflow SHALL check the same rule before it spends anything, the settings tool SHALL ask it before
-it turns a Topic's podcast on, and the topic page SHALL read the same result to show the upgrade link on that Topic's
-podcast switch.
+an owner on the free plan it SHALL be true only while that Topic has no rendering or published Podcast Episode, so each
+Topic on the free plan has one Podcast Episode at a time. A failed or removed Podcast Episode does not count. The
+episode workflow SHALL check the same rule before it spends anything, the settings tool SHALL ask it before it turns a
+Topic's podcast on, and the topic page SHALL read the same result to show the upgrade link on that Topic's podcast switch.
 
 #### Scenario: A paid plan renders
 
@@ -250,11 +271,11 @@ podcast switch.
 - **WHEN** its next Scan succeeds
 - **THEN** the gate allows the render
 
-#### Scenario: Removing the Podcast Episode of a Topic on the free plan does not earn another
+#### Scenario: Removing the Podcast Episode of a Topic on the free plan lets the Topic render a new Podcast Episode
 
 - **GIVEN** a Topic on the free plan whose owner removed its one Podcast Episode
 - **WHEN** the Topic's next Scan succeeds
-- **THEN** `podcastEpisode:render` is rejected for that Topic, and no Podcast Episode is rendered
+- **THEN** the gate allows the render
 
 #### Scenario: Each Topic on the free plan gets its own first Podcast Episode
 
@@ -267,26 +288,4 @@ podcast switch.
 - **GIVEN** a Topic on the free plan that has used its Podcast Episode
 - **WHEN** the owner moves to a paid plan and the Topic's next Scan succeeds
 - **THEN** the gate allows the render
-
-### Requirement: The gate decides whether a user may remove a Podcast Episode
-
-`isAllowed(user, "podcastEpisode:remove", topic)` SHALL decide whether a user may remove a Podcast Episode of a Topic. It SHALL
-be true for the Topic's owner and for an admin, and false for everyone else, a team leader and a subscriber included.
-The removal route SHALL ask the gate before it deletes anything, and the topic page SHALL read the same result to show
-the remove control.
-
-#### Scenario: The owner may remove
-
-- **WHEN** a Topic's owner asks to remove one of its Podcast Episodes
-- **THEN** the gate allows it
-
-#### Scenario: An admin may remove
-
-- **WHEN** an admin asks to remove a Podcast Episode of another user's Topic
-- **THEN** the gate allows it
-
-#### Scenario: A subscriber may not remove
-
-- **WHEN** a subscriber of the Topic asks to remove one of its Podcast Episodes
-- **THEN** the gate rejects it
 

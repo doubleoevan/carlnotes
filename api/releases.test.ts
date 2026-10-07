@@ -1,7 +1,7 @@
 // the release notes rules that hold without a database: the summary split, the webhook's signature check,
 // and what a GitHub release object becomes as a row
 import { expect, test } from "bun:test"
-import { connectionPool } from "../db"
+import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { isSignedByGitHub, releasesRoute, toReleaseSummary, toReleaseUpsert } from "./releases"
 
 // the header GitHub signs with, and the signature it would send for a body
@@ -150,8 +150,7 @@ test("a correctly signed request passes", async () => {
 // and read the response text
 async function postWebhook(payload: object): Promise<string> {
 	const body = JSON.stringify(payload)
-	const poolQuery = connectionPool.query
-	connectionPool.query = (() => Promise.resolve({ rows: [], fields: [] })) as unknown as typeof connectionPool.query
+	stubConnectionPool()
 
 	// post the delivery signed the way GitHub signs one
 	try {
@@ -163,7 +162,7 @@ async function postWebhook(payload: object): Promise<string> {
 		return await response.text()
 	} finally {
 		// put the pool's own query back, no matter how the post ends
-		connectionPool.query = poolQuery
+		restoreConnectionPool()
 	}
 }
 

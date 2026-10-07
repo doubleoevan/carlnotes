@@ -21,19 +21,24 @@ first, and each chapter says where its finding came from.
 
 The player sits at the top of the topic page, under the title. Press play, and the page follows
 along: the finding on air is highlighted, and each finding the episode covers is tagged with its
-chapter. Tap a tag or a chapter's title to jump there, and tap the rest of a chapter's row to open its
-finding.
+chapter. Tap a tag or a chapter's title to jump there, and tap the rest of a chapter's row to open its finding.
+
+The home feed plays it too. The play button beside a topic's name plays its latest episode, and hovering it names
+the episode, its date, and its length. The chapter tags show on the feed's findings and inside every finding's note,
+and a topic's **Topic roast** opens with its latest episode, ready to play.
 
 ![The Coffee Break player on a topic page: an episode paused on its first chapter, with the skip, speed, and
 Subscribe buttons beside it and the small player docked at the bottom](../../../assets/screenshots/podcast-player.png)
 
 - **Chapters.** One per finding. The scrubber is split by chapter, and the chapter list shows each
   one's source and times. A thumbs up or down on a chapter rates its finding, the same as rating
-  it in the list. On a phone, tap a chapter to open its finding and rate it there. A finding you
-  like or bookmark comes back in later episodes, right after the brew's new findings, and one you
+  it in the list. On a phone, tap a chapter to open its finding and rate it there. An episode picks
+  its findings by score. A like, a bookmark, or a page that is one of the topic's url sources lifts a
+  finding's score, so a finding you like or bookmark can come back in later episodes. One you
   rate down is never covered again. A chapter whose finding has left the list keeps its own
   rating, and the finding takes it if Carl finds that page again.
-- **Speed and skips.** Back 15 seconds, forward 30, and a speed control.
+- **Speed and skips.** Skip back 15 seconds, skip forward 30, and a speed control. The small player at the
+  bottom of the screen has both skips.
 - **It keeps playing.** Go to another page and the episode keeps playing in a small player at the
   bottom of the screen. Your phone's lock screen shows the episode and skips chapters.
 - **It remembers.** Signed in, an episode picks up where you stopped, on any device. When one
@@ -66,7 +71,8 @@ the topic's episodes, so keep it to yourself. **Reset my link** makes a new one 
 Unfollow the topic and your link stops working.
 
 Each episode also has its own page with the full transcript. On a public topic, that page is what a
-search engine reads.
+search engine reads. Its **⋮** actions menu adds the topic to a team, shares the topic, reports an issue with it,
+or adds CarlNotes to your AI.
 
 ![An episode's own page: its cover, title, and description above the player and the table of
 chapters](../../../assets/screenshots/podcast-episode-page.png)
@@ -80,8 +86,9 @@ Artisanal Blend card shows whether it's on. Off means no new episodes. The ones 
 ![The Podcast switch at the bottom of the edit form, on: Coffee Break episode after every
 brew](../../../assets/screenshots/podcast-switch.png)
 
-The owner can also remove a single episode from the episodes list. It leaves the page, every
-feed, and its own page for good, and its number is not used again.
+The owner can also remove a single episode: with the trash button on the player or in the episodes list, or with
+**Remove episode** in an episode page's **⋮** actions menu. It leaves the topic page, every feed, and its own page for good,
+and its number is not used again.
 
 ## When the mugs rest
 
@@ -93,7 +100,8 @@ month and brews keep running.
 
 | | Free | Plus | Premium |
 | --- | --- | --- | --- |
-| Episodes | One per topic | After every brew | After every brew |
+| Episodes | One at a time per topic | After every brew | After every brew |
 
-On the free plan, a topic's one episode is its first. After that the Podcast switch in the edit form shows the way to a
-plan that keeps episodes coming. See [Plans and limits](/docs/account/plans-and-limits/).
+On the free plan, a topic has one episode at a time. Remove it and the next brew makes a new one. Until then, the Podcast
+switch in the edit form shows the way to a plan that keeps episodes coming. See [Plans and
+limits](/docs/account/plans-and-limits/).

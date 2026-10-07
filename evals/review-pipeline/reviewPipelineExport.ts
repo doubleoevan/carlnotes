@@ -1,5 +1,6 @@
 // the review pipeline fixture export, from a public Topic's own Findings and other public topics' nearest Findings.
-// the fixture is committed without page bodies, which go to the gitignored page cache beside the fixture
+// the fixture is committed without page bodies, which go to the gitignored page cache beside the fixture.
+// a written row keeps its own text in the fixture
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { join } from "node:path"
 import { and, desc, eq, inArray, isNotNull, ne, notExists, sql } from "drizzle-orm"
@@ -27,7 +28,7 @@ type ExportedResourceRow = Omit<LabeledResource, "snippet" | "content" | "isRele
 }
 
 /**
- * Writes the fixture and its page cache for a public Topic, keeping the label of every Resource that it writes again.
+ * Writes the fixture and its page cache for a public Topic, keeping each earlier label and each written row.
  */
 export async function exportFixture(topicId: string): Promise<void> {
 	// load the topic
@@ -85,11 +86,14 @@ export async function exportFixture(topicId: string): Promise<void> {
 	mkdirSync(PAGE_CACHE_DIRECTORY, { recursive: true })
 	writeFileSync(join(PAGE_CACHE_DIRECTORY, `${topicId}.json`), `${JSON.stringify(pageCache, null, "\t")}\n`)
 
-	// write the fixture, keeping the injection sets that an earlier fixture had. a person fills in an empty set by hand
+	// write the fixture, keeping the injection sets and the written rows that an earlier fixture had.
+	// a person fills in an empty injection set by hand
 	const earlierFixture = existsSync(fixturePath) ? (JSON.parse(readFileSync(fixturePath, "utf8")) as EvalFixture) : null
+	const writtenLabeledResources =
+		earlierFixture?.labeledResources.filter((labeledResource) => labeledResource.labelSource === "written") ?? []
 	const fixture: EvalFixture = {
 		topic: { name: topic.name, context },
-		labeledResources,
+		labeledResources: [...labeledResources, ...writtenLabeledResources],
 		injectionProse: earlierFixture?.injectionProse ?? [],
 		injectionAttacks: earlierFixture?.injectionAttacks ?? [],
 	}

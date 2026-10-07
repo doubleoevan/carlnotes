@@ -19,8 +19,7 @@ import {
 } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import {
-	playPodcastEpisode,
-	togglePlayback,
+	togglePodcastEpisodeChapterPlayback,
 	usePlayerChapter,
 	usePodcastEpisodePlayer,
 } from "@/stores/podcastEpisodePlayerStore"
@@ -48,15 +47,6 @@ export function PodcastEpisodeChaptersTable({ podcastEpisode, chapterTopicFeed }
 	const { podcastEpisode: loadedPodcastEpisode, isPlaying } = usePodcastEpisodePlayer()
 	const playerChapter = usePlayerChapter()
 	const playerChapterPosition = loadedPodcastEpisode?.id === podcastEpisode.id ? playerChapter?.position : undefined
-
-	// pause or play the player's chapter, and play the podcast episode from any other chapter
-	const handleTogglePlayback = (chapter: PodcastEpisodeChapter): void => {
-		if (chapter.position === playerChapterPosition) {
-			togglePlayback()
-		} else {
-			void playPodcastEpisode(podcastEpisode, chapter.startSeconds)
-		}
-	}
 
 	// how long the chapters run in total, and how many hosts their sources come from
 	const totalChapterSeconds = chapters.reduce((sum, chapter) => sum + chapter.endSeconds - chapter.startSeconds, 0)
@@ -86,7 +76,8 @@ export function PodcastEpisodeChaptersTable({ podcastEpisode, chapterTopicFeed }
 								)}
 								isPlayerChapter={chapter.position === playerChapterPosition}
 								isChapterPlaying={chapter.position === playerChapterPosition && isPlaying}
-								onTogglePlayback={() => handleTogglePlayback(chapter)}
+								onTogglePlayback={() => togglePodcastEpisodeChapterPlayback(podcastEpisode, chapter)}
+								podcastEpisode={podcastEpisode}
 								chapterTopicFeed={chapterTopicFeed}
 							/>
 						))}
@@ -112,9 +103,10 @@ export function PodcastEpisodeChaptersTable({ podcastEpisode, chapterTopicFeed }
 	)
 }
 
-// a chapter, its topic finding if the topic still has the finding, whether the player is at the chapter,
-// whether the chapter is playing, the call that plays or pauses the chapter, and what the finding's note needs
+// the podcast episode, a chapter, its topic finding if the topic still has the finding, and the player's state for the chapter.
+// the call that plays or pauses the chapter, and what the finding's note needs
 type PodcastEpisodeChapterRowProps = {
+	podcastEpisode: PodcastEpisode
 	chapterTopicFeed: ChapterTopicFeed
 	chapter: PodcastEpisodeChapter
 	topicFinding: TopicFinding | undefined
@@ -133,6 +125,7 @@ function PodcastEpisodeChapterRow({
 	isChapterPlaying,
 	className,
 	onTogglePlayback,
+	podcastEpisode,
 	chapterTopicFeed,
 }: PodcastEpisodeChapterRowProps) {
 	// whether the finding's note is open, and the cells that every chapter's row has
@@ -188,6 +181,7 @@ function PodcastEpisodeChapterRow({
 					<TopicFindingSummary resource={topicFinding} isResourceKindIconShown={false} />
 					{/* the topic finding's note */}
 					<ChapterTopicFindingNote
+						podcastEpisode={podcastEpisode}
 						topicFinding={topicFinding}
 						isNoteOpen={isNoteOpen}
 						chapterTopicFeed={chapterTopicFeed}

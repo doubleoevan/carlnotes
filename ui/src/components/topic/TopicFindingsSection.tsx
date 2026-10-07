@@ -1,7 +1,6 @@
 import type { PodcastEpisode, TopicFinding } from "@shared/contracts"
 import type * as React from "react"
 import { useState } from "react"
-import { PodcastEpisodeChapterPill, useIsFindingChapterPlaying } from "@/components/podcast/PodcastEpisodePill"
 import { TopicResource } from "@/components/topic/TopicResource"
 import { RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
@@ -27,7 +26,7 @@ type TopicFindingsSectionProps = {
 	latestPodcastEpisode?: PodcastEpisode | null
 }
 
-// the collapsible topic findings list, limited to five rows with the homepage expander
+// the topic page's collapsible topic findings list
 export function TopicFindingsSection({
 	topicFindings,
 	hasAnyFindings,
@@ -38,66 +37,73 @@ export function TopicFindingsSection({
 	newCountInfo,
 	latestPodcastEpisode,
 }: TopicFindingsSectionProps) {
-	const [isExpanded, setIsExpanded] = useState(false)
-	// limit the rows unless expanded
-	const topicFindingsShown = isExpanded ? topicFindings : topicFindings.slice(0, MAX_TOPIC_FINDINGS)
-	const moreTopicFindingsCount = topicFindings.length - MAX_TOPIC_FINDINGS
-	// bookmarked rows sort first, so remove them from the numbering shown
-	const pinnedShownCount = topicFindingsShown.filter((finding) => finding.isBookmarked).length
 	return (
 		<CollapsibleSection value="findings" title="Topic findings" titleAside={newCountInfo} className="mt-2">
+			<TopicFindingList
+				topicFindings={topicFindings}
+				isRatable={isRatable}
+				isBookmarkable={isBookmarkable}
+				resourceHandlers={handlers}
+				topic={topic}
+				latestPodcastEpisode={latestPodcastEpisode}
+				emptyText={
+					hasAnyFindings
+						? "Nothing new worth your time yet. Carl has standards."
+						: "Carl's getting started. The raccoon put a pot on..."
+				}
+			/>
+		</CollapsibleSection>
+	)
+}
+
+// a topic's findings, what the user may do with the findings, the text shown with no findings,
+// and the classes of the list's card and of its expander
+type TopicFindingListProps = Omit<React.ComponentProps<typeof TopicResource>, "resource" | "rank"> & {
+	topicFindings: TopicFinding[]
+	emptyText: string
+	className?: string
+	moreButtonClassName?: string
+}
+
+/**
+ * A topic's findings as numbered rows, five until the expander shows every row. A bookmarked row takes no number.
+ */
+export function TopicFindingList({
+	topicFindings,
+	emptyText,
+	className,
+	moreButtonClassName,
+	...topicResourceProps
+}: TopicFindingListProps) {
+	// limit the rows unless expanded
+	const [isExpanded, setIsExpanded] = useState(false)
+	const topicFindingsShown = isExpanded ? topicFindings : topicFindings.slice(0, MAX_TOPIC_FINDINGS)
+	const moreTopicFindingsCount = topicFindings.length - MAX_TOPIC_FINDINGS
+
+	// bookmarked rows sort first, so this count is how many of the rows shown are pinned instead of being numbered
+	const pinnedShownCount = topicFindingsShown.filter((topicFinding) => topicFinding.isBookmarked).length
+	return (
+		<>
 			{/* topic finding rows, each drawing its own dashed separator */}
-			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
-				{topicFindingsShown.map((finding, index) => (
-					<TopicFindingRow
-						key={finding.findingId}
-						resource={finding}
-						rank={finding.isBookmarked ? null : index - pinnedShownCount + 1}
-						isRatable={isRatable}
-						isBookmarkable={isBookmarkable}
-						resourceHandlers={handlers}
-						topic={topic}
-						latestPodcastEpisode={latestPodcastEpisode}
+			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1", className)}>
+				{topicFindingsShown.map((topicFinding, index) => (
+					<TopicResource
+						key={topicFinding.findingId}
+						resource={topicFinding}
+						rank={topicFinding.isBookmarked ? null : index - pinnedShownCount + 1}
+						{...topicResourceProps}
 					/>
 				))}
-				{topicFindingsShown.length === 0 && (
-					<p className="text-muted-foreground p-3 text-sm">
-						{hasAnyFindings
-							? "Nothing new worth your time yet. Carl has standards."
-							: "Carl's getting started. The raccoon put a pot on..."}
-					</p>
-				)}
+				{topicFindingsShown.length === 0 && <p className="text-muted-foreground p-3 text-sm">{emptyText}</p>}
 			</div>
 			{moreTopicFindingsCount > 0 && (
 				<MoreButton
 					isExpanded={isExpanded}
 					moreLabel={`+ ${moreTopicFindingsCount} more `}
 					onToggle={() => setIsExpanded(!isExpanded)}
+					className={moreButtonClassName}
 				/>
 			)}
-		</CollapsibleSection>
-	)
-}
-
-// one topic finding's row, with the pill of the latest podcast episode's chapter that narrates the finding,
-// highlighted while the chapter plays
-function TopicFindingRow({
-	latestPodcastEpisode,
-	...topicResourceProps
-}: React.ComponentProps<typeof TopicResource> & { latestPodcastEpisode?: PodcastEpisode | null }) {
-	// the chapter that narrates this finding, and whether it is playing
-	const { findingId } = topicResourceProps.resource
-	const findingChapter = latestPodcastEpisode?.chapters.find((chapter) => chapter.findingId === findingId)
-	const isChapterPlaying = useIsFindingChapterPlaying(latestPodcastEpisode, findingId)
-	return (
-		<TopicResource
-			{...topicResourceProps}
-			isChapterPlaying={isChapterPlaying}
-			podcastEpisodeChapterPill={
-				latestPodcastEpisode && findingChapter ? (
-					<PodcastEpisodeChapterPill podcastEpisode={latestPodcastEpisode} chapter={findingChapter} />
-				) : undefined
-			}
-		/>
+		</>
 	)
 }

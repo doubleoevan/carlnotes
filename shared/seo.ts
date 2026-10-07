@@ -4,6 +4,9 @@ import { PLANS } from "./plans"
 // the site's own title, on the homepage and on any page with no title of its own
 export const SITE_TITLE = "CarlNotes — He already read it. All of it."
 
+// the docs site's address without its scheme
+export const DOCS_SITE_ADDRESS = "carlnotes.com/docs"
+
 // the site's public accounts and its source repository, for the Organization schema's sameAs list
 const ORGANIZATION_PROFILES = [
 	// X

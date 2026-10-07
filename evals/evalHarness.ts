@@ -1,6 +1,6 @@
-// the code that the promptfoo evals share. runEval and its report, the rubric grader, and the helpers that providers
-// and checks use. each eval keeps its own cases, rubrics, and checks
-import { readdirSync } from "node:fs"
+// the code that the promptfoo evals share, such as runEval and its report, the gate, the rubric grader, and the tool
+// call recorder
+import { appendFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
 import { parseArgs } from "node:util"
 import { generateText, type LanguageModel, type ModelMessage, type Tool } from "ai"
@@ -13,6 +13,11 @@ import {
 	type ProviderResponse,
 	type TestCase,
 } from "promptfoo"
+import { toPercentLabel } from "./evalLabels"
+
+// turn the prompt registry off as soon as an eval imports the harness, before any case builds a prompt.
+// every eval measures the bundled templates in git
+delete Bun.env.LANGFUSE_PUBLIC_KEY
 
 // how many times each case runs, from --repeat. a model's output varies, so several runs show how often a check passes
 const { values: evalFlags } = parseArgs({
@@ -30,8 +35,30 @@ if (!Number.isInteger(REPEAT_COUNT) || REPEAT_COUNT < 1) {
 const RESULTS_DIRECTORY = join(import.meta.dir, "results")
 const BADGE_FILE_NAME = "badge.json"
 
-// one eval's saved pass count. a run is one case run once
-type SavedEvalResult = { name: string; passedRunCount: number; runCount: number; ranOn: string }
+// one eval's saved pass count, with the commit and the models that the eval measured
+type SavedEvalResult = {
+	name: string
+	// a run is one case run once
+	passedRunCount: number
+	runCount: number
+	ranOn: string
+	commit: string
+	hasUncommittedChanges: boolean
+	writerModelIds: string[]
+	graderModelId: string
+}
+
+// an eval's pass rate, its 95% interval, and whether the rate clears the eval's gate
+type GateResult = {
+	passRate: number
+	intervalLow: number
+	intervalHigh: number
+	gateText: string
+	isBelowGate: boolean
+}
+
+// the passed and total run counts, and the pass rate that an eval has to clear, or null for a report-only eval
+type ToGateResultOptions = { passedRunCount: number; runCount: number; gatePassRate: number | null }
 
 // one tool call that a chat turn made, with its input
 export type RecordedToolCall = { toolName: string; input: unknown }
@@ -47,14 +74,17 @@ type ToRubricAssertionsOptions = {
 	material: unknown
 }
 
-// the options for runEval. the eval's name, the code under test, the grader, the checks that every case gets, and
-// the cases
+// the eval's name, the code under test and its models, the grader and its gate, the checks, and the cases
 export type RunEvalOptions = {
 	// the eval's folder name, which names its full results in logs/ and its pass count in evals/results/
 	name: string
 	description: string
 	provider: ApiProvider
+	// the models that the code under test calls, which each saved result names
+	writerModels: LanguageModel[]
 	grader: ApiProvider
+	// the pass rate that an eval has to clear, or null for an eval that only reports
+	gatePassRate: number | null
 	defaultAssertions: Assertion[]
 	testCases: TestCase[]
 	// the line printed under each run's description, such as the output's length and the run's cost
@@ -64,12 +94,10 @@ export type RunEvalOptions = {
 }
 
 /**
- * Runs every case four at a time, saves and prints the results, and sets a failing exit code if a run failed or broke.
+ * Runs every case four at a time, saves and prints the results, and sets a failing exit code below the eval's gate.
  */
 export async function runEval(runEvalOptions: RunEvalOptions): Promise<void> {
-	// turn the prompt registry off. the eval measures the bundled templates in git.
-	// turn promptfoo's own usage telemetry off too
-	delete Bun.env.LANGFUSE_PUBLIC_KEY
+	// turn promptfoo's own usage telemetry off
 	Bun.env.PROMPTFOO_DISABLE_TELEMETRY = "true"
 
 	// run every case with nothing saved to promptfoo's own database
@@ -95,17 +123,29 @@ export async function runEval(runEvalOptions: RunEvalOptions): Promise<void> {
 	const resultsPath = `logs/eval-${runEvalOptions.name}.json`
 	await Bun.write(resultsPath, JSON.stringify(evaluateSummary, null, 2))
 
-	// save the pass count for the README badge
+	// measure the eval's pass rate against its gate
 	const { successes: successCount, failures: failureCount, errors: errorCount, tokenUsage } = evaluateSummary.stats
-	const ranOn = new Date().toISOString().slice(0, 10)
-	await saveEvalResult({
-		name: runEvalOptions.name,
+	const runCount = evaluateSummary.results.length
+	const gateResult = toGateResult({
 		passedRunCount: successCount,
-		runCount: evaluateSummary.results.length,
-		ranOn,
+		runCount,
+		gatePassRate: runEvalOptions.gatePassRate,
 	})
 
-	// print the report and set a failing exit code if any run failed or broke
+	// save the pass count for the README badge, with the commit and the models. CI saves nothing
+	if (!Bun.env.CI) {
+		await saveEvalResult({
+			name: runEvalOptions.name,
+			passedRunCount: successCount,
+			runCount,
+			ranOn: new Date().toISOString().slice(0, 10),
+			...readGitState(),
+			writerModelIds: runEvalOptions.writerModels.map(toModelId),
+			graderModelId: runEvalOptions.grader.id(),
+		})
+	}
+
+	// print the report
 	printReport(evaluateSummary.results, runEvalOptions.toCaseLine)
 	if (REPEAT_COUNT > 1) {
 		printPassRates(evaluateSummary.results)
@@ -117,16 +157,30 @@ export async function runEval(runEvalOptions: RunEvalOptions): Promise<void> {
 		`\n${successCount} passed, ${failureCount} failed, ${errorCount} broke.`,
 		`grading used ${tokenUsage.assertions?.total} tokens`,
 	)
+	console.log(
+		`pass rate ${toPercentLabel(gateResult.passRate)}`,
+		`(95% interval ${toPercentLabel(gateResult.intervalLow)} to ${toPercentLabel(gateResult.intervalHigh)}), ${gateResult.gateText}`,
+	)
 	console.log(`full results: ${resultsPath}`)
-	process.exitCode = failureCount + errorCount > 0 ? 1 : 0
+
+	// add the eval's row to the CI job summary, and set a failing exit code if the pass rate falls below the gate
+	const jobSummaryPath = Bun.env.GITHUB_STEP_SUMMARY
+	if (jobSummaryPath) {
+		const intervalText = `${toPercentLabel(gateResult.intervalLow)} to ${toPercentLabel(gateResult.intervalHigh)}`
+		const passedText = `${successCount} of ${runCount}`
+		appendFileSync(
+			jobSummaryPath,
+			`| ${runEvalOptions.name} | ${passedText} | ${toPercentLabel(gateResult.passRate)} | ${intervalText} | ${gateResult.gateText} |\n`,
+		)
+	}
+	process.exitCode = gateResult.isBelowGate ? 1 : 0
 }
 
 /**
  * Returns a promptfoo provider that grades a rubric on the given model.
  */
 export function toRubricGrader(model: LanguageModel): ApiProvider {
-	const graderId = typeof model === "string" ? model : model.modelId
-	return { id: () => graderId, callApi: (gradingPrompt) => gradeRubric(model, gradingPrompt) }
+	return { id: () => toModelId(model), callApi: (gradingPrompt) => gradeRubric(model, gradingPrompt) }
 }
 
 /**
@@ -155,23 +209,6 @@ export function toRubricAssertions({
 }
 
 /**
- * Returns the text of every model step in order, with a blank line between steps.
- */
-export function toStepsText(steps: { text: string }[]): string {
-	return steps
-		.map((step) => step.text.trim())
-		.filter(Boolean)
-		.join("\n\n")
-}
-
-/**
- * Returns the url of every Markdown link in the text, in order.
- */
-export function toLinkUrls(markdownText: string): string[] {
-	return [...markdownText.matchAll(/\]\(\s*<?([^\s<>)]+)>?[^)]*\)/g)].map((linkMatch) => linkMatch[1] ?? "")
-}
-
-/**
  * Wraps each tool to record the tool call's name and input before the tool runs.
  */
 export function toRecordingTools(
@@ -191,6 +228,37 @@ export function toRecordingTools(
 			},
 		]),
 	)
+}
+
+/**
+ * Returns an eval's pass rate, its 95% Wilson interval, and whether the rate clears the eval's gate.
+ */
+export function toGateResult({ passedRunCount, runCount, gatePassRate }: ToGateResultOptions): GateResult {
+	// compute the pass rate and its 95% Wilson interval
+	const passRate = runCount > 0 ? passedRunCount / runCount : 0
+	const zSquared = 1.96 ** 2
+	const intervalDenominator = 1 + zSquared / Math.max(runCount, 1)
+	const intervalCenter = (passRate + zSquared / (2 * Math.max(runCount, 1))) / intervalDenominator
+	const intervalMargin =
+		(1.96 *
+			Math.sqrt((passRate * (1 - passRate)) / Math.max(runCount, 1) + zSquared / (4 * Math.max(runCount, 1) ** 2))) /
+		intervalDenominator
+
+	// keep the interval inside 0 to 1
+	const intervalBounds = {
+		intervalLow: Math.max(0, intervalCenter - intervalMargin),
+		intervalHigh: Math.min(1, intervalCenter + intervalMargin),
+	}
+
+	// a report-only eval has no gate to fall below
+	if (gatePassRate === null) {
+		return { passRate, ...intervalBounds, gateText: "report only", isBelowGate: false }
+	}
+
+	// name the gate that the pass rate clears or falls below
+	const isBelowGate = passRate < gatePassRate
+	const gateText = `${isBelowGate ? "below" : "clears"} its ${toPercentLabel(gatePassRate)} gate`
+	return { passRate, ...intervalBounds, gateText, isBelowGate }
 }
 
 // save one eval's result, then rebuild the badge from every eval's saved result
@@ -220,6 +288,18 @@ async function saveEvalResult(savedEvalResult: SavedEvalResult): Promise<void> {
 		color: badgeColor,
 	}
 	await Bun.write(join(RESULTS_DIRECTORY, BADGE_FILE_NAME), `${JSON.stringify(badge, null, "\t")}\n`)
+}
+
+// read the short commit that the eval measured, and whether the working tree had changes beyond the commit
+function readGitState(): { commit: string; hasUncommittedChanges: boolean } {
+	const commit = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"]).stdout.toString().trim()
+	const gitStatusText = Bun.spawnSync(["git", "status", "--porcelain"]).stdout.toString().trim()
+	return { commit, hasUncommittedChanges: gitStatusText !== "" }
+}
+
+// a model's id, which names its LiteLLM alias
+function toModelId(model: LanguageModel): string {
+	return typeof model === "string" ? model : model.modelId
 }
 
 // pick the badge's color for a pass rate. green if every run passed, yellow from 80 percent, and red below 80 percent

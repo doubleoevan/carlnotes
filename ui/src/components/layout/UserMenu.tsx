@@ -7,7 +7,7 @@ import { toUpdateLabel, UpdateCountBadge } from "@/components/common/UpdateCount
 import { DocsLink } from "@/components/layout/DocsLink"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { signOutAndReload } from "@/components/session/signOut"
-import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
+import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { useAllChatMentions, useAllTeamChatMentions, useAllTopicChatMentions } from "@/stores/chatRoomStore"
 import { useAllNoteBadges } from "@/stores/noteBadgeStore"
@@ -154,8 +154,8 @@ export function UserMenuItems({
 				<User className="size-4" />
 				Account
 			</AnchorLink>
-			{/* a divider under the account rows */}
-			<div className="bg-border my-1 h-px" />
+			{/* a divider under the account options */}
+			<div className={MENU_DIVIDER_CLASS} />
 			<AnchorLink
 				href="/plans"
 				onClick={onNavigate}
@@ -168,7 +168,7 @@ export function UserMenuItems({
 			{/* the docs open in their own tab */}
 			<DocsLink className={MENU_OPTION_CLASS} hasIcon onNavigate={onNavigate} />
 			{/* a divider above the last group, the admin console and signing out */}
-			<div className="bg-border my-1 h-px" />
+			<div className={MENU_DIVIDER_CLASS} />
 			{isAdmin ? (
 				<AnchorLink
 					href="/admin"

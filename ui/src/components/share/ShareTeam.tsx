@@ -19,6 +19,7 @@ import {
 } from "@/components/share/ShareOptions"
 import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
 import { canOpenShareSheet, openShareSheet } from "@/lib/shareSheet"
+import { MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
 import { copyToClipboard } from "@/lib/utils"
 
 /**
@@ -102,7 +103,7 @@ export function ShareTeam({
 				<div className="grid">
 					<ShareTargetOptions shareTargets={POST_PLATFORM_TARGETS} {...targetOptionProps} />
 					{/* a divider above the options that share the team to one person instead of posting it */}
-					<div className="bg-border my-1 h-px" />
+					<div className={MENU_DIVIDER_CLASS} />
 					{/* the only option that grants access. every other option shares the team's page */}
 					{canInvite && (
 						<button type="button" onClick={() => void handleShareInvite()} className={SHARE_OPTION_CLASS}>
@@ -130,7 +131,7 @@ export function ShareTeam({
 						))}
 					<ShareTargetOptions shareTargets={SEND_TARGETS} {...targetOptionProps} />
 					{/* the copy link option sits under a divider */}
-					<div className="bg-border my-1 h-px" />
+					<div className={MENU_DIVIDER_CLASS} />
 					<CopyLinkOption
 						label={COPY_PAGE_LABEL}
 						icon={<Link className="size-4" />}

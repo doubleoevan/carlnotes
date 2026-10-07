@@ -1,4 +1,5 @@
 // the LLM Guard scanner
+import { SCANNER_FLAGGED_REASON_PREFIX } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
 
 // the score at or above which a detector counts as a hit
@@ -10,10 +11,17 @@ const SCREEN_TIMEOUT_MS = Number(Bun.env.LLM_GUARD_TIMEOUT_MS ?? "2500")
 
 // the detectors that reject each type of text
 const SCREEN_TYPES = {
-	// an owner's document also gets leaked credentials, the one text they hand us directly
+	// a chat attachment or a page attached by url, which also gets the leaked credentials check
 	document: ["PromptInjection", "Secrets", "InvisibleText", "BanTopics", "Toxicity"],
 	page: ["PromptInjection", "InvisibleText", "BanTopics", "Toxicity"],
+	// a file that a topic's owner uploads, with no injection check. the file has the authority of the owner's own prompt
+	upload: ["Secrets", "InvisibleText", "BanTopics", "Toxicity"],
 } as const
+
+// the scanners that a type of text skips. an owner's upload keeps its personal details and takes no injection check
+const SUPPRESSED_SCANNERS: Partial<Record<keyof typeof SCREEN_TYPES, string[]>> = {
+	upload: ["PromptInjection", "Anonymize"],
+}
 
 export type ScreenType = keyof typeof SCREEN_TYPES
 
@@ -51,13 +59,19 @@ export async function screenText(
 		const response = await fetch(`${guardUrl}/analyze/prompt`, {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ prompt: text }),
+			body: JSON.stringify({ prompt: text, scanners_suppress: SUPPRESSED_SCANNERS[screenType] ?? [] }),
 			signal: AbortSignal.timeout(options.timeoutMs ?? SCREEN_TIMEOUT_MS),
 		})
 		if (!response.ok) {
 			throw new Error(`llm-guard returned ${response.status}`)
 		}
-		return toScreenVerdict((await response.json()) as GuardResponse, screenType, text)
+
+		// fail open on a rejection that names no scanner, which is a broken response
+		const guardResponse = (await response.json()) as GuardResponse
+		if (guardResponse.is_valid === false && Object.keys(guardResponse.scanners ?? {}).length === 0) {
+			throw new Error("llm-guard rejected the text without naming a scanner")
+		}
+		return toScreenVerdict(guardResponse, screenType, text)
 	} catch (error) {
 		// if the Scan does not get an llm-guard screen, this report is the only sign the scanner stopped working
 		console.error(`llm-guard failed to screen the ${screenType}`, error)
@@ -67,8 +81,8 @@ export async function screenText(
 }
 
 /**
- * Reads this screen type's detectors out of llm-guard's scores. A detector at or above the threshold rejects the text,
- * and so does a response that rejects it without naming a score. An accepted text comes back redacted.
+ * Reads this screen type's detectors out of llm-guard's scores. A detector at or above the threshold rejects the text.
+ * An accepted text comes back redacted.
  */
 export function toScreenVerdict(guardResponse: GuardResponse, screenType: ScreenType, text: string): ScreenVerdict {
 	// the detectors for this type of text that scored at or above the threshold
@@ -79,12 +93,6 @@ export function toScreenVerdict(guardResponse: GuardResponse, screenType: Screen
 		return { isFlagged: true, detectors, text, outcome: "screened" }
 	}
 
-	// a rejection that named no score at all still counts as a rejection
-	const hasScores = Object.keys(scores).length > 0
-	if (guardResponse.is_valid === false && !hasScores) {
-		return { isFlagged: true, detectors: ["unnamed"], text, outcome: "screened" }
-	}
-
 	// accepted, so the caller uses the redacted text
 	return toUnflagged(guardResponse.sanitized_prompt || text, "screened")
 }
@@ -93,5 +101,5 @@ export function toScreenVerdict(guardResponse: GuardResponse, screenType: Screen
  * Why the scanner flagged a text, naming the detectors that fired.
  */
 export function toFlaggedReason(verdict: ScreenVerdict): string {
-	return `flagged by the scanner: ${verdict.detectors.join(", ")}`
+	return `${SCANNER_FLAGGED_REASON_PREFIX}: ${verdict.detectors.join(", ")}`
 }

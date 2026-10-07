@@ -1,18 +1,18 @@
-import { Pause, Play, RotateCcw } from "lucide-react"
+import { Pause, Play } from "lucide-react"
 import { type ReactNode, useEffect, useRef } from "react"
 import { authClient } from "@/clients/authClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { SkipPlaybackButtons } from "@/components/podcast/PlaybackControlButtons"
 import { PodcastEpisodeCover } from "@/components/podcast/PodcastEpisodeCover"
-import { toClockLabel } from "@/lib/labels"
-import { PLAY_BUTTON_CLASS, PLAYBACK_CONTROL_BUTTON_CLASS } from "@/lib/styleClasses"
+import { PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
+import { toClockLabel, toPodcastEpisodeTitleLabel } from "@/lib/labels"
+import { toChapterIndexAt } from "@/lib/podcastEpisodePlayback"
+import { PLAY_BUTTON_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import {
 	registerPodcastEpisodeAudio,
-	SKIP_BACK_SECONDS,
 	seekPlaybackTo,
 	setIsUserSignedIn,
-	skipPlaybackBy,
-	toChapterIndexAt,
 	togglePlayback,
 	usePlayerPositionSeconds,
 	usePodcastEpisodePlayer,
@@ -52,7 +52,7 @@ function PodcastPlayer() {
 	const playedPercent = Math.min(100, (positionSeconds / Math.max(1, durationSeconds)) * 100)
 	const playerChapterIndex = toChapterIndexAt(podcastEpisode.chapters, positionSeconds)
 	const playerChapter = podcastEpisode.chapters[playerChapterIndex]
-	const podcastEpisodeTitle = `E${podcastEpisode.episodeNumber} · ${podcastEpisode.title}`
+	const podcastEpisodeTitle = toPodcastEpisodeTitleLabel(podcastEpisode)
 	const playButtonLabel = `${isPlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber ?? ""}`.trim()
 	return (
 		<div className="bg-card border-separator-strong fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)]">
@@ -74,9 +74,12 @@ function PodcastPlayer() {
 				{/* the podcast episode's cover and title, which link to its page once it has one */}
 				<PodcastEpisodeLink pagePath={podcastEpisode.pagePath}>
 					<PodcastEpisodeCover podcastEpisode={podcastEpisode} className="size-11" />
-					{/* the podcast episode's number and title, over the player's chapter or the position */}
+					{/* the podcast episode's number and title with the episode's details as a tooltip, over the player's
+					    chapter or the position */}
 					<div className="min-w-0 flex-1">
-						<div className="truncate text-sm font-bold group-hover:underline">{podcastEpisodeTitle}</div>
+						<PodcastEpisodeTooltip podcastEpisode={podcastEpisode}>
+							<div className="truncate text-sm font-bold group-hover:underline">{podcastEpisodeTitle}</div>
+						</PodcastEpisodeTooltip>
 						<div className="text-muted-foreground truncate text-xs">
 							{playerChapter
 								? `Ch ${playerChapterIndex + 1} of ${podcastEpisode.chapters.length} · ${playerChapter.title}`
@@ -84,15 +87,8 @@ function PodcastPlayer() {
 						</div>
 					</div>
 				</PodcastEpisodeLink>
-				{/* the skip back and play buttons */}
-				<button
-					type="button"
-					aria-label={`Back ${SKIP_BACK_SECONDS} seconds`}
-					onClick={() => skipPlaybackBy(-SKIP_BACK_SECONDS)}
-					className={PLAYBACK_CONTROL_BUTTON_CLASS}
-				>
-					<RotateCcw className="size-4.5" />
-				</button>
+				{/* the skip buttons and the play button */}
+				<SkipPlaybackButtons />
 				<button
 					type="button"
 					aria-label={playButtonLabel}

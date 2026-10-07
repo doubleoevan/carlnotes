@@ -2,7 +2,7 @@
 // if the billed member's LiteLLM key cannot be created
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
-import { connectionPool } from "../../db"
+import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"
 import * as chat from "../../worker/chat"
 import * as litellm from "../../worker/litellm"
 import { MODEL_CHAT_TURN_FAILED_REJECTION } from "../../worker/models"
@@ -11,9 +11,8 @@ import * as roomStream from "./roomStream"
 import { runModelChatRoomTurn } from "./roomTurns"
 
 // the connection pool's own query, put back after each test along with the spies
-const originalConnectionPoolQuery = connectionPool.query
 afterEach(() => {
-	connectionPool.query = originalConnectionPoolQuery
+	restoreConnectionPool()
 	mock.restore()
 })
 
@@ -24,11 +23,7 @@ test("a chat room turn whose key cannot be created posts carl's rejection and ma
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 
 	// a connection pool that returns the id of the inserted chat message and keeps each query
-	const sentQueries: { text: string; values: unknown[] }[] = []
-	connectionPool.query = ((queryConfig: { text: string }, values: unknown[]) => {
-		sentQueries.push({ text: queryConfig.text, values })
-		return Promise.resolve({ rows: [[42]], fields: [], rowCount: 1 })
-	}) as unknown as typeof connectionPool.query
+	const sentQueries = stubConnectionPool(() => [[42]])
 
 	// spies on the chat room notification and the model reply
 	const notifyChatRoomMessageSpy = spyOn(roomStream, "notifyChatRoomMessage").mockResolvedValue(undefined)

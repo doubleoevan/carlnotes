@@ -1,10 +1,12 @@
 import type { TopicFeed, TopicResponse } from "@shared/contracts"
+import { PODCAST_NAME } from "@shared/podcastEpisodes"
 import { DEFAULT_SOURCES, toDefaultSource } from "@shared/sources"
 import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, Plug, Puzzle, Rss } from "lucide-react"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { BrandIcon } from "@/components/common/BrandIcon"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
+import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { ShareTopicButton } from "@/components/share/ShareTopic"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
@@ -94,6 +96,21 @@ export function TopicInfo(props: TopicInfoProps) {
 								onMakeTopicPublic={props.onMakeTopicPublic}
 							/>
 						</div>
+					</InfoSection>
+				)}
+
+				{/* the latest podcast episode's row, in the popover only */}
+				{!props.isCard && topic.latestPodcastEpisode?.pagePath && (
+					<InfoSection label={PODCAST_NAME}>
+						<ul>
+							<PodcastEpisodeRow
+								podcastEpisode={topic.latestPodcastEpisode}
+								podcastEpisodePath={topic.latestPodcastEpisode.pagePath}
+								isLatestPodcastEpisode
+								// less padding than the episodes card gives the row, inside the section's own, and no hover highlight
+								className="py-1 pl-0 hover:before:bg-transparent"
+							/>
+						</ul>
 					</InfoSection>
 				)}
 

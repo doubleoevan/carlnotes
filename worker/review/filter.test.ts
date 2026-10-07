@@ -1,18 +1,26 @@
-// filter tests for the hashing, threshold, ranking, and dedupe decisions the free stages make
-import { expect, test } from "bun:test"
+// filter tests for the hashing, threshold, ranking, and dedupe decisions the free stages make, and the topic context limits
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { toTopicContextHash } from "../attach"
 import { newBudget } from "../budget"
+import * as models from "../models"
 import {
 	dedupeResources,
 	gateResources,
 	hasNearDuplicateKey,
 	isNearDuplicate,
 	isRelevant,
+	loadTopicContext,
 	normalizeText,
 	rankBySimilarity,
 	toContentHash,
 	toScoreContextText,
 } from "./filter"
 import { emptyReviewOutcome } from "./track"
+
+// put back the embedding call that a test stubbed
+afterEach(() => {
+	mock.restore()
+})
 
 // a stand-in Resource for the ranking and dedupe test cases, which read only its id
 function toTestResource(id: string): Parameters<typeof rankBySimilarity>[0][number]["resource"] {
@@ -187,4 +195,37 @@ test("toScoreContextText lists the example pages after the context text", () => 
 		"- https://www.example.com/1 (example.com)",
 	])
 	expect(scoreContextLines.slice(13)).toEqual(["", "[pages the reader rated down]", "- Junk (junk.example)"])
+})
+
+// the score prompt reads a long attachment past the embedding limit, and the hash covers what the score prompt reads
+test("loadTopicContext scores past the embedding limit and hashes the text that it scores", async () => {
+	// stub the embedding call and keep the text that the call embeds
+	const embeddedTexts: string[] = []
+	spyOn(models, "embedVector").mockImplementation(async (text) => {
+		embeddedTexts.push(text)
+		return [1]
+	})
+
+	// a list of names over 20,000 characters long, whose last name sits far past the first 8,000 characters
+	const namesList = Array.from({ length: 2000 }, (_, i) => `Chen ${i}`).join(", ")
+	const topicContext = await loadTopicContext({
+		topicScanContext: { name: "Keeping Up with the Chens", context: `${namesList} Chen Last` },
+		scoreExamplePages: { likedOrBookmarkedPages: [], ratedDownPages: [] },
+		budget: newBudget(),
+	})
+
+	// the score text and the hash include the last name, and the embedding reads only the first 8,000 characters
+	expect(topicContext.scoreText).toContain("Chen Last")
+	expect(embeddedTexts[0]).not.toContain("Chen Last")
+	expect(topicContext.text.length).toBeGreaterThan(20_000)
+	expect(topicContext.contextHash).toBe(toTopicContextHash(topicContext.text))
+	expect(topicContext.contextHash).not.toBe(toTopicContextHash(topicContext.text.slice(0, 8000)))
+
+	// a context under the embedding limit hashes the same text that the gate embeds
+	const shortTopicContext = await loadTopicContext({
+		topicScanContext: { name: "Grinders", context: "Burr grinders under $200." },
+		scoreExamplePages: { likedOrBookmarkedPages: [], ratedDownPages: [] },
+		budget: newBudget(),
+	})
+	expect(shortTopicContext.contextHash).toBe(toTopicContextHash("Grinders\n\nBurr grinders under $200."))
 })

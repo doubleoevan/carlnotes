@@ -9,7 +9,6 @@ const topicPodcast: TopicPodcast = {
 	isEnabled: true,
 	canRenderPodcastEpisode: true,
 	canRemovePodcastEpisodes: true,
-	latestPodcastEpisode: null,
 	unpublishedPodcastEpisode: null,
 	seasons: [],
 	latestSeasonPodcastEpisodes: { podcastEpisodes: [] },

@@ -49,8 +49,11 @@ export function toPodcastCoverPath(podcastCover: PodcastCover, size: PodcastCove
 // the sentence that tells a listener that the hosts are AI voices, without its period
 export const AI_VOICES_NOTE = "Carl and Vienna are AI voices"
 
+// the podcast's name in the app's copy
+export const PODCAST_NAME = "Coffee Break podcast"
+
 // the podcast's name as a listener and a search engine read it
-export const PODCAST_SHOW_NAME = "Coffee Break podcast with Carl and Vienna"
+export const PODCAST_SHOW_NAME = `${PODCAST_NAME} with Carl and Vienna`
 
 // the name that each speaker goes by in a transcript
 export const PODCAST_EPISODE_SPEAKER_NAMES = { host: "Carl", cohost: "Vienna" } as const

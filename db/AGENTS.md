@@ -39,6 +39,9 @@ Drizzle + Neon Postgres, and the Redis store.
   async context. The api opens a memo for every request, and outside a request every read goes to the database.
 - `queryTracing.ts` — counts each statement a request sends and traces it under the request's span. A write
   statement clears the memo of the request that sent it.
+- `connectionPoolStub.ts` — the connection pool stub that the tests share. `stubConnectionPool` returns the rows that
+  a test picks for each query and records each query sent, `restoreConnectionPool` puts the pool's own query back, and
+  `toTableRow` builds a row in a table's column order. Only tests import it.
 - `migrate.ts` applies pending migrations, and `seed.ts` has the dev stub data behind `bun run db:seed`.
 - Schema changes edit `schema.ts`, then `bun run db:generate` writes the migration (offline, no
   doppler) and `bun run db:migrate` applies it (its script already runs under doppler). Never

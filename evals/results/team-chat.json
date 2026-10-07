@@ -1,0 +1,12 @@
+{
+	"name": "team-chat",
+	"passedRunCount": 4,
+	"runCount": 12,
+	"ranOn": "2026-10-05",
+	"commit": "fdfb55e",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"chat-model"
+	],
+	"graderModelId": "score-model"
+}

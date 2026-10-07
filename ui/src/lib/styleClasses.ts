@@ -206,6 +206,11 @@ export const MENU_OPTION_CLASS =
 	"hover:bg-accent focus-visible:ring-ring/50 mt-1 flex min-h-11 w-full items-center gap-2 rounded-md px-2 text-left text-sm outline-none first:mt-0 focus-visible:ring-2 disabled:pointer-events-none disabled:opacity-50 sm:min-h-9"
 
 /**
+ * The thin line between groups of options in a menu or an options dialog.
+ */
+export const MENU_DIVIDER_CLASS = "bg-border my-1 h-px"
+
+/**
  * The tint marking the option a menu is currently on: the open page, the chosen value, the setting that is on.
  * It goes over MENU_OPTION_CLASS, whose hover fill is a different color.
  */

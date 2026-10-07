@@ -6,9 +6,11 @@ import {
 	inviteCreateResponse,
 	type TeamPageResponse,
 	type TeamSearchResult,
+	type TeamSummary,
 	type TeamsPageResponse,
 	type UpdateTeamPayload,
 } from "@shared/contracts"
+import { toast } from "sonner"
 import { apiClient, readApiErrorMessage } from "./apiClient"
 
 // how creating a team was rejected, for the modal to show which way it went
@@ -21,6 +23,12 @@ export async function fetchTeams(): Promise<TeamsPageResponse> {
 		throw new Error(`teams load failed: ${response.status}`)
 	}
 	return (await response.json()) as TeamsPageResponse
+}
+
+// the teams that the user leads
+export async function fetchLeaderTeams(): Promise<TeamSummary[]> {
+	const teamsPage = await fetchTeams()
+	return teamsPage.teams.filter((team) => team.role === "leader")
 }
 
 // delete one of the user's own sent team invitations
@@ -106,9 +114,13 @@ export async function sendAddTopicTeam(teamId: string, topicId: string): Promise
 	return (await readApiErrorMessage(response)) ?? "That topic didn't get added. Try again."
 }
 
-// remove a topic from the team
-export async function sendRemoveTopicFromTeam(teamId: string, topicId: string): Promise<void> {
-	await apiClient.api.teams[":id"].topics[":topicId"].$delete({ param: { id: teamId, topicId } })
+// remove a topic from the team, returning false and showing an error toast if the api rejects the removal
+export async function sendRemoveTopicFromTeam(teamId: string, topicId: string): Promise<boolean> {
+	const response = await apiClient.api.teams[":id"].topics[":topicId"].$delete({ param: { id: teamId, topicId } })
+	if (!response.ok) {
+		toast.error("That topic didn't come off the team. Try again.")
+	}
+	return response.ok
 }
 
 // set a team member's role, returning false if the last-leader rule held it

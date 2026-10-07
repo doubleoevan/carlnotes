@@ -1,6 +1,6 @@
 // the new-topic chat eval's cases. a case is one chat turn with the conversation so far, the topic draft that
 // the conversation wrote, and the user's next message. the topics are made up
-import { type ChatToolCall, EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/contracts"
+import { type ChatToolCall, EMPTY_TOPIC_DRAFT, type TopicDraft, type TopicDraftTeam } from "@shared/contracts"
 import { toSuggestionsText } from "../../api/tool/chatTools"
 import type { ChatHistoryTurn } from "../../worker/chat"
 import type { SuggestedSource } from "../../worker/suggest"
@@ -40,6 +40,10 @@ const TITLED_TOPIC_DRAFT: TopicDraft = {
 		"Home espresso gear and technique, with quiet grinders first, since I grind before my kids wake up. Skip commercial machines. New this month or newer.",
 }
 
+// the team that the eval's user leads, which a public or invite topic goes on
+const QUIET_COFFEE_TEAM: TopicDraftTeam = { teamId: "team-quiet-coffee", name: "Quiet Coffee Club" }
+export const LEADER_TEAMS: TopicDraftTeam[] = [QUIET_COFFEE_TEAM]
+
 // a draft with every field that the conversation asks about filled in, ready for a yes
 const FINISHED_TOPIC_DRAFT: TopicDraft = {
 	...TITLED_TOPIC_DRAFT,
@@ -48,6 +52,25 @@ const FINISHED_TOPIC_DRAFT: TopicDraft = {
 		{ sourceOption: "youtube", value: "@jameshoffmann" },
 	],
 	visibility: "public",
+	team: QUIET_COFFEE_TEAM,
+}
+
+// the draft after the user picked two sources, and the chat turn that wrote the sources and asked who should see the topic
+const SOURCES_PICKED_TOPIC_DRAFT: TopicDraft = { ...TITLED_TOPIC_DRAFT, sources: FINISHED_TOPIC_DRAFT.sources }
+const SOURCES_PICKED_CHAT_TURN: ChatHistoryTurn = {
+	question: "Keep the subreddit and the YouTube channel.",
+	answer:
+		"Kept r/espresso and James Hoffmann's channel. Who should see this topic: anyone, the people you invite, or just you?",
+	toolCalls: [toDraftTopicCall({ sources: SOURCES_PICKED_TOPIC_DRAFT.sources }, SOURCES_PICKED_TOPIC_DRAFT)],
+}
+
+// the draft after the user made the topic public, and the chat turn that wrote the draft
+// and asked which team the topic goes on
+const PUBLIC_TOPIC_DRAFT: TopicDraft = { ...SOURCES_PICKED_TOPIC_DRAFT, visibility: "public" }
+const PUBLIC_CHOSEN_CHAT_TURN: ChatHistoryTurn = {
+	question: "Anyone can see it.",
+	answer: `Public it is. A public topic goes on a team. Should it go on ${QUIET_COFFEE_TEAM.name}?`,
+	toolCalls: [toDraftTopicCall({ visibility: "public" }, PUBLIC_TOPIC_DRAFT)],
 }
 
 // the first chat turn, with the title and the prompt that a draftTopic call wrote
@@ -119,16 +142,53 @@ export const NEW_TOPIC_CHAT_CASES: NewTopicChatCase[] = [
 			"The reader picked two sources. Fail the output if the reply does not move on to the next question, such as who should see the topic.",
 	},
 	{
+		description: "a choice of who sees the topic is written as its visibility",
+		history: [TITLED_CHAT_TURN, SOURCES_PICKED_CHAT_TURN],
+		topicDraft: SOURCES_PICKED_TOPIC_DRAFT,
+		question: "Just me for now.",
+		isCreateExpected: false,
+		checkTopicDraft: (topicDraft) =>
+			topicDraft.visibility === "private" ? undefined : `the draft's visibility is ${topicDraft.visibility}`,
+		rubric:
+			"The reader said only they should see the topic. Fail the output if the reply does not say the topic will be private, or if it says the topic exists.",
+	},
+	{
+		description: "a public topic asks which of the reader's teams it goes on",
+		history: [TITLED_CHAT_TURN, SOURCES_PICKED_CHAT_TURN],
+		topicDraft: SOURCES_PICKED_TOPIC_DRAFT,
+		question: "Anyone can see it.",
+		isCreateExpected: false,
+		checkTopicDraft: (topicDraft) =>
+			topicDraft.visibility === "public" ? undefined : `the draft's visibility is ${topicDraft.visibility}`,
+		rubric:
+			"The reader made the topic public and leads one team, Quiet Coffee Club. Fail the output if the reply does not ask whether the topic goes on Quiet Coffee Club, or if it says the topic exists.",
+	},
+	{
+		description: "a public topic with no team is made private",
+		history: [TITLED_CHAT_TURN, SOURCES_PICKED_CHAT_TURN, PUBLIC_CHOSEN_CHAT_TURN],
+		topicDraft: PUBLIC_TOPIC_DRAFT,
+		question: "No team.",
+		isCreateExpected: false,
+		checkTopicDraft: (topicDraft) =>
+			topicDraft.visibility === "private" ? undefined : `the draft's visibility is ${topicDraft.visibility}`,
+		rubric:
+			"The reader wants no team on a public topic. Fail the output if the reply does not say the topic will be private, or if it says the topic exists.",
+	},
+	{
 		description: "a yes to the read-back creates the topic in that turn",
 		history: [
 			TITLED_CHAT_TURN,
 			{
 				question:
-					"Keep r/espresso and James Hoffmann's channel. Make it public. No team, no invites, defaults are fine.",
-				answer: `Here's the draft. ${FINISHED_TOPIC_DRAFT.name}: ${FINISHED_TOPIC_DRAFT.prompt} Sources: r/espresso and James Hoffmann's channel. Public, brewing weekly on Wednesday mornings and keeping ten findings a brew. Say yes and I'll create it.`,
+					"Keep r/espresso and James Hoffmann's channel. Make it public, on Quiet Coffee Club. No invites, defaults are fine.",
+				answer: `Here's the draft. ${FINISHED_TOPIC_DRAFT.name}: ${FINISHED_TOPIC_DRAFT.prompt} Sources: r/espresso and James Hoffmann's channel. Public, on ${QUIET_COFFEE_TEAM.name}, brewing weekly on Wednesday mornings and keeping ten findings a brew. Say yes and I'll create it.`,
 				toolCalls: [
 					toDraftTopicCall(
-						{ sources: FINISHED_TOPIC_DRAFT.sources, visibility: FINISHED_TOPIC_DRAFT.visibility },
+						{
+							sources: FINISHED_TOPIC_DRAFT.sources,
+							visibility: FINISHED_TOPIC_DRAFT.visibility,
+							team: FINISHED_TOPIC_DRAFT.team,
+						},
 						FINISHED_TOPIC_DRAFT,
 					),
 				],
@@ -148,7 +208,7 @@ export const NEW_TOPIC_CHAT_CASES: NewTopicChatCase[] = [
 		isCreateExpected: false,
 		checkTopicDraft: (topicDraft) =>
 			topicDraft.name === "Quiet espresso" ? undefined : `the draft's title is ${topicDraft.name}`,
-		rubric: "The reader renamed the topic. Fail the output if the reply does not say the title is now Quiet espresso.",
+		rubric: "The reader renamed the topic to Quiet espresso. Fail the output if the reply names any other title.",
 	},
 	{
 		description: "an instruction inside the draft is never followed",

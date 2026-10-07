@@ -30,8 +30,13 @@ The api serves the browser bundle and renders pages through the server build, be
   page), `PodcastEpisodeChapters.tsx` (the card's chapter list), `PodcastEpisodeChaptersTable.tsx` (the episode
   page's chapters table), `PodcastEpisodesCard.tsx` (the topic page's podcast episodes by season),
   `PodcastFeedDialog.tsx` (the dialog that adds the podcast feed to a podcast app),
-  `PodcastEpisodePill.tsx` (the pills on findings and scan history rows), `PodcastEpisodeCover.tsx` (an episode's cover
-  square), and `PodcastEpisodeAudio.tsx`, the one audio element and the podcast player that `Layout` mounts.
+  `RemovePodcastEpisodeDialog.tsx` (the remove confirmation and the trash button that opens it),
+  `PodcastEpisodePill.tsx` (the pills on findings and scan history rows), `PodcastEpisodeRow.tsx` (an episode's row in
+  the episodes card and the topic roast), `PodcastEpisodeDetails.tsx` (an episode's season, title, and details line, in
+  the player card and a tooltip), `LatestPodcastEpisodePlayButton.tsx` (the play button beside a topic's note icon),
+  `PlaybackControlButtons.tsx` (the skip and playback speed buttons, in the player card and the bottom player),
+  `PodcastEpisodeCover.tsx` (an episode's cover square), and `PodcastEpisodeAudio.tsx`, the one audio element and the
+  podcast player that `Layout` mounts.
   `stores/podcastEpisodePlayerStore.ts` drives that element, so playback continues from one page to the next.
 - `components/note/` — the Tasting Notes section, table, and dialog, and the lazily imported
   BlockNote editor with its yjs SSE provider, comment threads, and the comment "@" mention menu.

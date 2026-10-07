@@ -44,11 +44,14 @@ model_list:
       max_input_tokens: 524288
       max_output_tokens: 8192
 
-  # cheap-model: high-volume app inference (search query generation, first-pass scoring) — the cheap tier
+  # cheap-model: the cheap tier, for high-volume app inference such as search query generation and first-pass scoring
   - model_name: cheap-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/minimax-m3
       api_key: os.environ/FIREWORKS_API_KEY
+      # seconds for a whole response and for a stream's first chunk
+      timeout: 45
+      stream_timeout: 30
     model_info:
       friendly_name: "MiniMax M3 (app cheap tier)"
       supports_function_calling: true
@@ -56,11 +59,15 @@ model_list:
       max_input_tokens: 524288
       max_output_tokens: 8192
 
-  # score-model: the review premium tier — re-scores promoted Resources and writes relevance summaries
+  # score-model: the review's premium tier, which re-scores promoted Resources and writes relevance summaries and the
+  # podcast scripts
   - model_name: score-model
     litellm_params:
       model: fireworks_ai/accounts/fireworks/models/glm-5p3
       api_key: os.environ/FIREWORKS_API_KEY
+      # seconds for a whole response and for a stream's first chunk. a podcast script call runs past 90 seconds
+      timeout: 150
+      stream_timeout: 60
       # Fireworks Standard serving path: $1.40/M input, $0.26/M cached input, $4.40/M output
       input_cost_per_token: 0.0000014
       cache_read_input_token_cost: 0.00000026
@@ -78,6 +85,8 @@ model_list:
       model: fireworks_ai/accounts/fireworks/models/qwen3-embedding-8b
       api_key: os.environ/FIREWORKS_API_KEY
       dimensions: 1024
+      # seconds for a whole response
+      timeout: 30
     model_info:
       friendly_name: "Qwen3 Embedding 8B"
       mode: embedding
@@ -89,6 +98,9 @@ model_list:
       model: fireworks_ai/accounts/fireworks/models/kimi-k3
       api_key: os.environ/FIREWORKS_API_KEY
       reasoning_effort: medium
+      # seconds for a whole response and for a stream's first chunk
+      timeout: 120
+      stream_timeout: 45
       # Fireworks Standard serving path: $3/M input, $0.30/M cached input, $15/M output
       input_cost_per_token: 0.000003
       cache_read_input_token_cost: 0.0000003
@@ -107,11 +119,17 @@ model_list:
 # and charges the virtual key from LiteLLM's own price table, which a model entry here cannot change.
 # the app's own speech rates are in worker/budget.ts and follow what LiteLLM charges
 
-# drop provider-unsupported params instead of erroring (Fireworks embeddings reject encoding_format the AI SDK sends).
-# no proxy-wide max_budget: spend is capped per virtual key, minted per user at signup and managed in litellm itself.
-# the Fireworks prepaid balance is the real ceiling behind those keys
+# drop provider-unsupported params instead of erroring. Fireworks embeddings reject the encoding_format that the AI SDK
+# sends. there is no proxy-wide max_budget. spend is limited per virtual key, created per user at signup and managed in
+# LiteLLM itself, and the Fireworks prepaid balance is the real limit behind those keys
 litellm_settings:
   drop_params: true
+
+# retry a call once if it hits its model's timeout. a rate limit or a server error keeps the router's default of two
+# retries
+router_settings:
+  retry_policy:
+    TimeoutErrorRetries: 1
 
 general_settings:
   master_key: os.environ/LITELLM_MASTER_KEY

@@ -176,6 +176,7 @@ function PodcastEpisodeChapterRow({
 			{/* the note of the chapter's topic finding */}
 			{chapterTopicFinding && (
 				<ChapterTopicFindingNote
+					podcastEpisode={podcastEpisode}
 					topicFinding={chapterTopicFinding}
 					isNoteOpen={isNoteOpen}
 					chapterTopicFeed={chapterTopicFeed}
@@ -194,8 +195,10 @@ function PodcastEpisodeChapterRow({
 	)
 }
 
-// the chapter's topic finding, whether its note is open, and what the note reads
+// the podcast episode whose chapter pill the note shows, the chapter's topic finding, whether its note is open,
+// and what the note reads
 type ChapterTopicFindingNoteProps = {
+	podcastEpisode: PodcastEpisode
 	topicFinding: TopicFinding
 	isNoteOpen: boolean
 	chapterTopicFeed: ChapterTopicFeed
@@ -205,7 +208,12 @@ type ChapterTopicFindingNoteProps = {
  * A chapter's topic finding note, anchored at its row's right edge.
  * The note mounts only while open, so its link preview loads then.
  */
-export function ChapterTopicFindingNote({ topicFinding, isNoteOpen, chapterTopicFeed }: ChapterTopicFindingNoteProps) {
+export function ChapterTopicFindingNote({
+	podcastEpisode,
+	topicFinding,
+	isNoteOpen,
+	chapterTopicFeed,
+}: ChapterTopicFindingNoteProps) {
 	const { topic, isRatable, isBookmarkable, topicHandlers } = chapterTopicFeed
 	return (
 		<>
@@ -214,6 +222,7 @@ export function ChapterTopicFindingNote({ topicFinding, isNoteOpen, chapterTopic
 				<ResourceInfo
 					resource={topicFinding}
 					topicFindingRank={null}
+					podcastEpisode={podcastEpisode}
 					topic={topic}
 					isRatable={isRatable}
 					isBookmarkable={isBookmarkable}

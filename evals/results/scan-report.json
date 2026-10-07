@@ -1,6 +1,10 @@
 {
 	"name": "scan-report",
-	"passedRunCount": 10,
+	"passedRunCount": 11,
 	"runCount": 12,
-	"ranOn": "2026-10-05"
+	"ranOn": "2026-10-05",
+	"commit": "fdfb55e",
+	"hasUncommittedChanges": true,
+	"writerModelIds": ["cheap-model"],
+	"graderModelId": "chat-model"
 }

@@ -9,7 +9,7 @@ import {
 	startChild,
 } from "@temporalio/workflow"
 // a relative import. temporal bundles workflow code with webpack, which has no @shared alias
-import { toScanFailureReason } from "../../shared/scanFailure"
+import { toWorkflowFailureReason } from "../../shared/scanFailure"
 // the workflow that renders a succeeded Scan's Podcast Episode, and the queue that it runs on
 import {
 	PODCAST_EPISODE_TASK_QUEUE,
@@ -97,7 +97,7 @@ export async function runTopicScanWorkflow(
 			await stopCancelledScan(scanId)
 			return
 		}
-		await failScan(scanId, toScanFailureReason(error), spentBudget)
+		await failScan(scanId, toWorkflowFailureReason(error), spentBudget)
 	}
 
 	// a succeeded Scan starts its podcast episode render in its own workflow.
@@ -155,7 +155,7 @@ async function startScanEmail(scanEmailWorkflowInput: ScanEmailWorkflowInput): P
 		if (error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError") {
 			return
 		}
-		await reportScanEmailNotStarted(scanEmailWorkflowInput.scanId, toScanFailureReason(error))
+		await reportScanEmailNotStarted(scanEmailWorkflowInput.scanId, toWorkflowFailureReason(error))
 	}
 }
 
@@ -192,7 +192,7 @@ async function startPodcastEpisodeRender(
 		if (error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError") {
 			return true
 		}
-		await reportPodcastEpisodeRenderNotStarted(renderPodcastEpisodeWorkflowInput.scanId, toScanFailureReason(error))
+		await reportPodcastEpisodeRenderNotStarted(renderPodcastEpisodeWorkflowInput.scanId, toWorkflowFailureReason(error))
 		return false
 	}
 }

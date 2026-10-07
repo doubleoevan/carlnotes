@@ -1,7 +1,7 @@
 // session tests over spied Redis reads and writes: refreshing the users row in each stored session,
 // revoking a user's sessions, and caching a missing session
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { connectionPool } from "../db"
+import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as redis from "../db/redis"
 import { cacheSession, refreshSessionUser, revokeUserSessions } from "./sessions"
 
@@ -18,18 +18,12 @@ function stubRedisKeys(keys: Record<string, unknown>): void {
 
 // the session tokens that Postgres holds for a test, one row each
 function stubSessionTokens(sessionTokens: string[]): void {
-	connectionPool.query = (() =>
-		Promise.resolve({
-			rows: sessionTokens.map((sessionToken) => [sessionToken]),
-			fields: [],
-			rowCount: sessionTokens.length,
-		})) as unknown as typeof connectionPool.query
+	stubConnectionPool(() => sessionTokens.map((sessionToken) => [sessionToken]))
 }
 
 // the connection pool's own query, put back after each test along with the spied Redis functions
-const originalConnectionPoolQuery = connectionPool.query
 afterEach(() => {
-	connectionPool.query = originalConnectionPoolQuery
+	restoreConnectionPool()
 	mock.restore()
 })
 

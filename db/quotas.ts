@@ -293,16 +293,11 @@ export async function canRenderPodcastEpisode(topic: { id: string; ownerId: stri
 		return true
 	}
 
-	// allow the free plan one Podcast Episode per Topic. a removed Podcast Episode still counts, and a failed one does not
+	// allow the free plan one rendering or published Podcast Episode per Topic
 	const [podcastEpisodeCountRow] = await db
 		.select({ count: count() })
 		.from(podcastEpisodes)
-		.where(
-			and(
-				eq(podcastEpisodes.topicId, topic.id),
-				inArray(podcastEpisodes.status, ["rendering", "published", "removed"]),
-			),
-		)
+		.where(and(eq(podcastEpisodes.topicId, topic.id), inArray(podcastEpisodes.status, ["rendering", "published"])))
 	return (podcastEpisodeCountRow?.count ?? 0) === 0
 }
 

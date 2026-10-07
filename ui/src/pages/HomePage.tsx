@@ -9,7 +9,7 @@ import { Accordion } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TagPicker } from "@/components/topic/TagPicker"
-import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFeedSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicSection } from "@/components/topic/TopicSection"
 import { PAGE_CLASS } from "@/lib/styleClasses"
@@ -22,7 +22,7 @@ import { useRegisterPageActions } from "@/stores/pageActionsStore"
  */
 export function HomePage() {
 	const navigate = useNavigate()
-	// the session decides whether + New Topic opens the new-topic dialog or sends the visitor to sign up
+	// whether a user is signed in or a visitor is browsing
 	const { data: session } = authClient.useSession()
 	const isSignedIn = Boolean(session)
 	// the shared feed state: the sections, the finding and resource filters, and the topic-creation quota
@@ -40,14 +40,16 @@ export function HomePage() {
 		reheatKey,
 		isReheating,
 	} = useTopicFeed()
-	const [isNewTopicOpen, setIsNewTopicOpen] = useState(false)
+	// the New Topic button's dialog. a created topic reloads the topic feed behind the navigation
+	const { openNewTopicDialog, newTopicDialog } = useNewTopicDialog(() => void reloadTopicFeed())
 	// the section the user opened, or null while none has been opened and the default still applies
 	const [openedSection, setOpenedSection] = useState<string | null>(null)
 
-	// the search bar's menu includes this page's reheat option
+	// the search bar's menu includes this page's reheat option, and leaves out New topic
 	useRegisterPageActions({
 		page: "Home",
 		options: [{ label: "Reheat", Icon: Coffee, onSelect: () => void reheat() }],
+		hasNewTopicButton: true,
 	})
 
 	// the panel's page context. the new-topic chat opens by default for a user who owns and follows no topics
@@ -64,22 +66,6 @@ export function HomePage() {
 				}
 			: null,
 	)
-
-	// a created topic refreshes the feed behind the navigation to its new page
-	const handleTopicCreated = async (topicId: string): Promise<void> => {
-		setIsNewTopicOpen(false)
-		navigate({ to: "/topics/$topicId", params: { topicId } })
-		void reloadTopicFeed()
-	}
-
-	// "+ New Topic" button opens the new-topic dialog when signed in, otherwise it sends the visitor to sign up first
-	const handleNewTopic = (): void => {
-		if (isSignedIn) {
-			setIsNewTopicOpen(true)
-		} else {
-			navigate({ to: "/signup", search: { cta: "new-topic" } })
-		}
-	}
 
 	// the "Give Carl a topic" button opens the new-topic chat, and sends a visitor to sign up first
 	const handleNewTopicChat = (): void => {
@@ -111,7 +97,7 @@ export function HomePage() {
 					remainingTopics={topicFeed?.topicsRemaining ?? null}
 					topicLimit={topicFeed?.topicLimit ?? null}
 					isSignedIn={isSignedIn}
-					onNewTopic={handleNewTopic}
+					onNewTopic={openNewTopicDialog}
 				/>
 			</div>
 
@@ -140,8 +126,8 @@ export function HomePage() {
 					</Accordion>
 				)}
 			</div>
-			{/* the new-topic modal is only mounted while it's open so that its state resets each time */}
-			{isNewTopicOpen && <NewTopicDialog onClose={() => setIsNewTopicOpen(false)} onTopicSaved={handleTopicCreated} />}
+			{/* the dialog that the New Topic button opens */}
+			{newTopicDialog}
 		</main>
 	)
 }

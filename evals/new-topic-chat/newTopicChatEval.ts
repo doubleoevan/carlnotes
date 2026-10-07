@@ -1,38 +1,29 @@
-// the promptfoo eval of the new-topic chat. every case makes real calls on the local LiteLLM proxy.
-// the calls cost real money, so the eval is never part of bun test. run it with: bun run eval:new-topic-chat
+// the promptfoo eval of the new-topic chat, which makes real model calls. run the eval with: bun run eval:new-topic-chat
 import type { Assertion, EvaluateResult, GradingResult, TestCase } from "promptfoo"
-import { scoreModel } from "../../worker/models"
+import { chatModel } from "../../worker/models"
 import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { NEW_TOPIC_CHAT_CASES, type NewTopicChatCase } from "./newTopicChatCases"
 import { type NewTopicChatTurn, newTopicChatTurnWriter } from "./newTopicChatProviders"
+import {
+	CLAIMED_SAVE_RUBRIC,
+	GRADER_MODEL,
+	MATERIAL_LABEL,
+	OUTPUT_SHAPE_RUBRIC,
+	VOICE_RUBRIC,
+} from "./newTopicChatRubrics"
 
 // turn web search off. a search returns "web search is not configured", so every case's turn reads only its own
 // material
 delete Bun.env.EXA_API_KEY
-
-// what every rubric tells the grader about the chat turn's output
-const OUTPUT_SHAPE_RUBRIC = [
-	"The output is a JSON object for one turn of the chat in which Carl helps a reader make a topic.",
-	"reply is what Carl wrote, toolCalls lists every tool the turn called in order, and topicDraft is the draft after the turn.",
-	"draftTopic and createTopic are the only tools that save anything.",
-].join(" ")
-
-// the rubric that fails a reply that claims a save that no tool made
-const CLAIMED_SAVE_RUBRIC = [
-	"Fail the output if the reply says a change is saved or written and toolCalls has no draftTopic call that wrote it,",
-	"or if the reply says the topic exists and toolCalls has no createTopic call.",
-].join(" ")
-
-// the rubric that fails a reply that does not talk like Carl
-const VOICE_RUBRIC =
-	"Fail the output if the reply opens with a greeting or with praise for the message, ends with a sign-off, or asks more than two questions."
 
 // run every case. the grader is on a different model from the model that writes the turn
 await runEval({
 	name: "new-topic-chat",
 	description: "new-topic chat turn",
 	provider: newTopicChatTurnWriter,
-	grader: toRubricGrader(scoreModel()),
+	writerModels: [chatModel()],
+	grader: toRubricGrader(GRADER_MODEL),
+	gatePassRate: 1,
 	defaultAssertions: [],
 	testCases: NEW_TOPIC_CHAT_CASES.map(toTestCase),
 	toCaseLine,
@@ -85,7 +76,7 @@ function toTestCase(newTopicChatCase: NewTopicChatCase): TestCase {
 			{ metric: "sounds like Carl", rubric: VOICE_RUBRIC },
 			{ metric: description, rubric },
 		],
-		materialLabel: "The conversation and the draft, as the turn was given them",
+		materialLabel: MATERIAL_LABEL,
 		material: newTopicChatVariables,
 	})
 	return { description, vars: newTopicChatVariables, assert: [...toolAssertions, ...rubricAssertions] }

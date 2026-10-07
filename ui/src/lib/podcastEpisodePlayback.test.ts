@@ -1,7 +1,7 @@
-// podcast episode player store tests: toChapterIndexAt finds the chapter that is playing at a position
+// podcast episode playback tests: toChapterIndexAt finds the chapter that is playing at a position
 import { expect, test } from "bun:test"
 import type { PodcastEpisodeChapter } from "@shared/contracts"
-import { toChapterIndexAt } from "./podcastEpisodePlayerStore"
+import { toChapterIndexAt } from "./podcastEpisodePlayback"
 
 // three chapters that start at 0, 155, and 298 seconds
 const chapters: PodcastEpisodeChapter[] = [0, 155, 298].map((startSeconds, position) => ({

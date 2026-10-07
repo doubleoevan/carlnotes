@@ -22,7 +22,8 @@ from a real browser is the smoother path.
 
 ## 2. Create a topic
 
-Press **New Topic**. Or ask Carl: open Coffee Talk, pick **Give Carl a topic. You know the one.**, and he
+Press **New Topic**, or pick **New topic** in the **⋮** actions menu on a page without that button. Or ask Carl: open
+Coffee Talk, pick **Give Carl a topic. You know the one.**, and he
 builds it with you. See [Making a topic with Coffee Talk](/docs/feed/making-a-topic-in-chat/). The
 form is titled "Your new topic". Give it a **title** that describes the
 topic, not its category. Carl uses the title as context, so "CarlNotes Documentation" beats "Documentation".

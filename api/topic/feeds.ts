@@ -23,6 +23,7 @@ import {
 import { memberTopicIds, subscribedTopicIds } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
 import { attachTopicFindingFaviconPaths } from "../favicons"
+import { loadLatestPodcastEpisodes } from "../podcast/helpers"
 import { filteredTopicFindings, newTopicFindingCount, type TopicFindingRow, toTopicFinding } from "./findings"
 import { toScheduledTimeLabel } from "./helpers"
 import { isPublicAndShown } from "./permissions"
@@ -142,12 +143,7 @@ export async function buildTopicFeeds(
 
 	// fetch every loaded topic's feed data in one batch keyed by topic id, then build each feed in memory
 	const combinedTopics = [...ownersTopics, ...subscribedTopics, ...featuredTopics, ...popularTopics]
-	const topicFeedData = await traceRequestStage("topic_feed.data", () =>
-		loadTopicFeedData(
-			combinedTopics.map((topic) => topic.id),
-			userId,
-		),
-	)
+	const topicFeedData = await traceRequestStage("topic_feed.data", () => loadTopicFeedData(combinedTopics, userId))
 
 	// build each section's feeds from the batched data
 	const toTopicFeeds = (sectionTopics: (typeof topics.$inferSelect)[]): TopicFeed[] =>
@@ -184,10 +180,12 @@ export async function buildTopicFeeds(
 }
 
 // fetch every dataset the topic feeds need across all topic ids at once, each grouped by topic id
-async function loadTopicFeedData(topicIds: string[], userId: string | null) {
+async function loadTopicFeedData(topicRows: (typeof topics.$inferSelect)[], userId: string | null) {
+	const topicIds = topicRows.map((topicRow) => topicRow.id)
+
 	// run the topic-batched queries together, plus the subscription and membership queries for the signed-in user
 	// biome-ignore format: one line keeps the destructure under the comment-density hook's limit
-	const [findingRows, sourceRows, attachmentRows, scanRows, monthCostRows, subscribedTopicIdSet, memberTopicIdSet, ownerRows, teamRows, mentionsByTopic, teamCountRows] =
+	const [findingRows, sourceRows, attachmentRows, scanRows, monthCostRows, subscribedTopicIdSet, memberTopicIdSet, ownerRows, teamRows, mentionsByTopic, teamCountRows, latestPodcastEpisodeByTopic] =
 		await Promise.all([
 			// each topic's best findings, with the user's consumed and bookmarked dates
 			loadFeedFindingRows(topicIds, userId),
@@ -207,6 +205,8 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 			loadTopicChatMentions(userId, topicIds),
 			// how many teams hold each topic, which the topic roast shows under the follower count
 			loadSharedTeamCountRows(topicIds),
+			// each topic's latest podcast episode that the user may listen to, which plays from the topic's card
+			loadLatestPodcastEpisodes(topicRows, userId),
 		])
 
 	// group each dataset by topic id so that a feed can read its slice in memory
@@ -220,6 +220,7 @@ async function loadTopicFeedData(topicIds: string[], userId: string | null) {
 		memberTopicIdSet,
 		ownerByTopic: new Map(ownerRows.map((ownerRow) => [ownerRow.topicId, ownerRow])),
 		mentionsByTopic,
+		latestPodcastEpisodeByTopic,
 		// the shared-in teams alone. the owning team has no row here, so each count adds it back
 		sharedTeamCountByTopic: new Map(
 			teamCountRows.map((teamCountRow) => [teamCountRow.topicId, teamCountRow.teamCount]),
@@ -457,6 +458,7 @@ function buildTopicFeed(
 		sourceUrl: attachment.sourceUrl,
 		status: attachment.status,
 		context: null,
+		failureMessage: null,
 	}))
 
 	// shape each row into a topic finding and set its isConsumed flag
@@ -504,6 +506,7 @@ function buildTopicFeed(
 		attachments: topicAttachments,
 		sources: topicSources,
 		findings: filteredTopicFindings(topicFindings, includeConsumedResources),
+		latestPodcastEpisode: feedData.latestPodcastEpisodeByTopic.get(topic.id) ?? null,
 	}
 }
 

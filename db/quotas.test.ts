@@ -4,7 +4,7 @@
 // episodes stop rendering at 80 percent of the monthly budget, and after the first episode of a topic on the free plan
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { PLANS } from "@shared/plans"
-import { connectionPool } from "./index"
+import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
 import {
 	canRenderPodcastEpisode,
 	incrementDaySuggestionCount,
@@ -103,19 +103,14 @@ const USER_ACCESS_ROW = ["user", "plus", null]
 // runs the calls with the pool's query swapped for a stub that counts its calls, and returns the count.
 // the pool's own query comes back however the calls end
 async function countAccessQueries(runCalls: () => Promise<unknown>): Promise<number> {
-	const poolQuery = connectionPool.query
-	let queryCount = 0
-	connectionPool.query = (() => {
-		queryCount += 1
-		return Promise.resolve({ rows: [USER_ACCESS_ROW], fields: [] })
-	}) as unknown as typeof connectionPool.query
+	const sentQueries = stubConnectionPool(() => [USER_ACCESS_ROW])
 
 	// run the calls, then put the pool's own query back
 	try {
 		await runCalls()
-		return queryCount
+		return sentQueries.length
 	} finally {
-		connectionPool.query = poolQuery
+		restoreConnectionPool()
 	}
 }
 
@@ -169,7 +164,6 @@ async function withPodcastEpisodeQueryRows<Result>(
 	podcastEpisodeQueryRows: PodcastEpisodeQueryRows,
 	runCalls: () => Promise<Result>,
 ): Promise<Result> {
-	const originalConnectionPoolQuery = connectionPool.query
 	const [scanDollars, chatDollars, podcastEpisodeDollars] = podcastEpisodeQueryRows.spendDollars
 	const spendSums = [
 		{ fromClause: `from "scans"`, dollars: scanDollars },
@@ -178,25 +172,24 @@ async function withPodcastEpisodeQueryRows<Result>(
 	]
 
 	// return the podcast episode count for a count, one table's spend sum for a sum, and the access row for anything else
-	connectionPool.query = ((queryConfig: string | { text: string }) => {
-		const queryText = typeof queryConfig === "string" ? queryConfig : queryConfig.text
+	stubConnectionPool(({ text: queryText }) => {
 		if (queryText.includes("count(")) {
-			return Promise.resolve({ rows: [[podcastEpisodeQueryRows.podcastEpisodeCount]], fields: [] })
+			return [[podcastEpisodeQueryRows.podcastEpisodeCount]]
 		}
 
 		// return the spend sum of the table that the query reads
 		if (queryText.includes("sum(")) {
 			const spendSumDollars = spendSums.find(({ fromClause }) => queryText.includes(fromClause))?.dollars ?? "0"
-			return Promise.resolve({ rows: [[spendSumDollars]], fields: [] })
+			return [[spendSumDollars]]
 		}
-		return Promise.resolve({ rows: [podcastEpisodeQueryRows.accessRow], fields: [] })
-	}) as unknown as typeof connectionPool.query
+		return [podcastEpisodeQueryRows.accessRow]
+	})
 
 	// run the calls, then put the connection pool's own query back
 	try {
 		return await runCalls()
 	} finally {
-		connectionPool.query = originalConnectionPoolQuery
+		restoreConnectionPool()
 	}
 }
 

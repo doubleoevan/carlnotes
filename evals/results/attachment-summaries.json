@@ -1,0 +1,13 @@
+{
+	"name": "attachment-summaries",
+	"passedRunCount": 13,
+	"runCount": 21,
+	"ranOn": "2026-10-05",
+	"commit": "fdfb55e",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"cheap-model",
+		"chat-model"
+	],
+	"graderModelId": "score-model"
+}

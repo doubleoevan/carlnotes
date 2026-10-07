@@ -1,4 +1,5 @@
 // topic attachments
+import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts"
 import { generateText } from "ai"
 import { and, eq } from "drizzle-orm"
 import { extractText as extractPdfText } from "unpdf"
@@ -356,8 +357,10 @@ function toSheetSafeRow(rowLine: string): string {
 
 // the most rows table text keeps, shared across a workbook's sheets
 export const MAX_TABLE_ROWS = 150
-// the most characters table text keeps, so the size stays bounded even when rows are wide
-export const MAX_TABLE_CHARS = 20_000
+// the most characters that the rows and headings of table text keep.
+// the attachment context limit also holds the omitted-rows line, so an owner can save an edit to a full table's text
+const OMITTED_ROWS_LINE_CHARS = 32
+export const MAX_TABLE_CHARS = MAX_ATTACHMENT_CONTEXT_CHARS - OMITTED_ROWS_LINE_CHARS
 
 // a table file's text cut to what its table text can keep, with the data rows the cut dropped
 export type ClippedTableText = { serializedText: string; skippedRows: number }

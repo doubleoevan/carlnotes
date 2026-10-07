@@ -4,8 +4,8 @@
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
-import { getTableColumns } from "drizzle-orm"
-import { connectionPool, db } from "../db"
+import { db } from "../db"
+import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../db/connectionPoolStub"
 import * as quotas from "../db/quotas"
 import { scans, topics } from "../db/schema"
 import * as litellm from "./litellm"
@@ -55,16 +55,6 @@ function toScheduledTopic(id: string, ownerId = "owner-1"): typeof topics.$infer
 	return { id, ownerId, frequency: "weekly" } as never
 }
 
-// a connection pool that returns the given rows for every query and keeps each query's sql and values
-function stubConnectionPool(queryRows: unknown[][] = []): { text: string; values: unknown[] }[] {
-	const sentQueries: { text: string; values: unknown[] }[] = []
-	connectionPool.query = ((queryConfig: { text: string }, values: unknown[]) => {
-		sentQueries.push({ text: queryConfig.text, values })
-		return Promise.resolve({ rows: queryRows, fields: [], rowCount: queryRows.length })
-	}) as unknown as typeof connectionPool.query
-	return sentQueries
-}
-
 // stub a proxy that cannot be reached, with the proxy settings that a budget read needs, and return the fetch mock
 function stubUnreachableProxy(): Mock<() => Promise<Response>> {
 	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
@@ -80,14 +70,13 @@ function stubUnreachableProxy(): Mock<() => Promise<Response>> {
 
 // put each spied function, the connection pool's own query, the real fetch, and the proxy settings back
 // after each test, whether its assertions pass or not
-const originalConnectionPoolQuery = connectionPool.query
 const originalFetch = globalThis.fetch
 const originalProxySettings = {
 	LITELLM_BASE_URL: Bun.env.LITELLM_BASE_URL,
 	LITELLM_MASTER_KEY: Bun.env.LITELLM_MASTER_KEY,
 }
 afterEach(() => {
-	connectionPool.query = originalConnectionPoolQuery
+	restoreConnectionPool()
 	globalThis.fetch = originalFetch
 	mock.restore()
 
@@ -252,13 +241,13 @@ test("each owner's budget is read once, and only an owner whose budget is spent 
 // an owner whose budget read fails, or who has no key yet, is left out
 test("an owner whose budget read fails or who has no key is left out", async () => {
 	// an owner with a key, and a proxy that cannot be reached
-	stubConnectionPool([["owner@example.com", "sk-owner", "user", "free", null]])
+	stubConnectionPool(() => [["owner@example.com", "sk-owner", "user", "free", null]])
 	const fetchMock = stubUnreachableProxy()
 	expect(await loadBudgetExhaustedOwnerIds([toScheduledTopic("a")])).toEqual(new Set())
 	expect(fetchMock).toHaveBeenCalledTimes(1)
 
 	// an owner with no key yet is left out, and that owner's budget is never read from the proxy
-	stubConnectionPool([["owner@example.com", null, "user", "free", null]])
+	stubConnectionPool(() => [["owner@example.com", null, "user", "free", null]])
 	expect(await loadBudgetExhaustedOwnerIds([toScheduledTopic("a")])).toEqual(new Set())
 	expect(fetchMock).toHaveBeenCalledTimes(1)
 })
@@ -364,7 +353,7 @@ test("a daily Topic past its owner's daily topic limit saves no failed Scan", as
 // a Topic whose owner's budget is spent saves no failed Scan if the Topic has a Scan that is still running
 test("a Topic with a running Scan saves no failed Scan, even if its owner's budget is spent", async () => {
 	// every select returns a running Scan's id, and the owner has scans left today
-	const sentQueries = stubConnectionPool([["scan-1"]])
+	const sentQueries = stubConnectionPool(() => [["scan-1"]])
 	spyOn(quotas, "scansRemainingToday").mockResolvedValue(5)
 	const startTopicScanSpy = spyOn(scan, "startTopicScan")
 
@@ -389,20 +378,13 @@ type ToUndispatchedScanRowOptions = { id: string; isManual: boolean }
 // an undispatched Scan row as the connection pool returns the row.
 // only its id, Topic, owner, status, and manual flag are set
 function toUndispatchedScanRow({ id, isManual }: ToUndispatchedScanRowOptions): unknown[] {
-	const scanValues: Record<string, unknown> = {
-		id,
-		topicId: "topic-1",
-		ownerId: "owner-1",
-		status: "running",
-		isManual,
-	}
-	return Object.keys(getTableColumns(scans)).map((columnName) => scanValues[columnName] ?? null)
+	return toTableRow(scans, { id, topicId: "topic-1", ownerId: "owner-1", status: "running", isManual })
 }
 
 // an undispatched Scan whose owner's budget is spent is marked failed instead of started, unless the Scan is manual
 test("an undispatched Scan whose owner's budget is spent is marked failed, and a manual Scan still starts", async () => {
 	// a scheduled row and a manual row of one owner whose key budget is spent, with a quiet console
-	stubConnectionPool([
+	stubConnectionPool(() => [
 		toUndispatchedScanRow({ id: "scheduled-scan", isManual: false }),
 		toUndispatchedScanRow({ id: "manual-scan", isManual: true }),
 	])
@@ -425,7 +407,7 @@ test("an undispatched Scan whose owner's budget is spent is marked failed, and a
 // the sweep starts an undispatched Scan whose owner's budget is not spent
 test("an undispatched Scan whose owner's budget is not spent starts", async () => {
 	// a scheduled row whose owner's key budget is not spent, with a quiet console
-	stubConnectionPool([toUndispatchedScanRow({ id: "scheduled-scan", isManual: false })])
+	stubConnectionPool(() => [toUndispatchedScanRow({ id: "scheduled-scan", isManual: false })])
 	spyOn(console, "log").mockImplementation(() => {})
 	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
 	const failUnstartedScanSpy = spyOn(scan, "failUnstartedScan").mockResolvedValue(undefined)
@@ -440,7 +422,7 @@ test("an undispatched Scan whose owner's budget is not spent starts", async () =
 // a budget read that throws an error is reported, and the Scan is neither marked failed nor started
 test("an undispatched Scan whose owner's budget read throws an error is reported and left undispatched", async () => {
 	// a scheduled row whose owner's budget read throws an error, with a quiet console and error report
-	const sentQueries = stubConnectionPool([toUndispatchedScanRow({ id: "scheduled-scan", isManual: false })])
+	const sentQueries = stubConnectionPool(() => [toUndispatchedScanRow({ id: "scheduled-scan", isManual: false })])
 	spyOn(console, "log").mockImplementation(() => {})
 	spyOn(console, "error").mockImplementation(() => {})
 	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockRejectedValue(new Error("connection lost"))
@@ -460,12 +442,7 @@ test("an undispatched Scan whose owner's budget read throws an error is reported
 test("an undispatched Scan that stopped running after the sweep read the row is not started", async () => {
 	// the select returns a scheduled row, and the update of its start time matches no row
 	const undispatchedScanRows = [toUndispatchedScanRow({ id: "scheduled-scan", isManual: false })]
-	const sentQueries: { text: string; values: unknown[] }[] = []
-	connectionPool.query = ((queryConfig: { text: string }, values: unknown[]) => {
-		sentQueries.push({ text: queryConfig.text, values })
-		const queryRows = queryConfig.text.startsWith("select") ? undispatchedScanRows : []
-		return Promise.resolve({ rows: queryRows, fields: [], rowCount: queryRows.length })
-	}) as unknown as typeof connectionPool.query
+	const sentQueries = stubConnectionPool(({ text }) => (text.startsWith("select") ? undispatchedScanRows : []))
 
 	// an owner whose key budget is not spent, with a quiet console
 	spyOn(console, "log").mockImplementation(() => {})

@@ -1,7 +1,7 @@
 // avatar route tests: an upload is cached long only at its current version.
 // a provider photo's redirect is cached for an hour
 import { afterEach, expect, test } from "bun:test"
-import { connectionPool } from "../db"
+import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { avatarsRoute } from "./avatars"
 
 // a user's upload and a team's upload. the id in each file name is its version
@@ -9,15 +9,11 @@ const USER_AVATAR_KEY = "avatars/user-1/3f2a.png"
 const TEAM_AVATAR_KEY = "avatars/teams/team-1/9c1b.webp"
 
 // the pool's own query, put back after each test
-const poolQuery = connectionPool.query
-afterEach(() => {
-	connectionPool.query = poolQuery
-})
+afterEach(restoreConnectionPool)
 
 // return one row for every select, with its columns in the order that the route selects them
 function stubSelectRow(row: unknown[]): void {
-	const selectQueryResult = { rows: [row], fields: [], rowCount: 1, command: "SELECT" }
-	connectionPool.query = (() => Promise.resolve(selectQueryResult)) as unknown as typeof connectionPool.query
+	stubConnectionPool(() => [row])
 }
 
 // a conditional request, so a stored image responds with its headers alone and never reads storage

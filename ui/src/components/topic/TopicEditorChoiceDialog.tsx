@@ -1,10 +1,13 @@
 import type { TopicDraftTeam } from "@shared/contracts"
-import { type ComponentProps, useState } from "react"
+import { useNavigate } from "@tanstack/react-router"
+import { Plus } from "lucide-react"
+import { type ComponentProps, type ReactNode, useState } from "react"
+import { authClient } from "@/clients/authClient"
 import { CoffeeCup } from "@/components/branding/CoffeeCup"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { isWideScreen } from "@/lib/utils"
+import { cn, isWideScreen } from "@/lib/utils"
 import { openNewTopicChat, setChatId, setChatPanelState, startEditingTopic } from "@/stores/chatPanelStore"
 
 /**
@@ -72,5 +75,52 @@ export function NewTopicDialog({
 			onChooseTopicForm={() => setIsFormChosen(true)}
 			onClose={onClose}
 		/>
+	)
+}
+
+/**
+ * Returns the new topic dialog and the call that opens the dialog.
+ */
+export function useNewTopicDialog(onTopicCreated?: () => void): {
+	openNewTopicDialog: () => void
+	newTopicDialog: ReactNode
+} {
+	// the router, the session, and whether the dialog is open
+	const navigate = useNavigate()
+	const { data: session } = authClient.useSession()
+	const [isNewTopicDialogOpen, setIsNewTopicDialogOpen] = useState(false)
+
+	// open the dialog for a signed-in user, and send a visitor to sign up first
+	const openNewTopicDialog = (): void => {
+		if (session) {
+			setIsNewTopicDialogOpen(true)
+			return
+		}
+		void navigate({ to: "/signup", search: { cta: "new-topic" } })
+	}
+
+	// a created topic closes the dialog, opens the topic's page, and runs onTopicCreated
+	const handleTopicCreated = async (topicId: string): Promise<void> => {
+		setIsNewTopicDialogOpen(false)
+		void navigate({ to: "/topics/$topicId", params: { topicId } })
+		onTopicCreated?.()
+	}
+
+	// the dialog mounts only while open. its form starts empty each time
+	const newTopicDialog = isNewTopicDialogOpen ? (
+		<NewTopicDialog onClose={() => setIsNewTopicDialogOpen(false)} onTopicSaved={handleTopicCreated} />
+	) : null
+	return { openNewTopicDialog, newTopicDialog }
+}
+
+/**
+ * The New Topic button with its plus icon, which calls onNewTopic.
+ */
+export function NewTopicButton({ className, onNewTopic }: { className?: string; onNewTopic: () => void }) {
+	return (
+		<Button className={cn("shrink-0", className)} onClick={onNewTopic}>
+			<Plus className="size-4" />
+			New Topic
+		</Button>
 	)
 }

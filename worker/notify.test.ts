@@ -2,7 +2,7 @@
 // is sent once per Scan
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
-import { connectionPool } from "../db"
+import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as redis from "../db/redis"
 import { planScanDigest, sendScanDigestBatch, sendScanReport } from "./notify"
 
@@ -16,8 +16,7 @@ type RecordedInsert = { sql: string; values: unknown[] }
 const SUCCEEDED_SCAN_TOPIC_ROW = ["scan-1", "succeeded", null, null, "topic-1", "Coffee gear"]
 const FAILED_SCAN_TOPIC_ROW = ["scan-1", "failed", null, "every source failed", "topic-1", "Coffee gear"]
 
-// the real query, fetch, and env, to put back after each test
-const realConnectionPoolQuery = connectionPool.query
+// the real fetch and env, to put back after each test
 const realFetch = globalThis.fetch
 const realEnv = {
 	RESEND_API_KEY: Bun.env.RESEND_API_KEY,
@@ -36,7 +35,7 @@ beforeEach(() => {
 
 // put the query, fetch, and report back after each test
 afterEach(() => {
-	connectionPool.query = realConnectionPoolQuery
+	restoreConnectionPool()
 	globalThis.fetch = realFetch
 	mock.restore()
 
@@ -53,19 +52,16 @@ afterEach(() => {
 // stub the connection pool to return the rows whose pattern each query's SQL matches, recording every insert
 function stubDatabase(queryRows: QueryRows[]): RecordedInsert[] {
 	const recordedInserts: RecordedInsert[] = []
-	connectionPool.query = ((queryConfig: string | { text: string }, values: unknown[] = []) => {
-		const sql = typeof queryConfig === "string" ? queryConfig : queryConfig.text
-
+	stubConnectionPool(({ text: sql, values }) => {
 		// an insert is recorded and returns nothing
 		if (sql.startsWith("insert")) {
 			recordedInserts.push({ sql, values })
-			return Promise.resolve({ rows: [], fields: [], rowCount: 0, command: "INSERT" })
+			return []
 		}
 
 		// a select returns the first matching rows
-		const matchedRows = queryRows.find((queryRow) => queryRow.sqlPattern.test(sql))?.rows ?? []
-		return Promise.resolve({ rows: matchedRows, fields: [], rowCount: matchedRows.length, command: "SELECT" })
-	}) as unknown as typeof connectionPool.query
+		return queryRows.find((queryRow) => queryRow.sqlPattern.test(sql))?.rows ?? []
+	})
 	return recordedInserts
 }
 

@@ -1,5 +1,6 @@
 // the read side of topic chat
 import { reportError } from "@shared/monitoring"
+import { DOCS_SITE_ADDRESS } from "@shared/seo"
 import { toSourceSummary, toUrlHost } from "@shared/sources"
 import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm"
 import { db, isFindingShown } from "../../db"
@@ -81,7 +82,7 @@ export async function retrieveChatContext(
 	userId: string,
 	isTopicOwner: boolean,
 	litellmApiKey?: string,
-	includeKeptAttachments = true,
+	shouldIncludeAttachments = true,
 ): Promise<ChatContext | null> {
 	// a missing topic has nothing to chat about
 	const [topic] = await db
@@ -110,10 +111,9 @@ export async function retrieveChatContext(
 			retrieveFindings([topicId], questionVector),
 			readSources(topicId),
 			readScanSummaries(topicId),
-			// read the topic's own attachments only when the asker owns the topic
-			// both they and the user's kept chat attachments stay out of a chat room turn, whose answer posts publicly
-			isTopicOwner && includeKeptAttachments ? readAttachmentContext(topicId) : Promise.resolve(""),
-			includeKeptAttachments ? readChatAttachmentContext(userId, topicId) : Promise.resolve(""),
+			// read the topic's attachments for its owner and the user's kept chat attachments. a chat room turn reads no attachments
+			isTopicOwner && shouldIncludeAttachments ? readAttachmentContext(topicId) : Promise.resolve(""),
+			shouldIncludeAttachments ? readChatAttachmentContext(userId, topicId) : Promise.resolve(""),
 			readDocsBlock(questionVector),
 		])
 	// the name and prompt fill their own lines, and the rest of the row is the settings block
@@ -240,15 +240,23 @@ async function readDocsBlock(questionVector: number[]): Promise<string> {
 		.orderBy(sql`${docsChunks.embedding} <=> ${JSON.stringify(questionVector)}::vector`)
 		.limit(MAX_RETRIEVED_DOCS_SECTIONS)
 
-	// label each section with the docs url it came from, so a reply can point the user at the page
-	return rows
-		.map((docsRow) => `[carlnotes.com/docs${docsRow.page === "index" ? "" : `/${docsRow.page}`}]\n${docsRow.content}`)
+	return toDocsBlock(rows)
+}
+
+/**
+ * Returns the docs sections as one block, each labeled with the docs url that the section came from.
+ */
+export function toDocsBlock(docsSections: { page: string; content: string }[]): string {
+	return docsSections
+		.map(
+			(docsSection) =>
+				`[${DOCS_SITE_ADDRESS}${docsSection.page === "index" ? "" : `/${docsSection.page}`}]\n${docsSection.content}`,
+		)
 		.join("\n\n")
 }
 
 /**
- * The retrieved rows with near-ties broken by recency, so the newer of two findings that answer the question equally well leads.
- * The set never changes, only its order.
+ * Returns the same rows closest first, with near-ties broken by recency.
  */
 export function toRelevanceThenRecencyOrder<Row extends { distance: number; foundAt: Date }>(rows: Row[]): Row[] {
 	// distances in one range count as a tie, so recency can decide between them
@@ -269,7 +277,7 @@ export async function readResourceText(contentKey: string | null, snippet: strin
 		return snippet ?? ""
 	}
 
-	// read the object, falling back to the snippet when it is gone or unreadable
+	// read the object, falling back to the snippet if the object is gone or unreadable
 	try {
 		return await getResourceContent(contentKey)
 	} catch (error) {
@@ -371,7 +379,6 @@ export async function retrieveDocsBlock(question: string, litellmApiKey?: string
 
 /**
  * Assembles one team chat room turn's context from every topic the team holds, or null if the team does not exist.
- * Owner attachments and kept chat material stay out of an answer that posts to the whole chat room.
  */
 export async function retrieveTeamChatContext(
 	teamId: string,

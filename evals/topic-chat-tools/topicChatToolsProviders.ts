@@ -1,5 +1,5 @@
-// the topic chat tools eval's promptfoo provider, the chat turn writer under test. the writer calls the LiteLLM proxy
-// through worker/models.ts with the tools that a user who may edit the topic gets, and records every tool call
+// the topic chat tools eval's promptfoo provider, which runs the chat turn writer with the tools that a user who may
+// edit the topic gets, and records every tool call
 import { generateText, stepCountIs, type Tool } from "ai"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import { toModelRoomQuestion } from "../../api/chat/roomTurns"
@@ -19,7 +19,8 @@ import {
 } from "../../worker/chat"
 import { webSearchTool } from "../../worker/chat/search"
 import { chatModel } from "../../worker/models"
-import { type RecordedToolCall, toRecordingTools, toStepsText } from "../evalHarness"
+import { type RecordedToolCall, toRecordingTools } from "../evalHarness"
+import { toStepsText } from "../evalReplies"
 import { TOPIC_CHAT_CONTEXT } from "../topic-chat/topicChatCases"
 import type { TopicChatToolsCase } from "./topicChatToolsCases"
 

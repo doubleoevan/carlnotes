@@ -1,16 +1,18 @@
 import type { TopicResponse } from "@shared/contracts"
-import { ListOrdered, PawPrint, Pencil, Share2, Trash2 } from "lucide-react"
+import { ListOrdered, PawPrint, Pencil, Share2, Trash2, Users } from "lucide-react"
 import type * as React from "react"
 import { ShareTopicButton } from "@/components/share/ShareTopic"
-import { isTeamUpShown, TeamUpButton } from "@/components/team/TeamUpButton"
+import { AddTopicToTeamButton, isAddTopicToTeamShown } from "@/components/team/AddTopicToTeamButton"
+import { NewTopicButton } from "@/components/topic/TopicEditorChoiceDialog"
 import { isFollowShown, SubscribeButton } from "@/components/topic/TopicPageHeader"
 import { isManualScanShown } from "@/components/topic/TopicScanButton.tsx"
-import { MENU_BUTTON_CLASS } from "@/lib/styleClasses"
+import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 import type { PageActionOption } from "@/stores/pageActionsStore"
 
 // what the action bar's layout depends on
 type TopicActionContext = {
-	// undefined while the payload loads. the call-to-action skeleton stands in for it
+	// undefined while the payload loads. the call-to-action skeleton shows in its place
 	topic: TopicResponse | null | undefined
 	isSignedIn: boolean
 	isBookmarkedView: boolean
@@ -18,38 +20,57 @@ type TopicActionContext = {
 	isJoinable: boolean
 }
 
-/**
- * Which control the topic's action bar highlights. Exactly one is the call to action, and share
- * takes the left when nothing else claims it. The bar reads as one control on each end.
- */
-function toActionLayout({ topic, isSignedIn, isBookmarkedView, isJoinable }: TopicActionContext) {
-	const canScan = isManualScanShown(topic)
-	const isFollowCallToAction = !canScan && !isJoinable && !isSignedIn
-	const isTeamUpCallToAction = !canScan && !isJoinable && isSignedIn
+// where each control sits. the call to action holds the right, one control the left, and the actions menu the rest
+type TopicActionLayout = {
+	isNewTopicCallToAction: boolean
+	isJoinCallToAction: boolean
+	isJoinOnLeft: boolean
+	isFollowCallToAction: boolean
+	isFollowInMenu: boolean
+	isAddTopicToTeamOnLeft: boolean
+	isAddTopicToTeamInMenu: boolean
+	isShareOnLeft: boolean
+}
 
-	// either show the call to action or a menu row, and team up is either the row or the call to action
-	const isTeamUpInRow = Boolean(topic && isTeamUpShown(topic, isSignedIn) && !isTeamUpCallToAction)
+/**
+ * Returns where the topic's action bar puts each control.
+ */
+export function toTopicActionLayout({
+	topic,
+	isSignedIn,
+	isBookmarkedView,
+	isJoinable,
+}: TopicActionContext): TopicActionLayout {
+	// whoever may scan gets the scan button. any other signed-in user gets New Topic, and a visitor joins or follows
+	const canScan = isManualScanShown(topic)
+	const isNewTopicCallToAction = Boolean(topic) && isSignedIn && !canScan
+	const isFollowCallToAction = !canScan && !isSignedIn && !isJoinable
+
+	// a signed-in user who may join gets Join Team on the left. adding the topic to a team then moves into the menu
+	const isJoinOnLeft = isNewTopicCallToAction && isJoinable
+	const isAddTopicToTeamOffered = Boolean(topic && isAddTopicToTeamShown(topic, isSignedIn))
+	const isAddTopicToTeamOnLeft = isAddTopicToTeamOffered && !isJoinOnLeft
 	const isBookmarkScopeShown = isBookmarkedView && Boolean(topic?.isTeamMember)
 	return {
-		isJoinCallToAction: !canScan && isJoinable,
+		isNewTopicCallToAction,
+		isJoinCallToAction: !canScan && !isSignedIn && isJoinable,
+		isJoinOnLeft,
 		isFollowCallToAction,
 		isFollowInMenu: Boolean(topic && isFollowShown(topic) && !isFollowCallToAction),
-		isTeamUpInRow,
-		isTeamUpCallToAction,
-		isShareInRow: Boolean(topic) && !isBookmarkScopeShown && !isTeamUpInRow,
+		isAddTopicToTeamOnLeft,
+		isAddTopicToTeamInMenu: isAddTopicToTeamOffered && isJoinOnLeft,
+		isShareOnLeft: Boolean(topic) && !isBookmarkScopeShown && !isAddTopicToTeamOnLeft && !isJoinOnLeft,
 	}
 }
 
-// whether the follow row goes in the page's actions menu instead of the bar
-export function isFollowTopicInMenu(context: TopicActionContext): boolean {
-	return toActionLayout(context).isFollowInMenu
-}
-
-// the rows this page hands the search bar's actions menu, in the order they read
+/**
+ * Returns the options that the topic page gives the search bar's actions menu, in reading order.
+ */
 export function toTopicActionOptions({
 	topic,
 	isAdminUser,
-	isFollowTopicInMenu,
+	topicActionLayout,
+	onAddTopicToTeam,
 	onShareTopic,
 	onToggleFollowTopic,
 	onRankFeaturedTopic,
@@ -58,7 +79,8 @@ export function toTopicActionOptions({
 }: {
 	topic: TopicResponse
 	isAdminUser: boolean
-	isFollowTopicInMenu: boolean
+	topicActionLayout: TopicActionLayout
+	onAddTopicToTeam: () => void
 	onShareTopic: () => void
 	onToggleFollowTopic: () => void
 	onRankFeaturedTopic: () => void
@@ -66,8 +88,8 @@ export function toTopicActionOptions({
 	onDeleteTopic: () => void
 }): PageActionOption[] {
 	return [
-		// on a team topic Team Up holds the row, so following leads the menu instead of being a second button
-		...(isFollowTopicInMenu
+		// the follow option leads the menu if Follow shows and is not the call to action
+		...(topicActionLayout.isFollowInMenu
 			? [
 					{
 						label: topic.isSubscribed ? "Unfollow topic" : "Follow topic",
@@ -81,8 +103,10 @@ export function toTopicActionOptions({
 		...(isAdminUser && topic.visibility === "public"
 			? [{ label: "Featured topics", Icon: ListOrdered, onSelect: onRankFeaturedTopic }]
 			: []),
+		// the Add topic to team option opens its dialog if Join Team holds the bar's left
+		...(topicActionLayout.isAddTopicToTeamInMenu ? [toAddTopicToTeamOption(onAddTopicToTeam)] : []),
 		// sharing sits directly above editing
-		{ label: "Share topic", Icon: Share2, onSelect: onShareTopic },
+		toShareTopicOption(onShareTopic),
 		...(topic.canEdit
 			? [
 					{ label: "Edit topic", Icon: Pencil, onSelect: onEditTopic },
@@ -93,59 +117,75 @@ export function toTopicActionOptions({
 }
 
 /**
- * The static button bar above the payload, so the buttons never jump or animate in. Every control sits
- * left but the page's one call to action, which holds the right. The bar wraps when the screen is narrow.
+ * Returns the actions menu's Add topic to team option.
+ */
+export function toAddTopicToTeamOption(onSelect: () => void): PageActionOption {
+	return { label: "Add topic to team", Icon: Users, onSelect }
+}
+
+/**
+ * Returns the actions menu's Share topic option.
+ */
+export function toShareTopicOption(onSelect: () => void): PageActionOption {
+	return { label: "Share topic", Icon: Share2, onSelect }
+}
+
+/**
+ * The topic's static action bar, with one control on the left and the call to action on the right.
  */
 export function TopicActionBar({
 	topic,
 	isSignedIn,
-	isBookmarkedView,
-	isJoinable,
-	joinButton,
+	topicActionLayout,
+	renderJoinButton,
 	scanControl,
+	onNewTopic,
 	onSubscriptionToggle,
-}: TopicActionContext & {
-	// the join and scan controls own their own sends. the bar only decides where they sit
-	joinButton: React.ReactNode
+}: Pick<TopicActionContext, "topic" | "isSignedIn"> & {
+	topicActionLayout: TopicActionLayout
+	// the join and scan controls own their own sends. the bar decides where the controls sit
+	// and whether the join button is highlighted
+	renderJoinButton: ({ isHighlighted }: { isHighlighted: boolean }) => React.ReactNode
 	scanControl: React.ReactNode
+	onNewTopic: () => void
 	onSubscriptionToggle: () => Promise<void>
 }) {
-	const { isJoinCallToAction, isFollowCallToAction, isTeamUpInRow, isTeamUpCallToAction, isShareInRow } =
-		toActionLayout({ topic, isSignedIn, isBookmarkedView, isJoinable })
+	const {
+		isNewTopicCallToAction,
+		isJoinCallToAction,
+		isJoinOnLeft,
+		isFollowCallToAction,
+		isAddTopicToTeamOnLeft,
+		isShareOnLeft,
+	} = topicActionLayout
 	return (
 		<div className="flex flex-wrap items-start justify-between gap-3">
+			{/* the left holds the first of the join, add topic to team, and share buttons that applies.
+			    the actions menu has the rest */}
 			<div className="flex flex-wrap items-start gap-2">
-				{/* share fills the left unless follow or team up already does. the actions menu has it either way */}
-				{topic && isShareInRow && <ShareTopicButton topic={topic} className={MENU_BUTTON_CLASS} />}
-				{topic && isTeamUpInRow && (
-					<TeamUpButton
+				{isJoinOnLeft && renderJoinButton({ isHighlighted: false })}
+				{topic && isAddTopicToTeamOnLeft && (
+					<AddTopicToTeamButton
 						topic={topic}
 						isSignedIn={isSignedIn}
-						isHighlighted={false}
-						onChanged={() => window.location.reload()}
+						onTopicTeamsChanged={() => window.location.reload()}
 					/>
 				)}
+				{topic && isShareOnLeft && <ShareTopicButton topic={topic} className={MENU_BUTTON_CLASS} />}
 			</div>
-			{/* the call to action: whoever may scan brews, a non-member joins the team that has it, a visitor follows,
-			    and everyone else teams up.
-			    while the page loads, a skeleton holds the slot */}
+			{/* the call to action, or a skeleton while the page loads */}
 			<div className="flex items-start gap-2">
 				{topic === undefined && (
 					<div aria-hidden="true" className="bg-muted h-11 w-28 animate-pulse rounded-lg sm:h-9" />
 				)}
 				{/* the scan control mounts for every user to keep its poll running, and shows nothing to the rest */}
 				{scanControl}
-				{isJoinCallToAction && joinButton}
+				{isNewTopicCallToAction && (
+					<NewTopicButton className={cn(MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS)} onNewTopic={onNewTopic} />
+				)}
+				{isJoinCallToAction && renderJoinButton({ isHighlighted: true })}
 				{topic && isFollowCallToAction && (
 					<SubscribeButton topic={topic} isSignedIn={isSignedIn} isHighlighted onToggle={onSubscriptionToggle} />
-				)}
-				{topic && isTeamUpCallToAction && (
-					<TeamUpButton
-						topic={topic}
-						isSignedIn={isSignedIn}
-						isHighlighted
-						onChanged={() => window.location.reload()}
-					/>
 				)}
 			</div>
 		</div>

@@ -5,6 +5,7 @@ import {
 	fetchPodcastEpisode,
 	sendPodcastEpisodeListen,
 } from "@/clients/podcastEpisodeClient"
+import { toChapterIndexAt, updatePodcastEpisodeMediaSession } from "@/lib/podcastEpisodePlayback"
 import { toStoreListeners } from "@/stores/storeListeners"
 
 // the playback rates, in the order that cyclePlaybackRate steps through
@@ -72,6 +73,11 @@ export function usePlayerPositionSeconds(): number {
  */
 export function usePlayerChapter(): PodcastEpisodeChapter | undefined {
 	useStoreVersion()
+	return toPlayerChapter()
+}
+
+// the loaded podcast episode's chapter at the playback position, or undefined if there is none
+function toPlayerChapter(): PodcastEpisodeChapter | undefined {
 	const chapters = playerState.podcastEpisode?.chapters ?? []
 	return chapters[toChapterIndexAt(chapters, playerState.positionSeconds)]
 }
@@ -85,11 +91,11 @@ export function useIsPodcastPlayerShown(): boolean {
 }
 
 /**
- * Returns the index of the chapter playing at a position, or -1 if the podcast episode has no chapters.
+ * Returns whether the podcast episode with this id is loaded and playing.
  */
-export function toChapterIndexAt(chapters: PodcastEpisodeChapter[], positionSeconds: number): number {
-	const chapterIndex = chapters.findLastIndex((chapter) => chapter.startSeconds <= positionSeconds)
-	return chapters.length > 0 ? Math.max(chapterIndex, 0) : -1
+export function useIsPodcastEpisodePlaying(podcastEpisodeId: string | undefined): boolean {
+	useStoreVersion()
+	return playerState.isPlaying && podcastEpisodeId !== undefined && playerState.podcastEpisode?.id === podcastEpisodeId
 }
 
 /**
@@ -186,6 +192,23 @@ export function togglePlayback(): void {
 		void audioElement.play().catch(() => {})
 	} else {
 		audioElement.pause()
+	}
+}
+
+/**
+ * Plays or pauses the player's chapter, and plays the podcast episode from any other chapter.
+ */
+export function togglePodcastEpisodeChapterPlayback(
+	podcastEpisode: PodcastEpisode,
+	chapter: PodcastEpisodeChapter,
+): void {
+	// pause or play the player's chapter, and play any other chapter from its start
+	const isPlayerChapter =
+		playerState.podcastEpisode?.id === podcastEpisode.id && toPlayerChapter()?.position === chapter.position
+	if (isPlayerChapter) {
+		togglePlayback()
+	} else {
+		void playPodcastEpisode(podcastEpisode, chapter.startSeconds)
 	}
 }
 
@@ -361,33 +384,15 @@ function saveListen({ isPlaybackStart, isCompleted }: Omit<PodcastEpisodeListenP
 	})
 }
 
-// name the podcast episode and the player's chapter on the lock screen, and set what the media controls do
+// name the podcast episode and the player's chapter on the lock screen, with the store's own controls
 function updateMediaSession(): void {
-	const { podcastEpisode, positionSeconds } = playerState
-	if (!podcastEpisode || typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+	if (!playerState.podcastEpisode) {
 		return
 	}
-
-	// show the player's chapter, the podcast episode's title, the hosts, and the cover at each size on the lock screen
-	const playerChapter = podcastEpisode.chapters[toChapterIndexAt(podcastEpisode.chapters, positionSeconds)]
-	const artwork = [
-		...(podcastEpisode.smallCoverUrl
-			? [{ src: podcastEpisode.smallCoverUrl, sizes: "600x600", type: "image/jpeg" }]
-			: []),
-		...(podcastEpisode.coverUrl ? [{ src: podcastEpisode.coverUrl, sizes: "3000x3000", type: "image/jpeg" }] : []),
-	]
-	navigator.mediaSession.metadata = new MediaMetadata({
-		title: playerChapter?.title ?? podcastEpisode.title ?? "Coffee Break podcast",
-		artist: "Carl and Vienna",
-		album: podcastEpisode.title ?? "Coffee Break podcast",
-		artwork,
+	updatePodcastEpisodeMediaSession(playerState.podcastEpisode, playerState.positionSeconds, {
+		togglePlayback,
+		skipChapter,
+		skipBack: () => skipPlaybackBy(-SKIP_BACK_SECONDS),
+		skipForward: () => skipPlaybackBy(SKIP_FORWARD_SECONDS),
 	})
-
-	// set what the lock screen's play, pause, chapter skip, and skip back and forward controls do
-	navigator.mediaSession.setActionHandler("play", togglePlayback)
-	navigator.mediaSession.setActionHandler("pause", togglePlayback)
-	navigator.mediaSession.setActionHandler("nexttrack", () => skipChapter(1))
-	navigator.mediaSession.setActionHandler("previoustrack", () => skipChapter(-1))
-	navigator.mediaSession.setActionHandler("seekbackward", () => skipPlaybackBy(-SKIP_BACK_SECONDS))
-	navigator.mediaSession.setActionHandler("seekforward", () => skipPlaybackBy(SKIP_FORWARD_SECONDS))
 }

@@ -193,10 +193,12 @@ function AttachmentContext({
 }) {
 	const [isEditing, setIsEditing] = useState(false)
 
-	// only a ready attachment has a settled context. anything else reports its status instead
+	// only a ready attachment has a settled context. anything else reports its status, and a failed attachment says why
 	if (attachment.status !== "ready" || attachment.context === null) {
 		const statusLabel =
-			attachment.status === "pending" ? "Carl is still reading this one…" : "Carl couldn't read this one."
+			attachment.status === "pending"
+				? "Carl is still reading this one…"
+				: (attachment.failureMessage ?? "Carl couldn't read this one.")
 		return <div className="text-muted-foreground text-xs italic">{statusLabel}</div>
 	}
 

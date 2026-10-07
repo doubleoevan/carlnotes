@@ -15,7 +15,7 @@ import { subscriptions, topics, users } from "../db/schema"
 import { isAllowed } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
-import { loadPublicTeams, loadTeamSummaries, loadTeamUpMenu } from "./team/helpers"
+import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
 import { toTopicTableRows } from "./topic/helpers"
 
 // the transaction a caller is already inside, or the pool when there is none
@@ -140,11 +140,11 @@ export const profilesRoute = new Hono<AppEnv>()
 		const profile = await loadProfile(context.req.param("userId"), currentUser(context))
 		return profile ? context.json(profile) : context.json({ error: "not found" }, 404)
 	})
-	.get("/profiles/:userId/team-up", async (context) => {
-		// the user's teams with their team member status in each, for the Team Up menu
+	.get("/profiles/:userId/team-statuses", async (context) => {
+		// the user's teams, each with the profile user's status there
 		const userId = currentUser(context)
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		return context.json({ teams: await loadTeamUpMenu(userId, context.req.param("userId")) })
+		return context.json({ teams: await loadProfileTeamStatuses(userId, context.req.param("userId")) })
 	})

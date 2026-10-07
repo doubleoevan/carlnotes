@@ -1,5 +1,5 @@
 // a live smoke test the owner runs by hand for attachment ingestion and its processing workflow
-// run it with: bun run smoke:attach. it needs the LiteLLM proxy, the S3_* bucket, a Temporal server with its worker running (bun run dev:temporal), the latest migration applied, and Doppler secrets injected
+// run the smoke test with: bun run smoke:attach. the test needs the S3_* bucket, a Temporal server with its worker running (bun run dev:temporal), the latest migration applied, and Doppler secrets injected
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { attachments, topics, users } from "../db/schema"
@@ -11,7 +11,7 @@ import { shutdownTelemetry, startTelemetry } from "./telemetry"
 // a persisted attachment row
 type Attachment = typeof attachments.$inferSelect
 
-// enough real prose that the model writes a non-empty context from it, and a topic context to merge with
+// a short document, which processing stores as written, and a topic context to merge with
 const ATTACHMENT_TEXT =
 	"# Raccoon care\n\nRaccoons are omnivores that need a varied diet, secure enclosures, and daily enrichment. " +
 	"They reach maturity at about a year, live fifteen to twenty in captivity, and are illegal to keep in many states."
@@ -74,15 +74,15 @@ async function check(topicId: string, pendingAttachment: Attachment, readyAttach
 	const { context: scanContext } = await buildTopicScanContext(topicId)
 	const isObjectStored = await attachmentExists(readyAttachment.objectKey)
 
-	// verify a pending upload, a workflow that finished ready with a context and counts, the object stored, and the guards
+	// verify a pending upload, a workflow that finished ready with the document as written, the object stored, and the counts
 	const contextText = readyAttachment.context.trim()
 	const results: [string, boolean][] = [
 		["upload returns a pending attachment", pendingAttachment.status === "pending"],
 		["workflow marks the attachment ready", readyAttachment.status === "ready"],
-		["context is non-empty", contextText.length > 0],
+		["context is the document as written", contextText === ATTACHMENT_TEXT],
 		["context appears in topicScanContext", scanContext.includes(contextText)],
 		["char_count is recorded", (readyAttachment.charCount ?? 0) > 0],
-		["chunk_count is at least one", (readyAttachment.chunkCount ?? 0) >= 1],
+		["chunk_count is 0, since nothing was summarized", readyAttachment.chunkCount === 0],
 		["stored object exists", isObjectStored],
 	]
 

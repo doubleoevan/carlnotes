@@ -1,5 +1,5 @@
-// the reads for a topic page's podcast, a season's podcast episodes, one episode by its id, and a podcast episode page,
-// each limited to what the user may listen to
+// the reads for a topic page's podcast, each feed topic's latest podcast episode, a season's podcast episodes,
+// one episode by its id, and a podcast episode page, each limited to what the user may listen to
 import type {
 	PodcastEpisode,
 	PodcastEpisodePageResponse,
@@ -16,7 +16,13 @@ import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes, scans, 
 import { isAllowed } from "../authorization"
 import { attachPodcastEpisodeChapterFaviconPaths } from "../favicons"
 import { toTranscriptBlocks } from "../share/podcastFeed"
-import { loadTopicAccessAndFindings, loadTopicOwner, topicSubscriptionStartDate, toTeamFields } from "../topic/helpers"
+import {
+	loadTopicAccessAndFindings,
+	loadTopicOwner,
+	topicSubscriptionStartDate,
+	topicSubscriptionStartDates,
+	toTeamFields,
+} from "../topic/helpers"
 import { canRateTopic } from "../topic/permissions"
 
 // a podcast episode's columns, without its script
@@ -67,9 +73,11 @@ type LoadPodcastEpisodeOptions = {
 // a podcast episode's row and its topic, for a user who may listen to the episode
 export type AccessiblePodcastEpisode = { podcastEpisodeRow: PodcastEpisodeRow; topic: TopicRow }
 
-// the topic page's podcast, and each scan's published podcast episode by the scan's id
+// the topic page's podcast, its latest podcast episode with chapters, and each scan's published podcast episode
+// by the scan's id
 type TopicPodcastFields = {
 	podcast: TopicPodcast | null
+	latestPodcastEpisode: PodcastEpisode | null
 	podcastEpisodeByScanId: Map<string, TopicScan["podcastEpisode"]>
 }
 
@@ -81,7 +89,7 @@ type LoadSeasonPodcastEpisodesOptions = { topic: TopicRow; userId: string | null
  */
 export async function loadTopicPodcast(topic: TopicRow, userId: string | null): Promise<TopicPodcastFields> {
 	if (!isPodcastEpisodeRenderingConfigured()) {
-		return { podcast: null, podcastEpisodeByScanId: new Map() }
+		return { podcast: null, latestPodcastEpisode: null, podcastEpisodeByScanId: new Map() }
 	}
 
 	// load the published podcast episodes that the user may listen to, newest first, and the newest episode that was
@@ -135,7 +143,6 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 			isEnabled: topic.isPodcastEnabled,
 			canRenderPodcastEpisode,
 			canRemovePodcastEpisodes,
-			latestPodcastEpisode,
 			unpublishedPodcastEpisode: accessibleUnpublishedPodcastEpisode
 				? toPodcastEpisode({ podcastEpisodeRow: accessibleUnpublishedPodcastEpisode.podcastEpisodeRow, topic })
 				: null,
@@ -145,8 +152,56 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 			publicFeedUrl:
 				topic.visibility === "public" && latestPublishedPodcastEpisodeRow ? toPodcastFeedPath(topic.id) : null,
 		},
+		latestPodcastEpisode,
 		podcastEpisodeByScanId,
 	}
+}
+
+/**
+ * Loads each topic's latest published podcast episode that the user may listen to, with its chapters, by topic id.
+ */
+export async function loadLatestPodcastEpisodes(
+	topicRows: TopicRow[],
+	userId: string | null,
+): Promise<Map<string, PodcastEpisode>> {
+	if (!isPodcastEpisodeRenderingConfigured() || topicRows.length === 0) {
+		return new Map()
+	}
+
+	// each topic's newest published podcast episode, and when the user's subscription to each gated topic activated
+	const topicIds = topicRows.map((topicRow) => topicRow.id)
+	const [latestPodcastEpisodeRows, subscriberActivatedAtByTopicId] = await Promise.all([
+		db
+			.selectDistinctOn([podcastEpisodes.topicId], podcastEpisodeColumns)
+			.from(podcastEpisodes)
+			.where(and(inArray(podcastEpisodes.topicId, topicIds), eq(podcastEpisodes.status, "published")))
+			.orderBy(podcastEpisodes.topicId, desc(podcastEpisodes.publishedAt)),
+		topicSubscriptionStartDates(topicRows, userId),
+	])
+
+	// keep each newest podcast episode that the user may listen to, with its topic. an older episode never passes a gate
+	// that the newest episode fails, and a topic with no gate has no activation time
+	const topicById = new Map(topicRows.map((topicRow) => [topicRow.id, topicRow]))
+	const listenablePodcastEpisodes = latestPodcastEpisodeRows.flatMap((podcastEpisodeRow) => {
+		const topic = podcastEpisodeRow.topicId ? topicById.get(podcastEpisodeRow.topicId) : undefined
+		const subscriberActivatedAt = topic ? subscriberActivatedAtByTopicId.get(topic.id) : null
+		return topic && isAfterSubscriberActivation(podcastEpisodeRow.publishedAt, subscriberActivatedAt)
+			? [{ podcastEpisodeRow, topic }]
+			: []
+	})
+
+	// load each podcast episode's chapters and the user's progress, then key the episodes by topic id
+	const latestPodcastEpisodes = await loadPodcastEpisodes(listenablePodcastEpisodes, userId)
+	return new Map(latestPodcastEpisodes.map((podcastEpisode) => [podcastEpisode.topicId, podcastEpisode]))
+}
+
+// whether a time passes the user's subscription activation gate. no gate passes every time, no active subscription
+// passes none, and an activation passes only a later time
+function isAfterSubscriberActivation(time: Date | null, subscriberActivatedAt: Date | null | undefined): boolean {
+	if (subscriberActivatedAt === undefined) {
+		return true
+	}
+	return subscriberActivatedAt !== null && time !== null && time > subscriberActivatedAt
 }
 
 /**
@@ -231,20 +286,12 @@ export async function loadAccessiblePodcastEpisode({
 		return null
 	}
 
-	// return the podcast episode if no subscription activation gate applies to the user
+	// gate the podcast episode on the user's subscription activation by its publish time,
+	// or by its scan's start if the podcast episode has not published
 	const subscriberActivatedAt = await loadSubscriberActivatedAt(podcastEpisodeTopicRow.topic, userId)
-	if (subscriberActivatedAt === undefined) {
-		return podcastEpisodeTopicRow
-	}
-
-	// compare the activation with the podcast episode's publish time, or with its scan's start if it has not published
 	const publishedOrScanStartedAt =
 		podcastEpisodeTopicRow.podcastEpisodeRow.publishedAt ?? podcastEpisodeTopicRow.scanStartedAt
-	const isPodcastEpisodeAfterActivation =
-		subscriberActivatedAt !== null &&
-		publishedOrScanStartedAt !== null &&
-		publishedOrScanStartedAt > subscriberActivatedAt
-	return isPodcastEpisodeAfterActivation ? podcastEpisodeTopicRow : null
+	return isAfterSubscriberActivation(publishedOrScanStartedAt, subscriberActivatedAt) ? podcastEpisodeTopicRow : null
 }
 
 // the topic, the season, and the episode number within the season that name a podcast episode page
@@ -303,22 +350,30 @@ export async function loadPodcastEpisodePage(
 		return null
 	}
 
-	// load the podcast episode's script, the episode, the topic's findings that the user may see,
-	// whether the user may rate the findings, and the topic's byline
+	// load the podcast episode, its script, the findings that the user may see, whether the user may rate the findings
+	// or remove the episode, the topic's byline, the owning team, and the holding teams that the user is on
 	const { podcastEpisodeRow, topic } = accessiblePodcastEpisode
-	const [[podcastEpisodeScriptRow], podcastEpisode, { topicFindings }, canRate, owner, { teamLink }] =
-		await Promise.all([
-			db
-				.select({ script: podcastEpisodes.script })
-				.from(podcastEpisodes)
-				.where(eq(podcastEpisodes.id, podcastEpisodeRow.id)),
-			loadPodcastEpisode({ podcastEpisodeRow, topic, userId }),
-			loadTopicAccessAndFindings({ topic, userId }),
-			canRateTopic(userId, topic),
-			// the owner and the team that the topic's byline credits
-			loadTopicOwner(topic.ownerId),
-			toTeamFields(topic.id, topic.teamId, userId),
-		])
+	const [
+		[podcastEpisodeScriptRow],
+		podcastEpisode,
+		{ topicFindings },
+		canRate,
+		canRemovePodcastEpisode,
+		owner,
+		{ teamLink, team, roomTeams },
+	] = await Promise.all([
+		db
+			.select({ script: podcastEpisodes.script })
+			.from(podcastEpisodes)
+			.where(eq(podcastEpisodes.id, podcastEpisodeRow.id)),
+		loadPodcastEpisode({ podcastEpisodeRow, topic, userId }),
+		loadTopicAccessAndFindings({ topic, userId }),
+		canRateTopic(userId, topic),
+		isAllowed(userId, "podcastEpisode:remove", topic),
+		// the owner and the team that the topic's byline credits
+		loadTopicOwner(topic.ownerId),
+		toTeamFields(topic.id, topic.teamId, userId),
+	])
 
 	// keep the findings that the chapters narrate, and fill the chapters' favicons
 	const chapterFindingIds = new Set(
@@ -329,9 +384,10 @@ export async function loadPodcastEpisodePage(
 	const { id, name, prompt, visibility } = topic
 	return {
 		podcastEpisode,
-		topic: { id, name, prompt, visibility, owner, teamLink },
+		topic: { id, name, prompt, visibility, owner, teamLink, team, roomTeams, isTopicOwner: topic.ownerId === userId },
 		topicFindings: chapterTopicFindings,
 		canRate,
+		canRemovePodcastEpisode,
 		transcript: podcastEpisodeScriptRow?.script ? toTranscriptBlocks(podcastEpisodeScriptRow.script) : [],
 	}
 }
@@ -344,16 +400,47 @@ export async function loadPodcastEpisode({
 	topic,
 	userId,
 }: LoadPodcastEpisodeOptions): Promise<PodcastEpisode> {
-	// the podcast episode's chapters in their order, and the user's progress
-	const [podcastEpisodeChapterRows, [podcastEpisodeListenRow]] = await Promise.all([
+	// a list with a single podcast episode returns that podcast episode
+	const [podcastEpisode] = await loadPodcastEpisodes([{ podcastEpisodeRow, topic }], userId)
+	return podcastEpisode as PodcastEpisode
+}
+
+// podcast episodes in the shape that the player shows, each with its chapters and the user's progress, in the order given
+async function loadPodcastEpisodes(
+	podcastEpisodeTopics: { podcastEpisodeRow: PodcastEpisodeRow; topic: PodcastEpisodeTopic }[],
+	userId: string | null,
+): Promise<PodcastEpisode[]> {
+	const podcastEpisodeIds = podcastEpisodeTopics.map(({ podcastEpisodeRow }) => podcastEpisodeRow.id)
+	if (podcastEpisodeIds.length === 0) {
+		return []
+	}
+
+	// every podcast episode's chapters in their order, and the user's progress through each episode
+	const [podcastEpisodeChapterRows, podcastEpisodeListenRows] = await Promise.all([
 		db
 			.select()
 			.from(podcastEpisodeChapters)
-			.where(eq(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeRow.id))
+			.where(inArray(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeIds))
 			.orderBy(podcastEpisodeChapters.position),
-		loadPodcastEpisodeListenRows(userId, [podcastEpisodeRow.id]),
+		loadPodcastEpisodeListenRows(userId, podcastEpisodeIds),
 	])
-	return toPodcastEpisode({ podcastEpisodeRow, topic, podcastEpisodeChapterRows, podcastEpisodeListenRow })
+
+	// build each podcast episode from its own chapters and listen row
+	const chapterRowsByPodcastEpisodeId = Map.groupBy(
+		podcastEpisodeChapterRows,
+		(chapterRow) => chapterRow.podcastEpisodeId,
+	)
+	const listenRowByPodcastEpisodeId = new Map(
+		podcastEpisodeListenRows.map((listenRow) => [listenRow.podcastEpisodeId, listenRow]),
+	)
+	return podcastEpisodeTopics.map(({ podcastEpisodeRow, topic }) =>
+		toPodcastEpisode({
+			podcastEpisodeRow,
+			topic,
+			podcastEpisodeChapterRows: chapterRowsByPodcastEpisodeId.get(podcastEpisodeRow.id),
+			podcastEpisodeListenRow: listenRowByPodcastEpisodeId.get(podcastEpisodeRow.id),
+		}),
+	)
 }
 
 // a podcast episode as the player shows it

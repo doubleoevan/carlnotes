@@ -172,3 +172,26 @@ export function toPodcastEpisodeDurationLabel(durationSeconds: number | null): s
 export function toPodcastEpisodeDateLabel(publishedAt: string | null): string {
 	return publishedAt ? new Date(publishedAt).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : ""
 }
+
+/**
+ * Returns a podcast episode's number and title, such as E14 · The quiet burrs.
+ */
+export function toPodcastEpisodeTitleLabel(podcastEpisode: {
+	episodeNumber: number | null
+	title: string | null
+}): string {
+	return `E${podcastEpisode.episodeNumber} · ${podcastEpisode.title}`
+}
+
+/**
+ * Returns a podcast episode's publish day and its duration, such as Oct 3 and 24 min.
+ */
+export function toPodcastEpisodeDayAndDurationLabels(podcastEpisode: {
+	publishedAt: string | null
+	durationSeconds: number | null
+}): string[] {
+	return [
+		toPodcastEpisodeDateLabel(podcastEpisode.publishedAt),
+		toPodcastEpisodeDurationLabel(podcastEpisode.durationSeconds),
+	]
+}

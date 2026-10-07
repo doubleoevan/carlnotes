@@ -205,14 +205,13 @@ export function toPodcastEpisodePageHead({
 
 	// a private or invite topic's episode page has its card alone
 	if (!isPublicTopic) {
-		return { ...cardPageHead, podcastFeedUrl: null, audioUrl: null, jsonLd: null }
+		return { ...cardPageHead, podcastFeedUrl: null, jsonLd: null }
 	}
 
-	// a public topic's episode page adds its topic's podcast feed, its audio, and its structured data
+	// a public topic's episode page adds its topic's podcast feed and its structured data
 	return {
 		...cardPageHead,
 		podcastFeedUrl: podcastSeries.feedUrl,
-		audioUrl,
 		jsonLd: toPodcastEpisodeLd({
 			name: podcastEpisodeTitle,
 			description: podcastEpisodeRow.description ?? "",

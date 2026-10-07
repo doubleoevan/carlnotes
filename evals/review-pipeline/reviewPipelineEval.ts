@@ -1,7 +1,5 @@
-// the review pipeline eval runs the real review path over a labeled corpus and reports precision, recall, and cost per
-// topic, plus how often the scanner flags a benign article and how often the scanner catches a real attack.
-//
-// the eval spends real money, so the eval is a script instead of a test and never runs in the push gate:
+// the review pipeline eval runs the real review path over a labeled corpus and reports precision, recall, cost per topic,
+// and the scanner's false-positive and catch rates. the eval makes real model calls and runs as a script:
 //   bun run eval:review-pipeline                      measure every fixture beside this file
 //   bun run eval:review-pipeline --with-examples      score with the topic's rated and bookmarked pages as examples
 //   bun run eval:review-pipeline --export <topicId>   write a fixture from a public Topic, under the prd config
@@ -21,14 +19,15 @@ import {
 } from "../../worker/review/filter"
 import { isPromoted, scoreResource } from "../../worker/review/score"
 import { shutdownTelemetry, startTelemetry } from "../../worker/telemetry"
+import { toPercentLabel } from "../evalLabels"
 import { type CachedPage, exportFixture, FIXTURES_DIRECTORY, PAGE_CACHE_DIRECTORY } from "./reviewPipelineExport"
 
 // one labeled Resource. what an ingester would have returned, plus the label that the eval measures against
 export type LabeledResource = {
 	title: string | null
 	url: string
-	// the ingester's snippet and the page body. a committed fixture leaves the snippet and the body out.
-	// the run reads the snippet and the body from the page cache
+	// the ingester's snippet and the page body. an exported row's snippet and body come from the page cache.
+	// a written row holds its own text
 	snippet?: string | null
 	content?: string
 	// the medium, which decides the bar the gate measures this row against. a row written without one
@@ -36,9 +35,9 @@ export type LabeledResource = {
 	kind?: Resource["kind"]
 	// the label. null means unlabeled, and the eval rejects a fixture with an unlabeled Resource
 	isRelevant: boolean | null
-	// where the label came from: rating, bookmark, or reading. a reading is a person's reading of the page against
-	// the topic
-	labelSource?: "rating" | "bookmark" | "reading"
+	// where the label came from: rating, bookmark, reading, or written. a reading is a person's reading of the page
+	// against the topic, and a written row was written for the eval with its own text and label
+	labelSource?: "rating" | "bookmark" | "reading" | "written"
 }
 
 // the fixture to measure, its name, and how to measure it. with examples, the score prompt lists the pages labeled from
@@ -70,7 +69,7 @@ type EvalResult = {
 	attackCatchRate: number | null
 }
 
-// pick the mode from the arguments. guarded so importing this file for its exported math runs nothing and opens no database connection
+// pick the mode from the arguments, only if this file runs as a script
 if (import.meta.main) {
 	const exportTopicId = Bun.argv.includes("--export") ? Bun.argv[Bun.argv.indexOf("--export") + 1] : undefined
 
@@ -102,7 +101,8 @@ async function measureFixtures(): Promise<void> {
 		return
 	}
 
-	// measure the fixtures one at a time, with each page's snippet and body read from the page cache
+	// measure the fixtures one at a time. an exported row's snippet and body come from the page cache.
+	// a written row holds its own text
 	const isScoredWithExamples = Bun.argv.includes("--with-examples")
 	const results: EvalResult[] = []
 	for (const fixtureFile of fixtureFiles) {
@@ -248,12 +248,14 @@ async function measureGuardOnly(): Promise<void> {
 		`scanner attack catch rate: ${attackScreenTextsResult.flaggedCount}/${attackScreenTextsResult.screenedCount} known attacks caught`,
 	)
 
-	// print the count of texts that neither rate counts
+	// count the texts that neither rate counts
 	const unscreenedCount =
 		benignArticles.length +
 		attacks.length -
 		articleScreenTextsResult.screenedCount -
 		attackScreenTextsResult.screenedCount
+
+	// print the count if any text went unscreened
 	if (unscreenedCount > 0) {
 		console.log(`${unscreenedCount} texts could not be screened, so neither rate counts them`)
 	}
@@ -317,17 +319,12 @@ function printResults(results: EvalResult[]): void {
 	console.log("|---|---|---|---|---|---|---|")
 	for (const result of results) {
 		// null reads as n/a instead of a misleadingly blank cell
-		const falsePositives = result.falsePositiveRate === null ? "n/a" : toPercent(result.falsePositiveRate)
-		const catchRate = result.attackCatchRate === null ? "n/a" : toPercent(result.attackCatchRate)
+		const falsePositives = result.falsePositiveRate === null ? "n/a" : toPercentLabel(result.falsePositiveRate)
+		const catchRate = result.attackCatchRate === null ? "n/a" : toPercentLabel(result.attackCatchRate)
 		console.log(
-			`| ${result.name} | ${result.resourceCount} | ${toPercent(result.precision)} | ${toPercent(result.recall)} | $${result.costUsd.toFixed(4)} | ${falsePositives} | ${catchRate} |`,
+			`| ${result.name} | ${result.resourceCount} | ${toPercentLabel(result.precision)} | ${toPercentLabel(result.recall)} | $${result.costUsd.toFixed(4)} | ${falsePositives} | ${catchRate} |`,
 		)
 	}
-}
-
-// a ratio as a whole-number percentage
-function toPercent(ratio: number): string {
-	return `${Math.round(ratio * 100)}%`
 }
 
 // the fixture with each page's snippet and body filled from the fixture's page cache. text that the fixture holds

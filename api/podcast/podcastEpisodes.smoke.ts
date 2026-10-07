@@ -232,15 +232,12 @@ try {
 
 	// the topic page's podcast and its scan history
 	const topicPage = await loadTopicPage(ownerId, publicTopicId)
-	check(
-		"the topic page has the latest episode",
-		topicPage?.podcast?.latestPodcastEpisode?.id === publicPodcastEpisodeId,
-	)
+	check("the topic page has the latest episode", topicPage?.latestPodcastEpisode?.id === publicPodcastEpisodeId)
 	check(
 		"the latest episode links to its own page",
-		topicPage?.podcast?.latestPodcastEpisode?.pagePath?.startsWith(`/topics/${publicTopicId}/`) === true &&
-			topicPage.podcast.latestPodcastEpisode.pagePath.includes("/episodes/"),
-		topicPage?.podcast?.latestPodcastEpisode?.pagePath,
+		topicPage?.latestPodcastEpisode?.pagePath?.startsWith(`/topics/${publicTopicId}/`) === true &&
+			topicPage.latestPodcastEpisode.pagePath.includes("/episodes/"),
+		topicPage?.latestPodcastEpisode?.pagePath,
 	)
 	check(
 		"the topic page has the newest episodes of the newest season",
@@ -267,7 +264,7 @@ try {
 	check(
 		"the topic page has the episode that is rendering",
 		renderingTopicPage?.podcast?.unpublishedPodcastEpisode?.id === renderingPodcastEpisodeId &&
-			renderingTopicPage.podcast.latestPodcastEpisode?.id === publicPodcastEpisodeId,
+			renderingTopicPage.latestPodcastEpisode?.id === publicPodcastEpisodeId,
 	)
 
 	// the same podcast episode still shows once its render fails

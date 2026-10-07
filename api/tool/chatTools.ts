@@ -323,6 +323,10 @@ export function toSuggestTopicSourcesTool({ userId, toolCalls }: NewTopicToolBin
 	})
 }
 
+// what createTopic returns for a public or invite draft that names no team
+export const TEAM_MISSING_TEXT =
+	"A public or invite topic goes on a team. Ask which of the reader's teams it goes on, or make it private, then create again. Nothing was created."
+
 // the tool that creates the topic from the topic draft as it stands
 function toCreateTopicTool({ userId, toolCalls, topicDraft, analyticsProperties }: NewTopicToolBinding): Tool {
 	return tool({
@@ -330,6 +334,11 @@ function toCreateTopicTool({ userId, toolCalls, topicDraft, analyticsProperties 
 		inputSchema: z.object({}),
 		execute: async () => {
 			toolCalls.count += 1
+
+			// create nothing for a public or invite draft that names no team, and have carl ask which team
+			if (topicDraft.visibility !== "private" && !topicDraft.team) {
+				return TEAM_MISSING_TEXT
+			}
 			const createTopicFromDraftResult = await createTopicFromDraft({
 				userId,
 				topicDraft: topicDraft,

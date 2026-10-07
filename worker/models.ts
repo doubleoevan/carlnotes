@@ -1,32 +1,31 @@
-// the app's LLM model tiers, all routed through LiteLLM
+// the app's LLM model tiers, all routed through LiteLLM. litellmApiKey bills a call to the key of the call's user.
+// a call with no litellmApiKey, such as the search Source's query generation, uses the master key
 import { createOpenAI } from "@ai-sdk/openai"
 import { type EmbeddingModel, embed, embedMany, type LanguageModel } from "ai"
 import { EMBED_DIMENSIONS } from "../db/schema"
 
-// litellmApiKey bills a call to the key of the user that the call is made for.
-// a call with no litellmApiKey, such as the search Source's query generation, uses the master key
-
-// how long one model request may run before it aborts
-const MODEL_TIMEOUT_MS = Number(Bun.env.MODEL_TIMEOUT_MS ?? "120000")
+// how long a model request may run before the request aborts. the default sits above twice the proxy's longest model timeout
+const MODEL_TIMEOUT_MS = Number(Bun.env.MODEL_TIMEOUT_MS ?? "360000")
 
 // what a spent budget tells the user, whether the gate caught it up front or the proxy rejected the call partway through a chat turn
 export const SPENT_BUDGET_REJECTION = "Carl is staring at an empty mug. Top up to keep chatting."
 
-// what carl posts when his chat turn broke for any other reason
+// what carl posts if his chat turn broke for any other reason
 export const MODEL_CHAT_TURN_FAILED_REJECTION = "Carl couldn't answer that one. Mention him again to retry."
 
 /**
- * Whether the proxy rejected this call because the caller's key has spent its budget.
- * LiteLLM returns 429 with a budget_exceeded body on every tier, for scans, chat, and embeddings alike.
+ * Returns whether the proxy rejected this call because the caller's key has spent its budget.
  */
 export function isBudgetRejection(error: unknown): boolean {
-	// the AI sdk wraps the proxy's answer, and a retry wrapper may wrap that again. the whole chain is read
+	// read the whole error chain. the AI SDK wraps the proxy's response, and a retry wrapper may wrap the AI SDK's
+	// error again
 	for (const errorCause of toErrorCause(error)) {
 		const { statusCode, responseBody } = errorCause as { statusCode?: unknown; responseBody?: unknown }
 		if (statusCode !== 429) {
 			continue
 		}
-		// only a budget rejection named in the body counts. any other 429 stays a plain rate limit
+		// only a budget rejection named in the body counts. LiteLLM sends one on every tier as a 429.
+		// any other 429 stays a plain rate limit
 		const body = typeof responseBody === "string" ? responseBody : ""
 		if (body.includes("budget_exceeded") || body.includes("Budget has been exceeded")) {
 			return true
@@ -44,30 +43,44 @@ function toErrorCause(error: unknown, seenErrors = new Set<unknown>()): unknown[
 	// the error cause follows cause and fans out through an AggregateError's list
 	const { cause, errors } = error as { cause?: unknown; errors?: unknown }
 	const nestedErrors = Array.isArray(errors) ? errors : []
-	return [error, ...toErrorCause(cause, seenErrors), ...nestedErrors.flatMap((one) => toErrorCause(one, seenErrors))]
+	return [
+		error,
+		...toErrorCause(cause, seenErrors),
+		...nestedErrors.flatMap((nestedError) => toErrorCause(nestedError, seenErrors)),
+	]
 }
 
-// the cheap model handles high-volume inference like query generation and first-pass scoring
+/**
+ * Returns the cheap model, which handles high-volume inference like query generation and first-pass scoring.
+ */
 export function cheapModel(litellmApiKey?: string): LanguageModel {
 	return createModelProxyClient(litellmApiKey).chat("cheap-model")
 }
 
-// the premium model re-scores promoted Resources and writes the relevance explanation
+/**
+ * Returns the premium model, which re-scores promoted Resources and writes relevance explanations and podcast scripts.
+ */
 export function scoreModel(litellmApiKey?: string): LanguageModel {
 	return createModelProxyClient(litellmApiKey).chat("score-model")
 }
 
-// the chat model answers a user's questions about a topic and describes any images they attach
+/**
+ * Returns the chat model, which writes every chat reply and describes the images that a user attaches.
+ */
 export function chatModel(litellmApiKey?: string): LanguageModel {
 	return createModelProxyClient(litellmApiKey).chat("chat-model")
 }
 
-// the embedding model routes through LiteLLM's embed-model alias (qwen3-embedding-8b)
+/**
+ * Returns the embedding model behind LiteLLM's embed-model alias, qwen3-embedding-8b.
+ */
 export function embedModel(litellmApiKey?: string): EmbeddingModel {
 	return createModelProxyClient(litellmApiKey).embeddingModel("embed-model")
 }
 
-// the single place raw embeddings are produced, so no caller can skip truncation
+/**
+ * Embeds one text and returns its vector, cut to the schema's width and scaled to unit length.
+ */
 export async function embedVector(text: string, litellmApiKey?: string): Promise<number[]> {
 	// embed through the proxy, then reduce to the schema's width
 	const { embedding } = await embed({ model: embedModel(litellmApiKey), value: text })
@@ -75,8 +88,7 @@ export async function embedVector(text: string, litellmApiKey?: string): Promise
 }
 
 /**
- * Embed many texts in one call through embedMany, which batches the proxy requests instead of making one per text.
- * Each vector gets the same truncation and normalization as embedVector does, returned in the input order.
+ * Embeds many texts in one embedMany call and returns each vector reduced like embedVector's, in the input order.
  */
 export async function embedVectors(texts: string[], litellmApiKey?: string): Promise<number[][]> {
 	// embed through the proxy, then reduce each vector to the schema's width
@@ -86,7 +98,7 @@ export async function embedVectors(texts: string[], litellmApiKey?: string): Pro
 
 // reduce one raw proxy vector to the schema's width
 function toSchemaVector(embedding: number[]): number[] {
-	// a shorter vector than the target means a model or config change. fail loud instead of silently padding
+	// a vector shorter than the schema's width means a model or config change. fail loud instead of silently padding
 	if (embedding.length < EMBED_DIMENSIONS) {
 		throw new Error(`embedding model returned ${embedding.length} dimensions, need at least ${EMBED_DIMENSIONS}`)
 	}
@@ -103,7 +115,7 @@ function toUnitVector(vector: number[]): number[] {
 	return vector.map((value) => value / magnitude)
 }
 
-// build the OpenAI-compatible LLM client on demand the proxy env is required explicitly
+// build the OpenAI-compatible LLM client on demand, from the proxy url in the env and the user's key or the master key
 function createModelProxyClient(litellmApiKey?: string): ReturnType<typeof createOpenAI> {
 	// LiteLLM is OpenAI-compatible. the proxy url is always required
 	const baseURL = Bun.env.LITELLM_BASE_URL

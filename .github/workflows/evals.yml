@@ -1,0 +1,113 @@
+name: Evals
+
+# the promptfoo evals against the LiteLLM container that this workflow starts, on a push to main that changes a prompt,
+# the code that builds one, the model config, or an eval, weekly, and by hand. an eval below its gate is a warning,
+# never a failed build, and a run in CI saves no result. the workflow needs a DOPPLER_TOKEN secret that holds a dev-config service token
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 10 * * 1"
+  push:
+    branches: [main]
+    paths:
+      - "worker/prompts/**"
+      - "worker/chat/**"
+      - "worker/podcast/**"
+      - "worker/review/**"
+      - "worker/suggest.ts"
+      - "worker/attach.ts"
+      - "worker/ingest/search.ts"
+      - "worker/models.ts"
+      - "api/tool/chatTools.ts"
+      - "api/chat/roomTurns.ts"
+      - "shared/enums.ts"
+      - "shared/sources.ts"
+      - "litellm-config.yaml"
+      - "evals/**"
+      - ".github/workflows/evals.yml"
+
+# one eval run at a time. the runs share the model providers' rate limits
+concurrency:
+  group: evals
+  cancel-in-progress: false
+
+# the evals only read the repo
+permissions:
+  contents: read
+
+jobs:
+  evals:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      # a push runs each case once, and a weekly or manual run runs each case three times for a pass rate per case
+      REPEAT_COUNT: ${{ github.event_name == 'push' && '1' || '3' }}
+    steps:
+      # persist-credentials false keeps the checkout token out of .git/config
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      # the exact Bun the Dockerfile pins, matching the CI gate
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+      # cache Bun's global install cache, keyed by the lockfile
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+      - run: bun install --frozen-lockfile
+      # the doppler cli injects the same dev secrets that a local eval run uses
+      - uses: dopplerhq/cli-action@v3
+      # start LiteLLM, which every writer and every grader calls through
+      - run: doppler run -- docker compose up -d litellm
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      # fail with the container's log if LiteLLM never answers
+      - name: Wait for litellm
+        run: |
+          for attempt in $(seq 1 60); do
+            readiness_status=$(curl -s -o /dev/null -m 5 -w "%{http_code}" http://localhost:4000/health/readiness || echo 000)
+            if [ "$readiness_status" = "200" ]; then
+              echo "litellm ready after $attempt attempts"
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "LiteLLM answered $readiness_status, so the evals cannot run"
+          docker compose logs --tail 40 litellm
+          exit 1
+      # the job summary's table, which each eval adds its own row to
+      - name: Start the job summary
+        run: |
+          {
+            echo "### Evals, each case run $REPEAT_COUNT time(s)"
+            echo ""
+            echo "| eval | passed | pass rate | 95% interval | gate |"
+            echo "|---|---|---|---|---|"
+          } >> "$GITHUB_STEP_SUMMARY"
+      # run every eval one at a time, the grader calibration first. a grader that fails the calibration makes every
+      # eval's rubrics untrustworthy. an eval that fails or falls below its gate is named in a warning, and the
+      # build still passes
+      - name: Run the evals
+        run: |
+          failed_eval_names=""
+          for eval_name in grader-calibration podcast-episode-script scan-report topic-chat topic-chat-tools \
+              new-topic-chat team-chat search-queries attachment-summaries source-suggestions; do
+            if ! bun run "eval:$eval_name" --repeat "$REPEAT_COUNT"; then
+              failed_eval_names="$failed_eval_names $eval_name"
+            fi
+          done
+          if [ -n "$failed_eval_names" ]; then
+            echo "::warning::evals that failed or fell below their gates:$failed_eval_names"
+          fi
+        env:
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+      # keep every eval's full results for reading the outputs behind a failed check
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: logs/eval-*.json
+          if-no-files-found: warn

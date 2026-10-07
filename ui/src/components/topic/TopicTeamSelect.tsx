@@ -3,8 +3,8 @@ import type { TeamSummary, TopicResponse } from "@shared/contracts"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import {
+	fetchLeaderTeams,
 	fetchTeamNameTaken,
-	fetchTeams,
 	sendAddTopicTeam,
 	sendCreateTeam,
 	sendRemoveTopicFromTeam,
@@ -39,11 +39,10 @@ export function useTopicTeamChoice(topic: TopicResponse | undefined, initialTeam
 	// the leader teams load with the modal, seeding the selection with the ones already holding the topic
 	// biome-ignore lint/correctness/useExhaustiveDependencies: the topic id identifies the seed
 	useEffect(() => {
-		fetchTeams()
-			.then((index) => {
-				const leaderTeams = index.teams.filter((team) => team.role === "leader")
+		fetchLeaderTeams()
+			.then((leaderTeams) => {
 				setTeams(leaderTeams)
-				const heldLeaderTeamIds = leaderTeams
+				const holdingLeaderTeamIds = leaderTeams
 					.map((team) => team.teamId)
 					.filter((teamId) => holdingTeamIds.includes(teamId))
 				// an existing topic starts on the leader teams that hold it. a new one takes the first team led, never none
@@ -52,7 +51,7 @@ export function useTopicTeamChoice(topic: TopicResponse | undefined, initialTeam
 						return chosen
 					}
 					if (topic) {
-						return heldLeaderTeamIds
+						return holdingLeaderTeamIds
 					}
 					return leaderTeams[0] ? [leaderTeams[0].teamId] : []
 				})
@@ -71,13 +70,13 @@ export function useTopicTeamChoice(topic: TopicResponse | undefined, initialTeam
 
 	// a non-private topic must land on a team: a led one selected, a new one named, or a team of the
 	// user's that already holds it and is not theirs to manage here
-	const heldElsewhereCount = holdingTeamIds.filter(
+	const holdingElsewhereCount = holdingTeamIds.filter(
 		(teamId) => !(teams ?? []).some((team) => team.teamId === teamId),
 	).length
 	const isTeamChosen =
 		teams === null ||
 		selectedRealTeamIds.length > 0 ||
-		heldElsewhereCount > 0 ||
+		holdingElsewhereCount > 0 ||
 		(isNewTeamSelected && newTeamName.trim() !== "")
 
 	// apply the selection once the topic is saved: create the named team, add the newly picked, drop the unpicked
@@ -91,9 +90,9 @@ export function useTopicTeamChoice(topic: TopicResponse | undefined, initialTeam
 		}
 
 		// the diff against the leader teams that held the topic when the modal opened
-		const heldLeaderTeamIds = teams.map((team) => team.teamId).filter((teamId) => holdingTeamIds.includes(teamId))
-		const addedTeamIds = selectedRealTeamIds.filter((teamId) => !heldLeaderTeamIds.includes(teamId))
-		const removedTeamIds = heldLeaderTeamIds.filter((teamId) => !selectedRealTeamIds.includes(teamId))
+		const holdingLeaderTeamIds = teams.map((team) => team.teamId).filter((teamId) => holdingTeamIds.includes(teamId))
+		const addedTeamIds = selectedRealTeamIds.filter((teamId) => !holdingLeaderTeamIds.includes(teamId))
+		const removedTeamIds = holdingLeaderTeamIds.filter((teamId) => !selectedRealTeamIds.includes(teamId))
 
 		// adds first, so the topic never passes through a moment with no team. a rejection shows in a toast
 		const addRejections = await Promise.all(addedTeamIds.map((teamId) => sendAddTopicTeam(teamId, topicId)))

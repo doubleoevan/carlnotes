@@ -1,5 +1,6 @@
 // attachment extraction tests: the content-type resolver, each extractor, and the table text
 import { expect, test } from "bun:test"
+import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts"
 // the methods to test, none of which reach the database
 import {
 	extractText,
@@ -183,7 +184,7 @@ test("toTableText stops on the character budget before the row budget", () => {
 		filename: "wide.csv",
 		contentType: "text/csv",
 	})
-	expect(tableText.length).toBeLessThanOrEqual(MAX_TABLE_CHARS + 100)
+	expect(tableText.length).toBeLessThanOrEqual(MAX_ATTACHMENT_CONTEXT_CHARS)
 	expect(tableText).toContain("rows omitted]")
 
 	// every kept line is whole: a data line is the full row or a bracketed marker, never a fragment

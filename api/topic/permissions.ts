@@ -175,18 +175,36 @@ export const isPublicAndShown = and(
  * When the user's subscription to the topic became active, or null with no active subscription.
  */
 export async function subscriptionActivatedAt(userId: string, topicId: string): Promise<Date | null> {
-	// the earliest activation wins
-	const [activationRow] = await db
-		.select({ activatedAt: sql<Date | string | null>`min(${subscriptions.createdAt})` })
+	const activatedAtByTopicId = await subscriptionActivatedAtByTopicId(userId, [topicId])
+	return activatedAtByTopicId.get(topicId) ?? null
+}
+
+/**
+ * When the user's subscription to each of the topics became active, by topic id. A topic with no active subscription
+ * has no entry.
+ */
+export async function subscriptionActivatedAtByTopicId(userId: string, topicIds: string[]): Promise<Map<string, Date>> {
+	// an empty id list matches nothing, so skip the query
+	if (topicIds.length === 0) {
+		return new Map()
+	}
+
+	// the earliest activation of each topic wins
+	const activationRows = await db
+		.select({
+			topicId: subscriptions.topicId,
+			activatedAt: sql<Date | string>`min(${subscriptions.createdAt})`,
+		})
 		.from(subscriptions)
 		.where(
 			and(
-				eq(subscriptions.topicId, topicId),
+				inArray(subscriptions.topicId, topicIds),
 				eq(subscriptions.subscriberUserId, userId),
 				eq(subscriptions.isActive, true),
 			),
 		)
-	return activationRow?.activatedAt ? new Date(activationRow.activatedAt) : null
+		.groupBy(subscriptions.topicId)
+	return new Map(activationRows.map((activationRow) => [activationRow.topicId, new Date(activationRow.activatedAt)]))
 }
 
 /**

@@ -1,7 +1,7 @@
 // scan tests: toScanSummary self-checks, what scanTopic does with a Scan row if the workflow start is rejected or fails,
 // and which Scan rows failUnstartedScan marks failed
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { connectionPool } from "../db"
+import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import type { scans } from "../db/schema"
 import { toScanSummary } from "./ingest"
 import type { NewResource } from "./ingest/ingester"
@@ -9,27 +9,13 @@ import { failUnstartedScan, scanTopic } from "./scan"
 import * as temporalClient from "./temporalClient"
 
 // the connection pool's own query, put back after each test along with the spies
-const originalConnectionPoolQuery = connectionPool.query
 afterEach(() => {
-	connectionPool.query = originalConnectionPoolQuery
+	restoreConnectionPool()
 	mock.restore()
 })
 
 // an open Scan row with only its id set
 const OPEN_SCAN = { id: "scan-1" } as typeof scans.$inferSelect
-
-// a query that the stubbed connection pool was sent
-type SentQuery = { text: string; values: unknown[] }
-
-// stub the connection pool to return no rows, and return each query that the stub is sent
-function stubConnectionPool(): SentQuery[] {
-	const sentQueries: SentQuery[] = []
-	connectionPool.query = ((queryConfig: { text: string }, values: unknown[]) => {
-		sentQueries.push({ text: queryConfig.text, values })
-		return Promise.resolve({ rows: [], fields: [], rowCount: 0 })
-	}) as unknown as typeof connectionPool.query
-	return sentQueries
-}
 
 // a start that Temporal rejects as already running keeps an existing row and marks that row dispatched.
 // a row that the caller opened is deleted

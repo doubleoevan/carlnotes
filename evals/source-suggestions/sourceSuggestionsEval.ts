@@ -1,10 +1,10 @@
-// the promptfoo eval of the source suggester. every case makes real calls on Exa, the local LiteLLM proxy,
-// and the suggested Sources themselves. the calls cost real money, so the eval is never part of bun test.
-// run it with: bun run eval:source-suggestions
+// the promptfoo eval of the source suggester, which makes real calls on Exa, the models, and the suggested Sources.
+// run the eval with: bun run eval:source-suggestions
 import type { Assertion, EvaluateResult, GradingResult, TestCase } from "promptfoo"
-import { chatModel } from "../../worker/models"
+import { cheapModel } from "../../worker/models"
 import type { SuggestedSource } from "../../worker/suggest"
 import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toPercentLabel } from "../evalLabels"
 import {
 	MIN_READABLE_SUGGESTIONS,
 	SOURCE_SUGGESTIONS_CASES,
@@ -12,16 +12,7 @@ import {
 	SUGGESTION_LIMIT,
 } from "./sourceSuggestionsCases"
 import { sourceSuggester } from "./sourceSuggestionsProviders"
-
-// what every rubric tells the grader about the suggester's output
-const OUTPUT_SHAPE_RUBRIC =
-	"The output is a JSON object whose suggestedSources list holds the sources suggested for a topic to follow. Each one has its kind as sourceOption, and its value: a feed url, a publisher's domain, a subreddit name, or an account handle. A YouTube channel and a podcast have already been looked up, so their value is the id that was found, and a name, if one is given, is the channel's handle or the show's name. Never fail the output for a value that is an id."
-
-// the rubric that fails a suggestion that is off topic or will not keep producing
-const FIT_RUBRIC = [
-	"Every source publishes about this topic and keeps producing: a feed, a publication, a channel, a subreddit, a show, or an account.",
-	"Fail the output if a source is off topic, or is a single article or a page that will not change.",
-].join(" ")
+import { FIT_RUBRIC, GRADER_MODEL, MATERIAL_LABEL, OUTPUT_SHAPE_RUBRIC } from "./sourceSuggestionsRubrics"
 
 // the checks that every case gets and that need no model
 const DETERMINISTIC_ASSERTIONS: Assertion[] = [
@@ -37,7 +28,10 @@ await runEval({
 	name: "source-suggestions",
 	description: "source suggester",
 	provider: sourceSuggester,
-	grader: toRubricGrader(chatModel()),
+	writerModels: [cheapModel()],
+	grader: toRubricGrader(GRADER_MODEL),
+	// live search results and live sites make this eval report only
+	gatePassRate: null,
 	defaultAssertions: DETERMINISTIC_ASSERTIONS,
 	testCases: SOURCE_SUGGESTIONS_CASES.map(toTestCase),
 	toCaseLine,
@@ -55,7 +49,7 @@ function toTestCase(sourceSuggestionsCase: SourceSuggestionsCase): TestCase {
 			{ metric: "every source fits the topic and keeps producing", rubric: FIT_RUBRIC },
 			...(rubric ? [{ metric: description, rubric }] : []),
 		],
-		materialLabel: "The topic, as the suggester was given it",
+		materialLabel: MATERIAL_LABEL,
 		material: sourceSuggestionsVariables,
 	})
 	return { description, vars: sourceSuggestionsVariables, assert: rubricAssertions }
@@ -83,8 +77,8 @@ function toCaseLine(suggesterOutput: string, evaluateResult: EvaluateResult): st
 // the share of new suggestions that resolved and read across every run
 function toSummaryLine(evaluateResults: EvaluateResult[]): string {
 	const { newSuggestionCount, readableSuggestionCount } = toSuggestionCounts(evaluateResults)
-	const readablePercent = newSuggestionCount > 0 ? Math.round((readableSuggestionCount / newSuggestionCount) * 100) : 0
-	return `${readablePercent}% of new suggestions read, ${readableSuggestionCount} of ${newSuggestionCount}`
+	const readableSuggestionRatio = newSuggestionCount > 0 ? readableSuggestionCount / newSuggestionCount : 0
+	return `${toPercentLabel(readableSuggestionRatio)} of new suggestions read, ${readableSuggestionCount} of ${newSuggestionCount}`
 }
 
 // the new and readable suggestion counts, added up across the runs

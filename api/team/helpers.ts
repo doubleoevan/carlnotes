@@ -1,6 +1,13 @@
 // the database helpers for the team api
 import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
-import type { OwnerTopic, TeamPageResponse, TeamSearchResult, TeamSummary, TeamsPageResponse } from "@shared/contracts"
+import type {
+	OwnerTopic,
+	ProfileTeamStatus,
+	TeamPageResponse,
+	TeamSearchResult,
+	TeamSummary,
+	TeamsPageResponse,
+} from "@shared/contracts"
 import { USER_SEARCH_LIMIT, USER_SEARCH_MIN_CHARS } from "@shared/contracts"
 import { toNormalizedUsername } from "@shared/usernames"
 import { and, count, desc, eq, gt, gte, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm"
@@ -145,24 +152,10 @@ async function loadSentTeamInvites(userId: string): Promise<TeamsPageResponse["s
 	}))
 }
 
-// one Team Up menu row: a user's team and the profile user's status there
-export type TeamUpMenuOption = {
-	teamId: string
-	name: string
-	avatarVersion: string | null
-	role: "leader" | "member"
-	status: "member" | "invited" | "none"
-	// an invite to the profile user, and whether the user may delete it: a leader may delete any
-	inviteId: string | null
-	canDeleteInvite: boolean
-}
-
 /**
- * The user's teams for a profile's Team Up menu, each with the profile user's status there:
- * an active member, invited by the user with that invitation's id, or neither.
- * The user sees only their own teams, which they could read the members of anyway.
+ * Returns the user's teams, each with the profile user's status there, an active member, invited, or neither.
  */
-export async function loadTeamUpMenu(userId: string, profileUserId: string): Promise<TeamUpMenuOption[]> {
+export async function loadProfileTeamStatuses(userId: string, profileUserId: string): Promise<ProfileTeamStatus[]> {
 	// the user's active teams with their role in each
 	const userTeams = await db
 		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey, role: teamMembers.role })
@@ -177,7 +170,7 @@ export async function loadTeamUpMenu(userId: string, profileUserId: string): Pro
 		return []
 	}
 
-	// the profile user's active memberships among those teams, and the user's pending invites to them
+	// the profile user's active memberships among those teams, and the pending invites to the profile user
 	const [memberRows, inviteRows] = await Promise.all([
 		db
 			.select({ teamId: teamMembers.teamId })

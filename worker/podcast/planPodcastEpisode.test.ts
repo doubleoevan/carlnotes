@@ -1,23 +1,25 @@
-// podcast episode plan tests: the order of the planned Findings
+// podcast episode plan tests: which Findings are planned, and their order
 import { expect, test } from "bun:test"
 import { MAX_PODCAST_EPISODE_FINDINGS, type TopicFindingRow, toPlannedFindings } from "./planPodcastEpisode"
 
-// a user's rating of a Finding, and whether a user bookmarked it
-type FindingRatingAndBookmark = Partial<Pick<TopicFindingRow, "rating" | "isBookmarked">>
-
-// a Topic's Finding from the given Scan, with ids that follow from its name, and its rating and bookmark if it has them
+// a Topic's Finding from the given Scan, with ids that follow from its name,
+// and any score, rating, bookmark, or url Source page flag that the test overrides
 function toFindingRow(
 	name: string,
 	scanId: string,
-	findingRatingAndBookmark: FindingRatingAndBookmark = {},
+	topicFindingRowOverrides: Partial<
+		Pick<TopicFindingRow, "relevanceScore" | "rating" | "isBookmarked" | "isUrlSourcePage">
+	> = {},
 ): TopicFindingRow {
 	return {
 		findingId: `finding-${name}`,
 		resourceId: `resource-${name}`,
 		sourceUrl: `https://a.com/${name}`,
 		scanId,
-		rating: findingRatingAndBookmark.rating ?? null,
-		isBookmarked: findingRatingAndBookmark.isBookmarked ?? false,
+		relevanceScore: topicFindingRowOverrides.relevanceScore ?? 0,
+		rating: topicFindingRowOverrides.rating ?? null,
+		isBookmarked: topicFindingRowOverrides.isBookmarked ?? false,
+		isUrlSourcePage: topicFindingRowOverrides.isUrlSourcePage ?? false,
 	}
 }
 
@@ -82,4 +84,21 @@ test("toPlannedFindings never plans a Finding rated down, and puts liked and boo
 		"older",
 		"narrated-best",
 	])
+})
+
+test("toPlannedFindings picks by score with bonuses, and a new Finding wins a tie", () => {
+	// fifteen new Findings at 0.5, a bookmarked Finding at 0.3 that its bonus ties with the new Findings,
+	// and a liked url Source page at 0.2 that its two bonuses raise to 0.6
+	const newFindingRows = Array.from({ length: 15 }, (_, i) =>
+		toFindingRow(`new-${i}`, "scan-2", { relevanceScore: 0.5 }),
+	)
+	const topicFindingRows = [
+		...newFindingRows,
+		toFindingRow("bookmarked-tied", "scan-1", { relevanceScore: 0.3, isBookmarked: true }),
+		toFindingRow("liked-source", "scan-1", { relevanceScore: 0.2, rating: "up", isUrlSourcePage: true }),
+	]
+
+	// the liked url Source page takes a new Finding's place, and the tied bookmark loses to the new Findings
+	const newFindingNames = Array.from({ length: 14 }, (_, i) => `new-${i}`)
+	expect(toPlannedFindingNames(topicFindingRows)).toEqual([...newFindingNames, "liked-source"])
 })

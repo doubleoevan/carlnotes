@@ -229,8 +229,7 @@ Check for:
      so the old name said only the tiebreak)
    - `ui/src/components/chat/ChatMarkdown.test.ts` (now `ChatMarkdown.test.tsx`; its render cases need JSX)
    - `CHAT_STREAM_FAILED_TEXT` and the marker line it belonged to. a chat reply stream is newline-delimited json
-     now, one `ChatReplyLine` per line, so a failure is the `failed` line and text Carl writes can never pass
-     for one
+     now, one `ChatReplyLine` per line, so a failure is the `failed` line and text Carl writes can never pass for one
    - `api/litellm.ts` (now `worker/litellm.ts`), `effectiveBudgetCents` (now `userBudgetCents` in `shared/plans.ts`
      with `UserAccess`), `isAdminRole` (now in `shared/enums.ts`; the gate re-exports all three), the admin row's
      `effectiveBudgetCents` field (now `budgetCents`), and `startOfUtcMonth` (now in `db/quotas.ts`, re-exported from
@@ -272,16 +271,17 @@ Check for:
      fan-out is Redis pub/sub through `publishToChannel` and `subscribeToChannel` in `db/redis.ts`), and with them
      the brokers' own `Client`, `listener`, `listenRetryMs`, and `NOTIFY_TOOL_CALLS_MAX_BYTES`
    - `toExclusiveTask` in `worker/schedule.ts` (now `runWithClaim` in `db/claim.ts`), `isTopicScheduled`, and
-     `loadScheduledTopics` with its JS filter (now `toScheduledTopicFilter` in `worker/schedule.ts`), and the reset inside the sweep
-     (now `worker/resetMonthlyBudgets.ts` and `bun run reset:monthly-budgets`)
-   - `MAX_CONCURRENT_SCAN_ACTIVITIES` in `worker/temporal.ts` (now `SCAN_CONCURRENCY`, read from the setting of
-     that name)
+     `loadScheduledTopics` with its JS filter (now `toScheduledTopicFilter` in `worker/schedule.ts`), and the reset
+     inside the sweep (now `worker/resetMonthlyBudgets.ts` and `bun run reset:monthly-budgets`)
+   - `MAX_CONCURRENT_SCAN_ACTIVITIES` in `worker/temporal.ts` (now `SCAN_CONCURRENCY`, read from the setting of that name)
    - `runWithConcurrency` in `worker/review/score.ts` (now `worker/concurrency.ts`)
    - `flagCounts` in `api/flagContent.ts` and `suggestionCountsByUserId` with `dayStartTime` in `db/quotas.ts`
      (removed: both count through `incrementRateLimitWindow` in `db/redis.ts`), and `hono-rate-limiter`'s memory store in
      `api/rateLimit.ts` (now `toolCallerRateLimitStore` over the same counter)
-   - `RATE_WINDOW_MS` in `api/rateLimit.ts`, `FLAG_WINDOW_MS` in `api/flagContent.ts`, and `CREDENTIAL_RATE_WINDOW_SECONDS`
-     in `api/auth.ts` (now `RATE_LIMIT_WINDOW_MS`, `FLAG_RATE_LIMIT_WINDOW_MS`, and `CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS`)
+   - `RATE_WINDOW_MS` in `api/rateLimit.ts`, `FLAG_WINDOW_MS` in `api/flagContent.ts`, and
+     `CREDENTIAL_RATE_WINDOW_SECONDS`
+     in `api/auth.ts` (now `RATE_LIMIT_WINDOW_MS`, `FLAG_RATE_LIMIT_WINDOW_MS`, and
+     `CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS`)
    - `sendTopicScanEmail` in `worker/notify.ts` (now `planScanDigest` and `sendScanDigestBatch`), `sendManualScanEmail`
      (now `sendScanReport`), and `finishScan`'s `trigger` argument (now `sendScanEmailWorkflow` in
      `worker/workflows/sendScanEmail.ts`)
@@ -302,11 +302,56 @@ Check for:
      `FIRST_PAINT_SCRIPT` in `ui/src/routes/__root.tsx`), `SCHEME_PREFIXES` (now `URI_SCHEME_PREFIXES` in
      `AnchorLink.tsx`), `CARD_SKELETONS` in `TopicSkeleton.tsx` (removed), and `toHost` in `worker/suggest.ts` (now
      `toHostWithoutWww` in `shared/seo.ts`)
-   - `CardNode` in `api/share/previewImage.ts` (now `CardElement`), with every share card's `*Node` locals (now
-     `*Element`)
+   - `CardNode` in `api/share/previewImage.ts` (now `CardElement`), with every share card's `*Node` locals (now `*Element`)
    - `scripts/eval-pipeline.ts`, `scripts/eval-pipeline.smoke.ts`, and `scripts/eval-pipeline.test.ts` (now
-     `reviewPipelineEval.ts`, `reviewPipelineEval.smoke.ts`, and `reviewPipelineEval.test.ts`, in `evals/review-pipeline/`), the bare `bun run eval` script (now
-     `bun run eval:review-pipeline`), and fixtures at `evals/<topicId>.json` (now `evals/review-pipeline/<topicId>.json`)
+     `reviewPipelineEval.ts`, `reviewPipelineEval.smoke.ts`, and `reviewPipelineEval.test.ts`, in
+     `evals/review-pipeline/`), the bare `bun run eval` script (now
+     `bun run eval:review-pipeline`), and fixtures at `evals/<topicId>.json` (now
+     `evals/review-pipeline/<topicId>.json`)
+   - `isFollowTopicInMenu` and `toActionLayout` in `ui/src/components/topic/TopicActions.tsx` (now
+     `toTopicActionLayout`),
+     `HeldTeamMenu` in `TeamUpButton.tsx` (now `AddTopicToTeamButton` and `AddTopicToTeamOptionList` over
+     `useAddTopicToTeam`), and `TeamActionRow` (now `TeamActionOption` in `ui/src/components/team/TeamMenuOptions.tsx`)
+   - `isTeamUpInRow`, `isTeamUpCallToAction`, and the `joinButton` prop in `TopicActions.tsx` (now
+     `isAddTopicToTeamOnLeft`,
+     `isNewTopicCallToAction`, and `renderJoinButton`)
+   - `ui/src/components/team/TeamUpButton.tsx`, `TeamUpButton`, and `isTeamUpShown` (now `AddTopicToTeamButton.tsx`,
+     `AddTopicToTeamButton`, and `isAddTopicToTeamShown`), and `TeamOption` and `NewTeamOption` in it (now in
+     `ui/src/components/team/TeamMenuOptions.tsx`)
+   - `ProfileTeamUpButton` and `RemoveTeamMemberButton` in `ui/src/pages/ProfilePage.tsx` (now `InviteUserToTeamButton` in
+     `ui/src/components/team/InviteUserToTeamButton.tsx`), and the page's `handleTeamUp`, `onTeamUp`, `handleOpenTeamUpMenu`,
+     and `isTeamingUp` (now `handleInviteUserToTeam`, `onInviteUserToTeam`, `handleOpenNewTeamModal`, and `isNewTeamModalOpen`)
+   - `TeamUpMenuOption` and `loadTeamUpMenu` in `api/team/helpers.ts`, `TeamMenuOption` and `fetchTeamOptions` in
+     `ui/src/clients/profileClient.ts`, and the `/profiles/:userId/team-up` route (now `ProfileTeamStatus` in
+     `shared/contracts.ts`, `loadProfileTeamStatuses`, `fetchProfileTeamStatuses`, and
+     `/profiles/:userId/team-statuses`)
+   - `gradeLinksToFindings` and `toParagraphs` in `evals/topic-chat/topicChatEval.ts` (now `toStrayLinkUrl` and
+     `toProseParagraphs` in `evals/evalReplies.ts`), and `readablePercent` in `sourceSuggestionsEval.ts` (now
+     `toPercentLabel` in `evals/evalLabels.ts`)
+   - each eval's rubric constants in `evals/<name>/<name>Eval.ts` (now in `evals/<name>/<name>Rubrics.ts`)
+   - `MAX_QUERIES` in `worker/ingest/search.ts` (now `MAX_SEARCH_QUERIES`)
+   - `isLikedOrBookmarked` and `likedOrBookmarkedFindingRows` in `worker/podcast/planPodcastEpisode.ts` (now
+     `hasScoreBonus` and `scoreBonusFindingRows`)
+   - `audioUrl` in `PageHead` and the `og:audio` tags in `ui/src/lib/pageHead.ts` (removed)
+   - `finalizeTableAttachment` and the `tableContext` field in `worker/workflows/processAttachmentActivities.ts` (now
+     `finalizeVerbatimAttachment` and `verbatimContext`), and `TABLE_SCREEN_TIMEOUT_MS` (now
+     `VERBATIM_SCREEN_TIMEOUT_MS`)
+   - the `LLM_GUARD_TABLE_TIMEOUT_MS` and `MAX_ATTACHMENT_CONTEXT_CHARS` environment variables (now the
+     `VERBATIM_SCREEN_TIMEOUT_MS` constant and the `MAX_ATTACHMENT_CONTEXT_CHARS` constant in `shared/contracts.ts`)
+   - `TopicResource`'s `podcastEpisodeChapterPill` and `isChapterPlaying` props (now `latestPodcastEpisode`), and the
+     `TopicFindingRow` component in `ui/src/components/topic/TopicFindingsSection.tsx` (now `TopicFindingList`, which the
+     homepage card shares). `MAX_RESOURCES` in `Topic.tsx` (now `MAX_TOPIC_FINDINGS` in `TopicFindingsSection.tsx`)
+   - `TopicPodcast.latestPodcastEpisode` (now `latestPodcastEpisode` on `TopicFeed`, which `TopicResponse` extends)
+   - the episodes card's `PodcastEpisodeRow` props `isPlayerCardPodcastEpisode`, `isPodcastEpisodePlaying`, and
+     `onTogglePlayback` (now `isPlayButtonMuted` in `ui/src/components/podcast/PodcastEpisodeRow.tsx`, which reads the
+     player itself), `PodcastEpisodeDetails` in `PodcastEpisodePlayerCard.tsx` (now its own file), and
+     `handleTogglePlayback` in `PodcastEpisodeChaptersTable.tsx` (now `togglePodcastEpisodeChapterPlayback` in the player store)
+   - `PlaybackControls` in `PodcastEpisodePlayerCard.tsx` (now `SkipPlaybackButtons` and `PlaybackSpeedButton` in
+     `ui/src/components/podcast/PlaybackControlButtons.tsx`), and `toChapterIndexAt`, the media session, and
+     `podcastEpisodePlayerStore.test.ts` in `ui/src/stores/` (now `ui/src/lib/podcastEpisodePlayback.ts` and its test)
+   - `toScanFailureReason` (now `toWorkflowFailureReason` in `shared/scanFailure.ts`)
+   - `stray` for a link outside an eval case's allowed urls (now `disallowed`): `strayUrl` in the scan report and topic
+     chat evals (now `disallowedUrl` and `disallowedLinkUrl`), and `strayToolCall` (now `unexpectedToolCall`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

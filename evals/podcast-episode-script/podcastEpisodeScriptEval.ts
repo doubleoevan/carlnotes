@@ -1,12 +1,12 @@
-// the promptfoo eval of the podcast episode script writer. every case makes real calls on the local LiteLLM proxy.
-// the calls cost real money, so the eval is never part of bun test. run it with: bun run eval:podcast-episode-script
+// the promptfoo eval of the podcast episode script writer, which makes real model calls.
+// run the eval with: bun run eval:podcast-episode-script
 import {
 	PODCAST_EPISODE_DESCRIPTION_MAX_CHARS,
 	PODCAST_EPISODE_TITLE_MAX_CHARS,
 	type PodcastEpisodeChapterScript,
 } from "@shared/contracts"
 import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
-import { chatModel } from "../../worker/models"
+import { scoreModel } from "../../worker/models"
 import {
 	isRepeatedGoodbyeOpeningTurn,
 	MAX_PODCAST_EPISODE_MINUTES,
@@ -23,44 +23,20 @@ import {
 	podcastEpisodeScriptWriter,
 	type WrittenPodcastEpisode,
 } from "./podcastEpisodeScriptProviders"
+import {
+	GRADER_MODEL,
+	MATERIAL_LABEL,
+	OUTPUT_SHAPE_RUBRIC,
+	QUOTE_RUBRIC,
+	SUPPORT_RUBRIC,
+	TITLE_RUBRIC,
+} from "./podcastEpisodeScriptRubrics"
 
 // a script from a thin input has to run under this many minutes
 const MAX_THIN_PODCAST_EPISODE_MINUTES = 7
 
 // the words that outline-podcast-episode.md tells the writer to open each description with
 const DESCRIPTION_OPENING = "Carl and Vienna talk about"
-
-// what every rubric tells the grader about the writer's output
-const OUTPUT_SHAPE_RUBRIC =
-	"The output is one podcast episode as JSON: an outline with the title and the description, and a script of two hosts' turns in chapters, each chapter citing one finding by its id."
-
-// the rubric that fails a script for stating a fact that the Findings and their stored content do not support
-const SUPPORT_RUBRIC = [
-	"Every factual specific a host states is supported by the source material below.",
-	"A factual specific is a name, a number, a date, a price, a quotation, or an event.",
-	"Fail the output if a host states a factual specific that the source material does not have, or one that contradicts it.",
-	"Never fail the output for a host's reaction, opinion, joke, or question, for everyday reasoning about what the source material says, for a number rounded or said the way a person says it, or for the show's own words.",
-	"The show is Coffee Break, the carlnotes.com podcast, and its hosts are Carl and Vienna. The cold open may name the show, carlnotes.com, and the hosts, and a host may mention Carl's backstory: he never sleeps, drinks coffee, reads everything, finished the internet, and holds a raccoon and a machine learning textbook in his picture, or Vienna's: she is interested in everything, has more interests than hours in the day, a stack of half-read books, and a new obsession every week, and follows her topics on CarlNotes. The show closes on Carl saying he has more reading to do and Vienna saying he always does, then a short goodbye in the hosts' own words.",
-].join(" ")
-
-// the rubric that fails a chapter for copying its source or for a quote with no named source.
-// the writer's own checks count the quotes
-const QUOTE_RUBRIC = [
-	"Each chapter retells its finding's stored content in the hosts' own words.",
-	"Fail the output if most of a chapter's turns are sentences of the stored content copied word for word.",
-	"Fail the output if a turn quotes the stored content inside double quotation marks and that turn does not say who said it or who published it.",
-	"A chapter with no quotation passes.",
-	"How many quotations a chapter has is checked elsewhere, so never fail the output for their number.",
-	"A name, a number, or a short phrase repeated from the stored content is not a copied sentence.",
-].join(" ")
-
-// the rubric that fails a title or a description that is not specific to the podcast episode's chapters
-const TITLE_RUBRIC = [
-	"The outline's title and description are specific to this episode's chapters.",
-	"Someone who reads them knows what these chapters cover, and neither would fit an episode about other findings on the same topic.",
-	"Fail the output if the title is the topic's name alone, is clickbait, or names nothing that a chapter covers, or if the description names nothing that a chapter covers.",
-	"Fail the output if the title or the description is cut off in the middle of a sentence or a word.",
-].join(" ")
 
 // the checks that every case gets and that need no model
 const DETERMINISTIC_ASSERTIONS: Assertion[] = [
@@ -78,6 +54,11 @@ const DETERMINISTIC_ASSERTIONS: Assertion[] = [
 	},
 	{ type: "javascript", metric: `the description opens with "${DESCRIPTION_OPENING}"`, value: gradeDescriptionOpening },
 	{ type: "javascript", metric: "the writer leaves the goodbye's opening turns out", value: gradeGoodbyeOpening },
+	{
+		type: "javascript",
+		metric: "the segments follow the outline prompt",
+		value: gradeSegments,
+	},
 ]
 
 // run every case. the grader is on a different model from the model that writes the script
@@ -85,7 +66,9 @@ await runEval({
 	name: "podcast-episode-script",
 	description: "podcast episode script writer",
 	provider: podcastEpisodeScriptWriter,
-	grader: toRubricGrader(chatModel()),
+	writerModels: [scoreModel()],
+	grader: toRubricGrader(GRADER_MODEL),
+	gatePassRate: 0.9,
 	defaultAssertions: DETERMINISTIC_ASSERTIONS,
 	testCases: PODCAST_EPISODE_SCRIPT_CASES.map(toTestCase),
 	toCaseLine,
@@ -116,7 +99,7 @@ function toTestCase(podcastEpisodeScriptCase: PodcastEpisodeScriptCase): TestCas
 			{ metric: "the title and the description are specific", rubric: TITLE_RUBRIC },
 			...(caseRubric ? [{ metric: description, rubric: caseRubric }] : []),
 		],
-		materialLabel: "Source material, as the script's writer was given it",
+		materialLabel: MATERIAL_LABEL,
 		material: podcastEpisodeScriptVariables,
 	})
 
@@ -196,6 +179,26 @@ function gradeGoodbyeOpening(_writerOutput: string, context: AssertionValueFunct
 	// find a turn that repeats a goodbye opening turn, in any case and punctuation
 	const repeatedTurn = writerClosingTurns.find(isRepeatedGoodbyeOpeningTurn)
 	return toGradingResult(repeatedTurn && `the writer wrote "${repeatedTurn.text}"`)
+}
+
+// fail the check unless the segment count follows the outline prompt and every later segment has a transition
+function gradeSegments(writerOutput: string, context: AssertionValueFunctionContext): GradingResult {
+	// the outline prompt puts three findings or fewer in one segment, and four or more in two to four segments
+	const { outline, podcastEpisodeScript } = toWrittenPodcastEpisode(writerOutput)
+	const findingCount = toInputFindingIds(context).length
+	const segmentCount = outline.segments.length
+	const isSegmentCountExpected = findingCount <= 3 ? segmentCount === 1 : segmentCount >= 2 && segmentCount <= 4
+	if (!isSegmentCountExpected) {
+		return toGradingResult(`${findingCount} findings make ${segmentCount} segments`)
+	}
+
+	// every segment after the first segment opens with a transition from the segment before
+	const missingTransitionIndex = podcastEpisodeScript.segments
+		.slice(1)
+		.findIndex((segment) => segment.transition.length === 0)
+	return toGradingResult(
+		missingTransitionIndex >= 0 ? `segment ${missingTransitionIndex + 2} has no transition` : undefined,
+	)
 }
 
 // fail the check unless a thin input's script has one chapter for each Finding and runs under the thin-input limit

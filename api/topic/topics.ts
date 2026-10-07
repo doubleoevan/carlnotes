@@ -3,7 +3,7 @@ import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
 import type { TopicDraft, TopicResponse, UpdateTopicPayload } from "@shared/contracts"
-import { suggestSourcesPayload, updateTopicPayload } from "@shared/contracts"
+import { suggestSourcesPayload, toAttachmentFailureMessage, updateTopicPayload } from "@shared/contracts"
 import { reportError, traceRequestStage } from "@shared/monitoring"
 import { toTopicPath } from "@shared/seo"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
@@ -109,7 +109,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		isDailyFrequencyPaused,
 		canRate,
 		canEdit,
-		{ podcast, podcastEpisodeByScanId },
+		{ podcast, latestPodcastEpisode, podcastEpisodeByScanId },
 	] = await traceRequestStage("topic_page.reads", () =>
 		Promise.all([
 			// the user's access and the findings it gates
@@ -136,11 +136,13 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		]),
 	)
 
-	// every later scan reads the generated context, so the owner and admins see it to edit it, and nobody else does
+	// every later scan reads the generated context, so the owner and admins see the context to edit, and nobody else does.
+	// the owner and admins also see why a failed attachment failed, as a message instead of the recorded reason
 	const canSeeOwnerDetails = isAdmin || isTopicOwner
-	const attachmentRows = rawAttachmentRows.map((attachment) => ({
+	const attachmentRows = rawAttachmentRows.map(({ error, ...attachment }) => ({
 		...attachment,
 		context: canSeeOwnerDetails ? attachment.context : null,
+		failureMessage: canSeeOwnerDetails && attachment.status === "failed" ? toAttachmentFailureMessage(error) : null,
 	}))
 	// a stopped scan is left out of the history and the last-succeeded scan. the month's cost still counts it.
 	// each scan in the history gets its published podcast episode
@@ -193,6 +195,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		sources: visibleTopicSourceRows.map((topicSource) => toTopicSourceSummary(topicSource)),
 		scans: scanHistory,
 		podcast,
+		latestPodcastEpisode,
 		findings: topicFindings,
 		invites: inviteRows,
 		manualScansRemaining,
@@ -207,7 +210,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 // the attachment rows that a topic page lists
 async function loadTopicAttachmentRows(
 	topicId: string,
-): Promise<Pick<typeof attachments.$inferSelect, "id" | "filename" | "sourceUrl" | "status" | "context">[]> {
+): Promise<Pick<typeof attachments.$inferSelect, "id" | "filename" | "sourceUrl" | "status" | "context" | "error">[]> {
 	return db
 		.select({
 			id: attachments.id,
@@ -215,6 +218,7 @@ async function loadTopicAttachmentRows(
 			sourceUrl: attachments.sourceUrl,
 			status: attachments.status,
 			context: attachments.context,
+			error: attachments.error,
 		})
 		.from(attachments)
 		.where(eq(attachments.topicId, topicId))
