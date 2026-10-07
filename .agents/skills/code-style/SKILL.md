@@ -482,9 +482,9 @@ and the other stays broken.
   duplicate too.
 - Code that only looks alike but means different things stays separate.
 
-    // wrong — the same gate parsing in the topic client and the episode client
-    const body = (await response.json().catch(() => null)) as GateBody | null
-    if (body?.gatedVisibility !== "invite" && body?.gatedVisibility !== "private") { ... }
+  // wrong — the same gate parsing in the topic client and the episode client
+  const body = (await response.json().catch(() => null)) as GateBody | null
+  if (body?.gatedVisibility !== "invite" && body?.gatedVisibility !== "private") { ... }
 
-    // right — one reader in the topic client, called from both
-    const topicGate = await readTopicGate(response)
+  // right — one reader in the topic client, called from both
+  const topicGate = await readTopicGate(response)
