@@ -17,6 +17,7 @@ import {
 	uploadPodcastEpisodeFile,
 } from "../store"
 import { toChapterTurns } from "./podcastEpisodeScript"
+import { loadThemeClips, type ThemeClips, toThemedEpisodeTimes, toThemeMix } from "./podcastEpisodeTheme"
 import { addPodcastEpisodeCost } from "./writePodcastEpisodeScript"
 
 // the podcast loudness. -16 LUFS with a true peak of -1.5 dB, measured as mono
@@ -117,20 +118,25 @@ export async function encodePodcastEpisode(
 			),
 		)
 
-		// join, normalize, and encode in one ffmpeg pass that reads and writes files
+		// the talk's chapter times from the chapters' byte sizes, which place the outro, and the theme clips on disk
+		const speechChapterTimes = toChapterTimes(orderedChapters.map((renderedChapter) => renderedChapter.byteSize))
+		const speechSeconds = speechChapterTimes.at(-1)?.endSeconds ?? 0
+		const themeClips = await loadThemeClips()
+
+		// join, mix in the theme, normalize, and encode in one ffmpeg pass that reads and writes files
 		const audioPath = join(temporaryDirectory, "audio.mp3")
-		await joinChapterFiles({ temporaryDirectory, chapterPaths, audioPath })
+		await joinChapterFiles({ temporaryDirectory, chapterPaths, audioPath, themeClips, speechSeconds })
 
 		// store the finished file
 		const audioKey = toPodcastEpisodeAudioKey(podcastEpisodeId)
 		await uploadPodcastEpisodeFile({ key: audioKey, filePath: audioPath, contentType: "audio/mpeg" })
 
-		// the chapters' times and the Podcast Episode's length come from the rendered audio's byte sizes
-		const chapterTimes = toChapterTimes(orderedChapters.map((renderedChapter) => renderedChapter.byteSize))
+		// the chapters' times shifted by the intro's lead, and the Podcast Episode's length with the outro's tail
+		const { chapterTimes, durationSeconds } = toThemedEpisodeTimes(speechChapterTimes, themeClips)
 		return {
 			audioKey,
 			audioByteSize: Bun.file(audioPath).size,
-			durationSeconds: Math.round(chapterTimes.at(-1)?.endSeconds ?? 0),
+			durationSeconds: Math.round(durationSeconds),
 			chapterTimes,
 		}
 	} finally {
@@ -152,23 +158,59 @@ export function toChapterTimes(wavByteSizes: number[]): ChapterTime[] {
 	})
 }
 
-// one join. the temporary directory that it works in, the chapter files in order, and the file that it writes
-export type JoinChapterFilesOptions = { temporaryDirectory: string; chapterPaths: string[]; audioPath: string }
+// one join. the temporary directory that the join works in, the chapter files in order, the file that the join writes,
+// the theme clips that exist, and the talk's length that places the outro
+export type JoinChapterFilesOptions = {
+	temporaryDirectory: string
+	chapterPaths: string[]
+	audioPath: string
+	themeClips: ThemeClips
+	speechSeconds: number
+}
 
 /**
- * Runs ffmpeg's concat demuxer over the chapter files, normalizing the loudness and encoding the MP3.
+ * Runs ffmpeg's concat demuxer over the chapter files, mixing in the theme clips, normalizing the loudness,
+ * and encoding the MP3.
  */
 export async function joinChapterFiles({
 	temporaryDirectory,
 	chapterPaths,
 	audioPath,
+	themeClips,
+	speechSeconds,
 }: JoinChapterFilesOptions): Promise<void> {
 	// the concat demuxer reads its inputs from a list file
 	const chapterListPath = join(temporaryDirectory, "chapters.txt")
 	await Bun.write(chapterListPath, chapterPaths.map((chapterPath) => `file '${chapterPath}'`).join("\n"))
 
-	// normalize the loudness and encode one channel at the MP3's bitrate and sample rate, overwriting without a prompt
-	const ffmpegArguments = [
+	// run ffmpeg over the chapters and the theme clips
+	const joinArguments = toJoinArguments({ chapterListPath, audioPath, themeClips, speechSeconds })
+	const ffmpegProcess = Bun.spawn(["ffmpeg", ...joinArguments], { stdout: "ignore", stderr: "pipe" })
+
+	// throw an error with ffmpeg's error text if the encode failed
+	const [exitCode, errorText] = await Promise.all([ffmpegProcess.exited, new Response(ffmpegProcess.stderr).text()])
+	if (exitCode !== 0) {
+		throw new Error(`ffmpeg exited with ${exitCode}: ${errorText.trim().slice(0, 500)}`)
+	}
+}
+
+// one join's arguments: the join's own options, with the chapters' list file in place of the chapter files
+type ToJoinArgumentsOptions = Omit<JoinChapterFilesOptions, "temporaryDirectory" | "chapterPaths"> & {
+	chapterListPath: string
+}
+
+/**
+ * Returns ffmpeg's arguments for one join: the chapters through the concat demuxer, the theme clips if any exist,
+ * the loudness filter, and the encode of one channel at the MP3's bitrate and sample rate.
+ */
+export function toJoinArguments({
+	chapterListPath,
+	audioPath,
+	themeClips,
+	speechSeconds,
+}: ToJoinArgumentsOptions): string[] {
+	// read the chapters through the concat demuxer, and overwrite the output without a prompt
+	const chapterArguments = [
 		"-hide_banner",
 		"-loglevel",
 		"error",
@@ -180,15 +222,22 @@ export async function joinChapterFiles({
 		"-i",
 		chapterListPath,
 	]
-	const encodeArguments = ["-af", LOUDNESS_FILTER, "-ac", "1", "-ar", MP3_SAMPLE_RATE, "-c:a", "libmp3lame"]
-	const ffmpegProcess = Bun.spawn(["ffmpeg", ...ffmpegArguments, ...encodeArguments, "-b:a", MP3_BITRATE, audioPath], {
-		stdout: "ignore",
-		stderr: "pipe",
-	})
+	const encodeArguments = ["-ac", "1", "-ar", MP3_SAMPLE_RATE, "-c:a", "libmp3lame", "-b:a", MP3_BITRATE, audioPath]
 
-	// throw an error with ffmpeg's error text if the encode failed
-	const [exitCode, errorText] = await Promise.all([ffmpegProcess.exited, new Response(ffmpegProcess.stderr).text()])
-	if (exitCode !== 0) {
-		throw new Error(`ffmpeg exited with ${exitCode}: ${errorText.trim().slice(0, 500)}`)
+	// with no theme clip, normalize the talk alone
+	if (!themeClips.intro && !themeClips.outro) {
+		return [...chapterArguments, "-af", LOUDNESS_FILTER, ...encodeArguments]
 	}
+
+	// otherwise mix the clips under the talk, normalize the mix, and encode the mix
+	const themeMix = toThemeMix({ themeClips, speechSeconds, loudnessFilter: LOUDNESS_FILTER })
+	return [
+		...chapterArguments,
+		...themeMix.inputArguments,
+		"-filter_complex",
+		themeMix.filterGraph,
+		"-map",
+		"[mixed]",
+		...encodeArguments,
+	]
 }

@@ -55,6 +55,9 @@ type PodcastEpisodeListenRow = Pick<
 // the topic fields that a podcast episode's page path is built from
 type PodcastEpisodeTopic = Pick<TopicRow, "id" | "name">
 
+// the topic fields that the latest podcast episode loader reads: the podcast episode's topic and its access check
+type LatestPodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "ownerId" | "visibility">
+
 // the row, topic, chapter rows if any, and listen row that a podcast episode is built from
 type ToPodcastEpisodeOptions = {
 	podcastEpisodeRow: PodcastEpisodeRow
@@ -161,7 +164,7 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
  * Loads each topic's latest published podcast episode that the user may listen to, with its chapters, by topic id.
  */
 export async function loadLatestPodcastEpisodes(
-	topicRows: TopicRow[],
+	topicRows: LatestPodcastEpisodeTopic[],
 	userId: string | null,
 ): Promise<Map<string, PodcastEpisode>> {
 	if (!isPodcastEpisodeRenderingConfigured() || topicRows.length === 0) {

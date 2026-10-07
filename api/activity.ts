@@ -5,6 +5,7 @@ import type {
 	ActivityScan,
 	ChatMention,
 	OwnerTopic,
+	PodcastEpisode,
 	SubscriptionRow,
 	TeamIdentity,
 } from "@shared/contracts"
@@ -16,6 +17,7 @@ import { isAdminRole, isAllowed, monthlySpendDollars, userBudgetCents } from "./
 import { toProfileIdentity, withAvatarVersion } from "./avatars"
 import { loadTopicChatMentions } from "./chat/mentions"
 import type { AppEnv } from "./currentUser"
+import { loadLatestPodcastEpisodes } from "./podcast/helpers"
 import { startOfUtcMonth } from "./topic/quotas"
 
 // the topic rows that toActivityTopics reads
@@ -29,6 +31,11 @@ type TopicRow = {
 	createdAt: Date
 	updatedAt: Date
 }
+// the subscription row fields that the queries read, with the subscribed time as a date
+export type SubscriptionRowFields = Omit<SubscriptionRow, "subscribedAt" | "latestPodcastEpisode"> & {
+	subscribedAt: Date
+}
+
 // the month-scan rows that hang off each topic in the sub-table
 type ScanRow = {
 	id: string
@@ -47,9 +54,15 @@ type ScanRow = {
 }
 
 /**
- * Assemble the Activity payload for the user
+ * Assembles the user's Activity payload for a viewer: the user, or an admin viewing the user's activity.
  */
-export async function loadActivity(user: { id: string; email: string }, isOwnView = true): Promise<ActivityResponse> {
+export async function loadActivity(
+	user: { id: string; email: string },
+	viewerUserId: string,
+): Promise<ActivityResponse> {
+	// the user's own view, which alone reads the user's chat mentions
+	const isOwnView = viewerUserId === user.id
+
 	// select the user's identity, budget inputs, litellm key, and owned topics
 	const [userRow] = await db
 		.select({
@@ -147,6 +160,24 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 			),
 		)
 
+	// the subscriptions and the pending invitations, each with its topic's latest podcast episode that the viewer may hear
+	const subscriptionRowFields: SubscriptionRowFields[] = [
+		// convert the joined owner and team columns to their identities before the rows merge
+		...subscriptionRows.map((subscriptionRow) => ({
+			...subscriptionRow,
+			owner: withAvatarVersion(subscriptionRow.owner),
+			team: toTeamIdentity(subscriptionRow.team),
+		})),
+		...(await loadInvitedTopicSubscriptions(user)),
+	]
+	const subscriptionTopicRows = subscriptionRowFields.map((subscriptionRow) => ({
+		id: subscriptionRow.topicId,
+		name: subscriptionRow.name,
+		ownerId: subscriptionRow.owner.userId,
+		visibility: subscriptionRow.visibility,
+	}))
+	const subscriptionPodcastEpisodeByTopic = await loadLatestPodcastEpisodes(subscriptionTopicRows, viewerUserId)
+
 	return {
 		// whose activity this is, for the page's profile link
 		user: {
@@ -163,16 +194,8 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 			plan: userRow?.plan ?? "free",
 			budgetOverrideCents: userRow?.budgetOverrideCents ?? null,
 		}),
-		topics: await loadTopics(ownedTopicIds, isOwnView ? user.id : null),
-		subscriptions: toSubscriptionRows([
-			// convert the joined owner and team columns to their identities before the rows merge
-			...subscriptionRows.map((subscriptionRow) => ({
-				...subscriptionRow,
-				owner: withAvatarVersion(subscriptionRow.owner),
-				team: toTeamIdentity(subscriptionRow.team),
-			})),
-			...(await loadInvitedTopicSubscriptions(user)),
-		]),
+		topics: await loadTopics({ topicIds: ownedTopicIds, viewerUserId, mentionUserId: isOwnView ? user.id : null }),
+		subscriptions: toSubscriptionRows(subscriptionRowFields, subscriptionPodcastEpisodeByTopic),
 		invites: inviteRows.map((inviteRow) => ({
 			inviteId: inviteRow.inviteId,
 			topicId: inviteRow.topicId ?? "",
@@ -192,7 +215,7 @@ export async function loadActivity(user: { id: string; email: string }, isOwnVie
 export async function loadInvitedTopicSubscriptions(user: {
 	id: string
 	email: string
-}): Promise<(Omit<SubscriptionRow, "subscribedAt"> & { subscribedAt: Date })[]> {
+}): Promise<SubscriptionRowFields[]> {
 	const subscribedTopicIdQuery = db
 		.select({ topicId: subscriptions.topicId })
 		.from(subscriptions)
@@ -278,22 +301,31 @@ function toTeamIdentity(team: {
 }
 
 /**
- * The subscription rows with subscribedAt as the iso string the payload sends.
+ * The subscription rows with subscribedAt as the iso string the payload sends, and each topic's latest podcast episode.
  */
 export function toSubscriptionRows(
-	subscriptionRows: (Omit<SubscriptionRow, "subscribedAt"> & { subscribedAt: Date })[],
+	subscriptionRows: SubscriptionRowFields[],
+	latestPodcastEpisodeByTopic: Map<string, PodcastEpisode> = new Map(),
 ): SubscriptionRow[] {
 	return subscriptionRows.map((subscriptionRow) => ({
 		...subscriptionRow,
 		subscribedAt: subscriptionRow.subscribedAt.toISOString(),
+		latestPodcastEpisode: latestPodcastEpisodeByTopic.get(subscriptionRow.topicId) ?? null,
 	}))
 }
+
+// the topics to build rows for, the user viewing the rows, and the user whose chat mentions the rows show
+type LoadTopicsOptions = { topicIds: string[]; viewerUserId: string; mentionUserId?: string | null }
 
 /**
  * The activity rows for a given set of topics, whoever owns them. The admin console reads a team's topics through this,
  * so a team's subtable shows its topic activity.
  */
-export async function loadTopics(topicIds: string[], mentionUserId: string | null = null): Promise<OwnerTopic[]> {
+export async function loadTopics({
+	topicIds,
+	viewerUserId,
+	mentionUserId = null,
+}: LoadTopicsOptions): Promise<OwnerTopic[]> {
 	if (topicIds.length === 0) {
 		return []
 	}
@@ -365,24 +397,42 @@ export async function loadTopics(topicIds: string[], mentionUserId: string | nul
 		.from(subscriptions)
 		.innerJoin(topics, eq(topics.id, subscriptions.topicId))
 		.where(and(inArray(subscriptions.topicId, topicIds), eq(subscriptions.subscriberUserId, topics.ownerId)))
-	return toActivityTopics(
+	return toActivityTopics({
 		topicRows,
-		monthScans,
-		new Map(subscriberRows.map((subscriberRow) => [subscriberRow.topicId, subscriberRow.count])),
-		new Map(ownerEmailRows.map((ownerEmailRow) => [ownerEmailRow.topicId, ownerEmailRow.isEmailEnabled])),
-		new Map(emailSendRows.map((emailSendRow) => [emailSendRow.topicId, emailSendRow.count])),
-		await loadTopicChatMentions(mentionUserId, topicIds),
-	)
+		scanRows: monthScans,
+		subscriberCountByTopic: new Map(
+			subscriberRows.map((subscriberRow) => [subscriberRow.topicId, subscriberRow.count]),
+		),
+		emailEnabledByTopic: new Map(
+			ownerEmailRows.map((ownerEmailRow) => [ownerEmailRow.topicId, ownerEmailRow.isEmailEnabled]),
+		),
+		emailCountByTopic: new Map(emailSendRows.map((emailSendRow) => [emailSendRow.topicId, emailSendRow.count])),
+		mentionByTopic: await loadTopicChatMentions(mentionUserId, topicIds),
+		latestPodcastEpisodeByTopic: await loadLatestPodcastEpisodes(topicRows, viewerUserId),
+	})
 }
 
-export function toActivityTopics(
-	topicRows: TopicRow[],
-	scanRows: ScanRow[],
-	subscriberCountByTopic: Map<string, number>,
-	emailEnabledByTopic: Map<string, boolean> = new Map(),
-	emailCountByTopic: Map<string, number> = new Map(),
-	mentionByTopic: Map<string, ChatMention[]> = new Map(),
-): OwnerTopic[] {
+// the rows and the counts that each owned topic row is built from, keyed by topic id
+type ToActivityTopicsOptions = {
+	topicRows: TopicRow[]
+	scanRows: ScanRow[]
+	subscriberCountByTopic: Map<string, number>
+	// the maps that a caller may leave out, each read as empty
+	emailEnabledByTopic?: Map<string, boolean>
+	emailCountByTopic?: Map<string, number>
+	mentionByTopic?: Map<string, ChatMention[]>
+	latestPodcastEpisodeByTopic?: Map<string, PodcastEpisode>
+}
+
+export function toActivityTopics({
+	topicRows,
+	scanRows,
+	subscriberCountByTopic,
+	emailEnabledByTopic = new Map(),
+	emailCountByTopic = new Map(),
+	mentionByTopic = new Map(),
+	latestPodcastEpisodeByTopic = new Map(),
+}: ToActivityTopicsOptions): OwnerTopic[] {
 	// group each topic's scans once, then build every row
 	const scansByTopic = Map.groupBy(scanRows, (scan) => scan.topicId)
 	return topicRows.map((topic) => {
@@ -405,6 +455,7 @@ export function toActivityTopics(
 			// the owner holds a subscription to their own topic, and a missing row reads as on, matching the column default
 			isEmailEnabled: emailEnabledByTopic.get(topic.id) ?? true,
 			chatMentions: mentionByTopic.get(topic.id) ?? [],
+			latestPodcastEpisode: latestPodcastEpisodeByTopic.get(topic.id) ?? null,
 			scans: topicScans.map((scan) => ({
 				id: scan.id,
 				status: scan.status,
@@ -439,7 +490,7 @@ export const activityRoute = new Hono<AppEnv>().get("/activity", async (context)
 	// without the userId param, the user loads their own activity
 	const requestedUserId = context.req.query("userId")
 	if (!requestedUserId || requestedUserId === user.id) {
-		return context.json(await loadActivity({ id: user.id, email: user.email }))
+		return context.json(await loadActivity({ id: user.id, email: user.email }, user.id))
 	}
 
 	// viewing another user's activity requires the admin:console permission
@@ -452,5 +503,5 @@ export const activityRoute = new Hono<AppEnv>().get("/activity", async (context)
 		.select({ id: users.id, email: users.email })
 		.from(users)
 		.where(eq(users.id, requestedUserId))
-	return targetUser ? context.json(await loadActivity(targetUser, false)) : context.json({ error: "not found" }, 404)
+	return targetUser ? context.json(await loadActivity(targetUser, user.id)) : context.json({ error: "not found" }, 404)
 })

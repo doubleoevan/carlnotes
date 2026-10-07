@@ -35,6 +35,8 @@ The api serves the browser bundle and renders pages through the server build, be
   the episodes card and the topic roast), `PodcastEpisodeDetails.tsx` (an episode's season, title, and details line, in
   the player card and a tooltip), `LatestPodcastEpisodePlayButton.tsx` (the play button beside a topic's note icon),
   `PlaybackControlButtons.tsx` (the skip and playback speed buttons, in the player card and the bottom player),
+  `ThemeSongNote.tsx` (the note icon whose popup credits the theme song, beside the podcast's name and episode titles,
+  with the lyrics from `themeSongLyrics.ts`),
   `PodcastEpisodeCover.tsx` (an episode's cover square), and `PodcastEpisodeAudio.tsx`, the one audio element and the
   podcast player that `Layout` mounts.
   `stores/podcastEpisodePlayerStore.ts` drives that element, so playback continues from one page to the next.

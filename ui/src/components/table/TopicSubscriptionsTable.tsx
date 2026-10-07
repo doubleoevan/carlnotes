@@ -7,7 +7,6 @@ import { fetchTopicInviteBadges, sendAcceptInvite, sendDeclineInvite } from "@/c
 import { sendDeleteSubscription, sendSubscriptionEmail, sendTopicSubscription } from "@/clients/topicClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
-import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
 import { Button } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
@@ -15,6 +14,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TableCard } from "@/components/table/TableCard"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
+import { TopicNameLink } from "@/components/table/TopicNameLink"
 import { TeamLink } from "@/components/team/TeamLink"
 import { toMonthYearLabel } from "@/lib/labels"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
@@ -133,16 +133,13 @@ export function TopicSubscriptionsTable({
 						{pageRows.map((subscriptionRow) => (
 							<tr key={subscriptionRow.topicId} className="border-b">
 								<td className="py-2 pr-4">
-									{/* the badge sits on the name's corner, the way it does in every other topic table */}
-									<span className="relative inline-block">
-										<AnchorLink
-											href={toTopicPath({ id: subscriptionRow.topicId, name: subscriptionRow.name })}
-											className="text-link hover:underline"
-										>
-											{subscriptionRow.name}
-										</AnchorLink>
-										<PageUpdateCountBadge topicId={subscriptionRow.topicId} />
-									</span>
+									<TopicNameLink
+										topic={{
+											id: subscriptionRow.topicId,
+											name: subscriptionRow.name,
+											latestPodcastEpisode: subscriptionRow.latestPodcastEpisode,
+										}}
+									/>
 									{/* a pending invitation and a switched-off subscription both read inactive, so it shows which */}
 									{subscriptionRow.inviteId && <span className="block">Invited</span>}
 								</td>

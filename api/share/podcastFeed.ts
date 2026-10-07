@@ -5,6 +5,12 @@ import {
 	AI_VOICES_NOTE,
 	PODCAST_EPISODE_SPEAKER_NAMES,
 	PODCAST_SHOW_NAME,
+	PODCAST_THEME_SONG,
+	PODCAST_THEME_SONG_DRUMMING_CREDIT,
+	PODCAST_THEME_SONG_HEADING,
+	PODCAST_THEME_SONG_PERFORMANCE_CREDIT,
+	PODCAST_THEME_SONG_PRODUCTION_CREDIT,
+	PODCAST_THEME_SONG_WRITING_CREDIT,
 	toPodcastCoverPath,
 	toTranscriptText,
 } from "@shared/podcastEpisodes"
@@ -56,11 +62,11 @@ export function toPodcastFeedXml({
 	isBlockedFromPodcastDirectories,
 	podcastEpisodes,
 }: ToPodcastFeedXmlOptions): string {
-	// the show's page, title, cover, and description
+	// the show's page, title, cover, and description, which ends with the theme song's credits and its link
 	const topicUrl = `${appUrl}${toTopicPath(topic)}`
 	const showTitle = `${topic.name}: ${PODCAST_SHOW_NAME}`
 	const showCoverUrl = `${appUrl}${toPodcastCoverPath({ kind: "show", id: topic.id, title: topic.name }, 3000)}`
-	const showDescription = `${topic.prompt || `What Carl found for ${topic.name}.`} ${AI_VOICES_NOTE}.`
+	const showDescription = `${topic.prompt || `What Carl found for ${topic.name}.`} ${AI_VOICES_NOTE}. ${PODCAST_THEME_SONG_HEADING}: ${PODCAST_THEME_SONG.youtubeUrl}. ${PODCAST_THEME_SONG_WRITING_CREDIT}. ${PODCAST_THEME_SONG_PERFORMANCE_CREDIT}. ${PODCAST_THEME_SONG_PRODUCTION_CREDIT}. ${PODCAST_THEME_SONG_DRUMMING_CREDIT}.`
 
 	// the plain rss image tags, with the cover's url, the show's title, and the show's page
 	const showImageTags = [

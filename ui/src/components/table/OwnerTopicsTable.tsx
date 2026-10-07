@@ -1,18 +1,16 @@
 import type { ActivityScan, OwnerTopic } from "@shared/contracts"
 import { frequencies, isDailyFrequency } from "@shared/enums"
-import { toTopicPath } from "@shared/seo"
 import { ChevronDown, Globe, Lock, Mail } from "lucide-react"
 import { Fragment, useState } from "react"
 import { fetchScanNote, sendSubscriptionEmail } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { AnchorLink } from "@/components/common/AnchorLink"
-import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Switch } from "@/components/primitives/switch"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TableCard } from "@/components/table/TableCard"
 import { TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
+import { TopicNameLink } from "@/components/table/TopicNameLink"
 import { TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
 import { durationMsBetween, toCentsLabel, toCountLabel, toDurationLabel, toMonthYearLabel } from "@/lib/labels"
 import { POPOVER_PANEL_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
@@ -220,18 +218,6 @@ export function OwnerTopicsTable({
 			</div>
 			<TablePagination {...pagination} />
 		</TableCard>
-	)
-}
-
-// the topic's name, linking to its page, with the user's chat mention count at its corner
-function TopicNameLink({ topic }: { topic: OwnerTopic }) {
-	return (
-		<span className="relative inline-block">
-			<AnchorLink href={toTopicPath(topic)} className="text-link hover:underline">
-				{topic.name}
-			</AnchorLink>
-			<PageUpdateCountBadge topicId={topic.id} />
-		</span>
 	)
 }
 

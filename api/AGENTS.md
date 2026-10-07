@@ -53,6 +53,8 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   `chatTools.ts`: the edit tools bound to a chat's topic, and the draft tools of the new-topic chat. The mcp adapter is
   in `mcp/tools.ts`.
 - `topic/promptVersions.ts` — the Prompt Version write the editor's save and the Topic Tools share.
+- `topic/topicTableRows.ts` — `toTopicTableRows`, the topic table rows that the profile page and the team page share,
+  each with its latest Podcast Episode.
 - `topic/topicDrafts.ts` — the new-topic chat's Topic Draft row, written by the chat turn that changed it and read
   back when the conversation loads.
 - `rateLimit.ts` — the one per-tool-caller rate limit, shared by the chat turn routes and the mcp routes, keyed by the

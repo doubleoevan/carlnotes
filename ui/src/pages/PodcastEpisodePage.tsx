@@ -12,6 +12,7 @@ import { PodcastEpisodeCover } from "@/components/podcast/PodcastEpisodeCover"
 import { PodcastEpisodePlayerCard } from "@/components/podcast/PodcastEpisodePlayerCard"
 import { PodcastFeedDialog } from "@/components/podcast/PodcastFeedDialog"
 import { RemovePodcastEpisodeDialog } from "@/components/podcast/RemovePodcastEpisodeDialog"
+import { ThemeSongNote } from "@/components/podcast/ThemeSongNote"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { TableCard } from "@/components/table/TableCard"
 import { isAddTopicToTeamShown } from "@/components/team/AddTopicToTeamButton"
@@ -156,7 +157,10 @@ export function PodcastEpisodePage() {
 						</p>
 						<NewTopicButton onNewTopic={openNewTopicDialog} />
 					</div>
-					<h1 className="font-display mt-1.5 text-2xl leading-tight sm:text-3xl">{podcastEpisode.title}</h1>
+					<h1 className="font-display mt-1.5 text-2xl leading-tight sm:text-3xl">
+						{podcastEpisode.title}
+						<ThemeSongNote />
+					</h1>
 					{podcastEpisode.description && <p className="mt-1.5 text-sm">{podcastEpisode.description}</p>}
 					<TopicByline topic={topic} className="mt-1.5 text-sm sm:hidden" />
 				</div>
@@ -183,6 +187,7 @@ export function PodcastEpisodePage() {
 				</h2>
 				<PodcastEpisodeTranscript transcript={transcript} />
 			</section>
+
 			{/* the podcast feed dialog */}
 			{isPodcastFeedDialogOpen && (
 				<PodcastFeedDialog

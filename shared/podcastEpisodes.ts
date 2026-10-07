@@ -55,6 +55,26 @@ export const PODCAST_NAME = "Coffee Break podcast"
 // the podcast's name as a listener and a search engine read it
 export const PODCAST_SHOW_NAME = `${PODCAST_NAME} with Carl and Vienna`
 
+// the theme song that opens and closes every podcast episode, and the people credited for the song
+export const PODCAST_THEME_SONG = {
+	title: "Coffee Break",
+	artist: "Chase Wimberly",
+	youtubeUrl: "https://www.youtube.com/watch?v=S1-nYyIzK24",
+	songwriter: "Laura Atkinson",
+	copyrightYear: 2022,
+	songwriterUrl: "http://pilgrimmusic.com/",
+	producer: "Jimmy Deer",
+	drummer: "Nate Barnes",
+} as const
+
+// the theme song's heading and credit lines, without their links
+export const PODCAST_THEME_SONG_HEADING = `${PODCAST_THEME_SONG.title} Theme Song`
+export const PODCAST_THEME_SONG_WRITING_LABEL = `Lyrics and melody © ${PODCAST_THEME_SONG.copyrightYear}`
+export const PODCAST_THEME_SONG_WRITING_CREDIT = `${PODCAST_THEME_SONG_WRITING_LABEL} ${PODCAST_THEME_SONG.songwriter}`
+export const PODCAST_THEME_SONG_PERFORMANCE_CREDIT = `Performed by ${PODCAST_THEME_SONG.artist}`
+export const PODCAST_THEME_SONG_PRODUCTION_CREDIT = `Production by ${PODCAST_THEME_SONG.producer}`
+export const PODCAST_THEME_SONG_DRUMMING_CREDIT = `Drumming by ${PODCAST_THEME_SONG.drummer}`
+
 // the name that each speaker goes by in a transcript
 export const PODCAST_EPISODE_SPEAKER_NAMES = { host: "Carl", cohost: "Vienna" } as const
 

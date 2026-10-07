@@ -17,6 +17,11 @@ fewer findings, Carl and Vienna spend longer on each one, but an episode is neve
 Carl and Vienna are AI voices. Every episode is written from the topic's findings, the brew's own
 first, and each chapter says where its finding came from.
 
+Every episode opens and closes with the show's theme song,
+[Coffee Break](https://www.youtube.com/watch?v=S1-nYyIzK24). Lyrics and melody © 2022
+[Laura Atkinson](http://pilgrimmusic.com/). Performed by Chase Wimberly. Production by Jimmy Deer.
+Drumming by Nate Barnes.
+
 ## Where to listen
 
 The player sits at the top of the topic page, under the title. Press play, and the page follows
@@ -24,7 +29,8 @@ along: the finding on air is highlighted, and each finding the episode covers is
 chapter. Tap a tag or a chapter's title to jump there, and tap the rest of a chapter's row to open its finding.
 
 The home feed plays it too. The play button beside a topic's name plays its latest episode, and hovering it names
-the episode, its date, and its length. The chapter tags show on the feed's findings and inside every finding's note,
+the episode, its date, and its length. The same button sits beside a topic's name in every list of topics: on a
+profile, under your teams, on a team's page, and on your activity page. The chapter tags show on the feed's findings and inside every finding's note,
 and a topic's **Topic roast** opens with its latest episode, ready to play.
 
 ![The Coffee Break player on a topic page: an episode paused on its first chapter, with the skip, speed, and

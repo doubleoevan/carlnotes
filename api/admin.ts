@@ -42,13 +42,19 @@ const EMBED_BYTES = EMBED_DIMENSIONS * 4
 /**
  * A user's owned topics as their own Activity page would show them for the subtable in an admin's users table
  */
-export async function loadAdminUserTopics(userId: string): Promise<OwnerTopic[] | null> {
+export async function loadAdminUserTopics({
+	userId,
+	adminUserId,
+}: {
+	userId: string
+	adminUserId: string
+}): Promise<OwnerTopic[] | null> {
 	// the loader keys off the user, so an admin reads exactly what that user reads, with no second query to drift
 	const [user] = await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.id, userId))
 	if (!user) {
 		return null
 	}
-	return (await loadActivity(user, false)).topics
+	return (await loadActivity(user, adminUserId)).topics
 }
 
 /**
@@ -415,7 +421,7 @@ export const adminRoute = new Hono<AppEnv>()
 		if (!(await isAllowed(userId, "admin:console"))) {
 			return context.json({ error: "forbidden" }, 403)
 		}
-		const topics = await loadAdminUserTopics(context.req.param("id"))
+		const topics = await loadAdminUserTopics({ userId: context.req.param("id"), adminUserId: userId })
 		return topics ? context.json({ topics }) : context.json({ error: "not found" }, 404)
 	})
 	.get("/admin/teams/:id/members", async (context) => {
@@ -454,7 +460,7 @@ export const adminRoute = new Hono<AppEnv>()
 		if (!(await isAllowed(userId, "admin:console"))) {
 			return context.json({ error: "forbidden" }, 403)
 		}
-		const teamTopics = await loadAdminTeamTopics(context.req.param("id"))
+		const teamTopics = await loadAdminTeamTopics({ teamId: context.req.param("id"), adminUserId: userId })
 		return teamTopics ? context.json({ topics: teamTopics }) : context.json({ error: "not found" }, 404)
 	})
 	.post("/admin/users/:id/budget", zValidator("json", budgetOverridePayload), async (context) => {

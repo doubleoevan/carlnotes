@@ -16,7 +16,7 @@ import { isAllowed } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
 import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
-import { toTopicTableRows } from "./topic/helpers"
+import { toTopicTableRows } from "./topic/topicTableRows"
 
 // the transaction a caller is already inside, or the pool when there is none
 type DbHandle = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
@@ -117,6 +117,7 @@ async function loadProfileTopics(
 		.select({
 			id: topics.id,
 			name: topics.name,
+			ownerId: topics.ownerId,
 			visibility: topics.visibility,
 			createdAt: topics.createdAt,
 			updatedAt: topics.updatedAt,

@@ -350,6 +350,9 @@ Check for:
      `ui/src/components/podcast/PlaybackControlButtons.tsx`), and `toChapterIndexAt`, the media session, and
      `podcastEpisodePlayerStore.test.ts` in `ui/src/stores/` (now `ui/src/lib/podcastEpisodePlayback.ts` and its test)
    - `toScanFailureReason` (now `toWorkflowFailureReason` in `shared/scanFailure.ts`)
+   - `toTopicTableRows` in `api/topic/helpers.ts` (now `api/topic/topicTableRows.ts`), `TopicNameLink` in
+     `OwnerTopicsTable.tsx` (now `ui/src/components/table/TopicNameLink.tsx`), and `loadActivity`'s `isOwnView`
+     parameter (now `viewerUserId`)
    - `stray` for a link outside an eval case's allowed urls (now `disallowed`): `strayUrl` in the scan report and topic
      chat evals (now `disallowedUrl` and `disallowedLinkUrl`), and `strayToolCall` (now `unexpectedToolCall`)
 

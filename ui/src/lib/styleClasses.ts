@@ -193,6 +193,12 @@ export const RAIL_BARE_ICON_INSET = "-mr-2 sm:mr-1"
 export const PAGE_CLASS = "mx-auto max-w-5xl px-safe pt-3 pb-10"
 
 /**
+ * A 20px icon button tile in a line of text or a row. The tile and its tap area reach past the line's height.
+ */
+export const ICON_TILE_BUTTON_CLASS =
+	"relative inline-grid size-5 shrink-0 place-items-center align-middle before:absolute before:-inset-2 before:content-['']"
+
+/**
  * A wide info popover panel: viewport width on a phone, its own max width above that. The popover-panel
  * marker lets globals.css center it as a sheet on a phone.
  */

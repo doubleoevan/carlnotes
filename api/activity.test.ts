@@ -1,5 +1,6 @@
 // activity tests for the payload assembly
 import { expect, test } from "bun:test"
+import type { PodcastEpisode } from "@shared/contracts"
 import { toActivityTopics, toCents, toSubscriptionRows } from "./activity"
 
 // scans.cost is a numeric dollars string, converted once for every spend figure on the page
@@ -62,7 +63,7 @@ test("toActivityTopics groups scans per topic and sums their cents", () => {
 		},
 	]
 	// only the first topic has subscribers, so the second proves a missing count reads as zero
-	const [agents, quiet] = toActivityTopics(topicRows, scanRows, new Map([["t1", 3]]))
+	const [agents, quiet] = toActivityTopics({ topicRows, scanRows, subscriberCountByTopic: new Map([["t1", 3]]) })
 
 	// the topic with scans counts them and sums their cost in cents
 	expect(agents?.monthScanCount).toBe(2)
@@ -101,4 +102,41 @@ function subscriptionRow(topicId: string): Parameters<typeof toSubscriptionRows>
 test("toSubscriptionRows serializes the subscribed date", () => {
 	const [row] = toSubscriptionRows([subscriptionRow("t1")])
 	expect(row?.subscribedAt).toBe("2026-07-01T00:00:00.000Z")
+})
+
+// an owned topic row with no scans this month
+function ownedTopicRow(topicId: string): Parameters<typeof toActivityTopics>[0]["topicRows"][number] {
+	return {
+		id: topicId,
+		ownerId: "owner-1",
+		name: `topic ${topicId}`,
+		visibility: "public",
+		frequency: "weekly",
+		createdAt: new Date("2026-07-01T00:00:00Z"),
+		updatedAt: new Date("2026-07-01T00:00:00Z"),
+	}
+}
+
+// the latest podcast episode passes through to its topic's row, and a topic without one reads null
+test("toActivityTopics and toSubscriptionRows include each topic's latest podcast episode", () => {
+	const podcastEpisode = { id: "podcast-episode-1", episodeNumber: 3 } as PodcastEpisode
+	const latestPodcastEpisodeByTopic = new Map([["t1", podcastEpisode]])
+
+	// an owned topic with a podcast episode and one without
+	const [ownedTopicWithEpisode, ownedTopicWithoutEpisode] = toActivityTopics({
+		topicRows: [ownedTopicRow("t1"), ownedTopicRow("t2")],
+		scanRows: [],
+		subscriberCountByTopic: new Map(),
+		latestPodcastEpisodeByTopic,
+	})
+	expect(ownedTopicWithEpisode?.latestPodcastEpisode).toBe(podcastEpisode)
+	expect(ownedTopicWithoutEpisode?.latestPodcastEpisode).toBeNull()
+
+	// a subscription with a podcast episode and one without
+	const [subscriptionWithEpisode, subscriptionWithoutEpisode] = toSubscriptionRows(
+		[subscriptionRow("t1"), subscriptionRow("t2")],
+		latestPodcastEpisodeByTopic,
+	)
+	expect(subscriptionWithEpisode?.latestPodcastEpisode).toBe(podcastEpisode)
+	expect(subscriptionWithoutEpisode?.latestPodcastEpisode).toBeNull()
 })

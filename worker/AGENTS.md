@@ -49,7 +49,8 @@ with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep t
   - `writePodcastEpisodeScript.ts` writes and saves the script. `generatePodcastEpisodeScript.ts` makes its outline and
     segment calls on `score-model`, and `podcastEpisodeScript.ts` holds the script's shape and checks every draft.
   - `podcastEpisodeAudio.ts` renders each chapter, stores its audio in object storage, and joins the chapters with
-    ffmpeg.
+    ffmpeg. `podcastEpisodeTheme.ts` mixes the theme song's intro and outro under the talk in that same pass, from the
+    clips committed in `assets/podcast/`, and shifts the chapter times by the intro's lead.
   - `publishPodcastEpisode.ts` publishes or fails the row, and `removePodcastEpisode.ts` removes a Podcast Episode and
     deletes its audio.
   - `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the chapters that narrated its Resource, and

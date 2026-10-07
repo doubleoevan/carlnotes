@@ -1,12 +1,9 @@
 import type { Topic, TopicResponse } from "@shared/contracts"
-import { toTopicPath } from "@shared/seo"
 import { X } from "lucide-react"
 import { useState } from "react"
 import { fetchTopicPage, sendSubscriptionEmail } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { NoteIcon } from "@/components/branding/NoteIcon"
-import { AnchorLink } from "@/components/common/AnchorLink"
-import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Button } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Switch } from "@/components/primitives/switch"
@@ -15,6 +12,7 @@ import { TopicVisibility } from "@/components/table/OwnerTopicsTable"
 import { SortableHeader } from "@/components/table/SortableHeader"
 import { TableCard } from "@/components/table/TableCard"
 import { SMALLEST_PAGE_SIZE, TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
+import { TopicNameLink } from "@/components/table/TopicNameLink"
 import { TopicInfo } from "@/components/topic/TopicInfo"
 import { toMonthYearLabel } from "@/lib/labels"
 import { POPOVER_PANEL_CLASS, TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
@@ -142,13 +140,7 @@ export function TopicsTable({
 						{pageRows.map((topic) => (
 							<tr key={topic.id} className="border-b">
 								<td className="py-2 pr-4">
-									{/* the chat mention count sits in the name's top-right corner while the user has unseen chat mentions */}
-									<span className="relative inline-block">
-										<AnchorLink href={toTopicPath(topic)} className="text-link hover:underline">
-											{topic.name}
-										</AnchorLink>
-										<PageUpdateCountBadge topicId={topic.id} />
-									</span>
+									<TopicNameLink topic={topic} />
 								</td>
 								<td className="text-muted-foreground py-2 pr-4">{toMonthYearLabel(topic.createdAt)}</td>
 								<td className="text-muted-foreground py-2 pr-4">{toMonthYearLabel(topic.updatedAt)}</td>

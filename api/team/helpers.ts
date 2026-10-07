@@ -18,9 +18,9 @@ import { loadTopics } from "../activity"
 import { isAllowed, isLeaderRole } from "../authorization"
 import { toProfileIdentity } from "../avatars"
 import { loadTeamChatMentions } from "../chat/mentions"
-import { toTopicTableRows } from "../topic/helpers"
 import { verifiedEmailQuery } from "../topic/permissions"
 import { startOfUtcMonth } from "../topic/quotas"
+import { toTopicTableRows } from "../topic/topicTableRows"
 
 // the users table under a second name, so an invitation can join its sender beside its invitee
 const senders = alias(users, "senders")
@@ -220,14 +220,21 @@ export async function loadProfileTeamStatuses(userId: string, profileUserId: str
 /**
  * One team's topics in the shape the admin page renders them. An admin sees every topic the team holds and its scan costs.
  */
-export async function loadAdminTeamTopics(teamId: string): Promise<OwnerTopic[] | null> {
+export async function loadAdminTeamTopics({
+	teamId,
+	adminUserId,
+}: {
+	teamId: string
+	adminUserId: string
+}): Promise<OwnerTopic[] | null> {
 	const [team] = await db.select({ id: teams.id }).from(teams).where(eq(teams.id, teamId))
 	if (!team) {
 		return null
 	}
 
 	// the same rows a user's own topics table reads, so both subtables show the same columns and totals
-	return loadTopics((await loadTeamTopics(teamId)).map((topicRow) => topicRow.id))
+	const teamTopicIds = (await loadTeamTopics(teamId)).map((topicRow) => topicRow.id)
+	return loadTopics({ topicIds: teamTopicIds, viewerUserId: adminUserId })
 }
 
 /**

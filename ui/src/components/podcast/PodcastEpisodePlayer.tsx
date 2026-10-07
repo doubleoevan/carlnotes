@@ -8,6 +8,7 @@ import { PodcastEpisodePlaybackPill } from "@/components/podcast/PodcastEpisodeP
 import { PodcastEpisodePlayerCard } from "@/components/podcast/PodcastEpisodePlayerCard"
 import { PodcastFeedDialog } from "@/components/podcast/PodcastFeedDialog"
 import { RemovePodcastEpisodeDialog } from "@/components/podcast/RemovePodcastEpisodeDialog"
+import { ThemeSongNote } from "@/components/podcast/ThemeSongNote"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { isManualScanShown } from "@/components/topic/TopicScanButton"
 import { useSearchParams } from "@/hooks/useSearchParams"
@@ -56,7 +57,13 @@ export function PodcastEpisodePlayer({
 	) : undefined
 	const titleAside = isPodcastEpisodeLoaded ? <PodcastEpisodePlaybackPill /> : unplayedTitleAside
 	return (
-		<CollapsibleSection value="podcast" title={PODCAST_NAME} titleAside={titleAside} className="mt-2">
+		<CollapsibleSection
+			value="podcast"
+			title={PODCAST_NAME}
+			titleNote={<ThemeSongNote className="ml-0" />}
+			titleAside={titleAside}
+			className="mt-2"
+		>
 			{/* a published podcast episode's player card, or the card of an episode with no audio */}
 			{podcastEpisode?.status === "published" ? (
 				<PodcastEpisodePlayerCard

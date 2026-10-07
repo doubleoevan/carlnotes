@@ -2,6 +2,7 @@ import type { PodcastEpisode } from "@shared/contracts"
 import { AI_VOICES_NOTE, PODCAST_NAME } from "@shared/podcastEpisodes"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { ThemeSongNote } from "@/components/podcast/ThemeSongNote"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { toPodcastEpisodeDayAndDurationLabels } from "@/lib/labels"
 import { cn } from "@/lib/utils"
@@ -34,7 +35,7 @@ export function PodcastEpisodeDetails({
 			<div className={cn(secondaryTextClass, "font-display tracking-wide", isInTooltip ? "text-xs" : "text-sm")}>
 				{`Season ${podcastEpisode.season} · Episode ${podcastEpisode.episodeNumber}`}
 			</div>
-			{/* the title, linked to the podcast episode's own page if there is a path */}
+			{/* the title, linked to the podcast episode's own page if there is a path, with the theme song's note outside a tooltip */}
 			<div className={cn("leading-snug font-bold", isInTooltip ? "text-xs" : "text-lg")}>
 				{podcastEpisodePath ? (
 					<AnchorLink href={podcastEpisodePath} className="hover:underline">
@@ -43,6 +44,7 @@ export function PodcastEpisodeDetails({
 				) : (
 					podcastEpisode.title
 				)}
+				{!isInTooltip && <ThemeSongNote />}
 			</div>
 			{/* the player's chapter, or the date, duration, chapter count, and AI voices note */}
 			<div

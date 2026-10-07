@@ -341,6 +341,8 @@ export type OwnerTopic = {
 	scans: ActivityScan[]
 	// the user's unseen chat room mentions, latest first
 	chatMentions: ChatMention[]
+	// the topic's latest published podcast episode that the user may listen to, null without one
+	latestPodcastEpisode: PodcastEpisode | null
 }
 
 // one row of the Activity page's subscriptions table, kept until manually deleted
@@ -357,6 +359,8 @@ export type SubscriptionRow = {
 	isEmailEnabled: boolean
 	// the invite this row stands for, when the user was invited and has not answered
 	inviteId: string | null
+	// the topic's latest published podcast episode that the user may listen to, null without one
+	latestPodcastEpisode: PodcastEpisode | null
 }
 
 // a topic invitation waiting for the user's answer, as the badges name it
@@ -880,6 +884,8 @@ export type Topic = {
 	subscriberCount: number
 	// whether the user's own subscription emails them, null where they hold no subscription to switch
 	isEmailEnabled: boolean | null
+	// the topic's latest published podcast episode that the user may listen to, null without one
+	latestPodcastEpisode: PodcastEpisode | null
 }
 
 // a user profile search result
