@@ -361,3 +361,11 @@ test("the content security policy allows every provider photo host the avatar re
 		expect(imageSources).toContain(photoOrigin)
 	}
 })
+
+// signup renders the Turnstile challenge in an iframe from Cloudflare, so the policy has to allow that origin
+test("the content security policy allows the Turnstile challenge frame", async () => {
+	const response = await server.fetch(new Request("http://localhost:3000/api/health"))
+	const policyDirectives = response.headers.get("Content-Security-Policy")?.split(";") ?? []
+	const frameSources = policyDirectives.find((directive) => directive.trim().startsWith("frame-src")) ?? ""
+	expect(frameSources).toContain("https://challenges.cloudflare.com")
+})

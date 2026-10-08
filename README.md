@@ -436,6 +436,7 @@ bun run smoke:review       # just the review smoke test: the paid section buys i
 bun run smoke:subscribers  # just the subscriber-count smoke test: both subscription paths against real rows, rolled back after
 bun run smoke:profile      # just the profile smoke test: the header's distinct people against the footer's summed rows
 bun run smoke:seo          # just the seo smoke test: builds the ui, then checks every public page arrives whole to a browser without JavaScript on its first render, that only public topics are listed, that the edge may share a signed-out page and the feed but never a signed-in one, and that a card is immutable only at its version
+bun run smoke:signup       # just the signup smoke test: builds the ui under doppler, then opens the signup page in this machine's Chrome and checks that the Turnstile challenge issues a token the signup gate accepts, with no content security policy violation
 bun run smoke:chat         # just the topic chat retrieval smoke test (question → ranked findings → assembled context)
 bun run smoke:eval         # just the review pipeline eval's smoke test: one tiny labeled fixture through the real gate and scoring
 bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, detach succession, the team page gate, its avatar versions, and who sent an invite or invited a member

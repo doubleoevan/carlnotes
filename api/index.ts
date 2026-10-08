@@ -51,11 +51,11 @@ startTelemetry()
 // log the process's connection pool, event loop delay, and Redis gauges once a minute
 startRuntimeGauges({ processName: "api", readPoolGauges, readExtraGauges: readRedisExtraGauges })
 
-// the default policy, used unless a route sets its own. its image list allows a composer's local preview,
-// a release body's screenshots on github, and the photo host an avatar redirects to
+// the default policy, used unless a route sets its own. images may come from a composer's local preview,
+// github, and an avatar's photo host. frames may come from YouTube and Cloudflare's Turnstile challenge
 const CONTENT_SECURITY_POLICY = [
 	`img-src 'self' blob: data: https://raw.githubusercontent.com ${[...PROVIDER_PHOTO_ORIGINS].join(" ")}`,
-	"frame-src 'self' https://www.youtube-nocookie.com",
+	"frame-src 'self' https://www.youtube-nocookie.com https://challenges.cloudflare.com",
 	"object-src 'none'",
 	"frame-ancestors 'none'",
 ].join("; ")
