@@ -10,7 +10,7 @@ import {
 } from "@shared/contracts"
 import type { frequencies } from "@shared/enums"
 import { SCAN_COST_CENTS } from "@shared/plans"
-import { isPodcastEpisodeRenderingConfigured } from "@shared/podcastEpisodes"
+import { isPodcastEpisodeRecordingConfigured } from "@shared/podcastEpisodes"
 import { DEFAULT_SOURCES, toCustomSourceOption, toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, desc, eq } from "drizzle-orm"
 import { db } from "../../db"
@@ -60,11 +60,10 @@ export type TopicSourceCostDelta = { perScanCents: number; perMonthCents: number
 
 // each tool's results
 export type UpdateTopicPromptResult = TopicToolRejection | { status: "saved"; topicName: string }
-// the settings tool's results for the gate's rejections, the plan's daily and podcast episode limits, or the save
+// the settings tool's results for the gate's rejections, the plan's daily limit, or the save
 export type UpdateTopicFieldsResult =
 	| TopicToolRejection
 	| DailyFrequencyRejection
-	| { status: "podcastPlan" }
 	| { status: "empty" }
 	| { status: "saved"; topicName: string }
 // the source tool's results: a value it cannot use, the limit, a source already there, or the save
@@ -125,9 +124,9 @@ export async function updateTopicFields({
 	topicFields: UpdateTopicFieldsPayload
 	promptVersionOrigin: PromptVersionOrigin
 }): Promise<UpdateTopicFieldsResult> {
-	// drop the podcast switch if episode rendering is not configured
+	// drop the podcast switch if episode recording is not configured
 	const { isPodcastEnabled, ...topicSettings } = topicFields
-	const topicFieldsToSave = isPodcastEpisodeRenderingConfigured() ? topicFields : topicSettings
+	const topicFieldsToSave = isPodcastEpisodeRecordingConfigured() ? topicFields : topicSettings
 
 	// a call that names no field has nothing to save, whatever adapter sent it
 	const namedFields = Object.fromEntries(Object.entries(topicFieldsToSave).filter(([, value]) => value !== undefined))
@@ -150,17 +149,6 @@ export async function updateTopicFields({
 			return dailyFrequency
 		}
 	}
-	// reject turning the podcast on if the owner's plan renders no more podcast episodes for the topic.
-	// a podcast that is already on stays on
-	const isTurningPodcastOn =
-		isPodcastEnabled === true && !editableTopic.topic.isPodcastEnabled && isPodcastEpisodeRenderingConfigured()
-	if (
-		isTurningPodcastOn &&
-		!(await isAllowed(editableTopic.topic.ownerId, "podcastEpisode:render", editableTopic.topic))
-	) {
-		return { status: "podcastPlan" }
-	}
-
 	// write the named fields and release the feature order in one transaction
 	await db.transaction(async (transaction) => {
 		await transaction.update(topics).set(namedFields).where(eq(topics.id, topicId))
@@ -188,19 +176,19 @@ export async function updateTopicFields({
 }
 
 /**
- * Returns the settings tool's input fields, without the podcast switch if episode rendering is not configured.
+ * Returns the settings tool's input fields, without the podcast switch if episode recording is not configured.
  */
 export function toUpdateTopicFieldsShape(): typeof updateTopicFieldsPayload.shape {
-	return isPodcastEpisodeRenderingConfigured()
+	return isPodcastEpisodeRecordingConfigured()
 		? updateTopicFieldsPayload.shape
 		: (topicSettingsShape as typeof updateTopicFieldsPayload.shape)
 }
 
 /**
- * Returns the settings tool's podcast switch sentence, or an empty string if episode rendering is not configured.
+ * Returns the settings tool's podcast switch sentence, or an empty string if episode recording is not configured.
  */
 export function toPodcastFieldDescription(): string {
-	return isPodcastEpisodeRenderingConfigured()
+	return isPodcastEpisodeRecordingConfigured()
 		? " Set isPodcastEnabled to turn the topic's Coffee Break podcast on or off."
 		: ""
 }

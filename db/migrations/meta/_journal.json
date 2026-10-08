@@ -687,6 +687,20 @@
       "when": 1791038936495,
       "tag": "0097_gray_guardsmen",
       "breakpoints": true
+    },
+    {
+      "idx": 98,
+      "version": "7",
+      "when": 1791416451273,
+      "tag": "0098_nervous_starhawk",
+      "breakpoints": true
+    },
+    {
+      "idx": 99,
+      "version": "7",
+      "when": 1791432518836,
+      "tag": "0099_cool_sabra",
+      "breakpoints": true
     }
   ]
 }

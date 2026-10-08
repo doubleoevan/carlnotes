@@ -1,6 +1,7 @@
 // a Podcast Episode's script as its workflow's activities write it. the outline, each segment, the saved script,
 // and what each call cost
 import { reportError } from "@shared/monitoring"
+import { FULL_PODCAST_EPISODE_MINUTES, SHORT_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import { toHostWithoutWww } from "@shared/seo"
 import { eq, inArray, sql } from "drizzle-orm"
 import { db } from "../../db"
@@ -14,12 +15,11 @@ import {
 	writeCheckedScriptDraft,
 } from "./generatePodcastEpisodeScript"
 import type { PlannedFinding } from "./planPodcastEpisode"
+import { type PodcastEpisodeOutline, toCheckedPodcastEpisodeOutline } from "./podcastEpisodeOutline"
 import {
 	type PodcastEpisodeFinding,
-	type PodcastEpisodeOutline,
 	type PodcastEpisodeSegment,
 	toChapterTurns,
-	toCheckedPodcastEpisodeOutline,
 	toCheckedPodcastEpisodeSegment,
 	toPodcastEpisodeScript,
 } from "./podcastEpisodeScript"
@@ -47,6 +47,7 @@ export async function outlinePodcastEpisode(
 ): Promise<PodcastEpisodeOutline> {
 	// write the outline's drafts, and record each draft's cost before the draft is checked
 	const scriptInput = await loadScriptInput(scriptCallOptions)
+	const { maxMinutes } = scriptInput
 	const findingIds = scriptInput.podcastEpisodeFindings.map((podcastEpisodeFinding) => podcastEpisodeFinding.findingId)
 	const outline = await writeCheckedScriptDraft(async ({ rejectionReason, isLastScriptDraft }) => {
 		const { scriptDraft: outlineDraft, costDollars } = await generatePodcastEpisodeOutline({
@@ -54,10 +55,10 @@ export async function outlinePodcastEpisode(
 			rejectionReason,
 		})
 		await addPodcastEpisodeCost(scriptCallOptions.podcastEpisodeId, costDollars)
-		return toCheckedPodcastEpisodeOutline({ outline: outlineDraft, findingIds, isLastScriptDraft })
+		return toCheckedPodcastEpisodeOutline({ outline: outlineDraft, findingIds, maxMinutes, isLastScriptDraft })
 	})
 
-	// save the title and the description while the status is still rendering
+	// save the title and the description while the status is still recording
 	await db
 		.update(podcastEpisodes)
 		.set({ title: outline.title, description: outline.description })
@@ -125,19 +126,23 @@ export async function addPodcastEpisodeCost(podcastEpisodeId: string, costDollar
 		.where(eq(podcastEpisodes.id, podcastEpisodeId))
 }
 
-// load what a script call reads. the Topic's name and prompt, the Findings with their content, and the key to bill
+// load what a script call reads. the Topic's name and prompt, the Findings with their content, the key to bill,
+// and the most minutes that the Podcast Episode may plan
 async function loadScriptInput({
+	podcastEpisodeId,
 	topicId,
 	billedUserId,
 	plannedFindings,
 }: PodcastEpisodeScriptCallOptions): Promise<GeneratePodcastEpisodeOutlineOptions> {
-	// read the Topic's own text alone. its attachments are the owner's, and a Podcast Episode reaches every listener
-	const [topic] = await db
-		.select({ name: topics.name, prompt: topics.prompt })
-		.from(topics)
-		.where(eq(topics.id, topicId))
-	if (!topic) {
-		throw new Error(`topic ${topicId} not found`)
+	// read the Topic's own text alone, and whether the Podcast Episode is short.
+	// the Topic's attachments are the owner's, and a Podcast Episode reaches every listener
+	const [podcastEpisodeTopic] = await db
+		.select({ name: topics.name, prompt: topics.prompt, isShort: podcastEpisodes.isShort })
+		.from(podcastEpisodes)
+		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
+		.where(eq(podcastEpisodes.id, podcastEpisodeId))
+	if (!podcastEpisodeTopic) {
+		throw new Error(`episode ${podcastEpisodeId} of topic ${topicId} not found`)
 	}
 
 	// load the Findings' text and the billed user's key
@@ -149,7 +154,15 @@ async function loadScriptInput({
 	if (podcastEpisodeFindings.length === 0) {
 		throw new Error(`none of the episode's findings are left on topic ${topicId}`)
 	}
-	return { topicName: topic.name, topicPrompt: topic.prompt, podcastEpisodeFindings, litellmApiKey }
+	// a short Podcast Episode plans fewer minutes
+	const maxMinutes = podcastEpisodeTopic.isShort ? SHORT_PODCAST_EPISODE_MINUTES : FULL_PODCAST_EPISODE_MINUTES
+	return {
+		topicName: podcastEpisodeTopic.name,
+		topicPrompt: podcastEpisodeTopic.prompt,
+		podcastEpisodeFindings,
+		litellmApiKey,
+		maxMinutes,
+	}
 }
 
 // load the Findings for the script prompts in the planned order, each with its Resource's stored content

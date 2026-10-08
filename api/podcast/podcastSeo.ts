@@ -1,7 +1,7 @@
 // a public topic's podcast in search: its published episodes as the sitemap and llms.txt list them,
 // and the PodcastSeries and PodcastEpisode structured data
 import type { PublicTopic } from "@shared/contracts"
-import { isPodcastEpisodeRenderingConfigured, PODCAST_SHOW_NAME, toPodcastCoverPath } from "@shared/podcastEpisodes"
+import { isPodcastEpisodeRecordingConfigured, PODCAST_SHOW_NAME, toPodcastCoverPath } from "@shared/podcastEpisodes"
 import { toPodcastEpisodePath, toPodcastFeedPath, toTopicPath } from "@shared/seo"
 import { and, desc, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
@@ -42,10 +42,10 @@ type PodcastEpisodeWork = {
 }
 
 /**
- * Loads the published podcast episodes of public topics, newest first, or none if episode rendering is not configured.
+ * Loads the published podcast episodes of public topics, newest first, or none if episode recording is not configured.
  */
 export async function loadPublicPodcastEpisodeRows(publicTopicIds: string[]): Promise<PublicPodcastEpisodeRow[]> {
-	if (!isPodcastEpisodeRenderingConfigured() || publicTopicIds.length === 0) {
+	if (!isPodcastEpisodeRecordingConfigured() || publicTopicIds.length === 0) {
 		return []
 	}
 	return db

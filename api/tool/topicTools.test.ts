@@ -126,7 +126,7 @@ test("the version write skips an unchanged prompt and saves a changed one", asyn
 	expect(insertedRows).toEqual([{ topicId: "topic-1", prompt: "new", savedByUserId: "user-1", origin: "chat" }])
 })
 
-// the podcast switch is offered only if episode rendering is configured, in the schema and in the description
+// the podcast switch is offered only if episode recording is configured, in the schema and in the description
 test("the settings tool offers the podcast switch only if a speech model is configured", () => {
 	const originalSpeechModel = Bun.env.PODCAST_SPEECH_MODEL
 	try {

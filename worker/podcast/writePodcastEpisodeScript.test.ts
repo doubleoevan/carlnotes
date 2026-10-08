@@ -6,5 +6,5 @@ test("the script's inputs read the Topic's own name and prompt, never its attach
 	const moduleText = await Bun.file(new URL("./writePodcastEpisodeScript.ts", import.meta.url)).text()
 	expect(moduleText).not.toContain("buildTopicScanContext")
 	expect(moduleText).not.toMatch(/\battachments\b.*from "\.\.\/\.\.\/db\/schema"/)
-	expect(moduleText).toContain("topicPrompt: topic.prompt")
+	expect(moduleText).toContain("topicPrompt: podcastEpisodeTopic.prompt")
 })

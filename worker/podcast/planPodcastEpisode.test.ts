@@ -1,6 +1,11 @@
 // podcast episode plan tests: which Findings are planned, and their order
 import { expect, test } from "bun:test"
-import { MAX_PODCAST_EPISODE_FINDINGS, type TopicFindingRow, toPlannedFindings } from "./planPodcastEpisode"
+import {
+	FULL_PODCAST_EPISODE_FINDINGS,
+	SHORT_PODCAST_EPISODE_FINDINGS,
+	type TopicFindingRow,
+	toPlannedFindings,
+} from "./planPodcastEpisode"
 
 // a Topic's Finding from the given Scan, with ids that follow from its name,
 // and any score, rating, bookmark, or url Source page flag that the test overrides
@@ -23,12 +28,16 @@ function toFindingRow(
 	}
 }
 
-// the planned Findings' names, which are their ids without the prefix
+// the names of a full Podcast Episode's planned Findings, which are their ids without the prefix
 function toPlannedFindingNames(topicFindingRows: TopicFindingRow[], narratedFindingNames: string[] = []): string[] {
 	const narratedResourceIds = new Set(narratedFindingNames.map((name) => `resource-${name}`))
-	return toPlannedFindings({ topicFindingRows, narratedResourceIds, scanId: "scan-2" }).map((plannedFinding) =>
-		plannedFinding.findingId.replace("finding-", ""),
-	)
+	const plannedFindings = toPlannedFindings({
+		topicFindingRows,
+		narratedResourceIds,
+		scanId: "scan-2",
+		maxFindings: FULL_PODCAST_EPISODE_FINDINGS,
+	})
+	return plannedFindings.map((plannedFinding) => plannedFinding.findingId.replace("finding-", ""))
 }
 
 test("toPlannedFindings puts the Scan's Findings first, each group in score order", () => {
@@ -59,8 +68,22 @@ test("toPlannedFindings stops at fifteen Findings", () => {
 	// twenty Findings, the first four from this Scan
 	const topicFindingRows = Array.from({ length: 20 }, (_, i) => toFindingRow(String(i), i < 4 ? "scan-2" : "scan-1"))
 	const plannedFindingNames = toPlannedFindingNames(topicFindingRows)
-	expect(plannedFindingNames).toHaveLength(MAX_PODCAST_EPISODE_FINDINGS)
+	expect(plannedFindingNames).toHaveLength(FULL_PODCAST_EPISODE_FINDINGS)
 	expect(plannedFindingNames.slice(0, 5)).toEqual(["0", "1", "2", "3", "4"])
+})
+
+test("toPlannedFindings picks the five best of a short Podcast Episode's new Findings", () => {
+	// eight new Findings, best first, and an older Finding never narrated
+	const newFindingRows = Array.from({ length: 8 }, (_, i) => toFindingRow(String(i), "scan-2"))
+	const topicFindingRows = [...newFindingRows, toFindingRow("old", "scan-1")]
+	const plannedFindings = toPlannedFindings({
+		topicFindingRows,
+		narratedResourceIds: new Set(),
+		scanId: "scan-2",
+		maxFindings: SHORT_PODCAST_EPISODE_FINDINGS,
+	})
+	const plannedFindingIds = plannedFindings.map((plannedFinding) => plannedFinding.findingId)
+	expect(plannedFindingIds).toEqual(["finding-0", "finding-1", "finding-2", "finding-3", "finding-4"])
 })
 
 test("toPlannedFindings never plans a Finding rated down, and puts liked and bookmarked ones after the Scan's own", () => {

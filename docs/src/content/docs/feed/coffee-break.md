@@ -11,8 +11,9 @@ sidebar:
 
 **Coffee Break** is the podcast every topic gets. After a brew, Carl and his co-host Vienna sit down
 and talk through what he found: Carl reports, Vienna asks what you would, and no chapter ends
-until it lands on why the finding matters to you. An episode aims for about half an hour. With
-fewer findings, Carl and Vienna spend longer on each one, but an episode is never padded.
+until it lands on why the finding matters to you. An episode aims for about half an hour, or ten
+minutes on the free plan. With fewer findings, Carl and Vienna spend longer on each one, but an
+episode is never padded.
 
 Carl and Vienna are AI voices. Every episode is written from the topic's findings, the brew's own
 first, and each chapter says where its finding came from.
@@ -72,8 +73,8 @@ Pocket Casts, Castro, AntennaPod, or any app that adds a show by its link.
 ![The Subscribe to Coffee Break dialog, with the Copy feed link
 button](../../../assets/screenshots/podcast-subscribe.png)
 
-A public topic's feed is public. A private or invite topic's feed link is yours alone. Anyone who has the link can hear
-the topic's episodes, so keep it to yourself. **Reset my link** makes a new one and ends the old one.
+A public topic's feed is public. A private or invite topic's feed link is yours alone. Anyone who has the link can
+listen to the topic's episodes, so keep it to yourself. **Reset my link** makes a new one and ends the old one.
 Unfollow the topic and your link stops working.
 
 Each episode also has its own page with the full transcript. On a public topic, that page is what a
@@ -99,15 +100,17 @@ and its number is not used again.
 ## When the mugs rest
 
 One thing pauses new episodes without anyone touching the switch: Carl's coffee fund running low.
-Brews come first. Once the month's spend reaches 80 percent of the fund, episodes wait for next
-month and brews keep running.
+Brews come first. Once the month's spend reaches 80 percent of the fund, or half of it on the
+free plan, episodes wait for next month and brews keep running.
 
 ## What each plan gets
 
 | | Free | Plus | Premium |
 | --- | --- | --- | --- |
-| Episodes | One at a time per topic | After every brew | After every brew |
+| Episodes | 10 minutes after every brew, latest kept | 30 minutes after every brew | 30 minutes after every brew |
 
-On the free plan, a topic has one episode at a time. Remove it and the next brew makes a new one. Until then, the Podcast
-switch in the edit form shows the way to a plan that keeps episodes coming. See [Plans and
-limits](/docs/account/plans-and-limits/).
+On the free plan, each brew makes a ten-minute episode, and the new episode replaces the topic's
+last ten-minute one, so the topic keeps only its latest. Episodes the topic got on a paid plan
+stay. If a brew finishes while the last episode is still recording, that brew makes no episode,
+and its findings go in the next one. The Podcast switch in the edit form shows the way to a plan
+with half-hour episodes, every one kept. See [Plans and limits](/docs/account/plans-and-limits/).

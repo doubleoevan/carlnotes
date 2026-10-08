@@ -100,7 +100,7 @@ test("toJoinArguments with both clips mixes them under the talk before the loudn
 	expect(joinArguments.slice(-11, -9)).toEqual(["-map", "[mixed]"])
 })
 
-// the committed clips are already in the mix's format, so the render never resamples the song
+// the committed clips are already in the mix's format, so the recording never resamples the song
 test("the theme clips are 60 second WAV files at 44.1 kHz, mono, 16-bit", async () => {
 	for (const clipName of ["theme-intro.wav", "theme-outro.wav"]) {
 		// read the clip's header: its channels, its sample rate, and its bits per sample

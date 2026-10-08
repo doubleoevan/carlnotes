@@ -37,9 +37,9 @@ export function isDailyFrequency(frequency: string): boolean {
 // the day a weekly scan runs on. ignored for non-weekly frequencies
 export const daysOfWeek = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const
 export const scanStatuses = ["running", "succeeded", "failed"] as const
-// a podcast episode's status. rendering until it publishes or fails,
+// a podcast episode's status. recording until it publishes or fails,
 // and removed once its topic's owner or an admin removes it
-export const podcastEpisodeStatuses = ["rendering", "published", "failed", "removed"] as const
+export const podcastEpisodeStatuses = ["recording", "published", "failed", "removed"] as const
 // who speaks a turn of a podcast episode
 export const podcastEpisodeSpeakers = ["host", "cohost"] as const
 // an attachment's async processing status: pending === stored and queued, ready === processed, or failed

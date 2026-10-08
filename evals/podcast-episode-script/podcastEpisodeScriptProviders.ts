@@ -1,13 +1,14 @@
 // the podcast episode script eval's promptfoo provider, which runs the script writer under test
 import type { PodcastEpisodeScript } from "@shared/contracts"
+import { FULL_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import {
 	generatePodcastEpisodeOutline,
 	generatePodcastEpisodeSegment,
 } from "../../worker/podcast/generatePodcastEpisodeScript"
+import type { PodcastEpisodeOutline } from "../../worker/podcast/podcastEpisodeOutline"
 import {
 	type PodcastEpisodeFinding,
-	type PodcastEpisodeOutline,
 	RejectedScriptError,
 	toPodcastEpisodeScript,
 } from "../../worker/podcast/podcastEpisodeScript"
@@ -36,12 +37,13 @@ async function writeCasePodcastEpisode(
 ): Promise<ProviderResponse> {
 	const podcastEpisodeScriptVariables = context?.vars as PodcastEpisodeScriptVariables
 
-	// write the outline, then every segment against the outline
-	const outlineCallResult = await generatePodcastEpisodeOutline(podcastEpisodeScriptVariables)
+	// write a full episode's outline, then every segment against the outline
+	const scriptCallOptions = { ...podcastEpisodeScriptVariables, maxMinutes: FULL_PODCAST_EPISODE_MINUTES }
+	const outlineCallResult = await generatePodcastEpisodeOutline(scriptCallOptions)
 	const outline = outlineCallResult.scriptDraft
 	const segmentCallResults = await Promise.all(
 		outline.segments.map((_, segmentIndex) =>
-			generatePodcastEpisodeSegment({ ...podcastEpisodeScriptVariables, outline, segmentIndex }),
+			generatePodcastEpisodeSegment({ ...scriptCallOptions, outline, segmentIndex }),
 		),
 	)
 	const segments = segmentCallResults.map((segmentCallResult) => segmentCallResult.scriptDraft)

@@ -1,12 +1,9 @@
 // a live smoke test for the denormalized subscriber count
 // run it with: bun run smoke:subscribers. needs Doppler secrets
 import { eq } from "drizzle-orm"
-import { connectionPool, db } from "../../db"
+import { connectionPool, type DbTransaction, db } from "../../db"
 import { subscriptions, topics, users } from "../../db/schema"
 import { updateTopicSubscriberCount } from "./subscriberCounts"
-
-// the transaction each case runs inside, so no fixture ever escapes it
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 // the rollback marker, which is how the fixtures are cleaned up instead of by deleting them
 class Rollback extends Error {}

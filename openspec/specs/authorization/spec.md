@@ -233,59 +233,35 @@ the remove control.
 - **WHEN** a subscriber of the Topic asks to remove one of its Podcast Episodes
 - **THEN** the gate rejects it
 
-### Requirement: The gate decides whether a Topic may render a Podcast Episode, counting only rendering and published Podcast Episodes
+### Requirement: The gate decides whether a Topic gets full Podcast Episodes
 
-`isAllowed(user, "podcastEpisode:render", topic)` SHALL decide whether a Topic may render a Podcast Episode, read for the
-Topic's owner, whose plan funds it. It SHALL be true for an owner on a paid plan and for an owner who is an admin. For
-an owner on the free plan it SHALL be true only while that Topic has no rendering or published Podcast Episode, so each
-Topic on the free plan has one Podcast Episode at a time. A failed or removed Podcast Episode does not count. The
-episode workflow SHALL check the same rule before it spends anything, the settings tool SHALL ask it before it turns a
-Topic's podcast on, and the topic page SHALL read the same result to show the upgrade link on that Topic's podcast switch.
+`isAllowed(user, "podcastEpisode:full", topic)` SHALL decide whether a Topic gets full Podcast Episodes, read for the
+Topic's owner, whose plan funds it. It SHALL be true for an owner on a paid plan and for an owner who is an admin, and
+false for an owner on the free plan. A Topic with full Podcast Episodes SHALL get episodes of up to 30 minutes and 15
+Findings and SHALL keep every one. A Topic without them SHALL get short episodes of up to 10 minutes and 5 Findings and
+SHALL keep only its latest short one. The episode workflow SHALL check the same rule before it spends anything, and the
+topic page SHALL read the same result to show the free plan's hint and upgrade link on that Topic's podcast switch.
 
-#### Scenario: A paid plan renders
+#### Scenario: A paid plan gets full Podcast Episodes
 
 - **WHEN** a Scan of an owner on plus succeeds
-- **THEN** the gate allows the render
+- **THEN** the gate allows full Podcast Episodes, and the Podcast Episode plans up to 30 minutes
 
-#### Scenario: A Topic on the free plan renders its first Podcast Episode
+#### Scenario: An admin's free-plan Topic gets full Podcast Episodes
 
-- **GIVEN** a Topic on the free plan with no published Podcast Episode
+- **GIVEN** an admin whose plan is free
+- **WHEN** a Scan of the admin's Topic succeeds
+- **THEN** the gate allows full Podcast Episodes
+
+#### Scenario: A free Topic gets short Podcast Episodes
+
+- **GIVEN** a Topic whose owner is on the free plan and is not an admin
 - **WHEN** its Scan succeeds
-- **THEN** the gate allows the render
+- **THEN** the gate rejects full Podcast Episodes, and the Podcast Episode plans up to 10 minutes and 5 Findings
 
-#### Scenario: A second Podcast Episode of a Topic on the free plan is rejected
+#### Scenario: Upgrading gives full Podcast Episodes
 
-- **GIVEN** a Topic on the free plan with one published Podcast Episode
-- **WHEN** its next Scan succeeds
-- **THEN** the gate rejects the render, nothing is spent, and that Topic's podcast switch shows the upgrade link
-
-#### Scenario: A Scan during the first render on the free plan gets no Podcast Episode
-
-- **GIVEN** a Topic on the free plan whose first Podcast Episode is still rendering
-- **WHEN** another Scan of the Topic succeeds
-- **THEN** the gate rejects the render, and nothing is spent
-
-#### Scenario: A failed Podcast Episode does not use the free plan's one Podcast Episode
-
-- **GIVEN** a Topic on the free plan whose only Podcast Episode failed
-- **WHEN** its next Scan succeeds
-- **THEN** the gate allows the render
-
-#### Scenario: Removing the Podcast Episode of a Topic on the free plan lets the Topic render a new Podcast Episode
-
-- **GIVEN** a Topic on the free plan whose owner removed its one Podcast Episode
-- **WHEN** the Topic's next Scan succeeds
-- **THEN** the gate allows the render
-
-#### Scenario: Each Topic on the free plan gets its own first Podcast Episode
-
-- **GIVEN** an owner on the free plan with two Topics, one of which has a published Podcast Episode
-- **WHEN** the other Topic's Scan succeeds
-- **THEN** the gate allows the render for that Topic
-
-#### Scenario: Upgrading resumes a Topic
-
-- **GIVEN** a Topic on the free plan that has used its Podcast Episode
+- **GIVEN** a Topic on the free plan
 - **WHEN** the owner moves to a paid plan and the Topic's next Scan succeeds
-- **THEN** the gate allows the render
+- **THEN** the gate allows full Podcast Episodes, the new Podcast Episode replaces none, and the earlier short one stays
 

@@ -1,10 +1,7 @@
 // the one place topics.subscriber_count is written
 import { eq, sql } from "drizzle-orm"
-import { db } from "../../db"
+import { type DbHandle, db } from "../../db"
 import { subscriptions, topics } from "../../db/schema"
-
-// the transaction a caller is already inside, or the pool when there is none
-type DbHandle = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 // everyone subscribed to a Topic, one row per active subscriber
 const activeSubscribers = sql`

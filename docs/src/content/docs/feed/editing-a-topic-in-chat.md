@@ -41,9 +41,6 @@ Three things: the prompt, the source list by adding or removing one source at a 
 settings, its title, tags, visibility, how often it brews, the time and day it brews, how many
 findings a brew keeps, and whether its [Coffee Break podcast](/docs/feed/coffee-break/) is on.
 
-On the free plan, for a topic that has its one episode, Carl can't turn the podcast back on, and
-the toast says the free plan gives each topic one episode.
-
 Adding a source comes with its projected cost per brew and per month at the topic's frequency, so
 you know what one more place to read adds. A topic holds up to 10 sources.
 

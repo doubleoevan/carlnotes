@@ -11,7 +11,7 @@ import {
 import { toUsernameWithDigits } from "@shared/usernames"
 import { and, eq, inArray, isNull, notInArray, sql } from "drizzle-orm"
 import { Hono } from "hono"
-import { db, isUniqueViolation } from "../../db"
+import { type DbTransaction, db, isUniqueViolation } from "../../db"
 import { canCreateTeamToday, loadUserAccess } from "../../db/quotas"
 import { invites, subscriptions, teamMembers, teams, teamTopics, topics, users } from "../../db/schema"
 import { deleteAttachment } from "../../worker"
@@ -23,7 +23,6 @@ import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 import { loadTeamPage, loadTeamsPage, searchTeams } from "./helpers"
 import {
 	approveJoinTeamRequest,
-	type DbTransaction,
 	deactivateTeamTopicSubscriptions,
 	deleteJoinTeamRequest,
 	removeTeamMember,

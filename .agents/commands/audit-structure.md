@@ -352,9 +352,29 @@ Check for:
    - `toScanFailureReason` (now `toWorkflowFailureReason` in `shared/scanFailure.ts`)
    - `toTopicTableRows` in `api/topic/helpers.ts` (now `api/topic/topicTableRows.ts`), `TopicNameLink` in
      `OwnerTopicsTable.tsx` (now `ui/src/components/table/TopicNameLink.tsx`), and `loadActivity`'s `isOwnView`
-     parameter (now `viewerUserId`)
+     parameter (then `viewerUserId`, now `signedInUserId`, which `loadTopics` takes too)
    - `stray` for a link outside an eval case's allowed urls (now `disallowed`): `strayUrl` in the scan report and topic
      chat evals (now `disallowedUrl` and `disallowedLinkUrl`), and `strayToolCall` (now `unexpectedToolCall`)
+   - `canRenderPodcastEpisode` in `db/quotas.ts` and on the topic podcast payload (now `hasFullPodcastEpisodes`), and
+     the `podcastEpisode:render` capability (now `podcastEpisode:full`)
+   - `MAX_PODCAST_EPISODE_MINUTES` in `worker/podcast/podcastEpisodeScript.ts` (now `FULL_PODCAST_EPISODE_MINUTES` in
+     `shared/podcastEpisodes.ts`), `MAX_PODCAST_EPISODE_FINDINGS` (now `FULL_PODCAST_EPISODE_FINDINGS`), and
+     `PODCAST_EPISODE_BUDGET_SHARE` in `db/quotas.ts` (now each plan's `podcastEpisodeBudgetShare` in `shared/plans.ts`)
+   - the settings tool's `podcastPlan` result, its 402 response, and the ui client's `planRejected` (removed)
+   - `DbTransaction` in `api/team/members.ts`, `ChatRoomTransaction` in `api/chat/roomTurns.ts`, `Transaction` in
+     `api/topic/promptVersions.ts`, and the local `DbHandle` aliases (now `DbTransaction` and `DbHandle` in
+     `db/index.ts`)
+   - `podcastEpisodeOutlinePayload`, `PodcastEpisodeOutline`, and `toCheckedPodcastEpisodeOutline` in
+     `worker/podcast/podcastEpisodeScript.ts`, with their tests in `podcastEpisodeScript.test.ts` (now
+     `worker/podcast/podcastEpisodeOutline.ts` and `podcastEpisodeOutline.test.ts`)
+   - `rendering` for a podcast episode in progress (now `recording`): the `episode_status` value,
+     `renderPodcastEpisode.ts` and `renderPodcastEpisodeActivities.ts` in `worker/workflows/` (now
+     `recordPodcastEpisode.ts` and `recordPodcastEpisodeActivities.ts`), `renderPodcastEpisodeWorkflow`,
+     `renderPodcastEpisodeChapter`, `renderSpeech`, `toRenderedPodcastEpisodeScript`, `RenderedChapter`,
+     `tracePodcastEpisodeRender`, `isPodcastEpisodeRenderingConfigured`, `isPodcastEpisodeReadyToRender`, the
+     `episode-renders` task queue, the `episode-render` Langfuse trace, and `PODCAST_RENDER_CONCURRENCY`. the scan
+     workflow's `episode-render-workflow` patch id keeps its string, since every scan workflow's history stores it. a
+     feed's rendered XML, a cover image, an email, and a component still render
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

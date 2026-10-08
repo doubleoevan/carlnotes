@@ -606,11 +606,13 @@ export const podcastEpisodes = pgTable(
 			.references(() => users.id, { onDelete: "cascade" }),
 		// the scan that started the podcast episode
 		scanId: text("scan_id").references(() => scans.id, { onDelete: "set null" }),
-		// the podcast episode status. rendering until it publishes or fails,
-		// and removed once the topic's owner or an admin removes it. error holds a failure reason
-		status: podcastEpisodeStatus("status").notNull().default("rendering"),
+		// the podcast episode status. recording until it publishes or fails, and removed once the topic's owner or an admin
+		// removes it or a later short podcast episode replaces it. error holds a failure reason
+		status: podcastEpisodeStatus("status").notNull().default("recording"),
 		error: text("error"),
-		// the title and the description, written before any audio renders
+		// whether the podcast episode was planned as a short one, which a free plan's topic gets
+		isShort: boolean("is_short").notNull().default(false),
+		// the title and the description, written before any audio is recorded
 		title: text("title"),
 		description: text("description"),
 		// the publish year and the episode number within that year, both assigned only on publish
@@ -620,7 +622,7 @@ export const podcastEpisodes = pgTable(
 		audioKey: text("audio_key"),
 		audioByteSize: integer("audio_byte_size"),
 		durationSeconds: integer("duration_seconds"),
-		// the speech model that rendered the podcast episode, and what the script and the speech cost in dollars
+		// the speech model that recorded the podcast episode, and what the script and the speech cost in dollars
 		model: text("model"),
 		cost: numeric("cost", { precision: 12, scale: 6 }).notNull().default("0"),
 		// the script that passed its checks, and when the podcast episode published

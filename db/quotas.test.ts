@@ -1,12 +1,12 @@
 // quota tests: the suggestion rate limit window key, the daily suggestion limit, each invite limit factor alone, the floor, and a connected recipient's doubled limit.
 // the access row is read once per request, and on every call outside a request.
 // the month's spend sums scans, chat, and podcast episodes.
-// episodes stop rendering at 80 percent of the monthly budget, and after the first episode of a topic on the free plan
+// episodes stop recording at the plan's share of the monthly budget, and only a paid plan or an admin gets full episodes
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { PLANS } from "@shared/plans"
 import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
 import {
-	canRenderPodcastEpisode,
+	hasFullPodcastEpisodes,
 	incrementDaySuggestionCount,
 	isPodcastEpisodeBudgetShareExhausted,
 	loadUserAccess,
@@ -155,7 +155,6 @@ test("the daily suggestion limit allows up to 300 suggestions and allows one tha
 type PodcastEpisodeQueryRows = {
 	accessRow: unknown[]
 	spendDollars: [string, string, string]
-	podcastEpisodeCount: number
 }
 
 // runs the calls with the connection pool's query swapped for a stub that returns the given podcast episode query rows.
@@ -171,13 +170,8 @@ async function withPodcastEpisodeQueryRows<Result>(
 		{ fromClause: `from "episodes"`, dollars: podcastEpisodeDollars },
 	]
 
-	// return the podcast episode count for a count, one table's spend sum for a sum, and the access row for anything else
+	// return one table's spend sum for a sum, and the access row for anything else
 	stubConnectionPool(({ text: queryText }) => {
-		if (queryText.includes("count(")) {
-			return [[podcastEpisodeQueryRows.podcastEpisodeCount]]
-		}
-
-		// return the spend sum of the table that the query reads
 		if (queryText.includes("sum(")) {
 			const spendSumDollars = spendSums.find(({ fromClause }) => queryText.includes(fromClause))?.dollars ?? "0"
 			return [[spendSumDollars]]
@@ -198,7 +192,6 @@ test("monthly spend sums scans, chat, and episodes", async () => {
 	const podcastEpisodeQueryRows = {
 		accessRow: USER_ACCESS_ROW,
 		spendDollars: ["2.50", "1.25", "0.41"],
-		podcastEpisodeCount: 0,
 	}
 	const monthlySpend = await withPodcastEpisodeQueryRows(podcastEpisodeQueryRows as PodcastEpisodeQueryRows, () =>
 		monthlySpendDollars("user-1"),
@@ -207,57 +200,25 @@ test("monthly spend sums scans, chat, and episodes", async () => {
 	expect(toMonthlySpendCents(monthlySpend)).toBe(416)
 })
 
-// a plus user's budget is 1500 cents, so podcast episodes stop rendering at 1200 cents of spend and not one cent before
-test("episodes stop rendering at 80 percent of the monthly budget", async () => {
-	const toPodcastEpisodeQueryRows = (scanDollars: string): PodcastEpisodeQueryRows => ({
-		accessRow: USER_ACCESS_ROW,
-		spendDollars: [scanDollars, "0", "0"],
-		podcastEpisodeCount: 0,
-	})
-	expect(
-		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("11.99"), () =>
+// a plus user's budget is 1500 cents, so podcast episodes stop recording at 1200 cents of spend and not one cent before.
+// a free user's budget is 300 cents, so podcast episodes stop recording at 150 cents
+test("episodes stop recording at 80 percent of a paid budget and 50 percent of a free one", async () => {
+	const isExhaustedAt = (plan: string, scanDollars: string): Promise<boolean> =>
+		withPodcastEpisodeQueryRows({ accessRow: ["user", plan, null], spendDollars: [scanDollars, "0", "0"] }, () =>
 			isPodcastEpisodeBudgetShareExhausted("user-1"),
-		),
-	).toBe(false)
-	expect(
-		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("12.00"), () =>
-			isPodcastEpisodeBudgetShareExhausted("user-1"),
-		),
-	).toBe(true)
-	expect(
-		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("14.00"), () =>
-			isPodcastEpisodeBudgetShareExhausted("user-1"),
-		),
-	).toBe(true)
+		)
+	expect(await isExhaustedAt("plus", "11.99")).toBe(false)
+	expect(await isExhaustedAt("plus", "12.00")).toBe(true)
+	expect(await isExhaustedAt("plus", "14.00")).toBe(true)
+	expect(await isExhaustedAt("free", "1.49")).toBe(false)
+	expect(await isExhaustedAt("free", "1.50")).toBe(true)
 })
 
-// a topic whose owner is on a paid plan always renders, and a topic on the free plan renders only its first episode
-test("a paid plan always renders an episode, and a topic on the free plan renders only its first", async () => {
-	const topic = { id: "topic-1", ownerId: "user-1" }
-	const toPodcastEpisodeQueryRows = (plan: string, podcastEpisodeCount: number): PodcastEpisodeQueryRows => ({
-		accessRow: ["user", plan, null],
-		spendDollars: ["0", "0", "0"],
-		podcastEpisodeCount,
-	})
-
-	// a paid plan renders with podcast episodes already published, and a free plan stops after its first episode
-	expect(
-		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("plus", 5), () => canRenderPodcastEpisode(topic)),
-	).toBe(true)
-	expect(
-		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("free", 0), () => canRenderPodcastEpisode(topic)),
-	).toBe(true)
-	expect(
-		await withPodcastEpisodeQueryRows(toPodcastEpisodeQueryRows("free", 1), () => canRenderPodcastEpisode(topic)),
-	).toBe(false)
-
-	// an admin on the free plan always renders
-	const adminPodcastEpisodeQueryRows: PodcastEpisodeQueryRows = {
-		accessRow: ["admin", "free", null],
-		spendDollars: ["0", "0", "0"],
-		podcastEpisodeCount: 3,
-	}
-	expect(await withPodcastEpisodeQueryRows(adminPodcastEpisodeQueryRows, () => canRenderPodcastEpisode(topic))).toBe(
-		true,
-	)
+// a paid plan and an admin get full podcast episodes, and the free plan gets short ones
+test("a paid plan and an admin get full episodes, and the free plan does not", async () => {
+	const hasFullPodcastEpisodesFor = (accessRow: unknown[]): Promise<boolean> =>
+		withPodcastEpisodeQueryRows({ accessRow, spendDollars: ["0", "0", "0"] }, () => hasFullPodcastEpisodes("user-1"))
+	expect(await hasFullPodcastEpisodesFor(["user", "plus", null])).toBe(true)
+	expect(await hasFullPodcastEpisodesFor(["user", "free", null])).toBe(false)
+	expect(await hasFullPodcastEpisodesFor(["admin", "free", null])).toBe(true)
 })

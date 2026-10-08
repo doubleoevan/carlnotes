@@ -1,13 +1,10 @@
 // a live smoke test for the profile's two subscriber numbers, which are different.
 // run it with: bun run smoke:profile. needs Doppler secrets
 import { and, eq, sum } from "drizzle-orm"
-import { connectionPool, db } from "../db"
+import { connectionPool, type DbTransaction, db } from "../db"
 import { subscriptions, topics, users } from "../db/schema"
 import { countDistinctSubscribers } from "./profiles"
 import { updateTopicSubscriberCount } from "./topic/subscriberCounts"
-
-// the transaction each test case runs inside, so that no fixture ever escapes it
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 // the rollback marker, which is how the fixtures are cleaned up instead of by deleting them
 class Rollback extends Error {}

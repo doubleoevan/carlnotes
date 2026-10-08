@@ -1,10 +1,10 @@
 import type { TopicPodcast, TopicResponse } from "@shared/contracts"
 import { maxTopicFindingsOptions, visibilities } from "@shared/enums"
-import { PODCAST_NAME } from "@shared/podcastEpisodes"
+import { FULL_PODCAST_EPISODE_MINUTES, PODCAST_NAME, SHORT_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import { useNavigate } from "@tanstack/react-router"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
-import { sendTopicPodcast, type TopicPodcastResult } from "@/clients/podcastEpisodeClient"
+import { sendTopicPodcast } from "@/clients/podcastEpisodeClient"
 import {
 	DailyTopicLimitError,
 	sendAttachmentContext,
@@ -282,7 +282,7 @@ type PodcastSwitchProps = {
 }
 
 /**
- * The podcast switch, with the free plan's limit and the owner's plans link if the podcast cannot render.
+ * The podcast switch, with the free plan's short episode and the owner's plans link if the topic lacks full episodes.
  */
 export function PodcastSwitch({ topicPodcast, isPodcastEnabled, isTopicOwner, onPodcastChange }: PodcastSwitchProps) {
 	return (
@@ -292,13 +292,15 @@ export function PodcastSwitch({ topicPodcast, isPodcastEnabled, isTopicOwner, on
 				<span className="text-muted-foreground">
 					{isPodcastEnabled ? "Coffee Break episode after every brew" : "Coffee Break is off"}
 				</span>
-				{/* the free plan's limit, and the owner's link to the plans page */}
-				{!topicPodcast.canRenderPodcastEpisode && (
-					<span className="text-muted-foreground text-xs">The free plan gives each topic one episode</span>
+				{/* the free plan's short episode, and the owner's link to the plans page */}
+				{!topicPodcast.hasFullPodcastEpisodes && (
+					<span className="text-muted-foreground text-xs">
+						{`The free plan keeps each topic's latest ${SHORT_PODCAST_EPISODE_MINUTES}-minute episode`}
+					</span>
 				)}
-				{!topicPodcast.canRenderPodcastEpisode && isTopicOwner && (
+				{!topicPodcast.hasFullPodcastEpisodes && isTopicOwner && (
 					<AnchorLink href="/plans" className="text-link text-xs hover:underline">
-						Upgrade for an episode after every brew
+						{`Upgrade for ${FULL_PODCAST_EPISODE_MINUTES}-minute episodes, every one kept`}
 					</AnchorLink>
 				)}
 			</div>
@@ -336,11 +338,12 @@ async function saveTopic({
 		topicId = await sendCreateTopic(payload)
 	}
 
-	// save the podcast switch if it changed
+	// save the podcast switch if it changed and show a toast if it did not save
 	if (topic?.podcast && fields.isPodcastEnabled !== topic.podcast.isEnabled) {
-		showTopicPodcastFailureToast(
-			await sendTopicPodcast({ topicId: topic.id, isPodcastEnabled: fields.isPodcastEnabled }),
-		)
+		const isTopicPodcastSaved = await sendTopicPodcast({ topicId: topic.id, isPodcastEnabled: fields.isPodcastEnabled })
+		if (!isTopicPodcastSaved) {
+			toast.error("The podcast switch didn't save. Carl suggests trying again.")
+		}
 	}
 
 	// upload the new attachment files one at a time, dropping each from the pending list as it uploads
@@ -397,13 +400,4 @@ function showSaveError(error: unknown, onSeePlans: () => void): void {
 		return
 	}
 	toast.error(error instanceof Error ? error.message : "Save failed. Carl suggests trying again.")
-}
-
-// show a toast that says why the podcast switch did not save, and nothing if it saved
-function showTopicPodcastFailureToast(topicPodcastResult: TopicPodcastResult): void {
-	if (topicPodcastResult === "planRejected") {
-		toast.error("The free plan gives each topic one episode. A paid plan keeps the mugs out.")
-	} else if (topicPodcastResult === "failed") {
-		toast.error("The podcast switch didn't save. Carl suggests trying again.")
-	}
 }

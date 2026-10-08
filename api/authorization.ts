@@ -3,7 +3,7 @@ import { dailyFrequencies } from "@shared/enums"
 import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, userBudgetCents } from "@shared/plans"
 import { and, count, eq, inArray } from "drizzle-orm"
 import { db } from "../db"
-import { canRenderPodcastEpisode, loadUserAccess, monthlySpendDollars, toMonthlySpendCents } from "../db/quotas"
+import { hasFullPodcastEpisodes, loadUserAccess, monthlySpendDollars, toMonthlySpendCents } from "../db/quotas"
 import { subscriptions, teamMembers, teamTopics, topics } from "../db/schema"
 import { assertNever, canRateTopic, canSeeTopic, toTopicEditRole } from "./topic/permissions"
 import { loadBillingAccess, scansToday } from "./topic/quotas"
@@ -25,7 +25,7 @@ export type Capability =
 	// chat, and a topic's podcast episodes
 	| "chat:send"
 	| "chat:persist"
-	| "podcastEpisode:render"
+	| "podcastEpisode:full"
 	| "podcastEpisode:remove"
 	// the admin console
 	| "admin:console"
@@ -100,10 +100,10 @@ async function decideTopicCapability(
 		// a manual scan needs the owner to be within their daily quota
 		case "scan:manual":
 			return userId && topic ? (await loadManualScanAuthorization(userId, topic)).status === "allowed" : false
-		// an admin or a paid plan renders every podcast episode, and the free plan renders one per topic.
+		// an admin or a paid plan gets full podcast episodes, and the free plan gets short podcast episodes.
 		// the admin role and the plan are the topic owner's
-		case "podcastEpisode:render":
-			return topic ? canRenderPodcastEpisode(topic) : false
+		case "podcastEpisode:full":
+			return topic ? hasFullPodcastEpisodes(topic.ownerId) : false
 		// a new capability fails to compile here
 		default:
 			return assertNever(capability)

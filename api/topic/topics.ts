@@ -573,7 +573,7 @@ export async function deleteTopic(
 		),
 	)
 
-	// delete the podcast episodes' audio from object storage, with any chapter audio that a render left behind
+	// delete the podcast episodes' audio from object storage, with any chapter audio that a recording left behind
 	await deleteTopicPodcastEpisodeAudio(topicId)
 
 	// the delete cascades to sources, findings, invites, and subscriptions.

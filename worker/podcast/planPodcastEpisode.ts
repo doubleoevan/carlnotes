@@ -1,17 +1,18 @@
-// whether a Scan renders a Podcast Episode. the checks that stop a render before it spends,
+// whether a Scan records a Podcast Episode. the checks that stop a recording before it spends,
 // and the Findings that the Podcast Episode narrates
 import { podcastEpisodeSpeechModel } from "@shared/podcastEpisodes"
-import { desc, eq, inArray } from "drizzle-orm"
+import { and, desc, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
-import { canRenderPodcastEpisode, isPodcastEpisodeBudgetShareExhausted } from "../../db/quotas"
+import { hasFullPodcastEpisodes, isPodcastEpisodeBudgetShareExhausted } from "../../db/quotas"
 import { findings, podcastEpisodeChapters, podcastEpisodes, resources, scans, topics } from "../../db/schema"
 import { toCanonicalUrl } from "../ingest/normalize"
 import { loadBookmarkedFindingRows } from "../review"
 import { loadUrlSourcePageUrls } from "../review/filter"
 import { clampScore } from "../review/score"
 
-// how many Findings one Podcast Episode narrates at most
-export const MAX_PODCAST_EPISODE_FINDINGS = 15
+// how many Findings a full Podcast Episode and a short one narrate at most, about two minutes each
+export const FULL_PODCAST_EPISODE_FINDINGS = 15
+export const SHORT_PODCAST_EPISODE_FINDINGS = 5
 
 // the score bonus that a bookmark, a thumbs up, and a url Source's own page each give a Finding when picking a Podcast
 // Episode's Findings. the three add up, and the score stays at 1 or below
@@ -20,7 +21,7 @@ const PODCAST_EPISODE_SCORE_BONUS = 0.2
 // a Finding planned for a Podcast Episode, with its Resource and its source url
 export type PlannedFinding = { findingId: string; resourceId: string; sourceUrl: string }
 
-// the Podcast Episode that a Scan renders. its row's id, and the Findings that it narrates in order
+// the Podcast Episode that a Scan records. its row's id, and the Findings that it narrates in order
 export type PodcastEpisodePlan = { podcastEpisodeId: string; plannedFindings: PlannedFinding[] }
 
 // the Scan that a Podcast Episode is planned for, its Topic, and the user that the Podcast Episode's calls bill
@@ -37,23 +38,24 @@ export type TopicFindingRow = PlannedFinding & {
 }
 
 // the Topic's Findings best first, the Resources that a Podcast Episode already narrated,
-// and the Scan whose Findings go first
+// the Scan whose Findings go first, and how many Findings the Podcast Episode narrates at most
 export type ToPlannedFindingsOptions = {
 	topicFindingRows: TopicFindingRow[]
 	narratedResourceIds: Set<string>
 	scanId: string
+	maxFindings: number
 }
 
 /**
- * Decides whether a Scan renders a Podcast Episode and creates the Podcast Episode's row if it does.
- * Returns the plan, or null if the Scan renders no Podcast Episode.
+ * Decides whether a Scan records a Podcast Episode and creates the Podcast Episode's row if it does.
+ * Returns the plan, or null if the Scan records no Podcast Episode.
  */
 export async function planPodcastEpisode({
 	scanId,
 	topicId,
 	billedUserId,
 }: PlanPodcastEpisodeOptions): Promise<PodcastEpisodePlan | null> {
-	// render no Podcast Episode if no speech model is configured
+	// record no Podcast Episode if no speech model is configured
 	const speechModel = podcastEpisodeSpeechModel()
 	if (!speechModel) {
 		return null
@@ -68,13 +70,17 @@ export async function planPodcastEpisode({
 		return skipPodcastEpisode({ scanId, skipReason: "the scan did not succeed, or the topic's podcast is off" })
 	}
 
+	// a Topic whose owner lacks full Podcast Episodes gets a short one, which narrates fewer Findings
+	const isShortPodcastEpisode = !(await hasFullPodcastEpisodes(topic.ownerId))
+	const maxFindings = isShortPodcastEpisode ? SHORT_PODCAST_EPISODE_FINDINGS : FULL_PODCAST_EPISODE_FINDINGS
+
 	// skip a Scan that leaves nothing new to narrate
-	const plannedFindings = await loadPlannedFindings({ scanId, topic })
+	const plannedFindings = await loadPlannedFindings({ scanId, topic, maxFindings })
 	if (plannedFindings.length === 0) {
 		return skipPodcastEpisode({ scanId, skipReason: "nothing new is left to narrate" })
 	}
 
-	// reuse the row that an earlier attempt created if it is still rendering. that row already passed the checks.
+	// reuse the row that an earlier attempt created if it is still recording. that row already passed the checks.
 	// a published, failed, or removed row plans nothing
 	const [existingPodcastEpisode] = await db
 		.select({ id: podcastEpisodes.id, status: podcastEpisodes.status })
@@ -82,23 +88,23 @@ export async function planPodcastEpisode({
 		.where(eq(podcastEpisodes.scanId, scanId))
 	if (existingPodcastEpisode) {
 		const { id: podcastEpisodeId, status } = existingPodcastEpisode
-		return status === "rendering" ? { podcastEpisodeId, plannedFindings } : null
+		return status === "recording" ? { podcastEpisodeId, plannedFindings } : null
 	}
 
-	// the checks that stop a render before it spends. the owner's plan funds the Topic,
+	// the checks that stop a recording before it spends. a Topic records one short Podcast Episode at a time,
 	// and the billed user's budget pays for this Podcast Episode
-	if (!(await canRenderPodcastEpisode(topic))) {
-		return skipPodcastEpisode({ scanId, skipReason: "the owner's plan has used this topic's episode" })
+	if (isShortPodcastEpisode && (await hasRecordingShortPodcastEpisode(topic.id))) {
+		return skipPodcastEpisode({ scanId, skipReason: "the topic's short episode is still recording" })
 	}
 	if (await isPodcastEpisodeBudgetShareExhausted(billedUserId)) {
 		const skipReason = "the billed user's monthly spend is past the share that episodes may use"
 		return skipPodcastEpisode({ scanId, skipReason })
 	}
 
-	// create the row as rendering, with the speech model that renders the Podcast Episode
+	// create the row as recording, with the speech model that records the Podcast Episode and whether it is short
 	const [createdPodcastEpisode] = await db
 		.insert(podcastEpisodes)
-		.values({ topicId, ownerId: billedUserId, scanId, model: speechModel })
+		.values({ topicId, ownerId: billedUserId, scanId, model: speechModel, isShort: isShortPodcastEpisode })
 		.returning({ id: podcastEpisodes.id })
 
 	// return the plan, or throw an error if the insert returned no row
@@ -115,6 +121,7 @@ export function toPlannedFindings({
 	topicFindingRows,
 	narratedResourceIds,
 	scanId,
+	maxFindings,
 }: ToPlannedFindingsOptions): PlannedFinding[] {
 	// leave out each Finding that a user rated thumbs down
 	const narratableFindingRows = topicFindingRows.filter((topicFindingRow) => topicFindingRow.rating !== "down")
@@ -151,7 +158,7 @@ export function toPlannedFindings({
 	const rankedFindingRows = [...scanFindingRows, ...scoreBonusFindingRows].sort(
 		(firstFindingRow, secondFindingRow) => toScoreWithBonuses(secondFindingRow) - toScoreWithBonuses(firstFindingRow),
 	)
-	const pickedFindingRows = new Set(rankedFindingRows.slice(0, MAX_PODCAST_EPISODE_FINDINGS))
+	const pickedFindingRows = new Set(rankedFindingRows.slice(0, maxFindings))
 	const isFindingPicked = (topicFindingRow: TopicFindingRow): boolean => pickedFindingRows.has(topicFindingRow)
 
 	// return the picked Findings with the Scan's own first, then fill the rest of the limit with the Topic's other Findings
@@ -161,7 +168,7 @@ export function toPlannedFindings({
 		...otherUnnarratedFindingRows,
 		...otherNarratedFindingRows,
 	]
-		.slice(0, MAX_PODCAST_EPISODE_FINDINGS)
+		.slice(0, maxFindings)
 		.map(({ findingId, resourceId, sourceUrl }) => ({ findingId, resourceId, sourceUrl }))
 }
 
@@ -175,22 +182,41 @@ function toScoreWithBonuses(topicFindingRow: TopicFindingRow): number {
 	return clampScore(topicFindingRow.relevanceScore + bonusCount * PODCAST_EPISODE_SCORE_BONUS)
 }
 
-// log why a Scan renders no Podcast Episode, and return null as its plan
+// whether the Topic has a short Podcast Episode that is still recording
+async function hasRecordingShortPodcastEpisode(topicId: string): Promise<boolean> {
+	const [recordingShortPodcastEpisode] = await db
+		.select({ id: podcastEpisodes.id })
+		.from(podcastEpisodes)
+		.where(
+			and(
+				eq(podcastEpisodes.topicId, topicId),
+				eq(podcastEpisodes.status, "recording"),
+				eq(podcastEpisodes.isShort, true),
+			),
+		)
+		.limit(1)
+	return recordingShortPodcastEpisode !== undefined
+}
+
+// log why a Scan records no Podcast Episode, and return null as its plan
 function skipPodcastEpisode({ scanId, skipReason }: { scanId: string; skipReason: string }): null {
-	console.log(`scan ${scanId} renders no episode: ${skipReason}`)
+	console.log(`scan ${scanId} records no episode: ${skipReason}`)
 	return null
 }
 
-// load the Topic's Findings in narration order, with the narrated ones last
+// load the Topic's Findings in narration order, with the narrated ones last, up to the Podcast Episode's limit
 async function loadPlannedFindings({
 	scanId,
 	topic,
+	maxFindings,
 }: {
 	scanId: string
 	topic: typeof topics.$inferSelect
+	maxFindings: number
 }): Promise<PlannedFinding[]> {
 	// load the Resources that the Topic's Podcast Episodes narrated, the Findings that someone with access bookmarked,
-	// and the pages of the Topic's url Sources. a failed or removed Podcast Episode has no chapters
+	// and the pages of the Topic's url Sources. a failed Podcast Episode and one that its owner removed have no
+	// chapters, and a replaced short Podcast Episode keeps its chapters
 	const [narratedChapterRows, bookmarkedFindingRows, urlSourcePageUrls] = await Promise.all([
 		db
 			.select({ resourceId: podcastEpisodeChapters.resourceId })
@@ -227,5 +253,5 @@ async function loadPlannedFindings({
 
 	// order the Findings, with the narrated ones last
 	const narratedResourceIds = new Set(narratedChapterRows.map((narratedChapterRow) => narratedChapterRow.resourceId))
-	return toPlannedFindings({ topicFindingRows, narratedResourceIds, scanId })
+	return toPlannedFindings({ topicFindingRows, narratedResourceIds, scanId, maxFindings })
 }

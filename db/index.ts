@@ -26,6 +26,12 @@ traceQueries(connectionPool)
 // drizzle client bound to the full domain schema. consumers import table definitions from the schema directly
 export const db = drizzle(connectionPool, { schema })
 
+// the client that a db.transaction callback gets, which runs its statements in the transaction
+export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
+
+// the transaction a caller is already inside, or the pool if there is none
+export type DbHandle = typeof db | DbTransaction
+
 // a finding is shown unless a user rated the finding thumbs down
 export const isFindingShown = sql<boolean>`${schema.findings.rating} is distinct from 'down'`
 

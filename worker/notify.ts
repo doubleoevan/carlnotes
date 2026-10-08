@@ -290,7 +290,7 @@ async function toTopicScanEmailProps(
 			// the header, heading, and footer link back to the app and to this topic
 			appUrl,
 			topicUrl,
-			// the Scan's Podcast Episode, if it has a title and is rendering or published
+			// the Scan's Podcast Episode, if it has a title and is recording or published
 			podcastEpisode: await toScanEmailPodcastEpisode({ scanId: scan.id, topicUrl }),
 		},
 	}
@@ -305,7 +305,7 @@ async function toScanEmailPodcastEpisode({
 	scanId,
 	topicUrl,
 }: ToScanEmailPodcastEpisodeOptions): Promise<TopicScanEmailPodcastEpisode | undefined> {
-	// read the Scan's Podcast Episode, and show the Podcast Episode only if it has a title and is rendering or published
+	// read the Scan's Podcast Episode, and show the Podcast Episode only if it has a title and is recording or published
 	const [podcastEpisode] = await db
 		.select({
 			id: podcastEpisodes.id,
@@ -315,7 +315,7 @@ async function toScanEmailPodcastEpisode({
 		})
 		.from(podcastEpisodes)
 		.where(eq(podcastEpisodes.scanId, scanId))
-	const isPodcastEpisodeShown = podcastEpisode?.status === "rendering" || podcastEpisode?.status === "published"
+	const isPodcastEpisodeShown = podcastEpisode?.status === "recording" || podcastEpisode?.status === "published"
 	if (!podcastEpisode?.title || !isPodcastEpisodeShown) {
 		return undefined
 	}

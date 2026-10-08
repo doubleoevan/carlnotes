@@ -1,22 +1,28 @@
-// the podcast episode speech model, a cover's key and path, the show and host names, and a turn's transcript text
+// the podcast episode speech model, the episode lengths, a cover's key and path, the show and host names,
+// and a turn's transcript text
 
-// the Gemini speech model that episodes render with.
+// the Gemini speech model that records episodes.
 // PODCAST_SPEECH_MODEL names another model, and an empty value turns podcast episodes off
 const DEFAULT_PODCAST_SPEECH_MODEL = "gemini-3.8-flash-tts"
 
 /**
- * Returns the Gemini speech model that episodes render with, or null if PODCAST_SPEECH_MODEL is set empty.
+ * Returns the Gemini speech model that records episodes, or null if PODCAST_SPEECH_MODEL is set empty.
  */
 export function podcastEpisodeSpeechModel(): string | null {
 	return (Bun.env.PODCAST_SPEECH_MODEL ?? DEFAULT_PODCAST_SPEECH_MODEL).trim() || null
 }
 
 /**
- * Whether a speech model is set, which podcast episode rendering requires.
+ * Whether a speech model is set, which podcast episode recording requires.
  */
-export function isPodcastEpisodeRenderingConfigured(): boolean {
+export function isPodcastEpisodeRecordingConfigured(): boolean {
 	return podcastEpisodeSpeechModel() !== null
 }
+
+// the most minutes of talk that a full podcast episode and a short one may plan.
+// a topic whose owner is on the free plan gets short podcast episodes
+export const FULL_PODCAST_EPISODE_MINUTES = 30
+export const SHORT_PODCAST_EPISODE_MINUTES = 10
 
 // the pixel sizes that a cover is served at
 export const PODCAST_COVER_SIZES = [3000, 600] as const

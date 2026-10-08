@@ -7,7 +7,7 @@ import type {
 	TopicPodcast,
 	TopicScan,
 } from "@shared/contracts"
-import { isPodcastEpisodeRenderingConfigured, toPodcastCoverPath } from "@shared/podcastEpisodes"
+import { isPodcastEpisodeRecordingConfigured, toPodcastCoverPath } from "@shared/podcastEpisodes"
 import { toPodcastEpisodePath, toPodcastFeedPath } from "@shared/seo"
 import { and, desc, eq, gt, inArray, ne } from "drizzle-orm"
 import { db } from "../../db"
@@ -88,16 +88,16 @@ type TopicPodcastFields = {
 type LoadSeasonPodcastEpisodesOptions = { topic: TopicRow; userId: string | null; season: number }
 
 /**
- * Loads the topic page's podcast, or a null podcast if episode rendering is not configured.
+ * Loads the topic page's podcast, or a null podcast if episode recording is not configured.
  */
 export async function loadTopicPodcast(topic: TopicRow, userId: string | null): Promise<TopicPodcastFields> {
-	if (!isPodcastEpisodeRenderingConfigured()) {
+	if (!isPodcastEpisodeRecordingConfigured()) {
 		return { podcast: null, latestPodcastEpisode: null, podcastEpisodeByScanId: new Map() }
 	}
 
-	// load the published podcast episodes that the user may listen to, newest first, and the newest episode that was
-	// not removed. check whether the owner's plan renders another episode and whether the user may remove an episode
-	const [publishedPodcastEpisodeRows, [newestPodcastEpisodeRow], canRenderPodcastEpisode, canRemovePodcastEpisodes] =
+	// load the published podcast episodes that the user may listen to, newest first, and the newest episode that was not removed.
+	// check whether the owner's plan gets full episodes and whether the user may remove an episode
+	const [publishedPodcastEpisodeRows, [newestPodcastEpisodeRow], hasFullPodcastEpisodes, canRemovePodcastEpisodes] =
 		await Promise.all([
 			loadPublishedPodcastEpisodeRows(topic, userId),
 			db
@@ -106,7 +106,7 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 				.where(and(eq(podcastEpisodes.topicId, topic.id), ne(podcastEpisodes.status, "removed")))
 				.orderBy(desc(podcastEpisodes.createdAt))
 				.limit(1),
-			isAllowed(topic.ownerId, "podcastEpisode:render", topic),
+			isAllowed(topic.ownerId, "podcastEpisode:full", topic),
 			isAllowed(userId, "podcastEpisode:remove", topic),
 		])
 	const [latestPublishedPodcastEpisodeRow] = publishedPodcastEpisodeRows
@@ -114,9 +114,9 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 		...new Set(publishedPodcastEpisodeRows.flatMap((podcastEpisodeRow) => podcastEpisodeRow.season ?? [])),
 	]
 
-	// the newest podcast episode, if it is rendering or failed to render and the user may see it
+	// the newest podcast episode, if it is recording or failed to record and the user may see it
 	const isNewestPodcastEpisodeUnpublished =
-		newestPodcastEpisodeRow?.status === "rendering" || newestPodcastEpisodeRow?.status === "failed"
+		newestPodcastEpisodeRow?.status === "recording" || newestPodcastEpisodeRow?.status === "failed"
 	const accessibleUnpublishedPodcastEpisode =
 		newestPodcastEpisodeRow && isNewestPodcastEpisodeUnpublished
 			? await loadAccessiblePodcastEpisode({ userId, podcastEpisodeId: newestPodcastEpisodeRow.id })
@@ -144,7 +144,7 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 	return {
 		podcast: {
 			isEnabled: topic.isPodcastEnabled,
-			canRenderPodcastEpisode,
+			hasFullPodcastEpisodes,
 			canRemovePodcastEpisodes,
 			unpublishedPodcastEpisode: accessibleUnpublishedPodcastEpisode
 				? toPodcastEpisode({ podcastEpisodeRow: accessibleUnpublishedPodcastEpisode.podcastEpisodeRow, topic })
@@ -167,7 +167,7 @@ export async function loadLatestPodcastEpisodes(
 	topicRows: LatestPodcastEpisodeTopic[],
 	userId: string | null,
 ): Promise<Map<string, PodcastEpisode>> {
-	if (!isPodcastEpisodeRenderingConfigured() || topicRows.length === 0) {
+	if (!isPodcastEpisodeRecordingConfigured() || topicRows.length === 0) {
 		return new Map()
 	}
 
@@ -266,7 +266,7 @@ export async function loadAccessiblePodcastEpisode({
 	userId,
 	podcastEpisodeId,
 }: LoadAccessiblePodcastEpisodeOptions): Promise<AccessiblePodcastEpisode | null> {
-	if (!isPodcastEpisodeRenderingConfigured()) {
+	if (!isPodcastEpisodeRecordingConfigured()) {
 		return null
 	}
 
@@ -319,7 +319,7 @@ export async function loadPublishedPodcastEpisode({
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
 		.where(and(isPodcastEpisodeAtPageRef, eq(podcastEpisodes.status, "published")))
-	return isPodcastEpisodeRenderingConfigured() && publishedPodcastEpisode ? publishedPodcastEpisode : null
+	return isPodcastEpisodeRecordingConfigured() && publishedPodcastEpisode ? publishedPodcastEpisode : null
 }
 
 /**
@@ -334,7 +334,7 @@ export async function loadPublishedPodcastEpisodeById(
 		.from(podcastEpisodes)
 		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
 		.where(and(eq(podcastEpisodes.id, podcastEpisodeId), eq(podcastEpisodes.status, "published")))
-	return isPodcastEpisodeRenderingConfigured() && publishedPodcastEpisode ? publishedPodcastEpisode : null
+	return isPodcastEpisodeRecordingConfigured() && publishedPodcastEpisode ? publishedPodcastEpisode : null
 }
 
 /**
@@ -504,9 +504,9 @@ export async function loadPublishedPodcastEpisodeRows(
 	topic: TopicRow,
 	userId: string | null,
 ): Promise<PodcastEpisodeRow[]> {
-	// return no podcast episodes if episode rendering is not configured,
+	// return no podcast episodes if episode recording is not configured,
 	// or if the user has no active subscription to an invite topic
-	const subscriberActivatedAt = isPodcastEpisodeRenderingConfigured()
+	const subscriberActivatedAt = isPodcastEpisodeRecordingConfigured()
 		? await loadSubscriberActivatedAt(topic, userId)
 		: null
 	if (subscriberActivatedAt === null) {

@@ -5,14 +5,11 @@ import { YjsThreadStore } from "@blocknote/core/yjs"
 import { and, eq, inArray, not, sql } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import * as Y from "yjs"
-import { db } from "../../db"
+import { type DbTransaction, db } from "../../db"
 import { noteComments, noteCommentThreads, notes } from "../../db/schema"
 import { type AppEnv, currentUser } from "../currentUser"
 import { notifyNoteUpdate } from "./noteStream"
 import { canEditNote, loadNoteWithPage, loadPageAccess } from "./permissions"
-
-// a transaction handle, so the mirror writes share the caller's locked transaction
-type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 // one thread as the ydoc stores it, read back for mirroring
 type StoredThread = {

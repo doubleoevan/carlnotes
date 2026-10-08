@@ -190,7 +190,7 @@ function toPodcastFeedItem(
 }
 
 /**
- * Returns a podcast episode's script as transcript blocks in the order heard, leaving out a block with no turns.
+ * Returns a podcast episode's script as transcript blocks in listening order, leaving out a block with no turns.
  */
 export function toTranscriptBlocks(podcastEpisodeScript: PodcastEpisodeScript): PodcastEpisodeTranscriptBlock[] {
 	// each turn under its speaker's name, without the vocal tags that the speech model reads

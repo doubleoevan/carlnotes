@@ -1,13 +1,10 @@
-// the activities that render a Scan's Podcast Episode.
+// the activities that record a Scan's Podcast Episode.
 // a script or speech failure that another attempt cannot fix is marked non-retryable
 import { ApplicationFailure, activityInfo } from "@temporalio/activity"
 import { isBudgetRejection } from "../models"
 import * as podcastEpisodeAudio from "../podcast/podcastEpisodeAudio"
-import {
-	type PodcastEpisodeOutline,
-	type PodcastEpisodeSegment,
-	RejectedScriptError,
-} from "../podcast/podcastEpisodeScript"
+import type { PodcastEpisodeOutline } from "../podcast/podcastEpisodeOutline"
+import { type PodcastEpisodeSegment, RejectedScriptError } from "../podcast/podcastEpisodeScript"
 import * as writePodcastEpisodeScript from "../podcast/writePodcastEpisodeScript"
 
 // the plan, the encode, the publish, and the failure are exported as they are. each throws only on an unexpected error
@@ -15,8 +12,8 @@ export { planPodcastEpisode } from "../podcast/planPodcastEpisode"
 export { encodePodcastEpisode } from "../podcast/podcastEpisodeAudio"
 export { failPodcastEpisode, publishPodcastEpisode } from "../podcast/publishPodcastEpisode"
 
-// a rendered chapter with how many attempts its render took
-export type RenderedChapterAttempt = podcastEpisodeAudio.RenderedChapter & { attemptCount: number }
+// a recorded chapter with how many attempts its recording took
+export type RecordedChapterAttempt = podcastEpisodeAudio.RecordedChapter & { attemptCount: number }
 
 /**
  * Writes the outline and saves its title and description. Fails for good on a rejected script or a spent budget.
@@ -51,15 +48,15 @@ export async function savePodcastEpisodeScript(
 }
 
 /**
- * Renders one chapter to object storage, throwing a failure that says whether another attempt can help.
+ * Records one chapter to object storage, throwing a failure that says whether another attempt can help.
  */
-export async function renderPodcastEpisodeChapter(
-	renderPodcastEpisodeChapterOptions: podcastEpisodeAudio.RenderPodcastEpisodeChapterOptions,
-): Promise<RenderedChapterAttempt> {
+export async function recordPodcastEpisodeChapter(
+	recordPodcastEpisodeChapterOptions: podcastEpisodeAudio.RecordPodcastEpisodeChapterOptions,
+): Promise<RecordedChapterAttempt> {
 	try {
-		// render the chapter, and record which attempt rendered it
-		const renderedChapter = await podcastEpisodeAudio.renderPodcastEpisodeChapter(renderPodcastEpisodeChapterOptions)
-		return { ...renderedChapter, attemptCount: activityInfo().attempt }
+		// record the chapter, and note which attempt recorded it
+		const recordedChapter = await podcastEpisodeAudio.recordPodcastEpisodeChapter(recordPodcastEpisodeChapterOptions)
+		return { ...recordedChapter, attemptCount: activityInfo().attempt }
 	} catch (error) {
 		// retry a speech failure that another attempt can fix, and end the chapter's attempts on any other speech failure
 		if (error instanceof podcastEpisodeAudio.SpeechFailedError) {

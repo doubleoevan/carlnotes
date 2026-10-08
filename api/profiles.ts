@@ -10,16 +10,13 @@ import {
 import { toNormalizedUsername } from "@shared/usernames"
 import { and, countDistinct, eq, isNotNull, like, ne, sql } from "drizzle-orm"
 import { Hono } from "hono"
-import { db } from "../db"
+import { type DbHandle, db } from "../db"
 import { subscriptions, topics, users } from "../db/schema"
 import { isAllowed } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
 import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
 import { toTopicTableRows } from "./topic/topicTableRows"
-
-// the transaction a caller is already inside, or the pool when there is none
-type DbHandle = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
  * Users whose username contains the search query. Matched on the normalized username and query.

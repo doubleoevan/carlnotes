@@ -1,33 +1,16 @@
-// podcast episode script tests: the outline and segment checks, the repairs that keep a last draft,
-// the whole script, and each chapter's turns
+// podcast episode script tests: the segment checks, the repairs that keep a last segment draft, the whole script,
+// and each chapter's turns
 import { expect, test } from "bun:test"
 import type { PodcastEpisodeChapterScript, PodcastEpisodeTurn } from "@shared/contracts"
 import {
-	type PodcastEpisodeOutline,
 	type PodcastEpisodeSegment,
-	RejectedScriptError,
 	toChapterTurns,
-	toCheckedPodcastEpisodeOutline,
 	toCheckedPodcastEpisodeSegment,
 	toPodcastEpisodeScript,
-	toRenderedPodcastEpisodeScript,
+	toRecordedPodcastEpisodeScript,
 	toScriptMinutes,
 } from "./podcastEpisodeScript"
-
-// an outline that plans both Findings in one segment
-const outline: PodcastEpisodeOutline = {
-	title: "A quieter grinder, and your water",
-	description: "A quieter burr set, and why hard water sours a shot.",
-	segments: [
-		{
-			theme: "gear and water",
-			chapters: [
-				{ findingId: "finding-1", minutes: 2 },
-				{ findingId: "finding-2", minutes: 1 },
-			],
-		},
-	],
-}
+import { outline, toOutline, toWords } from "./podcastEpisodeScriptFixtures"
 
 // one host turn of the given text
 function toHostTurn(text: string): PodcastEpisodeTurn {
@@ -47,87 +30,6 @@ function toSegment(firstChapterText = "The grinder is quieter now."): PodcastEpi
 		goodbye: [toHostTurn("Same time next brew.")],
 	}
 }
-
-// an outline of one segment that plans the given Findings
-function toOutline(findingIds: string[]): PodcastEpisodeOutline {
-	const chapters = findingIds.map((findingId) => ({ findingId, minutes: 2 }))
-	return { ...outline, segments: [{ theme: "gear and water", chapters }] }
-}
-
-// a text of the given number of words
-function toWords(wordCount: number): string {
-	return Array.from({ length: wordCount }, () => "word").join(" ")
-}
-
-// the ids of the two Findings that the outline plans
-const findingIds = ["finding-1", "finding-2"]
-
-// the same Finding planned twice in one segment
-const repeatedChapter = { findingId: "finding-1", minutes: 2 }
-const repeatedOutline = { ...outline, segments: [{ theme: "gear", chapters: [repeatedChapter, repeatedChapter] }] }
-
-// eleven chapters of three minutes each, 33 minutes in all
-const longFindingIds = Array.from({ length: 11 }, (_, i) => `finding-${i}`)
-const longChapters = longFindingIds.map((findingId) => ({ findingId, minutes: 3 }))
-const longOutline = { ...outline, segments: [{ theme: "everything", chapters: longChapters }] }
-
-test("toCheckedPodcastEpisodeOutline passes an outline that plans each Finding once", () => {
-	expect(toCheckedPodcastEpisodeOutline({ outline, findingIds })).toEqual(outline)
-})
-
-test("an earlier outline draft is rejected for an unknown or repeated Finding, a long plan, or long text", () => {
-	// a Finding that was not in the input, the same Finding planned twice, and a plan past thirty minutes
-	expect(() => toCheckedPodcastEpisodeOutline({ outline, findingIds: ["finding-1"] })).toThrow(RejectedScriptError)
-	expect(() => toCheckedPodcastEpisodeOutline({ outline: repeatedOutline, findingIds: ["finding-1"] })).toThrow("twice")
-	expect(() => toCheckedPodcastEpisodeOutline({ outline: longOutline, findingIds: longFindingIds })).toThrow(
-		"33 minutes",
-	)
-
-	// a title past 60 characters and a description past 155
-	const longTitleOutline = { ...outline, title: `${toWords(12)} title` }
-	expect(() => toCheckedPodcastEpisodeOutline({ outline: longTitleOutline, findingIds })).toThrow("the title has 65")
-	const longDescriptionOutline = { ...outline, description: toWords(40) }
-	expect(() => toCheckedPodcastEpisodeOutline({ outline: longDescriptionOutline, findingIds })).toThrow(
-		"the description has 199",
-	)
-})
-
-test("every outline draft has its planned lengths kept between one and eight minutes, with no rejection", () => {
-	// a half-minute chapter and a twelve-minute chapter
-	const offRangeChapters = [
-		{ findingId: "finding-1", minutes: 0.5 },
-		{ findingId: "finding-2", minutes: 12 },
-	]
-	const offRangeOutline = { ...outline, segments: [{ theme: "gear", chapters: offRangeChapters }] }
-	const checkedOutline = toCheckedPodcastEpisodeOutline({ outline: offRangeOutline, findingIds })
-	expect(checkedOutline.segments[0]?.chapters.map((chapter) => chapter.minutes)).toEqual([1, 8])
-})
-
-test("the last outline draft is repaired instead of rejected, and fails only with nothing to narrate", () => {
-	// a long title and description are cut at a word boundary and end in an ellipsis
-	const longTextOutline = { ...outline, title: toWords(20), description: toWords(40) }
-	const cutOutline = toCheckedPodcastEpisodeOutline({ outline: longTextOutline, findingIds, isLastScriptDraft: true })
-	expect(cutOutline.title.length).toBeLessThanOrEqual(60)
-	expect(cutOutline.title.endsWith("word\u2026")).toBe(true)
-	expect(cutOutline.description.length).toBeLessThanOrEqual(155)
-
-	// a repeated Finding is planned once, an unknown one is left out, and a plan past thirty minutes is kept
-	const unknownFindingOutline = toOutline(["finding-1", "finding-9"])
-	const repairedOutline = toCheckedPodcastEpisodeOutline({
-		outline: unknownFindingOutline,
-		findingIds,
-		isLastScriptDraft: true,
-	})
-	expect(repairedOutline.segments[0]?.chapters.map((chapter) => chapter.findingId)).toEqual(["finding-1"])
-	const lastRepeatedOutlineOptions = { outline: repeatedOutline, findingIds, isLastScriptDraft: true }
-	expect(toCheckedPodcastEpisodeOutline(lastRepeatedOutlineOptions).segments[0]?.chapters).toHaveLength(1)
-	const lastLongOutlineOptions = { outline: longOutline, findingIds: longFindingIds, isLastScriptDraft: true }
-	expect(toCheckedPodcastEpisodeOutline(lastLongOutlineOptions).segments[0]?.chapters).toHaveLength(11)
-
-	// an outline that plans no Finding from its input has nothing to narrate
-	const unknownFindingOnlyOutlineOptions = { outline: toOutline(["finding-9"]), findingIds, isLastScriptDraft: true }
-	expect(() => toCheckedPodcastEpisodeOutline(unknownFindingOnlyOutlineOptions)).toThrow("no finding from its input")
-})
 
 test("toCheckedPodcastEpisodeSegment passes a segment with one chapter for each of its Findings", () => {
 	expect(() => toCheckedPodcastEpisodeSegment({ segment: toSegment(), outline, segmentIndex: 0 })).not.toThrow()
@@ -215,13 +117,23 @@ test("the last segment draft is repaired instead of rejected", () => {
 	expect(repairedChapters.map((chapter) => chapter.findingId)).toEqual(["finding-1"])
 	const [firstChapter] = outsideFindingSegment.chapters
 	const repeatedSegment = { ...outsideFindingSegment, chapters: firstChapter ? [firstChapter, firstChapter] : [] }
-	const repeatedSegmentOptions = { segment: repeatedSegment, outline, segmentIndex: 0, isLastScriptDraft: true }
+	const repeatedSegmentOptions = {
+		segment: repeatedSegment,
+		outline,
+		segmentIndex: 0,
+		isLastScriptDraft: true,
+	}
 	expect(toCheckedPodcastEpisodeSegment(repeatedSegmentOptions).chapters).toHaveLength(1)
 
 	// a missing chapter, a missing cold open, and a missing sign-off are accepted
 	const longerOutline = toOutline(["finding-1", "finding-2", "finding-3"])
 	const bareSegment = { ...toSegment(), coldOpen: undefined, signOff: undefined }
-	const bareSegmentOptions = { segment: bareSegment, outline: longerOutline, segmentIndex: 0, isLastScriptDraft: true }
+	const bareSegmentOptions = {
+		segment: bareSegment,
+		outline: longerOutline,
+		segmentIndex: 0,
+		isLastScriptDraft: true,
+	}
 	expect(toCheckedPodcastEpisodeSegment(bareSegmentOptions).chapters).toHaveLength(2)
 })
 
@@ -312,7 +224,7 @@ test("toPodcastEpisodeScript keeps a script past thirty minutes", () => {
 	expect(toScriptMinutes(toPodcastEpisodeScript([toSegment()]))).toBeLessThan(1)
 })
 
-test("toRenderedPodcastEpisodeScript leaves out each chapter that did not render, with the turns that render with it", () => {
+test("toRecordedPodcastEpisodeScript leaves out each chapter that was not recorded, with the turns recorded with it", () => {
 	// two segments of two and one chapters, each turn named for where it sits
 	const toChapter = (name: string): PodcastEpisodeChapterScript => ({
 		findingId: name,
@@ -328,18 +240,18 @@ test("toRenderedPodcastEpisodeScript leaves out each chapter that did not render
 		signOff: [toHostTurn("sign-off")],
 	}
 
-	// every chapter rendered, so the script is kept whole
-	expect(toRenderedPodcastEpisodeScript(podcastEpisodeScript, [0, 1, 2])).toEqual(podcastEpisodeScript)
+	// every chapter was recorded, so the script is kept whole
+	expect(toRecordedPodcastEpisodeScript(podcastEpisodeScript, [0, 1, 2])).toEqual(podcastEpisodeScript)
 
-	// the first chapter is left out with the cold open and its segment's transition, and the rest renders as before
-	const withoutFirstChapterScript = toRenderedPodcastEpisodeScript(podcastEpisodeScript, [1, 2])
+	// the first chapter is left out with the cold open and its segment's transition, and the rest is recorded as before
+	const withoutFirstChapterScript = toRecordedPodcastEpisodeScript(podcastEpisodeScript, [1, 2])
 	const withoutFirstChapterTexts = toChapterTurns(withoutFirstChapterScript).map((turns) =>
 		turns.map((turn) => turn.text),
 	)
 	expect(withoutFirstChapterTexts).toEqual([["middle"], ["last transition", "last", "sign-off"]])
 
 	// the last chapter is left out with its segment and the sign-off
-	const withoutLastChapterScript = toRenderedPodcastEpisodeScript(podcastEpisodeScript, [0, 1])
+	const withoutLastChapterScript = toRecordedPodcastEpisodeScript(podcastEpisodeScript, [0, 1])
 	expect(withoutLastChapterScript.segments).toHaveLength(1)
 	expect(withoutLastChapterScript.signOff).toHaveLength(0)
 	expect(withoutLastChapterScript.coldOpen).toHaveLength(1)

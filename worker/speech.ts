@@ -4,12 +4,12 @@ import { podcastEpisodeSpeechModel } from "@shared/podcastEpisodes"
 import type { SpeechTier } from "./budget"
 
 // one speech call. its turns, its tier, and the virtual key that it bills, or the master key if no key is given
-export type RenderSpeechOptions = { turns: PodcastEpisodeTurn[]; speechTier: SpeechTier; litellmApiKey?: string }
+export type RecordSpeechOptions = { turns: PodcastEpisodeTurn[]; speechTier: SpeechTier; litellmApiKey?: string }
 
 // the result of one speech call
 export type SpeechResult =
 	// the audio as a WAV file, with the token counts that price it
-	| { outcome: "rendered"; audioBytes: Uint8Array; inputTokens: number; audioTokens: number }
+	| { outcome: "recorded"; audioBytes: Uint8Array; inputTokens: number; audioTokens: number }
 	// a failure that a retry can fix. a rate limit, a 5xx, a response with no audio, a timeout, or a network failure
 	| { outcome: "retryable"; httpStatus: number | null; reason: string }
 	// the key's budget is spent, and no retry this month can fix a spent budget
@@ -37,9 +37,9 @@ type SpeechResponseBody = {
 }
 
 /**
- * Renders the turns as one two-speaker speech call, and returns the WAV and its token counts or why the call failed.
+ * Records the turns as one two-speaker speech call, and returns the WAV and its token counts or why the call failed.
  */
-export async function renderSpeech({ turns, speechTier, litellmApiKey }: RenderSpeechOptions): Promise<SpeechResult> {
+export async function recordSpeech({ turns, speechTier, litellmApiKey }: RecordSpeechOptions): Promise<SpeechResult> {
 	// reject the call if the speech model, the proxy, or a key is not configured
 	const speechModel = podcastEpisodeSpeechModel()
 	const baseUrl = Bun.env.LITELLM_BASE_URL
@@ -68,7 +68,7 @@ export async function renderSpeech({ turns, speechTier, litellmApiKey }: RenderS
 		}
 
 		return {
-			outcome: "rendered",
+			outcome: "recorded",
 			audioBytes: toWavBytes(Buffer.from(audioPart.inlineData.data, "base64")),
 			inputTokens: speechResponseBody.usageMetadata?.promptTokenCount ?? 0,
 			audioTokens: speechResponseBody.usageMetadata?.candidatesTokenCount ?? 0,

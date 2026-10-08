@@ -1,6 +1,7 @@
 // a live smoke test for a full topic Scan, ingestion then review: seed a topic with two sources, scan, check the outputs,
 // and send the Scan's report to Resend's test inbox.
 // run it with: bun run smoke:scan. needs the LiteLLM proxy at LITELLM_BASE_URL, the latest migration, and Doppler secrets
+import { FULL_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, scans, sources, topicEmailSends, topics, users } from "../db/schema"
@@ -258,6 +259,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		topicName: "sample topic",
 		topicPrompt: "sample topic prompt",
 		podcastEpisodeFindings: [samplePodcastEpisodeFinding],
+		maxMinutes: FULL_PODCAST_EPISODE_MINUTES,
 	}
 	const outlineResult = await buildOutlinePrompt(scriptInput)
 	const sampleOutline = {

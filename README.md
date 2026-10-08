@@ -56,7 +56,7 @@ These processes run in production:
 | Process | What it does |
 |---|---|
 | `app` | Serves the api and the ui, rendering public pages on the server. Chat replies and uploads run in-process. |
-| `temporal-worker` | One process hosts five Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, scan emails, podcast episode renders, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
+| `temporal-worker` | One process hosts five Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, scan emails, podcast episode recordings, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
 | scheduler | `bun worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed in one query from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. A database claim keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
 | budget reset | `bun worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces a few keys at a time, under the same kind of database claim as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
 | `llm-guard` | The content scanner is its own service (see below). |
@@ -75,7 +75,7 @@ A topic Scan is one Temporal workflow, its email is a second one, and its podcas
 ```mermaid
 flowchart
     Ingest[Ingest Sources] --> Screen[Screen · LLM Guard] --> Score[Score · LiteLLM] --> Review[Keep best Findings] -->|second workflow| Email[Email subscribers · Resend]
-    Review -->|third workflow| Episode[Render the podcast episode · Gemini speech + ffmpeg]
+    Review -->|third workflow| Episode[Record the podcast episode · Gemini speech + ffmpeg]
 ```
 
 Each step costs more but handles fewer Resources. Embeddings filter and rank what the Sources found. A cheap model
@@ -96,7 +96,7 @@ A succeeded Scan also starts the podcast episode workflow, described under Podca
 ### Podcast
 
 Every Topic has a podcast with two AI hosts, Carl and Vienna. A succeeded Scan starts its episode as a child workflow on
-the `episode-renders` queue, and an episode never holds up the Topic's next Scan.
+the `episode-recordings` queue, and an episode never holds up the Topic's next Scan.
 
 ```mermaid
 flowchart
@@ -122,11 +122,11 @@ drafts: a draft that fails a check is retried with the reason, and a third draft
 episode. The sign-off ends on two fixed lines and then a goodbye that the writer words differently every time. The
 prompts are in `worker/prompts/`.
 
-Each chapter renders as one two-speaker Gemini speech call through LiteLLM's pass-through. A manual Scan's chapters
-render on the standard tier, and a scheduled Scan's on Gemini's Flex tier, where a chapter may wait up to six hours for
-capacity. A chapter whose speech fails for good is left out, and the episode publishes the rest. ffmpeg joins the
-chapters into one MP3 in object storage, and the publish gives the episode its season, the UTC year, and its number
-within that season.
+Each chapter is recorded as one two-speaker Gemini speech call through LiteLLM's pass-through. A manual Scan's
+chapters are recorded on the standard tier, and a scheduled Scan's on Gemini's Flex tier, where a chapter may wait up to
+six hours for capacity. A chapter whose speech fails for good is left out, and the episode publishes the rest. ffmpeg
+joins the chapters into one MP3 in object storage, and the publish gives the episode its season, the UTC year, and its
+number within that season.
 
 An episode reaches listeners three ways. A public Topic has a public RSS feed at `/topics/:id/podcast.xml`, a private or
 invite Topic gives each listener their own feed at `/podcast-feeds/:token.xml`, and each is cached in Redis while it
@@ -137,9 +137,11 @@ shared link previews no matter what the Topic's visibility is, and a private or 
 and shows the Topic's gate to anyone who may not see the Topic. Covers are drawn over
 `docs/design/podcast/cover-base.png`.
 
-`PODCAST_SPEECH_MODEL` set empty turns episodes off, and `PODCAST_RENDER_CONCURRENCY` (16 by default) limits the episode
-activities on each worker replica. The free plan keeps one episode at a time per Topic, and episodes pause once a user's
-monthly spend passes 80 percent of the budget, so scans keep running.
+`PODCAST_SPEECH_MODEL` set empty turns episodes off, and `PODCAST_RECORDING_CONCURRENCY` (16 by default) limits the episode
+activities on each worker replica. A free Topic gets a 10-minute episode after every brew and keeps only the latest
+short one, where a paid plan gets 30 minutes and keeps every episode. A brew that finishes while the free Topic's short
+episode is still recording makes no episode, and its findings go into the next one. Episodes pause once a user's monthly
+spend passes the plan's share of the budget, half on the free plan and 80 percent on a paid one, so scans keep running.
 
 ### Chat
 
@@ -391,9 +393,9 @@ and analytics are off but the app behaves the same. A visitor's search on the MC
 and every other tool still works.
 
 The podcast needs a `GEMINI_API_KEY` on the LiteLLM service and ffmpeg (`brew install ffmpeg`). `PODCAST_SPEECH_MODEL`
-names the speech model (default `gemini-3.8-flash-tts`), `PODCAST_RENDER_CONCURRENCY` sets how many render activities
+names the speech model (default `gemini-3.8-flash-tts`), `PODCAST_RECORDING_CONCURRENCY` sets how many recording activities
 one worker runs at once, and `PODCAST_HOST_VOICE` and `PODCAST_COHOST_VOICE` name the two voices. To run without the
-podcast, set `PODCAST_SPEECH_MODEL` empty. No episode renders and the topic page shows no player.
+podcast, set `PODCAST_SPEECH_MODEL` empty. No episode is recorded and the topic page shows no player.
 
 Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium plans and a Stripe webhook derives the
 active plan. It needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the per-plan `STRIPE_PRICE_*` ids, and a metered
@@ -438,7 +440,7 @@ bun run smoke:chat         # just the topic chat retrieval smoke test (question 
 bun run smoke:eval         # just the review pipeline eval's smoke test: one tiny labeled fixture through the real gate and scoring
 bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, detach succession, the team page gate, its avatar versions, and who sent an invite or invited a member
 bun run smoke:room         # just the team chat-room smoke test: the access matrix, isolation, budget rejection, mention rows, and the room lock
-bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a viewer may open, one per holding team, and the unseen count
+bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a user may open, one per holding team, and the unseen count
 bun run smoke:mcp          # just the mcp smoke test: what a visitor reads, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, the edit tools, and the rate limit
 bun run smoke:tools        # just the topic tools smoke test: the gate inside each tool, the prompt version writes, adding and removing sources up to the limit, and that no tool starts a scan
 bun run smoke:podcast-episodes # just the podcast episode routes smoke test: access, audio, feeds, covers, and removal

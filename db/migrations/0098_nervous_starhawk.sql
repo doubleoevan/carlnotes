@@ -1,0 +1,1 @@
+ALTER TABLE "episodes" ADD COLUMN "is_short" boolean DEFAULT false NOT NULL;

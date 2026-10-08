@@ -47,8 +47,8 @@ const FLEX_INPUT_RATE_MULTIPLIER = 0.5
 // LiteLLM charges flex audio at the full rate, and Google bills flex audio at half
 const FLEX_AUDIO_RATE_MULTIPLIER = 1
 
-// one speech call to price. its tier, its text input and audio output tokens, and when it rendered
-export type SpeechCostOptions = { speechTier: SpeechTier; inputTokens: number; audioTokens: number; renderedAt?: Date }
+// one speech call to price. its tier, its text input and audio output tokens, and when it was recorded
+export type SpeechCostOptions = { speechTier: SpeechTier; inputTokens: number; audioTokens: number; recordedAt?: Date }
 
 // the per-stage dollar breakdown recorded on the Scan
 export type StageCosts = {
@@ -143,16 +143,16 @@ export function tokenCost(tokens: number, ratePerMillion: number): number {
 }
 
 /**
- * Estimates the dollars that LiteLLM charges a key for one speech call, at the tier's rates on the render date.
+ * Estimates the dollars that LiteLLM charges a key for one speech call, at the tier's rates on the recording date.
  */
 export function speechCost({
 	speechTier,
 	inputTokens,
 	audioTokens,
-	renderedAt = new Date(),
+	recordedAt = new Date(),
 }: SpeechCostOptions): number {
 	// price each kind of token at the standard rate, times the flex multiplier on flex, and double the total after 2027
-	const dateRateMultiplier = renderedAt.getTime() >= SPEECH_RATES_DOUBLE_AT ? 2 : 1
+	const dateRateMultiplier = recordedAt.getTime() >= SPEECH_RATES_DOUBLE_AT ? 2 : 1
 	const isFlexTier = speechTier === "flex"
 	const inputDollars =
 		tokenCost(inputTokens, SPEECH_INPUT_COST_PER_MILLION_TOKENS) * (isFlexTier ? FLEX_INPUT_RATE_MULTIPLIER : 1)

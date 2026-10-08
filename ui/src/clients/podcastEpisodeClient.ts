@@ -18,9 +18,6 @@ const podcastFeedUrlResponse = z.object({ podcastFeedUrl: z.string() })
 // the url params of a podcast episode's own page
 export type PodcastEpisodePageParams = { topicId: string; season: string; episodeNumber: string }
 
-// the result of saving a topic's podcast setting
-export type TopicPodcastResult = "saved" | "planRejected" | "failed"
-
 /**
  * Loads one podcast episode with its chapters and the user's progress,
  * or null if the episode is missing or the user may not listen to the episode.
@@ -123,23 +120,17 @@ export async function sendPodcastEpisodeChapterRating({
 type SendTopicPodcastOptions = { topicId: string; isPodcastEnabled: boolean }
 
 /**
- * Turns a topic's podcast on or off and returns whether the change saved, failed, or the plan rejected the change.
- * A request that never reaches the api counts as failed.
+ * Turns a topic's podcast on or off and returns whether the change saved.
+ * A request that never reaches the api did not save.
  */
-export async function sendTopicPodcast({
-	topicId,
-	isPodcastEnabled,
-}: SendTopicPodcastOptions): Promise<TopicPodcastResult> {
+export async function sendTopicPodcast({ topicId, isPodcastEnabled }: SendTopicPodcastOptions): Promise<boolean> {
 	// a request that throws an error has no response
 	const response = await apiClient.api.topics[":id"].podcast
 		.$put({ param: { id: topicId }, json: { isPodcastEnabled } })
 		.catch(() => null)
 
-	// an ok response saved the change, a 402 means the plan rejected the change, and anything else failed
-	if (response?.ok) {
-		return "saved"
-	}
-	return response?.status === 402 ? "planRejected" : "failed"
+	// only an ok response saved the change
+	return response?.ok === true
 }
 
 /**

@@ -432,7 +432,7 @@ async function loadChatRoomAttachment(
 }
 
 // how long a cache may keep a link preview image. the bytes for one link preview id never change,
-// and one stored image is the same for every viewer
+// and one stored image is the same for everyone who loads it
 const PREVIEW_IMAGE_CACHE_CONTROL = "public, max-age=86400"
 
 /** The chat message id a backward page starts reading below, or undefined for the latest page. */

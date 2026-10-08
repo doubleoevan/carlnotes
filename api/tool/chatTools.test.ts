@@ -15,7 +15,6 @@ import {
 	toProposeTopicEditTool,
 	toRejectionText,
 	toSuggestionsText,
-	toUpdateTopicFieldsText,
 } from "./chatTools"
 
 // the tools bound to one topic
@@ -239,12 +238,4 @@ test("openNewTopicChat opens the chat without counting as a save", async () => {
 	// check the count stays zero
 	expect(toolCalls).toEqual({ count: 0, topicSaves: [], topicSaveRejections: [], isNewTopicChatOpened: true })
 	expect(toolText).toContain("opening beside this one")
-})
-
-// the plan's rejection of the podcast switch has its own text
-test("a rejected podcast switch names the free plan's one episode", () => {
-	expect(toUpdateTopicFieldsText({ status: "podcastPlan" })).toContain(
-		"one podcast episode the free plan gives each topic",
-	)
-	expect(toUpdateTopicFieldsText({ status: "forbidden" })).toBe(toRejectionText("forbidden"))
 })

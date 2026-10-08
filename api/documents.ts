@@ -1,7 +1,7 @@
 // the documents served beside the pages, and the redirect from the old /pricing path.
 // the documents are the feeds, the sitemap, the llms files, the IndexNow key, and security.txt
 import { appUrl } from "@shared/appUrl"
-import { isPodcastEpisodeRenderingConfigured } from "@shared/podcastEpisodes"
+import { isPodcastEpisodeRecordingConfigured } from "@shared/podcastEpisodes"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
@@ -41,7 +41,7 @@ export const documentsRoute = new Hono()
 		// only a public topic with a published podcast episode has a public feed
 		const renderedPodcastFeed =
 			topic?.visibility === "public" ? await loadRenderedPodcastFeed({ topic, listener: null }) : null
-		if (!isPodcastEpisodeRenderingConfigured() || !renderedPodcastFeed?.xml.includes("<item>")) {
+		if (!isPodcastEpisodeRecordingConfigured() || !renderedPodcastFeed?.xml.includes("<item>")) {
 			return context.text("not found", 404)
 		}
 
@@ -55,7 +55,7 @@ export const documentsRoute = new Hono()
 	.get("/podcast-feeds/:tokenFile", async (context) => {
 		// read the podcast feed token from the file name, and look up its listener
 		const podcastFeedToken = context.req.param("tokenFile").replace(/\.xml$/, "")
-		const podcastFeedTokenListener = isPodcastEpisodeRenderingConfigured()
+		const podcastFeedTokenListener = isPodcastEpisodeRecordingConfigured()
 			? await loadPodcastFeedTokenListener(podcastFeedToken)
 			: null
 

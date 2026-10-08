@@ -115,7 +115,7 @@ export function toPodcastEpisodeAudioKey(podcastEpisodeId: string): string {
 	return `episodes/${podcastEpisodeId}/audio.mp3`
 }
 
-// the object key for one chapter's audio, which exists only while its Podcast Episode renders
+// the object key for one chapter's audio, which exists only while its Podcast Episode is recording
 export function toPodcastEpisodeChapterKey(podcastEpisodeId: string, position: number): string {
 	return `episodes/${podcastEpisodeId}/chapters/${position}.wav`
 }

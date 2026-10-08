@@ -71,26 +71,28 @@ export async function traceStage<Result>(
 	})
 }
 
-// one podcast episode render's trace. its Topic and Scan, the speech tier, each chapter's attempt count,
-// how long the render took, and its cost
-export type PodcastEpisodeRenderTrace = {
+// one podcast episode recording's trace. its Topic and Scan, the speech tier, each chapter's attempt count,
+// how long the recording took, and its cost
+export type PodcastEpisodeRecordingTrace = {
 	podcastEpisodeId: string
 	topicId: string
 	scanId: string | null
 	speechTier: string
 	chapterAttemptCounts: number[]
 	// the seconds from the row's creation to its publish
-	renderSeconds: number
+	recordingSeconds: number
 	costDollars: number
 	costPerAudioMinuteDollars: number
 }
 
 /**
- * Records one podcast episode render as its own Langfuse trace, or nothing without Langfuse keys.
+ * Traces one podcast episode's recording as its own Langfuse trace, or nothing without Langfuse keys.
  */
-export async function tracePodcastEpisodeRender(podcastEpisodeRenderTrace: PodcastEpisodeRenderTrace): Promise<void> {
-	await startActiveObservation("episode-render", async (span) => {
-		span.update({ metadata: podcastEpisodeRenderTrace })
+export async function tracePodcastEpisodeRecording(
+	podcastEpisodeRecordingTrace: PodcastEpisodeRecordingTrace,
+): Promise<void> {
+	await startActiveObservation("episode-recording", async (span) => {
+		span.update({ metadata: podcastEpisodeRecordingTrace })
 	})
 }
 

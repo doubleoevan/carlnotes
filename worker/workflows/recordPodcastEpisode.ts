@@ -1,15 +1,15 @@
-// the durable podcast episode render. plan, outline, one script call per segment, one speech call per chapter, encode,
-// and publish. a succeeded Scan starts the render as a child workflow that outlives the scan workflow
+// the durable podcast episode recording. plan, outline, one script call per segment, one speech call per chapter, encode,
+// and publish. a succeeded Scan starts the recording as a child workflow that outlives the scan workflow
 import { getExternalWorkflowHandle, proxyActivities } from "@temporalio/workflow"
 // a relative import. temporal bundles workflow code with webpack, which has no @shared alias
 import { toWorkflowFailureReason } from "../../shared/scanFailure"
 import type { SpeechTier } from "../budget"
-import type * as podcastEpisodeActivities from "./renderPodcastEpisodeActivities"
+import type * as podcastEpisodeActivities from "./recordPodcastEpisodeActivities"
 import type { ScanTrigger } from "./runTopicScanActivities"
 import { podcastEpisodeOutlineSettledSignal } from "./sendScanEmail"
 
 // the task queue that this workflow and its activities run on, kept apart from the scan activities' slots
-export const PODCAST_EPISODE_TASK_QUEUE = "episode-renders"
+export const PODCAST_EPISODE_TASK_QUEUE = "episode-recordings"
 
 // the plan, the saved script, the publish, and the failure are short writes
 const WRITE_TIMEOUT_MS = 2 * 60 * 1000
@@ -50,13 +50,13 @@ const { outlinePodcastEpisode, writePodcastEpisodeSegment } = proxyActivities<ty
 })
 
 // a chapter's activity fails for good on a rejection and retries a failure that another attempt can fix
-const { renderPodcastEpisodeChapter: renderStandardChapter } = proxyActivities<typeof podcastEpisodeActivities>({
+const { recordPodcastEpisodeChapter: recordStandardChapter } = proxyActivities<typeof podcastEpisodeActivities>({
 	startToCloseTimeout: STANDARD_CHAPTER_TIMEOUT_MS,
 	retry: { ...CHAPTER_RETRY_POLICY, maximumAttempts: STANDARD_CHAPTER_ATTEMPTS },
 })
 
 // a flex chapter has no attempt limit. the six-hour limit across its attempts ends its wait
-const { renderPodcastEpisodeChapter: renderFlexChapter } = proxyActivities<typeof podcastEpisodeActivities>({
+const { recordPodcastEpisodeChapter: recordFlexChapter } = proxyActivities<typeof podcastEpisodeActivities>({
 	startToCloseTimeout: FLEX_CHAPTER_TIMEOUT_MS,
 	scheduleToCloseTimeout: FLEX_CHAPTER_TOTAL_TIMEOUT_MS,
 	retry: CHAPTER_RETRY_POLICY,
@@ -69,7 +69,7 @@ const { encodePodcastEpisode } = proxyActivities<typeof podcastEpisodeActivities
 })
 
 // the Scan whose Podcast Episode this is, its Topic, the user that the Scan billed, and what asked for the Scan
-export type RenderPodcastEpisodeWorkflowInput = {
+export type RecordPodcastEpisodeWorkflowInput = {
 	scanId: string
 	topicId: string
 	billedUserId: string
@@ -77,15 +77,15 @@ export type RenderPodcastEpisodeWorkflowInput = {
 }
 
 /**
- * Renders one Scan's Podcast Episode and signals the Scan's email workflow once the outline is settled.
+ * Records one Scan's Podcast Episode and signals the Scan's email workflow once the outline is settled.
  */
-export async function renderPodcastEpisodeWorkflow({
+export async function recordPodcastEpisodeWorkflow({
 	scanId,
 	topicId,
 	billedUserId,
 	trigger,
-}: RenderPodcastEpisodeWorkflowInput): Promise<void> {
-	// plan the Podcast Episode. if the plan fails or finds nothing to render, end the email's wait and stop
+}: RecordPodcastEpisodeWorkflowInput): Promise<void> {
+	// plan the Podcast Episode. if the plan fails or finds nothing to record, end the email's wait and stop
 	const podcastEpisodePlan = await planPodcastEpisode({ scanId, topicId, billedUserId }).catch(
 		async (error: unknown) => {
 			await signalOutlineSettled(scanId)
@@ -116,39 +116,39 @@ export async function renderPodcastEpisodeWorkflow({
 		)
 		const chapterCount = await savePodcastEpisodeScript(podcastEpisodeId, podcastEpisodeSegments)
 
-		// a scheduled Scan's chapters render on the flex tier, and any other Scan's on the standard tier
+		// a scheduled Scan's chapters are recorded on the flex tier, and any other Scan's on the standard tier
 		const isScheduledScan = trigger === "scheduled"
 		const speechTier: SpeechTier = isScheduledScan ? "flex" : "standard"
-		const renderChapter = isScheduledScan ? renderFlexChapter : renderStandardChapter
+		const recordChapter = isScheduledScan ? recordFlexChapter : recordStandardChapter
 		const chapterPositions = Array.from({ length: chapterCount }, (_, position) => position)
 
-		// render every chapter in parallel. a chapter whose speech fails for good is left out,
-		// and the Podcast Episode fails only if no chapter renders
+		// record every chapter in parallel. a chapter whose speech fails for good is left out,
+		// and the Podcast Episode fails only if no chapter is recorded
 		let firstChapterError: unknown = null
-		const renderChapterResults = await Promise.all(
+		const recordChapterResults = await Promise.all(
 			chapterPositions.map((position) =>
-				renderChapter({ podcastEpisodeId, billedUserId, position, speechTier }).catch((error: unknown) => {
+				recordChapter({ podcastEpisodeId, billedUserId, position, speechTier }).catch((error: unknown) => {
 					firstChapterError ??= error
 					return null
 				}),
 			),
 		)
-		const renderedChapters = renderChapterResults.filter((renderChapterResult) => renderChapterResult !== null)
-		if (renderedChapters.length === 0) {
+		const recordedChapters = recordChapterResults.filter((recordChapterResult) => recordChapterResult !== null)
+		if (recordedChapters.length === 0) {
 			throw firstChapterError
 		}
 
 		// join the chapters' audio from object storage, then publish the Podcast Episode
-		const encodedPodcastEpisode = await encodePodcastEpisode(podcastEpisodeId, renderedChapters)
-		const chapterAttemptCounts = renderedChapters.map((renderedChapter) => renderedChapter.attemptCount)
-		const renderedChapterPositions = renderedChapters.map((renderedChapter) => renderedChapter.position)
+		const encodedPodcastEpisode = await encodePodcastEpisode(podcastEpisodeId, recordedChapters)
+		const chapterAttemptCounts = recordedChapters.map((recordedChapter) => recordedChapter.attemptCount)
+		const recordedChapterPositions = recordedChapters.map((recordedChapter) => recordedChapter.position)
 		await publishPodcastEpisode({
 			podcastEpisodeId,
 			plannedFindings,
 			encodedPodcastEpisode,
 			speechTier,
 			chapterAttemptCounts,
-			renderedChapterPositions,
+			recordedChapterPositions,
 		})
 	} catch (error) {
 		await failPodcastEpisode({ podcastEpisodeId, reason: toWorkflowFailureReason(error) })

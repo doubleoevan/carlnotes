@@ -198,10 +198,7 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 			return context.json({ ok: true })
 		}
 
-		// respond 402 if the plan renders no more podcast episodes, and 404 or 403 for the gate's rejections
-		if (updateTopicFieldsResult.status === "podcastPlan") {
-			return context.json({ error: "podcast-plan" }, 402)
-		}
+		// respond with a 404 or 403 for the gate's rejections
 		return updateTopicFieldsResult.status === "missing"
 			? context.json({ error: "not found" }, 404)
 			: context.json({ error: "forbidden" }, 403)

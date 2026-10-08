@@ -17,10 +17,10 @@ import { cn } from "@/lib/utils"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { usePodcastEpisodePlayer } from "@/stores/podcastEpisodePlayerStore"
 
-// how often a podcast episode that is still rendering is checked for its audio
-const RENDERING_POLL_MS = 5_000
+// how often a podcast episode that is still recording is checked for its audio
+const RECORDING_POLL_MS = 5_000
 
-// the topic, the calls behind a chapter's topic finding note, the scan button for a podcast episode that failed to render,
+// the topic, the calls behind a chapter's topic finding note, the scan button for a podcast episode that failed to record,
 // and the call that runs after the podcast episode is removed
 type PodcastEpisodePlayerProps = {
 	topic: TopicResponse
@@ -30,7 +30,7 @@ type PodcastEpisodePlayerProps = {
 }
 
 /**
- * The topic page's podcast episode player, or nothing if no podcast episode shows or is about to render.
+ * The topic page's podcast episode player, or nothing if no podcast episode shows or is about to record.
  */
 export function PodcastEpisodePlayer({
 	topic,
@@ -40,10 +40,10 @@ export function PodcastEpisodePlayer({
 }: PodcastEpisodePlayerProps) {
 	// the loaded episode, the episode that this player shows, and whether the podcast feed or remove dialog is open
 	const { podcastEpisode: loadedPodcastEpisode } = usePodcastEpisodePlayer()
-	const { podcastEpisode, willScanRenderPodcastEpisode } = useShownPodcastEpisode(topic)
+	const { podcastEpisode, willScanRecordPodcastEpisode } = useShownPodcastEpisode(topic)
 	const [isPodcastFeedDialogOpen, setIsPodcastFeedDialogOpen] = useState(false)
 	const [isRemovePodcastEpisodeDialogOpen, setIsRemovePodcastEpisodeDialogOpen] = useState(false)
-	if (!podcastEpisode && !willScanRenderPodcastEpisode) {
+	if (!podcastEpisode && !willScanRecordPodcastEpisode) {
 		return null
 	}
 
@@ -83,7 +83,7 @@ export function PodcastEpisodePlayer({
 				/>
 			) : (
 				<UnpublishedPodcastEpisodeCard
-					podcastEpisode={podcastEpisode ?? UNTITLED_RENDERING_PODCAST_EPISODE}
+					podcastEpisode={podcastEpisode ?? UNTITLED_RECORDING_PODCAST_EPISODE}
 					scanControl={isManualScanShown(topic) ? scanControl : undefined}
 				/>
 			)}
@@ -101,11 +101,11 @@ export function PodcastEpisodePlayer({
 	)
 }
 
-// the podcast episode that the player shows, and whether a running scan is about to render an episode instead
-type ShownPodcastEpisodeState = { podcastEpisode: PodcastEpisode | null; willScanRenderPodcastEpisode: boolean }
+// the podcast episode that the player shows, and whether a running scan is about to record an episode instead
+type ShownPodcastEpisodeState = { podcastEpisode: PodcastEpisode | null; willScanRecordPodcastEpisode: boolean }
 
 // the podcast episode that the player shows. this topic's loaded episode comes first, then the linked episode,
-// then a rendering episode, then a running scan's next episode, then a failed episode, then the latest episode
+// then a recording episode, then a running scan's next episode, then a failed episode, then the latest episode
 function useShownPodcastEpisode(topic: TopicResponse): ShownPodcastEpisodeState {
 	const linkedPodcastEpisodeId = useSearchParams().get("episode")
 	const [linkedPodcastEpisode, setLinkedPodcastEpisode] = useState<PodcastEpisode | null>(null)
@@ -118,9 +118,9 @@ function useShownPodcastEpisode(topic: TopicResponse): ShownPodcastEpisodeState 
 			return
 		}
 
-		// load the linked podcast episode, and poll again while the episode is rendering
+		// load the linked podcast episode, and poll again while the episode is recording
 		let isCurrentLinkedPodcastEpisode = true
-		let renderingPollTimer: ReturnType<typeof setTimeout> | undefined
+		let recordingPollTimer: ReturnType<typeof setTimeout> | undefined
 		const loadLinkedPodcastEpisode = async (): Promise<void> => {
 			const fetchedPodcastEpisode = await fetchPodcastEpisode(linkedPodcastEpisodeId)
 			if (!isCurrentLinkedPodcastEpisode) {
@@ -130,8 +130,8 @@ function useShownPodcastEpisode(topic: TopicResponse): ShownPodcastEpisodeState 
 			// keep the linked podcast episode only if the episode is this topic's
 			const topicPodcastEpisode = fetchedPodcastEpisode?.topicId === topicId ? fetchedPodcastEpisode : null
 			setLinkedPodcastEpisode(topicPodcastEpisode)
-			if (topicPodcastEpisode?.status === "rendering") {
-				renderingPollTimer = setTimeout(loadLinkedPodcastEpisode, RENDERING_POLL_MS)
+			if (topicPodcastEpisode?.status === "recording") {
+				recordingPollTimer = setTimeout(loadLinkedPodcastEpisode, RECORDING_POLL_MS)
 			}
 		}
 		void loadLinkedPodcastEpisode()
@@ -139,41 +139,41 @@ function useShownPodcastEpisode(topic: TopicResponse): ShownPodcastEpisodeState 
 		// stop the poll when the linked podcast episode changes
 		return () => {
 			isCurrentLinkedPodcastEpisode = false
-			clearTimeout(renderingPollTimer)
+			clearTimeout(recordingPollTimer)
 		}
 	}, [linkedPodcastEpisodeId, topicId])
 
-	// this topic's loaded podcast episode, the linked episode, or the episode that is rendering
+	// this topic's loaded podcast episode, the linked episode, or the episode that is recording
 	const { podcast } = topic
 	const unpublishedPodcastEpisode = podcast?.unpublishedPodcastEpisode ?? null
 	const topicLoadedPodcastEpisode = loadedPodcastEpisode?.topicId === topic.id ? loadedPodcastEpisode : null
-	const renderingPodcastEpisode = unpublishedPodcastEpisode?.status === "rendering" ? unpublishedPodcastEpisode : null
-	const shownPodcastEpisode = topicLoadedPodcastEpisode ?? linkedPodcastEpisode ?? renderingPodcastEpisode
+	const recordingPodcastEpisode = unpublishedPodcastEpisode?.status === "recording" ? unpublishedPodcastEpisode : null
+	const shownPodcastEpisode = topicLoadedPodcastEpisode ?? linkedPodcastEpisode ?? recordingPodcastEpisode
 	if (shownPodcastEpisode) {
-		return { podcastEpisode: shownPodcastEpisode, willScanRenderPodcastEpisode: false }
+		return { podcastEpisode: shownPodcastEpisode, willScanRecordPodcastEpisode: false }
 	}
 
-	// a running scan is about to render an episode if the podcast is on and the owner's plan still renders episodes
+	// a running scan is about to record an episode if the podcast is on
 	const isScanRunning = topic.scans.some((topicScan) => topicScan.status === "running")
-	if (isScanRunning && podcast?.isEnabled && podcast.canRenderPodcastEpisode) {
-		return { podcastEpisode: null, willScanRenderPodcastEpisode: true }
+	if (isScanRunning && podcast?.isEnabled) {
+		return { podcastEpisode: null, willScanRecordPodcastEpisode: true }
 	}
 
-	// a podcast episode that failed to render shows only to a user who may scan the topic.
+	// a podcast episode that failed to record shows only to a user who may scan the topic.
 	// every other user gets the latest episode
 	const failedPodcastEpisode = isManualScanShown(topic) ? unpublishedPodcastEpisode : null
 	return {
 		podcastEpisode: failedPodcastEpisode ?? topic.latestPodcastEpisode,
-		willScanRenderPodcastEpisode: false,
+		willScanRecordPodcastEpisode: false,
 	}
 }
 
 // the fields that the card of a podcast episode with no audio shows
 type UnpublishedPodcastEpisode = Pick<PodcastEpisode, "status" | "title" | "smallCoverUrl">
 
-// the podcast episode that a running scan is about to render, which has no title and no cover yet
-const UNTITLED_RENDERING_PODCAST_EPISODE: UnpublishedPodcastEpisode = {
-	status: "rendering",
+// the podcast episode that a running scan is about to record, which has no title and no cover yet
+const UNTITLED_RECORDING_PODCAST_EPISODE: UnpublishedPodcastEpisode = {
+	status: "recording",
 	title: null,
 	smallCoverUrl: null,
 }
@@ -181,24 +181,24 @@ const UNTITLED_RENDERING_PODCAST_EPISODE: UnpublishedPodcastEpisode = {
 // the podcast episode with no audio, and the scan button if the user may scan the topic
 type UnpublishedPodcastEpisodeCardProps = { podcastEpisode: UnpublishedPodcastEpisode; scanControl?: React.ReactNode }
 
-// the card of a podcast episode with no audio, which is still rendering or failed to render.
+// the card of a podcast episode with no audio, which is still recording or failed to record.
 // a failed episode's card has the scan button
 function UnpublishedPodcastEpisodeCard({ podcastEpisode, scanControl }: UnpublishedPodcastEpisodeCardProps) {
 	return (
 		<div className={cn(INFO_CARD_CLASS, "flex items-center gap-4")}>
-			{/* the podcast episode's cover. a rendering episode shows the recording cover until its own cover loads */}
+			{/* the podcast episode's cover. a recording episode shows the recording cover until its own cover loads */}
 			<PodcastEpisodeCover
 				podcastEpisode={podcastEpisode}
 				className={cn(
 					"border-separator shadow-lift size-24 border sm:size-36",
-					podcastEpisode.status === "rendering" && COVER_RECORDING_CLASS,
+					podcastEpisode.status === "recording" && COVER_RECORDING_CLASS,
 				)}
 			/>
 			<div className="flex min-w-0 flex-col gap-1">
 				{/* the podcast episode's title, or the show's name until the title is written */}
 				<div className="text-lg leading-snug font-bold">{podcastEpisode.title ?? PODCAST_NAME}</div>
-				{/* the recording line while the podcast episode renders, or the failure line */}
-				{podcastEpisode.status === "rendering" && (
+				{/* the recording line while the podcast episode records, or the failure line */}
+				{podcastEpisode.status === "recording" && (
 					<p className="text-base font-semibold sm:text-lg">
 						{/* the emoji sits outside the shimmer, which paints its text with a clipped gradient */}
 						<span aria-hidden="true" className="mr-1.5">
@@ -207,11 +207,11 @@ function UnpublishedPodcastEpisodeCard({ podcastEpisode, scanControl }: Unpublis
 						<span className="shimmer-text">Carl and Vienna are recording...</span>
 					</p>
 				)}
-				{podcastEpisode.status !== "rendering" && (
+				{podcastEpisode.status !== "recording" && (
 					<p className="text-muted-foreground text-sm">{`${PODCAST_NAME} failed to record.`}</p>
 				)}
 				{/* the scan button, under a failed podcast episode's line */}
-				{podcastEpisode.status !== "rendering" && scanControl && (
+				{podcastEpisode.status !== "recording" && scanControl && (
 					<div className="text-muted-foreground mt-1 flex items-center gap-2 text-sm">{scanControl}</div>
 				)}
 			</div>

@@ -10,12 +10,12 @@ import {
 } from "@temporalio/workflow"
 // a relative import. temporal bundles workflow code with webpack, which has no @shared alias
 import { toWorkflowFailureReason } from "../../shared/scanFailure"
-// the workflow that renders a succeeded Scan's Podcast Episode, and the queue that it runs on
+// the workflow that records a succeeded Scan's Podcast Episode, and the queue that it runs on
 import {
 	PODCAST_EPISODE_TASK_QUEUE,
-	type RenderPodcastEpisodeWorkflowInput,
-	renderPodcastEpisodeWorkflow,
-} from "./renderPodcastEpisode"
+	type RecordPodcastEpisodeWorkflowInput,
+	recordPodcastEpisodeWorkflow,
+} from "./recordPodcastEpisode"
 import type * as scanActivities from "./runTopicScanActivities"
 // the workflow that emails a completed Scan's outcome, the queue that it runs on, and the signal that ends its wait
 import {
@@ -55,7 +55,7 @@ const { reviewForScan } = proxyActivities<typeof scanActivities>({
 })
 
 // the closing writes are idempotent, so they may retry. they are short enough not to need a heartbeat
-const { finishScan, failScan, stopScan, reportScanEmailNotStarted, reportPodcastEpisodeRenderNotStarted } =
+const { finishScan, failScan, stopScan, reportScanEmailNotStarted, reportPodcastEpisodeRecordingNotStarted } =
 	proxyActivities<typeof scanActivities>({
 		startToCloseTimeout: FINISH_TIMEOUT_MS,
 		scheduleToCloseTimeout: FINISH_TOTAL_TIMEOUT_MS,
@@ -100,17 +100,17 @@ export async function runTopicScanWorkflow(
 		await failScan(scanId, toWorkflowFailureReason(error), spentBudget)
 	}
 
-	// a succeeded Scan starts its podcast episode render in its own workflow.
+	// a succeeded Scan starts its podcast episode recording in its own workflow.
 	// a Scan replaying from before the patch started no podcast episode workflow
-	const isPodcastEpisodeReadyToRender = finishedScanStatus === "succeeded" && patched("episode-render-workflow")
+	const isPodcastEpisodeReadyToRecord = finishedScanStatus === "succeeded" && patched("episode-render-workflow")
 
 	// email a completed Scan's outcome from its own workflow, outside the try so nothing here can fail the Scan.
 	// a Scan replaying a closing write from before the patch already sent its email, so the patch marker skips the start
 	const isScanEmailReadyToSend = trigger !== "scheduled" || finishedScanStatus === "succeeded"
 	if (finishedScanStatus !== undefined && isScanEmailReadyToSend && patched("scan-email-workflow")) {
 		// a scheduled Scan's digest goes to the subscribers, and any other Scan reports to whoever ran it
-		// or created the Topic. either email waits for the outline of a Podcast Episode that is ready to render
-		const scanEmailInput = { scanId, topicId, isPodcastEpisodeReadyToRender }
+		// or created the Topic. either email waits for the outline of a Podcast Episode that is ready to record
+		const scanEmailInput = { scanId, topicId, isPodcastEpisodeReadyToRecord }
 		await startScanEmail(
 			trigger === "scheduled"
 				? { ...scanEmailInput, trigger }
@@ -118,18 +118,18 @@ export async function runTopicScanWorkflow(
 		)
 	}
 
-	// start the podcast episode render after the email workflow, so the email workflow exists before the outline signal.
+	// start the podcast episode recording after the email workflow, so the email workflow exists before the outline signal.
 	// the Podcast Episode bills the Scan's owner
-	if (isPodcastEpisodeReadyToRender) {
-		const isPodcastEpisodeRenderStarted = await startPodcastEpisodeRender({
+	if (isPodcastEpisodeReadyToRecord) {
+		const isPodcastEpisodeRecordingStarted = await startPodcastEpisodeRecording({
 			scanId,
 			topicId,
 			billedUserId: ownerId,
 			trigger,
 		})
 
-		// end the email's wait if the podcast episode render never started
-		if (!isPodcastEpisodeRenderStarted) {
+		// end the email's wait if the podcast episode recording never started
+		if (!isPodcastEpisodeRecordingStarted) {
 			await signalPodcastEpisodeOutlineSettled(scanId)
 		}
 	}
@@ -174,25 +174,28 @@ async function signalPodcastEpisodeOutlineSettled(scanId: string): Promise<void>
 	}
 }
 
-// start the podcast episode render as a child that outlives this workflow, and return whether a render is running.
+// start the podcast episode recording as a child that outlives this workflow, and return whether a recording is running.
 // a child that already exists is left alone, and any other failure to start is reported
-async function startPodcastEpisodeRender(
-	renderPodcastEpisodeWorkflowInput: RenderPodcastEpisodeWorkflowInput,
+async function startPodcastEpisodeRecording(
+	recordPodcastEpisodeWorkflowInput: RecordPodcastEpisodeWorkflowInput,
 ): Promise<boolean> {
 	try {
-		await startChild(renderPodcastEpisodeWorkflow, {
-			workflowId: `episode-${renderPodcastEpisodeWorkflowInput.scanId}`,
+		await startChild(recordPodcastEpisodeWorkflow, {
+			workflowId: `episode-${recordPodcastEpisodeWorkflowInput.scanId}`,
 			taskQueue: PODCAST_EPISODE_TASK_QUEUE,
 			parentClosePolicy: ParentClosePolicy.ABANDON,
-			args: [renderPodcastEpisodeWorkflowInput],
+			args: [recordPodcastEpisodeWorkflowInput],
 		})
 		return true
 	} catch (error) {
-		// a child with this id is the Scan's Podcast Episode, already rendering
+		// a child with this id is the Scan's Podcast Episode, already recording
 		if (error instanceof Error && error.name === "WorkflowExecutionAlreadyStartedError") {
 			return true
 		}
-		await reportPodcastEpisodeRenderNotStarted(renderPodcastEpisodeWorkflowInput.scanId, toWorkflowFailureReason(error))
+		await reportPodcastEpisodeRecordingNotStarted(
+			recordPodcastEpisodeWorkflowInput.scanId,
+			toWorkflowFailureReason(error),
+		)
 		return false
 	}
 }

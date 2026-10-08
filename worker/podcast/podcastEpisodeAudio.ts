@@ -8,7 +8,7 @@ import { db } from "../../db"
 import { podcastEpisodes } from "../../db/schema"
 import { type SpeechTier, speechCost } from "../budget"
 import { loadOrProvisionUserLiteLLMKey } from "../litellm"
-import { renderSpeech, SPEECH_BYTES_PER_SECOND, WAV_HEADER_BYTES } from "../speech"
+import { recordSpeech, SPEECH_BYTES_PER_SECOND, WAV_HEADER_BYTES } from "../speech"
 import {
 	downloadPodcastEpisodeFile,
 	toPodcastEpisodeAudioKey,
@@ -27,16 +27,16 @@ const LOUDNESS_FILTER = "loudnorm=I=-16:TP=-1.5:LRA=11:dual_mono=true"
 const MP3_BITRATE = "64k"
 const MP3_SAMPLE_RATE = "44100"
 
-// one chapter's render. the Podcast Episode, the user that the call bills, the chapter's position, and the speech tier
-export type RenderPodcastEpisodeChapterOptions = {
+// one chapter's recording. the Podcast Episode, the user that the call bills, the chapter's position, and the speech tier
+export type RecordPodcastEpisodeChapterOptions = {
 	podcastEpisodeId: string
 	billedUserId: string
 	position: number
 	speechTier: SpeechTier
 }
 
-// a rendered chapter. its position, where its audio is stored, and how many bytes the audio is
-export type RenderedChapter = { position: number; chapterKey: string; byteSize: number }
+// a recorded chapter. its position, where its audio is stored, and how many bytes the audio is
+export type RecordedChapter = { position: number; chapterKey: string; byteSize: number }
 
 // where a chapter starts and ends in the Podcast Episode's audio
 export type ChapterTime = { startSeconds: number; endSeconds: number }
@@ -49,7 +49,7 @@ export type EncodedPodcastEpisode = {
 	chapterTimes: ChapterTime[]
 }
 
-// a speech call that did not render, and whether another attempt can help
+// a speech call that recorded no audio, and whether another attempt can help
 export class SpeechFailedError extends Error {
 	constructor(
 		message: string,
@@ -60,15 +60,15 @@ export class SpeechFailedError extends Error {
 }
 
 /**
- * Renders one chapter as one two-speaker speech call on the billed user's key and writes its audio to object storage.
- * Throws a SpeechFailedError if the call did not render.
+ * Records one chapter as one two-speaker speech call on the billed user's key and writes its audio to object storage.
+ * Throws a SpeechFailedError if the call recorded no audio.
  */
-export async function renderPodcastEpisodeChapter({
+export async function recordPodcastEpisodeChapter({
 	podcastEpisodeId,
 	billedUserId,
 	position,
 	speechTier,
-}: RenderPodcastEpisodeChapterOptions): Promise<RenderedChapter> {
+}: RecordPodcastEpisodeChapterOptions): Promise<RecordedChapter> {
 	// read the chapter's turns from the script saved on the row
 	const [podcastEpisode] = await db
 		.select({ script: podcastEpisodes.script })
@@ -76,50 +76,50 @@ export async function renderPodcastEpisodeChapter({
 		.where(eq(podcastEpisodes.id, podcastEpisodeId))
 	const turns = podcastEpisode?.script ? toChapterTurns(podcastEpisode.script)[position] : undefined
 	if (!turns) {
-		throw new SpeechFailedError(`episode ${podcastEpisodeId} has no chapter ${position} to render`, false)
+		throw new SpeechFailedError(`episode ${podcastEpisodeId} has no chapter ${position} to record`, false)
 	}
 
-	// render the chapter's speech on the billed user's key. only a retryable failure is worth another attempt
+	// record the chapter's speech on the billed user's key. only a retryable failure is worth another attempt
 	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(billedUserId)
-	const renderSpeechResult = await renderSpeech({ turns, speechTier, litellmApiKey })
-	if (renderSpeechResult.outcome !== "rendered") {
-		const isRetryable = renderSpeechResult.outcome === "retryable"
-		throw new SpeechFailedError(`the speech call failed: ${renderSpeechResult.reason}`, isRetryable)
+	const recordSpeechResult = await recordSpeech({ turns, speechTier, litellmApiKey })
+	if (recordSpeechResult.outcome !== "recorded") {
+		const isRetryable = recordSpeechResult.outcome === "retryable"
+		throw new SpeechFailedError(`the speech call failed: ${recordSpeechResult.reason}`, isRetryable)
 	}
 
 	// record what the call cost before the audio is stored, so a failed upload still counts the paid call
-	const { inputTokens, audioTokens } = renderSpeechResult
+	const { inputTokens, audioTokens } = recordSpeechResult
 	await addPodcastEpisodeCost(podcastEpisodeId, speechCost({ speechTier, inputTokens, audioTokens }))
 
 	// store the audio under the Podcast Episode's temporary chapter prefix
 	const chapterKey = toPodcastEpisodeChapterKey(podcastEpisodeId, position)
-	await uploadAttachment(chapterKey, renderSpeechResult.audioBytes, "audio/wav")
-	return { position, chapterKey, byteSize: renderSpeechResult.audioBytes.byteLength }
+	await uploadAttachment(chapterKey, recordSpeechResult.audioBytes, "audio/wav")
+	return { position, chapterKey, byteSize: recordSpeechResult.audioBytes.byteLength }
 }
 
 /**
- * Joins the rendered chapters into one normalized MP3 on temporary files and stores it.
+ * Joins the recorded chapters into one normalized MP3 on temporary files and stores it.
  * Returns the stored file with each chapter's times.
  */
 export async function encodePodcastEpisode(
 	podcastEpisodeId: string,
-	renderedChapters: RenderedChapter[],
+	recordedChapters: RecordedChapter[],
 ): Promise<EncodedPodcastEpisode> {
 	// download the chapters in Podcast Episode order to a temporary directory that only this call uses
-	const orderedChapters = renderedChapters.toSorted((first, second) => first.position - second.position)
+	const orderedChapters = recordedChapters.toSorted((first, second) => first.position - second.position)
 	const temporaryDirectory = await mkdtemp(join(tmpdir(), "episode-"))
 	try {
-		const chapterPaths = orderedChapters.map((renderedChapter) =>
-			join(temporaryDirectory, `${renderedChapter.position}.wav`),
+		const chapterPaths = orderedChapters.map((recordedChapter) =>
+			join(temporaryDirectory, `${recordedChapter.position}.wav`),
 		)
 		await Promise.all(
-			orderedChapters.map((renderedChapter, i) =>
-				downloadPodcastEpisodeFile({ key: renderedChapter.chapterKey, filePath: chapterPaths[i] ?? "" }),
+			orderedChapters.map((recordedChapter, i) =>
+				downloadPodcastEpisodeFile({ key: recordedChapter.chapterKey, filePath: chapterPaths[i] ?? "" }),
 			),
 		)
 
 		// the talk's chapter times from the chapters' byte sizes, which place the outro, and the theme clips on disk
-		const speechChapterTimes = toChapterTimes(orderedChapters.map((renderedChapter) => renderedChapter.byteSize))
+		const speechChapterTimes = toChapterTimes(orderedChapters.map((recordedChapter) => recordedChapter.byteSize))
 		const speechSeconds = speechChapterTimes.at(-1)?.endSeconds ?? 0
 		const themeClips = await loadThemeClips()
 

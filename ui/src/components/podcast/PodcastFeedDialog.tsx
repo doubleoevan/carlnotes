@@ -107,10 +107,11 @@ export function PodcastFeedDialog({
 						{isOwnPodcastFeed && (
 							<div className="border-separator flex flex-col gap-2 border-t pt-3">
 								<p className="text-muted-foreground text-xs">
-									This link is yours alone. Anyone who has it can hear this topic's episodes, so keep it to yourself.
+									This link is yours alone. Anyone who has it can listen to this topic's episodes, so keep it to
+									yourself.
 								</p>
 								<p className="bg-muted/60 rounded-md px-2 py-1.5 text-xs break-all">{podcastFeedUrl}</p>
-								<Button variant="ghost" size="sm" className="self-start" onClick={() => void handleResetPodcastFeed()}>
+								<Button variant="ghost" size="sm" className="self-end" onClick={() => void handleResetPodcastFeed()}>
 									Reset my link
 								</Button>
 							</div>

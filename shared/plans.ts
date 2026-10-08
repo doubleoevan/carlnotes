@@ -1,4 +1,5 @@
-// each billing plan's topic limit, daily topic limit, daily scan limit, monthly spend backstop, and price
+// each billing plan's topic limit, daily topic limit, daily scan limit, monthly spend backstop, podcast episode
+// budget share, and price
 import type { billingIntervals, plans } from "./enums"
 
 export type Plan = (typeof plans)[number]
@@ -22,6 +23,8 @@ type PlanConfig = {
 	dailyScanLimit: BillingIntervalLimit
 	// the monthly spend backstop in cents. a limit on our cost to serve the user, not the user's price
 	monthlyBudgetCents: number
+	// the share of the monthly budget at which podcast episodes stop recording. scans keep running on the rest
+	podcastEpisodeBudgetShare: number
 	priceMonthlyCents: number
 	priceYearlyCents: number
 }
@@ -51,6 +54,7 @@ export const PLANS = {
 		dailyTopicLimit: { monthly: 1, yearly: 1 },
 		dailyScanLimit: { monthly: 5, yearly: 5 },
 		monthlyBudgetCents: 300,
+		podcastEpisodeBudgetShare: 0.5,
 		priceMonthlyCents: MONTHLY_PRICE_CENTS.free,
 		priceYearlyCents: MONTHLY_PRICE_CENTS.free * YEARLY_MONTHS,
 	},
@@ -64,6 +68,7 @@ export const PLANS = {
 		dailyTopicLimit: { monthly: 3, yearly: 4 },
 		dailyScanLimit: { monthly: 15, yearly: 20 },
 		monthlyBudgetCents: 1500,
+		podcastEpisodeBudgetShare: 0.8,
 		priceMonthlyCents: MONTHLY_PRICE_CENTS.plus,
 		priceYearlyCents: MONTHLY_PRICE_CENTS.plus * YEARLY_MONTHS,
 	},
@@ -77,6 +82,7 @@ export const PLANS = {
 		dailyTopicLimit: { monthly: 6, yearly: 7 },
 		dailyScanLimit: { monthly: 30, yearly: 40 },
 		monthlyBudgetCents: 3500,
+		podcastEpisodeBudgetShare: 0.8,
 		priceMonthlyCents: MONTHLY_PRICE_CENTS.premium,
 		priceYearlyCents: MONTHLY_PRICE_CENTS.premium * YEARLY_MONTHS,
 	},

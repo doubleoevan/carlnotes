@@ -21,7 +21,7 @@ they brew, and how many brews you can run by hand in a day.
 | Topics on a daily schedule | 1 | 3 monthly · 4 yearly | 6 monthly · 7 yearly |
 | Brews a day | 5 | 15 monthly · 20 yearly | 30 monthly · 40 yearly |
 | Members per team you lead | 10 | Unlimited | Unlimited |
-| Coffee Break podcast episodes | 1 at a time per topic | After every brew | After every brew |
+| Coffee Break podcast episodes | 10 minutes after every brew, latest kept | 30 minutes after every brew | 30 minutes after every brew |
 
 Yearly billing is ten times the monthly price instead of twelve: two months for free. Yearly plans get higher daily limits
 instead of overage, because a yearly subscription has no monthly invoice to bill overage to.

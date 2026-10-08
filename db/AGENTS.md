@@ -3,7 +3,8 @@
 Drizzle + Neon Postgres, and the Redis store.
 
 - `schema.ts` — the one schema registry.
-- `index.ts` — the pooled client, the connection pool's counts, and `isUniqueViolation`.
+- `index.ts` — the pooled client, the connection pool's counts, `isUniqueViolation`, and the `DbTransaction` and
+  `DbHandle` types that a function sharing its caller's transaction takes.
   The connection pool opens up to `DATABASE_POOL_MAX` connections, 40 by default,
   and a request waiting for a connection fails after `DATABASE_CONNECT_TIMEOUT_MS`, 10 seconds by default.
   Every api replica, every worker replica, the sweep, and the monthly budget reset can run at once,
@@ -31,8 +32,8 @@ Drizzle + Neon Postgres, and the Redis store.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, and budget
   override, which the api and the worker share.
   `monthlySpendDollars` reads a user's spend for the month on scans, chat turns, and podcast episodes.
-  `isPodcastEpisodeBudgetShareExhausted` is true once that spend reaches 80 percent of the budget, which pauses episodes.
-  `canRenderPodcastEpisode` allows a Topic one episode on the free plan, and any number on a paid plan or for an admin.
+  `isPodcastEpisodeBudgetShareExhausted` is true once that spend reaches the plan's share of the budget, which pauses
+  episodes. `hasFullPodcastEpisodes` is true on a paid plan or for an admin, and the free plan gets short episodes.
 - `podcastFeedCache.ts` — the Redis keys of a Topic's rendered podcast feeds,
   and `deletePodcastFeedCache`, which a publish, a removal, or a rename runs.
 - `requestMemo.ts` — the reads one request repeats, its user's access and each topic role, kept in the request's

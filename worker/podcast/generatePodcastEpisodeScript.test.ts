@@ -1,6 +1,7 @@
 // podcast episode script draft tests: the prompts, the numbers that a prompt lists its findings under,
 // the draft retries, and a draft that does not match its schema
 import { expect, test } from "bun:test"
+import { SHORT_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import { NoObjectGeneratedError } from "ai"
 import {
 	buildOutlinePrompt,
@@ -11,7 +12,8 @@ import {
 	toListedFindingId,
 	writeCheckedScriptDraft,
 } from "./generatePodcastEpisodeScript"
-import { type PodcastEpisodeFinding, type PodcastEpisodeOutline, RejectedScriptError } from "./podcastEpisodeScript"
+import { type PodcastEpisodeFinding, RejectedScriptError } from "./podcastEpisodeScript"
+import { outline, toWords } from "./podcastEpisodeScriptFixtures"
 
 // two Findings that a script is written from
 const podcastEpisodeFindings: PodcastEpisodeFinding[] = [
@@ -33,24 +35,12 @@ const podcastEpisodeFindings: PodcastEpisodeFinding[] = [
 	},
 ]
 
-// an outline that plans both Findings in one segment
-const outline: PodcastEpisodeOutline = {
-	title: "A quieter grinder, and your water",
-	description: "A quieter burr set, and why hard water sours a shot.",
-	segments: [
-		{
-			theme: "gear and water",
-			chapters: [
-				{ findingId: "finding-1", minutes: 2 },
-				{ findingId: "finding-2", minutes: 1 },
-			],
-		},
-	],
-}
-
-// a text of the given number of words
-function toWords(wordCount: number): string {
-	return Array.from({ length: wordCount }, () => "word").join(" ")
+// the Topic and the Findings that the prompt tests build from, for a short Podcast Episode
+const promptOptions = {
+	topicName: "Home espresso",
+	topicPrompt: "gear for a small kitchen",
+	podcastEpisodeFindings,
+	maxMinutes: SHORT_PODCAST_EPISODE_MINUTES,
 }
 
 test("toLimitedWords cuts a long text at the word limit and leaves a short one alone", () => {
@@ -61,10 +51,10 @@ test("toLimitedWords cuts a long text at the word limit and leaves a short one a
 })
 
 test("a prompt lists its findings under numbers, and a draft's number maps back to the finding's id", async () => {
-	// the outline's prompt numbers both Findings and shows neither id
-	const promptOptions = { topicName: "Home espresso", topicPrompt: "gear for a small kitchen", podcastEpisodeFindings }
+	// the outline's prompt numbers both Findings, names the short minute limit, and shows neither id
 	const { prompt } = await buildOutlinePrompt(promptOptions)
 	expect(prompt).toContain("finding number: 1\n")
+	expect(prompt).toContain("at or under 10 minutes")
 	expect(prompt).toContain("finding number: 2\n")
 	expect(prompt).not.toContain("finding-1")
 
@@ -76,7 +66,6 @@ test("a prompt lists its findings under numbers, and a draft's number maps back 
 
 test("the outline and segment prompts fence every untrusted input and restate the task last", async () => {
 	// build the outline prompt and the segment prompt over the same Topic and Findings
-	const promptOptions = { topicName: "Home espresso", topicPrompt: "gear for a small kitchen", podcastEpisodeFindings }
 	const outlinePrompt = await buildOutlinePrompt(promptOptions)
 	const segmentPrompt = await buildSegmentPrompt({ ...promptOptions, outline, segmentIndex: 0 })
 
@@ -148,7 +137,6 @@ test("writeCheckedScriptDraft tells each later draft why the draft before it was
 
 test("a prompt names the last rejection, and says none for a first draft", async () => {
 	// a first draft's outline prompt, and a segment prompt after a rejection
-	const promptOptions = { topicName: "Home espresso", topicPrompt: "gear for a small kitchen", podcastEpisodeFindings }
 	const firstDraftPrompt = await buildOutlinePrompt(promptOptions)
 	const laterDraftPrompt = await buildSegmentPrompt({
 		...promptOptions,

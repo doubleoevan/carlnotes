@@ -3,7 +3,7 @@ import type { ChatAttachment, RoomTopicToolCalls } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
 import { and, asc, desc, eq, gt, inArray, isNull, lt, type SQL, sql } from "drizzle-orm"
 import type { PgColumn } from "drizzle-orm/pg-core"
-import { db } from "../../db"
+import { type DbTransaction, db } from "../../db"
 import { chatRoomAttachments, chatRoomMessages, chatRoomSummaries, type topics } from "../../db/schema"
 import {
 	type ChatReplyPart,
@@ -27,8 +27,6 @@ const CHAT_ROOM_WINDOW_MESSAGES = 30
 // how much of each rolled-out chat message the running summary keeps
 const SUMMARY_MESSAGE_CHARS = 200
 const SUMMARY_MAX_CHARS = 8000
-
-type ChatRoomTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 // the chat room's topic side of a filter: one topic's chat room, or the team's own chat room stored with no topic
 export function toTopicFilter(column: PgColumn, topicId: string | null): SQL {
@@ -228,7 +226,7 @@ export async function postModelRejection(
 
 // carl's question for one chat turn
 async function buildModelRoomQuestion(
-	transaction: ChatRoomTransaction,
+	transaction: DbTransaction,
 	topicId: string | null,
 	teamId: string,
 ): Promise<string> {
@@ -269,7 +267,7 @@ export async function toModelRoomQuestion(modelRoomQuestionVariables: ModelRoomQ
 
 // the chat messages put each author's username into the content which tells carl who asked what
 async function toChatRoomMessages(
-	transaction: ChatRoomTransaction,
+	transaction: DbTransaction,
 	topicId: string | null,
 	windowChatMessages: (typeof chatRoomMessages.$inferSelect)[],
 ): Promise<string> {
@@ -315,7 +313,7 @@ async function toChatRoomMessages(
 
 // the chat room's attachments, each with the words or description carl reads them by
 async function toChatRoomAttachmentsBlock(
-	transaction: ChatRoomTransaction,
+	transaction: DbTransaction,
 	topicId: string | null,
 	teamId: string,
 ): Promise<string> {
@@ -354,7 +352,7 @@ function toClippedLine(content: string): string {
 
 // add the chat messages that left the window to the running summary, each clipped, the whole limited
 async function addChatRoomSummary(
-	transaction: ChatRoomTransaction,
+	transaction: DbTransaction,
 	topicId: string | null,
 	teamId: string,
 	endMessageId: number,

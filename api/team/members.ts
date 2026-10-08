@@ -1,7 +1,7 @@
 // team membership: who holds
 import { PLANS, type Plan } from "@shared/plans"
 import { and, count, eq, inArray, notInArray } from "drizzle-orm"
-import { db } from "../../db"
+import { type DbTransaction, db } from "../../db"
 import {
 	chatRoomMentions,
 	chatRoomMessages,
@@ -15,9 +15,6 @@ import {
 import { isAdminRole } from "../authorization"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
-
-// the transaction shape the membership writes run inside
-export type DbTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 /**
  * The user's role on a team, or null for a non-member. The one team authority answer routes build on.

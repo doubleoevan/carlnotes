@@ -5,14 +5,14 @@ import {
 	PODCAST_EPISODE_TITLE_MAX_CHARS,
 	type PodcastEpisodeChapterScript,
 } from "@shared/contracts"
+import { FULL_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
 import { scoreModel } from "../../worker/models"
+import { toCheckedPodcastEpisodeOutline } from "../../worker/podcast/podcastEpisodeOutline"
 import {
 	isRepeatedGoodbyeOpeningTurn,
-	MAX_PODCAST_EPISODE_MINUTES,
 	type PodcastEpisodeSegment,
 	RejectedScriptError,
-	toCheckedPodcastEpisodeOutline,
 	toCheckedPodcastEpisodeSegment,
 	toScriptMinutes,
 } from "../../worker/podcast/podcastEpisodeScript"
@@ -49,7 +49,7 @@ const DETERMINISTIC_ASSERTIONS: Assertion[] = [
 	},
 	{
 		type: "javascript",
-		metric: `the script is within ${MAX_PODCAST_EPISODE_MINUTES} minutes`,
+		metric: `the script is within ${FULL_PODCAST_EPISODE_MINUTES} minutes`,
 		value: gradeRunningTime,
 	},
 	{ type: "javascript", metric: `the description opens with "${DESCRIPTION_OPENING}"`, value: gradeDescriptionOpening },
@@ -124,7 +124,11 @@ function gradeWriterChecks(writerOutput: string, context: AssertionValueFunction
 
 	// run the checks. a RejectedScriptError is a failed check
 	try {
-		toCheckedPodcastEpisodeOutline({ outline, findingIds: toInputFindingIds(context) })
+		toCheckedPodcastEpisodeOutline({
+			outline,
+			findingIds: toInputFindingIds(context),
+			maxMinutes: FULL_PODCAST_EPISODE_MINUTES,
+		})
 		for (const [segmentIndex, segment] of segments.entries()) {
 			toCheckedPodcastEpisodeSegment({ segment, outline, segmentIndex })
 		}
@@ -154,11 +158,11 @@ function gradeTitleAndDescriptionLength(writerOutput: string): GradingResult {
 	return toGradingResult()
 }
 
-// fail the check if the script runs past MAX_PODCAST_EPISODE_MINUTES, estimated from its word count
+// fail the check if the script runs past FULL_PODCAST_EPISODE_MINUTES, estimated from its word count
 function gradeRunningTime(writerOutput: string): GradingResult {
 	const scriptMinutes = toScriptMinutes(toWrittenPodcastEpisode(writerOutput).podcastEpisodeScript)
 	return toGradingResult(
-		scriptMinutes > MAX_PODCAST_EPISODE_MINUTES ? `the script runs ${scriptMinutes.toFixed(1)} minutes` : undefined,
+		scriptMinutes > FULL_PODCAST_EPISODE_MINUTES ? `the script runs ${scriptMinutes.toFixed(1)} minutes` : undefined,
 	)
 }
 

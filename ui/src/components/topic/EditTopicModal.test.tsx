@@ -4,10 +4,10 @@ import type { TopicPodcast } from "@shared/contracts"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PodcastSwitch } from "./EditTopicModal"
 
-// a topic's podcast that is on and can render, with nothing published
+// a topic's podcast that is on and gets full episodes, with nothing published
 const topicPodcast: TopicPodcast = {
 	isEnabled: true,
-	canRenderPodcastEpisode: true,
+	hasFullPodcastEpisodes: true,
 	canRemovePodcastEpisodes: true,
 	unpublishedPodcastEpisode: null,
 	seasons: [],
@@ -30,19 +30,17 @@ function toPodcastSwitchHtml({ topicPodcast, isPodcastEnabled }: ToPodcastSwitch
 	)
 }
 
-// the switch says whether the podcast is on, and shows the free plan's limit if the podcast cannot render
-test("the podcast switch says whether the podcast is on and shows the free plan's limit", () => {
+// the switch says whether the podcast is on, and shows the free plan's short episode if the topic lacks full ones
+test("the podcast switch says whether the podcast is on and shows the free plan's short episode", () => {
 	// say whether the podcast is on
 	expect(toPodcastSwitchHtml({ topicPodcast, isPodcastEnabled: true })).toContain(
 		"Coffee Break episode after every brew",
 	)
 	expect(toPodcastSwitchHtml({ topicPodcast, isPodcastEnabled: false })).toContain("Coffee Break is off")
 
-	// show the free plan's limit only if the podcast cannot render
-	expect(toPodcastSwitchHtml({ topicPodcast, isPodcastEnabled: true })).not.toContain(
-		"The free plan gives each topic one episode",
-	)
+	// show the free plan's short episode only if the topic lacks full episodes
+	expect(toPodcastSwitchHtml({ topicPodcast, isPodcastEnabled: true })).not.toContain("latest 10-minute episode")
 	expect(
-		toPodcastSwitchHtml({ topicPodcast: { ...topicPodcast, canRenderPodcastEpisode: false }, isPodcastEnabled: true }),
-	).toContain("The free plan gives each topic one episode")
+		toPodcastSwitchHtml({ topicPodcast: { ...topicPodcast, hasFullPodcastEpisodes: false }, isPodcastEnabled: true }),
+	).toContain("latest 10-minute episode")
 })

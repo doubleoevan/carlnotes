@@ -20,9 +20,6 @@ const CONNECTED_LIMIT_FACTOR = 2
 // how old a user invitation must be before its outcome counts toward a sender's reputation
 const REPUTATION_AGE_DAYS = 7
 
-// the share of the monthly budget at which podcast episodes stop rendering. scans keep running on the rest
-const PODCAST_EPISODE_BUDGET_SHARE = 0.8
-
 // a user's recorded spend this month in dollars, split into scans, chat, and podcast episodes
 type MonthlySpend = { scanDollars: number; chatDollars: number; podcastEpisodeDollars: number }
 
@@ -275,30 +272,22 @@ export function toMonthlySpendCents({ scanDollars, chatDollars, podcastEpisodeDo
 }
 
 /**
- * Whether the user's monthly spend has reached the share of their budget at which podcast episodes stop rendering.
+ * Whether the user's monthly spend has reached the share of their budget at which podcast episodes stop recording.
  */
 export async function isPodcastEpisodeBudgetShareExhausted(userId: string): Promise<boolean> {
 	// compare the month's spend with the podcast episode share of the user's budget
 	const [userAccess, monthlySpend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
-	return toMonthlySpendCents(monthlySpend) >= userBudgetCents(userAccess) * PODCAST_EPISODE_BUDGET_SHARE
+	const podcastEpisodeBudgetCents = userBudgetCents(userAccess) * PLANS[userAccess.plan].podcastEpisodeBudgetShare
+	return toMonthlySpendCents(monthlySpend) >= podcastEpisodeBudgetCents
 }
 
 /**
- * Whether a Topic may render a Podcast Episode on its owner's plan.
+ * Whether a Topic's owner gets full Podcast Episodes, which an admin and a paid plan do.
+ * The free plan gets short Podcast Episodes and keeps only the latest short one.
  */
-export async function canRenderPodcastEpisode(topic: { id: string; ownerId: string }): Promise<boolean> {
-	// allow any number of Podcast Episodes if the Topic's owner is an admin or on a paid plan
-	const ownerAccess = await loadUserAccess(topic.ownerId)
-	if (ownerAccess.isAdmin || ownerAccess.plan !== "free") {
-		return true
-	}
-
-	// allow the free plan one rendering or published Podcast Episode per Topic
-	const [podcastEpisodeCountRow] = await db
-		.select({ count: count() })
-		.from(podcastEpisodes)
-		.where(and(eq(podcastEpisodes.topicId, topic.id), inArray(podcastEpisodes.status, ["rendering", "published"])))
-	return (podcastEpisodeCountRow?.count ?? 0) === 0
+export async function hasFullPodcastEpisodes(ownerId: string): Promise<boolean> {
+	const ownerAccess = await loadUserAccess(ownerId)
+	return ownerAccess.isAdmin || ownerAccess.plan !== "free"
 }
 
 // utc midnight starting from the given moment's day. quota days roll over at utc midnight

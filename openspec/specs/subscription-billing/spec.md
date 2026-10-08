@@ -122,8 +122,8 @@ second charge.
 
 Each card SHALL list, in this order: how many Topics the plan allows, how many of them run on a daily schedule, how many
 manual scans a day, an approximate monthly scan total, and the plan's podcast line. The order matters: each line answers
-the question the line above it raises. The podcast line SHALL read "One Coffee Break episode per topic" on the free plan
-and "Coffee Break podcast after every brew" on a paid plan.
+the question the line above it raises. The podcast line SHALL read "Short podcast for latest brew only" on
+the free plan and "Full podcasts for every brew" on a paid plan.
 
 The monthly scan total SHALL be stated as approximate, since it depends on how the user schedules their Topics. It SHALL
 be derived from the plan's monthly budget and the average cost of one scan, rounded up to the next ten.
@@ -138,13 +138,13 @@ be derived from the plan's monthly budget and the average cost of one scan, roun
 
 - **WHEN** the free card renders at the monthly interval
 - **THEN** it reads 3 topics, 1 on a daily schedule, 5 manual scans a day, about 30 scans a month, and its podcast
-  line reads "One Coffee Break episode per topic"
+  line reads "Short podcast for latest brew only"
 
 #### Scenario: The paid cards
 
 - **WHEN** the plus and premium cards render at the monthly interval
 - **THEN** plus reads 10, 3, 15, and about 150, and premium reads 25, 6, 30, and about 350, and each podcast line
-  reads "Coffee Break podcast after every brew"
+  reads "Full podcasts for every brew"
 
 ### Requirement: The yearly toggle marks the limits it raises
 

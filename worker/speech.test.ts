@@ -1,7 +1,7 @@
 // speech tests: the request body, the flex tier, how a failed call is sorted, the pass-through call, an empty model
 import { afterEach, expect, test } from "bun:test"
 import type { PodcastEpisodeTurn } from "@shared/contracts"
-import { renderSpeech, toFailedSpeechResult, toSpeechRequestBody } from "./speech"
+import { recordSpeech, toFailedSpeechResult, toSpeechRequestBody } from "./speech"
 
 // the real fetch and env to put back after each test
 const realFetch = globalThis.fetch
@@ -88,8 +88,8 @@ test("a call posts to the pass-through on the key and returns the audio with its
 	}) as typeof fetch
 
 	// the result is the audio and its tokens, sent to the model's pass-through url on the user's key
-	const renderSpeechResult = await renderSpeech({ turns: TURNS, speechTier: "flex", litellmApiKey: "sk-user" })
-	expect(renderSpeechResult).toMatchObject({ outcome: "rendered", inputTokens: 40, audioTokens: 250 })
+	const recordSpeechResult = await recordSpeech({ turns: TURNS, speechTier: "flex", litellmApiKey: "sk-user" })
+	expect(recordSpeechResult).toMatchObject({ outcome: "recorded", inputTokens: 40, audioTokens: 250 })
 	expect(sentRequests).toEqual([
 		{ url: "http://proxy.test/gemini/v1beta/models/gemini-3.8-flash-tts:generateContent", apiKey: "sk-user" },
 	])
@@ -98,5 +98,5 @@ test("a call posts to the pass-through on the key and returns the audio with its
 // with the speech model set empty, the call is rejected without reaching the proxy
 test("a call with the speech model set empty is rejected", async () => {
 	Bun.env.PODCAST_SPEECH_MODEL = ""
-	expect((await renderSpeech({ turns: TURNS, speechTier: "standard" })).outcome).toBe("rejected")
+	expect((await recordSpeech({ turns: TURNS, speechTier: "standard" })).outcome).toBe("rejected")
 })

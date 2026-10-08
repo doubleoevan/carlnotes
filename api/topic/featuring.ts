@@ -3,14 +3,11 @@ import { topicFeatureOrderPayload } from "@shared/contracts"
 // the Featured section's ordering is whole numbers from 1 to the number of featured topics
 import { and, asc, count, eq, gt, gte, isNotNull, sql } from "drizzle-orm"
 import { Hono } from "hono"
-import { db } from "../../db"
+import { type DbHandle, db } from "../../db"
 import { topics } from "../../db/schema"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
 import { clearTopicSectionIdCache } from "./feeds"
-
-// the database, or a transaction on it
-type DbHandle = typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0]
 
 // whether the feature order was applied, and if not, which rule rejected it
 export type FeatureOrderResult = "ranked" | "missing" | "notPublic"

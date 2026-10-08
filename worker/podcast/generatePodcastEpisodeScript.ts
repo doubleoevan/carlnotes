@@ -7,12 +7,11 @@ import { PREMIUM_COST_PER_MILLION_TOKENS, tokenCost } from "../budget"
 import { scoreModel } from "../models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
 import { writePrompt } from "../prompts/write"
+import { type PodcastEpisodeOutline, podcastEpisodeOutlinePayload } from "./podcastEpisodeOutline"
 import {
 	GOODBYE_OPENING_TURNS,
 	type PodcastEpisodeFinding,
-	type PodcastEpisodeOutline,
 	type PodcastEpisodeSegment,
-	podcastEpisodeOutlinePayload,
 	podcastEpisodeSegmentPayload,
 	RejectedScriptError,
 	toGoodbyeOpeningLine,
@@ -40,11 +39,13 @@ export type ScriptDraftAttempt = { rejectionReason?: string; isLastScriptDraft: 
 // a model call's script draft with what the call cost in dollars
 export type ScriptCallResult<ScriptDraft> = { scriptDraft: ScriptDraft; costDollars: number }
 
-// one outline call. the Topic's name and prompt, the Findings to plan, and the litellm key to bill
+// one outline call. the Topic's name and prompt, the Findings to plan, the most minutes to plan,
+// and the litellm key to bill
 export type GeneratePodcastEpisodeOutlineOptions = {
 	topicName: string
 	topicPrompt: string
 	podcastEpisodeFindings: PodcastEpisodeFinding[]
+	maxMinutes: number
 	litellmApiKey?: string
 	// why the previous draft was rejected
 	rejectionReason?: string
@@ -160,6 +161,7 @@ export async function buildOutlinePrompt({
 	topicName,
 	topicPrompt,
 	podcastEpisodeFindings,
+	maxMinutes,
 	rejectionReason,
 }: GeneratePodcastEpisodeOutlineOptions): Promise<BuiltPrompt> {
 	// fetch the outline template, and fill it with the Topic, the Findings, the hosts, and the limits
@@ -174,6 +176,7 @@ export async function buildOutlinePrompt({
 		},
 		{
 			hostsBlock: await toHostsBlock(),
+			maxMinutes: String(maxMinutes),
 			titleMaxChars: String(PODCAST_EPISODE_TITLE_MAX_CHARS),
 			descriptionMaxChars: String(PODCAST_EPISODE_DESCRIPTION_MAX_CHARS),
 		},

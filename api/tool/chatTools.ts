@@ -13,7 +13,7 @@ import {
 	topicSettingsShape,
 	updateTopicPromptPayload,
 } from "@shared/contracts"
-import { isPodcastEpisodeRenderingConfigured } from "@shared/podcastEpisodes"
+import { isPodcastEpisodeRecordingConfigured } from "@shared/podcastEpisodes"
 import { type Tool, tool } from "ai"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
@@ -287,8 +287,8 @@ function toDraftTopicTool({ toolCalls, topicDraft }: NewTopicToolBinding): Tool 
 				Object.fromEntries(Object.entries(topicDraftFields).filter(([, value]) => value !== undefined)),
 			)
 
-			// a new topic's podcast starts on, on an instance where podcast episodes render
-			if (isPodcastEpisodeRenderingConfigured() && topicDraft.isPodcastEnabled === undefined) {
+			// a new topic's podcast starts on, on an instance where podcast episodes are recorded
+			if (isPodcastEpisodeRecordingConfigured() && topicDraft.isPodcastEnabled === undefined) {
 				topicDraft.isPodcastEnabled = true
 			}
 			toolCalls.topicDraft = { ...topicDraft }
@@ -380,7 +380,7 @@ function toTopicDraftSummary(topicDraft: TopicDraft): string {
 		.map((topicSource) => `${topicSource.sourceOption} ${topicSource.value}`.trim())
 		.join(", ")
 
-	// the podcast setting, on an instance where podcast episodes render
+	// the podcast setting, on an instance where podcast episodes are recorded
 	const podcastSummary =
 		topicDraft.isPodcastEnabled === undefined ? "" : `, podcast ${topicDraft.isPodcastEnabled ? "on" : "off"}`
 	return `title "${topicDraft.name}", prompt "${topicDraft.prompt}", sources [${topicSources}], visibility ${topicDraft.visibility}, team ${topicDraft.team?.name ?? "none"}, tags [${topicDraft.tags.join(", ")}], brews ${topicDraft.frequency}, keeps ${topicDraft.maxTopicFindings}, invites [${topicDraft.inviteEmails.join(", ")}]${podcastSummary}.`
@@ -468,10 +468,7 @@ export function toUpdateTopicFieldsText(
 		return "Name at least one field: the title, the tags, the visibility, how often it brews, when it brews, or how many findings a brew keeps."
 	}
 
-	// explain the plan's podcast episode limit, the plan's daily limit, or the gate's rejection
-	if (updateTopicFieldsResult.status === "podcastPlan") {
-		return "This topic has used the one podcast episode the free plan gives each topic. Its podcast stays off until its owner moves to a paid plan."
-	}
+	// explain the plan's daily limit or the gate's rejection
 	return updateTopicFieldsResult.status === "dailyFrequency"
 		? `A daily topic does not fit the plan right now. The limit is ${updateTopicFieldsResult.limit}.`
 		: toRejectionText(updateTopicFieldsResult.status)
@@ -485,10 +482,7 @@ function toUpdateTopicFieldsReason(
 		return "No setting was named."
 	}
 
-	// give the reason for the plan's podcast episode limit, the plan's daily limit, or the gate's rejection
-	if (updateTopicFieldsResult.status === "podcastPlan") {
-		return "The free plan gives each topic one podcast episode."
-	}
+	// give the reason for the plan's daily limit or the gate's rejection
 	return updateTopicFieldsResult.status === "dailyFrequency"
 		? CREATE_REJECTION_LINES.dailyFrequency
 		: toGateReason(updateTopicFieldsResult.status)

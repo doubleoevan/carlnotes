@@ -225,10 +225,8 @@ function PlanCard({
 					isRaised={isDailyScanLimitRaised}
 				/>
 				<QuotaLink label={`About ${monthlyScanEstimate} ${toBrewsWord(monthlyScanEstimate)} a month`} />
-				{/* the free plan's one podcast episode per topic, or a paid plan's episode after every scan */}
-				<QuotaLink
-					label={plan === "free" ? "One Coffee Break episode per topic" : "Coffee Break podcast after every brew"}
-				/>
+				{/* the free plan's short episode with only the latest kept, or a paid plan's full episodes, every one kept */}
+				<QuotaLink label={plan === "free" ? "Short podcast for latest brew only" : "Full podcasts for every brew"} />
 			</ul>
 			<PlanButton
 				plan={plan}

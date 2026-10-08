@@ -222,7 +222,7 @@ export async function reportScanEmailNotStarted(scanId: string, reason: string):
  * Reports a Scan whose podcast episode workflow could not be started.
  * The Scan is already complete, so nothing else changes.
  */
-export async function reportPodcastEpisodeRenderNotStarted(scanId: string, reason: string): Promise<void> {
+export async function reportPodcastEpisodeRecordingNotStarted(scanId: string, reason: string): Promise<void> {
 	console.error(`the episode workflow for scan ${scanId} could not be started: ${reason}`)
 	reportError(new Error("an episode workflow could not be started"), "podcast-episode", { scanId, reason })
 }

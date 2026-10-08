@@ -54,14 +54,14 @@ type ScanRow = {
 }
 
 /**
- * Assembles the user's Activity payload for a viewer: the user, or an admin viewing the user's activity.
+ * Assembles the user's Activity payload for the signed-in user: the user, or an admin viewing the user's activity.
  */
 export async function loadActivity(
 	user: { id: string; email: string },
-	viewerUserId: string,
+	signedInUserId: string,
 ): Promise<ActivityResponse> {
 	// the user's own view, which alone reads the user's chat mentions
-	const isOwnView = viewerUserId === user.id
+	const isOwnView = signedInUserId === user.id
 
 	// select the user's identity, budget inputs, litellm key, and owned topics
 	const [userRow] = await db
@@ -160,7 +160,8 @@ export async function loadActivity(
 			),
 		)
 
-	// the subscriptions and the pending invitations, each with its topic's latest podcast episode that the viewer may hear
+	// the subscriptions and the pending invitations, each with the latest podcast episode that the signed-in user may
+	// listen to
 	const subscriptionRowFields: SubscriptionRowFields[] = [
 		// convert the joined owner and team columns to their identities before the rows merge
 		...subscriptionRows.map((subscriptionRow) => ({
@@ -176,7 +177,7 @@ export async function loadActivity(
 		ownerId: subscriptionRow.owner.userId,
 		visibility: subscriptionRow.visibility,
 	}))
-	const subscriptionPodcastEpisodeByTopic = await loadLatestPodcastEpisodes(subscriptionTopicRows, viewerUserId)
+	const subscriptionPodcastEpisodeByTopic = await loadLatestPodcastEpisodes(subscriptionTopicRows, signedInUserId)
 
 	return {
 		// whose activity this is, for the page's profile link
@@ -194,7 +195,7 @@ export async function loadActivity(
 			plan: userRow?.plan ?? "free",
 			budgetOverrideCents: userRow?.budgetOverrideCents ?? null,
 		}),
-		topics: await loadTopics({ topicIds: ownedTopicIds, viewerUserId, mentionUserId: isOwnView ? user.id : null }),
+		topics: await loadTopics({ topicIds: ownedTopicIds, signedInUserId, mentionUserId: isOwnView ? user.id : null }),
 		subscriptions: toSubscriptionRows(subscriptionRowFields, subscriptionPodcastEpisodeByTopic),
 		invites: inviteRows.map((inviteRow) => ({
 			inviteId: inviteRow.inviteId,
@@ -314,8 +315,8 @@ export function toSubscriptionRows(
 	}))
 }
 
-// the topics to build rows for, the user viewing the rows, and the user whose chat mentions the rows show
-type LoadTopicsOptions = { topicIds: string[]; viewerUserId: string; mentionUserId?: string | null }
+// the topics to build rows for, the signed-in user viewing the rows, and the user whose chat mentions the rows show
+type LoadTopicsOptions = { topicIds: string[]; signedInUserId: string; mentionUserId?: string | null }
 
 /**
  * The activity rows for a given set of topics, whoever owns them. The admin console reads a team's topics through this,
@@ -323,7 +324,7 @@ type LoadTopicsOptions = { topicIds: string[]; viewerUserId: string; mentionUser
  */
 export async function loadTopics({
 	topicIds,
-	viewerUserId,
+	signedInUserId,
 	mentionUserId = null,
 }: LoadTopicsOptions): Promise<OwnerTopic[]> {
 	if (topicIds.length === 0) {
@@ -408,7 +409,7 @@ export async function loadTopics({
 		),
 		emailCountByTopic: new Map(emailSendRows.map((emailSendRow) => [emailSendRow.topicId, emailSendRow.count])),
 		mentionByTopic: await loadTopicChatMentions(mentionUserId, topicIds),
-		latestPodcastEpisodeByTopic: await loadLatestPodcastEpisodes(topicRows, viewerUserId),
+		latestPodcastEpisodeByTopic: await loadLatestPodcastEpisodes(topicRows, signedInUserId),
 	})
 }
 

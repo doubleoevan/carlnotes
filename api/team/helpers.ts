@@ -234,7 +234,7 @@ export async function loadAdminTeamTopics({
 
 	// the same rows a user's own topics table reads, so both subtables show the same columns and totals
 	const teamTopicIds = (await loadTeamTopics(teamId)).map((topicRow) => topicRow.id)
-	return loadTopics({ topicIds: teamTopicIds, viewerUserId: adminUserId })
+	return loadTopics({ topicIds: teamTopicIds, signedInUserId: adminUserId })
 }
 
 /**

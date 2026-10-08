@@ -15,18 +15,18 @@ import { cn } from "@/lib/utils"
 // how long after a scan finishes the page keeps looking for the podcast episode that the scan starts
 const PODCAST_EPISODE_START_WAIT_MS = 90_000
 
-// whether a podcast episode of this topic is rendering, or its latest scan just finished and may still start an episode
+// whether a podcast episode of this topic is recording, or its latest scan just finished and may still start an episode
 function isPodcastEpisodePending(topic: TopicResponse | null | undefined): boolean {
-	// a topic with no podcast has no episode pending, and a rendering episode is pending
+	// a topic with no podcast has no episode pending, and a recording episode is pending
 	const topicPodcast = topic?.podcast
 	if (!topic || !topicPodcast) {
 		return false
 	}
-	if (topicPodcast.unpublishedPodcastEpisode?.status === "rendering") {
+	if (topicPodcast.unpublishedPodcastEpisode?.status === "recording") {
 		return true
 	}
 
-	// the latest scan succeeded within the wait with no podcast episode yet, on a topic whose scans render an episode
+	// the latest scan succeeded within the wait with no podcast episode yet, on a topic whose podcast is on
 	const [latestScan] = topic.scans
 	const elapsedSinceScanMs = latestScan?.finishedAt ? Date.now() - new Date(latestScan.finishedAt).getTime() : null
 	const isScanAwaitingPodcastEpisode =
@@ -34,7 +34,7 @@ function isPodcastEpisodePending(topic: TopicResponse | null | undefined): boole
 		!latestScan.podcastEpisode &&
 		elapsedSinceScanMs !== null &&
 		elapsedSinceScanMs < PODCAST_EPISODE_START_WAIT_MS
-	return topicPodcast.isEnabled && topicPodcast.canRenderPodcastEpisode && isScanAwaitingPodcastEpisode
+	return topicPodcast.isEnabled && isScanAwaitingPodcastEpisode
 }
 
 // whether this user may brew this topic. only an owner gets a remaining scan count in the payload
@@ -64,11 +64,11 @@ export function TopicScanButton({
 	const { isScanning, isRunningScan, isCancellingScan, startScan, stopScan, cancelScan, stopCancelling } =
 		useManualScanProgress(topic?.scans)
 
-	// poll from the click, before the scan row arrives, and while the scan's podcast episode renders.
+	// poll from the click, before the scan row arrives, and while the scan's podcast episode records.
 	// the reload function stays the same across renders, so the poll does not restart and the poll's delay can grow
 	const reloadTopicPageAsPoll = useCallback(() => onScanned({ isPoll: true }), [onScanned])
-	// ponytail: a podcast episode on the flex tier can render for hours,
-	// and the page polls every 30 seconds the whole time. slow the poll during a long render if those reads add load
+	// ponytail: a podcast episode on the flex tier can record for hours,
+	// and the page polls every 30 seconds the whole time. slow the poll during a long recording if those reads add load
 	usePollWhileScanning(
 		shouldPollTopicPage && (isScanning || isRunningScan || isPodcastEpisodePending(topic)),
 		reloadTopicPageAsPoll,

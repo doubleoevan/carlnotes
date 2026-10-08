@@ -154,15 +154,15 @@ describe("a speech call's cost", () => {
 
 	test("uses the 2026 rates through the end of 2026, and flex halves the text input alone", () => {
 		// price a call from the last second of 2026 on each tier
-		const renderedAt = new Date("2026-12-31T23:59:59Z")
-		expect(speechCost({ speechTier: "standard", ...speechUsage, renderedAt })).toBeCloseTo(9.5)
-		expect(speechCost({ speechTier: "flex", ...speechUsage, renderedAt })).toBeCloseTo(9.25)
+		const recordedAt = new Date("2026-12-31T23:59:59Z")
+		expect(speechCost({ speechTier: "standard", ...speechUsage, recordedAt })).toBeCloseTo(9.5)
+		expect(speechCost({ speechTier: "flex", ...speechUsage, recordedAt })).toBeCloseTo(9.25)
 	})
 
 	test("doubles both tiers from January 1, 2027 UTC", () => {
 		// price a call from the first second of 2027 on each tier
-		const renderedAt = new Date("2027-01-01T00:00:00Z")
-		expect(speechCost({ speechTier: "standard", ...speechUsage, renderedAt })).toBeCloseTo(19)
-		expect(speechCost({ speechTier: "flex", ...speechUsage, renderedAt })).toBeCloseTo(18.5)
+		const recordedAt = new Date("2027-01-01T00:00:00Z")
+		expect(speechCost({ speechTier: "standard", ...speechUsage, recordedAt })).toBeCloseTo(19)
+		expect(speechCost({ speechTier: "flex", ...speechUsage, recordedAt })).toBeCloseTo(18.5)
 	})
 })

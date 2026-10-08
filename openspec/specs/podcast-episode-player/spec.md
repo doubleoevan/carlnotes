@@ -331,37 +331,6 @@ Episode's own page, and so SHALL the Podcast Episode's title in the player.
 - **WHEN** the card lists the Topic's newest Podcast Episode
 - **THEN** its row is marked as the latest
 
-### Requirement: The edit topic modal turns the podcast on and off, and the settings card shows its state
-
-The edit topic modal SHALL show a podcast switch at its bottom, after Attachments, for a saved Topic. A switch flipped
-there SHALL save with the modal's Save through the shared settings tool, the same one that the chat and the MCP server
-use, and a plan rejection SHALL be shown while the Topic's other fields stay saved. On a Topic on the free plan that has
-used its one Podcast Episode, the switch SHALL also show the plan's limit, and the owner SHALL get the upgrade link
-beside the switch, which still turns the podcast off. The Topic's settings card SHALL show "Podcast" right-aligned on
-its last row, beside Cost this month, that reads "On" or "Off", with no control.
-
-#### Scenario: The settings card shows the state
-
-- **WHEN** a user views the settings card of a Topic that has a podcast
-- **THEN** its last row shows "Podcast" at the right, reading "On" or "Off", with no switch
-
-#### Scenario: The edit topic modal saves the switch with its other fields
-
-- **WHEN** the owner opens the edit topic modal, turns the switch at its bottom off, and saves
-- **THEN** the Topic's fields and the switch are both saved, and the settings card's Podcast reads "Off"
-
-#### Scenario: A Topic on the free plan past its one Podcast Episode shows the upgrade link
-
-- **GIVEN** a Topic on the free plan that already has one published Podcast Episode
-- **WHEN** the owner opens the edit topic modal
-- **THEN** the podcast switch shows the upgrade link to the plans page
-
-#### Scenario: An owner on the free plan's other Topic still has its switch
-
-- **GIVEN** an owner on the free plan whose first Topic has used its Podcast Episode
-- **WHEN** they open the edit topic modal of a second Topic that has no Podcast Episode yet
-- **THEN** its podcast switch shows no plan limit and no upgrade link
-
 ### Requirement: A podcast player docks at the bottom while a Podcast Episode is loaded
 
 On a phone the player SHALL be a compact card. Once a listener starts a Podcast Episode, a podcast player SHALL dock at the
@@ -534,4 +503,35 @@ check access to each Podcast Episode as the user viewing the table.
 
 - **WHEN** the profile page lists 30 topics
 - **THEN** the latest Podcast Episodes are read in the same number of queries as for 3 topics
+
+### Requirement: The edit topic modal turns the podcast on and off with the free plan's hint, and the settings card shows its state
+
+The edit topic modal SHALL show a podcast switch at its bottom, after Attachments, for a saved Topic. A switch flipped
+there SHALL save with the modal's Save through the shared settings tool, the same one that the chat and the MCP server
+use. On a Topic whose owner is on the free plan, the switch SHALL show the hint "The free plan keeps each topic's latest
+10-minute episode", and the owner SHALL get the upgrade link "Upgrade for 30-minute episodes, every one kept" beside the
+switch. The Topic's settings card SHALL show "Podcast" right-aligned on its last row, beside Cost this month, that reads
+"On" or "Off", with no control.
+
+#### Scenario: The settings card shows the state
+
+- **WHEN** a user views the settings card of a Topic that has a podcast
+- **THEN** its last row shows "Podcast" at the right, reading "On" or "Off", with no switch
+
+#### Scenario: The edit topic modal saves the switch with its other fields
+
+- **WHEN** the owner opens the edit topic modal, turns the switch at its bottom off, and saves
+- **THEN** the Topic's fields and the switch are both saved, and the settings card's Podcast reads "Off"
+
+#### Scenario: A free Topic's switch shows the hint and the upgrade link
+
+- **GIVEN** a Topic whose owner is on the free plan
+- **WHEN** the owner opens the edit topic modal
+- **THEN** the podcast switch shows the hint and the upgrade link to the plans page
+
+#### Scenario: A paid Topic's switch shows no hint
+
+- **GIVEN** a Topic whose owner is on a paid plan
+- **WHEN** the owner opens the edit topic modal
+- **THEN** the podcast switch shows no hint and no upgrade link
 

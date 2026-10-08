@@ -42,7 +42,7 @@ export const COVER_PLACEHOLDER_CLASS = "bg-[url(/podcast-cover-placeholder.jpg)]
 
 /**
  * The cover that says the hosts are recording.
- * It replaces the cover placeholder for a podcast episode that is rendering.
+ * It replaces the cover placeholder for a podcast episode that is recording.
  */
 export const COVER_RECORDING_CLASS = "bg-[url(/podcast-cover-recording.jpg)]"
 

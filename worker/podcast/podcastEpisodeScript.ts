@@ -1,8 +1,6 @@
-// a Podcast Episode's script. its shape and limits, the checks on an earlier draft, the repairs of a last draft,
-// and the script built from the checked segments
+// a Podcast Episode's script. the segments' shape and limits, the checks on an earlier segment draft, the repairs of
+// a last segment draft, and the script built from the checked segments
 import {
-	PODCAST_EPISODE_DESCRIPTION_MAX_CHARS,
-	PODCAST_EPISODE_TITLE_MAX_CHARS,
 	type PodcastEpisodeChapterScript,
 	type PodcastEpisodeScript,
 	type PodcastEpisodeTurn,
@@ -11,15 +9,10 @@ import {
 } from "@shared/contracts"
 import { toTranscriptText } from "@shared/podcastEpisodes"
 import { z } from "zod"
+import type { PodcastEpisodeOutline } from "./podcastEpisodeOutline"
 
 // how many words the hosts speak in a minute
 const WORDS_PER_MINUTE = 150
-
-// the most minutes that an outline may plan for a Podcast Episode and for one chapter, and the fewest for a chapter.
-// a chapter and the turns that render with it fit one speech request of about eleven minutes. a script may run long
-export const MAX_PODCAST_EPISODE_MINUTES = 30
-const MAX_PLANNED_CHAPTER_MINUTES = 8
-const MIN_PLANNED_CHAPTER_MINUTES = 1
 
 // the most characters that a chapter's title may have. a longer title is cut
 const MAX_CHAPTER_TITLE_CHARS = 80
@@ -49,27 +42,6 @@ export type PodcastEpisodeFinding = {
 	content: string
 }
 
-// the outline that the first call writes. the Podcast Episode's title and description, and its segments in order.
-// each chapter has the number that its Finding is listed under and its minutes. the checks below apply the limits
-export const podcastEpisodeOutlinePayload = z.object({
-	title: z.string().trim().min(1),
-	description: z.string().trim().min(1),
-	segments: z
-		.array(
-			z.object({
-				theme: z.string().trim().min(1),
-				chapters: z.array(z.object({ findingNumber: z.number().int(), minutes: z.number() })).min(1),
-			}),
-		)
-		.min(1),
-})
-export type PodcastEpisodeOutlinePayload = z.infer<typeof podcastEpisodeOutlinePayload>
-
-// the outline with each chapter's Finding number mapped back to the Finding's id
-export type PodcastEpisodeOutline = Omit<PodcastEpisodeOutlinePayload, "segments"> & {
-	segments: { theme: string; chapters: { findingId: string; minutes: number }[] }[]
-}
-
 // what one segment call writes. the transition into the segment and its chapters, each with its Finding's number.
 // the first segment also has the cold open, and the last segment also has the sign-off and the goodbye
 export const podcastEpisodeSegmentPayload = z.object({
@@ -91,45 +63,12 @@ export type PodcastEpisodeSegment = Omit<PodcastEpisodeSegmentPayload, "chapters
 // a script draft, or a whole script, that failed a check
 export class RejectedScriptError extends Error {}
 
-// an outline draft to check, the ids of the Findings that its prompt listed, and whether it is the call's last draft
-export type ToCheckedPodcastEpisodeOutlineOptions = {
-	outline: PodcastEpisodeOutline
-	findingIds: string[]
-	isLastScriptDraft?: boolean
-}
-
 // a segment draft to check, the outline, the segment's index, and whether it is the call's last draft
 export type ToCheckedPodcastEpisodeSegmentOptions = {
 	segment: PodcastEpisodeSegment
 	outline: PodcastEpisodeOutline
 	segmentIndex: number
 	isLastScriptDraft?: boolean
-}
-
-/**
- * Returns the checked outline, or the repaired last draft, and throws a RejectedScriptError if the draft fails.
- */
-export function toCheckedPodcastEpisodeOutline({
-	outline,
-	findingIds,
-	isLastScriptDraft = false,
-}: ToCheckedPodcastEpisodeOutlineOptions): PodcastEpisodeOutline {
-	// keep each planned length between one and eight minutes
-	const segments = outline.segments.map((segment) => ({
-		...segment,
-		chapters: segment.chapters.map((chapter) => ({
-			...chapter,
-			minutes: Math.min(MAX_PLANNED_CHAPTER_MINUTES, Math.max(MIN_PLANNED_CHAPTER_MINUTES, chapter.minutes)),
-		})),
-	}))
-	const limitedOutline = { ...outline, segments }
-
-	// repair the last draft, and reject an earlier draft that fails a check
-	if (isLastScriptDraft) {
-		return toRepairedPodcastEpisodeOutline(limitedOutline, findingIds)
-	}
-	checkPodcastEpisodeOutline(limitedOutline, findingIds)
-	return limitedOutline
 }
 
 /**
@@ -217,7 +156,7 @@ export function toScriptMinutes(podcastEpisodeScript: PodcastEpisodeScript): num
 }
 
 /**
- * Returns each chapter's turns as they render, with the cold open, each transition, and the sign-off in their chapters.
+ * Returns each chapter's turns as they are recorded, with the cold open, each transition, and the sign-off in their chapters.
  */
 export function toChapterTurns(podcastEpisodeScript: PodcastEpisodeScript): PodcastEpisodeTurn[][] {
 	// join each segment's transition to its first chapter
@@ -235,93 +174,31 @@ export function toChapterTurns(podcastEpisodeScript: PodcastEpisodeScript): Podc
 }
 
 /**
- * Returns the script without each chapter whose audio did not render and without the turns that render with it.
+ * Returns the script without each chapter whose audio was not recorded and without the turns recorded with it.
  */
-export function toRenderedPodcastEpisodeScript(
+export function toRecordedPodcastEpisodeScript(
 	podcastEpisodeScript: PodcastEpisodeScript,
-	renderedChapterPositions: number[],
+	recordedChapterPositions: number[],
 ): PodcastEpisodeScript {
-	// keep each rendered chapter, and a segment's transition only if the segment's first chapter rendered.
+	// keep each recorded chapter, and a segment's transition only if the segment's first chapter was recorded.
 	// the count of the chapters before a segment is the position of the segment's first chapter
-	const isChapterRendered = (position: number): boolean => renderedChapterPositions.includes(position)
+	const isChapterRecorded = (position: number): boolean => recordedChapterPositions.includes(position)
 	let chapterCount = 0
-	const renderedSegments = podcastEpisodeScript.segments.map((segment) => {
-		const renderedSegment = {
-			transition: isChapterRendered(chapterCount) ? segment.transition : [],
-			chapters: segment.chapters.filter((_, i) => isChapterRendered(chapterCount + i)),
+	const recordedSegments = podcastEpisodeScript.segments.map((segment) => {
+		const recordedSegment = {
+			transition: isChapterRecorded(chapterCount) ? segment.transition : [],
+			chapters: segment.chapters.filter((_, i) => isChapterRecorded(chapterCount + i)),
 		}
 		chapterCount += segment.chapters.length
-		return renderedSegment
+		return recordedSegment
 	})
 
-	// keep the cold open only if the first chapter rendered, and the sign-off only if the last chapter rendered
+	// keep the cold open only if the first chapter was recorded, and the sign-off only if the last chapter was recorded
 	const lastPosition = chapterCount - 1
 	return {
-		coldOpen: isChapterRendered(0) ? podcastEpisodeScript.coldOpen : [],
-		segments: renderedSegments.filter((segment) => segment.chapters.length > 0),
-		signOff: isChapterRendered(lastPosition) ? podcastEpisodeScript.signOff : [],
-	}
-}
-
-// throw a RejectedScriptError if the title or the description is too long, a Finding is unknown or planned twice,
-// or the plan runs longer than a Podcast Episode may run
-function checkPodcastEpisodeOutline(outline: PodcastEpisodeOutline, findingIds: string[]): void {
-	// reject a title or a description past its limit
-	if (outline.title.length > PODCAST_EPISODE_TITLE_MAX_CHARS) {
-		const titleLimitText = `over the ${PODCAST_EPISODE_TITLE_MAX_CHARS} allowed`
-		throw new RejectedScriptError(`the title has ${outline.title.length} characters, ${titleLimitText}`)
-	}
-	if (outline.description.length > PODCAST_EPISODE_DESCRIPTION_MAX_CHARS) {
-		const descriptionLimitText = `over the ${PODCAST_EPISODE_DESCRIPTION_MAX_CHARS} allowed`
-		throw new RejectedScriptError(
-			`the description has ${outline.description.length} characters, ${descriptionLimitText}`,
-		)
-	}
-
-	// reject a planned Finding that was not an input, and a Finding planned twice
-	const plannedFindingIds = outline.segments.flatMap((segment) => segment.chapters.map((chapter) => chapter.findingId))
-	const unknownFindingId = plannedFindingIds.find((plannedFindingId) => !findingIds.includes(plannedFindingId))
-	if (unknownFindingId) {
-		throw new RejectedScriptError(`the outline plans a finding that was not in its input: ${unknownFindingId}`)
-	}
-	if (new Set(plannedFindingIds).size !== plannedFindingIds.length) {
-		throw new RejectedScriptError("the outline plans a finding twice")
-	}
-
-	// reject a plan longer than a Podcast Episode may run
-	const plannedMinutes = outline.segments
-		.flatMap((segment) => segment.chapters)
-		.reduce((sum, chapter) => sum + chapter.minutes, 0)
-	if (plannedMinutes > MAX_PODCAST_EPISODE_MINUTES) {
-		throw new RejectedScriptError(
-			`the outline plans ${plannedMinutes} minutes, over the ${MAX_PODCAST_EPISODE_MINUTES} allowed`,
-		)
-	}
-}
-
-// repair the last outline draft. cut the title and the description, and leave out each unknown or repeated Finding.
-// keep a plan past the minute limit, and throw a RejectedScriptError if no chapter is left
-function toRepairedPodcastEpisodeOutline(outline: PodcastEpisodeOutline, findingIds: string[]): PodcastEpisodeOutline {
-	// keep each chapter whose Finding was given and not already planned, then each segment with a chapter left
-	const plannedFindingIds = new Set<string>()
-	const plannedSegments = outline.segments.map((segment) => ({
-		...segment,
-		chapters: segment.chapters.filter((chapter) => {
-			const isNewInputFinding = findingIds.includes(chapter.findingId) && !plannedFindingIds.has(chapter.findingId)
-			plannedFindingIds.add(chapter.findingId)
-			return isNewInputFinding
-		}),
-	}))
-	const segments = plannedSegments.filter((segment) => segment.chapters.length > 0)
-	if (segments.length === 0) {
-		throw new RejectedScriptError("the outline plans no finding from its input")
-	}
-
-	// cut the title and the description to their limits
-	return {
-		title: toClippedText(outline.title, PODCAST_EPISODE_TITLE_MAX_CHARS),
-		description: toClippedText(outline.description, PODCAST_EPISODE_DESCRIPTION_MAX_CHARS),
-		segments,
+		coldOpen: isChapterRecorded(0) ? podcastEpisodeScript.coldOpen : [],
+		segments: recordedSegments.filter((segment) => segment.chapters.length > 0),
+		signOff: isChapterRecorded(lastPosition) ? podcastEpisodeScript.signOff : [],
 	}
 }
 
@@ -412,8 +289,10 @@ function toRepairedPodcastEpisodeSegment(
 	return { ...segment, chapters, signOff, goodbye }
 }
 
-// a text within the character limit. a longer text is cut at its last word boundary and ends in an ellipsis
-function toClippedText(text: string, maxChars: number): string {
+/**
+ * Returns a text within the character limit. A longer text is cut at its last word boundary and ends in an ellipsis.
+ */
+export function toClippedText(text: string, maxChars: number): string {
 	// return a trimmed text that fits the limit
 	const trimmedText = text.trim()
 	if (trimmedText.length <= maxChars) {

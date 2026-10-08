@@ -37,22 +37,24 @@ with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep t
   activity sends one batch or one report and records the accepted sends with the Scan's id, so a retry never mails
   anyone twice. `email.ts` sends through Resend, and every call from the api or the worker first takes a rate limit
   slot shared in Redis, which one call holds for 200 milliseconds, so calls leave evenly spaced at five a second.
-- A succeeded Scan's podcast episode renders in its own workflow, `workflows/renderPodcastEpisode.ts`, on the
-  `episode-renders` queue that the file names, with its own Worker in `temporal.ts` whose concurrency is set by
-  `PODCAST_RENDER_CONCURRENCY`. The scan workflow starts it as a child workflow that outlives the Scan's own, after the
-  email workflow, and the podcast episode workflow signals the Scan's email workflow once its outline is settled, so the email
+- A succeeded Scan's podcast episode is recorded in its own workflow, `workflows/recordPodcastEpisode.ts`, on the
+  `episode-recordings` queue that the file names, with its own Worker in `temporal.ts` whose concurrency is set by
+  `PODCAST_RECORDING_CONCURRENCY`. The scan workflow starts it as a child workflow that outlives the Scan's own, after
+  the email workflow, and the podcast episode workflow signals the Scan's email workflow once its outline is settled, so the email
   can name the Podcast Episode. `speech.ts` sends one two-speaker call per chapter through LiteLLM's Gemini
   pass-through. No audio passes between activities except through object storage. `shared/podcastEpisodes.ts` reads
   `PODCAST_SPEECH_MODEL`, which defaults to `gemini-3.8-flash-tts`, and Podcast Episodes are off if it is set empty.
   The steps are in `podcast/`:
-  - `planPodcastEpisode.ts` runs the checks that stop a render before it spends anything, and picks the Findings.
+  - `planPodcastEpisode.ts` runs the checks that stop a recording before it spends anything, picks the Findings, and
+    marks a free Topic's episode short.
   - `writePodcastEpisodeScript.ts` writes and saves the script. `generatePodcastEpisodeScript.ts` makes its outline and
-    segment calls on `score-model`, and `podcastEpisodeScript.ts` holds the script's shape and checks every draft.
-  - `podcastEpisodeAudio.ts` renders each chapter, stores its audio in object storage, and joins the chapters with
+    segment calls on `score-model`. `podcastEpisodeOutline.ts` holds the outline's shape and checks each outline
+    draft, and `podcastEpisodeScript.ts` holds the segments' shape, checks each segment draft, and builds the script.
+  - `podcastEpisodeAudio.ts` records each chapter, stores its audio in object storage, and joins the chapters with
     ffmpeg. `podcastEpisodeTheme.ts` mixes the theme song's intro and outro under the talk in that same pass, from the
     clips committed in `assets/podcast/`, and shifts the chapter times by the intro's lead.
-  - `publishPodcastEpisode.ts` publishes or fails the row, and `removePodcastEpisode.ts` removes a Podcast Episode and
-    deletes its audio.
+  - `publishPodcastEpisode.ts` publishes or fails the row, and a short episode's publish replaces the Topic's earlier
+    short ones. `removePodcastEpisode.ts` removes a Podcast Episode and deletes its audio.
   - `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the chapters that narrated its Resource, and
     links those chapters to it. The review's `upsertFinding` calls both.
 - `indexNow.ts` tells search engines a public Topic's urls changed. A missing `INDEXNOW_KEY` sends nothing, and a

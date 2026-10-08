@@ -987,12 +987,12 @@ export const podcastEpisodeChapter = z.object({
 })
 export type PodcastEpisodeChapter = z.infer<typeof podcastEpisodeChapter>
 
-// a podcast episode in the shape that the player shows. a rendering or failed episode has its status, no audio,
+// a podcast episode in the shape that the player shows. a recording or failed episode has its status, no audio,
 // and its title once written
 export const podcastEpisode = z.object({
 	id: z.string(),
 	topicId: z.string(),
-	status: z.enum(["rendering", "published", "failed"]),
+	status: z.enum(["recording", "published", "failed"]),
 	title: z.string().nullable(),
 	description: z.string().nullable(),
 	// the publish year, the episode number within that year, the length, and the publish time.
@@ -1152,11 +1152,11 @@ export const topicPodcastPayload = z.object({ isPodcastEnabled: z.boolean() })
 export const topicPodcast = z.object({
 	// whether the owner has the podcast on
 	isEnabled: z.boolean(),
-	// whether the owner's plan still renders a podcast episode for this topic
-	canRenderPodcastEpisode: z.boolean(),
+	// whether the owner's plan gets full podcast episodes. the free plan gets short ones and only keeps the latest
+	hasFullPodcastEpisodes: z.boolean(),
 	// whether this user may remove a podcast episode
 	canRemovePodcastEpisodes: z.boolean(),
-	// the topic's newest podcast episode if it is rendering or failed to render, without chapters,
+	// the topic's newest podcast episode if it is recording or failed to record, without chapters,
 	// and if the user may see it. null once a later episode publishes
 	unpublishedPodcastEpisode: podcastEpisode.nullable(),
 	// the seasons that have a published podcast episode, newest first

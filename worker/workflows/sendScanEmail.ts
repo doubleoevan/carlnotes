@@ -16,7 +16,7 @@ import type * as emailActivities from "./sendScanEmailActivities"
 export const SCAN_EMAIL_TASK_QUEUE = "scan-emails"
 
 // the signal that ends the email's wait for the Podcast Episode's outline. the signal is sent once the title is saved,
-// once the outline fails for good, if the plan fails or finds nothing to render, or if the render never started
+// once the outline fails for good, if the plan fails or finds nothing to record, or if the recording never started
 export const podcastEpisodeOutlineSettledSignal = defineSignal("episode-outline-settled")
 
 // how long an email waits for the outline signal before it sends without the podcast episode section
@@ -46,14 +46,14 @@ const { reportUndeliveredScanEmail } = proxyActivities<typeof emailActivities>({
 
 // the Scan whose email this is, what asked for it, and whether the Scan starts a podcast episode workflow.
 // a manual or creation Scan also names who gets its report
-export type ScanEmailWorkflowInput = { scanId: string; topicId: string; isPodcastEpisodeReadyToRender?: boolean } & (
+export type ScanEmailWorkflowInput = { scanId: string; topicId: string; isPodcastEpisodeReadyToRecord?: boolean } & (
 	| { trigger: Extract<ScanTrigger, "scheduled"> }
 	| { trigger: Exclude<ScanTrigger, "scheduled">; reportRecipientUserId: string }
 )
 
 /**
  * Sends a finished Scan's email, the digest one batch at a time or the report to whoever ran the Scan or created the
- * Topic. Either email first waits for the outline of a podcast episode that is ready to render.
+ * Topic. Either email first waits for the outline of a podcast episode that is ready to record.
  * A send that fails for good or runs out of attempts is reported, and the next batch still goes out.
  */
 export async function sendScanEmailWorkflow(scanEmailWorkflowInput: ScanEmailWorkflowInput): Promise<void> {
@@ -61,7 +61,7 @@ export async function sendScanEmailWorkflow(scanEmailWorkflowInput: ScanEmailWor
 	const { scanId, topicId } = scanEmailWorkflowInput
 
 	// wait for the outline of the Scan's Podcast Episode, and send without the Podcast Episode once the wait runs out
-	if (scanEmailWorkflowInput.isPodcastEpisodeReadyToRender) {
+	if (scanEmailWorkflowInput.isPodcastEpisodeReadyToRecord) {
 		let isPodcastEpisodeOutlineSettled = false
 		setHandler(podcastEpisodeOutlineSettledSignal, () => {
 			isPodcastEpisodeOutlineSettled = true

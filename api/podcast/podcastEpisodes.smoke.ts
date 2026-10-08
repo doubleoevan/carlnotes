@@ -243,7 +243,7 @@ try {
 		"the topic page has the newest episodes of the newest season",
 		topicPage?.podcast?.latestSeasonPodcastEpisodes.podcastEpisodes[0]?.id === publicPodcastEpisodeId,
 	)
-	check("a free topic that has an episode cannot render another", topicPage?.podcast?.canRenderPodcastEpisode === false)
+	check("a free topic gets short episodes", topicPage?.podcast?.hasFullPodcastEpisodes === false)
 	check(
 		"the scan history row names its episode",
 		topicPage?.scans[0]?.podcastEpisode?.episodeNumber === 1,
@@ -255,26 +255,26 @@ try {
 		topicPage?.podcast?.unpublishedPodcastEpisode === null,
 	)
 
-	// a podcast episode that is rendering shows on the topic page until it leaves that state
-	const renderingPodcastEpisodeId = `${runId}-rendering-episode`
+	// a podcast episode that is recording shows on the topic page until it leaves that state
+	const recordingPodcastEpisodeId = `${runId}-recording-episode`
 	await db
 		.insert(podcastEpisodes)
-		.values({ id: renderingPodcastEpisodeId, topicId: publicTopicId, ownerId, title: "Still recording" })
-	const renderingTopicPage = await loadTopicPage(ownerId, publicTopicId)
+		.values({ id: recordingPodcastEpisodeId, topicId: publicTopicId, ownerId, title: "Still recording" })
+	const recordingTopicPage = await loadTopicPage(ownerId, publicTopicId)
 	check(
-		"the topic page has the episode that is rendering",
-		renderingTopicPage?.podcast?.unpublishedPodcastEpisode?.id === renderingPodcastEpisodeId &&
-			renderingTopicPage.latestPodcastEpisode?.id === publicPodcastEpisodeId,
+		"the topic page has the episode that is recording",
+		recordingTopicPage?.podcast?.unpublishedPodcastEpisode?.id === recordingPodcastEpisodeId &&
+			recordingTopicPage.latestPodcastEpisode?.id === publicPodcastEpisodeId,
 	)
 
-	// the same podcast episode still shows once its render fails
-	await db.update(podcastEpisodes).set({ status: "failed" }).where(eq(podcastEpisodes.id, renderingPodcastEpisodeId))
+	// the same podcast episode still shows once its recording fails
+	await db.update(podcastEpisodes).set({ status: "failed" }).where(eq(podcastEpisodes.id, recordingPodcastEpisodeId))
 	const failedTopicPage = await loadTopicPage(ownerId, publicTopicId)
 	check(
-		"the topic page has the episode that failed to render",
+		"the topic page has the episode that failed to record",
 		failedTopicPage?.podcast?.unpublishedPodcastEpisode?.status === "failed",
 	)
-	await db.delete(podcastEpisodes).where(eq(podcastEpisodes.id, renderingPodcastEpisodeId))
+	await db.delete(podcastEpisodes).where(eq(podcastEpisodes.id, recordingPodcastEpisodeId))
 
 	// a HEAD of the audio gets the file's length, and a GET redirects
 	const audioPath = `/episodes/${publicPodcastEpisodeId}/audio.mp3`
@@ -351,16 +351,16 @@ try {
 		(await sendJson({ path: podcastPath, userId: ownerId, method: "PUT", body: { isPodcastEnabled: false } }))
 			.status === 200,
 	)
-	const podcastPlanResponse = await sendJson({
+	const podcastOnResponse = await sendJson({
 		path: podcastPath,
 		userId: ownerId,
 		method: "PUT",
 		body: { isPodcastEnabled: true },
 	})
 	check(
-		"a free topic that used its episode cannot turn it back on",
-		podcastPlanResponse.status === 402,
-		await podcastPlanResponse.json(),
+		"a free topic that has an episode turns its podcast back on",
+		podcastOnResponse.status === 200,
+		await podcastOnResponse.json(),
 	)
 	const updateTopicFieldsResult = await updateTopicFields({
 		userId: paidOwnerId,
