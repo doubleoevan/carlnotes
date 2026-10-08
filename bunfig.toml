@@ -1,6 +1,7 @@
 # test coverage settings. coverage itself stays opt-in: the preflight gate passes --coverage per invocation
 [test]
-coverageReporter = ["text", "lcov"]
+# no text table. bun fails to write one this large to a pipe, and CI's output is a pipe
+coverageReporter = ["lcov"]
 coverageDir = "coverage"
 # test files are not measured
 coverageSkipTestFiles = true
