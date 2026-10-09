@@ -716,6 +716,8 @@ export const podcastFeedTokens = pgTable(
 			.references(() => users.id, { onDelete: "cascade" }),
 		// the random value in the listener's feed url, which alone authorizes a request
 		token: text("token").notNull(),
+		// when a podcast app first fetched the feed. null until then
+		firstFetchedAt: timestamp("first_fetched_at", { withTimezone: true }),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	// one token per listener and topic. the unique token index covers the lookup by a feed url's token

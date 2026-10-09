@@ -501,7 +501,18 @@ try {
 	check("the new url works", (await request({ path: new URL(resetFeedUrl).pathname, userId: null })).status === 200)
 
 	// unsubscribing deletes the token
-	await setTopicSubscription(subscriberId, inviteTopicId, false)
+	await setTopicSubscription({
+		userId: subscriberId,
+		topicId: inviteTopicId,
+		isSubscribed: false,
+		analyticsProperties: {
+			entryPoint: "web",
+			plan: "free",
+			platform: "desktop",
+			browserPlatform: "other",
+			isInAppBrowser: false,
+		},
+	})
 	check(
 		"unsubscribing deletes the token",
 		(await request({ path: new URL(resetFeedUrl).pathname, userId: null })).status === 404,

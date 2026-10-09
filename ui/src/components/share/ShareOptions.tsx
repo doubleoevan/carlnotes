@@ -73,6 +73,7 @@ export function ShareTargetOptions({
 	encodedTitle,
 	reason,
 	onDisabledOptionClick,
+	onPlatformOptionClick,
 }: {
 	shareTargets: { label: string; icon: React.ReactNode; toUrl: (url: string, title: string) => string }[]
 	isEnabled: boolean
@@ -80,6 +81,8 @@ export function ShareTargetOptions({
 	encodedTitle: string
 	reason: string
 	onDisabledOptionClick?: () => void
+	// called with the platform's lowercased label as the share channel if its option is clicked
+	onPlatformOptionClick?: (channel: string) => void
 }) {
 	return (
 		<>
@@ -88,6 +91,7 @@ export function ShareTargetOptions({
 					<AnchorLink
 						key={shareTarget.label}
 						href={shareTarget.toUrl(encodedUrl, encodedTitle)}
+						onClick={() => onPlatformOptionClick?.(shareTarget.label.toLowerCase())}
 						className={SHARE_OPTION_CLASS}
 					>
 						{shareTarget.icon}

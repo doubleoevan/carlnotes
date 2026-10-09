@@ -1,5 +1,7 @@
 User-agent: *
 Allow: /
+Disallow: /login
+Disallow: /signup
 
 Sitemap: https://carlnotes.com/sitemap.xml
 Sitemap: https://carlnotes.com/docs/sitemap-index.xml

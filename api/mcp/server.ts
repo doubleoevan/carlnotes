@@ -1,12 +1,14 @@
 // the mcp server. one handler serves /mcp and the topic-bound /mcp/t/:topicId with the same tools
 import { StreamableHTTPTransport } from "@hono/mcp"
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
+import { McpServer, type RegisteredTool } from "@modelcontextprotocol/sdk/server/mcp.js"
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import { trackBotEvent } from "@shared/analytics"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { db } from "../../db"
 import { oauthApplications } from "../../db/schema"
 import { type AppEnv, currentUser } from "../currentUser"
-import { resolveToolCaller } from "./toolCaller"
+import { resolveToolCaller, type ToolCaller } from "./toolCaller"
 import { registerTools } from "./tools"
 
 // the name and version the mcpServer reports on initialize
@@ -37,10 +39,49 @@ export const mcpClientsRoute = new Hono<AppEnv>().get("/mcp/clients/:clientId", 
 async function handleMcpRequest(context: Context<AppEnv>, routeTopicId: string | null): Promise<Response> {
 	const toolCaller = context.get("toolCaller") ?? (await resolveToolCaller(context.req.raw.headers))
 	const mcpServer = new McpServer({ name: SERVER_NAME, version: SERVER_VERSION })
+	trackToolCalls(mcpServer, toolCaller)
 	registerTools(mcpServer, toolCaller, routeTopicId)
 
 	// connect a stateless transport. no session id, and a json response to each post
 	const transport = new StreamableHTTPTransport({ sessionIdGenerator: undefined, enableJsonResponse: true })
 	await mcpServer.connect(transport)
 	return (await transport.handleRequest(context)) ?? context.body(null, 204)
+}
+
+// a tool's handler and what it returns
+type ToolHandler = (...handlerArguments: unknown[]) => Promise<CallToolResult>
+
+/**
+ * Reports every tool call by the app that made it and the call's outcome, by wrapping the server's registerTool.
+ */
+export function trackToolCalls(mcpServer: McpServer, toolCaller: ToolCaller): void {
+	const registerTool = mcpServer.registerTool.bind(mcpServer)
+	const registerTrackedTool = (toolName: string, config: unknown, handler: ToolHandler): RegisteredTool =>
+		registerTool(
+			toolName,
+			config as never,
+			(async (...handlerArguments: unknown[]) => {
+				// report the result's outcome, or report a thrown error as failed and rethrow it
+				try {
+					const toolResult = await handler(...handlerArguments)
+					trackToolCall(toolCaller, toolName, toolResult.isError ? "rejected" : "ok")
+					return toolResult
+				} catch (error) {
+					trackToolCall(toolCaller, toolName, "failed")
+					throw error
+				}
+			}) as never,
+		)
+	mcpServer.registerTool = registerTrackedTool as unknown as typeof mcpServer.registerTool
+}
+
+// report one tool call by the app that made it, with the call's outcome
+function trackToolCall(toolCaller: ToolCaller, toolName: string, outcome: "ok" | "rejected" | "failed"): void {
+	trackBotEvent("mcp_tool_called", toolCaller.clientName, {
+		entryPoint: "mcp",
+		tool: toolName,
+		clientName: toolCaller.clientName,
+		callerKind: toolCaller.kind,
+		outcome,
+	})
 }

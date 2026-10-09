@@ -71,7 +71,7 @@ test("a page stops at the item limit", () => {
 // whether a page ends at the item limit or at the character budget
 test("a feed past the read limit pages to its end by windows", () => {
 	const feed = Array.from({ length: TOPIC_FINDINGS_READ_LIMIT + 45 }, (_, index) =>
-		toMcpFinding({ kind: "visitor" }, topicFinding(index, index % 7 === 0 ? 6000 : 40)),
+		toMcpFinding({ kind: "visitor", clientName: "test-app" }, topicFinding(index, index % 7 === 0 ? 6000 : 40)),
 	)
 	const pagedFindingIds: string[] = []
 	let cursor: string | null = null
@@ -98,13 +98,16 @@ test("a cursor round-trips and garbage reads as the start", () => {
 
 // a visitor's finding has no per-user field, and a user's has its consumed and bookmark times
 test("a visitor's finding has no per-user fields and a user's has them", () => {
-	const visitorFinding = toMcpFinding({ kind: "visitor" }, topicFinding(1))
+	const visitorFinding = toMcpFinding({ kind: "visitor", clientName: "test-app" }, topicFinding(1))
 	expect("isConsumed" in visitorFinding).toBe(false)
 	expect("isBookmarked" in visitorFinding).toBe(false)
 	expect(visitorFinding.relevanceExplanation).toBe("x".repeat(40))
 
 	// read the same finding as a user
-	const userFinding = toMcpFinding({ kind: "user", userId: "user-1", plan: "free" }, topicFinding(1))
+	const userFinding = toMcpFinding(
+		{ kind: "user", userId: "user-1", plan: "free", clientName: "test-app" },
+		topicFinding(1),
+	)
 	expect(userFinding.isConsumed).toBe(true)
 	expect(userFinding.isBookmarked).toBe(false)
 })

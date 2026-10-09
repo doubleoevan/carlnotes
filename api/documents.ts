@@ -1,12 +1,15 @@
-// the documents served beside the pages, and the redirect from the old /pricing path.
+// the documents served beside the pages, and the redirects from the old /pricing and /topics paths.
 // the documents are the feeds, the sitemap, the llms files, the IndexNow key, and security.txt
+import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
 import { isPodcastEpisodeRecordingConfigured } from "@shared/podcastEpisodes"
-import { eq } from "drizzle-orm"
+import { toBot } from "@shared/userAgent"
+import { and, eq, isNull } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
-import { topics } from "../db/schema"
+import { podcastFeedTokens, topics } from "../db/schema"
 import { loadPages } from "./content"
+import type { AppEnv } from "./currentUser"
 import { setRenderedCacheHeaders } from "./edgeCache"
 import {
 	loadPodcastFeedTokenListener,
@@ -22,13 +25,15 @@ import { toSiteFeedXml, toTopicFeedXml } from "./share/feed"
 const NOINDEX_HEADER = { "X-Robots-Tag": "noindex" }
 
 // the document routes
-export const documentsRoute = new Hono()
+export const documentsRoute = new Hono<AppEnv>()
 	// a public Topic's RSS feed, at a path after the Topic's id without its slug
 	.get("/topics/:id/feed.xml", async (context) => {
 		const topicFeedXml = await toTopicFeedXml(context.req.param("id"), appUrl())
 		if (!topicFeedXml) {
 			return context.text("not found", 404)
 		}
+		// name the public topic this feed is for, for the bot analytics
+		context.set("analyticsTopic", { topicId: context.req.param("id"), isPublic: true })
 		return context.body(topicFeedXml, 200, toDocumentHeaders("application/rss+xml; charset=utf-8", 900))
 	})
 	// a public Topic's podcast feed, after the Topic's id without its slug, shared at the edge like a rendered page
@@ -46,6 +51,7 @@ export const documentsRoute = new Hono()
 		}
 
 		// respond with a 304 if the request's copy is current, and let the edge share the feed
+		context.set("analyticsTopic", { topicId: context.req.param("id"), isPublic: true })
 		const podcastFeedResponse = toPodcastFeedResponse({ context, renderedPodcastFeed, routeHeaders: {} })
 		setRenderedCacheHeaders(context.req.raw, podcastFeedResponse)
 		return podcastFeedResponse
@@ -66,6 +72,26 @@ export const documentsRoute = new Hono()
 		if (!podcastFeedTokenListener || !topic) {
 			return context.text("not found", 404)
 		}
+		context.set("analyticsTopic", { topicId: topic.id, isPublic: topic.visibility === "public" })
+
+		// report a podcast app's first GET of this feed token as the feed added to that app
+		const bot = toBot(context.req.header("user-agent"))
+		if (bot?.kind === "podcastApp" && context.req.method === "GET") {
+			const [firstFetchedRow] = await db
+				.update(podcastFeedTokens)
+				.set({ firstFetchedAt: new Date() })
+				.where(and(eq(podcastFeedTokens.token, podcastFeedToken), isNull(podcastFeedTokens.firstFetchedAt)))
+				.returning({ id: podcastFeedTokens.id })
+			// the row comes back only on the first fetch
+			if (firstFetchedRow) {
+				trackEvent("podcast_feed_added", podcastFeedTokenListener.userId, {
+					entryPoint: "feed",
+					topicId: topic.id,
+					isTopicPublic: topic.visibility === "public",
+					client: bot.name,
+				})
+			}
+		}
 
 		// respond with the listener's own feed, or a 304 if the listener's copy is current
 		const listener = { userId: podcastFeedTokenListener.userId, token: podcastFeedToken }
@@ -73,8 +99,9 @@ export const documentsRoute = new Hono()
 		const routeHeaders = { ...NOINDEX_HEADER, "Cache-Control": "private, no-store" }
 		return toPodcastFeedResponse({ context, renderedPodcastFeed, routeHeaders })
 	})
-	// the plans page's old path, redirected permanently
+	// the permanent redirects from the plans page's old path and the old topics index
 	.get("/pricing", (context) => context.redirect("/plans", 301))
+	.get("/topics", (context) => context.redirect("/", 301))
 	// the llms.txt index of the site, its docs and blog, the most recently changed public topics,
 	// and the newest podcast episodes of the public topics
 	.get("/llms.txt", async (context) => {

@@ -7,7 +7,6 @@ import {
 	inviteAcceptResponse,
 	inviteCreateResponse,
 	manualScanResponse,
-	type PublicTopic,
 	type SuggestSourcesPayload,
 	type SuggestSourcesResponse,
 	scanNote,
@@ -377,12 +376,4 @@ export async function sendUserInvite(
 		return rejection
 	}
 	return response.status === 429 ? "limited" : "failed"
-}
-
-/**
- * Every shown public topic, most recently updated first, or an empty list if the request fails.
- */
-export async function fetchPublicTopics(): Promise<PublicTopic[]> {
-	const response = await apiClient.api["public-topics"].$get()
-	return response.ok ? ((await response.json()) as PublicTopic[]) : []
 }

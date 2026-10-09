@@ -2,6 +2,7 @@
 // its files and preview card, a listener's progress, a chapter's rating, the owner's podcast switch,
 // and removing an episode
 import { zValidator } from "@hono/zod-validator"
+import { trackEvent } from "@shared/analytics"
 import {
 	type PodcastEpisodeListenPayload,
 	podcastEpisodeListenPayload,
@@ -16,7 +17,7 @@ import { deletePodcastFeedCache } from "../../db/podcastFeedCache"
 import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes, subscriptions, topics } from "../../db/schema"
 import { removePodcastEpisode } from "../../worker"
 import { isAllowed } from "../authorization"
-import { type AppEnv, currentUser } from "../currentUser"
+import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toPodcastEpisodePreview } from "../share/podcastEpisodeImage"
 import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share/preview"
 import { updateTopicFields } from "../tool/topicTools"
@@ -53,8 +54,14 @@ const podcastEpisodeChapterParam = z.object({ id: z.string(), position: z.coerce
 // the topic that the listener is on. the next unplayed podcast episode comes from another topic
 const nextUnplayedPodcastEpisodeQuery = z.object({ topicId: z.string().optional() })
 
-// what a listener's player reported, with the listener and the podcast episode
-type SavePodcastEpisodeListenOptions = PodcastEpisodeListenPayload & { userId: string; podcastEpisodeId: string }
+// what a listener's player reported, with the listener, the podcast episode and its topic, and the request's
+// analytics properties
+type SavePodcastEpisodeListenOptions = PodcastEpisodeListenPayload & {
+	userId: string
+	podcastEpisodeId: string
+	topic: Pick<typeof topics.$inferSelect, "id" | "visibility">
+	analyticsProperties: AnalyticsProperties
+}
 
 // the user, and the topic that the user is on
 type LoadNextUnplayedPodcastEpisodeOptions = { userId: string; currentTopicId?: string }
@@ -65,6 +72,8 @@ type LoadNextUnplayedPodcastEpisodeOptions = { userId: string; currentTopicId?: 
 async function savePodcastEpisodeListen({
 	userId,
 	podcastEpisodeId,
+	topic,
+	analyticsProperties,
 	progressSeconds,
 	isPlaybackStart,
 	isCompleted,
@@ -85,6 +94,20 @@ async function savePodcastEpisodeListen({
 				...completedFields,
 			},
 		})
+
+	// report a playback start and a completion
+	const listenProperties = {
+		...analyticsProperties,
+		topicId: topic.id,
+		isTopicPublic: topic.visibility === "public",
+		episodeId: podcastEpisodeId,
+	}
+	if (isPlaybackStart) {
+		trackEvent("episode_played", userId, listenProperties)
+	}
+	if (isCompleted) {
+		trackEvent("episode_completed", userId, listenProperties)
+	}
 }
 
 /**
@@ -193,6 +216,7 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 			topicId: context.req.param("id"),
 			topicFields: context.req.valid("json"),
 			promptVersionOrigin: "editor",
+			analyticsProperties: toAnalyticsProperties(context),
 		})
 		if (updateTopicFieldsResult.status === "saved") {
 			return context.json({ ok: true })
@@ -288,8 +312,13 @@ export const podcastEpisodesRoute = new Hono<AppEnv>()
 		}
 
 		// save what the player reported
-		const podcastEpisodeId = accessiblePodcastEpisode.podcastEpisodeRow.id
-		await savePodcastEpisodeListen({ userId, podcastEpisodeId, ...context.req.valid("json") })
+		await savePodcastEpisodeListen({
+			userId,
+			podcastEpisodeId: accessiblePodcastEpisode.podcastEpisodeRow.id,
+			topic: accessiblePodcastEpisode.topic,
+			analyticsProperties: toAnalyticsProperties(context),
+			...context.req.valid("json"),
+		})
 		return context.json({ ok: true })
 	})
 	.post(

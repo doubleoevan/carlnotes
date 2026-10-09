@@ -53,7 +53,7 @@ type PodcastEpisodeListenRow = Pick<
 >
 
 // the topic fields that a podcast episode's page path is built from
-type PodcastEpisodeTopic = Pick<TopicRow, "id" | "name">
+type PodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "visibility">
 
 // the topic fields that the latest podcast episode loader reads: the podcast episode's topic and its access check
 type LatestPodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "ownerId" | "visibility">
@@ -466,6 +466,7 @@ function toPodcastEpisode({
 	return {
 		id: podcastEpisodeRow.id,
 		topicId: podcastEpisodeRow.topicId ?? "",
+		topicVisibility: topic.visibility,
 		status,
 		title: podcastEpisodeRow.title,
 		description: podcastEpisodeRow.description,

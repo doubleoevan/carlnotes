@@ -1,6 +1,7 @@
 // the team routes and the logic for them: creating a team, attaching and detaching topics, the public toggle,
 // deletion
 import { zValidator } from "@hono/zod-validator"
+import { trackEvent } from "@shared/analytics"
 import {
 	addTopicPayload,
 	createTeamPayload,
@@ -16,7 +17,7 @@ import { canCreateTeamToday, loadUserAccess } from "../../db/quotas"
 import { invites, subscriptions, teamMembers, teams, teamTopics, topics, users } from "../../db/schema"
 import { deleteAttachment } from "../../worker"
 import { isLeaderRole } from "../authorization"
-import { type AppEnv, currentUser } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { canSeeTopic } from "../topic/permissions"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
@@ -216,6 +217,7 @@ async function addTopicInTransaction(
 		.where(and(eq(teamMembers.teamId, teamId), eq(teamMembers.isActive, true)))
 	await saveTeamTopicSubscriptions(
 		transaction,
+		teamId,
 		teamMemberRows.map((teamMemberRow) => teamMemberRow.userId),
 		[{ id: topicId, frequency: topic.frequency }],
 	)
@@ -485,6 +487,7 @@ export const teamsRoute = new Hono<AppEnv>()
 		// create the team, answering which way a rejection went so the modal can say so
 		const created = await createTeam(userId, context.req.valid("json"))
 		if (created.status === "created") {
+			trackEvent("team_created", userId, { ...toAnalyticsProperties(context), teamId: created.teamId })
 			return context.json(created)
 		}
 		// a taken name is reported by name, and the daily creation limit is the other rejection creation has
@@ -514,7 +517,11 @@ export const teamsRoute = new Hono<AppEnv>()
 		}
 		// ask to join. a missing team and a member both answer not found, telling a non-member nothing
 		const isRequested = await requestToJoinTeam(userId, context.req.param("id"))
-		return isRequested ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
+		if (!isRequested) {
+			return context.json({ error: "not found" }, 404)
+		}
+		trackEvent("team_join_requested", userId, { ...toAnalyticsProperties(context), teamId: context.req.param("id") })
+		return context.json({ ok: true })
 	})
 	.delete("/teams/:id/join-requests/me", async (context) => {
 		// reject a signed-out visitor
@@ -537,7 +544,16 @@ export const teamsRoute = new Hono<AppEnv>()
 		if (outcome === "forbidden") {
 			return context.json({ error: "not found" }, 404)
 		}
-		return outcome === "limited" ? context.json({ error: "team is full" }, 409) : context.json({ ok: true })
+		if (outcome === "limited") {
+			return context.json({ error: "team is full" }, 409)
+		}
+		// report the approval with the member it admitted
+		trackEvent("team_join_approved", userId, {
+			...toAnalyticsProperties(context),
+			teamId: context.req.param("id"),
+			memberUserId: context.req.param("userId"),
+		})
+		return context.json({ ok: true })
 	})
 	.patch("/teams/:id", zValidator("json", updateTeamPayload), async (context) => {
 		// reject a signed-out visitor
@@ -563,6 +579,10 @@ export const teamsRoute = new Hono<AppEnv>()
 		if (deleteTeamResult.status === "forbidden") {
 			return context.json({ error: "not found" }, 404)
 		}
+		// report the deletion only if the team is gone, not if it survives under a new leader
+		if (deleteTeamResult.status === "deleted") {
+			trackEvent("team_deleted", userId, { ...toAnalyticsProperties(context), teamId: context.req.param("id") })
+		}
 		return context.json(deleteTeamResult)
 	})
 	.post("/teams/:id/topics", zValidator("json", addTopicPayload), async (context) => {
@@ -574,6 +594,11 @@ export const teamsRoute = new Hono<AppEnv>()
 		// attach, rejecting a topic this team already holds with a message naming the conflict
 		const attached = await addTopicToTeam(userId, context.req.param("id"), context.req.valid("json").topicId)
 		if (attached === "added") {
+			trackEvent("team_topic_added", userId, {
+				...toAnalyticsProperties(context),
+				teamId: context.req.param("id"),
+				topicId: context.req.valid("json").topicId,
+			})
 			return context.json({ ok: true })
 		}
 
@@ -588,8 +613,17 @@ export const teamsRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		const isRemoved = await removeTopicFromTeam(userId, context.req.param("id"), context.req.param("topicId"))
-		return isRemoved ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
+		// detach the topic, then report it with the team
+		const isTopicRemoved = await removeTopicFromTeam(userId, context.req.param("id"), context.req.param("topicId"))
+		if (!isTopicRemoved) {
+			return context.json({ error: "not found" }, 404)
+		}
+		trackEvent("team_topic_removed", userId, {
+			...toAnalyticsProperties(context),
+			teamId: context.req.param("id"),
+			topicId: context.req.param("topicId"),
+		})
+		return context.json({ ok: true })
 	})
 	.post("/teams/:id/members/:userId/role", zValidator("json", memberRolePayload), async (context) => {
 		// reject a signed-out visitor
@@ -673,6 +707,11 @@ export const teamsRoute = new Hono<AppEnv>()
 		// remove or leave, holding the last leader in place
 		const removed = await removeTeamMember(actingUserId, context.req.param("id"), context.req.param("userId"))
 		if (removed === "removed") {
+			trackEvent("team_member_removed", actingUserId, {
+				...toAnalyticsProperties(context),
+				teamId: context.req.param("id"),
+				isSelf: actingUserId === context.req.param("userId"),
+			})
 			return context.json({ ok: true })
 		}
 		return removed === "lastLeader"

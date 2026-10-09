@@ -29,8 +29,8 @@ const INLINE_ICON_BUTTON_CLASS =
 	"relative ml-2.5 inline-grid size-5 -translate-y-1 place-items-center align-middle before:absolute before:-inset-3 before:content-['']"
 const ICON_BUTTON_CLASS = "relative grid size-7 place-items-center before:absolute before:-inset-2 before:content-['']"
 
-// the topic feed and its position in the section. the position staggers the entrance animation
-type TopicProps = { topic: TopicFeed; index: number }
+// the topic feed, the card's classes, and its position on the section's page, which staggers the entrance animation
+type TopicProps = { topic: TopicFeed; index: number; className?: string }
 
 // the team and the owner that a topic's byline chooses between
 type TopicBylineProps = { topic: Pick<TopicFeed, "teamLink" | "owner">; className?: string }
@@ -50,14 +50,14 @@ export function TopicByline({ topic, className }: TopicBylineProps) {
  * A single topic in the feed. The topic header, then up to five topic resource rows.
  * It stays hidden until scrolled into view, then plays the hydrate animation.
  */
-export function Topic({ topic, index }: TopicProps) {
+export function Topic({ topic, index, className }: TopicProps) {
 	// a card the server rendered is shown at once, and one rendered in the browser fades in as it scrolls into view
 	const { ref, revealClassName } = useRevealClassName<HTMLDivElement>({ isAnimatedOnServer: false })
 	return (
 		<div
 			ref={ref}
 			data-reveal
-			className={cn("py-1.5", revealClassName)}
+			className={cn("py-1.5", revealClassName, className)}
 			style={{ animationDelay: `${Math.min(index, 3) * 50}ms` }}
 		>
 			{/* header: the title takes the whole row and wraps instead of truncating, with the byline and
@@ -112,9 +112,10 @@ export function Topic({ topic, index }: TopicProps) {
 				topicFindings={topic.findings}
 				isRatable={topic.canRate}
 				isBookmarkable={topic.isTopicOwner || topic.isTeamMember}
-				topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
+				topic={{ id: topic.id, name: topic.name, prompt: topic.prompt, visibility: topic.visibility }}
 				latestPodcastEpisode={topic.latestPodcastEpisode}
 				emptyText="Nothing new worth your time yet. Carl has standards."
+				fullListHref={toTopicPath(topic)}
 				className="mt-1.5"
 				moreButtonClassName="pl-12"
 			/>

@@ -1,5 +1,6 @@
 import type { PodcastEpisode, PodcastEpisodeChapter, TopicFinding } from "@shared/contracts"
 import { toHostWithoutWww } from "@shared/seo"
+import type * as React from "react"
 import { useState } from "react"
 import { sendPodcastEpisodeChapterRating } from "@/clients/podcastEpisodeClient"
 import { RatingThumbs } from "@/components/common/RatingThumbs"
@@ -7,7 +8,7 @@ import { PodcastEpisodeChapterPill } from "@/components/podcast/PodcastEpisodePi
 import { Popover, PopoverAnchor, PopoverTrigger } from "@/components/primitives/popover"
 import { ResourceInfo } from "@/components/topic/TopicResource"
 import { toClockLabel } from "@/lib/labels"
-import { DASHED_ROW_CLASS } from "@/lib/styleClasses"
+import { DASHED_ROW_CLASS, SCRIPTED_HIDDEN_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import type { TopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { playPodcastEpisode } from "@/stores/podcastEpisodePlayerStore"
@@ -26,10 +27,10 @@ const THUMBS_SLOT_CLASS = "relative z-10 hidden shrink-0 items-center gap-2 pr-3
 // whether the user may rate and bookmark the findings, and the calls behind the note's buttons
 export type ChapterTopicFeed = {
 	topicFindings: TopicFinding[]
-	topic: { id: string; name: string; prompt: string }
+	topic: React.ComponentProps<typeof ResourceInfo>["topic"]
 	isRatable: boolean
 	isBookmarkable: boolean
-	topicHandlers: TopicFeedHandlers
+	topicFeedHandlers: TopicFeedHandlers
 }
 
 // the podcast episode, the player's chapter index or null if the episode is not loaded, whether the list is expanded,
@@ -90,7 +91,7 @@ function PodcastEpisodeChapterRow({
 	chapterTopicFeed,
 }: PodcastEpisodeChapterRowProps) {
 	// the chapter's topic finding if the user sees it, whether its note is open, and the chapter's source and times
-	const { topicFindings, isRatable, topicHandlers } = chapterTopicFeed
+	const { topicFindings, isRatable, topicFeedHandlers } = chapterTopicFeed
 	const chapterTopicFinding = topicFindings.find((topicFinding) => topicFinding.findingId === chapter.findingId)
 	const [isNoteOpen, setIsNoteOpen] = useState(false)
 	const chapterTimesLabel = `${toClockLabel(chapter.startSeconds)} to ${toClockLabel(chapter.endSeconds)}`
@@ -115,7 +116,7 @@ function PodcastEpisodeChapterRow({
 				// the player's chapter stays highlighted
 				isPlayerChapter && "before:bg-muted/70",
 				// every chapter is in the html. with JavaScript, the rows past the first few hide until the list expands
-				isHiddenUntilExpanded && "scripted:hidden",
+				isHiddenUntilExpanded && SCRIPTED_HIDDEN_CLASS,
 			)}
 		>
 			{/* the chapter's number */}
@@ -165,7 +166,7 @@ function PodcastEpisodeChapterRow({
 					{chapterTopicFinding ? (
 						<RatingThumbs
 							rating={chapterTopicFinding.rating}
-							onRate={(rating) => topicHandlers.rateTopicFinding(chapterTopicFinding.findingId, rating)}
+							onRate={(rating) => topicFeedHandlers.rateTopicFinding(chapterTopicFinding.findingId, rating)}
 							ariaLabelSuffix={`, chapter ${chapter.position + 1}`}
 						/>
 					) : (
@@ -214,7 +215,7 @@ export function ChapterTopicFindingNote({
 	isNoteOpen,
 	chapterTopicFeed,
 }: ChapterTopicFindingNoteProps) {
-	const { topic, isRatable, isBookmarkable, topicHandlers } = chapterTopicFeed
+	const { topic, isRatable, isBookmarkable, topicFeedHandlers } = chapterTopicFeed
 	return (
 		<>
 			<PopoverAnchor className="pointer-events-none absolute top-1.5 right-1 size-11 sm:size-8" />
@@ -226,7 +227,7 @@ export function ChapterTopicFindingNote({
 					topic={topic}
 					isRatable={isRatable}
 					isBookmarkable={isBookmarkable}
-					topicHandlers={topicHandlers}
+					topicFeedHandlers={topicFeedHandlers}
 				/>
 			)}
 		</>

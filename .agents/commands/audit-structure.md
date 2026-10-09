@@ -375,6 +375,17 @@ Check for:
      `episode-renders` task queue, the `episode-render` Langfuse trace, and `PODCAST_RENDER_CONCURRENCY`. the scan
      workflow's `episode-render-workflow` patch id keeps its string, since every scan workflow's history stores it. a
      feed's rendered XML, a cover image, an email, and a component still render
+   - the `/topics` page: `ui/src/pages/PublicTopicsPage.tsx` with its route `topics.index.tsx`, the
+     `GET /api/public-topics` route, and `fetchPublicTopics` in `ui/src/clients/topicClient.ts` (removed: the
+     homepage's paged sections, the sitemap, and llms.txt lead a crawler to every public topic, and
+     `loadPublicTopics` stays for them)
+   - `AnalyticsEvent` (now `UserAnalyticsEvent` beside `BotAnalyticsEvent` and `VisitAnalyticsEvent` in
+     `shared/analytics.ts`), and the `topic_edited` events the add-source and remove-source Topic Tools emitted (now
+     `source_added` and `source_removed`, which the topic form emits too). `usePagination` returns
+     `{ pageRows, renderedRows, pagination }` instead of the state spread beside `pageRows`
+   - `resourceHandlers`, `topicHandlers`, and the `handlers` prop of `TopicFindingsSection` (now `topicFeedHandlers`,
+     the name of their `TopicFeedHandlers` type, in every component that passes them), and `stopResult` (now
+     `stopManualScanResult`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -1,7 +1,17 @@
-// analytics tests for the fallback default without a key and the cta tag validation
+// analytics tests for the fallback default without a key, a bot capture's shape, and the cta tag validation
 import { expect, test } from "bun:test"
-import { trackEvent } from "./analytics"
+import { toBotCapture, trackBotEvent, trackEvent } from "./analytics"
 import { toCtaTag } from "./contracts"
+
+// a bot's capture is keyed to the bot's name and never creates a person profile
+test("toBotCapture keys the event to the bot and turns the person profile off", () => {
+	expect(toBotCapture("crawler_fetched", "googlebot", { routeShape: "/topics/:id/:slug", status: 200 })).toEqual({
+		distinctId: "googlebot",
+		event: "crawler_fetched",
+		properties: { routeShape: "/topics/:id/:slug", status: 200, $process_person_profile: false },
+	})
+	expect(toBotCapture("mcp_connected", "claude").properties).toEqual({ $process_person_profile: false })
+})
 
 // only a well-formed slug becomes an event property, so a tampered cookie never reaches analytics
 test("toCtaTag admits slugs and rejects everything else", () => {
@@ -24,8 +34,9 @@ test("analytics is a no-op without its key", () => {
 	Bun.env.POSTHOG_API_KEY = undefined
 
 	try {
-		// a call without a key should not throw an error
+		// a call without a key should not throw an error, for a user's event or a bot's
 		expect(() => trackEvent("signup_completed", "user-1")).not.toThrow()
+		expect(() => trackBotEvent("crawler_fetched", "googlebot")).not.toThrow()
 	} finally {
 		Bun.env.POSTHOG_API_KEY = originalApiKey
 	}

@@ -5,15 +5,15 @@ import {
 	fetchPodcastEpisode,
 	sendPodcastEpisodeListen,
 } from "@/clients/podcastEpisodeClient"
-import { toChapterIndexAt, updatePodcastEpisodeMediaSession } from "@/lib/podcastEpisodePlayback"
+import {
+	SKIP_BACK_SECONDS,
+	SKIP_FORWARD_SECONDS,
+	toChapterIndexAt,
+	toNextPlaybackRate,
+	updatePodcastEpisodeMediaSession,
+} from "@/lib/podcastEpisodePlayback"
+import { captureEpisodeVisitEvent } from "@/lib/visitAnalytics"
 import { toStoreListeners } from "@/stores/storeListeners"
-
-// the playback rates, in the order that cyclePlaybackRate steps through
-const PLAYBACK_RATES = [1, 1.25, 1.5, 2, 0.75]
-
-// how far the back and forward controls skip
-export const SKIP_BACK_SECONDS = 15
-export const SKIP_FORWARD_SECONDS = 30
 
 // how often a playing podcast episode saves the user's progress
 const LISTEN_SAVE_INTERVAL_MS = 30_000
@@ -173,10 +173,11 @@ export async function playPodcastEpisode(podcastEpisode: PodcastEpisode, startSe
 	// start playback. a start that the browser blocks leaves the podcast episode loaded and ready to play
 	try {
 		await audioElement.play()
-		return true
 	} catch {
 		return false
 	}
+	captureEpisodeVisitEvent("visit_episode_played", podcastEpisode)
+	return true
 }
 
 /**
@@ -265,8 +266,7 @@ function skipChapter(direction: 1 | -1): void {
  * Changes the playback rate to the next rate in the list, or to the first rate after the last.
  */
 export function cyclePlaybackRate(): void {
-	const playbackRateIndex = PLAYBACK_RATES.indexOf(playerState.playbackRate)
-	const playbackRate = PLAYBACK_RATES[(playbackRateIndex + 1) % PLAYBACK_RATES.length] ?? 1
+	const playbackRate = toNextPlaybackRate(playerState.playbackRate)
 	if (audioElement) {
 		audioElement.playbackRate = playbackRate
 	}
@@ -342,6 +342,7 @@ async function handleEnded(): Promise<void> {
 	}
 	saveListen({ isCompleted: true })
 	updatePlayerState({ isPlaying: false })
+	captureEpisodeVisitEvent("visit_episode_completed", endedPodcastEpisode)
 
 	// only a signed-in user has a next unplayed podcast episode
 	const nextUnplayedPodcastEpisode = isUserSignedIn

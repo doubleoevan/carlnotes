@@ -20,6 +20,7 @@ import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
+import { MoreTopicsSection } from "@/components/topic/MoreTopicsSection"
 import { NewCountInfo } from "@/components/topic/Topic"
 import { TopicActionBar, toTopicActionLayout, toTopicActionOptions } from "@/components/topic/TopicActions"
 import { TopicEditorChoiceDialog, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
@@ -38,6 +39,7 @@ import { useRevealClassName } from "@/hooks/useRevealClassName"
 import { matchesTopicFindingFilter } from "@/lib/topicFindingFilters"
 import { toSortedTopicFindings } from "@/lib/topicFindingSorts"
 import { cn, NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
+import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, usePageTopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
 import { useRegisterChatContext, useTopicChangeCount } from "@/stores/chatPanelStore"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
@@ -62,6 +64,18 @@ export function TopicPage() {
 	// the open dialog, or null if no dialog is open
 	const [openDialog, setOpenDialog] = useState<TopicDialog | null>(null)
 	usePageTitle(topic?.name ?? null)
+
+	// report the visit once per topic, naming the topic only if it is public
+	const loadedTopicId = topic?.id
+	const loadedTopicVisibility = topic?.visibility
+	useEffect(() => {
+		if (loadedTopicId === topicId && loadedTopicVisibility) {
+			captureVisitEvent(
+				"visit_topic_viewed",
+				toPublicTopicProperties({ id: topicId, visibility: loadedTopicVisibility }),
+			)
+		}
+	}, [topicId, loadedTopicId, loadedTopicVisibility])
 
 	// the owning team a user on none of the topic's teams could join
 	const joinTeam = topic?.roomTeams.length === 0 ? topic.teamLink : null
@@ -134,7 +148,7 @@ export function TopicPage() {
 	)
 
 	// the topic feed handlers, which reload the page after each action
-	const topicHandlers = usePageTopicFeedHandlers(reloadTopicPage)
+	const topicFeedHandlers = usePageTopicFeedHandlers(reloadTopicPage)
 
 	// toggle this user's subscription
 	const handleSubscriptionToggle = async (): Promise<void> => {
@@ -216,7 +230,7 @@ export function TopicPage() {
 					<HydrateSection index={1}>
 						<PodcastEpisodePlayer
 							topic={topic}
-							topicHandlers={topicHandlers}
+							topicFeedHandlers={topicFeedHandlers}
 							onPodcastEpisodeRemoved={reloadTopicPage}
 							scanControl={
 								<TopicScanButton
@@ -228,12 +242,18 @@ export function TopicPage() {
 							}
 						/>
 					</HydrateSection>
-					<TopicFindings topic={topic} topicHandlers={topicHandlers} />
+					<TopicFindings topic={topic} topicFeedHandlers={topicFeedHandlers} />
 					<TopicCards
 						topic={topic}
 						onMakeTopicPublic={() => setOpenDialog("make-public")}
 						onReloadTopicPage={reloadTopicPage}
 					/>
+					{/* the links to more public topics, last on a public topic's page */}
+					{topic.moreTopics.length > 0 && (
+						<HydrateSection index={4}>
+							<MoreTopicsSection moreTopics={topic.moreTopics} />
+						</HydrateSection>
+					)}
 					<TopicDialogs
 						topic={topic}
 						openDialog={openDialog}
@@ -325,7 +345,7 @@ function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions)
  * The topic's findings, narrowed and sorted by the shared feed filters. A filter change remounts the section
  * and its hydrate entrance replays.
  */
-function TopicFindings({ topic, topicHandlers }: { topic: TopicResponse; topicHandlers: TopicFeedHandlers }) {
+function TopicFindings({ topic, topicFeedHandlers }: { topic: TopicResponse; topicFeedHandlers: TopicFeedHandlers }) {
 	const { findingFilter, sort, resourceKinds, bookmarkScope } = useTopicFeed()
 
 	// the findings this user sees
@@ -344,8 +364,8 @@ function TopicFindings({ topic, topicHandlers }: { topic: TopicResponse; topicHa
 				hasAnyFindings={topic.findings.length > 0}
 				isRatable={topic.canRate}
 				isBookmarkable={topic.isTopicOwner || topic.isTeamMember}
-				handlers={topicHandlers}
-				topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
+				topicFeedHandlers={topicFeedHandlers}
+				topic={{ id: topic.id, name: topic.name, prompt: topic.prompt, visibility: topic.visibility }}
 				newCountInfo={topic.newCount > 0 ? <NewCountInfo topic={topic} /> : undefined}
 				latestPodcastEpisode={topic.latestPodcastEpisode}
 			/>

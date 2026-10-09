@@ -1,13 +1,9 @@
 import { RotateCcw, RotateCw } from "lucide-react"
 import type * as React from "react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { SKIP_BACK_SECONDS, SKIP_FORWARD_SECONDS } from "@/lib/podcastEpisodePlayback"
 import { PLAYBACK_CONTROL_BUTTON_CLASS } from "@/lib/styleClasses"
-import {
-	cyclePlaybackRate,
-	SKIP_BACK_SECONDS,
-	SKIP_FORWARD_SECONDS,
-	skipPlaybackBy,
-} from "@/stores/podcastEpisodePlayerStore"
+import { cyclePlaybackRate, skipPlaybackBy } from "@/stores/podcastEpisodePlayerStore"
 
 /**
  * The skip back and skip forward buttons of the loaded podcast episode, each with its label as a tooltip.

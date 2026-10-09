@@ -3,6 +3,7 @@ import { getRouteApi, Link } from "@tanstack/react-router"
 import type { MouseEvent } from "react"
 import { Pagination } from "@/components/common/Pagination"
 import { AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
+import { toRenderedRows } from "@/lib/renderedRows"
 import { RAIL_TEXT_INSET } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { Topic } from "./Topic"
@@ -28,10 +29,11 @@ type TopicSectionProps = { section: TopicFeedResponse["sections"][number]; onNew
  * A collapsible section of topics: "Your topics", "Your subscribed topics", "Featured topics", or "Popular topics"
  */
 export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
-	// pick the topics from the page the url names. a page number past the last page stays on the last page
+	// the topics the section renders: the page the url names, and the first NO_SCRIPT_ROW_LIMIT topics for a reader without JavaScript.
+	// a page number past the last page stays on the last page
 	const pageCount = Math.max(1, Math.ceil(section.topics.length / TOPICS_PER_PAGE))
 	const pageNumber = Math.min(homeRoute.useSearch()[section.key] ?? 1, pageCount)
-	const pageTopics = section.topics.slice((pageNumber - 1) * TOPICS_PER_PAGE, pageNumber * TOPICS_PER_PAGE)
+	const renderedTopics = toRenderedRows(section.topics, { pageNumber, pageSize: TOPICS_PER_PAGE })
 	return (
 		<AccordionItem value={section.key}>
 			<AccordionTrigger onClick={scrollTriggerToTop} className="pb-1">
@@ -51,8 +53,9 @@ export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 						</button>
 					</p>
 				)}
-				{pageTopics.map((topic, index) => (
-					<Topic key={topic.id} topic={topic} index={index} />
+				{/* the topics, each at its position on its page */}
+				{renderedTopics.map(({ row: topic, className }, index) => (
+					<Topic key={topic.id} topic={topic} index={index % TOPICS_PER_PAGE} className={className} />
 				))}
 				{/* the links to the section's pages */}
 				{pageCount > 1 && (
@@ -60,6 +63,7 @@ export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 						ariaLabel={`${SECTION_TITLE[section.key]} pages`}
 						pageNumber={pageNumber}
 						pageCount={pageCount}
+						rowCount={section.topics.length}
 						renderPageLink={({ linkedPageNumber, label, className, isCurrentPage, onClick }) => (
 							<Link
 								to="/"

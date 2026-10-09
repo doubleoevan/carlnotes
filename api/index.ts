@@ -15,6 +15,7 @@ import { startTelemetry } from "../worker"
 import { apiRoute } from "./api"
 import { auth, checkTrustedProxies } from "./auth"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
+import { trackBotFetches } from "./botAnalytics"
 import { contentRoute } from "./content"
 import type { AppEnv } from "./currentUser"
 import { documentsRoute } from "./documents"
@@ -92,6 +93,8 @@ const server = new Hono<AppEnv>()
 	.get("/.well-known/oauth-authorization-server/*", (context) => oAuthDiscoveryMetadata(auth)(context.req.raw))
 	.get("/.well-known/oauth-protected-resource", (context) => oAuthProtectedResourceMetadata(auth)(context.req.raw))
 	.get("/.well-known/oauth-protected-resource/*", (context) => oAuthProtectedResourceMetadata(auth)(context.req.raw))
+	// report what a known bot fetched, once the route below has answered: a page, a document, a card, or a feed
+	.use("*", trackBotFetches)
 	// the tool caller resolves ahead of the limiter, which keys by the user a token names. the wildcard matches /mcp itself
 	.use("/mcp/*", async (context, next) => {
 		context.set("toolCaller", await resolveToolCaller(context.req.raw.headers))
@@ -107,7 +110,7 @@ const server = new Hono<AppEnv>()
 	.all("/api/*", (context) => context.json({ error: "not found" }, 404))
 	// the server-rendered blog and docs pages
 	.route("/", contentRoute)
-	// the documents built per request, and the redirect from the old /pricing path
+	// the documents built per request, and the redirects from the old /pricing and /topics paths
 	.route("/", documentsRoute)
 	// the statically built docs site, which owns every /docs path
 	.on(

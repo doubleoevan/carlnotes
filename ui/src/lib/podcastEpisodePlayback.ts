@@ -1,6 +1,14 @@
-// the playback helpers that hold no state: the chapter at a position, and the lock screen's media session
+// the playback helpers that hold no state: the chapter at a position, the next playback rate, the skip lengths, and
+// the lock screen's media session
 import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts"
 import { PODCAST_NAME } from "@shared/podcastEpisodes"
+
+// the playback rates, in the order that toNextPlaybackRate steps through
+const PLAYBACK_RATES = [1, 1.25, 1.5, 2, 0.75]
+
+// how far the back and forward controls skip
+export const SKIP_BACK_SECONDS = 15
+export const SKIP_FORWARD_SECONDS = 30
 
 // what the lock screen's controls call: play or pause, skip to the next or the previous chapter, and skip by seconds
 export type MediaSessionControls = {
@@ -16,6 +24,14 @@ export type MediaSessionControls = {
 export function toChapterIndexAt(chapters: PodcastEpisodeChapter[], positionSeconds: number): number {
 	const chapterIndex = chapters.findLastIndex((chapter) => chapter.startSeconds <= positionSeconds)
 	return chapters.length > 0 ? Math.max(chapterIndex, 0) : -1
+}
+
+/**
+ * Returns the playback rate after this one in the list, or the first playback rate after the last.
+ */
+export function toNextPlaybackRate(playbackRate: number): number {
+	const playbackRateIndex = PLAYBACK_RATES.indexOf(playbackRate)
+	return PLAYBACK_RATES[(playbackRateIndex + 1) % PLAYBACK_RATES.length] ?? 1
 }
 
 /**

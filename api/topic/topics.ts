@@ -50,6 +50,7 @@ import {
 	toScheduledTimeLabel,
 	toTeamFields,
 } from "./helpers"
+import { loadMoreTopics } from "./moreTopics"
 import { loadDirectSubscription } from "./permissions"
 import { type PromptVersionOrigin, savePromptVersion } from "./promptVersions"
 import { startOfUtcMonth } from "./quotas"
@@ -105,11 +106,12 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		inviteAndScanFields,
 		owner,
 		teamFields,
-		// whether a daily frequency is paused, what the user may do on the topic, and the podcast
+		// whether a daily frequency is paused, what the user may do on the topic, the podcast, and the more topics
 		isDailyFrequencyPaused,
 		canRate,
 		canEdit,
 		{ podcast, latestPodcastEpisode, podcastEpisodeByScanId },
+		moreTopics,
 	] = await traceRequestStage("topic_page.reads", () =>
 		Promise.all([
 			// the user's access and the findings it gates
@@ -133,6 +135,8 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 			isAllowed(userId, "topic:edit", topic),
 			// the topic's podcast, and each scan's podcast episode for the scan history
 			loadTopicPodcast(topic, userId),
+			// the other public topics the page links, none for a topic that is not public and shown
+			loadMoreTopics(topic),
 		]),
 	)
 
@@ -204,6 +208,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		...teamFields,
 		isOnTeam: topic.teamId !== null,
 		...(await toFeaturedTopics(topic.featureOrder, isAdmin)),
+		moreTopics,
 	}
 }
 
@@ -434,6 +439,7 @@ export async function updateTopic(
 
 	// one transaction covers the fields and both reconciled invitee and source lists
 	const { name, prompt, tags, frequency, scheduledTime, scheduledDayOfWeek, visibility, maxTopicFindings } = payload
+	const newSources = payload.sources.flatMap((topicSource) => ("id" in topicSource ? [] : [topicSource]))
 	// only the owner manages invites, so a team editor's save leaves the invite list untouched
 	const mayReconcileInvites = await isAllowed(userId, "topic:invite", topic)
 	// the deduped invite emails, shared by the reconcile inside the transaction and the emails after it
@@ -451,7 +457,7 @@ export async function updateTopic(
 		return inviteeCheck
 	}
 	const podcastNames = await toPodcastNames(payload.sources)
-	await db.transaction(async (transaction) => {
+	const removedSourceKinds = await db.transaction(async (transaction) => {
 		// write the editable topic fields
 		await transaction
 			.update(topics)
@@ -512,15 +518,19 @@ export async function updateTopic(
 			keptSourceIds.length > 0
 				? and(eq(sources.topicId, topicId), notInArray(sources.id, keptSourceIds))
 				: eq(sources.topicId, topicId)
-		await transaction.delete(sources).where(staleSourceFilter)
+		// the deleted rows come back with their kinds, for the events reported after the transaction
+		const removedSourceRows = await transaction
+			.delete(sources)
+			.where(staleSourceFilter)
+			.returning({ kind: sources.kind })
 
 		// insert the newly added sources. the flatMap narrows the union to the members with source kind and source config
-		const newSources = payload.sources.flatMap((topicSource) => ("id" in topicSource ? [] : [topicSource]))
 		if (newSources.length > 0) {
 			await transaction
 				.insert(sources)
 				.values(newSources.map((topicSource) => toNewSourceRow(topicId, topicSource, podcastNames)))
 		}
+		return removedSourceRows.map((removedSourceRow) => removedSourceRow.kind)
 	})
 
 	// screen whatever this edit added with llm-guard, now that the rows are committed
@@ -535,9 +545,40 @@ export async function updateTopic(
 		...inviteeCheck.reinvitedEmails,
 	])
 
-	// record who saved the topic. an admin may edit a topic they do not own so flag if it was not saved by the owner
-	trackEvent("topic_updated", userId, { ...analyticsProperties, topicId, isTopicOwner: topic.ownerId === userId })
+	// record who saved the topic, whether the owner saved it, and the names of the fields that changed
+	const topicProperties = { ...analyticsProperties, topicId, isTopicPublic: visibility === "public" }
+	trackEvent("topic_updated", userId, {
+		...topicProperties,
+		isTopicOwner: topic.ownerId === userId,
+		changedFields: toChangedTopicFieldNames(topic, payload).join(","),
+	})
+
+	// report each source the save added and each one it removed, by its kind
+	for (const newSource of newSources) {
+		trackEvent("source_added", userId, { ...topicProperties, sourceType: newSource.sourceKind, origin: "editor" })
+	}
+	for (const removedSourceKind of removedSourceKinds) {
+		trackEvent("source_removed", userId, { ...topicProperties, sourceType: removedSourceKind, origin: "editor" })
+	}
 	return { status: "saved" }
+}
+
+// the names of the payload's fields that differ from the row. the row's time has seconds the payload's does not
+function toChangedTopicFieldNames(topic: typeof topics.$inferSelect, payload: UpdateTopicPayload): string[] {
+	const payloadFields = {
+		name: payload.name,
+		prompt: payload.prompt,
+		tags: payload.tags.join("\n"),
+		frequency: payload.frequency,
+		scheduledTime: payload.scheduledTime,
+		scheduledDayOfWeek: payload.scheduledDayOfWeek,
+		visibility: payload.visibility,
+		maxTopicFindings: payload.maxTopicFindings,
+	}
+	const rowFields = { ...topic, tags: topic.tags.join("\n"), scheduledTime: topic.scheduledTime.slice(0, 5) }
+	return Object.entries(payloadFields)
+		.filter(([field, value]) => rowFields[field as keyof typeof payloadFields] !== value)
+		.map(([field]) => field)
 }
 
 /**
@@ -641,6 +682,10 @@ export const topicsRoute = new Hono<AppEnv>()
 			excludeSources,
 			limit,
 			litellmApiKey,
+		})
+		trackEvent("sources_suggested", userId, {
+			...toAnalyticsProperties(context),
+			suggestedSourceCount: suggestedSources.length,
 		})
 		return context.json({ sources: suggestedSources })
 	})

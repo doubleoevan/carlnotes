@@ -31,6 +31,11 @@ export const PLAY_BUTTON_CLASS =
 export const SCRIPTED_ONLY_CLASS = "hidden scripted:inline-flex"
 
 /**
+ * Hides an element only in a browser with JavaScript.
+ */
+export const SCRIPTED_HIDDEN_CLASS = "scripted:hidden"
+
+/**
  * The muted look that a row's play button adds if its podcast episode or chapter is not the one in the player.
  */
 export const PLAY_BUTTON_MUTED_CLASS = "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground border"

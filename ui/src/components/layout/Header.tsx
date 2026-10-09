@@ -108,14 +108,20 @@ export function Header() {
 							/>
 						) : (
 							<>
+								{/* the sign-in link, which crawlers do not follow */}
 								<AnchorLink
 									href={`/login?next=${encodeURIComponent(toSafeRedirectPath(pathname))}`}
+									rel="nofollow"
 									className={cn(buttonVariants({ variant: "ghost" }), "min-h-9", HERO_BUTTON_HOVER)}
 								>
 									Log in
 								</AnchorLink>
 								{/* use the "default" variant's primary color as a call to action. cta names the button for analytics */}
-								<AnchorLink href="/signup?cta=header" className={cn(buttonVariants({ variant: "default" }), "min-h-9")}>
+								<AnchorLink
+									href="/signup?cta=header"
+									rel="nofollow"
+									className={cn(buttonVariants({ variant: "default" }), "min-h-9")}
+								>
 									Sign up
 								</AnchorLink>
 							</>
@@ -282,8 +288,10 @@ function HeaderMenu({
 					</>
 				) : (
 					<>
+						{/* the sign-in link, which crawlers do not follow */}
 						<AnchorLink
 							href={`/login?next=${encodeURIComponent(toSafeRedirectPath(pathname))}`}
+							rel="nofollow"
 							onClick={closeMenu}
 							className={MENU_OPTION_CLASS}
 						>
@@ -293,6 +301,7 @@ function HeaderMenu({
 						{/* use the primary color as a call to action. cta names the button for analytics */}
 						<AnchorLink
 							href="/signup?cta=menu"
+							rel="nofollow"
 							onClick={closeMenu}
 							className={cn(MENU_OPTION_CLASS, "bg-primary text-primary-foreground hover:bg-primary/90")}
 						>

@@ -1,11 +1,12 @@
 // the routes for a listener's podcast feed url and its reset, a podcast episode's files at paths after a feed token,
 // and the podcast covers
+import { trackEvent } from "@shared/analytics"
 import { PODCAST_COVER_SIZES, type PodcastCover, toPodcastCoverKey } from "@shared/podcastEpisodes"
 import { eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
 import { podcastEpisodeListens, podcastEpisodes, topics } from "../../db/schema"
-import { type AppEnv, currentUser } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toVersionedImageHeaders } from "../edgeCache"
 import { toCachedPodcastCoverJpeg } from "../share/podcastCover"
 import { loadAccessiblePodcastEpisode } from "./helpers"
@@ -86,6 +87,7 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 		// delete the old feed token, then load the url, which creates a new feed token
 		await deletePodcastFeedToken({ topicId: topic.id, userId })
 		const podcastFeedUrl = await loadOrCreatePodcastFeedUrl(userId, topic)
+		trackEvent("podcast_feed_reset", userId, { ...toAnalyticsProperties(context), topicId: topic.id })
 		return podcastFeedUrl ? context.json({ podcastFeedUrl }) : context.json({ error: "not found" }, 404)
 	})
 	// a podcast episode's files at paths after a listener's feed token, which grants access without a session.
@@ -127,7 +129,7 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 			return context.json({ error: "not found" }, 404)
 		}
 
-		// count a download through the listener's feed as one play
+		// count a download through the listener's feed as one play, and report the play
 		if (context.req.method === "GET") {
 			await db
 				.insert(podcastEpisodeListens)
@@ -136,6 +138,12 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 					target: [podcastEpisodeListens.podcastEpisodeId, podcastEpisodeListens.userId],
 					set: { playCount: sql`${podcastEpisodeListens.playCount} + 1` },
 				})
+			trackEvent("episode_played", podcastFeedTokenListener.userId, {
+				entryPoint: "feed",
+				topicId: accessiblePodcastEpisode.topic.id,
+				isTopicPublic: accessiblePodcastEpisode.topic.visibility === "public",
+				episodeId: podcastEpisodeRow.id,
+			})
 		}
 		return toPodcastEpisodeAudioResponse(context, podcastEpisodeRow)
 	})

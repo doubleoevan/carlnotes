@@ -1,4 +1,5 @@
 import { zValidator } from "@hono/zod-validator"
+import { trackEvent } from "@shared/analytics"
 import { attachmentContextPayload, attachmentUrlPayload } from "@shared/contracts"
 // the attachment actions for the api routes
 import { and, eq } from "drizzle-orm"
@@ -16,7 +17,7 @@ import {
 	toCanonicalContentType,
 } from "../../worker"
 import { isAllowed } from "../authorization"
-import { type AppEnv, currentUser } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { loadOwnedTopic } from "./permissions"
 
 /**
@@ -160,6 +161,11 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 		try {
 			const { url } = context.req.valid("json")
 			const attachment = await ingestUrlAttachment(context.req.param("id"), url)
+			trackEvent("attachment_added", userId, {
+				...toAnalyticsProperties(context),
+				topicId: context.req.param("id"),
+				kind: "url",
+			})
 			return context.json({ id: attachment.id, filename: attachment.filename })
 		} catch (error) {
 			// a validation error names the user's own url, so it shows as written. anything else is internal
@@ -254,7 +260,12 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 					bytes,
 				})
 
-				// hand the persisted attachment identity back to the modal
+				// report the file, then return the saved attachment's id and filename
+				trackEvent("attachment_added", userId, {
+					...toAnalyticsProperties(context),
+					topicId: context.req.param("id"),
+					kind: "file",
+				})
 				return context.json({ id: attachment.id, filename: attachment.filename })
 			} catch (error) {
 				// a validation error names the user's own mistake, so it shows as written

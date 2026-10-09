@@ -16,6 +16,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { TopicScanFailure } from "@/components/topic/TopicScanFailure"
 import { type AllowedScanNoteUrls, TopicScanRecap, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
+import { toRenderedRows } from "@/lib/renderedRows"
 import { DASHED_ROW_CLASS, POPOVER_PANEL_CLASS, RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { CollapsibleSection } from "./CollapsibleSection"
@@ -43,23 +44,24 @@ export function TopicScanHistory({
 	const pageCount = Math.ceil(scans.length / SCANS_PER_PAGE)
 	const pageNumber = Math.min(openedPageNumber, Math.max(1, pageCount))
 
-	// the page's scans
-	const pageStartIndex = (pageNumber - 1) * SCANS_PER_PAGE
-	const pageScans = scans.slice(pageStartIndex, pageStartIndex + SCANS_PER_PAGE)
+	// the scans the history renders: the page shown, and the first NO_SCRIPT_ROW_LIMIT scans for a reader without
+	// JavaScript
+	const renderedScans = toRenderedRows(scans, { pageNumber, pageSize: SCANS_PER_PAGE })
 	return (
 		<CollapsibleSection value="history" title="Brew diary">
-			{/* one row per scan, each drawing its own dashed separator */}
+			{/* one row per rendered scan, each drawing its own dashed separator */}
 			<div className={cn(RESOURCE_LIST_CARD_CLASS, "p-1")}>
-				{pageScans.map((scan) => (
+				{renderedScans.map(({ row: scan, className }) => (
 					<ScanRow
 						key={scan.id}
 						scan={scan}
 						allowedUrls={allowedUrls}
 						findings={findings?.filter((finding) => finding.scanId === scan.id)}
 						topic={topic}
+						className={className}
 					/>
 				))}
-				{pageScans.length === 0 && (
+				{scans.length === 0 && (
 					<p className="text-muted-foreground py-3 pl-2 text-sm">{"Carl hasn't scanned this topic yet."}</p>
 				)}
 			</div>
@@ -82,11 +84,13 @@ function ScanRow({
 	allowedUrls,
 	findings,
 	topic,
+	className,
 }: {
 	scan: TopicScan
 	allowedUrls?: AllowedScanNoteUrls
 	findings?: TopicFinding[]
 	topic: { id: string; name: string; prompt: string }
+	className?: string
 }) {
 	// the scan recap is loaded on the first open and kept for the rest of the page's life
 	const [scanSummary, setScanSummary] = useState<string | null>(null)
@@ -105,7 +109,7 @@ function ScanRow({
 	return (
 		<Popover onOpenChange={handleOpenScanNote}>
 			{/* the scan row, which draws the dashed separator and holds the trigger and the podcast episode pill */}
-			<div className={DASHED_ROW_CLASS}>
+			<div className={cn(DASHED_ROW_CLASS, className)}>
 				<Tooltip>
 					<TooltipTrigger asChild>
 						<PopoverTrigger

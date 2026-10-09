@@ -107,7 +107,7 @@ export function PodcastEpisodePage() {
 		onOpenDialog: setOpenDialog,
 	})
 
-	const topicHandlers = usePageTopicFeedHandlers(loadPodcastEpisodePage)
+	const topicFeedHandlers = usePageTopicFeedHandlers(loadPodcastEpisodePage)
 
 	// the loading skeleton, the topic's gate, or the line for an episode that did not load
 	if (podcastEpisodePage === undefined) {
@@ -140,7 +140,7 @@ export function PodcastEpisodePage() {
 	// the podcast episode page's fields, the path of its topic's page, and what the chapters' topic finding notes read
 	const { podcastEpisode, topic, topicFindings, canRate, transcript } = podcastEpisodePage
 	const topicPath = toTopicPath(topic)
-	const chapterTopicFeed = { topicFindings, topic, isRatable: canRate, isBookmarkable: false, topicHandlers }
+	const chapterTopicFeed = { topicFindings, topic, isRatable: canRate, isBookmarkable: false, topicFeedHandlers }
 	return (
 		<main className={PAGE_CLASS}>
 			{/* the cover beside the topic's name, the title, the description, and on a phone the topic's byline */}

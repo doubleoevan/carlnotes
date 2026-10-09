@@ -992,6 +992,8 @@ export type PodcastEpisodeChapter = z.infer<typeof podcastEpisodeChapter>
 export const podcastEpisode = z.object({
 	id: z.string(),
 	topicId: z.string(),
+	// the visibility of the episode's topic
+	topicVisibility: z.enum(visibilities),
 	status: z.enum(["recording", "published", "failed"]),
 	title: z.string().nullable(),
 	description: z.string().nullable(),
@@ -1196,6 +1198,8 @@ export const topicResponse = topicFeed.extend({
 	// this topic's position in the Featured section as well as all featured topics, both are null on the topic page
 	featureOrder: z.number().nullable(),
 	featuredTopics: z.array(z.object({ id: z.string(), name: z.string(), featureOrder: z.number() })).nullable(),
+	// up to five other public topics the page links, nearest first. empty for a topic that is not public and shown
+	moreTopics: z.array(z.object({ id: z.string(), name: z.string() })),
 })
 export type TopicResponse = z.infer<typeof topicResponse>
 
@@ -1418,7 +1422,7 @@ export type PageHead = {
 	jsonLd: object | null
 }
 
-// a public topic as the /topics page lists it
+// a public topic as the sitemap and llms.txt list it
 export type PublicTopic = {
 	id: string
 	name: string

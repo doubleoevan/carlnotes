@@ -153,16 +153,28 @@ export async function finishScan(
 		return
 	}
 
-	// the topic owner's plan tracks the analytics event for a first scan
-	const [topicOwner] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, ownerId))
-	if (ingestResult.status === "succeeded" && (await isFirstSucceededScan(ownerId))) {
-		trackEvent("first_scan_completed", ownerId, { plan: topicOwner?.plan ?? "free", topicId })
-	}
-
-	// load the topic for the IndexNow notification, and stop if the topic was deleted
+	// load the topic for the analytics and the IndexNow notification, and stop if the topic was deleted
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
 	if (!topic) {
 		return
+	}
+
+	// report the scan with the owner's plan, and the owner's first succeeded scan once
+	const [topicOwner] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, ownerId))
+	const scanAnalyticsProperties = {
+		entryPoint: "worker",
+		plan: topicOwner?.plan ?? "free",
+		topicId,
+		isTopicPublic: topic.visibility === "public",
+	}
+	trackEvent("scan_completed", ownerId, {
+		...scanAnalyticsProperties,
+		trigger: finishedScan.isManual ? "manual" : "scheduled",
+		findingsKept: finishedScan.keptCount,
+		status: finishedScan.status,
+	})
+	if (ingestResult.status === "succeeded" && (await isFirstSucceededScan(ownerId))) {
+		trackEvent("first_scan_completed", ownerId, scanAnalyticsProperties)
 	}
 
 	// tell IndexNow a public topic's page changed if a finding was added or filtered out

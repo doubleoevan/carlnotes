@@ -3,6 +3,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import * as analytics from "@shared/analytics"
 import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@shared/contracts"
 import * as monitoring from "@shared/monitoring"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
@@ -239,10 +240,10 @@ test("a HEAD request for a page path responds with the page's headers and no bod
 // a page has one url, so the same path with a trailing slash redirects to it and keeps its query
 test("a page url ending in a slash redirects permanently to the url without it", async () => {
 	const bundleDirectory = await createBundleDirectory()
-	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/?popular=2"))
+	const response = await withWorkingDirectory(bundleDirectory, () => request("/plans/?popular=2"))
 
 	expect(response.status).toBe(301)
-	expect(response.location).toBe("/topics?popular=2")
+	expect(response.location).toBe("/plans?popular=2")
 })
 
 // a path that starts with two slashes still redirects to a path on this site, never to another host
@@ -341,6 +342,27 @@ test("a missing bundle responds with a 404 instead of failing", async () => {
 
 	expect(response.status).toBe(404)
 	expect(response.body).toContain("build:ui")
+})
+
+// a known crawler's page fetch is reported by the route's shape. its asset fetch and an unknown agent's page fetch
+// report nothing
+test("a crawler's page fetch is reported, and an asset or an unknown agent is not", async () => {
+	const trackBotEventSpy = spyOn(analytics, "trackBotEvent").mockImplementation(() => {})
+	const bundleDirectory = await createBundleDirectory()
+	const googlebotHeaders = { "user-agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" }
+	// the crawler's page and asset, then a browser's page
+	await withWorkingDirectory(bundleDirectory, async () => {
+		await request("/topics/abc123/espresso", { headers: googlebotHeaders })
+		await request(HASHED_ASSET_PATH, { headers: googlebotHeaders })
+		await request("/topics/abc123/espresso", { headers: { "user-agent": "Mozilla/5.0 (Macintosh) Chrome/120" } })
+	})
+	expect(trackBotEventSpy.mock.calls).toEqual([
+		[
+			"crawler_fetched",
+			"googlebot",
+			{ entryPoint: "web", botName: "googlebot", routeShape: "/topics/:id/:slug", status: 200 },
+		],
+	])
 })
 
 // a bundle that throws on import is a broken deploy, not a missing build, so the page asks a crawler to retry

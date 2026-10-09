@@ -14,17 +14,6 @@ TBD - created by archiving change add-topic-detail-and-edit-pages. Update Purpos
 - **WHEN** a non-owner views a public Topic
 - **THEN** only the 🔔 bell renders, with no ✎ or 🗑
 
-### Requirement: Findings render as a capped, collapsible list reusing the homepage row
-A `▾ Findings` accordion (default expanded) SHALL list the Topic's Findings with the homepage row anatomy: resource-kind icon, title (emphasized when unread, muted when read), muted source + age meta, and a right-aligned ⓘ popover with Carl's notes, the fetched date, the view count, a mark-read/unread control, and thumbs. The list SHALL honor the app's shared view filters — the All/Unread toggle and the resource-kind filters — exactly as the homepage does. At most five rows SHALL show, with a "+ N more / show less" expander for the rest. Row actions SHALL persist through the api and refresh the page's own payload.
-
-#### Scenario: Findings cap at five with an expander
-- **WHEN** a Topic has seven Findings
-- **THEN** five rows show and "+ 2 more" reveals the rest in place
-
-#### Scenario: The Unread view narrows the findings
-- **WHEN** the user selects Unread on the topic page
-- **THEN** only unread Findings show, and selecting All restores the full list with read rows muted
-
 ### Requirement: A right-rail info card summarizes the Topic
 Beside the History list (top-aligned with it, not with Findings), a single info card SHALL show, separated by thin dashed rules: Carl's Notes (the latest succeeded Scan's recap, when one exists); Carl's Prompt; Sources; Attachments as links where a url opens its page and a file downloads for the owner only; Schedule as the frequency, a muted "last scan" age, and how long that scan took; Visibility with its glyph (🔒 private, 🌐 public, ✉ invite); and, for the owner or an admin, this calendar month's total scan spend. The Sources section SHALL lead with one line per kind in the shared default-Source registry — today Carl's built-in web scout (the search Source, whose ingester derives queries from the topic prompt), labeled `web` — each shown as on or muted off, followed by one line per custom Source with a type glyph, its kind, and a config summary (feed host, subreddit, channel/playlist id, or a podcast's podcast id).
 
@@ -312,16 +301,27 @@ A signed-in reader who lacks access SHALL NOT be offered to log in, since that i
 
 ### Requirement: The info card and popover number the findings under Carl's Top N
 
-The topic info SHALL render the Topic's Findings as a numbered list under the scan note, in the info card and the info popover alike — the scan email's list in app form: the rank, the linked title, the host, and the model's relevance explanation at the note's own size. The explanations read inline there, where the findings feed keeps them behind a hover a phone does not have. The section SHALL be titled `Carl's Top N`, N the finding count, and fall back to `Carl's Notes` when the Topic has none.
+The topic info SHALL render the Topic's Findings as a numbered list under the scan note, in the info card and the info
+popover alike — the scan email's list in app form: the rank, the linked title, the host, and the model's relevance
+explanation at the note's own size. The explanations read inline there, where the findings feed keeps them behind a
+hover a phone does not have. The section SHALL be titled `Carl's Top N`, N the finding count, and fall back to `Carl's
+Notes` when the Topic has none.
 
-In the card, Read more SHALL expand the note and its findings into the bounded scroll box the popover already uses, with Read less sitting just below the box, so the card keeps its height and collapsing never needs a page-scroll back. The popover SHALL show the same content in its scroll box outright.
+In the card, Read more SHALL expand the note and its findings into the bounded scroll box the popover already uses, with
+Read less sitting just below the box, so the card keeps its height and collapsing never needs a page-scroll back. The
+popover SHALL show the same content in its scroll box outright. The clip and its Read more SHALL exist only with
+JavaScript, which measures the note, so a client with no JavaScript reads the whole note and the whole list with no
+toggle.
 
-The brew diary's popover SHALL list the findings its own scan produced the same way, under that scan's note — each finding carries its producing scan on the wire, so a diary never borrows another brew's findings. A diary whose findings are no longer among the topic's kept rows lists none.
+The scan history's popover SHALL list the findings its own scan produced the same way, under that scan's note. Each
+finding names its producing scan, so a scan's popover never borrows another scan's findings. A scan whose findings
+are no longer among the topic's kept rows lists none.
 
 #### Scenario: Expanding the card reveals the numbered findings
 
 - **WHEN** a reader expands the info card's Read more on a Topic with Findings
-- **THEN** the full note and the numbered finding list scroll together inside a bounded box, each entry linking its title and stating why Carl kept it, with Read less just below the box
+- **THEN** the full note and the numbered finding list scroll together inside a bounded box, each entry linking its
+  title and stating why Carl kept it, with Read less just below the box
 
 #### Scenario: The popover carries the same list
 
@@ -332,6 +332,11 @@ The brew diary's popover SHALL list the findings its own scan produced the same 
 
 - **WHEN** the Topic has no Findings
 - **THEN** the section stays titled Carl's Notes and renders the note alone, with no empty list under it
+
+#### Scenario: The note shows whole without JavaScript
+
+- **WHEN** a client with no JavaScript fetches a public Topic's page with a long scan note
+- **THEN** the info card holds the whole note and the whole numbered list, unclipped, with no Read more
 
 ### Requirement: Every notes scroll box offers its content as Markdown for an AI
 
@@ -365,4 +370,53 @@ The topic page's reload while a Scan runs SHALL mark itself as a poll, and only 
 
 - **WHEN** a signed-out visitor and a signed-in user poll the same Topic inside two seconds
 - **THEN** each receives the page built for them, since the cache is keyed by who asked
+
+### Requirement: A public topic page links more topics
+
+A public shown Topic's page SHALL end with a "More topics" section of up to five plain links to other public shown
+Topics, rendered on the server so a crawler and a visitor without JavaScript read them. The Topics SHALL be chosen in
+this order: other public shown Topics that a public team holding this Topic also holds, owned or shared; then public
+shown Topics sharing a tag with this Topic, most shared tags first; then the public shown Topics with the newest
+Finding. The Topic itself SHALL never be listed, a Topic SHALL be listed once, and a private or invite Topic, or a
+Topic held only by a private team, SHALL never be listed. Each link SHALL use the Topic's slugged url and show its
+name. A Topic page that is not public, or a public one not yet shown, SHALL have no such section.
+
+#### Scenario: A team's other topics come first
+
+- **GIVEN** a public Topic held by a public team with three other public shown Topics, and two more public Topics
+  sharing its tag
+- **WHEN** a visitor opens its page
+- **THEN** "More topics" lists the three team Topics, then the two tagged ones
+
+#### Scenario: Recent topics fill the rest
+
+- **GIVEN** a public Topic with no team and no tag
+- **WHEN** a crawler fetches its page without running JavaScript
+- **THEN** "More topics" lists the five other public shown Topics with the newest Findings, each as a plain link
+
+#### Scenario: A private topic has no section
+
+- **WHEN** an owner opens their private Topic's page
+- **THEN** there is no "More topics" section
+
+### Requirement: Findings render as a five-row, collapsible list reusing the homepage row
+A `▾ Findings` accordion (default expanded) SHALL list the Topic's Findings with the homepage row anatomy:
+resource-kind icon, title (emphasized when unread, muted when read), muted source + age meta, and a right-aligned ⓘ
+popover with Carl's notes, the fetched date, the view count, a mark-read/unread control, and thumbs. The list SHALL
+honor the app's shared view filters — the All/Unread toggle and the resource-kind filters — exactly as the homepage
+does. The Findings SHALL be in the HTML, up to fifty. At most five rows SHALL show with JavaScript, with a "+ N more /
+show less" expander for the rest, and the expander SHALL be hidden without JavaScript, where every row shows. Row
+actions SHALL persist through the api and refresh the page's own payload.
+
+#### Scenario: Five findings show with an expander
+- **WHEN** a Topic has seven Findings
+- **THEN** five rows show and "+ 2 more" reveals the rest in place
+
+#### Scenario: The Unread view narrows the findings
+- **WHEN** the user selects Unread on the topic page
+- **THEN** only unread Findings show, and selecting All restores the full list with read rows muted
+
+#### Scenario: A reader without JavaScript sees the findings whole
+- **WHEN** a client with no JavaScript fetches a public Topic with seven Findings
+- **THEN** all seven rows are in the HTML and shown, with no expander
 

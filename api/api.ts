@@ -30,6 +30,7 @@ import { type AppEnv, currentUser } from "./currentUser"
 import { renderedCacheHeaders } from "./edgeCache"
 import { flagContentRoute } from "./flagContent"
 import { invitesRoute, toInviteTarget } from "./invite/invites"
+import { receivedInvitesRoute } from "./invite/receivedInvites"
 import { userInvitesRoute } from "./invite/userInvites"
 import { mcpClientsRoute } from "./mcp/server"
 import { noteCommentThreadsRoute } from "./note/noteCommentThreads"
@@ -37,7 +38,6 @@ import { notesRoute } from "./note/notes"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
 import { profilesRoute } from "./profiles"
-import { loadPublicTopics } from "./seo"
 import { pageHeadRoute } from "./share/pageHead"
 import {
 	toCachedInvitePreviewPng,
@@ -186,7 +186,9 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", subscriptionsRoute)
 	// creating, revoking, and accepting invite links
 	.route("/", invitesRoute)
+	// the user-invite routes, and the routes that answer an invitation received
 	.route("/", userInvitesRoute)
+	.route("/", receivedInvitesRoute)
 	// the team routes
 	.route("/", teamsRoute)
 	// the activity page route
@@ -199,14 +201,17 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", avatarsRoute)
 	// the page head routes
 	.route("/", pageHeadRoute)
-	// every public topic with enough findings to show, most recently changed first
-	.get("/public-topics", async (context) => context.json(await loadPublicTopics()))
 	// the link-preview card that a social platform fetches for topic links
 	.get("/topics/:id/preview.png", async (context) => {
 		const topicPreviewCard = await toTopicPreview(context.req.param("id"))
 		if (!topicPreviewCard) {
 			return context.json({ error: "not found" }, 404)
 		}
+		// name the topic this card shows, for the bot analytics
+		context.set("analyticsTopic", {
+			topicId: topicPreviewCard.topicId,
+			isPublic: topicPreviewCard.visibility === "public",
+		})
 		return toPreviewPngResponse(context, await toCachedTopicPreviewPng(topicPreviewCard))
 	})
 	// the link-preview card that a social platform fetches for profile links

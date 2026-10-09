@@ -1,11 +1,11 @@
 // the app's Better Auth instance: email/password and Google/GitHub sign-in, with sessions read from Redis first
 // and kept in Postgres through the Drizzle adapter
-import { trackEvent } from "@shared/analytics"
+import { trackBotEvent, trackEvent } from "@shared/analytics"
 import { appBaseUrl } from "@shared/appUrl"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
 import { toCanonicalEmail } from "@shared/emails"
 import { reportError } from "@shared/monitoring"
-import { isInAppBrowser, toBrowserPlatform, toPlatform } from "@shared/userAgent"
+import { toDeviceProperties } from "@shared/userAgent"
 import { toNormalizedUsername, toProviderUsername } from "@shared/usernames"
 import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
@@ -89,6 +89,47 @@ const beforeCredentialRequest = createAuthMiddleware(async (context) => {
 	await rejectBreachedPassword(context.path, context.body)
 	return toCanonicalEmailBody(context.path, context.body)
 })
+
+// the hook that runs after a request. a sign-in reports its method,
+// and an app's code-for-token exchange reports the connection
+const afterAuthRequest = createAuthMiddleware(async (context) => {
+	// report a new session by the path that made it: the password form, or the oauth provider in the callback
+	const newSession = context.context.newSession
+	const loginMethod = toLoginMethod(context.path)
+	if (newSession && loginMethod) {
+		trackEvent("login_completed", newSession.user.id, {
+			entryPoint: "web",
+			plan: (newSession.user as { plan?: string }).plan ?? "free",
+			...toDeviceProperties(context.headers?.get("user-agent")),
+			method: loginMethod,
+		})
+	}
+
+	// report an app's authorization once it trades its code for a token. a refresh reports nothing
+	const requestBody = context.body instanceof FormData ? Object.fromEntries(context.body.entries()) : context.body
+	const clientId = typeof requestBody?.client_id === "string" ? requestBody.client_id : null
+	if (context.path !== "/mcp/token" || requestBody?.grant_type !== "authorization_code" || !clientId) {
+		return
+	}
+	// name the app by its registration. an unregistered client gets no token and reports nothing
+	const [oauthApplication] = await db
+		.select({ name: schema.oauthApplications.name })
+		.from(schema.oauthApplications)
+		.where(eq(schema.oauthApplications.clientId, clientId))
+	if (!oauthApplication) {
+		return
+	}
+	// report the connection by the app's registered name
+	trackBotEvent("mcp_connected", oauthApplication.name, { entryPoint: "mcp", clientName: oauthApplication.name })
+})
+
+// the login method a request path names: email for the password form, the provider for an oauth callback, or null
+function toLoginMethod(path: string): string | null {
+	if (path === "/sign-in/email") {
+		return "email"
+	}
+	return path.startsWith("/callback/") ? (path.split("/")[2] ?? null) : null
+}
 
 // reject a breached password
 async function rejectBreachedPassword(path: string, body: Record<string, unknown> | undefined): Promise<void> {
@@ -253,8 +294,9 @@ export const auth = betterAuth({
 	},
 	// account linking requires a verified email on both the incoming oauth side and the local row
 	account: { accountLinking: { enabled: true } },
-	// reject a breached password wherever one is being set, and canonicalize the address wherever one arrives
-	hooks: { before: beforeCredentialRequest },
+	// reject a breached password wherever one is being set, and canonicalize the address wherever one arrives.
+	// after a request, report a sign-in and an app's code-for-token exchange
+	hooks: { before: beforeCredentialRequest, after: afterAuthRequest },
 	// resolve the client address through the trusted proxies
 	advanced: { ipAddress: ipAddressOptions },
 	// the oauth server for the mcp server. a client registers itself, then the user signs in and consents
@@ -359,12 +401,10 @@ export const auth = betterAuth({
 					}
 					// the signup funnel's final event, tagged with what converted and from where
 					const ctaTag = toCtaTag(context?.getCookie(SIGNUP_CTA_COOKIE_NAME) ?? null)
-					const userAgent = context?.headers?.get("user-agent")
 					trackEvent("signup_completed", user.id, {
+						entryPoint: "web",
 						plan: "free",
-						platform: toPlatform(userAgent),
-						browserPlatform: toBrowserPlatform(userAgent ?? ""),
-						isInAppBrowser: isInAppBrowser(userAgent ?? ""),
+						...toDeviceProperties(context?.headers?.get("user-agent")),
 						...(ctaTag ? { cta: ctaTag } : {}),
 					})
 				},

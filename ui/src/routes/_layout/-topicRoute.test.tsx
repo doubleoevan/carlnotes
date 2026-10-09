@@ -14,6 +14,9 @@ const INVITE_TOPIC_ID = "7c1e4b2a-3d5f-4e6a-9b8c-0d1e2f3a4b5c"
 const INVITE_TOPIC_SLUG = "night-shift"
 const MISSING_TOPIC_ID = "00000000-0000-4000-8000-000000000000"
 
+// the id of a topic listed under More topics
+const MORE_TOPIC_ID = "9f3d2c1b-5a6e-4d7f-8b9c-0a1b2c3d4e5f"
+
 // the topic's page head, as the api returns it
 const TOPIC_HEAD = {
 	title: "Agents — CarlNotes",
@@ -104,6 +107,7 @@ const TOPIC = {
 	isDailyFrequencyPaused: false,
 	featureOrder: null,
 	featuredTopics: null,
+	moreTopics: [{ id: MORE_TOPIC_ID, name: "Robot vacuums" }],
 	podcast: null,
 	latestPodcastEpisode: null,
 } satisfies TopicResponse
@@ -188,6 +192,25 @@ test("the public topic route renders its head and its findings on the server", a
 	expect(html).not.toContain("opengraph-image.png")
 	expect(html).toContain('<meta name="twitter:card" content="summary_large_image"')
 	expect(html).toContain('<script type="application/ld+json">{"@type":"CreativeWork"}</script>')
+
+	// the page ends with More topics, each a plain link a reader without JavaScript can follow
+	expect(html).toMatch(
+		new RegExp(`More topics[\\s\\S]*<a [^>]*href="/topics/${MORE_TOPIC_ID}/robot-vacuums"[^>]*>Robot vacuums</a>`),
+	)
+})
+
+// a long scan note renders whole on the server with no Read more
+test("a long scan note renders whole on the server with no Read more", async () => {
+	const longNote = Array.from({ length: 80 }, (_, index) => `Sentence ${index + 1} of the recap.`).join(" ")
+	const html = await renderTopicPage({ topicHead: TOPIC_HEAD, topic: { ...TOPIC, scanSummary: longNote } })
+	expect(html).toContain("Sentence 80 of the recap.")
+	expect(html).not.toContain("Read more")
+})
+
+// a topic page with no more topics has no More topics section
+test("a topic with no more topics renders no More topics section", async () => {
+	const html = await renderTopicPage({ topicHead: TOPIC_HEAD, topic: { ...TOPIC, moreTopics: [] } })
+	expect(html).not.toContain("More topics")
 })
 
 // markup in the head's title, card title, and structured data renders escaped, so it opens no script tag

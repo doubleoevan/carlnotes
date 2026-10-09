@@ -1,6 +1,7 @@
 // team membership: who holds
+import { trackEvent } from "@shared/analytics"
 import { PLANS, type Plan } from "@shared/plans"
-import { and, count, eq, inArray, notInArray } from "drizzle-orm"
+import { and, count, eq, inArray, not, notInArray } from "drizzle-orm"
 import { type DbTransaction, db } from "../../db"
 import {
 	chatRoomMentions,
@@ -64,7 +65,7 @@ export async function joinTeam(userId: string, teamId: string, invitedByUserId: 
 			.values({ teamId, userId, invitedByUserId })
 			.onConflictDoUpdate({ target: [teamMembers.teamId, teamMembers.userId], set: { isActive: true } })
 		// one subscription per team topic, active so the topic reaches them, with email off until they turn it on
-		await saveTeamTopicSubscriptions(transaction, [userId], await loadTeamTopics(transaction, teamId))
+		await saveTeamTopicSubscriptions(transaction, teamId, [userId], await loadTeamTopics(transaction, teamId))
 		return true
 	})
 }
@@ -143,6 +144,7 @@ async function loadTeamTopics(
  */
 export async function saveTeamTopicSubscriptions(
 	transaction: DbTransaction,
+	teamId: string,
 	userIds: string[],
 	teamTopics: { id: string; frequency: (typeof topics.$inferSelect)["frequency"] }[],
 ): Promise<void> {
@@ -160,17 +162,30 @@ export async function saveTeamTopicSubscriptions(
 			frequency: teamTopic.frequency,
 		})),
 	)
-	await transaction
+	// an already active subscription is left alone, so the rows returned are the ones the team made
+	const savedSubscriptionRows = await transaction
 		.insert(subscriptions)
 		.values(topicRows)
 		.onConflictDoUpdate({
 			target: [subscriptions.topicId, subscriptions.subscriberUserId],
 			set: { isActive: true },
+			setWhere: not(subscriptions.isActive),
 		})
+		.returning({ topicId: subscriptions.topicId, subscriberUserId: subscriptions.subscriberUserId })
 
 	// update each topic's subscriber count
 	for (const teamTopic of teamTopics) {
 		await updateTopicSubscriberCount(teamTopic.id, transaction)
+	}
+
+	// report each subscription the team made, keyed to its subscriber
+	for (const savedSubscriptionRow of savedSubscriptionRows) {
+		trackEvent("topic_subscribed", savedSubscriptionRow.subscriberUserId, {
+			entryPoint: "web",
+			subscriptionSource: "team",
+			topicId: savedSubscriptionRow.topicId,
+			teamId,
+		})
 	}
 }
 

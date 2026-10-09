@@ -9,6 +9,7 @@ import {
 } from "@shared/contracts"
 import { ratings } from "@shared/enums"
 import { z } from "zod"
+import type { AnalyticsProperties } from "../currentUser"
 import {
 	toAddTopicSourceText,
 	toCreateTopicText,
@@ -279,17 +280,23 @@ function toTopicEditCall({
 	toolCaller,
 	routeTopicId,
 	topicId,
-}: ToTopicEditCallOptions): { userId: string; topicId: string } | { rejectionResult: CallToolResult } {
+}: ToTopicEditCallOptions):
+	| { userId: string; topicId: string; analyticsProperties: AnalyticsProperties }
+	| { rejectionResult: CallToolResult } {
 	const toolTopic = toToolTopicId(routeTopicId, topicId ?? null)
 	if ("rejection" in toolTopic) {
 		return { rejectionResult: toTextResult(toolTopic.rejection, true) }
 	}
 
-	// an edit saves as a connected account
+	// an edit saves as a connected account, with the call's analytics properties
 	if (toolCaller.kind !== "user") {
 		return { rejectionResult: toTextResult(CONNECT_ACCOUNT_TEXT) }
 	}
-	return { userId: toolCaller.userId, topicId: toolTopic.topicId }
+	return {
+		userId: toolCaller.userId,
+		topicId: toolTopic.topicId,
+		analyticsProperties: toMcpAnalyticsProperties(toolCaller),
+	}
 }
 
 // register the tools that start a new topic: the source suggestions and the create

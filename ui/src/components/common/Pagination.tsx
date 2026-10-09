@@ -1,3 +1,4 @@
+import { NO_SCRIPT_ROW_LIMIT } from "@shared/seo"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { type MouseEvent, type ReactNode, useLayoutEffect, useRef } from "react"
 import { toPaginationSlots } from "@/lib/paginationSlots"
@@ -14,17 +15,25 @@ type PageControl = {
 }
 
 // the row's accessible name, the current page from 1, and how many pages the list has.
-// a row of buttons takes the callback that opens a page, and a row of links takes the callback that renders one link
+// a row of buttons takes the callback that opens a page, and a row of links takes the callback that renders one link.
+// a row of links also takes how many rows the list has
 type PaginationProps = { ariaLabel: string; pageNumber: number; pageCount: number } & (
-	| { onOpenPage: (pageNumber: number) => void; renderPageLink?: undefined }
-	| { renderPageLink: (pageControl: PageControl) => ReactNode; onOpenPage?: undefined }
+	| { onOpenPage: (pageNumber: number) => void; renderPageLink?: undefined; rowCount?: undefined }
+	| { renderPageLink: (pageControl: PageControl) => ReactNode; rowCount: number; onOpenPage?: undefined }
 )
 
 /**
  * A centered row of controls that open a list's pages, between a previous and a next arrow.
- * A browser without JavaScript never shows a row of buttons.
+ * A browser without JavaScript never shows a row of buttons, nor a row of links if the html holds every row.
  */
-export function Pagination({ ariaLabel, pageNumber, pageCount, onOpenPage, renderPageLink }: PaginationProps) {
+export function Pagination({
+	ariaLabel,
+	pageNumber,
+	pageCount,
+	onOpenPage,
+	renderPageLink,
+	rowCount,
+}: PaginationProps) {
 	// save where the clicked control sits on screen. the new page's rows change the height above the control
 	const clickedControlRef = useRef<{ control: HTMLElement; top: number; linkedPageNumber: number } | null>(null)
 	const saveClickedControlTop = (event: MouseEvent<HTMLElement>, linkedPageNumber: number): void => {
@@ -92,8 +101,13 @@ export function Pagination({ ariaLabel, pageNumber, pageCount, onOpenPage, rende
 				onClick: (event) => saveClickedControlTop(event, linkedPageNumber),
 			})
 		)
+	// a row of links shows without JavaScript only for a list the html does not hold whole
+	const isPastNoScriptRowLimit = rowCount !== undefined && rowCount > NO_SCRIPT_ROW_LIMIT
 	return (
-		<nav aria-label={ariaLabel} className={cn("justify-center py-2", renderPageLink ? "flex" : "hidden scripted:flex")}>
+		<nav
+			aria-label={ariaLabel}
+			className={cn("justify-center py-2", isPastNoScriptRowLimit ? "flex" : "hidden scripted:flex")}
+		>
 			<ul className="flex flex-wrap items-center justify-center gap-1">
 				{/* the previous arrow */}
 				<li>

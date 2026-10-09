@@ -24,6 +24,14 @@ export function toChatPageId(page: ChatPage): string {
 	return page.topicId ?? page.teamId ?? ""
 }
 
+// which chat a page holds: a topic's, a team's, or the new-topic chat
+function toChatKind(page: ChatPage): "topic" | "team" | "new_topic" {
+	if (page.newTopic) {
+		return "new_topic"
+	}
+	return page.teamId ? "team" : "topic"
+}
+
 // what a completion spent: its tokens and its web searches
 type ChatTurnSpend = { totalTokens: number; searchCount: number }
 
@@ -56,7 +64,11 @@ export async function saveChatTurn({
 
 	// count the chat turn exactly when its row is saved
 	const { userId, page } = chatTurnRowOptions
-	trackEvent("chat_turn_sent", userId, { ...analyticsProperties, topicId: toChatPageId(page) })
+	trackEvent("chat_turn_sent", userId, {
+		...analyticsProperties,
+		topicId: toChatPageId(page),
+		chatKind: toChatKind(page),
+	})
 	return chatTurnRow?.id ?? null
 }
 

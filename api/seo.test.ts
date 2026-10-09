@@ -182,6 +182,20 @@ test("/pricing redirects permanently to /plans", async () => {
 	expect(response.headers.get("Location")).toBe("/plans")
 })
 
+// the old topics index redirects permanently to the homepage
+test("/topics redirects permanently to the homepage", async () => {
+	const response = await documentsRoute.request("/topics")
+	expect(response.status).toBe(301)
+	expect(response.headers.get("Location")).toBe("/")
+})
+
+// robots.txt allows crawling, keeps crawlers off the sign-in pages that every page links, and names the sitemap
+test("robots.txt keeps crawlers off the sign-in pages and names the sitemap", async () => {
+	const robotsTxt = await Bun.file("ui/public/robots.txt").text()
+	expect(robotsTxt).toContain("User-agent: *\nAllow: /\nDisallow: /login\nDisallow: /signup\n")
+	expect(robotsTxt).toContain("Sitemap: https://carlnotes.com/sitemap.xml")
+})
+
 // a finding without a relevance explanation keeps its entry and its position, with no description field at all
 test("the finding list leaves out an empty description", () => {
 	const findingList = toFindingListLd([

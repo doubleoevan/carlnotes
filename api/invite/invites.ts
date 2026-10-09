@@ -128,7 +128,11 @@ export async function toInviteTarget(token: string): Promise<{ topicId: string }
  * Accept a join token for the user. A topic invite subscribes them to the topic it opens.
  * A team invite makes them a team member.
  */
-export async function acceptInviteToken(userId: string, token: string): Promise<InviteAcceptResult> {
+export async function acceptInviteToken(
+	userId: string,
+	token: string,
+	analyticsProperties?: AnalyticsProperties,
+): Promise<InviteAcceptResult> {
 	// the token is the whole credential, so it is looked up on its own
 	const [invite] = await db.select().from(invites).where(eq(invites.token, token))
 	if (!invite) {
@@ -143,13 +147,37 @@ export async function acceptInviteToken(userId: string, token: string): Promise<
 		}
 		return { status: rejection }
 	}
-	return invite.teamId ? acceptTeamInvite(userId, invite) : acceptTopicInvite(userId, invite)
+	// accept the team or the topic the live token names
+	return invite.teamId
+		? acceptTeamInvite(userId, invite, analyticsProperties)
+		: acceptTopicInvite(userId, invite, analyticsProperties)
+}
+
+/**
+ * Reports an accepted invite with its kind, email, username, or link, and the topic or the team it opens.
+ */
+export function trackInviteAccepted(
+	userId: string,
+	invite: typeof invites.$inferSelect,
+	analyticsProperties?: AnalyticsProperties,
+): void {
+	trackEvent("invite_accepted", userId, { ...analyticsProperties, ...toInviteProperties(invite) })
+}
+
+// the kind of an invite, and the topic or the team it opens
+export function toInviteProperties(invite: typeof invites.$inferSelect): Record<string, string> {
+	// an email invite names an address, a username invite names an account, and a link names nobody
+	const inviteKind = invite.email ? "email" : invite.invitedUserId ? "username" : "link"
+	return invite.teamId
+		? { kind: inviteKind, pageKind: "team", teamId: invite.teamId }
+		: { kind: inviteKind, pageKind: "topic", topicId: invite.topicId ?? "" }
 }
 
 // a topic invite's acceptance: the subscription, and the use spent conditional on the limit
 export async function acceptTopicInvite(
 	userId: string,
 	invite: typeof invites.$inferSelect,
+	analyticsProperties?: AnalyticsProperties,
 ): Promise<InviteAcceptResult> {
 	// the topic the token opens, with its visibility for the public-topic waiver below
 	const [topic] = await db
@@ -171,6 +199,15 @@ export async function acceptTopicInvite(
 		return { status: "exhausted" }
 	}
 	await activateSubscription(userId, topic.id)
+
+	// report the acceptance and the subscription it made
+	trackInviteAccepted(userId, invite, analyticsProperties)
+	trackEvent("topic_subscribed", userId, {
+		...analyticsProperties,
+		topicId: topic.id,
+		isTopicPublic: topic.visibility === "public",
+		subscriptionSource: "invite",
+	})
 	return joined
 }
 
@@ -178,6 +215,7 @@ export async function acceptTopicInvite(
 export async function acceptTeamInvite(
 	userId: string,
 	invite: typeof invites.$inferSelect,
+	analyticsProperties?: AnalyticsProperties,
 ): Promise<InviteAcceptResult> {
 	// the team the token joins, named by its id
 	const [teamRow] = await db
@@ -231,6 +269,8 @@ export async function acceptTeamInvite(
 		}
 		return { status: "teamFull", teamId: teamRow.id, teamName: teamRow.name }
 	}
+	// report the acceptance that joined the team
+	trackInviteAccepted(userId, invite, analyticsProperties)
 	return joinedTeam
 }
 
@@ -251,6 +291,7 @@ export async function isInviteForUser(
 	if (!invite.email) {
 		return false
 	}
+	// the user's verified address must be the one the invite names
 	const [user] = await db
 		.select({ email: users.email, isEmailVerified: users.emailVerified })
 		.from(users)
@@ -387,6 +428,7 @@ async function acceptAsJoinRequest(userId: string, invite: typeof invites.$infer
 	if ((await toTeamRole(userId, teamRow.id)) !== null) {
 		return { status: "joinedTeam", teamId: teamRow.id, teamName: teamRow.name }
 	}
+	// save the request as an inactive membership
 	await db
 		.insert(teamMembers)
 		.values({ teamId: teamRow.id, userId, invitedByUserId: invite.invitedByUserId, isActive: false })
@@ -457,5 +499,5 @@ export const invitesRoute = new Hono<AppEnv>()
 		if (!userId) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		return context.json(await acceptInviteToken(userId, context.req.param("token")))
+		return context.json(await acceptInviteToken(userId, context.req.param("token"), toAnalyticsProperties(context)))
 	})

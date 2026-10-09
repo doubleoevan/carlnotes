@@ -102,6 +102,7 @@ function toEditorPayload(prompt: string): UpdateTopicPayload {
 
 // the analytics shape updateTopic asks for
 const analyticsProperties = {
+	entryPoint: "web" as const,
 	plan: "free",
 	platform: "desktop" as const,
 	browserPlatform: "other" as const,

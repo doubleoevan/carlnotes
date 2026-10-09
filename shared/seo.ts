@@ -25,6 +25,9 @@ const ORGANIZATION_PROFILES = [
 	// Mastodon
 ]
 
+// how many rows of a paged list a page's html holds for a reader without JavaScript, a crawler included
+export const NO_SCRIPT_ROW_LIMIT = 50
+
 // how many characters a slug keeps
 const TOPIC_SLUG_LIMIT = 60
 

@@ -1,6 +1,6 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useState } from "react"
-
+import { type RenderedRow, toRenderedRows } from "@/lib/renderedRows"
 import { type SortValue, useRowSort } from "./SortableHeader"
 
 // the page-size choices offered by every paginated table
@@ -19,17 +19,30 @@ type PaginationState = {
 	setPageSize: (pageSize: number) => void
 }
 
+// the page's rows, the rows the table renders, and the pagination state
+type PaginatedRows<Row> = {
+	pageRows: Row[]
+	// the page's rows and the list's first NO_SCRIPT_ROW_LIMIT rows, with the rows off the page hidden with JavaScript
+	renderedRows: RenderedRow<Row>[]
+	pagination: PaginationState
+}
+
 /**
- * The current pagination state
+ * The current pagination state, with the page's rows and the rows the table renders.
  */
-export function usePagination<Row>(rows: Row[]): PaginationState & { pageRows: Row[] } {
+export function usePagination<Row>(rows: Row[]): PaginatedRows<Row> {
 	const [pageSize, setPageSize] = useState<number>(10)
 	const [page, setPage] = useState(0)
 	// clamp the page count so an updated row set or page size never strands the view on an empty page
 	const pageCount = Math.max(1, Math.ceil(rows.length / pageSize))
 	const currentPage = Math.min(page, pageCount - 1)
 	const pageRows = rows.slice(currentPage * pageSize, (currentPage + 1) * pageSize)
-	return { pageRows, page: currentPage, pageCount, pageSize, setPage, setPageSize, rowCount: rows.length }
+	const renderedRows = toRenderedRows(rows, { pageNumber: currentPage + 1, pageSize })
+	return {
+		pageRows,
+		renderedRows,
+		pagination: { page: currentPage, pageCount, pageSize, setPage, setPageSize, rowCount: rows.length },
+	}
 }
 
 /**
@@ -41,7 +54,7 @@ export function usePaginatedRowSort<Row>(
 	initialSort?: { key: string; isDescending?: boolean },
 ) {
 	const rowSort = useRowSort(rows, valueByKey, initialSort)
-	const { pageRows, ...pagination } = usePagination(rowSort.sortedRows)
+	const { pageRows, renderedRows, pagination } = usePagination(rowSort.sortedRows)
 	// a sort should start at the top, so a header click returns to page one
 	const sort = {
 		...rowSort,
@@ -50,7 +63,7 @@ export function usePaginatedRowSort<Row>(
 			pagination.setPage(0)
 		},
 	}
-	return { pageRows, sort, pagination }
+	return { pageRows, renderedRows, sort, pagination }
 }
 
 /**

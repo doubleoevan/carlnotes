@@ -25,7 +25,6 @@ import { Route as LayoutSignedInAdminRouteImport } from './routes/_layout/_signe
 import { Route as LayoutProfilesUserIdRouteImport } from './routes/_layout/profiles.$userId'
 import { Route as LayoutTeamsIndexRouteImport } from './routes/_layout/teams.index'
 import { Route as LayoutTeamsTeamIdRouteImport } from './routes/_layout/teams.$teamId'
-import { Route as LayoutTopicsIndexRouteImport } from './routes/_layout/topics.index'
 import { Route as LayoutTopicsTopicIdRouteImport } from './routes/_layout/topics.$topicId'
 import { Route as LayoutSignedInMcpConsentRouteImport } from './routes/_layout/_signedIn/mcp.consent'
 import { Route as LayoutTopicsTopicIdTopicSlugRouteImport } from './routes/_layout/topics.$topicId_.$topicSlug'
@@ -109,11 +108,6 @@ const LayoutTeamsTeamIdRoute = LayoutTeamsTeamIdRouteImport.update({
   path: '/teams/$teamId',
   getParentRoute: () => LayoutRoute,
 } as any)
-const LayoutTopicsIndexRoute = LayoutTopicsIndexRouteImport.update({
-  id: '/topics/',
-  path: '/topics/',
-  getParentRoute: () => LayoutRoute,
-} as any)
 const LayoutTopicsTopicIdRoute = LayoutTopicsTopicIdRouteImport.update({
   id: '/topics/$topicId',
   path: '/topics/$topicId',
@@ -154,7 +148,6 @@ export interface FileRoutesByFullPath {
   '/teams/$teamId': typeof LayoutTeamsTeamIdRoute
   '/topics/$topicId': typeof LayoutTopicsTopicIdRoute
   '/teams/': typeof LayoutTeamsIndexRoute
-  '/topics/': typeof LayoutTopicsIndexRoute
   '/mcp/consent': typeof LayoutSignedInMcpConsentRoute
   '/topics/$topicId/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber': typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
@@ -175,7 +168,6 @@ export interface FileRoutesByTo {
   '/teams/$teamId': typeof LayoutTeamsTeamIdRoute
   '/topics/$topicId': typeof LayoutTopicsTopicIdRoute
   '/teams': typeof LayoutTeamsIndexRoute
-  '/topics': typeof LayoutTopicsIndexRoute
   '/mcp/consent': typeof LayoutSignedInMcpConsentRoute
   '/topics/$topicId/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber': typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
@@ -199,7 +191,6 @@ export interface FileRoutesById {
   '/_layout/teams/$teamId': typeof LayoutTeamsTeamIdRoute
   '/_layout/topics/$topicId': typeof LayoutTopicsTopicIdRoute
   '/_layout/teams/': typeof LayoutTeamsIndexRoute
-  '/_layout/topics/': typeof LayoutTopicsIndexRoute
   '/_layout/_signedIn/mcp/consent': typeof LayoutSignedInMcpConsentRoute
   '/_layout/topics/$topicId_/$topicSlug': typeof LayoutTopicsTopicIdTopicSlugRoute
   '/_layout/topics/$topicId_/$topicSlug_/episodes/$season/$episodeNumber': typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
@@ -222,7 +213,6 @@ export interface FileRouteTypes {
     | '/teams/$teamId'
     | '/topics/$topicId'
     | '/teams/'
-    | '/topics/'
     | '/mcp/consent'
     | '/topics/$topicId/$topicSlug'
     | '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber'
@@ -243,7 +233,6 @@ export interface FileRouteTypes {
     | '/teams/$teamId'
     | '/topics/$topicId'
     | '/teams'
-    | '/topics'
     | '/mcp/consent'
     | '/topics/$topicId/$topicSlug'
     | '/topics/$topicId/$topicSlug/episodes/$season/$episodeNumber'
@@ -266,7 +255,6 @@ export interface FileRouteTypes {
     | '/_layout/teams/$teamId'
     | '/_layout/topics/$topicId'
     | '/_layout/teams/'
-    | '/_layout/topics/'
     | '/_layout/_signedIn/mcp/consent'
     | '/_layout/topics/$topicId_/$topicSlug'
     | '/_layout/topics/$topicId_/$topicSlug_/episodes/$season/$episodeNumber'
@@ -394,13 +382,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LayoutTeamsTeamIdRouteImport
       parentRoute: typeof LayoutRoute
     }
-    '/_layout/topics/': {
-      id: '/_layout/topics/'
-      path: '/topics'
-      fullPath: '/topics/'
-      preLoaderRoute: typeof LayoutTopicsIndexRouteImport
-      parentRoute: typeof LayoutRoute
-    }
     '/_layout/topics/$topicId': {
       id: '/_layout/topics/$topicId'
       path: '/topics/$topicId'
@@ -460,7 +441,6 @@ interface LayoutRouteChildren {
   LayoutTeamsTeamIdRoute: typeof LayoutTeamsTeamIdRoute
   LayoutTopicsTopicIdRoute: typeof LayoutTopicsTopicIdRoute
   LayoutTeamsIndexRoute: typeof LayoutTeamsIndexRoute
-  LayoutTopicsIndexRoute: typeof LayoutTopicsIndexRoute
   LayoutTopicsTopicIdTopicSlugRoute: typeof LayoutTopicsTopicIdTopicSlugRoute
   LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute: typeof LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute
 }
@@ -475,7 +455,6 @@ const LayoutRouteChildren: LayoutRouteChildren = {
   LayoutTeamsTeamIdRoute: LayoutTeamsTeamIdRoute,
   LayoutTopicsTopicIdRoute: LayoutTopicsTopicIdRoute,
   LayoutTeamsIndexRoute: LayoutTeamsIndexRoute,
-  LayoutTopicsIndexRoute: LayoutTopicsIndexRoute,
   LayoutTopicsTopicIdTopicSlugRoute: LayoutTopicsTopicIdTopicSlugRoute,
   LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute:
     LayoutTopicsTopicIdTopicSlugEpisodesSeasonEpisodeNumberRoute,

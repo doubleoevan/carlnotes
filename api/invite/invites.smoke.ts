@@ -12,8 +12,9 @@ import { isConnected } from "../connections"
 import type { AnalyticsProperties } from "../currentUser"
 import { loadTeamsPage } from "../team/helpers"
 import { acceptInviteToken, createTeamInvite, createTopicInvite, toInviteRejection } from "./invites"
+import { acceptInvite, declineInvite } from "./receivedInvites"
 import type { UserInviteRejection } from "./userInvites"
-import { acceptInvite, createUserInvite, declineInvite } from "./userInvites"
+import { createUserInvite } from "./userInvites"
 
 // the free plan's team member limit, which these fills sit exactly at
 const FREE_TEAM_MEMBER_LIMIT = PLANS.free.teamMemberLimit ?? 0
@@ -35,6 +36,7 @@ const BACKDATED_CREATED_AT = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
 
 // the analytics shape createTopicInvite asks for. the capture key is dropped above, so nothing sends
 const ANALYTICS: AnalyticsProperties = {
+	entryPoint: "web",
 	plan: "free",
 	platform: "desktop",
 	browserPlatform: "other",

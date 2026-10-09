@@ -18,7 +18,7 @@ import { isPublicAndShown } from "./topic/permissions"
 import { cacheForTtl } from "./ttlCache"
 
 // the pages the sitemap always lists
-const STATIC_ROUTES = ["/", "/topics", "/plans", "/terms", "/privacy"]
+const STATIC_ROUTES = ["/", "/plans", "/terms", "/privacy"]
 
 // how many topics llms.txt lists, and how many podcast episodes
 const LLMS_TOPIC_LIMIT = 50
@@ -102,7 +102,7 @@ export const lastScanSummary = sql<string | null>`${lastScanSummaryQuery}`
 
 // when a topic's feed last gained a finding, or the topic's creation time if it has none
 const newestFindingCreatedAtQuery = sql`(select max(${findings.createdAt}) from ${findings} where ${findings.topicId} = ${topics.id})`
-const topicFeedUpdatedAt = sql<Date>`coalesce(${newestFindingCreatedAtQuery}, ${topics.createdAt})`.mapWith(
+export const topicFeedUpdatedAt = sql<Date>`coalesce(${newestFindingCreatedAtQuery}, ${topics.createdAt})`.mapWith(
 	topics.createdAt,
 )
 

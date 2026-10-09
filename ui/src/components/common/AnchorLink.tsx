@@ -1,6 +1,8 @@
+import { toCtaTag } from "@shared/contracts"
 import { defaultParseSearch, Link } from "@tanstack/react-router"
 import type * as React from "react"
 import { SITE_URL } from "@/lib/pageHead"
+import { captureVisitEvent } from "@/lib/visitAnalytics"
 
 // the uri schemes that open another app in the same tab with no target or rel, like a mail client or a podcast app
 const URI_SCHEME_PREFIXES = ["mailto:", "tel:", "sms:", "cursor:", "vscode:", "podcast:", "pcast:"]
@@ -41,8 +43,23 @@ export function AnchorLink({
 	// the site url lets the relative href parse, and the query parses as it does on a full page load
 	if (href.startsWith("/")) {
 		const url = new URL(href, SITE_URL)
+
+		// a link with a cta param reports its cta tag as a visit event
+		const ctaTag = toCtaTag(url.searchParams.get("cta"))
+		const handleClick = (event: React.MouseEvent<HTMLAnchorElement>): void => {
+			props.onClick?.(event)
+			if (ctaTag) {
+				captureVisitEvent("visit_cta_clicked", { cta: ctaTag })
+			}
+		}
 		return (
-			<Link to={url.pathname} search={defaultParseSearch(url.search)} hash={url.hash.slice(1)} {...props}>
+			<Link
+				to={url.pathname}
+				search={defaultParseSearch(url.search)}
+				hash={url.hash.slice(1)}
+				{...props}
+				onClick={handleClick}
+			>
 				{children}
 			</Link>
 		)

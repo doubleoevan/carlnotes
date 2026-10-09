@@ -1,0 +1,1 @@
+ALTER TABLE "episode_feed_tokens" ADD COLUMN "first_fetched_at" timestamp with time zone;

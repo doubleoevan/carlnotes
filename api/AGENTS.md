@@ -55,8 +55,13 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
 - `topic/promptVersions.ts` — the Prompt Version write the editor's save and the Topic Tools share.
 - `topic/topicTableRows.ts` — `toTopicTableRows`, the topic table rows that the profile page and the team page share,
   each with its latest Podcast Episode.
+- `topic/moreTopics.ts` — `loadMoreTopics`, the other public shown Topics a public Topic's page links under "More
+  topics": a holding public team's first, then by shared tags, then by newest Finding.
 - `topic/topicDrafts.ts` — the new-topic chat's Topic Draft row, written by the chat turn that changed it and read
   back when the conversation loads.
+- `botAnalytics.ts` — the middleware that reports what a known crawler, unfurler, podcast app, or feed reader fetched,
+  keyed to the bot's name, from the token list in `shared/userAgent.ts`. A route that loaded a topic sets
+  `analyticsTopic`, and a public topic's id is sent with the event.
 - `rateLimit.ts` — the one per-tool-caller rate limit, shared by the chat turn routes and the mcp routes, keyed by the
   user or by the client address. `trustedProxies.ts` reads that address exactly as Better Auth does: the rightmost
   `x-forwarded-for` entry outside the Cloudflare ranges that `TRUSTED_PROXIES` lists.

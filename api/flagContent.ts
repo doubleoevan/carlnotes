@@ -1,5 +1,6 @@
 // a user flagging a Topic, profile, or Team. the report is mailed to the SUPPORT_EMAIL address
 import { zValidator } from "@hono/zod-validator"
+import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
 import { type FlagContentPayload, flagContentPayload } from "@shared/contracts"
 import { toTopicPath } from "@shared/seo"
@@ -9,7 +10,7 @@ import { db } from "../db"
 import { decrementRateLimitWindow, incrementRateLimitWindow, isWithinRateLimit } from "../db/redis"
 import { teams, topics, users } from "../db/schema"
 import { sendEmail } from "../worker/email"
-import { type AppEnv, currentUser } from "./currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
 import { toTeamRole } from "./team/members"
 import { canSeeTopic } from "./topic/permissions"
 
@@ -139,9 +140,13 @@ export const flagContentRoute = new Hono<AppEnv>().post(
 			return context.json({ error: "unauthorized" }, 401)
 		}
 
-		// mail the flag to the moderation address
+		// mail the flag to the moderation address, and report what kind of thing was flagged
 		const flagResult = await flagContent(userId, context.req.valid("json"))
 		if (flagResult === "sent") {
+			trackEvent("content_flagged", userId, {
+				...toAnalyticsProperties(context),
+				kind: context.req.valid("json").subjectKind,
+			})
 			return context.json({ ok: true })
 		}
 		// each rejection reports in its own terms, so the dialog can show what actually went wrong

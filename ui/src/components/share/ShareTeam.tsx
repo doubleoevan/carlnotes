@@ -21,6 +21,7 @@ import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
 import { canOpenShareSheet, openShareSheet } from "@/lib/shareSheet"
 import { MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
 import { copyToClipboard } from "@/lib/utils"
+import { captureVisitEvent } from "@/lib/visitAnalytics"
 
 /**
  * The Share dialog for a Team, opened from the actions menu. It shares the team's page,
@@ -49,8 +50,13 @@ export function ShareTeam({
 	const teamUrl = `${useOrigin()}/teams/${teamId}`
 	const [encodedUrl, encodedTitle] = [encodeURIComponent(teamUrl), encodeURIComponent(teamName)]
 
+	// report a share by its channel. a team is never named
+	const handleShareOptionClick = (channel: string): void =>
+		captureVisitEvent("visit_share_clicked", { kind: "team", channel })
+
 	// copy a link to the team to the clipboard and show a confirmation label
 	async function handleCopyLink(label: string, text: string): Promise<void> {
+		handleShareOptionClick("copy-link")
 		if (await copyToClipboard(text)) {
 			setCopiedLabel(label)
 			setTimeout(() => setCopiedLabel(null), COPIED_FEEDBACK_MS)
@@ -59,6 +65,7 @@ export function ShareTeam({
 
 	// pass the team's url to the device's sheet. a rejected gesture falls back to the clipboard copy
 	async function handleShareSheet(): Promise<void> {
+		handleShareOptionClick("share-sheet")
 		const shared = await openShareSheet({ title: teamName, text: `${teamName} on CarlNotes`, url: teamUrl })
 		if (shared === "unavailable") {
 			await handleCopyLink(COPY_PAGE_LABEL, teamUrl)
@@ -67,6 +74,7 @@ export function ShareTeam({
 
 	// create the invite token inside the click handler and pass its invite url to the share sheet
 	async function handleShareInvite(): Promise<void> {
+		handleShareOptionClick("invite")
 		let invite: Awaited<ReturnType<typeof sendCreateTeamInvite>>
 		try {
 			invite = await sendCreateTeamInvite(teamId, "share-sheet")
@@ -91,7 +99,13 @@ export function ShareTeam({
 	}
 
 	const reason = "Make this team public to post it to a platform"
-	const targetOptionProps = { isEnabled: isPublic, encodedUrl, encodedTitle, reason }
+	const targetOptionProps = {
+		isEnabled: isPublic,
+		encodedUrl,
+		encodedTitle,
+		reason,
+		onPlatformOptionClick: handleShareOptionClick,
+	}
 	// the invite option opens a sheet where there is one, and copies everywhere else
 	const inviteLabel = isShareSheetAvailable ? INVITE_SHARE_LABEL : INVITE_LABEL
 	return (

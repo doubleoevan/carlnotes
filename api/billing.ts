@@ -1,6 +1,7 @@
 // Stripe Billing: Checkout, the Customer Portal
 // SETUP: create plus and premium products with monthly and yearly prices, plus a metered manual-scan overage price in Stripe
 import { zValidator } from "@hono/zod-validator"
+import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
 import type { BillingState } from "@shared/contracts"
 import { checkoutPayload } from "@shared/contracts"
@@ -13,7 +14,7 @@ import { db } from "../db"
 import { billingSubscriptions, users } from "../db/schema"
 import { replaceUserLiteLLMKey } from "../worker"
 import { isAllowed } from "./authorization"
-import { type AppEnv, currentUser } from "./currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
 import { refreshSessionUser } from "./sessions"
 import { scansToday } from "./topic/quotas"
 
@@ -239,11 +240,19 @@ async function applySubscriptionState(subscription: Stripe.Subscription): Promis
 		return
 	}
 
+	// the user's plan before this event
+	const [user] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, userId))
+	const previousPlan = user?.plan ?? "free"
+
 	// a null paid subscription clears the billing_subscriptions row and reverts the user to free
 	const paidSubscription = toPaidSubscription(subscription)
 	if (!paidSubscription) {
 		await db.delete(billingSubscriptions).where(eq(billingSubscriptions.userId, userId))
 		await syncUserPlan(userId, "free")
+		// report the cancellation of a paid plan. a repeated clear of a free user reports nothing
+		if (previousPlan !== "free") {
+			trackEvent("subscription_canceled", userId, { entryPoint: "webhook", plan: "free", fromPlan: previousPlan })
+		}
 		return
 	}
 
@@ -253,6 +262,14 @@ async function applySubscriptionState(subscription: Stripe.Subscription): Promis
 		.values({ userId, ...paidSubscription })
 		.onConflictDoUpdate({ target: billingSubscriptions.userId, set: paidSubscription })
 	await syncUserPlan(userId, paidSubscription.plan)
+
+	// report a subscription that started, or a plan that changed. a repeated event for the same plan reports nothing
+	const planProperties = { entryPoint: "webhook", plan: paidSubscription.plan, fromPlan: previousPlan }
+	if (previousPlan === "free") {
+		trackEvent("subscription_started", userId, planProperties)
+	} else if (previousPlan !== paidSubscription.plan) {
+		trackEvent("plan_changed", userId, planProperties)
+	}
 }
 
 // set users.plan and the user's sessions to the updated plan, then reissue the LiteLLM key with the new plan's budget
@@ -324,9 +341,15 @@ export const billingRoute = new Hono<AppEnv>()
 		if (!user) {
 			return context.json({ error: "unauthorized" }, 401)
 		}
-		// open a stripe checkout session for the chosen plan and billing interval, and hand its url back to redirect to
+		// open a stripe checkout session for the chosen plan and billing interval and return its url to redirect to
 		const { plan, billingInterval } = context.req.valid("json")
 		const url = await createCheckoutSession(user.id, user.email, plan, billingInterval)
+		// report the checkout the user opened, with the plan they picked and the plan they are on
+		trackEvent("checkout_started", user.id, {
+			...toAnalyticsProperties(context),
+			checkoutPlan: plan,
+			interval: billingInterval,
+		})
 		return context.json({ url })
 	})
 	.post("/billing/portal", async (context) => {

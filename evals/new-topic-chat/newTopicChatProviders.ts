@@ -50,7 +50,13 @@ async function writeCaseChatTurn(_renderedPrompt: string, context?: CallApiConte
 		userId: "eval-user",
 		toolCalls: { count: 0, topicSaves: [], topicSaveRejections: [] },
 		topicDraft,
-		analyticsProperties: { plan: "free", platform: "desktop", browserPlatform: "other", isInAppBrowser: false },
+		analyticsProperties: {
+			entryPoint: "web",
+			plan: "free",
+			platform: "desktop",
+			browserPlatform: "other",
+			isInAppBrowser: false,
+		},
 	}
 
 	// build the tools, recording every call that the turn makes

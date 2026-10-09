@@ -2,12 +2,13 @@
 // each write checks edit access, mutates the ydoc threads map under the note's lock, mirrors sql, and fans out
 import { DefaultThreadStoreAuth } from "@blocknote/core/comments"
 import { YjsThreadStore } from "@blocknote/core/yjs"
+import { trackEvent } from "@shared/analytics"
 import { and, eq, inArray, not, sql } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import * as Y from "yjs"
 import { type DbTransaction, db } from "../../db"
 import { noteComments, noteCommentThreads, notes } from "../../db/schema"
-import { type AppEnv, currentUser } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { notifyNoteUpdate } from "./noteStream"
 import { canEditNote, loadNoteWithPage, loadPageAccess } from "./permissions"
 
@@ -155,7 +156,12 @@ export const noteCommentThreadsRoute = new Hono<AppEnv>()
 			const outcome = await mutateNoteThreads(noteId, userId, null, (threadStore) =>
 				threadStore.createThread({ initialComment: body?.initialComment ?? { body: undefined } }),
 			)
-			return outcome ? context.json(outcome.result) : context.json({ error: "not found" }, 404)
+			if (!outcome) {
+				return context.json({ error: "not found" }, 404)
+			}
+			// report the new thread's first comment
+			trackEvent("note_comment_added", userId, { ...toAnalyticsProperties(context), noteId, isThreadStart: true })
+			return context.json(outcome.result)
 		} catch (error) {
 			return toThreadErrorResponse(context, error)
 		}
@@ -175,7 +181,12 @@ export const noteCommentThreadsRoute = new Hono<AppEnv>()
 			const outcome = await mutateNoteThreads(noteId, userId, threadId, (threadStore) =>
 				threadStore.addComment({ threadId, comment: body?.comment ?? { body: undefined } }),
 			)
-			return outcome ? context.json(outcome.result) : context.json({ error: "not found" }, 404)
+			if (!outcome) {
+				return context.json({ error: "not found" }, 404)
+			}
+			// report the reply
+			trackEvent("note_comment_added", userId, { ...toAnalyticsProperties(context), noteId, isThreadStart: false })
+			return context.json(outcome.result)
 		} catch (error) {
 			return toThreadErrorResponse(context, error)
 		}
@@ -260,7 +271,12 @@ export const noteCommentThreadsRoute = new Hono<AppEnv>()
 			const outcome = await mutateNoteThreads(noteId, userId, threadId, (threadStore) =>
 				threadStore.resolveThread({ threadId }),
 			)
-			return outcome ? context.json({ ok: true }) : context.json({ error: "not found" }, 404)
+			if (!outcome) {
+				return context.json({ error: "not found" }, 404)
+			}
+			// report the resolution
+			trackEvent("note_thread_resolved", userId, { ...toAnalyticsProperties(context), noteId })
+			return context.json({ ok: true })
 		} catch (error) {
 			return toThreadErrorResponse(context, error)
 		}

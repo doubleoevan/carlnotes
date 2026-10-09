@@ -1,3 +1,4 @@
+import type { visibilities } from "@shared/enums"
 import { toTopicFeedPath, toTopicPath } from "@shared/seo"
 import { Check, Flag, Link, Rss, Share, Share2 } from "lucide-react"
 import { useState } from "react"
@@ -21,6 +22,7 @@ import { useShareTopicActions } from "@/components/share/useShareTopicActions"
 import { useIsMounted, useOrigin } from "@/hooks/useBrowserValue"
 import { canOpenShareSheet } from "@/lib/shareSheet"
 import { MENU_DIVIDER_CLASS } from "@/lib/styleClasses"
+import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 
 // what a disabled share option shows, which names the owner's way to fix it
 function toDisabledReason(isTopicOwner?: boolean): string {
@@ -59,7 +61,7 @@ export function ShareTopic({
 	onMakeTopicPublic,
 }: {
 	// the topic being shared. only a public topic can be posted, and only its owner can make it public
-	topic: { id: string; name: string; visibility: string; isTopicOwner?: boolean }
+	topic: { id: string; name: string; visibility: (typeof visibilities)[number]; isTopicOwner?: boolean }
 	className?: string
 	// the homepage topic card shows the share icon alone instead of the labeled button
 	isIcon?: boolean
@@ -107,12 +109,17 @@ export function ShareTopic({
 	// the send options are enabled for any non-private topic
 	const canShareTopic = topic.visibility !== "private"
 
+	// report a share by its channel, naming the topic only if it is public
+	const handleShareOptionClick = (channel: string): void =>
+		captureVisitEvent("visit_share_clicked", { kind: "topic", channel, ...toPublicTopicProperties(topic) })
+
 	// the props every platform option requires
 	const shareTargetProps = {
 		encodedUrl,
 		encodedTitle,
 		reason: disabledReason,
 		onDisabledOptionClick: handleDisabledOptionClick,
+		onPlatformOptionClick: handleShareOptionClick,
 	}
 
 	// one set of options, whether they open from the feed card's popover or the topic page's dialog
@@ -126,13 +133,23 @@ export function ShareTopic({
 				<InviteShareOption
 					isCopied={copiedLabel === INVITE_LABEL}
 					label={isShareSheetAvailable ? INVITE_SHARE_LABEL : INVITE_LABEL}
-					onShare={shareInvite}
+					onShare={() => {
+						handleShareOptionClick("invite")
+						return shareInvite()
+					}}
 				/>
 			)}
 			{/* the device's share sheet is above the send options if one can open */}
 			{isShareSheetAvailable &&
 				(canShareTopic ? (
-					<button type="button" onClick={() => void shareTopic()} className={SHARE_OPTION_CLASS}>
+					<button
+						type="button"
+						onClick={() => {
+							handleShareOptionClick("share-sheet")
+							void shareTopic()
+						}}
+						className={SHARE_OPTION_CLASS}
+					>
 						<Share className={SHARE_OPTION_ICON_CLASS} />
 						Share…
 					</button>
@@ -152,7 +169,10 @@ export function ShareTopic({
 				icon={<Link className="size-4" />}
 				className={SHARE_OPTION_CLASS}
 				isCopied={copiedLabel === COPY_PAGE_LABEL}
-				onCopy={() => copyLink(COPY_PAGE_LABEL, topicUrl)}
+				onCopy={() => {
+					handleShareOptionClick("copy-link")
+					return copyLink(COPY_PAGE_LABEL, topicUrl)
+				}}
 			/>
 			{/* an rss feed can only be served for a public topic */}
 			{isPublic ? (
@@ -161,7 +181,10 @@ export function ShareTopic({
 					icon={<Rss className="size-4" />}
 					className={SHARE_OPTION_CLASS}
 					isCopied={copiedLabel === "Copy RSS"}
-					onCopy={() => copyLink("Copy RSS", feedUrl)}
+					onCopy={() => {
+						handleShareOptionClick("rss")
+						return copyLink("Copy RSS", feedUrl)
+					}}
 				/>
 			) : (
 				<DisabledShareOption
@@ -246,7 +269,7 @@ export function ShareTopicButton({
 	onClose,
 	onMakeTopicPublic,
 }: {
-	topic: { id: string; name: string; visibility: string; isTopicOwner: boolean }
+	topic: { id: string; name: string; visibility: (typeof visibilities)[number]; isTopicOwner: boolean }
 	className?: string
 	isCompact?: boolean
 	// the topic page opens the options as a dialog from its actions menu

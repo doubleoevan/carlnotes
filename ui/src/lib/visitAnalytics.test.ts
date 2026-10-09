@@ -43,6 +43,19 @@ test("every event has its id taken out of both the url and the path, and the url
 	expect(reportedEvent?.properties.$pathname).toBe("/topics/:id")
 })
 
+// a visit event's own properties stay as sent, while its url is rewritten with every other event's
+test("a visit event keeps its own properties and has its url rewritten", () => {
+	const reportedEvent = toReportedEvent({
+		event: "visit_topic_viewed",
+		properties: {
+			$current_url: "https://carlnotes.com/topics/bffe43c2-f706-4f92-88bd-df0c9fd8f9e8/agents",
+			topicId: "bffe43c2-f706-4f92-88bd-df0c9fd8f9e8",
+		},
+	} as never)
+	expect(reportedEvent?.properties.$current_url).toBe("https://carlnotes.com/topics/:id/:slug")
+	expect(reportedEvent?.properties.topicId).toBe("bffe43c2-f706-4f92-88bd-df0c9fd8f9e8")
+})
+
 // the previous page's path, which posthog attaches to a page view and a page leave, loses its id too
 test("the previous page's path has its id taken out", () => {
 	const reportedEvent = toReportedEvent({

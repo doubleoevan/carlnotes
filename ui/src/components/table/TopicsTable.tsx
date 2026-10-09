@@ -52,8 +52,9 @@ export function TopicsTable({
 	// the card styles a caller overrides, like the sunken surface a subtable sits on
 	className?: string
 }) {
-	// the sorted column applies across all the table's pages
-	const { pageRows, sort, pagination } = usePaginatedRowSort(topics, topicSortValues)
+	// the sorted column applies across all the table's pages. the page's rows and the first NO_SCRIPT_ROW_LIMIT rows
+	// render for a reader without JavaScript
+	const { renderedRows, sort, pagination } = usePaginatedRowSort(topics, topicSortValues)
 
 	// the switch shows the choice before the page reloads, so the row shows the choice the moment it is made
 	const [emailChoices, setEmailChoices] = useState<Record<string, boolean>>({})
@@ -137,8 +138,8 @@ export function TopicsTable({
 						</tr>
 					</thead>
 					<tbody>
-						{pageRows.map((topic) => (
-							<tr key={topic.id} className="border-b">
+						{renderedRows.map(({ row: topic, className }) => (
+							<tr key={topic.id} className={cn("border-b", className)}>
 								<td className="py-2 pr-4">
 									<TopicNameLink topic={topic} />
 								</td>

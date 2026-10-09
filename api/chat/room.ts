@@ -1,5 +1,6 @@
 // the chat messages, stream, and post route for a team's chat room. a null topic is the team's own chat room
 import { zValidator } from "@hono/zod-validator"
+import { trackEvent } from "@shared/analytics"
 import { hasAllMention, hasModelMention, isModelChatMessage } from "@shared/chatMentions"
 import { type ChatAttachment, type ChatRoomMessagePage, chatRoomMessagePayload } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
@@ -25,7 +26,7 @@ import {
 	SPENT_BUDGET_REJECTION,
 } from "../../worker"
 import { isLeaderRole, isMonthlySpendExhausted, loadUserAccess } from "../authorization"
-import { type AppEnv, currentUser } from "../currentUser"
+import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toTeamRole } from "../team/members"
 import { toStoredFileHeaders } from "../topic/attachments"
 import { streamVideoAttachment } from "./attachments"
@@ -107,6 +108,7 @@ export async function postChatRoomMessage(
 	content: string,
 	replyToChatMessageId: number | null,
 	attachments: ChatAttachment[],
+	analyticsProperties?: AnalyticsProperties,
 ): Promise<
 	{ chatMessageId: number; rejectionReason: string | null } | "attachmentRejected" | "attachmentLimitReached" | null
 > {
@@ -168,6 +170,16 @@ export async function postChatRoomMessage(
 	// team member chat mentions and the replied-to author become rows that the chat mention badges read
 	await saveChatMentions(chatRoom.teamId, userId, chatMessageRow.id, content, replyToChatMessageId ?? null)
 
+	// report the post: which kind of room, whether carl was asked, and whether a file came with it
+	trackChatRoomMessage({
+		userId,
+		topicId,
+		teamId,
+		isModelChatTurn,
+		hasAttachment: attachments.length > 0,
+		analyticsProperties,
+	})
+
 	// carl's turn runs after the post returns, its chat messages read serialized by the chat room lock
 	if (isModelChatTurn) {
 		const promptChatMessageId = chatMessageRow.id
@@ -185,6 +197,35 @@ export async function postChatRoomMessage(
 		})
 	}
 	return { chatMessageId: chatMessageRow.id, rejectionReason: null }
+}
+
+// a posted chat message's event: the room it went to, whether carl was asked, and whether a file came with it
+type TrackChatRoomMessageOptions = {
+	userId: string
+	topicId: string | null
+	teamId: string
+	isModelChatTurn: boolean
+	hasAttachment: boolean
+	analyticsProperties: AnalyticsProperties | undefined
+}
+
+// report a posted chat message. a topic's room names the topic, and a team's own room names the team alone
+function trackChatRoomMessage({
+	userId,
+	topicId,
+	teamId,
+	isModelChatTurn,
+	hasAttachment,
+	analyticsProperties,
+}: TrackChatRoomMessageOptions): void {
+	trackEvent("room_message_sent", userId, {
+		...analyticsProperties,
+		teamId,
+		...(topicId ? { topicId } : {}),
+		roomKind: topicId ? "topic" : "team",
+		mentionsCarl: isModelChatTurn,
+		hasAttachment,
+	})
 }
 
 // whether the replied-to chat message is carl's, which continues his exchange without a fresh chat mention
@@ -581,6 +622,7 @@ export const chatRoomRoute = new Hono<AppEnv>()
 			content,
 			replyToChatMessageId ?? null,
 			attachments,
+			toAnalyticsProperties(context),
 		)
 		if (postChatMessageResult === "attachmentLimitReached") {
 			return context.json({ error: "attachment limit reached" }, 400)
@@ -606,6 +648,7 @@ export const chatRoomRoute = new Hono<AppEnv>()
 			content,
 			replyToChatMessageId ?? null,
 			attachments,
+			toAnalyticsProperties(context),
 		)
 		if (postChatMessageResult === "attachmentLimitReached") {
 			return context.json({ error: "attachment limit reached" }, 400)

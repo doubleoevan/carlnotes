@@ -83,7 +83,11 @@ export async function runManualScan(
 /**
  * Stop the Scan a Topic is running. Authority alone decides who may do this, never the daily quota.
  */
-export async function stopManualScan(userId: string, topicId: string): Promise<StopScanResult> {
+export async function stopManualScan(
+	userId: string,
+	topicId: string,
+	analyticsProperties: AnalyticsProperties,
+): Promise<StopScanResult> {
 	// only a user who can scan a topic may stop a scan on it
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
 	if (!(topic && (await isAllowed(userId, "scan:request", topic)))) {
@@ -92,7 +96,11 @@ export async function stopManualScan(userId: string, topicId: string): Promise<S
 
 	// a Topic whose Scan already finished has nothing to stop, which is an answer instead of a failure
 	const stopped = await stopTopicScan(topicId)
-	return stopped.status === "cancelled" ? { status: "stopped" } : { status: "idle" }
+	if (stopped.status !== "cancelled") {
+		return { status: "idle" }
+	}
+	trackEvent("scan_stopped", userId, { ...analyticsProperties, topicId, isTopicPublic: topic.visibility === "public" })
+	return { status: "stopped" }
 }
 
 // the manual scan route and one scan's recap
@@ -145,9 +153,9 @@ export const scansRoute = new Hono<AppEnv>()
 		}
 
 		// stop the Topic's running Scan. a Topic with none running returns the same as one that was stopped
-		const stopResult = await stopManualScan(userId, context.req.param("id"))
-		if (stopResult.status === "forbidden") {
+		const stopManualScanResult = await stopManualScan(userId, context.req.param("id"), toAnalyticsProperties(context))
+		if (stopManualScanResult.status === "forbidden") {
 			return context.json({ error: "forbidden" }, 403)
 		}
-		return context.json({ status: stopResult.status })
+		return context.json({ status: stopManualScanResult.status })
 	})

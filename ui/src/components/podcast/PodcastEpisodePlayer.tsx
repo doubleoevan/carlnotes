@@ -24,7 +24,7 @@ const RECORDING_POLL_MS = 5_000
 // and the call that runs after the podcast episode is removed
 type PodcastEpisodePlayerProps = {
 	topic: TopicResponse
-	topicHandlers: TopicFeedHandlers
+	topicFeedHandlers: TopicFeedHandlers
 	scanControl: React.ReactNode
 	onPodcastEpisodeRemoved: () => Promise<void>
 }
@@ -34,7 +34,7 @@ type PodcastEpisodePlayerProps = {
  */
 export function PodcastEpisodePlayer({
 	topic,
-	topicHandlers,
+	topicFeedHandlers,
 	scanControl,
 	onPodcastEpisodeRemoved,
 }: PodcastEpisodePlayerProps) {
@@ -71,10 +71,10 @@ export function PodcastEpisodePlayer({
 					podcastEpisodePath={toPodcastEpisodePath(topic, podcastEpisode)}
 					chapterTopicFeed={{
 						topicFindings: topic.findings,
-						topic: { id: topic.id, name: topic.name, prompt: topic.prompt },
+						topic: { id: topic.id, name: topic.name, prompt: topic.prompt, visibility: topic.visibility },
 						isRatable: topic.canRate,
 						isBookmarkable: topic.isTopicOwner || topic.isTeamMember,
-						topicHandlers,
+						topicFeedHandlers,
 					}}
 					onOpenPodcastFeedDialog={() => setIsPodcastFeedDialogOpen(true)}
 					onRemovePodcastEpisode={

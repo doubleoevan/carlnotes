@@ -20,8 +20,9 @@ The api serves the browser bundle and renders pages through the server build, be
   `PageHead`, or a fixed title and path, into the tags a route's `head()` returns. `loadOnServer.ts` runs a route
   loader's read on the server only, and its `loadPageOnServer` reads a page's head and page data together.
   `requireSession.ts` is the sign-in guard the `_signedIn` layout runs before its pages load. `sessionCookie.ts` reads
-  on the server whether the request brings a session cookie. `visitAnalytics.ts` starts the browser's analytics and
-  reports a page view per route change.
+  on the server whether the request brings a session cookie. `visitAnalytics.ts` starts the browser's analytics,
+  reports a page view per route change, and captures the named visit events, their urls rewritten like every other
+  event's. `renderedRows.ts` picks the rows a paged list renders: the page shown and the list's first fifty.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/share/` — the share menus for a topic and a team, over the options they both use.
 - `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use.
@@ -65,7 +66,7 @@ The api serves the browser bundle and renders pages through the server build, be
   page load's session cookie decides until Better Auth's session request finishes, and the session decides after.
   An element that fades in as it scrolls into view takes its class from `useRevealClassName` in
   `hooks/useRevealClassName.ts`, which shows a server-rendered element before any script runs, so nothing a crawler
-  or a browser without scripts reads starts hidden.
+  or a browser without JavaScript reads starts hidden.
 - Imports: `@shared/*`, plus types only from the api, worker, and db, such as `AppType` and `auth`.
   `scripts/check-ui-boundary.ts` fails a value import from the api, worker, or db.
 - `.tsx` is exempt from the comment-groups hook; keep the comment style anyway.

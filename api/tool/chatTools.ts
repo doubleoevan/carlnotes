@@ -40,8 +40,13 @@ export type ChatTurnToolCalls = TopicToolCalls & { count: number }
 const CONFIRMATION_RULE =
 	"Call this only in a turn after the reader said yes to the exact change you proposed in an earlier turn."
 
-// what one chat turn's tools are bound to
-type EditTopicToolBinding = { userId: string; topicId: string; toolCalls: ChatTurnToolCalls }
+// what one chat turn's tools are bound to, and the request's analytics properties if a request is behind the turn
+type EditTopicToolBinding = {
+	userId: string
+	topicId: string
+	toolCalls: ChatTurnToolCalls
+	analyticsProperties?: AnalyticsProperties
+}
 
 /**
  * Binds the topic tools to one chat session's topic, so no message can point a tool at another topic, each tool
@@ -122,14 +127,20 @@ export function toCancelTopicEditTool({ toolCalls }: { toolCalls: ChatTurnToolCa
 }
 
 // the tool that rewrites the topic prompt
-function toUpdateTopicPromptTool({ userId, topicId, toolCalls }: EditTopicToolBinding): Tool {
+function toUpdateTopicPromptTool({ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding): Tool {
 	return tool({
 		description: `Rewrite what the reader is looking for, the prompt every brew scores against. ${CONFIRMATION_RULE}`,
 		inputSchema: updateTopicPromptPayload,
 		execute: async ({ prompt }) => {
 			// count the call before the write. a failed write still counts
 			toolCalls.count += 1
-			const updateTopicPromptResult = await updateTopicPrompt({ userId, topicId, prompt, origin: "chat" })
+			const updateTopicPromptResult = await updateTopicPrompt({
+				userId,
+				topicId,
+				prompt,
+				origin: "chat",
+				analyticsProperties,
+			})
 			if (updateTopicPromptResult.status !== "saved") {
 				toolCalls.topicSaveRejections.push(
 					toRejectionToast("save the prompt", toGateReason(updateTopicPromptResult.status)),
@@ -144,7 +155,7 @@ function toUpdateTopicPromptTool({ userId, topicId, toolCalls }: EditTopicToolBi
 }
 
 // the tool that changes the topic's fields
-function toUpdateTopicFieldsTool({ userId, topicId, toolCalls }: EditTopicToolBinding): Tool {
+function toUpdateTopicFieldsTool({ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding): Tool {
 	return tool({
 		description: `Change the topic's title, its tags, its visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day it brews as HH:MM and the day a weekly brew runs, or how many findings a brew keeps (5, 10, 15, or 20).${toPodcastFieldDescription()} Name only the fields to change. ${CONFIRMATION_RULE}`,
 		inputSchema: z.object(toUpdateTopicFieldsShape()),
@@ -155,6 +166,7 @@ function toUpdateTopicFieldsTool({ userId, topicId, toolCalls }: EditTopicToolBi
 				topicId,
 				topicFields,
 				promptVersionOrigin: "chat",
+				analyticsProperties,
 			})
 			if (updateTopicFieldsResult.status !== "saved") {
 				toolCalls.topicSaveRejections.push(
@@ -170,14 +182,21 @@ function toUpdateTopicFieldsTool({ userId, topicId, toolCalls }: EditTopicToolBi
 }
 
 // the tool that adds a source
-function toAddTopicSourceTool({ userId, topicId, toolCalls }: EditTopicToolBinding): Tool {
+function toAddTopicSourceTool({ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding): Tool {
 	return tool({
 		description: `Add somewhere to read for this topic: a default source key, or a custom source option with its value. Returns what one more source is projected to cost. ${CONFIRMATION_RULE}`,
 		inputSchema: addTopicSourcePayload,
 		execute: async ({ sourceOption, value }) => {
 			// count the call before the write. a failed write still counts
 			toolCalls.count += 1
-			const addTopicSourceResult = await addTopicSource({ userId, topicId, sourceOption, value, origin: "chat" })
+			const addTopicSourceResult = await addTopicSource({
+				userId,
+				topicId,
+				sourceOption,
+				value,
+				origin: "chat",
+				analyticsProperties,
+			})
 			// list the save, or what stopped it, for the toast
 			if (addTopicSourceResult.status === "saved") {
 				toolCalls.topicSaves.push(`Carl added ${addTopicSourceResult.topicSourceLabel}.`)
@@ -190,14 +209,20 @@ function toAddTopicSourceTool({ userId, topicId, toolCalls }: EditTopicToolBindi
 }
 
 // the tool that removes a source
-function toRemoveTopicSourceTool({ userId, topicId, toolCalls }: EditTopicToolBinding): Tool {
+function toRemoveTopicSourceTool({ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding): Tool {
 	return tool({
 		description: `Drop one of this topic's sources by the id shown in brackets after it in the sources block. ${CONFIRMATION_RULE}`,
 		inputSchema: removeTopicSourcePayload,
 		execute: async ({ sourceId }) => {
 			// count the call before the write. a failed write still counts
 			toolCalls.count += 1
-			const removeTopicSourceResult = await removeTopicSource({ userId, topicId, sourceId, origin: "chat" })
+			const removeTopicSourceResult = await removeTopicSource({
+				userId,
+				topicId,
+				sourceId,
+				origin: "chat",
+				analyticsProperties,
+			})
 			if (removeTopicSourceResult.status !== "saved") {
 				toolCalls.topicSaveRejections.push(
 					toRejectionToast("remove that source", toGateReason(removeTopicSourceResult.status)),

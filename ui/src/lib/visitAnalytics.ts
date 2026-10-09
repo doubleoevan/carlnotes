@@ -1,4 +1,8 @@
-// visit analytics: how many people open which page, with nothing stored on their device and nobody identified
+// visit analytics: how many people open which page and what they play, click, and share there, with nothing stored
+// on their device and nobody identified
+import type { AnalyticsEventProperties, VisitAnalyticsEvent } from "@shared/analytics"
+import type { PodcastEpisode } from "@shared/contracts"
+import type { visibilities } from "@shared/enums"
 import { toReportedPath } from "@shared/reportedPath"
 import posthog, { type CaptureResult } from "posthog-js"
 
@@ -79,11 +83,46 @@ function rewritePathsAndUrls(properties: Record<string, unknown>): void {
 }
 
 /**
- * Reports one page view. The path it reports is rewritten on the way out, with every other event.
+ * Reports one page view. The path it reports is rewritten with every other event's.
  */
 export function captureVisit(): void {
 	if (!import.meta.env.VITE_POSTHOG_KEY) {
 		return
 	}
 	posthog.capture("$pageview")
+}
+
+/**
+ * Reports one visit event by name. A no-op if VITE_POSTHOG_KEY is not set.
+ */
+export function captureVisitEvent(event: VisitAnalyticsEvent, properties: AnalyticsEventProperties = {}): void {
+	if (!import.meta.env.VITE_POSTHOG_KEY) {
+		return
+	}
+	posthog.capture(event, properties)
+}
+
+/**
+ * The topic a visit event names: a public topic by its id, and any other topic not at all.
+ */
+export function toPublicTopicProperties(topic: {
+	id: string
+	visibility: (typeof visibilities)[number]
+}): AnalyticsEventProperties {
+	return topic.visibility === "public" ? { topicId: topic.id } : {}
+}
+
+/**
+ * Reports a play or a finish of an episode, naming the episode and its topic only if the topic is public.
+ */
+export function captureEpisodeVisitEvent(
+	event: "visit_episode_played" | "visit_episode_completed",
+	podcastEpisode: PodcastEpisode,
+): void {
+	captureVisitEvent(
+		event,
+		podcastEpisode.topicVisibility === "public"
+			? { episodeId: podcastEpisode.id, topicId: podcastEpisode.topicId }
+			: {},
+	)
 }

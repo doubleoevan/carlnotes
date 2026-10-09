@@ -56,8 +56,9 @@ export function TeamMembersTable({
 	// the removal columns show for a leader, and for the user's own row
 	const hasRemovalColumns = isTeamLeader || members.some((member) => member.userId === currentUserId)
 
-	// sort feeds pagination, so a sorted column reorders across every page
-	const { pageRows, sort, pagination } = usePaginatedRowSort(members, memberSortValues, { key: "member" })
+	// sort feeds pagination, so a sorted column reorders across every page. the page's rows and the first
+	// NO_SCRIPT_ROW_LIMIT rows render for a reader without JavaScript
+	const { renderedRows, sort, pagination } = usePaginatedRowSort(members, memberSortValues, { key: "member" })
 	// the totals read activated members alone, so a waiting request never inflates them
 	const activeMembers = members.filter((member) => member.isActive)
 	return (
@@ -82,7 +83,7 @@ export function TeamMembersTable({
 						</tr>
 					</thead>
 					<tbody>
-						{pageRows.map((member) => (
+						{renderedRows.map(({ row: member, className }) => (
 							<MemberRow
 								key={member.userId}
 								member={member}
@@ -91,6 +92,7 @@ export function TeamMembersTable({
 								hasRemovalColumns={hasRemovalColumns}
 								currentUserId={currentUserId}
 								onChanged={onChanged}
+								className={className}
 							/>
 						))}
 					</tbody>
@@ -129,6 +131,7 @@ function MemberRow({
 	hasRemovalColumns,
 	currentUserId,
 	onChanged,
+	className,
 }: {
 	member: TeamMember
 	teamId: string
@@ -137,6 +140,7 @@ function MemberRow({
 	hasRemovalColumns: boolean
 	currentUserId: string | null
 	onChanged: () => void
+	className?: string
 }) {
 	// the last-leader rejection toast shows what to do first
 	const handleRoleChange = async (nextRole: string): Promise<void> => {
@@ -174,7 +178,7 @@ function MemberRow({
 	}
 
 	return (
-		<tr className="border-b last:border-b-0">
+		<tr className={cn("border-b last:border-b-0", className)}>
 			<td className="py-2 pr-4">
 				{/* the avatar and name link to the profile */}
 				<span className="flex items-center gap-2">

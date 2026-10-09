@@ -64,7 +64,7 @@ CarlNotes reads public web content on a schedule and scores it against context y
 
 **Technical data.** IP address, browser and device type, timestamps, and error diagnostics. Used for security, abuse prevention, and debugging.
 
-**Product analytics.** Anonymous or pseudonymous usage events such as signup, first topic created, and first scan completed. Hosted only.
+**Product analytics.** Usage events keyed to your account id, never to your name or email, such as signup, a topic created, a scan completed, an episode played, or a team joined, with your plan and device type. Anonymous visit events from your browser: page views, plays, and the links and buttons you click to open a finding, sign up, share, or subscribe, naming a public topic at most. What known crawlers, link previewers, podcast apps, and AI agents fetch, keyed to the bot's or app's name. Never anything you typed. Hosted only.
 
 ## What we do not collect
 
@@ -98,7 +98,7 @@ We use third-party providers to run the service. Each one receives only what its
 | Resend | Email delivery | Email address and scan email contents |
 | Langfuse | Pipeline tracing | Prompt and response contents |
 | Sentry | Error tracking | Error diagnostics, may include request context |
-| PostHog | Product analytics | Usage events and page views, pseudonymous |
+| PostHog | Product analytics | Usage events keyed to your account, anonymous visit events, and bot fetches |
 | Stripe | Payments | Billing details, when paid plans are live |
 
 We select providers that do not train models on data submitted through their APIs. Their own terms govern their handling of that data.
@@ -131,7 +131,7 @@ Our use of information received from Google APIs adheres to the Google API Servi
 
 ## Cookies
 
-We use a session cookie to keep you signed in and a security cookie for bot protection. Both are required for the service to work. Our page-view analytics set no cookie and store nothing on your device.
+We use a session cookie to keep you signed in and a security cookie for bot protection. Both are required for the service to work. Our visit analytics set no cookie and store nothing on your device.
 
 ## Retention
 
@@ -171,7 +171,7 @@ export function PrivacyPage() {
 			{/* the title and the effective / last-updated dates */}
 			<h1 className="font-display text-2xl">Privacy Policy</h1>
 			<p className="text-muted-foreground mt-2 text-sm">
-				Effective date: July 24, 2026 · Last updated: October 1, 2026
+				Effective date: July 24, 2026 · Last updated: October 9, 2026
 			</p>
 			{/* the sections, rendered from the markdown body */}
 			<Markdown options={PRIVACY_MARKDOWN_OPTIONS}>{PRIVACY_BODY}</Markdown>

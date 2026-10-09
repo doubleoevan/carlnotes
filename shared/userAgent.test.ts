@@ -1,7 +1,14 @@
 // the session forms reorder on this detection and analytics reports it
 
 import { expect, test } from "bun:test"
-import { isInAppBrowser, toBrowserPlatform, toPlatform } from "./userAgent"
+import {
+	isInAppBrowser,
+	toBot,
+	toBrowserPlatform,
+	toDeviceProperties,
+	toPlatform,
+	toUserAgentProduct,
+} from "./userAgent"
 
 // the in-app browsers that send us traffic, each as the app actually reports itself
 const IN_APP_AGENTS = {
@@ -56,4 +63,53 @@ test("the device platform splits mobile from desktop", () => {
 	expect(toPlatform(BROWSER_AGENTS.mobileSafari)).toBe("mobile")
 	expect(toPlatform(BROWSER_AGENTS.androidChrome)).toBe("mobile")
 	expect(toPlatform(BROWSER_AGENTS.desktopChrome)).toBe("desktop")
+})
+
+// the three device properties of one user agent, and of a missing one
+test("toDeviceProperties reads the three device properties from one user agent", () => {
+	expect(toDeviceProperties(IN_APP_AGENTS.linkedIn)).toEqual({
+		platform: "mobile",
+		browserPlatform: "ios",
+		isInAppBrowser: true,
+	})
+	expect(toDeviceProperties(undefined)).toEqual({
+		platform: "desktop",
+		browserPlatform: "other",
+		isInAppBrowser: false,
+	})
+})
+
+// a token in a user agent names the bot and its kind, and a user agent on no list names none
+test("toBot names a crawler, an unfurler, a podcast app, and a feed reader, and nothing else", () => {
+	expect(toBot("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)")).toEqual({
+		kind: "crawler",
+		name: "googlebot",
+	})
+	expect(toBot("Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0)")).toEqual({
+		kind: "crawler",
+		name: "claudebot",
+	})
+	expect(toBot("Slackbot-LinkExpanding 1.0 (+https://api.slack.com/robots)")).toEqual({
+		kind: "unfurler",
+		name: "slack",
+	})
+	expect(toBot("Overcast/2024.3 (+http://overcast.fm/; iOS podcast app)")).toEqual({
+		kind: "podcastApp",
+		name: "overcast",
+	})
+	expect(toBot("Feedly/1.0 (+https://feedly.com/fetcher.html; 3 subscribers)")).toEqual({
+		kind: "feedReader",
+		name: "feedly",
+	})
+	expect(toBot(BROWSER_AGENTS.desktopChrome)).toBeNull()
+	expect(toBot(IN_APP_AGENTS.linkedIn)).toBeNull()
+	expect(toBot(null)).toBeNull()
+})
+
+// a user agent's product is its first word, in lower case and without its version
+test("toUserAgentProduct names the product ahead of its version", () => {
+	expect(toUserAgentProduct("Claude-User/1.0 (+claude.ai)")).toBe("claude-user")
+	expect(toUserAgentProduct("node")).toBe("node")
+	expect(toUserAgentProduct("")).toBe("unknown")
+	expect(toUserAgentProduct(null)).toBe("unknown")
 })

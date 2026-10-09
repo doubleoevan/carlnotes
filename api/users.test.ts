@@ -10,6 +10,7 @@ import { deleteUser } from "./users"
 
 // the analytics properties that a close is tracked with
 const ANALYTICS_PROPERTIES: AnalyticsProperties = {
+	entryPoint: "web",
 	plan: "free",
 	platform: "desktop",
 	browserPlatform: "other",

@@ -1,21 +1,35 @@
 // the subscription writes for the topic routes
 import { zValidator } from "@hono/zod-validator"
+import { trackEvent } from "@shared/analytics"
 import { inviteDeletePayload, subscriptionEmailPayload, subscriptionPayload } from "@shared/contracts"
 import { and, eq, inArray, or } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
 import { invites, subscriptions, topics, users } from "../../db/schema"
 import { isAllowed } from "../authorization"
-import { type AppEnv, currentUser } from "../currentUser"
+import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { loadOwnedTopic, verifiedEmailQuery } from "./permissions"
 import { updateTopicSubscriberCount } from "./subscriberCounts"
+
+// the user, the topic, whether to subscribe or unsubscribe, and the request's analytics properties
+type SetTopicSubscriptionOptions = {
+	userId: string
+	topicId: string
+	isSubscribed: boolean
+	analyticsProperties: AnalyticsProperties
+}
 
 /**
  * Subscribe or unsubscribe the current user. On an "invite" topic, subscribing is how the invitee accepts.
  * Unsubscribing only deactivates the row, so it can be reactivated. deleteTopicSubscription removes it for good.
  */
-export async function setTopicSubscription(userId: string, topicId: string, isSubscribed: boolean): Promise<boolean> {
+export async function setTopicSubscription({
+	userId,
+	topicId,
+	isSubscribed,
+	analyticsProperties,
+}: SetTopicSubscriptionOptions): Promise<boolean> {
 	// only a visible topic can be subscribed to
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
 	if (!topic || !(await isAllowed(userId, "topic:view", topic))) {
@@ -31,6 +45,14 @@ export async function setTopicSubscription(userId: string, topicId: string, isSu
 		return false
 	}
 
+	// the event's properties: the request's, the topic, and the page as the subscription source
+	const subscriptionProperties = {
+		...analyticsProperties,
+		topicId,
+		isTopicPublic: topic.visibility === "public",
+		subscriptionSource: "page",
+	}
+
 	// unsubscribing deactivates this user's direct row and turns its email preference off too
 	if (!isSubscribed) {
 		await db.transaction(async (transaction) => {
@@ -44,18 +66,24 @@ export async function setTopicSubscription(userId: string, topicId: string, isSu
 
 		// delete the user's podcast feed token for the topic
 		await deletePodcastFeedToken({ topicId, userId })
+		trackEvent("topic_unsubscribed", userId, subscriptionProperties)
 		return true
 	}
 
 	// subscribing reactivates an existing subscription row or inserts a new one
 	await activateSubscription(userId, topicId)
+	trackEvent("topic_subscribed", userId, subscriptionProperties)
 	return true
 }
 
 /**
  * Permanently remove the user's subscription row.
  */
-export async function deleteTopicSubscription(userId: string, topicId: string): Promise<void> {
+export async function deleteTopicSubscription(
+	userId: string,
+	topicId: string,
+	analyticsProperties: AnalyticsProperties,
+): Promise<void> {
 	// the invite gets deleted with the subscription
 	await db.transaction(async (transaction) => {
 		await transaction
@@ -73,8 +101,9 @@ export async function deleteTopicSubscription(userId: string, topicId: string): 
 		await updateTopicSubscriberCount(topicId, transaction)
 	})
 
-	// delete the user's podcast feed token for the topic
+	// delete the user's podcast feed token for the topic, and report the unsubscribe
 	await deletePodcastFeedToken({ topicId, userId })
+	trackEvent("topic_unsubscribed", userId, { ...analyticsProperties, topicId, subscriptionSource: "page" })
 }
 
 /**
@@ -166,8 +195,13 @@ export const subscriptionsRoute = new Hono<AppEnv>()
 		}
 		// subscribe, reactivate, or deactivate the current user's subscription to a public or invite topic
 		const { isSubscribed } = context.req.valid("json")
-		const isSubscriptionSet = await setTopicSubscription(userId, context.req.param("id"), isSubscribed)
-		return isSubscriptionSet ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+		const isTopicSubscriptionSet = await setTopicSubscription({
+			userId,
+			topicId: context.req.param("id"),
+			isSubscribed,
+			analyticsProperties: toAnalyticsProperties(context),
+		})
+		return isTopicSubscriptionSet ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})
 	.delete("/topics/:id/subscription", async (context) => {
 		// reject a signed-out visitor
@@ -176,7 +210,7 @@ export const subscriptionsRoute = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// permanently remove the user's own subscription row and their invite, distinct from deactivating it
-		await deleteTopicSubscription(userId, context.req.param("id"))
+		await deleteTopicSubscription(userId, context.req.param("id"), toAnalyticsProperties(context))
 		return context.json({ ok: true })
 	})
 	.delete("/topics/:id/invite", zValidator("json", inviteDeletePayload), async (context) => {
@@ -202,5 +236,12 @@ export const subscriptionsRoute = new Hono<AppEnv>()
 			return context.json({ error: "forbidden" }, 403)
 		}
 		await setSubscriptionEmailEnabled(subscriberUserId ?? userId, context.req.param("id"), isEmailEnabled)
+
+		// report the switch for the subscriber whose digest it is
+		trackEvent("email_digest_toggled", subscriberUserId ?? userId, {
+			...toAnalyticsProperties(context),
+			topicId: context.req.param("id"),
+			isEnabled: isEmailEnabled,
+		})
 		return context.json({ ok: true })
 	})

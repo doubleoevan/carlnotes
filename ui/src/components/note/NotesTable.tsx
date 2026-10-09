@@ -7,6 +7,7 @@ import { TableCard } from "@/components/table/TableCard"
 import { SMALLEST_PAGE_SIZE, TablePagination, usePaginatedRowSort } from "@/components/table/TablePagination"
 import { toAgeLabel } from "@/lib/labels"
 import { TABLE_CLASS, TABLE_HEAD_CLASS, TABLE_SCROLL_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 import { useNoteBadge } from "@/stores/noteBadgeStore"
 import { NoteVisibilityIcon } from "./NoteVisibilitySelect"
 
@@ -36,8 +37,9 @@ export function toVisibilityCountsLabel(notes: Pick<Note, "visibility">[]): stri
  * The notes on a page. Clicking a row opens the note's dialog.
  */
 export function NotesTable({ notes, onOpenNote }: { notes: Note[]; onOpenNote: (note: Note) => void }) {
-	// the sorted column applies across all the table's pages
-	const { pageRows, sort, pagination } = usePaginatedRowSort(notes, noteSortValues)
+	// the sorted column applies across all the table's pages. the page's rows
+	// and the first NO_SCRIPT_ROW_LIMIT rows render for a reader without JavaScript
+	const { renderedRows, sort, pagination } = usePaginatedRowSort(notes, noteSortValues)
 
 	// the freshest change time, shown in the footer
 	const latestUpdatedAt = notes.reduce<string | null>(
@@ -62,8 +64,8 @@ export function NotesTable({ notes, onOpenNote }: { notes: Note[]; onOpenNote: (
 						</tr>
 					</thead>
 					<tbody>
-						{pageRows.map((note) => (
-							<tr key={note.id} className="border-b">
+						{renderedRows.map(({ row: note, className }) => (
+							<tr key={note.id} className={cn("border-b", className)}>
 								<td className="py-2 pr-4">
 									<span className="flex items-center gap-1.5">
 										<button

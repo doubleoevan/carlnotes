@@ -1,7 +1,7 @@
 // the homepage as the server renders it, across two requests in one process, with a section's page links, and with a
 // closed section still in the html
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import type { TopicFeed, TopicFeedResponse } from "@shared/contracts"
+import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
 import { toTopicPath } from "@shared/seo"
 import { RouterProvider } from "@tanstack/react-router"
 import { renderToString } from "react-dom/server"
@@ -13,11 +13,11 @@ const TOPIC_ID = "60221dfa-df65-44fa-84d4-fbaf10d48e5b"
 // the visitor feed the fake api returns, which each test sets before it renders
 let topicFeedResponse: TopicFeedResponse
 
-// the feed topic's id and name
-type ToFeedTopicOptions = { id: string; name: string }
+// a feed topic with the given id, name, and findings
+type ToFeedTopicOptions = { id: string; name: string; findings?: TopicFinding[] }
 
 // a public topic, as a visitor's feed lists it
-function toFeedTopic({ id, name }: ToFeedTopicOptions): TopicFeed {
+function toFeedTopic({ id, name, findings = [] }: ToFeedTopicOptions): TopicFeed {
 	return {
 		id,
 		name,
@@ -46,8 +46,32 @@ function toFeedTopic({ id, name }: ToFeedTopicOptions): TopicFeed {
 		scanSummary: null,
 		attachments: [],
 		sources: [],
-		findings: [],
+		findings,
 		latestPodcastEpisode: null,
+	}
+}
+
+// a topic finding with its ids and title from the number
+function toTopicFinding(findingNumber: number): TopicFinding {
+	return {
+		findingId: `f${findingNumber}`,
+		scanId: "s1",
+		resourceId: `r${findingNumber}`,
+		url: `https://example.com/${findingNumber}`,
+		resourceKind: "read",
+		title: `Finding ${findingNumber}`,
+		source: "example.com",
+		faviconPath: null,
+		publishedAt: "2026-09-20T00:00:00.000Z",
+		fetchedAt: "2026-09-21T00:00:00.000Z",
+		viewCount: 0,
+		relevanceScore: 0.9,
+		relevanceExplanation: "Why Carl kept it.",
+		rating: null,
+		isConsumed: false,
+		isBookmarked: false,
+		teamBookmarks: [],
+		engagement: null,
 	}
 }
 
@@ -109,7 +133,16 @@ test("each homepage render shows the feed its own request read", async () => {
 	expect(secondHomepageHtml).not.toContain("Espresso machines")
 })
 
-// a page past the last shows the last page, and the first page's link drops the section's search param
+// the header's sign-in and sign-up links are nofollow, and the sign-in link still names the page in its next param
+test("a visitor's sign-in and sign-up links are nofollow", async () => {
+	topicFeedResponse = toTopicFeedResponse({ featuredTopics: [] })
+	const homepageHtml = await renderHomepage()
+	expect(homepageHtml).toMatch(/<a rel="nofollow"[^>]*href="\/login\?next=%2F"/)
+	expect(homepageHtml).toMatch(/<a rel="nofollow"[^>]*href="\/signup\?cta=header"/)
+})
+
+// a page past the last shows the last page. the topics off that page are in the html, hidden with JavaScript, and
+// the first page's link drops the section's search param
 test("a featured page past the last shows the last page with links to every page", async () => {
 	// twelve featured topics, three pages of five, rendered at page 9
 	topicFeedResponse = toTopicFeedResponse({
@@ -120,10 +153,16 @@ test("a featured page past the last shows the last page with links to every page
 	})
 	const homepageHtml = await renderHomepage("/?featured=9")
 
-	// the last page shows the last two topics
-	expect(homepageHtml).toContain("Topic 11")
-	expect(homepageHtml).toContain("Topic 12")
-	expect(homepageHtml).not.toContain("Topic 10")
+	// the class of a topic's card, the div above its name
+	const toTopicCardClass = (name: string): string => {
+		const classStart = homepageHtml.lastIndexOf('class="py-1.5', homepageHtml.indexOf(name))
+		return homepageHtml.slice(classStart, homepageHtml.indexOf('"', classStart + 7))
+	}
+
+	// the last page shows the last two topics, and the ten before them are hidden with JavaScript
+	expect(toTopicCardClass("Topic 10")).toContain("scripted:hidden")
+	expect(toTopicCardClass("Topic 11")).not.toContain("scripted:hidden")
+	expect(toTopicCardClass("Topic 12")).not.toContain("scripted:hidden")
 
 	// the section's page links go to the plain homepage url, then page 2, then the current page 3
 	const paginationStart = homepageHtml.indexOf('aria-label="Featured topics pages"')
@@ -158,4 +197,25 @@ test("a closed popular section renders its first page and its page links", async
 	const popularSectionHtml = homepageHtml.slice(homepageHtml.indexOf(">Popular topics<"))
 	const popularContentTag = popularSectionHtml.match(/<div[^>]*data-slot="accordion-content"[^>]*>/)?.[0]
 	expect(popularContentTag).toContain('data-state="closed"')
+
+	// the closed section hides only with JavaScript
+	expect(popularContentTag).toContain("scripted:data-[state=closed]:hidden")
+})
+
+// a card's expander is a button with JavaScript and a link to the topic's page without it
+test("a card's expander is a link to the topic page without JavaScript", async () => {
+	// one featured topic with seven findings, two more than the five a card shows
+	const topicFindings = Array.from({ length: 7 }, (_, index) => toTopicFinding(index + 1))
+	topicFeedResponse = toTopicFeedResponse({
+		featuredTopics: [toFeedTopic({ id: TOPIC_ID, name: "Espresso machines", findings: topicFindings })],
+	})
+	const homepageHtml = await renderHomepage()
+
+	// the button shows with JavaScript alone, and the link in its place is hidden with JavaScript
+	expect(homepageHtml).toMatch(/<button[^>]*class="[^"]*hidden scripted:inline-flex[^"]*"[^>]*>.{0,120}\+ 2 more/)
+	expect(homepageHtml).toMatch(
+		new RegExp(
+			`<a [^>]*class="[^"]*scripted:hidden[^"]*"[^>]*href="/topics/${TOPIC_ID}/espresso-machines"[^>]*>\\+ 2 more`,
+		),
+	)
 })

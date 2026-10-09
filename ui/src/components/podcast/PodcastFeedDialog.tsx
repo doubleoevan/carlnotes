@@ -8,6 +8,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogTitle } from "@/components/primitives/dialog"
 import { useBrowserValue } from "@/hooks/useBrowserValue"
+import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 
 // the podcast app link for each platform. iOS opens Apple Podcasts, and Android apps register the pcast scheme
 const PODCAST_APP_LINKS = {
@@ -48,8 +49,13 @@ export function PodcastFeedDialog({
 	const podcastFeedUrlWithoutScheme = podcastFeedUrl?.replace(/^https?:\/\//, "")
 	const isOwnPodcastFeed = topic.visibility !== "public"
 
+	// report a subscribe click by its channel, naming the topic only if it is public
+	const captureSubscribeClick = (channel: "app" | "copy-link"): void =>
+		captureVisitEvent("visit_podcast_subscribe_clicked", { channel, ...toPublicTopicProperties(topic) })
+
 	// copy the podcast feed's url
 	const handleCopyPodcastFeedUrl = async (): Promise<void> => {
+		captureSubscribeClick("copy-link")
 		if (podcastFeedUrl) {
 			await navigator.clipboard.writeText(podcastFeedUrl)
 			toast("Feed link copied.")
@@ -87,6 +93,7 @@ export function PodcastFeedDialog({
 						{podcastAppLink && (
 							<AnchorLink
 								href={`${podcastAppLink.scheme}${podcastFeedUrlWithoutScheme}`}
+								onClick={() => captureSubscribeClick("app")}
 								className={buttonVariants({ variant: "default" })}
 							>
 								<Podcast className="size-4.5" />

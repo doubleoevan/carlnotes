@@ -359,7 +359,7 @@ function toChatTurnTools({
 	// and the tools that show a proposed change on the topic's card and take it back off
 	return {
 		openNewTopicChatTool,
-		tools: toChatTopicTools({ userId, topicId: page.topicId, toolCalls }),
+		tools: toChatTopicTools({ userId, topicId: page.topicId, toolCalls, analyticsProperties }),
 		...toTopicEditPreviewTools({ toolCalls }),
 	}
 }

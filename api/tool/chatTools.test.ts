@@ -89,6 +89,7 @@ test("the rejections and the other add texts are plain words", () => {
 
 // the analytics properties a create records, shaped the way the mcp adapter builds them
 const analyticsProperties = {
+	entryPoint: "web" as const,
 	plan: "free",
 	platform: toPlatform(undefined),
 	browserPlatform: toBrowserPlatform(""),

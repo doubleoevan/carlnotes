@@ -39,7 +39,8 @@ function AccordionTrigger({ className, children, ...props }: React.ComponentProp
 	)
 }
 
-// the collapsible body, height-animated open and closed. a forceMount body stays in the HTML and hides with no animation when closed
+// the collapsible body, height-animated open and closed. a forceMount body stays in the HTML and shows without JavaScript,
+// and with JavaScript hides with no animation once closed
 function AccordionContent({
 	className,
 	children,
@@ -52,7 +53,7 @@ function AccordionContent({
 			forceMount={forceMount}
 			className={cn(
 				"data-[state=closed]:animate-accordion-up data-[state=open]:animate-accordion-down",
-				forceMount && "data-[state=closed]:hidden",
+				forceMount && "scripted:data-[state=closed]:hidden",
 			)}
 			{...props}
 		>

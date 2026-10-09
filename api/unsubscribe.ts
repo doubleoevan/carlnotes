@@ -1,4 +1,5 @@
 // the one-click unsubscribe target for the topic-scan email
+import { trackEvent } from "@shared/analytics"
 import { toTopicPath } from "@shared/seo"
 import { and, eq } from "drizzle-orm"
 import { db } from "../db"
@@ -33,6 +34,12 @@ export async function unsubscribe(unsubscribeToken: string | undefined): Promise
 
 	// delete the recipient's podcast feed token for the topic
 	await deletePodcastFeedToken({ topicId: unsubscribePayload.topicId, userId: unsubscribePayload.userId })
+
+	// report the unsubscribe from the email's link, with no plan
+	trackEvent("email_unsubscribed", unsubscribePayload.userId, {
+		entryPoint: "email",
+		topicId: unsubscribePayload.topicId,
+	})
 
 	// the topic id and name for the confirmation page, falling back when the topic has since been deleted
 	const [topic] = await db.select({ name: topics.name }).from(topics).where(eq(topics.id, unsubscribePayload.topicId))

@@ -218,21 +218,35 @@ async function toRatingSnapshot(
 	return { ratedByUserId: userId, ratedTeamId: topicRow?.teamId ?? null, ratedRole: role }
 }
 
+// the user, the finding, the feedback as written, and the request's analytics properties
+type SaveFindingFeedbackOptions = {
+	userId: string
+	findingId: string
+	feedback: string
+	analyticsProperties: AnalyticsProperties
+}
+
 /**
- * Store a user's own words about a finding. Recording only: no extraction, no effect on scoring.
+ * Saves a user's own words about a finding, recording only, and returns false if the user may not rate it.
  */
-export async function saveFindingFeedback(userId: string, findingId: string, feedback: string): Promise<boolean> {
+export async function saveFindingFeedback({
+	userId,
+	findingId,
+	feedback,
+	analyticsProperties,
+}: SaveFindingFeedbackOptions): Promise<boolean> {
 	// the same permission check rating uses. feedback is a label like a thumb
 	if (!(await canRateFinding(userId, findingId))) {
 		return false
 	}
 
-	// the words as written, against the finding and its topic
+	// save the words as written against the finding and its topic, and report the finding, never the words
 	const [findingRow] = await db.select({ topicId: findings.topicId }).from(findings).where(eq(findings.id, findingId))
 	if (!findingRow) {
 		return false
 	}
 	await db.insert(findingFeedback).values({ findingId, topicId: findingRow.topicId, userId, feedback })
+	trackEvent("finding_feedback_sent", userId, { ...analyticsProperties, topicId: findingRow.topicId, findingId })
 	return true
 }
 
@@ -444,6 +458,11 @@ export const findingsRoute = new Hono<AppEnv>()
 			return context.json({ error: "unauthorized" }, 401)
 		}
 		// store the words as written. recording only
-		const isSaved = await saveFindingFeedback(userId, context.req.param("id"), context.req.valid("json").feedback)
-		return isSaved ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
+		const isFindingFeedbackSaved = await saveFindingFeedback({
+			userId,
+			findingId: context.req.param("id"),
+			feedback: context.req.valid("json").feedback,
+			analyticsProperties: toAnalyticsProperties(context),
+		})
+		return isFindingFeedbackSaved ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)
 	})

@@ -39,9 +39,9 @@ type PodcastEpisodeChaptersTableProps = { podcastEpisode: PodcastEpisode; chapte
  * A podcast episode's chapters as a table, over a row of totals. A row opens its topic finding's note.
  */
 export function PodcastEpisodeChaptersTable({ podcastEpisode, chapterTopicFeed }: PodcastEpisodeChaptersTableProps) {
-	// the chapters, and the page of chapter rows that the pagination shows
+	// the chapters, and the rows the table renders for the page shown
 	const { chapters } = podcastEpisode
-	const { pageRows, ...pagination } = usePagination(chapters)
+	const { renderedRows, pagination } = usePagination(chapters)
 
 	// the position of the chapter that the player is at, if this podcast episode is the loaded one
 	const { podcastEpisode: loadedPodcastEpisode, isPlaying } = usePodcastEpisodePlayer()
@@ -64,13 +64,14 @@ export function PodcastEpisodeChaptersTable({ podcastEpisode, chapterTopicFeed }
 							<th className="py-2 font-normal">Topic Finding</th>
 						</tr>
 					</thead>
-					{/* every chapter is in the html. with JavaScript, only the rows of the page shown stay visible */}
+					{/* the page's chapters and the first NO_SCRIPT_ROW_LIMIT are in the html.
+						with JavaScript, only the rows of the page shown stay visible */}
 					<tbody>
-						{chapters.map((chapter) => (
+						{renderedRows.map(({ row: chapter, className }) => (
 							<PodcastEpisodeChapterRow
 								key={chapter.position}
 								chapter={chapter}
-								className={cn(!pageRows.includes(chapter) && "scripted:hidden")}
+								className={className}
 								topicFinding={chapterTopicFeed.topicFindings.find(
 									(topicFinding) => topicFinding.findingId === chapter.findingId,
 								)}

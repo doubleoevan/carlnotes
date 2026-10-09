@@ -83,11 +83,13 @@ export async function updateTopicPrompt({
 	topicId,
 	prompt,
 	origin,
+	analyticsProperties,
 }: {
 	userId: string | null
 	topicId: string
 	prompt: string
 	origin: PromptVersionOrigin
+	analyticsProperties?: AnalyticsProperties
 }): Promise<UpdateTopicPromptResult> {
 	// ask the gate whether the user may edit the topic
 	const editableTopic = await loadEditableTopic(userId, topicId)
@@ -106,8 +108,21 @@ export async function updateTopicPrompt({
 			previousPrompt: editableTopic.topic.prompt,
 		})
 	})
-	trackEvent("topic_edited", editableTopic.userId, { topicId, tool: "updateTopicPrompt", origin })
+	trackEvent("topic_edited", editableTopic.userId, {
+		...toToolAnalyticsProperties(origin, analyticsProperties),
+		topicId,
+		tool: "updateTopicPrompt",
+		origin,
+	})
 	return { status: "saved", topicName: editableTopic.topic.name }
+}
+
+// a tool call's analytics properties: the request's if a request passed them, or else the entry point its origin names
+function toToolAnalyticsProperties(
+	origin: PromptVersionOrigin,
+	analyticsProperties: AnalyticsProperties | undefined,
+): Partial<AnalyticsProperties> {
+	return analyticsProperties ?? { entryPoint: origin === "mcp" ? "mcp" : "web" }
 }
 
 /**
@@ -118,11 +133,13 @@ export async function updateTopicFields({
 	topicId,
 	topicFields,
 	promptVersionOrigin,
+	analyticsProperties,
 }: {
 	userId: string | null
 	topicId: string
 	topicFields: UpdateTopicFieldsPayload
 	promptVersionOrigin: PromptVersionOrigin
+	analyticsProperties?: AnalyticsProperties
 }): Promise<UpdateTopicFieldsResult> {
 	// drop the podcast switch if episode recording is not configured
 	const { isPodcastEnabled, ...topicSettings } = topicFields
@@ -170,8 +187,16 @@ export async function updateTopicFields({
 		await deletePodcastFeedCache(topicId)
 	}
 
-	// track the edit and return the saved name
-	trackEvent("topic_edited", editableTopic.userId, { topicId, tool: "updateTopicFields", origin: promptVersionOrigin })
+	// report the edit, and the podcast switch if it flipped, then return the saved name
+	const toolAnalyticsProperties = { ...toToolAnalyticsProperties(promptVersionOrigin, analyticsProperties), topicId }
+	trackEvent("topic_edited", editableTopic.userId, {
+		...toolAnalyticsProperties,
+		tool: "updateTopicFields",
+		origin: promptVersionOrigin,
+	})
+	if (isPodcastEnabled !== undefined && isPodcastEnabled !== editableTopic.topic.isPodcastEnabled) {
+		trackEvent("podcast_toggled", editableTopic.userId, { ...toolAnalyticsProperties, isEnabled: isPodcastEnabled })
+	}
 	return { status: "saved", topicName: savedTopic.name }
 }
 
@@ -202,10 +227,12 @@ export async function addTopicSource({
 	sourceOption,
 	value,
 	origin,
+	analyticsProperties,
 }: AddTopicSourcePayload & {
 	userId: string | null
 	topicId: string
 	origin: PromptVersionOrigin
+	analyticsProperties?: AnalyticsProperties
 }): Promise<AddTopicSourceResult> {
 	// ask the gate whether the user may edit the topic
 	const editableTopic = await loadEditableTopic(userId, topicId)
@@ -255,11 +282,16 @@ export async function addTopicSource({
 		throw new Error(`failed to add a source to topic ${topicId}`)
 	}
 
-	// start the screen for a url source
+	// start the screen for a url source, and report the source by its kind
 	if (newTopicSource.sourceKind === "url") {
 		startPendingSourceScreens(topicId)
 	}
-	trackEvent("topic_edited", editableTopic.userId, { topicId, tool: "addSource", origin })
+	trackEvent("source_added", editableTopic.userId, {
+		...toToolAnalyticsProperties(origin, analyticsProperties),
+		topicId,
+		sourceType: newTopicSource.sourceKind,
+		origin,
+	})
 	return {
 		status: "saved",
 		topicSourceId: insertedTopicSource.id,
@@ -276,11 +308,13 @@ export async function removeTopicSource({
 	topicId,
 	sourceId,
 	origin,
+	analyticsProperties,
 }: {
 	userId: string | null
 	topicId: string
 	sourceId: string
 	origin: PromptVersionOrigin
+	analyticsProperties?: AnalyticsProperties
 }): Promise<RemoveTopicSourceResult> {
 	// ask the gate whether the user may edit the topic
 	const editableTopic = await loadEditableTopic(userId, topicId)
@@ -303,7 +337,12 @@ export async function removeTopicSource({
 
 	// delete the row and report which source went
 	await db.delete(sources).where(and(eq(sources.id, sourceId), eq(sources.topicId, topicId)))
-	trackEvent("topic_edited", editableTopic.userId, { topicId, tool: "removeSource", origin })
+	trackEvent("source_removed", editableTopic.userId, {
+		...toToolAnalyticsProperties(origin, analyticsProperties),
+		topicId,
+		sourceType: topicSourceRow.kind,
+		origin,
+	})
 	return { status: "saved", topicSourceLabel: toTopicSourceLabel(topicSourceRow.kind, topicSourceRow.config) }
 }
 

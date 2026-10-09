@@ -4,9 +4,8 @@
 // the edge may share a signed-out page and the feed, and a card is immutable only at its version.
 // bun run smoke:seo builds the ui, then runs this test under doppler
 import { resolve } from "node:path"
-import type { PageHead } from "@shared/contracts"
-import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
-import { toTopicPath } from "@shared/seo"
+import type { PageHead, TopicFeedResponse } from "@shared/contracts"
+import { NO_SCRIPT_ROW_LIMIT, toTopicPath } from "@shared/seo"
 import { eq, inArray, max } from "drizzle-orm"
 import { connectionPool, db } from "../db"
 import { findings, resources, scans, teamMembers, teams, topics, users } from "../db/schema"
@@ -49,11 +48,14 @@ const runId = `smoke-seo-${Date.now()}`
 const ownerId = `${runId}-owner`
 const teamId = crypto.randomUUID()
 const teamName = `${runId} team`
-const topicIds = { public: `${runId}-public`, private: `${runId}-private` }
+// the public topic, the private one, and a second public one that shares the public topic's tag
+const topicIds = { public: `${runId}-public`, private: `${runId}-private`, related: `${runId}-related` }
 // a public topic with no findings, below the minimum a listed topic needs
 const unshownTopicId = `${runId}-thin`
-const topicNames = { public: "public smoke topic", private: "private smoke topic" }
-const resourceIds = [...Array(MINIMUM_SHOWN_FINDINGS).keys()].map((index) => `${runId}-resource-${index}`)
+const topicNames = { public: "public smoke topic", private: "private smoke topic", related: "related smoke topic" }
+// more findings than the five rows a browser shows
+const FINDINGS_PER_TOPIC = 7
+const resourceIds = [...Array(FINDINGS_PER_TOPIC).keys()].map((index) => `${runId}-resource-${index}`)
 
 // the api this run serves itself if none is running, stopped at the end
 let apiServer: ReturnType<typeof Bun.serve> | null = null
@@ -69,18 +71,18 @@ try {
 	await db.insert(teams).values({ id: teamId, name: teamName, isPublic: true })
 	await db.insert(teamMembers).values({ teamId, userId: ownerId, role: "leader" })
 
-	// insert the three topics and the resources the findings point at
+	// insert the four topics, every one with the run's tag, and the resources the findings point at
 	await db.insert(topics).values([
 		{ id: topicIds.public, ownerId, name: topicNames.public, visibility: "public", tags: [runId] },
 		{ id: topicIds.private, ownerId, name: topicNames.private, visibility: "private", tags: [runId] },
+		{ id: topicIds.related, ownerId, name: topicNames.related, visibility: "public", tags: [runId] },
 		{ id: unshownTopicId, ownerId, name: "thin smoke topic", visibility: "public", tags: [runId] },
 	])
 	await db
 		.insert(resources)
 		.values(resourceIds.map((id) => ({ id, url: `https://carlnotes.test/${id}`, kind: "read" as const })))
 
-	// write the same summarized scan and findings on both topics, as a real scan leaves them, so only the visibility
-	// tells the two topics apart
+	// write the same summarized scan and findings on the public, private, and related topics
 	for (const topicId of Object.values(topicIds)) {
 		// insert the scan first, then the findings that reference the scan
 		const [scan] = await db
@@ -144,17 +146,7 @@ try {
 	const privateTopicPath = toTopicPath({ id: topicIds.private, name: topicNames.private })
 	const profilePath = `/profiles/${ownerId}`
 	const teamPath = `/teams/${teamId}`
-	const pagePaths = [
-		"/",
-		"/topics",
-		"/plans",
-		"/terms",
-		"/privacy",
-		publicTopicPath,
-		privateTopicPath,
-		profilePath,
-		teamPath,
-	]
+	const pagePaths = ["/", "/plans", "/terms", "/privacy", publicTopicPath, privateTopicPath, profilePath, teamPath]
 
 	// every page arrives whole, with nothing streamed in after the footer and nothing still loading
 	const pages = new Map<string, FetchedPage>()
@@ -167,7 +159,7 @@ try {
 	}
 
 	// a public topic's page has its name as the heading and every finding as a link marked as user content, in the
-	// html itself
+	// html itself, including the rows past the five a browser shows
 	const publicTopicHtml = pages.get(publicTopicPath)?.contentHtml ?? ""
 	failUnless(hasHeading(publicTopicHtml, topicNames.public), "the public topic page has no heading")
 	for (const resourceId of resourceIds) {
@@ -175,6 +167,14 @@ try {
 		failUnless(findingLink !== null, `no link to ${resourceId}`)
 		failUnless(findingLink[0].includes('rel="noopener ugc"'), `the link to ${resourceId} is not user content`)
 	}
+
+	// the page ends with More topics, which links the related public topic by its shared tag, and neither the private
+	// topic nor the thin one, which share the tag too
+	const relatedTopicPath = toTopicPath({ id: topicIds.related, name: topicNames.related })
+	const moreTopicsHtml = publicTopicHtml.split("More topics")[1] ?? ""
+	failUnless(moreTopicsHtml.includes(`href="${relatedTopicPath}"`), "More topics misses the related public topic")
+	failUnless(!moreTopicsHtml.includes(`/topics/${topicIds.private}`), "More topics lists the private topic")
+	failUnless(!moreTopicsHtml.includes(`/topics/${unshownTopicId}`), "More topics lists a topic with too few findings")
 
 	// a private topic's page is never indexed and shows none of its findings, to a crawler or anyone else
 	const privateTopicHtml = pages.get(privateTopicPath)?.html ?? ""
@@ -185,9 +185,15 @@ try {
 	failUnless(hasHeading(pages.get(profilePath)?.contentHtml ?? "", ownerId), "the profile page has no heading")
 	failUnless(hasHeading(pages.get(teamPath)?.contentHtml ?? "", teamName), "the team page has no heading")
 
-	// the public topics page links the public topic, and the homepage links at least one topic
-	failUnless(pages.get("/topics")?.contentHtml.includes(`href="${publicTopicPath}"`) ?? false, "/topics misses a topic")
-	failUnless(/href="\/topics\/[^"]+"/.test(pages.get("/")?.contentHtml ?? ""), "the homepage links no topic")
+	// the homepage's html links every topic of a visitor's feed sections up to the first fifty of each,
+	// including the pages past the first
+	const topicFeed = (await (await fetch(`${API_ORIGIN}/api/topic-feed`)).json()) as TopicFeedResponse
+	const homepageHtml = pages.get("/")?.contentHtml ?? ""
+	for (const section of topicFeed.sections) {
+		for (const topic of section.topics.slice(0, NO_SCRIPT_ROW_LIMIT)) {
+			failUnless(homepageHtml.includes(`href="${toTopicPath(topic)}"`), `the homepage does not link ${topic.name}`)
+		}
+	}
 
 	// the sitemap lists the public topic's url with its slug, and neither the private topic nor the team, which has
 	// no public topic

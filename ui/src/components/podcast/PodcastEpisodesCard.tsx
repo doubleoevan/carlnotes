@@ -10,6 +10,7 @@ import { PodcastEpisodeRow } from "@/components/podcast/PodcastEpisodeRow"
 import { RemovePodcastEpisodeDialog } from "@/components/podcast/RemovePodcastEpisodeDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
 import { useSearchParams } from "@/hooks/useSearchParams"
+import { toRenderedRows } from "@/lib/renderedRows"
 import { RESOURCE_LIST_CARD_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { usePodcastEpisodePlayer } from "@/stores/podcastEpisodePlayerStore"
@@ -68,10 +69,14 @@ export function PodcastEpisodesCard({ topic, onPodcastEpisodeRemoved }: PodcastE
 		shownSeason,
 	})
 
-	// how many pages the season has, the page shown, which stays within those pages, and where that page starts
+	// how many pages the season has, and the page shown, kept within those pages. the card renders the page shown,
+	// and the season's first NO_SCRIPT_ROW_LIMIT episodes for a reader without JavaScript
 	const pageCount = Math.ceil(seasonPodcastEpisodes.podcastEpisodes.length / SEASON_PODCAST_EPISODES_PER_PAGE)
 	const pageNumber = Math.min(openedPageNumber, Math.max(1, pageCount))
-	const pageStartIndex = (pageNumber - 1) * SEASON_PODCAST_EPISODES_PER_PAGE
+	const renderedPodcastEpisodes = toRenderedRows(seasonPodcastEpisodes.podcastEpisodes, {
+		pageNumber,
+		pageSize: SEASON_PODCAST_EPISODES_PER_PAGE,
+	})
 
 	if (seasons.length === 0) {
 		return null
@@ -105,15 +110,11 @@ export function PodcastEpisodesCard({ topic, onPodcastEpisodeRemoved }: PodcastE
 				{isSeasonLoading && <CoffeeLoading className={SEASON_LOADING_CLASS} />}
 				{/* the season's podcast episodes. with JavaScript, only the rows of the page shown stay visible */}
 				<ol aria-label={`Season ${shownSeason} episodes`} className={cn(isSeasonLoading && "hidden")}>
-					{seasonPodcastEpisodes.podcastEpisodes.map((podcastEpisode, podcastEpisodeIndex) => (
+					{renderedPodcastEpisodes.map(({ row: podcastEpisode, className }) => (
 						<PodcastEpisodeRow
 							key={podcastEpisode.id}
 							podcastEpisode={podcastEpisode}
-							className={cn(
-								Math.floor(podcastEpisodeIndex / SEASON_PODCAST_EPISODES_PER_PAGE) !== pageNumber - 1 &&
-									"scripted:hidden",
-								podcastEpisodeIndex === pageStartIndex && "scripted:after:hidden",
-							)}
+							className={className}
 							isLatestPodcastEpisode={podcastEpisode.id === latestPodcastEpisodeId}
 							isPlayButtonMuted={podcastEpisode.id !== playerCardPodcastEpisodeId}
 							podcastEpisodePath={toPodcastEpisodePath(topic, podcastEpisode)}

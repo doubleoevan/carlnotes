@@ -1,4 +1,6 @@
 import type { ChatLinkPreview, PodcastEpisode, TopicFinding } from "@shared/contracts"
+import type { visibilities } from "@shared/enums"
+import { toHostWithoutWww } from "@shared/seo"
 import { Bookmark, Check, Circle, ExternalLink } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useState } from "react"
@@ -25,6 +27,7 @@ import { ScrollBox, toNotesMarkdown } from "@/components/topic/TopicScanRecap"
 import { toAgeLabel } from "@/lib/labels"
 import { DASHED_ROW_CLASS, POPOVER_HEADING_CLASS, POPOVER_PANEL_CLASS } from "@/lib/styleClasses"
 import { cn, RESOURCE_KIND_ICON } from "@/lib/utils"
+import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, useIsSignedIn, useTopicFeedActions } from "@/providers/TopicFeedProvider"
 
 // the row's topic finding and its rank among the topic's auto-kept findings, null if a bookmark pins it
@@ -33,11 +36,12 @@ type TopicResourceProps = {
 	rank: number | null
 	isRatable: boolean
 	isBookmarkable: boolean
-	resourceHandlers?: TopicFeedHandlers
-	// names the topic in the note popover's copied Markdown
-	topic: { id: string; name: string; prompt: string }
+	topicFeedHandlers?: TopicFeedHandlers
+	// the topic that the note popover's copied Markdown names, with its visibility
+	topic: { id: string; name: string; prompt: string; visibility: (typeof visibilities)[number] }
 	// the topic's latest podcast episode, whose chapters put a pill on the findings that the chapters narrate
 	latestPodcastEpisode?: PodcastEpisode | null
+	className?: string
 }
 
 /**
@@ -49,14 +53,15 @@ export function TopicResource({
 	rank,
 	isRatable,
 	isBookmarkable,
-	resourceHandlers,
+	topicFeedHandlers,
 	topic,
 	latestPodcastEpisode,
+	className,
 }: TopicResourceProps) {
 	// the topic page passes handlers that reload their own payload. the homepage falls back to the shared provider's handlers
-	const providerHandlers = useTopicFeedActions()
+	const providerTopicFeedHandlers = useTopicFeedActions()
 	const { openTopicFinding, consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding } =
-		resourceHandlers ?? providerHandlers
+		topicFeedHandlers ?? providerTopicFeedHandlers
 	// signed-out visitors don't get the per-user read and rating buttons
 	const isSignedIn = useIsSignedIn()
 	// whether the chapter that narrates this finding is playing, which keeps the row highlighted
@@ -85,6 +90,7 @@ export function TopicResource({
 					"group isolate flex cursor-pointer before:absolute before:inset-0 before:-z-10 before:rounded-lg before:transition-colors hover:before:bg-accent-foreground/20",
 					// the finding whose chapter is playing stays highlighted
 					isChapterPlaying && "before:bg-muted/70",
+					className,
 				)}
 			>
 				{/* the rank, in the slot the bookmark mark takes over once the finding is bookmarked.
@@ -138,7 +144,7 @@ export function TopicResource({
 					topic={topic}
 					isRatable={isRatable}
 					isBookmarkable={isBookmarkable}
-					topicHandlers={{ consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding, openTopicFinding }}
+					topicFeedHandlers={{ consumeTopicFinding, rateTopicFinding, bookmarkTopicFinding, openTopicFinding }}
 				/>
 			</div>
 		</Popover>
@@ -249,7 +255,7 @@ export function ResourceInfo({
 	topic,
 	isRatable,
 	isBookmarkable,
-	topicHandlers,
+	topicFeedHandlers,
 }: {
 	topic: TopicResourceProps["topic"]
 	resource: TopicFinding
@@ -260,7 +266,7 @@ export function ResourceInfo({
 	isRatable: boolean
 	isBookmarkable: boolean
 	// the feed handlers the row resolved, the page's or the shared provider's
-	topicHandlers: TopicFeedHandlers
+	topicFeedHandlers: TopicFeedHandlers
 }) {
 	// signed-out visitors don't get the per-user read and rating buttons
 	const isSignedIn = useIsSignedIn()
@@ -304,7 +310,14 @@ export function ResourceInfo({
 						<AnchorLink
 							href={resource.url}
 							isUserContent
-							onClick={() => topicHandlers.openTopicFinding(resource.findingId)}
+							onClick={() => {
+								// report the click by the finding's host, naming the topic only if it is public
+								captureVisitEvent("visit_finding_clicked", {
+									host: toHostWithoutWww(resource.url),
+									...toPublicTopicProperties(topic),
+								})
+								topicFeedHandlers.openTopicFinding(resource.findingId)
+							}}
 							className="text-link inline-flex items-start gap-1 text-sm font-semibold hover:underline"
 						>
 							{resource.title ?? resource.url}
@@ -355,7 +368,7 @@ export function ResourceInfo({
 							<TopicFindingRating
 								findingId={resource.findingId}
 								rating={resource.rating}
-								onRateTopicFinding={(rating) => topicHandlers.rateTopicFinding(resource.findingId, rating)}
+								onRateTopicFinding={(rating) => topicFeedHandlers.rateTopicFinding(resource.findingId, rating)}
 							/>
 						)}
 						{/* the bookmark and read toggles share one row, and a user who cannot bookmark gets the read toggle alone */}
@@ -363,7 +376,7 @@ export function ResourceInfo({
 							{isBookmarkShown && (
 								<button
 									type="button"
-									onClick={() => topicHandlers.bookmarkTopicFinding(resource.findingId, !resource.isBookmarked)}
+									onClick={() => topicFeedHandlers.bookmarkTopicFinding(resource.findingId, !resource.isBookmarked)}
 									aria-pressed={resource.isBookmarked}
 									className="hover:text-primary flex min-h-11 items-center gap-2 text-sm hover:underline sm:min-h-9"
 								>
@@ -373,7 +386,7 @@ export function ResourceInfo({
 							)}
 							<button
 								type="button"
-								onClick={() => topicHandlers.consumeTopicFinding(resource.findingId, !resource.isConsumed)}
+								onClick={() => topicFeedHandlers.consumeTopicFinding(resource.findingId, !resource.isConsumed)}
 								className="hover:text-primary flex min-h-11 items-center gap-2 text-sm hover:underline sm:min-h-9"
 							>
 								{resource.isConsumed ? <Circle className="size-4" /> : <Check className="size-4" />}

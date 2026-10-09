@@ -1,5 +1,6 @@
 // the note routes: a page's note list, the note lifecycle, the ydoc snapshot and update sync, and the live stream
 import { zValidator } from "@hono/zod-validator"
+import { trackEvent } from "@shared/analytics"
 import { toAvatarVersion } from "@shared/avatars"
 import type { Note, NotesResponse } from "@shared/contracts"
 import { noteCreatePayload, noteSyncPayload, noteUpdatePayload } from "@shared/contracts"
@@ -11,7 +12,7 @@ import * as Y from "yjs"
 import { z } from "zod"
 import { db } from "../../db"
 import { notes, teamMembers, teamTopics, users } from "../../db/schema"
-import { type AppEnv, currentUser } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { isNoteBodyChanged, loadNoteBadges, saveNoteRead } from "./noteBadges"
 import { notifyNoteUpdate, onNoteUpdate } from "./noteStream"
 import {
@@ -334,17 +335,37 @@ export const notesRoute = new Hono<AppEnv>()
 	})
 	.post("/topics/:id/notes", zValidator("json", noteCreatePayload), async (context) => {
 		// a new note on the topic
+		const userId = currentUser(context)
 		const { name, visibility } = context.req.valid("json")
 		const page = await loadTopicPage(context.req.param("id"))
-		const createdNote = page ? await createNote(currentUser(context), page, name, visibility) : null
-		return createdNote ? context.json(createdNote) : context.json({ error: "not found" }, 404)
+		const createdNote = page ? await createNote(userId, page, name, visibility) : null
+		if (!createdNote || !userId) {
+			return context.json({ error: "not found" }, 404)
+		}
+		trackEvent("note_created", userId, {
+			...toAnalyticsProperties(context),
+			pageKind: "topic",
+			topicId: context.req.param("id"),
+			noteVisibility: visibility,
+		})
+		return context.json(createdNote)
 	})
 	.post("/teams/:id/notes", zValidator("json", noteCreatePayload), async (context) => {
 		// a new note on the team
+		const userId = currentUser(context)
 		const { name, visibility } = context.req.valid("json")
 		const page = await loadTeamPage(context.req.param("id"))
-		const createdNote = page ? await createNote(currentUser(context), page, name, visibility) : null
-		return createdNote ? context.json(createdNote) : context.json({ error: "not found" }, 404)
+		const createdNote = page ? await createNote(userId, page, name, visibility) : null
+		if (!createdNote || !userId) {
+			return context.json({ error: "not found" }, 404)
+		}
+		trackEvent("note_created", userId, {
+			...toAnalyticsProperties(context),
+			pageKind: "team",
+			teamId: context.req.param("id"),
+			noteVisibility: visibility,
+		})
+		return context.json(createdNote)
 	})
 	.get("/note-badges", async (context) => {
 		// every unread count the signed-in user has. a visitor is given none

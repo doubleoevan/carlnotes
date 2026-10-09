@@ -14,6 +14,9 @@ warnings. `runtimeGauges.ts` logs a long-running process's connection pool and e
 the delay from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its host name,
 so the replicas' lines can be told apart.
 `reportedPath.ts` names a page by its route's shape, for PostHog's page views and Sentry's page renders alike.
+`analytics.ts` holds the three kinds of event, the user events keyed to a user, the bot events keyed to a bot's or an
+app's name, and the names of the browser's visit events, and `userAgent.ts` reads a request's device properties and
+names a known crawler, unfurler, podcast app, or feed reader from a token list.
 
 - This module imports nothing app-level. It may not reach into `ui`, `api`, `worker`, or `db`, which
   is what lets all four depend on it.
