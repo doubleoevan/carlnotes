@@ -9,6 +9,7 @@ import { type DbTransaction, db, isUniqueViolation } from "../../db"
 import { deletePodcastFeedCache } from "../../db/podcastFeedCache"
 import { findings, podcastEpisodeChapters, podcastEpisodes, topics } from "../../db/schema"
 import { notifyIndexNow } from "../indexNow"
+import { runWithRetries } from "../retry"
 import { deleteAttachment, toPodcastEpisodeChapterKey } from "../store"
 import { tracePodcastEpisodeRecording } from "../telemetry"
 import type { PlannedFinding } from "./planPodcastEpisode"
@@ -111,24 +112,21 @@ export async function publishPodcastEpisode({
 		encodedPodcastEpisode,
 	})
 	const publishedAt = new Date()
-	let savedPodcastEpisode: SavedPodcastEpisode | undefined
-	for (let attempt = 1; savedPodcastEpisode === undefined; attempt++) {
-		try {
-			savedPodcastEpisode = await savePodcastEpisodeAsPublished({
-				topicId: podcastEpisode.topicId,
-				podcastEpisodeId,
-				podcastEpisodeScript: recordedScript,
-				podcastEpisodeChapterRows,
-				encodedPodcastEpisode,
-				publishedAt,
-				isShort: podcastEpisode.isShort,
-			})
-		} catch (error) {
-			if (!isUniqueViolation(error) || attempt >= PUBLISH_ATTEMPTS) {
-				throw error
-			}
-		}
+	const savePodcastEpisodeAsPublishedOptions = {
+		topicId: podcastEpisode.topicId,
+		podcastEpisodeId,
+		podcastEpisodeScript: recordedScript,
+		podcastEpisodeChapterRows,
+		encodedPodcastEpisode,
+		publishedAt,
+		isShort: podcastEpisode.isShort,
 	}
+	const savedPodcastEpisode = await runWithRetries({
+		attempts: PUBLISH_ATTEMPTS,
+		delayMs: 0,
+		runAttempt: () => savePodcastEpisodeAsPublished(savePodcastEpisodeAsPublishedOptions),
+		isRetryable: isUniqueViolation,
+	})
 
 	// delete the audio of the short Podcast Episodes that this one replaced
 	const { podcastEpisodeNumber, replacedPodcastEpisodes } = savedPodcastEpisode

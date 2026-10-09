@@ -16,7 +16,8 @@ with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep t
   The sweep closes out a picked-up Scan that runs past its stages' total timeouts,
   and a Scan still waiting for a worker past the ingest and finish stages' total timeouts.
   `concurrency.ts` runs tasks a few at a time for the review's scoring, the sweep's reads of each owner's daily Topics
-  and key budget, and the reset's replacements.
+  and key budget, and the reset's replacements. `retry.ts` tries a failed attempt again after a fixed wait, for the
+  worker's first Temporal connection, a podcast episode's publish, and the podcast episode smoke's chapters.
 
 - `workflows/` — Temporal workflows and activities; `ingest/` — one ingester per Source kind,
   `ingester.ts` is the interface; `review/` — filtering and scoring; `chat/` — Carl's streamed

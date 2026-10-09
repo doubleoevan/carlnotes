@@ -7,10 +7,17 @@ import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { monthlySpendDollars } from "../../db/quotas"
 import { findings, podcastEpisodeChapters, podcastEpisodes, resources, scans, topics, users } from "../../db/schema"
+import { runWithRetries } from "../retry"
 import { attachmentExists, toPodcastEpisodeAudioKey, toPodcastEpisodeChapterKey } from "../store"
 import { shutdownTelemetry, startTelemetry } from "../telemetry"
+import type { RecordedChapterAttempt } from "../workflows/recordPodcastEpisodeActivities"
 import { planPodcastEpisode } from "./planPodcastEpisode"
-import { encodePodcastEpisode, recordPodcastEpisodeChapter } from "./podcastEpisodeAudio"
+import {
+	encodePodcastEpisode,
+	type RecordPodcastEpisodeChapterOptions,
+	recordPodcastEpisodeChapter,
+	SpeechFailedError,
+} from "./podcastEpisodeAudio"
 import { toScriptMinutes } from "./podcastEpisodeScript"
 import { loadThemeClips, toThemedEpisodeTimes } from "./podcastEpisodeTheme"
 import { publishPodcastEpisode } from "./publishPodcastEpisode"
@@ -35,6 +42,10 @@ const SEEDED_FINDINGS = [
 		relevanceExplanation: "The reader's shots turned sour after a move, and the new city's water is much softer.",
 	},
 ]
+
+// how many times to record a chapter, and how long to wait between attempts
+const CHAPTER_ATTEMPTS = 3
+const CHAPTER_RETRY_DELAY_MS = 30 * 1000
 
 // the ids of the seeded rows that the checks read and the cleanup deletes
 type SeededRowIds = {
@@ -141,6 +152,26 @@ async function seedTestData(): Promise<SeededRowIds> {
 	}
 }
 
+// record a chapter, retrying a speech failure that another attempt can fix, as the podcast episode workflow does
+function recordPodcastEpisodeChapterWithRetries(
+	recordPodcastEpisodeChapterOptions: RecordPodcastEpisodeChapterOptions,
+): Promise<RecordedChapterAttempt> {
+	return runWithRetries({
+		attempts: CHAPTER_ATTEMPTS,
+		delayMs: CHAPTER_RETRY_DELAY_MS,
+		// record the chapter, and note which attempt recorded it
+		runAttempt: async (attempt) => {
+			const recordedChapter = await recordPodcastEpisodeChapter(recordPodcastEpisodeChapterOptions)
+			return { ...recordedChapter, attemptCount: attempt }
+		},
+		isRetryable: (error) => error instanceof SpeechFailedError && error.isRetryable,
+		onRetry: (attempt) =>
+			console.log(
+				`chapter ${recordPodcastEpisodeChapterOptions.position} failed on attempt ${attempt}, so it records again`,
+			),
+	})
+}
+
 // run a Podcast Episode from its plan to its removal, check each step, and print a report.
 // returns true if every check passes
 async function check({
@@ -184,13 +215,18 @@ async function check({
 	const chapterPositions = Array.from({ length: chapterCount }, (_, position) => position)
 	const recordedChapters = await Promise.all(
 		chapterPositions.map((position) =>
-			recordPodcastEpisodeChapter({ podcastEpisodeId, billedUserId: userId, position, speechTier: "standard" }),
+			recordPodcastEpisodeChapterWithRetries({
+				podcastEpisodeId,
+				billedUserId: userId,
+				position,
+				speechTier: "standard",
+			}),
 		),
 	)
 
 	// join the chapters, publish, and read back what was saved
 	const encodedPodcastEpisode = await encodePodcastEpisode(podcastEpisodeId, recordedChapters)
-	const chapterAttemptCounts = recordedChapters.map(() => 1)
+	const chapterAttemptCounts = recordedChapters.map((recordedChapter) => recordedChapter.attemptCount)
 	await publishPodcastEpisode({
 		podcastEpisodeId,
 		plannedFindings,

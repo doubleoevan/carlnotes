@@ -5,6 +5,7 @@ import { type ExtraGaugesReading, startRuntimeGauges } from "@shared/runtimeGaug
 import { NativeConnection, Worker } from "@temporalio/worker"
 import { readPoolGauges, toPositiveInteger } from "../db"
 import { readRedisExtraGauges } from "../db/redis"
+import { runWithRetries } from "./retry"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import {
 	ATTACHMENT_TASK_QUEUE,
@@ -45,22 +46,15 @@ const CONNECT_RETRY_DELAY_MS = 3 * 1000
 const CONNECT_ATTEMPTS = 20
 
 // connect to Temporal, retrying while its server is still starting. after a reboot this worker and the
-// dockerized server race
-async function connectWithRetry(): Promise<NativeConnection> {
-	for (let attempt = 1; ; attempt++) {
-		try {
-			return await NativeConnection.connect({ address: Bun.env.TEMPORAL_ADDRESS })
-		} catch (error) {
-			// the last attempt gives up and lets the process exit
-			if (attempt >= CONNECT_ATTEMPTS) {
-				throw error
-			}
-
-			// wait out the server's startup and try again
-			console.warn(`temporal not reachable yet (attempt ${attempt}/${CONNECT_ATTEMPTS}), retrying…`)
-			await new Promise((resolve) => setTimeout(resolve, CONNECT_RETRY_DELAY_MS))
-		}
-	}
+// dockerized server race. the last attempt's failure lets the process exit
+function connectWithRetry(): Promise<NativeConnection> {
+	return runWithRetries({
+		attempts: CONNECT_ATTEMPTS,
+		delayMs: CONNECT_RETRY_DELAY_MS,
+		runAttempt: () => NativeConnection.connect({ address: Bun.env.TEMPORAL_ADDRESS }),
+		onRetry: (attempt) =>
+			console.warn(`temporal not reachable yet (attempt ${attempt}/${CONNECT_ATTEMPTS}), retrying…`),
+	})
 }
 
 // connect to Temporal, build a worker per queue, and poll until the process stops
