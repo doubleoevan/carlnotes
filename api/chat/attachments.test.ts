@@ -1,7 +1,8 @@
 // chat attachment tests. what the payload accepts, how a PDF and text resolve for the model, and what gets kept
 import { expect, test } from "bun:test"
-import { CHAT_ATTACHMENT_TEXT_CHARS, clipAttachmentText, withAttachmentNote } from "@shared/contracts"
+import { CHAT_ATTACHMENT_TEXT_CHARS, clipAttachmentText, withAttachmentNote } from "@shared/contracts/chat"
 import { type ChatAttachment, chatTurnPayload } from "@shared/payloads"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { resolveChatAttachments } from "./attachments"
 import { toAttachmentsByChatTurnId } from "./chatAttachmentReads"
 
@@ -14,28 +15,28 @@ function resolvedText(chatAttachments: ChatAttachment[] | null, index: number): 
 // run a test case against a fake llm-guard scanner that returns the same verdict for every screen
 async function withScanner(guardResponse: unknown, run: () => Promise<void>): Promise<void> {
 	const scanner = Bun.serve({ port: 0, fetch: () => Response.json(guardResponse) })
-	const originalGuardUrl = Bun.env.LLM_GUARD_URL
+	const restoreEnvSettings = saveEnvSettings(["LLM_GUARD_URL"])
 	Bun.env.LLM_GUARD_URL = scanner.url.origin
 
 	// a failing case still puts the url back and stops the fake scanner, so it can't leak into the cases after it
 	try {
 		await run()
 	} finally {
-		Bun.env.LLM_GUARD_URL = originalGuardUrl
+		restoreEnvSettings()
 		await scanner.stop(true)
 	}
 }
 
 // run a test case with no scanner configured, so an llm-guard screen is a no-op
 async function withoutScanner(run: () => Promise<void>): Promise<void> {
-	const originalGuardUrl = Bun.env.LLM_GUARD_URL
+	const restoreEnvSettings = saveEnvSettings(["LLM_GUARD_URL"])
 	Bun.env.LLM_GUARD_URL = undefined
 
 	// a failing case still puts the url back, so it cannot leak into the cases after it
 	try {
 		await run()
 	} finally {
-		Bun.env.LLM_GUARD_URL = originalGuardUrl
+		restoreEnvSettings()
 	}
 }
 

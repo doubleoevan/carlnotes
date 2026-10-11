@@ -1,5 +1,5 @@
 // what order a feed's topic findings read in
-import type { TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
 
 // the feed sort modes. all three are read-side orderings of the delivered findings, never persisted
 export const TOPIC_FINDING_SORTS = ["relevant", "newest", "trending"] as const

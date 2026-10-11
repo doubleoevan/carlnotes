@@ -1,6 +1,6 @@
 // mcp read test: pages, cursors, the tool caller's finding shape, and the bound-topic rule
 import { expect, test } from "bun:test"
-import type { TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
 import { TOPIC_FINDINGS_READ_LIMIT } from "../topic/findings"
 import {
 	CONNECT_ACCOUNT_TEXT,

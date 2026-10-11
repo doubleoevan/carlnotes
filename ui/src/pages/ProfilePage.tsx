@@ -1,4 +1,5 @@
-import type { OwnerTopic, ProfileResponse, ProfileTeamStatus } from "@shared/contracts"
+import type { OwnerTopic } from "@shared/contracts/activity"
+import type { ProfileResponse, ProfileTeamStatus } from "@shared/contracts/profiles"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
 import { Pencil, Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useMemo, useState } from "react"

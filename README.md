@@ -386,6 +386,7 @@ and run under `doppler` against the configured database:
 
 ```bash
 doppler run -- bun scripts/backfill-resource-content.ts   # upload existing resources.content to object storage, set content_key/content_bytes
+doppler run -- bun scripts/backfill-vectors.ts            # save every topic's and published podcast episode's vector
 ```
 
 The content scanner (LLM Guard, see Architecture above) is optional too: `bun run llm-guard:up` and set `LLM_GUARD_URL`.

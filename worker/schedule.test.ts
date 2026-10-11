@@ -2,6 +2,7 @@
 // whose budget is spent, the topic sweep summary, the sweep without the budget reset, and the daily topic limit
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
 import { db } from "../db"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
@@ -53,23 +54,12 @@ function stubUnreachableProxy(): Mock<() => Promise<Response>> {
 // put each spied function, the connection pool's own query, the real fetch, and the proxy settings back
 // after each test, whether its assertions pass or not
 const originalFetch = globalThis.fetch
-const originalProxySettings = {
-	LITELLM_BASE_URL: Bun.env.LITELLM_BASE_URL,
-	LITELLM_MASTER_KEY: Bun.env.LITELLM_MASTER_KEY,
-}
+const restoreEnvSettings = saveEnvSettings(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
 afterEach(() => {
 	restoreConnectionPool()
 	globalThis.fetch = originalFetch
 	mock.restore()
-
-	// put each proxy setting back, or delete a proxy setting that the test run never had
-	for (const [proxySettingName, originalProxySetting] of Object.entries(originalProxySettings)) {
-		if (originalProxySetting === undefined) {
-			delete Bun.env[proxySettingName]
-		} else {
-			Bun.env[proxySettingName] = originalProxySetting
-		}
-	}
+	restoreEnvSettings()
 })
 
 // the daily frequency waits a day before a re-scan, the weekly frequency waits seven

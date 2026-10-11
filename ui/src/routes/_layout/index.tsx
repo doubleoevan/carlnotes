@@ -1,9 +1,9 @@
-import type { TopicSectionKey } from "@shared/contracts"
+import type { TopicSectionKey } from "@shared/contracts/topics"
 import { topicSectionKeys } from "@shared/enums"
 import { toOrganizationLd, toSoftwareApplicationLd, toWebSiteLd } from "@shared/seo"
 import { createFileRoute } from "@tanstack/react-router"
 import { fetchTopicFeed } from "@/clients/topicClient"
-import { loadOnServer } from "@/lib/loadOnServer"
+import { loadOnServer, readWithDegradedFallback } from "@/lib/loadOnServer"
 import { SITE_URL, toJsonLdScript } from "@/lib/pageHead"
 import { HomePage } from "@/pages/HomePage"
 
@@ -21,8 +21,9 @@ export const Route = createFileRoute("/_layout/")({
 				return pageNumber ? [[sectionKey, pageNumber]] : []
 			}),
 		),
-	// a visitor's feed, read on the server only, or null in the browser or if the read fails
-	loader: () => loadOnServer(() => fetchTopicFeed(true).catch(() => null), null),
+	// a visitor's feed, read on the server only, or null in the browser or if the read fails, which marks the render
+	// degraded
+	loader: () => loadOnServer(() => readWithDegradedFallback(() => fetchTopicFeed(true), null), null),
 	head: () => ({
 		links: [{ rel: "canonical", href: SITE_URL }],
 		scripts: [

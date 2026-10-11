@@ -1,7 +1,8 @@
 // a live smoke test: public topics alone in loadPublicTopics and the sitemap, every public page whole without
 // JavaScript on its first render, the app for a session cookie, and the cache headers. bun run smoke:seo runs it
 import { resolve } from "node:path"
-import type { PageHead, TopicFeedResponse } from "@shared/contracts"
+import type { PageHead } from "@shared/contracts/pageHead"
+import type { TopicFeedResponse } from "@shared/contracts/topics"
 import { NO_SCRIPT_ROW_LIMIT, toTopicPath } from "@shared/seo"
 import { eq, inArray, max } from "drizzle-orm"
 import { connectionPool, db } from "../db"
@@ -167,14 +168,6 @@ try {
 		failUnless(findingLink !== null, `no link to ${resourceId}`)
 		failUnless(findingLink[0].includes('rel="noopener ugc"'), `the link to ${resourceId} is not user content`)
 	}
-
-	// the page ends with More topics, which links the related public topic by its shared tag, and neither the private
-	// topic nor the thin one, which share the tag too
-	const relatedTopicPath = toTopicPath({ id: topicIds.related, name: topicNames.related })
-	const moreTopicsHtml = publicTopicHtml.split("More topics")[1] ?? ""
-	failUnless(moreTopicsHtml.includes(`href="${relatedTopicPath}"`), "More topics misses the related public topic")
-	failUnless(!moreTopicsHtml.includes(`/topics/${topicIds.private}`), "More topics lists the private topic")
-	failUnless(!moreTopicsHtml.includes(`/topics/${unshownTopicId}`), "More topics lists a topic with too few findings")
 
 	// a private topic's page is never indexed and shows none of its findings, to a crawler or anyone else
 	const privateTopicHtml = pages.get(privateTopicPath)?.html ?? ""

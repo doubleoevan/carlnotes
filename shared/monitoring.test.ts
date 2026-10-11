@@ -1,18 +1,19 @@
 // monitoring tests for the zero-reporting default and the report event content scrub
 import { expect, test } from "bun:test"
 import { scrubContent, scrubTransaction, startMonitoring, toTracesSampleRate } from "./monitoring"
+import { saveEnvSettings } from "./savedEnvSettings"
 
 // without a sentry dsn set, nothing starts
 test("monitoring is a no-op without its key", () => {
 	// clear the sentry dsn so the run is deterministic regardless of the calling shell's environment
-	const originalDsn = Bun.env.SENTRY_DSN
-	Bun.env.SENTRY_DSN = undefined
+	const restoreEnvSettings = saveEnvSettings(["SENTRY_DSN"])
+	delete Bun.env.SENTRY_DSN
 
 	try {
 		// the call does not throw an error and has no client to send through
 		expect(() => startMonitoring()).not.toThrow()
 	} finally {
-		Bun.env.SENTRY_DSN = originalDsn
+		restoreEnvSettings()
 	}
 })
 

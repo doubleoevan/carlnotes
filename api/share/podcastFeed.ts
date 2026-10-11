@@ -1,6 +1,10 @@
 // a Topic's podcast feed as RSS 2.0 with the iTunes and Podcasting 2.0 namespaces, a podcast episode's chapters file,
 // and its transcript. every value from a Topic or a podcast episode is user or model text and is escaped
-import type { PodcastEpisodeChapter, PodcastEpisodeScript, PodcastEpisodeTranscriptBlock } from "@shared/contracts"
+import type {
+	PodcastEpisodeChapter,
+	PodcastEpisodeScript,
+	PodcastEpisodeTranscriptBlock,
+} from "@shared/contracts/podcast"
 import {
 	AI_VOICES_NOTE,
 	PODCAST_EPISODE_SPEAKER_NAMES,

@@ -1,5 +1,5 @@
 // carl's chat turn in a team chat room
-import type { RoomTopicToolCalls } from "@shared/contracts"
+import type { RoomTopicToolCalls } from "@shared/contracts/chat"
 import { reportError } from "@shared/monitoring"
 import type { ChatAttachment } from "@shared/payloads"
 import { and, eq, sql } from "drizzle-orm"

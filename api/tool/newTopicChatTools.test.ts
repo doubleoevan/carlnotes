@@ -1,5 +1,6 @@
 // new-topic chat tool tests for the tool list, the draft writes, the team check before a create, and the tool text
 import { expect, test } from "bun:test"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"
 import { toBrowserPlatform, toPlatform } from "@shared/userAgent"
 import type { ChatTurnToolCalls } from "./chatTools"
@@ -81,7 +82,7 @@ test("draftTopic writes the named fields, leaves the rest, and clears on an empt
 
 // a new topic draft's podcast starts on, Carl can turn it off, and an instance with no speech model has no podcast
 test("draftTopic starts the podcast on, keeps it off once named, and leaves it out with no speech model", async () => {
-	const originalSpeechModel = Bun.env.PODCAST_SPEECH_MODEL
+	const restoreEnvSettings = saveEnvSettings(["PODCAST_SPEECH_MODEL"])
 	try {
 		// a new-topic chat on an instance with the default speech model
 		delete Bun.env.PODCAST_SPEECH_MODEL
@@ -109,11 +110,7 @@ test("draftTopic starts the podcast on, keeps it off once named, and leaves it o
 		expect(draftWithoutPodcast.isPodcastEnabled).toBeUndefined()
 	} finally {
 		// put the setting back as the environment had it
-		if (originalSpeechModel === undefined) {
-			delete Bun.env.PODCAST_SPEECH_MODEL
-		} else {
-			Bun.env.PODCAST_SPEECH_MODEL = originalSpeechModel
-		}
+		restoreEnvSettings()
 	}
 })
 

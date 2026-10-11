@@ -8,6 +8,7 @@ import {
 	FileText,
 	Hash,
 	type LucideIcon,
+	Podcast,
 	SlidersHorizontal,
 	Target,
 	Users,
@@ -23,7 +24,7 @@ import { type ResourceKind, type TagMatchMode, tagMatchModes, useTopicFeed } fro
 import { usePageActions } from "@/stores/pageActionsStore"
 
 // which kinds of results the typeahead offers, all on until the user turns one off
-export const SEARCH_RESULT_TYPES = ["topics", "findings", "teams", "users"] as const
+export const SEARCH_RESULT_TYPES = ["topics", "podcasts", "findings", "teams", "users"] as const
 export type SearchResultType = (typeof SEARCH_RESULT_TYPES)[number]
 
 // each feed view's label in the filters menu
@@ -216,6 +217,7 @@ function RadioRow({
 // the icon mapped to each kind of search result
 const SEARCH_RESULT_TYPE_ICON: Record<SearchResultType, LucideIcon> = {
 	topics: Hash,
+	podcasts: Podcast,
 	findings: FileText,
 	teams: Users,
 	users: CircleUserRound,

@@ -1,7 +1,6 @@
-// the shared access checks for topics and topic findings
-import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
-import { and, eq, inArray, or, type SQLWrapper, sql } from "drizzle-orm"
-import { db } from "../../db"
+// the shared access checks for topics and topic findings, and the topic view rules in SQL
+import { and, eq, inArray, or, type SQL, type SQLWrapper, sql } from "drizzle-orm"
+import { db, isPublicAndShown } from "../../db"
 import { memoizeInRequest } from "../../db/requestMemo"
 import { invites } from "../../db/schema/invites"
 import { findings, scans } from "../../db/schema/scans"
@@ -140,6 +139,60 @@ export function verifiedEmailQuery(userId: string): SQLWrapper {
 		.where(and(eq(users.id, userId), eq(users.emailVerified, true)))
 }
 
+/**
+ * Returns the topic view rules in SQL. A visitor sees a public topic with enough findings, and a user also sees the
+ * topics toTopicAccessFilter allows.
+ */
+export function toTopicViewFilter(userId: string | null): SQL | undefined {
+	return userId ? or(toTopicAccessFilter(userId), isPublicAndShown) : isPublicAndShown
+}
+
+/**
+ * Returns the topics a user may open through their account in SQL: a topic they have a role on, and an invite topic
+ * that names their verified email or that they subscribe to.
+ */
+export function toTopicAccessFilter(userId: string): SQL | undefined {
+	// the invite topics that name one of the user's verified addresses
+	const invitedTopicIds = db
+		.select({ topicId: invites.topicId })
+		.from(invites)
+		.where(inArray(invites.email, verifiedEmailQuery(userId)))
+
+	// the topics the user subscribes to
+	const subscribedTopicIds = db
+		.select({ topicId: subscriptions.topicId })
+		.from(subscriptions)
+		.where(and(eq(subscriptions.subscriberUserId, userId), eq(subscriptions.isActive, true)))
+
+	// a topic the user has a role on, or an invite topic they are invited to or subscribe to
+	return or(
+		toTopicRoleFilter(userId),
+		and(
+			eq(topics.visibility, "invite"),
+			or(inArray(topics.id, invitedTopicIds), inArray(topics.id, subscribedTopicIds)),
+		),
+	)
+}
+
+/**
+ * Returns whether the user has a role on a topic in SQL: they own it, a team of theirs owns it, or a team of theirs
+ * holds it through a share.
+ */
+export function toTopicRoleFilter(userId: string): SQL | undefined {
+	// the user's active teams, and the topics shared with those teams
+	const memberTeamIds = db
+		.select({ teamId: teamMembers.teamId })
+		.from(teamMembers)
+		.where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)))
+	const sharedTopicIds = db
+		.select({ topicId: teamTopics.topicId })
+		.from(teamTopics)
+		.where(inArray(teamTopics.teamId, memberTeamIds))
+
+	// a topic the user owns, or one their teams own or hold
+	return or(eq(topics.ownerId, userId), inArray(topics.teamId, memberTeamIds), inArray(topics.id, sharedTopicIds))
+}
+
 // whether an address the user has verified is on the topic's invite list
 async function isInvited(userId: string, topicId: string): Promise<boolean> {
 	// only a verified address matches, since anyone can sign up with an unproven one
@@ -166,14 +219,6 @@ async function hasSubscription(userId: string, topicId: string): Promise<boolean
 		.limit(1)
 	return subscription !== undefined
 }
-
-/**
- * Whether a TopicRow is public and has enough kept Findings to be listed.
- */
-export const isPublicAndShown = and(
-	eq(topics.visibility, "public"),
-	sql`(select count(*) from ${findings} where ${findings.topicId} = ${topics.id}) >= ${MINIMUM_SHOWN_FINDINGS}`,
-)
 
 /**
  * When the user's subscription to the topic became active, or null with no active subscription.

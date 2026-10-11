@@ -1,4 +1,4 @@
-import type { ActivityResponse } from "@shared/contracts"
+import type { ActivityResponse } from "@shared/contracts/activity"
 import { toTopicPath } from "@shared/seo"
 import { X } from "lucide-react"
 import { useState } from "react"
@@ -49,8 +49,7 @@ export function TopicSubscriptionsTable({
 }) {
 	// defaults to the newest subscribed first
 	const { pageRows, sort, pagination } = usePaginatedRowSort(subscriptions, subscriptionSortValues, {
-		key: "subscribed",
-		isDescending: true,
+		initialSort: { key: "subscribed", isDescending: true },
 	})
 	// the subscription waiting for delete confirmation or null
 	const [subscriptionToDelete, setSubscriptionToDelete] = useState<{

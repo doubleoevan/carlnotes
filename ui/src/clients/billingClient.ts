@@ -1,5 +1,8 @@
 // the typed api client for the billing and admin routes
-import type { AdminConsoleResponse, BillingState, OwnerTopic, TeamPageResponse, TeamSummary } from "@shared/contracts"
+import type { OwnerTopic } from "@shared/contracts/activity"
+import type { AdminConsoleResponse } from "@shared/contracts/admin"
+import type { BillingState } from "@shared/contracts/profiles"
+import type { TeamPageResponse, TeamSummary } from "@shared/contracts/teams"
 import { apiClient } from "./apiClient"
 
 // start Stripe Checkout for a plan and billing interval, then redirect the browser to the hosted page

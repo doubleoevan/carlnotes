@@ -1,14 +1,9 @@
 // the admin console data: the users table with status and cost, the teams table, the platform totals with a
 // contribution figure, and the expandable rows behind a user or a team
 import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
-import type {
-	AdminTeamRow,
-	AdminTotals,
-	AdminUserRow,
-	OwnerTopic,
-	TeamPageResponse,
-	TeamSummary,
-} from "@shared/contracts"
+import type { OwnerTopic } from "@shared/contracts/activity"
+import type { AdminTeamRow, AdminTotals, AdminUserRow } from "@shared/contracts/admin"
+import type { TeamPageResponse, TeamSummary } from "@shared/contracts/teams"
 import { and, count, eq, gte, isNotNull, sql } from "drizzle-orm"
 import { db } from "../db"
 import { chatAttachments, chatTurns } from "../db/schema/chat"

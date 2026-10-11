@@ -1,7 +1,7 @@
 // podcast feed tests: the feed's tags, its guids across a rename, a listener's blocked feed, the chapters file,
 // and the transcript
 import { expect, test } from "bun:test"
-import type { PodcastEpisodeScript } from "@shared/contracts"
+import type { PodcastEpisodeScript } from "@shared/contracts/podcast"
 import {
 	PODCAST_THEME_SONG,
 	PODCAST_THEME_SONG_DRUMMING_CREDIT,

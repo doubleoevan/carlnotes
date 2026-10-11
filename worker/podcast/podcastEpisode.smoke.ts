@@ -4,8 +4,7 @@ import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { monthlySpendDollars } from "../../db/quotas"
 import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast"
-import { findings, resources, scans } from "../../db/schema/scans"
-import { topics } from "../../db/schema/topics"
+import { resources } from "../../db/schema/scans"
 import { users } from "../../db/schema/users"
 import { runWithRetries } from "../retry"
 import { attachmentExists, toPodcastEpisodeAudioKey, toPodcastEpisodeChapterKey } from "../store"
@@ -19,6 +18,7 @@ import {
 	SpeechFailedError,
 } from "./podcastEpisodeAudio"
 import { toScriptMinutes } from "./podcastEpisodeScript"
+import { loadPodcastEpisodeVectorRows, type SeededRowIds, seedTestData } from "./podcastEpisodeSmokeFixtures"
 import { loadThemeClips, toThemedEpisodeTimes } from "./podcastEpisodeTheme"
 import { publishPodcastEpisode } from "./publishPodcastEpisode"
 import { removePodcastEpisode } from "./removePodcastEpisode"
@@ -28,129 +28,9 @@ import {
 	writePodcastEpisodeSegment,
 } from "./writePodcastEpisodeScript"
 
-// two Findings worth a short Podcast Episode, each with its Resource's title and snippet and its relevance explanation
-const SEEDED_FINDINGS = [
-	{
-		title: "A quieter burr set for home grinders",
-		snippet: "A grinder maker released a burr set that runs at 62 decibels, about a third quieter than its last one.",
-		relevanceExplanation:
-			"The reader grinds before the house is awake, so a quieter grinder is the upgrade they asked about.",
-	},
-	{
-		title: "Hard water and sour espresso",
-		snippet: "A water lab measured extraction at three hardness levels and found that very hard water mutes acidity.",
-		relevanceExplanation: "The reader's shots turned sour after a move, and the new city's water is much softer.",
-	},
-]
-
 // how many times to record a chapter, and how long to wait between attempts
 const CHAPTER_ATTEMPTS = 3
 const CHAPTER_RETRY_DELAY_MS = 30 * 1000
-
-// the ids of the seeded rows that the checks read and the cleanup deletes
-type SeededRowIds = {
-	userId: string
-	topicId: string
-	scanId: string
-	resourceIds: string[]
-	// a second succeeded Scan, and the Topic's earlier published short and full Podcast Episodes
-	secondScanId: string
-	earlierShortPodcastEpisodeId: string
-	earlierFullPodcastEpisodeId: string
-}
-
-// seed a free user with a Topic, two succeeded Scans, two Findings on Resources that only this run uses,
-// and the Topic's earlier short and full Podcast Episodes
-async function seedTestData(): Promise<SeededRowIds> {
-	const runId = crypto.randomUUID().slice(0, 8)
-	const [user] = await db
-		.insert(users)
-		.values({
-			name: "episode-smoke",
-			email: `delivered+episode-smoke-${runId}@resend.dev`,
-			username: `episode-smoke-${runId}`,
-			usernameNormalized: `episodesmoke${runId}`,
-		})
-		.returning()
-	if (!user) {
-		throw new Error("failed to seed user")
-	}
-
-	// the Topic and the Scan that the Podcast Episode is planned for
-	const topicValues = { ownerId: user.id, name: "Home espresso", prompt: "Gear and technique for espresso at home." }
-	const [topic] = await db.insert(topics).values(topicValues).returning()
-	const scanValues = { topicId: topic?.id, ownerId: user.id, status: "succeeded" as const, finishedAt: new Date() }
-	const [scan, secondScan] = await db.insert(scans).values([scanValues, scanValues]).returning()
-	if (!topic || !scan || !secondScan) {
-		throw new Error("failed to seed the topic or its scans")
-	}
-
-	// one Resource and one Finding for each seeded Finding, the first scored higher
-	const resourceRows = await db
-		.insert(resources)
-		.values(
-			SEEDED_FINDINGS.map(({ title, snippet }, i) => ({
-				url: `https://episode-smoke.example/${runId}/${i}`,
-				kind: "read" as const,
-				title,
-				snippet,
-			})),
-		)
-		.returning({ id: resources.id })
-	await db.insert(findings).values(
-		resourceRows.map((resourceRow, i) => ({
-			topicId: topic.id,
-			resourceId: resourceRow.id,
-			scanId: scan.id,
-			relevanceScore: 0.9 - i * 0.1,
-			relevanceExplanation: SEEDED_FINDINGS[i]?.relevanceExplanation ?? "",
-		})),
-	)
-
-	// the Topic's earlier published short and full Podcast Episodes, numbers 1 and 2 this season
-	const earlierPodcastEpisodeValues = { topicId: topic.id, ownerId: user.id, status: "published" as const }
-	const season = new Date().getUTCFullYear()
-	const [earlierShortPodcastEpisode, earlierFullPodcastEpisode] = await db
-		.insert(podcastEpisodes)
-		.values([
-			{ ...earlierPodcastEpisodeValues, isShort: true, season, episodeNumber: 1, title: "Earlier short episode" },
-			{ ...earlierPodcastEpisodeValues, isShort: false, season, episodeNumber: 2, title: "Earlier full episode" },
-		])
-		.returning({ id: podcastEpisodes.id })
-	if (!earlierShortPodcastEpisode || !earlierFullPodcastEpisode) {
-		throw new Error("failed to seed the earlier episodes")
-	}
-
-	// a Resource that only the earlier short Podcast Episode narrated, and no seeded Finding has
-	const earlierNarratedUrl = `https://episode-smoke.example/${runId}/earlier`
-	const [earlierNarratedResourceRow] = await db
-		.insert(resources)
-		.values({ url: earlierNarratedUrl, kind: "read", title: "An earlier finding" })
-		.returning({ id: resources.id })
-	if (!earlierNarratedResourceRow) {
-		throw new Error("failed to seed the earlier episode's resource")
-	}
-
-	// the earlier short Podcast Episode's chapter, which narrated that Resource
-	await db.insert(podcastEpisodeChapters).values({
-		podcastEpisodeId: earlierShortPodcastEpisode.id,
-		position: 0,
-		resourceId: earlierNarratedResourceRow.id,
-		title: "An earlier finding",
-		sourceUrl: earlierNarratedUrl,
-		startSeconds: 0,
-		endSeconds: 60,
-	})
-	return {
-		userId: user.id,
-		topicId: topic.id,
-		scanId: scan.id,
-		secondScanId: secondScan.id,
-		resourceIds: [...resourceRows.map((resourceRow) => resourceRow.id), earlierNarratedResourceRow.id],
-		earlierShortPodcastEpisodeId: earlierShortPodcastEpisode.id,
-		earlierFullPodcastEpisodeId: earlierFullPodcastEpisode.id,
-	}
-}
 
 // record a chapter, retrying a speech failure that another attempt can fix, as the podcast episode workflow does
 function recordPodcastEpisodeChapterWithRetries(
@@ -249,6 +129,10 @@ async function check({
 		.where(eq(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeId))
 		.orderBy(podcastEpisodeChapters.position)
 
+	// the published Podcast Episode's vector and the replaced short one's
+	const publishedVectorRows = await loadPodcastEpisodeVectorRows(podcastEpisodeId)
+	const earlierShortVectorRows = await loadPodcastEpisodeVectorRows(earlierShortPodcastEpisodeId)
+
 	// the episode's length that the theme gives the chapters' talk, measured from the first chapter's start
 	const talkStartSeconds = podcastEpisodeChapterRows[0]?.startSeconds ?? 0
 	const talkChapterTimes = podcastEpisodeChapterRows.map(({ startSeconds, endSeconds }) => ({
@@ -298,7 +182,8 @@ async function check({
 		.from(podcastEpisodeChapters)
 		.where(eq(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeId))
 
-	// whether any audio is left, and the user's spend this month
+	// whether the removed Podcast Episode's vector or any audio is left, and the user's spend this month
+	const removedVectorRows = await loadPodcastEpisodeVectorRows(podcastEpisodeId)
 	const isAudioLeft = await attachmentExists(toPodcastEpisodeAudioKey(podcastEpisodeId))
 	const monthlySpend = await monthlySpendDollars(userId)
 
@@ -324,6 +209,11 @@ async function check({
 		["it has a chapter row for each chapter", podcastEpisodeChapterRows.length === chapterCount],
 		["the chapters and the theme cover the episode", Math.round(themedDurationSeconds) === durationSeconds],
 		["its cost was recorded", Number(publishedPodcastEpisode?.cost) > 0],
+		["its vector was saved from its chapters", publishedVectorRows.length === 1],
+		[
+			"its vector saved its private topic as not public and shown",
+			publishedVectorRows[0]?.isTopicPublicAndShown === false,
+		],
 
 		// the checks after a publish
 		["the scan plans no second episode", secondPodcastEpisodePlan === null],
@@ -332,6 +222,7 @@ async function check({
 			earlierShortPodcastEpisode?.status === "removed" && earlierShortChapterRows.length === 1,
 		],
 		["the earlier full episode stays published", earlierFullPodcastEpisode?.status === "published"],
+		["the earlier short episode's vector was deleted", earlierShortVectorRows.length === 0],
 
 		// the removal
 		["the episode was removed", isPodcastEpisodeRemoved && removedPodcastEpisode?.status === "removed"],
@@ -344,6 +235,7 @@ async function check({
 			!removedPodcastEpisode?.script && removedChapterRows.length === 0,
 		],
 		["its audio object is gone", !isAudioLeft],
+		["its vector is gone", removedVectorRows.length === 0],
 		["its cost still counts in the month's spend", monthlySpend.podcastEpisodeDollars > 0],
 	]
 

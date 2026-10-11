@@ -1,6 +1,6 @@
 // the Better Auth client, the signed-in user's identity from the session, and the signup-gate call for password signups
 import { toAvatarVersion } from "@shared/avatars"
-import type { ProfileIdentity } from "@shared/contracts"
+import type { ProfileIdentity } from "@shared/contracts/profiles"
 import { inferAdditionalFields } from "better-auth/client/plugins"
 import { createAuthClient } from "better-auth/react"
 import type { auth } from "../../../api/auth"

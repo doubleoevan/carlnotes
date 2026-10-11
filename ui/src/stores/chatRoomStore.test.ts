@@ -1,7 +1,7 @@
 // the badge store's one rule: a chat room opened this session clears the count everywhere at once
 
 import { expect, test } from "bun:test"
-import type { ChatMention, ChatRoom } from "@shared/contracts"
+import type { ChatMention, ChatRoom } from "@shared/contracts/chat"
 import { markChatRoomOpened, setChatRooms, toChatRooms, toFirstChatMention } from "./chatRoomStore"
 
 // one waiting chat mention, which is what a badge counts

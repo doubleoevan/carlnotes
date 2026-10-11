@@ -1,12 +1,12 @@
 // the api client for the podcast episode routes
 import {
 	type PodcastEpisode,
-	type PodcastEpisodePageResponse,
 	podcastEpisode,
-	podcastEpisodePageResponse,
 	type SeasonPodcastEpisodes,
 	seasonPodcastEpisodes,
-} from "@shared/contracts"
+} from "@shared/contracts/podcast"
+import { type PodcastEpisodePageResponse, podcastEpisodePageResponse } from "@shared/contracts/podcastEpisodePage"
+import type { PodcastEpisodeSearchResult } from "@shared/contracts/search"
 import type { PodcastEpisodeListenPayload } from "@shared/payloads"
 import { z } from "zod"
 import { apiClient } from "./apiClient"
@@ -25,6 +25,17 @@ export type PodcastEpisodePageParams = { topicId: string; season: string; episod
 export async function fetchPodcastEpisode(podcastEpisodeId: string): Promise<PodcastEpisode | null> {
 	const response = await apiClient.api.episodes[":id"].$get({ param: { id: podcastEpisodeId } })
 	return response.ok ? podcastEpisode.parse(await response.json()) : null
+}
+
+/**
+ * Returns the published podcast episodes whose title or description matches the query, then the nearest by meaning.
+ */
+export async function searchPodcastEpisodes(query: string): Promise<PodcastEpisodeSearchResult[]> {
+	const response = await apiClient.api.episodes.search.$get({ query: { q: query } })
+	if (!response.ok) {
+		return []
+	}
+	return ((await response.json()) as { podcastEpisodes: PodcastEpisodeSearchResult[] }).podcastEpisodes
 }
 
 /**

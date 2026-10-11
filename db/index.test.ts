@@ -1,12 +1,13 @@
 // a pool setting read from the environment, and the pool size computed from the database at startup
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
 import { connectionPool, sizeConnectionPool, toPositiveInteger } from "./index"
 
 // the pool's size and the connection string before a test changes them
 const originalPoolMax = connectionPool.options.max
-const originalDatabaseUrl = process.env.DATABASE_URL
+const restoreEnvSettings = saveEnvSettings(["DATABASE_URL", "DATABASE_POOL_MAX", "DATABASE_POOL_COUNT"])
 
 // a connection string for the sizing read, which the stubbed pool never opens
 beforeEach(() => {
@@ -17,16 +18,8 @@ beforeEach(() => {
 afterEach(() => {
 	restoreConnectionPool()
 	connectionPool.options.max = originalPoolMax
-	delete process.env.DATABASE_POOL_MAX
-	delete process.env.DATABASE_POOL_COUNT
 	mock.restore()
-
-	// a connection string the environment never set stays unset
-	if (originalDatabaseUrl === undefined) {
-		delete process.env.DATABASE_URL
-	} else {
-		process.env.DATABASE_URL = originalDatabaseUrl
-	}
+	restoreEnvSettings()
 })
 
 // unset and empty keep the default, a whole number is used as is, and a word, zero, a negative, or a fraction keeps the default

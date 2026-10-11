@@ -1,12 +1,12 @@
-import type { PodcastEpisode } from "@shared/contracts"
+import type { PodcastEpisodeSummary } from "@shared/contracts/podcast"
 import { toTopicPath } from "@shared/seo"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { LatestPodcastEpisodePlayButton } from "@/components/podcast/LatestPodcastEpisodePlayButton"
+import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
 import { ICON_TILE_BUTTON_CLASS } from "@/lib/styleClasses"
 
 // the topic that a topic table row names, and its latest podcast episode that the user may listen to
-type TopicNameLinkTopic = { id: string; name: string; latestPodcastEpisode: PodcastEpisode | null }
+type TopicNameLinkTopic = { id: string; name: string; latestPodcastEpisode: PodcastEpisodeSummary | null }
 
 /**
  * A topic's name in a topic table, linking to its page, with the user's update count at its corner
@@ -25,10 +25,7 @@ export function TopicNameLink({ topic }: { topic: TopicNameLinkTopic }) {
 
 			{/* the latest podcast episode's play button */}
 			{topic.latestPodcastEpisode && (
-				<LatestPodcastEpisodePlayButton
-					podcastEpisode={topic.latestPodcastEpisode}
-					className={ICON_TILE_BUTTON_CLASS}
-				/>
+				<PodcastEpisodePlayButton podcastEpisode={topic.latestPodcastEpisode} className={ICON_TILE_BUTTON_CLASS} />
 			)}
 		</span>
 	)

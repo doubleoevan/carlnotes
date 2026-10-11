@@ -1,10 +1,10 @@
 // the topic table rows that the profile page, the team page, and the team rows' topics render
-import type { Topic } from "@shared/contracts"
+import type { Topic } from "@shared/contracts/profiles"
 import { and, count, eq, inArray, sql } from "drizzle-orm"
 import { db, isFindingShown } from "../../db"
 import { findings, scans } from "../../db/schema/scans"
 import { subscriptions, type topics } from "../../db/schema/topics"
-import { loadLatestPodcastEpisodes } from "../podcast/helpers"
+import { loadLatestPodcastEpisodeSummaries } from "../podcast/podcastEpisodeShapes"
 
 /**
  * The topic table rows that the profile page and the team page both render.
@@ -29,7 +29,7 @@ export async function toTopicTableRows(
 	const [keptAndSeenTopicFindings, emailByTopic, latestPodcastEpisodeByTopic] = await Promise.all([
 		loadFindingsKeptAndResourcesSeen(topicIds),
 		loadTopicsEmailPreferences(userId, topicIds),
-		loadLatestPodcastEpisodes(topicRows, userId),
+		loadLatestPodcastEpisodeSummaries(topicRows, userId),
 	])
 	return topicRows.map((topicRow) => ({
 		id: topicRow.id,

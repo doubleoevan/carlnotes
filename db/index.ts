@@ -1,8 +1,9 @@
 // the app's database client. a pooled Neon connection bound to the domain schema
 import { Pool } from "@neondatabase/serverless"
+import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
 import type { PoolGauges } from "@shared/runtimeGauges"
-import { sql } from "drizzle-orm"
+import { and, eq, isNotNull, type SQL, type SQLWrapper, sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/neon-serverless"
 import { traceQueries } from "./queryTracing"
 import * as billing from "./schema/billing"
@@ -17,6 +18,7 @@ import * as storage from "./schema/storage"
 import * as teams from "./schema/teams"
 import * as topics from "./schema/topics"
 import * as users from "./schema/users"
+import * as vectors from "./schema/vectors"
 
 // the defaults for the pool's size and for how long a request waits for a connection.
 // the size is what the pool keeps if the max_connections read fails
@@ -57,6 +59,7 @@ export const schema = {
 	...teams,
 	...topics,
 	...users,
+	...vectors,
 }
 export const db = drizzle(connectionPool, { schema })
 
@@ -68,6 +71,41 @@ export type DbHandle = typeof db | DbTransaction
 
 // a finding is shown unless a user rated the finding thumbs down
 export const isFindingShown = sql<boolean>`${schema.findings.rating} is distinct from 'down'`
+
+// a resource that the current embedding model embedded
+export const isCurrentModelEmbedding = and(
+	isNotNull(schema.resources.embedding),
+	eq(schema.resources.embeddingModel, scans.EMBED_MODEL_NAME),
+)
+
+// the setting that keeps a transaction's HNSW index scans going past their first candidates, in exact distance order
+export const ITERATIVE_INDEX_SCAN_SETTING = "set local hnsw.iterative_scan = strict_order"
+
+/**
+ * Returns whether a topic, by its id column or a bound id, has enough Findings that no user rated down to be listed.
+ */
+export function hasEnoughFindingsToList(topicId: SQLWrapper | string): SQL {
+	return sql`(select count(*) from ${schema.findings} where ${schema.findings.topicId} = ${topicId} and ${isFindingShown}) >= ${MINIMUM_SHOWN_FINDINGS}`
+}
+
+/**
+ * Whether a TopicRow is public and has enough Findings that no user rated down to be listed.
+ */
+export const isPublicAndShown = and(eq(schema.topics.visibility, "public"), hasEnoughFindingsToList(schema.topics.id))
+
+/**
+ * Runs a read in a transaction whose HNSW index scans continue past their first candidates in exact distance order,
+ * so filters applied after the index still fill the read's limit.
+ */
+export async function runWithIterativeIndexScan<Result>(
+	runRead: (transaction: DbTransaction) => Promise<Result>,
+): Promise<Result> {
+	// the setting holds for this transaction alone. neon's connection pooler drops a session setting between transactions
+	return db.transaction(async (transaction) => {
+		await transaction.execute(sql.raw(ITERATIVE_INDEX_SCAN_SETTING))
+		return runRead(transaction)
+	})
+}
 
 /**
  * Whether an error is Postgres rejecting a duplicate key, checked through each cause that a driver wraps the error in.

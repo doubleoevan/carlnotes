@@ -4,7 +4,7 @@ import {
 	type ChatMessageAttachment,
 	type KeptChatAttachment,
 	withAttachmentNote,
-} from "@shared/contracts"
+} from "@shared/contracts/chat"
 import type { ChatAttachment, ChatToolCall } from "@shared/payloads"
 import type { ChatRejection, ChatSendResult } from "@/clients/chatClient"
 

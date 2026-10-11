@@ -2,7 +2,7 @@
 // and kept in Postgres through the Drizzle adapter
 import { trackBotEvent, trackEvent } from "@shared/analytics"
 import { appBaseUrl } from "@shared/appUrl"
-import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
+import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts/signupCta"
 import { toCanonicalEmail } from "@shared/emails"
 import { reportError } from "@shared/monitoring"
 import { toDeviceProperties } from "@shared/userAgent"

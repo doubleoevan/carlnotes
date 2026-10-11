@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils"
  */
 export function Footer() {
 	return (
-		<footer className="text-muted-foreground border-separator mx-auto max-w-5xl border-t px-safe py-6 text-center text-sm">
+		<footer className="text-muted-foreground mx-auto max-w-5xl px-safe py-6 text-center text-sm">
 			<FooterLegal />
 			<p className="mt-2">Carl read all of it.</p>
 		</footer>

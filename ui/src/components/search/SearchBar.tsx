@@ -1,34 +1,43 @@
+import type { TopicFinding } from "@shared/contracts/findings"
 import {
+	type PodcastEpisodeSearchResult,
 	SEARCH_MIN_CHARS,
 	type TeamSearchResult,
-	type TopicFinding,
 	type TopicSearchResult,
 	type UserSearchResult,
-} from "@shared/contracts"
+} from "@shared/contracts/search"
 import { toTopicPath } from "@shared/seo"
 import { useNavigate } from "@tanstack/react-router"
 import { Search, X } from "lucide-react"
 import { type KeyboardEvent, useEffect, useState } from "react"
+import { searchPodcastEpisodes } from "@/clients/podcastEpisodeClient"
 import { searchUsers } from "@/clients/profileClient"
 import { searchTeams } from "@/clients/teamClient"
 import { searchTopics, sendTopicFindingOpened } from "@/clients/topicClient"
 import { Input } from "@/components/primitives/input"
 import { PageActionMenu } from "@/components/search/PageActionMenu"
 import { SEARCH_RESULT_TYPES, SearchFilters, type SearchResultType } from "@/components/search/SearchFilters"
-import { ResourceResult, TeamResult, TopicResult, UserResult } from "@/components/search/SearchResults"
+import {
+	PodcastEpisodeResult,
+	ResourceResult,
+	TeamResult,
+	TopicResult,
+	UserResult,
+} from "@/components/search/SearchResults"
 import { TopicFeedSort } from "@/components/topic/TopicFeedSort"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 
-// a typeahead suggestion type: a topic, one of its findings, a team, or a user profile
+// a typeahead suggestion type: a topic, a podcast episode, one of a topic's findings, a team, or a user profile
 type SearchResultSuggestion =
 	| { type: "topic"; topic: TopicSearchResult }
+	| { type: "podcastEpisode"; podcastEpisode: PodcastEpisodeSearchResult }
 	| { type: "resource"; resource: TopicFinding }
 	| { type: "team"; team: TeamSearchResult }
 	| { type: "user"; user: UserSearchResult }
 
 const MAX_RESOURCE_SUGGESTIONS = 6
 
-// how long typing pauses before a topic, team, or user search is sent
+// how long typing pauses before a topic, podcast episode, team, or user search is sent
 const SEARCH_DEBOUNCE_MS = 200
 
 // how far each arrow key moves the highlight
@@ -39,8 +48,8 @@ const SUGGESTION_LIST_ID = "search-suggestions"
 const SUGGESTION_ID_PREFIX = "search-suggestion-"
 
 /**
- * The search bar that overlaps the hero.
- * a search input with a clear button, a typeahead over topics, findings, teams, and users, and the Filters menu
+ * The search bar that overlaps the hero. A search input with a clear button, a typeahead over topics, podcast episodes,
+ * teams, users, and findings, and the Filters menu.
  */
 export function SearchBar() {
 	const { topicFeed } = useTopicFeed()
@@ -76,11 +85,17 @@ export function SearchBar() {
 				.slice(0, MAX_RESOURCE_SUGGESTIONS)
 		: []
 
-	// findings are already loaded. topics, teams, and users are searched on the server as the typing pauses
+	// findings are already loaded. topics, podcast episodes, teams, and users are searched on the server as the typing
+	// pauses
 	const { matches: topicMatches, isSearching: isSearchingTopics } = useDebouncedSearch(
 		searchQuery,
 		searchResultTypes.has("topics"),
 		searchTopics,
+	)
+	const { matches: podcastEpisodeMatches, isSearching: isSearchingPodcastEpisodes } = useDebouncedSearch(
+		searchQuery,
+		searchResultTypes.has("podcasts"),
+		searchPodcastEpisodes,
 	)
 	const { matches: userMatches, isSearching: isSearchingUsers } = useDebouncedSearch(
 		searchQuery,
@@ -93,9 +108,11 @@ export function SearchBar() {
 		searchTeams,
 	)
 
-	// topics, then teams, then users, then findings, so the arrow keys walk one combined search suggestions list
+	// topics, then podcast episodes, teams, users, and findings, so the arrow keys walk one combined search suggestions
+	// list
 	const searchSuggestions: SearchResultSuggestion[] = [
 		...topicMatches.map((topic) => ({ type: "topic" as const, topic })),
+		...podcastEpisodeMatches.map((podcastEpisode) => ({ type: "podcastEpisode" as const, podcastEpisode })),
 		...teamMatches.map((team) => ({ type: "team" as const, team })),
 		...userMatches.map((user) => ({ type: "user" as const, user })),
 		...(searchResultTypes.has("findings")
@@ -134,10 +151,12 @@ export function SearchBar() {
 		}
 	}
 
-	// open the topic, team, or user profile page, or the resource in a new tab, then clear the search
+	// open the topic, podcast episode, team, or user profile page, or the resource in a new tab, then clear the search
 	const openSearchSuggestion = (suggestion: SearchResultSuggestion): void => {
 		if (suggestion.type === "topic") {
 			void navigate({ to: toTopicPath(suggestion.topic) })
+		} else if (suggestion.type === "podcastEpisode") {
+			void navigate({ to: suggestion.podcastEpisode.pagePath })
 		} else if (suggestion.type === "team") {
 			void navigate({ to: "/teams/$teamId", params: { teamId: suggestion.team.teamId } })
 		} else if (suggestion.type === "user") {
@@ -168,8 +187,8 @@ export function SearchBar() {
 					aria-controls={showSearchSuggestion ? SUGGESTION_LIST_ID : undefined}
 					aria-autocomplete="list"
 					aria-activedescendant={suggestionIndex >= 0 ? `${SUGGESTION_ID_PREFIX}${suggestionIndex}` : undefined}
-					aria-label="Search topics, findings, teams and users..."
-					placeholder="Topics, findings, teams, users…"
+					aria-label="Search topics, podcasts, findings, teams and users..."
+					placeholder="Topics, podcasts, findings, teams, users…"
 					className="h-11 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0 sm:h-9 dark:bg-transparent"
 				/>
 				{query && (
@@ -215,6 +234,17 @@ export function SearchBar() {
 								/>
 							)
 						}
+						if (suggestion.type === "podcastEpisode") {
+							return (
+								<PodcastEpisodeResult
+									key={`podcast-episode-${suggestion.podcastEpisode.id}`}
+									suggestionId={suggestionId}
+									podcastEpisode={suggestion.podcastEpisode}
+									isActive={index === suggestionIndex}
+									onOpen={handleClearSearch}
+								/>
+							)
+						}
 						if (suggestion.type === "team") {
 							return (
 								<TeamResult
@@ -248,9 +278,11 @@ export function SearchBar() {
 						)
 					})}
 					{/* the empty suggestions state is hidden while a search is still pending */}
-					{searchSuggestions.length === 0 && !isSearchingTopics && !isSearchingUsers && !isSearchingTeams && (
-						<p className="text-muted-foreground px-2 py-3 text-sm">No matches found.</p>
-					)}
+					{searchSuggestions.length === 0 &&
+						!isSearchingTopics &&
+						!isSearchingPodcastEpisodes &&
+						!isSearchingUsers &&
+						!isSearchingTeams && <p className="text-muted-foreground px-2 py-3 text-sm">No matches found.</p>}
 				</div>
 			)}
 		</div>

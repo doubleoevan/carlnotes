@@ -6,9 +6,11 @@ import { bookmarks, consumptions, findingFeedback, findings, findingViews } from
 import { topics } from "../../db/schema/topics"
 import type { AnalyticsProperties } from "../currentUser"
 import { canBookmarkFinding, canRateFinding, isTopicFindingVisible, toTopicRole } from "./permissions"
+import { saveTopicVectorsReportingFailure } from "./saveTopic"
 
 /**
- * Set a topic finding's rating to thumbs up or down, or clear it. Returns false when the user may not rate.
+ * Sets a topic finding's rating to thumbs up or down, or clears it, and saves its topic's vectors again. Returns false
+ * if the user may not rate.
  */
 export async function setRating(
 	userId: string,
@@ -23,10 +25,17 @@ export async function setRating(
 
 	// the rating records who set it, the topic's team, and their role at that moment
 	const snapshot = rating === null ? emptySnapshot() : await toRatingSnapshot(userId, findingId)
-	await db
+	const [ratedFindingRow] = await db
 		.update(findings)
 		.set({ rating, ...snapshot })
 		.where(eq(findings.id, findingId))
+		.returning({ topicId: findings.topicId })
+
+	// save the topic's vectors again. a rating to or from down changes its mean and its shown count, and a failed save
+	// is reported and never fails the rating
+	if (ratedFindingRow) {
+		await saveTopicVectorsReportingFailure(ratedFindingRow.topicId)
+	}
 
 	// track the rating event. clearing a rating is not one
 	if (rating !== null) {
@@ -129,7 +138,7 @@ export async function setBookmarked(
 }
 
 /**
- * Mark or unmark a topic finding consumed. Returns false when the user may not see it.
+ * Marks or unmarks a topic finding consumed. Returns false if the user may not see it.
  */
 export async function setConsumed(
 	userId: string,
@@ -161,7 +170,7 @@ export async function setConsumed(
 }
 
 /**
- * Increment the topic finding's view count and mark it consumed. Returns false when the user may not see it.
+ * Increments the topic finding's view count and marks it consumed. Returns false if the user may not see it.
  */
 export async function recordView(
 	userId: string,

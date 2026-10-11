@@ -1,16 +1,19 @@
 // a live smoke test for a full topic Scan, ingestion then review: seed a topic with two sources, scan, check the outputs,
 // and send the Scan's report to Resend's test inbox.
 // run it with: bun run smoke:scan. needs the LiteLLM proxy at LITELLM_BASE_URL, the latest migration, and Doppler secrets
+import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
 import { FULL_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { db } from "../db"
 import { findings, resources, scans } from "../db/schema/scans"
 import { sources, topicEmailSends, topics } from "../db/schema/topics"
 import { users } from "../db/schema/users"
+import { topicVectors } from "../db/schema/vectors"
 import { buildContextPrompt } from "./attach"
 // the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
 import { buildSearchPrompt } from "./ingest/search"
 import { deleteUserLiteLLMKey } from "./litellm"
+import { saveTopicVectors } from "./meanVectors"
 import { sendScanReport } from "./notify"
 import { buildOutlinePrompt, buildSegmentPrompt } from "./podcast/generatePodcastEpisodeScript"
 import { buildScorePrompt } from "./review/score"
@@ -104,6 +107,14 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 		.where(and(eq(findings.topicId, topicId), isNotNull(resources.embedding)))
 		.limit(1)
 
+	// the private topic's succeeded scan saves its vector as not public and shown. made public, the vector is saved as
+	// public and shown once the topic lists enough findings
+	const privateTopicVectorRow = await loadTopicVectorRow(topicId)
+	await db.update(topics).set({ visibility: "public" }).where(eq(topics.id, topicId))
+	await saveTopicVectors(topicId)
+	const publicTopicVectorRow = await loadTopicVectorRow(topicId)
+	const isTopicShown = topicFindings.length >= MINIMUM_SHOWN_FINDINGS
+
 	// for an RSS-only scan, ingestion cost is 0, so the total cost should equal the sum of the review stage costs
 	const totalCost = Number(topicScan.cost)
 	const totalStageCosts = Object.values(topicScan.stageCosts).reduce((sum, value) => sum + value, 0)
@@ -158,6 +169,14 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 		["scan succeeded", topicScan.status === "succeeded"],
 		["found resources", topicScan.foundCount > 0],
 		["embedding is 1024-dim", embeddingLength === 1024],
+		[
+			"a private topic's succeeded scan saved its vector as not public and shown",
+			privateTopicVectorRow?.isPublicAndShown === false,
+		],
+		[
+			"made public, the topic's vector is saved as public and shown if it lists enough findings",
+			publicTopicVectorRow?.isPublicAndShown === isTopicShown,
+		],
 
 		// topic findings checks
 		["findings match kept_count limited by maxTopicFindings", topicFindings.length === expectedFindingCount],
@@ -183,6 +202,15 @@ async function check(topicId: string, ownerId: string): Promise<boolean> {
 		allPass = allPass && pass
 	}
 	return allPass
+}
+
+// a topic's vector row with whether it is saved as public and shown, or undefined with no vector
+async function loadTopicVectorRow(topicId: string): Promise<{ isPublicAndShown: boolean } | undefined> {
+	const [topicVectorRow] = await db
+		.select({ isPublicAndShown: topicVectors.isPublicAndShown })
+		.from(topicVectors)
+		.where(eq(topicVectors.topicId, topicId))
+	return topicVectorRow
 }
 
 // how many of this scan's episodes carried a transcript their feed published

@@ -28,6 +28,9 @@ const ORGANIZATION_PROFILES = [
 // how many rows of a paged list a page's html holds for a reader without JavaScript, a crawler included
 export const NO_SCRIPT_ROW_LIMIT = 50
 
+// the response header a page render sets if a read it renders from failed
+export const DEGRADED_RENDER_HEADER = "x-degraded-render"
+
 // how many characters a slug keeps
 const TOPIC_SLUG_LIMIT = 60
 

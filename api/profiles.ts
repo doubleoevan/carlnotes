@@ -1,12 +1,7 @@
 // the public profile: who a username belongs to, and the Topics they own.
 import { toAvatarVersion } from "@shared/avatars"
-import {
-	type ProfileResponse,
-	SEARCH_MIN_CHARS,
-	type Topic,
-	USER_SEARCH_LIMIT,
-	type UserSearchResult,
-} from "@shared/contracts"
+import type { ProfileResponse, Topic } from "@shared/contracts/profiles"
+import { SEARCH_MIN_CHARS, USER_SEARCH_LIMIT, type UserSearchResult } from "@shared/contracts/search"
 import { toNormalizedUsername } from "@shared/usernames"
 import { and, countDistinct, eq, isNotNull, like, ne, sql } from "drizzle-orm"
 import { Hono } from "hono"

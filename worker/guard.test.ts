@@ -1,6 +1,7 @@
 // guard tests for the verdict reading: which detectors each type consults, the threshold, and the fail-open paths.
 import { expect, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { screenText, toFlaggedReason, toScreenVerdict } from "./guard"
 
 // each type reads only its own detectors out of the one scanner pass, so a hit outside them does not flag it
@@ -48,7 +49,7 @@ test("toScreenVerdict passes a rejection whose scores are all below the threshol
 // a rejection that names no scanner is a broken response, so the text passes and the failure is reported
 test("screenText passes the text if the scanner rejects it without naming a scanner", async () => {
 	// a configured scanner that rejects with no scores, with a quiet error log and report
-	const originalGuardUrl = Bun.env.LLM_GUARD_URL
+	const restoreEnvSettings = saveEnvSettings(["LLM_GUARD_URL"])
 	const originalFetch = globalThis.fetch
 	Bun.env.LLM_GUARD_URL = "http://llm-guard.test"
 	globalThis.fetch = (async () => Response.json({ is_valid: false })) as unknown as typeof fetch
@@ -68,7 +69,7 @@ test("screenText passes the text if the scanner rejects it without naming a scan
 		expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 	} finally {
 		// put back the scanner url, fetch, and the spies
-		Bun.env.LLM_GUARD_URL = originalGuardUrl
+		restoreEnvSettings()
 		globalThis.fetch = originalFetch
 		consoleErrorSpy.mockRestore()
 		reportErrorSpy.mockRestore()
@@ -96,7 +97,7 @@ test("toScreenVerdict returns the redacted text on an accepted document", () => 
 // with no scanner configured, nothing is flagged and no request is attempted
 test("screenText reports unflagged when no scanner is configured", async () => {
 	// clear the url so the run is deterministic regardless of the calling shell's environment
-	const originalGuardUrl = Bun.env.LLM_GUARD_URL
+	const restoreEnvSettings = saveEnvSettings(["LLM_GUARD_URL"])
 	Bun.env.LLM_GUARD_URL = undefined
 
 	try {
@@ -108,7 +109,7 @@ test("screenText reports unflagged when no scanner is configured", async () => {
 			outcome: "skipped",
 		})
 	} finally {
-		Bun.env.LLM_GUARD_URL = originalGuardUrl
+		restoreEnvSettings()
 	}
 })
 

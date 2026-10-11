@@ -1,7 +1,7 @@
 // render tests for the chat room's chat messages: author lines, alignment, replies, link previews, attachments,
 // and delete controls
 import { expect, test } from "bun:test"
-import type { ChatRoomMessage } from "@shared/contracts"
+import type { ChatRoomMessage } from "@shared/contracts/chat"
 import { type ChatRoomState, FIRST_ITEM_INDEX_START } from "@/components/chat/useChatRoom"
 import { ChatRoomMessages } from "./ChatRoomMessages"
 import { renderWithRouter } from "./renderWithRouter"

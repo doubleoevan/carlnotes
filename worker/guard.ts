@@ -1,5 +1,5 @@
 // the LLM Guard scanner
-import { SCANNER_FLAGGED_REASON_PREFIX } from "@shared/contracts"
+import { SCANNER_FLAGGED_REASON_PREFIX } from "@shared/contracts/topics"
 import { reportError } from "@shared/monitoring"
 
 // the score at or above which a detector counts as a hit

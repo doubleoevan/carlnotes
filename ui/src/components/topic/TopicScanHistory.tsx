@@ -1,4 +1,5 @@
-import type { TopicFinding, TopicScan } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
+import type { TopicScan } from "@shared/contracts/topics"
 import { useState } from "react"
 import { fetchScanNote } from "@/clients/topicClient"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"

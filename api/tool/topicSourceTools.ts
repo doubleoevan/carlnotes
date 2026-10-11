@@ -1,6 +1,6 @@
 // the topic source tools: adding and removing a source, and what one more source costs
 import { trackEvent } from "@shared/analytics"
-import { MAX_TOPIC_SOURCES } from "@shared/contracts"
+import { MAX_TOPIC_SOURCES } from "@shared/contracts/topics"
 import type { frequencies } from "@shared/enums"
 import { SCAN_COST_CENTS } from "@shared/plans"
 import { DEFAULT_SOURCES, toCustomSourceOption, toSourceSummary, toSourceValue } from "@shared/sources"

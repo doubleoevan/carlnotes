@@ -1,6 +1,6 @@
 // chat adapter tests for the edit tool list, the topic binding, the confirmation rule, and the edit tool text
 import { expect, test } from "bun:test"
-import { TOPIC_SAVE_TOOL_NAMES } from "@shared/contracts"
+import { TOPIC_SAVE_TOOL_NAMES } from "@shared/contracts/chat"
 import {
 	type ChatTurnToolCalls,
 	toAddTopicSourceText,

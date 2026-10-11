@@ -1,7 +1,7 @@
 // the topic routes: the page, the poll, create, update, delete, and the per-topic settings
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { traceRequestStage } from "@shared/monitoring"
 import { suggestSourcesPayload, updateTopicPayload } from "@shared/topicPayloads"
 import { Hono } from "hono"
@@ -89,11 +89,11 @@ export const topicsRoute = new Hono<AppEnv>()
 		// the topic detail payload's traced loader, gated by visibility. a signed-out visitor may only view a public topic
 		const userId = currentUser(context)
 		const topicId = context.req.param("id")
+		const isPoll = context.req.valid("query").poll === "1"
 		const loadTracedTopicPage = (): Promise<TopicResponse | null> =>
-			traceRequestStage("topic_page.load", () => loadTopicPage(userId, topicId))
+			traceRequestStage("topic_page.load", () => loadTopicPage(userId, topicId, { isPoll }))
 
 		// serve a poll reload from a short Redis cache per user and topic, and any other request from the database
-		const isPoll = context.req.valid("query").poll === "1"
 		const topicPage = isPoll
 			? await cacheJson({
 					key: `topic-page:${userId ?? "visitor"}:${topicId}`,

@@ -2,6 +2,7 @@
 // the wait for the rate limit slot, and the reports for missing configuration and dropped addresses
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import * as redis from "../db/redis"
 import {
 	type EmailMessage,
@@ -25,8 +26,7 @@ function toTestMessage(index: number): EmailMessage {
 
 // the real fetch and env to put back after each test
 const realFetch = globalThis.fetch
-const realApiKey = Bun.env.RESEND_API_KEY
-const realFromEmail = Bun.env.RESEND_FROM_EMAIL
+const restoreEnvSettings = saveEnvSettings(["RESEND_API_KEY", "RESEND_FROM_EMAIL"])
 
 // give every call the rate limit slot at once so that no test reaches Redis
 let takeRateLimitSlotSpy: ReturnType<typeof spyOn<typeof redis, "takeRateLimitSlot">>
@@ -37,19 +37,9 @@ beforeEach(() => {
 // put the real fetch, env, and report back after each test, so that nothing leaks into other tests
 afterEach(() => {
 	globalThis.fetch = realFetch
-	restoreEnv("RESEND_API_KEY", realApiKey)
-	restoreEnv("RESEND_FROM_EMAIL", realFromEmail)
+	restoreEnvSettings()
 	mock.restore()
 })
-
-// put an env value back, removing it if it was unset. assigning undefined would store the text "undefined"
-function restoreEnv(name: string, value: string | undefined): void {
-	if (value === undefined) {
-		delete Bun.env[name]
-		return
-	}
-	Bun.env[name] = value
-}
 
 // a sender with a key and a verified from-address
 function configureResend(): void {

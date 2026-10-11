@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { Check, GripVertical, X } from "lucide-react"
 import { useState } from "react"
 import { Button } from "@/components/primitives/button"

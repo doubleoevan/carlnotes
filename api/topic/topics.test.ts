@@ -2,7 +2,8 @@
 
 import { afterEach, expect, test } from "bun:test"
 import { appUrl } from "@shared/appUrl"
-import type { TopicScan } from "@shared/contracts"
+import type { TopicScan } from "@shared/contracts/topics"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { toLastSucceededTopicScan } from "./helpers"
 import { isTakingDailySlot } from "./saveHelpers"
 import { notifyIndexNowOfTopicChange } from "./saveTopic"
@@ -62,7 +63,7 @@ test("isTakingDailySlot never fires for a topic already on a daily frequency", (
 
 // the real fetch and key to put back after every test, and the url list of each post the recorder keeps
 const realFetch = globalThis.fetch
-const realIndexNowKey = Bun.env.INDEXNOW_KEY
+const restoreEnvSettings = saveEnvSettings(["INDEXNOW_KEY"])
 const recordedUrlLists: unknown[] = []
 
 // put the key and fetch back after every test
@@ -72,11 +73,7 @@ afterEach(() => {
 	recordedUrlLists.length = 0
 
 	// restore the real key, or remove the key if there was none
-	if (realIndexNowKey === undefined) {
-		delete Bun.env.INDEXNOW_KEY
-	} else {
-		Bun.env.INDEXNOW_KEY = realIndexNowKey
-	}
+	restoreEnvSettings()
 })
 
 // report a topic save with a key and a fetch recorder, then wait for the post to go out

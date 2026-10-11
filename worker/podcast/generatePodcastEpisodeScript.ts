@@ -1,6 +1,6 @@
 // the model calls that write a Podcast Episode's script drafts, the prompts that they send,
 // and the retry that writes drafts until one passes its checks. a call returns its draft unchecked, with its cost
-import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@shared/contracts"
+import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@shared/contracts/podcast"
 import { PODCAST_EPISODE_SPEAKER_NAMES } from "@shared/podcastEpisodes"
 import { generateText, NoObjectGeneratedError, Output } from "ai"
 import { PREMIUM_COST_PER_MILLION_TOKENS, tokenCost } from "../budget"

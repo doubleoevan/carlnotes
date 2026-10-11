@@ -1,4 +1,4 @@
-import type { PodcastEpisode } from "@shared/contracts"
+import type { PodcastEpisodeSummary } from "@shared/contracts/podcast"
 import { Pause, Play } from "lucide-react"
 import { PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
 import { PLAY_BUTTON_CLASS } from "@/lib/styleClasses"
@@ -6,15 +6,15 @@ import { cn } from "@/lib/utils"
 import { togglePodcastEpisodePlayback, useIsPodcastEpisodePlaying } from "@/stores/podcastEpisodePlayerStore"
 
 /**
- * The play button of a topic's latest podcast episode, beside the topic's note icon,
+ * A podcast episode's play button, which plays or pauses the episode in the podcast player,
  * with a tooltip that names the podcast over the episode's details.
  */
-export function LatestPodcastEpisodePlayButton({
+export function PodcastEpisodePlayButton({
 	podcastEpisode,
 	className,
 	onMouseEnter,
 }: {
-	podcastEpisode: PodcastEpisode
+	podcastEpisode: PodcastEpisodeSummary
 	className?: string
 	onMouseEnter?: () => void
 }) {

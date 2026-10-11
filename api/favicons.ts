@@ -1,6 +1,8 @@
 // the route that serves a host's stored favicon, and the path that a finding, a link preview,
 // and a podcast episode chapter name the favicon by
-import type { ChatLinkPreview, PodcastEpisodeChapter, TopicFinding } from "@shared/contracts"
+import type { ChatLinkPreview } from "@shared/contracts/chat"
+import type { TopicFinding } from "@shared/contracts/findings"
+import type { PodcastEpisodeChapter } from "@shared/contracts/podcast"
 import { toUrlHost } from "@shared/sources"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { Hono } from "hono"

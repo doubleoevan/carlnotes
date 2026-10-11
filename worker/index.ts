@@ -8,10 +8,11 @@ export {
 } from "./attach"
 export { AttachmentValidationError, toCanonicalContentType } from "./attachContentType"
 export { extractText } from "./attachText"
-// the chat reply, one chat turn's input, and the topic search behind the chat routes
+// the chat reply, one chat turn's input, the topic search behind the chat routes, and the query embedding
 export { type ChatReplyPart, type ChatReplyStream, streamChatReply } from "./chat"
 export type { ChatTurnInput } from "./chat/chatMessages"
 export { type RankedTopicFinding, searchTopicFindings } from "./chat/retrieve"
+export { embedRetrievalQuery } from "./chat/retrieveDocs"
 export { notifyIndexNow } from "./indexNow"
 export { lookupPodcast } from "./ingest/podcast"
 export {
@@ -21,16 +22,19 @@ export {
 	toLinkPreviewUrls,
 	toNormalizedLinkPreviewUrl,
 } from "./linkPreview"
-// each user's LiteLLM key
+// each user's LiteLLM key, and the public key for a visitor
 export {
 	deleteLiteLLMKey,
 	deleteUserLiteLLMKey,
 	isUserLiteLLMKeyBudgetExhausted,
 	loadOrProvisionUserLiteLLMKey,
+	loadUserOrPublicLiteLLMKey,
 	provisionLiteLLMKey,
 	readLiteLLMKeySpend,
 	replaceUserLiteLLMKey,
 } from "./litellm"
+// the save of a topic's vector and of the public and shown flag on its podcast episodes' vectors
+export { saveTopicVectors } from "./meanVectors"
 export { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "./models"
 export { loadTopicPodcastEpisodeAudioKeys, removePodcastEpisode } from "./podcast/removePodcastEpisode"
 // whether an address is loopback, private, link-local, or reserved

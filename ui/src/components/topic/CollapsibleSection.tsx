@@ -3,8 +3,8 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { cn } from "@/lib/utils"
 
 /**
- * A titled section of the topic page that opens by default and collapses on click.
- * The topic page's four sections share it, so their headers share the same design.
+ * A titled section of a page that opens by default and collapses on click. The topic page's and the podcast episode
+ * page's sections share it, so their headers share the same design.
  */
 export function CollapsibleSection({
 	value,

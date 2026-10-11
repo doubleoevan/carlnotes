@@ -1,5 +1,5 @@
 // the editable topic fields for the edit modal, and the payload they save as
-import { MAX_ATTACHMENT_CONTEXT_CHARS, type TopicResponse } from "@shared/contracts"
+import { MAX_ATTACHMENT_CONTEXT_CHARS, type TopicResponse } from "@shared/contracts/topics"
 import type { visibilities } from "@shared/enums"
 import { DEFAULT_SOURCES, toCustomSourceOption, toDefaultSource } from "@shared/sources"
 import type { UpdateTopicPayload } from "@shared/topicPayloads"

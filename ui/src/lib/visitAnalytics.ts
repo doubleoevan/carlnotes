@@ -1,7 +1,7 @@
 // visit analytics: how many people open which page and what they play, click, and share there, with nothing stored
 // on their device and nobody identified
 import type { AnalyticsEventProperties, VisitAnalyticsEvent } from "@shared/analytics"
-import type { PodcastEpisode } from "@shared/contracts"
+import type { PodcastEpisode } from "@shared/contracts/podcast"
 import type { visibilities } from "@shared/enums"
 import { toReportedPath } from "@shared/reportedPath"
 import posthog, { type CaptureResult } from "posthog-js"

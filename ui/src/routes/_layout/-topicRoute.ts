@@ -1,9 +1,10 @@
-import type { PageHead, TopicResponse } from "@shared/contracts"
+import type { PageHead } from "@shared/contracts/pageHead"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { notFound, redirect } from "@tanstack/react-router"
 import { fetchTopicPageHead } from "@/clients/pageHeadClient"
 import { type FetchedSeason, fetchSeasonPodcastEpisodes } from "@/clients/podcastEpisodeClient"
 import { fetchTopicPage } from "@/clients/topicClient"
-import { loadOnServer, loadPageOnServer } from "@/lib/loadOnServer"
+import { loadOnServer, loadPageOnServer, readWithDegradedFallback } from "@/lib/loadOnServer"
 
 // the page head, the topic if the topic is public, and the url's season with its podcast episodes
 export type TopicRouteData = {
@@ -52,12 +53,16 @@ export function toLinkedSeason(search: object): unknown {
 	return "season" in search ? search.season : undefined
 }
 
-// the season that the url names, with its podcast episodes, or null if the url names no season or the read fails
+// the season that the url names, with its podcast episodes, or null if the url names no season or the read fails,
+// which marks the render degraded
 async function fetchLinkedSeason(topicId: string, season: unknown): Promise<FetchedSeason | null> {
 	if (typeof season !== "number" || !Number.isInteger(season)) {
 		return null
 	}
-	return fetchSeasonPodcastEpisodes(topicId, season)
-		.then((seasonPodcastEpisodes) => ({ season, seasonPodcastEpisodes }))
-		.catch(() => null)
+
+	// the season's podcast episodes, or null if their read fails
+	return readWithDegradedFallback(async () => {
+		const seasonPodcastEpisodes = await fetchSeasonPodcastEpisodes(topicId, season)
+		return { season, seasonPodcastEpisodes }
+	}, null)
 }

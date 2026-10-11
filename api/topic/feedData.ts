@@ -9,7 +9,7 @@ import { attachments, sources, topics } from "../../db/schema/topics"
 import { users } from "../../db/schema/users"
 import { memberTopicIds, subscribedTopicIds } from "../authorization"
 import { loadTopicChatMentions } from "../chat/mentions"
-import { loadLatestPodcastEpisodes } from "../podcast/helpers"
+import { loadLatestPodcastEpisodes } from "../podcast/podcastEpisodeShapes"
 import type { TopicFindingRow } from "./findings"
 import { startOfUtcMonth } from "./quotas"
 

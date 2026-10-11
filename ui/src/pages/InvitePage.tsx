@@ -1,4 +1,4 @@
-import type { InviteRejection } from "@shared/contracts"
+import type { InviteRejection } from "@shared/contracts/invites"
 import { getRouteApi, Navigate, useNavigate } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
 import { authClient } from "@/clients/authClient"

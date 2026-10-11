@@ -1,6 +1,6 @@
 // the note dialog, which creates a note or opens one. a user who can edit gets the live editor with
 // comments, and a read-only open gets the stored HTML
-import { NOTE_NAME_MAX_CHARS, type Note } from "@shared/contracts"
+import { NOTE_NAME_MAX_CHARS, type Note } from "@shared/contracts/notes"
 import type { noteVisibilities } from "@shared/enums"
 import { Maximize2, MessageSquareText, Minimize2, Pencil, X } from "lucide-react"
 import { lazy, Suspense, useEffect, useRef, useState } from "react"

@@ -1,6 +1,6 @@
 // podcast episode playback tests: toChapterIndexAt finds the chapter that is playing at a position
 import { expect, test } from "bun:test"
-import type { PodcastEpisodeChapter } from "@shared/contracts"
+import type { PodcastEpisodeChapter } from "@shared/contracts/podcast"
 import { toChapterIndexAt } from "./podcastEpisodePlayback"
 
 // three chapters that start at 0, 155, and 298 seconds

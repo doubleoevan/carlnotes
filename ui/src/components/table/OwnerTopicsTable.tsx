@@ -1,4 +1,4 @@
-import type { ActivityScan, OwnerTopic } from "@shared/contracts"
+import type { ActivityScan, OwnerTopic } from "@shared/contracts/activity"
 import { frequencies, isDailyFrequency } from "@shared/enums"
 import { ChevronDown, Globe, Lock, Mail } from "lucide-react"
 import { Fragment, useState } from "react"

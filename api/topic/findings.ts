@@ -1,6 +1,6 @@
 // the topic findings read for a page or a feed, the finding shape, and the per-finding routes
 import { zValidator } from "@hono/zod-validator"
-import type { TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
 import { reportThresholdCrossing } from "@shared/monitoring"
 import { bookmarkPayload, consumedPayload, findingFeedbackPayload, ratingPayload } from "@shared/payloads"
 import { toUrlHost } from "@shared/sources"

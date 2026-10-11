@@ -1,13 +1,7 @@
 // the typed api client for the team routes
-import {
-	type Invite,
-	type InviteSource,
-	inviteCreateResponse,
-	type TeamPageResponse,
-	type TeamSearchResult,
-	type TeamSummary,
-	type TeamsPageResponse,
-} from "@shared/contracts"
+import { type Invite, type InviteSource, inviteCreateResponse } from "@shared/contracts/invites"
+import type { TeamSearchResult } from "@shared/contracts/search"
+import type { TeamPageResponse, TeamSummary, TeamsPageResponse } from "@shared/contracts/teams"
 import type { CreateTeamPayload, UpdateTeamPayload } from "@shared/payloads"
 import { toast } from "sonner"
 import { apiClient, readApiErrorMessage } from "./apiClient"
@@ -160,14 +154,18 @@ export async function sendCreateTeamInvite(teamId: string, source: InviteSource)
 
 // upload a team's avatar. leader only, and a team with none shows its initials until one is uploaded
 export async function sendTeamAvatar(teamId: string, avatarFile: File): Promise<string | null> {
+	// send the image. a network failure fails the upload instead of throwing an error
 	const body = new FormData()
 	body.append("avatar", avatarFile)
-	const response = await fetch(`/api/teams/${teamId}/avatar`, { method: "POST", body })
+	const response = await fetch(`/api/teams/${teamId}/avatar`, { method: "POST", body }).catch(() => null)
+	if (!response) {
+		return "failed"
+	}
+
+	// an accepted image has no rejection. a rejected one names itself, so the picker can show which way it went
 	if (response.ok) {
 		return null
 	}
-
-	// the rejection names itself, so the picker can show which way it went
 	return (await readApiErrorMessage(response)) ?? "failed"
 }
 

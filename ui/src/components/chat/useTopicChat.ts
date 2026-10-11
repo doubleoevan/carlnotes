@@ -1,5 +1,5 @@
 // the chat panel's conversation state, owned by one hook so the panel components stay pure view
-import type { KeptChatAttachment, TopicToolCalls } from "@shared/contracts"
+import type { KeptChatAttachment, TopicToolCalls } from "@shared/contracts/chat"
 import type { ChatAttachment } from "@shared/payloads"
 import type { TopicDraft } from "@shared/topicPayloads"
 import { useRef, useState } from "react"

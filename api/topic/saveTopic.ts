@@ -9,7 +9,7 @@ import { db } from "../../db"
 import { invites } from "../../db/schema/invites"
 import { scans } from "../../db/schema/scans"
 import { sources, subscriptions, topics } from "../../db/schema/topics"
-import { notifyIndexNow } from "../../worker"
+import { notifyIndexNow, saveTopicVectors } from "../../worker"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { startInviteEmails } from "../invite/emails"
@@ -65,6 +65,35 @@ export function notifyIndexNowOfTopicChange({
 	// send the path that appeared and the path that went away
 	const changedPaths = [topicPath, previousTopicPath].filter((changedPath) => changedPath !== null)
 	void notifyIndexNow(changedPaths.map((changedPath) => `${appUrl()}${changedPath}`))
+}
+
+// the saved topic, and its visibility before and after the save
+type SaveTopicVectorsOnVisibilityChangeOptions = {
+	topicId: string
+	visibility: (typeof topics.$inferSelect)["visibility"]
+	previousVisibility: (typeof topics.$inferSelect)["visibility"]
+}
+
+/**
+ * Saves a topic's vectors again if a save changed its visibility. A failed save is reported and never fails the topic's
+ * save.
+ */
+export async function saveTopicVectorsOnVisibilityChange({
+	topicId,
+	visibility,
+	previousVisibility,
+}: SaveTopicVectorsOnVisibilityChangeOptions): Promise<void> {
+	if (visibility === previousVisibility) {
+		return
+	}
+	await saveTopicVectorsReportingFailure(topicId)
+}
+
+/**
+ * Saves a topic's vectors again, reporting a failed save instead of throwing it.
+ */
+export async function saveTopicVectorsReportingFailure(topicId: string): Promise<void> {
+	await saveTopicVectors(topicId).catch((error: unknown) => reportError(error, "database", { topicId }))
 }
 
 // the editor's topic fields, and whether the new topic's podcast is on. left out, the podcast starts on
@@ -301,8 +330,10 @@ export async function updateTopic(
 	// screen whatever this edit added with llm-guard, now that the rows are committed
 	startPendingSourceScreens(topicId)
 
-	// tell IndexNow if the save made the topic public or changed its url
+	// tell IndexNow if the save made the topic public or changed its url, and save its vectors again if its visibility
+	// changed
 	notifyIndexNowOfTopicChange({ savedTopic: { id: topicId, name, visibility }, previousTopic: topic })
+	await saveTopicVectorsOnVisibilityChange({ topicId, visibility, previousVisibility: topic.visibility })
 
 	// email only the newly added invites. a re-invited decliner counts as newly invited
 	startInviteEmails({ id: topicId, name, ownerId: topic.ownerId }, [

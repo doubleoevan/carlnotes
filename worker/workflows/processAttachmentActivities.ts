@@ -1,5 +1,5 @@
 // attachment processing activities: the I/O steps the workflow calls. they run in the worker process, not the sandbox
-import { ATTACHMENT_NO_TEXT_REASON, MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts"
+import { ATTACHMENT_NO_TEXT_REASON, MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts/topics"
 import { ApplicationFailure } from "@temporalio/activity"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"

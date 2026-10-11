@@ -1,6 +1,6 @@
 // the read path for a team's chat room: loading chat messages, their link preview cards, and the deduped SSE delta
 import { toAvatarVersion } from "@shared/avatars"
-import type { ChatLinkPreview, ChatRoomMessage } from "@shared/contracts"
+import type { ChatLinkPreview, ChatRoomMessage } from "@shared/contracts/chat"
 import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm"
 import { db } from "../../db"
 import { chatRoomAttachments, chatRoomMessages } from "../../db/schema/chat"

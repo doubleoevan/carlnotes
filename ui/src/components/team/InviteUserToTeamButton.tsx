@@ -1,6 +1,6 @@
 // the button on another user's profile whose menu invites the profile user to one of the user's teams,
 // removes the profile user from a team, or deletes a pending invitation
-import type { ProfileTeamStatus } from "@shared/contracts"
+import type { ProfileTeamStatus } from "@shared/contracts/profiles"
 import { Users, X } from "lucide-react"
 import { type ReactNode, useState } from "react"
 import { toast } from "sonner"

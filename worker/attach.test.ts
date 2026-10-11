@@ -1,6 +1,6 @@
 // attachment extraction tests: the content-type resolver, each extractor, and the table text
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts"
+import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts/topics"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../db/connectionPoolStub"
 import { attachments } from "../db/schema/topics"
 // the methods to test, and the ingestion, which the pool stub keeps off the database

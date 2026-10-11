@@ -1,6 +1,6 @@
 // the topic tools smoke's source sections: adding a source with its cost, the source limit, removing a source, and
 // that no source tool starts a scan
-import { MAX_TOPIC_SOURCES } from "@shared/contracts"
+import { MAX_TOPIC_SOURCES } from "@shared/contracts/topics"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { sources } from "../../db/schema/topics"

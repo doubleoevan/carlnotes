@@ -1,4 +1,4 @@
-import type { ChatRoom } from "@shared/contracts"
+import type { ChatRoom } from "@shared/contracts/chat"
 import type { ProposeTopicEditPayload, TopicDraftTeam } from "@shared/topicPayloads"
 import { useEffect } from "react"
 import { isWideScreen } from "@/lib/utils"

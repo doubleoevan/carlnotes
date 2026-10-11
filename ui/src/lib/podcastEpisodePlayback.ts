@@ -1,6 +1,6 @@
 // the playback helpers that hold no state: the chapter at a position, the next playback rate, the skip lengths, and
 // the lock screen's media session
-import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts"
+import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts/podcast"
 import { PODCAST_NAME } from "@shared/podcastEpisodes"
 
 // the playback rates, in the order that toNextPlaybackRate steps through

@@ -1,6 +1,6 @@
 // a Podcast Episode's outline. its shape and limits, the checks on an earlier outline draft, and the repairs of a last
 // outline draft
-import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@shared/contracts"
+import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@shared/contracts/podcast"
 import { z } from "zod"
 import { RejectedScriptError, toClippedText } from "./podcastEpisodeScript"
 

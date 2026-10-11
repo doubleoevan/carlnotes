@@ -1,5 +1,6 @@
 // the podcast tables: episodes, chapters, listens, and feed tokens
-import type { PodcastEpisodeScript } from "@shared/contracts"
+import type { PodcastEpisodeScript } from "@shared/contracts/podcast"
+import { sql } from "drizzle-orm"
 import {
 	boolean,
 	index,
@@ -62,6 +63,9 @@ export const podcastEpisodes = pgTable(
 		uniqueIndex("episodes_topic_season_number_unique").on(table.topicId, table.season, table.episodeNumber),
 		index("episodes_topic_published_idx").on(table.topicId, table.publishedAt),
 		index("episodes_owner_created_idx").on(table.ownerId, table.createdAt),
+		// the trigram indexes behind the episode search, which matches anywhere in the lowercased title or description
+		index("episodes_title_lower_trgm").using("gin", sql`lower(${table.title}) gin_trgm_ops`),
+		index("episodes_description_lower_trgm").using("gin", sql`lower(${table.description}) gin_trgm_ops`),
 	],
 )
 

@@ -1,5 +1,5 @@
 // which chat message the chat room composer is replying to
-import type { ChatRoomMessage } from "@shared/contracts"
+import type { ChatRoomMessage } from "@shared/contracts/chat"
 import { useEffect, useState } from "react"
 import type { ChatRoomState } from "@/components/chat/useChatRoom"
 
@@ -77,6 +77,7 @@ export function useRoomReply(chatRoom: ChatRoomState, userId: string | undefined
 
 // the newest chat message to reply to. null for anything else
 function toReplyChatMessage(chatMessages: ChatRoomMessage[], userId: string): ChatRoomMessage | null {
+	// no reply to the user's own chat message, or to one that replies to nothing
 	const newestChatMessage = chatMessages.at(-1)
 	if (
 		!newestChatMessage ||
@@ -85,6 +86,8 @@ function toReplyChatMessage(chatMessages: ChatRoomMessage[], userId: string): Ch
 	) {
 		return null
 	}
+
+	// reply only if the newest chat message answers one of the user's own
 	const isAnsweringUser = chatMessages.some(
 		(chatMessage) => chatMessage.id === newestChatMessage.replyToChatMessageId && chatMessage.authorUserId === userId,
 	)

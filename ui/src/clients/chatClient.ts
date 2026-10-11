@@ -7,7 +7,7 @@ import {
 	type TopicToolCalls,
 	toSentToolCalls,
 	toUncompactedChatTurnStart,
-} from "@shared/contracts"
+} from "@shared/contracts/chat"
 import type { ChatAttachment, ChatToolCall } from "@shared/payloads"
 import type { TopicDraft, TopicDraftTeam } from "@shared/topicPayloads"
 

@@ -1,7 +1,9 @@
 // the helpers for the topic page's reads: the gate, the scan history, the owner, team, and invite fields, and the
 // subscription dates that gate an invite topic's findings
 import { toAvatarKeyVersion } from "@shared/avatars"
-import type { Invite, ProfileIdentity, TopicGateResponse, TopicResponse, TopicScan } from "@shared/contracts"
+import type { Invite } from "@shared/contracts/invites"
+import type { ProfileIdentity } from "@shared/contracts/profiles"
+import type { TopicGateResponse, TopicResponse, TopicScan } from "@shared/contracts/topics"
 import { isDailyFrequency } from "@shared/enums"
 import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"

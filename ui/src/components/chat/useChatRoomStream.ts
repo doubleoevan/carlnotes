@@ -1,5 +1,5 @@
 // the chat room's live stream: opening it, resuming past the cursor, and reconnecting when it drops
-import type { ChatRoomMessage, ChatRoomMessagePage, RoomTopicToolCalls } from "@shared/contracts"
+import type { ChatRoomMessage, ChatRoomMessagePage, RoomTopicToolCalls } from "@shared/contracts/chat"
 import { useEffect, useRef } from "react"
 import { fetchChatRoomMessages, toChatRoomEventsUrl } from "@/clients/chatRoomClient"
 import { STALE_STREAM_MS, toReconnectStreamDelayMs } from "@/lib/streamReconnect"

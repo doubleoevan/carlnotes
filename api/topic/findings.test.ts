@@ -1,6 +1,6 @@
 // topic findings tests for filtering, the new count, and the bounded read
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import type { TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
 import * as monitoring from "@shared/monitoring"
 import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"
 import {

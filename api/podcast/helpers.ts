@@ -1,54 +1,31 @@
-// the podcast shapes: a topic page's podcast, each feed topic's latest podcast episode, a season's podcast episodes,
-// a podcast episode page, and a podcast episode as the player shows it, each limited to what the user may listen to
-import type {
-	PodcastEpisode,
-	PodcastEpisodePageResponse,
-	SeasonPodcastEpisodes,
-	TopicPodcast,
-	TopicScan,
-} from "@shared/contracts"
-import { isPodcastEpisodeRecordingConfigured, toPodcastCoverPath } from "@shared/podcastEpisodes"
-import { toPodcastEpisodePath, toPodcastFeedPath } from "@shared/seo"
-import { and, desc, eq, inArray, ne } from "drizzle-orm"
+// the podcast pages' reads: a topic page's podcast, a season's podcast episodes, and a podcast episode page, each limited
+// to what the user may listen to
+import type { PodcastEpisode, SeasonPodcastEpisodes, TopicPodcast } from "@shared/contracts/podcast"
+import type { PodcastEpisodePageResponse } from "@shared/contracts/podcastEpisodePage"
+import type { TopicScan } from "@shared/contracts/topics"
+import { isPodcastEpisodeRecordingConfigured } from "@shared/podcastEpisodes"
+import { toPodcastFeedPath } from "@shared/seo"
+import { and, desc, eq, ne } from "drizzle-orm"
 import { db } from "../../db"
-import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast"
+import { podcastEpisodes } from "../../db/schema/podcast"
 import { isAllowed } from "../authorization"
 import { attachPodcastEpisodeChapterFaviconPaths } from "../favicons"
 import { toTranscriptBlocks } from "../share/podcastFeed"
 import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
-import { loadTopicOwner, topicSubscriptionStartDates, toTeamFields } from "../topic/helpers"
+import { loadTopicOwner, toTeamFields } from "../topic/helpers"
 import { canRateTopic } from "../topic/permissions"
 import {
-	isAfterSubscriberActivation,
 	loadAccessiblePodcastEpisode,
 	loadPodcastEpisodeListenRows,
 	loadPublishedPodcastEpisode,
 	loadPublishedPodcastEpisodeRows,
-	type PodcastEpisodeListenRow,
 	type PodcastEpisodePageRef,
 	type PodcastEpisodeRow,
 	type PodcastEpisodeTopic,
-	podcastEpisodeColumns,
 	type TopicRow,
 } from "./podcastEpisodeRows"
-
-// the topic fields that the latest podcast episode loader reads: the podcast episode's topic and its access check
-type LatestPodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "ownerId" | "visibility">
-
-// the row, topic, chapter rows if any, and listen row that a podcast episode is built from
-type ToPodcastEpisodeOptions = {
-	podcastEpisodeRow: PodcastEpisodeRow
-	topic: PodcastEpisodeTopic
-	podcastEpisodeChapterRows?: (typeof podcastEpisodeChapters.$inferSelect)[]
-	podcastEpisodeListenRow?: PodcastEpisodeListenRow
-}
-
-// the podcast episode row, its topic, and the user, null for a visitor
-type LoadPodcastEpisodeOptions = {
-	podcastEpisodeRow: PodcastEpisodeRow
-	topic: PodcastEpisodeTopic
-	userId: string | null
-}
+import { loadPodcastEpisode, loadPodcastEpisodeSummaries, toPodcastEpisode } from "./podcastEpisodeShapes"
+import { loadRelatedPodcastEpisodeRows, loadTopicPodcastEpisodeRows } from "./relatedPodcastEpisodes"
 
 // the topic page's podcast, its latest podcast episode with chapters, and each scan's published podcast episode
 // by the scan's id
@@ -135,44 +112,6 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 }
 
 /**
- * Loads each topic's latest published podcast episode that the user may listen to, with its chapters, by topic id.
- */
-export async function loadLatestPodcastEpisodes(
-	topicRows: LatestPodcastEpisodeTopic[],
-	userId: string | null,
-): Promise<Map<string, PodcastEpisode>> {
-	if (!isPodcastEpisodeRecordingConfigured() || topicRows.length === 0) {
-		return new Map()
-	}
-
-	// each topic's newest published podcast episode, and when the user's subscription to each gated topic activated
-	const topicIds = topicRows.map((topicRow) => topicRow.id)
-	const [latestPodcastEpisodeRows, subscriberActivatedAtByTopicId] = await Promise.all([
-		db
-			.selectDistinctOn([podcastEpisodes.topicId], podcastEpisodeColumns)
-			.from(podcastEpisodes)
-			.where(and(inArray(podcastEpisodes.topicId, topicIds), eq(podcastEpisodes.status, "published")))
-			.orderBy(podcastEpisodes.topicId, desc(podcastEpisodes.publishedAt)),
-		topicSubscriptionStartDates(topicRows, userId),
-	])
-
-	// keep each newest podcast episode that the user may listen to, with its topic. an older episode never passes a gate
-	// that the newest episode fails, and a topic with no gate has no activation time
-	const topicById = new Map(topicRows.map((topicRow) => [topicRow.id, topicRow]))
-	const listenablePodcastEpisodes = latestPodcastEpisodeRows.flatMap((podcastEpisodeRow) => {
-		const topic = podcastEpisodeRow.topicId ? topicById.get(podcastEpisodeRow.topicId) : undefined
-		const subscriberActivatedAt = topic ? subscriberActivatedAtByTopicId.get(topic.id) : null
-		return topic && isAfterSubscriberActivation(podcastEpisodeRow.publishedAt, subscriberActivatedAt)
-			? [{ podcastEpisodeRow, topic }]
-			: []
-	})
-
-	// load each podcast episode's chapters and the user's progress, then key the episodes by topic id
-	const latestPodcastEpisodes = await loadPodcastEpisodes(listenablePodcastEpisodes, userId)
-	return new Map(latestPodcastEpisodes.map((podcastEpisode) => [podcastEpisode.topicId, podcastEpisode]))
-}
-
-/**
  * Loads a season's published podcast episodes that the user may listen to, newest first, without their chapters.
  */
 export async function loadSeasonPodcastEpisodes({
@@ -238,8 +177,10 @@ export async function loadPodcastEpisodePage(
 	}
 
 	// load the podcast episode, its script, the findings that the user may see, whether the user may rate the findings
-	// or remove the episode, the topic's byline, the owning team, and the holding teams that the user is on
-	const { podcastEpisodeRow, topic } = accessiblePodcastEpisode
+	// or remove the episode, the topic's byline, the owning team, the holding teams that the user is on, the topic's
+	// other podcast episodes, and the related ones
+	const { podcastEpisodeRow, topic, subscriberActivatedAt } = accessiblePodcastEpisode
+	const podcastEpisodeId = podcastEpisodeRow.id
 	const [
 		[podcastEpisodeScriptRow],
 		podcastEpisode,
@@ -248,11 +189,10 @@ export async function loadPodcastEpisodePage(
 		canRemovePodcastEpisode,
 		owner,
 		{ teamLink, team, roomTeams },
+		topicPodcastEpisodes,
+		relatedPodcastEpisodes,
 	] = await Promise.all([
-		db
-			.select({ script: podcastEpisodes.script })
-			.from(podcastEpisodes)
-			.where(eq(podcastEpisodes.id, podcastEpisodeRow.id)),
+		db.select({ script: podcastEpisodes.script }).from(podcastEpisodes).where(eq(podcastEpisodes.id, podcastEpisodeId)),
 		loadPodcastEpisode({ podcastEpisodeRow, topic, userId }),
 		loadTopicAccessAndFindings({ topic, userId }),
 		canRateTopic(userId, topic),
@@ -260,6 +200,10 @@ export async function loadPodcastEpisodePage(
 		// the owner and the team that the topic's byline credits
 		loadTopicOwner(topic.ownerId),
 		toTeamFields(topic.id, topic.teamId, userId),
+		// the topic's other podcast episodes and the related ones that the user may listen to, each with its description
+		// and with its chapter count for its play button
+		loadTopicPodcastEpisodeRows({ podcastEpisodeId, topic, subscriberActivatedAt }).then(loadPodcastEpisodeSummaries),
+		loadRelatedPodcastEpisodeRows({ podcastEpisodeId, topic, userId }).then(loadPodcastEpisodeSummaries),
 	])
 
 	// keep the findings that the chapters narrate, and fill the chapters' favicons
@@ -276,108 +220,7 @@ export async function loadPodcastEpisodePage(
 		canRate,
 		canRemovePodcastEpisode,
 		transcript: podcastEpisodeScriptRow?.script ? toTranscriptBlocks(podcastEpisodeScriptRow.script) : [],
-	}
-}
-
-/**
- * Loads a podcast episode as the player shows it, with its chapters and the user's progress.
- */
-export async function loadPodcastEpisode({
-	podcastEpisodeRow,
-	topic,
-	userId,
-}: LoadPodcastEpisodeOptions): Promise<PodcastEpisode> {
-	// a list with a single podcast episode returns that podcast episode
-	const [podcastEpisode] = await loadPodcastEpisodes([{ podcastEpisodeRow, topic }], userId)
-	return podcastEpisode as PodcastEpisode
-}
-
-// podcast episodes in the shape that the player shows, each with its chapters and the user's progress, in the order given
-async function loadPodcastEpisodes(
-	podcastEpisodeTopics: { podcastEpisodeRow: PodcastEpisodeRow; topic: PodcastEpisodeTopic }[],
-	userId: string | null,
-): Promise<PodcastEpisode[]> {
-	const podcastEpisodeIds = podcastEpisodeTopics.map(({ podcastEpisodeRow }) => podcastEpisodeRow.id)
-	if (podcastEpisodeIds.length === 0) {
-		return []
-	}
-
-	// every podcast episode's chapters in their order, and the user's progress through each episode
-	const [podcastEpisodeChapterRows, podcastEpisodeListenRows] = await Promise.all([
-		db
-			.select()
-			.from(podcastEpisodeChapters)
-			.where(inArray(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeIds))
-			.orderBy(podcastEpisodeChapters.position),
-		loadPodcastEpisodeListenRows(userId, podcastEpisodeIds),
-	])
-
-	// build each podcast episode from its own chapters and listen row
-	const chapterRowsByPodcastEpisodeId = Map.groupBy(
-		podcastEpisodeChapterRows,
-		(chapterRow) => chapterRow.podcastEpisodeId,
-	)
-	const listenRowByPodcastEpisodeId = new Map(
-		podcastEpisodeListenRows.map((listenRow) => [listenRow.podcastEpisodeId, listenRow]),
-	)
-	return podcastEpisodeTopics.map(({ podcastEpisodeRow, topic }) =>
-		toPodcastEpisode({
-			podcastEpisodeRow,
-			topic,
-			podcastEpisodeChapterRows: chapterRowsByPodcastEpisodeId.get(podcastEpisodeRow.id),
-			podcastEpisodeListenRow: listenRowByPodcastEpisodeId.get(podcastEpisodeRow.id),
-		}),
-	)
-}
-
-// a podcast episode as the player shows it
-function toPodcastEpisode({
-	podcastEpisodeRow,
-	topic,
-	podcastEpisodeChapterRows = [],
-	podcastEpisodeListenRow,
-}: ToPodcastEpisodeOptions): PodcastEpisode {
-	// map a removed status to failed. the loaders never return a removed podcast episode
-	const status = podcastEpisodeRow.status === "removed" ? "failed" : podcastEpisodeRow.status
-
-	// a published podcast episode has its own page
-	const pagePath = status === "published" ? toPodcastEpisodePath(topic, podcastEpisodeRow) : null
-
-	// a podcast episode has a cover once it has a title
-	const podcastCover = podcastEpisodeRow.title
-		? { kind: "episode" as const, id: podcastEpisodeRow.id, title: podcastEpisodeRow.title }
-		: null
-	return {
-		id: podcastEpisodeRow.id,
-		topicId: podcastEpisodeRow.topicId ?? "",
-		topicVisibility: topic.visibility,
-		status,
-		title: podcastEpisodeRow.title,
-		description: podcastEpisodeRow.description,
-		// assigned on publish
-		season: podcastEpisodeRow.season,
-		episodeNumber: podcastEpisodeRow.episodeNumber,
-		durationSeconds: podcastEpisodeRow.durationSeconds,
-		publishedAt: podcastEpisodeRow.publishedAt?.toISOString() ?? null,
-		pagePath,
-		// the audio and the cover
-		audioUrl: status === "published" ? `/api/episodes/${podcastEpisodeRow.id}/audio.mp3` : null,
-		coverUrl: podcastCover ? toPodcastCoverPath(podcastCover, 3000) : null,
-		smallCoverUrl: podcastCover ? toPodcastCoverPath(podcastCover, 600) : null,
-		chapters: podcastEpisodeChapterRows.map(
-			({ position, title, findingId, sourceUrl, rating, startSeconds, endSeconds }) => ({
-				position,
-				title,
-				findingId,
-				sourceUrl,
-				rating,
-				faviconPath: null,
-				startSeconds,
-				endSeconds,
-			}),
-		),
-		// the user's progress
-		progressSeconds: podcastEpisodeListenRow?.progressSeconds ?? 0,
-		isCompleted: Boolean(podcastEpisodeListenRow?.completedAt),
+		topicPodcastEpisodes,
+		relatedPodcastEpisodes,
 	}
 }

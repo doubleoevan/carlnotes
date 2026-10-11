@@ -1,5 +1,5 @@
 // the options that the team menus share. a team, a team with an action, and New team
-import type { TeamSummary } from "@shared/contracts"
+import type { TeamSummary } from "@shared/contracts/teams"
 import { Plus } from "lucide-react"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"

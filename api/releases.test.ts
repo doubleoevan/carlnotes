@@ -1,6 +1,7 @@
 // the release notes rules that hold without a database: the summary split, the webhook's signature check,
 // and what a GitHub release object becomes as a row
 import { expect, test } from "bun:test"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { isSignedByGitHub, releasesRoute, toReleaseSummary, toReleaseUpsert } from "./releases"
 
@@ -16,15 +17,6 @@ async function toSignature(body: string): Promise<string> {
 	)
 	const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body))
 	return `sha256=${Buffer.from(digest).toString("hex")}`
-}
-
-// put the GitHub webhook secret back as it was
-function restoreSecret(previousSecret: string | undefined): void {
-	if (previousSecret === undefined) {
-		delete Bun.env.GITHUB_WEBHOOK_SECRET
-		return
-	}
-	Bun.env.GITHUB_WEBHOOK_SECRET = previousSecret
 }
 
 // a published release as GitHub sends it
@@ -73,7 +65,7 @@ test("a prerelease is stored as one", () => {
 
 // an unsigned request is rejected, and so is one that arrives with no secret configured
 test("an unsigned request fails closed", async () => {
-	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
+	const restoreEnvSettings = saveEnvSettings(["GITHUB_WEBHOOK_SECRET"])
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
 		expect(await isSignedByGitHub("{}", undefined)).toBe(false)
@@ -83,13 +75,13 @@ test("an unsigned request fails closed", async () => {
 		Bun.env.GITHUB_WEBHOOK_SECRET = ""
 		expect(await isSignedByGitHub("{}", "sha256=deadbeef")).toBe(false)
 	} finally {
-		restoreSecret(previousSecret)
+		restoreEnvSettings()
 	}
 })
 
 // a form-encoded webhook is the misconfiguration most likely to reach us, so it says so
 test("a form encoded body is rejected with the reason", async () => {
-	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
+	const restoreEnvSettings = saveEnvSettings(["GITHUB_WEBHOOK_SECRET"])
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
 		const body = "payload=%7B%22action%22%3A%22published%22%7D"
@@ -103,13 +95,13 @@ test("a form encoded body is rejected with the reason", async () => {
 		expect(response.status).toBe(400)
 		expect(await response.text()).toContain("application/json")
 	} finally {
-		restoreSecret(previousSecret)
+		restoreEnvSettings()
 	}
 })
 
 // promoting a prerelease fires released instead of published, and the promoted release is still stored
 test("a promoted prerelease is stored", async () => {
-	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
+	const restoreEnvSettings = saveEnvSettings(["GITHUB_WEBHOOK_SECRET"])
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
 		const promotedText = await postWebhook({
@@ -120,13 +112,13 @@ test("a promoted prerelease is stored", async () => {
 		// the route stores the promoted release under its tag
 		expect(promotedText).toBe(JSON.stringify({ stored: "v0.4.0" }))
 	} finally {
-		restoreSecret(previousSecret)
+		restoreEnvSettings()
 	}
 })
 
 // the signature GitHub actually sends is accepted
 test("a correctly signed request passes", async () => {
-	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
+	const restoreEnvSettings = saveEnvSettings(["GITHUB_WEBHOOK_SECRET"])
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
 
@@ -142,7 +134,7 @@ test("a correctly signed request passes", async () => {
 		const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body))
 		expect(await isSignedByGitHub(body, `sha256=${Buffer.from(digest).toString("hex")}`)).toBe(true)
 	} finally {
-		restoreSecret(previousSecret)
+		restoreEnvSettings()
 	}
 })
 
@@ -168,7 +160,7 @@ async function postWebhook(payload: object): Promise<string> {
 
 // an edit to a published release is stored, so a fixed typo reaches the page without a sync
 test("an edit to a published release is stored", async () => {
-	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
+	const restoreEnvSettings = saveEnvSettings(["GITHUB_WEBHOOK_SECRET"])
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
 		// the edited release is stored under its tag
@@ -176,13 +168,13 @@ test("an edit to a published release is stored", async () => {
 			JSON.stringify({ stored: "v0.4.0" }),
 		)
 	} finally {
-		restoreSecret(previousSecret)
+		restoreEnvSettings()
 	}
 })
 
 // an edited draft is not on the page yet, and an action that changes nothing a user sees is acknowledged and dropped
 test("an edited draft and an unknown action are dropped", async () => {
-	const previousSecret = Bun.env.GITHUB_WEBHOOK_SECRET
+	const restoreEnvSettings = saveEnvSettings(["GITHUB_WEBHOOK_SECRET"])
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
 		const draftText = await postWebhook({ action: "edited", release: { ...PUBLISHED_RELEASE, draft: true } })
@@ -191,6 +183,6 @@ test("an edited draft and an unknown action are dropped", async () => {
 		const createdText = await postWebhook({ action: "created", release: PUBLISHED_RELEASE })
 		expect(createdText).toBe(JSON.stringify({ ignored: "created" }))
 	} finally {
-		restoreSecret(previousSecret)
+		restoreEnvSettings()
 	}
 })

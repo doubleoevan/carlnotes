@@ -1,6 +1,6 @@
 // reply stream tests: the text and each tool call are written as they arrive, and no tool call is written twice
 import { expect, test } from "bun:test"
-import { toChatReplyLineText } from "@shared/contracts"
+import { toChatReplyLineText } from "@shared/contracts/chat"
 import type { ChatToolCall } from "@shared/payloads"
 import { EMPTY_TOPIC_DRAFT } from "@shared/topicPayloads"
 import type { ChatReplyPart } from "../../worker"

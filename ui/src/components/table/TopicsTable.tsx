@@ -1,4 +1,5 @@
-import type { Topic, TopicResponse } from "@shared/contracts"
+import type { Topic } from "@shared/contracts/profiles"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { X } from "lucide-react"
 import { useState } from "react"
 import { fetchTopicPage, sendSubscriptionEmail } from "@/clients/topicClient"

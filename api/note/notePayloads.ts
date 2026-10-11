@@ -1,5 +1,5 @@
 // the note payloads: a page's note list, one visible note shaped for the api, and a note created on a page
-import type { Note, NotesResponse } from "@shared/contracts"
+import type { Note, NotesResponse } from "@shared/contracts/notes"
 import { and, eq, inArray, ne, or } from "drizzle-orm"
 import type { Context } from "hono"
 import { db } from "../../db"

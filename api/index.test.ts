@@ -1,105 +1,25 @@
-// tests for the rules that decide whether a request is served by the api, a client file, the ui's server, or a 404
+// tests for the rules that decide whether a request is served by the api or a 404, the health checks, the api's
+// own validation, and the content security policy
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { mkdir, mkdtemp, writeFile } from "node:fs/promises"
-import { tmpdir } from "node:os"
-import { join } from "node:path"
-import * as analytics from "@shared/analytics"
-import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@shared/contracts"
+import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@shared/contracts/chat"
 import * as monitoring from "@shared/monitoring"
-import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import server from "./index"
+import {
+	createBundleDirectory,
+	PAGE_HTML,
+	removeTestDirectories,
+	request,
+	requestWithQueryStub,
+	SELECT_ONE_ROWS,
+	withWorkingDirectory,
+} from "./indexTestFixtures"
 
-// the page the fake server entry renders the one-hashed client asset and its text, and the docs 404 page
-const PAGE_HTML = "<!doctype html><title>carl</title>"
-const HASHED_ASSET_PATH = "/assets/app-abc123.js"
-const HASHED_ASSET_TEXT = "console.log(1)"
-const DOCS_NOT_FOUND_HTML = "<!doctype html><title>docs page not found</title>"
-
-// serveStatic resolves its root against the working directory, so a test selects its bundle by moving there
-async function withWorkingDirectory<T>(directory: string, run: () => Promise<T>): Promise<T> {
-	const originalDirectory = process.cwd()
-	process.chdir(directory)
-
-	// restore on the way out however the run ends
-	try {
-		return await run()
-	} finally {
-		process.chdir(originalDirectory)
-	}
-}
-
-// a fake directory with a bundle shaped like the one build:ui writes: one hashed client asset, and a server entry
-// that responds to every page request with PAGE_HTML
-async function createBundleDirectory(): Promise<string> {
-	const root = await mkdtemp(join(tmpdir(), "carl-bundle-"))
-	await mkdir(join(root, "ui/dist/client/assets"), { recursive: true })
-	await mkdir(join(root, "ui/dist/server"), { recursive: true })
-
-	// write the asset and the server entry
-	await writeFile(join(root, `ui/dist/client${HASHED_ASSET_PATH}`), HASHED_ASSET_TEXT)
-	const serverEntryText = `export default { fetch: () => new Response(${JSON.stringify(PAGE_HTML)}, { headers: { "content-type": "text/html" } }) }`
-	await writeFile(join(root, "ui/dist/server/server.js"), serverEntryText)
-	return root
-}
-
-// the status, body, and headers the composed app returned for a request
-type ResponseSnapshot = {
-	status: number
-	body: string
-	// the headers that the tests read
-	cacheControl: string | null
-	edgeCacheControl: string | null
-	contentEncoding: string | null
-	contentType: string | null
-	location: string | null
-}
-
-// a request against the composed app, exactly as the runtime would deliver it
-async function request(path: string, requestInit: RequestInit = {}): Promise<ResponseSnapshot> {
-	const response = await server.fetch(new Request(`http://localhost:3000${path}`, requestInit))
-	return {
-		status: response.status,
-		body: await response.text(),
-		cacheControl: response.headers.get("Cache-Control"),
-		edgeCacheControl: response.headers.get("CDN-Cache-Control"),
-		contentEncoding: response.headers.get("Content-Encoding"),
-		contentType: response.headers.get("Content-Type"),
-		location: response.headers.get("Location"),
-	}
-}
-
-// what a stubbed request sends: its path, the rows that every query returns, and any request headers.
-// a toQueryRows that throws an error fails every query
-type RequestWithQueryStubOptions = {
-	path: string
-	toQueryRows: () => unknown[]
-	requestInit?: RequestInit
-}
-
-// a request sent with the pool's query swapped for a stub that counts its calls.
-// the pool's own query comes back no matter how the request ends
-async function requestWithQueryStub({
-	path,
-	toQueryRows,
-	requestInit,
-}: RequestWithQueryStubOptions): Promise<ResponseSnapshot & { queryCount: number }> {
-	const sentQueries = stubConnectionPool(toQueryRows)
-
-	// restore the pool's own query on the way out
-	try {
-		return { ...(await request(path, requestInit)), queryCount: sentQueries.length }
-	} finally {
-		restoreConnectionPool()
-	}
-}
-
-// the rows that a trivial query returns
-const SELECT_ONE_ROWS = [{ "?column?": 1 }]
-
-// put each spied console method back after each test, whether its assertions pass or not
-afterEach(() => {
+// put each spied console method back and remove the temporary directories after each test, whether its assertions
+// pass or not
+afterEach(async () => {
 	mock.restore()
+	await removeTestDirectories()
 })
 
 // the platform polls the health route to decide whether to cycle the container,
@@ -179,32 +99,6 @@ test("an unknown api path responds with a json 404, never a page", async () => {
 	expect(JSON.parse(response.body)).toEqual({ error: "not found" })
 })
 
-// a deep link is not a file, so the ui's server renders it
-test("a page path is rendered by the ui's server", async () => {
-	const bundleDirectory = await createBundleDirectory()
-	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123"))
-
-	// the browser revalidates, so a deploy reaches the user on their next request.
-	// the edge shares the page for a minute
-	expect(response.status).toBe(200)
-	expect(response.body).toBe(PAGE_HTML)
-	expect(response.cacheControl).toBe("no-cache")
-	expect(response.edgeCacheControl).toBe("max-age=60, stale-while-revalidate=60")
-})
-
-// the same url renders differently for a signed-in user, so the edge never caches their page
-test("a page rendered for a session cookie is private", async () => {
-	const bundleDirectory = await createBundleDirectory()
-	const cookieHeaders = { cookie: "__Secure-better-auth.session_token=abc" }
-	const response = await withWorkingDirectory(bundleDirectory, () =>
-		request("/topics/abc123", { headers: cookieHeaders }),
-	)
-
-	expect(response.status).toBe(200)
-	expect(response.cacheControl).toBe("private, no-cache")
-	expect(response.edgeCacheControl).toBeNull()
-})
-
 // the signed-out feed is the same for every visitor, so the edge shares it and compresses it on the way out
 test("the signed-out feed is shared at the edge and sent uncompressed, and a signed-in feed is private", async () => {
 	const acceptEncodingHeader = { "accept-encoding": "gzip, br" }
@@ -227,66 +121,12 @@ test("the signed-out feed is shared at the edge and sent uncompressed, and a sig
 	expect(signedInResponse.edgeCacheControl).toBeNull()
 })
 
-// a HEAD request for a page renders it like a GET and returns the headers without the body
-test("a HEAD request for a page path responds with the page's headers and no body", async () => {
-	const bundleDirectory = await createBundleDirectory()
-	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123", { method: "HEAD" }))
-
-	expect(response.status).toBe(200)
-	expect(response.body).toBe("")
-	expect(response.cacheControl).toBe("no-cache")
-})
-
-// a page has one url, so the same path with a trailing slash redirects to it and keeps its query
-test("a page url ending in a slash redirects permanently to the url without it", async () => {
-	const bundleDirectory = await createBundleDirectory()
-	const response = await withWorkingDirectory(bundleDirectory, () => request("/plans/?popular=2"))
-
-	expect(response.status).toBe(301)
-	expect(response.location).toBe("/plans?popular=2")
-})
-
-// a path that starts with two slashes still redirects to a path on this site, never to another host
-test("a slash redirect never leaves the site", async () => {
-	const bundleDirectory = await createBundleDirectory()
-	const locations = await withWorkingDirectory(bundleDirectory, async () =>
-		Promise.all(["//evil.com/", "//"].map(async (slashedPath) => (await request(slashedPath)).location)),
-	)
-
-	expect(locations).toEqual(["/evil.com", "/"])
-})
-
 // security.txt is for a researcher, so a search engine leaves it out of its results
 test("security.txt is served with a noindex header", async () => {
 	const response = await server.fetch(new Request("http://localhost:3000/.well-known/security.txt"))
 
 	expect(response.status).toBe(200)
 	expect(response.headers.get("X-Robots-Tag")).toBe("noindex")
-})
-
-// a hashed filename cannot change contents, so it is cached and never revalidated
-test("a hashed asset is cached immutably", async () => {
-	const bundleDirectory = await createBundleDirectory()
-	const response = await withWorkingDirectory(bundleDirectory, () => request(HASHED_ASSET_PATH))
-
-	// the asset's own bytes as javascript, cached for a year
-	expect(response.status).toBe(200)
-	expect(response.contentType).toContain("javascript")
-	expect(response.body).toBe(HASHED_ASSET_TEXT)
-	expect(response.cacheControl).toBe("public, max-age=31536000, immutable")
-})
-
-// a docs path matching no built file gets the docs site's own 404 page, never the ui's page
-test("an unknown docs path responds with the docs 404 page", async () => {
-	const bundleDirectory = await createBundleDirectory()
-	await mkdir(join(bundleDirectory, "docs/dist"), { recursive: true })
-	await writeFile(join(bundleDirectory, "docs/dist/404.html"), DOCS_NOT_FOUND_HTML)
-	const response = await withWorkingDirectory(bundleDirectory, () => request("/docs/no-such-page"))
-
-	// the docs 404 page with a 404 status
-	expect(response.status).toBe(404)
-	expect(response.body).toContain(DOCS_NOT_FOUND_HTML)
-	expect(response.body).not.toBe(PAGE_HTML)
 })
 
 // the fallback is for reads. a write to a path nothing handles is a 404, not a page
@@ -333,46 +173,6 @@ test("an oversized chat history is rejected", async () => {
 		}),
 	)
 	expect(response.status).toBe(400)
-})
-
-// dev runs the api with no bundle, where vite serves the ui and proxies /api. the 404 must say why
-test("a missing bundle responds with a 404 instead of failing", async () => {
-	const emptyDirectory = await mkdtemp(join(tmpdir(), "carl-no-bundle-"))
-	const response = await withWorkingDirectory(emptyDirectory, () => request("/"))
-
-	expect(response.status).toBe(404)
-	expect(response.body).toContain("build:ui")
-})
-
-// a known crawler's page fetch is reported by the route's shape. its asset fetch and an unknown agent's page fetch
-// report nothing
-test("a crawler's page fetch is reported, and an asset or an unknown agent is not", async () => {
-	const trackBotEventSpy = spyOn(analytics, "trackBotEvent").mockImplementation(() => {})
-	const bundleDirectory = await createBundleDirectory()
-	const googlebotHeaders = { "user-agent": "Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)" }
-	// the crawler's page and asset, then a browser's page
-	await withWorkingDirectory(bundleDirectory, async () => {
-		await request("/topics/abc123/espresso", { headers: googlebotHeaders })
-		await request(HASHED_ASSET_PATH, { headers: googlebotHeaders })
-		await request("/topics/abc123/espresso", { headers: { "user-agent": "Mozilla/5.0 (Macintosh) Chrome/120" } })
-	})
-	expect(trackBotEventSpy.mock.calls).toEqual([
-		[
-			"crawler_fetched",
-			"googlebot",
-			{ entryPoint: "web", botName: "googlebot", routeShape: "/topics/:id/:slug", status: 200 },
-		],
-	])
-})
-
-// a bundle that throws on import is a broken deploy, not a missing build, so the page asks a crawler to retry
-test("a bundle that fails to import responds 503", async () => {
-	const bundleDirectory = await createBundleDirectory()
-	await writeFile(join(bundleDirectory, "ui/dist/server/server.js"), 'throw new Error("a broken bundle")')
-	const response = await withWorkingDirectory(bundleDirectory, () => request("/topics/abc123"))
-
-	expect(response.status).toBe(503)
-	expect(response.body).not.toBe(PAGE_HTML)
 })
 
 // an oauth avatar redirects to its provider, so the policy has to allow that origin

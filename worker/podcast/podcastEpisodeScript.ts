@@ -1,6 +1,6 @@
 // a Podcast Episode's script. the segments' shape and limits, the checks on an earlier segment draft, the repairs of
 // a last segment draft, and the script built from the checked segments
-import type { PodcastEpisodeScript } from "@shared/contracts"
+import type { PodcastEpisodeScript } from "@shared/contracts/podcast"
 import {
 	type PodcastEpisodeChapterScript,
 	type PodcastEpisodeTurn,

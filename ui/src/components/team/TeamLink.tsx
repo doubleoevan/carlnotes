@@ -1,4 +1,4 @@
-import type { TeamIdentity } from "@shared/contracts"
+import type { TeamIdentity } from "@shared/contracts/teams"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { cn } from "@/lib/utils"

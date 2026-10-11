@@ -1,6 +1,7 @@
-import type { PodcastEpisode } from "@shared/contracts"
+import type { PodcastEpisode } from "@shared/contracts/podcast"
 import { Pause, Play } from "lucide-react"
 import { AnchorLink } from "@/components/common/AnchorLink"
+import { PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
 import { RemovePodcastEpisodeButton } from "@/components/podcast/RemovePodcastEpisodeDialog"
 import { toPodcastEpisodeDayAndDurationLabels, toPodcastEpisodeTitleLabel } from "@/lib/labels"
 import { DASHED_ROW_CLASS, PLAY_BUTTON_CLASS, PLAY_BUTTON_MUTED_CLASS } from "@/lib/styleClasses"
@@ -20,7 +21,7 @@ type PodcastEpisodeRowProps = {
 
 /**
  * One podcast episode's list item, with its play button, its title linked to the episode's page, its date and duration,
- * and the remove button if a remove call is passed.
+ * and the remove button if a remove call is passed. The button and the title each open the episode's tooltip.
  */
 export function PodcastEpisodeRow({
 	podcastEpisode,
@@ -45,25 +46,33 @@ export function PodcastEpisodeRow({
 				className,
 			)}
 		>
-			{/* the play button. the button's click area covers the row */}
-			<button
-				type="button"
-				aria-label={`${isPodcastEpisodePlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber}`}
-				onClick={() => void togglePodcastEpisodePlayback(podcastEpisode.id)}
-				className={cn(
-					PLAY_BUTTON_CLASS,
-					"size-11 after:absolute after:inset-0 sm:size-9",
-					isPlayButtonMuted && PLAY_BUTTON_MUTED_CLASS,
-				)}
-			>
-				{isPodcastEpisodePlaying ? <Pause className="size-4 fill-current" /> : <Play className="size-4 fill-current" />}
-			</button>
-			{/* the podcast episode's number and title, over its date and duration */}
+			{/* the play button with its tooltip. the button's click area covers the row */}
+			<PodcastEpisodeTooltip podcastEpisode={podcastEpisode}>
+				<button
+					type="button"
+					aria-label={`${isPodcastEpisodePlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber}`}
+					onClick={() => void togglePodcastEpisodePlayback(podcastEpisode.id)}
+					className={cn(
+						PLAY_BUTTON_CLASS,
+						"size-11 after:absolute after:inset-0 sm:size-9",
+						isPlayButtonMuted && PLAY_BUTTON_MUTED_CLASS,
+					)}
+				>
+					{isPodcastEpisodePlaying ? (
+						<Pause className="size-4 fill-current" />
+					) : (
+						<Play className="size-4 fill-current" />
+					)}
+				</button>
+			</PodcastEpisodeTooltip>
+			{/* the podcast episode's number and title with its tooltip, over its date and duration */}
 			<div className="min-w-0 flex-1">
 				<div className="truncate text-sm font-bold">
-					<AnchorLink href={podcastEpisodePath} className="relative z-10 hover:underline">
-						{toPodcastEpisodeTitleLabel(podcastEpisode)}
-					</AnchorLink>
+					<PodcastEpisodeTooltip podcastEpisode={podcastEpisode}>
+						<AnchorLink href={podcastEpisodePath} className="relative z-10 hover:underline">
+							{toPodcastEpisodeTitleLabel(podcastEpisode)}
+						</AnchorLink>
+					</PodcastEpisodeTooltip>
 				</div>
 				<div className="text-muted-foreground text-xs" suppressHydrationWarning>
 					{podcastEpisodeDetailLabels.join(" · ")}

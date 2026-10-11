@@ -1,4 +1,4 @@
-import type { ProfileIdentity } from "@shared/contracts"
+import type { ProfileIdentity } from "@shared/contracts/profiles"
 import type * as React from "react"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"

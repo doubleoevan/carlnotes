@@ -3,6 +3,7 @@
 import { eq, inArray } from "drizzle-orm"
 import { type DbHandle, type DbTransaction, db } from "../../db"
 import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes } from "../../db/schema/podcast"
+import { deletePodcastEpisodeVectors } from "../meanVectors"
 import {
 	deleteStoredObjects,
 	recordPendingObjectDeletions,
@@ -43,17 +44,18 @@ export async function removePodcastEpisode(podcastEpisodeId: string): Promise<bo
 }
 
 /**
- * Deletes the Podcast Episodes' listen state and marks their rows removed, with no script and no audio fields.
- * Their chapters stay, so the Findings that they narrated still count as narrated.
+ * Deletes the Podcast Episodes' listen state and vectors and marks their rows removed, with no script and no audio
+ * fields. Their chapters stay, so the Findings that they narrated still count as narrated.
  */
 export async function markPodcastEpisodesRemoved(
 	transaction: DbTransaction,
 	podcastEpisodeIds: string[],
 ): Promise<void> {
-	// delete the listens
+	// delete the listens and the vectors
 	await transaction
 		.delete(podcastEpisodeListens)
 		.where(inArray(podcastEpisodeListens.podcastEpisodeId, podcastEpisodeIds))
+	await deletePodcastEpisodeVectors(podcastEpisodeIds, transaction)
 
 	// mark each row removed, and clear its script and its audio fields
 	await transaction

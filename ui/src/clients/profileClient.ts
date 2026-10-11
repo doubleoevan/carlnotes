@@ -1,5 +1,6 @@
 // the user profile api client
-import type { ProfileResponse, ProfileTeamStatus, UserSearchResult } from "@shared/contracts"
+import type { ProfileResponse, ProfileTeamStatus } from "@shared/contracts/profiles"
+import type { UserSearchResult } from "@shared/contracts/search"
 import { apiClient } from "./apiClient"
 
 // a user's public profile by id, or null if there is no such user

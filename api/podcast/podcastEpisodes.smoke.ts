@@ -1,5 +1,6 @@
 // a live smoke test for the podcast episode routes, covering who may listen, the audio, a listener's progress,
-// the next unplayed episode, the podcast switch, the feeds, the episode pages, the covers, and removal.
+// the next unplayed episode, the podcast switch, the feeds, the episode pages, the related topics and episodes,
+// the covers, and removal.
 // run it with: doppler run -- bun api/podcast/podcastEpisodes.smoke.ts. needs Doppler secrets and no model
 import { connectionPool } from "../../db"
 import { checkGatedPodcastEpisodePages, checkPublicPodcastEpisodePage } from "./podcastEpisodePageSmokeSections"
@@ -14,6 +15,7 @@ import {
 	checkTopicPagePodcast,
 } from "./podcastEpisodeSmokeSections"
 import { checkListenerPodcastFeeds, checkPublicPodcastFeed } from "./podcastFeedSmokeSections"
+import { checkRelatedTopicsAndPodcastEpisodes } from "./relatedSmokeSections"
 
 // the smoke runs with podcast episodes on, no matter what the environment says
 Bun.env.PODCAST_SPEECH_MODEL ||= "smoke-speech-model"
@@ -28,11 +30,12 @@ try {
 	await checkListenerProgress()
 	await checkPodcastSwitch()
 
-	// the feeds, the episode pages, the covers, and removal
+	// the feeds, the episode pages, the related topics and episodes, the covers, and removal
 	await checkPublicPodcastFeed()
 	await checkListenerPodcastFeeds()
 	await checkGatedPodcastEpisodePages()
 	await checkPublicPodcastEpisodePage()
+	await checkRelatedTopicsAndPodcastEpisodes()
 	await checkPodcastEpisodeCovers(ownerPodcastEpisode)
 	await checkPodcastEpisodeRemoval()
 } finally {

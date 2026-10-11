@@ -1,5 +1,5 @@
 // the podcast episode script eval's promptfoo provider, which runs the script writer under test
-import type { PodcastEpisodeScript } from "@shared/contracts"
+import type { PodcastEpisodeScript } from "@shared/contracts/podcast"
 import { FULL_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import {

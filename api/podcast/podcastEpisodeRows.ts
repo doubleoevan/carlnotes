@@ -1,14 +1,15 @@
-// the podcast episode row reads: a topic's published episodes, one episode by its id or by its season and number,
-// and the subscription activation gate that limits each read to what the user may listen to
+// the podcast episode row reads: a topic's published episodes, one episode by its id or by its season and number, and
+// the view rules and the subscription activation gate that limit each read to what the user may listen to
 import { isPodcastEpisodeRecordingConfigured } from "@shared/podcastEpisodes"
-import { and, desc, eq, gt, inArray } from "drizzle-orm"
-import { db } from "../../db"
+import { and, desc, eq, exists, gt, inArray, or, type SQL } from "drizzle-orm"
+import { db, isPublicAndShown } from "../../db"
 import { loadUserAccess } from "../../db/quotas"
 import { podcastEpisodeListens, podcastEpisodes } from "../../db/schema/podcast"
 import { scans } from "../../db/schema/scans"
-import { topics } from "../../db/schema/topics"
+import { subscriptions, topics } from "../../db/schema/topics"
 import { isAllowed } from "../authorization"
 import { topicSubscriptionStartDate } from "../topic/helpers"
+import { toTopicRoleFilter } from "../topic/permissions"
 
 // a podcast episode's columns, without its script
 export const podcastEpisodeColumns = {
@@ -40,8 +41,13 @@ export type PodcastEpisodeListenRow = Pick<
 // the topic fields that a podcast episode's page path is built from
 export type PodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "visibility">
 
-// a podcast episode's row and its topic, for a user who may listen to the episode
-export type AccessiblePodcastEpisode = { podcastEpisodeRow: PodcastEpisodeRow; topic: TopicRow }
+// a podcast episode's row and its topic, for a user who may listen to the episode, and when the user's subscription
+// activated if a gate applies
+export type AccessiblePodcastEpisode = {
+	podcastEpisodeRow: PodcastEpisodeRow
+	topic: TopicRow
+	subscriberActivatedAt?: Date
+}
 
 /**
  * Returns whether a time passes the user's subscription activation gate. No gate passes every time, no active
@@ -95,7 +101,45 @@ export async function loadAccessiblePodcastEpisode({
 	const subscriberActivatedAt = await loadSubscriberActivatedAt(podcastEpisodeTopicRow.topic, userId)
 	const publishedOrScanStartedAt =
 		podcastEpisodeTopicRow.podcastEpisodeRow.publishedAt ?? podcastEpisodeTopicRow.scanStartedAt
-	return isAfterSubscriberActivation(publishedOrScanStartedAt, subscriberActivatedAt) ? podcastEpisodeTopicRow : null
+	if (!isAfterSubscriberActivation(publishedOrScanStartedAt, subscriberActivatedAt)) {
+		return null
+	}
+	return { ...podcastEpisodeTopicRow, subscriberActivatedAt: subscriberActivatedAt ?? undefined }
+}
+
+/**
+ * Returns the podcast episode view rules in SQL, over the episode joined with its topic. A visitor sees a public shown
+ * topic's episodes, checked by the public shown rule passed in, and a user also sees the episodes
+ * toPodcastEpisodeAccessFilter allows.
+ */
+export function toPodcastEpisodeViewFilter(
+	userId: string | null,
+	publicAndShownFilter: SQL | undefined = isPublicAndShown,
+): SQL | undefined {
+	return userId ? or(toPodcastEpisodeAccessFilter(userId), publicAndShownFilter) : publicAndShownFilter
+}
+
+/**
+ * Returns the podcast episodes a user may listen to through their account in SQL, over the episode joined with its
+ * topic: a topic's episodes if they have a role on it, and an invite topic's episodes published after their
+ * subscription to it activated.
+ */
+export function toPodcastEpisodeAccessFilter(userId: string): SQL | undefined {
+	// an active subscription of the user's to the episode's topic that activated before the episode published
+	const subscriptionBeforePublishQuery = db
+		.select({ id: subscriptions.id })
+		.from(subscriptions)
+		.where(
+			and(
+				eq(subscriptions.topicId, topics.id),
+				eq(subscriptions.subscriberUserId, userId),
+				eq(subscriptions.isActive, true),
+				gt(podcastEpisodes.publishedAt, subscriptions.createdAt),
+			),
+		)
+
+	// a topic the user has a role on, or an invite topic subscribed to before the episode published
+	return or(toTopicRoleFilter(userId), and(eq(topics.visibility, "invite"), exists(subscriptionBeforePublishQuery)))
 }
 
 // the topic, the season, and the episode number within the season that name a podcast episode page
@@ -157,16 +201,29 @@ export async function loadPublishedPodcastEpisodeRows(
 	// the activation gate keeps only the podcast episodes published after the user's subscription activated
 	// ponytail: reads every published episode of the topic.
 	// page the read in sql if a topic's episodes reach the thousands
-	const isPublishedPodcastEpisode = and(eq(podcastEpisodes.topicId, topic.id), eq(podcastEpisodes.status, "published"))
 	return db
 		.select(podcastEpisodeColumns)
 		.from(podcastEpisodes)
-		.where(
-			subscriberActivatedAt
-				? and(isPublishedPodcastEpisode, gt(podcastEpisodes.publishedAt, subscriberActivatedAt))
-				: isPublishedPodcastEpisode,
-		)
+		.where(toListenableTopicPodcastEpisodeFilter({ topicId: topic.id, subscriberActivatedAt }))
 		.orderBy(desc(podcastEpisodes.publishedAt))
+}
+
+// the topic, and when the user's subscription activated if a gate applies
+type ToListenableTopicPodcastEpisodeFilterOptions = { topicId: string; subscriberActivatedAt?: Date }
+
+/**
+ * Returns the condition that a podcast episode is one of the topic's published episodes that the user may listen to:
+ * published after their subscription activated, if a gate applies.
+ */
+export function toListenableTopicPodcastEpisodeFilter({
+	topicId,
+	subscriberActivatedAt,
+}: ToListenableTopicPodcastEpisodeFilterOptions): SQL | undefined {
+	return and(
+		eq(podcastEpisodes.topicId, topicId),
+		eq(podcastEpisodes.status, "published"),
+		subscriberActivatedAt ? gt(podcastEpisodes.publishedAt, subscriberActivatedAt) : undefined,
+	)
 }
 
 // when the user's subscription to an invite topic activated, null if the user has no active subscription,

@@ -1,5 +1,5 @@
 // the link preview card a link in a chat message gets: fetched once at post-time, stored under its url, and served from this origin
-import type { ChatLinkPreview } from "@shared/contracts"
+import type { ChatLinkPreview } from "@shared/contracts/chat"
 import { and, eq, gte, inArray } from "drizzle-orm"
 import { db } from "../../db"
 import { linkPreviews } from "../../db/schema/chat"

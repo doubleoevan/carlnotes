@@ -1,6 +1,6 @@
 // the chat room conversation state for one team topic
 import { hasAllMention, hasModelMention, isModelChatMessage } from "@shared/chatMentions"
-import type { ChatRoomMessage, ChatRoomMessagePage, RoomTopicToolCalls } from "@shared/contracts"
+import type { ChatRoomMessage, ChatRoomMessagePage, RoomTopicToolCalls } from "@shared/contracts/chat"
 import type { ChatAttachment } from "@shared/payloads"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"

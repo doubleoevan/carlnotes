@@ -1,4 +1,6 @@
-import type { ChatMention, NoteBadge, TopicInviteBadge } from "@shared/contracts"
+import type { ChatMention } from "@shared/contracts/chat"
+import type { TopicInviteBadge } from "@shared/contracts/invites"
+import type { NoteBadge } from "@shared/contracts/notes"
 import type * as React from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { CountBadge } from "@/components/common/CountBadge"

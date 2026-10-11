@@ -1,4 +1,4 @@
-import type { ActivityResponse } from "@shared/contracts"
+import type { ActivityResponse } from "@shared/contracts/activity"
 import { Activity } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useState } from "react"

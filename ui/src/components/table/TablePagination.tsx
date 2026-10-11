@@ -1,6 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react"
 import { useState } from "react"
 import { type RenderedRow, toRenderedRows } from "@/lib/renderedRows"
+import { ONE_PAGE_TABLE_CARD_CLASS, SCRIPTED_PAGINATION_TABLE_CARD_CLASS } from "@/lib/styleClasses"
 import { type SortValue, useRowSort } from "./SortableHeader"
 
 // the page-size choices offered by every paginated table
@@ -28,10 +29,11 @@ type PaginatedRows<Row> = {
 }
 
 /**
- * The current pagination state, with the page's rows and the rows the table renders.
+ * Returns the current pagination state, with the page's rows and the rows the table renders, starting at ten rows a page
+ * unless the table asks for another page size.
  */
-export function usePagination<Row>(rows: Row[]): PaginatedRows<Row> {
-	const [pageSize, setPageSize] = useState<number>(10)
+export function usePagination<Row>(rows: Row[], initialPageSize = 10): PaginatedRows<Row> {
+	const [pageSize, setPageSize] = useState<number>(initialPageSize)
 	const [page, setPage] = useState(0)
 	// clamp the page count so an updated row set or page size never strands the view on an empty page
 	const pageCount = Math.max(1, Math.ceil(rows.length / pageSize))
@@ -45,16 +47,19 @@ export function usePagination<Row>(rows: Row[]): PaginatedRows<Row> {
 	}
 }
 
+// the column a table starts sorted by, and the page size it starts at
+type UsePaginatedRowSortOptions = { initialSort?: { key: string; isDescending?: boolean }; initialPageSize?: number }
+
 /**
- * The current combined pagination and sort state for a table that uses both.
+ * Returns the current combined pagination and sort state for a table that uses both.
  */
 export function usePaginatedRowSort<Row>(
 	rows: Row[],
 	valueByKey: Record<string, (row: Row) => SortValue>,
-	initialSort?: { key: string; isDescending?: boolean },
+	{ initialSort, initialPageSize }: UsePaginatedRowSortOptions = {},
 ) {
 	const rowSort = useRowSort(rows, valueByKey, initialSort)
-	const { pageRows, renderedRows, pagination } = usePagination(rowSort.sortedRows)
+	const { pageRows, renderedRows, pagination } = usePagination(rowSort.sortedRows, initialPageSize)
 	// a sort should start at the top, so a header click returns to page one
 	const sort = {
 		...rowSort,
@@ -64,6 +69,29 @@ export function usePaginatedRowSort<Row>(
 		},
 	}
 	return { pageRows, renderedRows, sort, pagination }
+}
+
+/**
+ * Returns the card class of a table whose pagination shows only with JavaScript. A table with no more rows than the
+ * smallest page size, and every table without JavaScript, ends its card at its last row.
+ */
+export function toScriptedPaginationCardClass(rowCount: number): string {
+	return rowCount > SMALLEST_PAGE_SIZE ? SCRIPTED_PAGINATION_TABLE_CARD_CLASS : ONE_PAGE_TABLE_CARD_CLASS
+}
+
+/**
+ * The pagination footer under a table whose html holds its first NO_SCRIPT_ROW_LIMIT rows, shown only with JavaScript.
+ * A table with no more rows than the smallest page size has none.
+ */
+export function ScriptedTablePagination(pagination: PaginationState) {
+	if (pagination.rowCount <= SMALLEST_PAGE_SIZE) {
+		return null
+	}
+	return (
+		<div className="hidden scripted:block">
+			<TablePagination {...pagination} />
+		</div>
+	)
 }
 
 /**

@@ -60,7 +60,7 @@ fields, each new string a user reads, and each repeated class list. A second
 copy gets a shared helper now (code-style rule 18).
 
 Put the shared piece where every caller can import it without side effects: a
-client for an api call, `shared/contracts.ts` for a type the api and the ui both
+client for an api call, a `shared/contracts/` module for a type the api and the ui both
 read, `ui/src/lib/styleClasses.ts` for a class list. Leave apart code that only
 looks alike but means different things, and two components whose jobs differ
 enough that sharing would take a flag per difference. Fix every copy in this

@@ -1,7 +1,7 @@
 // the profile, team, join, login, and plans routes as the server renders them, with each head, 404, and noindex, and
 // the 404 for a url no page serves
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import type { PageHead } from "@shared/contracts"
+import type { PageHead } from "@shared/contracts/pageHead"
 import { SITE_TITLE } from "@shared/seo"
 import { RouterProvider } from "@tanstack/react-router"
 import { renderToString } from "react-dom/server"

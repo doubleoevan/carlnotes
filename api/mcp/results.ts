@@ -1,11 +1,11 @@
 // what the mcp finding tools return for a visitor or a user, and the pages every tool result is packed into
-import type { TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { topics } from "../../db/schema/topics"
 import {
 	isBudgetRejection,
-	loadOrProvisionUserLiteLLMKey,
+	loadUserOrPublicLiteLLMKey,
 	searchTopicFindings as rankTopicFindings,
 	SPENT_BUDGET_REJECTION,
 } from "../../worker"
@@ -110,10 +110,9 @@ export async function searchFindings(
 		return null
 	}
 
-	// bill the embedding to the user's own LiteLLM key, created first if the user has none.
-	// a visitor's embedding bills to the public key, and a visitor cannot search if the public key is unset
-	const litellmApiKey =
-		toolCaller.kind === "user" ? await loadOrProvisionUserLiteLLMKey(toolCaller.userId) : Bun.env.LITELLM_PUBLIC_KEY
+	// bill the embedding to the user's own LiteLLM key or to the public key. a visitor cannot search if the public key
+	// is unset
+	const litellmApiKey = await loadUserOrPublicLiteLLMKey(toolCaller.kind === "user" ? toolCaller.userId : null)
 	if (toolCaller.kind === "visitor" && !litellmApiKey) {
 		return { text: SEARCH_NEEDS_ACCOUNT_TEXT }
 	}

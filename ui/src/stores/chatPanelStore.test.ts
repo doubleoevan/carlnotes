@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { ChatRoom } from "@shared/contracts"
+import type { ChatRoom } from "@shared/contracts/chat"
 import {
 	type ChatPageContext,
 	isSameChat,

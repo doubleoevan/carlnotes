@@ -1,35 +1,26 @@
-import type { TeamPageResponse } from "@shared/contracts"
+import type { TeamPageResponse } from "@shared/contracts/teams"
 import { getRouteApi, useNavigate } from "@tanstack/react-router"
-import { Pencil, Plus, Share2, Trash2 } from "lucide-react"
+import { Pencil, Share2, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { authClient } from "@/clients/authClient"
 import type { TeamPageResult } from "@/clients/teamClient"
-import { fetchTeamPage, sendDeleteTeam, sendRemoveTopicFromTeam, sendTeamAvatar } from "@/clients/teamClient"
+import { fetchTeamPage, sendDeleteTeam, sendRemoveTopicFromTeam } from "@/clients/teamClient"
 import { fetchAddableTopics } from "@/clients/topicClient"
-import { AVATAR_REJECTIONS } from "@/components/avatar/AvatarUpload"
-import { TeamAvatarPicker } from "@/components/avatar/TeamAvatarPicker"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
-import { TeamAvatar } from "@/components/branding/TeamAvatar"
-import { AnchorLink } from "@/components/common/AnchorLink"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
-import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
-import { InviteMembersModal } from "@/components/invite/InviteMembersModal"
 import { NotesSection } from "@/components/note/NotesSection"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
-import { Button, buttonVariants } from "@/components/primitives/button"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
 import { ShareTeam } from "@/components/share/ShareTeam"
 import { TableCard } from "@/components/table/TableCard"
 import { TeamMembersTable } from "@/components/table/TeamMembersTable"
 import { TopicsTable } from "@/components/table/TopicsTable"
 import { AddTopicButton } from "@/components/team/AddTopicButton"
-import { EditTeamModal } from "@/components/team/EditTeamModal"
-import { JoinTeamButton } from "@/components/team/JoinTeamButton"
-import { NewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { type TeamDialog, TeamDialogs } from "@/components/team/TeamDialogs"
+import { TeamGateNotice, TeamSkeleton } from "@/components/team/TeamGate"
+import { TeamHeader } from "@/components/team/TeamHeader"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import { toCountLabel } from "@/lib/labels"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { type ChatPageContext, setChatId, setChatPanelState, useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
@@ -57,9 +48,6 @@ function toTeamChatContext(viewedTeam: TeamPageResponse | null): ChatPageContext
 		pageTeamIds: [viewedTeam.teamId],
 	}
 }
-
-// which of the team page's modals is open
-type TeamDialog = "edit" | "new-topic" | "invite"
 
 // the team route, whose loader reads the team on the server
 const teamRoute = getRouteApi("/_layout/teams/$teamId")
@@ -266,57 +254,6 @@ function useTeamPageResult(teamId: string): {
 	return { teamResult, reloadTeam }
 }
 
-// the dialogs the header opens, each mounted only while open, so its state resets every time
-function TeamDialogs({
-	teamPage,
-	addableTopics,
-	openDialog,
-	onOpenDialog,
-	onChanged,
-	onNewTopicSaved,
-}: {
-	teamPage: TeamPageResponse
-	addableTopics: { id: string; name: string }[]
-	openDialog: TeamDialog | null
-	onOpenDialog: (dialog: TeamDialog | null) => void
-	onChanged: () => void
-	// a new topic opens on its own page, where its sources are set up
-	onNewTopicSaved: (topicId: string) => void
-}) {
-	return (
-		<>
-			{/* the shared team modal, in its edit shape */}
-			{openDialog === "edit" && (
-				<EditTeamModal
-					team={{
-						teamId: teamPage.teamId,
-						name: teamPage.name,
-						description: teamPage.description,
-						avatarVersion: teamPage.avatarVersion,
-						isPublic: teamPage.isPublic,
-					}}
-					currentTopics={teamPage.topics.map((teamTopic) => ({ id: teamTopic.id, name: teamTopic.name }))}
-					userTopics={addableTopics}
-					onClose={() => onOpenDialog(null)}
-					onSaveTeam={onChanged}
-				/>
-			)}
-			{/* a new topic starts on this team, in the form or with carl, and opens on its own page */}
-			{openDialog === "new-topic" && (
-				<NewTopicDialog
-					initialTeam={{ teamId: teamPage.teamId, name: teamPage.name }}
-					onClose={() => onOpenDialog(null)}
-					onTopicSaved={async (topicId) => onNewTopicSaved(topicId)}
-				/>
-			)}
-			{/* a member's invite dialog, the team form's invite fields on their own */}
-			{openDialog === "invite" && (
-				<InviteMembersModal teamId={teamPage.teamId} teamName={teamPage.name} onClose={() => onOpenDialog(null)} />
-			)}
-		</>
-	)
-}
-
 /**
  * The team's members, and how many of them chose not to be shown.
  */
@@ -394,176 +331,5 @@ function TeamTopicsSection({
 				)}
 			</AccordionContent>
 		</AccordionItem>
-	)
-}
-
-// the page's shape while it is gated
-function TeamSkeleton({ teamName }: { teamName: string }) {
-	return (
-		<>
-			<header className="flex items-center gap-4">
-				<div aria-hidden="true" className="bg-muted size-16 shrink-0 animate-pulse rounded-full" />
-				<h1 className="font-display text-2xl">{teamName}</h1>
-			</header>
-			{/* everything below the name is decorative pulse, hidden from assistive tech as one block */}
-			<div aria-hidden="true" className="mt-6 space-y-4">
-				{TEAM_SKELETON_ROWS.map((skeletonKey) => (
-					<div key={skeletonKey} className="bg-muted h-10 w-full animate-pulse rounded" />
-				))}
-			</div>
-		</>
-	)
-}
-
-// what a user outside a private team is told, and how they get in: asking to join, or an invitation
-function TeamGateNotice({
-	teamId,
-	teamName,
-	isSignedIn,
-	hasRequestedToJoin,
-	onChanged,
-}: {
-	teamId: string
-	teamName: string
-	isSignedIn: boolean
-	hasRequestedToJoin: boolean
-	onChanged: () => void
-}) {
-	const navigate = useNavigate()
-	return (
-		<Dialog open onOpenChange={() => navigate({ to: "/" })}>
-			{/* the gate's own actions are the only ways out, so there is no ✕ */}
-			<DialogContent className="sm:max-w-md" hideCloseButton>
-				<DialogTitle>This team is invite-only</DialogTitle>
-				<DialogDescription>
-					{isSignedIn
-						? `Ask to join and a leader of ${teamName} can add you, or they can send you an invitation.`
-						: `Sign up, then ask a leader of ${teamName} for an invitation.`}
-				</DialogDescription>
-				<DialogFooter>
-					{isSignedIn && (
-						<JoinTeamButton
-							teamId={teamId}
-							teamName={teamName}
-							hasJoinRequest={hasRequestedToJoin}
-							isSignedIn
-							onChangeRequest={onChanged}
-						/>
-					)}
-					{!isSignedIn && (
-						<AnchorLink href="/signup?cta=team-gate" className={buttonVariants({ variant: "default" })}>
-							Sign up
-						</AnchorLink>
-					)}
-					<Button variant="outline" onClick={() => navigate({ to: "/" })}>
-						Back to topics
-					</Button>
-				</DialogFooter>
-			</DialogContent>
-		</Dialog>
-	)
-}
-
-// the leader's avatar picker in the header, uploading a chosen or dropped image at once
-function TeamHeaderAvatar({
-	team,
-	onChanged,
-}: {
-	team: { teamId: string; name: string; avatarVersion: string | null }
-	onChanged: () => void
-}) {
-	const [isUploading, setIsUploading] = useState(false)
-
-	// upload at once. success reloads the team with its new version, and a rejection shows a toast
-	const handleAvatarChange = async (avatarFile: File): Promise<void> => {
-		setIsUploading(true)
-		const rejection = await sendTeamAvatar(team.teamId, avatarFile).finally(() => setIsUploading(false))
-		if (rejection) {
-			toast.error(AVATAR_REJECTIONS[rejection] ?? "That image didn't reach Carl. Try again.")
-			return
-		}
-		onChanged()
-	}
-
-	return (
-		<TeamAvatarPicker
-			team={team}
-			onAvatarChange={(avatarFile) => void handleAvatarChange(avatarFile)}
-			isDisabled={isUploading}
-			className="size-16"
-		/>
-	)
-}
-
-// the decorative rows the gated page draws where its tables would be
-const TEAM_SKELETON_ROWS = ["members", "topics", "footer"]
-
-// the identity header: the avatar, the name, and a non-member's join control
-function TeamHeader({
-	teamPage,
-	isSignedIn,
-	onChanged,
-	onInviteOpen,
-	onOpenChat,
-}: {
-	teamPage: TeamPageResponse
-	isSignedIn: boolean
-	onChanged: () => void
-	onInviteOpen: () => void
-	// the chat mention badge's click opens the page's chat room panel
-	onOpenChat: () => void
-}) {
-	const isTeamLeader = teamPage.role === "leader"
-	return (
-		<header>
-			<div className="flex items-center gap-4">
-				{isTeamLeader ? (
-					<TeamHeaderAvatar team={teamPage} onChanged={onChanged} />
-				) : (
-					<TeamAvatar team={teamPage} className="size-16" />
-				)}
-				<span className="relative inline-block">
-					<h1 className="font-display text-2xl">{teamPage.name}</h1>
-					{/* the team chat room's unseen mentions. the badge's click opens the chat room, which clears it */}
-					<PageUpdateCountBadge
-						topicId={null}
-						teamId={teamPage.teamId}
-						href={`/teams/${teamPage.teamId}`}
-						onClick={(event) => {
-							// the click opens the chat room in place instead of re-navigating to the page
-							event.preventDefault()
-							onOpenChat()
-						}}
-					/>
-				</span>
-				{/* the right column, the join or add button aligned with the avatar's top */}
-				<div className="ml-auto flex flex-col items-end gap-1 self-start">
-					{teamPage.role === null && (
-						<JoinTeamButton
-							teamId={teamPage.teamId}
-							teamName={teamPage.name}
-							hasJoinRequest={teamPage.hasRequestedToJoin}
-							isSignedIn={isSignedIn}
-							onChangeRequest={onChanged}
-						/>
-					)}
-					{teamPage.role !== null && (
-						<Button className="shrink-0" onClick={onInviteOpen}>
-							<Plus className="size-4" />
-							Add Member
-						</Button>
-					)}
-				</div>
-			</div>
-			<p className="text-muted-foreground mt-2 text-sm">
-				{/* activated members alone, so a waiting request never inflates the headline */}
-				{toCountLabel(
-					teamPage.members.filter((member) => member.isActive).length + teamPage.hiddenMemberCount,
-					"member",
-				)}{" "}
-				· {toCountLabel(teamPage.topics.length, "topic")}
-			</p>
-			{teamPage.description && <p className="mt-2 text-sm">{teamPage.description}</p>}
-		</header>
 	)
 }

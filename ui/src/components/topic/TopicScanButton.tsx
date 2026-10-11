@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { ADMIN_QUOTA } from "@shared/plans"
 import { isBudgetError, SCAN_SPENT_BUDGET_LABEL, toScanFailureLabel } from "@shared/scanFailure"
 import { useNavigate } from "@tanstack/react-router"

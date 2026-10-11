@@ -1,4 +1,4 @@
-import type { ProfileIdentity } from "@shared/contracts"
+import type { ProfileIdentity } from "@shared/contracts/profiles"
 import type * as React from "react"
 import { useState } from "react"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
@@ -69,8 +69,7 @@ export function SentInvitesTable({
 }) {
 	// newest invitation first
 	const { pageRows, sort, pagination } = usePaginatedRowSort(inviteRows, sentInviteSortValues, {
-		key: "invited",
-		isDescending: true,
+		initialSort: { key: "invited", isDescending: true },
 	})
 
 	// the invitation waiting for withdraw confirmation, or null if no dialog is open

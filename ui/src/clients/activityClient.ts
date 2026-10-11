@@ -1,5 +1,6 @@
 // the typed api client for the activity routes
-import type { ActivityResponse, TopicInviteBadge } from "@shared/contracts"
+import type { ActivityResponse } from "@shared/contracts/activity"
+import type { TopicInviteBadge } from "@shared/contracts/invites"
 import { apiClient } from "./apiClient"
 
 // the activity payload: monthly spend against budget, owned topics, subscriptions, and sent invitations

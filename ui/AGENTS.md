@@ -16,17 +16,26 @@ The api serves the browser bundle and renders pages through the server build, be
   generator skips a file whose name starts with `-`, such as the loader both topic routes share or a route test.
 - `pages/` — one file per route; `components/<area>/` — components by domain area.
 - `components/primitives/` is reserved for shadcn; custom shared components go in `components/common/`.
-- `components/table/` — the page tables; `lib/` — `utils.ts` and small pure client-side helpers. `pageHead.ts` turns a
+- `components/table/` — the page tables and their cells: `TopicNameLink.tsx`, a topic's linked name with its latest
+  podcast episode's play button, and `PodcastEpisodeTitleLink.tsx`, a podcast episode's linked title with its play
+  button. `TeamMembershipRows.tsx` holds the teams table's membership and invite rows, `AdminUserRows.tsx` the admin
+  users table's row with its subtables, and `PagedTableSection.tsx` the titled section of a paged, sortable table that
+  Similar topics and both episode tables share. `usePagination` in
+  `TablePagination.tsx` starts a table at ten rows a page unless it asks for another size, and its
+  `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
+- `lib/` — `utils.ts` and small pure client-side helpers. `pageHead.ts` turns a
   `PageHead`, or a fixed title and path, into the tags a route's `head()` returns. `loadOnServer.ts` runs a route
-  loader's read on the server only, and its `loadPageOnServer` reads a page's head and page data together.
+  loader's read on the server only, and its `loadPageOnServer` reads a page's head and page data together. Its
+  `readWithDegradedFallback` returns a fallback for a failed read and marks the response, which the api answers 503.
   `requireSession.ts` is the sign-in guard the `_signedIn` layout runs before its pages load. `sessionCookie.ts` reads
   on the server whether the request brings a session cookie. `visitAnalytics.ts` starts the browser's analytics,
   reports a page view per route change, and captures the named visit events, their urls rewritten like every other
   event's. `renderedRows.ts` picks the rows a paged list renders: the page shown and the list's first fifty.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/share/` — the share menus for a topic and a team, over the options they both use.
-- `components/search/` — the header's search bar, its Filters menu, and its result rows. The topic, team, and user
-  matches are server searches sent once typing pauses, and the finding matches come from the loaded feed.
+- `components/search/` — the header's search bar, its Filters menu, and its result rows. The topic, podcast episode,
+  team, and user matches are server searches sent once typing pauses, and the finding matches come from the loaded
+  feed.
 - `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use. `AvatarUpload.tsx`
   turns a chosen file into the resized re-encode the app stores, a PNG for a PNG, WebP, or GIF source so a transparent
   logo keeps its background, and a JPEG for a photo. A file of a megabyte or more decodes at 512 pixels wide,
@@ -40,7 +49,10 @@ The api serves the browser bundle and renders pages through the server build, be
   `RemovePodcastEpisodeDialog.tsx` (the remove confirmation and the trash button that opens it),
   `PodcastEpisodePill.tsx` (the pills on findings and scan history rows), `PodcastEpisodeRow.tsx` (an episode's row in
   the episodes card and the topic roast), `PodcastEpisodeDetails.tsx` (an episode's season, title, and details line, in
-  the player card and a tooltip), `LatestPodcastEpisodePlayButton.tsx` (the play button beside a topic's note icon),
+  the player card and a tooltip), `PodcastEpisodePlayButton.tsx` (a podcast episode's play button, beside a topic's
+  note icon and in a table's title cell), `PodcastEpisodesSection.tsx` (the episode page's Other episodes and
+  Similar podcasts tables, sortable by title and description), `PodcastEpisodeTranscript.tsx` (the episode page's
+  transcript), `podcastEpisodeTestFixtures.ts` (the ui tests' episode summary),
   `PlaybackControlButtons.tsx` (the skip and playback speed buttons, in the player card and the bottom player),
   `ThemeSongNote.tsx` (the note icon whose popup credits the theme song, beside the podcast's name and episode titles,
   with the lyrics from `themeSongLyrics.ts`),
@@ -61,7 +73,8 @@ The api serves the browser bundle and renders pages through the server build, be
   wrapping them. Reach for a store only when state outlives a page or crosses the tree; `useState` and
   `providers/` cover everything else. Every store hook calls `useStoreVersion`, which reads the same version as the
   server snapshot.
-- `hooks/` — shared React hooks; `providers/` — context providers; `assets/` — images the bundler inlines.
+- `hooks/` — shared React hooks, `useTopicPagePayload.ts` among them, the topic page's payload and its poll reload;
+  `providers/` — context providers; `assets/` — images the bundler inlines.
   A component that reads the browser during render, `localStorage`, `window`, or `document`, reads it through
   `useBrowserValue` in `hooks/useBrowserValue.ts`, so the server and the first browser render agree. A page that
   starts from a server loader's data loads in the browser through `useLoadInBrowser` in the same file.

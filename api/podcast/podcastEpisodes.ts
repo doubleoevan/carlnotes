@@ -20,7 +20,7 @@ import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share
 import { updateTopicFields } from "../tool/topicTools"
 import { toTopicGateResponse } from "../topic/helpers"
 import { canRateTopic } from "../topic/permissions"
-import { loadPodcastEpisode, loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
+import { loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
 import {
 	toPodcastEpisodeAudioResponse,
 	toPodcastEpisodeChaptersResponse,
@@ -32,6 +32,7 @@ import {
 	loadPublishedPodcastEpisode,
 	loadPublishedPodcastEpisodeById,
 } from "./podcastEpisodeRows"
+import { loadPodcastEpisode } from "./podcastEpisodeShapes"
 
 // which season's podcast episodes to list
 const seasonPodcastEpisodesQuery = z.object({ season: z.coerce.number().int() })

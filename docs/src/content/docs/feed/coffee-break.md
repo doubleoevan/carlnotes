@@ -30,9 +30,15 @@ along: the finding on air is highlighted, and each finding the episode covers is
 chapter. Tap a tag or a chapter's title to jump there, and tap the rest of a chapter's row to open its finding.
 
 The home feed plays it too. The play button beside a topic's name plays its latest episode, and hovering it names
-the episode, its date, and its length. The same button sits beside a topic's name in every list of topics: on a
-profile, under your teams, on a team's page, and on your activity page. The chapter tags show on the feed's findings and inside every finding's note,
-and a topic's **Topic roast** opens with its latest episode, ready to play.
+the episode, its date, its length, and what it covers. Hovering an episode's title does the same. The same button sits
+beside a topic's name in every list of topics: on a profile, under your teams, on a team's page, on your activity page,
+and in a topic's **Similar topics**, the topics most like it by what they found and the tags they share. Similar topics
+lists public topics, and once you sign in, your own topics, your teams' topics, and the invite topics you follow.
+The chapter tags show on the feed's findings and inside every finding's note, and a topic's **Topic roast** opens with
+its latest episode, ready to play.
+
+To find an episode, type in the search bar. **Podcasts** lists the episodes whose title or description matches, then
+the episodes about what you typed, even if no title says it.
 
 ![The Coffee Break player on a topic page: an episode paused on its first chapter, with the skip, speed, and
 Subscribe buttons beside it and the small player docked at the bottom](../../../assets/screenshots/podcast-player.png)
@@ -77,9 +83,12 @@ A public topic's feed is public. A private or invite topic's feed link is yours 
 listen to the topic's episodes, so keep it to yourself. **Reset my link** makes a new one and ends the old one.
 Unfollow the topic and your link stops working.
 
-Each episode also has its own page with the full transcript. On a public topic, that page is what a
-search engine reads. Its **⋮** actions menu adds the topic to a team, shares the topic, reports an issue with it,
-or adds CarlNotes to your AI.
+Each episode also has its own page with the full transcript. On a public topic, that page is what a search engine reads.
+Every episode page ends with **Other episodes**, the topic's other episodes, and **Similar podcasts**, the episodes of
+other topics most like it, each with its play button and its description. Like Similar topics, Similar podcasts lists
+public topics' episodes, and once you sign in, the episodes of the topics you can open. Click a column's heading to sort
+the table by it. The page's **⋮** actions menu adds the topic to a team, shares the topic, reports an issue with it, or
+adds CarlNotes to your AI.
 
 ![An episode's own page: its cover, title, and description above the player and the table of
 chapters](../../../assets/screenshots/podcast-episode-page.png)

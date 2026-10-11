@@ -1,4 +1,4 @@
-import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts"
+import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts/podcast"
 import { Headphones, Pause, Play } from "lucide-react"
 import { cn } from "@/lib/utils"
 import {

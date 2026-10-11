@@ -4,20 +4,27 @@ Drizzle + Neon Postgres, and the Redis store.
 
 - `schema/` — the schema, one file per domain: `users.ts` (users and Better Auth's tables), `topics.ts`, `scans.ts`
   (scans, resources, findings, and the finding markers), `teams.ts`, `invites.ts`, `chat.ts`, `notes.ts`, `podcast.ts`,
-  `billing.ts`, `releases.ts`, `storage.ts` (favicons and the pending object deletions), and `columns.ts` (the pgEnums
-  and the column helpers they share). A table references another file's table through a lazy `references`, so the
-  files import each other freely. `index.ts` spreads every file into the one `schema` object the client is bound to.
+  `billing.ts`, `releases.ts`, `storage.ts` (favicons and the pending object deletions), `vectors.ts` (the topic and
+  podcast episode vectors that rank related topics, related podcast episodes, and the podcast episode search, each table
+  kept apart from the row it ranks so a read of a whole row never includes a vector, and each table's public and shown
+  flag with its partial HNSW index), and `columns.ts` (the pgEnums and the column helpers they share). A table
+  references another file's table through a lazy `references`, so the files import each other freely. `index.ts` spreads
+  every file into the one `schema` object the client is bound to.
 - `index.ts` — the pooled client, the connection pool's counts, `sizeConnectionPool`, `isUniqueViolation`, and the
-  `DbTransaction` and `DbHandle` types that a function sharing its caller's transaction takes.
-  Each long-running process, the api, the Temporal worker, the sweep, and the budget reset, awaits
-  `sizeConnectionPool` at startup. It reads `SHOW max_connections` and sizes the pool to 0.9 times that value, the
-  share Neon's connection pooler holds on its server side for one user and database, divided by the pool count, how
-  many processes can hold a pool at once: 8 by default, or `DATABASE_POOL_COUNT`. `DATABASE_POOL_MAX` sets the size
-  itself instead. Until the read completes, and if it fails, the pool holds 15 connections, and a failed read is
-  reported. A process with no `DATABASE_URL`, such as a test, keeps the default and reads nothing. The size is logged
-  at startup. A request waiting for a connection fails after `DATABASE_CONNECT_TIMEOUT_MS`, 10 seconds by default. A
-  short-lived job keeps the default.
-  `isUniqueViolation` is true if an error is Postgres rejecting a duplicate key.
+  `DbTransaction` and `DbHandle` types that a function sharing its caller's transaction takes. Each long-running
+  process, the api, the Temporal worker, the sweep, and the budget reset, awaits `sizeConnectionPool` at startup. It
+  reads `SHOW max_connections` and sizes the pool to 0.9 times that value, the share Neon's connection pooler holds on
+  its server side for one user and database, divided by the pool count, how many processes can hold a pool at once: 8 by
+  default, or `DATABASE_POOL_COUNT`. `DATABASE_POOL_MAX` sets the size itself instead. Until the read completes, and if
+  it fails, the pool holds 15 connections, and a failed read is reported. A process with no `DATABASE_URL`, such as a
+  test, keeps the default and reads nothing. The size is logged at startup. A request waiting for a connection fails
+  after `DATABASE_CONNECT_TIMEOUT_MS`, 10 seconds by default. A short-lived job keeps the default. `isUniqueViolation`
+  is true if an error is Postgres rejecting a duplicate key. `runWithIterativeIndexScan` runs a ranked read in a
+  transaction that sets pgvector's `hnsw.iterative_scan` to `strict_order`, so an HNSW scan continues past its first
+  candidates until the filters after it fill the read's limit. `isFindingShown` keeps a finding no user rated down,
+  `hasEnoughFindingsToList` a topic with enough of those findings to be listed, `isPublicAndShown` a public topic that
+  has them, and `isCurrentModelEmbedding` a resource the current embedding model embedded. The api and the worker both
+  apply them.
 - `redis.ts` — the Redis store, on Bun's built-in client from `REDIS_URL`.
   `runWithRedis` runs one operation and returns null on any failure,
   and `cacheJson` returns a cached value, or loads the value and caches it.

@@ -1,5 +1,5 @@
 // the chat room panel: one shared conversation streaming live, clearable by a leader alone
-import { CHAT_ROOM_ATTACHMENT_LIMIT } from "@shared/contracts"
+import { CHAT_ROOM_ATTACHMENT_LIMIT } from "@shared/contracts/chat"
 import { X } from "lucide-react"
 import { lazy, Suspense, useEffect, useState } from "react"
 import { authClient } from "@/clients/authClient"

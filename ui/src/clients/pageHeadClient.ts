@@ -1,5 +1,5 @@
 // the api client for the page head of a topic, profile, team, or join page
-import type { PageHead } from "@shared/contracts"
+import type { PageHead } from "@shared/contracts/pageHead"
 import { apiClient } from "./apiClient"
 import type { PodcastEpisodePageParams } from "./podcastEpisodeClient"
 

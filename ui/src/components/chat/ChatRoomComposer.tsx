@@ -5,7 +5,7 @@ import {
 	CHAT_ROOM_MESSAGE_MAX_CHARS,
 	type ChatRoomMessage,
 	clipAttachmentText,
-} from "@shared/contracts"
+} from "@shared/contracts/chat"
 import type { ChatAttachment } from "@shared/payloads"
 import { ArrowUp, Paperclip } from "lucide-react"
 import { useEffect, useRef, useState } from "react"

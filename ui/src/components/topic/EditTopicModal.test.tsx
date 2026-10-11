@@ -1,6 +1,6 @@
 // podcast switch tests: what the edit topic modal's podcast switch says for each state of the podcast
 import { expect, test } from "bun:test"
-import type { TopicPodcast } from "@shared/contracts"
+import type { TopicPodcast } from "@shared/contracts/podcast"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PodcastSwitch } from "./EditTopicModal"
 

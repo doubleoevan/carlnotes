@@ -16,8 +16,8 @@ type PageControl = {
 
 // the row's accessible name, the current page from 1, and how many pages the list has.
 // a row of buttons takes the callback that opens a page, and a row of links takes the callback that renders one link.
-// a row of links also takes how many rows the list has
-type PaginationProps = { ariaLabel: string; pageNumber: number; pageCount: number } & (
+// a row of links also takes how many rows the list has. a className replaces the row's spacing
+type PaginationProps = { ariaLabel: string; pageNumber: number; pageCount: number; className?: string } & (
 	| { onOpenPage: (pageNumber: number) => void; renderPageLink?: undefined; rowCount?: undefined }
 	| { renderPageLink: (pageControl: PageControl) => ReactNode; rowCount: number; onOpenPage?: undefined }
 )
@@ -33,6 +33,7 @@ export function Pagination({
 	onOpenPage,
 	renderPageLink,
 	rowCount,
+	className,
 }: PaginationProps) {
 	// save where the clicked control sits on screen. the new page's rows change the height above the control
 	const clickedControlRef = useRef<{ control: HTMLElement; top: number; linkedPageNumber: number } | null>(null)
@@ -106,7 +107,7 @@ export function Pagination({
 	return (
 		<nav
 			aria-label={ariaLabel}
-			className={cn("justify-center py-2", isPastNoScriptRowLimit ? "flex" : "hidden scripted:flex")}
+			className={cn("justify-center pt-2", isPastNoScriptRowLimit ? "flex" : "hidden scripted:flex", className)}
 		>
 			<ul className="flex flex-wrap items-center justify-center gap-1">
 				{/* the previous arrow */}

@@ -1,4 +1,5 @@
-import type { PodcastEpisode, PodcastEpisodeChapter, TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
+import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts/podcast"
 import { toHostWithoutWww } from "@shared/seo"
 import { Pause, Play } from "lucide-react"
 import { useState } from "react"
@@ -7,8 +8,8 @@ import { HostFavicon } from "@/components/common/HostFavicon"
 import { type ChapterTopicFeed, ChapterTopicFindingNote } from "@/components/podcast/PodcastEpisodeChapters"
 import { Popover } from "@/components/primitives/popover"
 import { TableCard } from "@/components/table/TableCard"
-import { SMALLEST_PAGE_SIZE, TablePagination, usePagination } from "@/components/table/TablePagination"
-import { TopicFindingSummary } from "@/components/topic/TopicResource"
+import { ScriptedTablePagination, usePagination } from "@/components/table/TablePagination"
+import { TopicFindingSummary } from "@/components/topic/TopicFindingSummary"
 import { toClockLabel, toCountLabel } from "@/lib/labels"
 import {
 	PLAY_BUTTON_CLASS,
@@ -16,6 +17,7 @@ import {
 	TABLE_CLASS,
 	TABLE_HEAD_CLASS,
 	TABLE_SCROLL_CLASS,
+	TABLE_WIDE_FIRST_COLUMN_CLASS,
 } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import {
@@ -27,10 +29,6 @@ import {
 // a chapter's source link, in muted text
 const CHAPTER_SOURCE_CLASS =
 	"text-muted-foreground hover:text-foreground inline-flex items-center gap-1.5 text-xs hover:underline"
-
-// the chapter column, wide enough for a play button beside a title.
-// the important modifier overrides the table's own width for its first column
-const CHAPTER_COLUMN_CLASS = "min-w-64! max-w-64!"
 
 // the podcast episode, and what its chapters' topic finding notes read
 type PodcastEpisodeChaptersTableProps = { podcastEpisode: PodcastEpisode; chapterTopicFeed: ChapterTopicFeed }
@@ -58,7 +56,7 @@ export function PodcastEpisodeChaptersTable({ podcastEpisode, chapterTopicFeed }
 					{/* the column headings */}
 					<thead className={TABLE_HEAD_CLASS}>
 						<tr>
-							<th className={cn(CHAPTER_COLUMN_CLASS, "py-2 pr-4 font-normal")}>Chapter</th>
+							<th className={cn(TABLE_WIDE_FIRST_COLUMN_CLASS, "py-2 pr-4 font-normal")}>Chapter</th>
 							<th className="py-2 pr-4 font-normal">Starts</th>
 							<th className="py-2 pr-4 font-normal">Length</th>
 							<th className="py-2 font-normal">Topic Finding</th>
@@ -95,11 +93,7 @@ export function PodcastEpisodeChaptersTable({ podcastEpisode, chapterTopicFeed }
 				</table>
 			</div>
 			{/* the pagination, shown only with JavaScript */}
-			{chapters.length > SMALLEST_PAGE_SIZE && (
-				<div className="hidden scripted:block">
-					<TablePagination {...pagination} />
-				</div>
-			)}
+			<ScriptedTablePagination {...pagination} />
 		</TableCard>
 	)
 }
@@ -133,7 +127,7 @@ function PodcastEpisodeChapterRow({
 	const [isNoteOpen, setIsNoteOpen] = useState(false)
 	const chapterCells = (
 		<>
-			<td className={cn(CHAPTER_COLUMN_CLASS, "py-2 pr-4 font-semibold")}>
+			<td className={cn(TABLE_WIDE_FIRST_COLUMN_CLASS, "py-2 pr-4 font-semibold")}>
 				<div className="flex items-center gap-3">
 					{/* the play button, in the primary color on the player's chapter. the button keeps its click from the row */}
 					<button

@@ -2,6 +2,7 @@
 import { extname, resolve } from "node:path"
 import { reportError, startMonitoring } from "@shared/monitoring"
 import { startRuntimeGauges } from "@shared/runtimeGauges"
+import { DEGRADED_RENDER_HEADER } from "@shared/seo"
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins"
 import { sql } from "drizzle-orm"
 import type { Context } from "hono"
@@ -36,6 +37,9 @@ const UI_CLIENT_ROOT = "./ui/dist/client"
 
 // where build:ui writes the ui's server entry, which renders every page no other route serves
 const UI_SERVER_ENTRY = "ui/dist/server/server.js"
+
+// how long a crawler waits before it retries a page rendered without a read it needs
+const DEGRADED_RENDER_RETRY_AFTER_SECONDS = 60
 
 // how long the deep health check waits for the database before it responds 503
 const DEEP_HEALTH_TIMEOUT_MS = 2000
@@ -157,7 +161,8 @@ function setDocsCacheControl(_path: string, context: Context): void {
 	context.header("Cache-Control", isHashedAsset ? "public, max-age=31536000, immutable" : "no-cache")
 }
 
-// render a page with the ui's server. a missing bundle is a 404, and a bundle that fails to import is a 503
+// render a page with the ui's server. a missing bundle is a 404, and a bundle that fails to import or a page rendered
+// without a read it needs is a 503
 async function renderUiPage(request: Request): Promise<Response> {
 	// a missing bundle is a 404 that names build:ui
 	const uiServerEntryPath = resolve(UI_SERVER_ENTRY)
@@ -181,7 +186,24 @@ async function renderUiPage(request: Request): Promise<Response> {
 
 	// render the page. the browser revalidates every time, and the edge shares a signed-out page for a minute
 	const page = await uiServer.fetch(request)
-	const response = new Response(page.body, { status: page.status, statusText: page.statusText, headers: page.headers })
+	const pageHeaders = new Headers(page.headers)
+
+	// a page rendered without a read it needs returns a 503 with a Retry-After header
+	const isDegradedRender = pageHeaders.has(DEGRADED_RENDER_HEADER)
+	pageHeaders.delete(DEGRADED_RENDER_HEADER)
+	if (isDegradedRender) {
+		pageHeaders.set("Retry-After", String(DEGRADED_RENDER_RETRY_AFTER_SECONDS))
+		reportError(new Error("a page rendered without a read it needs"), "page-render", {
+			path: new URL(request.url).pathname,
+		})
+	}
+
+	// the response, with its cache headers
+	const response = new Response(page.body, {
+		status: isDegradedRender ? 503 : page.status,
+		statusText: isDegradedRender ? "Service Unavailable" : page.statusText,
+		headers: pageHeaders,
+	})
 	setRenderedCacheHeaders(request, response)
 	return response
 }

@@ -1,6 +1,8 @@
 // the database helpers for the team api
 import { toAvatarKeyVersion } from "@shared/avatars"
-import type { OwnerTopic, ProfileTeamStatus, TeamSummary } from "@shared/contracts"
+import type { OwnerTopic } from "@shared/contracts/activity"
+import type { ProfileTeamStatus } from "@shared/contracts/profiles"
+import type { TeamSummary } from "@shared/contracts/teams"
 import { and, count, eq, gt, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { db } from "../../db"

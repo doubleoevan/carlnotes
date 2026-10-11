@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { ChevronRight, Download, ExternalLink, Paperclip, X } from "lucide-react"
 import type * as React from "react"
 import { useRef, useState } from "react"

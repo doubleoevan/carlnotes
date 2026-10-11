@@ -1,6 +1,6 @@
 // the chat room's shared attachment files: screening and reading an upload before anything stores,
 // the write beside its chat message
-import { CHAT_ROOM_ATTACHMENT_LIMIT } from "@shared/contracts"
+import { CHAT_ROOM_ATTACHMENT_LIMIT } from "@shared/contracts/chat"
 import type { ChatAttachment } from "@shared/payloads"
 import { and, count, eq, type SQL } from "drizzle-orm"
 import { type DbTransaction, db } from "../../db"

@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { toBrowserPlatform } from "@shared/userAgent"
 import { Copy, Podcast } from "lucide-react"
 import { useEffect, useState } from "react"

@@ -1,6 +1,7 @@
 // notifyIndexNow sends nothing without a key, posts once with the key file's address,
 // and logs a failure instead of throwing an error
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { notifyIndexNow } from "./indexNow"
 
 // the topic page every test reports
@@ -8,7 +9,7 @@ const TOPIC_PAGE_URL = "https://carlnotes.com/topics/t1/agents"
 
 // the real fetch and key to put back after every test, and the requests the recorder keeps
 const realFetch = globalThis.fetch
-const realIndexNowKey = Bun.env.INDEXNOW_KEY
+const restoreEnvSettings = saveEnvSettings(["INDEXNOW_KEY"])
 const recordedRequests: { url: string; body: unknown }[] = []
 
 // swap fetch for a recorder that keeps each request's url and parsed body, and responds with the given status
@@ -27,11 +28,7 @@ afterEach(() => {
 	recordedRequests.length = 0
 
 	// restore the real key, or remove the key if there was none
-	if (realIndexNowKey === undefined) {
-		delete Bun.env.INDEXNOW_KEY
-	} else {
-		Bun.env.INDEXNOW_KEY = realIndexNowKey
-	}
+	restoreEnvSettings()
 })
 
 // with no key there is nothing to prove ownership with, so nothing is sent

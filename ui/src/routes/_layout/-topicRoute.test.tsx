@@ -1,10 +1,15 @@
 // the topic routes as the server renders them, with the head, the findings, the 404, the slug redirects, an invite
 // topic's noindex, and an unreachable api
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import type { PageHead, TopicFinding, TopicResponse } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
+import type { PageHead } from "@shared/contracts/pageHead"
+import type { PodcastEpisodeSummary } from "@shared/contracts/podcast"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { SITE_TITLE } from "@shared/seo"
 import { RouterProvider } from "@tanstack/react-router"
 import { renderToString } from "react-dom/server"
+import { toPodcastEpisodeSummaryFixture } from "@/components/podcast/podcastEpisodeTestFixtures"
+import type { RelatedTopic } from "@/components/topic/RelatedTopicsSection"
 import { loadRouter } from "../-loadRouter"
 
 // the fixture topic's id and current slug, the invite topic's id and slug, and an id the api does not have
@@ -13,9 +18,6 @@ const TOPIC_SLUG = "agents"
 const INVITE_TOPIC_ID = "7c1e4b2a-3d5f-4e6a-9b8c-0d1e2f3a4b5c"
 const INVITE_TOPIC_SLUG = "night-shift"
 const MISSING_TOPIC_ID = "00000000-0000-4000-8000-000000000000"
-
-// the id of a topic listed under More topics
-const MORE_TOPIC_ID = "9f3d2c1b-5a6e-4d7f-8b9c-0a1b2c3d4e5f"
 
 // the topic's page head, as the api returns it
 const TOPIC_HEAD = {
@@ -107,7 +109,7 @@ const TOPIC = {
 	isDailyFrequencyPaused: false,
 	featureOrder: null,
 	featuredTopics: null,
-	moreTopics: [{ id: MORE_TOPIC_ID, name: "Robot vacuums" }],
+	relatedTopics: [],
 	podcast: null,
 	latestPodcastEpisode: null,
 } satisfies TopicResponse
@@ -192,11 +194,6 @@ test("the public topic route renders its head and its findings on the server", a
 	expect(html).not.toContain("opengraph-image.png")
 	expect(html).toContain('<meta name="twitter:card" content="summary_large_image"')
 	expect(html).toContain('<script type="application/ld+json">{"@type":"CreativeWork"}</script>')
-
-	// the page ends with More topics, each a plain link a reader without JavaScript can follow
-	expect(html).toMatch(
-		new RegExp(`More topics[\\s\\S]*<a [^>]*href="/topics/${MORE_TOPIC_ID}/robot-vacuums"[^>]*>Robot vacuums</a>`),
-	)
 })
 
 // a long scan note renders whole on the server with no Read more
@@ -207,10 +204,49 @@ test("a long scan note renders whole on the server with no Read more", async () 
 	expect(html).not.toContain("Read more")
 })
 
-// a topic page with no more topics has no More topics section
-test("a topic with no more topics renders no More topics section", async () => {
-	const html = await renderTopicPage({ topicHead: TOPIC_HEAD, topic: { ...TOPIC, moreTopics: [] } })
-	expect(html).not.toContain("More topics")
+// a related topic, with its latest podcast episode or none
+function toRelatedTopic(
+	relatedTopicNumber: number,
+	latestPodcastEpisode: PodcastEpisodeSummary | null = null,
+): RelatedTopic {
+	return { id: `related-${relatedTopicNumber}`, name: `Related topic ${relatedTopicNumber}`, latestPodcastEpisode }
+}
+
+// a published podcast episode of a related topic, for its play button
+const RELATED_PODCAST_EPISODE = toPodcastEpisodeSummaryFixture({
+	id: "related-episode-1",
+	pagePath: "/topics/related-1/related-topic-1/episodes/2026/7",
+})
+
+// the related topics table renders on the server, each name linked, with a play button only beside an episode
+test("related topics render on the server, with a play button only for a topic with an episode", async () => {
+	const relatedTopics = [toRelatedTopic(1, RELATED_PODCAST_EPISODE), toRelatedTopic(2), toRelatedTopic(3)]
+	const html = await renderTopicPage({ topicHead: TOPIC_HEAD, topic: { ...TOPIC, relatedTopics } })
+
+	// the table, each topic's linked name, and one play button
+	expect(html).toContain("Similar topics")
+	for (const relatedTopic of relatedTopics) {
+		expect(html).toMatch(new RegExp(`<a [^>]*href="/topics/${relatedTopic.id}/[^"]*"[^>]*>${relatedTopic.name}</a>`))
+	}
+	expect(html.match(/aria-label="Play episode 7"/g)).toHaveLength(1)
+})
+
+// sixty related topics put fifty rows in the html, five shown once JavaScript runs
+test("sixty related topics render fifty rows, five visible with JavaScript", async () => {
+	const relatedTopics = Array.from({ length: 60 }, (_, i) => toRelatedTopic(i + 1))
+	const html = await renderTopicPage({ topicHead: TOPIC_HEAD, topic: { ...TOPIC, relatedTopics } })
+
+	// the fiftieth topic is linked and the fifty-first is left out, and the sixth row is hidden with JavaScript
+	expect(html).toContain(">Related topic 50</a>")
+	expect(html).not.toContain(">Related topic 51</a>")
+	expect(html).toMatch(/<tr class="[^"]*scripted:hidden[^"]*"><td[^>]*>[\s\S]*?>Related topic 6<\/a>/)
+	expect(html).not.toMatch(/<tr class="[^"]*scripted:hidden[^"]*"><td[^>]*>(?:(?!<\/tr>)[\s\S])*?>Related topic 5<\/a>/)
+})
+
+// a topic page with no related topics has no Similar topics section
+test("a topic with no related topics renders no Similar topics section", async () => {
+	const html = await renderTopicPage({ topicHead: TOPIC_HEAD, topic: TOPIC })
+	expect(html).not.toContain("Similar topics")
 })
 
 // markup in the head's title, card title, and structured data renders escaped, so it opens no script tag

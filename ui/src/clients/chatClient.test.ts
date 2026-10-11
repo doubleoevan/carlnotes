@@ -1,7 +1,7 @@
 // how the stream reader ends a chat turn and which lines it takes as tool calls. a stream read to the end completes
 // unless the server closed it with the failed line
 import { expect, test } from "bun:test"
-import { type TopicToolCalls, toChatReplyLineText } from "@shared/contracts"
+import { type TopicToolCalls, toChatReplyLineText } from "@shared/contracts/chat"
 import { sendChatTurn } from "./chatClient"
 
 // a mock stream response built from the given chunks, which need not line up with the lines inside them

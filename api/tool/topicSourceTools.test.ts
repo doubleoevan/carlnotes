@@ -1,6 +1,6 @@
 // topic source tool tests for the cost delta, the source input and match, and the source limit
 import { expect, test } from "bun:test"
-import { MAX_TOPIC_SOURCES } from "@shared/contracts"
+import { MAX_TOPIC_SOURCES } from "@shared/contracts/topics"
 import { SCAN_COST_CENTS } from "@shared/plans"
 import { isSameTopicSource, toNewTopicSource, toTopicSourceCostDelta } from "./topicSourceTools"
 

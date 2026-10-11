@@ -14,10 +14,9 @@ import {
 	CHAT_ROOM_MESSAGE_MAX_CHARS,
 	CHAT_VIDEO_DATA_CHARS,
 	FLAG_REASON_MAX_CHARS,
-	inviteSources,
-	NOTE_NAME_MAX_CHARS,
-	NOTE_UPDATE_MAX_CHARS,
-} from "./contracts"
+} from "./contracts/chat"
+import { inviteSources } from "./contracts/invites"
+import { NOTE_NAME_MAX_CHARS, NOTE_UPDATE_MAX_CHARS } from "./contracts/notes"
 import { inviteAccesses, noteVisibilities, podcastEpisodeSpeakers, ratings, teamRoles } from "./enums"
 import { topicDraftPayload } from "./topicPayloads"
 

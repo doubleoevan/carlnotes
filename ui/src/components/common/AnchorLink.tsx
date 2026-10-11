@@ -1,4 +1,4 @@
-import { toCtaTag } from "@shared/contracts"
+import { toCtaTag } from "@shared/contracts/signupCta"
 import { defaultParseSearch, Link } from "@tanstack/react-router"
 import type * as React from "react"
 import { SITE_URL } from "@/lib/pageHead"

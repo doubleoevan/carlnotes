@@ -1,19 +1,21 @@
 // tests for the payload contracts that create and update topic are validated through
 import { expect, test } from "bun:test"
 import {
-	ATTACHMENT_NO_TEXT_REASON,
 	CHAT_HISTORY_ANSWER_CHARS,
 	CHAT_HISTORY_TOOL_CALL_INPUT_CHARS,
 	CHAT_HISTORY_TOOL_CALLS,
-	MAX_ATTACHMENT_CONTEXT_CHARS,
-	MAX_TOPIC_SOURCES,
 	TOPIC_SAVE_TOOL_NAMES,
-	toAttachmentFailureMessage,
 	toSentToolCall,
 	toSentToolCalls,
 	toStandingTopicEditCall,
 	withAttachmentNote,
-} from "./contracts"
+} from "./contracts/chat"
+import {
+	ATTACHMENT_NO_TEXT_REASON,
+	MAX_ATTACHMENT_CONTEXT_CHARS,
+	MAX_TOPIC_SOURCES,
+	toAttachmentFailureMessage,
+} from "./contracts/topics"
 import { type ChatToolCall, chatRoomMessagePayload, chatTurnPayload, userInvitePayload } from "./payloads"
 import {
 	suggestSourcesPayload,

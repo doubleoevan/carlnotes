@@ -1,4 +1,4 @@
-import type { ChatRoom } from "@shared/contracts"
+import type { ChatRoom } from "@shared/contracts/chat"
 import { useNavigate } from "@tanstack/react-router"
 import { useCallback, useEffect, useState } from "react"
 import { fetchTopicInviteBadges } from "@/clients/activityClient"

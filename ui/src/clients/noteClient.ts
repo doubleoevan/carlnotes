@@ -1,6 +1,6 @@
 // the api client for notes: the page's note list, the note lifecycle, the ydoc sync, the stream url,
 // and the comment users
-import type { Note, NoteBadge, NoteCommentUser, NoteResponse, NotesResponse } from "@shared/contracts"
+import type { Note, NoteBadge, NoteCommentUser, NoteResponse, NotesResponse } from "@shared/contracts/notes"
 import type { noteVisibilities } from "@shared/enums"
 import { apiClient } from "./apiClient"
 

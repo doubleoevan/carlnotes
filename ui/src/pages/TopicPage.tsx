@@ -1,51 +1,39 @@
-import type { TopicResponse } from "@shared/contracts"
-import { isTopicSlugStale, toTopicPath } from "@shared/seo"
-import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
+import type { TopicResponse } from "@shared/contracts/topics"
+import { useNavigate, useParams } from "@tanstack/react-router"
 import type * as React from "react"
 import { useCallback, useEffect, useState } from "react"
 import { toast } from "sonner"
 import { authClient } from "@/clients/authClient"
-import {
-	type FetchTopicPageOptions,
-	fetchTopicPage,
-	sendTopicFeatureOrder,
-	sendTopicSubscription,
-	type TopicGate,
-} from "@/clients/topicClient"
+import { sendTopicFeatureOrder, sendTopicSubscription, type TopicGate } from "@/clients/topicClient"
 import { NotesSection } from "@/components/note/NotesSection"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
-import { ShareTopic } from "@/components/share/ShareTopic"
-import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
-import { DeleteTopicDialog } from "@/components/topic/DeleteTopicDialog"
-import { EditTopicModal } from "@/components/topic/EditTopicModal"
-import { MoreTopicsSection } from "@/components/topic/MoreTopicsSection"
+import { RelatedTopicsSection } from "@/components/topic/RelatedTopicsSection"
 import { NewCountInfo } from "@/components/topic/Topic"
 import { TopicActionBar, toTopicActionLayout, toTopicActionOptions } from "@/components/topic/TopicActions"
-import { TopicEditorChoiceDialog, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
+import { type TopicDialog, TopicDialogs } from "@/components/topic/TopicDialogs"
+import { useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFindingsSection } from "@/components/topic/TopicFindingsSection"
 import { TopicGateNotice } from "@/components/topic/TopicGateNotice"
 import { TopicInfoCard } from "@/components/topic/TopicInfoCard"
 import { TopicHeader } from "@/components/topic/TopicPageHeader"
-import { type FeatureOrderMove, TopicRankDialog } from "@/components/topic/TopicRankDialog"
+import type { FeatureOrderMove } from "@/components/topic/TopicRankDialog"
 import { TopicScanButton } from "@/components/topic/TopicScanButton.tsx"
 import { TopicScanHistory } from "@/components/topic/TopicScanHistory"
 import { TopicSettingsCard } from "@/components/topic/TopicSettingsCard"
 import { TopicSkeleton } from "@/components/topic/TopicSkeleton"
-import { useLoadInBrowser, useOrigin } from "@/hooks/useBrowserValue"
+import { useOrigin } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useRevealClassName } from "@/hooks/useRevealClassName"
+import { useTopicPagePayload } from "@/hooks/useTopicPagePayload"
 import { matchesTopicFindingFilter } from "@/lib/topicFindingFilters"
 import { toSortedTopicFindings } from "@/lib/topicFindingSorts"
 import { cn, NEXT_SCAN_DISCLAIMER } from "@/lib/utils"
 import { captureVisitEvent, toPublicTopicProperties } from "@/lib/visitAnalytics"
 import { type TopicFeedHandlers, usePageTopicFeedHandlers, useTopicFeed } from "@/providers/TopicFeedProvider"
-import { useRegisterChatContext, useTopicChangeCount } from "@/stores/chatPanelStore"
+import { useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
-
-// the page's dialogs, one open at a time
-type TopicDialog = "edit-choice" | "edit" | "make-public" | "share" | "add-topic-to-team" | "rank" | "delete"
 
 /**
  * The topic page at /topics/$topicId/$topicSlug: header with owner actions, findings, scan history, and the info card.
@@ -248,12 +236,6 @@ export function TopicPage() {
 						onMakeTopicPublic={() => setOpenDialog("make-public")}
 						onReloadTopicPage={reloadTopicPage}
 					/>
-					{/* the links to more public topics, last on a public topic's page */}
-					{topic.moreTopics.length > 0 && (
-						<HydrateSection index={4}>
-							<MoreTopicsSection moreTopics={topic.moreTopics} />
-						</HydrateSection>
-					)}
 					<TopicDialogs
 						topic={topic}
 						openDialog={openDialog}
@@ -270,75 +252,6 @@ export function TopicPage() {
 			)}
 		</main>
 	)
-}
-
-// the topic id from the url, and the slug if the url has one
-type UseTopicPagePayloadOptions = { topicId: string; topicSlug: string | undefined }
-
-// the topic page payload and how the topic is gated, seeded by the server's read and reloaded on a new topic id or a chat change
-function useTopicPagePayload({ topicId, topicSlug }: UseTopicPagePayloadOptions): {
-	topic: TopicResponse | null | undefined
-	topicGate: TopicGate | null
-	reloadTopicPage: (fetchTopicPageOptions?: FetchTopicPageOptions) => Promise<void>
-} {
-	const navigate = useNavigate()
-	// the public topic either topic route loads on the server, or nothing
-	const loadedTopicById = useMatch({
-		from: "/_layout/topics/$topicId",
-		shouldThrow: false,
-		select: (topicMatch) => topicMatch.loaderData?.topic,
-	})
-	const loadedTopicBySlug = useMatch({
-		from: "/_layout/topics/$topicId_/$topicSlug",
-		shouldThrow: false,
-		select: (topicMatch) => topicMatch.loaderData?.topic,
-	})
-	const loadedTopic = loadedTopicById ?? loadedTopicBySlug
-	// the topic page payload. undefined while loading, null if missing or not visible
-	const [topic, setTopic] = useState<TopicResponse | null | undefined>(loadedTopic ?? undefined)
-	// the gate in front of an invite or private topic that the user may not see
-	const [topicGate, setTopicGate] = useState<TopicGate | null>(null)
-
-	// fetch the topic page payload, which says whether the topic is visible, gated to this user, or missing
-	const reloadTopicPage = useCallback(
-		async (fetchTopicPageOptions: FetchTopicPageOptions = {}) => {
-			try {
-				const topicPage = await fetchTopicPage(topicId, fetchTopicPageOptions)
-				setTopic(topicPage.status === "visible" ? topicPage.topic : null)
-				setTopicGate(topicPage.status === "gated" ? topicPage.topicGate : null)
-			} catch (error) {
-				console.error("topic page load failed", error)
-				setTopic(null)
-			}
-		},
-		[topicId],
-	)
-	// keep the topic if its id matches the url, otherwise show the skeleton, then reload the page payload. the first
-	// load skips while hydrating the public topic the server loaded, unless a scan was running, whose findings may have changed since
-	const resetAndReloadTopicPage = useCallback((): void => {
-		setTopic((previousTopic) => (previousTopic?.id === topicId ? previousTopic : undefined))
-		setTopicGate(null)
-		void reloadTopicPage()
-	}, [reloadTopicPage, topicId])
-	const isLoadedOnServer =
-		loadedTopic?.id === topicId && !loadedTopic.scans.some((topicScan) => topicScan.status === "running")
-	useLoadInBrowser({ pageId: topicId, isLoadedOnServer, loadPage: resetAndReloadTopicPage })
-
-	// redirect a url by id alone or with a stale slug to the topic's current path once the url's topic loads
-	useEffect(() => {
-		if (topic?.id === topicId && isTopicSlugStale(topic, topicSlug)) {
-			navigate({ to: toTopicPath(topic), replace: true })
-		}
-	}, [topic, topicId, topicSlug, navigate])
-
-	// reload the page each time the chat panel reports this topic changed
-	const topicChangeCount = useTopicChangeCount(topic?.id ?? null)
-	useEffect(() => {
-		if (topicChangeCount > 0) {
-			void reloadTopicPage()
-		}
-	}, [topicChangeCount, reloadTopicPage])
-	return { topic, topicGate, reloadTopicPage }
 }
 
 /**
@@ -374,7 +287,8 @@ function TopicFindings({ topic, topicFeedHandlers }: { topic: TopicResponse; top
 }
 
 /**
- * The topic info card and its settings on the left, its podcast episodes, scan history, and notes on the right.
+ * The topic info card and its settings on the left, its podcast episodes, scan history, notes, and related topics on
+ * the right.
  */
 function TopicCards({
 	topic,
@@ -405,73 +319,12 @@ function TopicCards({
 						topic={{ id: topic.id, name: topic.name, prompt: topic.prompt }}
 					/>
 					{/* the notes on this topic, expanded by default with no note bodies loaded */}
-					<NotesSection pageType="topic" pageId={topic.id} titleClassName="font-display text-lg" />
+					<NotesSection pageType="topic" pageId={topic.id} titleClassName="font-display text-lg" hasCompactHeader />
+					{/* the topics nearest this one that the user may open */}
+					<RelatedTopicsSection relatedTopics={topic.relatedTopics} />
 				</div>
 			</div>
 		</HydrateSection>
-	)
-}
-
-/**
- * The topic's dialogs, one at a time. Each mounts only while it is the open one, and its state resets every time.
- */
-function TopicDialogs({
-	topic,
-	openDialog,
-	onOpenDialog,
-	onSaveTopic,
-	onTopicTeamsChanged,
-	onRankTopic,
-	onTopicDeleted,
-}: {
-	topic: TopicResponse
-	openDialog: TopicDialog | null
-	onOpenDialog: (dialog: TopicDialog | null) => void
-	onSaveTopic: () => Promise<void>
-	onTopicTeamsChanged: () => void
-	onRankTopic: (moves: FeatureOrderMove[]) => Promise<void>
-	onTopicDeleted: () => Promise<void>
-}) {
-	return (
-		<>
-			{/* the edit option asks form or Carl first. the form choice opens the modal in its place */}
-			{openDialog === "edit-choice" && (
-				<TopicEditorChoiceDialog
-					topicId={topic.id}
-					onChooseTopicForm={() => onOpenDialog("edit")}
-					onClose={() => onOpenDialog(null)}
-				/>
-			)}
-			{(openDialog === "edit" || openDialog === "make-public") && (
-				<EditTopicModal
-					topic={topic}
-					isMakingTopicPublic={openDialog === "make-public"}
-					onClose={() => onOpenDialog(null)}
-					onTopicSaved={onSaveTopic}
-				/>
-			)}
-			{openDialog === "share" && (
-				<ShareTopic
-					topic={topic}
-					isDialog
-					onClose={() => onOpenDialog(null)}
-					onMakeTopicPublic={() => onOpenDialog("make-public")}
-				/>
-			)}
-			{openDialog === "add-topic-to-team" && (
-				<AddTopicToTeamDialog
-					topic={topic}
-					onTopicTeamsChanged={onTopicTeamsChanged}
-					onClose={() => onOpenDialog(null)}
-				/>
-			)}
-			{openDialog === "rank" && (
-				<TopicRankDialog topic={topic} onSave={onRankTopic} onClose={() => onOpenDialog(null)} />
-			)}
-			{openDialog === "delete" && (
-				<DeleteTopicDialog topic={topic} onClose={() => onOpenDialog(null)} onTopicDeleted={onTopicDeleted} />
-			)}
-		</>
 	)
 }
 

@@ -1,5 +1,5 @@
 // the chat panel widget: the pill it collapses to, the docked frame, and the title bar
-import type { ChatMention } from "@shared/contracts"
+import type { ChatMention } from "@shared/contracts/chat"
 import { Maximize2, Minimize2, Minus } from "lucide-react"
 import type * as React from "react"
 import { createPortal } from "react-dom"

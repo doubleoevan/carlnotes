@@ -10,10 +10,15 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the pool and
   Redis stubs.
   `index.ts` also serves `/api/health`, which the platform polls and which sends no query, and `/api/health/deep`,
-  which runs one query and returns the pool's counts for a monitor. Neither looks up a session.
+  which runs one query and returns the pool's counts for a monitor. Neither looks up a session. Its tests split
+  between `index.test.ts`, for the routing, the health checks, the api's own validation, and the security policy, and
+  `pageRender.test.ts`, for the rendered pages, over the fake bundle and requests in `indexTestFixtures.ts`.
+  `index.ts` renders every other page through the ui's server build. A page render sets the `DEGRADED_RENDER_HEADER`
+  from `shared/seo.ts` if a required read fails, and that page returns a 503 with a `Retry-After`, is reported, and is
+  never cached at the edge.
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `share/`, `tool/`, `mcp/`. Root files
-  serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, and `content.ts` for the blog
-  under `content/blog/`).
+  serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, `likePattern.ts` for the contains
+  pattern the name and text searches match with, and `content.ts` for the blog under `content/blog/`).
 - `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key, and
   security.txt. `seo.ts` builds what they read, and `jsonLd.ts` the JSON-LD the topic page head includes. The blog and
   docs Markdown are read through `ttlCache.ts`, which keeps the parsed pages for a minute, so a new file appears within
@@ -46,16 +51,27 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   through `topic/firstScanSmoke.ts`.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
   the next unplayed episode, one episode with its files and its preview card, a listener's progress, a chapter's rating,
-  the podcast switch, and removing an episode), `podcastEpisodeRows.ts` (the episode row reads and the subscription
-  activation gate that limits each read to what the user may listen to), `helpers.ts` (the shapes over them: the topic
-  page's podcast, a season's episodes, and a podcast episode page), `podcastSeo.ts` (the public episodes that the
-  sitemap and llms.txt list, and the PodcastSeries and PodcastEpisode structured data that `seo.ts` and
-  `share/pageHead.ts` read), `podcastEpisodeFiles.ts` (the audio, chapters, and transcript responses),
-  `podcastFeedTokens.ts` (a listener's feed token, and building, caching, and responding with a feed, or a 304 for a
-  current copy), and `podcastFeeds.ts` (a listener's feed url and its reset, an episode's files at paths after a feed
-  token, and the covers). `share/podcastFeed.ts` builds the feed, `share/podcastCover.ts` draws the covers over
-  `docs/design/podcast/cover-base.png`, and `share/podcastEpisodeImage.ts` draws an episode page's link-preview card.
-  `documents.ts` serves a public Topic's feed at `/topics/:id/podcast.xml` and a listener's own at
+  the podcast switch, and removing an episode), `podcastEpisodeRows.ts` (the episode row reads, the episode view rules
+  in SQL, and the subscription activation gate that limit each read to what the user may listen to), `helpers.ts` (the
+  page reads over them: the topic page's podcast, a season's episodes, and a podcast episode page),
+  `podcastEpisodeShapes.ts` (an episode as the player shows it, with its chapters, and as a table row shows it, with its
+  chapter count, and each topic's latest of either: the home feed reads full episodes, and every table row and its play
+  button read summaries), `podcastSeo.ts` (the public episodes that the sitemap and llms.txt list, and the PodcastSeries
+  and PodcastEpisode structured data that `seo.ts` and `share/pageHead.ts` read), `podcastEpisodeFiles.ts` (the audio,
+  chapters, and transcript responses), `podcastFeedTokens.ts` (a listener's feed token, and building, caching, and
+  responding with a feed, or a 304 for a current copy), `podcastFeeds.ts` (a listener's feed url and its reset, an
+  episode's files at paths after a feed token, and the covers), `relatedPodcastEpisodes.ts` (the rows of an episode
+  page's Other episodes and Similar podcasts tables: the topic's other published episodes that the user may listen to,
+  and the most related published episodes of other topics. The public shown topics' episodes rank through the index of
+  the episode vectors saved as public and shown, cached in Redis. A user's own, the episodes they may listen to through
+  their account, are scored for them without an index on every load. Both merge by score, and every read checks each
+  episode again), and `podcastEpisodeSearch.ts` (`GET /api/episodes/search`, the search bar's episode search: title and
+  description matches through trigram indexes, then for a query of three characters or more the nearest by meaning over
+  the episode vectors, under the episode view rules. The query's vector is cached in Redis by its lowercased words and
+  billed to the user's key or the public key, a visitor's embeddings are rate limited per address, and a search that may
+  not embed returns its text matches). `share/podcastFeed.ts` builds the feed, `share/podcastCover.ts` draws the covers
+  over `docs/design/podcast/cover-base.png`, and `share/podcastEpisodeImage.ts` draws an episode page's link-preview
+  card. `documents.ts` serves a public Topic's feed at `/topics/:id/podcast.xml` and a listener's own at
   `/podcast-feeds/:token.xml`.
 - `tool/` — the Topic Tools, each with its own gate check: `topicTools.ts` (the prompt and field updates),
   `topicSourceTools.ts` (adding and removing a source, and what one more costs), and `topicDraftTools.ts` (creating a
@@ -74,11 +90,22 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
 - `topic/promptVersions.ts` — the Prompt Version write the editor's save and the Topic Tools share.
 - `topic/topicTableRows.ts` — `toTopicTableRows`, the topic table rows that the profile page and the team page share,
   each with its latest Podcast Episode.
-- `topic/moreTopics.ts` — `loadMoreTopics`, the other public shown Topics a public Topic's page links under "More
-  topics": a holding public team's first, then by shared tags, then by newest Finding.
+- `topic/relatedTopics.ts` — `loadRelatedTopics`, the up to fifty other Topics most related to a Topic that the user may
+  open, each with its latest Podcast Episode. The public shown ones are scored over candidates from an iterative scan of
+  the public and shown HNSW index, and their ids and scores are cached in Redis for fifteen minutes. The Topics a user
+  may open through their account are scored for them without an index on every load. Both merge by score, and every read
+  checks each topic against the user's view rules again, so one the user may no longer open leaves at once. A topic page
+  poll reload skips this read, and the page keeps the ones it loaded.
+- `topic/relatedness.ts` — what both related reads share: `loadEmbeddingCentroid`, the current model's average
+  resource embedding cached in Redis for a day, `toRelatedScore`, the centered cosine distance less a bonus for each
+  shared tag, the score limits, the candidate count, `loadRelatedIds`, the public ranking cached in Redis merged with a
+  user's own, `toMergedRelatedIds`, and `toRowsInIdOrder`. The related reads' tests store its centroid through
+  `relatednessTestFixtures.ts`, and build episode rows through `podcast/podcastEpisodeTestFixtures.ts`.
 - `topic/topics.ts` — the topic page read; `topic/saveTopic.ts` — the create with its default Sources and invites, and
-  the update with its changed-field events; `topic/topicsRoute.ts` — the topic routes over them; `topic/deleteTopic.ts`
-  — the delete, one transaction over every row a topic owns with its object keys recorded.
+  the update with its changed-field events, and `saveTopicVectorsOnVisibilityChange`, which the update and the topic
+  tools call to save the topic's vectors again after a visibility change, as `topic/findingMarks.ts`'s `setRating` does
+  after a rating; `topic/topicsRoute.ts` — the topic routes over them; `topic/deleteTopic.ts` — the delete, one
+  transaction over every row a topic owns with its object keys recorded.
 - `topic/feeds.ts` — the topic feed's sections, and `topic/feedData.ts` — the batched reads behind every topic in a
   feed, each table read once for the whole batch.
 - `chat/room.ts` — posting to a chat room and its stream; `chat/roomRoute.ts` — the chat room routes;
@@ -94,13 +121,16 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   the object keys behind a user's or a topic's.
 - `team/teams.ts` — creating and updating a team and the topic attach and detach; `team/teamsRoute.ts` — the team
   routes; `team/deleteTeam.ts` — the delete, the handover to a new leader, and the one team row delete an account
-  close shares; `team/search.ts` — the team name search and the like-pattern escape; `team/teamPage.ts` — the team
+  close shares; `team/search.ts` — the team name search; `team/teamPage.ts` — the team
   page read; `team/teamsPage.ts` — the teams page read; `team/helpers.ts` — the team summaries, the profile's team
   statuses, the admin's team topics, and the per-team counts and spend they share.
-- `topic/search.ts` — `searchTopics` and `GET /api/topics/search`, the search bar's topic name search, which applies
-  the `topic:view` rules in SQL ahead of the limit. A user finds the listed topics they may open, and a visitor finds
-  public topics with enough findings. The name searches here, in `profiles.ts`, and in `team/search.ts` read trigram
-  indexes, whose plans `searchPlans.smoke.ts` checks beside the chat ranking's.
+- `topic/search.ts` — `searchTopics` and `GET /api/topics/search`, the search bar's topic name search, which applies the
+  `topic:view` rules in SQL ahead of the limit. A user finds the listed topics they may open, and a visitor finds public
+  topics with enough findings. Those rules in SQL live in `topic/permissions.ts`: `toTopicViewFilter`,
+  `toTopicAccessFilter`, the topics a user reaches through their account, and `toTopicRoleFilter`, a topic the user owns
+  or a team of theirs holds. The related reads and the episode view rules share them. The name searches here, in
+  `profiles.ts`, and in `team/search.ts` read trigram indexes, whose plans `searchPlans.smoke.ts` checks beside the chat
+  ranking's, the related reads', and the episode search's.
 - `topic/topicDrafts.ts` — the new-topic chat's Topic Draft row, written by the chat turn that changed it and read
   back when the conversation loads.
 - `botAnalytics.ts` — the middleware that reports what a known crawler, unfurler, podcast app, or feed reader fetched,
@@ -130,8 +160,9 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   runs `inviteLinkSmokeSections.ts` and `userInviteSmokeSections.ts` over `inviteSmokeFixtures.ts`, and
   `team/teams.smoke.ts` runs `teamMembershipSmokeSections.ts`, `teamTopicSmokeSections.ts`, and
   `teamPageSmokeSections.ts` over `teamSmokeFixtures.ts`. `podcast/podcastEpisodes.smoke.ts` runs
-  `podcastEpisodeSmokeSections.ts`, `podcastFeedSmokeSections.ts`, and `podcastEpisodePageSmokeSections.ts` over
-  `podcastEpisodeSmokeFixtures.ts`.
+  `podcastEpisodeSmokeSections.ts`, `podcastFeedSmokeSections.ts`, `podcastEpisodePageSmokeSections.ts`, and
+  `relatedSmokeSections.ts` over `podcastEpisodeSmokeFixtures.ts`, and the related section seeds its own topics,
+  episodes, vectors, subscriber, and team through `relatedSmokeFixtures.ts`.
 - `unsubscribe.ts` — the topic-scan email's unsubscribe link: `GET /api/unsubscribe` opens a page with one button and
   changes nothing, and `POST /api/unsubscribe` performs the unsubscribe for the button and for a provider's RFC 8058
   one-click, reporting which with the request's device properties.
@@ -152,7 +183,7 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   An account close is rejected while a configured Redis is unreachable.
 - Every authority check routes through `authorization.ts` and the role helpers; inline
   `role ===` / `plan ===` comparisons are banned outside it (`authorization.test.ts` greps).
-- Request bodies validate with zod payloads from `shared/contracts.ts` via `zValidator`.
+- Request bodies validate with zod payloads from `shared/payloads.ts` and `shared/topicPayloads.ts` via `zValidator`.
 - A private or team read the user may not see responds 404, never 403; the invite gate keeps its 403.
 - Dev: `bun run dev:api` (doppler, on `PORT`, 3000 by default).
   Tests: `bun test api`; `*.smoke.ts` run under `doppler run`.

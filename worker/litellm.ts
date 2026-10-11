@@ -27,6 +27,14 @@ type LiteLLMKeyOwner = Pick<
 > & { budgetCents: number }
 
 /**
+ * Loads a user's own key, created first if the user has none, or the public key for a visitor, which is undefined if
+ * it is unset.
+ */
+export async function loadUserOrPublicLiteLLMKey(userId: string | null): Promise<string | undefined> {
+	return userId ? loadOrProvisionUserLiteLLMKey(userId) : Bun.env.LITELLM_PUBLIC_KEY
+}
+
+/**
  * Loads the key billed for a user's model calls. Creates and stores a key at the user's budget if the user has none.
  * Throws an error if the user is gone, or if the key cannot be created or stored.
  */

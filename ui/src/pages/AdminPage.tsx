@@ -1,4 +1,4 @@
-import type { AdminConsoleResponse, AdminTeamRow, AdminTotals, AdminUserRow } from "@shared/contracts"
+import type { AdminConsoleResponse, AdminTeamRow, AdminTotals, AdminUserRow } from "@shared/contracts/admin"
 import { plans } from "@shared/enums"
 import { Settings, ShieldUser } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"

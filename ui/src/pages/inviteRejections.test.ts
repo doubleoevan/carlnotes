@@ -1,6 +1,6 @@
 // join page tests: every way a token can fail has a response for the person with the invite link
 import { expect, test } from "bun:test"
-import { inviteRejections } from "@shared/contracts"
+import { inviteRejections } from "@shared/contracts/invites"
 import { INVITE_REJECTIONS } from "./inviteRejections"
 
 // a rejection the api can answer with, but the page has no copy for would render an empty screen

@@ -1,11 +1,12 @@
-// the team name search behind the search bar, and the like-pattern escape the topic search shares
+// the team name search behind the search bar
 import { toAvatarKeyVersion } from "@shared/avatars"
-import type { TeamSearchResult } from "@shared/contracts"
-import { SEARCH_MIN_CHARS, USER_SEARCH_LIMIT } from "@shared/contracts"
+import type { TeamSearchResult } from "@shared/contracts/search"
+import { SEARCH_MIN_CHARS, USER_SEARCH_LIMIT } from "@shared/contracts/search"
 import { toNormalizedUsername } from "@shared/usernames"
 import { and, eq, inArray, like, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { teamMembers, teams } from "../../db/schema/teams"
+import { toContainsLikePattern } from "../likePattern"
 
 /**
  * Teams whose name contains the query, for the search bar's team suggestions. A public team is found
@@ -49,14 +50,7 @@ export function toTeamSearchQuery(query: string, userId: string | null) {
 	return db
 		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey })
 		.from(teams)
-		.where(and(isFindable, like(sql`lower(${teams.name})`, `%${escapeLikePattern(query.toLowerCase())}%`)))
+		.where(and(isFindable, like(sql`lower(${teams.name})`, toContainsLikePattern(query))))
 		.orderBy(sql`length(${teams.name})`)
 		.limit(USER_SEARCH_LIMIT)
-}
-
-/**
- * Returns a like pattern that matches the typed characters literally, never as wildcards.
- */
-export function escapeLikePattern(query: string): string {
-	return query.replaceAll(/[\\%_]/g, (wildcard) => `\\${wildcard}`)
 }

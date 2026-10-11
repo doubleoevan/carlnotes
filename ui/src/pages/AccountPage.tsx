@@ -1,4 +1,5 @@
-import type { ActivityResponse, BillingState } from "@shared/contracts"
+import type { ActivityResponse } from "@shared/contracts/activity"
+import type { BillingState } from "@shared/contracts/profiles"
 import { User } from "lucide-react"
 import { useEffect, useState } from "react"
 import { fetchActivity } from "@/clients/activityClient"

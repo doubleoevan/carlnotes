@@ -1,4 +1,5 @@
-import type { PodcastEpisode, TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
+import type { PodcastEpisode } from "@shared/contracts/podcast"
 import { NO_SCRIPT_ROW_LIMIT } from "@shared/seo"
 import type * as React from "react"
 import { useState } from "react"

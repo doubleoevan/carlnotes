@@ -1,4 +1,4 @@
-import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts"
+import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts/signupCta"
 import { useEffect, useState } from "react"
 import { authClient, passSignupGate } from "@/clients/authClient"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"

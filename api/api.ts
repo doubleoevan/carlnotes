@@ -29,6 +29,7 @@ import { userInvitesRoute } from "./invite/userInvites"
 import { mcpClientsRoute } from "./mcp/server"
 import { noteCommentThreadsRoute } from "./note/noteCommentThreads"
 import { notesRoute } from "./note/notes"
+import { podcastEpisodeSearchRoute } from "./podcast/podcastEpisodeSearch"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
 import { profilesRoute } from "./profiles"
@@ -191,7 +192,9 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", findingsRoute)
 	// the manual scan route
 	.route("/", scansRoute)
-	// the podcast episode routes, then the podcast feed and cover routes
+	// the podcast episode search ahead of the podcast episode routes, so /episodes/search is never read as an episode id,
+	// then the podcast feed and cover routes
+	.route("/", podcastEpisodeSearchRoute)
 	.route("/", podcastEpisodesRoute)
 	.route("/", podcastFeedsRoute)
 	// the chat routes

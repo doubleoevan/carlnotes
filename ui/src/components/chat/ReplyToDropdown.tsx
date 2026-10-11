@@ -1,6 +1,6 @@
 // the reply target dropdown of the chat room composer, and the chat message helpers that swap its chat mention
 import { ALL_USERNAME, CARL_USERNAME } from "@shared/chatMentions"
-import type { ChatRoomMessage } from "@shared/contracts"
+import type { ChatRoomMessage } from "@shared/contracts/chat"
 import { ChevronDown, Reply } from "lucide-react"
 import { useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"

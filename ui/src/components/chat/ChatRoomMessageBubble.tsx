@@ -1,7 +1,7 @@
 // one chat room message as the list renders it: the author line, the reply reference, the chat bubble with its shared
 // files, and the footer
 import { isModelChatMessage } from "@shared/chatMentions"
-import type { ChatRoomMessage } from "@shared/contracts"
+import type { ChatRoomMessage } from "@shared/contracts/chat"
 import { FileText, Film, Image, Paperclip, Reply, Trash2, X } from "lucide-react"
 import { memo } from "react"
 import { toChatRoomAttachmentUrl } from "@/clients/chatRoomClient"

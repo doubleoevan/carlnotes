@@ -1,4 +1,4 @@
-import { toCtaTag } from "@shared/contracts"
+import { toCtaTag } from "@shared/contracts/signupCta"
 import { useNavigate } from "@tanstack/react-router"
 import type { GatedTopicVisibility } from "@/clients/topicClient"
 import { AnchorLink } from "@/components/common/AnchorLink"

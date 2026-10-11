@@ -1,5 +1,5 @@
 // the attachments a user sends with a chat turn, different from the topic attachments that an owner uploads
-import { CHAT_ATTACHMENT_KEEP_LIMIT, clipAttachmentText } from "@shared/contracts"
+import { CHAT_ATTACHMENT_KEEP_LIMIT, clipAttachmentText } from "@shared/contracts/chat"
 import { reportError } from "@shared/monitoring"
 import type { ChatAttachment } from "@shared/payloads"
 import { and, eq, inArray } from "drizzle-orm"

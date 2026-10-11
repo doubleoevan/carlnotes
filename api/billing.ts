@@ -3,7 +3,7 @@
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
-import type { BillingState } from "@shared/contracts"
+import type { BillingState } from "@shared/contracts/profiles"
 import { reportError } from "@shared/monitoring"
 import { checkoutPayload } from "@shared/payloads"
 import { type BillingInterval, PLANS, type Plan } from "@shared/plans"

@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { INFO_CARD_CLASS } from "@/lib/styleClasses"
 import { CollapsibleSection } from "./CollapsibleSection"
 import { TopicInfo } from "./TopicInfo"

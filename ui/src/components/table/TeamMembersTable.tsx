@@ -1,4 +1,4 @@
-import type { TeamPageResponse } from "@shared/contracts"
+import type { TeamPageResponse } from "@shared/contracts/teams"
 import { X } from "lucide-react"
 import { toast } from "sonner"
 import { authClient } from "@/clients/authClient"
@@ -58,7 +58,9 @@ export function TeamMembersTable({
 
 	// sort feeds pagination, so a sorted column reorders across every page. the page's rows and the first
 	// NO_SCRIPT_ROW_LIMIT rows render for a reader without JavaScript
-	const { renderedRows, sort, pagination } = usePaginatedRowSort(members, memberSortValues, { key: "member" })
+	const { renderedRows, sort, pagination } = usePaginatedRowSort(members, memberSortValues, {
+		initialSort: { key: "member" },
+	})
 	// the totals read activated members alone, so a waiting request never inflates them
 	const activeMembers = members.filter((member) => member.isActive)
 	return (

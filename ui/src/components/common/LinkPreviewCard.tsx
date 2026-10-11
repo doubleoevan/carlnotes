@@ -1,5 +1,5 @@
 // the link preview card, its loading note, and the check for a link worth previewing
-import type { ChatLinkPreview } from "@shared/contracts"
+import type { ChatLinkPreview } from "@shared/contracts/chat"
 import { Play } from "lucide-react"
 import { useMemo, useState } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"

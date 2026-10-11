@@ -1,4 +1,4 @@
-import { MAX_TOPIC_SOURCES, type TopicResponse } from "@shared/contracts"
+import { MAX_TOPIC_SOURCES, type TopicResponse } from "@shared/contracts/topics"
 import {
 	CUSTOM_SOURCE_OPTIONS,
 	type CustomSourceKey,

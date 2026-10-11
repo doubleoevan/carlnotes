@@ -330,7 +330,7 @@ Check for:
      and `isTeamingUp` (now `handleInviteUserToTeam`, `onInviteUserToTeam`, `handleOpenNewTeamModal`, and `isNewTeamModalOpen`)
    - `TeamUpMenuOption` and `loadTeamUpMenu` in `api/team/helpers.ts`, `TeamMenuOption` and `fetchTeamOptions` in
      `ui/src/clients/profileClient.ts`, and the `/profiles/:userId/team-up` route (now `ProfileTeamStatus` in
-     `shared/contracts.ts`, `loadProfileTeamStatuses`, `fetchProfileTeamStatuses`, and
+     `shared/contracts/profiles.ts`, `loadProfileTeamStatuses`, `fetchProfileTeamStatuses`, and
      `/profiles/:userId/team-statuses`)
    - `gradeLinksToFindings` and `toParagraphs` in `evals/topic-chat/topicChatEval.ts` (now `toStrayLinkUrl` and
      `toProseParagraphs` in `evals/evalReplies.ts`), and `readablePercent` in `sourceSuggestionsEval.ts` (now
@@ -344,7 +344,8 @@ Check for:
      `finalizeVerbatimAttachment` and `verbatimContext`), and `TABLE_SCREEN_TIMEOUT_MS` (now
      `VERBATIM_SCREEN_TIMEOUT_MS`)
    - the `LLM_GUARD_TABLE_TIMEOUT_MS` and `MAX_ATTACHMENT_CONTEXT_CHARS` environment variables (now the
-     `VERBATIM_SCREEN_TIMEOUT_MS` constant and the `MAX_ATTACHMENT_CONTEXT_CHARS` constant in `shared/contracts.ts`)
+     `VERBATIM_SCREEN_TIMEOUT_MS` constant and the `MAX_ATTACHMENT_CONTEXT_CHARS` constant in
+     `shared/contracts/topics.ts`)
    - `TopicResource`'s `podcastEpisodeChapterPill` and `isChapterPlaying` props (now `latestPodcastEpisode`), and the
      `TopicFindingRow` component in `ui/src/components/topic/TopicFindingsSection.tsx` (now `TopicFindingList`, which the
      homepage card shares). `MAX_RESOURCES` in `Topic.tsx` (now `MAX_TOPIC_FINDINGS` in `TopicFindingsSection.tsx`)
@@ -397,7 +398,8 @@ Check for:
      `invites.ts`, `chat.ts`, `notes.ts`, `podcast.ts`, `billing.ts`, `releases.ts`, `storage.ts`, and `columns.ts` for
      the pgEnums and column helpers), with `db/index.ts` spreading them into the one `schema` object
    - the `*Payload` zod schemas and the types inferred from them in `shared/contracts.ts`, with `EMPTY_TOPIC_DRAFT`
-     and `topicSettingsShape` (now `shared/payloads.ts`; `contracts.ts` keeps the response shapes and the constants)
+     and `topicSettingsShape` (now `shared/payloads.ts`; the `shared/contracts/` modules keep the response shapes and
+     the constants)
    - the long-file splits of 2026-10-10, each moved whole: `deleteTopic` and `loadTopicObjectKeys` from
      `api/topic/topics.ts` (now `api/topic/deleteTopic.ts`) and `topicsRoute` from it (now `api/topic/topicsRoute.ts`);
      `loadTopicFeedData` and the `loadFeed*Rows` reads from `api/topic/feeds.ts` (now `api/topic/feedData.ts`);
@@ -474,6 +476,22 @@ Check for:
    - `SERVER_RENDERED_PREFIXES` in `ui/src/components/common/AnchorLink.tsx` (now `SERVER_PATH_PREFIXES`, with `/api`
      among them), and the bare `<a>` for an `/api` download or image link with its "plain anchor" comment (now
      `AnchorLink`, which renders a server path as a plain anchor and passes `download`, `target`, and `rel` through)
+   - `LatestPodcastEpisodePlayButton` in `ui/src/components/podcast/LatestPodcastEpisodePlayButton.tsx` (now
+     `PodcastEpisodePlayButton` in `PodcastEpisodePlayButton.tsx`), the chapters table's own `CHAPTER_COLUMN_CLASS`
+     (now `TABLE_WIDE_FIRST_COLUMN_CLASS` in `ui/src/lib/styleClasses.ts`), the exported `EMBED_QUERY_INSTRUCTION` in
+     `worker/chat/retrieveDocs.ts` (now private behind `embedRetrievalQuery`), and the `restoreEnv` copies in
+     `worker/litellmTestFixtures.ts` and `worker/email.test.ts` (now `saveEnvSettings` in `shared/savedEnvSettings.ts`),
+     and `loadLatestPodcastEpisodes`, `loadPodcastEpisode`, and `toPodcastEpisode` in `api/podcast/helpers.ts` with
+     their test `helpers.test.ts` (now `api/podcast/podcastEpisodeShapes.ts` and `podcastEpisodeShapes.test.ts`, beside
+     `loadLatestPodcastEpisodeSummaries`, which the topic tables read), and `isPublicAndShown` in
+     `api/topic/permissions.ts` (now in `db/index.ts` beside `isFindingShown` and `hasEnoughFindingsToList`)
+   - `loadMoreTopics` and `MORE_TOPICS_LIMIT` in `api/topic/moreTopics.ts` with `moreTopics.test.ts`,
+     `ui/src/components/topic/MoreTopicsSection.tsx`, and `TopicResponse.moreTopics` (removed; the topic page's
+     Similar topics table is `RelatedTopicsSection` over `loadRelatedTopics`)
+   - `shared/contracts.ts` and `@shared/contracts` (now one module per domain under `shared/contracts/`, each imported
+     by its own path: `chat`, `teams`, `invites`, `activity`, `profiles`, `admin`, `search`, `findings`, `podcast`,
+     `podcastEpisodePage`, `topics`, `notes`, `pageHead`, `signupCta`), and `escapeLikePattern` in `api/team/search.ts`
+     (now private behind `toContainsLikePattern` in `api/likePattern.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

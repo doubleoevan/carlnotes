@@ -1,6 +1,6 @@
 // the team page read: the team, its members, its topics, and what the user may do on it
 import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
-import type { TeamPageResponse } from "@shared/contracts"
+import type { TeamPageResponse } from "@shared/contracts/teams"
 import { and, eq, gt, inArray, isNull, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { invites } from "../../db/schema/invites"

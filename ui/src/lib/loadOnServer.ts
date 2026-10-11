@@ -1,4 +1,6 @@
-import type { PageHead } from "@shared/contracts"
+import type { PageHead } from "@shared/contracts/pageHead"
+import { DEGRADED_RENDER_HEADER } from "@shared/seo"
+import { createIsomorphicFn } from "@tanstack/react-start"
 
 /**
  * Runs a route loader's read on the server only. In the browser, loadOnServer returns browserValue at once.
@@ -22,7 +24,33 @@ export function loadPageOnServer<TPage>({
 	fetchPage,
 }: LoadPageOnServerOptions<TPage>): Promise<[PageHead | null | undefined, TPage | null]> {
 	return loadOnServer<[PageHead | null | undefined, TPage | null]>(
-		() => Promise.all([fetchPageHead().catch(() => undefined), fetchPage().catch(() => null)]),
+		() => Promise.all([readWithDegradedFallback(fetchPageHead, undefined), readWithDegradedFallback(fetchPage, null)]),
 		[undefined, null],
 	)
 }
+
+/**
+ * Returns a server read's value, or the fallback if the read fails. A failed read marks the page's render degraded.
+ */
+export async function readWithDegradedFallback<T, TFallback>(
+	read: () => Promise<T>,
+	fallback: TFallback,
+): Promise<T | TFallback> {
+	try {
+		return await read()
+	} catch {
+		await markRenderDegraded()
+		return fallback
+	}
+}
+
+// set the degraded render header on the page's response. only the server, inside a request, has a response to set it
+// on, so the function has no browser side, and in a test it sets nothing
+const markRenderDegraded = createIsomorphicFn().server(async () => {
+	// import the server-only setter inside the server function, so the browser bundle leaves it out.
+	// a call outside a request throws an error, and sets nothing
+	const { setResponseHeader } = await import("@tanstack/react-start/server")
+	try {
+		setResponseHeader(DEGRADED_RENDER_HEADER, "1")
+	} catch {}
+})

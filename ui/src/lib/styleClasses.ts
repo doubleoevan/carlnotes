@@ -155,6 +155,22 @@ export const TABLE_CLASS = `w-full border-separate border-spacing-0 text-left te
 
 export const TABLE_HEAD_CLASS = "text-muted-foreground border-b"
 
+// the one column of a one-column table, which fills the table and draws no frozen column's rule.
+// the important modifier overrides the table's own width and rule for its first column
+export const TABLE_ONLY_COLUMN_CLASS = "w-full! max-w-none! border-r-0!"
+
+// a first column wide enough for a play button beside a title.
+// the important modifier overrides the table's own width for its first column
+export const TABLE_WIDE_FIRST_COLUMN_CLASS = "min-w-64! max-w-64!"
+
+// the card of a table with no pagination under it. the card ends at the last row, which draws no rule, and the card's
+// rounded corners clip that row
+export const ONE_PAGE_TABLE_CARD_CLASS = "overflow-hidden pb-0 [&_tbody>tr:last-child>*]:border-b-0"
+
+// the card of a table whose pagination shows only with JavaScript. without JavaScript, the card ends at the last row
+// as a one-page table's does
+export const SCRIPTED_PAGINATION_TABLE_CARD_CLASS = `${ONE_PAGE_TABLE_CARD_CLASS} scripted:overflow-visible scripted:pb-4 scripted:[&_tbody>tr:last-child>*]:border-b`
+
 export const CARD_CLASS = "bg-card rounded-lg border p-4 shadow-lift"
 
 /**

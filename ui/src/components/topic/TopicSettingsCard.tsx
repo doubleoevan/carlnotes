@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { toAgeLabel, toDollarLabel, toDurationLabel, toScheduleLabel } from "@/lib/labels"

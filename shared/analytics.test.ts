@@ -1,7 +1,8 @@
 // analytics tests for the fallback default without a key, a bot capture's shape, and the cta tag validation
 import { expect, test } from "bun:test"
 import { toBotCapture, trackBotEvent, trackEvent } from "./analytics"
-import { toCtaTag } from "./contracts"
+import { toCtaTag } from "./contracts/signupCta"
+import { saveEnvSettings } from "./savedEnvSettings"
 
 // a bot's capture is keyed to the bot's name and never creates a person profile
 test("toBotCapture keys the event to the bot and turns the person profile off", () => {
@@ -30,14 +31,14 @@ test("toCtaTag admits slugs and rejects everything else", () => {
 // without a key, nothing is sent
 test("analytics is a no-op without its key", () => {
 	// clear the key so the run is deterministic regardless of the calling shell's environment
-	const originalApiKey = Bun.env.POSTHOG_API_KEY
-	Bun.env.POSTHOG_API_KEY = undefined
+	const restoreEnvSettings = saveEnvSettings(["POSTHOG_API_KEY"])
+	delete Bun.env.POSTHOG_API_KEY
 
 	try {
 		// a call without a key should not throw an error, for a user's event or a bot's
 		expect(() => trackEvent("signup_completed", "user-1")).not.toThrow()
 		expect(() => trackBotEvent("crawler_fetched", "googlebot")).not.toThrow()
 	} finally {
-		Bun.env.POSTHOG_API_KEY = originalApiKey
+		restoreEnvSettings()
 	}
 })

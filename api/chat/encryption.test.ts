@@ -1,5 +1,6 @@
 // chat text encryption tests. how stored text is written, read back, and rejected when it fails to verify
 import { expect, test } from "bun:test"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { toChatTurnRow } from "./chatTurns"
 import { decryptChatText, encryptChatText } from "./encryption"
 
@@ -8,17 +9,14 @@ const TEST_KEY = Buffer.alloc(32, 7).toString("base64")
 
 // run a test case with the test encryption key, then restore the original key afterward
 function withChatTextKey(run: () => void): void {
-	const originalKey = Bun.env.CHAT_TEXT_KEY
+	const restoreEnvSettings = saveEnvSettings(["CHAT_TEXT_KEY"])
 	Bun.env.CHAT_TEXT_KEY = TEST_KEY
+
+	// put the key back even if the case fails
 	try {
 		run()
 	} finally {
-		// no key before means the keyless default is what to restore
-		if (originalKey === undefined) {
-			delete Bun.env.CHAT_TEXT_KEY
-		} else {
-			Bun.env.CHAT_TEXT_KEY = originalKey
-		}
+		restoreEnvSettings()
 	}
 }
 

@@ -1,4 +1,4 @@
-import type { TeamIdentity } from "@shared/contracts"
+import type { TeamIdentity } from "@shared/contracts/teams"
 import { useNavigate } from "@tanstack/react-router"
 import { Users } from "lucide-react"
 import { useRef, useState } from "react"

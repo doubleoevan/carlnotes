@@ -1,6 +1,6 @@
 // the chat room mentions api helpers to update the badge counts
 import { toMentionedUserIds } from "@shared/chatMentions"
-import type { ChatMention } from "@shared/contracts"
+import type { ChatMention } from "@shared/contracts/chat"
 import { and, desc, eq, inArray, isNull, type SQL } from "drizzle-orm"
 import { db } from "../../db"
 import { deleteRedisKey } from "../../db/redis"

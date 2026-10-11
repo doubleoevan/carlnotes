@@ -1,5 +1,5 @@
 // the new-topic chat's own tools: writing the topic draft, suggesting its sources, and creating the topic from it
-import { MAX_DRAFT_INVITES, MAX_TOPIC_SOURCES, TOPIC_NAME_CHARS, TOPIC_PROMPT_CHARS } from "@shared/contracts"
+import { MAX_DRAFT_INVITES, MAX_TOPIC_SOURCES, TOPIC_NAME_CHARS, TOPIC_PROMPT_CHARS } from "@shared/contracts/topics"
 import { isPodcastEpisodeRecordingConfigured } from "@shared/podcastEpisodes"
 import {
 	addTopicSourcePayload,

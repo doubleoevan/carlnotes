@@ -1,0 +1,2 @@
+ALTER TABLE "episode_vectors" ADD COLUMN "is_topic_public_and_shown" boolean DEFAULT false NOT NULL;--> statement-breakpoint
+CREATE INDEX "episode_vectors_public_and_shown_embedding_hnsw" ON "episode_vectors" USING hnsw ("embedding" vector_cosine_ops) WHERE "episode_vectors"."is_topic_public_and_shown";

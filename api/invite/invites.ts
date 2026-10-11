@@ -2,7 +2,7 @@
 // link routes
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
-import type { Invite, InviteSource } from "@shared/contracts"
+import type { Invite, InviteSource } from "@shared/contracts/invites"
 import { inviteCreatePayload } from "@shared/payloads"
 import { PLANS } from "@shared/plans"
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm"

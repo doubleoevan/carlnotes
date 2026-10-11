@@ -1,4 +1,4 @@
-import type { PodcastEpisode } from "@shared/contracts"
+import type { PodcastEpisode } from "@shared/contracts/podcast"
 import { Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { sendRemovePodcastEpisode } from "@/clients/podcastEpisodeClient"

@@ -1,5 +1,5 @@
 // the invite smoke's fixtures: the run id, the accounts, topics, teams, and invite rows it seeds, and their cleanup
-import type { Invite } from "@shared/contracts"
+import type { Invite } from "@shared/contracts/invites"
 import { toNormalizedUsername } from "@shared/usernames"
 import { and, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"

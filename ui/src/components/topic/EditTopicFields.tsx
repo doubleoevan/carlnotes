@@ -1,4 +1,4 @@
-import { MAX_TOPIC_SOURCES } from "@shared/contracts"
+import { MAX_TOPIC_SOURCES } from "@shared/contracts/topics"
 import { daysOfWeek, type frequencies, isDailyFrequency } from "@shared/enums"
 import { ADMIN_QUOTA } from "@shared/plans"
 import { useNavigate } from "@tanstack/react-router"

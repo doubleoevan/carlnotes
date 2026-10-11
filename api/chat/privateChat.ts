@@ -1,7 +1,7 @@
 // the private chat routes on each page, and answering an allowed chat turn with the worker's streamed reply
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
-import { type ChatConversation, type ChatTurnRow, withAttachmentNote } from "@shared/contracts"
+import { type ChatConversation, type ChatTurnRow, withAttachmentNote } from "@shared/contracts/chat"
 import { type ChatTurnPayload, chatTurnPayload } from "@shared/payloads"
 import { ADMIN_QUOTA } from "@shared/plans"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"

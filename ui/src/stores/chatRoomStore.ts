@@ -1,5 +1,5 @@
 // the state of the user's chat rooms and their chat mention badge counts
-import type { ChatMention, ChatRoom } from "@shared/contracts"
+import type { ChatMention, ChatRoom } from "@shared/contracts/chat"
 import { toStoreListeners } from "@/stores/storeListeners"
 
 // the chat rooms that the user opened this session

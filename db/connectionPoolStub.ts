@@ -50,3 +50,10 @@ export function restoreConnectionPool(): void {
 export function toTableRow(table: Table, columnValues: Record<string, unknown>): unknown[] {
 	return Object.keys(getTableColumns(table)).map((columnName) => columnValues[columnName] ?? null)
 }
+
+/**
+ * Returns a row of a select's fields in their order, with the given fields filled in and every other field null.
+ */
+export function toSelectionRow(selection: Record<string, unknown>, fieldValues: Record<string, unknown>): unknown[] {
+	return Object.keys(selection).map((fieldName) => fieldValues[fieldName] ?? null)
+}

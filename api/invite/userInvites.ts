@@ -1,6 +1,6 @@
 // the invites that name a person, by email or by @username
 import { zValidator } from "@hono/zod-validator"
-import type { Invite } from "@shared/contracts"
+import type { Invite } from "@shared/contracts/invites"
 import type { UserInvitePayload } from "@shared/payloads"
 import { userInvitePayload } from "@shared/payloads"
 import { toNormalizedUsername } from "@shared/usernames"

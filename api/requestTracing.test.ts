@@ -1,13 +1,15 @@
 // the route a request's transaction is named by, a request passing through untouched if nothing traces it,
 // the Server-Timing header outside production, and the request log line's counts and missed keys
 import { afterEach, expect, test } from "bun:test"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { Hono } from "hono"
 import { countCacheRead, countRequestStatement } from "../db/queryTracing"
 import { toRequestLogLine, toRequestRoute, traceRequest } from "./requestTracing"
 
 // put the test environment back after a test that pretends to be production
+const restoreEnvSettings = saveEnvSettings(["NODE_ENV"])
 afterEach(() => {
-	Bun.env.NODE_ENV = "test"
+	restoreEnvSettings()
 })
 
 // an app routed like the api: a sub-app under a prefix, a parameterized route, the api's JSON 404,

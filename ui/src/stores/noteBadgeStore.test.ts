@@ -1,7 +1,7 @@
 // the note badge store's rules. the two numbers stay apart on a note and sum on a page, and opening a note clears it
 
 import { expect, test } from "bun:test"
-import type { NoteBadge } from "@shared/contracts"
+import type { NoteBadge } from "@shared/contracts/notes"
 import {
 	markNoteOpened,
 	setNoteBadges,

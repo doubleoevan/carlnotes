@@ -2,13 +2,12 @@
 import { reportError } from "@shared/monitoring"
 import { toSourceSummary, toUrlHost } from "@shared/sources"
 import { and, desc, eq, inArray, isNotNull, type SQL, sql } from "drizzle-orm"
-import { db, isFindingShown } from "../../db"
+import { db, isCurrentModelEmbedding, isFindingShown } from "../../db"
 import { chatAttachments } from "../../db/schema/chat"
-import { EMBED_MODEL_NAME, findings, resources, scans } from "../../db/schema/scans"
+import { findings, resources, scans } from "../../db/schema/scans"
 import { attachments, sources, topics } from "../../db/schema/topics"
-import { embedVector } from "../models"
 import { getResourceContent } from "../store"
-import { EMBED_QUERY_INSTRUCTION, readDocsBlock } from "./retrieveDocs"
+import { embedRetrievalQuery, readDocsBlock } from "./retrieveDocs"
 
 // how many findings a chat turn sends to the model
 const MAX_RETRIEVED_FINDINGS = 8
@@ -85,8 +84,8 @@ export async function retrieveChatContext(
 		return null
 	}
 
-	// embed the question once through the same helper review uses. the findings and the docs both rank against it
-	const questionVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${question}`, litellmApiKey)
+	// embed the question once. the findings and the docs both rank against it
+	const questionVector = await embedRetrievalQuery(question, litellmApiKey)
 
 	// re-rank the findings against the question and read the sources, scan summaries, attachment contexts, and docs
 	const [retrievedFindings, topicSources, scanSummaries, attachmentContext, chatAttachmentContext, docsBlock] =
@@ -145,7 +144,7 @@ export async function searchTopicFindings(
 	limit: number,
 	litellmApiKey?: string,
 ): Promise<RankedTopicFinding[]> {
-	const queryVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${query}`, litellmApiKey)
+	const queryVector = await embedRetrievalQuery(query, litellmApiKey)
 	return rankTopicFindings([topicId], queryVector, limit)
 }
 
@@ -233,14 +232,7 @@ export function toRankTopicFindingsQuery(topicIds: string[], questionVector: num
 		})
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.where(
-			and(
-				inArray(findings.topicId, topicIds),
-				isFindingShown,
-				isNotNull(resources.embedding),
-				eq(resources.embeddingModel, EMBED_MODEL_NAME),
-			),
-		)
+		.where(and(inArray(findings.topicId, topicIds), isFindingShown, isCurrentModelEmbedding))
 
 	// the materialized topic findings, then the ranking over them
 	return sql`with topic_findings as materialized (${topicFindingsQuery}) select * from topic_findings order by distance limit ${limit}`

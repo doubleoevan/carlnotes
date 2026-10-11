@@ -2,12 +2,12 @@
 // setup and restore that each LiteLLM test file runs around every test
 import { type Mock, mock, spyOn } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "../db/connectionPoolStub"
 
 // the real fetch, the connection pool's own query, and the proxy settings, put back after each test
 const originalFetch = globalThis.fetch
-const originalBaseUrl = Bun.env.LITELLM_BASE_URL
-const originalMasterKey = Bun.env.LITELLM_MASTER_KEY
+const restoreEnvSettings = saveEnvSettings(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
 
 /**
  * Sets the proxy settings that the config check requires, and empties the stub call order.
@@ -24,8 +24,7 @@ export function setUpLiteLLMTest(): void {
 export function restoreLiteLLMTest(): void {
 	globalThis.fetch = originalFetch
 	restoreConnectionPool()
-	restoreEnv("LITELLM_BASE_URL", originalBaseUrl)
-	restoreEnv("LITELLM_MASTER_KEY", originalMasterKey)
+	restoreEnvSettings()
 	mock.restore()
 }
 
@@ -83,13 +82,4 @@ export function stubFailingProxy(): ProxyRequest[] {
  */
 export function toUserRow(litellmVirtualKey: string | null): unknown[] {
 	return ["carl@example.com", litellmVirtualKey, "user", "free", 1234]
-}
-
-// put a setting back, or take it away again when the test run never had it
-function restoreEnv(name: string, value: string | undefined): void {
-	if (value === undefined) {
-		delete Bun.env[name]
-	} else {
-		Bun.env[name] = value
-	}
 }

@@ -1,5 +1,5 @@
-import type { TopicResponse } from "@shared/contracts"
-import { toAttachmentFailureMessage } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
+import { toAttachmentFailureMessage } from "@shared/contracts/topics"
 import { traceRequestStage } from "@shared/monitoring"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { desc, eq } from "drizzle-orm"
@@ -21,15 +21,22 @@ import {
 	toScheduledTimeLabel,
 	toTeamFields,
 } from "./helpers"
-import { loadMoreTopics } from "./moreTopics"
 import { loadDirectSubscription } from "./permissions"
 import { startOfUtcMonth } from "./quotas"
+import { loadRelatedTopics } from "./relatedTopics"
+
+// whether the load is a poll reload while a scan runs, which leaves out the related topics
+type LoadTopicPageOptions = { isPoll?: boolean }
 
 /**
  * Loads one topic's page or null if the topic is missing or not visible to this user.
  * A signed-out visitor may view a public topic, with no consumed state and no owner extras.
  */
-export async function loadTopicPage(userId: string | null, topicId: string): Promise<TopicResponse | null> {
+export async function loadTopicPage(
+	userId: string | null,
+	topicId: string,
+	{ isPoll = false }: LoadTopicPageOptions = {},
+): Promise<TopicResponse | null> {
 	// load the topic behind the visibility gate. a hidden topic looks identical to a missing one
 	const topic = await traceRequestStage("topic_page.gate", async () => {
 		const [topicRow] = await db.select().from(topics).where(eq(topics.id, topicId))
@@ -52,12 +59,12 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		inviteAndScanFields,
 		owner,
 		teamFields,
-		// whether a daily frequency is paused, what the user may do on the topic, the podcast, and the more topics
+		// whether a daily frequency is paused, what the user may do on the topic, the podcast, and the related topics
 		isDailyFrequencyPaused,
 		canRate,
 		canEdit,
 		{ podcast, latestPodcastEpisode, podcastEpisodeByScanId },
-		moreTopics,
+		relatedTopics,
 	] = await traceRequestStage("topic_page.reads", () =>
 		Promise.all([
 			// the user's access and the findings it gates
@@ -81,8 +88,8 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 			isAllowed(userId, "topic:edit", topic),
 			// the topic's podcast, and each scan's podcast episode for the scan history
 			loadTopicPodcast(topic, userId),
-			// the other public topics the page links, none for a topic that is not public and shown
-			loadMoreTopics(topic),
+			// the most related topics that the user may open, none for a poll reload
+			isPoll ? [] : loadRelatedTopics(topic, userId),
 		]),
 	)
 
@@ -154,7 +161,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 		...teamFields,
 		isOnTeam: topic.teamId !== null,
 		...(await toFeaturedTopics(topic.featureOrder, isAdmin)),
-		moreTopics,
+		relatedTopics,
 	}
 }
 

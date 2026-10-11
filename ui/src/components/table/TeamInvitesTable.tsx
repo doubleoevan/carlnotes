@@ -1,4 +1,4 @@
-import type { TeamsPageResponse } from "@shared/contracts"
+import type { TeamsPageResponse } from "@shared/contracts/teams"
 import { sendDeleteTeamInvite } from "@/clients/teamClient"
 import { type SentInviteRow, SentInvitesTable } from "@/components/table/SentInvitesTable"
 import { TeamLink } from "@/components/team/TeamLink"

@@ -1,5 +1,5 @@
 // which topic findings a feed filter shows
-import type { TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
 
 // the feed's filter views. bookmarked narrows to the user's bookmarked findings,
 // and rated down shows the findings rated thumbs down, which every other view hides

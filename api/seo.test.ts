@@ -1,6 +1,7 @@
 // tests for the document routes, the seo files they serve, and a topic's description
 import { expect, test } from "bun:test"
-import type { PublicTopic } from "@shared/contracts"
+import type { PublicTopic } from "@shared/contracts/topics"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { documentsRoute } from "./documents"
 import { loadDocsPages, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toTopicDescription } from "./seo"
@@ -154,7 +155,7 @@ test("toTopicDescription falls back from the scan summary to the prompt to the n
 // IndexNow reads the key from /indexnow.txt, which exists only while a key is set
 test("/indexnow.txt serves the IndexNow key, and a 404 without one", async () => {
 	// keep the environment's key to restore afterwards
-	const originalIndexNowKey = Bun.env.INDEXNOW_KEY
+	const restoreEnvSettings = saveEnvSettings(["INDEXNOW_KEY"])
 	try {
 		// a set key is the whole body
 		Bun.env.INDEXNOW_KEY = "test-indexnow-key"
@@ -167,11 +168,7 @@ test("/indexnow.txt serves the IndexNow key, and a 404 without one", async () =>
 		expect((await documentsRoute.request("/indexnow.txt")).status).toBe(404)
 	} finally {
 		// restore the key the test found
-		if (originalIndexNowKey === undefined) {
-			delete Bun.env.INDEXNOW_KEY
-		} else {
-			Bun.env.INDEXNOW_KEY = originalIndexNowKey
-		}
+		restoreEnvSettings()
 	}
 })
 

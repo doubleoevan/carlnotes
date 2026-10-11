@@ -1,5 +1,5 @@
 // the podcast episode player's state, which outlives the page that started playback
-import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts"
+import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts/podcast"
 import type { PodcastEpisodeListenPayload } from "@shared/payloads"
 import {
 	fetchNextUnplayedPodcastEpisode,

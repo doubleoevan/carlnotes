@@ -1,7 +1,8 @@
 // the homepage as the server renders it, across two requests in one process, with a section's page links, and with a
 // closed section still in the html
 import { afterAll, beforeAll, expect, test } from "bun:test"
-import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
+import type { TopicFeed, TopicFeedResponse } from "@shared/contracts/topics"
 import { toTopicPath } from "@shared/seo"
 import { RouterProvider } from "@tanstack/react-router"
 import { renderToString } from "react-dom/server"

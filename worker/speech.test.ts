@@ -1,28 +1,17 @@
 // speech tests: the request body, the flex tier, how a failed call is sorted, the pass-through call, an empty model
 import { afterEach, expect, test } from "bun:test"
 import type { PodcastEpisodeTurn } from "@shared/payloads"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { recordSpeech, toFailedSpeechResult, toSpeechRequestBody } from "./speech"
 
 // the real fetch and env to put back after each test
 const realFetch = globalThis.fetch
-const realEnv = {
-	PODCAST_SPEECH_MODEL: Bun.env.PODCAST_SPEECH_MODEL,
-	LITELLM_BASE_URL: Bun.env.LITELLM_BASE_URL,
-	LITELLM_MASTER_KEY: Bun.env.LITELLM_MASTER_KEY,
-}
+const restoreEnvSettings = saveEnvSettings(["PODCAST_SPEECH_MODEL", "LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
 
 // put fetch and the env back, removing a value that was unset
 afterEach(() => {
 	globalThis.fetch = realFetch
-
-	// assigning undefined would store the text "undefined", so an unset value is deleted
-	for (const [name, value] of Object.entries(realEnv)) {
-		if (value === undefined) {
-			delete Bun.env[name]
-		} else {
-			Bun.env[name] = value
-		}
-	}
+	restoreEnvSettings()
 })
 
 // two turns, one from each speaker, the second with a style

@@ -1,5 +1,5 @@
 // streaming a chat turn's reply to the user, then saving its row, its topic draft, and its sent attachments
-import { toChatReplyLineText } from "@shared/contracts"
+import { toChatReplyLineText } from "@shared/contracts/chat"
 import { reportError } from "@shared/monitoring"
 import type { ChatAttachment } from "@shared/payloads"
 import type { Context } from "hono"

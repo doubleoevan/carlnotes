@@ -1,5 +1,5 @@
 // the chat adapters for a topic: the edit tools bound to one chat turn's topic, and the wording every adapter shares
-import type { TopicToolCalls } from "@shared/contracts"
+import type { TopicToolCalls } from "@shared/contracts/chat"
 import {
 	addTopicSourcePayload,
 	proposeTopicEditPayload,

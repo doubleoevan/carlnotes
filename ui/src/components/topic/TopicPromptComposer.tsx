@@ -1,4 +1,4 @@
-import { TOPIC_PROMPT_CHARS } from "@shared/contracts"
+import { TOPIC_PROMPT_CHARS } from "@shared/contracts/topics"
 import { FileText, Paperclip, X } from "lucide-react"
 import type * as React from "react"
 import { useEffect, useRef, useState } from "react"

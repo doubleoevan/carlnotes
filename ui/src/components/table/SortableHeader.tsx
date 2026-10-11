@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives
 export type SortValue = string | number | null
 
 // the sort state a SortableHeader needs from the hook
-type RowSort = {
+export type RowSort = {
 	sortKey: string | null
 	isDescending: boolean
 	toggleSort: (key: string) => void

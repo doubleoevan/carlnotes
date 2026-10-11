@@ -1,7 +1,7 @@
 // the page head of a topic, a profile, a team, or an invitation, and the routes that serve it
 
 import { appUrl } from "@shared/appUrl"
-import type { PageHead } from "@shared/contracts"
+import type { PageHead } from "@shared/contracts/pageHead"
 import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
 import { toPageTitle, toPodcastEpisodePath, toPodcastFeedPath, toTopicFeedPath, toTopicPath } from "@shared/seo"
 import { eq } from "drizzle-orm"

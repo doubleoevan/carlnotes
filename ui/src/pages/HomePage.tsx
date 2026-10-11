@@ -1,4 +1,4 @@
-import type { TopicFeedResponse } from "@shared/contracts"
+import type { TopicFeedResponse } from "@shared/contracts/topics"
 import { ADMIN_QUOTA } from "@shared/plans"
 import { useNavigate } from "@tanstack/react-router"
 import { Coffee, Plus } from "lucide-react"

@@ -1,11 +1,14 @@
 // the typed Hono RPC api client for every topic route
+import type { ChatLinkPreview } from "@shared/contracts/chat"
 import {
-	type ChatLinkPreview,
 	type Invite,
 	type InviteAcceptResponse,
 	type InviteSource,
 	inviteAcceptResponse,
 	inviteCreateResponse,
+} from "@shared/contracts/invites"
+import type { TopicSearchResult } from "@shared/contracts/search"
+import {
 	manualScanResponse,
 	type SuggestSourcesResponse,
 	scanNote,
@@ -13,12 +16,11 @@ import {
 	type TopicFeedResponse,
 	type TopicGateResponse,
 	type TopicResponse,
-	type TopicSearchResult,
 	topicCreateResponse,
 	topicFeedResponse,
 	topicGateResponse,
 	topicResponse,
-} from "@shared/contracts"
+} from "@shared/contracts/topics"
 import type { SuggestSourcesPayload, UpdateTopicPayload } from "@shared/topicPayloads"
 import { toast } from "sonner"
 import { apiClient, readApiErrorMessage } from "./apiClient"

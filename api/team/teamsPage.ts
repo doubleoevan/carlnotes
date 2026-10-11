@@ -1,6 +1,6 @@
 // the teams page read: the user's teams, the team invites waiting for an answer, and the team invites sent
 import { toAvatarKeyVersion } from "@shared/avatars"
-import type { TeamsPageResponse } from "@shared/contracts"
+import type { TeamsPageResponse } from "@shared/contracts/teams"
 import { and, desc, eq, gt, inArray, isNotNull, isNull, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { db } from "../../db"

@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { sendDeleteTopic } from "@/clients/topicClient"
 import { ConfirmDialog } from "@/components/common/ConfirmDialog"
 

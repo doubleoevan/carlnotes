@@ -1,5 +1,6 @@
 // the topic edit modal's teams field: which of the user's leader teams hold the topic after the save
-import type { TeamSummary, TopicResponse } from "@shared/contracts"
+import type { TeamSummary } from "@shared/contracts/teams"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import {

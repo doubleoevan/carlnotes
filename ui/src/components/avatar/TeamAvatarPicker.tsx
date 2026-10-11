@@ -1,5 +1,5 @@
 // the team avatar with the camera overlay
-import type { TeamIdentity } from "@shared/contracts"
+import type { TeamIdentity } from "@shared/contracts/teams"
 import { Camera } from "lucide-react"
 import { toast } from "sonner"
 import {

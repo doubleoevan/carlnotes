@@ -1,5 +1,5 @@
 import { AVATAR_COLOR, toAvatarInitials, toAvatarTint } from "@shared/avatars"
-import type { TeamIdentity } from "@shared/contracts"
+import type { TeamIdentity } from "@shared/contracts/teams"
 import { useState } from "react"
 import { AVATAR_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"

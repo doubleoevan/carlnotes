@@ -1,5 +1,5 @@
 // the topic draft tools: creating a topic from a draft, and suggesting sources for one
-import { MAX_TOPIC_SOURCES } from "@shared/contracts"
+import { MAX_TOPIC_SOURCES } from "@shared/contracts/topics"
 import { DEFAULT_SOURCES } from "@shared/sources"
 import type { TopicDraft } from "@shared/topicPayloads"
 import { eq } from "drizzle-orm"

@@ -1,4 +1,5 @@
-import type { TopicPodcast, TopicResponse } from "@shared/contracts"
+import type { TopicPodcast } from "@shared/contracts/podcast"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { maxTopicFindingsOptions, visibilities } from "@shared/enums"
 import { FULL_PODCAST_EPISODE_MINUTES, PODCAST_NAME, SHORT_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import { useNavigate } from "@tanstack/react-router"

@@ -1,4 +1,4 @@
-import type { ActivityResponse } from "@shared/contracts"
+import type { ActivityResponse } from "@shared/contracts/activity"
 import { toTopicPath } from "@shared/seo"
 import { sendDeleteTopicInvite } from "@/clients/activityClient"
 import { AnchorLink } from "@/components/common/AnchorLink"

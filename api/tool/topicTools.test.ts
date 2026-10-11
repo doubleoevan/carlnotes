@@ -1,5 +1,6 @@
 // topic tool tests for the prompt version write and the settings tool's podcast switch
 import { expect, test } from "bun:test"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { savePromptVersion } from "../topic/promptVersions"
 import { toPodcastFieldDescription, toUpdateTopicFieldsShape } from "./topicTools"
 
@@ -38,7 +39,7 @@ test("the version write skips an unchanged prompt and saves a changed one", asyn
 
 // the podcast switch is offered only if episode recording is configured, in the schema and in the description
 test("the settings tool offers the podcast switch only if a speech model is configured", () => {
-	const originalSpeechModel = Bun.env.PODCAST_SPEECH_MODEL
+	const restoreEnvSettings = saveEnvSettings(["PODCAST_SPEECH_MODEL"])
 	try {
 		// with the speech model set empty, the tool has no switch to offer
 		Bun.env.PODCAST_SPEECH_MODEL = ""
@@ -51,10 +52,6 @@ test("the settings tool offers the podcast switch only if a speech model is conf
 		expect(toPodcastFieldDescription()).toContain("isPodcastEnabled")
 	} finally {
 		// put the setting back as the environment had it
-		if (originalSpeechModel === undefined) {
-			delete Bun.env.PODCAST_SPEECH_MODEL
-		} else {
-			Bun.env.PODCAST_SPEECH_MODEL = originalSpeechModel
-		}
+		restoreEnvSettings()
 	}
 })

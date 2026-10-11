@@ -1,4 +1,5 @@
-import type { PageHead, PodcastEpisodePageResponse } from "@shared/contracts"
+import type { PageHead } from "@shared/contracts/pageHead"
+import type { PodcastEpisodePageResponse } from "@shared/contracts/podcastEpisodePage"
 import { createFileRoute, notFound, redirect } from "@tanstack/react-router"
 import { fetchPodcastEpisodePageHead } from "@/clients/pageHeadClient"
 import { fetchPodcastEpisodePage } from "@/clients/podcastEpisodeClient"

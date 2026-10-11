@@ -1,4 +1,4 @@
-import type { TopicFeedResponse } from "@shared/contracts"
+import type { TopicFeedResponse } from "@shared/contracts/topics"
 import { getRouteApi, Link } from "@tanstack/react-router"
 import type { MouseEvent } from "react"
 import { Pagination } from "@/components/common/Pagination"
@@ -57,10 +57,11 @@ export function TopicSection({ section, onNewTopicChat }: TopicSectionProps) {
 				{renderedTopics.map(({ row: topic, className }, index) => (
 					<Topic key={topic.id} topic={topic} index={index % TOPICS_PER_PAGE} className={className} />
 				))}
-				{/* the links to the section's pages */}
+				{/* the links to the section's pages, with no padding above them */}
 				{pageCount > 1 && (
 					<Pagination
 						ariaLabel={`${SECTION_TITLE[section.key]} pages`}
+						className="pt-0 pb-2"
 						pageNumber={pageNumber}
 						pageCount={pageCount}
 						rowCount={section.topics.length}

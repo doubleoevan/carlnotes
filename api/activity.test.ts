@@ -1,6 +1,6 @@
 // activity tests for the payload assembly
 import { expect, test } from "bun:test"
-import type { PodcastEpisode } from "@shared/contracts"
+import type { PodcastEpisodeSummary } from "@shared/contracts/podcast"
 import { toSubscriptionRows } from "./activity"
 import { toActivityTopics, toCents } from "./activityTopics"
 
@@ -120,7 +120,7 @@ function ownedTopicRow(topicId: string): Parameters<typeof toActivityTopics>[0][
 
 // the latest podcast episode passes through to its topic's row, and a topic without one reads null
 test("toActivityTopics and toSubscriptionRows include each topic's latest podcast episode", () => {
-	const podcastEpisode = { id: "podcast-episode-1", episodeNumber: 3 } as PodcastEpisode
+	const podcastEpisode = { id: "podcast-episode-1", episodeNumber: 3 } as PodcastEpisodeSummary
 	const latestPodcastEpisodeByTopic = new Map([["t1", podcastEpisode]])
 
 	// an owned topic with a podcast episode and one without

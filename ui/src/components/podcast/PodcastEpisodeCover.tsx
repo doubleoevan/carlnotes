@@ -1,4 +1,4 @@
-import type { PodcastEpisode } from "@shared/contracts"
+import type { PodcastEpisode } from "@shared/contracts/podcast"
 import { COVER_PLACEHOLDER_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 

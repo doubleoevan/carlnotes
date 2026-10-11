@@ -1,5 +1,5 @@
 // the private chat's scrollable chat message list, virtualized past a long conversation
-import { CHAT_HISTORY_TURNS, toUncompactedChatTurnStart } from "@shared/contracts"
+import { CHAT_HISTORY_TURNS, toUncompactedChatTurnStart } from "@shared/contracts/chat"
 import { useEffect, useRef } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { type ChatMessageAuthor, ChatTurnBlock } from "@/components/chat/ChatTurnBlock"

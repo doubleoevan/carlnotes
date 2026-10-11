@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { CUSTOM_SOURCE_OPTIONS, DEFAULT_SOURCES } from "@shared/sources"
 import type { ProposeTopicEditPayload, TopicDraft } from "@shared/topicPayloads"
 

@@ -1,4 +1,5 @@
-import type { PodcastEpisode, SeasonPodcastEpisodes, TopicResponse } from "@shared/contracts"
+import type { PodcastEpisode, SeasonPodcastEpisodes } from "@shared/contracts/podcast"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { PODCAST_NAME } from "@shared/podcastEpisodes"
 import { toPodcastEpisodePath, toTopicPath } from "@shared/seo"
 import { defaultParseSearch, Link, useMatch } from "@tanstack/react-router"

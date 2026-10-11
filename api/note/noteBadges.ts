@@ -1,5 +1,5 @@
 // the unread note badge counts. what changed in a note since a user last opened it, and the read that clears it
-import type { NoteBadge } from "@shared/contracts"
+import type { NoteBadge } from "@shared/contracts/notes"
 import { and, count, eq, gt, inArray, isNull, ne, or } from "drizzle-orm"
 import { db } from "../../db"
 import { noteComments, noteCommentThreads, noteReads, notes } from "../../db/schema/notes"

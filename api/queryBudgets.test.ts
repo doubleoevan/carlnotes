@@ -9,18 +9,21 @@ import {
 	toTableRow,
 } from "../db/connectionPoolStub"
 import * as redis from "../db/redis"
-import { restoreRedisClient, stubRedisClient } from "../db/redisClientStub"
+import { restoreRedisClient } from "../db/redisClientStub"
 import { runWithRequestMemo } from "../db/requestMemo"
 import { topics } from "../db/schema/topics"
 import { apiRoute } from "./api"
 import { auth } from "./auth"
+import { stubRedisClientWithCentroid } from "./topic/relatednessTestFixtures"
 
 // the most queries a request may send: a Redis hit serves the mention count, the topic poll, and the feed's topic
-// section ids without their reads, and one topic page load reads its user's access row once and their topic role once
+// section ids without their reads, and one topic page load reads its user's access row once and their topic role once.
+// the topic page's related topics read sends its iterative index scan setting, its read, and the check of its ranked
+// topics
 const MAX_MENTION_COUNT_CACHE_HIT_QUERIES = 0
 const MAX_TOPIC_POLL_CACHE_HIT_QUERIES = 0
 const MAX_TOPIC_FEED_CACHE_HIT_QUERIES = 8
-const MAX_TOPIC_PAGE_QUERIES = 18
+const MAX_TOPIC_PAGE_QUERIES = 20
 
 // a public topic owned by someone else
 const TOPIC_ROW = toTableRow(topics, {
@@ -57,9 +60,9 @@ function toBudgetQueryRows(sentQuery: SentQuery): unknown[] {
 	return []
 }
 
-// one Redis and one stubbed pool per test, with the console quiet
+// one Redis with the related reads' centroid stored and one stubbed pool per test, with the console quiet
 beforeEach(() => {
-	stubRedisClient()
+	stubRedisClientWithCentroid()
 	sentQueries = stubConnectionPool(toBudgetQueryRows)
 	spyOn(console, "error").mockImplementation(() => {})
 })
@@ -122,6 +125,19 @@ test("the topic page reads the user's access and topic role once", async () => {
 	const roleReads = sentQueries.filter((sentQuery) => sentQuery.text.includes('"role" from "team_members"'))
 	expect(accessReads).toHaveLength(1)
 	expect(roleReads).toHaveLength(1)
+})
+
+// a poll reload leaves out the related topics read, which a full page load sends
+test("a poll reload skips the related topics read", async () => {
+	// the read that only a full page load sends: the related topic ids
+	const isRelatedTopicsRead = (sentQuery: SentQuery): boolean => sentQuery.text.includes('from "topic_vectors"')
+
+	// a full load sends it, and a poll does not
+	await requestAsUser("/api/topics/topic-1", "user-1")
+	const fullLoadQueryCount = sentQueries.length
+	expect(sentQueries.filter(isRelatedTopicsRead).length).toBeGreaterThanOrEqual(1)
+	await requestAsUser("/api/topics/topic-1?poll=1", "user-1")
+	expect(sentQueries.slice(fullLoadQueryCount).filter(isRelatedTopicsRead)).toHaveLength(0)
 })
 
 // a cached read that is bypassed sends its queries again, which the maximum catches

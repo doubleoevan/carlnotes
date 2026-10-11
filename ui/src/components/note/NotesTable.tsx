@@ -1,5 +1,5 @@
 // the notes table: sortable name, visibility, and updated columns, one row per visible note
-import type { Note } from "@shared/contracts"
+import type { Note } from "@shared/contracts/notes"
 import { CountBadge } from "@/components/common/CountBadge"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { SortableHeader } from "@/components/table/SortableHeader"

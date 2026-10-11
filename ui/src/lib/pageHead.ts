@@ -1,5 +1,5 @@
 // the head tags a route's head() returns, built from the api's page head or from a page's own title and path
-import type { PageHead } from "@shared/contracts"
+import type { PageHead } from "@shared/contracts/pageHead"
 import { PODCAST_SHOW_NAME } from "@shared/podcastEpisodes"
 import { toJsonLdText, toPageTitle } from "@shared/seo"
 

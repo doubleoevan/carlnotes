@@ -2,11 +2,11 @@
 // security.txt
 import { readdir } from "node:fs/promises"
 import { join } from "node:path"
-import type { PublicTopic } from "@shared/contracts"
+import type { PublicTopic } from "@shared/contracts/topics"
 import { PODCAST_SHOW_NAME } from "@shared/podcastEpisodes"
 import { toMetaDescription, toTopicPath } from "@shared/seo"
 import { and, desc, eq, exists, inArray, or, type SQL, sql } from "drizzle-orm"
-import { db } from "../db"
+import { db, isPublicAndShown } from "../db"
 import { findings, scans } from "../db/schema/scans"
 import { teams, teamTopics } from "../db/schema/teams"
 import { topics } from "../db/schema/topics"
@@ -16,7 +16,6 @@ import {
 	toPublicPodcastEpisodePages,
 } from "./podcast/podcastSeo"
 import { loadReleases, toReleasePath } from "./releases"
-import { isPublicAndShown } from "./topic/permissions"
 import { cacheForTtl } from "./ttlCache"
 
 // the pages the sitemap always lists
@@ -104,7 +103,7 @@ export const lastScanSummary = sql<string | null>`${lastScanSummaryQuery}`
 
 // when a topic's feed last gained a finding, or the topic's creation time if it has none
 const newestFindingCreatedAtQuery = sql`(select max(${findings.createdAt}) from ${findings} where ${findings.topicId} = ${topics.id})`
-export const topicFeedUpdatedAt = sql<Date>`coalesce(${newestFindingCreatedAtQuery}, ${topics.createdAt})`.mapWith(
+const topicFeedUpdatedAt = sql<Date>`coalesce(${newestFindingCreatedAtQuery}, ${topics.createdAt})`.mapWith(
 	topics.createdAt,
 )
 

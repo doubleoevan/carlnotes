@@ -1,5 +1,5 @@
 // the topic invitations waiting for the user's answer, as the badge poll last read them
-import type { TopicInviteBadge } from "@shared/contracts"
+import type { TopicInviteBadge } from "@shared/contracts/invites"
 import { toStoreListeners } from "@/stores/storeListeners"
 
 // what the poll last read

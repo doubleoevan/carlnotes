@@ -1,6 +1,6 @@
 // every chat room one user can open, for the chat panel's switch chat rooms menu
 import { toAvatarKeyVersion } from "@shared/avatars"
-import type { ChatRoom } from "@shared/contracts"
+import type { ChatRoom } from "@shared/contracts/chat"
 import { and, count, eq, inArray, isNull } from "drizzle-orm"
 import { db } from "../../db"
 import { chatRoomMentions } from "../../db/schema/chat"

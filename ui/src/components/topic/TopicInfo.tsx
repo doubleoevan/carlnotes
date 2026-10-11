@@ -1,4 +1,4 @@
-import type { TopicFeed, TopicResponse } from "@shared/contracts"
+import type { TopicFeed, TopicResponse } from "@shared/contracts/topics"
 import { PODCAST_NAME } from "@shared/podcastEpisodes"
 import { DEFAULT_SOURCES, toDefaultSource } from "@shared/sources"
 import { AudioLines, Diamond, Download, ExternalLink, Globe, Link, Lock, Mail, Plug, Puzzle, Rss } from "lucide-react"

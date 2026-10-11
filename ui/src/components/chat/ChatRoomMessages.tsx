@@ -1,4 +1,4 @@
-import type { ChatRoomMessage } from "@shared/contracts"
+import type { ChatRoomMessage } from "@shared/contracts/chat"
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { toast } from "sonner"

@@ -1,4 +1,6 @@
-import type { AdminTeamRow, OwnerTopic, TeamPageResponse } from "@shared/contracts"
+import type { OwnerTopic } from "@shared/contracts/activity"
+import type { AdminTeamRow } from "@shared/contracts/admin"
+import type { TeamPageResponse } from "@shared/contracts/teams"
 import { useState } from "react"
 import { toast } from "sonner"
 import { fetchAdminTeamMembers, fetchAdminTeamTopics } from "@/clients/billingClient"

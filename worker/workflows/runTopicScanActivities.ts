@@ -16,6 +16,7 @@ import type { SourceOutcome } from "../ingest"
 import { ingestFromTopicSources } from "../ingest"
 import type { DiscoveredResource } from "../ingest/ingester"
 import { loadOrProvisionUserLiteLLMKey } from "../litellm"
+import { saveTopicVectors } from "../meanVectors"
 import type { ReviewSummary } from "../review"
 import { reviewScan } from "../review"
 import { HEARTBEAT_INTERVAL_MS } from "./stageTimeouts"
@@ -116,7 +117,8 @@ export async function reviewForScan(
 }
 
 /**
- * Finishes the Scan by storing its counts and cost, and telling IndexNow if a public topic gained or lost a finding.
+ * Finishes the Scan by storing its counts and cost, saving its topic's vectors, and telling IndexNow if a public topic
+ * gained or lost a finding.
  */
 export async function finishScan(
 	scanId: string,
@@ -155,6 +157,9 @@ export async function finishScan(
 		return
 	}
 
+	// save the topic's vectors from what the scan kept
+	await saveTopicVectorsAfterScan({ scanId, topicId })
+
 	// load the topic for the analytics and the IndexNow notification, and stop if the topic was deleted
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
 	if (!topic) {
@@ -192,14 +197,21 @@ export async function finishScan(
  * and what tells the topic page it was stopped.
  * Nothing is emailed: a manual Scan reports to the page whoever stopped it is watching, and a scheduled
  * one sends no digest for a Topic read only part way.
- * The spend is left as each stage recorded it. A cancelled stage's own totals never reach the workflow.
+ * The spend is left as each stage recorded it. A cancelled stage's own totals never reach the workflow. The topic's
+ * vectors are saved from what the Scan kept.
  */
 export async function stopScan(scanId: string): Promise<void> {
 	// the Scan saves the moment the stop arrives, while its cancelled stage is still winding down
-	await db
+	const [stoppedScan] = await db
 		.update(scans)
 		.set({ status: "succeeded", stoppedAt: new Date(), finishedAt: new Date() })
 		.where(and(eq(scans.id, scanId), isNull(scans.finishedAt)))
+		.returning({ topicId: scans.topicId })
+
+	// save the topic's vectors from what the stopped scan kept
+	if (stoppedScan?.topicId) {
+		await saveTopicVectorsAfterScan({ scanId, topicId: stoppedScan.topicId })
+	}
 }
 
 /**
@@ -242,15 +254,30 @@ export async function reportPodcastEpisodeRecordingNotStarted(scanId: string, re
 }
 
 /**
- * Record a Scan as failed along with what it had already spent, for a workflow whose stage threw an error.
+ * Record a Scan as failed along with what it had already spent, for a workflow whose stage threw an error, and save
+ * the topic's vectors from what the Scan kept before it failed.
  */
 export async function failScan(scanId: string, reason: string, budget?: Budget): Promise<void> {
 	// a Scan that failed before its first stage returned has no spend to record
 	const spend = budget ? { stageCosts: budget.stageCosts, cost: budget.spentDollars.toString() } : {}
-	await db
+	const [failedScan] = await db
 		.update(scans)
 		.set({ status: "failed", error: reason, finishedAt: new Date(), ...spend })
 		.where(eq(scans.id, scanId))
+		.returning({ topicId: scans.topicId })
+
+	// save the topic's vectors from what the failed scan kept before its stage threw
+	if (failedScan?.topicId) {
+		await saveTopicVectorsAfterScan({ scanId, topicId: failedScan.topicId })
+	}
+}
+
+// the scan that ended, and its topic
+type SaveTopicVectorsAfterScanOptions = { scanId: string; topicId: string }
+
+// save the topic's vectors after a scan ends. a failed save is reported and never fails the scan
+async function saveTopicVectorsAfterScan({ scanId, topicId }: SaveTopicVectorsAfterScanOptions): Promise<void> {
+	await saveTopicVectors(topicId).catch((error: unknown) => reportError(error, "database", { scanId, topicId }))
 }
 
 // report that this worker is alive for as long as the stage runs, and checkpoint the Budget as what it reports

@@ -1,4 +1,4 @@
-import { CHAT_QUESTION_CHARS, type KeptChatAttachment } from "@shared/contracts"
+import { CHAT_QUESTION_CHARS, type KeptChatAttachment } from "@shared/contracts/chat"
 import { ArrowUp, FileText, FileX2, Film, Image, Minus, Paperclip, Square, X } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { ChatAttachmentChips } from "@/components/chat/ChatAttachmentChips"

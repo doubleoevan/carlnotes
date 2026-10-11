@@ -59,8 +59,14 @@ let hasSubscriberConnected = false
 // the channels that each subscriber client has subscribed, so no channel is subscribed twice on one client
 const subscribedChannelsByClient = new WeakMap<RedisConnectionClient, Set<string>>()
 
-// a cached read's key, how long a loaded value is stored, and how to load the value
-export type CacheJsonOptions<Value> = { key: string; ttlMs: number; load: () => Promise<Value> }
+// a cached read's key, how long a loaded value is stored, how to load the value, and whether a loaded value is stored.
+// every loaded value is stored unless isStorable says otherwise
+export type CacheJsonOptions<Value> = {
+	key: string
+	ttlMs: number
+	load: () => Promise<Value>
+	isStorable?: (loadedValue: Value) => boolean
+}
 
 // a JSON value to write under a key for the time to live
 export type SaveRedisJsonOptions = { key: string; value: unknown; ttlMs: number }
@@ -96,10 +102,10 @@ export async function runWithRedis<Result>(
 }
 
 /**
- * Returns the JSON value stored under a key, or loads the value on a miss and stores the value for the time to live.
- * A failed read loads the value and stores nothing.
+ * Returns the JSON value stored under a key, or loads the value on a miss and stores the value for the time to live,
+ * unless isStorable rejects it. A failed read loads the value and stores nothing.
  */
-export async function cacheJson<Value>({ key, ttlMs, load }: CacheJsonOptions<Value>): Promise<Value> {
+export async function cacheJson<Value>({ key, ttlMs, load, isStorable }: CacheJsonOptions<Value>): Promise<Value> {
 	// read the stored value and load without storing if the read fails or the value does not parse
 	const cacheRead = await runWithRedis("get", async (client) => {
 		const storedJson = await client.get(key)
@@ -119,11 +125,13 @@ export async function cacheJson<Value>({ key, ttlMs, load }: CacheJsonOptions<Va
 		return cacheRead.storedValue as Value
 	}
 
-	// count a miss for the minute and for the request, then load and store the value for the time to live
+	// count a miss for the minute and for the request, then load and store a storable value for the time to live
 	minuteGauges.cacheMissCount++
 	countCacheRead({ isHit: false, key })
 	const loadedValue = await load()
-	await saveRedisJson({ key, value: loadedValue, ttlMs })
+	if (!isStorable || isStorable(loadedValue)) {
+		await saveRedisJson({ key, value: loadedValue, ttlMs })
+	}
 	return loadedValue
 }
 

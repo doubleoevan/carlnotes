@@ -1,7 +1,7 @@
 // tests for utils methods and dependencies
 
 import { afterEach, expect, setSystemTime, test } from "bun:test"
-import type { TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
 import { toScanRecapPlaceholder } from "@/components/topic/TopicScanRecap"
 import {
 	durationMsBetween,

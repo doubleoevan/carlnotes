@@ -1,6 +1,6 @@
 // the chat room routes: the page, the stream, posting, the shared files, and the deletes
 import { zValidator } from "@hono/zod-validator"
-import type { ChatRoomMessagePage } from "@shared/contracts"
+import type { ChatRoomMessagePage } from "@shared/contracts/chat"
 import { chatRoomMessagePayload } from "@shared/payloads"
 import { Hono } from "hono"
 import { attachmentStream } from "../../worker"

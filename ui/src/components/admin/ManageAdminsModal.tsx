@@ -1,4 +1,4 @@
-import type { AdminUserRow } from "@shared/contracts"
+import type { AdminUserRow } from "@shared/contracts/admin"
 import { ChevronsUpDown, ShieldUser, X } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"

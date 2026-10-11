@@ -1,4 +1,4 @@
-import type { TopicFeed } from "@shared/contracts"
+import type { TopicFeed } from "@shared/contracts/topics"
 import { toTopicPath } from "@shared/seo"
 import { useNavigate } from "@tanstack/react-router"
 import { PawPrint } from "lucide-react"
@@ -9,7 +9,7 @@ import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { UserProfileLink } from "@/components/common/UserProfileLink"
-import { LatestPodcastEpisodePlayButton } from "@/components/podcast/LatestPodcastEpisodePlayButton"
+import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePlayButton"
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -187,7 +187,7 @@ export function TopicInfoPopover({
 	const iconButtons = (
 		<>
 			{topic.latestPodcastEpisode && (
-				<LatestPodcastEpisodePlayButton
+				<PodcastEpisodePlayButton
 					podcastEpisode={topic.latestPodcastEpisode}
 					className={iconButtonClass}
 					// the play button's own tooltip replaces the note hint that a heading around the play button opens

@@ -31,7 +31,8 @@ started, which the sweep and the manual scan route run).
   and a Scan still waiting for a worker past the ingest and finish stages' total timeouts.
   `concurrency.ts` runs tasks a few at a time for the review's scoring, the sweep's reads of each owner's daily Topics
   and key budget, and the reset's replacements. `retry.ts` tries a failed attempt again after a fixed wait, for the
-  worker's first Temporal connection, a podcast episode's publish, and the podcast episode smoke's chapters.
+  worker's first Temporal connection, a podcast episode's publish, and the podcast episode smoke's chapters. The
+  podcast episode smoke seeds its rows through `podcast/podcastEpisodeSmokeFixtures.ts`.
 
 - `workflows/` — Temporal workflows and activities; `ingest/` — one ingester per Source kind,
   `ingester.ts` is the interface; `review/` — filtering and scoring (`filter.ts` the relevance gate, `dedupe.ts` the
@@ -40,7 +41,8 @@ started, which the sweep and the manual scan route run).
   chat replies (`index.ts` streams a reply, `chatMessages.ts` shapes a conversation into the model messages a turn
   sends, and `chatPrompts.ts` builds each chat's system prompt from its template) and their retrieval (`retrieve.ts`,
   whose topic ranking collects the topics' findings in a materialized common table expression and ranks that set,
-  `retrieveDocs.ts` for the docs sections a question about the app reads, and `retrieveTeam.ts` for a team chat room
+  `retrieveDocs.ts` for the docs sections a question about the app reads and `embedRetrievalQuery`, which embeds a
+  question or a search query with the query instruction, and `retrieveTeam.ts` for a team chat room
   turn's context); `prompts/` —
   model-facing Markdown templates; `models.ts` —
   every model call, through LiteLLM; `litellm.ts` — the user keys that those calls bill to. A key is created at
@@ -77,8 +79,17 @@ started, which the sweep and the manual scan route run).
   theme song's intro and outro under the talk in that same pass, from the clips committed in `assets/podcast/`, and
   shifts the chapter times by the intro's lead. - `publishPodcastEpisode.ts` publishes or fails the row, and a short
   episode's publish replaces the Topic's earlier short ones. `removePodcastEpisode.ts` removes a Podcast Episode and
-  deletes its audio. - `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the chapters that narrated
-  its Resource, and links those chapters to it. The review's `upsertFinding` calls both.
+  deletes its audio and its vector. - `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the
+  chapters that narrated its Resource, and links those chapters to it. The review's `upsertFinding` calls both.
+- `meanVectors.ts` saves the vectors that rank related topics, related podcast episodes, and the podcast episode search,
+  each the mean of the current model's resource embeddings behind it, computed in SQL: a Topic's after every Scan ends,
+  succeeded, stopped, or failed, after a save that changes its visibility, and after a rating, from its kept Findings,
+  and a Podcast Episode's in its publish transaction, from its chapters. Every Topic with an embedded kept Finding keeps
+  a vector, saved with whether the Topic is public and shown, a published Podcast Episode keeps one for the related
+  episodes and the podcast episode search, an empty mean deletes the vector, and marking a Podcast Episode removed
+  deletes its vector. A Podcast Episode's vector also saves whether its Topic is public and shown, at publish and again
+  with the Topic's vectors. `scripts/backfill-vectors.ts` saves every existing Topic's and published Podcast Episode's
+  vector through the same writes.
 - `indexNow.ts` tells search engines a public Topic's urls changed. A missing `INDEXNOW_KEY` sends nothing, and a
   failed send never fails its caller.
 - A Resource's content hash is taken in the dedupe stage, over the title and snippet as they stand then.

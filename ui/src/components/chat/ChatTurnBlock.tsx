@@ -1,5 +1,5 @@
 // one chat turn as the private chat renders it: the question bubble, carl's answer bubble, and the compaction line
-import type { ChatMessageAttachment } from "@shared/contracts"
+import type { ChatMessageAttachment } from "@shared/contracts/chat"
 import { RotateCcw } from "lucide-react"
 import { type ChatRejection, toChatAttachmentUrl } from "@/clients/chatClient"
 import { ChatAuthor } from "@/components/chat/ChatAuthor"

@@ -5,9 +5,8 @@ import { db } from "../../db"
 import { scans } from "../../db/schema/scans"
 import { teams, teamTopics } from "../../db/schema/teams"
 import { sources, topics } from "../../db/schema/topics"
-import { embedVector } from "../models"
 import { MAX_SCAN_SUMMARIES, type RetrievedFinding, retrieveFindings } from "./retrieve"
-import { EMBED_QUERY_INSTRUCTION, readDocsBlock } from "./retrieveDocs"
+import { embedRetrievalQuery, readDocsBlock } from "./retrieveDocs"
 
 // everything one team chat room turn puts in front of the model, drawn from every topic the team holds
 export type TeamChatContext = {
@@ -52,7 +51,7 @@ export async function retrieveTeamChatContext(
 	const topicNameByTopicId = new Map(teamTopicRows.map((topicRow) => [topicRow.id, topicRow.name]))
 
 	// embed the question once, then rank every held topic's findings against it together
-	const questionVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${question}`, litellmApiKey)
+	const questionVector = await embedRetrievalQuery(question, litellmApiKey)
 	const [retrievedFindings, teamSources, scanSummaries, docsBlock] = await Promise.all([
 		topicIds.length > 0 ? retrieveFindings(topicIds, questionVector, topicNameByTopicId) : Promise.resolve([]),
 		topicIds.length > 0 ? readTeamSources(topicIds, topicNameByTopicId) : Promise.resolve([]),

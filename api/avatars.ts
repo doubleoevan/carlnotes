@@ -1,7 +1,7 @@
 // the avatar a user publishes: an upload they chose, the photo their provider supplied, or the username initials
 import { zValidator } from "@hono/zod-validator"
 import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
-import type { ProfileIdentity } from "@shared/contracts"
+import type { ProfileIdentity } from "@shared/contracts/profiles"
 import type { avatarSources } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
 import { avatarDecodeFailurePayload } from "@shared/payloads"

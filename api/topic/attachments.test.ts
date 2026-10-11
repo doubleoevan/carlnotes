@@ -1,6 +1,6 @@
 // attachment tests for the context edit
 import { expect, test } from "bun:test"
-import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts"
+import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts/topics"
 import { attachmentContextPayload } from "@shared/topicPayloads"
 import { toStoredFileHeaders } from "./attachments"
 

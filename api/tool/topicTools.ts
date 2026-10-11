@@ -12,7 +12,7 @@ import { releaseFeatureOrder } from "../topic/featuring"
 import { clearTopicSectionIdCache } from "../topic/feeds"
 import { type PromptVersionOrigin, savePromptVersion } from "../topic/promptVersions"
 import { authorizeNewDailyTopic, type DailyFrequencyRejection } from "../topic/saveHelpers"
-import { notifyIndexNowOfTopicChange } from "../topic/saveTopic"
+import { notifyIndexNowOfTopicChange, saveTopicVectorsOnVisibilityChange } from "../topic/saveTopic"
 
 // a tool's result when the gate rejects. a topic the user cannot see is missing, one they may not edit is forbidden
 export type TopicToolRejection = { status: "missing" } | { status: "forbidden" }
@@ -140,6 +140,13 @@ export async function updateTopicFields({
 		visibility: topicFields.visibility ?? editableTopic.topic.visibility,
 	}
 	notifyIndexNowOfTopicChange({ savedTopic, previousTopic: editableTopic.topic })
+
+	// save the topic's vectors again if the edit changed its visibility
+	await saveTopicVectorsOnVisibilityChange({
+		topicId,
+		visibility: savedTopic.visibility,
+		previousVisibility: editableTopic.topic.visibility,
+	})
 
 	// delete the topic's cached podcast feeds if the name changed. a feed's show cover url changes with the name
 	if (savedTopic.name !== editableTopic.topic.name) {

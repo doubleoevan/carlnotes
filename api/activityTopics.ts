@@ -1,11 +1,13 @@
 // the activity rows for a set of topics: each topic's month scans, counts, chat mentions, and latest podcast episode
-import type { ActivityScan, ChatMention, OwnerTopic, PodcastEpisode } from "@shared/contracts"
+import type { ActivityScan, OwnerTopic } from "@shared/contracts/activity"
+import type { ChatMention } from "@shared/contracts/chat"
+import type { PodcastEpisodeSummary } from "@shared/contracts/podcast"
 import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm"
 import { db } from "../db"
 import { scans } from "../db/schema/scans"
 import { subscriptions, topicEmailSends, topics } from "../db/schema/topics"
 import { loadTopicChatMentions } from "./chat/mentions"
-import { loadLatestPodcastEpisodes } from "./podcast/helpers"
+import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShapes"
 import { startOfUtcMonth } from "./topic/quotas"
 
 // the topic rows that toActivityTopics reads
@@ -131,7 +133,7 @@ export async function loadTopics({
 		),
 		emailCountByTopic: new Map(emailSendRows.map((emailSendRow) => [emailSendRow.topicId, emailSendRow.count])),
 		mentionByTopic: await loadTopicChatMentions(mentionUserId, topicIds),
-		latestPodcastEpisodeByTopic: await loadLatestPodcastEpisodes(topicRows, signedInUserId),
+		latestPodcastEpisodeByTopic: await loadLatestPodcastEpisodeSummaries(topicRows, signedInUserId),
 	})
 }
 
@@ -144,7 +146,7 @@ type ToActivityTopicsOptions = {
 	emailEnabledByTopic?: Map<string, boolean>
 	emailCountByTopic?: Map<string, number>
 	mentionByTopic?: Map<string, ChatMention[]>
-	latestPodcastEpisodeByTopic?: Map<string, PodcastEpisode>
+	latestPodcastEpisodeByTopic?: Map<string, PodcastEpisodeSummary>
 }
 
 export function toActivityTopics({

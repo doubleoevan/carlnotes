@@ -1,5 +1,6 @@
 // source suggestion tests: the source key, the advertised feed link, the show name match, and the option prefix
 import { expect, test } from "bun:test"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { FeedStatusError } from "./ingest/feed"
 import {
 	isSameShowName,
@@ -194,7 +195,7 @@ test("the topic context stays clipped whatever the attachment includes", () => {
 // the model reads each page that the web search found, and a deployment with no search key gets no web search pages
 test("toWebSearchPages lists each page the search found, and none without a search key", async () => {
 	const realFetch = globalThis.fetch
-	const realSearchKey = Bun.env.EXA_API_KEY
+	const restoreEnvSettings = saveEnvSettings(["EXA_API_KEY"])
 	try {
 		// a search that finds one page lists its title, host, and address
 		Bun.env.EXA_API_KEY = "test-search-key"
@@ -212,10 +213,6 @@ test("toWebSearchPages lists each page the search found, and none without a sear
 	} finally {
 		// put fetch and the search key back as the environment had them
 		globalThis.fetch = realFetch
-		if (realSearchKey === undefined) {
-			delete Bun.env.EXA_API_KEY
-		} else {
-			Bun.env.EXA_API_KEY = realSearchKey
-		}
+		restoreEnvSettings()
 	}
 })

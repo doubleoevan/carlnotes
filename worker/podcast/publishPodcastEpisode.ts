@@ -1,7 +1,7 @@
 // how a Podcast Episode's recording ends. published with its season, its episode number, and its chapters,
 // replacing the Topic's earlier short Podcast Episodes if it is short, or failed with its reason
 import { appBaseUrl } from "@shared/appUrl"
-import type { PodcastEpisodeScript } from "@shared/contracts"
+import type { PodcastEpisodeScript } from "@shared/contracts/podcast"
 import { reportError } from "@shared/monitoring"
 import { toPodcastEpisodePath } from "@shared/seo"
 import { and, eq, inArray, max, ne } from "drizzle-orm"
@@ -11,6 +11,7 @@ import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast
 import { findings } from "../../db/schema/scans"
 import { topics } from "../../db/schema/topics"
 import { notifyIndexNow } from "../indexNow"
+import { savePodcastEpisodeVector } from "../meanVectors"
 import { runWithRetries } from "../retry"
 import { deleteStoredObjects, recordPendingObjectDeletions, toPodcastEpisodeChapterKey } from "../store"
 import { tracePodcastEpisodeRecording } from "../telemetry"
@@ -277,6 +278,9 @@ async function savePodcastEpisodeAsPublished({
 				publishedAt,
 			})
 			.where(eq(podcastEpisodes.id, podcastEpisodeId))
+
+		// save the published Podcast Episode's vector from its chapters' resources
+		await savePodcastEpisodeVector(podcastEpisodeId, transaction)
 
 		// a short Podcast Episode replaces the Topic's earlier short ones, and a full one replaces none
 		const replacedObjectKeys = isShort

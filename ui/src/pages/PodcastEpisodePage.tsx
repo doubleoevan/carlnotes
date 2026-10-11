@@ -1,4 +1,4 @@
-import type { PodcastEpisodePageResponse, PodcastEpisodeTranscriptBlock } from "@shared/contracts"
+import type { PodcastEpisodePageResponse } from "@shared/contracts/podcastEpisodePage"
 import { isTopicSlugStale, toPodcastEpisodePath, toTopicPath } from "@shared/seo"
 import { useMatch, useNavigate, useParams } from "@tanstack/react-router"
 import { Trash2 } from "lucide-react"
@@ -10,6 +10,8 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { PodcastEpisodeChaptersTable } from "@/components/podcast/PodcastEpisodeChaptersTable"
 import { PodcastEpisodeCover } from "@/components/podcast/PodcastEpisodeCover"
 import { PodcastEpisodePlayerCard } from "@/components/podcast/PodcastEpisodePlayerCard"
+import { PodcastEpisodesSection } from "@/components/podcast/PodcastEpisodesSection"
+import { PodcastEpisodeTranscript } from "@/components/podcast/PodcastEpisodeTranscript"
 import { PodcastFeedDialog } from "@/components/podcast/PodcastFeedDialog"
 import { RemovePodcastEpisodeDialog } from "@/components/podcast/RemovePodcastEpisodeDialog"
 import { ThemeSongNote } from "@/components/podcast/ThemeSongNote"
@@ -18,7 +20,6 @@ import { TableCard } from "@/components/table/TableCard"
 import { isAddTopicToTeamShown } from "@/components/team/AddTopicToTeamButton"
 import { AddTopicToTeamDialog } from "@/components/team/AddTopicToTeamDialog"
 import { CollapsibleSection } from "@/components/topic/CollapsibleSection"
-import { MoreButton } from "@/components/topic/MoreButton"
 import { TopicByline } from "@/components/topic/Topic"
 import { toAddTopicToTeamOption, toShareTopicOption } from "@/components/topic/TopicActions"
 import { NewTopicButton, useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
@@ -30,13 +31,7 @@ import {
 } from "@/components/topic/TopicSkeleton"
 import { useLoadInBrowser } from "@/hooks/useBrowserValue"
 import { usePageTitle } from "@/hooks/usePageTitle"
-import {
-	COVER_PLACEHOLDER_CLASS,
-	HIGHLIGHT_SCROLLBAR_CLASS,
-	INFO_CARD_CLASS,
-	PAGE_CLASS,
-	SCRIPTED_ONLY_CLASS,
-} from "@/lib/styleClasses"
+import { COVER_PLACEHOLDER_CLASS, INFO_CARD_CLASS, PAGE_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { usePageTopicFeedHandlers } from "@/providers/TopicFeedProvider"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
@@ -138,7 +133,8 @@ export function PodcastEpisodePage() {
 	}
 
 	// the podcast episode page's fields, the path of its topic's page, and what the chapters' topic finding notes read
-	const { podcastEpisode, topic, topicFindings, canRate, transcript } = podcastEpisodePage
+	const { podcastEpisode, topic, topicFindings, canRate, transcript, topicPodcastEpisodes, relatedPodcastEpisodes } =
+		podcastEpisodePage
 	const topicPath = toTopicPath(topic)
 	const chapterTopicFeed = { topicFindings, topic, isRatable: canRate, isBookmarkable: false, topicFeedHandlers }
 	return (
@@ -187,6 +183,20 @@ export function PodcastEpisodePage() {
 				</h2>
 				<PodcastEpisodeTranscript transcript={transcript} />
 			</section>
+
+			{/* the topic's other podcast episodes, then the nearest podcast episodes of other topics */}
+			<PodcastEpisodesSection
+				value="topic-episodes"
+				title="Other episodes"
+				titleColumnLabel="Episode"
+				podcastEpisodes={topicPodcastEpisodes}
+			/>
+			<PodcastEpisodesSection
+				value="related-episodes"
+				title="Similar podcasts"
+				titleColumnLabel="Podcast"
+				podcastEpisodes={relatedPodcastEpisodes}
+			/>
 
 			{/* the podcast feed dialog */}
 			{isPodcastFeedDialogOpen && (
@@ -322,67 +332,5 @@ function PodcastEpisodeSkeleton() {
 				))}
 			</div>
 		</div>
-	)
-}
-
-// the collapsed transcript's height, with its last lines fading out. the transcript collapses only with JavaScript
-const COLLAPSED_TRANSCRIPT_CLASS = [
-	"scripted:max-h-80 scripted:overflow-hidden",
-	"scripted:[mask-image:linear-gradient(to_bottom,black_60%,transparent)]",
-].join(" ")
-
-// how tall the expanded transcript grows before the transcript scrolls
-const EXPANDED_TRANSCRIPT_CLASS = "max-h-160 overflow-y-auto"
-
-// a dashed separator on each side of a chapter's title
-const CHAPTER_TITLE_SEPARATOR_CLASS = [
-	"before:border-separator-strong before:min-w-6 before:flex-1 before:border-t before:border-dashed",
-	"after:border-separator-strong after:min-w-6 after:flex-1 after:border-t after:border-dashed",
-].join(" ")
-
-// a podcast episode's transcript, each chapter under its title.
-// with JavaScript the transcript collapses behind a control, and the expanded transcript scrolls
-function PodcastEpisodeTranscript({ transcript }: { transcript: PodcastEpisodeTranscriptBlock[] }) {
-	const [isExpanded, setIsExpanded] = useState(false)
-	return (
-		<>
-			{/* the transcript card */}
-			<div
-				className={cn(
-					INFO_CARD_CLASS,
-					isExpanded ? [EXPANDED_TRANSCRIPT_CLASS, HIGHLIGHT_SCROLLBAR_CLASS] : COLLAPSED_TRANSCRIPT_CLASS,
-				)}
-			>
-				{transcript.map((transcriptBlock, transcriptBlockIndex) => (
-					// biome-ignore lint/suspicious/noArrayIndexKey: a transcript's blocks never reorder
-					<div key={transcriptBlockIndex} className="mb-4 last:mb-0">
-						{/* a chapter's title inside a dashed separator, or a plain dashed separator over any later block */}
-						{transcriptBlock.heading ? (
-							<h3 className={cn("mb-2 flex items-center gap-3 text-center font-bold", CHAPTER_TITLE_SEPARATOR_CLASS)}>
-								{transcriptBlock.heading}
-							</h3>
-						) : (
-							transcriptBlockIndex > 0 && <hr className="border-separator-strong mb-3 border-t border-dashed" />
-						)}
-						{/* the block's turns, each after its speaker's name */}
-						{transcriptBlock.turns.map((transcriptTurn, transcriptTurnIndex) => (
-							// biome-ignore lint/suspicious/noArrayIndexKey: a block's turns never reorder
-							<p key={transcriptTurnIndex} className="mb-1.5 leading-relaxed">
-								<span className="font-semibold">{`${transcriptTurn.speakerName}: `}</span>
-								{transcriptTurn.text}
-							</p>
-						))}
-					</div>
-				))}
-			</div>
-			{/* the read more control */}
-			<MoreButton
-				isExpanded={isExpanded}
-				moreLabel="read more "
-				lessLabel="read less "
-				onToggle={() => setIsExpanded(!isExpanded)}
-				className={SCRIPTED_ONLY_CLASS}
-			/>
-		</>
 	)
 }

@@ -1,5 +1,5 @@
-import type { TopicToolCalls, TopicToolToasts } from "@shared/contracts"
-import { toStandingTopicEditCall } from "@shared/contracts"
+import type { TopicToolCalls, TopicToolToasts } from "@shared/contracts/chat"
+import { toStandingTopicEditCall } from "@shared/contracts/chat"
 import type { ChatToolCall } from "@shared/payloads"
 import { type ProposeTopicEditPayload, proposeTopicEditPayload } from "@shared/topicPayloads"
 import { toast } from "sonner"

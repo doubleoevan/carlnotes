@@ -1,4 +1,4 @@
-import type { PodcastEpisode } from "@shared/contracts"
+import type { PodcastEpisode } from "@shared/contracts/podcast"
 import { Pause, Play, Rss } from "lucide-react"
 import { useState } from "react"
 import { PlaybackSpeedButton, SkipPlaybackButtons } from "@/components/podcast/PlaybackControlButtons"
@@ -7,7 +7,7 @@ import {
 	PodcastEpisodeChapters,
 	SHOWN_CHAPTER_COUNT,
 } from "@/components/podcast/PodcastEpisodeChapters"
-import { PodcastEpisodeDetails } from "@/components/podcast/PodcastEpisodeDetails"
+import { PodcastEpisodeDetails, PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
 import { RemovePodcastEpisodeButton } from "@/components/podcast/RemovePodcastEpisodeDialog"
 import { MoreButton } from "@/components/topic/MoreButton"
 import { toClockLabel } from "@/lib/labels"
@@ -77,20 +77,23 @@ export function PodcastEpisodePlayerCard({
 		<>
 			<div className={cn(INFO_CARD_CLASS, "flex flex-col gap-4")}>
 				<div className="flex flex-wrap items-center gap-4">
-					{/* the play button beside the podcast episode's details. the controls wrap under both on a phone */}
+					{/* the play button with its tooltip beside the podcast episode's details. the controls wrap under both on
+					    a phone */}
 					<div className="flex min-w-0 flex-[1_1_18rem] items-center gap-4">
-						<button
-							type="button"
-							aria-label={playButtonLabel}
-							onClick={handleTogglePlayback}
-							className={cn(PLAY_BUTTON_CLASS, "size-14 sm:size-16")}
-						>
-							{isPodcastEpisodeLoaded && isPlaying ? (
-								<Pause className="size-6 fill-current" />
-							) : (
-								<Play className="size-7 fill-current" />
-							)}
-						</button>
+						<PodcastEpisodeTooltip podcastEpisode={podcastEpisode}>
+							<button
+								type="button"
+								aria-label={playButtonLabel}
+								onClick={handleTogglePlayback}
+								className={cn(PLAY_BUTTON_CLASS, "size-14 sm:size-16")}
+							>
+								{isPodcastEpisodeLoaded && isPlaying ? (
+									<Pause className="size-6 fill-current" />
+								) : (
+									<Play className="size-7 fill-current" />
+								)}
+							</button>
+						</PodcastEpisodeTooltip>
 
 						<PodcastEpisodeDetails
 							podcastEpisode={podcastEpisode}

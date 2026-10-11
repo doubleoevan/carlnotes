@@ -1,23 +1,18 @@
 // store tests: the object content key, the keys among nullable rows, and deleteStoredObject, whose failed delete
 // leaves the key pending with its failure and whose successful delete clears the key
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { deleteStoredObject, toResourceContentKey, toStoredObjectKeys } from "./store"
 
-// the endpoint the environment had
-const originalEndpoint = Bun.env.S3_ENDPOINT
+// save the endpoint the environment had
+const restoreEnvSettings = saveEnvSettings(["S3_ENDPOINT"])
 
 // put the pool, the spies, and the endpoint back after each test
 afterEach(() => {
 	restoreConnectionPool()
 	mock.restore()
-
-	// an endpoint the environment never set stays unset
-	if (originalEndpoint === undefined) {
-		delete Bun.env.S3_ENDPOINT
-	} else {
-		Bun.env.S3_ENDPOINT = originalEndpoint
-	}
+	restoreEnvSettings()
 })
 
 // the resource content key is stable and namespaced by resource id, mirroring the attachment key layout

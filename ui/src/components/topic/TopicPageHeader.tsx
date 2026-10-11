@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { PawPrint } from "lucide-react"
 import { useState } from "react"
 import { PageUpdateCountBadge } from "@/components/common/UpdateCountBadge"

@@ -1,4 +1,5 @@
-import type { TeamSummary, TopicResponse } from "@shared/contracts"
+import type { TeamSummary } from "@shared/contracts/teams"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { Plus, Users, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"

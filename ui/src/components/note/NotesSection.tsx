@@ -1,6 +1,6 @@
 // the Tasting Notes section: the header row with its Add note call to action, the note table,
 // the empty state, and the dialog notes open in. the default render is the table alone
-import type { Note, NotesResponse } from "@shared/contracts"
+import type { Note, NotesResponse } from "@shared/contracts/notes"
 import { Plus } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { authClient } from "@/clients/authClient"
@@ -20,10 +20,14 @@ export function NotesSection({
 	pageType,
 	pageId,
 	titleClassName,
+	hasCompactHeader = false,
 	isInsideAccordion = false,
 }: NotePageRef & {
 	// the header text style the mounting page uses for its sibling sections
 	titleClassName?: string
+	// true on a page whose sections have a compact header. then this header matches theirs, with space under the Add note
+	// button
+	hasCompactHeader?: boolean
 	// true when a parent accordion already wraps this. then this renders a bare accordion item
 	isInsideAccordion?: boolean
 }) {
@@ -72,8 +76,8 @@ export function NotesSection({
 	const notesSection = (
 		<AccordionItem value="notes">
 			{/* the Add Note button sits beside the trigger. clicks on it never toggle the section */}
-			<div className="flex items-center gap-2 [&>:first-child]:flex-1">
-				<AccordionTrigger>
+			<div className={cn("flex items-center gap-2 [&>:first-child]:flex-1", hasCompactHeader && "mb-2")}>
+				<AccordionTrigger className={cn(hasCompactHeader && "py-2")}>
 					<span className={titleClassName}>{sectionTitle}</span>
 				</AccordionTrigger>
 				{notes.creatableVisibilities.length > 0 ? (

@@ -1,5 +1,5 @@
 // what each way an invitation can fail shows to the person holding the link
-import type { InviteRejection } from "@shared/contracts"
+import type { InviteRejection } from "@shared/contracts/invites"
 
 export const INVITE_REJECTIONS: Record<InviteRejection | "teamFull", string> = {
 	expired: "That invitation went cold.",

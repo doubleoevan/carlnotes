@@ -1,4 +1,5 @@
-import type { PodcastEpisode, PodcastEpisodeChapter, TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
+import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts/podcast"
 import { toHostWithoutWww } from "@shared/seo"
 import type * as React from "react"
 import { useState } from "react"
@@ -6,7 +7,7 @@ import { sendPodcastEpisodeChapterRating } from "@/clients/podcastEpisodeClient"
 import { RatingThumbs } from "@/components/common/RatingThumbs"
 import { PodcastEpisodeChapterPill } from "@/components/podcast/PodcastEpisodePill"
 import { Popover, PopoverAnchor, PopoverTrigger } from "@/components/primitives/popover"
-import { ResourceInfo } from "@/components/topic/TopicResource"
+import { ResourceInfo, type ResourceInfoTopic } from "@/components/topic/ResourceInfo"
 import { toClockLabel } from "@/lib/labels"
 import { DASHED_ROW_CLASS, SCRIPTED_HIDDEN_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
@@ -27,7 +28,7 @@ const THUMBS_SLOT_CLASS = "relative z-10 hidden shrink-0 items-center gap-2 pr-3
 // whether the user may rate and bookmark the findings, and the calls behind the note's buttons
 export type ChapterTopicFeed = {
 	topicFindings: TopicFinding[]
-	topic: React.ComponentProps<typeof ResourceInfo>["topic"]
+	topic: ResourceInfoTopic
 	isRatable: boolean
 	isBookmarkable: boolean
 	topicFeedHandlers: TopicFeedHandlers

@@ -1,4 +1,4 @@
-import { FLAG_REASON_MAX_CHARS } from "@shared/contracts"
+import { FLAG_REASON_MAX_CHARS } from "@shared/contracts/chat"
 import type { FlagContentPayload } from "@shared/payloads"
 import { useState } from "react"
 import { toast } from "sonner"

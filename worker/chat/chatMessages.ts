@@ -4,7 +4,7 @@ import {
 	compactChatAnswer,
 	toStandingTopicEditCall,
 	toUncompactedChatTurnStart,
-} from "@shared/contracts"
+} from "@shared/contracts/chat"
 import type { ChatAttachment, ChatToolCall } from "@shared/payloads"
 import type { TopicDraft, TopicDraftTeam } from "@shared/topicPayloads"
 import type { ImagePart, ModelMessage, TextPart, Tool } from "ai"

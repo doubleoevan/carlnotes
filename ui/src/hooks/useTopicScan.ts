@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { useEffect, useState } from "react"
 
 // how often to re-fetch the page while a scan is running
@@ -50,6 +50,8 @@ export function usePollWhileScanning(isScanning: boolean, reload: () => Promise<
 				schedule()
 			}
 		}
+
+		// listen for the page's visibility, and start polling if the page is visible now
 		document.addEventListener("visibilitychange", handleVisibilityChange)
 		if (document.visibilityState === "visible") {
 			schedule()

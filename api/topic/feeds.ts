@@ -1,17 +1,17 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import { toAvatarVersion } from "@shared/avatars"
-import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
+import type { TopicFeed, TopicFeedResponse } from "@shared/contracts/topics"
 import { traceRequestStage } from "@shared/monitoring"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm"
-import { db } from "../../db"
+import { db, isPublicAndShown } from "../../db"
 import { cacheJson, deleteRedisKey } from "../../db/redis"
 import { subscriptions, topics } from "../../db/schema/topics"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadTopicFeedData } from "./feedData"
 import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
 import { toScheduledTimeLabel } from "./helpers"
-import { isPublicAndShown } from "./permissions"
 
 // the Redis key every replica reads the featured and popular topic id lists through, and how long they are kept
 const TOPIC_SECTION_IDS_KEY = "topic-section-ids"

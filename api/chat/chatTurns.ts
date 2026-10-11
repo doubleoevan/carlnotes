@@ -1,6 +1,6 @@
 // the chat_turns rows: saving one for every chat turn and chat room turn, and reading or clearing a user's conversation
 import { trackEvent } from "@shared/analytics"
-import type { ChatTurnRow } from "@shared/contracts"
+import type { ChatTurnRow } from "@shared/contracts/chat"
 import type { ChatToolCall } from "@shared/payloads"
 import { and, desc, eq, isNull, type SQL } from "drizzle-orm"
 import { db } from "../../db"

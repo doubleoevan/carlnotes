@@ -1,6 +1,7 @@
 // manual scan tests: a scan whose key has spent its budget is rejected before anything starts or is billed.
 // a failed budget read starts the scan, and an admin's scan checks the admin's own budget
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
 import { Hono } from "hono"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
@@ -16,23 +17,12 @@ import { scansRoute } from "./scans"
 // the connection pool's own query, the real fetch, and the proxy settings that the budget read needs,
 // put back after each test along with the spies
 const originalFetch = globalThis.fetch
-const originalProxySettings = {
-	LITELLM_BASE_URL: Bun.env.LITELLM_BASE_URL,
-	LITELLM_MASTER_KEY: Bun.env.LITELLM_MASTER_KEY,
-}
+const restoreEnvSettings = saveEnvSettings(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
 afterEach(() => {
 	restoreConnectionPool()
 	globalThis.fetch = originalFetch
 	mock.restore()
-
-	// put each proxy setting back, or delete a proxy setting that the test run never had
-	for (const [proxySettingName, originalProxySetting] of Object.entries(originalProxySettings)) {
-		if (originalProxySetting === undefined) {
-			delete Bun.env[proxySettingName]
-		} else {
-			Bun.env[proxySettingName] = originalProxySetting
-		}
-	}
+	restoreEnvSettings()
 })
 
 // stub the connection pool to return one topic owned by owner-1, and a user whose key is sk-user

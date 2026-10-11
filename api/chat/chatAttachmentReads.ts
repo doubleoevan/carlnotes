@@ -1,6 +1,6 @@
 // reading chat attachments: the kept ones and their context for a chat turn, a chat turn's own, a download, and the
 // object keys behind a user's or a topic's
-import type { ChatMessageAttachment, KeptChatAttachment } from "@shared/contracts"
+import type { ChatMessageAttachment, KeptChatAttachment } from "@shared/contracts/chat"
 import type { ChatAttachment } from "@shared/payloads"
 import { and, eq } from "drizzle-orm"
 import type { Context } from "hono"

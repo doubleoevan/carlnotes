@@ -1,5 +1,5 @@
 // the chat room switcher, a row under the title that opens the chat room list
-import type { ChatMention } from "@shared/contracts"
+import type { ChatMention } from "@shared/contracts/chat"
 import { Check, ChevronDown, Plus, Trash2, Users } from "lucide-react"
 import { useState } from "react"
 import { CarlAvatar } from "@/components/branding/CarlAvatar"

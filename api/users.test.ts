@@ -2,6 +2,7 @@
 // and a LiteLLM key created while the account was closing
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "../db/connectionPoolStub"
 import * as litellm from "../worker/litellm"
 import * as store from "../worker/store"
@@ -19,19 +20,13 @@ const ANALYTICS_PROPERTIES: AnalyticsProperties = {
 }
 
 // the connection pool's own query and the environment's Redis url, put back after each test along with the spies
-const originalRedisUrl = Bun.env.REDIS_URL
+const restoreEnvSettings = saveEnvSettings(["REDIS_URL"])
 afterEach(() => {
 	restoreConnectionPool()
 	mock.restore()
 	delete Bun.env.CLOUDFLARE_ZONE_ID
 	delete Bun.env.CLOUDFLARE_API_TOKEN
-
-	// a Redis url that the environment never set stays unset
-	if (originalRedisUrl === undefined) {
-		delete Bun.env.REDIS_URL
-	} else {
-		Bun.env.REDIS_URL = originalRedisUrl
-	}
+	restoreEnvSettings()
 })
 
 // a failed revocation, and a connection pool that counts its queries and returns no rows

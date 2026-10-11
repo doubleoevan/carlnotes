@@ -2,6 +2,7 @@
 // is sent once per Scan
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as redis from "../db/redis"
 import { planScanDigest, sendScanDigestBatch, sendScanReport } from "./notify"
@@ -18,11 +19,7 @@ const FAILED_SCAN_TOPIC_ROW = ["scan-1", "failed", null, "every source failed", 
 
 // the real fetch and env, to put back after each test
 const realFetch = globalThis.fetch
-const realEnv = {
-	RESEND_API_KEY: Bun.env.RESEND_API_KEY,
-	RESEND_FROM_EMAIL: Bun.env.RESEND_FROM_EMAIL,
-	BETTER_AUTH_URL: Bun.env.BETTER_AUTH_URL,
-}
+const restoreEnvSettings = saveEnvSettings(["RESEND_API_KEY", "RESEND_FROM_EMAIL", "BETTER_AUTH_URL"])
 
 // configure Resend, give every call the rate limit slot without Redis, and leave out the app url so that no
 // unsubscribe token is signed
@@ -33,20 +30,12 @@ beforeEach(() => {
 	spyOn(redis, "takeRateLimitSlot").mockResolvedValue(0)
 })
 
-// put the query, fetch, and report back after each test
+// put the query, fetch, report, and env back after each test
 afterEach(() => {
 	restoreConnectionPool()
 	globalThis.fetch = realFetch
 	mock.restore()
-
-	// put the env back, removing a value that was unset instead of storing the text "undefined"
-	for (const [name, value] of Object.entries(realEnv)) {
-		if (value === undefined) {
-			delete Bun.env[name]
-		} else {
-			Bun.env[name] = value
-		}
-	}
+	restoreEnvSettings()
 })
 
 // stub the connection pool to return the rows whose pattern each query's SQL matches, recording every insert

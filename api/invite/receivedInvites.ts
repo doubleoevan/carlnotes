@@ -1,7 +1,7 @@
 // the invitations a user received: the recipient check, the pending ones, and accepting or declining one from the
 // page it renders on
 import { trackEvent } from "@shared/analytics"
-import type { TopicInviteBadge } from "@shared/contracts"
+import type { TopicInviteBadge } from "@shared/contracts/invites"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"

@@ -1,4 +1,4 @@
-import type { TopicFeedResponse } from "@shared/contracts"
+import type { TopicFeedResponse } from "@shared/contracts/topics"
 import { resourceKinds as allResourceKinds } from "@shared/enums"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useLocation, useMatch } from "@tanstack/react-router"

@@ -31,7 +31,7 @@ Each module has its own AGENTS.md with entry points, layout, and commands.
 | New or changed ingester | `worker/ingest/` (`ingester.ts` is the interface) | ingester-authoring | `api/`, `ui/` |
 | Model-facing prompt | `worker/prompts/*.md` + its thin builder | prompt-authoring | everything outside `worker/` |
 | Schema or migration | `db/schema/<domain>.ts`, then `bun run db:generate` | domain-model | `db/migrations/` (generated) |
-| UI screen or component | `ui/src/routes/` for the route and its head, `ui/src/pages/`, `ui/src/components/<area>/` | jsx-conventions | `api/` except `shared/contracts.ts`, `shared/payloads.ts`, and `shared/topicPayloads.ts` types |
+| UI screen or component | `ui/src/routes/` for the route and its head, `ui/src/pages/`, `ui/src/components/<area>/` | jsx-conventions | `api/` except `shared/contracts/`, `shared/payloads.ts`, and `shared/topicPayloads.ts` types |
 | Tasting note or sync change | `api/note/`, `ui/src/components/note/` | domain-model | `worker/` |
 | API route or permission | `api/<domain>/`, `api/authorization.ts` | domain-model | `worker/` except `worker/index.ts` exports |
 | Temporal workflow change | `worker/workflows/`, `worker/temporal.ts` | — | `ui/`, `api/` route files |

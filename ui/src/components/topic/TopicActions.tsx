@@ -1,4 +1,4 @@
-import type { TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { ListOrdered, PawPrint, Pencil, Share2, Trash2, Users } from "lucide-react"
 import type * as React from "react"
 import { ShareTopicButton } from "@/components/share/ShareTopic"

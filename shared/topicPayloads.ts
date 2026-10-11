@@ -10,7 +10,7 @@ import {
 	TOPIC_NAME_CHARS,
 	TOPIC_PROMPT_CHARS,
 	updateTopicSource,
-} from "./contracts"
+} from "./contracts/topics"
 import { daysOfWeek, frequencies, maxTopicFindingsOptions, visibilities } from "./enums"
 import { customSourceKeys, defaultSourceKeys } from "./sources"
 

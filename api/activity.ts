@@ -1,6 +1,8 @@
 // the Activity page's payload, the user's own or, for an admin, any user's
 import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
-import type { ActivityResponse, PodcastEpisode, SubscriptionRow, TeamIdentity } from "@shared/contracts"
+import type { ActivityResponse, SubscriptionRow } from "@shared/contracts/activity"
+import type { PodcastEpisodeSummary } from "@shared/contracts/podcast"
+import type { TeamIdentity } from "@shared/contracts/teams"
 import { and, desc, eq, gt, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
@@ -12,7 +14,7 @@ import { loadTopics } from "./activityTopics"
 import { isAdminRole, isAllowed, monthlySpendDollars, userBudgetCents } from "./authorization"
 import { toProfileIdentity, withAvatarVersion } from "./avatars"
 import type { AppEnv } from "./currentUser"
-import { loadLatestPodcastEpisodes } from "./podcast/helpers"
+import { loadLatestPodcastEpisodeSummaries } from "./podcast/podcastEpisodeShapes"
 
 // the subscription row fields that the queries read, with the subscribed time as a date
 export type SubscriptionRowFields = Omit<SubscriptionRow, "subscribedAt" | "latestPodcastEpisode"> & {
@@ -143,7 +145,10 @@ export async function loadActivity(
 		ownerId: subscriptionRow.owner.userId,
 		visibility: subscriptionRow.visibility,
 	}))
-	const subscriptionPodcastEpisodeByTopic = await loadLatestPodcastEpisodes(subscriptionTopicRows, signedInUserId)
+	const subscriptionPodcastEpisodeByTopic = await loadLatestPodcastEpisodeSummaries(
+		subscriptionTopicRows,
+		signedInUserId,
+	)
 
 	return {
 		// whose activity this is, for the page's profile link
@@ -272,7 +277,7 @@ function toTeamIdentity(team: {
  */
 export function toSubscriptionRows(
 	subscriptionRows: SubscriptionRowFields[],
-	latestPodcastEpisodeByTopic: Map<string, PodcastEpisode> = new Map(),
+	latestPodcastEpisodeByTopic: Map<string, PodcastEpisodeSummary> = new Map(),
 ): SubscriptionRow[] {
 	return subscriptionRows.map((subscriptionRow) => ({
 		...subscriptionRow,

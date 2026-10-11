@@ -1,10 +1,9 @@
 // what list_topics returns: the topics a tool caller may read, each with a prompt preview and its ready sources
 import { and, desc, eq, inArray } from "drizzle-orm"
-import { db } from "../../db"
+import { db, isPublicAndShown } from "../../db"
 import { teamMembers, teamTopics } from "../../db/schema/teams"
 import { sources, subscriptions, topics } from "../../db/schema/topics"
 import { toTopicSourceLabel } from "../tool/topicSourceTools"
-import { isPublicAndShown } from "../topic/permissions"
 import { fromCursor, loadVisibleTopic, MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE, type McpPage, packPage } from "./results"
 import type { ToolCaller } from "./toolCaller"
 

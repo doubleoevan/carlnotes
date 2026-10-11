@@ -371,34 +371,6 @@ The topic page's reload while a Scan runs SHALL mark itself as a poll, and only 
 - **WHEN** a signed-out visitor and a signed-in user poll the same Topic inside two seconds
 - **THEN** each receives the page built for them, since the cache is keyed by who asked
 
-### Requirement: A public topic page links more topics
-
-A public shown Topic's page SHALL end with a "More topics" section of up to five plain links to other public shown
-Topics, rendered on the server so a crawler and a visitor without JavaScript read them. The Topics SHALL be chosen in
-this order: other public shown Topics that a public team holding this Topic also holds, owned or shared; then public
-shown Topics sharing a tag with this Topic, most shared tags first; then the public shown Topics with the newest
-Finding. The Topic itself SHALL never be listed, a Topic SHALL be listed once, and a private or invite Topic, or a
-Topic held only by a private team, SHALL never be listed. Each link SHALL use the Topic's slugged url and show its
-name. A Topic page that is not public, or a public one not yet shown, SHALL have no such section.
-
-#### Scenario: A team's other topics come first
-
-- **GIVEN** a public Topic held by a public team with three other public shown Topics, and two more public Topics
-  sharing its tag
-- **WHEN** a visitor opens its page
-- **THEN** "More topics" lists the three team Topics, then the two tagged ones
-
-#### Scenario: Recent topics fill the rest
-
-- **GIVEN** a public Topic with no team and no tag
-- **WHEN** a crawler fetches its page without running JavaScript
-- **THEN** "More topics" lists the five other public shown Topics with the newest Findings, each as a plain link
-
-#### Scenario: A private topic has no section
-
-- **WHEN** an owner opens their private Topic's page
-- **THEN** there is no "More topics" section
-
 ### Requirement: Findings render as a five-row, collapsible list reusing the homepage row
 A `▾ Findings` accordion (default expanded) SHALL list the Topic's Findings with the homepage row anatomy:
 resource-kind icon, title (emphasized when unread, muted when read), muted source + age meta, and a right-aligned ⓘ

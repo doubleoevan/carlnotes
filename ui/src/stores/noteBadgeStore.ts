@@ -1,5 +1,5 @@
 // the unread note counts the poll last read, plus the notes opened this session that already cleared
-import type { NoteBadge } from "@shared/contracts"
+import type { NoteBadge } from "@shared/contracts/notes"
 import { toStoreListeners } from "@/stores/storeListeners"
 
 // the notes opened this session, which clear their badge before the next poll confirms it

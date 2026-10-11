@@ -1,4 +1,5 @@
-import type { PodcastEpisode, TopicResponse } from "@shared/contracts"
+import type { PodcastEpisode } from "@shared/contracts/podcast"
+import type { TopicResponse } from "@shared/contracts/topics"
 import { PODCAST_NAME } from "@shared/podcastEpisodes"
 import { toPodcastEpisodePath } from "@shared/seo"
 import { useEffect, useState } from "react"

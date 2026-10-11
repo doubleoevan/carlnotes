@@ -1,5 +1,5 @@
 // a scan recap is model-written from pages we don't control, so it renders through a limited Markdown subset
-import type { TopicFinding } from "@shared/contracts"
+import type { TopicFinding } from "@shared/contracts/findings"
 import type { scanStatuses } from "@shared/enums"
 import { isBudgetError } from "@shared/scanFailure"
 import { toTopicPath } from "@shared/seo"

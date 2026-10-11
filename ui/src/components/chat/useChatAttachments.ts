@@ -7,7 +7,7 @@ import {
 	CHAT_VIDEO_DATA_CHARS,
 	clipAttachmentText,
 	type KeptChatAttachment,
-} from "@shared/contracts"
+} from "@shared/contracts/chat"
 import type { ChatAttachment } from "@shared/payloads"
 import { type Dispatch, type SetStateAction, useRef, useState } from "react"
 import { toast } from "sonner"

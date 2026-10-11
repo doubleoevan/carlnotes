@@ -6,7 +6,7 @@ import {
 	CHAT_MEMORY_CHARS,
 	TOPIC_SAVE_TOOL_NAMES,
 	toUncompactedChatTurnStart,
-} from "@shared/contracts"
+} from "@shared/contracts/chat"
 import type { ChatToolCall } from "@shared/payloads"
 import { type ChatHistoryTurn, isConsent, toConsentStep, toModelMessages } from "./chatMessages"
 
