@@ -2,10 +2,11 @@
 // run the smoke test with: bun run smoke:attach. the test needs the S3_* bucket, a Temporal server with its worker running (bun run dev:temporal), the latest migration applied, and Doppler secrets injected
 import { eq } from "drizzle-orm"
 import { db } from "../db"
-import { attachments, topics, users } from "../db/schema"
+import { attachments, topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
 import { buildTopicScanContext, ingestAttachment } from "./attach"
 import { deleteUserLiteLLMKey } from "./litellm"
-import { attachmentExists, deleteAttachment } from "./store"
+import { attachmentExists, deleteStoredObject } from "./store"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 
 // a persisted attachment row
@@ -124,7 +125,7 @@ async function smokeTest(): Promise<number> {
 		// delete the bucket object and the owner's LiteLLM key, then the owner.
 		// the owner cascade drops only the rows
 		if (objectKey) {
-			await deleteAttachment(objectKey)
+			await deleteStoredObject(objectKey)
 		}
 		await deleteUserLiteLLMKey(userId)
 		await db.delete(users).where(eq(users.id, userId))

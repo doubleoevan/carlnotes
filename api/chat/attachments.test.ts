@@ -1,13 +1,9 @@
 // chat attachment tests. what the payload accepts, how a PDF and text resolve for the model, and what gets kept
 import { expect, test } from "bun:test"
-import {
-	CHAT_ATTACHMENT_TEXT_CHARS,
-	type ChatAttachment,
-	chatTurnPayload,
-	clipAttachmentText,
-	withAttachmentNote,
-} from "@shared/contracts"
-import { resolveChatAttachments, toAttachmentsByChatTurnId } from "./attachments"
+import { CHAT_ATTACHMENT_TEXT_CHARS, clipAttachmentText, withAttachmentNote } from "@shared/contracts"
+import { type ChatAttachment, chatTurnPayload } from "@shared/payloads"
+import { resolveChatAttachments } from "./attachments"
+import { toAttachmentsByChatTurnId } from "./chatAttachmentReads"
 
 // the words that a chat attachment includes. everything sent to the model is text, so a chat image reads as empty
 function resolvedText(chatAttachments: ChatAttachment[] | null, index: number): string {

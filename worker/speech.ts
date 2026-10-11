@@ -1,5 +1,5 @@
 // two-speaker speech from Gemini through LiteLLM's pass-through route, billed to the virtual key that sends the call
-import type { PodcastEpisodeTurn } from "@shared/contracts"
+import type { PodcastEpisodeTurn } from "@shared/payloads"
 import { podcastEpisodeSpeechModel } from "@shared/podcastEpisodes"
 import type { SpeechTier } from "./budget"
 

@@ -1,7 +1,8 @@
 // who may delete one chat room message, decided without a database
 import { expect, test } from "bun:test"
-import { canDeleteChatRoomMessage, toBeforeChatMessageId, toChatMessagePage } from "./room"
+import { canDeleteChatRoomMessage } from "./roomDeletes"
 import { CHAT_ROOM_LOAD_LIMIT } from "./roomMessages"
+import { toBeforeChatMessageId, toChatMessagePage } from "./roomRoute"
 
 // the chat message's own author removes it whatever their team role is
 test("the author deletes their own chat message", () => {

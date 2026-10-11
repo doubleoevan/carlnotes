@@ -81,7 +81,9 @@ Generated, vendored, fixture, and result files are exempt.
   import. Split within the module, name each new file for what it holds, and
   update the module's AGENTS.md if it lists files (step 2).
 - A file that was over 400 lines on origin/main and that the diff only touches
-  goes in the report with a suggested split, done as its own change.
+  is split in this change too, by the same rule. Thorough beats narrow: a split
+  the change can do now is done now, never filed as its own change. A file left
+  whole goes in the report with the reason it is one concern.
 
 Rerun step 4, and report each long file, what was split out of it, and each file
 left whole with the reason.
@@ -114,10 +116,13 @@ Always run Gemini:
 - gemini /code-review (reviews the current branch; if non-interactive
   invocation fails, say so and run it interactively before continuing)
 
-Fix every critical and major finding from every reviewer that ran. Where
-CodeRabbit and Gemini both ran and agree, fix without debate. Re-run until
-clean or only dismissible nits remain, and list any findings you dismissed
-and why.
+Fix every critical and major finding from every reviewer that ran, whether or
+not this diff introduced the problem: a real finding in code the change touches
+or depends on is fixed in this change, never deferred as pre-existing. Where
+CodeRabbit and Gemini both ran and agree, fix without debate. Dismiss only a
+finding that is wrong, or one that needs a decision the user has to make, and
+list each dismissed finding with the reason. Re-run until clean or only
+dismissible nits remain.
 
 ## 8. Ponytail pass, default on
 
@@ -170,7 +175,9 @@ Report what you changed, and each finding left alone with the reason.
 Summarize the full diff for human review: each file, what changed, and why.
 Write the long report to `logs/ship-report.md` and give its path in the
 handoff: the reports from steps 5, 6, and 9, every reviewer's findings with
-the ones dismissed and why, and recommendations. Then STOP, show the
+the ones dismissed and why, and recommendations. A recommendation is only
+work that needs the user's decision; anything the change could do, it has done.
+Then STOP, show the
 suggested commit message, and wait for explicit approval. Do not proceed
 without it.
 

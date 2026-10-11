@@ -1,4 +1,4 @@
-import type { TopicDraft } from "@shared/contracts"
+import type { TopicDraft } from "@shared/topicPayloads"
 import { useEffect, useMemo, useState } from "react"
 import { fetchTopicPage } from "@/clients/topicClient"
 import { type EditableTopicFields, toEditableTopicDraft } from "@/components/chat/editableTopicDraft"

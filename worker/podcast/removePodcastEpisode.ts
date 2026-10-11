@@ -1,13 +1,15 @@
-// removing a Podcast Episode, marking Podcast Episodes removed, and deleting the stored audio of one Podcast Episode
+// removing a Podcast Episode, marking Podcast Episodes removed, and the keys of the stored audio of one Podcast Episode
 // or of every Podcast Episode of a Topic
 import { eq, inArray } from "drizzle-orm"
-import { type DbTransaction, db } from "../../db"
-import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes } from "../../db/schema"
-import { deleteAttachment, toPodcastEpisodeAudioKey, toPodcastEpisodeChapterKey } from "../store"
+import { type DbHandle, type DbTransaction, db } from "../../db"
+import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes } from "../../db/schema/podcast"
+import {
+	deleteStoredObjects,
+	recordPendingObjectDeletions,
+	toPodcastEpisodeAudioKey,
+	toPodcastEpisodeChapterKey,
+} from "../store"
 import { toChapterTurns } from "./podcastEpisodeScript"
-
-// how many Podcast Episodes' audio a Topic's deletion deletes at once
-const PODCAST_EPISODE_DELETE_BATCH_SIZE = 10
 
 /**
  * Removes a published or failed Podcast Episode and keeps its row as removed with its season, episode number, and cost.
@@ -23,15 +25,20 @@ export async function removePodcastEpisode(podcastEpisodeId: string): Promise<bo
 		return false
 	}
 
-	// delete the audio, the chapters, and the listens, and keep the row as removed
-	await deletePodcastEpisodeAudio(podcastEpisode)
+	// record the audio keys while the script still names the chapters, delete the chapters and the listens, and keep
+	// the row as removed, in one transaction
+	const objectKeys = toPodcastEpisodeAudioKeys(podcastEpisode)
 	await db.transaction(async (transaction) => {
+		await recordPendingObjectDeletions({ handle: transaction, objectKeys })
 		// delete the chapters, so a later Podcast Episode may narrate the Findings again
 		await transaction
 			.delete(podcastEpisodeChapters)
 			.where(eq(podcastEpisodeChapters.podcastEpisodeId, podcastEpisodeId))
 		await markPodcastEpisodesRemoved(transaction, [podcastEpisodeId])
 	})
+
+	// delete the audio once the row is marked
+	await deleteStoredObjects(objectKeys)
 	return true
 }
 
@@ -56,32 +63,26 @@ export async function markPodcastEpisodesRemoved(
 }
 
 /**
- * Deletes the stored audio of every Podcast Episode of a Topic, with any chapter audio that a recording left behind.
+ * Returns the keys of the stored audio of every Podcast Episode of a Topic, finished audio and chapter audio alike,
+ * for a Topic's delete to record while the rows still hold their scripts.
  */
-export async function deleteTopicPodcastEpisodeAudio(topicId: string): Promise<void> {
-	const podcastEpisodeRows = await db
+export async function loadTopicPodcastEpisodeAudioKeys(topicId: string, handle: DbHandle = db): Promise<string[]> {
+	// read the Topic's Podcast Episodes and list their audio keys
+	const podcastEpisodeRows = await handle
 		.select({ id: podcastEpisodes.id, script: podcastEpisodes.script })
 		.from(podcastEpisodes)
 		.where(eq(podcastEpisodes.topicId, topicId))
-
-	// delete a few Podcast Episodes' audio at a time.
-	// a Topic with hundreds of Podcast Episodes has thousands of audio objects
-	for (let i = 0; i < podcastEpisodeRows.length; i += PODCAST_EPISODE_DELETE_BATCH_SIZE) {
-		const podcastEpisodeRowBatch = podcastEpisodeRows.slice(i, i + PODCAST_EPISODE_DELETE_BATCH_SIZE)
-		await Promise.all(podcastEpisodeRowBatch.map((podcastEpisodeRow) => deletePodcastEpisodeAudio(podcastEpisodeRow)))
-	}
+	return podcastEpisodeRows.flatMap((podcastEpisodeRow) => toPodcastEpisodeAudioKeys(podcastEpisodeRow))
 }
 
 /**
- * Deletes one Podcast Episode's finished audio and the chapter audio of its recording.
- * An object that is not there is skipped.
+ * Returns a Podcast Episode's audio keys: its finished audio, and one chapter object for each chapter of its script.
  */
-export async function deletePodcastEpisodeAudio({
+export function toPodcastEpisodeAudioKeys({
 	id,
 	script,
-}: Pick<typeof podcastEpisodes.$inferSelect, "id" | "script">): Promise<void> {
-	// delete the finished audio, and one chapter object for each chapter of the script
+}: Pick<typeof podcastEpisodes.$inferSelect, "id" | "script">): string[] {
 	const chapterCount = script ? toChapterTurns(script).length : 0
 	const chapterKeys = Array.from({ length: chapterCount }, (_, position) => toPodcastEpisodeChapterKey(id, position))
-	await Promise.all([toPodcastEpisodeAudioKey(id), ...chapterKeys].map((objectKey) => deleteAttachment(objectKey)))
+	return [toPodcastEpisodeAudioKey(id), ...chapterKeys]
 }

@@ -4,13 +4,14 @@ import { appUrl } from "@shared/appUrl"
 import { toPodcastFeedPath } from "@shared/seo"
 import { and, eq } from "drizzle-orm"
 import type { Context } from "hono"
-import { db } from "../../db"
+import { type DbHandle, db } from "../../db"
 import { toPodcastFeedCacheKey } from "../../db/podcastFeedCache"
 import { deleteRedisKey, readRedisJson, saveRedisJson } from "../../db/redis"
-import { podcastFeedTokens, topics } from "../../db/schema"
+import { podcastFeedTokens } from "../../db/schema/podcast"
+import { topics } from "../../db/schema/topics"
 import { isAllowed } from "../authorization"
 import { type PodcastFeedEpisode, toPodcastFeedXml } from "../share/podcastFeed"
-import { loadPublishedPodcastEpisodeRows } from "./helpers"
+import { loadPublishedPodcastEpisodeRows } from "./podcastEpisodeRows"
 
 // how long a rendered feed stays in Redis
 const PODCAST_FEED_CACHE_TTL_MS = 15 * 60 * 1000
@@ -64,9 +65,12 @@ export async function loadOrCreatePodcastFeedUrl(userId: string | null, topic: T
 /**
  * Deletes a listener's token for a Topic, with the token's cached check and the listener's cached feed.
  */
-export async function deletePodcastFeedToken({ topicId, userId }: PodcastFeedTokenListener): Promise<void> {
+export async function deletePodcastFeedToken(
+	{ topicId, userId }: PodcastFeedTokenListener,
+	handle: DbHandle = db,
+): Promise<void> {
 	// delete the token's row, then its cached check and the listener's cached feed
-	const deletedPodcastFeedTokenRows = await db
+	const deletedPodcastFeedTokenRows = await handle
 		.delete(podcastFeedTokens)
 		.where(and(eq(podcastFeedTokens.topicId, topicId), eq(podcastFeedTokens.userId, userId)))
 		.returning({ token: podcastFeedTokens.token })

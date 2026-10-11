@@ -1,4 +1,4 @@
-import type { FlagContentPayload } from "@shared/contracts"
+import type { FlagContentPayload } from "@shared/payloads"
 import type { LucideIcon } from "lucide-react"
 import { useEffect } from "react"
 import { toStoreListeners } from "@/stores/storeListeners"

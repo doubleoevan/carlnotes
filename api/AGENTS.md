@@ -3,16 +3,20 @@
 Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregates the `/api` routes.
 
 - `index.ts` opens each request's memo (`db/requestMemo.ts`) in its first middleware, and its `onError` reports an
-  error no route handles to Sentry and keeps Hono's 500. `requestTracing.ts` runs next: it names a traced request's
-  Sentry transaction by its route and attaches its query count, the pool's counts, and the event loop's lag.
+  error no route handles to Sentry and keeps Hono's 500. `requestTracing.ts` runs next: it counts the request's
+  queries and cache reads, names a traced request's Sentry transaction by its route and attaches its query count,
+  the pool's counts, and the event loop's lag, and outside production sets a `Server-Timing` header with the duration
+  and the counts. In dev it also logs one line per request with the same numbers and the cache keys that missed.
+  `queryBudgets.test.ts` holds the cached routes' query budgets, each a route requested twice against the pool and
+  Redis stubs.
   `index.ts` also serves `/api/health`, which the platform polls and which sends no query, and `/api/health/deep`,
   which runs one query and returns the pool's counts for a monitor. Neither looks up a session.
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `share/`, `tool/`, `mcp/`. Root files
   serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, and `content.ts` for the blog
   under `content/blog/`).
 - `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key, and
-  security.txt. `seo.ts` builds what they read, and the JSON-LD the topic page head includes. The blog and docs
-  Markdown are read through `ttlCache.ts`, which keeps the parsed pages for a minute, so a new file appears within
+  security.txt. `seo.ts` builds what they read, and `jsonLd.ts` the JSON-LD the topic page head includes. The blog and
+  docs Markdown are read through `ttlCache.ts`, which keeps the parsed pages for a minute, so a new file appears within
   that minute without a restart.
 - `share/pageHead.ts` — the `/api/<page>/:id/head` routes that return a topic, profile, team, or invite page's
   `PageHead`, which each ui route's `head()` turns into tags.
@@ -21,9 +25,11 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   `releases.sync.ts` (`bun run sync:releases`) re-reads the GitHub API through the same write, which
   seeds history and repairs a missed delivery, and `releases.preview.ts` (`bun run releases:preview`) stores a
   local notes file through it for reading on the dev server. The convention for writing one is `docs/release-notes.md`.
-- `note/` — the tasting-notes routes and their yjs sync: `notes.ts` (page payload, snapshot, updates, stream),
-  `noteCommentThreads.ts` (comment writes), `noteStream.ts` (fan-out), `permissions.ts` (visibility access),
-  `noteBadges.ts` (the unread edit and comment counts, and the read time that clears them).
+- `note/` — the tasting-notes routes and their yjs sync: `notes.ts` (the routes and the stream), `noteYdoc.ts` (the
+  yjs merge under the note's lock, the snapshot, and the regenerated HTML), `notePayloads.ts` (a page's note list, one
+  note as the api shapes it, and a note created on a page), `noteCommentThreads.ts` (comment writes), `noteStream.ts`
+  (fan-out), `permissions.ts` (visibility access), `noteBadges.ts` (the unread edit and comment counts, and the read
+  time that clears them).
 - `chat/roomStream.ts` and `note/noteStream.ts` fan a stored chat message and a note change out across replicas
   over Redis pub/sub through `db/redis.ts`.
   Each delivers to its own instance's subscribers first, publishes a payload that names the instance,
@@ -34,29 +40,67 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
 - `mcp/` — the mcp server: `server.ts` (the `/mcp` and `/mcp/t/:topicId` routes and the transport), `tools.ts` (the
   tools it registers, with their schemas and annotations), `toolCaller.ts` (the tool caller: the visitor or user a
   bearer token resolves to), and
-  `results.ts` (what each tool returns for a visitor or a user, paged under a client's result limit).
+  `results.ts` (what the finding tools return for a visitor or a user, paged under a client's result limit, and the
+  paging helpers) and `topicResults.ts` (what `list_topics` returns). `mcp.smoke.ts` runs the sections in
+  `mcpSmokeSections.ts` over the fixtures in `mcpSmokeFixtures.ts`, and stops the first scan of the topic it creates
+  through `topic/firstScanSmoke.ts`.
 - `podcast/` — a Topic's podcast episodes: `podcastEpisodes.ts` (the routes for a season's episodes, an episode page,
-  the next unplayed episode, one episode with its files and its preview card, a listener's progress, a chapter's
-  rating, the podcast switch, and removing an episode), `helpers.ts` (the reads behind them: the topic page's
-  podcast, a season's episodes, one episode by its id, and a podcast episode page, each limited to what the user may
-  listen to), `podcastSeo.ts` (the public episodes that the sitemap and llms.txt list, and the PodcastSeries and
-  PodcastEpisode structured data that `seo.ts` and `share/pageHead.ts` read),
-  `podcastEpisodeFiles.ts` (the audio, chapters, and transcript responses), `podcastFeedTokens.ts` (a listener's feed
-  token, and building, caching, and responding with a feed, or a 304 for a current copy), and `podcastFeeds.ts` (a
-  listener's feed url and its reset, an episode's files at paths after a feed token, and the covers).
-  `share/podcastFeed.ts` builds the feed, `share/podcastCover.ts` draws the covers over
-  `docs/design/podcast/cover-base.png`, and
-  `share/podcastEpisodeImage.ts` draws an episode page's link-preview card.
+  the next unplayed episode, one episode with its files and its preview card, a listener's progress, a chapter's rating,
+  the podcast switch, and removing an episode), `podcastEpisodeRows.ts` (the episode row reads and the subscription
+  activation gate that limits each read to what the user may listen to), `helpers.ts` (the shapes over them: the topic
+  page's podcast, a season's episodes, and a podcast episode page), `podcastSeo.ts` (the public episodes that the
+  sitemap and llms.txt list, and the PodcastSeries and PodcastEpisode structured data that `seo.ts` and
+  `share/pageHead.ts` read), `podcastEpisodeFiles.ts` (the audio, chapters, and transcript responses),
+  `podcastFeedTokens.ts` (a listener's feed token, and building, caching, and responding with a feed, or a 304 for a
+  current copy), and `podcastFeeds.ts` (a listener's feed url and its reset, an episode's files at paths after a feed
+  token, and the covers). `share/podcastFeed.ts` builds the feed, `share/podcastCover.ts` draws the covers over
+  `docs/design/podcast/cover-base.png`, and `share/podcastEpisodeImage.ts` draws an episode page's link-preview card.
   `documents.ts` serves a public Topic's feed at `/topics/:id/podcast.xml` and a listener's own at
   `/podcast-feeds/:token.xml`.
-- `tool/` — `topicTools.ts` (the Topic Tools, each with its own gate check) and the chat adapters in
-  `chatTools.ts`: the edit tools bound to a chat's topic, and the draft tools of the new-topic chat. The mcp adapter is
-  in `mcp/tools.ts`.
+- `tool/` — the Topic Tools, each with its own gate check: `topicTools.ts` (the prompt and field updates),
+  `topicSourceTools.ts` (adding and removing a source, and what one more costs), and `topicDraftTools.ts` (creating a
+  topic from a draft and suggesting its sources). The chat adapters are `chatTools.ts` (the edit tools bound to a
+  chat's topic) and `newTopicChatTools.ts` (the new-topic chat's draft tools). The mcp adapter is in `mcp/tools.ts`.
+  `topicTools.smoke.ts` runs `topicUpdateSmokeSections.ts`, `topicSourceSmokeSections.ts`, and
+  `topicDraftSmokeSections.ts` over `topicToolsSmokeFixtures.ts`, and stops the first scan of the topic it creates
+  through `topic/firstScanSmoke.ts`.
+- `topic/helpers.ts` — the topic page's reads; `topic/saveHelpers.ts` — the daily slot a frequency takes, a topic's
+  new source rows, and its first scan; `topic/firstScanSmoke.ts` — the smoke helper that waits for a created topic's
+  first scan to reach Temporal, then stops it and waits for its workflow to end; `topic/teamTopicOptions.ts` — the
+  topics a user may add to a team; `topic/accessibleFindings.ts` — the findings a user may read on a topic, with the
+  owning team's bookmarks.
+- `topic/findings.ts` — the finding routes, and `topic/findingMarks.ts` — the marks a user puts on a finding: the
+  rating and its feedback, the bookmark, consumed, and a view.
 - `topic/promptVersions.ts` — the Prompt Version write the editor's save and the Topic Tools share.
 - `topic/topicTableRows.ts` — `toTopicTableRows`, the topic table rows that the profile page and the team page share,
   each with its latest Podcast Episode.
 - `topic/moreTopics.ts` — `loadMoreTopics`, the other public shown Topics a public Topic's page links under "More
   topics": a holding public team's first, then by shared tags, then by newest Finding.
+- `topic/topics.ts` — the topic page read; `topic/saveTopic.ts` — the create with its default Sources and invites, and
+  the update with its changed-field events; `topic/topicsRoute.ts` — the topic routes over them; `topic/deleteTopic.ts`
+  — the delete, one transaction over every row a topic owns with its object keys recorded.
+- `topic/feeds.ts` — the topic feed's sections, and `topic/feedData.ts` — the batched reads behind every topic in a
+  feed, each table read once for the whole batch.
+- `chat/room.ts` — posting to a chat room and its stream; `chat/roomRoute.ts` — the chat room routes;
+  `chat/roomAccess.ts` — one chat room, the member's access to it, and the topic side of a chat room filter;
+  `chat/roomDeletes.ts` — clearing a room and deleting one message or shared file.
+- `chat/privateChat.ts` — the private chat routes and the answer flow; `chat/chatTurnAuthorization.ts` — whether a
+  user may take a chat turn on a topic, in a team chat, or in the new-topic chat; `chat/chatTurnStream.ts` — streaming
+  a chat turn's reply and saving its row. `chat/roomTurns.ts` — Carl's chat room turn, and `chat/roomQuestion.ts` —
+  the question it is asked, from the chat window and the room's summary and files. `room.smoke.ts` runs
+  `roomSmokeSections.ts` over `roomSmokeFixtures.ts`.
+- `chat/attachments.ts` — storing a chat turn's attachments and deleting them, with the routes;
+  `chat/chatAttachmentReads.ts` — reading them: the kept ones with their context, a chat turn's own, a download, and
+  the object keys behind a user's or a topic's.
+- `team/teams.ts` — creating and updating a team and the topic attach and detach; `team/teamsRoute.ts` — the team
+  routes; `team/deleteTeam.ts` — the delete, the handover to a new leader, and the one team row delete an account
+  close shares; `team/search.ts` — the team name search and the like-pattern escape; `team/teamPage.ts` — the team
+  page read; `team/teamsPage.ts` — the teams page read; `team/helpers.ts` — the team summaries, the profile's team
+  statuses, the admin's team topics, and the per-team counts and spend they share.
+- `topic/search.ts` — `searchTopics` and `GET /api/topics/search`, the search bar's topic name search, which applies
+  the `topic:view` rules in SQL ahead of the limit. A user finds the listed topics they may open, and a visitor finds
+  public topics with enough findings. The name searches here, in `profiles.ts`, and in `team/search.ts` read trigram
+  indexes, whose plans `searchPlans.smoke.ts` checks beside the chat ranking's.
 - `topic/topicDrafts.ts` — the new-topic chat's Topic Draft row, written by the chat turn that changed it and read
   back when the conversation loads.
 - `botAnalytics.ts` — the middleware that reports what a known crawler, unfurler, podcast app, or feed reader fetched,
@@ -64,15 +108,37 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   `analyticsTopic`, and a public topic's id is sent with the event.
 - `rateLimit.ts` — the one per-tool-caller rate limit, shared by the chat turn routes and the mcp routes, keyed by the
   user or by the client address. `trustedProxies.ts` reads that address exactly as Better Auth does: the rightmost
-  `x-forwarded-for` entry outside the Cloudflare ranges that `TRUSTED_PROXIES` lists.
+  `x-forwarded-for` entry outside the Cloudflare ranges that `TRUSTED_PROXIES` lists, and logs the warning once if
+  the setting is unset or misses a hop.
   Each rate limit window is counted in Redis through `db/redis.ts`, so every replica shares the count.
-  The limiter allows every request while Redis is unreachable.
+  While Redis is unreachable the counter counts in this replica's memory, so a caller stays bounded per replica.
+- `avatars.ts` — the user and team avatar uploads and routes, and `POST /api/avatars/decode-failures`, which reports
+  a chosen avatar file that could not be decoded, by its content type and byte size.
 - `edgeCache.ts` — what the edge may cache: a signed-out page, the blog and release pages, and the signed-out feed for a
-  minute under the `rendered` tag, and a versioned avatar or card for a year in the browser and a day at the edge.
-  `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag right after the app
-  deploys.
-- `auth.ts` creates each new user's LiteLLM key in the user create hook. If the LiteLLM proxy fails or times out,
-  the hook reports the failure, and the user is created without a key. The user's first model call creates the key.
+  minute under the `rendered` tag, and a versioned avatar or card for a year in the browser and a day at the edge. A
+  user avatar response is tagged `user-avatar:<userId>` and a team avatar response `team-avatar:<teamId>`, and
+  `purgeEdgeCacheTagAfterDeletion` purges one tag once an account close or a team deletion has committed, reporting a
+  failed purge, logging a skipped one, and never failing the deletion. `purgeEdgeCacheTags` is the purge by tag both it
+  and the release job send. `edgeCache.purge.ts` (`bun run edge:purge`) is the deploy job that clears the `rendered` tag
+  right after the app deploys.
+- `admin.ts` — the admin writes (a user's role and budget override) and the admin console routes, over
+  `adminConsole.ts` (the users and teams tables, the platform totals, and the expandable rows).
+- `activity.ts` — the activity page and its route, over `activityTopics.ts` (each topic's month scans, counts, chat
+  mentions, and latest podcast episode).
+- `invite/invites.ts` — the invite links, the target a token opens, and the link routes; `invite/inviteAcceptance.ts`
+  — accepting an invite: the token acceptance, the topic and team acceptances, and the spent use. `invites.smoke.ts`
+  runs `inviteLinkSmokeSections.ts` and `userInviteSmokeSections.ts` over `inviteSmokeFixtures.ts`, and
+  `team/teams.smoke.ts` runs `teamMembershipSmokeSections.ts`, `teamTopicSmokeSections.ts`, and
+  `teamPageSmokeSections.ts` over `teamSmokeFixtures.ts`. `podcast/podcastEpisodes.smoke.ts` runs
+  `podcastEpisodeSmokeSections.ts`, `podcastFeedSmokeSections.ts`, and `podcastEpisodePageSmokeSections.ts` over
+  `podcastEpisodeSmokeFixtures.ts`.
+- `unsubscribe.ts` — the topic-scan email's unsubscribe link: `GET /api/unsubscribe` opens a page with one button and
+  changes nothing, and `POST /api/unsubscribe` performs the unsubscribe for the button and for a provider's RFC 8058
+  one-click, reporting which with the request's device properties.
+- `auth.ts` creates each new user's LiteLLM key in the user create hook. If the LiteLLM proxy fails or times out, the
+  hook reports the failure, and the user is created without a key. The user's first model call creates the key.
+  `authEmails.ts` sends the emails Better Auth asks for, and `signupGate.ts` holds the turnstile check a password
+  signup passes, signed into a short-lived cookie.
   `auth.ts` gives Better Auth the Redis store as its secondary storage and keeps sessions in Postgres too.
   A session is read from Redis first, and from Postgres if Redis has no copy or is down.
   Verification values, such as reset links and OAuth state, are kept in both stores and read the same way.

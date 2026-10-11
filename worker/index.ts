@@ -1,15 +1,16 @@
 // the worker module entry. it exposes the topic scan, chat reply, and attachment functions that the api calls in-process
 export {
-	AttachmentValidationError,
-	extractText,
 	generateAttachmentContext,
 	generateImageContext,
 	ingestAttachment,
 	ingestUrlAttachment,
 	MAX_ATTACHMENT_BYTES,
-	toCanonicalContentType,
 } from "./attach"
-export { type ChatReplyPart, type ChatReplyStream, type ChatTurnInput, streamChatReply } from "./chat"
+export { AttachmentValidationError, toCanonicalContentType } from "./attachContentType"
+export { extractText } from "./attachText"
+// the chat reply, one chat turn's input, and the topic search behind the chat routes
+export { type ChatReplyPart, type ChatReplyStream, streamChatReply } from "./chat"
+export type { ChatTurnInput } from "./chat/chatMessages"
 export { type RankedTopicFinding, searchTopicFindings } from "./chat/retrieve"
 export { notifyIndexNow } from "./indexNow"
 export { lookupPodcast } from "./ingest/podcast"
@@ -31,23 +32,29 @@ export {
 	replaceUserLiteLLMKey,
 } from "./litellm"
 export { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "./models"
-export { deleteTopicPodcastEpisodeAudio, removePodcastEpisode } from "./podcast/removePodcastEpisode"
+export { loadTopicPodcastEpisodeAudioKeys, removePodcastEpisode } from "./podcast/removePodcastEpisode"
 // whether an address is loopback, private, link-local, or reserved
 export { isInternalAddress } from "./publicFetch"
 export { failUnstartedScan, loadScan, scanTopic, startTopicScan, stopTopicScan } from "./scan"
-export { failStaleScans, runScheduledTopicScans } from "./schedule"
+export { runScheduledTopicScans } from "./schedule"
 export { toYoutubeVideoId } from "./scrape"
 export { screenPendingSources, screenTopicSources } from "./screen"
+export { failStaleScans } from "./staleScans"
 export {
 	attachmentExists,
 	attachmentRangeStream,
 	attachmentStream,
-	deleteAttachment,
+	clearPendingObjectDeletion,
+	deleteStoredObject,
+	deleteStoredObjects,
 	getAttachmentBytes,
+	recordPendingObjectDeletionBeforeUpload,
+	recordPendingObjectDeletions,
 	toChatAttachmentKey,
 	toChatRoomAttachmentKey,
 	toLinkPreviewImageKey,
 	toPodcastEpisodeAudioUrl,
+	toStoredObjectKeys,
 	uploadAttachment,
 } from "./store"
 export { type SuggestedSource, suggestSources, toSourceKey } from "./suggest"

@@ -6,7 +6,7 @@ import { appUrl } from "@shared/appUrl"
 import { desc, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
-import { releases } from "../db/schema"
+import { releases } from "../db/schema/releases"
 import { toContentHtml, toPageHtml } from "./content"
 import { renderedCacheHeaders } from "./edgeCache"
 

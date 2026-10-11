@@ -2,7 +2,7 @@
 // the newest chapter rating that the Finding takes, and the link from those chapters to the Finding
 import { and, desc, eq, inArray, isNotNull, isNull, type SQL, sql } from "drizzle-orm"
 import { db } from "../../db"
-import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema"
+import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast"
 
 // a topic and one of its resources
 export type TopicResourceRef = { topicId: string; resourceId: string }

@@ -1,8 +1,8 @@
 import {
+	SEARCH_MIN_CHARS,
 	type TeamSearchResult,
-	type TopicFeed,
 	type TopicFinding,
-	USER_SEARCH_MIN_CHARS,
+	type TopicSearchResult,
 	type UserSearchResult,
 } from "@shared/contracts"
 import { toTopicPath } from "@shared/seo"
@@ -11,7 +11,7 @@ import { Search, X } from "lucide-react"
 import { type KeyboardEvent, useEffect, useState } from "react"
 import { searchUsers } from "@/clients/profileClient"
 import { searchTeams } from "@/clients/teamClient"
-import { sendTopicFindingOpened } from "@/clients/topicClient"
+import { searchTopics, sendTopicFindingOpened } from "@/clients/topicClient"
 import { Input } from "@/components/primitives/input"
 import { PageActionMenu } from "@/components/search/PageActionMenu"
 import { SEARCH_RESULT_TYPES, SearchFilters, type SearchResultType } from "@/components/search/SearchFilters"
@@ -21,15 +21,14 @@ import { useTopicFeed } from "@/providers/TopicFeedProvider"
 
 // a typeahead suggestion type: a topic, one of its findings, a team, or a user profile
 type SearchResultSuggestion =
-	| { type: "topic"; topic: TopicFeed }
+	| { type: "topic"; topic: TopicSearchResult }
 	| { type: "resource"; resource: TopicFinding }
 	| { type: "team"; team: TeamSearchResult }
 	| { type: "user"; user: UserSearchResult }
 
-const MAX_TOPIC_SUGGESTIONS = 4
 const MAX_RESOURCE_SUGGESTIONS = 6
 
-// how long typing pauses before a user or team search is sent, so a fast typist spends one request instead of ten
+// how long typing pauses before a topic, team, or user search is sent
 const SEARCH_DEBOUNCE_MS = 200
 
 // how far each arrow key moves the highlight
@@ -64,25 +63,25 @@ export function SearchBar() {
 		})
 	}
 
-	// flatten the topic feed findings for the typeahead. dedupe topics, which can appear in both Featured and Popular
+	// flatten the topic feed findings for the typeahead
 	const topicFindings = topicFeed
 		? topicFeed.sections.flatMap((section) => section.topics.flatMap((topic) => topic.findings))
 		: []
-	const sectionTopics = topicFeed?.sections.flatMap((topicSection) => topicSection.topics) ?? []
-	const topics = [...new Map(sectionTopics.map((topic) => [topic.id, topic])).values()]
 
-	// match topics by name and topic findings by title, or the url when there is no title. limit each list
+	// match topic findings by title, or the url if there is no title, and limit the list
 	const searchQuery = query.trim().toLowerCase()
-	const topicMatches = searchQuery
-		? topics.filter((topic) => topic.name.toLowerCase().includes(searchQuery)).slice(0, MAX_TOPIC_SUGGESTIONS)
-		: []
 	const resourceMatches = searchQuery
 		? topicFindings
 				.filter((resource) => (resource.title ?? resource.url).toLowerCase().includes(searchQuery))
 				.slice(0, MAX_RESOURCE_SUGGESTIONS)
 		: []
 
-	// topics and findings are already loaded. teams and users are not, and both are searched as the typing pauses
+	// findings are already loaded. topics, teams, and users are searched on the server as the typing pauses
+	const { matches: topicMatches, isSearching: isSearchingTopics } = useDebouncedSearch(
+		searchQuery,
+		searchResultTypes.has("topics"),
+		searchTopics,
+	)
 	const { matches: userMatches, isSearching: isSearchingUsers } = useDebouncedSearch(
 		searchQuery,
 		searchResultTypes.has("users"),
@@ -96,7 +95,7 @@ export function SearchBar() {
 
 	// topics, then teams, then users, then findings, so the arrow keys walk one combined search suggestions list
 	const searchSuggestions: SearchResultSuggestion[] = [
-		...(searchResultTypes.has("topics") ? topicMatches.map((topic) => ({ type: "topic" as const, topic })) : []),
+		...topicMatches.map((topic) => ({ type: "topic" as const, topic })),
 		...teamMatches.map((team) => ({ type: "team" as const, team })),
 		...userMatches.map((user) => ({ type: "user" as const, user })),
 		...(searchResultTypes.has("findings")
@@ -249,7 +248,7 @@ export function SearchBar() {
 						)
 					})}
 					{/* the empty suggestions state is hidden while a search is still pending */}
-					{searchSuggestions.length === 0 && !isSearchingUsers && !isSearchingTeams && (
+					{searchSuggestions.length === 0 && !isSearchingTopics && !isSearchingUsers && !isSearchingTeams && (
 						<p className="text-muted-foreground px-2 py-3 text-sm">No matches found.</p>
 					)}
 				</div>
@@ -270,7 +269,7 @@ function useDebouncedSearch<Match>(
 	const [matches, setMatches] = useState<Match[]>([])
 	const [isSearching, setIsSearching] = useState(false)
 	useEffect(() => {
-		if (!isEnabled || searchQuery.length < USER_SEARCH_MIN_CHARS) {
+		if (!isEnabled || searchQuery.length < SEARCH_MIN_CHARS) {
 			setMatches([])
 			setIsSearching(false)
 			return

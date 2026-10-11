@@ -3,7 +3,7 @@ import { shutdownAnalytics } from "@shared/analytics"
 import { shutdownMonitoring, startMonitoring } from "@shared/monitoring"
 import { type ExtraGaugesReading, startRuntimeGauges } from "@shared/runtimeGauges"
 import { NativeConnection, Worker } from "@temporalio/worker"
-import { readPoolGauges, toPositiveInteger } from "../db"
+import { readPoolGauges, sizeConnectionPool, toPositiveInteger } from "../db"
 import { readRedisExtraGauges } from "../db/redis"
 import { runWithRetries } from "./retry"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
@@ -60,9 +60,10 @@ function connectWithRetry(): Promise<NativeConnection> {
 // connect to Temporal, build a worker per queue, and poll until the process stops
 async function run(): Promise<void> {
 	// monitoring, then tracing for this worker's model calls, in that order so Langfuse keeps its own provider beside Sentry's.
-	// both do nothing without their keys
+	// both do nothing without their keys. then size the connection pool from the database
 	startMonitoring()
 	startTelemetry()
+	await sizeConnectionPool()
 
 	// a Worker polls exactly one queue and takes one workflowsPath
 	const connection = await connectWithRetry()

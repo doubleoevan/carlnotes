@@ -1,17 +1,15 @@
 // the topic chat client. the reply arrives as a stream, so it is read chunk by chunk instead of being parsed whole
 import {
 	CHAT_HISTORY_TURNS,
-	type ChatAttachment,
 	type ChatConversation,
 	type ChatReplyLine,
-	type ChatToolCall,
 	compactChatAnswer,
-	type TopicDraft,
-	type TopicDraftTeam,
 	type TopicToolCalls,
 	toSentToolCalls,
 	toUncompactedChatTurnStart,
 } from "@shared/contracts"
+import type { ChatAttachment, ChatToolCall } from "@shared/payloads"
+import type { TopicDraft, TopicDraftTeam } from "@shared/topicPayloads"
 
 // why a chat turn was rejected, kept apart so that the panel can prompt an upgrade instead of a generic error
 export type ChatRejection = "budget" | "forbidden" | "failed" | "rateLimited"

@@ -1,14 +1,34 @@
 // the app's database client. a pooled Neon connection bound to the domain schema
 import { Pool } from "@neondatabase/serverless"
+import { reportError } from "@shared/monitoring"
 import type { PoolGauges } from "@shared/runtimeGauges"
 import { sql } from "drizzle-orm"
 import { drizzle } from "drizzle-orm/neon-serverless"
 import { traceQueries } from "./queryTracing"
-import * as schema from "./schema"
+import * as billing from "./schema/billing"
+import * as chat from "./schema/chat"
+import * as columns from "./schema/columns"
+import * as invites from "./schema/invites"
+import * as notes from "./schema/notes"
+import * as podcast from "./schema/podcast"
+import * as releases from "./schema/releases"
+import * as scans from "./schema/scans"
+import * as storage from "./schema/storage"
+import * as teams from "./schema/teams"
+import * as topics from "./schema/topics"
+import * as users from "./schema/users"
 
-// the defaults for the pool's size and for how long a request waits for a connection
-const DEFAULT_POOL_MAX = 40
+// the defaults for the pool's size and for how long a request waits for a connection.
+// the size is what the pool keeps if the max_connections read fails
+const DEFAULT_POOL_MAX = 15
 const DEFAULT_CONNECT_TIMEOUT_MS = 10_000
+
+// how many processes can hold a pool at once: two api replicas, two worker replicas, the sweep, the budget reset,
+// and two more for the replicas a rolling deploy overlaps with and the release jobs. DATABASE_POOL_COUNT overrides it
+const DEFAULT_POOL_COUNT = 8
+
+// the share of max_connections that Neon's connection pooler holds on its server side for one user and database
+const POOLER_SERVER_SHARE = 0.9
 
 // one pooled Neon client for the app. a request that waits past the timeout for a connection fails with an error
 export const connectionPool = new Pool({
@@ -23,7 +43,21 @@ connectionPool.on("error", (error: Error) => console.error("neon pool error", er
 // count and trace each statement a request sends
 traceQueries(connectionPool)
 
-// drizzle client bound to the full domain schema. consumers import table definitions from the schema directly
+// the full domain schema, one object over every schema file, and the drizzle client bound to it
+export const schema = {
+	...billing,
+	...chat,
+	...columns,
+	...invites,
+	...notes,
+	...podcast,
+	...releases,
+	...scans,
+	...storage,
+	...teams,
+	...topics,
+	...users,
+}
 export const db = drizzle(connectionPool, { schema })
 
 // the client that a db.transaction callback gets, which runs its statements in the transaction
@@ -55,6 +89,48 @@ export function readPoolGauges(): PoolGauges {
 		totalCount: connectionPool.totalCount,
 		idleCount: connectionPool.idleCount,
 		waitingCount: connectionPool.waitingCount,
+	}
+}
+
+/**
+ * Sizes the pool from the database: the pooler's share of its max_connections divided by the pool count, unless
+ * DATABASE_POOL_MAX sets the size. A failed read keeps the default and reports the failure. Logs the size it sets.
+ */
+export async function sizeConnectionPool(): Promise<number> {
+	// keep a size that configuration sets
+	const poolMaxOverride = toPositiveInteger(process.env.DATABASE_POOL_MAX, 0)
+	if (poolMaxOverride > 0) {
+		connectionPool.options.max = poolMaxOverride
+		console.log(`database pool sized to ${poolMaxOverride} connections from DATABASE_POOL_MAX`)
+		return poolMaxOverride
+	}
+
+	// keep the default without a connection string
+	if (!process.env.DATABASE_URL) {
+		return DEFAULT_POOL_MAX
+	}
+
+	// read max_connections, then size the pool to the pooler's share of it split across the pools that can be open at once
+	const poolCount = toPositiveInteger(process.env.DATABASE_POOL_COUNT, DEFAULT_POOL_COUNT)
+	try {
+		const { rows: maxConnectionsRows } = await connectionPool.query<{ max_connections: string }>("show max_connections")
+		const maxConnections = toPositiveInteger(maxConnectionsRows[0]?.max_connections, 0)
+		if (maxConnections === 0) {
+			throw new Error(`max_connections read as ${maxConnectionsRows[0]?.max_connections}`)
+		}
+
+		// set the size for the pool's next checkout and log it
+		const poolMax = Math.max(1, Math.floor((POOLER_SERVER_SHARE * maxConnections) / poolCount))
+		connectionPool.options.max = poolMax
+		console.log(
+			`database pool sized to ${poolMax} connections from max_connections ${maxConnections} and ${poolCount} pools`,
+		)
+		return poolMax
+	} catch (error) {
+		// keep the default and report the failed read
+		console.error(`database pool kept at ${DEFAULT_POOL_MAX} connections: the max_connections read failed`, error)
+		reportError(error, "database")
+		return DEFAULT_POOL_MAX
 	}
 }
 

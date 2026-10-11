@@ -1,5 +1,5 @@
 // the pending attachment chips both chat composers show above their message box
-import type { ChatAttachment } from "@shared/contracts"
+import type { ChatAttachment } from "@shared/payloads"
 import { FileText, Film, X } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 

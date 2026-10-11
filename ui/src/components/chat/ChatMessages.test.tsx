@@ -1,7 +1,9 @@
 // test the chat message time label, and the private chat's author lines, retry control, and question attachments
 import { expect, test } from "bun:test"
 import type { ChatMessageAttachment } from "@shared/contracts"
-import { ChatMessages, type ChatTurn, toTimeAgoLabel } from "./ChatMessages"
+import { toTimeAgoLabel } from "./ChatMessageParts"
+import { ChatMessages } from "./ChatMessages"
+import type { ChatTurn } from "./chatTurns"
 import { renderWithRouter } from "./renderWithRouter"
 
 // a fixed "now" time so the test cases read as plain arithmetic

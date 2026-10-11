@@ -1,146 +1,30 @@
+// the chat room composer: the chat message box with its attachments, the @ autocomplete, and the reply selector
 import { ALL_USERNAME, CARL_USERNAME, isModelChatMessage, toChatMentions } from "@shared/chatMentions"
 import {
 	CHAT_MAX_ATTACHMENTS,
 	CHAT_ROOM_MESSAGE_MAX_CHARS,
-	type ChatAttachment,
 	type ChatRoomMessage,
 	clipAttachmentText,
 } from "@shared/contracts"
-import { ArrowUp, ChevronDown, Paperclip, Reply } from "lucide-react"
+import type { ChatAttachment } from "@shared/payloads"
+import { ArrowUp, Paperclip } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ChatAttachmentChips } from "@/components/chat/ChatAttachmentChips"
+import { MentionSuggestionList, useMentionAutocomplete } from "@/components/chat/MentionSuggestionList"
+import {
+	ReplyToDropdown,
+	toChangedMentionChatMessage,
+	toChatMessage,
+	toMentionLabel,
+} from "@/components/chat/ReplyToDropdown"
 import { toAttachment } from "@/components/chat/useChatAttachments"
 import type { ChatRoomReply } from "@/components/chat/useRoomReply"
 import { FileDropZone } from "@/components/common/FileDropZone"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
-import { MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
-import { CHAT_FILE_PICKER_ACCEPT, cn, isTouchScreen, isWideScreen } from "@/lib/utils"
+import { CHAT_FILE_PICKER_ACCEPT, isTouchScreen, isWideScreen } from "@/lib/utils"
 
 // how tall the chat message box may grow before it scrolls inside itself, matching the private chat's composer
 const MAX_MESSAGE_BOX_HEIGHT_PX = 120
-
-// the active username chat mention token behind the caret: an @ at a word start and whatever prefix follows it
-const ACTIVE_CHAT_MENTION_PATTERN = /(^|[^\w@.-])@([\w-]*)$/
-
-/**
- * What the @ autocomplete username suggests: Carl pinned first, then the room's members, filtered by the typed-in prefix.
- */
-export function toChatMentionSuggestions(mentionQuery: string, memberUsernames: string[]): string[] {
-	return [CARL_USERNAME, ...memberUsernames.filter((username) => username.toLowerCase() !== CARL_USERNAME)].filter(
-		(username) => username.toLowerCase().startsWith(mentionQuery.toLowerCase()),
-	)
-}
-
-// what the autocomplete shows the composer: the open list and the handlers the chat message box wires in
-type MentionAutocomplete = {
-	usernameSuggestions: string[]
-	highlightMentionIndex: number
-	readMentionQuery: (chatMessageStart: string) => void
-	selectMentionedUsername: (username: string) => void
-	handleAutocompleteKey: (event: React.KeyboardEvent<HTMLTextAreaElement>) => boolean
-	closeMentionList: () => void
-}
-
-// the @ autocomplete behind the chat message box: the typed prefix, the highlighted username, and the keys it owns
-function useMentionAutocomplete(options: {
-	memberUsernames: string[]
-	chatMessage: string
-	setChatMessage: (chatMessage: string) => void
-	chatMessageBoxRef: React.RefObject<HTMLTextAreaElement | null>
-}): MentionAutocomplete {
-	const { memberUsernames, chatMessage, setChatMessage, chatMessageBoxRef } = options
-	const [mentionQuery, setMentionQuery] = useState<string | null>(null)
-	const [highlightMentionIndex, setHighlightMentionIndex] = useState(0)
-
-	// carl is suggested first, then the chat members, narrowed by the typed prefix
-	const usernameSuggestions = mentionQuery === null ? [] : toChatMentionSuggestions(mentionQuery, memberUsernames)
-
-	// each keystroke re-reads the token behind the caret to suggest the users to mention
-	const readMentionQuery = (chatMessageStart: string): void => {
-		const activeMentionQuery = chatMessageStart.match(ACTIVE_CHAT_MENTION_PATTERN)
-		setMentionQuery(activeMentionQuery ? (activeMentionQuery[2] ?? "") : null)
-		setHighlightMentionIndex(0)
-	}
-
-	// selecting a username replaces the typed prefix and puts the caret after it
-	const selectMentionedUsername = (username: string): void => {
-		const chatMessageBox = chatMessageBoxRef.current
-		if (!chatMessageBox) {
-			return
-		}
-
-		// selecting a username replaces the typed prefix with the full one
-		const caret = chatMessageBox.selectionStart ?? chatMessage.length
-		const chatMessageStart = chatMessage.slice(0, caret).replace(ACTIVE_CHAT_MENTION_PATTERN, `$1@${username} `)
-		setChatMessage(chatMessageStart + chatMessage.slice(caret))
-		setMentionQuery(null)
-		chatMessageBox.focus()
-	}
-
-	// while the autocomplete is open, it owns the arrows, Enter, Tab, and Escape
-	const handleAutocompleteKey = (event: React.KeyboardEvent<HTMLTextAreaElement>): boolean => {
-		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-			event.preventDefault()
-			const step = event.key === "ArrowDown" ? 1 : -1
-			setHighlightMentionIndex((index) => (index + step + usernameSuggestions.length) % usernameSuggestions.length)
-			return true
-		}
-
-		// enter and tab select the highlighted username
-		if (event.key === "Enter" || event.key === "Tab") {
-			event.preventDefault()
-			const username = usernameSuggestions[highlightMentionIndex]
-			if (username) {
-				selectMentionedUsername(username)
-			}
-			return true
-		}
-
-		// escape closes the list without touching the chat message
-		if (event.key === "Escape") {
-			event.stopPropagation()
-			setMentionQuery(null)
-			return true
-		}
-		return false
-	}
-
-	// the composer clears the list after a post, so a sent draft never leaves suggestions floating
-	return {
-		usernameSuggestions,
-		highlightMentionIndex,
-		readMentionQuery,
-		selectMentionedUsername,
-		handleAutocompleteKey,
-		closeMentionList: () => setMentionQuery(null),
-	}
-}
-
-// the username list showing above the chat message box, carl pinned first then the chat members
-function MentionSuggestionList({ autocomplete }: { autocomplete: MentionAutocomplete }) {
-	return (
-		<ul className="bg-popover absolute right-3 bottom-full left-3 z-10 mb-1 overflow-hidden rounded-md border shadow-md">
-			{autocomplete.usernameSuggestions.map((username, index) => (
-				<li key={username}>
-					<button
-						type="button"
-						onMouseDown={(event) => {
-							event.preventDefault()
-							autocomplete.selectMentionedUsername(username)
-						}}
-						className={cn(
-							"w-full px-3 py-1.5 text-left text-sm",
-							index === autocomplete.highlightMentionIndex ? "bg-accent text-accent-foreground" : "hover:bg-accent/50",
-						)}
-					>
-						@{username}
-					</button>
-				</li>
-			))}
-		</ul>
-	)
-}
 
 /**
  * The chat composer's shell with nothing live in it, for someone the room is closed to.
@@ -440,101 +324,7 @@ export function ChatRoomComposer({
 	)
 }
 
-// the reply to user dropdown menu
-function ReplyToDropdown({
-	currentReplyUser,
-	replyChatMessages,
-	onSelectReplyTo,
-}: {
-	currentReplyUser: string
-	replyChatMessages: { username: string; chatMessage: ChatRoomMessage }[]
-	onSelectReplyTo: (selectedChatMessage: { username: string; chatMessage: ChatRoomMessage } | "all" | "carl") => void
-}) {
-	const [isOpen, setIsOpen] = useState(false)
-
-	// selecting closes the menu and passes the chat message to the callback
-	const handleSelectReplyTo = (
-		selectedChatMessage: { username: string; chatMessage: ChatRoomMessage } | "all" | "carl",
-	): void => {
-		setIsOpen(false)
-		onSelectReplyTo(selectedChatMessage)
-	}
-
-	return (
-		<Popover open={isOpen} onOpenChange={setIsOpen}>
-			<PopoverTrigger asChild>
-				<button
-					type="button"
-					aria-label="Pick who to reply to"
-					className="text-muted-foreground hover:text-foreground mb-1.5 flex items-center gap-1.5 text-xs"
-				>
-					<Reply className="size-3" />
-					{`Replying to ${currentReplyUser}`}
-					<ChevronDown className="size-3" />
-				</button>
-			</PopoverTrigger>
-			{/* the current reply target's row shows the selected tint */}
-			<PopoverContent align="start" className="w-44" bodyClassName="p-1">
-				{/* @all reaches the whole room and starts carl's turn beside it */}
-				<button
-					type="button"
-					onClick={() => handleSelectReplyTo("all")}
-					className={cn(MENU_OPTION_CLASS, currentReplyUser === "@all" && MENU_OPTION_SELECTED_CLASS)}
-				>
-					@all
-				</button>
-				{!replyChatMessages.some((chatMessage) => chatMessage.username === "Carl") && (
-					<button
-						type="button"
-						onClick={() => handleSelectReplyTo("carl")}
-						className={cn(MENU_OPTION_CLASS, currentReplyUser === "Carl" && MENU_OPTION_SELECTED_CLASS)}
-					>
-						Carl
-					</button>
-				)}
-				{replyChatMessages.map((chatMessage) => (
-					<button
-						key={chatMessage.username}
-						type="button"
-						onClick={() => handleSelectReplyTo(chatMessage)}
-						className={cn(MENU_OPTION_CLASS, currentReplyUser === chatMessage.username && MENU_OPTION_SELECTED_CLASS)}
-					>
-						{chatMessage.username}
-					</button>
-				))}
-			</PopoverContent>
-		</Popover>
-	)
-}
-
 // the placeholder starts with the selected target's chat mention
 function toComposerPlaceholder(replyUsername: string): string {
 	return `@${replyUsername}, penny for your thoughts…`
-}
-
-// what the menu calls a chat mention: carl by name, @all as typed, anyone else by their username
-function toMentionLabel(username: string): string {
-	if (username === CARL_USERNAME) {
-		return "Carl"
-	}
-	return username === ALL_USERNAME ? "@all" : username
-}
-
-// swap the current chat mention for the selected chat mention if there is one
-export function toChangedMentionChatMessage(chatMessage: string, username: string, memberUsernames: string[]): string {
-	return `@${username} ${toChatMessage(chatMessage, memberUsernames)}`
-}
-
-// the chat message without its leading chat mention
-export function toChatMessage(chatMessage: string, memberUsernames: string[]): string {
-	const currentMentions = chatMessage.match(/^@([\w-]+)\s*/)
-	const chatUsernames = [
-		CARL_USERNAME,
-		ALL_USERNAME,
-		...memberUsernames.map((memberUsername) => memberUsername.toLowerCase()),
-	]
-	if (currentMentions && chatUsernames.includes((currentMentions[1] ?? "").toLowerCase())) {
-		return chatMessage.slice(currentMentions[0].length)
-	}
-	return chatMessage
 }

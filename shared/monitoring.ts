@@ -320,6 +320,7 @@ const reportedStages = [
 	"billing",
 	"page-render",
 	"api-route",
+	"database",
 ] as const
 
 // one of the stages above

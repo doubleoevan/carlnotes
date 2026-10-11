@@ -1,5 +1,6 @@
-import type { ProposeTopicEditPayload, TopicDraft, TopicResponse } from "@shared/contracts"
+import type { TopicResponse } from "@shared/contracts"
 import { CUSTOM_SOURCE_OPTIONS, DEFAULT_SOURCES } from "@shared/sources"
+import type { ProposeTopicEditPayload, TopicDraft } from "@shared/topicPayloads"
 
 // the fields of a topic the card shows
 export type EditableTopicFields = Pick<

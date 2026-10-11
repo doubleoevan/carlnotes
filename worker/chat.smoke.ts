@@ -1,7 +1,7 @@
 // a live smoke test for chat retrieval against a real topic run it with: bun run smoke:chat, needs LiteLLM
 import { and, count, eq, isNotNull, ne } from "drizzle-orm"
 import { db } from "../db"
-import { EMBED_MODEL_NAME, findings, resources } from "../db/schema"
+import { EMBED_MODEL_NAME, findings, resources } from "../db/schema/scans"
 import { retrieveChatContext } from "./chat/retrieve"
 
 // the question the smoke test asks of whichever topic it finds

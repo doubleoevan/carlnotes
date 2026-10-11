@@ -2,7 +2,7 @@
 // a call with no litellmApiKey, such as the search Source's query generation, uses the master key
 import { createOpenAI } from "@ai-sdk/openai"
 import { type EmbeddingModel, embed, embedMany, type LanguageModel } from "ai"
-import { EMBED_DIMENSIONS } from "../db/schema"
+import { EMBED_DIMENSIONS } from "../db/schema/scans"
 
 // how long a model request may run before the request aborts. the default sits above twice the proxy's longest model timeout
 const MODEL_TIMEOUT_MS = Number(Bun.env.MODEL_TIMEOUT_MS ?? "360000")

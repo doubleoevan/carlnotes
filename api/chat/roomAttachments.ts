@@ -1,20 +1,41 @@
 // the chat room's shared attachment files: screening and reading an upload before anything stores,
 // the write beside its chat message
-import { CHAT_ROOM_ATTACHMENT_LIMIT, type ChatAttachment } from "@shared/contracts"
-import { and, count, eq } from "drizzle-orm"
-import { db } from "../../db"
-import { chatRoomAttachments } from "../../db/schema"
+import { CHAT_ROOM_ATTACHMENT_LIMIT } from "@shared/contracts"
+import type { ChatAttachment } from "@shared/payloads"
+import { and, count, eq, type SQL } from "drizzle-orm"
+import { type DbTransaction, db } from "../../db"
+import { chatRoomAttachments } from "../../db/schema/chat"
 import {
 	extractText,
 	generateImageContext,
 	loadOrProvisionUserLiteLLMKey,
+	recordPendingObjectDeletions,
 	toCanonicalContentType,
 	toChatRoomAttachmentKey,
+	toStoredObjectKeys,
 	uploadAttachment,
 } from "../../worker"
 import { contentTypeFromDataUrl, decodeDataUrl, screenAttachmentText, VIDEO_ATTACHMENT_CONTEXT } from "./attachments"
 import { encryptChatText } from "./encryption"
-import { toTopicFilter } from "./roomTurns"
+import { toTopicFilter } from "./roomAccess"
+
+/**
+ * Deletes the chat room attachment rows the filter names, records their keys as pending, and returns the keys.
+ */
+export async function deleteChatRoomAttachmentRows(
+	transaction: DbTransaction,
+	attachmentFilter: SQL | undefined,
+): Promise<string[]> {
+	const chatRoomAttachmentRows = await transaction
+		.delete(chatRoomAttachments)
+		.where(attachmentFilter)
+		.returning({ objectKey: chatRoomAttachments.objectKey })
+
+	// a row still uploading has no key yet
+	const objectKeys = toStoredObjectKeys(chatRoomAttachmentRows)
+	await recordPendingObjectDeletions({ handle: transaction, objectKeys })
+	return objectKeys
+}
 
 // what a shared attachment file becomes before its chat message posts
 export type PreparedChatRoomAttachment = {

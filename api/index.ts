@@ -8,12 +8,12 @@ import type { Context } from "hono"
 import { Hono } from "hono"
 import { serveStatic } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
-import { db, readPoolGauges } from "../db"
+import { db, readPoolGauges, sizeConnectionPool } from "../db"
 import { readRedisExtraGauges } from "../db/redis"
 import { runWithRequestMemo } from "../db/requestMemo"
 import { startTelemetry } from "../worker"
 import { apiRoute } from "./api"
-import { auth, checkTrustedProxies } from "./auth"
+import { auth } from "./auth"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
 import { trackBotFetches } from "./botAnalytics"
 import { contentRoute } from "./content"
@@ -26,6 +26,7 @@ import { resolveToolCaller } from "./mcp/toolCaller"
 import { toolCallerRateLimiter } from "./rateLimit"
 import { releasesRoute } from "./releases"
 import { traceRequest } from "./requestTracing"
+import { checkTrustedProxies } from "./trustedProxies"
 
 // where build:docs writes the Starlight site, relative to the repo root the server runs from
 const DOCS_BUNDLE_ROOT = "./docs/dist"
@@ -45,9 +46,11 @@ type UiServer = { fetch: (request: Request) => Promise<Response> }
 // the ui builds its typed api client from this definition
 export type AppType = typeof apiRoute
 
-// start monitoring, then tracing for model calls, in that order so Langfuse keeps its own provider beside Sentry's
+// start monitoring, then tracing for model calls, in that order so Langfuse keeps its own provider beside Sentry's.
+// then size the connection pool from the database
 startMonitoring()
 startTelemetry()
+await sizeConnectionPool()
 
 // log the process's connection pool, event loop delay, and Redis gauges once a minute
 startRuntimeGauges({ processName: "api", readPoolGauges, readExtraGauges: readRedisExtraGauges })

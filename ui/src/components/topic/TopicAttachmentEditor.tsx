@@ -172,14 +172,14 @@ function AttachmentLink({ attachment }: { attachment: StoredAttachment }) {
 		)
 	}
 	return (
-		<a
+		<AnchorLink
 			href={`/api/attachments/${attachment.id}/download`}
 			download={attachment.filename}
 			className="group text-link flex min-w-0 flex-1 items-center gap-1 hover:underline"
 		>
 			<span className="min-w-0 truncate">{attachment.filename}</span>
 			<Download aria-hidden="true" className="size-3 shrink-0" />
-		</a>
+		</AnchorLink>
 	)
 }
 

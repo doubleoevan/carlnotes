@@ -14,7 +14,8 @@ types only. The api and the worker import db, every module imports shared, and s
 - `worker/` — Temporal workflows, the scan pipeline, ingesters, chat replies, link previews, prompts, email delivery,
   the scheduled sweep, and the monthly budget reset.
 - `db/` — Drizzle schema, migrations, quotas, the Redis store, and the database claim. Neon Postgres and Redis.
-- `shared/` — what every module may import: the zod contracts, enums, plans, and Source definitions.
+- `shared/` — what every module may import: the zod contracts and request payloads, enums, plans, and Source
+  definitions.
 - `infra/` — the service configs the app runs beside: litellm, llm-guard, and the Northflank pipelines.
 - `content/blog/` — the blog posts `api/content.ts` serves.
 - `evals/` — the evals that measure the model-facing prompts, their graders, and the review pipeline, one folder each,
@@ -29,8 +30,8 @@ Each module has its own AGENTS.md with entry points, layout, and commands.
 |---|---|---|---|
 | New or changed ingester | `worker/ingest/` (`ingester.ts` is the interface) | ingester-authoring | `api/`, `ui/` |
 | Model-facing prompt | `worker/prompts/*.md` + its thin builder | prompt-authoring | everything outside `worker/` |
-| Schema or migration | `db/schema.ts`, then `bun run db:generate` | domain-model | `db/migrations/` (generated) |
-| UI screen or component | `ui/src/routes/` for the route and its head, `ui/src/pages/`, `ui/src/components/<area>/` | jsx-conventions | `api/` except `shared/contracts.ts` types |
+| Schema or migration | `db/schema/<domain>.ts`, then `bun run db:generate` | domain-model | `db/migrations/` (generated) |
+| UI screen or component | `ui/src/routes/` for the route and its head, `ui/src/pages/`, `ui/src/components/<area>/` | jsx-conventions | `api/` except `shared/contracts.ts`, `shared/payloads.ts`, and `shared/topicPayloads.ts` types |
 | Tasting note or sync change | `api/note/`, `ui/src/components/note/` | domain-model | `worker/` |
 | API route or permission | `api/<domain>/`, `api/authorization.ts` | domain-model | `worker/` except `worker/index.ts` exports |
 | Temporal workflow change | `worker/workflows/`, `worker/temporal.ts` | — | `ui/`, `api/` route files |
@@ -47,7 +48,7 @@ Domain vocabulary is canonical and enforced, so grepping a domain noun reliably 
 
 Generated or archived paths that burn context:
 
-- `db/migrations/` — generated SQL and snapshots; the schema is `db/schema.ts`
+- `db/migrations/` — generated SQL and snapshots; the schema is `db/schema/`
 - `ui/src/routeTree.gen.ts` — the route tree Vite generates from `ui/src/routes/`; the routes are the files
 - `ui/dist/`, `docs/dist/` — built UI and docs output
 - `coverage/` — test coverage output
@@ -83,6 +84,9 @@ Green before any hand-off.
   scripts, update the README Development section in the same change.
 - Structure changes update the docs in the same change: a new, moved, renamed, or deleted folder, entry point, or script
   is included in the module's AGENTS.md, and in the root module map or routing table when it changes what they say.
+- Thorough beats narrow scope. A fix, a split, or a follow-up the change can do now is done in the change, never
+  deferred to "its own change" or a recommendation. Only work that needs the user's decision is left out, and it is
+  named with the reason.
 - Commits: ask first. "go ahead" at session start pre-approves commits for that session. Never push unless explicitly asked to.
 - Ship via /ship. Archive OpenSpec changes with the CLI (`openspec archive <name> --yes`), never /opsx:archive.
 

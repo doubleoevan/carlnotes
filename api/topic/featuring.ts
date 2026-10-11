@@ -1,10 +1,10 @@
 import { zValidator } from "@hono/zod-validator"
-import { topicFeatureOrderPayload } from "@shared/contracts"
+import { topicFeatureOrderPayload } from "@shared/topicPayloads"
 // the Featured section's ordering is whole numbers from 1 to the number of featured topics
 import { and, asc, count, eq, gt, gte, isNotNull, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { type DbHandle, db } from "../../db"
-import { topics } from "../../db/schema"
+import { topics } from "../../db/schema/topics"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
 import { clearTopicSectionIdCache } from "./feeds"
@@ -49,8 +49,8 @@ export async function setTopicFeatureOrder(topicId: string, position: number): P
 		await transaction.update(topics).set({ featureOrder: targetPosition }).where(eq(topics.id, topicId))
 	})
 
-	// the homepage's cached featured topic section order needs to be refreshed when a topic rank changes
-	clearTopicSectionIdCache()
+	// delete the shared topic section ids
+	await clearTopicSectionIdCache()
 	return "ranked"
 }
 
@@ -62,13 +62,14 @@ export function toTargetPosition(position: number, featuredCount: number): numbe
 }
 
 /**
- * Clear a topic's feature order and close the gap it leaves by moving everything below it up one.
+ * Clears a topic's feature order and closes the gap it leaves by moving everything below it up one. Returns whether
+ * the topic had one, so the caller clears the shared topic section ids once its transaction commits.
  */
-export async function releaseFeatureOrder(topicId: string, handle: DbHandle = db): Promise<void> {
+export async function releaseFeatureOrder(topicId: string, handle: DbHandle = db): Promise<boolean> {
 	// a topic with no order has nothing to release and nothing below it to move
 	const [topic] = await handle.select({ featureOrder: topics.featureOrder }).from(topics).where(eq(topics.id, topicId))
 	if (topic?.featureOrder == null) {
-		return
+		return false
 	}
 
 	// clear the topic's feature order, then pull everything that was below it up one
@@ -77,6 +78,7 @@ export async function releaseFeatureOrder(topicId: string, handle: DbHandle = db
 		.update(topics)
 		.set({ featureOrder: sql`${topics.featureOrder} - 1` })
 		.where(and(isNotNull(topics.featureOrder), gt(topics.featureOrder, topic.featureOrder)))
+	return true
 }
 
 /**

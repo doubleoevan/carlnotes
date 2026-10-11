@@ -2,7 +2,7 @@
 import { eq } from "drizzle-orm"
 import { db } from "./index"
 import { deleteRedisKey } from "./redis"
-import { podcastFeedTokens } from "./schema"
+import { podcastFeedTokens } from "./schema/podcast"
 
 // a topic, and the listener whose own feed it is, or null for the public feed
 type ToPodcastFeedCacheKeyOptions = { topicId: string; listenerUserId: string | null }

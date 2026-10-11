@@ -1,6 +1,6 @@
 // the database half of usernames: which username proposals are free and what username a new user is assigned
 import { zValidator } from "@hono/zod-validator"
-import { usernamePayload } from "@shared/contracts"
+import { usernamePayload } from "@shared/payloads"
 import {
 	RESERVED_USERNAMES,
 	toNormalizedUsername,
@@ -12,7 +12,7 @@ import {
 import { eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 import { db, isUniqueViolation } from "../db"
-import { users } from "../db/schema"
+import { users } from "../db/schema/users"
 import { type AppEnv, currentUser } from "./currentUser"
 import { refreshSessionUser } from "./sessions"
 

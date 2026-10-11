@@ -4,7 +4,9 @@
 import { FULL_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import { and, eq, inArray, isNotNull } from "drizzle-orm"
 import { db } from "../db"
-import { findings, resources, scans, sources, topicEmailSends, topics, users } from "../db/schema"
+import { findings, resources, scans } from "../db/schema/scans"
+import { sources, topicEmailSends, topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
 import { buildContextPrompt } from "./attach"
 // the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
 import { buildSearchPrompt } from "./ingest/search"

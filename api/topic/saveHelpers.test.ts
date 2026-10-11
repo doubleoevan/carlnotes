@@ -1,4 +1,4 @@
-// topic helpers tests: a Topic's first Scan is marked failed instead of started if its owner's key budget is spent.
+// topic save helper tests: a Topic's first Scan is marked failed instead of started if its owner's key budget is spent.
 // the first Scan starts if the budget is not spent or cannot be read
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
@@ -7,7 +7,7 @@ import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPo
 import * as litellm from "../../worker/litellm"
 import * as scan from "../../worker/scan"
 import * as screen from "../../worker/screen"
-import { type Scan, startFirstScan } from "./helpers"
+import { type Scan, startFirstScan } from "./saveHelpers"
 
 // the connection pool's own query, put back after each test along with the spies
 afterEach(() => {

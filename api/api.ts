@@ -1,8 +1,9 @@
 // the JSON endpoints the ui fetches, served under /api by the basePath
 import { zValidator } from "@hono/zod-validator"
 import { appUrl } from "@shared/appUrl"
-import { signupGatePayload } from "@shared/contracts"
 import { traceRequestStage } from "@shared/monitoring"
+import { signupGatePayload } from "@shared/payloads"
+import { toDeviceProperties } from "@shared/userAgent"
 import { isAPIError } from "better-auth/api"
 import { Hono } from "hono"
 import { getCookie, setCookie } from "hono/cookie"
@@ -10,21 +11,14 @@ import { z } from "zod"
 import { cacheJson } from "../db/redis"
 import { activityRoute } from "./activity"
 import { adminRoute } from "./admin"
-import {
-	auth,
-	GATE_COOKIE_MAX_AGE_SECONDS,
-	GATE_COOKIE_NAME,
-	signGateToken,
-	verifyGateToken,
-	verifyTurnstileToken,
-} from "./auth"
+import { auth } from "./auth"
 import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "./authorization"
 import { avatarsRoute } from "./avatars"
 import { billingRoute } from "./billing"
 import { chatAttachmentsRoute } from "./chat/attachments"
 import { toUnseenChatMentionCountKey } from "./chat/mentions"
 import { privateChatRoute } from "./chat/privateChat"
-import { chatRoomRoute } from "./chat/room"
+import { chatRoomRoute } from "./chat/roomRoute"
 import { countUnseenChatMentions, loadChatRooms } from "./chat/rooms"
 import { type AppEnv, currentUser } from "./currentUser"
 import { renderedCacheHeaders } from "./edgeCache"
@@ -49,15 +43,29 @@ import {
 	toTeamPreview,
 	toTopicPreview,
 } from "./share/preview"
-import { teamsRoute } from "./team/teams"
+import {
+	GATE_COOKIE_MAX_AGE_SECONDS,
+	GATE_COOKIE_NAME,
+	signGateToken,
+	verifyGateToken,
+	verifyTurnstileToken,
+} from "./signupGate"
+import { teamsRoute } from "./team/teamsRoute"
 import { topicAttachmentsRoute } from "./topic/attachments"
 import { featuringRoute } from "./topic/featuring"
 import { buildTopicFeeds } from "./topic/feeds"
 import { findingsRoute } from "./topic/findings"
 import { scansRoute } from "./topic/scans"
+import { topicSearchRoute } from "./topic/search"
 import { subscriptionsRoute } from "./topic/subscriptions"
-import { topicsRoute } from "./topic/topics"
-import { invalidUnsubscribePage, unsubscribe, unsubscribedPage } from "./unsubscribe"
+import { topicsRoute } from "./topic/topicsRoute"
+import {
+	confirmUnsubscribePage,
+	invalidUnsubscribePage,
+	readUnsubscribeTopic,
+	unsubscribe,
+	unsubscribedPage,
+} from "./unsubscribe"
 import { usernamesRoute } from "./usernames"
 import { usersRoute } from "./users"
 
@@ -114,16 +122,28 @@ export const apiRoute = new Hono<AppEnv>()
 		})
 		return context.json({ ok: true })
 	})
-	// public one-click unsubscribe from a topic-scan email. the signed token in the link is the auth, so no session is needed
+	// the unsubscribe link of a topic-scan email. the signed token in the url is the auth, so no session is needed, and
+	// a fetch of the link changes nothing, so a mail provider or a scanner that checks the link unsubscribes nobody
 	.get("/unsubscribe", async (context) => {
-		// verify the token, drop the direct subscription, and show the result page
-		const topic = await unsubscribe(context.req.query("token"))
-		return topic ? context.html(unsubscribedPage(topic, appUrl())) : context.html(invalidUnsubscribePage(appUrl()), 400)
+		const unsubscribeToken = context.req.query("token")
+		const topic = await readUnsubscribeTopic(unsubscribeToken)
+		return topic
+			? context.html(confirmUnsubscribePage(topic, unsubscribeToken ?? "", appUrl()))
+			: context.html(invalidUnsubscribePage(appUrl()), 400)
 	})
+	// the page's button and a provider's RFC 8058 one-click both post here. the one-click sends the List-Unsubscribe
+	// form field and gets 200 with no body, and the button gets the confirmation page
 	.post("/unsubscribe", async (context) => {
-		// inbox providers post here to comply with RFC 8058 one-click unsubscribe. act on the token and return 200 with no body
-		await unsubscribe(context.req.query("token"))
-		return context.body(null, 200)
+		const formBody = await context.req.parseBody()
+		const isOneClick = formBody["List-Unsubscribe"] === "One-Click"
+		const topic = await unsubscribe(context.req.query("token"), {
+			entryPoint: isOneClick ? "one-click" : "page",
+			deviceProperties: toDeviceProperties(context.req.header("user-agent")),
+		})
+		if (isOneClick) {
+			return context.body(null, 200)
+		}
+		return topic ? context.html(unsubscribedPage(topic, appUrl())) : context.html(invalidUnsubscribePage(appUrl()), 400)
 	})
 	// every chat room the user may open, for the chat panel that the app shell mounts once
 	.get("/rooms", async (context) => {
@@ -163,6 +183,7 @@ export const apiRoute = new Hono<AppEnv>()
 		})
 	})
 	// the topic routes
+	.route("/", topicSearchRoute)
 	.route("/", topicsRoute)
 	// the flag content route
 	.route("/", flagContentRoute)

@@ -3,21 +3,15 @@ import { ATTACHMENT_NO_TEXT_REASON, MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared
 import { ApplicationFailure } from "@temporalio/activity"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
-import { attachments, topics } from "../../db/schema"
-import {
-	extractText,
-	generateAttachmentContext,
-	generateImageContext,
-	isImageAttachmentType,
-	isTableFileType,
-	toClippedTableText,
-	toDataUrl,
-	toTableText,
-} from "../attach"
+import { attachments, topics } from "../../db/schema/topics"
+import { generateAttachmentContext, generateImageContext, toDataUrl } from "../attach"
+import { isImageAttachmentType, isTableFileType } from "../attachContentType"
+import { toClippedTableText, toTableText } from "../attachTable"
+import { extractText } from "../attachText"
 import { CHUNK_CHARS, chunk, MAX_CHUNKS } from "../chunk"
 import { screenText, toFlaggedReason } from "../guard"
 import { loadOrProvisionUserLiteLLMKey } from "../litellm"
-import { deleteAttachment, getAttachmentBytes } from "../store"
+import { deleteStoredObject, getAttachmentBytes, recordPendingObjectDeletions } from "../store"
 
 // the most characters the workflow can process, so that chunk payloads stay well under Temporal's per-message limit
 const MAX_PROCESS_CHARS = MAX_CHUNKS * CHUNK_CHARS
@@ -164,17 +158,29 @@ async function markAttachmentReady(
 		.where(eq(attachments.id, attachmentId))
 }
 
-// mark an attachment failed with the reason and best-effort delete its stored object
+// mark an attachment failed with the reason and delete its stored object
 export async function failAttachment(attachmentId: string, message: string): Promise<void> {
-	// record the failure, then best-effort remove the object so a failed attachment leaves no orphan
-	const [attachment] = await db
-		.select({ objectKey: attachments.objectKey })
-		.from(attachments)
-		.where(eq(attachments.id, attachmentId))
-	await db.update(attachments).set({ status: "failed", error: message }).where(eq(attachments.id, attachmentId))
+	// record the failure and the object's key as pending in one transaction
+	const objectKey = await db.transaction(async (transaction) => {
+		// the attachment's key, and the failure on its row
+		const [attachment] = await transaction
+			.select({ objectKey: attachments.objectKey })
+			.from(attachments)
+			.where(eq(attachments.id, attachmentId))
+		await transaction
+			.update(attachments)
+			.set({ status: "failed", error: message })
+			.where(eq(attachments.id, attachmentId))
 
-	// the row is already marked failed, so a missing object or a failed delete leaves nothing inconsistent
-	if (attachment) {
-		await deleteAttachment(attachment.objectKey)
+		// the key as pending, if the attachment exists
+		if (attachment) {
+			await recordPendingObjectDeletions({ handle: transaction, objectKeys: [attachment.objectKey] })
+		}
+		return attachment?.objectKey ?? null
+	})
+
+	// delete the object once the row is marked
+	if (objectKey) {
+		await deleteStoredObject(objectKey)
 	}
 }

@@ -1,17 +1,37 @@
-// the one-click unsubscribe target for the topic-scan email
+// the unsubscribe link of the topic-scan email: the page it opens, the unsubscribe its button and a provider's one-click
+// post, and the pages that confirm or reject it
 import { trackEvent } from "@shared/analytics"
 import { toTopicPath } from "@shared/seo"
+import type { DeviceProperties } from "@shared/userAgent"
 import { and, eq } from "drizzle-orm"
 import { db } from "../db"
-import { subscriptions, topics } from "../db/schema"
+import { subscriptions, topics } from "../db/schema/topics"
 import { verifyUnsubscribeToken } from "../worker"
 import { deletePodcastFeedToken } from "./podcast/podcastFeedTokens"
 import { updateTopicSubscriberCount } from "./topic/subscriberCounts"
 
+// the topic an unsubscribe link names
+export type UnsubscribeTopic = { id: string; name: string }
+
+// what performed an unsubscribe: the page's button, or a mail provider's one-click post. the device properties go on
+// the event
+export type UnsubscribeOptions = { entryPoint: "page" | "one-click"; deviceProperties: DeviceProperties }
+
+/**
+ * Verifies the token and returns the topic it names without changing anything, or null if the token is bad.
+ */
+export async function readUnsubscribeTopic(unsubscribeToken: string | undefined): Promise<UnsubscribeTopic | null> {
+	const unsubscribePayload = unsubscribeToken ? await verifyUnsubscribeToken(unsubscribeToken) : null
+	return unsubscribePayload ? loadUnsubscribeTopic(unsubscribePayload.topicId) : null
+}
+
 /**
  * Verifies the token, deactivates the recipient's direct subscription, and returns the unsubscribed topic (null if the token is bad).
  */
-export async function unsubscribe(unsubscribeToken: string | undefined): Promise<{ id: string; name: string } | null> {
+export async function unsubscribe(
+	unsubscribeToken: string | undefined,
+	{ entryPoint, deviceProperties }: UnsubscribeOptions,
+): Promise<UnsubscribeTopic | null> {
 	// a missing or forged token unsubscribes nothing
 	const unsubscribePayload = unsubscribeToken ? await verifyUnsubscribeToken(unsubscribeToken) : null
 	if (!unsubscribePayload) {
@@ -35,15 +55,37 @@ export async function unsubscribe(unsubscribeToken: string | undefined): Promise
 	// delete the recipient's podcast feed token for the topic
 	await deletePodcastFeedToken({ topicId: unsubscribePayload.topicId, userId: unsubscribePayload.userId })
 
-	// report the unsubscribe from the email's link, with no plan
+	// report the unsubscribe with what performed it and the request's device, with no plan
 	trackEvent("email_unsubscribed", unsubscribePayload.userId, {
-		entryPoint: "email",
+		entryPoint,
 		topicId: unsubscribePayload.topicId,
+		...deviceProperties,
 	})
+	return loadUnsubscribeTopic(unsubscribePayload.topicId)
+}
 
-	// the topic id and name for the confirmation page, falling back when the topic has since been deleted
-	const [topic] = await db.select({ name: topics.name }).from(topics).where(eq(topics.id, unsubscribePayload.topicId))
-	return { id: unsubscribePayload.topicId, name: topic?.name ?? "that topic" }
+// the topic's id and name for the pages, with a fallback name if the topic has since been deleted
+async function loadUnsubscribeTopic(topicId: string): Promise<UnsubscribeTopic> {
+	const [topic] = await db.select({ name: topics.name }).from(topics).where(eq(topics.id, topicId))
+	return { id: topicId, name: topic?.name ?? "that topic" }
+}
+
+/**
+ * The page the unsubscribe link opens: the topic's name and one button that posts the unsubscribe, so a fetch of the
+ * link changes nothing.
+ */
+export function confirmUnsubscribePage(topic: UnsubscribeTopic, unsubscribeToken: string, appUrl?: string): string {
+	// the button posts back to this url with the token, and the link below leaves without unsubscribing
+	const topicUrl = appUrl ? `${appUrl.replace(/\/$/, "")}${toTopicPath(topic)}` : undefined
+	const formAction = `/api/unsubscribe?token=${encodeURIComponent(unsubscribeToken)}`
+
+	// the topic, the button, and the way out
+	return renderPage(`
+		<h1>Unsubscribe?</h1>
+		<p>No more emails about <strong>${Bun.escapeHTML(topic.name)}</strong>. You can follow it again from the app.</p>
+		<form method="post" action="${Bun.escapeHTML(formAction)}"><input type="hidden" name="confirm" value="unsubscribe"><button type="submit">Unsubscribe</button></form>
+		${backLink(topicUrl, "Keep the emails and open the topic instead")}
+	`)
 }
 
 /**
@@ -88,6 +130,7 @@ const PAGE_STYLE = `
 	p     { color:#5b5b5b; font-size:15px; line-height:1.55; margin:0 0 8px }
 	.back { margin-top:20px }
 	a     { color:#7c4a1e }
+	button { margin-top:16px; padding:10px 22px; border:0; border-radius:8px; background:#7c4a1e; color:#fff; font-size:15px; cursor:pointer }
 `
 
 // a served web page can use a style block, unlike an email. the card holds the CarlNotes mark and the page content

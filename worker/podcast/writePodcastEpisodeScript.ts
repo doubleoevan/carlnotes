@@ -5,7 +5,9 @@ import { FULL_PODCAST_EPISODE_MINUTES, SHORT_PODCAST_EPISODE_MINUTES } from "@sh
 import { toHostWithoutWww } from "@shared/seo"
 import { eq, inArray, sql } from "drizzle-orm"
 import { db } from "../../db"
-import { findings, podcastEpisodes, resources, topics } from "../../db/schema"
+import { podcastEpisodes } from "../../db/schema/podcast"
+import { findings, resources } from "../../db/schema/scans"
+import { topics } from "../../db/schema/topics"
 import { readResourceText } from "../chat/retrieve"
 import { loadOrProvisionUserLiteLLMKey } from "../litellm"
 import {

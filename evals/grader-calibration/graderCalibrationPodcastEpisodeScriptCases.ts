@@ -1,6 +1,6 @@
 // the grader calibration cases of the podcast episode script eval's rubrics.
 // the topic is the topic chat eval's, and the finding and the podcast episodes are made up
-import type { PodcastEpisodeTurn } from "@shared/contracts"
+import type { PodcastEpisodeTurn } from "@shared/payloads"
 import { GOODBYE_OPENING_TURNS, type PodcastEpisodeFinding } from "../../worker/podcast/podcastEpisodeScript"
 import type {
 	PodcastEpisodeScriptVariables,

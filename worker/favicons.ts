@@ -3,7 +3,7 @@ import { reportError } from "@shared/monitoring"
 import { toHostVariant } from "@shared/sources"
 import { eq } from "drizzle-orm"
 import { db } from "../db"
-import { favicons } from "../db/schema"
+import { favicons } from "../db/schema/storage"
 import { fetchLinkPreviewImage, type LinkPreviewImage, PREVIEW_IMAGE_TYPES } from "./linkPreview"
 import { toFaviconKey, uploadAttachment } from "./store"
 

@@ -54,11 +54,22 @@ The console SHALL NOT offer the control on the signed-in admin's own row, and th
 
 ### Requirement: Closing an account takes everything it owns
 
-Closing SHALL cancel everything that can still spend money before anything is destroyed: the user's Stripe subscription and their LiteLLM key. A failure canceling either SHALL abort the close and leave the account whole, since an abort is recoverable while a key the deleted row was the only record of is not. A user on the free plan has no subscription row and nothing to cancel.
+Closing SHALL cancel everything that can still spend money before anything is destroyed: the user's Stripe subscription
+and their LiteLLM key. A failure canceling either SHALL abort the close and leave the account whole, since an abort is
+recoverable while a key the deleted row was the only record of is not. A user on the free plan has no subscription row
+and nothing to cancel.
 
-Closing SHALL then delete each owned Topic through the Topic delete, so the stored objects and the featured position behind it are released instead of merely orphaned. It SHALL delete the stored objects behind everything the user kept in Chat, including on Topics they do not own, and their uploaded avatar. These SHALL be best-effort, since a stored object left behind costs storage and nothing else.
+Closing SHALL then delete each owned Topic through the Topic delete, so the stored objects and the featured position
+behind it are released instead of merely orphaned. It SHALL record the keys of the stored objects behind everything the
+user kept in Chat, including on Topics they do not own, and their uploaded avatar, in the transaction that deletes the
+`users` row, and SHALL delete those objects through `deleteStoredObject` after the commit, so a delete that fails leaves
+its key pending for the sweep and no object is left that no row and no pending row names.
 
-Closing SHALL then delete the `users` row, and every table referencing it SHALL cascade, with two exceptions that keep other people's records whole: room messages the user authored survive with the account reference cleared and the name they were posted under still shown, because deleting or unnaming them would rewrite conversations other members took part in, and a Team the user led passes the last-leader rule first — the close is refused while they are a Team's only leader, until they promote someone or delete the Team.
+Closing SHALL then delete the `users` row, and every table referencing it SHALL cascade, with two exceptions that keep
+other people's records whole: room messages the user authored survive with the account reference cleared and the name
+they were posted under still shown, because deleting or unnaming them would rewrite conversations other members took
+part in, and a Team the user led alone is settled first: handed to its longest-standing other member, or deleted if it
+has no other member.
 
 The system SHALL record who closed the account as an analytics event, since the row that would otherwise say so is gone.
 
@@ -85,12 +96,20 @@ The system SHALL record who closed the account as an analytics event, since the 
 #### Scenario: Nothing referencing the user survives
 
 - **WHEN** an account is closed
-- **THEN** its sessions, accounts, subscriptions, bookmarks, chat turns, and memberships are gone with it, while room messages it authored remain, showing the name they were posted under with the account reference cleared
+- **THEN** its sessions, accounts, subscriptions, bookmarks, chat turns, and memberships are gone with it, while room
+  messages it authored remain, showing the name they were posted under with the account reference cleared
 
 #### Scenario: A sole leader's Teams are settled by the close
 
 - **WHEN** an account that is some Team's only leader is closed
-- **THEN** each such Team with other active members is handed to its longest-standing one, a Team with no other member is deleted, and the close goes through either way
+- **THEN** each such Team with other active members is handed to its longest-standing one, a Team with no other member
+  is deleted, and the close goes through either way
+
+#### Scenario: A close with the bucket unreachable loses no key
+
+- **WHEN** an account is closed while the bucket cannot be reached
+- **THEN** its avatar key and its chat attachment keys are pending before the `users` row is gone, and the sweep deletes
+  the objects once the bucket answers
 
 ### Requirement: A closed account frees its address and its session at once
 
@@ -137,10 +156,10 @@ A key that the proxy does not know SHALL count as already deleted, so a close th
 ### Requirement: Closing an account deletes its Podcast Episodes' audio
 
 Closing an account SHALL delete the audio of every Podcast Episode of every Topic that the account owns, through the
-same path that deletes a Topic, which deletes the audio objects from object storage before the Topic row goes. The
-user's Podcast Episode rows, listen rows, and feed tokens SHALL be deleted with the user. Deleting one Topic on its own
-SHALL delete its Podcast Episodes' audio the same way and keep the Podcast Episode rows with no Topic, so their cost
-stays in the owner's spend history.
+same path that deletes a Topic, which records every audio and chapter key as pending in the transaction that deletes the
+Topic row and deletes the objects through `deleteStoredObject` after the commit. The user's Podcast Episode rows, listen
+rows, and feed tokens SHALL be deleted with the user. Deleting one Topic on its own SHALL delete its Podcast Episodes'
+audio the same way and keep the Podcast Episode rows with no Topic, so their cost stays in the owner's spend history.
 
 #### Scenario: A closed account's audio is gone
 

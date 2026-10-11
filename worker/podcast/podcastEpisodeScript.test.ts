@@ -1,7 +1,7 @@
 // podcast episode script tests: the segment checks, the repairs that keep a last segment draft, the whole script,
 // and each chapter's turns
 import { expect, test } from "bun:test"
-import type { PodcastEpisodeChapterScript, PodcastEpisodeTurn } from "@shared/contracts"
+import type { PodcastEpisodeChapterScript, PodcastEpisodeTurn } from "@shared/payloads"
 import {
 	type PodcastEpisodeSegment,
 	toChapterTurns,

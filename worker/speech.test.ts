@@ -1,6 +1,6 @@
 // speech tests: the request body, the flex tier, how a failed call is sorted, the pass-through call, an empty model
 import { afterEach, expect, test } from "bun:test"
-import type { PodcastEpisodeTurn } from "@shared/contracts"
+import type { PodcastEpisodeTurn } from "@shared/payloads"
 import { recordSpeech, toFailedSpeechResult, toSpeechRequestBody } from "./speech"
 
 // the real fetch and env to put back after each test

@@ -1,15 +1,15 @@
-// a live smoke test that loadPublicTopics and the sitemap list only public topics,
-// and every public page arrives whole to a browser without JavaScript on its route's first render.
-// a request with a session cookie gets the app as the browser renders it, and a crawler gets what a browser gets.
-// the edge may share a signed-out page and the feed, and a card is immutable only at its version.
-// bun run smoke:seo builds the ui, then runs this test under doppler
+// a live smoke test: public topics alone in loadPublicTopics and the sitemap, every public page whole without
+// JavaScript on its first render, the app for a session cookie, and the cache headers. bun run smoke:seo runs it
 import { resolve } from "node:path"
 import type { PageHead, TopicFeedResponse } from "@shared/contracts"
 import { NO_SCRIPT_ROW_LIMIT, toTopicPath } from "@shared/seo"
 import { eq, inArray, max } from "drizzle-orm"
 import { connectionPool, db } from "../db"
-import { findings, resources, scans, teamMembers, teams, topics, users } from "../db/schema"
-import { deleteAttachment } from "../worker"
+import { findings, resources, scans } from "../db/schema/scans"
+import { teamMembers, teams } from "../db/schema/teams"
+import { topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
+import { deleteStoredObject } from "../worker"
 import { RENDERED_CACHE_TAG } from "./edgeCache"
 import { loadPublicTopics, loadTopicFeedUpdatedAt, toSitemapXml } from "./seo"
 import { toTopicPreview } from "./share/preview"
@@ -288,7 +288,7 @@ try {
 	// delete the card that this run rendered, while its topic still names the card's key
 	const publicTopicPreview = await toTopicPreview(topicIds.public)
 	if (publicTopicPreview) {
-		await deleteAttachment(toTopicPreviewKey(publicTopicPreview))
+		await deleteStoredObject(toTopicPreviewKey(publicTopicPreview))
 	}
 
 	// stop the api this run served, then delete the fixtures. the findings cascade with the topics, the members with

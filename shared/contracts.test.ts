@@ -5,23 +5,22 @@ import {
 	CHAT_HISTORY_ANSWER_CHARS,
 	CHAT_HISTORY_TOOL_CALL_INPUT_CHARS,
 	CHAT_HISTORY_TOOL_CALLS,
-	type ChatToolCall,
-	chatRoomMessagePayload,
-	chatTurnPayload,
 	MAX_ATTACHMENT_CONTEXT_CHARS,
 	MAX_TOPIC_SOURCES,
-	suggestSourcesPayload,
 	TOPIC_SAVE_TOOL_NAMES,
 	toAttachmentFailureMessage,
 	toSentToolCall,
 	toSentToolCalls,
 	toStandingTopicEditCall,
+	withAttachmentNote,
+} from "./contracts"
+import { type ChatToolCall, chatRoomMessagePayload, chatTurnPayload, userInvitePayload } from "./payloads"
+import {
+	suggestSourcesPayload,
 	type UpdateTopicPayload,
 	updateTopicFieldsPayload,
 	updateTopicPayload,
-	userInvitePayload,
-	withAttachmentNote,
-} from "./contracts"
+} from "./topicPayloads"
 
 // a valid topic payload, varied only by the source list each test case needs
 function topicPayload(sources: UpdateTopicPayload["sources"]): UpdateTopicPayload {

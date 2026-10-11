@@ -1,66 +1,20 @@
-// the helpers for the topic's reads and writes
-import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
-import type {
-	Invite,
-	ProfileIdentity,
-	TopicGateResponse,
-	TopicResponse,
-	TopicScan,
-	UpdateTopicPayload,
-} from "@shared/contracts"
+// the helpers for the topic page's reads: the gate, the scan history, the owner, team, and invite fields, and the
+// subscription dates that gate an invite topic's findings
+import { toAvatarKeyVersion } from "@shared/avatars"
+import type { Invite, ProfileIdentity, TopicGateResponse, TopicResponse, TopicScan } from "@shared/contracts"
 import { isDailyFrequency } from "@shared/enums"
-import { reportError } from "@shared/monitoring"
-import { FIRST_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
-import { and, desc, eq, exists, inArray, isNull, notInArray, or, sql } from "drizzle-orm"
+import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { dailyScanLimit, dailyTopicIdsWithinLimit } from "../../db/quotas"
-import {
-	bookmarks,
-	findings,
-	invites,
-	type scans,
-	type sources,
-	subscriptions,
-	teamMembers,
-	teams,
-	teamTopics,
-	topics,
-	users,
-} from "../../db/schema"
-import {
-	failUnstartedScan,
-	isUserLiteLLMKeyBudgetExhausted,
-	lookupPodcast,
-	scanTopic,
-	screenPendingSources,
-	screenTopicSources,
-} from "../../worker"
-import {
-	isAllowed,
-	isMonthlySpendExhausted,
-	loadDailyFrequencyAuthorization,
-	loadUserAccess,
-	memberTopicIds,
-} from "../authorization"
+import { teamMembers, teams, teamTopics } from "../../db/schema/teams"
+import { topics } from "../../db/schema/topics"
+import { users } from "../../db/schema/users"
+import { isAllowed, isMonthlySpendExhausted, loadUserAccess, memberTopicIds } from "../authorization"
 import { withAvatarVersion } from "../avatars"
-import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadPendingTopicInvites } from "../invite/invites"
 import { loadFeaturedTopics } from "./featuring"
-import { type FindingPageWindow, loadTopicFindings } from "./findings"
-import {
-	subscriptionActivatedAt,
-	subscriptionActivatedAtByTopicId,
-	toTopicRole,
-	verifiedEmailQuery,
-} from "./permissions"
+import { subscriptionActivatedAt, subscriptionActivatedAtByTopicId, toTopicRole } from "./permissions"
 import { scansRemaining } from "./quotas"
-
-// a rejected attempt to add one more topic on a daily frequency, including the plan's limit so the message can show it
-export type DailyFrequencyRejection = { status: "dailyFrequency"; limit: number }
-
-// a Source that the payload adds instead of an existing one
-export type NewTopicSource = Extract<UpdateTopicPayload["sources"][number], { sourceKind: string }>
-export type Scan = typeof scans.$inferSelect
 
 /**
  * Loads the gate response of an invite or private topic, or null for a public or missing topic.
@@ -149,58 +103,6 @@ export function toScanHistory(
 		}))
 }
 
-// attach the bookmarks from the team that owns the topic to its topic findings
-export async function attachTeamBookmarks(
-	topicFindings: Awaited<ReturnType<typeof loadTopicFindings>>,
-	topicId: string,
-	owningTeamId: string | null,
-): Promise<void> {
-	// no findings have no bookmarks to attach
-	if (topicFindings.length === 0) {
-		return
-	}
-
-	// build the subquery to check if a user belongs to the team that owns the topic
-	const topicTeamIds = db.select({ teamId: teamTopics.teamId }).from(teamTopics).where(eq(teamTopics.topicId, topicId))
-	const isTopicOwningMember = or(
-		inArray(teamMembers.teamId, topicTeamIds),
-		owningTeamId ? eq(teamMembers.teamId, owningTeamId) : sql`false`,
-	)
-
-	// the ids of the findings being returned
-	const findingIds = topicFindings.map((topicFinding) => topicFinding.findingId)
-
-	// select the bookmarks from the team that owns the topic
-	const teamBookmarkRows = await db
-		.selectDistinct({
-			findingId: bookmarks.findingId,
-			userId: users.id,
-			username: users.username,
-			avatarSource: users.avatarSource,
-			avatarKey: users.avatarKey,
-		})
-		.from(bookmarks)
-		.innerJoin(findings, and(eq(bookmarks.findingId, findings.id), eq(findings.topicId, topicId)))
-		.innerJoin(
-			teamMembers,
-			and(eq(teamMembers.userId, bookmarks.userId), eq(teamMembers.isActive, true), isTopicOwningMember),
-		)
-		.innerJoin(users, eq(users.id, bookmarks.userId))
-		// on these findings alone, so a page of the findings reads only that page's bookmarks
-		.where(inArray(bookmarks.findingId, findingIds))
-
-	// attach the team bookmarks to the topic findings
-	const bookmarksByFindingId = Map.groupBy(teamBookmarkRows, (row) => row.findingId)
-	for (const topicFinding of topicFindings) {
-		topicFinding.teamBookmarks = (bookmarksByFindingId.get(topicFinding.findingId) ?? []).map((bookmark) => ({
-			userId: bookmark.userId,
-			username: bookmark.username,
-			avatarSource: bookmark.avatarSource,
-			avatarVersion: toAvatarVersion(bookmark),
-		}))
-	}
-}
-
 // the owner fields that the topic page reads
 export async function toInviteAndScanFields(
 	userId: string | null,
@@ -222,41 +124,6 @@ export async function toInviteAndScanFields(
 		// only someone who may scan needs their spend checked
 		isSpendExhausted: userId && canScan ? await isMonthlySpendExhausted(userId) : false,
 	}
-}
-
-// the topic, the user whose access gates its findings, an optional page window of the findings,
-// and whether to leave out the findings rated thumbs down
-type LoadTopicAccessAndFindingsOptions = {
-	topic: typeof topics.$inferSelect
-	userId: string | null
-	pageWindow?: FindingPageWindow
-	isRatedDownExcluded?: boolean
-}
-
-// the user's topic access and the findings it gates, up to the read limit or within one page window
-export async function loadTopicAccessAndFindings({
-	topic,
-	userId,
-	pageWindow,
-	isRatedDownExcluded,
-}: LoadTopicAccessAndFindingsOptions): Promise<{
-	isAdmin: boolean
-	topicFindings: Awaited<ReturnType<typeof loadTopicFindings>>
-}> {
-	// only the owner and admins can see the spend
-	const { isAdmin } = userId ? await loadUserAccess(userId) : { isAdmin: false }
-
-	// the topic findings with this user's consumed state, gated by when an invite was accepted
-	const topicFindings = await loadTopicFindings({
-		topicId: topic.id,
-		userId,
-		subscriberActivatedAt: await topicSubscriptionStartDate(topic, userId, isAdmin),
-		pageWindow,
-		isRatedDownExcluded,
-	})
-	await attachTeamBookmarks(topicFindings, topic.id, topic.teamId)
-	await attachTopicFindingFaviconPaths(topicFindings)
-	return { isAdmin, topicFindings }
 }
 
 /**
@@ -428,28 +295,6 @@ export function toScheduledTimeLabel(scheduledTime: string): string {
 }
 
 /**
- * Whether saving this frequency takes a new daily slot
- */
-export function isTakingDailySlot(savedFrequency: string, currentFrequency?: string): boolean {
-	return isDailyFrequency(savedFrequency) && !isDailyFrequency(currentFrequency ?? "")
-}
-
-/**
- * The rejection when a payload moves a topic onto a daily frequency past the plan's daily topic limit, or null if not
- */
-export async function authorizeNewDailyTopic(
-	userId: string,
-	topicPayload: Pick<UpdateTopicPayload, "frequency">,
-	currentFrequency?: string,
-): Promise<DailyFrequencyRejection | null> {
-	if (!isTakingDailySlot(topicPayload.frequency, currentFrequency)) {
-		return null
-	}
-	const authorization = await loadDailyFrequencyAuthorization(userId)
-	return authorization.status === "quota" ? { status: "dailyFrequency", limit: authorization.limit } : null
-}
-
-/**
  * Where this topic sits in the Featured section, and the section itself for the Rank menu to show.
  * Only an admin can see it.
  */
@@ -461,141 +306,4 @@ export async function toFeaturedTopics(
 		return { featureOrder: null, featuredTopics: null }
 	}
 	return { featureOrder, featuredTopics: await loadFeaturedTopics() }
-}
-
-// a new topic Source row
-export function toNewSourceRow(
-	topicId: string,
-	source: NewTopicSource,
-	podcastNames: Map<string, string>,
-): typeof sources.$inferInsert {
-	// a podcast Source keeps the show's name beside its id, so it reads by name instead of by number
-	const podcastId = source.config.podcastId
-	const podcastName = typeof podcastId === "string" ? podcastNames.get(podcastId) : undefined
-	return {
-		topicId,
-		kind: source.sourceKind,
-		config: podcastName ? { ...source.config, name: podcastName } : source.config,
-		status: source.sourceKind === "url" ? "pending" : "ready",
-	}
-}
-
-// the show names for the podcast Sources this payload adds, read before the writing
-export async function toPodcastNames(payloadSources: UpdateTopicPayload["sources"]): Promise<Map<string, string>> {
-	// the ids this payload adds without a name of their own
-	const podcastIds = payloadSources.flatMap((source) =>
-		"id" in source ||
-		source.sourceKind !== "podcast" ||
-		typeof source.config.podcastId !== "string" ||
-		typeof source.config.name === "string"
-			? []
-			: [source.config.podcastId],
-	)
-	if (podcastIds.length === 0) {
-		return new Map()
-	}
-
-	// look every show up at once. iTunes being unreachable costs a name, but not the save
-	const podcasts = await Promise.all(podcastIds.map((podcastId) => lookupPodcast(podcastId).catch(() => null)))
-	return new Map(podcasts.flatMap((podcast) => (podcast ? [[podcast.podcastId, podcast.name] as const] : [])))
-}
-
-// start the llm-guard screen for the Topic's newly saved url Sources asynchronously, without delaying the save
-export function startPendingSourceScreens(topicId: string): void {
-	screenPendingSources(topicId).catch((error) => {
-		console.error(`could not start source screens for topic ${topicId}`, error)
-		reportError(error, "source-screen", { topicId })
-	})
-}
-
-/**
- * Screens the new Topic's url Sources with llm-guard, then starts the Topic's first Scan.
- * If the owner's key budget is spent, the first Scan is marked failed instead of started.
- */
-export async function startFirstScan(topicId: string, firstScan: Scan | undefined, ownerId: string): Promise<void> {
-	// read the owner's key budget before the wait for the Source screens.
-	// a read that throws an error is reported, and the budget counts as not spent
-	const isOwnerBudgetExhausted = await isUserLiteLLMKeyBudgetExhausted(ownerId).catch((error: unknown) => {
-		console.error(`could not read the key budget for the first scan of topic ${topicId}`, error)
-		reportError(error, "first-scan", { topicId, ownerId })
-		return false
-	})
-
-	// mark the first Scan failed if the owner's budget is spent, and start the Source screens without the wait
-	if (firstScan && isOwnerBudgetExhausted) {
-		await failUnstartedScan(firstScan.id, FIRST_SCAN_SPENT_BUDGET_REASON)
-		await screenPendingSources(topicId)
-		return
-	}
-
-	// screen the Topic's url Sources and wait for the screens, then start the first Scan.
-	// the Scan row was opened at creation, so a rejected or failed start leaves the row in place
-	await screenTopicSources(topicId)
-	if (firstScan) {
-		await scanTopic(firstScan, topicId, ownerId, "creation", true)
-	}
-}
-
-// how many topic options to show in the add to team dropdown
-const TEAM_TOPIC_OPTIONS_LIMIT = 500
-
-/**
- * The topics this user may add to a team: their own at any visibility first, then every public topic,
- * and the invite topics they can read, each group alphabetical.
- */
-export async function loadTeamTopicOptions(userId: string, teamId?: string): Promise<{ id: string; name: string }[]> {
-	// an invite topic counts when the user has an active subscription or a pending invite to it
-	const hasSubscription = exists(
-		db
-			.select({ id: subscriptions.topicId })
-			.from(subscriptions)
-			.where(
-				and(
-					eq(subscriptions.topicId, topics.id),
-					eq(subscriptions.subscriberUserId, userId),
-					eq(subscriptions.isActive, true),
-				),
-			),
-	)
-	const hasInvite = exists(
-		db
-			.select({ id: invites.id })
-			.from(invites)
-			.where(
-				and(
-					eq(invites.topicId, topics.id),
-					// an address matches only once the account verified it
-					or(eq(invites.invitedUserId, userId), inArray(invites.email, verifiedEmailQuery(userId))),
-					isNull(invites.declinedAt),
-					or(isNull(invites.expiresAt), sql`${invites.expiresAt} > now()`),
-					sql`${invites.usedCount} < ${invites.maxUses}`,
-				),
-			),
-	)
-
-	// one query builds the list of topics to add, the user's own topics leading. what team already has is left out.
-	const addableTopics = teamId
-		? [
-				sql`${topics.teamId} is distinct from ${teamId}`,
-				notInArray(
-					topics.id,
-					db.select({ topicId: teamTopics.topicId }).from(teamTopics).where(eq(teamTopics.teamId, teamId)),
-				),
-			]
-		: []
-	return db
-		.select({ id: topics.id, name: topics.name })
-		.from(topics)
-		.where(
-			and(
-				...addableTopics,
-				or(
-					eq(topics.ownerId, userId),
-					eq(topics.visibility, "public"),
-					and(eq(topics.visibility, "invite"), or(hasSubscription, hasInvite)),
-				),
-			),
-		)
-		.orderBy(desc(eq(topics.ownerId, userId)), sql`lower(${topics.name})`)
-		.limit(TEAM_TOPIC_OPTIONS_LIMIT)
 }

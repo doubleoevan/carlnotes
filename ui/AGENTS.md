@@ -25,7 +25,13 @@ The api serves the browser bundle and renders pages through the server build, be
   event's. `renderedRows.ts` picks the rows a paged list renders: the page shown and the list's first fifty.
 - `components/invite/` — the invite fields, editors, and modals, shared by the topic and team pages.
 - `components/share/` — the share menus for a topic and a team, over the options they both use.
-- `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use.
+- `components/search/` — the header's search bar, its Filters menu, and its result rows. The topic, team, and user
+  matches are server searches sent once typing pauses, and the finding matches come from the loaded feed.
+- `components/avatar/` — the user and team avatar pickers, over the upload pieces they both use. `AvatarUpload.tsx`
+  turns a chosen file into the resized re-encode the app stores, a PNG for a PNG, WebP, or GIF source so a transparent
+  logo keeps its background, and a JPEG for a photo. A file of a megabyte or more decodes at 512 pixels wide,
+  a HEIC file the browser rejects decodes through a HEIC decoder the page loads on that pick, and a file that could
+  not be decoded or resized is reported by its content type and byte size and shows a message.
 - `components/podcast/` — the podcast's components, `PodcastEpisodePlayer.tsx` (the topic page's player),
   `PodcastEpisodePlayerCard.tsx` (a published podcast episode's card with its seek bar, also on the podcast episode
   page), `PodcastEpisodeChapters.tsx` (the card's chapter list), `PodcastEpisodeChaptersTable.tsx` (the episode

@@ -3,16 +3,10 @@ import { trackEvent } from "@shared/analytics"
 import { PLANS, type Plan } from "@shared/plans"
 import { and, count, eq, inArray, not, notInArray } from "drizzle-orm"
 import { type DbTransaction, db } from "../../db"
-import {
-	chatRoomMentions,
-	chatRoomMessages,
-	subscriptions,
-	teamMembers,
-	teams,
-	teamTopics,
-	topics,
-	users,
-} from "../../db/schema"
+import { chatRoomMentions, chatRoomMessages } from "../../db/schema/chat"
+import { teamMembers, teams, teamTopics } from "../../db/schema/teams"
+import { subscriptions, topics } from "../../db/schema/topics"
+import { users } from "../../db/schema/users"
 import { isAdminRole } from "../authorization"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
@@ -287,7 +281,9 @@ export async function deactivateTeamTopicSubscriptions(
 				),
 			)
 			.returning({ topicId: subscriptions.topicId })
-		await Promise.all(deactivatedSubscriptionRows.map(({ topicId }) => deletePodcastFeedToken({ topicId, userId })))
+		await Promise.all(
+			deactivatedSubscriptionRows.map(({ topicId }) => deletePodcastFeedToken({ topicId, userId }, transaction)),
+		)
 	}
 
 	// update each topic's subscriber count

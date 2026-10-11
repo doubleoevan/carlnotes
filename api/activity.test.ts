@@ -1,7 +1,8 @@
 // activity tests for the payload assembly
 import { expect, test } from "bun:test"
 import type { PodcastEpisode } from "@shared/contracts"
-import { toActivityTopics, toCents, toSubscriptionRows } from "./activity"
+import { toSubscriptionRows } from "./activity"
+import { toActivityTopics, toCents } from "./activityTopics"
 
 // scans.cost is a numeric dollars string, converted once for every spend figure on the page
 test("toCents converts the dollars string and zeroes malformed values", () => {

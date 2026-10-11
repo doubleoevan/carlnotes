@@ -1,7 +1,7 @@
 // starting a Scan
 import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "../db"
-import { scans } from "../db/schema"
+import { scans } from "../db/schema/scans"
 import { cancelTopicScanWorkflow, type ScanCancel, type ScanStart, startTopicScanWorkflow } from "./temporalClient"
 import type { ScanTrigger } from "./workflows/runTopicScanActivities"
 

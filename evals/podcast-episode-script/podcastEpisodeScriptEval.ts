@@ -1,10 +1,7 @@
 // the promptfoo eval of the podcast episode script writer, which makes real model calls.
 // run the eval with: bun run eval:podcast-episode-script
-import {
-	PODCAST_EPISODE_DESCRIPTION_MAX_CHARS,
-	PODCAST_EPISODE_TITLE_MAX_CHARS,
-	type PodcastEpisodeChapterScript,
-} from "@shared/contracts"
+import { PODCAST_EPISODE_DESCRIPTION_MAX_CHARS, PODCAST_EPISODE_TITLE_MAX_CHARS } from "@shared/contracts"
+import type { PodcastEpisodeChapterScript } from "@shared/payloads"
 import { FULL_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
 import { scoreModel } from "../../worker/models"

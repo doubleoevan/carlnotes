@@ -1,7 +1,5 @@
-// quota tests: the suggestion rate limit window key, the daily suggestion limit, each invite limit factor alone, the floor, and a connected recipient's doubled limit.
-// the access row is read once per request, and on every call outside a request.
-// the month's spend sums scans, chat, and podcast episodes.
-// episodes stop recording at the plan's share of the monthly budget, and only a paid plan or an admin gets full episodes
+// quota tests: the suggestion limit window and daily limit, each invite limit factor with its floor and a connected
+// recipient, the per-request access read, the month's spend, and when episodes stop recording
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { PLANS } from "@shared/plans"
 import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
@@ -135,20 +133,23 @@ test("the access row is read on every call outside a request", async () => {
 	expect(queryCount).toBe(2)
 })
 
-// the daily suggestion limit allows the three hundredth suggestion, rejects the next, and allows one that Redis could not count
-test("the daily suggestion limit allows up to 300 suggestions and allows one that Redis could not count", async () => {
-	// a plain user, and a rate limit window that returns the three hundredth hit, the next, and no count
+// the daily suggestion limit allows the three hundredth suggestion and rejects the next
+test("the daily suggestion limit allows up to 300 suggestions", async () => {
+	// a plain user, and a rate limit window that returns the three hundredth hit, then the next
 	const incrementRateLimitWindowSpy = spyOn(redis, "incrementRateLimitWindow")
 	const incrementDaySuggestionCountResults: boolean[] = []
 
 	// count one suggestion for each hit, then check which suggestions were within the limit
 	await countAccessQueries(async () => {
-		for (const rateLimitWindowHit of [{ count: 300, resetAt: 0 }, { count: 301, resetAt: 0 }, null]) {
+		for (const rateLimitWindowHit of [
+			{ count: 300, resetAt: 0 },
+			{ count: 301, resetAt: 0 },
+		]) {
 			incrementRateLimitWindowSpy.mockResolvedValueOnce(rateLimitWindowHit)
 			incrementDaySuggestionCountResults.push(await incrementDaySuggestionCount("user-1"))
 		}
 	})
-	expect(incrementDaySuggestionCountResults).toEqual([true, false, true])
+	expect(incrementDaySuggestionCountResults).toEqual([true, false])
 })
 
 // the rows that the podcast episode checks read. the stub picks each row by a pattern in the query's SQL

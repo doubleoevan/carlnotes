@@ -7,19 +7,19 @@ import {
 	inviteAcceptResponse,
 	inviteCreateResponse,
 	manualScanResponse,
-	type SuggestSourcesPayload,
 	type SuggestSourcesResponse,
 	scanNote,
 	suggestSourcesResponse,
 	type TopicFeedResponse,
 	type TopicGateResponse,
 	type TopicResponse,
+	type TopicSearchResult,
 	topicCreateResponse,
 	topicFeedResponse,
 	topicGateResponse,
 	topicResponse,
-	type UpdateTopicPayload,
 } from "@shared/contracts"
+import type { SuggestSourcesPayload, UpdateTopicPayload } from "@shared/topicPayloads"
 import { toast } from "sonner"
 import { apiClient, readApiErrorMessage } from "./apiClient"
 
@@ -376,4 +376,13 @@ export async function sendUserInvite(
 		return rejection
 	}
 	return response.status === 429 ? "limited" : "failed"
+}
+
+// return the topics whose name contains the query
+export async function searchTopics(query: string): Promise<TopicSearchResult[]> {
+	const response = await apiClient.api.topics.search.$get({ query: { q: query } })
+	if (!response.ok) {
+		return []
+	}
+	return ((await response.json()) as { topics: TopicSearchResult[] }).topics
 }

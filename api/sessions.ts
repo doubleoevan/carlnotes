@@ -3,7 +3,7 @@
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { readRedisJson, replaceRedisJson, runWithRedis, saveRedisJson } from "../db/redis"
-import { sessions, users } from "../db/schema"
+import { sessions, users } from "../db/schema/users"
 
 // one entry of a user's active-sessions list, in the shape that Better Auth writes
 type ActiveSession = { token: string; expiresAt: number }

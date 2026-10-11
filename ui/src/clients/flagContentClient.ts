@@ -1,5 +1,5 @@
 // the flag-content call, for a Topic or a profile
-import type { FlagContentPayload } from "@shared/contracts"
+import type { FlagContentPayload } from "@shared/payloads"
 
 /**
  * Flag a Topic or profile. Throws an error with the api's reason on a rejection.

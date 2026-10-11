@@ -33,6 +33,25 @@ export function TeamAvatarPicker({
 	// the size, which differs between the team page and the modal
 	className?: string
 }) {
+	// resize a chosen file and pass it on, or show the undecodable message
+	const handleResizeAvatarFile = async (avatarFile: File): Promise<void> => {
+		const uploadableAvatar = await toUploadableAvatar(avatarFile)
+		if (uploadableAvatar.status === "undecodable") {
+			toast.error(AVATAR_REJECTIONS.undecodable ?? "")
+			return
+		}
+		onAvatarChange(uploadableAvatar.resizedAvatarFile)
+	}
+
+	// the chooser's select. clearing the input lets the same file be selected again
+	const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+		const avatarFile = event.target.files?.[0]
+		event.target.value = ""
+		if (avatarFile) {
+			void handleResizeAvatarFile(avatarFile)
+		}
+	}
+
 	// a drop skips the chooser, so its accept filter re-runs here
 	const handleDropFiles = (files: File[]): void => {
 		const droppedImage = toDroppedImage(files)
@@ -40,7 +59,7 @@ export function TeamAvatarPicker({
 			toast.error(AVATAR_REJECTIONS["unsupported-type"] ?? "PNG, JPEG, WebP or GIF only.")
 			return
 		}
-		void toUploadableAvatar(droppedImage).then(onAvatarChange)
+		void handleResizeAvatarFile(droppedImage)
 	}
 
 	return (
@@ -58,12 +77,7 @@ export function TeamAvatarPicker({
 				<input
 					type="file"
 					accept={AVATAR_ACCEPT}
-					onChange={(event) => {
-						const chosen = event.target.files?.[0]
-						if (chosen) {
-							onAvatarChange(chosen)
-						}
-					}}
+					onChange={handleFileChange}
 					disabled={isDisabled}
 					className="sr-only"
 				/>

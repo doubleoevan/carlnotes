@@ -1,10 +1,7 @@
 import type { TopicToolCalls, TopicToolToasts } from "@shared/contracts"
-import {
-	type ChatToolCall,
-	type ProposeTopicEditPayload,
-	proposeTopicEditPayload,
-	toStandingTopicEditCall,
-} from "@shared/contracts"
+import { toStandingTopicEditCall } from "@shared/contracts"
+import type { ChatToolCall } from "@shared/payloads"
+import { type ProposeTopicEditPayload, proposeTopicEditPayload } from "@shared/topicPayloads"
 import { toast } from "sonner"
 import { clearProposedTopicEdit, startEditingTopic } from "@/stores/chatPanelStore"
 

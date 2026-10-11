@@ -2,7 +2,7 @@
 import type { ChatLinkPreview } from "@shared/contracts"
 import { and, eq, gte, inArray } from "drizzle-orm"
 import { db } from "../../db"
-import { linkPreviews } from "../../db/schema"
+import { linkPreviews } from "../../db/schema/chat"
 import {
 	fetchLinkPreviewImage,
 	fetchLinkPreviewMetadata,

@@ -7,7 +7,7 @@ import { userBudgetCents } from "@shared/plans"
 import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm"
 import { db } from "../db"
 import { startOfUtcMonth } from "../db/quotas"
-import { users } from "../db/schema"
+import { users } from "../db/schema/users"
 import { runWithConcurrency } from "./concurrency"
 
 // how many key replacements the reset runs against the proxy at once

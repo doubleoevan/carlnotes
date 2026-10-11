@@ -7,16 +7,17 @@ import { toPageTitle, toPodcastEpisodePath, toPodcastFeedPath, toTopicFeedPath, 
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
-import { topics } from "../../db/schema"
+import { topics } from "../../db/schema/topics"
 import type { AppEnv } from "../currentUser"
 import { toInviteTarget } from "../invite/invites"
+import { lastScan, scanFindings, toCreativeWorkLd, toFindingListLd } from "../jsonLd"
 import {
 	loadPublishedPodcastEpisode,
 	loadPublishedPodcastEpisodeRows,
 	type PodcastEpisodeRow,
-} from "../podcast/helpers"
+} from "../podcast/podcastEpisodeRows"
 import { toPodcastEpisodeLd, toPodcastSeries, toPodcastSeriesLd } from "../podcast/podcastSeo"
-import { lastScan, loadTopicFeedUpdatedAt, scanFindings, toCreativeWorkLd, toFindingListLd } from "../seo"
+import { loadTopicFeedUpdatedAt } from "../seo"
 import { toPodcastEpisodePreview, toPodcastEpisodePreviewKey } from "./podcastEpisodeImage"
 import { toInvitedTeamPreview, toProfilePreview, toTeamPreview, toTopicPreview } from "./preview"
 import { toCountLabel, toPreviewVersion } from "./previewImage"

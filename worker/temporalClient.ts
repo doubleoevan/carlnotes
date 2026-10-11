@@ -33,8 +33,10 @@ export type ScanQueueDescription = { pollerCount: number; backlogCount: number; 
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type ScanStart = { status: "started"; whenFinished: () => Promise<void> } | { status: "running" }
 
-// whether a cancel reached a running Scan
-export type ScanCancel = { status: "cancelled" } | { status: "idle" }
+// whether a cancel reached a running Scan, and a call that waits for the cancelled Scan to wind down.
+// it is a call for the same reason as ScanStart's, and it resolves once the workflow has ended, however it ended
+// biome-ignore format: one line keeps the union under the comment-density hook's limit
+export type ScanCancel = { status: "cancelled"; whenStopped: () => Promise<void> } | { status: "idle" }
 
 // the reused client promise, built on first use from the TEMPORAL_ADDRESS endpoint
 let clientPromise: Promise<Client> | undefined
@@ -106,8 +108,17 @@ export async function startTopicScanWorkflow(
 export async function cancelTopicScanWorkflow(topicId: string): Promise<ScanCancel> {
 	const client = await getClient()
 	try {
-		await client.workflow.getHandle(`scan-${topicId}`).cancel()
-		return { status: "cancelled" }
+		const workflowHandle = client.workflow.getHandle(`scan-${topicId}`)
+		await workflowHandle.cancel()
+		// the result rejects with the cancellation once the workflow has wound down, which is the wait's end
+		return {
+			status: "cancelled",
+			whenStopped: () =>
+				workflowHandle.result().then(
+					() => undefined,
+					() => undefined,
+				),
+		}
 	} catch (error) {
 		// a workflow that is missing or already completed leaves nothing to cancel
 		if (error instanceof WorkflowNotFoundError) {

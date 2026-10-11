@@ -36,15 +36,11 @@ function toRateLimitToolCaller(context: Context<AppEnv>): RateLimitToolCaller {
 
 /**
  * The limiter's store, which counts each limiter key's hits in a Redis rate limit window.
- * The store returns zero hits for a hit that Redis could not count, so the request passes.
  */
 export const toolCallerRateLimitStore: Store<AppEnv> = {
 	increment: async (key: string): Promise<ClientRateLimitInfo> => {
-		// count the hit in Redis. return zero hits and a full rate limit window if Redis could not count the hit
 		const rateLimitWindowHit = await incrementRateLimitWindow(toRateLimitWindowKey(key), RATE_LIMIT_WINDOW_MS)
-		return rateLimitWindowHit
-			? { totalHits: rateLimitWindowHit.count, resetTime: new Date(rateLimitWindowHit.resetAt) }
-			: { totalHits: 0, resetTime: new Date(Date.now() + RATE_LIMIT_WINDOW_MS) }
+		return { totalHits: rateLimitWindowHit.count, resetTime: new Date(rateLimitWindowHit.resetAt) }
 	},
 	decrement: (key: string): Promise<void> => decrementRateLimitWindow(toRateLimitWindowKey(key)),
 	resetKey: (key: string): Promise<void> => deleteRedisKey(toRateLimitWindowKey(key)),

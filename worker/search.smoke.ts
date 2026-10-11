@@ -2,7 +2,8 @@
 // run it with: bun run smoke:search. it needs EXA_API_KEY set, the LiteLLM proxy reachable at LITELLM_BASE_URL, the latest migration applied, and Doppler secrets injected
 import { eq } from "drizzle-orm"
 import { db } from "../db"
-import { sources, topics, users } from "../db/schema"
+import { sources, topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
 import type { Source } from "./ingest/ingester"
 import { searchIngester } from "./ingest/search"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"

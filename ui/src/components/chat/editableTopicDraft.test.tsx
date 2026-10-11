@@ -1,6 +1,6 @@
 // the mapping from a topic to a topic draft: sources by option key, the team, and the email invites
 import { expect, test } from "bun:test"
-import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/contracts"
+import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"
 import { renderToStaticMarkup } from "react-dom/server"
 import { type EditableTopicFields, toEditableTopicDraft } from "./editableTopicDraft"
 import { TopicDraftCard } from "./TopicDraftCard"

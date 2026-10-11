@@ -7,9 +7,11 @@ import {
 	toNewTopicChatTools,
 	toSuggestionsText,
 	toSuggestTopicSourcesTool,
-} from "../../api/tool/chatTools"
+} from "../../api/tool/newTopicChatTools"
 import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
-import { buildNewTopicChatPrompt, MAX_TURN_STEPS, toConsentStep, toModelMessages } from "../../worker/chat"
+import { MAX_TURN_STEPS } from "../../worker/chat"
+import { toConsentStep, toModelMessages } from "../../worker/chat/chatMessages"
+import { buildNewTopicChatPrompt } from "../../worker/chat/chatPrompts"
 import { webSearchTool } from "../../worker/chat/search"
 import { chatModel } from "../../worker/models"
 import { type RecordedToolCall, toRecordingTools } from "../evalHarness"

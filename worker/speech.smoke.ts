@@ -1,6 +1,6 @@
 // a live smoke test of podcast speech. record a clip on each Gemini tier, and check the key's spend at each tier's rate
 // run it with: bun run smoke:speech. it needs the proxy from bun run carl-up, with GEMINI_API_KEY on the proxy
-import type { PodcastEpisodeTurn } from "@shared/contracts"
+import type { PodcastEpisodeTurn } from "@shared/payloads"
 import { podcastEpisodeSpeechModel } from "@shared/podcastEpisodes"
 import { type SpeechTier, speechCost } from "./budget"
 import { deleteLiteLLMKey, provisionLiteLLMKey, readLiteLLMKeySpend } from "./litellm"

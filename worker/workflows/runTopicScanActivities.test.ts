@@ -2,7 +2,7 @@
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { ApplicationFailure } from "@temporalio/activity"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
-import { scans } from "../../db/schema"
+import { scans } from "../../db/schema/scans"
 import * as ingest from "../ingest"
 import * as litellm from "../litellm"
 import { ingestForScan } from "./runTopicScanActivities"

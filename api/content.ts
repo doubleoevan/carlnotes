@@ -7,7 +7,7 @@ import Markdown from "markdown-to-jsx"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { renderedCacheHeaders } from "./edgeCache"
-import { toJsonLdTag } from "./seo"
+import { toJsonLdTag } from "./jsonLd"
 import { cacheForTtl } from "./ttlCache"
 
 // the content directories, resolved from this file so the api serves them from any working directory

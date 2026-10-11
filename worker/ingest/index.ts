@@ -3,10 +3,11 @@ import { reportError } from "@shared/monitoring"
 import { toDefaultSource } from "@shared/sources"
 import { eq, sql } from "drizzle-orm"
 import { db } from "../../db"
-import { resources, type scans, sources } from "../../db/schema"
+import { resources, type scans } from "../../db/schema/scans"
+import { sources } from "../../db/schema/topics"
 import { type Budget, charge } from "../budget"
 import { OversizedBodyError } from "../publicFetch"
-import { deleteResourceContent, toResourceContentKey, uploadResourceContent } from "../store"
+import { deleteStoredObject, toResourceContentKey, uploadResourceContent } from "../store"
 import { traceStage } from "../telemetry"
 import { blueskyIngester } from "./bluesky"
 import { FeedStatusError } from "./feed"
@@ -122,7 +123,7 @@ async function storeFetchedBody(resourceId: string, fetchedBody: FetchedBody): P
 		// the row keeps content_key unset, so nothing points at a half-written object, and review refetches
 		console.error(`object-storage write failed for ingested resource ${resourceId}`, error)
 		reportError(error, "object-storage", { resourceId, operation: "write" })
-		await deleteResourceContent(toResourceContentKey(resourceId)).catch(() => {})
+		await deleteStoredObject(toResourceContentKey(resourceId))
 	}
 }
 

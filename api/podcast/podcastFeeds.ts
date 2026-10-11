@@ -5,16 +5,17 @@ import { PODCAST_COVER_SIZES, type PodcastCover, toPodcastCoverKey } from "@shar
 import { eq, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
-import { podcastEpisodeListens, podcastEpisodes, topics } from "../../db/schema"
+import { podcastEpisodeListens, podcastEpisodes } from "../../db/schema/podcast"
+import { topics } from "../../db/schema/topics"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toVersionedImageHeaders } from "../edgeCache"
 import { toCachedPodcastCoverJpeg } from "../share/podcastCover"
-import { loadAccessiblePodcastEpisode } from "./helpers"
 import {
 	toPodcastEpisodeAudioResponse,
 	toPodcastEpisodeChaptersResponse,
 	toPodcastEpisodeTranscriptResponse,
 } from "./podcastEpisodeFiles"
+import { loadAccessiblePodcastEpisode } from "./podcastEpisodeRows"
 import { deletePodcastFeedToken, loadOrCreatePodcastFeedUrl, loadPodcastFeedTokenListener } from "./podcastFeedTokens"
 
 // a cover's file name, made of its key and its size

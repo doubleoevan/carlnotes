@@ -1,6 +1,6 @@
 // username autocomplete tests: carl pinned first, the members narrowed by prefix, and nobody else
 import { expect, test } from "bun:test"
-import { toChangedMentionChatMessage, toChatMentionSuggestions, toChatMessage } from "./ChatRoomComposer"
+import { toChatMentionSuggestions } from "./MentionSuggestionList"
 
 // the members the chat room gives to the composer
 const CHAT_MEMBERS = ["ana", "bo", "Cara"]
@@ -22,19 +22,4 @@ test("toChatMentionSuggestions only suggests the chat members", () => {
 	expect(toChatMentionSuggestions("stranger", CHAT_MEMBERS)).toEqual([])
 	// a members list spelling of carl merges with the pinned entry instead of doubling it
 	expect(toChatMentionSuggestions("carl", ["Carl", "carlos"])).toEqual(["carl", "carlos"])
-})
-
-// stripping removes only a known leading username chat mention, so retargeting never stacks contradictory addresses
-test("toMessageDraft removes a known leading username mention and nothing else", () => {
-	expect(toChatMessage("@carl hello", [])).toBe("hello")
-	expect(toChatMessage("@all hi", [])).toBe("hi")
-	expect(toChatMessage("@Cara hi", ["Cara"])).toBe("hi")
-	expect(toChatMessage("@stranger hi", [])).toBe("@stranger hi")
-	expect(toChatMessage("hey @carl", [])).toBe("hey @carl")
-})
-
-// changing the chat mention swaps the leading username chat mention for the new one instead of stacking a second
-test("toChangedMentionMessageDraft leads with the selected mention exactly once", () => {
-	expect(toChangedMentionChatMessage("@carl hi", "all", [])).toBe("@all hi")
-	expect(toChangedMentionChatMessage("plain draft", "carl", [])).toBe("@carl plain draft")
 })

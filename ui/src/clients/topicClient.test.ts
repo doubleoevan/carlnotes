@@ -1,9 +1,9 @@
-// topic client tests: a manual scan rejected because of a spent budget returns "budget", a started scan returns the
-// scans left today, and a topic page or a podcast episode page response names the gate in front of its topic
+// topic client tests: a spent budget returns "budget" and a started scan the scans left, a topic or podcast episode
+// page names the gate in front of its topic, and the topic search returns the matched topics
 import { afterEach, expect, test } from "bun:test"
 import { SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
 import { fetchPodcastEpisodePage } from "./podcastEpisodeClient"
-import { fetchTopicPage, sendManualScan } from "./topicClient"
+import { fetchTopicPage, searchTopics, sendManualScan } from "./topicClient"
 
 // the real fetch to put back after each test
 const originalFetch = globalThis.fetch
@@ -60,4 +60,20 @@ test("a topic page and a podcast episode page read the topic gate from a 403, an
 	expect(await fetchPodcastEpisodePage({ topicId: "topic-1", season: "2026", episodeNumber: "1" })).toEqual({
 		status: "missing",
 	})
+})
+
+// the topic search sends the query to the search route and returns its topics, or none on a failure
+test("searchTopics sends the query and returns the matched topics", async () => {
+	// the search route returns one topic, with the request url recorded
+	let requestedUrl = ""
+	globalThis.fetch = (async (input: RequestInfo | URL) => {
+		requestedUrl = String(input instanceof Request ? input.url : input)
+		return Response.json({ topics: [{ id: "topic-1", name: "Agents" }] })
+	}) as unknown as typeof fetch
+	expect(await searchTopics("agents")).toEqual([{ id: "topic-1", name: "Agents" }])
+	expect(requestedUrl).toContain("/api/topics/search?q=agents")
+
+	// a failed search returns no topics
+	stubFetch(new Response(null, { status: 500 }))
+	expect(await searchTopics("agents")).toEqual([])
 })

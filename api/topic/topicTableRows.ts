@@ -2,7 +2,8 @@
 import type { Topic } from "@shared/contracts"
 import { and, count, eq, inArray, sql } from "drizzle-orm"
 import { db, isFindingShown } from "../../db"
-import { findings, scans, subscriptions, type topics } from "../../db/schema"
+import { findings, scans } from "../../db/schema/scans"
+import { subscriptions, type topics } from "../../db/schema/topics"
 import { loadLatestPodcastEpisodes } from "../podcast/helpers"
 
 /**

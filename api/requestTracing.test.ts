@@ -1,7 +1,14 @@
-// the route a request's transaction is named by, and a request passing through untouched if nothing traces it
-import { expect, test } from "bun:test"
+// the route a request's transaction is named by, a request passing through untouched if nothing traces it,
+// the Server-Timing header outside production, and the request log line's counts and missed keys
+import { afterEach, expect, test } from "bun:test"
 import { Hono } from "hono"
-import { toRequestRoute, traceRequest } from "./requestTracing"
+import { countCacheRead, countRequestStatement } from "../db/queryTracing"
+import { toRequestLogLine, toRequestRoute, traceRequest } from "./requestTracing"
+
+// put the test environment back after a test that pretends to be production
+afterEach(() => {
+	Bun.env.NODE_ENV = "test"
+})
 
 // an app routed like the api: a sub-app under a prefix, a parameterized route, the api's JSON 404,
 // and the ui's catch-all, which renders a topic page and has no route for anything else
@@ -69,4 +76,46 @@ test("a podcast feed token never reaches a request's name", async () => {
 	await app.request("/podcast-feeds/a-secret-token.xml")
 	await app.request("/api/podcast-feeds/a-secret-token/episodes/episode-1/audio.mp3")
 	expect(requestRoutes).toEqual(["/podcast-feeds/:tokenFile", "/api/podcast-feeds/:token/episodes/:id/:file"])
+})
+
+// outside production every request's response names its duration and its counts in the Server-Timing header
+test("the Server-Timing header reports the request's counts outside production", async () => {
+	// a handler that sends one statement and misses the cache once
+	const app = new Hono().use(traceRequest).get("/api/topics/:id", (context) => {
+		countRequestStatement("select 1")
+		countCacheRead({ isHit: false, key: "topic-page:visitor:abc" })
+		return context.json({})
+	})
+	const response = await app.request("/api/topics/abc")
+	expect(response.headers.get("Server-Timing")).toMatch(
+		/^total;dur=\d+, queries;desc="1", cache-hits;desc="0", cache-misses;desc="1"$/,
+	)
+})
+
+// production keeps Sentry alone, so the header is absent
+test("production sends no Server-Timing header", async () => {
+	Bun.env.NODE_ENV = "production"
+	const app = new Hono().use(traceRequest).get("/api/topics/:id", (context) => context.json({}))
+	const response = await app.request("/api/topics/abc")
+	expect(response.headers.get("Server-Timing")).toBeNull()
+})
+
+// the log line names the method, the route, the status, the duration, the counts, and each key that missed
+test("the request log line names a cache miss by its key", () => {
+	const requestReport = {
+		method: "GET",
+		route: "/api/rooms/mention-count",
+		status: 200,
+		durationMs: 12,
+		queryCount: 1,
+		cacheHitCount: 0,
+		cacheMissCount: 1,
+		missedCacheKeys: ["unseen-chat-mention-count:user-1"],
+	}
+	expect(toRequestLogLine(requestReport)).toBe(
+		"GET /api/rooms/mention-count 200 12ms queries=1 hits=0 misses=1 missed=unseen-chat-mention-count:user-1",
+	)
+	expect(toRequestLogLine({ ...requestReport, cacheHitCount: 1, cacheMissCount: 0, missedCacheKeys: [] })).toBe(
+		"GET /api/rooms/mention-count 200 12ms queries=1 hits=1 misses=0",
+	)
 })

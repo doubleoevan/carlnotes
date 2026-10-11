@@ -2,7 +2,9 @@
 // run it with: bun run smoke:links. needs FIRECRAWL_API_KEY, object storage, and the latest migration.
 import { eq, inArray } from "drizzle-orm"
 import { db } from "../db"
-import { resources, scans, sources, topics, users } from "../db/schema"
+import { resources, scans } from "../db/schema/scans"
+import { sources, topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
 import { FIRECRAWL_COST_PER_FETCH } from "./budget"
 import { deleteUserLiteLLMKey } from "./litellm"
 import { ingestForScan } from "./workflows/runTopicScanActivities"

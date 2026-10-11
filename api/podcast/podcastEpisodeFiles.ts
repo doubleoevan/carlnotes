@@ -2,10 +2,10 @@
 import { eq } from "drizzle-orm"
 import type { Context } from "hono"
 import { db } from "../../db"
-import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema"
+import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast"
 import { toPodcastEpisodeAudioUrl } from "../../worker"
 import { toPodcastEpisodeChaptersJson, toTranscriptHtml } from "../share/podcastFeed"
-import type { PodcastEpisodeRow } from "./helpers"
+import type { PodcastEpisodeRow } from "./podcastEpisodeRows"
 
 /**
  * Returns a podcast episode's audio length and type for a HEAD, and a redirect to its presigned url for a GET.

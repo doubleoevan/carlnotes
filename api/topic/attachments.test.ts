@@ -1,6 +1,7 @@
 // attachment tests for the context edit
 import { expect, test } from "bun:test"
-import { attachmentContextPayload, MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts"
+import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts"
+import { attachmentContextPayload } from "@shared/topicPayloads"
 import { toStoredFileHeaders } from "./attachments"
 
 // the edited context is limited like a generated one, so an edit cannot inflate a scan's tokens

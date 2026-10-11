@@ -1,6 +1,6 @@
 // the grader calibration cases of the new-topic chat eval's rubrics. the user's message, the draft, and the chat
 // turns are made up
-import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/contracts"
+import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"
 import type { NewTopicChatTurn, NewTopicChatVariables } from "../new-topic-chat/newTopicChatProviders"
 import * as newTopicChatRubrics from "../new-topic-chat/newTopicChatRubrics"
 import type { CalibratedEval, RubricCalibration } from "./graderCalibrationCases"

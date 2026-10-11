@@ -1,170 +1,44 @@
-// the private chat routes and one chat turn end to end:
-// authorizing it, answering it with the worker's streamed reply, and saving its row
+// the private chat routes on each page, and answering an allowed chat turn with the worker's streamed reply
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
-import {
-	type ChatAttachment,
-	type ChatConversation,
-	type ChatTurnPayload,
-	type ChatTurnRow,
-	chatTurnPayload,
-	EMPTY_TOPIC_DRAFT,
-	type TopicDraft,
-	type TopicDraftTeam,
-	toChatReplyLineText,
-	withAttachmentNote,
-} from "@shared/contracts"
-import { reportError } from "@shared/monitoring"
+import { type ChatConversation, type ChatTurnRow, withAttachmentNote } from "@shared/contracts"
+import { type ChatTurnPayload, chatTurnPayload } from "@shared/payloads"
 import { ADMIN_QUOTA } from "@shared/plans"
+import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
-import { stream } from "hono/streaming"
 import { db } from "../../db"
-import { topics } from "../../db/schema"
-import {
-	type ChatReplyStream,
-	type ChatTurnInput,
-	isBudgetRejection,
-	loadOrProvisionUserLiteLLMKey,
-	SPENT_BUDGET_REJECTION,
-	streamChatReply,
-} from "../../worker"
-import { isAllowed, isLeaderRole, isMonthlySpendExhausted, topicLimit, topicsRemaining } from "../authorization"
+import { topics } from "../../db/schema/topics"
+import { type ChatTurnInput, loadOrProvisionUserLiteLLMKey, streamChatReply } from "../../worker"
+import { topicLimit } from "../authorization"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
-import { loadTeamSummaries } from "../team/helpers"
-import { toTeamRole } from "../team/members"
 import {
 	type ChatTurnToolCalls,
 	toChatTopicTools,
-	toNewTopicChatTools,
 	toOpenNewTopicChatTool,
-	toSuggestTopicSourcesTool,
 	toTopicEditPreviewTools,
 } from "../tool/chatTools"
-import { deleteTopicDraft, loadTopicDraft, saveTopicDraft } from "../topic/topicDrafts"
-import { loadKeptTopicAttachments, resolveChatAttachments, storeTopicChatAttachments } from "./attachments"
-import { type ChatPage, clearChatTurns, loadChatTurns, saveChatTurn, toChatPageId } from "./chatTurns"
+import { toNewTopicChatTools, toSuggestTopicSourcesTool } from "../tool/newTopicChatTools"
+import { deleteTopicDraft, loadTopicDraft } from "../topic/topicDrafts"
+import { resolveChatAttachments } from "./attachments"
+import { loadKeptTopicAttachments } from "./chatAttachmentReads"
+import {
+	authorizeChatTurn,
+	authorizeNewTopicChatTurn,
+	authorizeTeamChatTurn,
+	type ChatTurnAuthorization,
+} from "./chatTurnAuthorization"
+import { streamChatTurn } from "./chatTurnStream"
+import { type ChatPage, clearChatTurns, loadChatTurns, toChatPageId } from "./chatTurns"
 import { saveLinkPreviews } from "./linkPreviews"
-import { writeReplyStream } from "./replyStream"
 
 // one body limit for every chat post, sized for a question plus its data url attachments
 export const chatBodyLimit = bodyLimit({
 	maxSize: 26 * 1024 * 1024,
 	onError: (context) => context.json({ error: "Those attachments are too large." }, 413),
 })
-
-// the outcomes of a chat turn request. a spent budget names its user.
-// an allowed chat turn names its user, whether the chat turn keeps its text, and what the chat turn may change
-export type ChatTurnAuthorization =
-	| {
-			status: "allowed"
-			userId: string
-			isTopicOwner: boolean
-			isPersisted: boolean
-			canEditTopic: boolean
-			// how many more topics the plan allows, and the teams that carl may put the topic on.
-			// both are set only on the new-topic chat
-			topicsRemaining?: number
-			leaderTeams?: TopicDraftTeam[]
-	  }
-	| { status: "signup" }
-	| { status: "forbidden" }
-	| { status: "budget"; userId: string }
-
-/**
- * Decides whether this user may take a chat turn on the topic right now, and how that chat turn is saved.
- * A signed-out visitor on a visible topic is sent to signup.
- */
-export async function authorizeChatTurn(userId: string | null, topicId: string): Promise<ChatTurnAuthorization> {
-	// reject a missing topic the same way as an invisible one
-	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
-	if (!topic) {
-		return { status: "forbidden" }
-	}
-
-	// check visibility first, then sign-in
-	if (!(await isAllowed(userId, "topic:view", topic))) {
-		return { status: "forbidden" }
-	}
-	if (!userId) {
-		return { status: "signup" }
-	}
-
-	// reject a spent budget, the last check for a signed-in user who can see the topic
-	if (!(await isAllowed(userId, "chat:send", topic))) {
-		return { status: "budget", userId }
-	}
-
-	// ask the gate whether the chat turn keeps its text and whether the user may edit the topic
-	const [isPersistAllowed, canEditTopic] = await Promise.all([
-		isAllowed(userId, "chat:persist"),
-		isAllowed(userId, "topic:edit", topic),
-	])
-	return {
-		status: "allowed",
-		userId,
-		isTopicOwner: topic.ownerId === userId,
-		isPersisted: isPersistAllowed,
-		canEditTopic,
-	}
-}
-
-/**
- * Decides whether this user may take a team-wide chat turn: a signed-in, active member under budget.
- */
-export async function authorizeTeamChatTurn(userId: string | null, teamId: string): Promise<ChatTurnAuthorization> {
-	// send a visitor to signup
-	if (!userId) {
-		return { status: "signup" }
-	}
-	// reject a user who is not an active member, then a spent budget
-	if ((await toTeamRole(userId, teamId)) === null) {
-		return { status: "forbidden" }
-	}
-	if (await isMonthlySpendExhausted(userId)) {
-		return { status: "budget", userId }
-	}
-
-	// ask the gate whether the chat turn keeps its text
-	const isPersistAllowed = await isAllowed(userId, "chat:persist")
-	return { status: "allowed", userId, isTopicOwner: false, isPersisted: isPersistAllowed, canEditTopic: false }
-}
-
-/**
- * Decides whether this user may take a chat turn in the new-topic chat.
- * A visitor is sent to signup, and a signed-in user is gated by their monthly spend alone.
- */
-export async function authorizeNewTopicChatTurn(userId: string | null): Promise<ChatTurnAuthorization> {
-	// send a visitor to signup and reject a user whose budget is spent
-	if (!userId) {
-		return { status: "signup" }
-	}
-	if (await isMonthlySpendExhausted(userId)) {
-		return { status: "budget", userId }
-	}
-
-	// ask the gate whether the chat turn keeps its text.
-	// load how many more topics the plan allows and the teams that the user belongs to
-	const [isPersistAllowed, remainingTopics, teamSummaries] = await Promise.all([
-		isAllowed(userId, "chat:persist"),
-		topicsRemaining(userId),
-		loadTeamSummaries(userId),
-	])
-	return {
-		status: "allowed",
-		userId,
-		isTopicOwner: false,
-		isPersisted: isPersistAllowed,
-		canEditTopic: false,
-		topicsRemaining: remainingTopics,
-		// the teams that the user leads, which carl may put the topic on
-		leaderTeams: teamSummaries
-			.filter((teamSummary) => isLeaderRole(teamSummary.role))
-			.map((teamSummary) => ({ teamId: teamSummary.teamId, name: teamSummary.name })),
-	}
-}
 
 // whether the user owns no topic yet
 async function ownsNoTopic(userId: string | null): Promise<boolean> {
@@ -367,109 +241,6 @@ function toChatTurnTools({
 // how many more topics the plan allows, as the prompt states it. an admin's unlimited marker becomes no limit at all
 function toPromptTopicsRemaining(remainingTopics: number | undefined): number | undefined {
 	return remainingTopics === undefined || remainingTopics >= ADMIN_QUOTA ? undefined : remainingTopics
-}
-
-// one chat turn whose reply is streaming
-type StreamedChatTurn = {
-	chatReply: ChatReplyStream
-	// who asked on which page, and what they sent
-	userId: string
-	page: ChatPage
-	question: string
-	attachments: ChatAttachment[]
-	// whether the gate keeps the text, and what the topic tools did
-	isPersisted: boolean
-	toolCalls: ChatTurnToolCalls
-	// the properties that the analytics event is sent with, and the LiteLLM key for the attachment summaries
-	analyticsProperties: AnalyticsProperties
-	litellmApiKey: string
-}
-
-// stream a chat reply to the user, then save the chat turn whether the stream finished or broke
-function streamChatTurn(context: Context, chatTurn: StreamedChatTurn): Response {
-	return stream(context, async (writeStream) => {
-		// forward the reply, with the tool calls as each tool returns
-		try {
-			await writeReplyStream(writeStream, chatTurn.chatReply, chatTurn.toolCalls)
-		} catch (error) {
-			// log the broken stream. it still spent tokens, so the save below still runs
-			console.error(`chat stream failed for ${toChatPageId(chatTurn.page)}`, error)
-			// close with the spent budget's text. the stream is the only place left to show it.
-			// report any other failure and close with the failed line
-			let closingLine = toChatReplyLineText({ type: "text", text: `\n\n${SPENT_BUDGET_REJECTION}` })
-			if (!isBudgetRejection(error)) {
-				reportError(error, "chat", { topicId: toChatPageId(chatTurn.page) })
-				closingLine = toChatReplyLineText({ type: "failed" })
-			}
-
-			// write the closing line. a user who already left cannot be written to, and that must not skip the save below
-			try {
-				await writeStream.write(closingLine)
-			} catch (closingError) {
-				console.error("chat stream close failed", closingError)
-			}
-		}
-
-		// save the spend whether the stream finished or broke. a partial chat turn is never free
-		const chatTurnId = await saveFinishedChatTurn(chatTurn)
-
-		// store the topic draft that the chat turn wrote. a chat turn that created the topic already deleted it
-		if (chatTurn.toolCalls.topicDraft && !chatTurn.toolCalls.createdTopicId) {
-			await saveTopicDraft(chatTurn.userId, chatTurn.toolCalls.topicDraft).catch((error) => {
-				console.error("topic draft save failed", error)
-				reportError(error, "chat")
-			})
-		}
-
-		// store the sent attachments in the background once the reply has finished. their summaries take seconds.
-		// a team or new-topic conversation stores none
-		const storedTopicId = chatTurn.page.topicId
-		if (storedTopicId !== undefined) {
-			storeTopicChatAttachments(
-				chatTurn.userId,
-				storedTopicId,
-				chatTurnId,
-				chatTurn.attachments,
-				chatTurn.litellmApiKey,
-			).catch((error) => {
-				console.error(`storing chat attachments failed for topic ${storedTopicId}`, error)
-				reportError(error, "chat", { topicId: storedTopicId })
-			})
-		}
-	})
-}
-
-// save the finished chat turn's spend and text, and fetch the answer's link preview in the background.
-// return null if the chat turn stored no text or the save failed
-async function saveFinishedChatTurn(chatTurn: StreamedChatTurn): Promise<string | null> {
-	try {
-		// save the chat turn. a topic tool call keeps the chat turn's text even if the gate rejects persistence
-		const { text, totalTokens, searchCount, toolCalls } = await chatTurn.chatReply.completion
-		const isChatTurnPersisted = chatTurn.isPersisted || chatTurn.toolCalls.count > 0
-		const savedChatTurnId = await saveChatTurn({
-			userId: chatTurn.userId,
-			page: chatTurn.page,
-			totalTokens,
-			searchCount,
-			isPersisted: isChatTurnPersisted,
-			question: chatTurn.question,
-			answer: text,
-			toolCalls,
-			analyticsProperties: chatTurn.analyticsProperties,
-		})
-
-		// fetch the answer's first link preview card in the background, like the question's
-		if (isChatTurnPersisted) {
-			void saveLinkPreviews(text).catch((error) => console.error("chat link preview failed", error))
-		}
-
-		// return the id only if the chat turn stored text. without text there is no bubble for an attachment to show in
-		return isChatTurnPersisted ? savedChatTurnId : null
-	} catch (error) {
-		console.error(`chat turn save failed for ${toChatPageId(chatTurn.page)}`, error)
-		reportError(error, "chat", { topicId: toChatPageId(chatTurn.page) })
-		return null
-	}
 }
 
 // the private chat routes on each page: the conversation, clearing it, and the streamed reply

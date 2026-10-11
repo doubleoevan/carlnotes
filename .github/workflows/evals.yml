@@ -19,6 +19,7 @@ on:
       - "worker/ingest/search.ts"
       - "worker/models.ts"
       - "api/tool/chatTools.ts"
+      - "api/tool/newTopicChatTools.ts"
       - "api/chat/roomTurns.ts"
       - "shared/enums.ts"
       - "shared/sources.ts"

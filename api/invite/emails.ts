@@ -3,7 +3,10 @@ import { appBaseUrl } from "@shared/appUrl"
 import { reportError } from "@shared/monitoring"
 import { and, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
-import { invites, teams, topics, users } from "../../db/schema"
+import { invites } from "../../db/schema/invites"
+import { teams } from "../../db/schema/teams"
+import { topics } from "../../db/schema/topics"
+import { users } from "../../db/schema/users"
 import { renderTeamInviteEmail, renderTeamInviteEmailText, toTeamInviteSubject } from "../../emails/team-invite-email"
 import {
 	renderTopicInviteEmail,

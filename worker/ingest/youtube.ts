@@ -2,7 +2,7 @@
 
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
-import { sources } from "../../db/schema"
+import { sources } from "../../db/schema/topics"
 import { fetchNamedFeed } from "./feed"
 import type { NewResource, Source, SourceIngester } from "./ingester"
 

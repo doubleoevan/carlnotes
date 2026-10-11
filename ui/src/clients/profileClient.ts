@@ -34,6 +34,18 @@ export async function uploadAvatar(file: File): Promise<string | null> {
 	return ((await response.json()) as { error?: string }).error ?? "unsupported-type"
 }
 
+// report an avatar file nothing could decode, by its content type and byte size
+export async function sendAvatarDecodeFailure(avatarDecodeFailure: {
+	contentType: string
+	byteSize: number
+}): Promise<void> {
+	await fetch("/api/avatars/decode-failures", {
+		method: "POST",
+		headers: { "Content-Type": "application/json" },
+		body: JSON.stringify(avatarDecodeFailure),
+	}).catch(() => undefined)
+}
+
 // use the generated initials or the provider photo. the photo stays private until this asks for it
 export async function sendAvatarSource(avatarSource: "generated" | "oauth"): Promise<void> {
 	const body = new FormData()

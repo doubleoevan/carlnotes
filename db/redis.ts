@@ -1,21 +1,22 @@
-// the app's Redis store, with one command connection and one subscriber connection.
-// a failed Redis operation returns null instead of throwing an error
+// the app's Redis store, with one command connection and one subscriber connection. a failed operation returns null
+// instead of throwing an error, and a failed rate limit count falls back to this process's memory
 import type { ExtraGaugesReading } from "@shared/runtimeGauges"
-import { RedisClient } from "bun"
-
-// how long a connection attempt may take, kept short so a request never waits long on an unreachable Redis
-const CONNECT_TIMEOUT_MS = 2000
-
-// the reconnect delay doubles on repeated failures and resets once a connection succeeds
-const RECONNECT_MINIMUM_MS = 1000
-const RECONNECT_MAXIMUM_MS = 30_000
-
-// the shortest time between logged failures, so an outage never floods the log
-const ERROR_LOG_INTERVAL_MS = 60_000
-
-// the options for Bun's client, with the client's built-in reconnect and offline queue off.
-// the store reconnects without limit, and a command on a down connection fails at once instead of holding up the request
-const REDIS_CLIENT_OPTIONS = { connectionTimeout: CONNECT_TIMEOUT_MS, autoReconnect: false, enableOfflineQueue: false }
+import {
+	clearMemoryRateLimitWindows,
+	decrementMemoryRateLimitWindow,
+	incrementMemoryRateLimitWindow,
+} from "./memoryRateLimitWindows"
+import { countCacheRead } from "./queryTracing"
+import {
+	countError,
+	ensureConnected,
+	type RedisConnection,
+	type RedisConnectionClient,
+	readAndResetErrorCount,
+	replaceRedisClientBuilder,
+	scheduleReconnect,
+	toConnection,
+} from "./redisConnection"
 
 // a script that atomically increments a key and starts the key's expiry on the rate limit window's first hit.
 // the script's reply is the count and the milliseconds left in the rate limit window
@@ -35,42 +36,25 @@ const DECREMENT_RATE_LIMIT_WINDOW_SCRIPT =
 const TAKE_RATE_LIMIT_SLOT_SCRIPT =
 	"if redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) then return 0 end return math.max(redis.call('PTTL', KEYS[1]), 1)"
 
-// the commands that the store sends, and the connection methods and properties that the store uses
-type RedisCommandMethod = "get" | "set" | "del" | "send" | "publish"
-type RedisConnectionMethod = "connected" | "connect" | "close" | "onclose" | "subscribe"
-
-// the part of Bun's client that the store uses
-export type RedisConnectionClient = Pick<RedisClient, RedisCommandMethod | RedisConnectionMethod>
-
 // one hit on a rate limit window, with the count so far and when the rate limit window resets
 export type RateLimitWindowHit = { count: number; resetAt: number }
 
 // whether the command connection is up, and the minute's cache hits, cache misses, and failed operations
 export type RedisGauges = { isConnected: boolean; cacheHitCount: number; cacheMissCount: number; errorCount: number }
 
-// one connection and its reconnect state. the store holds a command connection and a subscriber connection
-type RedisConnection = {
-	client: RedisConnectionClient
-	connectAttempt: Promise<boolean> | null
-	reconnectTimer: ReturnType<typeof setTimeout> | null
-	reconnectDelayMs: number
-	// what runs each time the client connects. the subscriber connection subscribes every registered channel here
-	onConnected: (client: RedisConnectionClient) => Promise<void>
-}
-
-// how the store builds a client, replaced by setRedisClientBuilder
-let buildRedisClient: () => RedisConnectionClient = () => new RedisClient(Bun.env.REDIS_URL, REDIS_CLIENT_OPTIONS)
-
 // the command connection and the subscriber connection, built on first use so importing this module never opens a connection
 let commandConnection: RedisConnection | null = null
 let subscriberConnection: RedisConnection | null = null
 
-// the minute's counts, and when a failure was last logged
-const minuteGauges = { cacheHitCount: 0, cacheMissCount: 0, errorCount: 0 }
-let lastErrorLoggedAt = 0
+// the minute's cache counts
+const minuteGauges = { cacheHitCount: 0, cacheMissCount: 0 }
 
 // the handler that each channel's messages go to
 const handlerByChannel = new Map<string, (channelMessage: string) => void>()
+
+// what runs each time the subscriber connection has come back after a drop, and whether it has connected before
+const subscriberReconnectListeners = new Set<() => void>()
+let hasSubscriberConnected = false
 
 // the channels that each subscriber client has subscribed, so no channel is subscribed twice on one client
 const subscribedChannelsByClient = new WeakMap<RedisConnectionClient, Set<string>>()
@@ -128,14 +112,16 @@ export async function cacheJson<Value>({ key, ttlMs, load }: CacheJsonOptions<Va
 		return load()
 	}
 
-	// count a stored value as a hit and return the stored value
+	// count a stored value as a hit, for the minute and for the request, and return the stored value
 	if (cacheRead.isStored) {
 		minuteGauges.cacheHitCount++
+		countCacheRead({ isHit: true, key })
 		return cacheRead.storedValue as Value
 	}
 
-	// count a miss, then load and store the value for the time to live
+	// count a miss for the minute and for the request, then load and store the value for the time to live
 	minuteGauges.cacheMissCount++
+	countCacheRead({ isHit: false, key })
 	const loadedValue = await load()
 	await saveRedisJson({ key, value: loadedValue, ttlMs })
 	return loadedValue
@@ -174,19 +160,16 @@ export async function deleteRedisKey(key: string): Promise<void> {
 }
 
 /**
- * Counts one hit on a fixed rate limit window and returns the count and when the rate limit window resets,
- * or null if Redis could not count the hit.
+ * Counts one hit on a fixed rate limit window and returns the count and when the rate limit window resets.
+ * A hit that Redis could not count is counted in this process's memory under the same key and window.
  */
-export async function incrementRateLimitWindow(
-	key: string,
-	rateLimitWindowMs: number,
-): Promise<RateLimitWindowHit | null> {
-	// run the increment script and return null if the script fails or the script's reply is not two values
+export async function incrementRateLimitWindow(key: string, rateLimitWindowMs: number): Promise<RateLimitWindowHit> {
+	// run the increment script, and count the hit in memory if the script fails or the script's reply is not two values
 	const scriptReply: unknown = await runWithRedis("incrementRateLimitWindow", (client) =>
 		client.send("EVAL", [INCREMENT_RATE_LIMIT_WINDOW_SCRIPT, "1", key, String(rateLimitWindowMs)]),
 	)
 	if (!Array.isArray(scriptReply) || scriptReply.length !== 2) {
-		return null
+		return incrementMemoryRateLimitWindow(key, rateLimitWindowMs)
 	}
 
 	// return the count and the reset time. the reply's numbers may arrive as integers or big integers
@@ -195,12 +178,16 @@ export async function incrementRateLimitWindow(
 }
 
 /**
- * Refunds one hit on a rate limit window that is still open.
+ * Refunds one hit on a rate limit window that is still open, in memory if Redis could not run the refund.
  */
 export async function decrementRateLimitWindow(key: string): Promise<void> {
-	await runWithRedis("decrementRateLimitWindow", (client) =>
+	// run the refund script, and refund the memory window if Redis could not run it
+	const scriptReply = await runWithRedis("decrementRateLimitWindow", (client) =>
 		client.send("EVAL", [DECREMENT_RATE_LIMIT_WINDOW_SCRIPT, "1", key]),
 	)
+	if (scriptReply === null) {
+		decrementMemoryRateLimitWindow(key)
+	}
 }
 
 /**
@@ -218,10 +205,10 @@ export async function takeRateLimitSlot({ key, slotMs }: TakeRateLimitSlotOption
 }
 
 /**
- * Returns whether a rate limit window's hit is within the limit. A hit that Redis could not count is within the limit.
+ * Returns whether a rate limit window's hit is within the limit.
  */
-export function isWithinRateLimit(rateLimitWindowHit: RateLimitWindowHit | null, limit: number): boolean {
-	return rateLimitWindowHit === null || rateLimitWindowHit.count <= limit
+export function isWithinRateLimit(rateLimitWindowHit: RateLimitWindowHit, limit: number): boolean {
+	return rateLimitWindowHit.count <= limit
 }
 
 /**
@@ -247,12 +234,24 @@ export function subscribeToChannel(channel: string, onChannelMessage: (channelMe
 }
 
 /**
+ * Runs a listener each time the subscriber connection has come back after a drop and subscribed every channel again.
+ * The first connect runs no listener.
+ */
+export function addSubscriberReconnectListener(listener: () => void): void {
+	subscriberReconnectListeners.add(listener)
+}
+
+/**
  * Returns the minute's counts and whether the command connection is up, then resets the counts.
  */
 export function readAndResetRedisGauges(): RedisGauges {
 	// read the counts, then zero the counts for the next minute
-	const redisGauges = { isConnected: commandConnection?.client.connected ?? false, ...minuteGauges }
-	Object.assign(minuteGauges, { cacheHitCount: 0, cacheMissCount: 0, errorCount: 0 })
+	const redisGauges = {
+		isConnected: commandConnection?.client.connected ?? false,
+		...minuteGauges,
+		errorCount: readAndResetErrorCount(),
+	}
+	Object.assign(minuteGauges, { cacheHitCount: 0, cacheMissCount: 0 })
 	return redisGauges
 }
 
@@ -280,15 +279,21 @@ export async function readRedisExtraGauges(): Promise<ExtraGaugesReading> {
 }
 
 /**
- * Replaces how the store builds its clients and forgets the connections, the channel handlers, and the counts.
+ * Replaces how the store builds its clients and forgets the connections, the channel handlers, the reconnect
+ * listeners, the counts, and the memory rate limit windows.
  */
 export function setRedisClientBuilder(nextBuildRedisClient: () => RedisConnectionClient): void {
-	// use the new builder and forget the connections, the channel handlers, and the counts
-	buildRedisClient = nextBuildRedisClient
+	// use the new builder and forget the connections, the channel handlers, and the reconnect listeners
+	replaceRedisClientBuilder(nextBuildRedisClient)
 	commandConnection = null
 	subscriberConnection = null
 	handlerByChannel.clear()
+	subscriberReconnectListeners.clear()
+	hasSubscriberConnected = false
+
+	// forget the counts and the memory windows
 	readAndResetRedisGauges()
+	clearMemoryRateLimitWindows()
 }
 
 // the command connection, built on first use
@@ -297,110 +302,34 @@ function toCommandConnection(): RedisConnection {
 	return commandConnection
 }
 
-// the subscriber connection, built on first use.
-// each time a fresh client connects, the subscriber connection subscribes every registered channel on the fresh client
+// the subscriber connection, built on first use. each fresh client subscribes every registered channel, then the
+// reconnect listeners run if the connection has connected before
 function toSubscriberConnection(): RedisConnection {
 	subscriberConnection ??= toConnection(async (client) => {
+		// subscribe every registered channel
 		for (const channel of handlerByChannel.keys()) {
 			await subscribeOnClient(client, channel)
 		}
+
+		// run the reconnect listeners on every connect after the first
+		if (hasSubscriberConnected) {
+			runSubscriberReconnectListeners()
+		}
+		hasSubscriberConnected = true
 	})
 	return subscriberConnection
 }
 
-// a connection on a newly built client, set to reconnect when the client closes
-function toConnection(onConnected: RedisConnection["onConnected"]): RedisConnection {
-	// the connection starts down, with the shortest delay
-	const connection: RedisConnection = {
-		client: buildRedisClient(),
-		connectAttempt: null,
-		reconnectTimer: null,
-		reconnectDelayMs: RECONNECT_MINIMUM_MS,
-		onConnected,
-	}
-	reconnectOnClose(connection, connection.client)
-	return connection
-}
-
-// reconnect when the client closes, unless the connection has already replaced the client
-function reconnectOnClose(connection: RedisConnection, client: RedisConnectionClient): void {
-	client.onclose = (error) => {
-		// ignore the close of a replaced client
-		if (connection.client !== client) {
-			return
+// run each reconnect listener and log one that throws an error
+function runSubscriberReconnectListeners(): void {
+	for (const listener of subscriberReconnectListeners) {
+		// run the listener and log an error it throws
+		try {
+			listener()
+		} catch (error) {
+			console.error("redis reconnect listener failed", error)
 		}
-
-		// count the close and reconnect
-		countError("connection", error)
-		scheduleReconnect(connection)
 	}
-}
-
-// connect if the connection is down. a call while a reconnect waits returns false at once instead of waiting for the reconnect
-function ensureConnected(connection: RedisConnection): Promise<boolean> {
-	// skip the connection attempt if the connection is already up
-	if (connection.client.connected) {
-		return Promise.resolve(true)
-	}
-
-	// return false if a reconnect is waiting after a failure
-	if (connection.reconnectTimer) {
-		return Promise.resolve(false)
-	}
-
-	// start a connection attempt or share the attempt already in flight
-	connection.connectAttempt ??= connectNow(connection)
-	return connection.connectAttempt
-}
-
-// try to connect once. a success runs onConnected and resets the backoff, and a failure schedules a reconnect
-async function connectNow(connection: RedisConnection): Promise<boolean> {
-	// the client that this attempt connects.
-	// bun reports a failed connection attempt as a close first, and the close handler replaces the client
-	const connectingClient = connection.client
-	try {
-		// connect and run onConnected, then reset the backoff.
-		// the subscriber connection resets the backoff only once every registered channel is subscribed
-		await connectingClient.connect()
-		await connection.onConnected(connectingClient)
-		connection.reconnectDelayMs = RECONNECT_MINIMUM_MS
-		return true
-	} catch (error) {
-		// count the failure and try again after the backoff, unless a close already replaced the client.
-		// a close that replaced the client has already counted the failure and scheduled the reconnect
-		if (connection.client === connectingClient) {
-			countError("connect", error)
-			scheduleReconnect(connection)
-		}
-		return false
-	} finally {
-		// clear the finished attempt, whether the attempt succeeded or failed
-		connection.connectAttempt = null
-	}
-}
-
-// schedule a reconnect on a fresh client after the backoff. the timer never keeps the process alive
-function scheduleReconnect(connection: RedisConnection): void {
-	// skip if a reconnect is already scheduled
-	if (connection.reconnectTimer) {
-		return
-	}
-
-	// swap in a fresh client, then close the old client. bun runs the close handler at once, and the handler ignores a replaced client.
-	// bun's client keeps its subscription listeners across a drop, so subscribing again on the same client would run every handler twice
-	const replacedClient = connection.client
-	connection.client = buildRedisClient()
-	reconnectOnClose(connection, connection.client)
-	try {
-		replacedClient.close()
-	} catch {}
-
-	// start a timer that clears itself and connects, then double the next delay up to the limit
-	connection.reconnectTimer = setTimeout(() => {
-		connection.reconnectTimer = null
-		void ensureConnected(connection)
-	}, connection.reconnectDelayMs).unref()
-	connection.reconnectDelayMs = Math.min(connection.reconnectDelayMs * 2, RECONNECT_MAXIMUM_MS)
 }
 
 // subscribe one new channel once the subscriber connection is up
@@ -442,18 +371,4 @@ function deliverChannelMessage({ channel, channelMessage }: DeliverChannelMessag
 	} catch (error) {
 		console.error(`redis handler for ${channel} failed`, error)
 	}
-}
-
-// count a failed operation and log at most one failure a minute
-function countError(operationName: string, error: unknown): void {
-	// count the failure and return if a failure was logged less than a minute ago
-	minuteGauges.errorCount++
-	const now = Date.now()
-	if (now - lastErrorLoggedAt < ERROR_LOG_INTERVAL_MS) {
-		return
-	}
-
-	// log the failure and save the log time
-	lastErrorLoggedAt = now
-	console.error(`redis ${operationName} failed`, error)
 }

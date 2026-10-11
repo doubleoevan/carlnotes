@@ -3,7 +3,7 @@
 // run under doppler after the migration: doppler run -- bun scripts/backfill-resource-content.ts
 import { and, eq, isNotNull, isNull } from "drizzle-orm"
 import { db } from "../db"
-import { resources } from "../db/schema"
+import { resources } from "../db/schema/scans"
 import { uploadResourceContent } from "../worker/store"
 
 // upload the content of each resource that has no key yet and write its key and size, reporting progress

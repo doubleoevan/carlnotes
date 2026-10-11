@@ -3,18 +3,15 @@
 // and removing an episode
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
-import {
-	type PodcastEpisodeListenPayload,
-	podcastEpisodeListenPayload,
-	ratingPayload,
-	topicPodcastPayload,
-} from "@shared/contracts"
+import { type PodcastEpisodeListenPayload, podcastEpisodeListenPayload, ratingPayload } from "@shared/payloads"
+import { topicPodcastPayload } from "@shared/topicPayloads"
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { z } from "zod"
 import { db } from "../../db"
 import { deletePodcastFeedCache } from "../../db/podcastFeedCache"
-import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes, subscriptions, topics } from "../../db/schema"
+import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes } from "../../db/schema/podcast"
+import { subscriptions, topics } from "../../db/schema/topics"
 import { removePodcastEpisode } from "../../worker"
 import { isAllowed } from "../authorization"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
@@ -23,20 +20,18 @@ import { toCachedPodcastEpisodePreviewPng, toPreviewPngResponse } from "../share
 import { updateTopicFields } from "../tool/topicTools"
 import { toTopicGateResponse } from "../topic/helpers"
 import { canRateTopic } from "../topic/permissions"
-import {
-	type AccessiblePodcastEpisode,
-	loadAccessiblePodcastEpisode,
-	loadPodcastEpisode,
-	loadPodcastEpisodePage,
-	loadPublishedPodcastEpisode,
-	loadPublishedPodcastEpisodeById,
-	loadSeasonPodcastEpisodes,
-} from "./helpers"
+import { loadPodcastEpisode, loadPodcastEpisodePage, loadSeasonPodcastEpisodes } from "./helpers"
 import {
 	toPodcastEpisodeAudioResponse,
 	toPodcastEpisodeChaptersResponse,
 	toPodcastEpisodeTranscriptResponse,
 } from "./podcastEpisodeFiles"
+import {
+	type AccessiblePodcastEpisode,
+	loadAccessiblePodcastEpisode,
+	loadPublishedPodcastEpisode,
+	loadPublishedPodcastEpisodeById,
+} from "./podcastEpisodeRows"
 
 // which season's podcast episodes to list
 const seasonPodcastEpisodesQuery = z.object({ season: z.coerce.number().int() })

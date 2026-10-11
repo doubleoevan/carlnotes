@@ -1,6 +1,7 @@
 // admin tests for the contribution math the that totals summary reports
 import { expect, test } from "bun:test"
-import { computeContributionCents, isSelfDemotion } from "./admin"
+import { isSelfDemotion } from "./admin"
+import { computeContributionCents } from "./adminConsole"
 
 // contribution is net revenue minus tracked variable cost minus the optional fixed-cost constant
 test("computeContributionCents nets revenue against tracked cost and the fixed constant", () => {

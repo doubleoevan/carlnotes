@@ -1,6 +1,6 @@
 // tests for reading a stored topic draft back
 import { expect, test } from "bun:test"
-import { EMPTY_TOPIC_DRAFT, topicDraftPayload } from "@shared/contracts"
+import { EMPTY_TOPIC_DRAFT, topicDraftPayload } from "@shared/topicPayloads"
 
 // check a topic draft saved before the schedule fields existed still parses
 test("a topic draft saved without the schedule fields reads back with their defaults", () => {

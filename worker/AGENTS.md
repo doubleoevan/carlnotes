@@ -1,15 +1,29 @@
 # worker/
 
 Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker,
-with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep that starts scheduled scans),
+with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep that starts scheduled scans, then
+retries the pending object deletions through `retryPendingObjectDeletions.ts`),
 `resetMonthlyBudgets.ts` (the monthly budget reset, a daily job run as `bun run reset:monthly-budgets`),
-`worker/index.ts` (what api may import).
+`worker/index.ts` (what api may import), `staleScans.ts` (the close-out of a scan that outran its stages or never
+started, which the sweep and the manual scan route run).
 
 - The sweep and the reset each run under a database claim from `db/claim.ts`,
   so two overlapping runs cannot do the work twice. The sweep selects scheduled Topics in one SQL query
   and reads each owner's quota and key budget once. For a Topic whose owner's key has spent its budget, the sweep saves
   a failed Scan with the budget reason instead of starting a Scan. The Topics of an owner with no key, or of an owner
   whose budget read fails, are scanned as usual.
+- `attach.ts` ingests a topic attachment and builds a topic's scan context, over `attachContentType.ts` (the canonical
+  content type and what each type is), `attachText.ts` (the text extracted from an attachment's bytes), and
+  `attachTable.ts` (a table file's rows serialized, clipped, and laid out for the model).
+- `store.ts` is object storage: the uploads, the reads, the object keys, and `deleteStoredObject`. It
+  deletes through the bucket and clears the key's row in `pending_object_deletions`, and a failed delete
+  writes its failure to that row with the next try pushed back. A write that deletes or fails the row naming an object
+  records the key with `recordPendingObjectDeletions` in the same transaction, and an upload records its key first
+  with `recordPendingObjectDeletionBeforeUpload`, with a grace period, and clears it with `clearPendingObjectDeletion`
+  in the row insert's transaction. `retryPendingObjectDeletions.ts` retries the pending keys after the claimed sweep,
+  outside its claim, with a doubling backoff up to a day, and reports a key pending for over a day once. Resource
+  content deletes through `deleteStoredObject` with no pending row. Its key is fixed per Resource, and the next fetch
+  rewrites it.
   Before the sweep starts a Scan row that was opened and never dispatched, the sweep reads the row owner's key budget
   and marks the row failed with the budget reason if that budget is spent.
   A Scan that a user started by hand starts without the budget read.
@@ -20,8 +34,15 @@ with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep t
   worker's first Temporal connection, a podcast episode's publish, and the podcast episode smoke's chapters.
 
 - `workflows/` — Temporal workflows and activities; `ingest/` — one ingester per Source kind,
-  `ingester.ts` is the interface; `review/` — filtering and scoring; `chat/` — Carl's streamed
-  chat replies and their retrieval; `prompts/` — model-facing Markdown templates; `models.ts` —
+  `ingester.ts` is the interface; `review/` — filtering and scoring (`filter.ts` the relevance gate, `dedupe.ts` the
+  content hash and near-duplicate pass, `fetch.ts` the content fetch for a Resource to score, `score.ts` the scoring
+  and the finding writes, with `reviewTestFixtures.ts` beside their tests); `chat/` — Carl's streamed
+  chat replies (`index.ts` streams a reply, `chatMessages.ts` shapes a conversation into the model messages a turn
+  sends, and `chatPrompts.ts` builds each chat's system prompt from its template) and their retrieval (`retrieve.ts`,
+  whose topic ranking collects the topics' findings in a materialized common table expression and ranks that set,
+  `retrieveDocs.ts` for the docs sections a question about the app reads, and `retrieveTeam.ts` for a team chat room
+  turn's context); `prompts/` —
+  model-facing Markdown templates; `models.ts` —
   every model call, through LiteLLM; `litellm.ts` — the user keys that those calls bill to. A key is created at
   signup, or by `loadOrProvisionUserLiteLLMKey` before a user's first model call if that user has no key. A key is
   also replaced, read, and reset on the first of the month by the reset job. Every proxy admin call times out after
@@ -32,32 +53,32 @@ with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep t
   minute, and the sweep reports a queue nothing polls and a backlog older than 15 minutes, both through
   `describeScanQueue` in `temporalClient.ts`.
 - Every scan stage charges the Scan's one Budget (`budget.ts`); nothing spends outside it.
-- A completed Scan's email runs in its own workflow, `workflows/sendScanEmail.ts`, on the `scan-emails` queue that
-  the file names, with its own Worker in `temporal.ts`. The scan workflow starts it as a child workflow that outlives
-  the Scan's own, so a retrying email never holds up or fails the Scan. `notify.ts` plans a digest's batches, and each
+- A completed Scan's email runs in its own workflow, `workflows/sendScanEmail.ts`, on the `scan-emails` queue that the
+  file names, with its own Worker in `temporal.ts`. The scan workflow starts it as a child workflow that outlives the
+  Scan's own, so a retrying email never holds up or fails the Scan. `notify.ts` plans a digest's batches, and each
   activity sends one batch or one report and records the accepted sends with the Scan's id, so a retry never mails
-  anyone twice. `email.ts` sends through Resend, and every call from the api or the worker first takes a rate limit
-  slot shared in Redis, which one call holds for 200 milliseconds, so calls leave evenly spaced at five a second.
+  anyone twice. `scanEmailContent.ts` holds what a Scan's email says: the props the digest and the report render from,
+  and one subscriber's rendered message. `email.ts` sends through Resend, and every call from the api or the worker
+  first takes a rate limit slot shared in Redis, which one call holds for 200 milliseconds, so calls leave evenly spaced
+  at five a second.
 - A succeeded Scan's podcast episode is recorded in its own workflow, `workflows/recordPodcastEpisode.ts`, on the
   `episode-recordings` queue that the file names, with its own Worker in `temporal.ts` whose concurrency is set by
   `PODCAST_RECORDING_CONCURRENCY`. The scan workflow starts it as a child workflow that outlives the Scan's own, after
-  the email workflow, and the podcast episode workflow signals the Scan's email workflow once its outline is settled, so the email
-  can name the Podcast Episode. `speech.ts` sends one two-speaker call per chapter through LiteLLM's Gemini
+  the email workflow, and the podcast episode workflow signals the Scan's email workflow once its outline is settled, so
+  the email can name the Podcast Episode. `speech.ts` sends one two-speaker call per chapter through LiteLLM's Gemini
   pass-through. No audio passes between activities except through object storage. `shared/podcastEpisodes.ts` reads
-  `PODCAST_SPEECH_MODEL`, which defaults to `gemini-3.8-flash-tts`, and Podcast Episodes are off if it is set empty.
-  The steps are in `podcast/`:
-  - `planPodcastEpisode.ts` runs the checks that stop a recording before it spends anything, picks the Findings, and
-    marks a free Topic's episode short.
-  - `writePodcastEpisodeScript.ts` writes and saves the script. `generatePodcastEpisodeScript.ts` makes its outline and
-    segment calls on `score-model`. `podcastEpisodeOutline.ts` holds the outline's shape and checks each outline
-    draft, and `podcastEpisodeScript.ts` holds the segments' shape, checks each segment draft, and builds the script.
-  - `podcastEpisodeAudio.ts` records each chapter, stores its audio in object storage, and joins the chapters with
-    ffmpeg. `podcastEpisodeTheme.ts` mixes the theme song's intro and outro under the talk in that same pass, from the
-    clips committed in `assets/podcast/`, and shifts the chapter times by the intro's lead.
-  - `publishPodcastEpisode.ts` publishes or fails the row, and a short episode's publish replaces the Topic's earlier
-    short ones. `removePodcastEpisode.ts` removes a Podcast Episode and deletes its audio.
-  - `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the chapters that narrated its Resource, and
-    links those chapters to it. The review's `upsertFinding` calls both.
+  `PODCAST_SPEECH_MODEL`, which defaults to `gemini-3.8-flash-tts`, and Podcast Episodes are off if it is set empty. The
+  steps are in `podcast/`: - `planPodcastEpisode.ts` runs the checks that stop a recording before it spends anything,
+  picks the Findings, and marks a free Topic's episode short. - `writePodcastEpisodeScript.ts` writes and saves the
+  script. `generatePodcastEpisodeScript.ts` makes its outline and segment calls on `score-model`.
+  `podcastEpisodeOutline.ts` holds the outline's shape and checks each outline draft, and `podcastEpisodeScript.ts`
+  holds the segments' shape, checks each segment draft, and builds the script. - `podcastEpisodeAudio.ts` records each
+  chapter, stores its audio in object storage, and joins the chapters with ffmpeg. `podcastEpisodeTheme.ts` mixes the
+  theme song's intro and outro under the talk in that same pass, from the clips committed in `assets/podcast/`, and
+  shifts the chapter times by the intro's lead. - `publishPodcastEpisode.ts` publishes or fails the row, and a short
+  episode's publish replaces the Topic's earlier short ones. `removePodcastEpisode.ts` removes a Podcast Episode and
+  deletes its audio. - `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the chapters that narrated
+  its Resource, and links those chapters to it. The review's `upsertFinding` calls both.
 - `indexNow.ts` tells search engines a public Topic's urls changed. A missing `INDEXNOW_KEY` sends nothing, and a
   failed send never fails its caller.
 - A Resource's content hash is taken in the dedupe stage, over the title and snippet as they stand then.

@@ -1,6 +1,6 @@
-import type { TopicDraft } from "@shared/contracts"
 import { toTopicPath } from "@shared/seo"
 import { DEFAULT_SOURCES } from "@shared/sources"
+import type { TopicDraft } from "@shared/topicPayloads"
 import { X } from "lucide-react"
 import type { ReactNode } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"

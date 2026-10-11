@@ -2,23 +2,12 @@
 import { expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
-import * as schema from "./schema"
-import {
-	chatTurns,
-	EMBED_DIMENSIONS,
-	EMBED_MODEL_NAME,
-	findings,
-	oauthAccessTokens,
-	oauthApplications,
-	oauthConsents,
-	podcastEpisodeChapters,
-	podcastEpisodes,
-	resources,
-	subscriptions,
-	topicEmailSends,
-	topicPromptVersions,
-	topics,
-} from "./schema"
+import { schema } from "./index"
+import { chatTurns } from "./schema/chat"
+import { podcastEpisodeChapters, podcastEpisodes } from "./schema/podcast"
+import { EMBED_DIMENSIONS, EMBED_MODEL_NAME, findings, resources } from "./schema/scans"
+import { subscriptions, topicEmailSends, topicPromptVersions, topics } from "./schema/topics"
+import { oauthAccessTokens, oauthApplications, oauthConsents } from "./schema/users"
 
 // read the generated initial migration once for SQL-level assertions
 const migrationsDirectory = join(import.meta.dir, "migrations")
@@ -267,7 +256,7 @@ test("finding feedback and views are written and displayed, never read into rank
 	const readers = sourceFilesUnder(["api", "worker"])
 		.filter((file) => /findingFeedback|findingViews|ratedTeamId|ratedRole/.test(file.text))
 		.map((file) => file.path)
-	expect(readers.sort()).toEqual(["api/topic/findings.ts"])
+	expect(readers.sort()).toEqual(["api/topic/findingMarks.ts", "api/topic/findings.ts"])
 })
 
 // the chat room's chat messages are the team's conversation. it never reaches scoring, retrieval, or embeddings

@@ -1,6 +1,6 @@
 // a live smoke test for the resource-content object-storage round-trip
 // run it with: bun run smoke:store. needs the S3_* bucket config and Doppler secrets
-import { deleteResourceContent, getResourceContent, toResourceContentKey, uploadResourceContent } from "./store"
+import { deleteStoredObject, getResourceContent, toResourceContentKey, uploadResourceContent } from "./store"
 
 // upload content for a fake resource id, read it back, and check the key, size, and body all round-trip
 async function smokeTest(): Promise<number> {
@@ -30,7 +30,7 @@ async function smokeTest(): Promise<number> {
 		return allPassed ? 0 : 1
 	} finally {
 		// best-effort delete so a repeated run leaves nothing behind
-		await deleteResourceContent(toResourceContentKey(resourceId)).catch(() => {})
+		await deleteStoredObject(toResourceContentKey(resourceId)).catch(() => {})
 	}
 }
 

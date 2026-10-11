@@ -1,4 +1,4 @@
-import type { TopicDraftTeam } from "@shared/contracts"
+import type { TopicDraftTeam } from "@shared/topicPayloads"
 import { useNavigate } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { type ComponentProps, type ReactNode, useState } from "react"

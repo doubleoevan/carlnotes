@@ -1,7 +1,8 @@
 // podcast helper tests: each feed topic's latest podcast episode, limited to what the user may listen to
 import { afterEach, expect, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
-import { podcastEpisodeChapters, type topics } from "../../db/schema"
+import { podcastEpisodeChapters } from "../../db/schema/podcast"
+import type { topics } from "../../db/schema/topics"
 import { loadLatestPodcastEpisodes } from "./helpers"
 
 // the speech model, which turns podcast episodes on, and the secret that signs cover urls, put back after each test

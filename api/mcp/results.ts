@@ -1,8 +1,8 @@
-// what each mcp tool returns for a visitor or a user, paged under a client's result limit
+// what the mcp finding tools return for a visitor or a user, and the pages every tool result is packed into
 import type { TopicFinding } from "@shared/contracts"
-import { and, desc, eq, inArray } from "drizzle-orm"
+import { eq } from "drizzle-orm"
 import { db } from "../../db"
-import { sources, subscriptions, teamMembers, teamTopics, topics } from "../../db/schema"
+import { topics } from "../../db/schema/topics"
 import {
 	isBudgetRejection,
 	loadOrProvisionUserLiteLLMKey,
@@ -10,10 +10,9 @@ import {
 	SPENT_BUDGET_REJECTION,
 } from "../../worker"
 import { isAllowed } from "../authorization"
-import { toTopicSourceLabel } from "../tool/topicTools"
-import { loadTopicFindings, setBookmarked, setConsumed, setRating } from "../topic/findings"
-import { loadTopicAccessAndFindings } from "../topic/helpers"
-import { isPublicAndShown } from "../topic/permissions"
+import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
+import { setBookmarked, setConsumed, setRating } from "../topic/findingMarks"
+import { loadTopicFindings } from "../topic/findings"
 import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
 
 // the most characters that one page returns, under a client's limit on one result
@@ -22,10 +21,6 @@ export const MCP_PAGE_MAX_CHARS = 40_000
 // the most findings that one page returns, and the most a search ranks
 export const MCP_PAGE_SIZE = 20
 const MCP_SEARCH_LIMIT = 40
-
-// the most topics a list returns, and how many characters of each prompt it shows
-const MCP_TOPIC_LIST_LIMIT = 50
-const TOPIC_PROMPT_PREVIEW_CHARS = 300
 
 // what a visitor reads when a tool needs an account
 export const CONNECT_ACCOUNT_TEXT =
@@ -36,18 +31,6 @@ const SEARCH_NEEDS_ACCOUNT_TEXT =
 	"Search needs a connected CarlNotes account on this server. The feed read works without one."
 const PUBLIC_KEY_SPENT_TEXT =
 	"Carl's public search budget is spent for this month. Connect a CarlNotes account to keep searching, or read the feed as is."
-
-// a topic as list_topics returns it
-export type McpTopic = {
-	topicId: string
-	name: string
-	prompt: string
-	visibility: string
-	frequency: string
-	subscriberCount: number
-	// the topic's ready sources
-	sources: { sourceId: string; label: string }[]
-}
 
 // a finding as the feed and search return it
 export type McpFinding = {
@@ -67,53 +50,6 @@ export type McpFinding = {
 
 // one page of a result, with the cursor that continues it
 export type McpPage<Item> = { items: Item[]; nextCursor: string | null }
-
-// the topic columns a list reads
-const topicColumns = {
-	id: topics.id,
-	name: topics.name,
-	prompt: topics.prompt,
-	visibility: topics.visibility,
-	frequency: topics.frequency,
-	subscriberCount: topics.subscriberCount,
-}
-
-/**
- * Lists the topics a tool caller may read: the public ones plus what a user owns, subscribes to, or holds through a team,
- * or a bound server's one topic.
- */
-export async function listTopics(
-	toolCaller: ToolCaller,
-	routeTopicId: string | null,
-	cursor: string | null,
-): Promise<McpPage<McpTopic>> {
-	// return the bound topic alone, when the tool caller may see it
-	if (routeTopicId) {
-		const boundTopic = await loadVisibleTopic(toolCaller, routeTopicId)
-		if (!boundTopic) {
-			return { items: [], nextCursor: null }
-		}
-		const sourcesByTopic = await loadReadyTopicSourcesByTopic([boundTopic.id])
-		return { items: [toMcpTopic(boundTopic, sourcesByTopic.get(boundTopic.id) ?? [])], nextCursor: null }
-	}
-
-	// load the public topics with enough findings to be shown, most subscribed first
-	const publicRows = await db
-		.select(topicColumns)
-		.from(topics)
-		.where(isPublicAndShown)
-		.orderBy(desc(topics.subscriberCount), desc(topics.createdAt))
-		.limit(MCP_TOPIC_LIST_LIMIT)
-
-	// put a user's own topics first, then the public ones, each topic once
-	const ownRows = toolCaller.kind === "user" ? await loadUserTopicRows(toolCaller.userId) : []
-	const topicRows = [...new Map([...ownRows, ...publicRows].map((topicRow) => [topicRow.id, topicRow])).values()]
-
-	// add each topic's ready sources and pack the page
-	const sourcesByTopic = await loadReadyTopicSourcesByTopic(topicRows.map((topicRow) => topicRow.id))
-	const mcpTopics = topicRows.map((topicRow) => toMcpTopic(topicRow, sourcesByTopic.get(topicRow.id) ?? []))
-	return packPage(mcpTopics, fromCursor(cursor), MCP_PAGE_MAX_CHARS, MCP_PAGE_SIZE)
-}
 
 /**
  * Reads a topic's feed in stored relevance order, with a user's consumed and bookmark rows and the invite gate joined
@@ -300,94 +236,16 @@ export function toMcpFinding(toolCaller: ToolCaller, finding: TopicFinding): Mcp
 	return { ...mcpFinding, isConsumed: finding.isConsumed, isBookmarked: finding.isBookmarked }
 }
 
-// load the topic, or null when it is missing or the tool caller may not see it
-async function loadVisibleTopic(toolCaller: ToolCaller, topicId: string): Promise<typeof topics.$inferSelect | null> {
+/** Loads the topic, or null if it is missing or the tool caller may not see it. */
+export async function loadVisibleTopic(
+	toolCaller: ToolCaller,
+	topicId: string,
+): Promise<typeof topics.$inferSelect | null> {
 	const [topic] = await db.select().from(topics).where(eq(topics.id, topicId))
 	if (!topic || !(await isAllowed(toolCaller.kind === "user" ? toolCaller.userId : null, "topic:view", topic))) {
 		return null
 	}
 	return topic
-}
-
-// load the topics a user owns, subscribes to, or holds through a team, all at once
-async function loadUserTopicRows(userId: string): Promise<McpTopicRow[]> {
-	const [ownedRows, subscribedRows, owningTeamRows, sharedTeamRows] = await Promise.all([
-		db.select(topicColumns).from(topics).where(eq(topics.ownerId, userId)),
-		db
-			.select(topicColumns)
-			.from(topics)
-			.innerJoin(
-				subscriptions,
-				and(
-					eq(subscriptions.topicId, topics.id),
-					eq(subscriptions.subscriberUserId, userId),
-					eq(subscriptions.isActive, true),
-				),
-			),
-		db
-			.select(topicColumns)
-			.from(topics)
-			.innerJoin(
-				teamMembers,
-				and(eq(teamMembers.teamId, topics.teamId), eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)),
-			),
-		db
-			.select(topicColumns)
-			.from(teamTopics)
-			.innerJoin(topics, eq(topics.id, teamTopics.topicId))
-			.innerJoin(
-				teamMembers,
-				and(eq(teamMembers.teamId, teamTopics.teamId), eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)),
-			),
-	])
-	return [...ownedRows, ...subscribedRows, ...owningTeamRows, ...sharedTeamRows]
-}
-
-// a topic row with the columns a list reads
-type McpTopicRow = Pick<
-	typeof topics.$inferSelect,
-	"id" | "name" | "prompt" | "visibility" | "frequency" | "subscriberCount"
->
-
-// shape a topic for the list, with its prompt clipped to a preview and its ready sources
-function toMcpTopic(topicRow: McpTopicRow, topicSources: McpTopic["sources"]): McpTopic {
-	return {
-		topicId: topicRow.id,
-		name: topicRow.name,
-		prompt: toPromptPreview(topicRow.prompt),
-		visibility: topicRow.visibility,
-		frequency: topicRow.frequency,
-		subscriberCount: topicRow.subscriberCount,
-		sources: topicSources,
-	}
-}
-
-// the prompt clipped to its preview, ending in an ellipsis when it was clipped
-function toPromptPreview(prompt: string): string {
-	return prompt.length > TOPIC_PROMPT_PREVIEW_CHARS ? `${prompt.slice(0, TOPIC_PROMPT_PREVIEW_CHARS)}…` : prompt
-}
-
-// load each topic's ready sources in one query, labeled the way the tools name them
-async function loadReadyTopicSourcesByTopic(topicIds: string[]): Promise<Map<string, McpTopic["sources"]>> {
-	if (topicIds.length === 0) {
-		return new Map()
-	}
-	const topicSourceRows = await db
-		.select({ id: sources.id, topicId: sources.topicId, kind: sources.kind, config: sources.config })
-		.from(sources)
-		.where(and(inArray(sources.topicId, topicIds), eq(sources.status, "ready")))
-
-	// group the sources by topic, each with its label
-	const sourcesByTopic = new Map<string, McpTopic["sources"]>()
-	for (const topicSourceRow of topicSourceRows) {
-		const topicSources = sourcesByTopic.get(topicSourceRow.topicId) ?? []
-		topicSources.push({
-			sourceId: topicSourceRow.id,
-			label: toTopicSourceLabel(topicSourceRow.kind, topicSourceRow.config),
-		})
-		sourcesByTopic.set(topicSourceRow.topicId, topicSources)
-	}
-	return sourcesByTopic
 }
 
 /**

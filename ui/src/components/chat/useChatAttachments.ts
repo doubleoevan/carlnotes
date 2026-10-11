@@ -5,10 +5,10 @@ import {
 	CHAT_MAX_ATTACHMENTS,
 	CHAT_PDF_DATA_CHARS,
 	CHAT_VIDEO_DATA_CHARS,
-	type ChatAttachment,
 	clipAttachmentText,
 	type KeptChatAttachment,
 } from "@shared/contracts"
+import type { ChatAttachment } from "@shared/payloads"
 import { type Dispatch, type SetStateAction, useRef, useState } from "react"
 import { toast } from "sonner"
 import { sendDeleteKeptAttachment } from "@/clients/chatClient"

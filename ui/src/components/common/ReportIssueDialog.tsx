@@ -1,4 +1,5 @@
-import { FLAG_REASON_MAX_CHARS, type FlagContentPayload } from "@shared/contracts"
+import { FLAG_REASON_MAX_CHARS } from "@shared/contracts"
+import type { FlagContentPayload } from "@shared/payloads"
 import { useState } from "react"
 import { toast } from "sonner"
 import { sendFlagContent } from "@/clients/flagContentClient"

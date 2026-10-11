@@ -5,7 +5,8 @@ import type { TopicInviteBadge } from "@shared/contracts"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
-import { invites, users } from "../../db/schema"
+import { invites } from "../../db/schema/invites"
+import { users } from "../../db/schema/users"
 import { loadInvitedTopicSubscriptions } from "../activity"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import {
@@ -14,7 +15,7 @@ import {
 	type InviteAcceptResult,
 	toInviteProperties,
 	toInviteRejection,
-} from "./invites"
+} from "./inviteAcceptance"
 
 /**
  * Whether this user is the invitation's recipient: an address they verified, or the account a username resolved to.

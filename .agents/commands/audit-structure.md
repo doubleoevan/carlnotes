@@ -214,7 +214,7 @@ Check for:
      selector returns already-scored Findings whose context changed, so "unscored" named only some of them)
    - `maxResults` and `maxResultsOptions` (now `maxTopicFindings` and `maxTopicFindingsOptions`, since what a scan keeps are
      Findings). the `max_results` column and its `topics_max_results_allowed` check keep their names, mapped in
-     `db/schema.ts`, so no migration moved
+     `db/schema/topics.ts`, so no migration moved
    - `api/mcp/caller.ts` (now `api/mcp/toolCaller.ts`), and with it `Caller`, `resolveCaller`, the `mcpCaller` context
      variable, `RateLimitCaller`, `toRateLimitCaller`, and `callerRateLimiter` (now `ToolCaller`, `resolveToolCaller`,
      `toolCaller`, `RateLimitToolCaller`, `toRateLimitToolCaller`, and `toolCallerRateLimiter`). the plain word for
@@ -253,6 +253,13 @@ Check for:
    - `countScanQueuePollers` (now `describeScanQueue` in `worker/temporalClient.ts`) and `reportUnpolledScanQueue`
      (now `reportScanQueue` in `worker/schedule.ts`)
    - `toReportedPath` and its route shape tables in `ui/src/lib/visitAnalytics.ts` (now `shared/reportedPath.ts`)
+   - `deleteAttachment` and `deleteResourceContent` (now `deleteStoredObject` and `deleteStoredObjects` in
+     `worker/store.ts`, the one delete path, beside `recordPendingObjectDeletions`), `deleteStoredChatAttachments`
+     (now `loadChatAttachmentObjectKeys` in `api/chat/attachments.ts`), and `deleteTopicPodcastEpisodeAudio` and
+     `deletePodcastEpisodeAudio` (now `loadTopicPodcastEpisodeAudioKeys` and `toPodcastEpisodeAudioKeys` in
+     `worker/podcast/removePodcastEpisode.ts`)
+   - `readQueryCount` (now `readRequestCounts` in `db/queryTracing.ts`), and `topicSectionIdCache` with its
+     `loadedAt` (now the `topic-section-ids` Redis key in `api/topic/feeds.ts`)
    - the `@opentelemetry/sdk-node` dependency and its `NodeSDK` in `worker/telemetry.ts` (now a `NodeTracerProvider`
      from `@opentelemetry/sdk-trace-node`)
    - `loadUserAccess` in `api/authorization.ts` (now the one in `db/quotas.ts`, which `api/authorization.ts` re-exports)
@@ -386,6 +393,87 @@ Check for:
    - `resourceHandlers`, `topicHandlers`, and the `handlers` prop of `TopicFindingsSection` (now `topicFeedHandlers`,
      the name of their `TopicFeedHandlers` type, in every component that passes them), and `stopResult` (now
      `stopManualScanResult`)
+   - `db/schema.ts` (now one file per domain under `db/schema/`: `users.ts`, `topics.ts`, `scans.ts`, `teams.ts`,
+     `invites.ts`, `chat.ts`, `notes.ts`, `podcast.ts`, `billing.ts`, `releases.ts`, `storage.ts`, and `columns.ts` for
+     the pgEnums and column helpers), with `db/index.ts` spreading them into the one `schema` object
+   - the `*Payload` zod schemas and the types inferred from them in `shared/contracts.ts`, with `EMPTY_TOPIC_DRAFT`
+     and `topicSettingsShape` (now `shared/payloads.ts`; `contracts.ts` keeps the response shapes and the constants)
+   - the long-file splits of 2026-10-10, each moved whole: `deleteTopic` and `loadTopicObjectKeys` from
+     `api/topic/topics.ts` (now `api/topic/deleteTopic.ts`) and `topicsRoute` from it (now `api/topic/topicsRoute.ts`);
+     `loadTopicFeedData` and the `loadFeed*Rows` reads from `api/topic/feeds.ts` (now `api/topic/feedData.ts`);
+     `loadChatRoom` from `api/chat/room.ts` (now `api/chat/roomAccess.ts`) and `clearChatRoom`,
+     `deleteChatRoomMessage`, `deleteChatRoomAttachment`, `downloadChatRoomAttachment`, and
+     `canDeleteChatRoomMessage` from it (now `api/chat/roomDeletes.ts`); `loadKeptTopicAttachments`,
+     `loadTopicChatTurnAttachments`, `toAttachmentsByChatTurnId`, `loadDownloadableChatAttachment`, and
+     `streamVideoAttachment` from `api/chat/attachments.ts` (now `api/chat/chatAttachmentReads.ts`); `deleteTeam` and
+     `updateTeamLeader` from `api/team/teams.ts` (now `api/team/deleteTeam.ts`); `searchTeams`, `toTeamSearchQuery`,
+     and `escapeLikePattern` from `api/team/helpers.ts` (now `api/team/search.ts`); `extractText`,
+     `toCanonicalContentType`, `isImageAttachmentType`, `isTableFileType`, `AttachmentValidationError`, `toTableText`,
+     and `toClippedTableText` from `worker/attach.ts` (now `worker/attachText.ts`, `worker/attachContentType.ts`, and
+     `worker/attachTable.ts`); `failStaleScans`, `toStaleScanFilter`, and `staleScanWindowMs` from
+     `worker/schedule.ts` (now `worker/staleScans.ts`); `retrieveDocsBlock` and `toDocsBlock` from
+     `worker/chat/retrieve.ts` (now `worker/chat/retrieveDocs.ts`) and `retrieveTeamChatContext` from it (now
+     `worker/chat/retrieveTeam.ts`); `REDIS_CLIENT_OPTIONS` and `RedisConnectionClient` from `db/redis.ts` (now
+     `db/redisConnection.ts`); the fake Redis server from `db/redis.test.ts` (now `db/redisFakeServer.ts`);
+     `teamsRoute` from `api/team/teams.ts` (now `api/team/teamsRoute.ts`); `loadTeamPage` from `api/team/helpers.ts`
+     (now `api/team/teamPage.ts`) and `loadTeamsPage` from it (now `api/team/teamsPage.ts`); `createTopic`,
+     `updateTopic`, and `notifyIndexNowOfTopicChange` from `api/topic/topics.ts` (now `api/topic/saveTopic.ts`);
+     `chatRoomRoute`, `toBeforeChatMessageId`, and `toChatMessagePage` from `api/chat/room.ts` (now
+     `api/chat/roomRoute.ts`)
+   - the long-file splits of 2026-10-11, each moved whole: `addTopicSource`, `removeTopicSource`,
+     `toTopicSourceCostDelta`, and `toTopicSourceLabel` from `api/tool/topicTools.ts` (now
+     `api/tool/topicSourceTools.ts`) and `createTopicFromDraft` and `suggestTopicDraftSources` from it (now
+     `api/tool/topicDraftTools.ts`); `toNewTopicChatTools`, `toSuggestTopicSourcesTool`, `toCreateTopicText`, and
+     `TEAM_MISSING_TEXT` from `api/tool/chatTools.ts` (now `api/tool/newTopicChatTools.ts`); `isTakingDailySlot`,
+     `startFirstScan`, and `toNewSourceRow` from `api/topic/helpers.ts` (now `api/topic/saveHelpers.ts`),
+     `loadTeamTopicOptions` from it (now `api/topic/teamTopicOptions.ts`), and `loadTopicAccessAndFindings` from it
+     (now `api/topic/accessibleFindings.ts`); `setRating`, `setBookmarked`, `setConsumed`, and `recordView` from
+     `api/topic/findings.ts` (now `api/topic/findingMarks.ts`); `toJsonLdTag`, `toCreativeWorkLd`, and
+     `toFindingListLd` from `api/seo.ts` (now `api/jsonLd.ts`); `authorizeChatTurn`, `authorizeTeamChatTurn`, and
+     `authorizeNewTopicChatTurn` from `api/chat/privateChat.ts` (now `api/chat/chatTurnAuthorization.ts`) and
+     `streamChatTurn` from it (now `api/chat/chatTurnStream.ts`); `toTopicFilter` from `api/chat/roomTurns.ts` (now
+     `api/chat/roomAccess.ts`) and `toModelRoomQuestion` from it (now `api/chat/roomQuestion.ts`); `listTopics` from
+     `api/mcp/results.ts` (now `api/mcp/topicResults.ts`); `acceptInviteToken`, `acceptTopicInvite`,
+     `acceptTeamInvite`, and `toInviteProperties` from `api/invite/invites.ts` (now `api/invite/inviteAcceptance.ts`);
+     `loadAdminUsers`, `loadAdminTeams`, `loadAdminTotals`, and `computeContributionCents` from `api/admin.ts` (now
+     `api/adminConsole.ts`); `loadTopics`, `toActivityTopics`, and `toCents` from `api/activity.ts` (now
+     `api/activityTopics.ts`); `mergeNoteYdoc`, `toNoteSnapshot`, `emptyNoteYdoc`, `toNoteHtml`, and
+     `sanitizeNoteHtml` from `api/note/notes.ts` (now `api/note/noteYdoc.ts`) and `loadNotesPayload` and `createNote`
+     from it (now `api/note/notePayloads.ts`); `sendResetPasswordEmail`, `sendChangeEmailConfirmationEmail`, and
+     `sendVerificationEmail` from `api/auth.ts` (now `api/authEmails.ts`), `signGateToken`, `verifyTurnstileToken`,
+     `verifyGateToken`, and `GATE_COOKIE_NAME` from it (now `api/signupGate.ts`), and `checkTrustedProxies` and
+     `toTrustedProxiesWarning` from it (now `api/trustedProxies.ts`); `loadAccessiblePodcastEpisode`,
+     `loadPublishedPodcastEpisode`, and `loadPublishedPodcastEpisodeRows` from `api/podcast/helpers.ts` (now
+     `api/podcast/podcastEpisodeRows.ts`); `useNewTopicDraft`, `useChatConversationLoad`, and `useLinkPreviewRefresh`
+     from `ui/src/components/chat/useTopicChat.ts` (now their own files beside it) and `ChatTurn` from
+     `ui/src/components/chat/ChatMessages.tsx` (now `ui/src/components/chat/chatTurns.ts`);
+     `toChatMentionSuggestions` from `ui/src/components/chat/ChatRoomComposer.tsx` (now `MentionSuggestionList.tsx`)
+     and `toChangedMentionChatMessage` from it (now `ReplyToDropdown.tsx`); `toTimeAgoLabel`, `ChatVideo`,
+     `CopyButton`, and `ModelThinkingBubble` from `ChatMessages.tsx` (now `ChatMessageParts.tsx`) and
+     `ChatMessageAuthor` from it (now `ChatTurnBlock.tsx`); the smoke sections and fixtures of `invites.smoke.ts`,
+     `teams.smoke.ts`, `room.smoke.ts`, `mcp.smoke.ts`, `topicTools.smoke.ts`, and `podcastEpisodes.smoke.ts` (now
+     `*SmokeSections.ts` and `*SmokeFixtures.ts` beside each); and the test renames `api/invite/invites.test.ts`
+     (now `inviteAcceptance.test.ts`), `api/note/notes.test.ts` (now `noteYdoc.test.ts`), `api/topic/helpers.test.ts`
+     (now `saveHelpers.test.ts`), and `ui/src/components/chat/ChatRoomComposer.test.ts` (now
+     `MentionSuggestionList.test.ts` and `ReplyToDropdown.test.ts`);
+     `ChatHistoryTurn`, `ChatTurnInput`, `toModelMessages`, `toConsentStep`, `isTopicEditProposed`, and `isConsent`
+     from `worker/chat/index.ts` (now `worker/chat/chatMessages.ts`) and `buildTopicChatPrompt`,
+     `buildNewTopicChatPrompt`, `buildTeamChatPrompt`, and `toEditTopicBlock` from it (now
+     `worker/chat/chatPrompts.ts`);
+     `dedupeResources`, `DedupeKeys`, `hasNearDuplicateKey`, `toContentHash`, `normalizeText`, and `isNearDuplicate`
+     from `worker/review/filter.ts` (now `worker/review/dedupe.ts`); `isSnippetComplete`, `toPageTitleField`, and
+     `toFetchedContentFields` from `worker/review/score.ts` (now `worker/review/fetch.ts`); the email props builders of
+     `worker/notify.ts` (now `worker/scanEmailContent.ts`); and the test splits `worker/chat/index.test.ts` (now beside
+     `chatPrompts.test.ts` and `chatMessages.test.ts`), `worker/schedule.test.ts` (now beside `staleScans.test.ts` and
+     `scanQueue.test.ts`), `worker/litellm.test.ts` (now beside `resetMonthlyBudgets.test.ts` over
+     `litellmTestFixtures.ts`), and `worker/review/filter.test.ts` and `score.test.ts` (now beside `dedupe.test.ts` and
+     `fetch.test.ts`); the topic payloads (`topicDraftPayload`, `TopicDraft`, `EMPTY_TOPIC_DRAFT`, `createTopicPayload`,
+     `updateTopicPayload`, `updateTopicFieldsPayload`, `proposeTopicEditPayload`, `addTopicSourcePayload`,
+     `suggestSourcesPayload`, and their siblings) from `shared/payloads.ts` (now `shared/topicPayloads.ts`); and
+     `ChatRoomMessageBubble` from `ui/src/components/chat/ChatRoomMessages.tsx` (now `ChatRoomMessageBubble.tsx`)
+   - `SERVER_RENDERED_PREFIXES` in `ui/src/components/common/AnchorLink.tsx` (now `SERVER_PATH_PREFIXES`, with `/api`
+     among them), and the bare `<a>` for an `/api` download or image link with its "plain anchor" comment (now
+     `AnchorLink`, which renders a server path as a plain anchor and passes `download`, `target`, and `rel` through)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

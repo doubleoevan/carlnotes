@@ -3,7 +3,11 @@ import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
 import { and, eq, inArray, or, type SQLWrapper, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { memoizeInRequest } from "../../db/requestMemo"
-import { findings, invites, scans, subscriptions, teamMembers, teamTopics, topics, users } from "../../db/schema"
+import { invites } from "../../db/schema/invites"
+import { findings, scans } from "../../db/schema/scans"
+import { teamMembers, teamTopics } from "../../db/schema/teams"
+import { subscriptions, topics } from "../../db/schema/topics"
+import { users } from "../../db/schema/users"
 
 // a topic row, the shape every check in this file takes
 type TopicRow = typeof topics.$inferSelect

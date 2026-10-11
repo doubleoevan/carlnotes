@@ -2,7 +2,8 @@
 // so both halves stay proven. run it with: bun run smoke:x. it needs TWITTERAPI_IO_API_KEY set
 import { eq } from "drizzle-orm"
 import { db } from "../db"
-import { sources, topics, users } from "../db/schema"
+import { sources, topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
 import type { Source } from "./ingest/ingester"
 import { readHandle, xIngester } from "./ingest/x"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"

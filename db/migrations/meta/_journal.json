@@ -708,6 +708,20 @@
       "when": 1791547024259,
       "tag": "0100_stormy_patch",
       "breakpoints": true
+    },
+    {
+      "idx": 101,
+      "version": "7",
+      "when": 1791591258262,
+      "tag": "0101_flowery_ultron",
+      "breakpoints": true
+    },
+    {
+      "idx": 102,
+      "version": "7",
+      "when": 1791591692733,
+      "tag": "0102_steep_ender_wiggin",
+      "breakpoints": true
     }
   ]
 }

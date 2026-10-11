@@ -2,19 +2,23 @@
 
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
-import { inviteAccessPayload } from "@shared/contracts"
 import { reportError } from "@shared/monitoring"
+import { inviteAccessPayload } from "@shared/payloads"
 import { and, asc, count, eq, inArray, ne } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
-import { teamMembers, teams, topics, users } from "../db/schema"
-import { deleteAttachment, deleteLiteLLMKey } from "../worker"
+import { teamMembers } from "../db/schema/teams"
+import { topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
+import { deleteLiteLLMKey, deleteStoredObjects, recordPendingObjectDeletions } from "../worker"
 import { isAllowed } from "./authorization"
 import { cancelUserSubscription } from "./billing"
-import { deleteStoredChatAttachments } from "./chat/attachments"
+import { loadChatAttachmentObjectKeys } from "./chat/chatAttachmentReads"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
+import { purgeEdgeCacheTagAfterDeletion, toTeamAvatarCacheTag, toUserAvatarCacheTag } from "./edgeCache"
 import { refreshSessionUser, revokeUserSessions } from "./sessions"
-import { deleteTopic } from "./topic/topics"
+import { deleteTeamRow } from "./team/deleteTeam"
+import { deleteTopic } from "./topic/deleteTopic"
 
 // the error that both close routes send with a 503 while Redis is unreachable
 const ACCOUNT_CLOSE_UNAVAILABLE_TEXT = "closing an account is unavailable for a moment. try again"
@@ -52,16 +56,13 @@ async function setNewTeamLeaders(userId: string): Promise<void> {
 			continue
 		}
 
-		// nobody else is on the team, so it is deleted with the account. its topics return to their topic owners
-		const [deletedTeamRow] = await db
-			.delete(teams)
-			.where(eq(teams.id, teamId))
-			.returning({ avatarKey: teams.avatarKey })
+		// nobody else is on the team, so it is deleted with the account, its avatar and chat room attachment keys
+		// recorded in the same transaction. its topics return to their topic owners
+		const deletedTeamObjectKeys = await db.transaction((transaction) => deleteTeamRow(transaction, teamId))
 
-		// delete the team's avatar image too. a failed delete leaves an unused file, and the account still closes
-		if (deletedTeamRow?.avatarKey) {
-			await deleteAttachment(deletedTeamRow.avatarKey)
-		}
+		// delete the team's objects too, and purge its avatar from the edge
+		await deleteStoredObjects(deletedTeamObjectKeys)
+		await purgeEdgeCacheTagAfterDeletion(toTeamAvatarCacheTag(teamId))
 	}
 }
 
@@ -86,7 +87,7 @@ export async function deleteUser(
 	await setNewTeamLeaders(targetUserId)
 
 	const [user] = await db
-		.select({ id: users.id, avatarKey: users.avatarKey, litellmVirtualKey: users.litellmVirtualKey })
+		.select({ id: users.id, litellmVirtualKey: users.litellmVirtualKey })
 		.from(users)
 		.where(eq(users.id, targetUserId))
 	if (!user) {
@@ -105,14 +106,6 @@ export async function deleteUser(
 		await deleteTopic(actingUserId, topic.id, analyticsProperties)
 	}
 
-	// delete everything kept in chat, including on other people's topics, which the deletes above never reached
-	await deleteStoredChatAttachments(targetUserId)
-
-	// delete the avatar object if they uploaded one
-	if (user.avatarKey) {
-		await deleteAttachment(user.avatarKey)
-	}
-
 	// sign out again any session cached while the account was closing.
 	// the steps above cannot run twice, so a failed sign-out is reported and the close goes on
 	const isUserSessionsRevokedAgain = await revokeUserSessions(targetUserId)
@@ -120,11 +113,23 @@ export async function deleteUser(
 		reportError(new Error("could not sign a closing account out of redis"), "api-route", { userId: targetUserId })
 	}
 
-	// delete the user row which cascades to sessions, accounts, subscriptions, bookmarks, and the rest.
-	const [deletedUserRow] = await db
-		.delete(users)
-		.where(eq(users.id, targetUserId))
-		.returning({ litellmVirtualKey: users.litellmVirtualKey })
+	// record the keys of everything kept in chat, on any topic, and of the avatar, then delete the user row in one
+	// transaction, so the keys survive the cascade
+	const { deletedUserRow, objectKeys } = await db.transaction(async (transaction) => {
+		const chatAttachmentObjectKeys = await loadChatAttachmentObjectKeys({ userId: targetUserId }, transaction)
+		const [deletedUserRow] = await transaction
+			.delete(users)
+			.where(eq(users.id, targetUserId))
+			.returning({ litellmVirtualKey: users.litellmVirtualKey, avatarKey: users.avatarKey })
+
+		// every key as pending
+		const objectKeys = [...chatAttachmentObjectKeys, ...(deletedUserRow?.avatarKey ? [deletedUserRow.avatarKey] : [])]
+		await recordPendingObjectDeletions({ handle: transaction, objectKeys })
+		return { deletedUserRow, objectKeys }
+	})
+
+	// delete the objects once the row is gone
+	await deleteStoredObjects(objectKeys)
 
 	// delete a LiteLLM key that was stored while the account was closing.
 	// a failed delete is reported, and the close goes on
@@ -134,6 +139,9 @@ export async function deleteUser(
 			reportError(error, "api-route", { userId: targetUserId })
 		})
 	}
+
+	// purge the account's avatar from the edge now that the row is gone
+	await purgeEdgeCacheTagAfterDeletion(toUserAvatarCacheTag(targetUserId))
 
 	// the row is gone, so this analytics event is the only record of who closed it
 	trackEvent("account_deleted", actingUserId, {

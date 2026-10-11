@@ -1,4 +1,5 @@
-// the per-request query count and the span of each statement a request sends, kept in the request's async context
+// the per-request query count, cache reads, and the span of each statement a request sends, kept in the request's
+// async context
 import { AsyncLocalStorage } from "node:async_hooks"
 import type { Pool, PoolClient } from "@neondatabase/serverless"
 import { type Span, startQuerySpan } from "@shared/monitoring"
@@ -7,24 +8,88 @@ import { clearRequestMemo } from "./requestMemo"
 // a statement that changes rows: an insert, an update, or a delete, alone or inside a with statement
 const WRITE_STATEMENT_PATTERN = /^\s*(insert|update|delete)\b|^\s*with\b[\s\S]*\b(insert|update|delete)\b/i
 
-// how many statements one request has sent, and the request's span that their spans are parented to
-type RequestQueries = { queryCount: number; requestSpan: Span | undefined }
+// how many statements one request has sent, its cache hits and misses with the keys that missed,
+// and the request's span that the statement spans are parented to
+type RequestCounts = {
+	queryCount: number
+	cacheHitCount: number
+	cacheMissCount: number
+	missedCacheKeys: string[]
+	requestSpan: Span | undefined
+}
 
-// the running request's query count, open for as long as the request runs
-const requestQueryStore = new AsyncLocalStorage<RequestQueries>()
+// one cache read to count: a hit, or a miss with its key
+export type CountCacheReadOptions = { isHit: boolean; key: string }
+
+// the counts outside any request
+const NO_REQUEST_COUNTS: RequestCounts = {
+	queryCount: 0,
+	cacheHitCount: 0,
+	cacheMissCount: 0,
+	missedCacheKeys: [],
+	requestSpan: undefined,
+}
+
+// the running request's counts, open for as long as the request runs
+const requestQueryStore = new AsyncLocalStorage<RequestCounts>()
 
 /**
- * Runs a request with its own query count, and parents the span of each statement it sends to the request's span.
+ * Runs a request with its own query and cache read counts, and parents the span of each statement it sends to the
+ * request's span.
  */
 export function runWithQueryCount<Result>(requestSpan: Span | undefined, runRequest: () => Result): Result {
-	return requestQueryStore.run({ queryCount: 0, requestSpan }, runRequest)
+	return requestQueryStore.run(
+		{ queryCount: 0, cacheHitCount: 0, cacheMissCount: 0, missedCacheKeys: [], requestSpan },
+		runRequest,
+	)
 }
 
 /**
- * Returns how many statements the running request has sent so far, or zero outside a request.
+ * Returns the running request's counts so far: its statements, its cache hits and misses, and the keys that missed.
+ * Outside a request every count is zero.
  */
-export function readQueryCount(): number {
-	return requestQueryStore.getStore()?.queryCount ?? 0
+export function readRequestCounts(): Omit<RequestCounts, "requestSpan"> {
+	// return the counts without the span
+	const { queryCount, cacheHitCount, cacheMissCount, missedCacheKeys } =
+		requestQueryStore.getStore() ?? NO_REQUEST_COUNTS
+	return { queryCount, cacheHitCount, cacheMissCount, missedCacheKeys }
+}
+
+/**
+ * Counts one cache read toward the running request, with the key of a miss. Outside a request nothing is counted.
+ */
+export function countCacheRead({ isHit, key }: CountCacheReadOptions): void {
+	// count nothing outside a request
+	const requestQueries = requestQueryStore.getStore()
+	if (!requestQueries) {
+		return
+	}
+
+	// count a hit, or a miss with its key
+	if (isHit) {
+		requestQueries.cacheHitCount += 1
+		return
+	}
+	requestQueries.cacheMissCount += 1
+	requestQueries.missedCacheKeys.push(key)
+}
+
+/**
+ * Counts one statement toward the running request, after clearing the request's memo if the statement writes.
+ * Returns the request's counts, or null outside a request.
+ */
+export function countRequestStatement(statement: string): RequestCounts | null {
+	// a write clears the request's memo, so the request's next read of the user's access or a topic role goes to the database
+	if (WRITE_STATEMENT_PATTERN.test(statement)) {
+		clearRequestMemo()
+	}
+
+	// count the statement toward the running request
+	const requestQueries = requestQueryStore.getStore()
+	if (requestQueries) {
+		requestQueries.queryCount += 1
+	}
+	return requestQueries ?? null
 }
 
 /**
@@ -49,19 +114,10 @@ export function traceQueries(pool: Pool): void {
 function traceClientQueries(client: PoolClient): void {
 	const sendQuery = client.query.bind(client) as (...queryArguments: unknown[]) => unknown
 	client.query = ((...queryArguments: unknown[]) => {
-		// a write clears the request's memo, so the request's next read of the user's access or a topic role goes to the database
+		// count the statement, and send it untraced outside any request, such as a Scan's, or without a request span
 		const statement = toStatement(queryArguments[0])
-		if (WRITE_STATEMENT_PATTERN.test(statement)) {
-			clearRequestMemo()
-		}
-
-		// a statement outside any request, such as a Scan's, is neither counted nor traced
-		const requestQueries = requestQueryStore.getStore()
-		if (!requestQueries) {
-			return sendQuery(...queryArguments)
-		}
-		requestQueries.queryCount += 1
-		if (!requestQueries.requestSpan) {
+		const requestQueries = countRequestStatement(statement)
+		if (!requestQueries?.requestSpan) {
 			return sendQuery(...queryArguments)
 		}
 

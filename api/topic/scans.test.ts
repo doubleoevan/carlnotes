@@ -4,10 +4,10 @@ import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import { SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
 import { Hono } from "hono"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
-import { topics } from "../../db/schema"
+import { topics } from "../../db/schema/topics"
 import * as litellm from "../../worker/litellm"
 import * as scan from "../../worker/scan"
-import * as schedule from "../../worker/schedule"
+import * as staleScans from "../../worker/staleScans"
 import * as authorization from "../authorization"
 import * as billing from "../billing"
 import type { AppEnv } from "../currentUser"
@@ -54,7 +54,7 @@ function stubOwnedTopicRows(): void {
 // the spies on the scan start, the stale scan close-out, and the overage bill
 type ManualScanSpies = {
 	startTopicScanSpy: Mock<typeof scan.startTopicScan>
-	failStaleScansSpy: Mock<typeof schedule.failStaleScans>
+	failStaleScansSpy: Mock<typeof staleScans.failStaleScans>
 	reportManualScanOverageSpy: Mock<typeof billing.reportManualScanOverage>
 }
 
@@ -73,7 +73,7 @@ function spyOnManualScan(isOverage: boolean): ManualScanSpies {
 			scan: { id: "scan-1" } as never,
 			whenFinished: async () => {},
 		}),
-		failStaleScansSpy: spyOn(schedule, "failStaleScans").mockResolvedValue(0),
+		failStaleScansSpy: spyOn(staleScans, "failStaleScans").mockResolvedValue(0),
 		reportManualScanOverageSpy: spyOn(billing, "reportManualScanOverage").mockResolvedValue(undefined),
 	}
 }

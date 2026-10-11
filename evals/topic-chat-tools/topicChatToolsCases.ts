@@ -1,7 +1,7 @@
 // the topic chat tools eval's cases. a case is one turn of the topic chat for a user who may edit the topic,
 // in the solo chat or the team room, and the tool call that the turn has to make, if any. the topic is made up
-import type { ChatToolCall } from "@shared/contracts"
-import type { ChatHistoryTurn } from "../../worker/chat"
+import type { ChatToolCall } from "@shared/payloads"
+import type { ChatHistoryTurn } from "../../worker/chat/chatMessages"
 import type { ChatContext } from "../../worker/chat/retrieve"
 import { BURRNOTES_TOPIC_SOURCE_ID, TOPIC_CHAT_CONTEXT } from "../topic-chat/topicChatCases"
 

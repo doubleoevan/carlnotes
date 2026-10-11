@@ -1,5 +1,5 @@
 // the link-preview card that a pasted podcast episode url renders as
-import type { PodcastEpisodeRow } from "../podcast/helpers"
+import type { PodcastEpisodeRow } from "../podcast/podcastEpisodeRows"
 import { PODCAST_COVER_TEMPLATE_VERSION, toCachedPodcastCoverJpeg } from "./podcastCover"
 import { CARD_MUTED_COLOR, type CardElement, PREVIEW_TEMPLATE_VERSION, toBrandIcon, toCardPng } from "./previewImage"
 

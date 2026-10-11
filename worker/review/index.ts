@@ -1,13 +1,15 @@
 // review turns a Scan's discovered Resources into topic findings
 import { and, desc, eq, inArray, isNotNull, max, or, sql } from "drizzle-orm"
 import { db } from "../../db"
-import { bookmarks, findings, resources, type scans, teamMembers, teamTopics, topics } from "../../db/schema"
+import { bookmarks, findings, resources, type scans } from "../../db/schema/scans"
+import { teamMembers, teamTopics } from "../../db/schema/teams"
+import { topics } from "../../db/schema/topics"
 import { buildTopicScanContext, toTopicContextHash } from "../attach"
 import type { Budget } from "../budget"
 import type { DiscoveredResource } from "../ingest/ingester"
 import { traceStage } from "../telemetry"
+import { dedupeResources } from "./dedupe"
 import {
-	dedupeResources,
 	gateResources,
 	loadResourcesToReview,
 	loadTopicContext,

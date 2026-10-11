@@ -6,7 +6,7 @@ import { EventEmitter } from "node:events"
 import { Pool } from "@neondatabase/serverless"
 import { sql } from "drizzle-orm"
 import { drizzle, type NeonDatabase } from "drizzle-orm/neon-serverless"
-import { readQueryCount, runWithQueryCount, traceQueries } from "./queryTracing"
+import { readRequestCounts, runWithQueryCount, traceQueries } from "./queryTracing"
 import { memoizeInRequest, runWithRequestMemo } from "./requestMemo"
 
 // the result every statement returns, with no database behind the test's clients
@@ -53,14 +53,14 @@ test("each request counts only its own statements, and each statement of a trans
 			await Bun.sleep(20)
 			await transaction.execute(sql`select 2`)
 		})
-		return readQueryCount()
+		return readRequestCounts().queryCount
 	})
 
 	// the second request asks for the client while the first one is using it
 	await Bun.sleep(5)
 	const secondQueryCount = runWithQueryCount(undefined, async () => {
 		await database.execute(sql`select 3`)
-		return readQueryCount()
+		return readRequestCounts().queryCount
 	})
 	expect(await firstQueryCount).toBe(4)
 	expect(await secondQueryCount).toBe(1)
@@ -74,14 +74,14 @@ test("a statement outside any request is not counted", async () => {
 	const requestQueryCount = runWithQueryCount(undefined, async () => {
 		await database.execute(sql`select 1`)
 		await Bun.sleep(20)
-		return readQueryCount()
+		return readRequestCounts().queryCount
 	})
 
 	// a statement outside the request still returns its result
 	const result = await database.execute(sql`select 2`)
 	expect(result.rows).toEqual([])
 	expect(await requestQueryCount).toBe(1)
-	expect(readQueryCount()).toBe(0)
+	expect(readRequestCounts().queryCount).toBe(0)
 })
 
 // a select keeps the request's memo, and an update clears it, so only the read after the update reads again

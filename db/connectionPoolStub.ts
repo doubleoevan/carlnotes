@@ -1,33 +1,47 @@
 // the connection pool stub that the tests share, and the table row builder for the rows that the stub returns
 import { getTableColumns, type Table } from "drizzle-orm"
-import { connectionPool } from "./index"
+import { connectionPool, db } from "./index"
+import { countRequestStatement } from "./queryTracing"
 
-// the connection pool's own query, which restoreConnectionPool puts back
+// the connection pool's own query and the client's own transaction, which restoreConnectionPool puts back
 const originalConnectionPoolQuery = connectionPool.query
+const originalDbTransaction = db.transaction
 
 // a query that the stubbed connection pool was sent: its sql and its values
 export type SentQuery = { text: string; values: unknown[] }
 
+// a free user's and an admin's access rows, in the column order the access read selects: role, plan, budget override
+export const FREE_USER_ACCESS_ROW = ["user", "free", null]
+export const ADMIN_USER_ACCESS_ROW = ["admin", "free", null]
+
 /**
  * Swaps the connection pool's query for a stub that returns the rows that toQueryRows picks, and returns each query sent.
+ * A query sent inside a request counts toward the request's queries, and a transaction runs its callback on the stubbed client.
  */
 export function stubConnectionPool(toQueryRows: (sentQuery: SentQuery) => unknown[] = () => []): SentQuery[] {
+	// the stubbed query
 	const sentQueries: SentQuery[] = []
 	connectionPool.query = (async (queryConfig: string | { text: string }, values: unknown[] = []) => {
-		// keep the query, then return its rows. a toQueryRows that throws an error fails that query
+		// keep and count the query, then return its rows. a toQueryRows that throws an error fails that query
 		const sentQuery = { text: typeof queryConfig === "string" ? queryConfig : queryConfig.text, values }
 		sentQueries.push(sentQuery)
+		countRequestStatement(sentQuery.text)
 		const rows = toQueryRows(sentQuery)
 		return { rows, fields: [], rowCount: rows.length }
 	}) as unknown as typeof connectionPool.query
+
+	// the stubbed transaction, which runs its callback on the client itself
+	db.transaction = ((runTransaction: (transaction: typeof db) => Promise<unknown>) =>
+		runTransaction(db)) as unknown as typeof db.transaction
 	return sentQueries
 }
 
 /**
- * Puts the connection pool's own query back.
+ * Puts the connection pool's own query and the client's own transaction back.
  */
 export function restoreConnectionPool(): void {
 	connectionPool.query = originalConnectionPoolQuery
+	db.transaction = originalDbTransaction
 }
 
 /**

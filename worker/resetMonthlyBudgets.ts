@@ -2,14 +2,16 @@
 // a platform cron runs the job once a day shortly after midnight utc
 import { shutdownAnalytics } from "@shared/analytics"
 import { reportError, shutdownMonitoring, startMonitoring } from "@shared/monitoring"
+import { sizeConnectionPool } from "../db"
 import { runWithClaim } from "../db/claim"
 import { resetMonthlyBudgets } from "./litellm"
 
 // the reset's claim, so two overlapping resets cannot replace a key twice
 const MONTHLY_BUDGET_RESET_CLAIM = "monthly-budget-reset"
 
-// report the reset's errors to Sentry
+// report the reset's errors to Sentry, then size the connection pool from the database
 startMonitoring()
+await sizeConnectionPool()
 
 // run one reset under the claim and log what the reset did
 try {

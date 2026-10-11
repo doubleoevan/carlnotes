@@ -2,7 +2,7 @@
 import { toDeviceProperties, toUserAgentProduct } from "@shared/userAgent"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
-import { oauthApplications, users } from "../../db/schema"
+import { oauthApplications, users } from "../../db/schema/users"
 import { auth } from "../auth"
 import type { AnalyticsProperties } from "../currentUser"
 

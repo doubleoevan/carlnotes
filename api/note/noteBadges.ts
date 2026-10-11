@@ -2,16 +2,9 @@
 import type { NoteBadge } from "@shared/contracts"
 import { and, count, eq, gt, inArray, isNull, ne, or } from "drizzle-orm"
 import { db } from "../../db"
-import {
-	noteComments,
-	noteCommentThreads,
-	noteReads,
-	notes,
-	teamMembers,
-	teams,
-	teamTopics,
-	topics,
-} from "../../db/schema"
+import { noteComments, noteCommentThreads, noteReads, notes } from "../../db/schema/notes"
+import { teamMembers, teams, teamTopics } from "../../db/schema/teams"
+import { topics } from "../../db/schema/topics"
 
 /**
  * Every unread edit and comment count the signed-in user has. One entry per note that holds something.
@@ -154,6 +147,8 @@ async function loadBadgedPages(
 			teamIdsByTopicId.set(topicRow.topicId, [...topicTeamIds, topicRow.teamId])
 		}
 	}
+
+	// every topic with the teams holding it
 	return { topicIds: [...teamIdsByTopicId.keys()], teamIds, teamIdsByTopicId }
 }
 

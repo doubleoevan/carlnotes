@@ -1,4 +1,4 @@
-import { MAX_TOPIC_SOURCES, type SuggestSourcesPayload, type TopicResponse } from "@shared/contracts"
+import { MAX_TOPIC_SOURCES, type TopicResponse } from "@shared/contracts"
 import {
 	CUSTOM_SOURCE_OPTIONS,
 	type CustomSourceKey,
@@ -6,6 +6,7 @@ import {
 	toCustomSourceOption,
 	toSourceSummary,
 } from "@shared/sources"
+import type { SuggestSourcesPayload } from "@shared/topicPayloads"
 import { Lightbulb, X } from "lucide-react"
 import type * as React from "react"
 import { useState } from "react"

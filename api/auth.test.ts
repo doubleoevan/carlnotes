@@ -1,11 +1,11 @@
 // auth tests: a signup's LiteLLM key and default avatar, the session hooks that keep Redis in sync with Postgres,
-// the verification values kept in both, and the warning logged if TRUSTED_PROXIES is unset or misses a proxy hop
+// and the verification values kept in both
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as redis from "../db/redis"
 import * as litellm from "../worker/litellm"
-import { auth, toSignupAvatarSource, toTrustedProxiesWarning } from "./auth"
+import { auth, toSignupAvatarSource } from "./auth"
 import * as sessions from "./sessions"
 import * as usernames from "./usernames"
 
@@ -57,43 +57,6 @@ test("a signup with no provider photo falls back to generated initials", () => {
 	expect(toSignupAvatarSource(null)).toBe("generated")
 	expect(toSignupAvatarSource(undefined)).toBe("generated")
 	expect(toSignupAvatarSource("")).toBe("generated")
-})
-
-// if TRUSTED_PROXIES is unset, the warning suggests the proxy hops from the first request's x-forwarded-for header
-test("an unset TRUSTED_PROXIES reports the hops behind the user", () => {
-	const trustedProxiesWarning = toTrustedProxiesWarning({
-		forwardedFor: "203.0.113.7, 172.70.1.1",
-		clientAddress: null,
-		trustedProxyCount: 0,
-	})
-	expect(trustedProxiesWarning).toContain("TRUSTED_PROXIES is unset")
-	expect(trustedProxiesWarning).toContain("172.70.1.1")
-})
-
-// if TRUSTED_PROXIES lists every hop, a header through Cloudflare resolves to the visitor, and there is nothing to report
-test("a header that resolves to a public client reports nothing", () => {
-	const trustedProxiesWarning = toTrustedProxiesWarning({
-		forwardedFor: "203.0.113.7, 172.70.1.1",
-		clientAddress: "203.0.113.7",
-		trustedProxyCount: 22,
-	})
-	expect(trustedProxiesWarning).toBeNull()
-})
-
-// if TRUSTED_PROXIES misses a hop, every caller would share that hop's address, or no address at all
-test("a header that resolves to an internal address or none reports the missing hop", () => {
-	const internalWarning = toTrustedProxiesWarning({
-		forwardedFor: "203.0.113.7, 172.70.1.1, 10.0.0.5",
-		clientAddress: "10.0.0.5",
-		trustedProxyCount: 22,
-	})
-	const unresolvedWarning = toTrustedProxiesWarning({
-		forwardedFor: "172.70.1.1",
-		clientAddress: null,
-		trustedProxyCount: 22,
-	})
-	expect(internalWarning).toContain("10.0.0.5")
-	expect(unresolvedWarning).toContain("no address")
 })
 
 // a session that Better Auth deletes from Postgres is deleted from Redis by its token
@@ -162,17 +125,12 @@ test("the secondary storage sets a key with its time to live, or without one", a
 	])
 })
 
-// the secondary storage's increment returns the rate limit window's count, and zero if Redis could not count the hit
-test("the secondary storage counts a hit, and counts zero while Redis is unreachable", async () => {
-	// a counted hit returns its count, and the time to live arrives in milliseconds
+// the secondary storage's increment returns the rate limit window's count, with the time to live in milliseconds
+test("the secondary storage counts a hit on the key's rate limit window", async () => {
 	const incrementRateLimitWindowSpy = spyOn(redis, "incrementRateLimitWindow").mockResolvedValue({
 		count: 3,
 		resetAt: Date.now() + 60_000,
 	})
 	expect(await auth.options.secondaryStorage?.increment?.("key-a", 60)).toBe(3)
 	expect(incrementRateLimitWindowSpy).toHaveBeenCalledWith("key-a", 60_000)
-
-	// a hit that Redis could not count returns zero
-	incrementRateLimitWindowSpy.mockResolvedValue(null)
-	expect(await auth.options.secondaryStorage?.increment?.("key-a", 60)).toBe(0)
 })

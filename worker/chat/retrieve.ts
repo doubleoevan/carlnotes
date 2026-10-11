@@ -1,24 +1,14 @@
 // the read side of topic chat
 import { reportError } from "@shared/monitoring"
-import { DOCS_SITE_ADDRESS } from "@shared/seo"
 import { toSourceSummary, toUrlHost } from "@shared/sources"
-import { and, desc, eq, inArray, isNotNull, sql } from "drizzle-orm"
+import { and, desc, eq, inArray, isNotNull, type SQL, sql } from "drizzle-orm"
 import { db, isFindingShown } from "../../db"
-import {
-	attachments,
-	chatAttachments,
-	docsChunks,
-	EMBED_MODEL_NAME,
-	findings,
-	resources,
-	scans,
-	sources,
-	teams,
-	teamTopics,
-	topics,
-} from "../../db/schema"
+import { chatAttachments } from "../../db/schema/chat"
+import { EMBED_MODEL_NAME, findings, resources, scans } from "../../db/schema/scans"
+import { attachments, sources, topics } from "../../db/schema/topics"
 import { embedVector } from "../models"
 import { getResourceContent } from "../store"
+import { EMBED_QUERY_INSTRUCTION, readDocsBlock } from "./retrieveDocs"
 
 // how many findings a chat turn sends to the model
 const MAX_RETRIEVED_FINDINGS = 8
@@ -27,17 +17,10 @@ const MAX_RETRIEVED_FINDINGS = 8
 const MAX_RESOURCE_CHARS = 2000
 
 // how many recent scan summaries a chat turn includes, newest first
-const MAX_SCAN_SUMMARIES = 3
+export const MAX_SCAN_SUMMARIES = 3
 
 // how close two findings' question-similarity has to be before recency is used to break their tie
 const SIMILARITY_TIE_RANGE = 0.05
-
-// qwen3 is instruction-aware
-const EMBED_QUERY_INSTRUCTION = "Given a user's question about a topic, retrieve web resources that answer it"
-
-// how many docs sections one chat turn may quote and how relevant they have to be
-const MAX_RETRIEVED_DOCS_SECTIONS = 3
-const DOCS_MATCH_MAX_DISTANCE = 0.5
 
 // one finding as the model sees it
 export type RetrievedFinding = {
@@ -166,8 +149,10 @@ export async function searchTopicFindings(
 	return rankTopicFindings([topicId], queryVector, limit)
 }
 
-// the topics' findings ranked by how close their resource is to the question, each with its stored text
-async function retrieveFindings(
+/**
+ * Returns the topics' findings ranked by how close their resource is to the question, each with its stored text.
+ */
+export async function retrieveFindings(
 	topicIds: string[],
 	questionVector: number[],
 	topicNameById?: Map<string, string>,
@@ -187,26 +172,64 @@ async function retrieveFindings(
 	)
 }
 
-// the findings nearest the question among the resources this model embedded, near-ties broken by recency
+// the findings nearest the question among the resources this model embedded, near-ties broken by recency.
+// the topics' findings are collected first and ranked second
 async function rankTopicFindings(
 	topicIds: string[],
 	questionVector: number[],
 	limit: number,
 ): Promise<RankedTopicFinding[]> {
-	const rows = await db
+	// run the ranking query and name each row's columns
+	const { rows } = await db.execute<RankedTopicFindingRow>(toRankTopicFindingsQuery(topicIds, questionVector, limit))
+	const rankedTopicFindings = rows.map(toRankedTopicFinding)
+
+	// break near-ties by recency, then add each row's url host as its source
+	return toRelevanceThenRecencyOrder(rankedTopicFindings).map((rankedRow) => ({
+		...rankedRow,
+		source: toUrlHost(rankedRow.url),
+	}))
+}
+
+// one ranked row as the database returns it, by column name
+type RankedTopicFindingRow = {
+	// the finding and the topic it belongs to, and its resource
+	finding_id: string
+	topic_id: string
+	title: string | null
+	url: string
+	resource_kind: string
+	// when the topic found it and when the resource was published
+	found_at: Date
+	published_at: Date
+	// the review, where the resource's text lives, and how close it is to the question
+	relevance_score: number
+	relevance_explanation: string
+	snippet: string | null
+	content_key: string | null
+	distance: number
+}
+
+/**
+ * Returns the ranking query: the topics' shown findings whose resources the current model embedded, collected in a
+ * materialized common table expression and ordered by distance.
+ */
+export function toRankTopicFindingsQuery(topicIds: string[], questionVector: number[], limit: number): SQL {
+	// the topics' findings, each with its distance from the question
+	const questionVectorLiteral = JSON.stringify(questionVector)
+	const topicFindingsQuery = db
 		.select({
-			findingId: findings.id,
-			topicId: findings.topicId,
-			title: resources.title,
-			url: resources.url,
-			resourceKind: resources.kind,
-			foundAt: findings.createdAt,
-			publishedAt: resources.createdAt,
-			relevanceScore: findings.relevanceScore,
-			relevanceExplanation: findings.relevanceExplanation,
-			snippet: resources.snippet,
-			contentKey: resources.contentKey,
-			distance: sql<number>`${resources.embedding} <=> ${JSON.stringify(questionVector)}::vector`,
+			findingId: sql`${findings.id}`.as("finding_id"),
+			topicId: sql`${findings.topicId}`.as("topic_id"),
+			title: sql`${resources.title}`.as("title"),
+			url: sql`${resources.url}`.as("url"),
+			resourceKind: sql`${resources.kind}`.as("resource_kind"),
+			foundAt: sql`${findings.createdAt}`.as("found_at"),
+			publishedAt: sql`${resources.createdAt}`.as("published_at"),
+			relevanceScore: sql`${findings.relevanceScore}`.as("relevance_score"),
+			relevanceExplanation: sql`${findings.relevanceExplanation}`.as("relevance_explanation"),
+			snippet: sql`${resources.snippet}`.as("snippet"),
+			contentKey: sql`${resources.contentKey}`.as("content_key"),
+			distance: sql`${resources.embedding} <=> ${questionVectorLiteral}::vector`.as("distance"),
 		})
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
@@ -218,41 +241,27 @@ async function rankTopicFindings(
 				eq(resources.embeddingModel, EMBED_MODEL_NAME),
 			),
 		)
-		.orderBy(sql`${resources.embedding} <=> ${JSON.stringify(questionVector)}::vector`)
-		.limit(limit)
 
-	// break near-ties by recency, then add each row's url host as its source
-	return toRelevanceThenRecencyOrder(rows).map((rankedRow) => ({ ...rankedRow, source: toUrlHost(rankedRow.url) }))
+	// the materialized topic findings, then the ranking over them
+	return sql`with topic_findings as materialized (${topicFindingsQuery}) select * from topic_findings order by distance limit ${limit}`
 }
 
-// the docs sections close enough to the question to quote, composed into one block
-async function readDocsBlock(questionVector: number[]): Promise<string> {
-	// keep only the sections within the cutoff, closest first, and limit how many one chat turn quotes
-	const rows = await db
-		.select({ page: docsChunks.page, content: docsChunks.content })
-		.from(docsChunks)
-		.where(
-			and(
-				eq(docsChunks.embeddingModel, EMBED_MODEL_NAME),
-				sql`${docsChunks.embedding} <=> ${JSON.stringify(questionVector)}::vector < ${DOCS_MATCH_MAX_DISTANCE}`,
-			),
-		)
-		.orderBy(sql`${docsChunks.embedding} <=> ${JSON.stringify(questionVector)}::vector`)
-		.limit(MAX_RETRIEVED_DOCS_SECTIONS)
-
-	return toDocsBlock(rows)
-}
-
-/**
- * Returns the docs sections as one block, each labeled with the docs url that the section came from.
- */
-export function toDocsBlock(docsSections: { page: string; content: string }[]): string {
-	return docsSections
-		.map(
-			(docsSection) =>
-				`[${DOCS_SITE_ADDRESS}${docsSection.page === "index" ? "" : `/${docsSection.page}`}]\n${docsSection.content}`,
-		)
-		.join("\n\n")
+// a ranked row with its columns named as the code names them
+function toRankedTopicFinding(row: RankedTopicFindingRow): Omit<RankedTopicFinding, "source"> & { distance: number } {
+	return {
+		findingId: row.finding_id,
+		topicId: row.topic_id,
+		title: row.title,
+		url: row.url,
+		resourceKind: row.resource_kind,
+		foundAt: new Date(row.found_at),
+		publishedAt: new Date(row.published_at),
+		relevanceScore: Number(row.relevance_score),
+		relevanceExplanation: row.relevance_explanation,
+		snippet: row.snippet,
+		contentKey: row.content_key,
+		distance: Number(row.distance),
+	}
 }
 
 /**
@@ -355,104 +364,4 @@ async function readChatAttachmentContext(userId: string, topicId: string): Promi
 		.map((attachmentRow) => attachmentRow.context)
 		.filter((chatAttachmentContext) => chatAttachmentContext.trim().length > 0)
 		.join("\n\n")
-}
-
-// everything one team chat room turn puts in front of the model, drawn from every topic the team holds
-export type TeamChatContext = {
-	teamName: string
-	// each held topic's name and prompt, for the prompt's topics block
-	topics: { name: string; prompt: string }[]
-	findings: RetrievedFinding[]
-	// the held topics' sources, each line naming its topic
-	sources: string[]
-	scanSummaries: string[]
-	docsBlock: string
-}
-
-/**
- * Builds the docs block alone for the new-topic chat, which has no topic material to read.
- */
-export async function retrieveDocsBlock(question: string, litellmApiKey?: string): Promise<string> {
-	const questionVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${question}`, litellmApiKey)
-	return readDocsBlock(questionVector)
-}
-
-/**
- * Assembles one team chat room turn's context from every topic the team holds, or null if the team does not exist.
- */
-export async function retrieveTeamChatContext(
-	teamId: string,
-	question: string,
-	litellmApiKey?: string,
-): Promise<TeamChatContext | null> {
-	// a missing team has nothing to chat about
-	const [team] = await db.select({ name: teams.name }).from(teams).where(eq(teams.id, teamId))
-	if (!team) {
-		return null
-	}
-
-	// the team's owned topics
-	const ownedTopicRows = await db
-		.select({ id: topics.id, name: topics.name, prompt: topics.prompt })
-		.from(topics)
-		.where(eq(topics.teamId, teamId))
-	// the team's shared topics
-	const sharedTopicRows = await db
-		.select({ id: topics.id, name: topics.name, prompt: topics.prompt })
-		.from(teamTopics)
-		.innerJoin(topics, eq(topics.id, teamTopics.topicId))
-		.where(eq(teamTopics.teamId, teamId))
-	// the topicIds list that drives the topic reads. the topicNameByTopicId map labels each finding and source line
-	const teamTopicRows = [...ownedTopicRows, ...sharedTopicRows]
-	const topicIds = teamTopicRows.map((topicRow) => topicRow.id)
-	const topicNameByTopicId = new Map(teamTopicRows.map((topicRow) => [topicRow.id, topicRow.name]))
-
-	// embed the question once, then rank every held topic's findings against it together
-	const questionVector = await embedVector(`Instruct: ${EMBED_QUERY_INSTRUCTION}\nQuery: ${question}`, litellmApiKey)
-	const [retrievedFindings, teamSources, scanSummaries, docsBlock] = await Promise.all([
-		topicIds.length > 0 ? retrieveFindings(topicIds, questionVector, topicNameByTopicId) : Promise.resolve([]),
-		topicIds.length > 0 ? readTeamSources(topicIds, topicNameByTopicId) : Promise.resolve([]),
-		topicIds.length > 0 ? readTeamScanSummaries(topicIds) : Promise.resolve([]),
-		readDocsBlock(questionVector),
-	])
-	return {
-		teamName: team.name,
-		topics: teamTopicRows.map((topicRow) => ({ name: topicRow.name, prompt: topicRow.prompt })),
-		findings: retrievedFindings,
-		sources: teamSources,
-		scanSummaries,
-		docsBlock,
-	}
-}
-
-// every topic's ready sources in one query, each line prefixed with its topic's name
-async function readTeamSources(topicIds: string[], topicNameById: Map<string, string>): Promise<string[]> {
-	const topicSourceRows = await db
-		.select({ topicId: sources.topicId, sourceKind: sources.kind, config: sources.config })
-		.from(sources)
-		.where(and(inArray(sources.topicId, topicIds), eq(sources.status, "ready")))
-
-	// the built-in web search stores nothing worth summarizing, so it names itself
-	return topicSourceRows.map((topicSourceRow) => {
-		const topicName = topicNameById.get(topicSourceRow.topicId) ?? "a topic"
-		if (topicSourceRow.sourceKind === "search") {
-			return `${topicName}: web search — Carl searches the live web for this topic`
-		}
-		// every other source keeps the topic page's own summary line
-		const sourceSummary = toSourceSummary(topicSourceRow.sourceKind, topicSourceRow.config)
-		return `${topicName}: ${sourceSummary ? `${topicSourceRow.sourceKind} — ${sourceSummary}` : topicSourceRow.sourceKind}`
-	})
-}
-
-// the held topics' most recent scan summaries together, newest first
-async function readTeamScanSummaries(topicIds: string[]): Promise<string[]> {
-	const summaryRows = await db
-		.select({ scanSummary: scans.scanSummary })
-		.from(scans)
-		.where(and(inArray(scans.topicId, topicIds), isNotNull(scans.scanSummary)))
-		.orderBy(desc(scans.startedAt))
-		.limit(MAX_SCAN_SUMMARIES)
-
-	// drop the empty summaries so a blank summary adds no noise
-	return summaryRows.map((summaryRow) => summaryRow.scanSummary ?? "").filter((summary) => summary.length > 0)
 }

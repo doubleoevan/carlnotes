@@ -1,7 +1,7 @@
 // the url ingester. returns its own page content plus the page content from its links
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
-import { resources } from "../../db/schema"
+import { resources } from "../../db/schema/scans"
 import { toFetchableUrl } from "../publicFetch"
 import { CONTENT_TTL_MS, fetchContent, isContentStale } from "../scrape"
 import { getResourceContent } from "../store"

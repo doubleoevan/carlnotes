@@ -1,6 +1,6 @@
 // the proposal a reopened conversation is still sitting on, read back from the tools its chat turns called
 import { expect, test } from "bun:test"
-import type { ChatToolCall } from "@shared/contracts"
+import type { ChatToolCall } from "@shared/payloads"
 import { toProposedTopicEdit } from "./topicToolCalls"
 
 // one stored tool call, the shape a chat turn keeps and returns on load

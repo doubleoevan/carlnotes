@@ -1,156 +1,27 @@
 // the database helpers for the team api
-import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
-import type {
-	OwnerTopic,
-	ProfileTeamStatus,
-	TeamPageResponse,
-	TeamSearchResult,
-	TeamSummary,
-	TeamsPageResponse,
-} from "@shared/contracts"
-import { USER_SEARCH_LIMIT, USER_SEARCH_MIN_CHARS } from "@shared/contracts"
-import { toNormalizedUsername } from "@shared/usernames"
-import { and, count, desc, eq, gt, gte, inArray, isNotNull, isNull, like, or, sql } from "drizzle-orm"
+import { toAvatarKeyVersion } from "@shared/avatars"
+import type { OwnerTopic, ProfileTeamStatus, TeamSummary } from "@shared/contracts"
+import { and, count, eq, gt, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { db } from "../../db"
-import { chatTurns, invites, scans, teamMembers, teams, teamTopics, topics, users } from "../../db/schema"
-import { loadTopics } from "../activity"
-import { isAllowed, isLeaderRole } from "../authorization"
+import { chatTurns } from "../../db/schema/chat"
+import { invites } from "../../db/schema/invites"
+import { scans } from "../../db/schema/scans"
+import { teamMembers, teams, teamTopics } from "../../db/schema/teams"
+import { topics } from "../../db/schema/topics"
+import { users } from "../../db/schema/users"
+import { loadTopics } from "../activityTopics"
+import { isLeaderRole } from "../authorization"
 import { toProfileIdentity } from "../avatars"
 import { loadTeamChatMentions } from "../chat/mentions"
-import { verifiedEmailQuery } from "../topic/permissions"
 import { startOfUtcMonth } from "../topic/quotas"
-import { toTopicTableRows } from "../topic/topicTableRows"
+import { loadTeamTopics } from "./teamPage"
 
 // the users table under a second name, so an invitation can join its sender beside its invitee
-const senders = alias(users, "senders")
+export const senders = alias(users, "senders")
 
 // the users table under a third name, so a membership can join whoever invited the user
-const inviters = alias(users, "inviters")
-
-/**
- * The teams page sections: the user's teams, the team invites waiting for an answer, and the team invites sent.
- */
-export async function loadTeamsPage(userId: string): Promise<TeamsPageResponse> {
-	// the team ids that the user is a member of
-	const userTeamSummaries = await loadTeamSummaries(userId)
-	const userTeamIds = new Set(userTeamSummaries.map((teamSummary) => teamSummary.teamId))
-
-	// the team invites waiting for an answer
-	const inviteRows = await db
-		.select({
-			inviteId: invites.id,
-			teamId: teams.id,
-			name: teams.name,
-			isPublic: teams.isPublic,
-			description: teams.description,
-			avatarKey: teams.avatarKey,
-			invitedAt: invites.invitedAt,
-			// the sender's account, null if it has closed
-			sender: {
-				userId: senders.id,
-				username: senders.username,
-				avatarSource: senders.avatarSource,
-				avatarKey: senders.avatarKey,
-			},
-		})
-		.from(invites)
-		.innerJoin(teams, eq(teams.id, invites.teamId))
-		.leftJoin(senders, eq(senders.id, invites.invitedByUserId))
-		.where(
-			// pending means unanswered: no spent use, no decline, no revocation, no passed expiry.
-			// an address matches only once the account verified it
-			and(
-				or(eq(invites.invitedUserId, userId), inArray(invites.email, verifiedEmailQuery(userId))),
-				eq(invites.usedCount, 0),
-				isNull(invites.declinedAt),
-				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
-			),
-		)
-		.orderBy(desc(invites.invitedAt))
-
-	// a team the user already belongs to does not show an invite
-	const receivedInviteRows = inviteRows.filter((inviteRow) => !userTeamIds.has(inviteRow.teamId))
-
-	// each remaining invite includes the counts and spend its table row shows, read in one pass each
-	const invitedTeamIds = receivedInviteRows.map((inviteRow) => inviteRow.teamId)
-	const [countsByTeamId, spendByTeamId] = await Promise.all([
-		toCountsByTeamId(invitedTeamIds),
-		toSpendByTeamId(invitedTeamIds),
-	])
-	const receivedInvites = receivedInviteRows.map((inviteRow) => ({
-		inviteId: inviteRow.inviteId,
-		teamId: inviteRow.teamId,
-		name: inviteRow.name,
-		isPublic: inviteRow.isPublic,
-		avatarVersion: toAvatarKeyVersion(inviteRow.avatarKey),
-		description: inviteRow.description,
-		memberCount: countsByTeamId.get(inviteRow.teamId)?.memberCount ?? 0,
-		topicCount: countsByTeamId.get(inviteRow.teamId)?.topicCount ?? 0,
-		scanSpendCents: spendByTeamId.get(inviteRow.teamId)?.scanCents ?? 0,
-		chatSpendCents: spendByTeamId.get(inviteRow.teamId)?.chatCents ?? 0,
-		sender: toProfileIdentity(inviteRow.sender),
-		invitedAt: inviteRow.invitedAt.toISOString(),
-	}))
-
-	// the user sent team invitations showing whether each invitee joined
-	const sentInvites = await loadSentTeamInvites(userId)
-	return { teams: userTeamSummaries, receivedInvites, sentInvites }
-}
-
-// the sent team invitations, matched by email or by account. declined rows stay stored but are hidden here
-async function loadSentTeamInvites(userId: string): Promise<TeamsPageResponse["sentInvites"]> {
-	// two single-column joins let each side use its own unique index, then coalesce selects the resolved account first
-	const usersByEmail = alias(users, "users_by_email")
-	const inviteeId = sql<string | null>`coalesce(${users.id}, ${usersByEmail.id})`
-	const sentInviteRows = await db
-		.select({
-			inviteId: invites.id,
-			teamId: teams.id,
-			name: teams.name,
-			teamAvatarKey: teams.avatarKey,
-			inviteeEmail: invites.email,
-			invitedAt: invites.invitedAt,
-			// the invitee's account fields, null until the invitation names or resolves to an account
-			invitee: {
-				userId: inviteeId,
-				username: sql<string | null>`coalesce(${users.username}, ${usersByEmail.username})`,
-				avatarSource: sql<string | null>`coalesce(${users.avatarSource}, ${usersByEmail.avatarSource})`,
-				// the key of the account that the id names. a coalesce here could return the other account's key
-				avatarKey: sql<
-					string | null
-				>`case when ${users.id} is not null then ${users.avatarKey} else ${usersByEmail.avatarKey} end`,
-			},
-			joinedAt: teamMembers.createdAt,
-		})
-		.from(invites)
-		.innerJoin(teams, eq(teams.id, invites.teamId))
-		.leftJoin(users, eq(users.id, invites.invitedUserId))
-		.leftJoin(usersByEmail, eq(usersByEmail.email, invites.email))
-		.leftJoin(
-			teamMembers,
-			and(eq(teamMembers.teamId, teams.id), eq(teamMembers.userId, inviteeId), eq(teamMembers.isActive, true)),
-		)
-		.where(
-			// only the rows that name a person: a link invitation names nobody and lives on the team page instead
-			and(
-				eq(invites.invitedByUserId, userId),
-				or(isNotNull(invites.email), isNotNull(invites.invitedUserId)),
-				isNull(invites.declinedAt),
-			),
-		)
-		.orderBy(desc(invites.invitedAt))
-	return sentInviteRows.map((inviteRow) => ({
-		inviteId: inviteRow.inviteId,
-		teamId: inviteRow.teamId,
-		name: inviteRow.name,
-		avatarVersion: toAvatarKeyVersion(inviteRow.teamAvatarKey),
-		inviteeEmail: inviteRow.inviteeEmail,
-		invitee: toProfileIdentity(inviteRow.invitee),
-		invitedAt: inviteRow.invitedAt.toISOString(),
-		joinedAt: inviteRow.joinedAt?.toISOString() ?? null,
-	}))
-}
+export const inviters = alias(users, "inviters")
 
 /**
  * Returns the user's teams, each with the profile user's status there, an active member, invited, or neither.
@@ -235,48 +106,6 @@ export async function loadAdminTeamTopics({
 	// the same rows a user's own topics table reads, so both subtables show the same columns and totals
 	const teamTopicIds = (await loadTeamTopics(teamId)).map((topicRow) => topicRow.id)
 	return loadTopics({ topicIds: teamTopicIds, signedInUserId: adminUserId })
-}
-
-/**
- * Teams whose name contains the query, for the search bar's team suggestions. A public team is found
- * by anyone, and a signed-in user also finds the teams they belong to at any visibility.
- */
-export async function searchTeams(query: string, userId: string | null): Promise<TeamSearchResult[]> {
-	// the query must meet the same minimum length a username search has
-	const username = toNormalizedUsername(query).replaceAll(/[^a-z0-9]/g, "")
-	if (username.length < USER_SEARCH_MIN_CHARS) {
-		return []
-	}
-
-	// the teams this user is on, which a pending request to join is not yet one of
-	const memberTeamIds = userId
-		? db
-				.select({ teamId: teamMembers.teamId })
-				.from(teamMembers)
-				.where(and(eq(teamMembers.userId, userId), eq(teamMembers.isActive, true)))
-		: null
-	// a visitor finds the public teams alone, and a member finds their own beside them
-	const isFindable = memberTeamIds
-		? or(eq(teams.isPublic, true), inArray(teams.id, memberTeamIds))
-		: eq(teams.isPublic, true)
-
-	// shorter names sort first, where a larger portion of the name was matched
-	const teamRows = await db
-		.select({ teamId: teams.id, name: teams.name, avatarKey: teams.avatarKey })
-		.from(teams)
-		.where(and(isFindable, like(sql`lower(${teams.name})`, `%${escapeLikePattern(query.toLowerCase())}%`)))
-		.orderBy(sql`length(${teams.name})`)
-		.limit(USER_SEARCH_LIMIT)
-	return teamRows.map((teamRow) => ({
-		teamId: teamRow.teamId,
-		name: teamRow.name,
-		avatarVersion: toAvatarKeyVersion(teamRow.avatarKey),
-	}))
-}
-
-// a like pattern matches the typed characters literally, never as wildcards
-function escapeLikePattern(query: string): string {
-	return query.replaceAll(/[\\%_]/g, (wildcard) => `\\${wildcard}`)
 }
 
 /**
@@ -443,8 +272,12 @@ export async function loadPublicTeams(userId: string): Promise<TeamSummary[]> {
 	}))
 }
 
-// each team's active-member and topic counts, one grouped query per table
-async function toCountsByTeamId(teamIds: string[]): Promise<Map<string, { memberCount: number; topicCount: number }>> {
+/**
+ * Returns each team's active-member and topic counts, one grouped query per table.
+ */
+export async function toCountsByTeamId(
+	teamIds: string[],
+): Promise<Map<string, { memberCount: number; topicCount: number }>> {
 	if (teamIds.length === 0) {
 		return new Map()
 	}
@@ -484,132 +317,4 @@ async function toCountsByTeamId(teamIds: string[]): Promise<Map<string, { member
 			{ memberCount: memberCountByTeamId.get(teamId) ?? 0, topicCount: topicCountByTeamId.get(teamId) ?? 0 },
 		]),
 	)
-}
-
-// a team page as one user may see it: the whole page, the gate a private team shows a non-member, or no team at all
-export type TeamPageResult =
-	| { status: "visible"; team: TeamPageResponse }
-	| { status: "gated"; teamName: string; hasRequestedToJoin: boolean }
-	| { status: "missing" }
-
-/**
- * Loads a team's page as the user may see it, or the gate a private team shows a non-member.
- */
-export async function loadTeamPage(userId: string | null, teamId: string): Promise<TeamPageResult> {
-	// read the team and the user's membership row in one query. a signed-out visitor joins no membership row
-	const [teamRow] = await db
-		.select({ team: teams, membershipRole: teamMembers.role, isMembershipActive: teamMembers.isActive })
-		.from(teams)
-		.leftJoin(teamMembers, and(eq(teamMembers.teamId, teams.id), userId ? eq(teamMembers.userId, userId) : sql`false`))
-		.where(eq(teams.id, teamId))
-	if (!teamRow) {
-		return { status: "missing" }
-	}
-
-	// an active membership is the user's role, and an inactive one is a join request no leader has approved yet
-	const { team } = teamRow
-	const role = teamRow.isMembershipActive ? teamRow.membershipRole : null
-	const hasRequestedToJoin = teamRow.isMembershipActive === false
-
-	// check access before reading the page. a private team shows only its gate to everyone but its members, an admin,
-	// and someone with a pending invite
-	const isMember = role !== null
-	const isInvited = !isMember && (await hasPendingTeamInvite(userId, team.id))
-	if (!team.isPublic && !isMember && !isInvited && !(await isAllowed(userId, "admin:console"))) {
-		return { status: "gated", teamName: team.name, hasRequestedToJoin }
-	}
-
-	// the team page's independent reads run together
-	const [memberRows, topicRows, chatMentionsByTeam] = await Promise.all([
-		// the members with the not-yet-activated rows included
-		db
-			.select({
-				userId: users.id,
-				username: users.username,
-				avatarSource: users.avatarSource,
-				avatarKey: users.avatarKey,
-				role: teamMembers.role,
-				isMemberVisible: teamMembers.isMemberVisible,
-				isActive: teamMembers.isActive,
-			})
-			.from(teamMembers)
-			.innerJoin(users, eq(users.id, teamMembers.userId))
-			.where(eq(teamMembers.teamId, team.id))
-			.orderBy(teamMembers.createdAt),
-		loadTeamTopics(team.id),
-		loadTeamChatMentions(userId, [team.id]),
-	])
-
-	// members see everyone, and only a leader can see who asked to join
-	const isTeamLeader = isMember && isLeaderRole(role)
-	const shownMembers = memberRows.filter(
-		(memberRow) => (memberRow.isActive || isTeamLeader) && (isMember || memberRow.isMemberVisible),
-	)
-
-	// the hidden count reads activated rows alone, so a waiting request never shows through the number
-	const activeRows = memberRows.filter((memberRow) => memberRow.isActive)
-	const hiddenActiveCount =
-		activeRows.length - activeRows.filter((memberRow) => isMember || memberRow.isMemberVisible).length
-
-	// the team's topics: a non-member sees only the public ones, a member or someone with a pending invite sees them all
-	const visibleTopics = topicRows.filter((topicRow) => isMember || isInvited || topicRow.visibility === "public")
-
-	// build the page from the members and topics the user may see
-	const teamPage: TeamPageResponse = {
-		teamId: team.id,
-		name: team.name,
-		description: team.description,
-		isPublic: team.isPublic,
-		avatarVersion: toAvatarKeyVersion(team.avatarKey),
-		role,
-		hasRequestedToJoin,
-		members: shownMembers.map((memberRow) => ({
-			userId: memberRow.userId,
-			username: memberRow.username,
-			avatarSource: memberRow.avatarSource,
-			avatarVersion: toAvatarVersion(memberRow),
-			role: memberRow.role,
-			isMemberVisible: memberRow.isMemberVisible,
-			isActive: memberRow.isActive,
-		})),
-		hiddenMemberCount: hiddenActiveCount,
-		chatMentions: chatMentionsByTeam.get(team.id) ?? [],
-		topics: await toTopicTableRows(visibleTopics, userId),
-	}
-	return { status: "visible", team: teamPage }
-}
-
-// whether a pending invite names this user, by account or by their email address
-async function hasPendingTeamInvite(userId: string | null, teamId: string): Promise<boolean> {
-	if (!userId) {
-		return false
-	}
-
-	// a single matching pending invite row is enough. an address matches only once the account verified it
-	const [invite] = await db
-		.select({ id: invites.id })
-		.from(invites)
-		.where(
-			and(
-				eq(invites.teamId, teamId),
-				or(eq(invites.invitedUserId, userId), inArray(invites.email, verifiedEmailQuery(userId))),
-				eq(invites.usedCount, 0),
-				isNull(invites.declinedAt),
-				or(isNull(invites.expiresAt), gt(invites.expiresAt, new Date())),
-			),
-		)
-		.limit(1)
-	return Boolean(invite)
-}
-
-// the topics a team holds: its own plus the ones shared into it
-async function loadTeamTopics(teamId: string): Promise<(typeof topics.$inferSelect)[]> {
-	const ownedTopicRows = await db.select().from(topics).where(eq(topics.teamId, teamId))
-	// a shared topic is reached through its team_topics row instead of the team column
-	const sharedTopicRows = await db
-		.select()
-		.from(teamTopics)
-		.innerJoin(topics, eq(topics.id, teamTopics.topicId))
-		.where(eq(teamTopics.teamId, teamId))
-	return [...ownedTopicRows, ...sharedTopicRows.map((topicRow) => topicRow.topics)]
 }

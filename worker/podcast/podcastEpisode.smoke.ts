@@ -1,12 +1,12 @@
-// a live smoke test for a free Topic's short Podcast Episode. plan it for a seeded Scan, write its script, record and
-// join its chapters, publish it in place of the Topic's earlier short one, and remove it, through the same functions
-// that the podcast episode workflow's activities run.
-// run it with: bun run smoke:podcast-episode. it needs the LiteLLM proxy from bun run carl-up with GEMINI_API_KEY,
-// object storage, and ffmpeg
+// a live smoke test for a free Topic's short Podcast Episode, through the workflow's own activity functions: plan,
+// script, record, publish, and remove it. bun run smoke:podcast-episode needs carl-up, GEMINI_API_KEY, S3, and ffmpeg
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { monthlySpendDollars } from "../../db/quotas"
-import { findings, podcastEpisodeChapters, podcastEpisodes, resources, scans, topics, users } from "../../db/schema"
+import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast"
+import { findings, resources, scans } from "../../db/schema/scans"
+import { topics } from "../../db/schema/topics"
+import { users } from "../../db/schema/users"
 import { runWithRetries } from "../retry"
 import { attachmentExists, toPodcastEpisodeAudioKey, toPodcastEpisodeChapterKey } from "../store"
 import { shutdownTelemetry, startTelemetry } from "../telemetry"

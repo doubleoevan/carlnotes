@@ -1,6 +1,6 @@
 // invite-link tests for the rejection an invite url gets when its token is no longer valid
 import { expect, test } from "bun:test"
-import { isAutomaticInvite, toInviteRejection } from "./invites"
+import { isAutomaticInvite, toInviteRejection } from "./inviteAcceptance"
 
 // the moment each invite in this file is checked against
 const now = new Date("2026-08-18T12:00:00.000Z")

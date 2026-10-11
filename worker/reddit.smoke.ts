@@ -2,7 +2,8 @@
 // run it with: bun run smoke:reddit. run it from the deployed environment to settle the datacenter-IP
 import { eq } from "drizzle-orm"
 import { db } from "../db"
-import { sources, topics, users } from "../db/schema"
+import { sources, topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
 import type { Source } from "./ingest/ingester"
 import { redditIngester } from "./ingest/reddit"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
@@ -110,6 +111,8 @@ async function check(subredditSource: Source, searchSource: Source): Promise<boo
 			console.log(`SKIP  ${label}, reddit is throttling this address`)
 			continue
 		}
+
+		// log the outcome and fold it into the verdict
 		console.log(`${outcome === "found" ? "PASS" : "FAIL"}  ${label}`)
 		allPass = allPass && outcome === "found"
 	}

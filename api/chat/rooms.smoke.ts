@@ -2,7 +2,10 @@
 // run it with: doppler run -- bun api/chat/rooms.smoke.ts. needs Doppler secrets
 import { eq, inArray } from "drizzle-orm"
 import { connectionPool, db } from "../../db"
-import { chatRoomMentions, chatRoomMessages, teamMembers, teams, teamTopics, topics, users } from "../../db/schema"
+import { chatRoomMentions, chatRoomMessages } from "../../db/schema/chat"
+import { teamMembers, teams, teamTopics } from "../../db/schema/teams"
+import { topics } from "../../db/schema/topics"
+import { users } from "../../db/schema/users"
 import { countUnseenChatMentions, loadChatRooms } from "./rooms"
 
 // one id per run, and every fixture id derives from it, so a parallel run never collides

@@ -1,7 +1,7 @@
 // what the next question sends as the conversation so far
 import { expect, test } from "bun:test"
-import type { ChatTurn } from "./ChatMessages"
 import { toChatHistoryTurns } from "./chatHistoryTurns"
+import type { ChatTurn } from "./chatTurns"
 
 // a chat turn with nothing attached and no links
 const EMPTY_CHAT_TURN: ChatTurn = {

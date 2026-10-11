@@ -2,16 +2,17 @@
 import { toAvatarVersion } from "@shared/avatars"
 import {
 	type ProfileResponse,
+	SEARCH_MIN_CHARS,
 	type Topic,
 	USER_SEARCH_LIMIT,
-	USER_SEARCH_MIN_CHARS,
 	type UserSearchResult,
 } from "@shared/contracts"
 import { toNormalizedUsername } from "@shared/usernames"
 import { and, countDistinct, eq, isNotNull, like, ne, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { type DbHandle, db } from "../db"
-import { subscriptions, topics, users } from "../db/schema"
+import { subscriptions, topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
 import { isAllowed } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
@@ -25,12 +26,21 @@ export async function searchUsers(query: string): Promise<UserSearchResult[]> {
 	// normalized usernames are lowercase alphanumerics, so anything else in a query could only act as a LIKE wildcard
 	const normalizedUsername = toNormalizedUsername(query).replaceAll(/[^a-z0-9]/g, "")
 	// too short a query matches most of the table, so it is not worth a search
-	if (normalizedUsername.length < USER_SEARCH_MIN_CHARS) {
+	if (normalizedUsername.length < SEARCH_MIN_CHARS) {
 		return []
 	}
 
-	// sort shorter names first, so an exact match ranks above a name that contains it
-	const userRows = await db
+	// read the matching users and add their avatar versions
+	const userRows = await toUserSearchQuery(normalizedUsername)
+	return userRows.map(withAvatarVersion)
+}
+
+/**
+ * Returns the username search's query, shorter names first.
+ */
+// biome-ignore lint/nursery/useExplicitReturnType: drizzle's select builder type is generated, and naming it here would break on an upgrade
+export function toUserSearchQuery(normalizedUsername: string) {
+	return db
 		.select({
 			userId: users.id,
 			username: users.username,
@@ -41,7 +51,6 @@ export async function searchUsers(query: string): Promise<UserSearchResult[]> {
 		.where(like(users.usernameNormalized, `%${normalizedUsername}%`))
 		.orderBy(sql`length(${users.usernameNormalized})`)
 		.limit(USER_SEARCH_LIMIT)
-	return userRows.map(withAvatarVersion)
 }
 
 /**

@@ -1,17 +1,15 @@
 // attachment extraction tests: the content-type resolver, each extractor, and the table text
-import { expect, test } from "bun:test"
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared/contracts"
-// the methods to test, none of which reach the database
-import {
-	extractText,
-	isTableFileType,
-	MAX_TABLE_CHARS,
-	MAX_TABLE_ROWS,
-	toCanonicalContentType,
-	toClippedTableText,
-	toTableText,
-	toTopicContextHash,
-} from "./attach"
+import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../db/connectionPoolStub"
+import { attachments } from "../db/schema/topics"
+// the methods to test, and the ingestion, which the pool stub keeps off the database
+import { ingestAttachment, toTopicContextHash } from "./attach"
+import { isTableFileType, toCanonicalContentType } from "./attachContentType"
+import { MAX_TABLE_CHARS, MAX_TABLE_ROWS, toClippedTableText, toTableText } from "./attachTable"
+import { extractText } from "./attachText"
+import * as store from "./store"
+import * as temporalClient from "./temporalClient"
 
 // the OOXML media types the resolver and gate know
 const DOCX_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -273,4 +271,73 @@ test("toTopicContextHash changes with the context and ignores surrounding whites
 	// the same context asks the same question, no matter how it is spaced
 	expect(toTopicContextHash(prompt)).toBe(toTopicContextHash(`${prompt}\n`))
 	expect(toTopicContextHash(contextWithAttachment)).toBe(toTopicContextHash(contextWithAttachment))
+})
+
+// put the pool and every spy back after each ingestion test
+afterEach(() => {
+	restoreConnectionPool()
+	mock.restore()
+})
+
+// ingest a small text file into topic-1
+async function ingestTextAttachment(): Promise<Awaited<ReturnType<typeof ingestAttachment>>> {
+	return ingestAttachment({
+		topicId: "topic-1",
+		filename: "notes.txt",
+		contentType: "text/plain",
+		bytes: new TextEncoder().encode("hello"),
+	})
+}
+
+// the key is recorded as pending with a grace period before the upload. a failed row insert deletes the object through
+// deleteStoredObject, and a failed delete leaves the key pending
+test("an upload whose row insert fails leaves its key pending", async () => {
+	// an upload that stores, a delete that fails, and the error log quiet
+	spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
+	const deleteStoredObjectSpy = spyOn(store, "deleteStoredObject").mockResolvedValue(false)
+	spyOn(console, "error").mockImplementation(() => {})
+
+	// the pool, whose attachment insert fails
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.startsWith('insert into "attachments"')) {
+			throw new Error("insert failed")
+		}
+		return text.includes('from "topics"') ? [["topic-1"]] : []
+	})
+
+	// the ingestion fails with the insert's error, which the driver names by its statement
+	await expect(ingestTextAttachment()).rejects.toThrow('insert into "attachments"')
+
+	// the key was recorded before the upload with a try time, recorded again with none before the delete, and never cleared
+	const pendingObjectDeletionInserts = sentQueries.filter(({ text }) =>
+		text.startsWith('insert into "pending_object_deletions"'),
+	)
+	expect(pendingObjectDeletionInserts).toHaveLength(2)
+	expect(pendingObjectDeletionInserts[0]?.values).toHaveLength(2)
+	expect(pendingObjectDeletionInserts[1]?.values).toHaveLength(1)
+	expect(sentQueries.some(({ text }) => text.startsWith('delete from "pending_object_deletions"'))).toBe(false)
+	expect(deleteStoredObjectSpy).toHaveBeenCalledTimes(1)
+	expect(String(deleteStoredObjectSpy.mock.calls[0]?.[0])).toStartWith("topics/topic-1/attachments/")
+})
+
+// a successful upload clears the key in the row insert's transaction, so nothing stays pending
+test("a successful upload leaves no key pending", async () => {
+	// a topic that exists, an upload that stores, a row insert that returns the row, and a workflow that starts
+	spyOn(store, "uploadAttachment").mockResolvedValue(undefined)
+	const deleteStoredObjectSpy = spyOn(store, "deleteStoredObject")
+	spyOn(temporalClient, "startAttachmentWorkflow").mockResolvedValue(undefined)
+	const sentQueries = stubConnectionPool(({ text }) => {
+		if (text.startsWith('insert into "attachments"')) {
+			return [
+				toTableRow(attachments, { id: "attachment-1", topicId: "topic-1", objectKey: "k", filename: "notes.txt" }),
+			]
+		}
+		return text.includes('from "topics"') ? [["topic-1"]] : []
+	})
+
+	// the ingestion returns the row, the key's pending deletion is cleared, and nothing is deleted
+	expect((await ingestTextAttachment()).id).toBe("attachment-1")
+	expect(sentQueries.some(({ text }) => text.startsWith('insert into "pending_object_deletions"'))).toBe(true)
+	expect(sentQueries.some(({ text }) => text.startsWith('delete from "pending_object_deletions"'))).toBe(true)
+	expect(deleteStoredObjectSpy).not.toHaveBeenCalled()
 })

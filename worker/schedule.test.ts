@@ -1,40 +1,22 @@
-// schedule tests: the frequency window, the scheduled topic and stale scan filters, starting the scheduled Topics' Scans,
-// the owners whose budget is spent, starting the undispatched Scans, the topic sweep summary, the stale window,
-// the sweep without the budget reset, the daily topic limit, and the scan queue report
+// schedule tests: the frequency window, the scheduled topic filter, starting the scheduled Topics' Scans, the owners
+// whose budget is spent, the topic sweep summary, the sweep without the budget reset, and the daily topic limit
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
 import { db } from "../db"
-import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../db/connectionPoolStub"
+import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as quotas from "../db/quotas"
-import { scans, topics } from "../db/schema"
+import { topics } from "../db/schema/topics"
 import * as litellm from "./litellm"
 import * as scan from "./scan"
 import {
 	frequencyWindowMs,
 	isWithinDailyTopicLimit,
 	loadBudgetExhaustedOwnerIds,
-	reportScanQueue,
-	staleScanWindowMs,
 	startScheduledTopicScans,
-	startUndispatchedScans,
 	type TopicSweepSummary,
 	toScheduledTopicFilter,
-	toStaleScanFilter,
 } from "./schedule"
-import { toScanBacklogCrossing } from "./temporalClient"
-import {
-	FINISH_ATTEMPTS,
-	FINISH_TIMEOUT_MS,
-	FINISH_TOTAL_TIMEOUT_MS,
-	INGEST_ATTEMPTS,
-	INGEST_TIMEOUT_MS,
-	INGEST_TOTAL_TIMEOUT_MS,
-	MAX_SCAN_DURATION_MS,
-	REVIEW_ATTEMPTS,
-	REVIEW_TIMEOUT_MS,
-	REVIEW_TOTAL_TIMEOUT_MS,
-} from "./workflows/stageTimeouts"
 
 // one day in milliseconds, the daily frequency window
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -132,25 +114,6 @@ test("the scheduled topic filter drops a scanned weekdays topic on a weekend", (
 	// monday puts weekdays back in the day window
 	const monday = new Date("2026-07-27T12:00:00Z")
 	expect(toScheduledTopicQuery(monday).params).toContain("weekdays")
-})
-
-// the stale filter measures a picked-up scan from its pickup and a scan that no worker picked up from its dispatch
-test("the stale filter measures a picked-up scan from its pickup and a queued scan from its dispatch", () => {
-	const now = new Date("2026-07-22T12:00:00Z")
-	const { sql, params } = db.select({ id: scans.id }).from(scans).where(toStaleScanFilter(now)).toSQL()
-
-	// the picked-up branch compares the pickup time, and the queued branch compares the dispatch time
-	expect(sql).toContain('"scans"."picked_up_at" is not null and "scans"."picked_up_at" <')
-	expect(sql).toContain('"scans"."picked_up_at" is null and "scans"."dispatched_at" <')
-
-	// the pickup cutoff is the stale window, and the dispatch cutoff is the ingest and finish total timeouts plus the margin.
-	// a comparison against a timestamp column sends its date as an iso string
-	const staleScanMarginMs = 15 * 60 * 1000
-	expect(params).toEqual([
-		"running",
-		new Date(now.getTime() - staleScanWindowMs()).toISOString(),
-		new Date(now.getTime() - (INGEST_TOTAL_TIMEOUT_MS + FINISH_TOTAL_TIMEOUT_MS + staleScanMarginMs)).toISOString(),
-	])
 })
 
 // one owner's remaining scan count is read once, and each start lowers the sweep's copy of that count
@@ -372,91 +335,6 @@ test("a Topic with a running Scan saves no failed Scan, even if its owner's budg
 	expect(topicSweepSummary).toMatchObject({ started: 0, skippedOverBudget: 0, failed: 0 })
 })
 
-// the id and the manual flag of an undispatched Scan row
-type ToUndispatchedScanRowOptions = { id: string; isManual: boolean }
-
-// an undispatched Scan row as the connection pool returns the row.
-// only its id, Topic, owner, status, and manual flag are set
-function toUndispatchedScanRow({ id, isManual }: ToUndispatchedScanRowOptions): unknown[] {
-	return toTableRow(scans, { id, topicId: "topic-1", ownerId: "owner-1", status: "running", isManual })
-}
-
-// an undispatched Scan whose owner's budget is spent is marked failed instead of started, unless the Scan is manual
-test("an undispatched Scan whose owner's budget is spent is marked failed, and a manual Scan still starts", async () => {
-	// a scheduled row and a manual row of one owner whose key budget is spent, with a quiet console
-	stubConnectionPool(() => [
-		toUndispatchedScanRow({ id: "scheduled-scan", isManual: false }),
-		toUndispatchedScanRow({ id: "manual-scan", isManual: true }),
-	])
-	spyOn(console, "log").mockImplementation(() => {})
-	const isUserLiteLLMKeyBudgetExhaustedSpy = spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(true)
-	const failUnstartedScanSpy = spyOn(scan, "failUnstartedScan").mockResolvedValue(undefined)
-	const scanTopicSpy = spyOn(scan, "scanTopic").mockResolvedValue({ status: "running" })
-	await startUndispatchedScans()
-
-	// the owner's budget is read for the scheduled row only
-	expect(isUserLiteLLMKeyBudgetExhaustedSpy.mock.calls).toEqual([["owner-1"]])
-
-	// the scheduled Scan is marked failed with the budget reason, and only the manual Scan is started
-	expect(failUnstartedScanSpy.mock.calls).toEqual([["scheduled-scan", SCHEDULED_SCAN_SPENT_BUDGET_REASON]])
-	expect(scanTopicSpy).toHaveBeenCalledTimes(1)
-	expect(scanTopicSpy.mock.calls[0]?.[0]).toMatchObject({ id: "manual-scan" })
-	expect(scanTopicSpy.mock.calls[0]?.slice(1)).toEqual(["topic-1", "owner-1", "manual", true])
-})
-
-// the sweep starts an undispatched Scan whose owner's budget is not spent
-test("an undispatched Scan whose owner's budget is not spent starts", async () => {
-	// a scheduled row whose owner's key budget is not spent, with a quiet console
-	stubConnectionPool(() => [toUndispatchedScanRow({ id: "scheduled-scan", isManual: false })])
-	spyOn(console, "log").mockImplementation(() => {})
-	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
-	const failUnstartedScanSpy = spyOn(scan, "failUnstartedScan").mockResolvedValue(undefined)
-	const scanTopicSpy = spyOn(scan, "scanTopic").mockResolvedValue({ status: "running" })
-	await startUndispatchedScans()
-
-	// the Scan is started as a scheduled Scan on its existing row, and no Scan is marked failed
-	expect(failUnstartedScanSpy).not.toHaveBeenCalled()
-	expect(scanTopicSpy.mock.calls[0]?.slice(1)).toEqual(["topic-1", "owner-1", "scheduled", true])
-})
-
-// a budget read that throws an error is reported, and the Scan is neither marked failed nor started
-test("an undispatched Scan whose owner's budget read throws an error is reported and left undispatched", async () => {
-	// a scheduled row whose owner's budget read throws an error, with a quiet console and error report
-	const sentQueries = stubConnectionPool(() => [toUndispatchedScanRow({ id: "scheduled-scan", isManual: false })])
-	spyOn(console, "log").mockImplementation(() => {})
-	spyOn(console, "error").mockImplementation(() => {})
-	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockRejectedValue(new Error("connection lost"))
-	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
-	const failUnstartedScanSpy = spyOn(scan, "failUnstartedScan").mockResolvedValue(undefined)
-	const scanTopicSpy = spyOn(scan, "scanTopic").mockResolvedValue({ status: "running" })
-	await startUndispatchedScans()
-
-	// the error is reported with the Scan's id, and only the read of the undispatched rows was sent
-	expect(reportErrorSpy.mock.calls[0]?.slice(1)).toEqual(["scheduled-scan", { scanId: "scheduled-scan" }])
-	expect(sentQueries.map((sentQuery) => sentQuery.text.split(" ")[0])).toEqual(["select"])
-	expect(failUnstartedScanSpy).not.toHaveBeenCalled()
-	expect(scanTopicSpy).not.toHaveBeenCalled()
-})
-
-// a row that stopped running after the sweep read the row matches no update, so the sweep starts no Scan for that row
-test("an undispatched Scan that stopped running after the sweep read the row is not started", async () => {
-	// the select returns a scheduled row, and the update of its start time matches no row
-	const undispatchedScanRows = [toUndispatchedScanRow({ id: "scheduled-scan", isManual: false })]
-	const sentQueries = stubConnectionPool(({ text }) => (text.startsWith("select") ? undispatchedScanRows : []))
-
-	// an owner whose key budget is not spent, with a quiet console
-	spyOn(console, "log").mockImplementation(() => {})
-	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockResolvedValue(false)
-	const scanTopicSpy = spyOn(scan, "scanTopic").mockResolvedValue({ status: "running" })
-	await startUndispatchedScans()
-
-	// the update matches only a row that is still running, and no Scan started
-	expect(sentQueries[1]?.text).toStartWith('update "scans"')
-	expect(sentQueries[1]?.text).toContain('"scans"."status" = $')
-	expect(sentQueries[1]?.values).toEqual(expect.arrayContaining(["scheduled-scan", "running"]))
-	expect(scanTopicSpy).not.toHaveBeenCalled()
-})
-
 // the sweep hands each Scan to Temporal and does not wait, so its summary count starts
 test("a topic sweep summary counts starts instead of outcomes", () => {
 	const summary = emptyTopicSweepSummary()
@@ -468,18 +346,6 @@ test("a topic sweep summary counts starts instead of outcomes", () => {
 		"skippedOverQuota",
 		"started",
 	])
-})
-
-// the stale scan window waits out the longest a Scan may legally run
-test("the stale scan window clears the longest a Scan may legally run", () => {
-	// each stage's total covers its own retries, so the summed total cannot fall behind a retry policy that changes
-	expect(INGEST_TOTAL_TIMEOUT_MS).toBe(INGEST_TIMEOUT_MS * INGEST_ATTEMPTS)
-	expect(REVIEW_TOTAL_TIMEOUT_MS).toBe(REVIEW_TIMEOUT_MS * REVIEW_ATTEMPTS)
-	expect(FINISH_TOTAL_TIMEOUT_MS).toBe(FINISH_TIMEOUT_MS * FINISH_ATTEMPTS)
-
-	// the window clears the across-attempts total, not the sum of one attempt per stage
-	expect(MAX_SCAN_DURATION_MS).toBe(INGEST_TOTAL_TIMEOUT_MS + REVIEW_TOTAL_TIMEOUT_MS + FINISH_TOTAL_TIMEOUT_MS)
-	expect(staleScanWindowMs()).toBeGreaterThan(MAX_SCAN_DURATION_MS)
 })
 
 // the monthly budget reset runs as its own daily job, so the sweep's source never names resetMonthlyBudgets
@@ -506,42 +372,4 @@ test("the sweep runs only the daily Topics inside their owner's allowance", () =
 
 	// an owner with no daily Topics in this sweep has no allowance read, and no daily Topic to run either
 	expect(isWithinDailyTopicLimit({ id: "kept", frequency: "daily" }, undefined)).toBe(false)
-})
-
-// a Scan queue with a worker polling it and nothing waiting
-const HEALTHY_SCAN_QUEUE = { pollerCount: 1, backlogCount: 0, oldestBacklogAgeMs: 0 }
-
-// the sweep reports a queue nothing polls, and a backlog whose oldest Scan waited past 15 minutes
-test("reportScanQueue reports a queue nothing polls and a backlog past its limit", async () => {
-	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
-	await reportScanQueue(async () => HEALTHY_SCAN_QUEUE)
-	expect(consoleErrorSpy).not.toHaveBeenCalled()
-
-	// a queue nothing polls
-	await reportScanQueue(async () => ({ ...HEALTHY_SCAN_QUEUE, pollerCount: 0 }))
-	expect(String(consoleErrorSpy.mock.calls.at(-1)?.[0])).toContain("no temporal worker is polling the scan queue")
-
-	// a queue whose oldest Scan has waited 20 minutes
-	await reportScanQueue(async () => ({ pollerCount: 1, backlogCount: 12, oldestBacklogAgeMs: 20 * 60 * 1000 }))
-	expect(consoleErrorSpy.mock.calls.at(-1)).toEqual([
-		"a scan waited over 15 minutes for a slot",
-		{ backlogCount: 12, oldestBacklogAgeMs: 20 * 60 * 1000 },
-	])
-})
-
-// a describe that fails is logged, and the sweep goes on
-test("reportScanQueue never fails the sweep", async () => {
-	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
-	await expect(reportScanQueue(() => Promise.reject(new Error("temporal unreachable")))).resolves.toBeUndefined()
-	expect(consoleErrorSpy.mock.calls[0]?.[0]).toBe("could not read the scan task queue")
-})
-
-// an older server gives a depth and no age, so its backlog is never reported as past the limit
-test("toScanBacklogCrossing needs a known age past 15 minutes", () => {
-	const backedUpQueue = { pollerCount: 1, backlogCount: 40 }
-	expect(toScanBacklogCrossing({ ...backedUpQueue, oldestBacklogAgeMs: null })).toBeNull()
-	expect(toScanBacklogCrossing({ ...backedUpQueue, oldestBacklogAgeMs: 15 * 60 * 1000 })).toBeNull()
-	expect(toScanBacklogCrossing({ ...backedUpQueue, oldestBacklogAgeMs: 16 * 60 * 1000 })?.condition).toBe(
-		"scan-backlog",
-	)
 })

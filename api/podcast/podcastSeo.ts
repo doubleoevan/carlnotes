@@ -5,7 +5,7 @@ import { isPodcastEpisodeRecordingConfigured, PODCAST_SHOW_NAME, toPodcastCoverP
 import { toPodcastEpisodePath, toPodcastFeedPath, toTopicPath } from "@shared/seo"
 import { and, desc, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
-import { podcastEpisodes } from "../../db/schema"
+import { podcastEpisodes } from "../../db/schema/podcast"
 import type { TopicPreview } from "../share/topicImage"
 
 // a published podcast episode of a public topic, as the sitemap and llms.txt list it

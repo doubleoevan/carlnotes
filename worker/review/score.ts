@@ -1,34 +1,30 @@
-// the paid stages: fetch each Resource's content, score it against the topic context with tiered models
+// the paid stages: score each fetched Resource against the topic context with tiered models, and write its Finding
 import { reportError } from "@shared/monitoring"
-import { toUrlHost } from "@shared/sources"
 import { generateText, type LanguageModel, Output } from "ai"
-import { eq, sql } from "drizzle-orm"
+import { sql } from "drizzle-orm"
 import { z } from "zod"
 import { db } from "../../db"
-import { findings, resources, type scans } from "../../db/schema"
+import { findings, type scans } from "../../db/schema/scans"
 import {
 	type Budget,
 	CHEAP_COST_PER_MILLION_TOKENS,
 	canScoreResource,
 	canSpend,
 	charge,
-	type FetchOutcome,
 	PREMIUM_COST_PER_MILLION_TOKENS,
 	type StageCosts,
 	toFetchCountField,
 	tokenCost,
 } from "../budget"
 import { runWithConcurrency } from "../concurrency"
-import { fetchAndStoreHostFavicon, settleFaviconFetches } from "../favicons"
+import { settleFaviconFetches } from "../favicons"
 import { screenText, toFlaggedReason } from "../guard"
-import { isTitleFromUrlFallback } from "../ingest/normalize"
 import { cheapModel, isBudgetRejection, scoreModel } from "../models"
 import { linkPodcastEpisodeChapters, toPodcastEpisodeChapterRatingSql } from "../podcast/podcastEpisodeChapters"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
 import { filterPremiumPrompt, writePrompt } from "../prompts/write"
-import { CONTENT_TTL_MS, fetchContent, isContentStale, revalidateContent } from "../scrape"
-import { deleteResourceContent, getResourceContent, toResourceContentKey, uploadResourceContent } from "../store"
+import { fetchResourceContent } from "./fetch"
 import type { Resource, TopicContext } from "./filter"
 import { type ResourceOutcome, type ReviewOutcome, trackOutcomes } from "./track"
 
@@ -43,9 +39,6 @@ const REVIEW_CONCURRENCY = Number(Bun.env.REVIEW_CONCURRENCY ?? "4")
 
 // the text limit that bounds scoring tokens and spend
 const MAX_SCORE_CHARS = 8000
-
-// how a tweet's canonical url always starts, where ingestion folds twitter.com onto x.com and lowercases the host
-const X_URL_PREFIX = "https://x.com/"
 
 // the model's structured output
 const scoreSchema = z.object({ score: z.number(), relevanceExplanation: z.string().optional() })
@@ -156,105 +149,6 @@ async function fetchAndScoreResource(
 		console.error(`review failed for resource ${resource.id}`, error)
 		reportError(error, "score", { resourceId: resource.id, url: resource.url })
 		return { status: "failed" }
-	}
-}
-
-// get the resource's content
-async function fetchResourceContent(
-	resource: Resource,
-	budget: Budget,
-): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
-	// a Resource whose snippet is already its whole text needs no fetch. it counts as reused, which charges no fetch credit
-	if (isSnippetComplete(resource.url)) {
-		return { content: resource.snippet ?? "", fetchOutcome: "reused" }
-	}
-
-	// reuse stored content scores as-is if it isn't stale, read back from object storage, with no fetch
-	if (resource.contentKey && !isContentStale(resource.fetchedAt, new Date(), CONTENT_TTL_MS)) {
-		const storedContent = await readStoredContent(resource.contentKey, resource.id)
-		if (storedContent !== null) {
-			return { content: storedContent, fetchOutcome: "reused" }
-		}
-	}
-
-	// revalidate stale content with a cheap conditional GET. 304 reuses it and refreshes the fetched_at timestamp
-	if (resource.contentKey && (resource.etag || resource.lastModified)) {
-		const outcome = await revalidateContent(resource.url, { etag: resource.etag, lastModified: resource.lastModified })
-		const storedContent = outcome === "not-modified" ? await readStoredContent(resource.contentKey, resource.id) : null
-		if (storedContent !== null) {
-			await db.update(resources).set({ fetchedAt: new Date() }).where(eq(resources.id, resource.id))
-			return { content: storedContent, fetchOutcome: "revalidated" }
-		}
-	}
-
-	// fetch fresh content, storing it along with the etag and last-modified
-	return fetchAndStoreContent(resource, budget)
-}
-
-// read a Resource's stored text or null if the object is gone or unreadable
-async function readStoredContent(contentKey: string, resourceId: string): Promise<string | null> {
-	try {
-		return await getResourceContent(contentKey)
-	} catch (error) {
-		// a read that fails turns into a paid refetch, so a rising rate here costs money
-		console.error(`object-storage read failed for resource ${resourceId}`, error)
-		reportError(error, "object-storage", { resourceId, contentKey, operation: "read" })
-		return null
-	}
-}
-
-// fetch the content by the path the Resource's kind selects, write it to object storage
-async function fetchAndStoreContent(
-	resource: Resource,
-	budget: Budget,
-): Promise<{ content: string; fetchOutcome: FetchOutcome }> {
-	try {
-		// fetch the content, charge what that fetch spent, then write the body to object storage
-		const { text, cost, etag, lastModified, title, faviconUrl } = await fetchContent(
-			resource.url,
-			resource.kind,
-			resource.transcriptUrl,
-		)
-		charge(budget, "fetch", cost)
-		const stored = text ? await storeResourceContent(resource.id, text) : null
-
-		// the text to score and the key to store, plus the title when the stored one came from the url
-		const { scoringText, contentKey, contentBytes } = toFetchedContentFields(stored, text, resource.snippet)
-		const pageTitleField = toPageTitleField(resource, title)
-
-		// store the resource row
-		await db
-			.update(resources)
-			.set({ contentKey, contentBytes, etag, lastModified, fetchedAt: new Date(), ...pageTitleField })
-			.where(eq(resources.id, resource.id))
-
-		// the page's host gets its favicon beside the score, never ahead of it
-		const host = toUrlHost(resource.url)
-		if (host) {
-			void fetchAndStoreHostFavicon(host, faviconUrl)
-		}
-		return { content: scoringText, fetchOutcome: "fetched" }
-	} catch (error) {
-		// the fetch failed, so fall back to the snippet. the Finding is still written, with less to go on
-		console.error(`content fetch failed for ${resource.url}`, error)
-		reportError(error, "fetch", { resourceId: resource.id, url: resource.url })
-		return { content: resource.snippet ?? "", fetchOutcome: "fetched" }
-	}
-}
-
-// write the fetched text to object storage, returning its key and size, or null if the write fails
-async function storeResourceContent(
-	resourceId: string,
-	text: string,
-): Promise<{ contentKey: string; bytes: number } | null> {
-	try {
-		return await uploadResourceContent(resourceId, text)
-	} catch (error) {
-		// the write failed
-		console.error(`object-storage write failed for resource ${resourceId}`, error)
-		reportError(error, "object-storage", { resourceId, operation: "write" })
-		await deleteResourceContent(toResourceContentKey(resourceId)).catch(() => {})
-		return null
 	}
 }
 
@@ -434,41 +328,6 @@ async function upsertFinding({
  */
 export function isPromoted(score: number): boolean {
 	return score >= REVIEW_PROMOTION_THRESHOLD
-}
-
-/**
- * Whether the Resource's snippet is already its whole text, so fetching the page would add nothing.
- * A tweet is the only one today, and x.com rejects scraping, so a fetch there is billed only to fail.
- */
-export function isSnippetComplete(url: string): boolean {
-	return url.startsWith(X_URL_PREFIX)
-}
-
-/**
- * The title field a fetch writes, which is the page's own title if the stored one was taken from the url.
- * An empty object leaves the stored title alone.
- */
-export function toPageTitleField(
-	resource: Pick<Resource, "title" | "url">,
-	pageTitle: string | null,
-): { title?: string } {
-	return pageTitle && isTitleFromUrlFallback(resource.title, resource.url) ? { title: pageTitle } : {}
-}
-
-/**
- * The fields that a fetch writes to the Resource row, plus the text it scores. A body written to object storage
- * is scored in memory and keeps its key. An empty fetch or a failed write scores the snippet instead and keeps no key.
- */
-export function toFetchedContentFields(
-	stored: { contentKey: string; bytes: number } | null,
-	text: string,
-	snippet: string | null,
-): { scoringText: string; contentKey: string | null; contentBytes: number | null } {
-	return {
-		scoringText: stored ? text : (snippet ?? ""),
-		contentKey: stored?.contentKey ?? null,
-		contentBytes: stored?.bytes ?? null,
-	}
 }
 
 /**

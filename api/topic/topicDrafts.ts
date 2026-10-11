@@ -1,8 +1,8 @@
 // the new-topic chat's draft, stored per user so it survives a reload
-import { type TopicDraft, topicDraftPayload } from "@shared/contracts"
+import { type TopicDraft, topicDraftPayload } from "@shared/topicPayloads"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
-import { topicDrafts } from "../../db/schema"
+import { topicDrafts } from "../../db/schema/topics"
 
 /**
  * The draft this user's new-topic chat has written so far, or null for a visitor and a chat that has written none.

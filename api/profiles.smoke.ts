@@ -2,7 +2,8 @@
 // run it with: bun run smoke:profile. needs Doppler secrets
 import { and, eq, sum } from "drizzle-orm"
 import { connectionPool, type DbTransaction, db } from "../db"
-import { subscriptions, topics, users } from "../db/schema"
+import { subscriptions, topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
 import { countDistinctSubscribers } from "./profiles"
 import { updateTopicSubscriberCount } from "./topic/subscriberCounts"
 

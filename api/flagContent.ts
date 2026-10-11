@@ -2,13 +2,15 @@
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
-import { type FlagContentPayload, flagContentPayload } from "@shared/contracts"
+import { type FlagContentPayload, flagContentPayload } from "@shared/payloads"
 import { toTopicPath } from "@shared/seo"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
 import { decrementRateLimitWindow, incrementRateLimitWindow, isWithinRateLimit } from "../db/redis"
-import { teams, topics, users } from "../db/schema"
+import { teams } from "../db/schema/teams"
+import { topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
 import { sendEmail } from "../worker/email"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
 import { toTeamRole } from "./team/members"
@@ -109,7 +111,6 @@ function toFlagHtml(subject: { label: string; path: string }, sender: string, re
 
 /**
  * Counts one flag against the user's daily rate limit window and returns whether the count is within the limit.
- * A flag that Redis could not count is allowed.
  */
 export async function canFlag(userId: string): Promise<boolean> {
 	// count the flag in the user's daily rate limit window and return whether the count is within the limit

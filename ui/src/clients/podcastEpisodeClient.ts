@@ -1,13 +1,13 @@
 // the api client for the podcast episode routes
 import {
 	type PodcastEpisode,
-	type PodcastEpisodeListenPayload,
 	type PodcastEpisodePageResponse,
 	podcastEpisode,
 	podcastEpisodePageResponse,
 	type SeasonPodcastEpisodes,
 	seasonPodcastEpisodes,
 } from "@shared/contracts"
+import type { PodcastEpisodeListenPayload } from "@shared/payloads"
 import { z } from "zod"
 import { apiClient } from "./apiClient"
 import { readTopicGate, type TopicGate } from "./topicClient"

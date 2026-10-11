@@ -2,7 +2,8 @@
 import type { TopicResponse } from "@shared/contracts"
 import { and, desc, eq, exists, inArray, ne, or, type SQL, sql } from "drizzle-orm"
 import { db } from "../../db"
-import { teams, teamTopics, topics } from "../../db/schema"
+import { teams, teamTopics } from "../../db/schema/teams"
+import { topics } from "../../db/schema/topics"
 import { topicFeedUpdatedAt } from "../seo"
 import { isPublicAndShown } from "./permissions"
 

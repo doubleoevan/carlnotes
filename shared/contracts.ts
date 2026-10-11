@@ -7,29 +7,19 @@ import {
 	daysOfWeek,
 	editableSourceKinds,
 	frequencies,
-	inviteAccesses,
-	maxTopicFindingsOptions,
-	noteVisibilities,
-	podcastEpisodeSpeakers,
+	type noteVisibilities,
 	ratings,
 	resourceKinds,
 	scanStatuses,
 	sourceKinds,
-	teamRoles,
+	type teamRoles,
 	topicSectionKeys,
 	visibilities,
 } from "./enums"
+import type { ChatToolCall, PodcastEpisodeChapterScript, PodcastEpisodeTurn } from "./payloads"
 import type { BillingInterval, Plan } from "./plans"
-import { customSourceKeys, defaultSourceKeys } from "./sources"
-
-// the rating mutation body. up or down sets the topic finding's rating and null clears it
-export const ratingPayload = z.object({ rating: z.enum(ratings).nullable() })
-
-// the consumed mutation body. true marks the topic finding consumed for the current user and false unmarks it
-export const consumedPayload = z.object({ isConsumed: z.boolean() })
-
-// the bookmark mutation body. true sets the topic finding bookmark for the current user and false clears it
-export const bookmarkPayload = z.object({ isBookmarked: z.boolean() })
+import { customSourceKeys } from "./sources"
+import type { ProposeTopicEditPayload, TopicDraft } from "./topicPayloads"
 
 // one chat message attachment shown with a chat message
 export type ChatMessageAttachment = { id: string; kind: (typeof chatAttachmentKinds)[number]; name: string }
@@ -66,46 +56,9 @@ export type ChatLinkPreview = {
 
 // the chat room post body
 export const CHAT_ROOM_MESSAGE_MAX_CHARS = 4000
-export const chatRoomMessagePayload = z
-	.object({
-		content: z.string().trim().max(CHAT_ROOM_MESSAGE_MAX_CHARS),
-		replyToChatMessageId: z.number().int().positive().nullable().optional(),
-		// the shared files going with the chat message, under the per-chat message limit
-		get attachments() {
-			return z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([])
-		},
-	})
-	// a chat message may be attachments alone, but never nothing at all
-	.refine((chatMessage) => chatMessage.content !== "" || chatMessage.attachments.length > 0)
-
-// a user's own words about a finding to use for tuning later
-export const findingFeedbackPayload = z.object({ feedback: z.string().trim().min(1).max(2000) })
-
-// the signup-gate body. oauth never calls this endpoint, only the password path needs turnstile
-export const signupGatePayload = z.object({ turnstileToken: z.string() })
-
-// the checkout body. which paid plan and billing interval to subscribe to through Stripe Checkout
-export const checkoutPayload = z.object({
-	plan: z.enum(["plus", "premium"]),
-	billingInterval: z.enum(["monthly", "yearly"]),
-})
-
-// the update username body. the validation rules live in toUsernameRejection
-export const usernamePayload = z.object({ username: z.string() })
 
 // how long a flag's reason can be
 export const FLAG_REASON_MAX_CHARS = 1000
-
-// the flag issue body. the subject is a topic, profile, or team id, named by which kind it is so the api can look it up
-export const flagContentPayload = z.object({
-	subjectKind: z.enum(["topic", "profile", "team"]),
-	subjectId: z.string().min(1),
-	reason: z.string().trim().min(1).max(FLAG_REASON_MAX_CHARS),
-})
-export type FlagContentPayload = z.infer<typeof flagContentPayload>
-
-// the invite-delete body, named by its invite id
-export const inviteDeletePayload = z.object({ inviteId: z.string() })
 
 // one pending invite to a topic or a team, as its sender sees it
 export const invite = z.object({
@@ -118,30 +71,6 @@ export const invite = z.object({
 	expiresAt: z.string().nullable(),
 })
 export type Invite = z.infer<typeof invite>
-
-// the create-team body from the shared create modal
-export const createTeamPayload = z.object({
-	name: z.string().trim().min(1).max(80),
-	topicIds: z.array(z.string()).max(50),
-	// the description the same modal writes on an edit, optional at both ends
-	description: z.string().trim().max(500).nullable().optional(),
-	// whether the page opens to anyone from the start. absent stays private, the default
-	isPublic: z.boolean().optional(),
-})
-export type CreateTeamPayload = z.infer<typeof createTeamPayload>
-
-// the leader's team edits. the public toggle's confirmation lives in the ui
-export const updateTeamPayload = z.object({
-	name: z.string().trim().min(1).max(80).optional(),
-	description: z.string().trim().max(500).nullable().optional(),
-	isPublic: z.boolean().optional(),
-})
-export type UpdateTeamPayload = z.infer<typeof updateTeamPayload>
-
-// attaching one topic to a team, setting one member's role, and a member's own member-visibility opt-out
-export const addTopicPayload = z.object({ topicId: z.string() })
-export const memberRolePayload = z.object({ role: z.enum(teamRoles) })
-export const memberVisibilityPayload = z.object({ isMemberVisible: z.boolean() })
 
 // the fields every teams page row shows, shared by memberships and received invitations
 export type TeamRowFields = TeamIdentity & {
@@ -197,23 +126,8 @@ export type TeamPageResponse = {
 	topics: Topic[]
 }
 
-// the invite-access settings body
-export const inviteAccessPayload = z.object({ inviteAccess: z.enum(inviteAccesses) })
-
-// the user-invite body: exactly one identifier, a username or an email address
-export const userInvitePayload = z
-	.object({
-		username: z.string().trim().min(1).optional(),
-		email: z.string().trim().toLowerCase().pipe(z.email()).optional(),
-	})
-	.refine((payload) => (payload.username === undefined) !== (payload.email === undefined), {
-		message: "exactly one of username or email",
-	})
-export type UserInvitePayload = z.infer<typeof userInvitePayload>
-
 // which control created an invite
 export const inviteSources = ["compose", "copy-link", "share-sheet"] as const
-export const inviteCreatePayload = z.object({ source: z.enum(inviteSources) })
 export type InviteSource = (typeof inviteSources)[number]
 
 // what creating an invite returns: the invite whose url goes into a composer or onto the clipboard
@@ -232,13 +146,6 @@ export const inviteAcceptResponse = z.discriminatedUnion("status", [
 	z.object({ status: z.enum(inviteRejections) }),
 ])
 export type InviteAcceptResponse = z.infer<typeof inviteAcceptResponse>
-
-// the subscription email-preference mutation body, independent of the subscription's active state
-export const subscriptionEmailPayload = z.object({
-	isEmailEnabled: z.boolean(),
-	// whose subscription to write, for an admin acting on somebody else's. absent means the caller's own
-	subscriberUserId: z.string().optional(),
-})
 
 // one Scan row in an Activity topic's subtable
 export type ActivityScan = {
@@ -584,42 +491,6 @@ export const CHAT_ATTACHMENT_KEEP_LIMIT = 20
 // how many files one member may have shared with one chat room at a time
 export const CHAT_ROOM_ATTACHMENT_LIMIT = 20
 
-// the shape that every chat attachment includes whatever its kind
-const chatAttachmentFields = {
-	name: z.string().trim().min(1).max(200),
-	keep: z.boolean().default(false),
-}
-
-// one attachment on a chat turn. each kind has its own field requirements
-export const chatAttachmentPayload = z.discriminatedUnion("kind", [
-	z.strictObject({
-		...chatAttachmentFields,
-		kind: z.literal("image"),
-		dataUrl: z.string().max(CHAT_IMAGE_DATA_CHARS).startsWith("data:image/"),
-	}),
-	z.strictObject({
-		...chatAttachmentFields,
-		kind: z.literal("pdf"),
-		dataUrl: z.string().max(CHAT_PDF_DATA_CHARS).startsWith("data:application/pdf"),
-	}),
-	z.strictObject({
-		...chatAttachmentFields,
-		kind: z.literal("document"),
-		dataUrl: z.string().max(CHAT_PDF_DATA_CHARS).startsWith("data:application/vnd.openxmlformats-"),
-	}),
-	z.strictObject({
-		...chatAttachmentFields,
-		kind: z.literal("text"),
-		text: z.string().max(CHAT_ATTACHMENT_TEXT_CHARS),
-	}),
-	z.strictObject({
-		...chatAttachmentFields,
-		kind: z.literal("video"),
-		dataUrl: z.string().max(CHAT_VIDEO_DATA_CHARS).startsWith("data:video/"),
-	}),
-])
-export type ChatAttachment = z.infer<typeof chatAttachmentPayload>
-
 /**
  * Attachment text is held to a limit, with a marker naming the cut.
  */
@@ -645,126 +516,9 @@ export function withAttachmentNote(question: string, attachments: { name: string
 // how many Sources one topic may hold, the same on every plan.
 export const MAX_TOPIC_SOURCES = 10
 
-// the topic tool payloads
-export const updateTopicPromptPayload = z.object({ prompt: z.string().trim().min(1).max(TOPIC_PROMPT_CHARS) })
-export const addTopicSourcePayload = z.object({
-	// a source option key and its value. a default source takes no value
-	sourceOption: z.enum([...defaultSourceKeys, ...customSourceKeys]),
-	value: z.string().trim().max(2000).default(""),
-})
-export const removeTopicSourcePayload = z.object({ sourceId: z.string().min(1) })
-export type AddTopicSourcePayload = z.infer<typeof addTopicSourcePayload>
-
 // the limits on the tags a chat writes onto a topic
 export const MAX_TOPIC_DRAFT_TAGS = 10
 export const TOPIC_DRAFT_TAG_CHARS = 40
-// the tags a chat writes, and the results count as one of the editor's choices
-const topicDraftTagsPayload = z.array(z.string().trim().min(1).max(TOPIC_DRAFT_TAG_CHARS)).max(MAX_TOPIC_DRAFT_TAGS)
-const maxTopicFindingsPayload = z
-	.number()
-	.refine((value) => (maxTopicFindingsOptions as readonly number[]).includes(value))
-
-// the time of day a scan runs, as HH:MM
-export const scheduledTimePayload = z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/, "expected HH:MM")
-
-// the settings that a topic and a topic draft both have. each is optional, so a call names only the settings it changes
-export const topicSettingsShape = {
-	name: z.string().trim().min(1).max(TOPIC_NAME_CHARS).optional(),
-	tags: topicDraftTagsPayload.optional(),
-	visibility: z.enum(visibilities).optional(),
-	frequency: z.enum(frequencies).optional(),
-	scheduledTime: scheduledTimePayload.optional(),
-	scheduledDayOfWeek: z.enum(daysOfWeek).optional(),
-	maxTopicFindings: maxTopicFindingsPayload.optional(),
-}
-
-// a change to a saved topic's settings. the settings that a topic draft shares, and whether the topic's podcast is on
-export const updateTopicFieldsPayload = z
-	.object({ ...topicSettingsShape, isPodcastEnabled: z.boolean().optional() })
-	.refine((fields) => Object.values(fields).some((value) => value !== undefined), "name at least one field")
-export type UpdateTopicFieldsPayload = z.infer<typeof updateTopicFieldsPayload>
-
-// what carl proposes changing, which the card previews over the topic as it stands. sources are named as the two
-// acts the saving tools take, one adding and one dropping, so a source he does not name is never read as a removal
-export const proposeTopicEditPayload = updateTopicFieldsPayload.extend({
-	prompt: z.string().trim().min(1).max(TOPIC_PROMPT_CHARS).optional(),
-	addSources: z.array(addTopicSourcePayload).max(MAX_TOPIC_SOURCES).optional(),
-	removeSourceIds: z.array(z.string().min(1)).max(MAX_TOPIC_SOURCES).optional(),
-})
-export type ProposeTopicEditPayload = z.infer<typeof proposeTopicEditPayload>
-
-// a team the topic draft names: its id for the save, its name for the card and for carl
-export const topicDraftTeamPayload = z.object({
-	teamId: z.string().trim().min(1),
-	name: z.string().trim().min(1).max(200),
-})
-export type TopicDraftTeam = z.infer<typeof topicDraftTeamPayload>
-
-// the topic draft the new-topic chat holds: what carl has written down so far, every field starting empty
-export const topicDraftPayload = z.object({
-	name: z.string().trim().max(TOPIC_NAME_CHARS).default(""),
-	prompt: z.string().trim().max(TOPIC_PROMPT_CHARS).default(""),
-	sources: z.array(addTopicSourcePayload).max(MAX_TOPIC_SOURCES).default([]),
-	inviteEmails: z.array(z.string().trim().toLowerCase().pipe(z.email())).max(MAX_DRAFT_INVITES).default([]),
-	// who may read the topic, shared by invite unless the topic draft says otherwise
-	visibility: z.enum(visibilities).default("invite"),
-	// the team the topic joins at the save, one the user leads, or none
-	team: topicDraftTeamPayload.nullable().default(null),
-	// the settings a new topic draft starts with: no tags, a weekly scan on Wednesday morning, and ten findings kept
-	tags: topicDraftTagsPayload.default([]),
-	frequency: z.enum(frequencies).default("weekly"),
-	scheduledTime: scheduledTimePayload.default("09:00"),
-	scheduledDayOfWeek: z.enum(daysOfWeek).default("wednesday"),
-	maxTopicFindings: maxTopicFindingsPayload.default(10),
-	// whether the topic's podcast is on. absent on an instance with no speech model, which has no podcast
-	isPodcastEnabled: z.boolean().optional(),
-})
-export type TopicDraft = z.infer<typeof topicDraftPayload>
-
-// a topic draft with nothing written yet, every field at the payload's own default
-export const EMPTY_TOPIC_DRAFT: TopicDraft = Object.freeze(topicDraftPayload.parse({}))
-
-// the create_topic tool's input over mcp: a draft whose name and prompt are required
-export const createTopicPayload = topicDraftPayload.extend({
-	name: z.string().trim().min(1).max(TOPIC_NAME_CHARS),
-	prompt: z.string().trim().min(1).max(TOPIC_PROMPT_CHARS),
-})
-
-// one tool a chat turn called, with its input and what it returned
-export const chatToolCallPayload = z
-	.object({
-		toolName: z.string().max(80),
-		input: z.unknown(),
-		output: z.string().max(CHAT_HISTORY_ANSWER_CHARS),
-	})
-	.refine(
-		(toolCall) => JSON.stringify(toolCall.input ?? null).length <= CHAT_HISTORY_TOOL_CALL_INPUT_CHARS,
-		"tool call input too long",
-	)
-export type ChatToolCall = z.infer<typeof chatToolCallPayload>
-
-// a chat turn's question plus the conversation so far
-export const chatTurnPayload = z
-	.object({
-		question: z.string().trim().max(CHAT_QUESTION_CHARS),
-		history: z
-			.array(
-				z.object({
-					question: z.string().max(CHAT_HISTORY_QUESTION_CHARS),
-					answer: z.string().max(CHAT_HISTORY_ANSWER_CHARS),
-					// the tools the chat turn called, replayed so the model reads a save as a call
-					toolCalls: z.array(chatToolCallPayload).max(CHAT_HISTORY_TOOL_CALLS).optional(),
-				}),
-			)
-			.max(CHAT_HISTORY_TURNS)
-			.default([]),
-		attachments: z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([]),
-		// the chat's new topic draft as the browser holds it
-		topicDraft: topicDraftPayload.optional(),
-	})
-	// a chat turn may be attachments alone, but never nothing at all
-	.refine((chatTurn) => chatTurn.question !== "" || chatTurn.attachments.length > 0)
-export type ChatTurnPayload = z.infer<typeof chatTurnPayload>
 
 // one persisted chat turn of a stored conversation, replayed on a later page load
 export type ChatTurnRow = {
@@ -806,12 +560,6 @@ export type ChatConversation = {
 	// the topic draft carl has written so far, on the new-topic conversation alone
 	topicDraft?: TopicDraft
 }
-
-// the admin role-change body. an admin cannot remove their own admin role, enforced server-side
-export const setRolePayload = z.object({ role: z.enum(["admin", "user"]) })
-
-// the admin budget-override body: a per-user monthly limit in cents, or null to fall back to the plan's backstop
-export const budgetOverridePayload = z.object({ budgetOverrideCents: z.number().int().nonnegative().nullable() })
 
 // an admin-console user row: the user's status plus their attributed storage and month-to-date variable cost
 export type AdminUserRow = {
@@ -894,8 +642,11 @@ export type UserSearchResult = ProfileIdentity
 // a public team the search bar found, in the shape its avatar and link both read
 export type TeamSearchResult = TeamIdentity
 
-// how long a query must be before it can search users, and how many matches can be returned
-export const USER_SEARCH_MIN_CHARS = 2
+// a topic the search bar found, in the shape its link reads
+export type TopicSearchResult = { id: string; name: string }
+
+// how long a query must be before it can search users, teams, or topics, and how many user matches can be returned
+export const SEARCH_MIN_CHARS = 2
 export const USER_SEARCH_LIMIT = 5
 
 export type ProfileResponse = {
@@ -1138,18 +889,6 @@ export const podcastEpisodeTranscriptBlock = z.object({
 })
 export type PodcastEpisodeTranscriptBlock = z.infer<typeof podcastEpisodeTranscriptBlock>
 
-// what the player saves as a user listens. the user's progress, whether playback just started,
-// and whether playback ended
-export const podcastEpisodeListenPayload = z.object({
-	progressSeconds: z.number().int().min(0),
-	isPlaybackStart: z.boolean().optional(),
-	isCompleted: z.boolean().optional(),
-})
-export type PodcastEpisodeListenPayload = z.infer<typeof podcastEpisodeListenPayload>
-
-// the body that turns a topic's podcast switch on or off
-export const topicPodcastPayload = z.object({ isPodcastEnabled: z.boolean() })
-
 // a topic's podcast as its page shows it
 export const topicPodcast = z.object({
 	// whether the owner has the podcast on
@@ -1262,18 +1001,6 @@ export function toAttachmentFailureMessage(failureReason: string | null): string
 	return "Carl couldn't read this one."
 }
 
-// the source suggestions body
-export const suggestSourcesPayload = z.object({
-	name: z.string().trim(),
-	prompt: z.string().trim(),
-	attachmentContext: z.string().trim().max(MAX_ATTACHMENT_CONTEXT_CHARS).default(""),
-	excludeSources: z
-		.array(z.object({ sourceOption: z.enum(customSourceKeys), value: z.string() }))
-		.max(MAX_TOPIC_SOURCES),
-	limit: z.number().int().min(1).max(MAX_TOPIC_SOURCES),
-})
-export type SuggestSourcesPayload = z.infer<typeof suggestSourcesPayload>
-
 // suggested sources, each already confirmed readable. name is the display name for the source
 export const suggestSourcesResponse = z.object({
 	sources: z.array(
@@ -1281,28 +1008,6 @@ export const suggestSourcesResponse = z.object({
 	),
 })
 export type SuggestSourcesResponse = z.infer<typeof suggestSourcesResponse>
-
-// the topic update body the edit modal saves. invites and sources are lists that the api reconciles
-export const updateTopicPayload = z.object({
-	// the editable topic fields
-	name: z.string().trim().min(1),
-	prompt: z.string().trim().min(1),
-	tags: z.array(z.string().trim().min(1)),
-	frequency: z.enum(frequencies),
-	scheduledTime: scheduledTimePayload,
-	scheduledDayOfWeek: z.enum(daysOfWeek),
-	visibility: z.enum(visibilities),
-	// how many findings a scan is set to keep for this topic
-	maxTopicFindings: maxTopicFindingsPayload,
-	// the full list of a topic's invited email addresses
-	inviteEmails: z.array(z.string().trim().toLowerCase().pipe(z.email())),
-	// stored, staged, and prompt-derived Sources are combined into one array and limited to MAX_TOPIC_SOURCES
-	sources: z.array(updateTopicSource).max(MAX_TOPIC_SOURCES),
-})
-export type UpdateTopicPayload = z.infer<typeof updateTopicPayload>
-
-// the subscription toggle body. true subscribes the current user and false unsubscribes them
-export const subscriptionPayload = z.object({ isSubscribed: z.boolean() })
 
 // which signup button converted for posthog, kept in a cookie across the oauth round-trip
 export const SIGNUP_CTA_COOKIE_NAME = "signup_cta"
@@ -1316,15 +1021,6 @@ const CTA_TAG_PATTERN = /^[a-z0-9-]{1,40}$/
 export function toCtaTag(value: string | null | undefined): string | null {
 	return value && CTA_TAG_PATTERN.test(value) ? value : null
 }
-
-// the edited attachment context body
-export const attachmentContextPayload = z.object({ context: z.string().trim().max(MAX_ATTACHMENT_CONTEXT_CHARS) })
-
-// the payload for attaching a page by url
-export const attachmentUrlPayload = z.object({ url: z.string().trim().min(1).max(2000) })
-
-// the admin's featured topics order choice
-export const topicFeatureOrderPayload = z.object({ position: z.number().int().min(0) })
 
 // the manual scan response which is how many manual scans the user has left today
 export const manualScanResponse = z.object({ remainingScans: z.number() })
@@ -1353,20 +1049,9 @@ export const topicCreateResponse = z.object({ id: z.string() })
 
 // one base64 yjs update posted from a note editor. a large paste arrives as one atomic update, so the limit is sized to hold one
 export const NOTE_UPDATE_MAX_CHARS = 4 * 1024 * 1024
-export const noteSyncPayload = z.object({ update: z.string().min(1).max(NOTE_UPDATE_MAX_CHARS) })
 
 // the create body for a note on a page
 export const NOTE_NAME_MAX_CHARS = 120
-export const noteCreatePayload = z.object({
-	name: z.string().trim().min(1).max(NOTE_NAME_MAX_CHARS),
-	visibility: z.enum(noteVisibilities),
-})
-
-// the note update body. a rename takes edit access, a visibility change is the owner's alone
-export const noteUpdatePayload = z.object({
-	name: z.string().trim().min(1).max(NOTE_NAME_MAX_CHARS).optional(),
-	visibility: z.enum(noteVisibilities).optional(),
-})
 
 // one note as the notes table lists it
 export type Note = {
@@ -1437,22 +1122,6 @@ export type TopicSectionKey = (typeof topicSectionKeys)[number]
 // the length limits of a podcast episode's title and description
 export const PODCAST_EPISODE_TITLE_MAX_CHARS = 60
 export const PODCAST_EPISODE_DESCRIPTION_MAX_CHARS = 155
-
-// one spoken turn of a podcast episode. its speaker, its words as speech, and an optional short delivery style
-export const podcastEpisodeTurnPayload = z.object({
-	speaker: z.enum(podcastEpisodeSpeakers),
-	text: z.string().trim().min(1),
-	style: z.string().trim().min(1).optional(),
-})
-export type PodcastEpisodeTurn = z.infer<typeof podcastEpisodeTurnPayload>
-
-// one chapter of a podcast episode's script. the Finding that the chapter narrates, its title, and its turns
-export const podcastEpisodeChapterScriptPayload = z.object({
-	findingId: z.string().min(1),
-	title: z.string().trim().min(1),
-	turns: z.array(podcastEpisodeTurnPayload).min(1),
-})
-export type PodcastEpisodeChapterScript = z.infer<typeof podcastEpisodeChapterScriptPayload>
 
 // a podcast episode's entire script. the cold open, the themed segments in order, and the sign-off and goodbye.
 // each segment has the short transition into the segment, then its chapters

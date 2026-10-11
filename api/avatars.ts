@@ -1,16 +1,27 @@
 // the avatar a user publishes: an upload they chose, the photo their provider supplied, or the username initials
+import { zValidator } from "@hono/zod-validator"
 import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
 import type { ProfileIdentity } from "@shared/contracts"
 import type { avatarSources } from "@shared/enums"
+import { reportError } from "@shared/monitoring"
+import { avatarDecodeFailurePayload } from "@shared/payloads"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { stream } from "hono/streaming"
 import { db } from "../db"
-import { teams, users } from "../db/schema"
-import { attachmentStream, deleteAttachment, uploadAttachment } from "../worker"
+import { teams } from "../db/schema/teams"
+import { users } from "../db/schema/users"
+import {
+	attachmentStream,
+	clearPendingObjectDeletion,
+	deleteStoredObject,
+	recordPendingObjectDeletionBeforeUpload,
+	recordPendingObjectDeletions,
+	uploadAttachment,
+} from "../worker"
 import { type AppEnv, currentUser } from "./currentUser"
-import { toVersionedImageHeaders } from "./edgeCache"
+import { toTeamAvatarCacheTag, toUserAvatarCacheTag, toVersionedImageHeaders } from "./edgeCache"
 import { refreshSessionUser } from "./sessions"
 import { toTeamRole } from "./team/members"
 
@@ -65,8 +76,9 @@ export async function uploadAvatar(
 		return rejection
 	}
 
-	// write the new object first, so a failed upload leaves the user on the avatar they already had
+	// record the key as pending with the upload grace period, write the new object, then point the user at it
 	const avatarKey = `avatars/${userId}/${keyId}.${AVATAR_EXTENSIONS[contentType]}`
+	await recordPendingObjectDeletionBeforeUpload(avatarKey)
 	await uploadAttachment(avatarKey, bytes, contentType)
 	await replaceAvatar(userId, "upload", avatarKey)
 	return null
@@ -89,17 +101,40 @@ export async function uploadTeamAvatar(
 		return rejection
 	}
 
-	// write the new object first, so a failed upload leaves the team on the avatar it already had
-	const [previous] = await db.select({ avatarKey: teams.avatarKey }).from(teams).where(eq(teams.id, teamId))
+	// record the key as pending with the upload grace period, then write the new object
 	const avatarKey = `avatars/teams/${teamId}/${keyId}.${AVATAR_EXTENSIONS[contentType]}`
+	await recordPendingObjectDeletionBeforeUpload(avatarKey)
 	await uploadAttachment(avatarKey, bytes, contentType)
-	await db.update(teams).set({ avatarKey }).where(eq(teams.id, teamId))
 
-	// the row already points at the new object. a failed delete leaves an unused file, never a broken avatar
-	if (previous?.avatarKey && previous.avatarKey !== avatarKey) {
-		await deleteAttachment(previous.avatarKey)
+	// read the previous key with the row locked, record it as pending, point the team at the new object,
+	// and clear the new key's pending row, in one transaction
+	const replacedAvatarKey = await db.transaction(async (transaction) => {
+		const [team] = await transaction
+			.select({ avatarKey: teams.avatarKey })
+			.from(teams)
+			.where(eq(teams.id, teamId))
+			.for("update")
+		const lockedReplacedAvatarKey = toReplacedAvatarKey(team?.avatarKey ?? null, avatarKey)
+
+		// record the replaced key, point the team at the new object, and clear the new key's pending row
+		if (lockedReplacedAvatarKey) {
+			await recordPendingObjectDeletions({ handle: transaction, objectKeys: [lockedReplacedAvatarKey] })
+		}
+		await transaction.update(teams).set({ avatarKey }).where(eq(teams.id, teamId))
+		await clearPendingObjectDeletion(avatarKey, transaction)
+		return lockedReplacedAvatarKey
+	})
+
+	// delete the replaced object, which nothing points at now
+	if (replacedAvatarKey) {
+		await deleteStoredObject(replacedAvatarKey)
 	}
 	return null
+}
+
+// the previous avatar key an upload replaces, or null if there was none or the key is unchanged
+function toReplacedAvatarKey(previousAvatarKey: string | null, avatarKey: string | null): string | null {
+	return previousAvatarKey && previousAvatarKey !== avatarKey ? previousAvatarKey : null
 }
 
 /**
@@ -197,36 +232,50 @@ export function toProfileIdentity(profileColumns: JoinedProfileColumns | null): 
 	}
 }
 
-// the object key for a user's uploaded avatar, or null when they have none stored
-async function toAvatarKey(userId: string): Promise<string | null> {
-	const [user] = await db.select({ avatarKey: users.avatarKey }).from(users).where(eq(users.id, userId))
-	return user?.avatarKey ?? null
-}
-
 // point the user at a source, dropping the object the previous one left behind
 async function replaceAvatar(
 	userId: string,
 	avatarSource: (typeof avatarSources)[number],
 	avatarKey: string | null,
 ): Promise<void> {
-	// read the previous key, then write the avatar to the row and to the user's sessions
-	const previousKey = await toAvatarKey(userId)
-	await db.update(users).set({ avatarSource, avatarKey }).where(eq(users.id, userId))
-	await refreshSessionUser(userId)
+	// read the previous key with the row locked, record it as pending, write the avatar to the row,
+	// and clear an uploaded key's pending row, in one transaction
+	const replacedAvatarKey = await db.transaction(async (transaction) => {
+		const [user] = await transaction
+			.select({ avatarKey: users.avatarKey })
+			.from(users)
+			.where(eq(users.id, userId))
+			.for("update")
+		const lockedReplacedAvatarKey = toReplacedAvatarKey(user?.avatarKey ?? null, avatarKey)
 
-	// the users row is already optimistically updated. a failed delete leaves an unused file instead of a broken avatar
-	if (previousKey && previousKey !== avatarKey) {
-		await deleteAttachment(previousKey)
+		// record the replaced key, then write the avatar
+		if (lockedReplacedAvatarKey) {
+			await recordPendingObjectDeletions({ handle: transaction, objectKeys: [lockedReplacedAvatarKey] })
+		}
+		await transaction.update(users).set({ avatarSource, avatarKey }).where(eq(users.id, userId))
+
+		// clear an uploaded key's pending row
+		if (avatarKey) {
+			await clearPendingObjectDeletion(avatarKey, transaction)
+		}
+		return lockedReplacedAvatarKey
+	})
+
+	// write the avatar to the user's sessions, then delete the replaced object, which nothing points at now
+	await refreshSessionUser(userId)
+	if (replacedAvatarKey) {
+		await deleteStoredObject(replacedAvatarKey)
 	}
 }
 
-// serve a stored avatar with its unique key as the cache validator
-function serveAvatar(context: Context<AppEnv>, avatarKey: string): Response {
-	// set the cache headers, long only for a url that names the key's own version
+// serve a stored avatar with its unique key as the cache validator, tagged at the edge for a purge on deletion
+function serveAvatar(context: Context<AppEnv>, avatarKey: string, cacheTag: string): Response {
+	// set the cache headers, long only for a url that names the key's own version, and the tag at every version
 	const isCurrentVersion = context.req.query("v") === toAvatarKeyVersion(avatarKey)
 	for (const [headerName, headerValue] of Object.entries(toVersionedImageHeaders(isCurrentVersion))) {
 		context.header(headerName, headerValue)
 	}
+	context.header("Cache-Tag", cacheTag)
 
 	// validate by the key and never let the browser guess the type
 	context.header("ETag", `"${avatarKey}"`)
@@ -254,15 +303,27 @@ export const avatarsRoute = new Hono<AppEnv>()
 			context.header("Cache-Control", PROVIDER_PHOTO_CACHE_CONTROL)
 			return context.redirect(published.imageUrl, 302)
 		}
-		return serveAvatar(context, published.avatarKey)
+		return serveAvatar(context, published.avatarKey, toUserAvatarCacheTag(context.req.param("userId")))
+	})
+	// a chosen avatar file the browser could not decode, reported to monitoring by its type and size alone
+	.post("/avatars/decode-failures", zValidator("json", avatarDecodeFailurePayload), (context) => {
+		if (!currentUser(context)) {
+			return context.json({ error: "unauthorized" }, 401)
+		}
+		const { contentType, byteSize } = context.req.valid("json")
+		reportError(new Error("a chosen avatar could not be decoded"), "api-route", {
+			contentType,
+			byteSize: String(byteSize),
+		})
+		return context.body(null, 204)
 	})
 	// a team's own uploaded image, shown wherever the team is named
 	.get("/team-avatars/:teamId", async (context) => {
-		const [team] = await db
-			.select({ avatarKey: teams.avatarKey })
-			.from(teams)
-			.where(eq(teams.id, context.req.param("teamId")))
-		return team?.avatarKey ? serveAvatar(context, team.avatarKey) : context.json({ error: "not found" }, 404)
+		const teamId = context.req.param("teamId")
+		const [team] = await db.select({ avatarKey: teams.avatarKey }).from(teams).where(eq(teams.id, teamId))
+		return team?.avatarKey
+			? serveAvatar(context, team.avatarKey, toTeamAvatarCacheTag(teamId))
+			: context.json({ error: "not found" }, 404)
 	})
 	.post(
 		"/teams/:id/avatar",

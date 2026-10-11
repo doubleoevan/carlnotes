@@ -35,8 +35,13 @@ export function UserAvatarPicker({
 		setIsUploading(true)
 		setUpdateRejection(null)
 		try {
-			// a phone photo is cut to the stored size before it is sent
-			const avatarRejection = await uploadAvatarFile(await toUploadableAvatar(avatarFile))
+			// resize the photo, and show the undecodable message if nothing can decode it
+			const uploadableAvatar = await toUploadableAvatar(avatarFile)
+			if (uploadableAvatar.status === "undecodable") {
+				setUpdateRejection(AVATAR_REJECTIONS.undecodable ?? "")
+				return
+			}
+			const avatarRejection = await uploadAvatarFile(uploadableAvatar.resizedAvatarFile)
 			if (avatarRejection) {
 				setUpdateRejection(AVATAR_REJECTIONS[avatarRejection] ?? "That didn't reach Carl. Try again.")
 			}

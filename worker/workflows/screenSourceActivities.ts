@@ -2,7 +2,7 @@
 import { ApplicationFailure } from "@temporalio/activity"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
-import { sources } from "../../db/schema"
+import { sources } from "../../db/schema/topics"
 import { screenText, toFlaggedReason } from "../guard"
 import { toFetchableUrl } from "../publicFetch"
 import { type FetchResult, fetchContent } from "../scrape"

@@ -2,7 +2,7 @@
 // edit the topic gets, and records every tool call
 import { generateText, stepCountIs, type Tool } from "ai"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
-import { toModelRoomQuestion } from "../../api/chat/roomTurns"
+import { toModelRoomQuestion } from "../../api/chat/roomQuestion"
 import {
 	type ChatTurnToolCalls,
 	toChatTopicTools,
@@ -10,13 +10,9 @@ import {
 	toTopicEditPreviewTools,
 } from "../../api/tool/chatTools"
 import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
-import {
-	buildTopicChatPrompt,
-	MAX_TURN_STEPS,
-	toConsentStep,
-	toEditTopicBlock,
-	toModelMessages,
-} from "../../worker/chat"
+import { MAX_TURN_STEPS } from "../../worker/chat"
+import { toConsentStep, toModelMessages } from "../../worker/chat/chatMessages"
+import { buildTopicChatPrompt, toEditTopicBlock } from "../../worker/chat/chatPrompts"
 import { webSearchTool } from "../../worker/chat/search"
 import { chatModel } from "../../worker/models"
 import { type RecordedToolCall, toRecordingTools } from "../evalHarness"

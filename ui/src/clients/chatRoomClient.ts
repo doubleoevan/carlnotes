@@ -1,5 +1,6 @@
 // the api client for a team topic's chat room and a team's own chat room: the chat messages, the post, and the stream url
-import type { ChatAttachment, ChatLinkPreview, ChatRoom, ChatRoomMessagePage } from "@shared/contracts"
+import type { ChatLinkPreview, ChatRoom, ChatRoomMessagePage } from "@shared/contracts"
+import type { ChatAttachment } from "@shared/payloads"
 import { apiClient, readApiErrorMessage } from "./apiClient"
 
 /**

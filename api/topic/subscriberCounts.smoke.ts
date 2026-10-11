@@ -2,7 +2,8 @@
 // run it with: bun run smoke:subscribers. needs Doppler secrets
 import { eq } from "drizzle-orm"
 import { connectionPool, type DbTransaction, db } from "../../db"
-import { subscriptions, topics, users } from "../../db/schema"
+import { subscriptions, topics } from "../../db/schema/topics"
+import { users } from "../../db/schema/users"
 import { updateTopicSubscriberCount } from "./subscriberCounts"
 
 // the rollback marker, which is how the fixtures are cleaned up instead of by deleting them

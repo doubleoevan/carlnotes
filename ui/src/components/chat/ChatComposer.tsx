@@ -3,6 +3,7 @@ import { ArrowUp, FileText, FileX2, Film, Image, Minus, Paperclip, Square, X } f
 import { useEffect, useRef } from "react"
 import { ChatAttachmentChips } from "@/components/chat/ChatAttachmentChips"
 import type { TopicChat } from "@/components/chat/useTopicChat"
+import { AnchorLink } from "@/components/common/AnchorLink"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
@@ -248,14 +249,14 @@ function KeptAttachmentsButton({
 						)}
 						<Tooltip>
 							<TooltipTrigger asChild>
-								{/* a file download must be a full request, so it bypasses AnchorLink's client-side routing */}
-								<a
+								{/* the file download */}
+								<AnchorLink
 									href={`/api/chat-attachments/${keptAttachment.id}/download`}
 									download={keptAttachment.name}
 									className="text-link min-w-0 flex-1 truncate hover:underline"
 								>
 									{keptAttachment.name}
-								</a>
+								</AnchorLink>
 							</TooltipTrigger>
 							<TooltipContent>Click to download</TooltipContent>
 						</Tooltip>

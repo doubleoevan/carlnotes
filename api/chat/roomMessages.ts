@@ -3,10 +3,11 @@ import { toAvatarVersion } from "@shared/avatars"
 import type { ChatLinkPreview, ChatRoomMessage } from "@shared/contracts"
 import { and, asc, desc, eq, gt, inArray, lt } from "drizzle-orm"
 import { db } from "../../db"
-import { chatRoomAttachments, chatRoomMessages, users } from "../../db/schema"
+import { chatRoomAttachments, chatRoomMessages } from "../../db/schema/chat"
+import { users } from "../../db/schema/users"
 import { decryptChatText } from "./encryption"
 import { loadChatLinkPreviews } from "./linkPreviews"
-import { toTopicFilter } from "./roomTurns"
+import { toTopicFilter } from "./roomAccess"
 
 // how many chat messages one load returns. a page this long may have another above it
 export const CHAT_ROOM_LOAD_LIMIT = 500

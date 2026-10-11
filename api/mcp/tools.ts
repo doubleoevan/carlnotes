@@ -1,27 +1,20 @@
 // the tools the mcp server registers: their names, schemas, annotations, and what each returns
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js"
+import { ratings } from "@shared/enums"
 import {
 	addTopicSourcePayload,
 	createTopicPayload,
 	removeTopicSourcePayload,
 	updateTopicPromptPayload,
-} from "@shared/contracts"
-import { ratings } from "@shared/enums"
+} from "@shared/topicPayloads"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
+import { toAddTopicSourceText, toRejectionText, toUpdateTopicFieldsText } from "../tool/chatTools"
+import { toCreateTopicText, toSuggestionsText } from "../tool/newTopicChatTools"
+import { createTopicFromDraft, suggestTopicDraftSources } from "../tool/topicDraftTools"
+import { addTopicSource, removeTopicSource } from "../tool/topicSourceTools"
 import {
-	toAddTopicSourceText,
-	toCreateTopicText,
-	toRejectionText,
-	toSuggestionsText,
-	toUpdateTopicFieldsText,
-} from "../tool/chatTools"
-import {
-	addTopicSource,
-	createTopicFromDraft,
-	removeTopicSource,
-	suggestTopicDraftSources,
 	toPodcastFieldDescription,
 	toUpdateTopicFieldsShape,
 	updateTopicFields,
@@ -30,7 +23,6 @@ import {
 import {
 	bookmarkFinding,
 	CONNECT_ACCOUNT_TEXT,
-	listTopics,
 	type McpPage,
 	markFindingConsumed,
 	rateFinding,
@@ -39,6 +31,7 @@ import {
 	toToolTopicId,
 } from "./results"
 import { type ToolCaller, toMcpAnalyticsProperties } from "./toolCaller"
+import { listTopics } from "./topicResults"
 
 // the two arguments tools share. on the bound route the topic id comes from the url
 const topicIdArgument = z

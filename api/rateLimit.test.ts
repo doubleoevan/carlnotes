@@ -2,14 +2,20 @@
 // and the store that counts each limiter key's hits in Redis
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { getIp } from "better-auth/api"
+import { Hono } from "hono"
 import * as redis from "../db/redis"
+import { setRedisClientBuilder } from "../db/redis"
+import { restoreRedisClient } from "../db/redisClientStub"
+import type { RedisConnectionClient } from "../db/redisConnection"
 import { auth } from "./auth"
-import { toolCallerRateLimitStore, toRateLimitKey } from "./rateLimit"
+import type { AppEnv } from "./currentUser"
+import { CALLER_RATE_LIMIT, toolCallerRateLimiter, toolCallerRateLimitStore, toRateLimitKey } from "./rateLimit"
 import { ipAddressOptions, resolveClientAddress } from "./trustedProxies"
 
-// put the spied Redis functions back after each test
+// put the spied Redis functions and the Redis client back after each test
 afterEach(() => {
 	mock.restore()
+	restoreRedisClient()
 })
 
 // a few of Cloudflare's published ranges, read the way production reads TRUSTED_PROXIES
@@ -68,11 +74,30 @@ test("the store maps a counted rate limit window to hits and a reset time", asyn
 	expect(incrementRateLimitWindowSpy).toHaveBeenCalledWith("rate-limit:user:user-1", 60_000)
 })
 
-// the store returns zero hits for a hit that Redis could not count, so the request passes
-test("the store allows a request while Redis is unreachable", async () => {
-	spyOn(redis, "incrementRateLimitWindow").mockResolvedValue(null)
-	const rateLimitInfo = await toolCallerRateLimitStore.increment("user:user-1")
-	expect(rateLimitInfo.totalHits).toBe(0)
+// with Redis unreachable the counter counts in this process's memory, so the 31st request inside a minute is rejected
+test("the limiter rejects the 31st request inside a minute while Redis is unreachable", async () => {
+	// a Redis client that never connects, so every count falls back to memory
+	setRedisClientBuilder(
+		() =>
+			({
+				connected: false,
+				onclose: null,
+				connect: async () => {
+					throw new Error("connection refused")
+				},
+				close: () => {},
+			}) as unknown as RedisConnectionClient,
+	)
+	spyOn(console, "error").mockImplementation(() => {})
+
+	// 31 requests from one caller through the limiter
+	const limitedApp = new Hono<AppEnv>().use(toolCallerRateLimiter).get("/mcp", (context) => context.text("ok"))
+	const statuses: number[] = []
+	for (let i = 0; i < CALLER_RATE_LIMIT + 1; i++) {
+		statuses.push((await limitedApp.request("/mcp")).status)
+	}
+	expect(statuses.slice(0, CALLER_RATE_LIMIT)).toEqual(Array(CALLER_RATE_LIMIT).fill(200))
+	expect(statuses.at(-1)).toBe(429)
 })
 
 // a refund and a reset go to the same Redis key that the hits count under

@@ -1,7 +1,7 @@
 // sync tests for the pure yjs pieces: merging concurrent updates and diffing snapshots by state vector
 import { expect, test } from "bun:test"
 import * as Y from "yjs"
-import { emptyNoteYdoc, mergeNoteYdoc, toNoteHtml, toNoteSnapshot } from "./notes"
+import { emptyNoteYdoc, mergeNoteYdoc, toNoteHtml, toNoteSnapshot } from "./noteYdoc"
 
 // one client's update against a emptyYdoc document
 function updateFrom(emptyYdoc: Uint8Array, edit: (document: Y.Doc) => void): Uint8Array {

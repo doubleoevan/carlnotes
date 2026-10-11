@@ -3,8 +3,9 @@
 import { afterEach, expect, test } from "bun:test"
 import { appUrl } from "@shared/appUrl"
 import type { TopicScan } from "@shared/contracts"
-import { isTakingDailySlot, toLastSucceededTopicScan } from "./helpers"
-import { notifyIndexNowOfTopicChange } from "./topics"
+import { toLastSucceededTopicScan } from "./helpers"
+import { isTakingDailySlot } from "./saveHelpers"
+import { notifyIndexNowOfTopicChange } from "./saveTopic"
 
 // a scan history row, varied only by the status and id each test needs
 function scanRow(id: string, status: TopicScan["status"]): TopicScan {

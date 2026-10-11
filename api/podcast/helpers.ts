@@ -1,5 +1,5 @@
-// the reads for a topic page's podcast, each feed topic's latest podcast episode, a season's podcast episodes,
-// one episode by its id, and a podcast episode page, each limited to what the user may listen to
+// the podcast shapes: a topic page's podcast, each feed topic's latest podcast episode, a season's podcast episodes,
+// a podcast episode page, and a podcast episode as the player shows it, each limited to what the user may listen to
 import type {
 	PodcastEpisode,
 	PodcastEpisodePageResponse,
@@ -9,51 +9,28 @@ import type {
 } from "@shared/contracts"
 import { isPodcastEpisodeRecordingConfigured, toPodcastCoverPath } from "@shared/podcastEpisodes"
 import { toPodcastEpisodePath, toPodcastFeedPath } from "@shared/seo"
-import { and, desc, eq, gt, inArray, ne } from "drizzle-orm"
+import { and, desc, eq, inArray, ne } from "drizzle-orm"
 import { db } from "../../db"
-import { loadUserAccess } from "../../db/quotas"
-import { podcastEpisodeChapters, podcastEpisodeListens, podcastEpisodes, scans, topics } from "../../db/schema"
+import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast"
 import { isAllowed } from "../authorization"
 import { attachPodcastEpisodeChapterFaviconPaths } from "../favicons"
 import { toTranscriptBlocks } from "../share/podcastFeed"
-import {
-	loadTopicAccessAndFindings,
-	loadTopicOwner,
-	topicSubscriptionStartDate,
-	topicSubscriptionStartDates,
-	toTeamFields,
-} from "../topic/helpers"
+import { loadTopicAccessAndFindings } from "../topic/accessibleFindings"
+import { loadTopicOwner, topicSubscriptionStartDates, toTeamFields } from "../topic/helpers"
 import { canRateTopic } from "../topic/permissions"
-
-// a podcast episode's columns, without its script
-const podcastEpisodeColumns = {
-	id: podcastEpisodes.id,
-	topicId: podcastEpisodes.topicId,
-	scanId: podcastEpisodes.scanId,
-	status: podcastEpisodes.status,
-	title: podcastEpisodes.title,
-	description: podcastEpisodes.description,
-	// assigned on publish
-	season: podcastEpisodes.season,
-	episodeNumber: podcastEpisodes.episodeNumber,
-	audioKey: podcastEpisodes.audioKey,
-	audioByteSize: podcastEpisodes.audioByteSize,
-	durationSeconds: podcastEpisodes.durationSeconds,
-	publishedAt: podcastEpisodes.publishedAt,
-}
-
-// a podcast episode row with the columns above, and a topic row
-export type PodcastEpisodeRow = Pick<typeof podcastEpisodes.$inferSelect, keyof typeof podcastEpisodeColumns>
-type TopicRow = typeof topics.$inferSelect
-
-// a user's saved progress through one podcast episode, and when the user finished it
-type PodcastEpisodeListenRow = Pick<
-	typeof podcastEpisodeListens.$inferSelect,
-	"podcastEpisodeId" | "progressSeconds" | "completedAt"
->
-
-// the topic fields that a podcast episode's page path is built from
-type PodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "visibility">
+import {
+	isAfterSubscriberActivation,
+	loadAccessiblePodcastEpisode,
+	loadPodcastEpisodeListenRows,
+	loadPublishedPodcastEpisode,
+	loadPublishedPodcastEpisodeRows,
+	type PodcastEpisodeListenRow,
+	type PodcastEpisodePageRef,
+	type PodcastEpisodeRow,
+	type PodcastEpisodeTopic,
+	podcastEpisodeColumns,
+	type TopicRow,
+} from "./podcastEpisodeRows"
 
 // the topic fields that the latest podcast episode loader reads: the podcast episode's topic and its access check
 type LatestPodcastEpisodeTopic = Pick<TopicRow, "id" | "name" | "ownerId" | "visibility">
@@ -72,9 +49,6 @@ type LoadPodcastEpisodeOptions = {
 	topic: PodcastEpisodeTopic
 	userId: string | null
 }
-
-// a podcast episode's row and its topic, for a user who may listen to the episode
-export type AccessiblePodcastEpisode = { podcastEpisodeRow: PodcastEpisodeRow; topic: TopicRow }
 
 // the topic page's podcast, its latest podcast episode with chapters, and each scan's published podcast episode
 // by the scan's id
@@ -198,15 +172,6 @@ export async function loadLatestPodcastEpisodes(
 	return new Map(latestPodcastEpisodes.map((podcastEpisode) => [podcastEpisode.topicId, podcastEpisode]))
 }
 
-// whether a time passes the user's subscription activation gate. no gate passes every time, no active subscription
-// passes none, and an activation passes only a later time
-function isAfterSubscriberActivation(time: Date | null, subscriberActivatedAt: Date | null | undefined): boolean {
-	if (subscriberActivatedAt === undefined) {
-		return true
-	}
-	return subscriberActivatedAt !== null && time !== null && time > subscriberActivatedAt
-}
-
 /**
  * Loads a season's published podcast episodes that the user may listen to, newest first, without their chapters.
  */
@@ -254,87 +219,6 @@ async function toSeasonPodcastEpisodes({
 			}),
 		),
 	}
-}
-
-// the user, null for a visitor, and the podcast episode to load
-type LoadAccessiblePodcastEpisodeOptions = { userId: string | null; podcastEpisodeId: string }
-
-/**
- * Loads a podcast episode's row and its topic if the user may listen to the episode, or null.
- */
-export async function loadAccessiblePodcastEpisode({
-	userId,
-	podcastEpisodeId,
-}: LoadAccessiblePodcastEpisodeOptions): Promise<AccessiblePodcastEpisode | null> {
-	if (!isPodcastEpisodeRecordingConfigured()) {
-		return null
-	}
-
-	// the podcast episode with its topic and when its scan started.
-	// an episode whose topic was deleted has no topic to join
-	const [podcastEpisodeTopicRow] = await db
-		.select({ podcastEpisodeRow: podcastEpisodeColumns, topic: topics, scanStartedAt: scans.startedAt })
-		.from(podcastEpisodes)
-		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
-		.leftJoin(scans, eq(podcastEpisodes.scanId, scans.id))
-		.where(eq(podcastEpisodes.id, podcastEpisodeId))
-
-	// return null for a removed podcast episode or an episode on a topic that the user cannot see
-	const isPodcastEpisodeRemoved = podcastEpisodeTopicRow?.podcastEpisodeRow.status === "removed"
-	if (
-		!podcastEpisodeTopicRow ||
-		isPodcastEpisodeRemoved ||
-		!(await isAllowed(userId, "topic:view", podcastEpisodeTopicRow.topic))
-	) {
-		return null
-	}
-
-	// gate the podcast episode on the user's subscription activation by its publish time,
-	// or by its scan's start if the podcast episode has not published
-	const subscriberActivatedAt = await loadSubscriberActivatedAt(podcastEpisodeTopicRow.topic, userId)
-	const publishedOrScanStartedAt =
-		podcastEpisodeTopicRow.podcastEpisodeRow.publishedAt ?? podcastEpisodeTopicRow.scanStartedAt
-	return isAfterSubscriberActivation(publishedOrScanStartedAt, subscriberActivatedAt) ? podcastEpisodeTopicRow : null
-}
-
-// the topic, the season, and the episode number within the season that name a podcast episode page
-type PodcastEpisodePageRef = { topicId: string; season: number; episodeNumber: number }
-
-/**
- * Loads the published podcast episode at a season and episode number, with its topic of any visibility, or null.
- */
-export async function loadPublishedPodcastEpisode({
-	topicId,
-	season,
-	episodeNumber,
-}: PodcastEpisodePageRef): Promise<{ podcastEpisodeRow: PodcastEpisodeRow; topic: TopicRow } | null> {
-	// the published podcast episode of the topic at the season and episode number
-	const isPodcastEpisodeAtPageRef = and(
-		eq(podcastEpisodes.topicId, topicId),
-		eq(podcastEpisodes.season, season),
-		eq(podcastEpisodes.episodeNumber, episodeNumber),
-	)
-	const [publishedPodcastEpisode] = await db
-		.select({ podcastEpisodeRow: podcastEpisodeColumns, topic: topics })
-		.from(podcastEpisodes)
-		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
-		.where(and(isPodcastEpisodeAtPageRef, eq(podcastEpisodes.status, "published")))
-	return isPodcastEpisodeRecordingConfigured() && publishedPodcastEpisode ? publishedPodcastEpisode : null
-}
-
-/**
- * Loads a published podcast episode by its id, with its topic of any visibility, or null.
- */
-export async function loadPublishedPodcastEpisodeById(
-	podcastEpisodeId: string,
-): Promise<{ podcastEpisodeRow: PodcastEpisodeRow; topic: TopicRow } | null> {
-	// the published podcast episode with that id, with its topic
-	const [publishedPodcastEpisode] = await db
-		.select({ podcastEpisodeRow: podcastEpisodeColumns, topic: topics })
-		.from(podcastEpisodes)
-		.innerJoin(topics, eq(podcastEpisodes.topicId, topics.id))
-		.where(and(eq(podcastEpisodes.id, podcastEpisodeId), eq(podcastEpisodes.status, "published")))
-	return isPodcastEpisodeRecordingConfigured() && publishedPodcastEpisode ? publishedPodcastEpisode : null
 }
 
 /**
@@ -496,62 +380,4 @@ function toPodcastEpisode({
 		progressSeconds: podcastEpisodeListenRow?.progressSeconds ?? 0,
 		isCompleted: Boolean(podcastEpisodeListenRow?.completedAt),
 	}
-}
-
-/**
- * Loads a topic's published podcast episodes that the user may listen to, newest first.
- */
-export async function loadPublishedPodcastEpisodeRows(
-	topic: TopicRow,
-	userId: string | null,
-): Promise<PodcastEpisodeRow[]> {
-	// return no podcast episodes if episode recording is not configured,
-	// or if the user has no active subscription to an invite topic
-	const subscriberActivatedAt = isPodcastEpisodeRecordingConfigured()
-		? await loadSubscriberActivatedAt(topic, userId)
-		: null
-	if (subscriberActivatedAt === null) {
-		return []
-	}
-
-	// the activation gate keeps only the podcast episodes published after the user's subscription activated
-	// ponytail: reads every published episode of the topic.
-	// page the read in sql if a topic's episodes reach the thousands
-	const isPublishedPodcastEpisode = and(eq(podcastEpisodes.topicId, topic.id), eq(podcastEpisodes.status, "published"))
-	return db
-		.select(podcastEpisodeColumns)
-		.from(podcastEpisodes)
-		.where(
-			subscriberActivatedAt
-				? and(isPublishedPodcastEpisode, gt(podcastEpisodes.publishedAt, subscriberActivatedAt))
-				: isPublishedPodcastEpisode,
-		)
-		.orderBy(desc(podcastEpisodes.publishedAt))
-}
-
-// when the user's subscription to an invite topic activated, null if the user has no active subscription,
-// or undefined if no activation gate applies to the user
-async function loadSubscriberActivatedAt(topic: TopicRow, userId: string | null): Promise<Date | null | undefined> {
-	const { isAdmin } = userId ? await loadUserAccess(userId) : { isAdmin: false }
-	return topicSubscriptionStartDate(topic, userId, isAdmin)
-}
-
-// the user's progress through the given podcast episodes. a visitor has none
-async function loadPodcastEpisodeListenRows(
-	userId: string | null,
-	podcastEpisodeIds: string[],
-): Promise<PodcastEpisodeListenRow[]> {
-	if (!userId || podcastEpisodeIds.length === 0) {
-		return []
-	}
-	return db
-		.select({
-			podcastEpisodeId: podcastEpisodeListens.podcastEpisodeId,
-			progressSeconds: podcastEpisodeListens.progressSeconds,
-			completedAt: podcastEpisodeListens.completedAt,
-		})
-		.from(podcastEpisodeListens)
-		.where(
-			and(eq(podcastEpisodeListens.userId, userId), inArray(podcastEpisodeListens.podcastEpisodeId, podcastEpisodeIds)),
-		)
 }

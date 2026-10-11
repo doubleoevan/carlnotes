@@ -7,15 +7,17 @@ import { toPodcastEpisodePath } from "@shared/seo"
 import { and, eq, inArray, max, ne } from "drizzle-orm"
 import { type DbTransaction, db, isUniqueViolation } from "../../db"
 import { deletePodcastFeedCache } from "../../db/podcastFeedCache"
-import { findings, podcastEpisodeChapters, podcastEpisodes, topics } from "../../db/schema"
+import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast"
+import { findings } from "../../db/schema/scans"
+import { topics } from "../../db/schema/topics"
 import { notifyIndexNow } from "../indexNow"
 import { runWithRetries } from "../retry"
-import { deleteAttachment, toPodcastEpisodeChapterKey } from "../store"
+import { deleteStoredObjects, recordPendingObjectDeletions, toPodcastEpisodeChapterKey } from "../store"
 import { tracePodcastEpisodeRecording } from "../telemetry"
 import type { PlannedFinding } from "./planPodcastEpisode"
 import type { EncodedPodcastEpisode } from "./podcastEpisodeAudio"
 import { toChapterTurns, toRecordedPodcastEpisodeScript } from "./podcastEpisodeScript"
-import { deletePodcastEpisodeAudio, markPodcastEpisodesRemoved } from "./removePodcastEpisode"
+import { markPodcastEpisodesRemoved, toPodcastEpisodeAudioKeys } from "./removePodcastEpisode"
 
 // how many times a publish tries to take the next episode number, if another publish of the Topic takes that episode number first
 const PUBLISH_ATTEMPTS = 3
@@ -45,13 +47,13 @@ type SavePodcastEpisodeAsPublishedOptions = {
 	publishedAt: Date
 	// whether the Podcast Episode is short, which replaces the Topic's earlier short ones
 	isShort: boolean
+	// the script positions of the recorded chapters, whose audio the publish deletes
+	recordedChapterPositions: number[]
 }
 
-// a Podcast Episode that a later short one replaced, with the script that names its chapter audio
-type ReplacedPodcastEpisode = Pick<typeof podcastEpisodes.$inferSelect, "id" | "script">
-
-// what a saved publish took. its episode number, and the short Podcast Episodes that it replaced
-type SavedPodcastEpisode = { podcastEpisodeNumber: number; replacedPodcastEpisodes: ReplacedPodcastEpisode[] }
+// what a saved publish took. its episode number, and the audio keys the publish deletes: the recorded chapters'
+// audio and the replaced short Podcast Episodes' audio
+type SavedPodcastEpisode = { podcastEpisodeNumber: number; audioKeysToDelete: string[] }
 
 // the Topic whose short Podcast Episodes a publish replaces, and the published Podcast Episode that stays
 type ReplaceShortPodcastEpisodesOptions = { transaction: DbTransaction; topicId: string; podcastEpisodeId: string }
@@ -83,13 +85,6 @@ export async function publishPodcastEpisode({
 		throw new Error(`episode ${podcastEpisodeId} has no topic or no script to publish`)
 	}
 
-	// delete the chapters' audio, which the join leaves in place for a retried join to read
-	await Promise.all(
-		recordedChapterPositions.map((position) =>
-			deleteAttachment(toPodcastEpisodeChapterKey(podcastEpisodeId, position)),
-		),
-	)
-
 	// leave out each chapter whose speech failed for good, with the turns recorded with that chapter,
 	// and report how many chapters were left out
 	const recordedScript = toRecordedPodcastEpisodeScript(podcastEpisode.script, recordedChapterPositions)
@@ -120,6 +115,7 @@ export async function publishPodcastEpisode({
 		encodedPodcastEpisode,
 		publishedAt,
 		isShort: podcastEpisode.isShort,
+		recordedChapterPositions,
 	}
 	const savedPodcastEpisode = await runWithRetries({
 		attempts: PUBLISH_ATTEMPTS,
@@ -128,9 +124,10 @@ export async function publishPodcastEpisode({
 		isRetryable: isUniqueViolation,
 	})
 
-	// delete the audio of the short Podcast Episodes that this one replaced
-	const { podcastEpisodeNumber, replacedPodcastEpisodes } = savedPodcastEpisode
-	await deleteReplacedPodcastEpisodeAudio(podcastEpisodeId, replacedPodcastEpisodes)
+	// delete the recorded chapters' audio, which the join left in place for a retried join to read, and the audio of
+	// the short Podcast Episodes that this one replaced, now that the publish has committed
+	const { podcastEpisodeNumber, audioKeysToDelete } = savedPodcastEpisode
+	await deleteStoredObjects(audioKeysToDelete)
 
 	// trace the recording with what it took, then delete the Topic's cached feeds,
 	// and tell IndexNow about a public Topic's podcast episode page
@@ -159,23 +156,35 @@ export async function publishPodcastEpisode({
  * and reports the failure.
  */
 export async function failPodcastEpisode({ podcastEpisodeId, reason }: FailPodcastEpisodeOptions): Promise<void> {
-	// fail only a recording Podcast Episode
-	const [failedPodcastEpisode] = await db
-		.update(podcastEpisodes)
-		.set({ status: "failed", error: reason })
-		.where(and(eq(podcastEpisodes.id, podcastEpisodeId), eq(podcastEpisodes.status, "recording")))
-		.returning({
-			id: podcastEpisodes.id,
-			topicId: podcastEpisodes.topicId,
-			scanId: podcastEpisodes.scanId,
-			script: podcastEpisodes.script,
-		})
+	// fail only a recording Podcast Episode, and record the keys of any audio that the recording left behind
+	// in the same transaction
+	const failedPodcastEpisode = await db.transaction(async (transaction) => {
+		const [failedPodcastEpisodeRow] = await transaction
+			.update(podcastEpisodes)
+			.set({ status: "failed", error: reason })
+			.where(and(eq(podcastEpisodes.id, podcastEpisodeId), eq(podcastEpisodes.status, "recording")))
+			.returning({
+				id: podcastEpisodes.id,
+				topicId: podcastEpisodes.topicId,
+				scanId: podcastEpisodes.scanId,
+				script: podcastEpisodes.script,
+			})
+
+		// the audio keys as pending, if the Podcast Episode was recording
+		if (failedPodcastEpisodeRow) {
+			const objectKeys = toPodcastEpisodeAudioKeys(failedPodcastEpisodeRow)
+			await recordPendingObjectDeletions({ handle: transaction, objectKeys })
+		}
+		return failedPodcastEpisodeRow ?? null
+	})
+
+	// nothing to fail
 	if (!failedPodcastEpisode) {
 		return
 	}
 
 	// delete any audio that the recording left behind
-	await deletePodcastEpisodeAudio(failedPodcastEpisode)
+	await deleteStoredObjects(toPodcastEpisodeAudioKeys(failedPodcastEpisode))
 
 	// report the failure with its Topic and its Scan
 	console.error(`episode ${podcastEpisodeId} failed to record: ${reason}`)
@@ -240,6 +249,7 @@ async function savePodcastEpisodeAsPublished({
 	encodedPodcastEpisode,
 	publishedAt,
 	isShort,
+	recordedChapterPositions,
 }: SavePodcastEpisodeAsPublishedOptions): Promise<SavedPodcastEpisode> {
 	const season = publishedAt.getUTCFullYear()
 	return db.transaction(async (transaction) => {
@@ -269,20 +279,27 @@ async function savePodcastEpisodeAsPublished({
 			.where(eq(podcastEpisodes.id, podcastEpisodeId))
 
 		// a short Podcast Episode replaces the Topic's earlier short ones, and a full one replaces none
-		const replacedPodcastEpisodes = isShort
+		const replacedObjectKeys = isShort
 			? await replaceShortPodcastEpisodes({ transaction, topicId, podcastEpisodeId })
 			: []
-		return { podcastEpisodeNumber, replacedPodcastEpisodes }
+
+		// record the recorded chapters' audio keys and the replaced audio keys as pending, for the delete after the commit
+		const recordedChapterKeys = recordedChapterPositions.map((position) =>
+			toPodcastEpisodeChapterKey(podcastEpisodeId, position),
+		)
+		const audioKeysToDelete = [...recordedChapterKeys, ...replacedObjectKeys]
+		await recordPendingObjectDeletions({ handle: transaction, objectKeys: audioKeysToDelete })
+		return { podcastEpisodeNumber, audioKeysToDelete }
 	})
 }
 
 // remove the Topic's other published short Podcast Episodes and keep their chapters, so their Findings stay narrated.
-// return the removed Podcast Episodes
+// return the keys of the removed Podcast Episodes' audio, read while their scripts still name the chapters
 async function replaceShortPodcastEpisodes({
 	transaction,
 	topicId,
 	podcastEpisodeId,
-}: ReplaceShortPodcastEpisodesOptions): Promise<ReplacedPodcastEpisode[]> {
+}: ReplaceShortPodcastEpisodesOptions): Promise<string[]> {
 	// find the Topic's other published short Podcast Episodes. a full Podcast Episode is never replaced
 	const replacedPodcastEpisodes = await transaction
 		.select({ id: podcastEpisodes.id, script: podcastEpisodes.script })
@@ -301,22 +318,7 @@ async function replaceShortPodcastEpisodes({
 		const replacedPodcastEpisodeIds = replacedPodcastEpisodes.map((replacedPodcastEpisode) => replacedPodcastEpisode.id)
 		await markPodcastEpisodesRemoved(transaction, replacedPodcastEpisodeIds)
 	}
-	return replacedPodcastEpisodes
-}
-
-// delete the replaced Podcast Episodes' audio after the publish commits.
-// a failed delete is reported and leaves the audio objects in place
-async function deleteReplacedPodcastEpisodeAudio(
-	podcastEpisodeId: string,
-	replacedPodcastEpisodes: ReplacedPodcastEpisode[],
-): Promise<void> {
-	try {
-		await Promise.all(
-			replacedPodcastEpisodes.map((replacedPodcastEpisode) => deletePodcastEpisodeAudio(replacedPodcastEpisode)),
-		)
-	} catch (error) {
-		reportError(error, "podcast-episode", { podcastEpisodeId })
-	}
+	return replacedPodcastEpisodes.flatMap((replacedPodcastEpisode) => toPodcastEpisodeAudioKeys(replacedPodcastEpisode))
 }
 
 // tell IndexNow about a public Topic's new podcast episode page. a private or invite Topic's episode page is noindex

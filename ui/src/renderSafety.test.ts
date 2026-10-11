@@ -80,7 +80,7 @@ test("no ui file injects raw html", () => {
 
 // the HTML the note renderer injects is sanitized where it is generated, in the api
 test("the note html is sanitized server-side", () => {
-	const htmlSource = readFileSync(join(import.meta.dir, "../../api/note/notes.ts"), "utf8")
+	const htmlSource = readFileSync(join(import.meta.dir, "../../api/note/noteYdoc.ts"), "utf8")
 	expect(htmlSource).toContain("sanitizeNoteHtml(await serverEditor.blocksToFullHTML(blocks))")
 	expect(htmlSource).toContain('allowedSchemes: ["http", "https", "mailto"]')
 })

@@ -25,9 +25,3 @@ test("a refund lowers the count on the user's key", async () => {
 	await refundFlag("user-1")
 	expect(decrementRateLimitWindowSpy).toHaveBeenCalledWith("flags:user-1")
 })
-
-// a flag that Redis could not count is allowed
-test("a flag is allowed while Redis is unreachable", async () => {
-	spyOn(redis, "incrementRateLimitWindow").mockResolvedValue(null)
-	expect(await canFlag("user-1")).toBe(true)
-})

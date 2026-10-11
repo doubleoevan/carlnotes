@@ -11,31 +11,24 @@ import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
 import { createAuthMiddleware } from "better-auth/api"
 import { mcp } from "better-auth/plugins"
-import { and, eq, like } from "drizzle-orm"
-import { db } from "../db"
+import { eq } from "drizzle-orm"
+import { db, schema } from "../db"
 import { deleteRedisKey, incrementRateLimitWindow, runWithRedis } from "../db/redis"
-import * as schema from "../db/schema"
-import { renderAuthEmail, renderAuthEmailText } from "../emails/auth-email"
-import { isInternalAddress, provisionLiteLLMKey } from "../worker"
-import { sendEmail } from "../worker/email"
+import { provisionLiteLLMKey } from "../worker"
+import {
+	clearResetPasswordTokens,
+	sendChangeEmailConfirmationEmail,
+	sendResetPasswordEmail,
+	sendVerificationEmail,
+	VERIFICATION_LINK_HOURS,
+} from "./authEmails"
 import { userBudgetCents } from "./authorization"
 import { isBreachedPassword } from "./passwords"
 import { cacheSession } from "./sessions"
+import { GATE_COOKIE_NAME, verifyGateToken } from "./signupGate"
 import { saveDefaultUserTeam } from "./team/teams"
-import { ipAddressOptions, resolveClientAddress, trustedProxies } from "./trustedProxies"
+import { ipAddressOptions } from "./trustedProxies"
 import { saveDefaultUsername, toAssignedUsername, toFreeUsernames } from "./usernames"
-
-// how long a signup-gate token stays valid
-const GATE_TOKEN_LIFETIME_MS = 15 * 60 * 1000
-
-// how long an email-verification link works, which the email that carries it also states
-const VERIFICATION_LINK_HOURS = 24
-
-// the matching browser-side cookie lifetime
-export const GATE_COOKIE_MAX_AGE_SECONDS = GATE_TOKEN_LIFETIME_MS / 1000
-
-// the cookie name /api/signup-gate writes and the create.before hook reads
-export const GATE_COOKIE_NAME = "signup_gate"
 
 // the better auth endpoint path for password signup, the only path the gate cookie is required on
 const PASSWORD_SIGNUP_PATH = "/sign-up/email"
@@ -61,7 +54,7 @@ export type SessionUser = typeof auth.$Infer.Session.user
 
 /**
  * The Redis storage that Better Auth uses for sessions, verification tokens, and rate limit counts.
- * A failed read is a miss, and a failed count is zero. Better Auth passes each key's time to live in seconds.
+ * A failed read is a miss.  Better Auth passes each key's time to live in seconds.
  */
 const sessionSecondaryStorage = {
 	get: (key: string): Promise<string | null> => runWithRedis("session get", (client) => client.get(key)),
@@ -71,11 +64,9 @@ const sessionSecondaryStorage = {
 		)
 	},
 	delete: deleteRedisKey,
-	increment: async (key: string, ttlSeconds: number): Promise<number> => {
-		// count the hit on the key's rate limit window and return the count, or zero if Redis could not count the hit
-		const rateLimitWindowHit = await incrementRateLimitWindow(key, ttlSeconds * 1000)
-		return rateLimitWindowHit?.count ?? 0
-	},
+	// count the hit on the key's rate limit window and return the count
+	increment: async (key: string, ttlSeconds: number): Promise<number> =>
+		(await incrementRateLimitWindow(key, ttlSeconds * 1000)).count,
 }
 
 // whether a phone on the same network may sign in against this server. dev only
@@ -178,72 +169,6 @@ function toGithubProfileUser(profile: { email?: string | null; login: string }):
 // an oauth signup arrives with the provider's photo already on image. a password signup never has one
 export function toSignupAvatarSource(image: string | null | undefined): "oauth" | "generated" {
 	return image ? "oauth" : "generated"
-}
-
-// whether this process has checked TRUSTED_PROXIES against a request. each process checks only one request
-let hasCheckedTrustedProxies = false
-
-/**
- * Logs a warning once per process if TRUSTED_PROXIES is unset or misses a hop behind Cloudflare.
- */
-export function checkTrustedProxies(request: Request): void {
-	// run the check once per process, on a request through Cloudflare if TRUSTED_PROXIES is set
-	const isThroughCloudflare = request.headers.has("cf-ray")
-	if (hasCheckedTrustedProxies || (trustedProxies.length > 0 && !isThroughCloudflare)) {
-		return
-	}
-	hasCheckedTrustedProxies = true
-
-	// log a warning if TRUSTED_PROXIES is unset or misses a hop in this request's x-forwarded-for header
-	const trustedProxiesWarning = toTrustedProxiesWarning({
-		forwardedFor: request.headers.get("x-forwarded-for"),
-		clientAddress: resolveClientAddress(request),
-		trustedProxyCount: trustedProxies.length,
-	})
-	if (trustedProxiesWarning) {
-		console.warn(trustedProxiesWarning)
-	}
-}
-
-// one request's x-forwarded-for header, the client address it resolved to, and how many proxies are in TRUSTED_PROXIES
-type ToTrustedProxiesWarningOptions = {
-	forwardedFor: string | null
-	clientAddress: string | null
-	trustedProxyCount: number
-}
-
-/**
- * Returns the warning to log for an x-forwarded-for header, or null if TRUSTED_PROXIES resolves it to a public client.
- */
-export function toTrustedProxiesWarning({
-	forwardedFor,
-	clientAddress,
-	trustedProxyCount,
-}: ToTrustedProxiesWarningOptions): string | null {
-	// the header's comma-separated hops, cleaned of padding and empties
-	const hops = (forwardedFor ?? "")
-		.split(",")
-		.map((hop) => hop.trim())
-		.filter(Boolean)
-
-	// if TRUSTED_PROXIES is set, warn unless the header resolved to a public client.
-	// no address or an internal one means the platform added a hop that TRUSTED_PROXIES lacks
-	if (trustedProxyCount > 0) {
-		return clientAddress && !isInternalAddress(clientAddress)
-			? null
-			: `TRUSTED_PROXIES leaves x-forwarded-for "${hops.join(", ")}" at ${clientAddress ?? "no address"}. ` +
-					"Add the hop after Cloudflare's to TRUSTED_PROXIES"
-	}
-
-	// if TRUSTED_PROXIES is unset, a missing header means the platform is not forwarding, and there is no address to read
-	if (hops.length === 0) {
-		return "no x-forwarded-for on the first request, so no client address can be resolved at all"
-	}
-	// everything after the leading address is a proxy, and those are what TRUSTED_PROXIES names
-	return (
-		`TRUSTED_PROXIES is unset and x-forwarded-for arrived with ${hops.length} hop(s). ` +
-		`Set it to the proxy hop(s) behind the user: ${hops.slice(1).join(", ") || "(none, the header has only the user)"}`
-	)
 }
 
 // the oauth server plugin, minus its options property. `tsc -b` cannot name that property's type in auth's declaration
@@ -455,124 +380,3 @@ export const auth = betterAuth({
 		},
 	},
 })
-
-// signs a short-lived token proving turnstile was checked, for the signup-gate cookie
-export async function signGateToken(): Promise<string> {
-	const expiresAt = Date.now() + GATE_TOKEN_LIFETIME_MS
-	const payload = Buffer.from(JSON.stringify({ expiresAt })).toString("base64url")
-	return `${payload}.${await toSignature(payload)}`
-}
-
-// verifies a turnstile token server-side against cloudflare. required on the password signup path only
-export async function verifyTurnstileToken(token: string): Promise<boolean> {
-	const secret = Bun.env.TURNSTILE_SECRET_KEY
-	if (!secret) {
-		throw new Error("TURNSTILE_SECRET_KEY must be set to verify a signup's turnstile token")
-	}
-	// verify server-side against cloudflare's siteverify endpoint
-	const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-		method: "POST",
-		headers: { "Content-Type": "application/x-www-form-urlencoded" },
-		body: new URLSearchParams({ secret, response: token }),
-	})
-	const verification = (await response.json()) as { success: boolean }
-	return verification.success
-}
-
-// verifies a signup-gate token's signature and expiry
-export async function verifyGateToken(token: string): Promise<boolean> {
-	const [payload, signature] = token.split(".")
-	if (!payload || !signature || signature !== (await toSignature(payload))) {
-		return false
-	}
-	// signature checks out. decode the payload and enforce its expiry
-	const { expiresAt } = JSON.parse(Buffer.from(payload, "base64url").toString()) as { expiresAt: number }
-	return Date.now() < expiresAt
-}
-
-// delete every outstanding reset-password link of a user from Postgres and from Redis
-async function clearResetPasswordTokens(userId: string): Promise<void> {
-	// delete the user's reset-password rows and return each row's identifier
-	const deletedVerifications = await db
-		.delete(schema.verifications)
-		.where(and(like(schema.verifications.identifier, "reset-password:%"), eq(schema.verifications.value, userId)))
-		.returning({ identifier: schema.verifications.identifier })
-
-	// delete each row's Redis copy, which Better Auth keys by the row's identifier
-	await Promise.all(deletedVerifications.map(({ identifier }) => deleteRedisKey(`verification:${identifier}`)))
-}
-
-// sends the reset-password link
-async function sendResetPasswordEmail(email: string, url: string): Promise<void> {
-	const emailProps = {
-		heading: "Reset your password",
-		lead: "Carl can let you back in. Pick a new password with the link below.",
-		buttonLabel: "Reset your password",
-		url,
-		linkNote: "The link works once and expires in an hour.",
-		appUrl: appBaseUrl(),
-	}
-	await sendEmail({
-		to: email,
-		subject: "Reset your password",
-		emailContent: await renderAuthEmail(emailProps),
-		plainTextContent: await renderAuthEmailText(emailProps),
-		emailKind: "password-reset",
-	})
-}
-
-// sends the link that authorizes a change of address to the current address instead of the new one
-async function sendChangeEmailConfirmationEmail(currentEmail: string, newEmail: string, url: string): Promise<void> {
-	const emailProps = {
-		heading: "Confirm your new email",
-		lead: `Someone asked to move this account to ${newEmail}. Confirm it and Carl will send notes to the new address.`,
-		buttonLabel: "Confirm the change",
-		url,
-		linkNote: "Nothing changes until you confirm.",
-		appUrl: appBaseUrl(),
-	}
-	await sendEmail({
-		to: currentEmail,
-		subject: "Confirm your new email",
-		emailContent: await renderAuthEmail(emailProps),
-		plainTextContent: await renderAuthEmailText(emailProps),
-		emailKind: "email-change",
-	})
-}
-
-// sends the signup email-verification link. a delivery failure is logged but not fatal
-async function sendVerificationEmail(email: string, url: string): Promise<void> {
-	const emailProps = {
-		heading: "Confirm your email",
-		lead: `Carl is ready to start reading for you. Confirm this address so he knows where to send what he finds. The link works for ${VERIFICATION_LINK_HOURS} hours.`,
-		buttonLabel: "Confirm your email",
-		url,
-		appUrl: appBaseUrl(),
-	}
-	await sendEmail({
-		to: email,
-		subject: "Confirm your email",
-		emailContent: await renderAuthEmail(emailProps),
-		plainTextContent: await renderAuthEmailText(emailProps),
-		emailKind: "verification",
-	})
-}
-
-// the value's signature, keyed on the app's auth secret. HMAC-SHA256, base64url-encoded
-async function toSignature(value: string): Promise<string> {
-	const secret = Bun.env.BETTER_AUTH_SECRET
-	if (!secret) {
-		throw new Error("BETTER_AUTH_SECRET must be set to sign the signup-gate cookie")
-	}
-	// import the app secret as a signing key
-	const key = await crypto.subtle.importKey(
-		"raw",
-		new TextEncoder().encode(secret),
-		{ name: "HMAC", hash: "SHA-256" },
-		false,
-		["sign"],
-	)
-	// sign and encode for a cookie-safe, url-safe string
-	const signature = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(value))
-	return Buffer.from(signature).toString("base64url")
-}

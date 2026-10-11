@@ -1,7 +1,7 @@
 // the one place topics.subscriber_count is written
 import { eq, sql } from "drizzle-orm"
 import { type DbHandle, db } from "../../db"
-import { subscriptions, topics } from "../../db/schema"
+import { subscriptions, topics } from "../../db/schema/topics"
 
 // everyone subscribed to a Topic, one row per active subscriber
 const activeSubscribers = sql`

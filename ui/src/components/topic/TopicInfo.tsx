@@ -221,10 +221,10 @@ function AttachmentPill({
 		)
 	}
 
-	// a file download must be a full request, so it bypasses AnchorLink's client-side routing
+	// a file download, which the api answers as a full request
 	if (isDownloadable) {
 		return (
-			<a
+			<AnchorLink
 				href={`/api/attachments/${attachment.id}/download`}
 				download={attachment.filename}
 				className="group text-secondary-foreground hover:text-foreground flex min-w-0 items-center gap-1 text-xs"
@@ -232,7 +232,7 @@ function AttachmentPill({
 				<span className="min-w-0 truncate group-hover:underline">{attachment.filename}</span>
 				<Download aria-hidden="true" className="size-3 shrink-0" />
 				{processing}
-			</a>
+			</AnchorLink>
 		)
 	}
 

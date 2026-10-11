@@ -4,7 +4,8 @@ import { readdir } from "node:fs/promises"
 import { join } from "node:path"
 import { inArray, sql } from "drizzle-orm"
 import { connectionPool, db } from "../db"
-import { docsChunks, EMBED_MODEL_NAME } from "../db/schema"
+import { docsChunks } from "../db/schema/chat"
+import { EMBED_MODEL_NAME } from "../db/schema/scans"
 import { embedVectors } from "./models"
 
 // where the docs Markdown lives, relative to the repo root that every script runs from

@@ -1,5 +1,6 @@
 // schema tables the ingester types are inferred from
-import type { resources, sources } from "../../db/schema"
+import type { resources } from "../../db/schema/scans"
+import type { sources } from "../../db/schema/topics"
 
 // a Source row is an ingester's input, and Resource inserts are its output
 export type Source = typeof sources.$inferSelect

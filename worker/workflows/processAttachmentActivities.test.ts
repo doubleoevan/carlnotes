@@ -1,7 +1,7 @@
 // attachment activity tests: short documents stored as written, screened or not, and a long document chunked
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
-import { attachments } from "../../db/schema"
+import { attachments } from "../../db/schema/topics"
 import * as guard from "../guard"
 import * as store from "../store"
 import { extractAttachmentText } from "./processAttachmentActivities"

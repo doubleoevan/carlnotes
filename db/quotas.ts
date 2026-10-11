@@ -5,7 +5,14 @@ import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } fro
 import { db } from "."
 import { incrementRateLimitWindow, isWithinRateLimit } from "./redis"
 import { memoizeInRequest } from "./requestMemo"
-import { billingSubscriptions, chatTurns, invites, podcastEpisodes, scans, teamMembers, topics, users } from "./schema"
+import { billingSubscriptions } from "./schema/billing"
+import { chatTurns } from "./schema/chat"
+import { invites } from "./schema/invites"
+import { podcastEpisodes } from "./schema/podcast"
+import { scans } from "./schema/scans"
+import { teamMembers } from "./schema/teams"
+import { topics } from "./schema/topics"
+import { users } from "./schema/users"
 
 // one day in milliseconds, the suggestion rate limit window and the unit that invite and account ages are measured in
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -31,7 +38,7 @@ const DAILY_SUGGESTION_LIMIT = 300
 
 /**
  * Counts one suggestion against the user's UTC day and returns whether the suggestion is within the daily limit.
- * An admin bypasses the limit, and a suggestion that Redis could not count is allowed.
+ * An admin bypasses the limit.
  */
 export async function incrementDaySuggestionCount(userId: string): Promise<boolean> {
 	// an admin is not limited, so their count is never incremented

@@ -169,8 +169,9 @@ over Server-Sent Events, and neither runs a WebSocket server.
 The fan-out between instances is Redis pub/sub. The instance that stored a change delivers the change to its own
 subscribers through an in-process `EventEmitter` first and then publishes the change. Every other instance re-broadcasts
 what it receives to its own subscribers. The instance that published skips its own echo. The same Redis holds the
-sessions, the caches for the mention count and the topic page's scan poll, the shared limiters, and the Resend limit
-that the worker shares too, so more than one `app` replica can run at once. Every database connection goes through
+sessions, the caches for the mention count, the topic page's scan poll, and the homepage's topic section ids. It also
+holds the shared limiters and the Resend limit that the worker shares too, so more than one `app` replica can run at
+once. Every database connection goes through
 Neon's connection pooler. There is no socket tier to operate.
 
 ```mermaid
@@ -190,10 +191,11 @@ The note's ydoc stays the source of truth and its `html` column is regenerated o
 starts the editor.
 
 Nothing published while a subscriber was disconnected is replayed. A chat stream catches up from its cursor on the next
-chat message. A note resyncs on the next poke, or when its stream closes at the fifteen-minute age limit. A Redis
-connection that drops reconnects with a backoff from one second to thirty. While Redis is unreachable, a session is read
-from Postgres, each cache calls its loader, each limit allows the request, and the storing instance still delivers to
-its own subscribers. A note's stream pauses while its tab is hidden.
+chat message, and every open chat stream on an instance catches up once its subscriber connection comes back. A note
+resyncs on the next poke, or when its stream closes at the fifteen-minute age limit. A Redis connection that drops
+reconnects with a backoff from one second to thirty. While Redis is unreachable, a session is read from Postgres, each
+cache calls its loader, each limit counts in its own replica's memory so a caller is bounded at the limit per replica,
+and the storing instance still delivers to its own subscribers. A note's stream pauses while its tab is hidden.
 
 ### Content screening (LLM Guard)
 
@@ -366,7 +368,7 @@ database (below). The dev, db, and smoke scripts wrap themselves in `doppler run
 Database: generate a migration from the Drizzle schema, then apply it:
 
 ```bash
-bun run db:generate   # write a migration from db/schema.ts (offline, no doppler)
+bun run db:generate   # write a migration from the db/schema files (offline, no doppler)
 bun run db:migrate    # apply pending migrations (db/migrate.ts, the same one-shot script the deploy job runs)
 bun run db:seed       # creates the dev demo user using a real signup, then loads idempotent stub data (rejects an attempt to run it outside of the dev config)
 bun run litellm:restart # reload litellm-config.yaml. the file is bind-mounted, so a restart picks up an edit with no rebuild
@@ -445,6 +447,7 @@ bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a user 
 bun run smoke:mcp          # just the mcp smoke test: what a visitor reads, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, the edit tools, and the rate limit
 bun run smoke:tools        # just the topic tools smoke test: the gate inside each tool, the prompt version writes, adding and removing sources up to the limit, and that no tool starts a scan
 bun run smoke:podcast-episodes # just the podcast episode routes smoke test: access, audio, feeds, covers, and removal
+bun run smoke:search-plans # just the search plans smoke test: no HNSW scan in the topic ranking, trigram indexes in the name searches
 bun run smoke:invites      # just the invite smoke test: link authority and races, resolution, who-may-invite, connections, accept-equals-redeem, and each sent invite's avatar version
 ```
 

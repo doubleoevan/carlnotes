@@ -1,6 +1,5 @@
 // the typed api client for the team routes
 import {
-	type CreateTeamPayload,
 	type Invite,
 	type InviteSource,
 	inviteCreateResponse,
@@ -8,8 +7,8 @@ import {
 	type TeamSearchResult,
 	type TeamSummary,
 	type TeamsPageResponse,
-	type UpdateTeamPayload,
 } from "@shared/contracts"
+import type { CreateTeamPayload, UpdateTeamPayload } from "@shared/payloads"
 import { toast } from "sonner"
 import { apiClient, readApiErrorMessage } from "./apiClient"
 

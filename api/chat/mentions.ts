@@ -4,9 +4,11 @@ import type { ChatMention } from "@shared/contracts"
 import { and, desc, eq, inArray, isNull, type SQL } from "drizzle-orm"
 import { db } from "../../db"
 import { deleteRedisKey } from "../../db/redis"
-import { chatRoomMentions, chatRoomMessages, teamMembers, users } from "../../db/schema"
+import { chatRoomMentions, chatRoomMessages } from "../../db/schema/chat"
+import { teamMembers } from "../../db/schema/teams"
+import { users } from "../../db/schema/users"
 import { decryptChatText } from "./encryption"
-import { toTopicFilter } from "./roomTurns"
+import { toTopicFilter } from "./roomAccess"
 
 // how much of the chat message the badge tooltip shows
 const CHAT_MESSAGE_SNIPPET_LENGTH = 120

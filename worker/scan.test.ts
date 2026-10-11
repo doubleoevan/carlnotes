@@ -2,7 +2,7 @@
 // and which Scan rows failUnstartedScan marks failed
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
-import type { scans } from "../db/schema"
+import type { scans } from "../db/schema/scans"
 import { toScanSummary } from "./ingest"
 import type { NewResource } from "./ingest/ingester"
 import { failUnstartedScan, scanTopic } from "./scan"

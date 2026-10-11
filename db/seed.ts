@@ -2,7 +2,10 @@
 import { toNormalizedUsername } from "@shared/usernames"
 import { eq, isNotNull, sql } from "drizzle-orm"
 import { db } from "./index"
-import { findings, invites, resources, scans, sources, subscriptions, topics, users } from "./schema"
+import { invites } from "./schema/invites"
+import { findings, resources, scans } from "./schema/scans"
+import { sources, subscriptions, topics } from "./schema/topics"
+import { users } from "./schema/users"
 
 // the community owner whose public topics fill the Featured and Popular sections
 const COMMUNITY_USER_ID = "usr_community"

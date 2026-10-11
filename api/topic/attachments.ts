@@ -1,19 +1,20 @@
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
-import { attachmentContextPayload, attachmentUrlPayload } from "@shared/contracts"
+import { attachmentContextPayload, attachmentUrlPayload } from "@shared/topicPayloads"
 // the attachment actions for the api routes
 import { and, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { bodyLimit } from "hono/body-limit"
 import { db } from "../../db"
-import { attachments, topics } from "../../db/schema"
+import { attachments, topics } from "../../db/schema/topics"
 import {
 	AttachmentValidationError,
 	attachmentStream,
-	deleteAttachment,
+	deleteStoredObject,
 	ingestAttachment,
 	ingestUrlAttachment,
 	MAX_ATTACHMENT_BYTES,
+	recordPendingObjectDeletions,
 	toCanonicalContentType,
 } from "../../worker"
 import { isAllowed } from "../authorization"
@@ -34,9 +35,12 @@ export async function deleteTopicAttachment(userId: string, attachmentId: string
 		return false
 	}
 
-	// delete the row, then best-effort delete the stored object
-	await db.delete(attachments).where(eq(attachments.id, attachment.id))
-	await deleteAttachment(attachment.objectKey)
+	// record the key and delete the row in one transaction, then delete the object
+	await db.transaction(async (transaction) => {
+		await recordPendingObjectDeletions({ handle: transaction, objectKeys: [attachment.objectKey] })
+		await transaction.delete(attachments).where(eq(attachments.id, attachment.id))
+	})
+	await deleteStoredObject(attachment.objectKey)
 	return true
 }
 

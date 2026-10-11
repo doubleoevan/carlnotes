@@ -1,10 +1,8 @@
-// LiteLLM tests: the proxy admin calls, the budget read, the spent budget check,
-// the key created before a first model call, the key replacement, and the monthly budget reset
-import { afterEach, beforeEach, expect, type Mock, mock, spyOn, test } from "bun:test"
-import * as monitoring from "@shared/monitoring"
-import { restoreConnectionPool, type SentQuery, stubConnectionPool, toTableRow } from "../db/connectionPoolStub"
-import { startOfUtcMonth } from "../db/quotas"
-import { scans } from "../db/schema"
+// LiteLLM tests: the proxy admin calls, the budget read, the spent budget check, and the key created before a first
+// model call
+import { afterEach, beforeEach, expect, spyOn, test } from "bun:test"
+import { toTableRow } from "../db/connectionPoolStub"
+import { scans } from "../db/schema/scans"
 import * as attach from "./attach"
 import * as ingest from "./ingest"
 import {
@@ -13,87 +11,22 @@ import {
 	loadOrProvisionUserLiteLLMKey,
 	provisionLiteLLMKey,
 	readLiteLLMKeyBudget,
-	replaceUserLiteLLMKey,
-	resetMonthlyBudgets,
 } from "./litellm"
+import {
+	quietErrorReports,
+	restoreLiteLLMTest,
+	setUpLiteLLMTest,
+	stubConnectionPoolInCallOrder,
+	stubFailingProxy,
+	stubProxy,
+	toUserRow,
+} from "./litellmTestFixtures"
 import { summarizeChunk } from "./workflows/processAttachmentActivities"
 import { ingestForScan } from "./workflows/runTopicScanActivities"
 
-// the real fetch, the connection pool's own query, and the proxy settings, put back after each test
-const originalFetch = globalThis.fetch
-const originalBaseUrl = Bun.env.LITELLM_BASE_URL
-const originalMasterKey = Bun.env.LITELLM_MASTER_KEY
-
-// set the proxy settings that the config check requires, and empty the stub call order
-beforeEach(() => {
-	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
-	Bun.env.LITELLM_MASTER_KEY = "master"
-	stubCallOrder.length = 0
-})
-
-// leave the run the way it was found
-afterEach(() => {
-	globalThis.fetch = originalFetch
-	restoreConnectionPool()
-	restoreEnv("LITELLM_BASE_URL", originalBaseUrl)
-	restoreEnv("LITELLM_MASTER_KEY", originalMasterKey)
-	mock.restore()
-})
-
-// a request that the stubbed proxy was sent
-type ProxyRequest = { path: string; body: unknown; signal: AbortSignal | null | undefined }
-
-// each stubbed query's first word and each stubbed proxy request's path, in the order that the stubs were called
-const stubCallOrder: string[] = []
-
-// stub the connection pool with the rows that toQueryRows picks, keeping each query's first word in the call order.
-// return the queries that the stub is sent. a toQueryRows that throws an error makes that query fail
-function stubConnectionPoolInCallOrder(toQueryRows: (sentQuery: SentQuery) => unknown[][]): SentQuery[] {
-	return stubConnectionPool((sentQuery) => {
-		stubCallOrder.push(sentQuery.text.split(" ")[0] ?? "")
-		return toQueryRows(sentQuery)
-	})
-}
-
-// swap fetch for a stub proxy that returns the response that toResponse builds for each request's path.
-// return the requests that the stub proxy is sent
-function stubProxy(toResponse: (path: string) => Response): ProxyRequest[] {
-	const proxyRequests: ProxyRequest[] = []
-	globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
-		// keep the request and its path, then return the response for that path
-		const path = new URL(String(input)).pathname
-		proxyRequests.push({ path, body: init?.body ? JSON.parse(String(init.body)) : undefined, signal: init?.signal })
-		stubCallOrder.push(path)
-		return toResponse(path)
-	}) as typeof fetch
-	return proxyRequests
-}
-
-// quiet the console and the error report, and return the spy on the error report
-function quietErrorReports(): Mock<typeof monitoring.reportError> {
-	spyOn(console, "error").mockImplementation(() => {})
-	return spyOn(monitoring, "reportError").mockImplementation(() => {})
-}
-
-// quiet the console and the error report, and swap fetch for a stub proxy that responds to every request with a 500
-function stubFailingProxy(): ProxyRequest[] {
-	quietErrorReports()
-	return stubProxy(() => new Response("proxy error", { status: 500 }))
-}
-
-// a user row that loadLiteLLMKeyOwner selects, with its email, key, role, plan, and a $12.34 budget override
-function toUserRow(litellmVirtualKey: string | null): unknown[] {
-	return ["carl@example.com", litellmVirtualKey, "user", "free", 1234]
-}
-
-// put a setting back, or take it away again when the test run never had it
-function restoreEnv(name: string, value: string | undefined): void {
-	if (value === undefined) {
-		delete Bun.env[name]
-	} else {
-		Bun.env[name] = value
-	}
-}
+// set the proxy settings before each test, and leave the run the way it was found after
+beforeEach(setUpLiteLLMTest)
+afterEach(restoreLiteLLMTest)
 
 // max_budget in dollars, and no budget_duration the proxy would reset on its own
 test("a key is created with its budget and no budget_duration", async () => {
@@ -375,97 +308,4 @@ test("an attachment summary fails before its model call if the owner's key canno
 	// an attachment that is gone
 	stubConnectionPoolInCallOrder(() => [])
 	await expect(summarizeChunk("attachment-1", "chunk text")).rejects.toThrow("attachment attachment-1 not found")
-})
-
-// a replacement creates the new key at the user's current budget and stores the new key on the user's row.
-// the old key is deleted only after the store
-test("a key replacement creates the new key at the user's budget, stores the new key, and then deletes the old key", async () => {
-	// a user with a stored key and a $12.34 budget override, whose update stores the new key
-	const sentQueries = stubConnectionPoolInCallOrder((sentQuery) =>
-		sentQuery.text.startsWith("update") ? [["user-1"]] : [toUserRow("sk-old")],
-	)
-	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
-
-	// the new key is created at the override in dollars and stored before the old key is deleted
-	expect(await replaceUserLiteLLMKey("user-1")).toBe(true)
-	expect(stubCallOrder).toEqual(["select", "/key/generate", "update", "/key/delete"])
-	expect(proxyRequests[0]?.body).toMatchObject({ max_budget: 12.34 })
-	expect(proxyRequests[1]?.body).toEqual({ keys: ["sk-old"] })
-
-	// the update stores the new key on that user's row
-	const keyUpdate = sentQueries.find((sentQuery) => sentQuery.text.startsWith("update"))
-	expect(keyUpdate?.values).toEqual(expect.arrayContaining(["sk-new", "user-1"]))
-})
-
-// a user whose row is deleted while the new key is created has no row to store the key on.
-// the new key is deleted, and the old key is kept
-test("a key replacement for a user whose row is gone deletes the new key and keeps the old key", async () => {
-	// a user with a stored key, whose update matches no row
-	stubConnectionPoolInCallOrder((sentQuery) => (sentQuery.text.startsWith("update") ? [] : [toUserRow("sk-old")]))
-	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
-
-	// the replacement returns true, and the only key deleted is the new key
-	expect(await replaceUserLiteLLMKey("user-1")).toBe(true)
-	expect(proxyRequests.map((proxyRequest) => proxyRequest.path)).toEqual(["/key/generate", "/key/delete"])
-	expect(proxyRequests[1]?.body).toEqual({ keys: ["sk-new"] })
-})
-
-// a user with no key has nothing to replace. a replacement that fails returns false and leaves the old key stored
-test("a key replacement does nothing for a user with no key, and returns false if the replacement fails", async () => {
-	// a replacement for a user with no key returns true, with no request sent to the proxy
-	stubConnectionPoolInCallOrder(() => [toUserRow(null)])
-	const proxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
-	expect(await replaceUserLiteLLMKey("user-1")).toBe(true)
-	expect(proxyRequests).toHaveLength(0)
-
-	// the replacement returns false if the proxy cannot create the new key, and nothing is stored
-	const sentQueries = stubConnectionPoolInCallOrder(() => [toUserRow("sk-old")])
-	stubFailingProxy()
-	expect(await replaceUserLiteLLMKey("user-1")).toBe(false)
-	expect(sentQueries.some((sentQuery) => sentQuery.text.startsWith("update"))).toBe(false)
-
-	// a user with a stored key and an update that fails, and a proxy that creates the new key
-	stubConnectionPoolInCallOrder((sentQuery) => {
-		if (sentQuery.text.startsWith("update")) {
-			throw new Error("connection lost")
-		}
-		return [toUserRow("sk-old")]
-	})
-	const failedStoreProxyRequests = stubProxy(() => Response.json({ key: "sk-new" }))
-
-	// the replacement returns false. the new key is created and then deleted, and the old key is kept
-	expect(await replaceUserLiteLLMKey("user-1")).toBe(false)
-	expect(failedStoreProxyRequests.map((proxyRequest) => proxyRequest.body)).toEqual([
-		expect.objectContaining({ max_budget: 12.34 }),
-		{ keys: ["sk-new"] },
-	])
-})
-
-// the boundary the due rule compares a key's creation against
-test("the month the reset compares a key against begins at utc midnight on the first", () => {
-	expect(startOfUtcMonth(new Date("2026-09-19T14:00:00Z")).toISOString()).toBe("2026-09-01T00:00:00.000Z")
-	expect(startOfUtcMonth(new Date("2026-09-30T23:59:59Z")).toISOString()).toBe("2026-09-01T00:00:00.000Z")
-	expect(startOfUtcMonth(new Date("2026-10-01T00:00:00Z")).toISOString()).toBe("2026-10-01T00:00:00.000Z")
-})
-
-// the reset replaces keys four at a time. one user's failed replacement is counted, and the other five keys are replaced
-test("the reset runs at most four replacements at once and counts a failure separately", async () => {
-	// six due users from the stubbed connection pool, as the array rows that the driver returns
-	stubConnectionPoolInCallOrder(() => [["u1"], ["u2"], ["u3"], ["u4"], ["u5"], ["u6"]])
-
-	// a stand-in key replacement that counts how many replacements run at once and fails for u3
-	let inFlightCount = 0
-	let peakInFlightCount = 0
-	const replaceLiteLLMKey = async (userId: string): Promise<boolean> => {
-		// raise the in-flight count and its peak, wait a moment, and lower the count
-		inFlightCount++
-		peakInFlightCount = Math.max(peakInFlightCount, inFlightCount)
-		await Bun.sleep(2)
-		inFlightCount--
-		return userId !== "u3"
-	}
-
-	// five replaced, one failed, and never more than four in flight
-	expect(await resetMonthlyBudgets(replaceLiteLLMKey)).toEqual({ replacedCount: 5, failedCount: 1 })
-	expect(peakInFlightCount).toBe(4)
 })

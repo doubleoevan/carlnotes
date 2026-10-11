@@ -298,7 +298,8 @@ The user events SHALL be, by area:
 - findings: `finding_rated`, `finding_bookmarked`, `finding_unbookmarked`, `finding_read`, `finding_unread`,
   `finding_opened`, and `finding_feedback_sent`
 - subscriptions: `topic_subscribed` and `topic_unsubscribed` with `subscriptionSource`, `email_digest_toggled` with
-  `isEnabled`, and `email_unsubscribed` from the unsubscribe link
+  `isEnabled`, and `email_unsubscribed` with `entryPoint` `page` for the unsubscribe page's button or `one-click` for a
+  provider's one-click, with the request's device properties
 - podcast: `episode_played` and `episode_completed` wherever a play or a finish is counted, in the app or through a
   listener's feed, `podcast_feed_added` on a feed's first fetch by a podcast app, and `podcast_feed_reset`
 - chat: `chat_turn_sent` with `chatKind` `topic`, `team`, or `new_topic`, `chat_budget_reached`, and `room_message_sent`

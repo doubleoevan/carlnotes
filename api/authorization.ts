@@ -4,7 +4,8 @@ import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, userBudgetCents } 
 import { and, count, eq, inArray } from "drizzle-orm"
 import { db } from "../db"
 import { hasFullPodcastEpisodes, loadUserAccess, monthlySpendDollars, toMonthlySpendCents } from "../db/quotas"
-import { subscriptions, teamMembers, teamTopics, topics } from "../db/schema"
+import { teamMembers, teamTopics } from "../db/schema/teams"
+import { subscriptions, topics } from "../db/schema/topics"
 import { assertNever, canRateTopic, canSeeTopic, toTopicEditRole } from "./topic/permissions"
 import { loadBillingAccess, scansToday } from "./topic/quotas"
 

@@ -2,7 +2,9 @@
 import { toTopicFeedPath, toTopicPath } from "@shared/seo"
 import { and, desc, eq } from "drizzle-orm"
 import { db, isFindingShown } from "../../db"
-import { findings, resources, topics, users } from "../../db/schema"
+import { findings, resources } from "../../db/schema/scans"
+import { topics } from "../../db/schema/topics"
+import { users } from "../../db/schema/users"
 
 // how many of the newest Findings a feed includes
 const FEED_ITEM_LIMIT = 50

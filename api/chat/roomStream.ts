@@ -2,7 +2,7 @@
 // a stored chat message reaches this instance's subscribers directly and every other instance through the channel
 import { EventEmitter } from "node:events"
 import type { RoomTopicToolCalls } from "@shared/contracts"
-import { publishToChannel, subscribeToChannel } from "../../db/redis"
+import { addSubscriberReconnectListener, publishToChannel, subscribeToChannel } from "../../db/redis"
 
 // the one channel that every instance subscribes to. the payload names the sending instance, the topic, the team,
 // and the chat message id. a fifth part holds the chat turn's tool calls if a topic tool left any
@@ -17,6 +17,12 @@ chatRoomEvents.setMaxListeners(0)
 
 // the tool calls that a chat message arrives with if no topic tool left any
 const EMPTY_ROOM_TOPIC_TOOL_CALLS: RoomTopicToolCalls = { topicSaves: [], topicSaveRejections: [] }
+
+// the chat message id a catch-up notification names. a stream reads everything past its cursor
+export const CATCH_UP_CHAT_MESSAGE_ID = 0
+
+// whether this instance listens for the subscriber connection coming back, registered on the first subscribe
+let hasSubscriberReconnectListener = false
 
 // one chat room: the topic, or null for the team's own chat room, and the team
 type ToChatRoomKeyOptions = { topicId: string | null; teamId: string }
@@ -37,10 +43,28 @@ export function onChatRoomMessage(
 	teamId: string,
 	handler: (chatMessageId: number, roomToolCalls: RoomTopicToolCalls) => void,
 ): () => void {
-	// subscribe this instance to the channel, then register the handler under the chat room's key
+	// subscribe this instance to the channel and listen for the subscriber connection coming back,
+	// then register the handler under the chat room's key
 	subscribeToChannel(CHAT_ROOM_CHANNEL, deliverChatRoomPayload)
+	listenForSubscriberReconnect()
 	chatRoomEvents.on(toChatRoomKey({ topicId, teamId }), handler)
 	return () => chatRoomEvents.off(toChatRoomKey({ topicId, teamId }), handler)
+}
+
+// tell every open chat room stream on this instance to catch up past its cursor
+function catchUpChatRoomStreams(): void {
+	for (const chatRoomKey of chatRoomEvents.eventNames()) {
+		chatRoomEvents.emit(chatRoomKey, CATCH_UP_CHAT_MESSAGE_ID, EMPTY_ROOM_TOPIC_TOOL_CALLS)
+	}
+}
+
+// catch every open stream up once each time the subscriber connection comes back, registered once per instance
+function listenForSubscriberReconnect(): void {
+	if (hasSubscriberReconnectListener) {
+		return
+	}
+	hasSubscriberReconnectListener = true
+	addSubscriberReconnectListener(catchUpChatRoomStreams)
 }
 
 /**

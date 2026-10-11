@@ -1,7 +1,7 @@
 // the prompt version write every prompt save shares, the editor's and the topic tools' alike
 import type { promptVersionOrigins } from "@shared/enums"
 import type { DbTransaction } from "../../db"
-import { topicPromptVersions } from "../../db/schema"
+import { topicPromptVersions } from "../../db/schema/topics"
 
 // where a prompt version came from
 export type PromptVersionOrigin = (typeof promptVersionOrigins)[number]

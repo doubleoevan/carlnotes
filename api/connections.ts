@@ -1,7 +1,10 @@
 // whether two users have interacted, derived at invite creation
 import { and, eq, gt, inArray, isNotNull, or } from "drizzle-orm"
 import { db } from "../db"
-import { invites, subscriptions, teamMembers, topics, users } from "../db/schema"
+import { invites } from "../db/schema/invites"
+import { teamMembers } from "../db/schema/teams"
+import { subscriptions, topics } from "../db/schema/topics"
+import { users } from "../db/schema/users"
 
 /**
  * Whether the sender counts as connected to the recipient. Any one of the three checks is enough.

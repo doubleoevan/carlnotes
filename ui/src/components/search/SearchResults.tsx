@@ -1,4 +1,4 @@
-import type { TeamSearchResult, TopicFeed, TopicFinding, UserSearchResult } from "@shared/contracts"
+import type { TeamSearchResult, TopicFinding, TopicSearchResult, UserSearchResult } from "@shared/contracts"
 import { toTopicPath } from "@shared/seo"
 import { Hash } from "lucide-react"
 import { sendTopicFindingOpened } from "@/clients/topicClient"
@@ -13,7 +13,12 @@ type SuggestionRowProps = { suggestionId: string; isActive: boolean; onOpen: () 
 /**
  * A topic result with a topic icon and name that links to the topic page. isActive marks the arrow-key highlight.
  */
-export function TopicResult({ suggestionId, topic, isActive, onOpen }: SuggestionRowProps & { topic: TopicFeed }) {
+export function TopicResult({
+	suggestionId,
+	topic,
+	isActive,
+	onOpen,
+}: SuggestionRowProps & { topic: TopicSearchResult }) {
 	return (
 		<AnchorLink
 			href={toTopicPath(topic)}
