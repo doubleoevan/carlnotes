@@ -11,6 +11,7 @@ import { scans } from "../../db/schema/scans"
 import { sources, type topics } from "../../db/schema/topics"
 import { EXA_COST_PER_SEARCH, X_COST_PER_READ } from "../../worker/budget"
 import type { AnalyticsProperties } from "../currentUser"
+import { clearVisitorTopicCaches } from "../topic/feeds"
 import type { PromptVersionOrigin } from "../topic/promptVersions"
 import { type NewTopicSource, startPendingSourceScreens, toNewSourceRow, toPodcastNames } from "../topic/saveHelpers"
 import { loadEditableTopic, type TopicToolRejection, toToolAnalyticsProperties } from "./topicTools"
@@ -109,10 +110,12 @@ export async function addTopicSource({
 		throw new Error(`failed to add a source to topic ${topicId}`)
 	}
 
-	// start the screen for a url source, and report the source by its kind
+	// start the screen for a url source, drop the visitors' cached topic page, which lists the sources, and report the
+	// source by its kind
 	if (newTopicSource.sourceKind === "url") {
 		startPendingSourceScreens(topicId)
 	}
+	await clearVisitorTopicCaches({ topicId, isListingChanged: false })
 	trackEvent("source_added", editableTopic.userId, {
 		...toToolAnalyticsProperties(origin, analyticsProperties),
 		topicId,
@@ -162,8 +165,9 @@ export async function removeTopicSource({
 		return { status: "missing" }
 	}
 
-	// delete the row and report which source went
+	// delete the row, drop the visitors' cached topic page, which lists the sources, and report which source went
 	await db.delete(sources).where(and(eq(sources.id, sourceId), eq(sources.topicId, topicId)))
+	await clearVisitorTopicCaches({ topicId, isListingChanged: false })
 	trackEvent("source_removed", editableTopic.userId, {
 		...toToolAnalyticsProperties(origin, analyticsProperties),
 		topicId,

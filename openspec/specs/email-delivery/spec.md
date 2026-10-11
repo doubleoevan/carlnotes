@@ -2,10 +2,12 @@
 
 ## Purpose
 TBD - created by archiving change email-delivery-reliability. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: Every provider call takes a slot from one limit shared in Redis
 
-Every call to Resend, from the api's senders and from the worker's scan emails, SHALL first take a slot from one limit held in Redis, which allows one call in any 200 milliseconds across every api and worker process together, so calls leave evenly spaced at five a second, half of Resend's limit of ten requests a second per team. A call that finds no slot SHALL wait for the next one instead of going out. If Redis cannot be reached, the call SHALL go out without a slot, as the app's other limits in Redis allow a request, and the api and the worker SHALL each report the outage to Sentry through their once-a-minute Redis-down warning.
+Every call to Resend, from the api's senders and from the worker's scan emails, SHALL first take a slot from one limit held in Redis, which allows one call in any 200 milliseconds across every api and worker process together, so calls leave evenly spaced at five a second, half of Resend's limit of ten requests a second per team. A call that finds no slot SHALL wait for the next one instead of going out, with a little jitter on each wait so callers that woke together do not ask in lockstep, and SHALL go out without a slot once its wait would pass ten seconds, so a backlog never holds a send for good; Resend's own limit rejects that overflow with a 429, which a scan email retries and any other send reports to Sentry. If Redis cannot be reached, the call SHALL go out without a slot, as the app's other limits in Redis allow a request, and the api and the worker SHALL each report the outage to Sentry through their once-a-minute Redis-down warning.
 
 #### Scenario: Every process counts against the same limit
 
@@ -29,6 +31,11 @@ Every call to Resend, from the api's senders and from the worker's scan emails, 
 - **WHEN** twenty calls from two processes are waiting for slots at once
 - **THEN** they leave one at a time, 200 milliseconds apart, and never in a burst
 
+#### Scenario: A wait past the deadline goes out
+
+- **WHEN** a call would have to wait more than ten seconds for a slot
+- **THEN** it goes out without one
+
 #### Scenario: Redis is unreachable
 
 - **WHEN** a send runs while Redis cannot be reached
@@ -47,4 +54,3 @@ A send that cannot go out SHALL be reported to Sentry, not only logged. A missin
 
 - **WHEN** a batch drops two recipients whose addresses Resend would reject
 - **THEN** the rest of the batch is sent, and Sentry receives a report with the email kind and a count of two, and no address
-

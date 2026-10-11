@@ -1,6 +1,8 @@
 # api/
 
-Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregates the `/api` routes.
+Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregates the `/api` routes and bounds every
+body at a megabyte through `toBodyLimit` in `bodyLimit.ts`, except on the chat, upload, and note sync routes, which set
+their own limits.
 
 - `index.ts` opens each request's memo (`db/requestMemo.ts`) in its first middleware, and its `onError` reports an
   error no route handles to Sentry and keeps Hono's 500. `requestTracing.ts` runs next: it counts the request's
@@ -11,9 +13,16 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   Redis stubs.
   `index.ts` also serves `/api/health`, which the platform polls and which sends no query, and `/api/health/deep`,
   which runs one query and returns the pool's counts for a monitor. Neither looks up a session.
+  Ahead of a page render, `index.ts` limits a visitor's origin requests by address through `rateLimit.ts`, redirects a
+  page url with a per-click id (`fbclid`, `gclid`, and the like) permanently to the url without it, which is the
+  one the edge caches, and sheds a visitor's render past `RENDER_CONCURRENCY` with a 503 and a two-second retry while
+  the edge serves its stale copy; a signed-in render is never shed. Every response includes the content security policy
+  with `base-uri` and `form-action` on this origin, `Referrer-Policy`, and `X-Content-Type-Options`, and an unhashed
+  public file from the ui bundle is cached an hour in the browser and a day at the edge under the `rendered` tag.
 - Domain folders: `topic/`, `team/`, `chat/`, `invite/`, `note/`, `podcast/`, `share/`, `tool/`, `mcp/`. Root files
   serve more than one domain (auth, billing, admin, avatars, favicons, profiles, SEO, and `content.ts` for the blog
-  under `content/blog/`).
+  under `content/blog/`). `billingRoute.ts` holds the billing routes over `billing.ts`; its Stripe webhook responds
+  400 to a bad signature and 500 to a verified event it could not apply, so Stripe retries it.
 - `documents.ts` — the document routes: the sitemap, the site and topic feeds, the llms files, the IndexNow key, and
   security.txt. `seo.ts` builds what they read, and `jsonLd.ts` the JSON-LD the topic page head includes. The blog and
   docs Markdown are read through `ttlCache.ts`, which keeps the parsed pages for a minute, so a new file appears within
@@ -74,17 +83,22 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
 - `topic/promptVersions.ts` — the Prompt Version write the editor's save and the Topic Tools share.
 - `topic/topicTableRows.ts` — `toTopicTableRows`, the topic table rows that the profile page and the team page share,
   each with its latest Podcast Episode.
-- `topic/moreTopics.ts` — `loadMoreTopics`, the other public shown Topics a public Topic's page links under "More
-  topics": a holding public team's first, then by shared tags, then by newest Finding.
+- `topic/moreTopics.ts` — `readMoreTopics`, the other public shown Topics a public Topic's page links under "More
+  topics": a holding public team's first, then by shared tags, then by newest Finding, read through Redis for a minute
+  since they are the same for every user and visitor.
 - `topic/topics.ts` — the topic page read; `topic/saveTopic.ts` — the create with its default Sources and invites, and
-  the update with its changed-field events; `topic/topicsRoute.ts` — the topic routes over them; `topic/deleteTopic.ts`
-  — the delete, one transaction over every row a topic owns with its object keys recorded.
-- `topic/feeds.ts` — the topic feed's sections, and `topic/feedData.ts` — the batched reads behind every topic in a
-  feed, each table read once for the whole batch.
+  the update with its changed-field events; `topic/topicsRoute.ts` — the topic routes over them, which serve a
+  visitor's topic page from one Redis copy for half a minute and limit source suggestions like a tool caller;
+  `topic/deleteTopic.ts` — the delete, one transaction over every row a topic owns with its object keys recorded.
+- `topic/feeds.ts` — the topic feed's sections; the visitors' feed and topic page, each read through one Redis copy for
+  half a minute; `clearVisitorTopicCaches`, which a topic's edit, delete, and team attach or detach call to drop its
+  copies; and `clearSharedTopicFeedCaches`, which drops the feed copies with the featured and popular topic id lists;
+  `topic/feedData.ts` — the batched reads behind every topic in a feed, each table read once for the whole batch.
 - `chat/room.ts` — posting to a chat room and its stream; `chat/roomRoute.ts` — the chat room routes;
   `chat/roomAccess.ts` — one chat room, the member's access to it, and the topic side of a chat room filter;
   `chat/roomDeletes.ts` — clearing a room and deleting one message or shared file.
-- `chat/privateChat.ts` — the private chat routes and the answer flow; `chat/chatTurnAuthorization.ts` — whether a
+- `chat/privateChat.ts` — the private chat routes and the answer flow, each post rejecting a signed-out visitor through
+  `toSignedOutRejection` in `bodyLimit.ts` before the body is read; `chat/chatTurnAuthorization.ts` — whether a
   user may take a chat turn on a topic, in a team chat, or in the new-topic chat; `chat/chatTurnStream.ts` — streaming
   a chat turn's reply and saving its row. `chat/roomTurns.ts` — Carl's chat room turn, and `chat/roomQuestion.ts` —
   the question it is asked, from the chat window and the room's summary and files. `room.smoke.ts` runs
@@ -106,16 +120,21 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
 - `botAnalytics.ts` — the middleware that reports what a known crawler, unfurler, podcast app, or feed reader fetched,
   keyed to the bot's name, from the token list in `shared/userAgent.ts`. A route that loaded a topic sets
   `analyticsTopic`, and a public topic's id is sent with the event.
-- `rateLimit.ts` — the one per-tool-caller rate limit, shared by the chat turn routes and the mcp routes, keyed by the
-  user or by the client address. `trustedProxies.ts` reads that address exactly as Better Auth does: the rightmost
-  `x-forwarded-for` entry outside the Cloudflare ranges that `TRUSTED_PROXIES` lists, and logs the warning once if
-  the setting is unset or misses a hop.
+- `rateLimit.ts` — the three rate limits: the tool caller limit, shared by the chat turn routes, the source
+  suggestions, and the mcp routes, keyed by the user or by the client address; the page render limit on a visitor's
+  page renders, which `index.ts` mounts ahead of the blog, release, and ui page renders, keyed by address and skipped
+  for a session cookie or an untrusted address; and the search limit on the search bar's three routes.
+  `trustedProxies.ts` reads that address exactly as Better Auth does: the rightmost `x-forwarded-for` entry outside
+  the Cloudflare ranges that `TRUSTED_PROXIES` lists, and logs the warning once if the setting is unset or misses a
+  hop.
   Each rate limit window is counted in Redis through `db/redis.ts`, so every replica shares the count.
   While Redis is unreachable the counter counts in this replica's memory, so a caller stays bounded per replica.
-- `avatars.ts` — the user and team avatar uploads and routes, and `POST /api/avatars/decode-failures`, which reports
-  a chosen avatar file that could not be decoded, by its content type and byte size.
-- `edgeCache.ts` — what the edge may cache: a signed-out page, the blog and release pages, and the signed-out feed for a
-  minute under the `rendered` tag, and a versioned avatar or card for a year in the browser and a day at the edge. A
+- `avatars.ts` — the user and team avatar uploads and the published avatar, and `avatarsRoute.ts` their routes, with
+  `POST /api/avatars/decode-failures`, which reports a chosen avatar file that could not be decoded, by its content
+  type and byte size, the first five a user sends in a day.
+- `edgeCache.ts` — what the edge may cache: a signed-out page, a permanent redirect from a page path, the blog and
+  release pages, and the signed-out feed for a minute under the `rendered` tag, and a versioned avatar or card for a
+  year in the browser and a day at the edge. A
   user avatar response is tagged `user-avatar:<userId>` and a team avatar response `team-avatar:<teamId>`, and
   `purgeEdgeCacheTagAfterDeletion` purges one tag once an account close or a team deletion has committed, reporting a
   failed purge, logging a skipped one, and never failing the deletion. `purgeEdgeCacheTags` is the purge by tag both it
@@ -137,8 +156,12 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
   one-click, reporting which with the request's device properties.
 - `auth.ts` creates each new user's LiteLLM key in the user create hook. If the LiteLLM proxy fails or times out, the
   hook reports the failure, and the user is created without a key. The user's first model call creates the key.
-  `authEmails.ts` sends the emails Better Auth asks for, and `signupGate.ts` holds the turnstile check a password
-  signup passes, signed into a short-lived cookie.
+  `authEmails.ts` sends the emails Better Auth asks for, and each mail hook in `auth.ts` starts its send through
+  `sendAuthEmailInBackground`, which logs and reports a send that throws, and responds at once, so a slow or down
+  Resend never holds a signup or a reset request. `/mcp/register` is limited to 600 registrations an hour per address.
+  `signupGate.ts` holds the turnstile check a password signup passes, signed into a five-minute cookie whose nonce
+  Redis records, so one signup consumes it and a replay is rejected; while Redis is down the signature and expiry alone
+  pass.
   `auth.ts` gives Better Auth the Redis store as its secondary storage and keeps sessions in Postgres too.
   A session is read from Redis first, and from Postgres if Redis has no copy or is down.
   Verification values, such as reset links and OAuth state, are kept in both stores and read the same way.
@@ -155,4 +178,6 @@ Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregate
 - Request bodies validate with zod payloads from `shared/contracts.ts` via `zValidator`.
 - A private or team read the user may not see responds 404, never 403; the invite gate keeps its 403.
 - Dev: `bun run dev:api` (doppler, on `PORT`, 3000 by default).
-  Tests: `bun test api`; `*.smoke.ts` run under `doppler run`.
+  Tests: `bun test api`; `*.smoke.ts` run under `doppler run`. `testSession.ts` answers the session lookup as one user
+  or as a visitor, and `indexTestFixtures.ts` builds the fake ui bundle and the requests the page serving tests send
+  through the composed app; only tests import either.

@@ -3,8 +3,9 @@
 # the app service image: the Hono api plus the ui's built browser files and server build, started under Doppler.
 # the litellm proxy is a separate service and builds from infra/litellm/Dockerfile, not this file.
 # Bun is pinned to the version the repo targets (@types/bun ^1.3.14) so the image and a developer's
-# local runtime cannot drift apart on a patch release
-FROM oven/bun:1.3.14 AS build
+# local runtime cannot drift apart on a patch release, and to the digest of that tag, so a re-pushed tag changes
+# nothing until Dependabot bumps the digest
+FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS build
 WORKDIR /app
 
 # install against the committed lockfile on its own layer, so it caches until a dependency actually changes
@@ -35,7 +36,7 @@ RUN bun run build:docs
 
 # the runtime includes only what serving a request needs: production dependencies, the modules Bun executes, and the
 # built ui and docs. the toolchain and every dev dependency stay behind in the build stage
-FROM oven/bun:1.3.14 AS runtime
+FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
@@ -47,8 +48,8 @@ RUN apt-get update \
 	&& rm -rf /var/lib/apt/lists/*
 
 # Doppler injects the secrets at start. copied from its own published image rather than curled at build time,
-# so the version is pinned and the build needs no network egress
-COPY --from=dopplerhq/cli:3 /bin/doppler /bin/doppler
+# so the version and its digest are pinned and the build needs no network egress
+COPY --from=dopplerhq/cli:3.77.0@sha256:bc59e0e97ea596a2c402f108043b9fd6ad574db253998364de939c0ca373453e /bin/doppler /bin/doppler
 
 # resolve production dependencies from the same lockfile the build stage used
 COPY package.json bun.lock ./

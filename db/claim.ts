@@ -15,6 +15,10 @@ export function runWithClaim<Result>({ claimName, runTask }: RunWithClaimOptions
 	// ponytail: the claim's transaction stays open while the task runs.
 	// a lease row with an expiry is the upgrade if the connection pooler ever closes an idle transaction
 	return db.transaction(async (transaction) => {
+		// opt the claim's transaction out of any idle-in-transaction timeout while the task runs. the setting ends with the
+		// transaction
+		await transaction.execute(sql`set local idle_in_transaction_session_timeout = 0`)
+
 		// try to take the claim and run the task only if this transaction took the claim
 		const { rows: claimRows } = await transaction.execute(
 			sql`select pg_try_advisory_xact_lock(hashtext(${claimName})) as has_taken_claim`,

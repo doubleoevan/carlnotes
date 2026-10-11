@@ -4,7 +4,7 @@ import { shutdownMonitoring, startMonitoring } from "@shared/monitoring"
 import { type ExtraGaugesReading, startRuntimeGauges } from "@shared/runtimeGauges"
 import { NativeConnection, Worker } from "@temporalio/worker"
 import { readPoolGauges, sizeConnectionPool, toPositiveInteger } from "../db"
-import { readRedisExtraGauges } from "../db/redis"
+import { readRedisExtraGauges } from "../db/redisGauges"
 import { runWithRetries } from "./retry"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
 import {
@@ -17,6 +17,7 @@ import {
 import * as attachmentActivities from "./workflows/processAttachmentActivities"
 import { PODCAST_EPISODE_TASK_QUEUE } from "./workflows/recordPodcastEpisode"
 import * as podcastEpisodeActivities from "./workflows/recordPodcastEpisodeActivities"
+import { SCAN_CLOSING_TASK_QUEUE } from "./workflows/runTopicScan"
 import * as scanActivities from "./workflows/runTopicScanActivities"
 import * as sourceActivities from "./workflows/screenSourceActivities"
 import { SCAN_EMAIL_TASK_QUEUE } from "./workflows/sendScanEmail"
@@ -28,6 +29,14 @@ const SHUTDOWN_GRACE_MS = 2 * 60 * 1000
 // how many scan activities may run at once on this replica, from the SCAN_CONCURRENCY setting or the default
 const DEFAULT_SCAN_CONCURRENCY = 8
 const SCAN_CONCURRENCY = toPositiveInteger(Bun.env.SCAN_CONCURRENCY, DEFAULT_SCAN_CONCURRENCY)
+
+// how many closing writes may run at once on this replica
+const SCAN_CLOSING_CONCURRENCY = 8
+
+// how many activities the attachment Worker and the source-screen Worker may each run at once on this replica, from
+// the SCREEN_CONCURRENCY setting or the default
+const DEFAULT_SCREEN_CONCURRENCY = 8
+const SCREEN_CONCURRENCY = toPositiveInteger(Bun.env.SCREEN_CONCURRENCY, DEFAULT_SCREEN_CONCURRENCY)
 
 // how many scan email activities may run at once on this replica. a few keep each wait for a Resend slot short,
 // and the rest of a burst waits in the Temporal queue
@@ -75,8 +84,9 @@ async function run(): Promise<void> {
 			activities: attachmentActivities,
 			taskQueue: ATTACHMENT_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: SCREEN_CONCURRENCY,
 		}),
-		// runs one dispatched Scan: ingest, review, and the final write
+		// runs one dispatched Scan: ingest and review
 		Worker.create({
 			connection,
 			workflowsPath: new URL("./workflows/runTopicScan.ts", import.meta.url).pathname,
@@ -84,6 +94,14 @@ async function run(): Promise<void> {
 			taskQueue: SCAN_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
 			maxConcurrentActivityTaskExecutions: SCAN_CONCURRENCY,
+		}),
+		// records a Scan's outcome: the closing writes on their own queue, with every scan activity registered
+		Worker.create({
+			connection,
+			activities: scanActivities,
+			taskQueue: SCAN_CLOSING_TASK_QUEUE,
+			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: SCAN_CLOSING_CONCURRENCY,
 		}),
 		// emails a completed Scan's outcome, one activity per Resend call
 		Worker.create({
@@ -110,6 +128,7 @@ async function run(): Promise<void> {
 			activities: sourceActivities,
 			taskQueue: SOURCE_TASK_QUEUE,
 			shutdownGraceTime: SHUTDOWN_GRACE_MS,
+			maxConcurrentActivityTaskExecutions: SCREEN_CONCURRENCY,
 		}),
 	])
 

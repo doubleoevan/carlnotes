@@ -115,6 +115,8 @@ export const resources = pgTable(
 	(table) => [
 		// speeds up the duplicate check, which otherwise reads and sorts every stored resource
 		index("resources_embedding_hnsw").using("hnsw", table.embedding.op("vector_cosine_ops")),
+		// a resource by its content hash, for the duplicate check review runs on every fetched page
+		index("resources_content_hash_idx").on(table.contentHash),
 	],
 )
 
@@ -164,6 +166,8 @@ export const findings = pgTable(
 		index("findings_topic_relevance_idx").on(table.topicId, table.relevanceScore.desc().nullsFirst()),
 		// one scan's findings, for a public topic page's structured data and a scan email
 		index("findings_scan_id_idx").on(table.scanId),
+		// a topic's findings by when they arrived, for the new finding count and the reads that take a topic's latest findings
+		index("findings_topic_created_idx").on(table.topicId, table.createdAt),
 	],
 )
 

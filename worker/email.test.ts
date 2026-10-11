@@ -2,6 +2,7 @@
 // the wait for the rate limit slot, and the reports for missing configuration and dropped addresses
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { restoreEnv } from "@shared/testEnv"
 import * as redis from "../db/redis"
 import {
 	type EmailMessage,
@@ -41,15 +42,6 @@ afterEach(() => {
 	restoreEnv("RESEND_FROM_EMAIL", realFromEmail)
 	mock.restore()
 })
-
-// put an env value back, removing it if it was unset. assigning undefined would store the text "undefined"
-function restoreEnv(name: string, value: string | undefined): void {
-	if (value === undefined) {
-		delete Bun.env[name]
-		return
-	}
-	Bun.env[name] = value
-}
 
 // a sender with a key and a verified from-address
 function configureResend(): void {
@@ -272,4 +264,16 @@ test("a scan email call that cannot reach Resend is retried on the backoff", asy
 		failure: { httpStatus: null, resendError: "connection refused" },
 		retryAfterSeconds: null,
 	})
+})
+
+// a wait that would pass the deadline goes ahead without the slot, so a backlog never holds a send for good
+test("a scan email call goes ahead without the slot once the wait would pass the deadline", async () => {
+	configureResend()
+	const sentResendCalls = stubResend(() => new Response("{}", { status: 200 }))
+
+	// a slot held for a minute is not waited for
+	takeRateLimitSlotSpy.mockResolvedValueOnce(60_000)
+	expect(await sendScanEmailCall({ scanId: "scan-1", messages: [toTestMessage(1)] })).toEqual({ outcome: "accepted" })
+	expect(takeRateLimitSlotSpy).toHaveBeenCalledTimes(1)
+	expect(sentResendCalls).toHaveLength(1)
 })

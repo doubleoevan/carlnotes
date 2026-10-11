@@ -38,15 +38,17 @@ test("a claim already held skips the task", async () => {
 	expect(taskCallCount).toBe(0)
 })
 
-// a free claim runs the task and returns its result, and the statement tries the advisory lock on the claim's name
+// a free claim runs the task and returns its result, the transaction first opts out of the idle timeout, and the next
+// statement tries the advisory lock on the claim's name
 test("a free claim runs the task and returns its result", async () => {
 	// the statements that the fake transaction records, and the result of a task under a free claim
 	const statements: string[] = []
 	spyOn(db, "transaction").mockImplementation(toFakeTransaction({ hasTakenClaim: true, statements }))
 	const runWithClaimResult = await runWithClaim({ claimName: "monthly-budget-reset", runTask: async () => "reset" })
 	expect(runWithClaimResult).toBe("reset")
-	expect(statements[0]).toContain("pg_try_advisory_xact_lock(hashtext(")
-	expect(statements[0]).toContain("monthly-budget-reset")
+	expect(statements[0]).toContain("set local idle_in_transaction_session_timeout = 0")
+	expect(statements[1]).toContain("pg_try_advisory_xact_lock(hashtext(")
+	expect(statements[1]).toContain("monthly-budget-reset")
 })
 
 // a task that throws an error rejects runWithClaim with that error.

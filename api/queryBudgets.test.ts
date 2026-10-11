@@ -13,7 +13,7 @@ import { restoreRedisClient, stubRedisClient } from "../db/redisClientStub"
 import { runWithRequestMemo } from "../db/requestMemo"
 import { topics } from "../db/schema/topics"
 import { apiRoute } from "./api"
-import { auth } from "./auth"
+import { signInAs } from "./testSession"
 
 // the most queries a request may send: a Redis hit serves the mention count, the topic poll, and the feed's topic
 // section ids without their reads, and one topic page load reads its user's access row once and their topic role once
@@ -74,7 +74,7 @@ afterEach(() => {
 // request a path through the api tree as the given user, with the request memo open as the server opens it,
 // and return the response with how many queries the request sent
 async function requestAsUser(path: string, userId: string | null): Promise<{ response: Response; queryCount: number }> {
-	spyOn(auth.api, "getSession").mockResolvedValue(userId ? ({ user: { id: userId } } as never) : null)
+	signInAs(userId)
 	const queryCountBefore = sentQueries.length
 	const response = await runWithRequestMemo(() => apiRoute.request(path))
 	return { response, queryCount: sentQueries.length - queryCountBefore }

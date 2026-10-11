@@ -10,10 +10,14 @@ reads the app's base url from `BETTER_AUTH_URL` for server code: `appUrl()` fall
 `appBaseUrl()` is undefined if unset, for the emails and notifications that skip without a link.
 
 `monitoring.ts` starts Sentry in the api and the worker and defines what tracing reads and writes: the traces sampler,
-a request's transaction name and measurements, the stage and query spans, the send-time scrub, and the threshold
-warnings. `runtimeGauges.ts` logs a long-running process's connection pool and event loop delay once a minute, reading
-the delay from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its host name,
-so the replicas' lines can be told apart.
+a request's transaction name and measurements, the stage and query spans, and the threshold warnings. The send-time
+scrub every outgoing event passes is `scrubContent` and `scrubTransaction` in `monitoringScrub.ts`. `reportError`
+sends one stage's one error ten times an hour and holds the rest, and the next hour's first report says how many were
+held. `testEnv.ts` puts an environment setting back in a test, removing one the run never had; only tests import it.
+`time.ts` holds a day in milliseconds and `withTimeLimit`, which fails work that outlasts a time limit with the
+caller's error. `runtimeGauges.ts` logs a long-running process's connection pool and event loop delay once a minute,
+reading the delay from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its
+host name, so the replicas' lines can be told apart.
 `reportedPath.ts` names a page by its route's shape, for PostHog's page views and Sentry's page renders alike.
 `analytics.ts` holds the three kinds of event, the user events keyed to a user, the bot events keyed to a bot's or an
 app's name, and the names of the browser's visit events, and `userAgent.ts` reads a request's device properties and

@@ -1,0 +1,2 @@
+CREATE INDEX "findings_topic_created_idx" ON "findings" USING btree ("topic_id","created_at");--> statement-breakpoint
+CREATE INDEX "resources_content_hash_idx" ON "resources" USING btree ("content_hash");

@@ -10,7 +10,6 @@ import {
 	isWithinRateLimit,
 	publishToChannel,
 	readAndResetRedisGauges,
-	readRedisExtraGauges,
 	readRedisJson,
 	replaceRedisJson,
 	runWithRedis,
@@ -22,10 +21,12 @@ import {
 	dropConnection,
 	type FakeRedisClient,
 	type FakeRedisServer,
+	toEveryTimerInstantSetTimeout,
 	toFakeRedisClient,
-	toInstantSetTimeout,
+	toInstantReconnectSetTimeout,
 	waitUntil,
 } from "./redisFakeServer"
+import { readRedisExtraGauges, readRedisMemoryGauges } from "./redisGauges"
 
 // the fake server that each test's store talks to, the fake clients that the store built, and a quiet console
 let fakeRedisServer: FakeRedisServer
@@ -219,7 +220,7 @@ test("a dropped subscriber connection resubscribes on a fresh client and deliver
 	expect([...(fakeRedisServer.subscribedClientsByChannel.get("notes") ?? [])]).toEqual([firstSubscriberClient])
 
 	// drop the connection with an instant reconnect timer, and wait for a fresh client to subscribe the channel
-	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantSetTimeout([]))
+	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantReconnectSetTimeout([]))
 	dropConnection(firstSubscriberClient)
 	await waitUntil(
 		() => fakeRedisClients.length === 2 && fakeRedisServer.subscribedClientsByChannel.get("notes")?.size === 1,
@@ -241,7 +242,9 @@ test("a failed subscribe starts one reconnect and the fresh client subscribes ev
 	subscribeToChannel("notes", (channelMessage) => receivedChannelMessages.push(`notes ${channelMessage}`))
 	await Bun.sleep(0)
 	const reconnectDelaysMs: number[] = []
-	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantSetTimeout(reconnectDelaysMs))
+	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+		toInstantReconnectSetTimeout(reconnectDelaysMs),
+	)
 	fakeRedisServer.remainingSubscribeFailureCount = 1
 	subscribeToChannel("room", (channelMessage) => receivedChannelMessages.push(`room ${channelMessage}`))
 	await waitUntil(() => fakeRedisServer.subscribedClientsByChannel.get("room")?.size === 1)
@@ -265,10 +268,16 @@ test("a failed subscribe starts one reconnect and the fresh client subscribes ev
 test("the reconnect delay doubles to thirty seconds and resets on connect", async () => {
 	// seven failed connects with instant timers
 	const reconnectDelaysMs: number[] = []
-	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantSetTimeout(reconnectDelaysMs))
+	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+		toInstantReconnectSetTimeout(reconnectDelaysMs),
+	)
 	fakeRedisServer.remainingConnectFailureCount = 7
 	await runWithRedis("get", (client) => client.get("k"))
 	await waitUntil(() => fakeRedisClients.at(-1)?.connected === true)
+
+	// a command on the fresh connection responds before its deadline, and its deadline timer records no reconnect delay
+	fakeRedisServer.storedValueByKey.set("k", "stored")
+	expect(await runWithRedis("get", (client) => client.get("k"))).toBe("stored")
 	expect(reconnectDelaysMs).toEqual([1000, 2000, 4000, 8000, 16_000, 30_000, 30_000])
 	expect(fakeRedisClients.at(-1)?.connected).toBe(true)
 	expect(readAndResetRedisGauges().errorCount).toBe(7)
@@ -317,10 +326,63 @@ test("a reconnect listener runs after a drop and not on the first connect", asyn
 	expect(reconnectCount).toBe(0)
 
 	// a drop with an instant reconnect timer brings a fresh client that subscribes the channel, then the listener runs once
-	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantSetTimeout([]))
+	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantReconnectSetTimeout([]))
 	dropConnection(fakeRedisClients.at(-1) as FakeRedisClient)
 	await waitUntil(() => fakeRedisClients.length === 2 && reconnectCount === 1)
 	expect(fakeRedisServer.subscribedClientsByChannel.get("notes")?.size).toBe(1)
 	expect(reconnectCount).toBe(1)
 	setTimeoutSpy.mockRestore()
+})
+
+// a command that never settles returns null at the deadline and counts an error, and three misses in a row replace the client
+test("a stalled command returns null at the deadline, and three stalls in a row replace the client", async () => {
+	// the deadline and the reconnect wait both fire at once
+	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toEveryTimerInstantSetTimeout())
+	fakeRedisServer.isCommandStalled = true
+
+	// each stalled command returns null and counts one error, and the third miss brings a fresh client
+	expect(await runWithRedis("get", (client) => client.get("k"))).toBeNull()
+	expect(await runWithRedis("get", (client) => client.get("k"))).toBeNull()
+	expect(fakeRedisClients.length).toBe(1)
+	expect(await runWithRedis("get", (client) => client.get("k"))).toBeNull()
+	expect(fakeRedisClients.length).toBe(2)
+	expect(readAndResetRedisGauges().errorCount).toBe(3)
+	setTimeoutSpy.mockRestore()
+})
+
+// a connection that is up but rejected commands all minute crosses the errors threshold, and the server's memory is read
+test("readRedisExtraGauges reads the server's memory and crosses the errors and memory thresholds", async () => {
+	// ten failed commands on a live connection, on a server near its memory limit
+	fakeRedisServer.infoReply = "# Memory\r\nused_memory:900\r\nmaxmemory:1000\r\n"
+	await runWithRedis("get", (client) => client.get("k"))
+	fakeRedisServer.isCommandFailing = true
+	for (let i = 0; i < 10; i++) {
+		await runWithRedis("get", (client) => client.get("k"))
+	}
+	fakeRedisServer.isCommandFailing = false
+
+	// the gauges include the memory numbers, and both thresholds cross
+	const redisExtraGauges = await readRedisExtraGauges()
+	expect(redisExtraGauges.gauges).toEqual({
+		redis: {
+			isConnected: true,
+			cacheHitCount: 0,
+			cacheMissCount: 0,
+			errorCount: 10,
+			usedMemoryBytes: 900,
+			maxMemoryBytes: 1000,
+		},
+	})
+	expect(redisExtraGauges.thresholdCrossings.map((thresholdCrossing) => thresholdCrossing.condition)).toEqual([
+		"redis-errors",
+		"redis-memory",
+	])
+})
+
+// a server with no memory limit crosses no memory threshold, and a failed INFO read leaves the memory numbers out
+test("readRedisMemoryGauges reads an unlimited server and returns null when the read fails", async () => {
+	fakeRedisServer.infoReply = "# Memory\r\nused_memory:900\r\nmaxmemory:0\r\n"
+	expect(await readRedisMemoryGauges()).toEqual({ usedMemoryBytes: 900, maxMemoryBytes: 0 })
+	fakeRedisServer.isCommandFailing = true
+	expect(await readRedisMemoryGauges()).toBeNull()
 })

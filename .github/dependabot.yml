@@ -1,0 +1,32 @@
+# Dependabot version updates for the Bun lockfile, the workflow actions, and the image bases, each weekly. the Bun
+# updates are grouped, production minor and patch in one pull request and development in another. a security update for
+# an advisory comes on its own as soon as GitHub publishes the advisory. the Bun that Dependabot resolves with has to
+# write the lockfile format the pinned Bun reads, so a Dependabot pull request that fails the install is a sign to bump
+# the Bun pin, never to drop the lockfile check
+version: 2
+updates:
+  - package-ecosystem: bun
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      production:
+        dependency-type: production
+        update-types: [minor, patch]
+      development:
+        dependency-type: development
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+  - package-ecosystem: docker
+    directories:
+      - /
+      - /infra/litellm
+      - /infra/llm-guard
+    schedule:
+      interval: weekly
+      day: monday

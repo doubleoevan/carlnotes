@@ -49,8 +49,23 @@ const MIN_PASSWORD_LENGTH = 12
 const CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS = 60
 const CREDENTIAL_RATE_MAX = 10
 
+// how many mcp clients one address may register in an hour. a hosted ai app registers its users' clients from a few
+// shared addresses, so the limit sits far above one person's registrations
+const MCP_REGISTER_RATE_LIMIT_WINDOW_SECONDS = 3600
+const MCP_REGISTER_RATE_MAX = 600
+
 // the signed-in user that the session middleware sets on Hono's request context
 export type SessionUser = typeof auth.$Infer.Session.user
+
+/**
+ * Sends an auth email without holding the request, and logs and reports a send that throws.
+ */
+export function sendAuthEmailInBackground(emailKind: string, emailSendPromise: Promise<void>): void {
+	emailSendPromise.catch((error: unknown) => {
+		console.error(`the ${emailKind} email could not be sent`, error)
+		reportError(error, "email", { emailKind })
+	})
+}
 
 /**
  * The Redis storage that Better Auth uses for sessions, verification tokens, and rate limit counts.
@@ -196,7 +211,7 @@ export const auth = betterAuth({
 		enabled: true,
 		minPasswordLength: MIN_PASSWORD_LENGTH,
 		sendResetPassword: async ({ user, url }) => {
-			await sendResetPasswordEmail(user.email, url)
+			sendAuthEmailInBackground("reset-password", sendResetPasswordEmail(user.email, url))
 		},
 		resetPasswordTokenExpiresIn: RESET_TOKEN_LIFETIME_SECONDS,
 		revokeSessionsOnPasswordReset: true,
@@ -236,12 +251,14 @@ export const auth = betterAuth({
 			"/request-password-reset": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 			"/reset-password": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 			"/change-password": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
+			// an mcp client registers with no credential, and each registration writes a row
+			"/mcp/register": { window: MCP_REGISTER_RATE_LIMIT_WINDOW_SECONDS, max: MCP_REGISTER_RATE_MAX },
 		},
 	},
 	// a non-blocking verification email on signup, whose link lives a day instead of the default hour
 	emailVerification: {
 		sendVerificationEmail: async ({ user, url }) => {
-			await sendVerificationEmail(user.email, url)
+			sendAuthEmailInBackground("verification", sendVerificationEmail(user.email, url))
 		},
 		sendOnSignUp: true,
 		expiresIn: VERIFICATION_LINK_HOURS * 60 * 60,
@@ -252,7 +269,7 @@ export const auth = betterAuth({
 		changeEmail: {
 			enabled: true,
 			sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
-				await sendChangeEmailConfirmationEmail(user.email, newEmail, url)
+				sendAuthEmailInBackground("change-email", sendChangeEmailConfirmationEmail(user.email, newEmail, url))
 			},
 		},
 		additionalFields: {

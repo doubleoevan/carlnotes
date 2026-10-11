@@ -17,7 +17,7 @@ import { isAllowed } from "../authorization"
 import { loadChatAttachmentObjectKeys } from "../chat/chatAttachmentReads"
 import type { AnalyticsProperties } from "../currentUser"
 import { releaseFeatureOrder } from "./featuring"
-import { clearTopicSectionIdCache } from "./feeds"
+import { clearVisitorTopicCaches } from "./feeds"
 
 /**
  * Deletes a topic and everything it includes. Only allowed by an owner or admin.
@@ -44,11 +44,13 @@ export async function deleteTopic(
 		return topicObjectKeys
 	})
 
-	// delete the objects once the rows are gone, and the shared topic section ids if the topic was featured
+	// delete the objects once the rows are gone, then the topic's cached visitor page, and the visitors' feeds if the
+	// topic was public or featured
 	await deleteStoredObjects(objectKeys)
-	if (isFeatureOrderReleased) {
-		await clearTopicSectionIdCache()
-	}
+	await clearVisitorTopicCaches({
+		topicId,
+		isListingChanged: isFeatureOrderReleased || topic.visibility === "public",
+	})
 
 	// a deleted public topic's url is gone, so notify IndexNow to drop it
 	if (topic.visibility === "public") {

@@ -1,34 +1,20 @@
-// schedule tests: the frequency window, the scheduled topic filter, starting the scheduled Topics' Scans, the owners
-// whose budget is spent, the topic sweep summary, the sweep without the budget reset, and the daily topic limit
+// schedule tests: starting the scheduled Topics' Scans, the owners whose budget is spent, the topic sweep summary, and
+// the sweep without the budget reset
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
-import { db } from "../db"
+import { restoreEnv } from "@shared/testEnv"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as quotas from "../db/quotas"
-import { topics } from "../db/schema/topics"
+import type { topics } from "../db/schema/topics"
 import * as litellm from "./litellm"
 import * as scan from "./scan"
-import {
-	frequencyWindowMs,
-	isWithinDailyTopicLimit,
-	loadBudgetExhaustedOwnerIds,
-	startScheduledTopicScans,
-	type TopicSweepSummary,
-	toScheduledTopicFilter,
-} from "./schedule"
-
-// one day in milliseconds, the daily frequency window
-const DAY_MS = 24 * 60 * 60 * 1000
+import { loadBudgetExhaustedOwnerIds, startScheduledTopicScans, type TopicSweepSummary } from "./schedule"
 
 // a fresh zeroed topic sweep summary to fold outcomes into
 function emptyTopicSweepSummary(): TopicSweepSummary {
-	return { scheduled: 1, started: 0, skippedOverQuota: 0, skippedOverDailyLimit: 0, skippedOverBudget: 0, failed: 0 }
-}
-
-// the sql and the parameters that a select of the scheduled Topics renders on a given day
-function toScheduledTopicQuery(now: Date): { sql: string; params: unknown[] } {
-	return db.select({ id: topics.id }).from(topics).where(toScheduledTopicFilter(now)).toSQL()
+	// biome-ignore format: one line keeps the summary under the comment-density hook's limit
+	return { scheduled: 1, started: 0, skippedOverQuota: 0, skippedOverDailyLimit: 0, skippedOverBudget: 0, skippedOverBacklog: 0, failed: 0 }
 }
 
 // a scheduled weekly Topic with only the fields that startScheduledTopicScans reads.
@@ -64,56 +50,8 @@ afterEach(() => {
 
 	// put each proxy setting back, or delete a proxy setting that the test run never had
 	for (const [proxySettingName, originalProxySetting] of Object.entries(originalProxySettings)) {
-		if (originalProxySetting === undefined) {
-			delete Bun.env[proxySettingName]
-		} else {
-			Bun.env[proxySettingName] = originalProxySetting
-		}
+		restoreEnv(proxySettingName, originalProxySetting)
 	}
-})
-
-// the daily frequency waits a day before a re-scan, the weekly frequency waits seven
-test("frequencyWindowMs is a day for daily and a week for weekly", () => {
-	expect(frequencyWindowMs("daily")).toBe(DAY_MS)
-	expect(frequencyWindowMs("weekly")).toBe(7 * DAY_MS)
-})
-
-// the scheduled topic filter is one sql predicate.
-// a topic is scheduled if it has no completed scan, or if its last completed scan is older than its frequency window
-test("the scheduled topic filter reads the last completed scan in sql with the day and week windows", () => {
-	// a wednesday, so daily and weekdays both read the day window
-	const now = new Date("2026-07-22T12:00:00Z")
-	const { sql, params } = toScheduledTopicQuery(now)
-
-	// the subquery over completed scans, and the null branch for a topic never scanned
-	expect(sql).toContain('max("scans"."started_at")')
-	expect(sql).toContain("<> 'running'")
-	expect(sql).toContain("is null")
-
-	// the weekly branch reads a week back and the daily branch a day back, for daily and weekdays alike
-	expect(params).toEqual([
-		"weekly",
-		new Date(now.getTime() - 7 * DAY_MS),
-		"daily",
-		"weekdays",
-		new Date(now.getTime() - DAY_MS),
-	])
-})
-
-// a scanned weekdays topic drops out of the day window on a weekend and comes back on monday
-test("the scheduled topic filter drops a scanned weekdays topic on a weekend", () => {
-	// a saturday leaves only daily in the day window's frequencies
-	const saturday = new Date("2026-07-25T12:00:00Z")
-	expect(toScheduledTopicQuery(saturday).params).toEqual([
-		"weekly",
-		new Date(saturday.getTime() - 7 * DAY_MS),
-		"daily",
-		new Date(saturday.getTime() - DAY_MS),
-	])
-
-	// monday puts weekdays back in the day window
-	const monday = new Date("2026-07-27T12:00:00Z")
-	expect(toScheduledTopicQuery(monday).params).toContain("weekdays")
 })
 
 // one owner's remaining scan count is read once, and each start lowers the sweep's copy of that count
@@ -149,8 +87,32 @@ test("ten scheduled topics of one owner with two remaining scans read the quota 
 		skippedOverQuota: 8,
 		skippedOverDailyLimit: 0,
 		skippedOverBudget: 0,
+		skippedOverBacklog: 0,
 		failed: 0,
 	})
+})
+
+// a sweep starts no more Scans than the backlog allows, and leaves the rest due for the next sweep
+test("a sweep past its dispatchable scan count leaves the remaining topics for the next sweep", async () => {
+	// five topics of one owner with plenty of quota, and room to start two
+	const scheduledTopics = Array.from({ length: 5 }, (_, index) => toScheduledTopic(`topic-${index}`))
+	spyOn(quotas, "scansRemainingToday").mockResolvedValue(10)
+	const startedTopicIds: string[] = []
+	spyOn(scan, "startTopicScan").mockImplementation(async (topicId): Promise<scan.TopicScanStart> => {
+		startedTopicIds.push(topicId)
+		return { status: "started", scan: {} as never, whenFinished: async () => {} }
+	})
+
+	// two start, three wait for the next sweep
+	const topicSweepSummary = await startScheduledTopicScans({
+		scheduledTopics,
+		dailyTopicIdsByOwner: new Map(),
+		budgetExhaustedOwnerIds: new Set(),
+		dispatchableScanCount: 2,
+	})
+	expect(startedTopicIds).toEqual(["topic-0", "topic-1"])
+	expect(topicSweepSummary.started).toBe(2)
+	expect(topicSweepSummary.skippedOverBacklog).toBe(3)
 })
 
 // a scan that Temporal reports as already running spends no quota, and a start that throws an error counts as failed
@@ -179,6 +141,7 @@ test("a running scan spends nothing and a failed start is counted", async () => 
 		skippedOverQuota: 0,
 		skippedOverDailyLimit: 0,
 		skippedOverBudget: 0,
+		skippedOverBacklog: 0,
 		failed: 1,
 	})
 })
@@ -264,6 +227,7 @@ test("each Topic whose owner's budget is spent saves a failed Scan with the budg
 		skippedOverQuota: 0,
 		skippedOverDailyLimit: 0,
 		skippedOverBudget: 2,
+		skippedOverBacklog: 0,
 		failed: 0,
 	})
 
@@ -341,6 +305,7 @@ test("a topic sweep summary counts starts instead of outcomes", () => {
 	expect(Object.keys(summary).sort()).toEqual([
 		"failed",
 		"scheduled",
+		"skippedOverBacklog",
 		"skippedOverBudget",
 		"skippedOverDailyLimit",
 		"skippedOverQuota",
@@ -352,24 +317,4 @@ test("a topic sweep summary counts starts instead of outcomes", () => {
 test("the sweep never calls the monthly budget reset", async () => {
 	const scheduleSource = await Bun.file(new URL("./schedule.ts", import.meta.url)).text()
 	expect(scheduleSource).not.toContain("resetMonthlyBudgets")
-})
-
-// the daily topic limit binds the Topics already there, not only the ones being written
-test("the sweep runs only the daily Topics inside their owner's allowance", () => {
-	const allowance = new Set(["kept"])
-
-	// a daily Topic inside the allowance runs, and one outside it is skipped
-	expect(isWithinDailyTopicLimit({ id: "kept", frequency: "daily" }, allowance)).toBe(true)
-	expect(isWithinDailyTopicLimit({ id: "dropped", frequency: "daily" }, allowance)).toBe(false)
-
-	// weekdays draws on the same allowance as daily, or it would be a free way around the limit
-	expect(isWithinDailyTopicLimit({ id: "dropped", frequency: "weekdays" }, allowance)).toBe(false)
-	expect(isWithinDailyTopicLimit({ id: "kept", frequency: "weekdays" }, allowance)).toBe(true)
-
-	// a weekly Topic draws on no daily allowance, so the limit never reaches it
-	expect(isWithinDailyTopicLimit({ id: "dropped", frequency: "weekly" }, allowance)).toBe(true)
-	expect(isWithinDailyTopicLimit({ id: "dropped", frequency: "weekly" }, undefined)).toBe(true)
-
-	// an owner with no daily Topics in this sweep has no allowance read, and no daily Topic to run either
-	expect(isWithinDailyTopicLimit({ id: "kept", frequency: "daily" }, undefined)).toBe(false)
 })

@@ -3,7 +3,15 @@
 import { afterEach, expect, test } from "bun:test"
 import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "../../db/redisClientStub"
-import { canRateInFeed, clearTopicSectionIdCache, readPublicSectionTopicIds } from "./feeds"
+import {
+	canRateInFeed,
+	clearSharedTopicFeedCaches,
+	clearVisitorTopicCaches,
+	readPublicSectionTopicIds,
+	readVisitorTopicFeeds,
+	toVisitorTopicPageKey,
+} from "./feeds"
+import { toMoreTopicsKey } from "./moreTopics"
 
 // put the pool and the Redis client back after each test
 afterEach(() => {
@@ -72,10 +80,60 @@ test("two replicas read the same section order after a featuring change", async 
 
 	// a featuring change deletes the key, so the next read on either replica loads the new order and the other shares it
 	featuredTopicIdRows = [["t2"], ["t1"]]
-	await clearTopicSectionIdCache()
+	await clearSharedTopicFeedCaches()
 	const secondReplicaNewOrder = await readPublicSectionTopicIds()
 	const firstReplicaNewOrder = await readPublicSectionTopicIds()
 	expect(secondReplicaNewOrder).toEqual({ featuredIds: ["t2", "t1"], popularIds: ["t3"] })
 	expect(firstReplicaNewOrder).toEqual(secondReplicaNewOrder)
 	expect(sentQueries).toHaveLength(4)
+})
+
+// the visitors' feed is built once per view per half minute, and a listing change clears both views with the section
+// order
+test("the visitors' feed is built once per view and cleared with the section order", async () => {
+	// one Redis and a database with nothing in it
+	stubRedisClient()
+	const sentQueries = stubConnectionPool(() => [])
+
+	// the first read builds the feed, and the second reads the copy
+	await readVisitorTopicFeeds(false)
+	const buildQueryCount = sentQueries.length
+	await readVisitorTopicFeeds(false)
+	expect(buildQueryCount).toBeGreaterThan(0)
+	expect(sentQueries).toHaveLength(buildQueryCount)
+
+	// the other view is its own copy, and a clearing rebuilds the first
+	await readVisitorTopicFeeds(true)
+	const bothViewsQueryCount = sentQueries.length
+	expect(bothViewsQueryCount).toBeGreaterThan(buildQueryCount)
+	await clearSharedTopicFeedCaches()
+	await readVisitorTopicFeeds(false)
+	expect(sentQueries.length).toBeGreaterThan(bothViewsQueryCount)
+})
+
+// an edit always drops the topic's page copy and its more topics, and drops the visitors' feeds only when it touched
+// the listing
+test("clearVisitorTopicCaches drops the page copies always and the feeds only for a listing change", async () => {
+	// one Redis holding a topic's page copy, its more topics, and both feed views
+	const storedValueByKey = stubRedisClient()
+	stubConnectionPool(() => [])
+	const fillCopies = async (): Promise<void> => {
+		storedValueByKey.set(toVisitorTopicPageKey("t1"), "{}")
+		storedValueByKey.set(toMoreTopicsKey("t1"), "[]")
+		await readVisitorTopicFeeds(false)
+	}
+
+	// an edit that leaves the listing alone keeps the feed copy
+	await fillCopies()
+	const storedKeyCount = storedValueByKey.size
+	await clearVisitorTopicCaches({ topicId: "t1", isListingChanged: false })
+	expect(storedValueByKey.has(toVisitorTopicPageKey("t1"))).toBe(false)
+	expect(storedValueByKey.has(toMoreTopicsKey("t1"))).toBe(false)
+	expect(storedValueByKey.size).toBe(storedKeyCount - 2)
+
+	// an edit that changes the listing drops the feed copies too
+	await fillCopies()
+	await clearVisitorTopicCaches({ topicId: "t1", isListingChanged: true })
+	expect(storedValueByKey.has(toVisitorTopicPageKey("t1"))).toBe(false)
+	expect([...storedValueByKey.keys()].some((key) => key.startsWith("topic-feed:visitor"))).toBe(false)
 })

@@ -16,6 +16,7 @@ import { users } from "../db/schema/users"
 import { isAllowed } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { type AppEnv, currentUser } from "./currentUser"
+import { searchRateLimiter } from "./rateLimit"
 import { loadProfileTeamStatuses, loadPublicTeams, loadTeamSummaries } from "./team/helpers"
 import { toTopicTableRows } from "./topic/topicTableRows"
 
@@ -139,7 +140,7 @@ async function loadProfileTopics(
 // the public profile routes: the search bar's user suggestions and the profile page
 export const profilesRoute = new Hono<AppEnv>()
 	// public: who a user can find by name, for the search bar's user suggestions
-	.get("/users", async (context) => {
+	.get("/users", searchRateLimiter, async (context) => {
 		return context.json({ users: await searchUsers(context.req.query("q") ?? "") })
 	})
 	// a profile does not require a session. but a session is required to show non-public topics to the owner or an admin.

@@ -22,24 +22,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # persist-credentials false keeps the checkout token out of .git/config, so bun install and the gate can't read it
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
       # the exact Bun the Dockerfile pins, so the gate runs on the version that ships
-      - uses: oven-sh/setup-bun@v2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: "1.3.14"
       # cache Bun's global install cache, keyed by the lockfile
-      - uses: actions/cache@v4
+      - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: ~/.bun/install/cache
           key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
           restore-keys: ${{ runner.os }}-bun-
       - run: bun install --frozen-lockfile
+      # the advisory audit against the GitHub Advisory Database, report-only: the log lists every open advisory, and
+      # Dependabot's security updates are what fix one, so a new advisory never blocks an unrelated push
+      - run: bun audit
+        continue-on-error: true
       # the exact gate the .githooks/pre-push hook runs, so local and CI cannot diverge
       - run: bash scripts/preflight.sh
       # publish the test coverage that the gate wrote. an upload failure or a Codecov outage never blocks a push
-      - uses: codecov/codecov-action@v7
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         with:
           files: ./coverage/lcov.info
           disable_search: true

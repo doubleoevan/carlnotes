@@ -21,7 +21,7 @@ import {
 	toScheduledTimeLabel,
 	toTeamFields,
 } from "./helpers"
-import { loadMoreTopics } from "./moreTopics"
+import { readMoreTopics } from "./moreTopics"
 import { loadDirectSubscription } from "./permissions"
 import { startOfUtcMonth } from "./quotas"
 
@@ -82,7 +82,7 @@ export async function loadTopicPage(userId: string | null, topicId: string): Pro
 			// the topic's podcast, and each scan's podcast episode for the scan history
 			loadTopicPodcast(topic, userId),
 			// the other public topics the page links, none for a topic that is not public and shown
-			loadMoreTopics(topic),
+			readMoreTopics(topic),
 		]),
 	)
 

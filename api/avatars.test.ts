@@ -4,17 +4,20 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
 import { Hono } from "hono"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
+import { restoreRedisClient, stubRedisClient } from "../db/redisClientStub"
 import * as store from "../worker/store"
-import { avatarsRoute, uploadTeamAvatar } from "./avatars"
+import { uploadTeamAvatar } from "./avatars"
+import { avatarsRoute } from "./avatarsRoute"
 import type { AppEnv } from "./currentUser"
 
 // a user's upload and a team's upload. the id in each file name is its version
 const USER_AVATAR_KEY = "avatars/user-1/3f2a.png"
 const TEAM_AVATAR_KEY = "avatars/teams/team-1/9c1b.webp"
 
-// the pool's own query and every spy, put back after each test
+// the pool's own query, the Redis client, and every spy, put back after each test
 afterEach(() => {
 	restoreConnectionPool()
+	restoreRedisClient()
 	mock.restore()
 })
 
@@ -73,8 +76,9 @@ test("a team's upload is immutable only at its current version and tagged at eve
 })
 
 // a decode failure from the browser is reported with the file's type and size, and only for a signed-in user
-test("a decode failure is reported by its type and size for a signed-in user alone", async () => {
-	// the report spied, and the route as a signed-in user and as a visitor
+test("a decode failure is reported by its type and size for a signed-in user alone, five a day", async () => {
+	// the report spied, the day's count in Redis, and the route as a signed-in user and as a visitor
+	stubRedisClient()
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 	const signedInApp = new Hono<AppEnv>()
 		.use(async (context, next) => {
@@ -82,6 +86,7 @@ test("a decode failure is reported by its type and size for a signed-in user alo
 			await next()
 		})
 		.route("/", avatarsRoute)
+	// one report of a HEIC file
 	const decodeFailureRequest = {
 		method: "POST",
 		headers: { "Content-Type": "application/json" },
@@ -95,6 +100,12 @@ test("a decode failure is reported by its type and size for a signed-in user alo
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({ contentType: "image/heic", byteSize: "3000000" })
 	expect(visitorResponse.status).toBe(401)
+
+	// the user's reports past five in a day are taken and dropped
+	for (let i = 0; i < 6; i++) {
+		expect((await signedInApp.request("/avatars/decode-failures", decodeFailureRequest)).status).toBe(204)
+	}
+	expect(reportErrorSpy).toHaveBeenCalledTimes(5)
 })
 
 // an upload records its key as pending before the object is written, and the row write's transaction clears it

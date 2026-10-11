@@ -1,5 +1,5 @@
 // the app's LLM model tiers, all routed through LiteLLM. litellmApiKey bills a call to the key of the call's user.
-// a call with no litellmApiKey, such as the search Source's query generation, uses the master key
+// a call with no litellmApiKey uses the master key
 import { createOpenAI } from "@ai-sdk/openai"
 import { type EmbeddingModel, embed, embedMany, type LanguageModel } from "ai"
 import { EMBED_DIMENSIONS } from "../db/schema/scans"

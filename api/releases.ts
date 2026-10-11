@@ -8,7 +8,6 @@ import { Hono } from "hono"
 import { db } from "../db"
 import { releases } from "../db/schema/releases"
 import { toContentHtml, toPageHtml } from "./content"
-import { renderedCacheHeaders } from "./edgeCache"
 
 // what a release body puts above its auto-generated pull request list. the index renders only what
 // sits above it, and a body written without it renders whole
@@ -201,12 +200,13 @@ export async function serveRelease(tag: string): Promise<string | null> {
 	})
 }
 
-// the release routes: the index, one release's page, and the webhook that writes the table
+// the release routes: the index, one release's page, and the webhook that writes the table. the page guards in
+// api/index.ts set the pages' cache headers
 export const releasesRoute = new Hono()
-	.get("/releases", renderedCacheHeaders, async (context) => {
+	.get("/releases", async (context) => {
 		return context.html(await serveReleaseIndex())
 	})
-	.get("/releases/:tag", renderedCacheHeaders, async (context) => {
+	.get("/releases/:tag", async (context) => {
 		const page = await serveRelease(context.req.param("tag"))
 		return page ? context.html(page) : context.notFound()
 	})

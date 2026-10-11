@@ -133,17 +133,17 @@ test("the access row is read on every call outside a request", async () => {
 	expect(queryCount).toBe(2)
 })
 
-// the daily suggestion limit allows the three hundredth suggestion and rejects the next
-test("the daily suggestion limit allows up to 300 suggestions", async () => {
-	// a plain user, and a rate limit window that returns the three hundredth hit, then the next
+// the daily suggestion limit allows the thirtieth suggestion and rejects the next
+test("the daily suggestion limit allows up to 30 suggestions", async () => {
+	// a plain user, and a rate limit window that returns the thirtieth hit, then the next
 	const incrementRateLimitWindowSpy = spyOn(redis, "incrementRateLimitWindow")
 	const incrementDaySuggestionCountResults: boolean[] = []
 
 	// count one suggestion for each hit, then check which suggestions were within the limit
 	await countAccessQueries(async () => {
 		for (const rateLimitWindowHit of [
-			{ count: 300, resetAt: 0 },
-			{ count: 301, resetAt: 0 },
+			{ count: 30, resetAt: 0 },
+			{ count: 31, resetAt: 0 },
 		]) {
 			incrementRateLimitWindowSpy.mockResolvedValueOnce(rateLimitWindowHit)
 			incrementDaySuggestionCountResults.push(await incrementDaySuggestionCount("user-1"))

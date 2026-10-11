@@ -1,6 +1,7 @@
 // error monitoring and request tracing through Sentry
 import type { Span } from "@sentry/bun"
 import * as Sentry from "@sentry/bun"
+import { scrubContent, scrubTransaction, withoutUrlSecrets } from "./monitoringScrub"
 
 // Sentry's span type, so a caller can type a span without importing Sentry
 export type { Span }
@@ -17,6 +18,21 @@ const THRESHOLD_ALERT_QUIET_MS = 60 * 60 * 1000
 // when each condition last sent its alert from this process. each replica sends its own warning for a condition,
 // and the condition's fingerprint groups the replicas' warnings in one Sentry issue
 const thresholdAlertSentAt = new Map<string, number>()
+
+// how many reports of one stage's one error are sent in a window before the rest are held, how long the window is, and
+// how many errors are tracked
+const ERROR_REPORTS_PER_WINDOW = 10
+const ERROR_REPORT_WINDOW_MS = 60 * 60 * 1000
+const ERROR_REPORT_KEY_LIMIT = 1000
+
+// how many characters of an error's message name it, so one error with a long, varying message counts once
+const ERROR_REPORT_MESSAGE_CHARS = 200
+
+// what one stage's one error has done this hour: when its hour began, how many reports were sent, and how many were held
+export type ErrorReportWindow = { startedAt: number; sentCount: number; heldCount: number }
+
+// the error report windows of this process, keyed by stage and message
+const errorReportWindows = new Map<string, ErrorReportWindow>()
 
 // the paths never traced: the health checks, which the platform and a monitor poll all day
 const UNTRACED_PATHS = new Set(["/api/health", "/api/health/deep"])
@@ -158,148 +174,6 @@ export function startQuerySpan(statement: string, requestSpan: Span): () => void
 	return () => querySpan.end()
 }
 
-// an event on its way to Sentry, as the scrub reads and rewrites it
-type OutgoingEvent = {
-	extra?: Record<string, unknown>
-	contexts?: Record<string, unknown>
-	request?: { url?: string; query_string?: unknown; headers?: Record<string, string> }
-	spans?: { data?: Record<string, unknown> }[]
-}
-
-/**
- * Removes content-bearing fields, every query string, and every invite link's token from an outgoing event,
- * keeping the event itself.
- */
-export function scrubContent<Event extends OutgoingEvent>(event: Event): Event {
-	// scrub extra and contexts, the two places an integration or a caller can attach content
-	const scrubbedEvent = { ...event, extra: withoutContent(event.extra), contexts: withoutContent(event.contexts) }
-
-	// a query string can include a reset token or a consent code, and a path an invite link's token,
-	// so neither leaves on the request, a header, the trace, or a span
-	const traceContext = scrubbedEvent.contexts?.trace as { data?: Record<string, unknown> } | undefined
-	if (traceContext?.data) {
-		traceContext.data = withoutUrlSecrets(traceContext.data)
-	}
-	return {
-		...scrubbedEvent,
-		...(event.request ? { request: withoutRequestUrlSecrets(event.request) } : {}),
-		...(event.spans ? { spans: event.spans.map((span) => ({ ...span, data: withoutUrlSecrets(span.data) })) } : {}),
-	}
-}
-
-/**
- * Scrubs an outgoing transaction like any event, then reports each of its urls by its route,
- * so no id or token in a path reaches Sentry either.
- */
-export function scrubTransaction<Event extends OutgoingEvent>(event: Event): Event {
-	// a transaction the request middleware named has its route, and a page the ui has no route for keeps its path
-	const scrubbedEvent = scrubContent(event)
-	const traceData = (scrubbedEvent.contexts?.trace as { data?: Record<string, unknown> } | undefined)?.data
-	const route = traceData?.["http.route"]
-	if (!traceData || typeof route !== "string" || !route.startsWith("/")) {
-		return scrubbedEvent
-	}
-
-	// the route replaces the path in the trace's urls and in the request's
-	const toRouteUrl = <Url>(url: Url): Url | string =>
-		typeof url === "string" && URL.canParse(url) ? `${new URL(url).origin}${route}` : url
-	Object.assign(traceData, {
-		"url.full": toRouteUrl(traceData["url.full"]),
-		url: toRouteUrl(traceData.url),
-		"url.path": route,
-	})
-	const request = scrubbedEvent.request && { ...scrubbedEvent.request, url: toRouteUrl(scrubbedEvent.request.url) }
-	return { ...scrubbedEvent, ...(request ? { request } : {}) }
-}
-
-// the fields named for a query string, which are dropped whole
-const QUERY_STRING_FIELDS = new Set(["url.query", "http.query", "query_string"])
-
-// a value that reads as a url or a path, whose query string starts at its "?" and its fragment at its "#"
-const URL_OR_PATH_PATTERN = /^(https?:\/\/|\/)/
-
-// an invite link's token in a path, on the invite page and its accept route,
-// and on the api routes that read the link for its page head and its preview image
-const INVITE_TOKEN_PATTERNS = [/(\/invite\/)[^/?#]+/g, /(\/invites\/)[^/?#]+(?=\/(?:head|preview\.png)(?:$|[/?#]))/g]
-
-// a record without the secrets a url can include. the fields named for a query string are dropped,
-// and every url or path loses its query string, its fragment, and its invite link's token
-function withoutUrlSecrets(record: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
-	if (!record) {
-		return record
-	}
-	const keptEntries = Object.entries(record)
-		.filter(([field]) => !QUERY_STRING_FIELDS.has(field))
-		.map(([field, value]) => [
-			field,
-			typeof value === "string" && URL_OR_PATH_PATTERN.test(value) ? toRedactedUrl(value) : value,
-		])
-	return Object.fromEntries(keptEntries)
-}
-
-// a url or a path cut at its query string or its fragment, with an invite link's token replaced by :token
-function toRedactedUrl(url: string): string {
-	const urlWithoutQueryOrFragment = url.split(/[?#]/)[0] ?? url
-	return INVITE_TOKEN_PATTERNS.reduce(
-		(redactedUrl, pattern) => redactedUrl.replace(pattern, "$1:token"),
-		urlWithoutQueryOrFragment,
-	)
-}
-
-// a request with no query string or invite link's token on its url, its recorded query, or a header such as its referer
-function withoutRequestUrlSecrets<Request extends NonNullable<OutgoingEvent["request"]>>(request: Request): Request {
-	const keptRequest = withoutUrlSecrets(request) as Request
-	return request.headers ? { ...keptRequest, headers: withoutUrlSecrets(request.headers) } : keptRequest
-}
-
-// event fields that could include a context doc or a page's content. they are dropped before an event is sent.
-const CONTENT_FIELD_PATTERN = /content|context|document|snippet|prompt|markdown|text/i
-
-// an identifier is short and content is long, so any string past this length is treated as content wherever it hides
-const MAX_REPORT_STRING_CHARS = 500
-
-// a copy of one attached object with every content-bearing field dropped, or undefined when there was nothing to scrub
-function withoutContent(attached: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
-	if (!attached) {
-		return attached
-	}
-
-	// the name filter removes what is labeled as content, and the length limit catches what is content
-	const seen = new WeakSet<object>([attached])
-	const keptEntries = Object.entries(attached)
-		.filter(([field]) => !CONTENT_FIELD_PATTERN.test(field))
-		.map(([field, value]) => [field, truncateLongStrings(value, seen)])
-	return Object.fromEntries(keptEntries)
-}
-
-// truncate every string in a value, walking nested objects so a body can't hide a level down
-function truncateLongStrings(value: unknown, seen = new WeakSet<object>()): unknown {
-	// truncated and marked, so the error report can say something was here without including it
-	if (typeof value === "string" && value.length > MAX_REPORT_STRING_CHARS) {
-		return `${value.slice(0, MAX_REPORT_STRING_CHARS)}…[truncated]`
-	}
-
-	// a Date, Map, or Error has no own enumerable entries, so walking one would replace it with an empty object
-	if (!isPlainObject(value)) {
-		return value
-	}
-
-	if (seen.has(value)) {
-		return "[circular]"
-	}
-	seen.add(value)
-	return Object.fromEntries(Object.entries(value).map(([field, nested]) => [field, truncateLongStrings(nested, seen)]))
-}
-
-// whether a value is a plain object literal, the only shape worth walking for hidden content
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-	if (typeof value !== "object" || value === null) {
-		return false
-	}
-	const prototype = Object.getPrototypeOf(value)
-	return prototype === Object.prototype || prototype === null
-}
-
 // the pipeline stages that report a failure, named so Sentry can group them the way the pipeline reads
 const reportedStages = [
 	"ingest",
@@ -330,7 +204,51 @@ export type ReportedStage = (typeof reportedStages)[number]
  * Reports a failure the caller is already handling, so a failure that never throws an error is still visible.
  */
 export function reportError(error: unknown, stage: ReportedStage, extra?: Record<string, string>): void {
-	Sentry.captureException(error, { tags: { stage }, extra })
+	// decide from the error's window, and send the held count with the report that reopens a window
+	const errorReportDecision = decideErrorReport(errorReportWindows, toErrorReportKey(stage, error), Date.now())
+	if (!errorReportDecision.isSent) {
+		return
+	}
+	const reportedExtra =
+		errorReportDecision.heldCount > 0 ? { ...extra, heldReportCount: String(errorReportDecision.heldCount) } : extra
+	Sentry.captureException(error, { tags: { stage }, extra: reportedExtra })
+}
+
+/**
+ * Decides whether one error report is sent, and with how many reports its key's previous hour held.
+ */
+export function decideErrorReport(
+	windowByKey: Map<string, ErrorReportWindow>,
+	key: string,
+	now: number,
+): { isSent: boolean; heldCount: number } {
+	// a report inside an open hour is sent up to the window's limit and held past it
+	const errorReportWindow = windowByKey.get(key)
+	if (errorReportWindow && now - errorReportWindow.startedAt < ERROR_REPORT_WINDOW_MS) {
+		if (errorReportWindow.sentCount < ERROR_REPORTS_PER_WINDOW) {
+			errorReportWindow.sentCount++
+			return { isSent: true, heldCount: 0 }
+		}
+
+		// past the limit, the report is held and counted
+		errorReportWindow.heldCount++
+		return { isSent: false, heldCount: 0 }
+	}
+
+	// a report that opens an hour is sent with what the hour before held. a new error drops the oldest window once the
+	// key limit is reached
+	if (!errorReportWindow && windowByKey.size >= ERROR_REPORT_KEY_LIMIT) {
+		windowByKey.delete(windowByKey.keys().next().value as string)
+	}
+	windowByKey.delete(key)
+	windowByKey.set(key, { startedAt: now, sentCount: 1, heldCount: 0 })
+	return { isSent: true, heldCount: errorReportWindow?.heldCount ?? 0 }
+}
+
+// the key one stage's one error counts under: the stage and the start of the error's message
+function toErrorReportKey(stage: ReportedStage, error: unknown): string {
+	const message = error instanceof Error ? error.message : String(error)
+	return `${stage}:${message.slice(0, ERROR_REPORT_MESSAGE_CHARS)}`
 }
 
 // a gauge that crossed its threshold: the condition that names its issue, the message, and the measured values

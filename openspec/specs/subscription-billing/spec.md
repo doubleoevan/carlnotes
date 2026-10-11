@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-authz-plans-billing. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A Billing Subscription maps a Stripe subscription to a plan and derives the user's plan
 The system SHALL persist a `billing_subscriptions` row for a user's active paid Stripe subscription, carrying the user, Stripe customer id, Stripe subscription id, plan, status, and current period end. The user's current plan SHALL be derived from their active billing subscription; a user with no active row SHALL be `free`. `users.plan` SHALL be a projection kept in sync from Stripe webhooks so the gate and quota reads stay a single row. The Billing Subscription noun SHALL be distinct from the topic `Subscription` (subscriber ↔ Topic).
 
@@ -26,7 +28,7 @@ Upgrades SHALL run through a Stripe Checkout Session for the target plan's price
 - **THEN** the app opens the Stripe Customer Portal for their customer
 
 ### Requirement: Stripe webhooks are the source of truth for subscription state
-A Stripe webhook endpoint SHALL verify the Stripe signature and reject unsigned or invalid events. On subscription lifecycle events it SHALL create, update, or clear the user's `billing_subscriptions` row and its `users.plan` projection, and SHALL resize the user's LiteLLM key budget to the new plan's monthly backstop (or the per-user override when set).
+A Stripe webhook endpoint SHALL verify the Stripe signature and reject unsigned or invalid events with a 400. On subscription lifecycle events it SHALL create, update, or clear the user's `billing_subscriptions` row and its `users.plan` projection, and SHALL resize the user's LiteLLM key budget to the new plan's monthly backstop (or the per-user override when set). A verified event that could not be applied, such as during a database outage, and any event while the webhook secret is unset, SHALL be answered 500, so Stripe retries it on its own schedule. Both a rejection and a failure SHALL be reported.
 
 #### Scenario: A completed checkout activates the plan
 - **WHEN** a valid subscription-active webhook (for example `checkout.session.completed`) arrives for a user
@@ -38,7 +40,15 @@ A Stripe webhook endpoint SHALL verify the Stripe signature and reject unsigned 
 
 #### Scenario: An unsigned webhook is rejected
 - **WHEN** a request to the webhook endpoint fails Stripe signature verification
-- **THEN** the endpoint rejects it and writes nothing
+- **THEN** the endpoint answers 400, writes nothing, and reports the rejection
+
+#### Scenario: A verified event that fails to apply is retried
+- **WHEN** a correctly signed subscription event arrives while the database is unreachable
+- **THEN** the endpoint answers 500 and reports the failure, and Stripe sends the event again later
+
+#### Scenario: An unset webhook secret is a failure, not a rejection
+- **WHEN** an event arrives while `STRIPE_WEBHOOK_SECRET` is unset
+- **THEN** the endpoint answers 500 and reports the failure, and Stripe sends the event again once the secret is set
 
 ### Requirement: Metered manual-scan overage makes the daily limit soft only with a card on file
 
@@ -347,4 +357,3 @@ read that same sum: the manual-scan gate, the chat gate, the account meter, and 
 
 - **WHEN** a user has recorded Podcast Episode cost this month
 - **THEN** that cost is included in the monthly spend figure that the chat gate and the account meter read
-

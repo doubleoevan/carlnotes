@@ -1,8 +1,13 @@
 # worker/
 
-Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker,
-with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep that starts scheduled scans, then
-retries the pending object deletions through `retryPendingObjectDeletions.ts`),
+Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker, with its scan concurrency set by
+`SCAN_CONCURRENCY`, the concurrency of each of its attachment and source-screen Workers by `SCREEN_CONCURRENCY`, and a
+Worker of its own for the `scan-closing` queue that records a scan's outcome apart from the scan slots), `schedule.ts`
+(the sweep that starts as many scheduled scans as the backlog allows, then retries the pending object deletions through
+`retryPendingObjectDeletions.ts` and reports the day's spend across every user through `dailySpend.ts`, which warns past
+`GLOBAL_DAILY_SPEND_ALERT_USD`), `scanQueue.ts` (the sweep's view of the scan queue: the start of the rows a dying
+caller never dispatched, the queue's report, and how many Scans a sweep may start, `SCAN_DISPATCH_LIMIT` minus the
+backlog),
 `resetMonthlyBudgets.ts` (the monthly budget reset, a daily job run as `bun run reset:monthly-budgets`),
 `worker/index.ts` (what api may import), `staleScans.ts` (the close-out of a scan that outran its stages or never
 started, which the sweep and the manual scan route run).
@@ -34,7 +39,8 @@ started, which the sweep and the manual scan route run).
   worker's first Temporal connection, a podcast episode's publish, and the podcast episode smoke's chapters.
 
 - `workflows/` — Temporal workflows and activities; `ingest/` — one ingester per Source kind,
-  `ingester.ts` is the interface; `review/` — filtering and scoring (`filter.ts` the relevance gate, `dedupe.ts` the
+  `ingester.ts` is the interface, and the search ingester's query generation bills the Topic owner's key like every
+  other model call a Scan makes; `review/` — filtering and scoring (`filter.ts` the relevance gate, `dedupe.ts` the
   content hash and near-duplicate pass, `fetch.ts` the content fetch for a Resource to score, `score.ts` the scoring
   and the finding writes, with `reviewTestFixtures.ts` beside their tests); `chat/` — Carl's streamed
   chat replies (`index.ts` streams a reply, `chatMessages.ts` shapes a conversation into the model messages a turn
@@ -51,7 +57,7 @@ started, which the sweep and the manual scan route run).
 - `telemetry.ts` traces model calls in Langfuse on its own tracer provider beside Sentry's, and both processes start
   Sentry before it. `temporal.ts` logs the connection pool, the event loop delay, the scan queue, and Redis once a
   minute, and the sweep reports a queue nothing polls and a backlog older than 15 minutes, both through
-  `describeScanQueue` in `temporalClient.ts`.
+  `describeScanQueue` in `temporalClient.ts`, whose connect, workflow start, and cancel each give up after ten seconds.
 - Every scan stage charges the Scan's one Budget (`budget.ts`); nothing spends outside it.
 - A completed Scan's email runs in its own workflow, `workflows/sendScanEmail.ts`, on the `scan-emails` queue that the
   file names, with its own Worker in `temporal.ts`. The scan workflow starts it as a child workflow that outlives the
@@ -60,7 +66,8 @@ started, which the sweep and the manual scan route run).
   anyone twice. `scanEmailContent.ts` holds what a Scan's email says: the props the digest and the report render from,
   and one subscriber's rendered message. `email.ts` sends through Resend, and every call from the api or the worker
   first takes a rate limit slot shared in Redis, which one call holds for 200 milliseconds, so calls leave evenly spaced
-  at five a second.
+  at five a second. A call that would wait past ten seconds for the slot goes ahead without it, and each wait adds a
+  little jitter, so waiters that woke together do not ask in lockstep.
 - A succeeded Scan's podcast episode is recorded in its own workflow, `workflows/recordPodcastEpisode.ts`, on the
   `episode-recordings` queue that the file names, with its own Worker in `temporal.ts` whose concurrency is set by
   `PODCAST_RECORDING_CONCURRENCY`. The scan workflow starts it as a child workflow that outlives the Scan's own, after

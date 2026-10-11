@@ -12,8 +12,12 @@ export type PurgeEdgeCacheTagsOptions = { tags: string[]; zoneId: string | undef
 // what one purge did
 export type EdgePurgeResult = { status: "purged" } | { status: "skipped" } | { status: "failed"; reason: string }
 
-// the edge shares a rendered response for a minute, then serves it stale for up to a minute while it fetches a new one
-const RENDERED_EDGE_CACHE_CONTROL = "max-age=60, stale-while-revalidate=60"
+// the edge shares a rendered response for a minute, then serves it stale for up to a minute while it fetches a new one,
+// and for up to two minutes while the origin responds with an error, such as a shed render's 503
+export const RENDERED_EDGE_CACHE_CONTROL = "max-age=60, stale-while-revalidate=60, stale-if-error=120"
+
+// how long one purge request may take before it counts as failed
+const PURGE_TIMEOUT_MS = 10_000
 
 // an image at its current version never changes and is cached for a year in the browser and a day at the edge.
 // a day is the longest a deleted image stays at the edge. an old or missing version is cached for a minute
@@ -22,13 +26,14 @@ const CURRENT_IMAGE_EDGE_CACHE_CONTROL = "max-age=86400"
 const OLD_IMAGE_CACHE_CONTROL = "public, max-age=60"
 
 /**
- * Marks a rendered response shared at the edge, or private if it is personal or did not render.
+ * Marks a rendered page or a permanent redirect shared at the edge, or private if it is personal.
  */
 export function setRenderedCacheHeaders(request: Request, response: Response): void {
-	// mark the response private if the request has a session cookie or an authorization header,
-	// or if the response did not render or sets a cookie
+	// mark the response private if the request has a session cookie or an authorization header, or if the response is
+	// not a page or a permanent redirect, or sets a cookie. a shared old-slug redirect costs one render a minute
 	const hasCredentials = Boolean(getSessionCookie(request)) || request.headers.has("Authorization")
-	const isShared = response.status === 200 && !hasCredentials && !response.headers.has("Set-Cookie")
+	const isShareableStatus = response.status === 200 || response.status === 301 || response.status === 308
+	const isShared = isShareableStatus && !hasCredentials && !response.headers.has("Set-Cookie")
 	if (!isShared) {
 		response.headers.set("Cache-Control", "private, no-cache")
 		return
@@ -89,6 +94,7 @@ export async function purgeEdgeCacheTags(
 			method: "POST",
 			headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json" },
 			body: JSON.stringify({ tags }),
+			signal: AbortSignal.timeout(PURGE_TIMEOUT_MS),
 		})
 
 		// a rejected purge returns Cloudflare's status and message

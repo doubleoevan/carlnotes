@@ -8,6 +8,7 @@ import { invites } from "../../db/schema/invites"
 import { teamMembers, teamTopics } from "../../db/schema/teams"
 import { subscriptions, topics } from "../../db/schema/topics"
 import { type AppEnv, currentUser } from "../currentUser"
+import { searchRateLimiter } from "../rateLimit"
 import { escapeLikePattern } from "../team/search"
 import { isPublicAndShown, verifiedEmailQuery } from "./permissions"
 
@@ -92,6 +93,6 @@ function toTopicViewFilter(userId: string | null): SQL | undefined {
 }
 
 // the topic search route, mounted ahead of the topic routes so /topics/search is never read as a topic id
-export const topicSearchRoute = new Hono<AppEnv>().get("/topics/search", async (context) =>
+export const topicSearchRoute = new Hono<AppEnv>().get("/topics/search", searchRateLimiter, async (context) =>
 	context.json({ topics: await searchTopics({ userId: currentUser(context), query: context.req.query("q") ?? "" }) }),
 )

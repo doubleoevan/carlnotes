@@ -7,7 +7,7 @@ import { type DbHandle, db } from "../../db"
 import { topics } from "../../db/schema/topics"
 import { isAllowed } from "../authorization"
 import { type AppEnv, currentUser } from "../currentUser"
-import { clearTopicSectionIdCache } from "./feeds"
+import { clearSharedTopicFeedCaches } from "./feeds"
 
 // whether the feature order was applied, and if not, which rule rejected it
 export type FeatureOrderResult = "ranked" | "missing" | "notPublic"
@@ -49,8 +49,8 @@ export async function setTopicFeatureOrder(topicId: string, position: number): P
 		await transaction.update(topics).set({ featureOrder: targetPosition }).where(eq(topics.id, topicId))
 	})
 
-	// delete the shared topic section ids
-	await clearTopicSectionIdCache()
+	// delete the shared topic section ids and the visitors' feeds
+	await clearSharedTopicFeedCaches()
 	return "ranked"
 }
 

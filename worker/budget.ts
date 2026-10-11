@@ -1,15 +1,19 @@
 // what one Scan may spend and what it has spent
 
 // the per-Scan spend limit, covering everything that the Scan charges during ingestion, embedding, fetch, and scoring
-const SCAN_BUDGET_USD = toSpendLimit(Bun.env.SCAN_BUDGET_USD)
+const SCAN_BUDGET_USD = toDollarSetting("SCAN_BUDGET_USD", 0.5)
 
-// the configured limit as a usable number with a default
-function toSpendLimit(configuredLimit: string | undefined): number {
-	const limit = Number(configuredLimit ?? "0.5")
-	if (!Number.isFinite(limit) || limit < 0) {
-		throw new Error(`SCAN_BUDGET_USD must be a number of dollars, zero or more. got: ${configuredLimit}`)
+/**
+ * Reads a setting in dollars, or the default when the setting is unset. A setting that is not a number of dollars, zero
+ * or more, throws at startup.
+ */
+export function toDollarSetting(settingName: string, defaultDollars: number): number {
+	const configuredValue = Bun.env[settingName]
+	const dollars = configuredValue === undefined ? defaultDollars : Number(configuredValue)
+	if (!Number.isFinite(dollars) || dollars < 0) {
+		throw new Error(`${settingName} must be a number of dollars, zero or more. got: ${configuredValue}`)
 	}
-	return limit
+	return dollars
 }
 
 // the approximate limit on how many resources one Scan can score, bounding the paid fetch-and-scoring section

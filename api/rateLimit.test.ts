@@ -5,11 +5,20 @@ import { getIp } from "better-auth/api"
 import { Hono } from "hono"
 import * as redis from "../db/redis"
 import { setRedisClientBuilder } from "../db/redis"
-import { restoreRedisClient } from "../db/redisClientStub"
+import { restoreRedisClient, stubRedisClient } from "../db/redisClientStub"
 import type { RedisConnectionClient } from "../db/redisConnection"
 import { auth } from "./auth"
 import type { AppEnv } from "./currentUser"
-import { CALLER_RATE_LIMIT, toolCallerRateLimiter, toolCallerRateLimitStore, toRateLimitKey } from "./rateLimit"
+import {
+	CALLER_RATE_LIMIT,
+	PAGE_RENDER_RATE_LIMIT,
+	pageRenderRateLimiter,
+	SEARCH_RATE_LIMIT,
+	searchRateLimiter,
+	toolCallerRateLimiter,
+	toolCallerRateLimitStore,
+	toRateLimitKey,
+} from "./rateLimit"
 import { ipAddressOptions, resolveClientAddress } from "./trustedProxies"
 
 // put the spied Redis functions and the Redis client back after each test
@@ -108,4 +117,57 @@ test("the store refunds and resets the limiter key's Redis key", async () => {
 	await toolCallerRateLimitStore.resetKey("shared")
 	expect(decrementRateLimitWindowSpy).toHaveBeenCalledWith("rate-limit:shared")
 	expect(deleteRedisKeySpy).toHaveBeenCalledWith("rate-limit:shared")
+})
+
+// a visitor's page renders past the page render limit respond 429 with a retry. a request with a session cookie and a
+// request with no trusted address are never counted
+test("the page render limiter counts a visitor's address and skips a session and an internal address", async () => {
+	stubRedisClient()
+	const limitedApp = new Hono<AppEnv>().use(pageRenderRateLimiter).get("/topics/t1", (context) => context.text("page"))
+	const visitorHeaders = { "x-forwarded-for": "203.0.113.9" }
+
+	// the visitor's page requests up to the limit pass
+	const statuses: number[] = []
+	for (let i = 0; i < PAGE_RENDER_RATE_LIMIT; i++) {
+		statuses.push((await limitedApp.request("/topics/t1", { headers: visitorHeaders })).status)
+	}
+	expect(new Set(statuses)).toEqual(new Set([200]))
+
+	// the next request is limited
+	const limitedPageResponse = await limitedApp.request("/topics/t1", { headers: visitorHeaders })
+	expect(limitedPageResponse.status).toBe(429)
+	expect(limitedPageResponse.headers.get("Retry-After")).toBe("60")
+	expect(limitedPageResponse.headers.get("Content-Type")).toContain("text/plain")
+
+	// a signed-in request passes, and so does an internal address past the limit, which a missed proxy hop would give
+	// every visitor
+	const signedInResponse = await limitedApp.request("/topics/t1", {
+		headers: { ...visitorHeaders, cookie: "better-auth.session_token=abc" },
+	})
+	expect(signedInResponse.status).toBe(200)
+	const internalStatuses = new Set<number>()
+	for (let i = 0; i <= PAGE_RENDER_RATE_LIMIT; i++) {
+		const internalResponse = await limitedApp.request("/topics/t1", { headers: { "x-forwarded-for": "10.0.0.5" } })
+		internalStatuses.add(internalResponse.status)
+	}
+	expect(internalStatuses).toEqual(new Set([200]))
+
+	// no rate limit header reaches a page the edge may share
+	const pageResponse = await limitedApp.request("/topics/t1", { headers: { "x-forwarded-for": "203.0.113.10" } })
+	expect(pageResponse.headers.has("RateLimit-Remaining")).toBe(false)
+})
+
+// the search bar's routes share one limiter, keyed like the tool callers' by the user else the address
+test("the search limiter rejects the request past its limit", async () => {
+	stubRedisClient()
+	const limitedApp = new Hono<AppEnv>().use(searchRateLimiter).get("/users", (context) => context.json({ users: [] }))
+	const visitorHeaders = { "x-forwarded-for": "203.0.113.10" }
+
+	// the searches up to the limit pass, and the next is rejected
+	const statuses: number[] = []
+	for (let i = 0; i < SEARCH_RATE_LIMIT + 1; i++) {
+		statuses.push((await limitedApp.request("/users", { headers: visitorHeaders })).status)
+	}
+	expect(statuses.slice(0, SEARCH_RATE_LIMIT)).toEqual(Array(SEARCH_RATE_LIMIT).fill(200))
+	expect(statuses.at(-1)).toBe(429)
 })

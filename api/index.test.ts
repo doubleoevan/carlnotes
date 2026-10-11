@@ -6,96 +6,22 @@ import { join } from "node:path"
 import * as analytics from "@shared/analytics"
 import { CHAT_HISTORY_TURNS, CHAT_QUESTION_CHARS } from "@shared/contracts"
 import * as monitoring from "@shared/monitoring"
-import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
+import { RENDERED_EDGE_CACHE_CONTROL } from "./edgeCache"
 import server from "./index"
-
-// the page the fake server entry renders the one-hashed client asset and its text, and the docs 404 page
-const PAGE_HTML = "<!doctype html><title>carl</title>"
-const HASHED_ASSET_PATH = "/assets/app-abc123.js"
-const HASHED_ASSET_TEXT = "console.log(1)"
-const DOCS_NOT_FOUND_HTML = "<!doctype html><title>docs page not found</title>"
-
-// serveStatic resolves its root against the working directory, so a test selects its bundle by moving there
-async function withWorkingDirectory<T>(directory: string, run: () => Promise<T>): Promise<T> {
-	const originalDirectory = process.cwd()
-	process.chdir(directory)
-
-	// restore on the way out however the run ends
-	try {
-		return await run()
-	} finally {
-		process.chdir(originalDirectory)
-	}
-}
-
-// a fake directory with a bundle shaped like the one build:ui writes: one hashed client asset, and a server entry
-// that responds to every page request with PAGE_HTML
-async function createBundleDirectory(): Promise<string> {
-	const root = await mkdtemp(join(tmpdir(), "carl-bundle-"))
-	await mkdir(join(root, "ui/dist/client/assets"), { recursive: true })
-	await mkdir(join(root, "ui/dist/server"), { recursive: true })
-
-	// write the asset and the server entry
-	await writeFile(join(root, `ui/dist/client${HASHED_ASSET_PATH}`), HASHED_ASSET_TEXT)
-	const serverEntryText = `export default { fetch: () => new Response(${JSON.stringify(PAGE_HTML)}, { headers: { "content-type": "text/html" } }) }`
-	await writeFile(join(root, "ui/dist/server/server.js"), serverEntryText)
-	return root
-}
-
-// the status, body, and headers the composed app returned for a request
-type ResponseSnapshot = {
-	status: number
-	body: string
-	// the headers that the tests read
-	cacheControl: string | null
-	edgeCacheControl: string | null
-	contentEncoding: string | null
-	contentType: string | null
-	location: string | null
-}
-
-// a request against the composed app, exactly as the runtime would deliver it
-async function request(path: string, requestInit: RequestInit = {}): Promise<ResponseSnapshot> {
-	const response = await server.fetch(new Request(`http://localhost:3000${path}`, requestInit))
-	return {
-		status: response.status,
-		body: await response.text(),
-		cacheControl: response.headers.get("Cache-Control"),
-		edgeCacheControl: response.headers.get("CDN-Cache-Control"),
-		contentEncoding: response.headers.get("Content-Encoding"),
-		contentType: response.headers.get("Content-Type"),
-		location: response.headers.get("Location"),
-	}
-}
-
-// what a stubbed request sends: its path, the rows that every query returns, and any request headers.
-// a toQueryRows that throws an error fails every query
-type RequestWithQueryStubOptions = {
-	path: string
-	toQueryRows: () => unknown[]
-	requestInit?: RequestInit
-}
-
-// a request sent with the pool's query swapped for a stub that counts its calls.
-// the pool's own query comes back no matter how the request ends
-async function requestWithQueryStub({
-	path,
-	toQueryRows,
-	requestInit,
-}: RequestWithQueryStubOptions): Promise<ResponseSnapshot & { queryCount: number }> {
-	const sentQueries = stubConnectionPool(toQueryRows)
-
-	// restore the pool's own query on the way out
-	try {
-		return { ...(await request(path, requestInit)), queryCount: sentQueries.length }
-	} finally {
-		restoreConnectionPool()
-	}
-}
-
-// the rows that a trivial query returns
-const SELECT_ONE_ROWS = [{ "?column?": 1 }]
+import {
+	createBundleDirectory,
+	DOCS_NOT_FOUND_HTML,
+	HASHED_ASSET_PATH,
+	HASHED_ASSET_TEXT,
+	PAGE_HTML,
+	PUBLIC_FILE_TEXT,
+	request,
+	requestWithQueryStub,
+	SELECT_ONE_ROWS,
+	withWorkingDirectory,
+} from "./indexTestFixtures"
+import { signInAs } from "./testSession"
 
 // put each spied console method back after each test, whether its assertions pass or not
 afterEach(() => {
@@ -189,7 +115,7 @@ test("a page path is rendered by the ui's server", async () => {
 	expect(response.status).toBe(200)
 	expect(response.body).toBe(PAGE_HTML)
 	expect(response.cacheControl).toBe("no-cache")
-	expect(response.edgeCacheControl).toBe("max-age=60, stale-while-revalidate=60")
+	expect(response.edgeCacheControl).toBe(RENDERED_EDGE_CACHE_CONTROL)
 })
 
 // the same url renders differently for a signed-in user, so the edge never caches their page
@@ -221,7 +147,7 @@ test("the signed-out feed is shared at the edge and sent uncompressed, and a sig
 
 	// only the signed-out feed is shared at the edge, and the api compresses neither
 	expect(signedOutResponse.status).toBe(200)
-	expect(signedOutResponse.edgeCacheControl).toBe("max-age=60, stale-while-revalidate=60")
+	expect(signedOutResponse.edgeCacheControl).toBe(RENDERED_EDGE_CACHE_CONTROL)
 	expect(signedOutResponse.contentEncoding).toBeNull()
 	expect(signedInResponse.cacheControl).toBe("private, no-cache")
 	expect(signedInResponse.edgeCacheControl).toBeNull()
@@ -235,25 +161,6 @@ test("a HEAD request for a page path responds with the page's headers and no bod
 	expect(response.status).toBe(200)
 	expect(response.body).toBe("")
 	expect(response.cacheControl).toBe("no-cache")
-})
-
-// a page has one url, so the same path with a trailing slash redirects to it and keeps its query
-test("a page url ending in a slash redirects permanently to the url without it", async () => {
-	const bundleDirectory = await createBundleDirectory()
-	const response = await withWorkingDirectory(bundleDirectory, () => request("/plans/?popular=2"))
-
-	expect(response.status).toBe(301)
-	expect(response.location).toBe("/plans?popular=2")
-})
-
-// a path that starts with two slashes still redirects to a path on this site, never to another host
-test("a slash redirect never leaves the site", async () => {
-	const bundleDirectory = await createBundleDirectory()
-	const locations = await withWorkingDirectory(bundleDirectory, async () =>
-		Promise.all(["//evil.com/", "//"].map(async (slashedPath) => (await request(slashedPath)).location)),
-	)
-
-	expect(locations).toEqual(["/evil.com", "/"])
 })
 
 // security.txt is for a researcher, so a search engine leaves it out of its results
@@ -298,40 +205,35 @@ test("a write to an unknown path responds 404, never a page", async () => {
 	expect(response.body).not.toBe(PAGE_HTML)
 })
 
-// the question is validated before the handler runs
-test("a chat turn with no question is rejected before any work", async () => {
-	const response = await server.fetch(
+// post a chat turn as a signed-in user. a signed-out post is rejected before its body is read, so the payload checks
+// are reached only with a session
+async function postSignedInChatTurn(chatTurnBody: unknown): Promise<Response> {
+	signInAs("user-1")
+	return server.fetch(
 		new Request("http://localhost:3000/api/topics/abc123/chat", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ question: "   " }),
+			body: JSON.stringify(chatTurnBody),
 		}),
 	)
+}
+
+// the question is validated before the handler runs
+test("a chat turn with no question is rejected before any work", async () => {
+	const response = await postSignedInChatTurn({ question: "   " })
 	expect(response.status).toBe(400)
 })
 
 // a question longer that the limit is rejected, so that one request cannot inflate the retrieval or the prompt
 test("an oversized chat question is rejected", async () => {
-	const response = await server.fetch(
-		new Request("http://localhost:3000/api/topics/abc123/chat", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ question: "x".repeat(CHAT_QUESTION_CHARS + 1) }),
-		}),
-	)
+	const response = await postSignedInChatTurn({ question: "x".repeat(CHAT_QUESTION_CHARS + 1) })
 	expect(response.status).toBe(400)
 })
 
 // the chat history is sent by the api client, so its depth is limited before it can inflate the token bill
 test("an oversized chat history is rejected", async () => {
 	const history = Array.from({ length: CHAT_HISTORY_TURNS + 1 }, () => ({ question: "q", answer: "a" }))
-	const response = await server.fetch(
-		new Request("http://localhost:3000/api/topics/abc123/chat", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ question: "what is new?", history }),
-		}),
-	)
+	const response = await postSignedInChatTurn({ question: "what is new?", history })
 	expect(response.status).toBe(400)
 })
 
@@ -390,4 +292,27 @@ test("the content security policy allows the Turnstile challenge frame", async (
 	const policyDirectives = response.headers.get("Content-Security-Policy")?.split(";") ?? []
 	const frameSources = policyDirectives.find((directive) => directive.trim().startsWith("frame-src")) ?? ""
 	expect(frameSources).toContain("https://challenges.cloudflare.com")
+})
+
+// an unhashed public file changes only with a release, so the browser keeps it an hour and the edge a day under the
+// tag the release purge clears
+test("a public file is cached for an hour in the browser and a day at the edge", async () => {
+	const bundleDirectory = await createBundleDirectory()
+	const response = await withWorkingDirectory(bundleDirectory, () => request("/robots.txt"))
+
+	expect(response.status).toBe(200)
+	expect(response.body).toBe(PUBLIC_FILE_TEXT)
+	expect(response.cacheControl).toBe("public, max-age=3600")
+	expect(response.edgeCacheControl).toBe("max-age=86400")
+})
+
+// every response names the referrer a cross-origin link sees, forbids type sniffing, and keeps a base url and a form on
+// this origin
+test("every response includes the baseline security headers", async () => {
+	const response = await server.fetch(new Request("http://localhost:3000/api/health"))
+
+	expect(response.headers.get("Referrer-Policy")).toBe("strict-origin-when-cross-origin")
+	expect(response.headers.get("X-Content-Type-Options")).toBe("nosniff")
+	expect(response.headers.get("Content-Security-Policy")).toContain("base-uri 'self'")
+	expect(response.headers.get("Content-Security-Policy")).toContain("form-action 'self'")
 })

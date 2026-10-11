@@ -6,6 +6,7 @@ import { signupGatePayload } from "@shared/payloads"
 import { toDeviceProperties } from "@shared/userAgent"
 import { isAPIError } from "better-auth/api"
 import { Hono } from "hono"
+import { except } from "hono/combine"
 import { getCookie, setCookie } from "hono/cookie"
 import { z } from "zod"
 import { cacheJson } from "../db/redis"
@@ -13,8 +14,9 @@ import { activityRoute } from "./activity"
 import { adminRoute } from "./admin"
 import { auth } from "./auth"
 import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "./authorization"
-import { avatarsRoute } from "./avatars"
-import { billingRoute } from "./billing"
+import { avatarsRoute } from "./avatarsRoute"
+import { billingRoute } from "./billingRoute"
+import { defaultBodyLimit } from "./bodyLimit"
 import { chatAttachmentsRoute } from "./chat/attachments"
 import { toUnseenChatMentionCountKey } from "./chat/mentions"
 import { privateChatRoute } from "./chat/privateChat"
@@ -53,7 +55,7 @@ import {
 import { teamsRoute } from "./team/teamsRoute"
 import { topicAttachmentsRoute } from "./topic/attachments"
 import { featuringRoute } from "./topic/featuring"
-import { buildTopicFeeds } from "./topic/feeds"
+import { buildTopicFeeds, readVisitorTopicFeeds } from "./topic/feeds"
 import { findingsRoute } from "./topic/findings"
 import { scansRoute } from "./topic/scans"
 import { topicSearchRoute } from "./topic/search"
@@ -78,6 +80,19 @@ const MCP_AUTHORIZE_PATH = "/mcp/authorize"
 // how long the unseen chat mention count is served from Redis
 const UNSEEN_CHAT_MENTION_COUNT_TTL_MS = 10_000
 
+// the routes that set their own body limit, for chat turns, chat room posts, uploads, and note sync
+const OWN_BODY_LIMIT_PATHS = [
+	"/api/topics/:id/chat",
+	"/api/teams/:id/chat",
+	"/api/chat/new-topic",
+	"/api/topics/:id/rooms/:teamId",
+	"/api/teams/:id/room",
+	"/api/avatars",
+	"/api/teams/:id/avatar",
+	"/api/topics/:id/attachments",
+	"/api/notes/:id/updates",
+]
+
 // the "All" vs. "Unread" topic finding toggle
 const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional() })
 
@@ -90,6 +105,8 @@ export const apiRoute = new Hono<AppEnv>()
 		context.set("user", session?.user ?? null)
 		await next()
 	})
+	// bound every body on the routes with no limit of their own
+	.use("*", except(OWN_BODY_LIMIT_PATHS, defaultBodyLimit))
 	.on(["POST", "GET"], "/auth/*", async (context) => {
 		// send every mcp authorize request through the consent page. the client cannot skip it
 		if (context.req.method === "GET" && context.req.path.endsWith(MCP_AUTHORIZE_PATH)) {
@@ -167,9 +184,12 @@ export const apiRoute = new Hono<AppEnv>()
 		const userId = currentUser(context)
 		// only include consumed topic findings unless the api client asks for the "All" view
 		const includeConsumed = context.req.valid("query").all === "true"
-		// merge in the topic-creation quota. a signed-out visitor has none so gets zero
+		// merge in the topic-creation quota. a signed-out visitor has none so gets zero, and every visitor shares one
+		// feed, read through Redis for half a minute
 		const [topicFeeds, remainingNewTopics, ownedTopicLimit, dailyTopicQuota] = await Promise.all([
-			traceRequestStage("topic_feed.build", () => buildTopicFeeds(userId, includeConsumed)),
+			traceRequestStage("topic_feed.build", () =>
+				userId ? buildTopicFeeds(userId, includeConsumed) : readVisitorTopicFeeds(includeConsumed),
+			),
 			userId ? topicsRemaining(userId) : Promise.resolve(0),
 			userId ? topicLimit(userId) : Promise.resolve(0),
 			userId ? loadDailyTopicQuota(userId) : Promise.resolve({ limit: 0, remainingTopics: 0 }),

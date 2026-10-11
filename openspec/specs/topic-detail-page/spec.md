@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-topic-detail-and-edit-pages. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The topic page renders a Topic's detail view
 `/topics/:id` SHALL render the Topic detail view in the homepage's visual system: first a control row aligned with the homepage's — the shared All/Unread toggle left and the owner's Run-now block right (per scan-history) — then `← All topics` as a plain text link, then a full-width title row with the Topic name in the display font and the unread-Findings count ("N new") right-aligned — the count opening the same Topic info popover the homepage's count does, anchored to itself — and a tags row with the Topic's tag pills left-aligned. The control row and back link SHALL render statically before the payload loads — never animating in — with the Run-now trigger disabled until the quota is known and its quota line hydrating in once it is. The header, findings, and history sections SHALL play the homepage's staggered hydrate entrance (honoring prefers-reduced-motion), the homepage's ambient steam background SHALL sit behind the page, and the loading skeleton SHALL mirror the body below the static controls: header, findings rows, and the history-plus-card layout. Action icons SHALL sit right-aligned on the `← All topics` back-link line as bare glyphs matching the ⓘ icon weight, styled without button chrome but implemented as keyboard-focusable icon buttons with accessible labels and a visible focus ring: for the owner a ✎ edit and 🗑 delete icon; for a non-owner a 🔔 subscribe bell when visibility is public or invite. An owner never gets a bell, since they already hold the Topic, and private topics SHALL never show the bell.
 
@@ -381,6 +383,11 @@ Finding. The Topic itself SHALL never be listed, a Topic SHALL be listed once, a
 Topic held only by a private team, SHALL never be listed. Each link SHALL use the Topic's slugged url and show its
 name. A Topic page that is not public, or a public one not yet shown, SHALL have no such section.
 
+The section SHALL be served from one copy per Topic for a minute, the same for every user and visitor. An edit or a
+delete of the Topic, a Source added to or removed from it, or a team attach or detach of it, SHALL drop its own copy, so a Topic made private has no section once its save
+returns. Another Topic's copy MAY still list a Topic that just went private, or leave out one that just went public,
+until that copy's minute ends, the same window the edge already serves a page for.
+
 #### Scenario: A team's other topics come first
 
 - **GIVEN** a public Topic held by a public team with three other public shown Topics, and two more public Topics
@@ -398,6 +405,18 @@ name. A Topic page that is not public, or a public one not yet shown, SHALL have
 
 - **WHEN** an owner opens their private Topic's page
 - **THEN** there is no "More topics" section
+
+#### Scenario: A topic made private loses its section at once
+
+- **GIVEN** a public Topic whose "More topics" copy was built a moment ago
+- **WHEN** its owner makes it private and opens its page
+- **THEN** there is no "More topics" section
+
+#### Scenario: Another page's list catches up within a minute
+
+- **GIVEN** a public Topic listed in another Topic's "More topics" copy
+- **WHEN** its owner makes it private
+- **THEN** the other Topic's page stops listing it once that copy's minute ends
 
 ### Requirement: Findings render as a five-row, collapsible list reusing the homepage row
 A `▾ Findings` accordion (default expanded) SHALL list the Topic's Findings with the homepage row anatomy:
@@ -419,4 +438,3 @@ actions SHALL persist through the api and refresh the page's own payload.
 #### Scenario: A reader without JavaScript sees the findings whole
 - **WHEN** a client with no JavaScript fetches a public Topic with seven Findings
 - **THEN** all seven rows are in the HTML and shown, with no expander
-

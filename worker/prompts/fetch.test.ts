@@ -1,5 +1,6 @@
 // fetch.ts tests for the no-key prompt fallback path
 import { expect, test } from "bun:test"
+import { restoreEnv } from "@shared/testEnv"
 import { FALLBACK_PROMPT_TEMPLATES, fetchPromptTemplate, hasSameVariables } from "./fetch"
 
 // without Langfuse keys, every prompt name resolves to its fallback Markdown with no registry link
@@ -7,8 +8,8 @@ test("fetchPromptTemplate returns the bundled template unmodified when Langfuse 
 	// clear both keys so the run is deterministic regardless of the calling shell's environment
 	const originalPublicKey = Bun.env.LANGFUSE_PUBLIC_KEY
 	const originalSecretKey = Bun.env.LANGFUSE_SECRET_KEY
-	Bun.env.LANGFUSE_PUBLIC_KEY = undefined
-	Bun.env.LANGFUSE_SECRET_KEY = undefined
+	delete Bun.env.LANGFUSE_PUBLIC_KEY
+	delete Bun.env.LANGFUSE_SECRET_KEY
 
 	// fetch every fallback prompt name, restoring the environment regardless of the outcome
 	try {
@@ -22,8 +23,8 @@ test("fetchPromptTemplate returns the bundled template unmodified when Langfuse 
 		}
 	} finally {
 		// restore whatever keys the calling shell had set, even when the test threw
-		Bun.env.LANGFUSE_PUBLIC_KEY = originalPublicKey
-		Bun.env.LANGFUSE_SECRET_KEY = originalSecretKey
+		restoreEnv("LANGFUSE_PUBLIC_KEY", originalPublicKey)
+		restoreEnv("LANGFUSE_SECRET_KEY", originalSecretKey)
 	}
 })
 

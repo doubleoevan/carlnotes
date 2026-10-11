@@ -46,6 +46,25 @@ test("a start that throws an error keeps an existing Scan row and sends no query
 	expect(sentQueries).toEqual([])
 })
 
+// a start that hit its deadline may have started the workflow, so even a row the caller opened is kept for the sweep,
+// whose own start then finds the workflow running and marks the row dispatched
+test("a start that hits its deadline keeps the row the caller opened", async () => {
+	// a start rejected with a deadline error, and a start rejected with any other error
+	spyOn(temporalClient, "isClientDeadlineError").mockImplementation((error) => (error as Error).message === "deadline")
+	const startSpy = spyOn(temporalClient, "startTopicScanWorkflow").mockRejectedValue(new Error("deadline"))
+
+	// the deadline keeps the row, sending no query
+	const deadlineSentQueries = stubConnectionPool()
+	await expect(scanTopic(OPEN_SCAN, "topic-1", "owner-1", "manual")).rejects.toThrow("deadline")
+	expect(deadlineSentQueries).toEqual([])
+
+	// any other failure deletes the row the caller opened
+	startSpy.mockRejectedValue(new Error("temporal unreachable"))
+	const failedSentQueries = stubConnectionPool()
+	await expect(scanTopic(OPEN_SCAN, "topic-1", "owner-1", "manual")).rejects.toThrow("temporal unreachable")
+	expect(failedSentQueries[0]?.text).toStartWith('delete from "scans"')
+})
+
 // the update matches only a running Scan that is not manual, never dispatched, and never picked up
 test("failUnstartedScan marks failed only a running Scan that is not manual, not dispatched, and not picked up", async () => {
 	const sentQueries = stubConnectionPool()

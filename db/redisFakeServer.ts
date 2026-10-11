@@ -17,6 +17,9 @@ export type FakeRedisServer = {
 	isCommandFailing: boolean
 	connectCount: number
 	subscribeGate: Promise<void> | null
+	// whether the server never responds to a command, and the reply it gives to INFO
+	isCommandStalled?: boolean
+	infoReply?: string
 }
 
 // the real setTimeout, saved before a test replaces it
@@ -34,6 +37,13 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 	const throwIfCommandFailing = (): void => {
 		if (fakeRedisServer.isCommandFailing) {
 			throw new Error("socket closed")
+		}
+	}
+
+	// a stalled command never settles, as a command sent to a reachable node that stopped replying does
+	const stallIfCommandStalled = async (): Promise<void> => {
+		if (fakeRedisServer.isCommandStalled) {
+			await new Promise<never>(() => {})
 		}
 	}
 
@@ -90,9 +100,10 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 				fakeRedisClient.onclose?.call(fakeRedisClient as never, new Error("closed"))
 			}
 		},
-		// a get throws an error while commands are failing and otherwise reads the shared keys
+		// a get throws an error while commands are failing, hangs while commands are stalled, and otherwise reads the shared keys
 		async get(key: string): Promise<string | null> {
 			throwIfCommandFailing()
+			await stallIfCommandStalled()
 			return fakeRedisServer.storedValueByKey.get(key) ?? null
 		},
 		// a set writes the shared keys and ignores the expiry. the XX option writes only a key that exists
@@ -111,8 +122,14 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 		},
 		// the increment script returns the count and the time left, which is the whole rate limit window on the first hit.
 		// the decrement script lowers only a key that exists
-		async send(_command: string, commandArguments: string[]): Promise<unknown> {
+		async send(command: string, commandArguments: string[]): Promise<unknown> {
 			throwIfCommandFailing()
+			await stallIfCommandStalled()
+
+			// an INFO command answers with the server's reply text
+			if (command === "INFO") {
+				return fakeRedisServer.infoReply ?? ""
+			}
 			const [script = "", , key = "", rateLimitWindowMs = "0"] = commandArguments
 
 			// the slot script takes the slot or returns the wait
@@ -169,14 +186,26 @@ export function dropConnection(client: FakeRedisClient): void {
 	client.close()
 }
 
-// a setTimeout that records each delay and runs the callback after zero milliseconds instead of after the delay.
-// the timer's unref returns the timer, as Bun's does
-export function toInstantSetTimeout(reconnectDelaysMs: number[]): typeof setTimeout {
+// a setTimeout that runs a reconnect timer's callback after zero milliseconds instead of after its delay, and records
+// the delay. a reconnect timer is the one that unrefs itself, so a command's deadline keeps its real delay
+export function toInstantReconnectSetTimeout(reconnectDelaysMs: number[]): typeof setTimeout {
 	return ((callback: () => void, delayMs: number) => {
-		reconnectDelaysMs.push(delayMs)
-		const instantTimer = originalSetTimeout(callback, 0)
-		return { unref: () => instantTimer }
+		// start a real timer, which runs at its delay unless the caller unrefs it
+		const timer = originalSetTimeout(callback, delayMs)
+
+		// an unref that swaps the timer for an instant one and returns that, as Bun's unref returns its timer
+		const unrefInstantly = (): ReturnType<typeof setTimeout> => {
+			clearTimeout(timer)
+			reconnectDelaysMs.push(delayMs)
+			return originalSetTimeout(callback, 0)
+		}
+		return Object.assign(timer, { unref: unrefInstantly })
 	}) as unknown as typeof setTimeout
+}
+
+// a setTimeout that runs every timer's callback after zero milliseconds, so a command's deadline passes at once too
+export function toEveryTimerInstantSetTimeout(): typeof setTimeout {
+	return ((callback: () => void) => originalSetTimeout(callback, 0)) as unknown as typeof setTimeout
 }
 
 // wait until a check passes, ten milliseconds at a time, for up to a second

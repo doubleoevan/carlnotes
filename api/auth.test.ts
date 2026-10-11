@@ -5,7 +5,7 @@ import * as monitoring from "@shared/monitoring"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as redis from "../db/redis"
 import * as litellm from "../worker/litellm"
-import { auth, toSignupAvatarSource } from "./auth"
+import { auth, sendAuthEmailInBackground, toSignupAvatarSource } from "./auth"
 import * as sessions from "./sessions"
 import * as usernames from "./usernames"
 
@@ -133,4 +133,17 @@ test("the secondary storage counts a hit on the key's rate limit window", async 
 	})
 	expect(await auth.options.secondaryStorage?.increment?.("key-a", 60)).toBe(3)
 	expect(incrementRateLimitWindowSpy).toHaveBeenCalledWith("key-a", 60_000)
+})
+
+// a mail hook responds at once, and a send that throws later is reported instead of left as an unhandled rejection
+test("a background auth email that throws is reported by its kind", async () => {
+	// the report and the log spied, and a send that fails after the hook has returned
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	spyOn(console, "error").mockImplementation(() => {})
+	const sendError = new Error("the template failed to render")
+	sendAuthEmailInBackground("verification", Promise.reject(sendError))
+
+	// the failure reaches the report once the send settles
+	await Bun.sleep(0)
+	expect(reportErrorSpy).toHaveBeenCalledWith(sendError, "email", { emailKind: "verification" })
 })

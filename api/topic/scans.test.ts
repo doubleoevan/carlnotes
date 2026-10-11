@@ -1,6 +1,7 @@
 // manual scan tests: a scan whose key has spent its budget is rejected before anything starts or is billed.
 // a failed budget read starts the scan, and an admin's scan checks the admin's own budget
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
+import * as monitoring from "@shared/monitoring"
 import { SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
 import { Hono } from "hono"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
@@ -143,4 +144,30 @@ test("an admin's manual Scan checks the admin's own budget", async () => {
 	expect(response.status).toBe(200)
 	expect(isUserLiteLLMKeyBudgetExhaustedSpy).toHaveBeenCalledWith("admin-1")
 	expect(startTopicScanSpy).toHaveBeenCalledWith("topic-1", "admin-1", "manual")
+})
+
+// a start that throws, such as a Temporal that cannot be reached, is reported and responds as unavailable, never a 500
+test("a manual Scan whose start throws is reported and responds 503", async () => {
+	// an owner with a key, a start that throws, and the proxy settings that the budget read needs
+	stubOwnedTopicRows()
+	const { startTopicScanSpy } = spyOnManualScan(false)
+	startTopicScanSpy.mockRejectedValue(new Error("temporal is not reachable"))
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	spyOn(console, "error").mockImplementation(() => {})
+
+	// a proxy that cannot be reached, so the budget read fails and the scan goes ahead to the start
+	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
+	Bun.env.LITELLM_MASTER_KEY = "master"
+	globalThis.fetch = mock(async (): Promise<Response> => {
+		throw new TypeError("fetch failed")
+	}) as unknown as typeof fetch
+
+	// the scan responds as unavailable, and the failed start is reported with the topic and the user
+	const response = await sendManualScan("owner-1")
+	expect(response.status).toBe(503)
+	expect(await response.json()).toEqual({ error: "scanning is temporarily unavailable, try again in a minute" })
+	expect(reportErrorSpy).toHaveBeenCalledWith(expect.any(Error), "manual-scan", {
+		topicId: "topic-1",
+		userId: "owner-1",
+	})
 })

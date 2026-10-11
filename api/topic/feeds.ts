@@ -1,6 +1,6 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import { toAvatarVersion } from "@shared/avatars"
-import type { TopicFeed, TopicFeedResponse, TopicFinding } from "@shared/contracts"
+import type { TopicFeed, TopicFeedResponse, TopicFinding, TopicResponse } from "@shared/contracts"
 import { traceRequestStage } from "@shared/monitoring"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm"
@@ -11,17 +11,26 @@ import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadTopicFeedData } from "./feedData"
 import { filteredTopicFindings, newTopicFindingCount, toTopicFinding } from "./findings"
 import { toScheduledTimeLabel } from "./helpers"
+import { toMoreTopicsKey } from "./moreTopics"
 import { isPublicAndShown } from "./permissions"
 
 // the Redis key every replica reads the featured and popular topic id lists through, and how long they are kept
 const TOPIC_SECTION_IDS_KEY = "topic-section-ids"
 const TOPIC_SECTION_IDS_TTL_MS = 60_000
 
+// the Redis key prefix the visitors' feed is served through, one key per view, and how long a visitor's cached feed or
+// topic page is kept
+const VISITOR_TOPIC_FEED_KEY_PREFIX = "topic-feed:visitor"
+const VISITOR_CACHE_TTL_MS = 30_000
+
 // how many popular topic ids the homepage keeps, ten pages of its five
 const MAX_POPULAR_TOPIC_IDS = 50
 
 // the featured and popular topic id lists
 type TopicSectionIds = { featuredIds: string[]; popularIds: string[] }
+
+// the topic whose cached visitor copies to drop, and whether the change touched the public listing
+type ClearVisitorTopicCachesOptions = { topicId: string; isListingChanged: boolean }
 
 // the topic ids this user actively subscribes to
 function activeSubscriptionTopicIdQuery(userId: string) {
@@ -32,10 +41,60 @@ function activeSubscriptionTopicIdQuery(userId: string) {
 }
 
 /**
- * Deletes the shared topic section id lists, so the next feed build on any replica reads them fresh.
+ * Deletes the shared topic section id lists and the visitors' feeds, so the next feed build on any replica reads them fresh.
  */
-export function clearTopicSectionIdCache(): Promise<void> {
-	return deleteRedisKey(TOPIC_SECTION_IDS_KEY)
+export async function clearSharedTopicFeedCaches(): Promise<void> {
+	await Promise.all(
+		[TOPIC_SECTION_IDS_KEY, toVisitorTopicFeedKey(true), toVisitorTopicFeedKey(false)].map((key) =>
+			deleteRedisKey(key),
+		),
+	)
+}
+
+/**
+ * Deletes a topic's cached visitor page and more topics, and the visitors' feeds and section ids when the listing changed.
+ */
+export async function clearVisitorTopicCaches({
+	topicId,
+	isListingChanged,
+}: ClearVisitorTopicCachesOptions): Promise<void> {
+	await Promise.all([deleteRedisKey(toVisitorTopicPageKey(topicId)), deleteRedisKey(toMoreTopicsKey(topicId))])
+	if (isListingChanged) {
+		await clearSharedTopicFeedCaches()
+	}
+}
+
+/**
+ * Returns the Redis key a topic's page is served to visitors through.
+ */
+export function toVisitorTopicPageKey(topicId: string): string {
+	return `topic-page:visitor-page:${topicId}`
+}
+
+/**
+ * Returns the topic page every signed-out visitor sees, loaded once per half minute across every replica.
+ */
+export function readVisitorTopicPage(
+	topicId: string,
+	loadTopicPage: () => Promise<TopicResponse | null>,
+): Promise<TopicResponse | null> {
+	return cacheJson({ key: toVisitorTopicPageKey(topicId), ttlMs: VISITOR_CACHE_TTL_MS, load: loadTopicPage })
+}
+
+/**
+ * Returns the feed every signed-out visitor sees, built once per half minute across every replica.
+ */
+export function readVisitorTopicFeeds(includeConsumedResources: boolean): Promise<Pick<TopicFeedResponse, "sections">> {
+	return cacheJson({
+		key: toVisitorTopicFeedKey(includeConsumedResources),
+		ttlMs: VISITOR_CACHE_TTL_MS,
+		load: () => buildTopicFeeds(null, includeConsumedResources),
+	})
+}
+
+// the visitors' feed key for one view
+function toVisitorTopicFeedKey(includeConsumedResources: boolean): string {
+	return `${VISITOR_TOPIC_FEED_KEY_PREFIX}:${includeConsumedResources ? "all" : "unread"}`
 }
 
 /**

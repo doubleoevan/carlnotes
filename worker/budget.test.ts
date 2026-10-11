@@ -1,6 +1,16 @@
 // the Budget crosses a Temporal activity boundary between the topic Scan's stages
-import { describe, expect, test } from "bun:test"
-import { type Budget, canScoreResource, canSpend, charge, newBudget, speechCost, toResumedBudget } from "./budget"
+import { afterEach, describe, expect, test } from "bun:test"
+import { restoreEnv } from "@shared/testEnv"
+import {
+	type Budget,
+	canScoreResource,
+	canSpend,
+	charge,
+	newBudget,
+	speechCost,
+	toDollarSetting,
+	toResumedBudget,
+} from "./budget"
 
 // what Temporal does to a value that crosses an activity boundary
 function acrossActivityBoundary(budget: Budget): Budget {
@@ -164,5 +174,28 @@ describe("a speech call's cost", () => {
 		const recordedAt = new Date("2027-01-01T00:00:00Z")
 		expect(speechCost({ speechTier: "standard", ...speechUsage, recordedAt })).toBeCloseTo(19)
 		expect(speechCost({ speechTier: "flex", ...speechUsage, recordedAt })).toBeCloseTo(18.5)
+	})
+})
+
+describe("a setting in dollars", () => {
+	// a spare setting name, put back after each case
+	const settingName = "BUDGET_TEST_DOLLARS"
+	const originalValue = Bun.env[settingName]
+	afterEach(() => restoreEnv(settingName, originalValue))
+
+	test("reads the default when unset, and the configured number when set", () => {
+		// unset, then set to twelve and a half dollars
+		delete Bun.env[settingName]
+		expect(toDollarSetting(settingName, 0.5)).toBe(0.5)
+		Bun.env[settingName] = "12.5"
+		expect(toDollarSetting(settingName, 0.5)).toBe(12.5)
+	})
+
+	test("throws on a value that is not a number of dollars, zero or more", () => {
+		// a negative amount and a word
+		Bun.env[settingName] = "-1"
+		expect(() => toDollarSetting(settingName, 0.5)).toThrow(`${settingName} must be a number of dollars`)
+		Bun.env[settingName] = "lots"
+		expect(() => toDollarSetting(settingName, 0.5)).toThrow(`${settingName} must be a number of dollars`)
 	})
 })

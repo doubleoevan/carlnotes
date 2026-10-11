@@ -2,12 +2,12 @@
 // fails again after a day is reported once, and a run with nothing to retry does nothing
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { DAY_MS } from "@shared/time"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { retryPendingObjectDeletions } from "./retryPendingObjectDeletions"
 import * as store from "./store"
 
-// one day, and a recorded time two days back
-const DAY_MS = 24 * 60 * 60 * 1000
+// a recorded time two days back
 const TWO_DAYS_AGO = new Date(Date.now() - 2 * DAY_MS)
 
 // put the pool and every spy back after each test

@@ -1,6 +1,6 @@
 // the app's Redis store, with one command connection and one subscriber connection. a failed operation returns null
 // instead of throwing an error, and a failed rate limit count falls back to this process's memory
-import type { ExtraGaugesReading } from "@shared/runtimeGauges"
+import { withTimeLimit } from "@shared/time"
 import {
 	clearMemoryRateLimitWindows,
 	decrementMemoryRateLimitWindow,
@@ -36,11 +36,29 @@ const DECREMENT_RATE_LIMIT_WINDOW_SCRIPT =
 const TAKE_RATE_LIMIT_SLOT_SCRIPT =
 	"if redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) then return 0 end return math.max(redis.call('PTTL', KEYS[1]), 1)"
 
+// how long one command may take before the store gives up on it and counts a failure
+const COMMAND_TIMEOUT_MS = 2000
+
+// how many commands in a row may miss the deadline before the store replaces the client, which rejects every command
+// still queued on the silent one and starts the reconnect backoff
+const COMMAND_TIMEOUTS_BEFORE_RECONNECT = 3
+
+// the deadline misses in a row so far
+let consecutiveCommandTimeoutCount = 0
+
 // one hit on a rate limit window, with the count so far and when the rate limit window resets
 export type RateLimitWindowHit = { count: number; resetAt: number }
 
 // whether the command connection is up, and the minute's cache hits, cache misses, and failed operations
 export type RedisGauges = { isConnected: boolean; cacheHitCount: number; cacheMissCount: number; errorCount: number }
+
+// the error that a command missing its deadline rejects with
+class CommandTimeoutError extends Error {
+	constructor(operationName: string) {
+		super(`redis ${operationName} took over ${COMMAND_TIMEOUT_MS} ms`)
+		this.name = "CommandTimeoutError"
+	}
+}
 
 // the command connection and the subscriber connection, built on first use so importing this module never opens a connection
 let commandConnection: RedisConnection | null = null
@@ -86,13 +104,37 @@ export async function runWithRedis<Result>(
 		return null
 	}
 
-	// run the operation. count a thrown error and return null
+	// run the operation under the command deadline, and clear the deadline misses on an answer
+	const commandClient = connection.client
 	try {
-		return await runOperation(connection.client)
+		const operationResult = await withTimeLimit(
+			runOperation(commandClient),
+			COMMAND_TIMEOUT_MS,
+			() => new CommandTimeoutError(operationName),
+		)
+		consecutiveCommandTimeoutCount = 0
+		return operationResult
 	} catch (error) {
+		// count a thrown error, and a missed deadline against the client it ran on if that client is still the current one
 		countError(operationName, error)
+		if (error instanceof CommandTimeoutError && connection.client === commandClient) {
+			countCommandTimeout(connection)
+		}
 		return null
 	}
+}
+
+// count a missed deadline, and replace the client once enough commands in a row have missed it.
+// closing the silent client rejects every command still queued on it
+function countCommandTimeout(connection: RedisConnection): void {
+	consecutiveCommandTimeoutCount++
+	if (consecutiveCommandTimeoutCount < COMMAND_TIMEOUTS_BEFORE_RECONNECT) {
+		return
+	}
+
+	// start over on a fresh client after the backoff
+	consecutiveCommandTimeoutCount = 0
+	scheduleReconnect(connection)
 }
 
 /**
@@ -256,29 +298,6 @@ export function readAndResetRedisGauges(): RedisGauges {
 }
 
 /**
- * Returns the Redis gauges, with a Redis-down threshold crossing if the command connection is down.
- * Reading the gauges resets the minute's counts.
- */
-export async function readRedisExtraGauges(): Promise<ExtraGaugesReading> {
-	// connect if nothing has used Redis yet, then read the gauges.
-	// an idle process still reports whether the command connection is up
-	await ensureConnected(toCommandConnection())
-	const redisGauges = readAndResetRedisGauges()
-
-	// cross the Redis-down threshold if the command connection is down
-	const thresholdCrossings = redisGauges.isConnected
-		? []
-		: [
-				{
-					condition: "redis-down",
-					message: "the redis client is not connected",
-					values: { errorCount: redisGauges.errorCount },
-				},
-			]
-	return { gauges: { redis: redisGauges }, thresholdCrossings }
-}
-
-/**
  * Replaces how the store builds its clients and forgets the connections, the channel handlers, the reconnect
  * listeners, the counts, and the memory rate limit windows.
  */
@@ -291,8 +310,9 @@ export function setRedisClientBuilder(nextBuildRedisClient: () => RedisConnectio
 	subscriberReconnectListeners.clear()
 	hasSubscriberConnected = false
 
-	// forget the counts and the memory windows
+	// forget the counts, the deadline misses, and the memory windows
 	readAndResetRedisGauges()
+	consecutiveCommandTimeoutCount = 0
 	clearMemoryRateLimitWindows()
 }
 

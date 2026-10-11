@@ -18,6 +18,7 @@ import {
 	toCanonicalContentType,
 } from "../../worker"
 import { isAllowed } from "../authorization"
+import { uploadSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { loadOwnedTopic } from "./permissions"
 
@@ -225,7 +226,8 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 	})
 	.post(
 		"/topics/:id/attachments",
-		// limit the upload body before it's fully buffered into memory
+		// reject a visitor, then limit the upload body before it's fully buffered into memory
+		uploadSignedOutRejection,
 		bodyLimit({
 			maxSize: MAX_ATTACHMENT_BYTES + 1024 * 1024,
 			onError: (context) =>

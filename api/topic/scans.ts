@@ -15,8 +15,9 @@ import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 
 // the outcomes of a manual scan request. status: running means a scan is already in flight for the topic.
 // status: budget means the key that the scan bills has spent its whole budget
+// status: unavailable means handing the scan to Temporal threw
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ManualScanResult = { status: "started"; remainingScans: number } | { status: "forbidden" } | { status: "quota" } | { status: "budget" } | { status: "running" }
+export type ManualScanResult = { status: "started"; remainingScans: number } | { status: "forbidden" } | { status: "quota" } | { status: "budget" } | { status: "running" } | { status: "unavailable" }
 
 // the outcomes of a stop request. status: idle means the Topic had no Scan running to stop
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
@@ -54,8 +55,17 @@ export async function runManualScan(
 	// close out any hung scans first, so a stuck scan row doesn't block a new manual scan indefinitely
 	await failStaleScans()
 
-	// hand the scan to Temporal
-	const started = await startTopicScan(topicId, userId, "manual")
+	// hand the scan to Temporal, and report a start that throws as unavailable
+	const started = await startTopicScan(topicId, userId, "manual").catch((error: unknown) => {
+		console.error(`manual scan could not start for topic ${topicId}`, error)
+		reportError(error, "manual-scan", { topicId, userId })
+		return null
+	})
+
+	// an unavailable start, then a Scan already running
+	if (started === null) {
+		return { status: "unavailable" }
+	}
 	if (started.status === "running") {
 		return { status: "running" }
 	}
@@ -139,6 +149,11 @@ export const scansRoute = new Hono<AppEnv>()
 		// reject the scan with the budget label if the budget is spent
 		if (scanResult.status === "budget") {
 			return context.json({ error: SCAN_SPENT_BUDGET_LABEL }, 402)
+		}
+
+		// a scan that could not be handed off asks the user to try again shortly
+		if (scanResult.status === "unavailable") {
+			return context.json({ error: "scanning is temporarily unavailable, try again in a minute" }, 503)
 		}
 
 		// an exhausted quota and a non-owner topic scan fail differently

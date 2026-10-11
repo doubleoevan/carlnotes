@@ -5,6 +5,7 @@ import { canCreateTeamToday, loadUserAccess } from "../../db/quotas"
 import { teamMembers, teams, teamTopics } from "../../db/schema/teams"
 import { subscriptions, topics } from "../../db/schema/topics"
 import { deletePodcastFeedToken } from "../podcast/podcastFeedTokens"
+import { clearVisitorTopicCaches } from "../topic/feeds"
 import { canSeeTopic } from "../topic/permissions"
 import { updateTopicSubscriberCount } from "../topic/subscriberCounts"
 import { saveTeamTopicSubscriptions, toTeamRole } from "./members"
@@ -46,6 +47,9 @@ export async function createTeam(
 		}
 		throw error
 	}
+
+	// drop the visitors' copies of each attached topic's page, which names its teams
+	await Promise.all(payload.topicIds.map((topicId) => clearVisitorTopicCaches({ topicId, isListingChanged: false })))
 	return { status: "created", teamId }
 }
 
@@ -111,7 +115,15 @@ export async function addTopicToTeam(
 	if ((await toTeamRole(userId, teamId)) !== "leader") {
 		return "forbidden"
 	}
-	return db.transaction((transaction) => addTopicInTransaction(transaction, userId, teamId, topicId))
+
+	// attach, then drop the visitors' copies of the topic's page, which names its teams
+	const addTopicResult = await db.transaction((transaction) =>
+		addTopicInTransaction(transaction, userId, teamId, topicId),
+	)
+	if (addTopicResult === "added") {
+		await clearVisitorTopicCaches({ topicId, isListingChanged: false })
+	}
+	return addTopicResult
 }
 
 // the attach write shared by creation and the attach route
@@ -294,12 +306,14 @@ export async function removeTopicFromTeam(userId: string, teamId: string, topicI
 		return deactivatedSubscriptionRows.map((deactivatedSubscriptionRow) => deactivatedSubscriptionRow.subscriberUserId)
 	})
 
-	// delete the podcast feed token of each member who lost the subscription
-	await Promise.all(
-		deactivatedSubscriberUserIds.map((deactivatedSubscriberUserId) =>
+	// delete the podcast feed token of each member who lost the subscription, and drop the visitors' copies of the
+	// topic's page, which names its teams
+	await Promise.all([
+		...deactivatedSubscriberUserIds.map((deactivatedSubscriberUserId) =>
 			deletePodcastFeedToken({ topicId, userId: deactivatedSubscriberUserId }),
 		),
-	)
+		clearVisitorTopicCaches({ topicId, isListingChanged: false }),
+	])
 	return true
 }
 

@@ -6,7 +6,7 @@ import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../db/con
 import { scans } from "../db/schema/scans"
 import * as litellm from "./litellm"
 import * as scan from "./scan"
-import { reportScanQueue, startUndispatchedScans } from "./schedule"
+import { reportScanQueue, startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
 import { toScanBacklogCrossing } from "./temporalClient"
 
 // put each spied function and the connection pool's own query back after each test
@@ -121,10 +121,11 @@ test("reportScanQueue reports a queue nothing polls and a backlog past its limit
 	])
 })
 
-// a describe that fails is logged, and the sweep goes on
+// a describe that fails is logged and reads as no description, which leaves the sweep the whole dispatch limit, and the
+// sweep goes on
 test("reportScanQueue never fails the sweep", async () => {
 	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
-	await expect(reportScanQueue(() => Promise.reject(new Error("temporal unreachable")))).resolves.toBeUndefined()
+	await expect(reportScanQueue(() => Promise.reject(new Error("temporal unreachable")))).resolves.toBeNull()
 	expect(consoleErrorSpy.mock.calls[0]?.[0]).toBe("could not read the scan task queue")
 })
 
@@ -136,4 +137,11 @@ test("toScanBacklogCrossing needs a known age past 15 minutes", () => {
 	expect(toScanBacklogCrossing({ ...backedUpQueue, oldestBacklogAgeMs: 16 * 60 * 1000 })?.condition).toBe(
 		"scan-backlog",
 	)
+})
+
+// the dispatchable scan count is the limit minus the backlog, never below zero, and the whole limit for an unread queue
+test("toDispatchableScanCount subtracts the backlog from the limit and keeps the limit for an unread queue", () => {
+	expect(toDispatchableScanCount({ pollerCount: 2, backlogCount: 30, oldestBacklogAgeMs: null })).toBe(70)
+	expect(toDispatchableScanCount({ pollerCount: 2, backlogCount: 500, oldestBacklogAgeMs: null })).toBe(0)
+	expect(toDispatchableScanCount(null)).toBe(100)
 })

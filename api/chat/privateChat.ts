@@ -12,6 +12,7 @@ import { db } from "../../db"
 import { topics } from "../../db/schema/topics"
 import { type ChatTurnInput, loadOrProvisionUserLiteLLMKey, streamChatReply } from "../../worker"
 import { topicLimit } from "../authorization"
+import { toSignedOutRejection } from "../bodyLimit"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
 import {
@@ -39,6 +40,9 @@ export const chatBodyLimit = bodyLimit({
 	maxSize: 26 * 1024 * 1024,
 	onError: (context) => context.json({ error: "Those attachments are too large." }, 413),
 })
+
+// a visitor's chat post is rejected before its body is read, with the error the gate gives a visitor's turn
+const chatSignedOutRejection = toSignedOutRejection("sign up required")
 
 // whether the user owns no topic yet
 async function ownsNoTopic(userId: string | null): Promise<boolean> {
@@ -263,6 +267,7 @@ export const privateChatRoute = new Hono<AppEnv>()
 	.post(
 		"/topics/:id/chat",
 		toolCallerRateLimiter,
+		chatSignedOutRejection,
 		chatBodyLimit,
 		zValidator("json", chatTurnPayload),
 		async (context) => {
@@ -293,6 +298,7 @@ export const privateChatRoute = new Hono<AppEnv>()
 	.post(
 		"/teams/:id/chat",
 		toolCallerRateLimiter,
+		chatSignedOutRejection,
 		chatBodyLimit,
 		zValidator("json", chatTurnPayload),
 		async (context) => {
@@ -334,6 +340,7 @@ export const privateChatRoute = new Hono<AppEnv>()
 	.post(
 		"/chat/new-topic",
 		toolCallerRateLimiter,
+		chatSignedOutRejection,
 		chatBodyLimit,
 		zValidator("json", chatTurnPayload),
 		async (context) => {

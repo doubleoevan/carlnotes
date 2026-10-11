@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test"
 import { CHAT_ATTACHMENT_TEXT_CHARS, clipAttachmentText, withAttachmentNote } from "@shared/contracts"
 import { type ChatAttachment, chatTurnPayload } from "@shared/payloads"
+import { restoreEnv } from "@shared/testEnv"
 import { resolveChatAttachments } from "./attachments"
 import { toAttachmentsByChatTurnId } from "./chatAttachmentReads"
 
@@ -21,7 +22,7 @@ async function withScanner(guardResponse: unknown, run: () => Promise<void>): Pr
 	try {
 		await run()
 	} finally {
-		Bun.env.LLM_GUARD_URL = originalGuardUrl
+		restoreEnv("LLM_GUARD_URL", originalGuardUrl)
 		await scanner.stop(true)
 	}
 }
@@ -29,13 +30,13 @@ async function withScanner(guardResponse: unknown, run: () => Promise<void>): Pr
 // run a test case with no scanner configured, so an llm-guard screen is a no-op
 async function withoutScanner(run: () => Promise<void>): Promise<void> {
 	const originalGuardUrl = Bun.env.LLM_GUARD_URL
-	Bun.env.LLM_GUARD_URL = undefined
+	delete Bun.env.LLM_GUARD_URL
 
 	// a failing case still puts the url back, so it cannot leak into the cases after it
 	try {
 		await run()
 	} finally {
-		Bun.env.LLM_GUARD_URL = originalGuardUrl
+		restoreEnv("LLM_GUARD_URL", originalGuardUrl)
 	}
 }
 

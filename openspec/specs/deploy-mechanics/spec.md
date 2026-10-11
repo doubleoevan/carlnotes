@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-deploy-health-and-migrations. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: The app service exposes a liveness route
 
 The app service SHALL answer `GET /api/health` with 200 and a JSON body reporting that the process is up. The route SHALL NOT query the database, and SHALL NOT require or resolve a session, so that an unreachable database never presents as a dead instance.
@@ -21,7 +23,7 @@ The app service SHALL answer `GET /api/health` with 200 and a JSON body reportin
 
 Pending migrations SHALL be applied by a script that runs once and exits, executed as a deploy job against the deployed image before the new service rolls out. The container start command SHALL NOT apply migrations, so that instances starting concurrently cannot race on the same migration.
 
-The script SHALL apply only migrations the database has not already recorded, SHALL resolve the migration folder relative to its own location rather than the working directory, and SHALL close its database connection so the job exits on its own.
+The script SHALL apply only migrations the database has not already recorded, SHALL resolve the migration folder relative to its own location rather than the working directory, and SHALL close its database connection so the job exits on its own. After migrating, the script SHALL set the app role's `statement_timeout` to 30 seconds in the app's database, as the request-capacity capability states, and a failure to set it, such as for a role without the privilege, SHALL be logged without failing the job.
 
 #### Scenario: A pending migration is applied once
 
@@ -37,6 +39,11 @@ The script SHALL apply only migrations the database has not already recorded, SH
 
 - **WHEN** a container starts
 - **THEN** it serves requests without applying any migration
+
+#### Scenario: The job bounds the role's statements
+
+- **WHEN** the job finishes migrating
+- **THEN** the role's statements in the app's database are cancelled after 30 seconds
 
 ### Requirement: One migration mechanism serves local and production
 
@@ -172,4 +179,3 @@ the worker SHALL NOT read it, and they SHALL reach Gemini only through the LiteL
 
 - **WHEN** the app and the worker start with no `GEMINI_API_KEY` in their environment
 - **THEN** they start normally, and a speech request through the proxy still succeeds
-

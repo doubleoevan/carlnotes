@@ -1,6 +1,7 @@
 // guard tests for the verdict reading: which detectors each type consults, the threshold, and the fail-open paths.
 import { expect, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { restoreEnv } from "@shared/testEnv"
 import { screenText, toFlaggedReason, toScreenVerdict } from "./guard"
 
 // each type reads only its own detectors out of the one scanner pass, so a hit outside them does not flag it
@@ -68,7 +69,7 @@ test("screenText passes the text if the scanner rejects it without naming a scan
 		expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 	} finally {
 		// put back the scanner url, fetch, and the spies
-		Bun.env.LLM_GUARD_URL = originalGuardUrl
+		restoreEnv("LLM_GUARD_URL", originalGuardUrl)
 		globalThis.fetch = originalFetch
 		consoleErrorSpy.mockRestore()
 		reportErrorSpy.mockRestore()
@@ -97,7 +98,7 @@ test("toScreenVerdict returns the redacted text on an accepted document", () => 
 test("screenText reports unflagged when no scanner is configured", async () => {
 	// clear the url so the run is deterministic regardless of the calling shell's environment
 	const originalGuardUrl = Bun.env.LLM_GUARD_URL
-	Bun.env.LLM_GUARD_URL = undefined
+	delete Bun.env.LLM_GUARD_URL
 
 	try {
 		// the caller's own text comes back untouched, so a disabled scanner changes nothing downstream
@@ -108,7 +109,7 @@ test("screenText reports unflagged when no scanner is configured", async () => {
 			outcome: "skipped",
 		})
 	} finally {
-		Bun.env.LLM_GUARD_URL = originalGuardUrl
+		restoreEnv("LLM_GUARD_URL", originalGuardUrl)
 	}
 })
 

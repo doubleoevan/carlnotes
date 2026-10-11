@@ -1,6 +1,13 @@
 // the Temporal client that the api and the sweep use to start durable workflows
 import type { ThresholdCrossing } from "@shared/monitoring"
-import { Client, Connection, WorkflowExecutionAlreadyStartedError, WorkflowNotFoundError } from "@temporalio/client"
+import { withTimeLimit } from "@shared/time"
+import {
+	Client,
+	Connection,
+	isGrpcDeadlineError,
+	WorkflowExecutionAlreadyStartedError,
+	WorkflowNotFoundError,
+} from "@temporalio/client"
 import type { ScanTrigger } from "./workflows/runTopicScanActivities"
 
 // the task queue the attachment worker polls, and the workflow it runs started by name
@@ -17,6 +24,9 @@ const SOURCE_WORKFLOW = "screenSourceWorkflow"
 
 // how long a task queue description may take before the scan sweep gives up on it and continues
 const QUEUE_DESCRIBE_TIMEOUT_MS = 10_000
+
+// how long a connect, a workflow start, and a cancel may each take before it fails
+const CLIENT_CALL_TIMEOUT_MS = 10_000
 
 // Temporal's TASK_QUEUE_TYPE_ACTIVITY, the Scan queue's activity side, where a Scan's activities wait for a scan slot
 const ACTIVITY_TASK_QUEUE_TYPE = 2
@@ -45,11 +55,13 @@ let clientPromise: Promise<Client> | undefined
 export async function startAttachmentWorkflow(attachmentId: string): Promise<void> {
 	// the workflow id is derived from the attachment id
 	const client = await getClient()
-	await client.workflow.start(ATTACHMENT_WORKFLOW, {
-		taskQueue: ATTACHMENT_TASK_QUEUE,
-		workflowId: `attachment-${attachmentId}`,
-		args: [attachmentId],
-	})
+	await withClientDeadline(client, () =>
+		client.workflow.start(ATTACHMENT_WORKFLOW, {
+			taskQueue: ATTACHMENT_TASK_QUEUE,
+			workflowId: `attachment-${attachmentId}`,
+			args: [attachmentId],
+		}),
+	)
 }
 
 /**
@@ -59,11 +71,13 @@ export async function startAttachmentWorkflow(attachmentId: string): Promise<voi
 export async function startSourceScreenWorkflow(sourceId: string): Promise<void> {
 	const client = await getClient()
 	try {
-		await client.workflow.start(SOURCE_WORKFLOW, {
-			taskQueue: SOURCE_TASK_QUEUE,
-			workflowId: `source-${sourceId}`,
-			args: [sourceId],
-		})
+		await withClientDeadline(client, () =>
+			client.workflow.start(SOURCE_WORKFLOW, {
+				taskQueue: SOURCE_TASK_QUEUE,
+				workflowId: `source-${sourceId}`,
+				args: [sourceId],
+			}),
+		)
 	} catch (error) {
 		// a Source whose llm-guard screen is already running needs no second one, and anything else is a real failure
 		if (!(error instanceof WorkflowExecutionAlreadyStartedError)) {
@@ -85,11 +99,13 @@ export async function startTopicScanWorkflow(
 	const client = await getClient()
 	try {
 		// the workflow id is derived from the topic
-		const workflowHandle = await client.workflow.start(SCAN_WORKFLOW, {
-			taskQueue: SCAN_TASK_QUEUE,
-			workflowId: `scan-${topicId}`,
-			args: [scanId, topicId, ownerId, trigger],
-		})
+		const workflowHandle = await withClientDeadline(client, () =>
+			client.workflow.start(SCAN_WORKFLOW, {
+				taskQueue: SCAN_TASK_QUEUE,
+				workflowId: `scan-${topicId}`,
+				args: [scanId, topicId, ownerId, trigger],
+			}),
+		)
 		// return the wait as a call that opens its long-poll only when asked
 		return { status: "started", whenFinished: () => workflowHandle.result() }
 	} catch (error) {
@@ -109,7 +125,7 @@ export async function cancelTopicScanWorkflow(topicId: string): Promise<ScanCanc
 	const client = await getClient()
 	try {
 		const workflowHandle = client.workflow.getHandle(`scan-${topicId}`)
-		await workflowHandle.cancel()
+		await withClientDeadline(client, () => workflowHandle.cancel())
 		// the result rejects with the cancellation once the workflow has wound down, which is the wait's end
 		return {
 			status: "cancelled",
@@ -135,18 +151,10 @@ export async function cancelTopicScanWorkflow(topicId: string): Promise<ScanCanc
 export async function describeScanQueue(): Promise<ScanQueueDescription> {
 	const client = await getClient()
 
-	// a describe that never responds would hang the sweep before it starts a single Scan.
-	// the time limit's timer stops once the describe finishes, so the one-shot sweep can exit
-	let timeLimitTimer: ReturnType<typeof setTimeout> | undefined
-	const timeLimit = new Promise<never>((_resolve, reject) => {
-		timeLimitTimer = setTimeout(
-			() => reject(new Error("describing the scan task queue timed out")),
-			QUEUE_DESCRIBE_TIMEOUT_MS,
-		)
-	})
-
-	// the stats a current server reports, and the backlog hint an older one returns instead
-	const queue = await Promise.race([
+	// the stats a current server reports, and the backlog hint an older one returns instead, under a time limit. a
+	// describe that never responds would hang the sweep before it starts a single Scan, and the limit's timer stops once
+	// the describe finishes, so the one-shot sweep can exit
+	const queue = await withTimeLimit(
 		client.workflowService.describeTaskQueue({
 			namespace: client.options.namespace,
 			taskQueue: { name: SCAN_TASK_QUEUE },
@@ -154,8 +162,9 @@ export async function describeScanQueue(): Promise<ScanQueueDescription> {
 			reportStats: true,
 			includeTaskQueueStatus: true,
 		}),
-		timeLimit,
-	]).finally(() => clearTimeout(timeLimitTimer))
+		QUEUE_DESCRIBE_TIMEOUT_MS,
+		() => new Error("describing the scan task queue timed out"),
+	)
 
 	// a server without stats gives a depth from its hint and no age
 	const pollerCount = queue.pollers?.length ?? 0
@@ -190,10 +199,23 @@ export function toScanBacklogCrossing({
 	}
 }
 
+// run one client call under the call deadline, so a server that never answers fails the call instead of the request
+function withClientDeadline<Result>(client: Client, runCall: () => Promise<Result>): Promise<Result> {
+	return client.connection.withDeadline(Date.now() + CLIENT_CALL_TIMEOUT_MS, runCall)
+}
+
+/**
+ * Whether a client call failed at its deadline, which leaves unknown whether Temporal acted on it.
+ */
+export function isClientDeadlineError(error: unknown): boolean {
+	return isGrpcDeadlineError(error)
+}
+
 // the reused Temporal client instance, connected to the TEMPORAL_ADDRESS endpoint on first use
 function getClient(): Promise<Client> {
-	// connect once and reuse the client. clear a failed connection so the next call connects again
-	clientPromise ??= Connection.connect({ address: Bun.env.TEMPORAL_ADDRESS })
+	// connect once and reuse the client, giving the connect the call deadline. clear a failed connection so the next
+	// call connects again
+	clientPromise ??= Connection.connect({ address: Bun.env.TEMPORAL_ADDRESS, connectTimeout: CLIENT_CALL_TIMEOUT_MS })
 		.then((connection) => new Client({ connection }))
 		.catch((error: unknown) => {
 			clientPromise = undefined

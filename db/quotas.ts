@@ -1,6 +1,7 @@
 // per-user limits, the month's spend, and the podcast episode checks
 import { dailyFrequencies, isAdminRole } from "@shared/enums"
 import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, type UserAccess, userBudgetCents } from "@shared/plans"
+import { DAY_MS } from "@shared/time"
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm"
 import { db } from "."
 import { incrementRateLimitWindow, isWithinRateLimit } from "./redis"
@@ -13,9 +14,6 @@ import { scans } from "./schema/scans"
 import { teamMembers } from "./schema/teams"
 import { topics } from "./schema/topics"
 import { users } from "./schema/users"
-
-// one day in milliseconds, the suggestion rate limit window and the unit that invite and account ages are measured in
-const DAY_MS = 24 * 60 * 60 * 1000
 
 // the invite-limit factors: a first-week account reaches a fifth of its base, a sender whose week-old
 const YOUNG_ACCOUNT_DAYS = 7
@@ -34,7 +32,7 @@ type MonthlySpend = { scanDollars: number; chatDollars: number; podcastEpisodeDo
 const DAILY_TEAM_LIMIT = 20
 
 // how many source-suggestion model calls a user may make in a day, so nobody drains the budget on suggestions
-const DAILY_SUGGESTION_LIMIT = 300
+const DAILY_SUGGESTION_LIMIT = 30
 
 /**
  * Counts one suggestion against the user's UTC day and returns whether the suggestion is within the daily limit.

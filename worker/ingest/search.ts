@@ -1,7 +1,12 @@
 // the search ingester
+
 import { generateText, Output } from "ai"
+import { eq } from "drizzle-orm"
 import { z } from "zod"
+import { db } from "../../db"
+import { topics } from "../../db/schema/topics"
 import { buildTopicScanContext } from "../attach"
+import { loadOrProvisionUserLiteLLMKey } from "../litellm"
 import { cheapModel } from "../models.ts"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch.ts"
@@ -21,11 +26,14 @@ const EXA_ENDPOINT = "https://api.exa.ai/search"
 
 // read the topic's context, generate queries from it, search per query, and merge the deduped Resources
 export const searchIngester: SourceIngester = async (source: Source) => {
-	// the context combines the topic's prompt with its attachments along with the topic name to be used for query generation
-	const { name: topicName, context: topicContext } = await buildTopicScanContext(source.topicId)
+	// read the topic's context and name, and the owner's LiteLLM key that bills the query generation
+	const [{ name: topicName, context: topicContext }, litellmApiKey] = await Promise.all([
+		buildTopicScanContext(source.topicId),
+		loadOrProvisionTopicOwnerLiteLLMKey(source.topicId),
+	])
 
 	// generate search queries from the context, then run them and keep whichever succeeds
-	const searchQueries = await generateSearchQueries({ topicContext, topicName })
+	const searchQueries = await generateSearchQueries({ topicContext, topicName, litellmApiKey })
 	const searchResponses = await runSearches(searchQueries)
 
 	// merge search query results. sum the per-search cost and collect the Resources
@@ -67,22 +75,32 @@ export async function buildSearchPrompt(context: string, name: string): Promise<
 	return { prompt, name: promptName, registryPrompt }
 }
 
-// the topic's context and its name, which the search queries are written from
-type GenerateSearchQueriesOptions = { topicContext: string; topicName: string }
+// the topic's context and its name, which the search queries are written from, and the key that bills the writing
+type GenerateSearchQueriesOptions = { topicContext: string; topicName: string; litellmApiKey?: string }
+
+// the LiteLLM key of a topic's owner, created first if the owner has none. a missing topic throws
+async function loadOrProvisionTopicOwnerLiteLLMKey(topicId: string): Promise<string> {
+	const [topic] = await db.select({ ownerId: topics.ownerId }).from(topics).where(eq(topics.id, topicId))
+	if (!topic) {
+		throw new Error(`topic ${topicId} not found`)
+	}
+	return loadOrProvisionUserLiteLLMKey(topic.ownerId)
+}
 
 /**
- * Writes a limited list of search queries from the topic's context with the cheap model.
+ * Writes a limited list of search queries from the topic's context with the cheap model, billed to the given key.
  */
 export async function generateSearchQueries({
 	topicContext,
 	topicName,
+	litellmApiKey,
 }: GenerateSearchQueriesOptions): Promise<string[]> {
 	// fetch and write the prompt
 	const searchPrompt = await buildSearchPrompt(topicContext, topicName)
 
 	// write the queries as structured output. promptTelemetry links the registry version to the trace
 	const { output } = await generateText({
-		model: cheapModel(),
+		model: cheapModel(litellmApiKey),
 		output: Output.object({ schema: z.object({ queries: z.array(z.string()) }) }),
 		prompt: searchPrompt.prompt,
 		...promptTelemetry(searchPrompt),

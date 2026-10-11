@@ -120,10 +120,14 @@ model_list:
 # the app's own speech rates are in worker/budget.ts and follow what LiteLLM charges
 
 # drop provider-unsupported params instead of erroring. Fireworks embeddings reject the encoding_format that the AI SDK
-# sends. there is no proxy-wide max_budget. spend is limited per virtual key, created per user at signup and managed in
-# LiteLLM itself, and the Fireworks prepaid balance is the real limit behind those keys
+# sends. there is no proxy-wide max_budget yet. spend is limited per virtual key, created per user at signup and managed
+# in LiteLLM itself, and the Fireworks prepaid balance is the real limit behind those keys. the two lines below are the
+# proxy-wide limit: every key together may spend max_budget dollars per budget_duration, and the proxy rejects every call
+# past it until the window resets. set them from a month of measured spend before a launch, and raise them as measured spend grows
 litellm_settings:
   drop_params: true
+  # max_budget: 500
+  # budget_duration: 30d
 
 # retry a call once if it hits its model's timeout. a rate limit or a server error keeps the router's default of two
 # retries

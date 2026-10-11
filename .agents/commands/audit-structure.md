@@ -474,6 +474,22 @@ Check for:
    - `SERVER_RENDERED_PREFIXES` in `ui/src/components/common/AnchorLink.tsx` (now `SERVER_PATH_PREFIXES`, with `/api`
      among them), and the bare `<a>` for an `/api` download or image link with its "plain anchor" comment (now
      `AnchorLink`, which renders a server path as a plain anchor and passes `download`, `target`, and `rel` through)
+   - the viral-day splits of 2026-10-11, each moved whole: `readRedisExtraGauges` from `db/redis.ts` (now
+     `db/redisGauges.ts`); `scrubContent` and `scrubTransaction` from `shared/monitoring.ts` (now
+     `shared/monitoringScrub.ts`, with their tests in `monitoringScrub.test.ts`); `avatarsRoute` from `api/avatars.ts`
+     (now `api/avatarsRoute.ts`); `billingRoute` from `api/billing.ts` (now `api/billingRoute.ts`);
+     `startUndispatchedScans` and `reportScanQueue` from `worker/schedule.ts` (now `worker/scanQueue.ts`); and the
+     test splits `api/index.test.ts` (now beside `pageGuards.test.ts` over `indexTestFixtures.ts`) and
+     `worker/schedule.test.ts` (now beside `scheduledTopicFilter.test.ts`)
+   - `INGEST_TOTAL_TIMEOUT_MS` and `REVIEW_TOTAL_TIMEOUT_MS` (removed: ingest and review now share
+     `QUEUED_STAGE_TIMEOUT_MS` as their schedule-to-close bound, and `MAX_SCAN_DURATION_MS` derives from it), `toSpendLimit`
+     (now `toDollarSetting` in `worker/budget.ts`, which reads any setting in dollars), and the local `DAY_MS` copies in
+     `db/quotas.ts`, `worker/schedule.ts`, `worker/retryPendingObjectDeletions.test.ts`, and the schedule tests (now
+     `DAY_MS` in `shared/time.ts`, beside `withTimeLimit`)
+   - `toInstantSetTimeout` in `db/redisFakeServer.ts` (now `toInstantReconnectSetTimeout`, which speeds and records only
+     the reconnect timers, beside `toEveryTimerInstantSetTimeout` for every timer), and `clearTopicSectionIdCache` (now
+     `clearSharedTopicFeedCaches`, which drops the visitors' feeds with the section ids). `loadMoreTopics` is still the
+     database read, and the page reads through `readMoreTopics`, its one-minute Redis copy
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -2,7 +2,9 @@
 
 ## Purpose
 TBD - created by archiving change add-topic-coffee-talk-chat. Update Purpose after archive.
+
 ## Requirements
+
 ### Requirement: A turn's retrieval context is assembled from the Topic's own material
 Each turn SHALL assemble its context from the Topic's prompt, the selected Findings with their relevance scores and relevance explanations, the stored Resource content behind those Findings, and the most recent Scan summaries. Resource text SHALL come from the Resource's stored content where a content key exists and SHALL fall back to its snippet otherwise.
 
@@ -404,3 +406,19 @@ The edit chat SHALL offer `updateTopicFields` beside the prompt and source tools
 - **WHEN** an editor agrees to tags Carl proposed
 - **THEN** the tool writes them, a toast says the settings were saved, and the page reloads with them
 
+### Requirement: A signed-out chat post is rejected before its body is read
+
+A post to a topic chat, a team chat, or the new-topic chat by a request with no session SHALL be answered 401 with
+"sign up required" before its body is read, and a post to a chat room by such a request SHALL be answered 404, as a
+missing chat room is, before its body is read, so an anonymous request never holds a chat body's attachments in
+memory. A signed-in post SHALL then pass the route's own body limit and its authorization.
+
+#### Scenario: An anonymous post with large attachments
+
+- **WHEN** a signed-out caller posts a chat turn with two megabytes of attachments
+- **THEN** it is answered 401 at once, and its body is never read
+
+#### Scenario: An anonymous chat room post
+
+- **WHEN** a signed-out caller posts a chat room message with two megabytes of attachments
+- **THEN** it is answered 404 at once, as a missing chat room is, and its body is never read
