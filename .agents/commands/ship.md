@@ -72,7 +72,10 @@ left apart and why.
 List every file that the diff adds or changes with its line count, longest
 first, beside its line count on origin/main: `git diff --name-only <origin/main sha>`
 plus the untracked files, then `wc -l` and `git show <origin/main sha>:<path>`.
-Generated, vendored, fixture, and result files are exempt.
+Generated, vendored, fixture, and result files are exempt. A file whose diff
+changes only its import lines, as when a module it imports moves or is renamed,
+does not count as added, changed, or touched here: leave it off the list and
+never split it for this change.
 
 - A file that this diff adds over 400 lines or grows past 400, or that holds more
   than one concern after the diff, gets split in this change even if the moved
@@ -80,10 +83,11 @@ Generated, vendored, fixture, and result files are exempt.
   their own module, pure helpers out of a module that sets something up on
   import. Split within the module, name each new file for what it holds, and
   update the module's AGENTS.md if it lists files (step 2).
-- A file that was over 400 lines on origin/main and that the diff only touches
-  is split in this change too, by the same rule. Thorough beats narrow: a split
-  the change can do now is done now, never filed as its own change. A file left
-  whole goes in the report with the reason it is one concern.
+- A file that was over 400 lines on origin/main and that the diff only touches,
+  beyond its import lines, is split in this change too, by the same rule.
+  Thorough beats narrow: a split the change can do now is done now, never filed
+  as its own change. A file left whole goes in the report with the reason it is
+  one concern.
 
 Rerun step 4, and report each long file, what was split out of it, and each file
 left whole with the reason.
