@@ -3,7 +3,7 @@
 # the app service image: the Hono api plus the ui's built browser files and server build, started under Doppler.
 # the litellm proxy is a separate service and builds from infra/litellm/Dockerfile, not this file.
 # Bun is pinned to the version in .bun-version, which CI also reads, and to that tag's digest
-FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS build
+FROM oven/bun:1.4.2@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 AS build
 WORKDIR /app
 
 # install against the committed lockfile on its own layer, so it caches until a dependency actually changes
@@ -34,7 +34,7 @@ RUN bun run build:docs
 
 # the runtime includes only what serving a request needs: production dependencies, the modules Bun executes, and the
 # built ui and docs. the toolchain and every dev dependency stay behind in the build stage
-FROM oven/bun:1.3.14@sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4 AS runtime
+FROM oven/bun:1.4.2@sha256:9114c058aeae42162ee16dd5084b95fe9473970bb6bcb5b232ab1630f0546895 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 
