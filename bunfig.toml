@@ -1,3 +1,8 @@
+# installs: a package version must be three days old before an add or an update installs it, the window in which a
+# hijacked release is usually pulled
+[install]
+minimumReleaseAge = 259200
+
 # test coverage settings. coverage itself stays opt-in: the preflight gate passes --coverage per invocation
 [test]
 # no text table. bun fails to write one this large to a pipe, and CI's output is a pipe

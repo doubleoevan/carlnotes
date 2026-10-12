@@ -1,29 +1,23 @@
-// Redis store tests over fake clients: null on a failure, the cache, the rate limit window counter, the rate limit slot,
-// the gauges, pub/sub, and reconnects
+// Redis store tests over fake clients: null on a failure, the cache, pub/sub, and reconnects
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import {
 	addSubscriberReconnectListener,
 	cacheJson,
-	decrementRateLimitWindow,
-	deleteRedisKey,
-	incrementRateLimitWindow,
-	isWithinRateLimit,
+	deleteRedisKeys,
 	publishToChannel,
 	readAndResetRedisGauges,
-	readRedisExtraGauges,
 	readRedisJson,
 	replaceRedisJson,
 	runWithRedis,
-	setRedisClientBuilder,
 	subscribeToChannel,
-	takeRateLimitSlot,
 } from "./redis"
 import {
 	dropConnection,
 	type FakeRedisClient,
 	type FakeRedisServer,
-	toFakeRedisClient,
-	toInstantSetTimeout,
+	startFakeRedisStore,
+	toEveryTimerInstantSetTimeout,
+	toInstantReconnectSetTimeout,
 	waitUntil,
 } from "./redisFakeServer"
 
@@ -31,25 +25,9 @@ import {
 let fakeRedisServer: FakeRedisServer
 let fakeRedisClients: FakeRedisClient[]
 beforeEach(() => {
-	// a fresh server with no clients
-	fakeRedisServer = {
-		storedValueByKey: new Map(),
-		slotFreesAtByKey: new Map(),
-		subscribedClientsByChannel: new Map(),
-		remainingConnectFailureCount: 0,
-		remainingSubscribeFailureCount: 0,
-		isCommandFailing: false,
-		connectCount: 0,
-		subscribeGate: null,
-	}
-	fakeRedisClients = []
-
-	// build the store's clients on this fake server, record each client, and silence the console
-	setRedisClientBuilder(() => {
-		const client = toFakeRedisClient(fakeRedisServer)
-		fakeRedisClients.push(client)
-		return client
-	})
+	const fakeRedisStore = startFakeRedisStore()
+	fakeRedisServer = fakeRedisStore.fakeRedisServer
+	fakeRedisClients = fakeRedisStore.fakeRedisClients
 	spyOn(console, "error").mockImplementation(() => {})
 })
 
@@ -83,7 +61,7 @@ test("cacheJson serves a hit, stores a miss, and reloads a deleted key", async (
 	// the second read returns the first read's value, and a delete makes the third read load again
 	expect(await cacheJson({ key: "c", ttlMs: 1000, load })).toEqual({ count: 1 })
 	expect(await cacheJson({ key: "c", ttlMs: 1000, load })).toEqual({ count: 1 })
-	await deleteRedisKey("c")
+	await deleteRedisKeys("c")
 	expect(await cacheJson({ key: "c", ttlMs: 1000, load })).toEqual({ count: 2 })
 	expect(readAndResetRedisGauges()).toMatchObject({ cacheHitCount: 1, cacheMissCount: 2, errorCount: 0 })
 })
@@ -110,6 +88,20 @@ test("a stored value that does not parse reads as a failure", async () => {
 	expect(readAndResetRedisGauges()).toMatchObject({ cacheHitCount: 0, cacheMissCount: 0, errorCount: 2 })
 })
 
+// one delete removes several keys and counts the ones that were there, no keys sends nothing, and a failure is null
+test("deleteRedisKeys deletes several keys at once and returns how many were there, or null on a failure", async () => {
+	// two stored keys and a missing one
+	fakeRedisServer.storedValueByKey.set("a", "1")
+	fakeRedisServer.storedValueByKey.set("b", "2")
+	expect(await deleteRedisKeys("a", "b", "missing")).toBe(2)
+	expect(fakeRedisServer.storedValueByKey.size).toBe(0)
+	expect(await deleteRedisKeys()).toBe(0)
+
+	// a failing command returns null
+	fakeRedisServer.isCommandFailing = true
+	expect(await deleteRedisKeys("a")).toBeNull()
+})
+
 // a replace rewrites a stored key and leaves a missing key missing
 test("replaceRedisJson rewrites a stored key and never creates a missing key", async () => {
 	fakeRedisServer.storedValueByKey.set("present", JSON.stringify({ name: "old" }))
@@ -117,79 +109,6 @@ test("replaceRedisJson rewrites a stored key and never creates a missing key", a
 	await replaceRedisJson({ key: "missing", value: { name: "new" }, ttlMs: 1000 })
 	expect(fakeRedisServer.storedValueByKey.get("present")).toBe(JSON.stringify({ name: "new" }))
 	expect(fakeRedisServer.storedValueByKey.has("missing")).toBe(false)
-})
-
-// the first hit counts one with the whole rate limit window left, the second counts two, a hit that Redis could not
-// count counts in memory under the same key, and the next hit Redis counts reads Redis's count
-test("incrementRateLimitWindow counts hits in Redis, in memory while Redis is down, and in Redis again after", async () => {
-	// two hits on one rate limit window
-	const firstRateLimitWindowHit = await incrementRateLimitWindow("w", 60_000)
-	const secondRateLimitWindowHit = await incrementRateLimitWindow("w", 60_000)
-	expect(firstRateLimitWindowHit.count).toBe(1)
-	expect(secondRateLimitWindowHit.count).toBe(2)
-	expect(firstRateLimitWindowHit.resetAt - Date.now()).toBeGreaterThan(59_000)
-
-	// two hits count in memory while commands fail, starting a memory window of their own
-	fakeRedisServer.isCommandFailing = true
-	const firstMemoryRateLimitWindowHit = await incrementRateLimitWindow("w", 60_000)
-	expect(firstMemoryRateLimitWindowHit.count).toBe(1)
-	expect(firstMemoryRateLimitWindowHit.resetAt - Date.now()).toBeGreaterThan(59_000)
-	expect((await incrementRateLimitWindow("w", 60_000)).count).toBe(2)
-
-	// the next hit Redis counts is Redis's third, with nothing added from memory
-	fakeRedisServer.isCommandFailing = false
-	expect((await incrementRateLimitWindow("w", 60_000)).count).toBe(3)
-})
-
-// a refund lowers an open rate limit window, a rate limit window that already closed stays closed, and a refund
-// that Redis could not run lowers the memory window
-test("decrementRateLimitWindow lowers an open rate limit window, leaves a closed one closed, and refunds the memory window", async () => {
-	// two hits, then one refund
-	await incrementRateLimitWindow("w", 60_000)
-	await incrementRateLimitWindow("w", 60_000)
-	await decrementRateLimitWindow("w")
-	expect(fakeRedisServer.storedValueByKey.get("w")).toBe("1")
-
-	// a refund on a key whose rate limit window expired creates nothing
-	await decrementRateLimitWindow("expired")
-	expect(fakeRedisServer.storedValueByKey.has("expired")).toBe(false)
-
-	// two memory hits and one memory refund leave the next memory hit at two
-	fakeRedisServer.isCommandFailing = true
-	await incrementRateLimitWindow("m", 60_000)
-	await incrementRateLimitWindow("m", 60_000)
-	await decrementRateLimitWindow("m")
-	expect((await incrementRateLimitWindow("m", 60_000)).count).toBe(2)
-})
-
-// one call holds a rate limit slot for its length, the next call waits about that long, and a failed take returns null
-test("takeRateLimitSlot takes a free slot, returns the wait while another call holds it, and returns null while Redis is down", async () => {
-	// one call takes the slot, and the next has to wait about the slot's whole length
-	const rateLimitSlot = { key: "s", slotMs: 60_000 }
-	expect(await takeRateLimitSlot(rateLimitSlot)).toBe(0)
-	expect(await takeRateLimitSlot(rateLimitSlot)).toBeGreaterThan(59_000)
-
-	// a take returns null while commands fail
-	fakeRedisServer.isCommandFailing = true
-	expect(await takeRateLimitSlot(rateLimitSlot)).toBeNull()
-})
-
-// a command connection that cannot connect crosses the Redis-down threshold with the minute's error count
-test("readRedisExtraGauges crosses the Redis-down threshold while the command connection cannot connect", async () => {
-	fakeRedisServer.remainingConnectFailureCount = 1
-	const redisExtraGauges = await readRedisExtraGauges()
-	expect(redisExtraGauges.gauges).toEqual({
-		redis: { isConnected: false, cacheHitCount: 0, cacheMissCount: 0, errorCount: 1 },
-	})
-	expect(redisExtraGauges.thresholdCrossings.map((thresholdCrossing) => thresholdCrossing.condition)).toEqual([
-		"redis-down",
-	])
-})
-
-// a count at the limit passes, and a count past the limit fails
-test("isWithinRateLimit allows up to the limit", () => {
-	expect(isWithinRateLimit({ count: 10, resetAt: 0 }, 10)).toBe(true)
-	expect(isWithinRateLimit({ count: 11, resetAt: 0 }, 10)).toBe(false)
 })
 
 // a subscriber's handler runs on a publish, a repeat subscribe changes nothing, and a failed publish returns false
@@ -219,7 +138,7 @@ test("a dropped subscriber connection resubscribes on a fresh client and deliver
 	expect([...(fakeRedisServer.subscribedClientsByChannel.get("notes") ?? [])]).toEqual([firstSubscriberClient])
 
 	// drop the connection with an instant reconnect timer, and wait for a fresh client to subscribe the channel
-	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantSetTimeout([]))
+	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantReconnectSetTimeout([]))
 	dropConnection(firstSubscriberClient)
 	await waitUntil(
 		() => fakeRedisClients.length === 2 && fakeRedisServer.subscribedClientsByChannel.get("notes")?.size === 1,
@@ -241,7 +160,9 @@ test("a failed subscribe starts one reconnect and the fresh client subscribes ev
 	subscribeToChannel("notes", (channelMessage) => receivedChannelMessages.push(`notes ${channelMessage}`))
 	await Bun.sleep(0)
 	const reconnectDelaysMs: number[] = []
-	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantSetTimeout(reconnectDelaysMs))
+	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+		toInstantReconnectSetTimeout(reconnectDelaysMs),
+	)
 	fakeRedisServer.remainingSubscribeFailureCount = 1
 	subscribeToChannel("room", (channelMessage) => receivedChannelMessages.push(`room ${channelMessage}`))
 	await waitUntil(() => fakeRedisServer.subscribedClientsByChannel.get("room")?.size === 1)
@@ -265,10 +186,16 @@ test("a failed subscribe starts one reconnect and the fresh client subscribes ev
 test("the reconnect delay doubles to thirty seconds and resets on connect", async () => {
 	// seven failed connects with instant timers
 	const reconnectDelaysMs: number[] = []
-	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantSetTimeout(reconnectDelaysMs))
+	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(
+		toInstantReconnectSetTimeout(reconnectDelaysMs),
+	)
 	fakeRedisServer.remainingConnectFailureCount = 7
 	await runWithRedis("get", (client) => client.get("k"))
 	await waitUntil(() => fakeRedisClients.at(-1)?.connected === true)
+
+	// a command on the fresh connection responds before its deadline, and its deadline timer records no reconnect delay
+	fakeRedisServer.storedValueByKey.set("k", "stored")
+	expect(await runWithRedis("get", (client) => client.get("k"))).toBe("stored")
 	expect(reconnectDelaysMs).toEqual([1000, 2000, 4000, 8000, 16_000, 30_000, 30_000])
 	expect(fakeRedisClients.at(-1)?.connected).toBe(true)
 	expect(readAndResetRedisGauges().errorCount).toBe(7)
@@ -317,10 +244,26 @@ test("a reconnect listener runs after a drop and not on the first connect", asyn
 	expect(reconnectCount).toBe(0)
 
 	// a drop with an instant reconnect timer brings a fresh client that subscribes the channel, then the listener runs once
-	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantSetTimeout([]))
+	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toInstantReconnectSetTimeout([]))
 	dropConnection(fakeRedisClients.at(-1) as FakeRedisClient)
 	await waitUntil(() => fakeRedisClients.length === 2 && reconnectCount === 1)
 	expect(fakeRedisServer.subscribedClientsByChannel.get("notes")?.size).toBe(1)
 	expect(reconnectCount).toBe(1)
+	setTimeoutSpy.mockRestore()
+})
+
+// a command that never settles returns null at the deadline and counts an error, and three misses in a row replace the client
+test("a stalled command returns null at the deadline, and three stalls in a row replace the client", async () => {
+	// the deadline and the reconnect wait both fire at once
+	const setTimeoutSpy = spyOn(globalThis, "setTimeout").mockImplementation(toEveryTimerInstantSetTimeout())
+	fakeRedisServer.isCommandStalled = true
+
+	// each stalled command returns null and counts one error, and the third miss brings a fresh client
+	expect(await runWithRedis("get", (client) => client.get("k"))).toBeNull()
+	expect(await runWithRedis("get", (client) => client.get("k"))).toBeNull()
+	expect(fakeRedisClients.length).toBe(1)
+	expect(await runWithRedis("get", (client) => client.get("k"))).toBeNull()
+	expect(fakeRedisClients.length).toBe(2)
+	expect(readAndResetRedisGauges().errorCount).toBe(3)
 	setTimeoutSpy.mockRestore()
 })

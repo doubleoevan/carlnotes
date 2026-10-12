@@ -1,31 +1,41 @@
 // the server that owns the origin
 import { extname, resolve } from "node:path"
+import { toPositiveInteger } from "@shared/envSettings"
 import { reportError, startMonitoring } from "@shared/monitoring"
 import { startRuntimeGauges } from "@shared/runtimeGauges"
 import { DEGRADED_RENDER_HEADER } from "@shared/seo"
+import { withTimeLimit } from "@shared/time"
+import { getSessionCookie } from "better-auth/cookies"
 import { oAuthDiscoveryMetadata, oAuthProtectedResourceMetadata } from "better-auth/plugins"
 import { sql } from "drizzle-orm"
-import type { Context } from "hono"
+import type { Context, Next } from "hono"
 import { Hono } from "hono"
 import { serveStatic } from "hono/bun"
 import { HTTPException } from "hono/http-exception"
 import { db, readPoolGauges, sizeConnectionPool } from "../db"
-import { readRedisExtraGauges } from "../db/redis"
+import { readRedisExtraGauges } from "../db/redisGauges"
 import { runWithRequestMemo } from "../db/requestMemo"
 import { startTelemetry } from "../worker"
 import { apiRoute } from "./api"
 import { auth } from "./auth"
 import { PROVIDER_PHOTO_ORIGINS } from "./avatars"
+import { defaultBodyLimit } from "./bodyLimit"
 import { trackBotFetches } from "./botAnalytics"
-import { contentRoute } from "./content"
+import { BLOG_INDEX_PATH, BLOG_PAGE_PATH, contentRoute } from "./content"
 import type { AppEnv } from "./currentUser"
 import { documentsRoute } from "./documents"
-import { setRenderedCacheHeaders } from "./edgeCache"
+import {
+	IMMUTABLE_CACHE_CONTROL,
+	NO_STORE_CACHE_CONTROL,
+	PUBLIC_FILE_HEADERS,
+	REVALIDATE_CACHE_CONTROL,
+	renderedCacheHeaders,
+} from "./edgeCache"
 import { faviconsRoute } from "./favicons"
 import { mcpRoute } from "./mcp/server"
 import { resolveToolCaller } from "./mcp/toolCaller"
-import { toolCallerRateLimiter } from "./rateLimit"
-import { releasesRoute } from "./releases"
+import { pageRenderRateLimiter, toolCallerRateLimiter } from "./rateLimit"
+import { RELEASE_PATH, RELEASES_PATH, releasesRoute } from "./releases"
 import { traceRequest } from "./requestTracing"
 import { checkTrustedProxies } from "./trustedProxies"
 
@@ -44,6 +54,45 @@ const DEGRADED_RENDER_RETRY_AFTER_SECONDS = 60
 // how long the deep health check waits for the database before it responds 503
 const DEEP_HEALTH_TIMEOUT_MS = 2000
 
+// the largest request body the server reads, above CHAT_BODY_LIMIT_BYTES, the largest any route accepts
+const MAX_REQUEST_BODY_BYTES = 32 * 1024 * 1024
+
+// how many visitor pages this replica renders at once unless RENDER_CONCURRENCY sets it. a visitor's render past it is
+// shed
+const DEFAULT_RENDER_CONCURRENCY = 16
+
+// how long the browser waits before retrying a shed render, in seconds
+const BUSY_RENDER_RETRY_AFTER_SECONDS = 2
+
+// the click ids that ad and social platforms append to a shared link
+const CLICK_ID_PARAMETERS = new Set([
+	"fbclid",
+	"gclid",
+	"gclsrc",
+	"dclid",
+	"gbraid",
+	"wbraid",
+	"msclkid",
+	"twclid",
+	"ttclid",
+	"igshid",
+	"li_fat_id",
+	"rdt_cid",
+	"epik",
+	"qclid",
+	"sccid",
+	"irclid",
+	"_kx",
+	"mc_eid",
+])
+
+// the page routes the api renders itself instead of the ui's server: the blog and the release pages. each names its
+// route exactly, so a request passes the page guards once
+const API_PAGE_ROUTE_PATHS = [BLOG_INDEX_PATH, BLOG_PAGE_PATH, RELEASES_PATH, RELEASE_PATH]
+
+// how many visitor pages this replica is rendering now
+let activeVisitorRenderCount = 0
+
 // the ui's server handler, as the server entry exports it
 type UiServer = { fetch: (request: Request) => Promise<Response> }
 
@@ -60,13 +109,28 @@ await sizeConnectionPool()
 startRuntimeGauges({ processName: "api", readPoolGauges, readExtraGauges: readRedisExtraGauges })
 
 // the default policy, used unless a route sets its own. images may come from a composer's local preview,
-// github, and an avatar's photo host. frames may come from YouTube and Cloudflare's Turnstile challenge
+// github, and an avatar's photo host. frames may come from YouTube and Cloudflare's Turnstile challenge.
+// a base url and a form's action stay on this origin
 const CONTENT_SECURITY_POLICY = [
 	`img-src 'self' blob: data: https://raw.githubusercontent.com ${[...PROVIDER_PHOTO_ORIGINS].join(" ")}`,
 	"frame-src 'self' https://www.youtube-nocookie.com https://challenges.cloudflare.com",
 	"object-src 'none'",
 	"frame-ancestors 'none'",
+	"base-uri 'self'",
+	"form-action 'self'",
 ].join("; ")
+
+// the headers every response includes unless its route set its own: the policy, the referrer a cross-origin link sees
+// as the origin alone, and a browser that never sniffs a response's type
+const DEFAULT_RESPONSE_HEADERS = {
+	"Content-Security-Policy": CONTENT_SECURITY_POLICY,
+	"Referrer-Policy": "strict-origin-when-cross-origin",
+	"X-Content-Type-Options": "nosniff",
+}
+
+// the page guards every rendered page passes ahead of its route: the rendered cache headers, the page render limit,
+// and the click id redirect
+const PAGE_GUARDS = [renderedCacheHeaders, pageRenderRateLimiter, redirectClickIdUrl] as const
 
 // one server serves the api, the pages, and the built ui
 const server = new Hono<AppEnv>()
@@ -77,11 +141,15 @@ const server = new Hono<AppEnv>()
 	// name each traced request by its route and count its queries,
 	// ahead of the rest so the count includes every other middleware's queries
 	.use(traceRequest)
-	// the content security policy, set on the way back out so every route includes it. a route that set its own keeps it
+	// the default response headers, set on the way back out so every route includes them. a route that set its own
+	// keeps it
 	.use(async (context, next) => {
 		await next()
-		if (!context.res.headers.has("Content-Security-Policy")) {
-			context.header("Content-Security-Policy", CONTENT_SECURITY_POLICY)
+		// set each default header the route did not set
+		for (const [headerName, headerValue] of Object.entries(DEFAULT_RESPONSE_HEADERS)) {
+			if (!context.res.headers.has(headerName)) {
+				context.header(headerName, headerValue)
+			}
 		}
 	})
 	// check once per process that TRUSTED_PROXIES resolves the x-forwarded-for header, and warn if not
@@ -107,9 +175,11 @@ const server = new Hono<AppEnv>()
 		context.set("toolCaller", await resolveToolCaller(context.req.raw.headers))
 		await next()
 	})
-	.use("/mcp/*", toolCallerRateLimiter)
+	.use("/mcp/*", toolCallerRateLimiter, defaultBodyLimit)
 	.route("/", mcpRoute)
 	.route("/", apiRoute)
+	// the blog and release pages pass the page guards ahead of their routes
+	.on(["GET", "HEAD"], API_PAGE_ROUTE_PATHS, ...PAGE_GUARDS)
 	// the release pages and the GitHub webhook that writes the rows they read. the webhook's path comes
 	// after /api, so it is mounted ahead of the catch-all below instead of beside the other page routes
 	.route("/", releasesRoute)
@@ -135,15 +205,38 @@ const server = new Hono<AppEnv>()
 	})
 	// the built ui's files: hashed assets and whatever vite copied from the public folder
 	.on(["GET", "HEAD"], "*", serveStatic({ root: UI_CLIENT_ROOT, onFound: setBundleCacheControl }))
-	// redirect a page url that ends in a slash permanently to the url without it. the leading slashes collapse to
-	// one, so the redirect stays on this site
+	// every request past this point renders a page with the ui's server, so it passes the page guards here
+	.on(["GET", "HEAD"], "*", ...PAGE_GUARDS)
+	// redirect a page url that ends in a slash permanently to the url without it, kept on this site
 	.on(["GET", "HEAD"], "*", (context, next) => {
 		const { pathname, search } = new URL(context.req.url)
-		const pagePath = `/${pathname.replace(/^\/+|\/+$/g, "")}`
+		const pagePath = toSameSitePath(pathname.replace(/\/+$/, ""))
 		return pathname.length > 1 && pathname.endsWith("/") ? context.redirect(`${pagePath}${search}`, 301) : next()
 	})
 	// render every other GET as a page with the ui's server
 	.on(["GET", "HEAD"], "*", (context) => renderUiPage(context.req.raw))
+
+// redirect a page url with a click id permanently to the url without it, which is the one the edge caches
+async function redirectClickIdUrl(context: Context, next: Next): Promise<Response | undefined> {
+	// pass a url with no click id on to the page
+	const url = new URL(context.req.url)
+	const clickIdParameters = [...url.searchParams.keys()].filter((key) => CLICK_ID_PARAMETERS.has(key))
+	if (clickIdParameters.length === 0) {
+		await next()
+		return
+	}
+
+	// delete the click ids from the url, and redirect to its path and query kept on this site
+	for (const clickIdParameter of clickIdParameters) {
+		url.searchParams.delete(clickIdParameter)
+	}
+	return context.redirect(`${toSameSitePath(url.pathname)}${url.search}`, 301)
+}
+
+// the path with its leading slashes collapsed to one, so a path such as //evil.com stays on this site
+function toSameSitePath(path: string): string {
+	return `/${path.replace(/^\/+/, "")}`
+}
 
 /**
  * The file a docs url names. Astro prefixes /docs onto every link it generates but does not nest the build
@@ -158,7 +251,7 @@ function toDocsFilePath(path: string): string {
 // the docs assets under _astro have a content hash in their name, so they get cached like the ui bundle's
 function setDocsCacheControl(_path: string, context: Context): void {
 	const isHashedAsset = context.req.path.startsWith("/docs/_astro/")
-	context.header("Cache-Control", isHashedAsset ? "public, max-age=31536000, immutable" : "no-cache")
+	context.header("Cache-Control", isHashedAsset ? IMMUTABLE_CACHE_CONTROL : REVALIDATE_CACHE_CONTROL)
 }
 
 // render a page with the ui's server. a missing bundle is a 404, and a bundle that fails to import or a page rendered
@@ -184,50 +277,70 @@ async function renderUiPage(request: Request): Promise<Response> {
 		return new Response("the ui failed to load", { status: 503 })
 	}
 
-	// render the page. the browser revalidates every time, and the edge shares a signed-out page for a minute
-	const page = await uiServer.fetch(request)
-	const pageHeaders = new Headers(page.headers)
+	// shed a visitor's render past the concurrency limit, with a short retry. a signed-in render is never counted or shed.
+	// the page guards mark the 503 private
+	const isVisitorRender = !getSessionCookie(request)
+	const renderConcurrency = toPositiveInteger(Bun.env.RENDER_CONCURRENCY, DEFAULT_RENDER_CONCURRENCY)
+	if (isVisitorRender && activeVisitorRenderCount >= renderConcurrency) {
+		return new Response("the site is busy, try again in a moment", {
+			status: 503,
+			headers: { "Retry-After": String(BUSY_RENDER_RETRY_AFTER_SECONDS) },
+		})
+	}
 
-	// a page rendered without a read it needs returns a 503 with a Retry-After header
+	// render the page, counting a visitor's render until the ui's server returns the page's headers
+	if (isVisitorRender) {
+		activeVisitorRenderCount++
+	}
+	try {
+		const page = await uiServer.fetch(request)
+		return toRenderedPageResponse(request, page)
+	} finally {
+		// stop counting the render, whether it returned or threw
+		if (isVisitorRender) {
+			activeVisitorRenderCount--
+		}
+	}
+}
+
+// copy a rendered page into a response whose headers the page guards may set. a page rendered without a read it needs
+// returns a 503 with a Retry-After header
+function toRenderedPageResponse(request: Request, page: Response): Response {
+	// read and drop the marker of a page rendered without a read it needs
+	const pageHeaders = new Headers(page.headers)
 	const isDegradedRender = pageHeaders.has(DEGRADED_RENDER_HEADER)
 	pageHeaders.delete(DEGRADED_RENDER_HEADER)
+
+	// report a degraded render, and ask the client to retry it
 	if (isDegradedRender) {
 		pageHeaders.set("Retry-After", String(DEGRADED_RENDER_RETRY_AFTER_SECONDS))
 		reportError(new Error("a page rendered without a read it needs"), "page-render", {
 			path: new URL(request.url).pathname,
 		})
 	}
-
-	// the response, with its cache headers
-	const response = new Response(page.body, {
+	return new Response(page.body, {
 		status: isDegradedRender ? 503 : page.status,
 		statusText: isDegradedRender ? "Service Unavailable" : page.statusText,
 		headers: pageHeaders,
 	})
-	setRenderedCacheHeaders(request, response)
-	return response
 }
 
 // respond with one trivial query's latency and the pool's counts, or with 503 if the query fails or takes too long.
 // a monitor must never read a cached result
 async function checkDatabaseHealth(context: Context): Promise<Response> {
-	context.header("Cache-Control", "no-store")
+	context.header("Cache-Control", NO_STORE_CACHE_CONTROL)
 	const startedAt = performance.now()
 
-	// the query, or a failure once the time limit passes, whichever comes first
-	let timeLimitTimer: ReturnType<typeof setTimeout> | undefined
-	const timeLimit = new Promise<never>((_resolve, reject) => {
-		timeLimitTimer = setTimeout(() => reject(new Error("the database took over two seconds")), DEEP_HEALTH_TIMEOUT_MS)
-	})
-
-	// a failure or a timeout responds 503, and the time limit's timer is cleared however the query ends
+	// run the query under the time limit, and respond 503 to a failure or a timeout
 	try {
-		await Promise.race([db.execute(sql`select 1`), timeLimit])
+		await withTimeLimit({
+			work: db.execute(sql`select 1`),
+			timeLimitMs: DEEP_HEALTH_TIMEOUT_MS,
+			toError: () => new Error("the database took over two seconds"),
+		})
 	} catch (error) {
 		console.error("the deep health check's query failed", error)
 		return context.json({ status: "unavailable", pool: readPoolGauges() }, 503)
-	} finally {
-		clearTimeout(timeLimitTimer)
 	}
 
 	// a result responds with the query's latency and the pool's counts
@@ -249,12 +362,21 @@ function reportRouteError(error: Error, context: Context): Response {
 	return context.text("Internal Server Error", 500)
 }
 
-// a hashed filename never changes contents, so it caches for a year
+// cache a hashed asset for a year, and a public file with the public file headers
 function setBundleCacheControl(_path: string, context: Context): void {
+	// cache a hashed asset for a year
 	const isHashedAsset = context.req.path.startsWith("/assets/")
-	context.header("Cache-Control", isHashedAsset ? "public, max-age=31536000, immutable" : "no-cache")
+	if (isHashedAsset) {
+		context.header("Cache-Control", IMMUTABLE_CACHE_CONTROL)
+		return
+	}
+
+	// set the public file headers on every other file
+	for (const [headerName, headerValue] of Object.entries(PUBLIC_FILE_HEADERS)) {
+		context.header(headerName, headerValue)
+	}
 }
 
-// Bun serves on the port in PORT, or on 3000 if PORT is unset.
+// Bun serves on the port in PORT, or on 3000 if PORT is unset, and rejects a body past the largest a route accepts.
 // in dev, vite forwards /api, /mcp, and the api's own pages and documents to port 3000
-export default { fetch: server.fetch, idleTimeout: 120 }
+export default { fetch: server.fetch, idleTimeout: 120, maxRequestBodySize: MAX_REQUEST_BODY_BYTES }

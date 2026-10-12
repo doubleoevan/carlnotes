@@ -317,7 +317,7 @@ The `suggestTopicDraftSources` Topic Tool SHALL call the same suggestion functio
 
 ### Requirement: The daily suggestion limit counts in Redis
 
-Each user SHALL be limited to a fixed number of suggestion model calls per UTC day, currently 300, and an admin SHALL be
+Each user SHALL be limited to a fixed number of suggestion model calls per UTC day, currently 30, and an admin SHALL be
 exempt. The count SHALL live in Redis through the Redis store's fixed-window counter, keyed by the UTC day and the user,
 so it survives a deploy, holds across every api replica, and starts over each UTC day. The route and the
 `suggestTopicDraftSources` Topic Tool SHALL count against the same key. While Redis is unreachable the counter counts in
@@ -347,4 +347,14 @@ each replica's memory, so a user is bounded at the limit per replica and a call 
 
 - **WHEN** Redis is unreachable and a user's suggestion calls to one replica pass the daily limit
 - **THEN** the calls past the limit are rejected
+
+### Requirement: The suggestion route is limited like a tool caller
+
+The suggestion route SHALL share the tool caller limit the chat turns and the MCP routes use, so a burst of suggestion
+calls from one user gets a 429 before the daily limit is reached.
+
+#### Scenario: A burst of suggestions is limited
+
+- **WHEN** one user sends more suggestion calls in a minute than the tool caller limit allows
+- **THEN** the calls past it get a 429
 

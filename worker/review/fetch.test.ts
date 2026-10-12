@@ -1,5 +1,6 @@
 // fetch tests for the content ttl, the tweet whose snippet is whole, the fields a fetch writes, and the page title
 import { expect, test } from "bun:test"
+import { DAY_MS } from "@shared/time"
 import { isContentStale } from "../scrape"
 import { isSnippetComplete, toFetchedContentFields, toPageTitleField } from "./fetch"
 
@@ -7,9 +8,9 @@ import { isSnippetComplete, toFetchedContentFields, toPageTitleField } from "./f
 test("isContentStale gates on the ttl window", () => {
 	const now = new Date("2026-07-24T12:00:00Z")
 	// an hour old is still reusable under a one-day ttl, two days old is stale, and the exact ttl boundary is stale
-	expect(isContentStale(new Date("2026-07-24T11:00:00Z"), now, 86_400_000)).toBe(false)
-	expect(isContentStale(new Date("2026-07-22T12:00:00Z"), now, 86_400_000)).toBe(true)
-	expect(isContentStale(new Date("2026-07-23T12:00:00Z"), now, 86_400_000)).toBe(true)
+	expect(isContentStale(new Date("2026-07-24T11:00:00Z"), now, DAY_MS)).toBe(false)
+	expect(isContentStale(new Date("2026-07-22T12:00:00Z"), now, DAY_MS)).toBe(true)
+	expect(isContentStale(new Date("2026-07-23T12:00:00Z"), now, DAY_MS)).toBe(true)
 })
 
 // a tweet arrives with its entire text, so scoring it must never pay for a fetch that x.com would reject anyway

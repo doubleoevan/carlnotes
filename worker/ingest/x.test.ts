@@ -1,5 +1,6 @@
 // X test cases over the pure functions
 import { expect, test } from "bun:test"
+import { DAY_MS } from "@shared/time"
 import { X_COST_MINIMUM_PER_REQUEST, X_COST_PER_READ } from "../budget"
 import { mergeSearchResponses, toBoundedQuery, toRequestCost, toResources, toSnippet, toSourceHandle } from "./x"
 
@@ -90,7 +91,7 @@ test("toBoundedQuery appends the retweet and recency filters", () => {
 
 	// the window looks back exactly seven days
 	const sinceSeconds = Number(boundedQuery.split("since_time:")[1])
-	expect(nowMs / 1000 - sinceSeconds).toBe(7 * 24 * 60 * 60)
+	expect(nowMs / 1000 - sinceSeconds).toBe((7 * DAY_MS) / 1000)
 })
 
 // the cost is the per-tweet rate on what came back, so a scan reports what it really spent

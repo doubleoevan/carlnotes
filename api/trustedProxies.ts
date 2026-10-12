@@ -19,6 +19,13 @@ export function resolveClientAddress(request: Request, ipAddress = ipAddressOpti
 	return getIp(request, { advanced: { ipAddress } })
 }
 
+/**
+ * Returns whether a resolved client address is a known address outside this network.
+ */
+export function isExternalAddress(clientAddress: string | null): boolean {
+	return clientAddress ? !isInternalAddress(clientAddress) : false
+}
+
 // whether this process has checked TRUSTED_PROXIES against a request. each process checks only one request
 let hasCheckedTrustedProxies = false
 
@@ -69,7 +76,7 @@ export function toTrustedProxiesWarning({
 	// no address or an internal one means the platform added a hop that TRUSTED_PROXIES lacks.
 	// the warning names the proxy hops alone, never the visitor's own address at the head of the header
 	if (trustedProxyCount > 0) {
-		return clientAddress && !isInternalAddress(clientAddress)
+		return isExternalAddress(clientAddress)
 			? null
 			: `TRUSTED_PROXIES leaves x-forwarded-for's proxy hops "${hops.slice(1).join(", ")}" at ${clientAddress ?? "no address"}. ` +
 					"Add the hop after Cloudflare's to TRUSTED_PROXIES"

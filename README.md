@@ -56,7 +56,7 @@ These processes run in production:
 | Process | What it does |
 |---|---|
 | `app` | Serves the api and the ui, rendering public pages on the server. Chat replies and uploads run in-process. |
-| `temporal-worker` | One process hosts five Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, scan emails, podcast episode recordings, and source screens each get their own Worker. If any Worker stops, the process exits and the platform restarts it. |
+| `temporal-worker` | One process hosts six Temporal Workers: each Worker polls exactly one task queue, so attachments, topic scans, the closing writes that record a scan's outcome, scan emails, podcast episode recordings, and source screens each get their own Worker. The closing writes have their own queue so a backlog of scans waiting for a slot never starves the write that records a scan that already paid for its review. If any Worker stops, the process exits and the platform restarts it. |
 | scheduler | `bun worker/schedule.ts` sweeps for scheduled Topics and starts their scans. Whether a Topic is scheduled is computed in one query from its frequency and Scan window, so a sweep is safe to repeat and there is no stored queue to drift. A database claim keeps two sweeps from overlapping. In production a Northflank cron job runs one sweep per interval (`bun run schedule`). |
 | budget reset | `bun worker/resetMonthlyBudgets.ts` replaces every LiteLLM key created before the month began, so each user's spend starts the month at zero. The reset replaces a few keys at a time, under the same kind of database claim as the sweep. In production a Northflank cron job runs the reset once a day shortly after midnight UTC (`bun run reset:monthly-budgets`). After the first of the month, the reset finds only the keys that an earlier run failed to replace. |
 | `llm-guard` | The content scanner is its own service (see below). |
@@ -88,7 +88,7 @@ rate limit waits for Resend's `retry-after`, a 5xx backs off, and a send that fa
 without failing the Scan. Each accepted batch records its sends with the Scan, so a retry never mails anyone twice.
 Emails outside workflows (verification, password reset, invites, flag notices) send directly through Resend, and a
 failure is reported to Sentry instead of replayed. Every call to Resend, from the app or the worker, first takes a rate
-limit slot held in Redis, which one call holds for 200 milliseconds. Calls leave evenly spaced at five a second, half of
+limit slot kept in Redis, which one call holds for 200 milliseconds. Calls leave evenly spaced at five a second, half of
 Resend's ten.
 
 A succeeded Scan also starts the podcast episode workflow, described under Podcast below.
@@ -577,6 +577,14 @@ the api looks healthy. The scan sweep reports when no worker is polling the scan
 The LiteLLM proxy builds outside the `release-main` pipeline. [infra/litellm/Dockerfile](infra/litellm/Dockerfile)
 copies [litellm-config.yaml](litellm-config.yaml) into the image, and a Northflank path rule on those two files rebuilds
 and redeploys the service on push. A model swap is the config edit and nothing else.
+
+## Security
+
+[SECURITY.md](SECURITY.md) says how to report a vulnerability and lists the dependency checks that run on their own:
+Dependabot, `bun audit` in CI, CodeQL, the pinned actions and image digests, and the three-day release age. Dependency
+changes run through the pinned Bun, `bunx bun@1.3.14 add ...`, so the lockfile keeps the format CI's Bun reads. CI
+reads that version from `.bun-version` through the shared `.github/actions/setup-bun` step, and the Dockerfile pins the
+same version in its image tag, so a Bun upgrade changes both.
 
 ## Attribution
 

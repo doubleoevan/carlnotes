@@ -1,5 +1,6 @@
 // values turned into the text a user sees: dates, durations, money, sizes, and counts
 import type { daysOfWeek, frequencies } from "@shared/enums"
+import { DAY_MS } from "@shared/time"
 
 /**
  * An ISO date as its month and year: Jul 2026. Empty for a null date.
@@ -19,22 +20,22 @@ export function toAgeLabel(dateString: string | null): string {
 		return ""
 	}
 	// bucket the elapsed days into the coarsest readable unit
-	const days = Math.floor((Date.now() - new Date(dateString).getTime()) / 86_400_000)
-	if (days < 1) {
+	const elapsedDayCount = Math.floor((Date.now() - new Date(dateString).getTime()) / DAY_MS)
+	if (elapsedDayCount < 1) {
 		return "today"
 	}
 	// days, then weeks
-	if (days < 7) {
-		return `${days}d`
+	if (elapsedDayCount < 7) {
+		return `${elapsedDayCount}d`
 	}
-	if (days < 30) {
-		return `${Math.floor(days / 7)}w`
+	if (elapsedDayCount < 30) {
+		return `${Math.floor(elapsedDayCount / 7)}w`
 	}
 	// months, then years
-	if (days < 365) {
-		return `${Math.floor(days / 30)}mo`
+	if (elapsedDayCount < 365) {
+		return `${Math.floor(elapsedDayCount / 30)}mo`
 	}
-	return `${Math.floor(days / 365)}y`
+	return `${Math.floor(elapsedDayCount / 365)}y`
 }
 
 /**

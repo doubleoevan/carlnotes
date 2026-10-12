@@ -5,6 +5,7 @@ import { join } from "node:path"
 import type { PublicTopic } from "@shared/contracts/topics"
 import { PODCAST_SHOW_NAME } from "@shared/podcastEpisodes"
 import { toMetaDescription, toTopicPath } from "@shared/seo"
+import { DAY_MS } from "@shared/time"
 import { and, desc, eq, exists, inArray, or, type SQL, sql } from "drizzle-orm"
 import { db, isPublicAndShown } from "../db"
 import { findings, scans } from "../db/schema/scans"
@@ -268,7 +269,7 @@ export function toLlmsFullTxt({ appUrl, docsPages, blogPages }: ToLlmsFullTxtOpt
  */
 export function toSecurityTxt(appUrl: string): string {
 	// the expiry rolls forward on every request
-	const expiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000)
+	const expiresAt = new Date(Date.now() + 365 * DAY_MS)
 	return [
 		"Contact: mailto:support@carlnotes.com",
 		`Expires: ${expiresAt.toISOString()}`,

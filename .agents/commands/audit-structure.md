@@ -492,6 +492,40 @@ Check for:
      by its own path: `chat`, `teams`, `invites`, `activity`, `profiles`, `admin`, `search`, `findings`, `podcast`,
      `podcastEpisodePage`, `topics`, `notes`, `pageHead`, `signupCta`), and `escapeLikePattern` in `api/team/search.ts`
      (now private behind `toContainsLikePattern` in `api/likePattern.ts`)
+   - the viral-day splits of 2026-10-11, each moved whole: `readRedisExtraGauges` from `db/redis.ts` (now
+     `db/redisGauges.ts`); `incrementRateLimitWindow`, `decrementRateLimitWindow`, and `takeRateLimitSlot` from
+     `db/redis.ts` (now `db/redisRateLimits.ts`); the video id, caption track, and transcript readers such as
+     `toYoutubeVideoId` and `toTranscriptText` from `worker/scrape.ts` (now `worker/transcripts.ts`); `isSameShowName`,
+     `toAdvertisedFeedHref`, and `isTemporaryFailure` from `worker/suggest.ts` (now `worker/suggestedSourceChecks.ts`);
+     the Better Auth request hooks from `api/auth.ts` (now `api/authHooks.ts`); `scrubContent` and `scrubTransaction`
+     from `shared/monitoring.ts` (now `shared/monitoringScrub.ts`, with their tests in `monitoringScrub.test.ts`);
+     `avatarsRoute` from `api/avatars.ts` (now `api/avatarsRoute.ts`); `billingRoute` from `api/billing.ts` (now
+     `api/billingRoute.ts`); `startUndispatchedScans` and `reportScanQueue` from `worker/schedule.ts` (now
+     `worker/scanQueue.ts`); and the test splits `api/index.test.ts` (now beside `pageRender.test.ts` and
+     `pageGuards.test.ts` over `indexTestFixtures.ts`) and `worker/schedule.test.ts` (now beside
+     `scheduledTopicFilter.test.ts`)
+   - `INGEST_TOTAL_TIMEOUT_MS` and `REVIEW_TOTAL_TIMEOUT_MS` (removed: ingest and review now share
+     `QUEUED_STAGE_TIMEOUT_MS` as their schedule-to-close bound, and `MAX_SCAN_DURATION_MS` derives from it),
+     `toSpendLimit` (now `toDollarSetting` in `shared/envSettings.ts`, which reads any setting in dollars), and the
+     local `DAY_MS` copies in `db/quotas.ts`, `worker/schedule.ts`, `worker/retryPendingObjectDeletions.test.ts`, and
+     the schedule tests (now `DAY_MS` in `shared/time.ts`, beside `withTimeLimit`)
+   - `toInstantSetTimeout` in `db/redisFakeServer.ts` (now `toInstantReconnectSetTimeout`, which speeds and records only
+     the reconnect timers, beside `toEveryTimerInstantSetTimeout` for every timer), and `clearTopicSectionIdCache` (now
+     `clearSharedTopicFeedCaches`, which drops the visitors' feeds with the section ids)
+   - `FeedStatusError` in `worker/ingest/feed.ts` (now `FetchStatusError` in `worker/publicFetch.ts`, beside
+     `isRetryableFetchFailure`), `topicOwnerModelKey` in `worker/workflows/processAttachmentActivities.ts` (now
+     `loadOrProvisionTopicOwnerLiteLLMKey` in `worker/litellm.ts`), and `QUEUE_DESCRIBE_TIMEOUT_MS` in
+     `worker/temporalClient.ts` (removed: the describe call runs through `withClientDeadline`)
+   - `toPositiveInteger` in `db/index.ts` (now `shared/envSettings.ts`), `toMonthlySpendCents` in `db/quotas.ts` (now
+     `toSpendCents`, beside `loadSpendSince`), and `quietErrorReports` in `worker/litellmTestFixtures.ts` (now
+     `shared/monitoringTestFixtures.ts`)
+   - `deleteRedisKey` in `db/redis.ts` (now `deleteRedisKeys`, which takes one or more keys and returns how many it
+     deleted), `isWithinRateLimit` (removed: `countRateLimitHit` in `db/redisRateLimits.ts` counts a hit and returns
+     whether it is within the limit), `isAnsweredRefusal` in `worker/ingest/index.ts` (now `isHostRejection`), and
+     `isReadable` in `worker/suggest.ts` (now `isSuggestedSourceReadable` in `worker/suggestedSourceChecks.ts`)
+   - `PROVIDER_PHOTO_CACHE_CONTROL` in `api/avatars.ts`, and `CURRENT_IMAGE_CACHE_CONTROL` and
+     `CURRENT_IMAGE_EDGE_CACHE_CONTROL` in `api/edgeCache.ts` (now `UNVERSIONED_CACHE_CONTROL`,
+     `IMMUTABLE_CACHE_CONTROL`, and `FILE_EDGE_CACHE_CONTROL` in `api/edgeCache.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

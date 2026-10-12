@@ -15,7 +15,7 @@ import type { AnalyticsProperties } from "../currentUser"
 import { startInviteEmails } from "../invite/emails"
 import { checkTopicInvitees } from "../invite/userInvites"
 import { releaseFeatureOrder } from "./featuring"
-import { clearTopicSectionIdCache } from "./feeds"
+import { clearVisitorTopicCaches } from "./feeds"
 import { type PromptVersionOrigin, savePromptVersion } from "./promptVersions"
 import {
 	authorizeNewDailyTopic,
@@ -322,10 +322,8 @@ export async function updateTopic(
 		return removedSourceRows.map((removedSourceRow) => removedSourceRow.kind)
 	})
 
-	// clear the shared topic section ids if the visibility change released a feature order
-	if (isFeatureOrderReleased) {
-		await clearTopicSectionIdCache()
-	}
+	// drop the topic's cached visitor copies
+	await clearVisitorTopicCaches({ topicId, visibility, previousVisibility: topic.visibility, isFeatureOrderReleased })
 
 	// screen whatever this edit added with llm-guard, now that the rows are committed
 	startPendingSourceScreens(topicId)

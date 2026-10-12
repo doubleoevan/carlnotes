@@ -1,9 +1,17 @@
 // feed tests for the rate-eligibility rule that the batched feed uses, and for the topic section ids that every
 // replica shares through Redis
 import { afterEach, expect, test } from "bun:test"
+import type { visibilities } from "@shared/enums"
 import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"
 import { restoreRedisClient, stubRedisClient } from "../../db/redisClientStub"
-import { canRateInFeed, clearTopicSectionIdCache, readPublicSectionTopicIds } from "./feeds"
+import {
+	canRateInFeed,
+	clearSharedTopicFeedCaches,
+	clearVisitorTopicCaches,
+	readPublicSectionTopicIds,
+	readVisitorTopicFeeds,
+	toVisitorTopicPageKey,
+} from "./feeds"
 
 // put the pool and the Redis client back after each test
 afterEach(() => {
@@ -12,7 +20,7 @@ afterEach(() => {
 })
 
 // a topic with just the fields canRateInFeed needs
-function topic(ownerId: string, visibility: "public" | "invite" | "private"): Parameters<typeof canRateInFeed>[0] {
+function topic(ownerId: string, visibility: (typeof visibilities)[number]): Parameters<typeof canRateInFeed>[0] {
 	return { id: "t1", ownerId, visibility }
 }
 
@@ -72,10 +80,67 @@ test("two replicas read the same section order after a featuring change", async 
 
 	// a featuring change deletes the key, so the next read on either replica loads the new order and the other shares it
 	featuredTopicIdRows = [["t2"], ["t1"]]
-	await clearTopicSectionIdCache()
+	await clearSharedTopicFeedCaches()
 	const secondReplicaNewOrder = await readPublicSectionTopicIds()
 	const firstReplicaNewOrder = await readPublicSectionTopicIds()
 	expect(secondReplicaNewOrder).toEqual({ featuredIds: ["t2", "t1"], popularIds: ["t3"] })
 	expect(firstReplicaNewOrder).toEqual(secondReplicaNewOrder)
 	expect(sentQueries).toHaveLength(4)
+})
+
+// the visitors' feed is built once per view per half minute, and a listing change clears both views with the section
+// order
+test("the visitors' feed is built once per view and cleared with the section order", async () => {
+	// one Redis and a database with nothing in it
+	stubRedisClient()
+	const sentQueries = stubConnectionPool(() => [])
+
+	// the first read builds the feed, and the second reads the copy
+	await readVisitorTopicFeeds(false)
+	const buildQueryCount = sentQueries.length
+	await readVisitorTopicFeeds(false)
+	expect(buildQueryCount).toBeGreaterThan(0)
+	expect(sentQueries).toHaveLength(buildQueryCount)
+
+	// the other view is its own copy, and a clearing rebuilds the first
+	await readVisitorTopicFeeds(true)
+	const bothViewsQueryCount = sentQueries.length
+	expect(bothViewsQueryCount).toBeGreaterThan(buildQueryCount)
+	await clearSharedTopicFeedCaches()
+	await readVisitorTopicFeeds(false)
+	expect(sentQueries.length).toBeGreaterThan(bothViewsQueryCount)
+})
+
+// a change always drops the topic's page copy, and drops the visitors' feeds only if the topic was or is public or the
+// change released its feature order
+test("clearVisitorTopicCaches drops the page copy always and the feeds only for a public or featured topic", async () => {
+	// one Redis holding a topic's page copy and the feed views
+	const storedValueByKey = stubRedisClient()
+	stubConnectionPool(() => [])
+	const fillCopies = async (): Promise<void> => {
+		storedValueByKey.set(toVisitorTopicPageKey("t1"), "{}")
+		await readVisitorTopicFeeds(false)
+	}
+	const hasFeedCopy = (): boolean => [...storedValueByKey.keys()].some((key) => key.startsWith("topic-feed:visitor"))
+
+	// a change to a topic that stays private keeps the feed copy
+	await fillCopies()
+	const storedKeyCount = storedValueByKey.size
+	await clearVisitorTopicCaches({ topicId: "t1", visibility: "private" })
+	expect(storedValueByKey.has(toVisitorTopicPageKey("t1"))).toBe(false)
+	expect(storedValueByKey.size).toBe(storedKeyCount - 1)
+
+	// a change to a public topic, a topic made public, a topic made private, and a released feature order each drop the
+	// feed copies too
+	for (const clearVisitorTopicCachesOptions of [
+		{ topicId: "t1", visibility: "public" },
+		{ topicId: "t1", visibility: "public", previousVisibility: "invite" },
+		{ topicId: "t1", visibility: "private", previousVisibility: "public" },
+		{ topicId: "t1", visibility: "invite", isFeatureOrderReleased: true },
+	] as const) {
+		await fillCopies()
+		await clearVisitorTopicCaches(clearVisitorTopicCachesOptions)
+		expect(storedValueByKey.has(toVisitorTopicPageKey("t1"))).toBe(false)
+		expect(hasFeedCopy()).toBe(false)
+	}
 })

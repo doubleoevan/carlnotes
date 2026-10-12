@@ -10,7 +10,9 @@ import { incrementDaySuggestionCount } from "../../db/quotas"
 import { cacheJson } from "../../db/redis"
 import { loadOrProvisionUserLiteLLMKey, suggestSources } from "../../worker"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { toolCallerRateLimiter } from "../rateLimit"
 import { deleteTopic } from "./deleteTopic"
+import { readVisitorTopicPage, TOPIC_PAGE_KEY_PREFIX } from "./feeds"
 import { loadTopicGateResponse } from "./helpers"
 import { createTopic, updateTopic } from "./saveTopic"
 import { loadTeamTopicOptions } from "./teamTopicOptions"
@@ -48,35 +50,40 @@ export const topicsRoute = new Hono<AppEnv>()
 			? context.json({ error: "daily topic limit reached", dailyTopicLimit: createTopicResult.limit }, 429)
 			: context.json({ error: "quota exhausted" }, 429)
 	})
-	.post("/topics/suggest-sources", zValidator("json", suggestSourcesPayload), async (context) => {
-		// reject a signed-out visitor
-		const userId = currentUser(context)
-		if (!userId) {
-			return context.json({ error: "unauthorized" }, 401)
-		}
-		// the suggestion's model call bills to the user's own LiteLLM key, created first if the user has none
-		const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId)
+	.post(
+		"/topics/suggest-sources",
+		toolCallerRateLimiter,
+		zValidator("json", suggestSourcesPayload),
+		async (context) => {
+			// reject a signed-out visitor
+			const userId = currentUser(context)
+			if (!userId) {
+				return context.json({ error: "unauthorized" }, 401)
+			}
+			// the suggestion's model call bills to the user's own LiteLLM key, created first if the user has none
+			const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId)
 
-		// suggesting is not scanning, so it draws on its own daily limit instead of the scan quota
-		if (!(await incrementDaySuggestionCount(userId))) {
-			return context.json({ error: "daily suggestion limit reached" }, 429)
-		}
-		// propose sources from the topic's own text
-		const { name, prompt, attachmentContext, excludeSources, limit } = context.req.valid("json")
-		const suggestedSources = await suggestSources({
-			name,
-			prompt,
-			attachmentContext,
-			excludeSources,
-			limit,
-			litellmApiKey,
-		})
-		trackEvent("sources_suggested", userId, {
-			...toAnalyticsProperties(context),
-			suggestedSourceCount: suggestedSources.length,
-		})
-		return context.json({ sources: suggestedSources })
-	})
+			// suggesting is not scanning, so it draws on its own daily limit instead of the scan quota
+			if (!(await incrementDaySuggestionCount(userId))) {
+				return context.json({ error: "daily suggestion limit reached" }, 429)
+			}
+			// propose sources from the topic's own text
+			const { name, prompt, attachmentContext, excludeSources, limit } = context.req.valid("json")
+			const suggestedSources = await suggestSources({
+				name,
+				prompt,
+				attachmentContext,
+				excludeSources,
+				limit,
+				litellmApiKey,
+			})
+			trackEvent("sources_suggested", userId, {
+				...toAnalyticsProperties(context),
+				suggestedSourceCount: suggestedSources.length,
+			})
+			return context.json({ sources: suggestedSources })
+		},
+	)
 	.get("/topics/addable", async (context) => {
 		// the topics a signed-in user may bring to a team, in the order the picker shows them
 		const userId = currentUser(context)
@@ -93,14 +100,19 @@ export const topicsRoute = new Hono<AppEnv>()
 		const loadTracedTopicPage = (): Promise<TopicResponse | null> =>
 			traceRequestStage("topic_page.load", () => loadTopicPage(userId, topicId, { isPoll }))
 
-		// serve a poll reload from a short Redis cache per user and topic, and any other request from the database
-		const topicPage = isPoll
-			? await cacheJson({
-					key: `topic-page:${userId ?? "visitor"}:${topicId}`,
-					ttlMs: TOPIC_PAGE_POLL_TTL_MS,
-					load: loadTracedTopicPage,
-				})
-			: await loadTracedTopicPage()
+		// read the page, then respond with it if it is visible
+		let topicPage: TopicResponse | null
+		if (isPoll) {
+			// read a poll from a short Redis cache per user and topic
+			const pollKey = `${TOPIC_PAGE_KEY_PREFIX}:${userId ?? "visitor"}:${topicId}`
+			topicPage = await cacheJson({ key: pollKey, ttlMs: TOPIC_PAGE_POLL_TTL_MS, load: loadTracedTopicPage })
+		} else if (userId) {
+			// load a signed-in user's page from the database
+			topicPage = await loadTracedTopicPage()
+		} else {
+			// read a visitor's page from the visitors' cached page
+			topicPage = await readVisitorTopicPage(topicId, loadTracedTopicPage)
+		}
 		if (topicPage) {
 			return context.json(topicPage)
 		}

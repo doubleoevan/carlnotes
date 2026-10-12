@@ -1,11 +1,12 @@
 // auth tests: a signup's LiteLLM key and default avatar, the session hooks that keep Redis in sync with Postgres,
 // and the verification values kept in both
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import * as monitoring from "@shared/monitoring"
+import { quietErrorReports } from "@shared/monitoringTestFixtures"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as redis from "../db/redis"
+import * as redisRateLimits from "../db/redisRateLimits"
 import * as litellm from "../worker/litellm"
-import { auth, toSignupAvatarSource } from "./auth"
+import { auth, sendAuthEmailInBackground, toSignupAvatarSource } from "./auth"
 import * as sessions from "./sessions"
 import * as usernames from "./usernames"
 
@@ -31,8 +32,7 @@ async function runUserCreateHook(): Promise<Record<string, unknown>> {
 test("a signup whose key creation fails creates the user with no key and reports the failure", async () => {
 	// make the key creation time out, spy on the error report, and quiet the console
 	spyOn(litellm, "provisionLiteLLMKey").mockRejectedValue(new DOMException("The operation timed out.", "TimeoutError"))
-	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
-	spyOn(console, "error").mockImplementation(() => {})
+	const reportErrorSpy = quietErrorReports()
 
 	// the user is created with a username and no key, and the failure is reported once
 	const newUser = await runUserCreateHook()
@@ -61,7 +61,7 @@ test("a signup with no provider photo falls back to generated initials", () => {
 
 // a session that Better Auth deletes from Postgres is deleted from Redis by its token
 test("the session delete hook deletes the token from Redis", async () => {
-	const deleteRedisKeySpy = spyOn(redis, "deleteRedisKey").mockResolvedValue(undefined)
+	const deleteRedisKeySpy = spyOn(redis, "deleteRedisKeys").mockResolvedValue(1)
 	await auth.options.databaseHooks?.session?.delete?.after?.({ token: "token-a" } as never)
 	expect(deleteRedisKeySpy).toHaveBeenCalledWith("token-a")
 })
@@ -70,7 +70,7 @@ test("the session delete hook deletes the token from Redis", async () => {
 test("the session update hook deletes the Redis copy of a session that Postgres no longer holds", async () => {
 	// spy on the Redis writes and fake a request whose signed cookie names the revoked token
 	const cacheSessionSpy = spyOn(sessions, "cacheSession").mockResolvedValue(undefined)
-	const deleteRedisKeySpy = spyOn(redis, "deleteRedisKey").mockResolvedValue(undefined)
+	const deleteRedisKeySpy = spyOn(redis, "deleteRedisKeys").mockResolvedValue(1)
 	const context = {
 		getSignedCookie: async () => "token-a",
 		context: { authCookies: { sessionToken: { name: "session_token" } }, secret: "secret" },
@@ -91,16 +91,18 @@ test("Better Auth keeps verification values in Postgres", () => {
 	expect(auth.options.verification?.storeInDatabase).toBe(true)
 })
 
-// a password reset deletes the user's other reset links from Postgres, and each link's Redis copy by its identifier
+// a password reset deletes the user's other reset links from Postgres, and their Redis copies by identifier in one delete
 test("a password reset deletes the user's other reset links from Postgres and from Redis", async () => {
-	// Postgres returns two deleted reset-password rows, and a spy records each Redis key delete
+	// Postgres returns two deleted reset-password rows, and a spy records the Redis key delete
 	stubConnectionPool(() => [["reset-password:token-a"], ["reset-password:token-b"]])
-	const deleteRedisKeySpy = spyOn(redis, "deleteRedisKey").mockResolvedValue(undefined)
+	const deleteRedisKeySpy = spyOn(redis, "deleteRedisKeys").mockResolvedValue(1)
 
 	// reset the password and check that both Redis copies were deleted
 	await auth.options.emailAndPassword?.onPasswordReset?.({ user: { id: "user-1" } } as never)
-	expect(deleteRedisKeySpy).toHaveBeenCalledWith("verification:reset-password:token-a")
-	expect(deleteRedisKeySpy).toHaveBeenCalledWith("verification:reset-password:token-b")
+	expect(deleteRedisKeySpy).toHaveBeenCalledWith(
+		"verification:reset-password:token-a",
+		"verification:reset-password:token-b",
+	)
 })
 
 // the secondary storage sets a key with the time to live that Better Auth passes, and a plain key if it passes none
@@ -127,10 +129,22 @@ test("the secondary storage sets a key with its time to live, or without one", a
 
 // the secondary storage's increment returns the rate limit window's count, with the time to live in milliseconds
 test("the secondary storage counts a hit on the key's rate limit window", async () => {
-	const incrementRateLimitWindowSpy = spyOn(redis, "incrementRateLimitWindow").mockResolvedValue({
+	const incrementRateLimitWindowSpy = spyOn(redisRateLimits, "incrementRateLimitWindow").mockResolvedValue({
 		count: 3,
 		resetAt: Date.now() + 60_000,
 	})
 	expect(await auth.options.secondaryStorage?.increment?.("key-a", 60)).toBe(3)
 	expect(incrementRateLimitWindowSpy).toHaveBeenCalledWith("key-a", 60_000)
+})
+
+// a mail hook responds at once, and a send that throws later is reported instead of left as an unhandled rejection
+test("a background auth email that throws is reported by its kind", async () => {
+	// the report and the log spied, and a send that fails after the hook has returned
+	const reportErrorSpy = quietErrorReports()
+	const sendError = new Error("the template failed to render")
+	sendAuthEmailInBackground("verification", Promise.reject(sendError))
+
+	// the failure reaches the report once the send settles
+	await Bun.sleep(0)
+	expect(reportErrorSpy).toHaveBeenCalledWith(sendError, "email", { emailKind: "verification" })
 })

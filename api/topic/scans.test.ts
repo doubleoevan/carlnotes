@@ -1,28 +1,22 @@
 // manual scan tests: a scan whose key has spent its budget is rejected before anything starts or is billed.
 // a failed budget read starts the scan, and an admin's scan checks the admin's own budget
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
-import { saveEnvSettings } from "@shared/savedEnvSettings"
+import { quietErrorReports } from "@shared/monitoringTestFixtures"
 import { SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
-import { Hono } from "hono"
-import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
+import { stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
 import { topics } from "../../db/schema/topics"
 import * as litellm from "../../worker/litellm"
+import { restoreLiteLLMTest, setUpLiteLLMTest } from "../../worker/litellmTestFixtures"
 import * as scan from "../../worker/scan"
 import * as staleScans from "../../worker/staleScans"
 import * as authorization from "../authorization"
 import * as billing from "../billing"
-import type { AppEnv } from "../currentUser"
+import { toSignedInApp } from "../testSession"
 import { scansRoute } from "./scans"
 
-// the connection pool's own query, the real fetch, and the proxy settings that the budget read needs,
-// put back after each test along with the spies
-const originalFetch = globalThis.fetch
-const restoreEnvSettings = saveEnvSettings(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
+// put the connection pool's own query, the real fetch, the proxy settings, and the spies back after each test
 afterEach(() => {
-	restoreConnectionPool()
-	globalThis.fetch = originalFetch
-	mock.restore()
-	restoreEnvSettings()
+	restoreLiteLLMTest()
 })
 
 // stub the connection pool to return one topic owned by owner-1, and a user whose key is sk-user
@@ -68,16 +62,19 @@ function spyOnManualScan(isOverage: boolean): ManualScanSpies {
 	}
 }
 
+// set the proxy settings that the budget read needs, swap fetch for a proxy that cannot be reached, and return the stub
+function stubUnreachableProxy(): Mock<() => Promise<Response>> {
+	setUpLiteLLMTest()
+	const fetchMock = mock(async (): Promise<Response> => {
+		throw new TypeError("fetch failed")
+	})
+	globalThis.fetch = fetchMock as unknown as typeof fetch
+	return fetchMock
+}
+
 // request a manual scan of topic-1 as the given user
 async function sendManualScan(userId: string): Promise<Response> {
-	// the scan routes with the given user signed in
-	const app = new Hono<AppEnv>()
-		.use(async (context, next) => {
-			context.set("user", { id: userId } as never)
-			await next()
-		})
-		.route("/", scansRoute)
-	return app.request("/topics/topic-1/scan", { method: "POST" })
+	return toSignedInApp(scansRoute, userId).request("/topics/topic-1/scan", { method: "POST" })
 }
 
 // a spent budget rejects the scan with the budget label, before the stale scan close-out, the scan row, or the overage
@@ -100,17 +97,10 @@ test("a manual Scan whose key has spent its budget returns 402 with the budget l
 
 // a budget read that fails starts the scan
 test("a failed budget read starts the manual Scan", async () => {
-	// an owner with a key, and the proxy settings that the budget read needs
+	// an owner with a key, and a proxy that cannot be reached
 	stubOwnedTopicRows()
 	const { startTopicScanSpy } = spyOnManualScan(false)
-	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
-	Bun.env.LITELLM_MASTER_KEY = "master"
-
-	// a proxy that cannot be reached
-	const fetchMock = mock(async (): Promise<Response> => {
-		throw new TypeError("fetch failed")
-	})
-	globalThis.fetch = fetchMock as unknown as typeof fetch
+	const fetchMock = stubUnreachableProxy()
 
 	// the budget read called the proxy once, and the scan starts on the owner's key
 	const response = await sendManualScan("owner-1")
@@ -133,4 +123,25 @@ test("an admin's manual Scan checks the admin's own budget", async () => {
 	expect(response.status).toBe(200)
 	expect(isUserLiteLLMKeyBudgetExhaustedSpy).toHaveBeenCalledWith("admin-1")
 	expect(startTopicScanSpy).toHaveBeenCalledWith("topic-1", "admin-1", "manual")
+})
+
+// a start that throws, such as a Temporal that cannot be reached, is reported and responds as unavailable, never a 500
+test("a manual Scan whose start throws is reported and responds 503", async () => {
+	// an owner with a key and a start that throws, with the console and the error report quiet
+	stubOwnedTopicRows()
+	const { startTopicScanSpy } = spyOnManualScan(false)
+	startTopicScanSpy.mockRejectedValue(new Error("temporal is not reachable"))
+	const reportErrorSpy = quietErrorReports()
+
+	// a proxy that cannot be reached, so the budget read fails and the scan goes ahead to the start
+	stubUnreachableProxy()
+
+	// the scan responds as unavailable, and the failed start is reported with the topic and the user
+	const response = await sendManualScan("owner-1")
+	expect(response.status).toBe(503)
+	expect(await response.json()).toEqual({ error: "scanning is temporarily unavailable, try again in a minute" })
+	expect(reportErrorSpy).toHaveBeenCalledWith(expect.any(Error), "manual-scan", {
+		topicId: "topic-1",
+		userId: "owner-1",
+	})
 })

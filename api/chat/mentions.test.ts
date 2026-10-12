@@ -14,7 +14,7 @@ afterEach(() => {
 test("saving a chat room's chat mentions as seen deletes the user's cached unseen count", async () => {
 	// a connection pool that accepts the update, and a spy on the Redis key delete
 	stubConnectionPool()
-	const deleteRedisKeySpy = spyOn(redis, "deleteRedisKey").mockResolvedValue(undefined)
+	const deleteRedisKeySpy = spyOn(redis, "deleteRedisKeys").mockResolvedValue(1)
 
 	// save the chat room's chat mentions as seen and check that the delete names the user's unseen count key
 	await saveSeenChatMentions("user-1", "topic-1", "team-1")

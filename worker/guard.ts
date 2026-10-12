@@ -1,5 +1,6 @@
 // the LLM Guard scanner
 import { SCANNER_FLAGGED_REASON_PREFIX } from "@shared/contracts/topics"
+import { toPositiveInteger } from "@shared/envSettings"
 import { reportError } from "@shared/monitoring"
 
 // the score at or above which a detector counts as a hit
@@ -7,7 +8,7 @@ const DEFAULT_INJECTION_THRESHOLD = 0.8
 
 // the llm-guard network timeout. a page it cannot finish inside passes unscreened.
 // raise LLM_GUARD_TIMEOUT_MS if real pages run past the default
-const SCREEN_TIMEOUT_MS = Number(Bun.env.LLM_GUARD_TIMEOUT_MS ?? "2500")
+const SCREEN_TIMEOUT_MS = toPositiveInteger(Bun.env.LLM_GUARD_TIMEOUT_MS, 2500)
 
 // the detectors that reject each type of text
 const SCREEN_TYPES = {

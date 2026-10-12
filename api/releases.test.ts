@@ -1,22 +1,15 @@
 // the release notes rules that hold without a database: the summary split, the webhook's signature check,
 // and what a GitHub release object becomes as a row
 import { expect, test } from "bun:test"
+import { toHmacDigest } from "@shared/hmac"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { isSignedByGitHub, releasesRoute, toReleaseSummary, toReleaseUpsert } from "./releases"
 
 // the header GitHub signs with, and the signature it would send for a body
 const SIGNATURE_HEADER = "x-hub-signature-256"
-async function toSignature(body: string): Promise<string> {
-	const key = await crypto.subtle.importKey(
-		"raw",
-		new TextEncoder().encode("shhh"),
-		{ name: "HMAC", hash: "SHA-256" },
-		false,
-		["sign"],
-	)
-	const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body))
-	return `sha256=${Buffer.from(digest).toString("hex")}`
+function toSignature(body: string): string {
+	return `sha256=${toHmacDigest({ value: body, secret: "shhh", encoding: "hex" })}`
 }
 
 // a published release as GitHub sends it
@@ -64,16 +57,16 @@ test("a prerelease is stored as one", () => {
 })
 
 // an unsigned request is rejected, and so is one that arrives with no secret configured
-test("an unsigned request fails closed", async () => {
+test("an unsigned request fails closed", () => {
 	const restoreEnvSettings = saveEnvSettings(["GITHUB_WEBHOOK_SECRET"])
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
-		expect(await isSignedByGitHub("{}", undefined)).toBe(false)
-		expect(await isSignedByGitHub("{}", "sha256=deadbeef")).toBe(false)
+		expect(isSignedByGitHub("{}", undefined)).toBe(false)
+		expect(isSignedByGitHub("{}", "sha256=deadbeef")).toBe(false)
 
 		// with no secret set the route rejects instead of trusting the payload
 		Bun.env.GITHUB_WEBHOOK_SECRET = ""
-		expect(await isSignedByGitHub("{}", "sha256=deadbeef")).toBe(false)
+		expect(isSignedByGitHub("{}", "sha256=deadbeef")).toBe(false)
 	} finally {
 		restoreEnvSettings()
 	}
@@ -88,7 +81,7 @@ test("a form encoded body is rejected with the reason", async () => {
 		const response = await releasesRoute.request("/api/webhooks/github", {
 			method: "POST",
 			body,
-			headers: { [SIGNATURE_HEADER]: await toSignature(body) },
+			headers: { [SIGNATURE_HEADER]: toSignature(body) },
 		})
 
 		// the reason names the setting to change instead of leaving a bare failure
@@ -117,22 +110,14 @@ test("a promoted prerelease is stored", async () => {
 })
 
 // the signature GitHub actually sends is accepted
-test("a correctly signed request passes", async () => {
+test("a correctly signed request passes", () => {
 	const restoreEnvSettings = saveEnvSettings(["GITHUB_WEBHOOK_SECRET"])
 	try {
 		Bun.env.GITHUB_WEBHOOK_SECRET = "shhh"
 
 		// the same HMAC GitHub computes over the raw body
 		const body = JSON.stringify({ action: "published" })
-		const key = await crypto.subtle.importKey(
-			"raw",
-			new TextEncoder().encode("shhh"),
-			{ name: "HMAC", hash: "SHA-256" },
-			false,
-			["sign"],
-		)
-		const digest = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body))
-		expect(await isSignedByGitHub(body, `sha256=${Buffer.from(digest).toString("hex")}`)).toBe(true)
+		expect(isSignedByGitHub(body, toSignature(body))).toBe(true)
 	} finally {
 		restoreEnvSettings()
 	}
@@ -149,7 +134,7 @@ async function postWebhook(payload: object): Promise<string> {
 		const response = await releasesRoute.request("/api/webhooks/github", {
 			method: "POST",
 			body,
-			headers: { [SIGNATURE_HEADER]: await toSignature(body) },
+			headers: { [SIGNATURE_HEADER]: toSignature(body) },
 		})
 		return await response.text()
 	} finally {

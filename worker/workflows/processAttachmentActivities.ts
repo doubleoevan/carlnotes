@@ -3,14 +3,14 @@ import { ATTACHMENT_NO_TEXT_REASON, MAX_ATTACHMENT_CONTEXT_CHARS } from "@shared
 import { ApplicationFailure } from "@temporalio/activity"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
-import { attachments, topics } from "../../db/schema/topics"
+import { attachments } from "../../db/schema/topics"
 import { generateAttachmentContext, generateImageContext, toDataUrl } from "../attach"
 import { isImageAttachmentType, isTableFileType } from "../attachContentType"
 import { toClippedTableText, toTableText } from "../attachTable"
 import { extractText } from "../attachText"
 import { CHUNK_CHARS, chunk, MAX_CHUNKS } from "../chunk"
 import { screenText, toFlaggedReason } from "../guard"
-import { loadOrProvisionUserLiteLLMKey } from "../litellm"
+import { loadOrProvisionTopicOwnerLiteLLMKey } from "../litellm"
 import { deleteStoredObject, getAttachmentBytes, recordPendingObjectDeletions } from "../store"
 
 // the most characters the workflow can process, so that chunk payloads stay well under Temporal's per-message limit
@@ -38,7 +38,10 @@ export async function extractAttachmentText(attachmentId: string): Promise<Extra
 
 	// an image has no text to extract
 	const extractedText = isImageAttachmentType(attachment.contentType)
-		? await generateImageContext(toDataUrl(attachment.contentType, bytes), await topicOwnerModelKey(attachmentId))
+		? await generateImageContext(
+				toDataUrl(attachment.contentType, bytes),
+				await loadOrProvisionTopicOwnerLiteLLMKey(attachment.topicId),
+			)
 		: await extractText(attachment.contentType, bytes)
 
 	// fail a file with no readable text, like a scanned PDF or a chart-only workbook
@@ -105,23 +108,17 @@ function toCutMarker(fullLength: number): string {
 
 // summarize one chunk into a context note with the cheap model, billed to the topic owner's key
 export async function summarizeChunk(attachmentId: string, chunkText: string): Promise<string> {
-	return generateAttachmentContext(chunkText, await topicOwnerModelKey(attachmentId))
-}
-
-// the LiteLLM key of the owner of the attachment's topic, created first if the owner has none
-async function topicOwnerModelKey(attachmentId: string): Promise<string> {
-	// select the attachment's topic owner
-	const [attachmentTopic] = await db
-		.select({ ownerId: topics.ownerId })
+	// read the attachment's topic, and fail an attachment that is gone
+	const [attachment] = await db
+		.select({ topicId: attachments.topicId })
 		.from(attachments)
-		.innerJoin(topics, eq(attachments.topicId, topics.id))
 		.where(eq(attachments.id, attachmentId))
-
-	// fail an attachment that is gone, then return the topic owner's key
-	if (!attachmentTopic) {
+	if (!attachment) {
 		throw ApplicationFailure.nonRetryable(`attachment ${attachmentId} not found`, "AttachmentNotFound")
 	}
-	return loadOrProvisionUserLiteLLMKey(attachmentTopic.ownerId)
+
+	// write the summary with the topic owner's key
+	return generateAttachmentContext(chunkText, await loadOrProvisionTopicOwnerLiteLLMKey(attachment.topicId))
 }
 
 // merge the chunk summaries into one limited context, mark the attachment ready, and record its counts

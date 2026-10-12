@@ -1,4 +1,5 @@
 // the link-preview card a pasted Topic url renders as
+import type { visibilities } from "@shared/enums"
 import type { PublishedAvatar } from "../avatars"
 import {
 	CARD_MUTED_COLOR,
@@ -21,7 +22,7 @@ export type TopicPreview = {
 	topicId: string
 	title: string
 	// the card is rendered for every topic, but only a public topic's page may disclose its findings
-	visibility: "public" | "invite" | "private"
+	visibility: (typeof visibilities)[number]
 	// the topic owner's byline, and the image drawn beside it
 	ownerUserId: string
 	ownerUsername: string

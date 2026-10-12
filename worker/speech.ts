@@ -2,6 +2,7 @@
 import type { PodcastEpisodeTurn } from "@shared/payloads"
 import { podcastEpisodeSpeechModel } from "@shared/podcastEpisodes"
 import type { SpeechTier } from "./budget"
+import { isRetryableHttpStatus } from "./publicFetch"
 
 // one speech call. its turns, its tier, and the virtual key that it bills, or the master key if no key is given
 export type RecordSpeechOptions = { turns: PodcastEpisodeTurn[]; speechTier: SpeechTier; litellmApiKey?: string }
@@ -118,7 +119,7 @@ export function toFailedSpeechResult(httpStatus: number, errorBody: string): Spe
 	}
 
 	// a rate limit and an overloaded or failing server are worth another attempt
-	if (httpStatus === 429 || httpStatus >= 500) {
+	if (isRetryableHttpStatus(httpStatus)) {
 		return { outcome: "retryable", httpStatus, reason }
 	}
 	return { outcome: "rejected", httpStatus, reason }

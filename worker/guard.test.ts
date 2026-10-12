@@ -98,7 +98,7 @@ test("toScreenVerdict returns the redacted text on an accepted document", () => 
 test("screenText reports unflagged when no scanner is configured", async () => {
 	// clear the url so the run is deterministic regardless of the calling shell's environment
 	const restoreEnvSettings = saveEnvSettings(["LLM_GUARD_URL"])
-	Bun.env.LLM_GUARD_URL = undefined
+	delete Bun.env.LLM_GUARD_URL
 
 	try {
 		// the caller's own text comes back untouched, so a disabled scanner changes nothing downstream

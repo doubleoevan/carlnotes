@@ -1,10 +1,11 @@
 // split a long document's text into bounded chunks for parallel summarization
+import { toPositiveInteger } from "@shared/envSettings"
 
 // the most chunks a document splits into, bounding the summarize fan-out. the environment can override it
-export const MAX_CHUNKS = Number(Bun.env.MAX_CHUNKS ?? "8")
+export const MAX_CHUNKS = toPositiveInteger(Bun.env.MAX_CHUNKS, 8)
 
-// the target characters per chunk, before the max-chunks bound forces larger chunks to cover the whole document
-export const CHUNK_CHARS = Number(Bun.env.CHUNK_CHARS ?? "8000")
+// how many characters a chunk aims for, before the max-chunks bound forces larger chunks
+export const CHUNK_CHARS = toPositiveInteger(Bun.env.CHUNK_CHARS, 8000)
 
 // split text into at most maxChunks chunks that together cover the whole document
 export function chunk(text: string, maxChunks: number, chunkChars: number): string[] {

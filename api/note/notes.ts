@@ -2,6 +2,7 @@
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import { toAvatarVersion } from "@shared/avatars"
+import { NOTE_UPDATE_MAX_CHARS } from "@shared/contracts/notes"
 import { noteCreatePayload, noteSyncPayload, noteUpdatePayload } from "@shared/payloads"
 import { eq, inArray } from "drizzle-orm"
 import { type Context, Hono } from "hono"
@@ -11,7 +12,9 @@ import { z } from "zod"
 import { db } from "../../db"
 import { notes } from "../../db/schema/notes"
 import { users } from "../../db/schema/users"
+import { toBodyLimit, toSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { NO_STORE_CACHE_CONTROL } from "../edgeCache"
 import { loadNoteBadges, saveNoteRead } from "./noteBadges"
 import { createNote, loadNotesPayload, loadVisibleNote, toNote } from "./notePayloads"
 import { onNoteUpdate } from "./noteStream"
@@ -20,6 +23,15 @@ import { canDeleteNote, canEditNote, creatableNoteVisibilities, loadTeamPage, lo
 
 // a live stream ends at this age
 const NOTE_STREAM_MAX_AGE_MS = 15 * 60 * 1000
+
+// the path of a note's sync post, after the /api base
+export const NOTE_SYNC_PATH = "/notes/:id/updates"
+
+// the note sync post's body limit: one update at its largest, plus the JSON around it
+const noteSyncBodyLimit = toBodyLimit(NOTE_UPDATE_MAX_CHARS + 1024)
+
+// a visitor's note sync post responds like a missing note, before its body is read
+const noteSyncSignedOutRejection = toSignedOutRejection("not found", 404)
 
 // the comma-joined user ids to resolve into usernames and avatars
 const noteUsersQuery = z.object({ ids: z.string().optional() })
@@ -186,29 +198,35 @@ export const notesRoute = new Hono<AppEnv>()
 		}
 		return context.body(Buffer.from(snapshot) as unknown as ArrayBuffer, 200, {
 			"Content-Type": "application/octet-stream",
-			"Cache-Control": "no-store",
+			"Cache-Control": NO_STORE_CACHE_CONTROL,
 		})
 	})
-	.post("/notes/:id/updates", zValidator("json", noteSyncPayload), async (context) => {
-		// one base64 update in, merged under the note's lock. writing takes edit access
-		const visibleNote = await loadVisibleNote(context, context.req.param("id"))
-		if (!visibleNote?.userId || !canEditNote(visibleNote.userId, visibleNote.note, visibleNote.access)) {
-			return context.json({ error: "not found" }, 404)
-		}
+	.post(
+		NOTE_SYNC_PATH,
+		noteSyncSignedOutRejection,
+		noteSyncBodyLimit,
+		zValidator("json", noteSyncPayload),
+		async (context) => {
+			// one base64 update in, merged under the note's lock. writing takes edit access
+			const visibleNote = await loadVisibleNote(context, context.req.param("id"))
+			if (!visibleNote?.userId || !canEditNote(visibleNote.userId, visibleNote.note, visibleNote.access)) {
+				return context.json({ error: "not found" }, 404)
+			}
 
-		// reject bytes that do not decode as a yjs update
-		let update: Buffer
-		try {
-			update = Buffer.from(context.req.valid("json").update, "base64")
-			Y.encodeStateVectorFromUpdate(update)
-		} catch {
-			return context.json({ error: "invalid update" }, 400)
-		}
+			// reject bytes that do not decode as a yjs update
+			let update: Buffer
+			try {
+				update = Buffer.from(context.req.valid("json").update, "base64")
+				Y.encodeStateVectorFromUpdate(update)
+			} catch {
+				return context.json({ error: "invalid update" }, 400)
+			}
 
-		// a failed save answers 500 instead of the invalid-update 400
-		await saveNoteUpdate(visibleNote.note.id, update, visibleNote.userId)
-		return context.json({ ok: true })
-	})
+			// a failed save responds 500 instead of the invalid-update 400
+			await saveNoteUpdate(visibleNote.note.id, update, visibleNote.userId)
+			return context.json({ ok: true })
+		},
+	)
 	.get("/notes/:id/events", async (context) => {
 		// the live stream, view access only
 		const visibleNote = await loadVisibleNote(context, context.req.param("id"))

@@ -4,6 +4,7 @@ import type { Context } from "hono"
 import { db } from "../../db"
 import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast"
 import { toPodcastEpisodeAudioUrl } from "../../worker"
+import { PRIVATE_NO_STORE_CACHE_CONTROL } from "../edgeCache"
 import { toPodcastEpisodeChaptersJson, toTranscriptHtml } from "../share/podcastFeed"
 import type { PodcastEpisodeRow } from "./podcastEpisodeRows"
 
@@ -26,7 +27,7 @@ export function toPodcastEpisodeAudioResponse(context: Context, podcastEpisodeRo
 	}
 
 	// redirect to the short-lived presigned url, and never cache the redirect
-	context.header("Cache-Control", "private, no-store")
+	context.header("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL)
 	return context.redirect(toPodcastEpisodeAudioUrl(podcastEpisodeRow.audioKey), 302)
 }
 

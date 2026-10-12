@@ -1,9 +1,9 @@
 // a pool setting read from the environment, and the pool size computed from the database at startup
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
-import * as monitoring from "@shared/monitoring"
+import { quietErrorReports } from "@shared/monitoringTestFixtures"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
-import { connectionPool, sizeConnectionPool, toPositiveInteger } from "./index"
+import { connectionPool, sizeConnectionPool } from "./index"
 
 // the pool's size and the connection string before a test changes them
 const originalPoolMax = connectionPool.options.max
@@ -20,22 +20,6 @@ afterEach(() => {
 	connectionPool.options.max = originalPoolMax
 	mock.restore()
 	restoreEnvSettings()
-})
-
-// unset and empty keep the default, a whole number is used as is, and a word, zero, a negative, or a fraction keeps the default
-test("an unset, a valid, and an unreadable value give the default or the value", () => {
-	const expectedValues: [string | undefined, number][] = [
-		[undefined, 40],
-		["", 40],
-		["12", 12],
-		["forty", 40],
-		["0", 40],
-		["-5", 40],
-		["2.5", 40],
-	]
-	for (const [value, expectedValue] of expectedValues) {
-		expect(toPositiveInteger(value, 40)).toBe(expectedValue)
-	}
 })
 
 // 0.9 times 209 is 188, which split across eight pools is 23
@@ -80,8 +64,7 @@ test("a failed read keeps the default and reports", async () => {
 	stubConnectionPool(() => {
 		throw new Error("connection refused")
 	})
-	spyOn(console, "error").mockImplementation(() => {})
-	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	const reportErrorSpy = quietErrorReports()
 
 	// the size stays, and the failure is reported under the database stage
 	expect(await sizeConnectionPool()).toBe(15)

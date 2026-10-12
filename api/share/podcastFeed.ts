@@ -5,6 +5,7 @@ import type {
 	PodcastEpisodeScript,
 	PodcastEpisodeTranscriptBlock,
 } from "@shared/contracts/podcast"
+import type { visibilities } from "@shared/enums"
 import {
 	AI_VOICES_NOTE,
 	PODCAST_EPISODE_SPEAKER_NAMES,
@@ -47,7 +48,7 @@ export type PodcastFeedEpisode = {
 // what a feed is built from. the podcast episode files' base url is the public url or the listener's own token path
 export type ToPodcastFeedXmlOptions = {
 	appUrl: string
-	topic: { id: string; name: string; prompt: string; visibility: "public" | "invite" | "private" }
+	topic: { id: string; name: string; prompt: string; visibility: (typeof visibilities)[number] }
 	feedUrl: string
 	podcastEpisodeFilesBaseUrl: string
 	// a listener's own feed is blocked from podcast directories

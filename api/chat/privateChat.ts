@@ -7,11 +7,11 @@ import { ADMIN_QUOTA } from "@shared/plans"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
-import { bodyLimit } from "hono/body-limit"
 import { db } from "../../db"
 import { topics } from "../../db/schema/topics"
 import { type ChatTurnInput, loadOrProvisionUserLiteLLMKey, streamChatReply } from "../../worker"
 import { topicLimit } from "../authorization"
+import { toBodyLimit, toSignedOutRejection } from "../bodyLimit"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
 import {
@@ -29,16 +29,25 @@ import {
 	authorizeNewTopicChatTurn,
 	authorizeTeamChatTurn,
 	type ChatTurnAuthorization,
+	SIGNUP_REQUIRED_ERROR,
 } from "./chatTurnAuthorization"
 import { streamChatTurn } from "./chatTurnStream"
 import { type ChatPage, clearChatTurns, loadChatTurns, toChatPageId } from "./chatTurns"
 import { saveLinkPreviews } from "./linkPreviews"
 
-// one body limit for every chat post, sized for a question plus its data url attachments
-export const chatBodyLimit = bodyLimit({
-	maxSize: 26 * 1024 * 1024,
-	onError: (context) => context.json({ error: "Those attachments are too large." }, 413),
-})
+// the paths of a topic's chat, a team's chat, and the new-topic chat, after the /api base
+export const TOPIC_CHAT_PATH = "/topics/:id/chat"
+export const TEAM_CHAT_PATH = "/teams/:id/chat"
+export const NEW_TOPIC_CHAT_PATH = "/chat/new-topic"
+
+// the largest body a chat post may send, sized for a question plus its data url attachments
+const CHAT_BODY_LIMIT_BYTES = 26 * 1024 * 1024
+
+// one body limit for every chat post
+export const chatBodyLimit = toBodyLimit(CHAT_BODY_LIMIT_BYTES, "Those attachments are too large.")
+
+// a visitor's chat post is rejected before its body is read, with the error the gate gives a visitor's turn
+const chatSignedOutRejection = toSignedOutRejection(SIGNUP_REQUIRED_ERROR)
 
 // whether the user owns no topic yet
 async function ownsNoTopic(userId: string | null): Promise<boolean> {
@@ -94,7 +103,7 @@ function toChatRejection(context: Context, status: "budget" | "signup" | "forbid
 		return context.json({ error: "budget exhausted" }, 402)
 	}
 	if (status === "signup") {
-		return context.json({ error: "sign up required" }, 401)
+		return context.json({ error: SIGNUP_REQUIRED_ERROR }, 401)
 	}
 
 	// reject a page this user may not chat on
@@ -245,7 +254,7 @@ function toPromptTopicsRemaining(remainingTopics: number | undefined): number | 
 
 // the private chat routes on each page: the conversation, clearing it, and the streamed reply
 export const privateChatRoute = new Hono<AppEnv>()
-	.get("/topics/:id/chat", async (context) => {
+	.get(TOPIC_CHAT_PATH, async (context) => {
 		// load what the panel opens with: the user's stored conversation, their kept attachments, and whether they may chat
 		const userId = currentUser(context)
 		const topicId = context.req.param("id")
@@ -259,10 +268,11 @@ export const privateChatRoute = new Hono<AppEnv>()
 		const chatConversation: ChatConversation = { ...toChatConversation(chatTurns, authorization), keptAttachments }
 		return context.json(chatConversation)
 	})
-	.delete("/topics/:id/chat", (context) => clearChatConversation(context, { topicId: context.req.param("id") }))
+	.delete(TOPIC_CHAT_PATH, (context) => clearChatConversation(context, { topicId: context.req.param("id") }))
 	.post(
-		"/topics/:id/chat",
+		TOPIC_CHAT_PATH,
 		toolCallerRateLimiter,
+		chatSignedOutRejection,
 		chatBodyLimit,
 		zValidator("json", chatTurnPayload),
 		async (context) => {
@@ -279,7 +289,7 @@ export const privateChatRoute = new Hono<AppEnv>()
 			})
 		},
 	)
-	.get("/teams/:id/chat", async (context) => {
+	.get(TEAM_CHAT_PATH, async (context) => {
 		// load the team-wide conversation that the panel opens with. a team chat keeps no attachments of its own
 		const userId = currentUser(context)
 		const teamId = context.req.param("id")
@@ -289,10 +299,11 @@ export const privateChatRoute = new Hono<AppEnv>()
 		])
 		return context.json(toChatConversation(chatTurns, authorization))
 	})
-	.delete("/teams/:id/chat", (context) => clearChatConversation(context, { teamId: context.req.param("id") }))
+	.delete(TEAM_CHAT_PATH, (context) => clearChatConversation(context, { teamId: context.req.param("id") }))
 	.post(
-		"/teams/:id/chat",
+		TEAM_CHAT_PATH,
 		toolCallerRateLimiter,
+		chatSignedOutRejection,
 		chatBodyLimit,
 		zValidator("json", chatTurnPayload),
 		async (context) => {
@@ -309,7 +320,7 @@ export const privateChatRoute = new Hono<AppEnv>()
 			})
 		},
 	)
-	.get("/chat/new-topic", async (context) => {
+	.get(NEW_TOPIC_CHAT_PATH, async (context) => {
 		// load the new-topic conversation and whether this is the user's first topic
 		const userId = currentUser(context)
 		const [chatTurns, authorization, isFirstTopic, planTopicLimit, topicDraft] = await Promise.all([
@@ -330,10 +341,11 @@ export const privateChatRoute = new Hono<AppEnv>()
 		}
 		return context.json(chatConversation)
 	})
-	.delete("/chat/new-topic", (context) => clearChatConversation(context, { newTopic: true }))
+	.delete(NEW_TOPIC_CHAT_PATH, (context) => clearChatConversation(context, { newTopic: true }))
 	.post(
-		"/chat/new-topic",
+		NEW_TOPIC_CHAT_PATH,
 		toolCallerRateLimiter,
+		chatSignedOutRejection,
 		chatBodyLimit,
 		zValidator("json", chatTurnPayload),
 		async (context) => {

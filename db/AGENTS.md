@@ -26,10 +26,15 @@ Drizzle + Neon Postgres, and the Redis store.
   has them, and `isCurrentModelEmbedding` a resource the current embedding model embedded. The api and the worker both
   apply them.
 - `redis.ts` — the Redis store, on Bun's built-in client from `REDIS_URL`.
-  `runWithRedis` runs one operation and returns null on any failure,
-  and `cacheJson` returns a cached value, or loads the value and caches it.
-  `incrementRateLimitWindow` is the fixed window counter behind the api's shared limiters, and `takeRateLimitSlot`
-  is the slot that one call holds at a time, behind the Resend limit that the api and the worker share.
+  `runWithRedis` runs one operation and returns null on any failure, including a command with no reply in two
+  seconds, and three such commands in a row replace the client, so a wedged connection never holds every request.
+  `cacheJson` returns a cached value, or loads the value and caches it. `redisGauges.ts` holds the extra gauges the
+  minute line reads: the store's counts with the server's used and maximum memory, warning if the command connection
+  is down, at eight tenths of the memory limit, and at ten errors in a minute.
+  `redisRateLimits.ts` holds the rate limits over the store: `incrementRateLimitWindow` is the fixed window counter
+  behind the api's shared limiters, `countRateLimitHit` counts a hit and returns whether it is within a limit, and
+  `takeRateLimitSlot` is the slot that one call holds at a time, behind the Resend limit that the api and the worker
+  share.
   `publishToChannel` and `subscribeToChannel` are the fan-out, and each process subscribes on one subscriber connection.
   `addSubscriberReconnectListener` runs a listener each time that connection has come back after a drop.
   `readAndResetRedisGauges` returns the minute line's counts.
@@ -43,7 +48,8 @@ Drizzle + Neon Postgres, and the Redis store.
 - `memoryRateLimitWindows.ts` — the rate limit windows a process counts in memory while Redis cannot count them,
   bounded by expiry and by a limit of 10,000 keys, the oldest evicted first. A memory count is never written to Redis.
 - `claim.ts` — `runWithClaim` runs the sweep and the budget reset under a database-level claim.
-  The claim is a transaction-level advisory lock keyed by the claim's name.
+  The claim is a transaction-level advisory lock keyed by the claim's name, in a transaction that first opts out of
+  any idle-in-transaction timeout while the task runs.
   The lock works through the connection pooler and releases with the transaction no matter how the task ends.
   A sweep or reset that starts while the claim is held does nothing.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, and budget
@@ -59,8 +65,9 @@ Drizzle + Neon Postgres, and the Redis store.
   request's cache hits and misses with the keys that missed, which `redis.ts` reports to it. A write statement clears
   the memo of the request that sent it. `countRequestStatement` is the one count, which the connection pool stub
   calls too, so a test's queries count the way real ones do.
-- `redisFakeServer.ts` — the fake Redis server behind `redis.test.ts`: in-memory clients that connect, drop,
-  subscribe, and deliver published messages, with the reconnect delays shortened to nothing.
+- `redisFakeServer.ts` — the fake Redis server behind `redis.test.ts`, `redisRateLimits.test.ts`, and
+  `redisGauges.test.ts`: in-memory clients that connect, drop, subscribe, and deliver published messages, with the
+  reconnect delays shortened to nothing. `startFakeRedisStore` builds the store's clients on a fresh one.
 - `redisClientStub.ts` — the Redis client stub that the tests share. `stubRedisClient` swaps the store's clients for
   in-memory fakes over one map and returns the map, and `restoreRedisClient` puts the store's own builder back. Only
   tests import it.
@@ -68,7 +75,10 @@ Drizzle + Neon Postgres, and the Redis store.
   a test picks for each query, records each query sent, counts each one toward the running request, and runs a
   transaction's callback on the stubbed client. `restoreConnectionPool` puts the pool's own query and the client's own
   transaction back, and `toTableRow` builds a row in a table's column order. Only tests import it.
-- `migrate.ts` applies pending migrations, and `seed.ts` has the dev stub data behind `bun run db:seed`.
+- `migrate.ts` applies pending migrations, then sets the role's `statement_timeout` to 30 seconds, which the connection
+  pooler's server connections take as the role's default, so a runaway query is cancelled instead of holding a pooled
+  connection. A migration that needs longer puts `SET LOCAL statement_timeout = 0` first in its own SQL. `seed.ts` has
+  the dev stub data behind `bun run db:seed`.
 - Schema changes edit the domain's file in `schema/`, then `bun run db:generate` writes the migration (offline, no
   doppler) and `bun run db:migrate` applies it (its script already runs under doppler). Never
   hand-edit an applied migration.

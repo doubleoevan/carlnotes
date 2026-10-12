@@ -3,6 +3,7 @@
 // farther than a fixed limit. the public shown ones are ranked once for everyone, and the ones a user may open through
 // their account are ranked for that user alone
 import { NO_SCRIPT_ROW_LIMIT } from "@shared/seo"
+import { DAY_MS } from "@shared/time"
 import { type SQL, type SQLWrapper, sql } from "drizzle-orm"
 import { type DbTransaction, db, isCurrentModelEmbedding, runWithIterativeIndexScan } from "../../db"
 import { cacheJson } from "../../db/redis"
@@ -24,7 +25,7 @@ const SHARED_TAG_SCORE_BONUS = 0.1
 const MAX_COUNTED_SHARED_TAGS = 2
 
 // how long Redis keeps the average resource embedding, and how many resources it averages
-const EMBEDDING_CENTROID_TTL_MS = 24 * 60 * 60 * 1000
+const EMBEDDING_CENTROID_TTL_MS = DAY_MS
 const EMBEDDING_CENTROID_RESOURCE_LIMIT = 20_000
 
 // the Redis key of the current embedding model's average resource embedding

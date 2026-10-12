@@ -1,8 +1,13 @@
 # worker/
 
-Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker,
-with its scan concurrency set by `SCAN_CONCURRENCY`), `schedule.ts` (the sweep that starts scheduled scans, then
-retries the pending object deletions through `retryPendingObjectDeletions.ts`),
+Temporal worker and the scan pipeline. Entries: `temporal.ts` (the worker, with its scan concurrency set by
+`SCAN_CONCURRENCY`, the concurrency of each of its attachment and source-screen Workers by `SCREEN_CONCURRENCY`, and a
+Worker of its own for the `scan-closing` queue that records a scan's outcome apart from the scan slots), `schedule.ts`
+(the sweep that starts as many scheduled scans as the backlog allows, then retries the pending object deletions through
+`retryPendingObjectDeletions.ts` and reports the day's spend across every user through `dailySpend.ts`, which warns past
+`GLOBAL_DAILY_SPEND_ALERT_USD`), `scanQueue.ts` (the sweep's view of the scan queue: the start of the rows a dying
+caller never dispatched, the queue's report, and how many Scans a sweep may start, `SCAN_DISPATCH_LIMIT` minus the
+backlog),
 `resetMonthlyBudgets.ts` (the monthly budget reset, a daily job run as `bun run reset:monthly-budgets`),
 `worker/index.ts` (what api may import), `staleScans.ts` (the close-out of a scan that outran its stages or never
 started, which the sweep and the manual scan route run).
@@ -35,8 +40,10 @@ started, which the sweep and the manual scan route run).
   podcast episode smoke seeds its rows through `podcast/podcastEpisodeSmokeFixtures.ts`.
 
 - `workflows/` — Temporal workflows and activities; `ingest/` — one ingester per Source kind,
-  `ingester.ts` is the interface; `review/` — filtering and scoring (`filter.ts` the relevance gate, `dedupe.ts` the
-  content hash and near-duplicate pass, `fetch.ts` the content fetch for a Resource to score, `score.ts` the scoring
+  `ingester.ts` is the interface, whose optional `ingestContext` includes the Scan owner's key: the Topic owner's for a
+  scheduled Scan and the starting user's for a manual one. The search ingester's query generation bills that key like
+  every other model call a Scan makes; `review/` — filtering and scoring (`filter.ts` the relevance gate, `dedupe.ts`
+  the content hash and near-duplicate pass, `fetch.ts` the content fetch for a Resource to score, `score.ts` the scoring
   and the finding writes, with `reviewTestFixtures.ts` beside their tests); `chat/` — Carl's streamed
   chat replies (`index.ts` streams a reply, `chatMessages.ts` shapes a conversation into the model messages a turn
   sends, and `chatPrompts.ts` builds each chat's system prompt from its template) and their retrieval (`retrieve.ts`,
@@ -53,7 +60,7 @@ started, which the sweep and the manual scan route run).
 - `telemetry.ts` traces model calls in Langfuse on its own tracer provider beside Sentry's, and both processes start
   Sentry before it. `temporal.ts` logs the connection pool, the event loop delay, the scan queue, and Redis once a
   minute, and the sweep reports a queue nothing polls and a backlog older than 15 minutes, both through
-  `describeScanQueue` in `temporalClient.ts`.
+  `describeScanQueue` in `temporalClient.ts`, whose connect, workflow start, and cancel each give up after ten seconds.
 - Every scan stage charges the Scan's one Budget (`budget.ts`); nothing spends outside it.
 - A completed Scan's email runs in its own workflow, `workflows/sendScanEmail.ts`, on the `scan-emails` queue that the
   file names, with its own Worker in `temporal.ts`. The scan workflow starts it as a child workflow that outlives the
@@ -62,7 +69,8 @@ started, which the sweep and the manual scan route run).
   anyone twice. `scanEmailContent.ts` holds what a Scan's email says: the props the digest and the report render from,
   and one subscriber's rendered message. `email.ts` sends through Resend, and every call from the api or the worker
   first takes a rate limit slot shared in Redis, which one call holds for 200 milliseconds, so calls leave evenly spaced
-  at five a second.
+  at five a second. A call that would wait past ten seconds for the slot goes ahead without it, and each wait adds a
+  little jitter, so waiters that woke together do not ask in lockstep.
 - A succeeded Scan's podcast episode is recorded in its own workflow, `workflows/recordPodcastEpisode.ts`, on the
   `episode-recordings` queue that the file names, with its own Worker in `temporal.ts` whose concurrency is set by
   `PODCAST_RECORDING_CONCURRENCY`. The scan workflow starts it as a child workflow that outlives the Scan's own, after
@@ -96,8 +104,12 @@ started, which the sweep and the manual scan route run).
   The fetch that follows may replace a title read off the url and leaves the hash alone, so a retitled
   Resource still matches its Finding's `reviewed_content_hash` and no later Scan pays to score it again.
 - Untrusted text is screened by LLM Guard (`guard.ts`) before any model reads it.
-- Every fetch of a user-supplied url goes through `fetchPublicUrl` (`publicFetch.ts`), which re-checks
-  each redirect hop against the internal-address rule, with `readLimitedBody` bounding reads. `scrape.ts` reads a
-  declared transcript over that path, reads a reddit thread from reddit's own api, and scrapes any other page
-  through Firecrawl, and `linkPreview.ts` reads a chat link's preview on it.
+- Every fetch of a user-supplied url goes through `fetchPublicUrl` (`publicFetch.ts`), which re-checks each redirect hop
+  against the internal-address rule, with `readLimitedBody` bounding reads. A fetch that a server responds to with an
+  error status throws `FetchStatusError`, and `isRetryableFetchFailure` says whether a failure is worth a retry: a
+  timeout, an abort, a 429, or a 5xx. `scrape.ts` reads a reddit thread from reddit's own api and scrapes any other page
+  through Firecrawl, `transcripts.ts` reads a video's captions from YouTube, Vimeo, or Dailymotion and a declared
+  transcript over that path, and `linkPreview.ts` reads a chat link's preview on it.
+- `suggest.ts` suggests a Topic's Sources, and `suggestedSourceChecks.ts` resolves each suggested Source to the value
+  its ingester stores and checks that its ingester can read it.
 - Tests: `bun test worker`; `*.smoke.ts` hit real services and run under `doppler run`.

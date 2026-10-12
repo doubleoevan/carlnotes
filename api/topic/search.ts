@@ -7,6 +7,7 @@ import { loadUserAccess } from "../../db/quotas"
 import { topics } from "../../db/schema/topics"
 import { type AppEnv, currentUser } from "../currentUser"
 import { toContainsLikePattern } from "../likePattern"
+import { searchRateLimiter } from "../rateLimit"
 import { toTopicViewFilter } from "./permissions"
 
 // who is searching, and the typed query
@@ -48,6 +49,6 @@ export function toTopicSearchQuery({ userId, query, isAdmin }: ToTopicSearchQuer
 }
 
 // the topic search route, mounted ahead of the topic routes so /topics/search is never read as a topic id
-export const topicSearchRoute = new Hono<AppEnv>().get("/topics/search", async (context) =>
+export const topicSearchRoute = new Hono<AppEnv>().get("/topics/search", searchRateLimiter, async (context) =>
 	context.json({ topics: await searchTopics({ userId: currentUser(context), query: context.req.query("q") ?? "" }) }),
 )

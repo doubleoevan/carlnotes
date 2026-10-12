@@ -6,7 +6,7 @@ import { cheapModel } from "../models.ts"
 // the prompt loader fetches the registry version first, falling back to the bundled markdown
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch.ts"
 import { writePrompt } from "../prompts/write.ts"
-import type { NewResource, Source, SourceIngester } from "./ingester"
+import type { IngestContext, NewResource, Source, SourceIngester } from "./ingester"
 import { toResourceKind } from "./normalize"
 import { fetchVideos, playlistIdFromUrl } from "./youtube"
 
@@ -20,12 +20,13 @@ const MAX_CONTEXT_CHARS = 8000
 const EXA_ENDPOINT = "https://api.exa.ai/search"
 
 // read the topic's context, generate queries from it, search per query, and merge the deduped Resources
-export const searchIngester: SourceIngester = async (source: Source) => {
-	// the context combines the topic's prompt with its attachments along with the topic name to be used for query generation
+export const searchIngester: SourceIngester = async (source: Source, ingestContext?: IngestContext) => {
+	// read the topic's context and name
 	const { name: topicName, context: topicContext } = await buildTopicScanContext(source.topicId)
 
-	// generate search queries from the context, then run them and keep whichever succeeds
-	const searchQueries = await generateSearchQueries({ topicContext, topicName })
+	// generate search queries from the context on the Scan owner's key, then run them and keep whichever succeeds
+	const litellmApiKey = ingestContext?.litellmApiKey
+	const searchQueries = await generateSearchQueries({ topicContext, topicName, litellmApiKey })
 	const searchResponses = await runSearches(searchQueries)
 
 	// merge search query results. sum the per-search cost and collect the Resources
@@ -67,22 +68,23 @@ export async function buildSearchPrompt(context: string, name: string): Promise<
 	return { prompt, name: promptName, registryPrompt }
 }
 
-// the topic's context and its name, which the search queries are written from
-type GenerateSearchQueriesOptions = { topicContext: string; topicName: string }
+// the topic's context and its name, which the search queries are written from, and the key that bills the writing
+type GenerateSearchQueriesOptions = { topicContext: string; topicName: string; litellmApiKey?: string }
 
 /**
- * Writes a limited list of search queries from the topic's context with the cheap model.
+ * Writes a limited list of search queries from the topic's context with the cheap model, billed to the given key.
  */
 export async function generateSearchQueries({
 	topicContext,
 	topicName,
+	litellmApiKey,
 }: GenerateSearchQueriesOptions): Promise<string[]> {
 	// fetch and write the prompt
 	const searchPrompt = await buildSearchPrompt(topicContext, topicName)
 
 	// write the queries as structured output. promptTelemetry links the registry version to the trace
 	const { output } = await generateText({
-		model: cheapModel(),
+		model: cheapModel(litellmApiKey),
 		output: Output.object({ schema: z.object({ queries: z.array(z.string()) }) }),
 		prompt: searchPrompt.prompt,
 		...promptTelemetry(searchPrompt),

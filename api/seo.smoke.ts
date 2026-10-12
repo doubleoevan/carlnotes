@@ -11,7 +11,7 @@ import { teamMembers, teams } from "../db/schema/teams"
 import { topics } from "../db/schema/topics"
 import { users } from "../db/schema/users"
 import { deleteStoredObject } from "../worker"
-import { RENDERED_CACHE_TAG } from "./edgeCache"
+import { RENDERED_CACHE_TAG, RENDERED_EDGE_CACHE_CONTROL } from "./edgeCache"
 import { loadPublicTopics, loadTopicFeedUpdatedAt, toSitemapXml } from "./seo"
 import { toTopicPreview } from "./share/preview"
 import { toTopicPreviewKey } from "./share/topicImage"
@@ -247,7 +247,7 @@ try {
 		})
 		const signedInResponse = await fetch(`${API_ORIGIN}${renderedPath}`, { headers: { cookie: SESSION_COOKIE } })
 		failUnless(
-			signedOutResponse.headers.get("cdn-cache-control") === "max-age=60, stale-while-revalidate=60",
+			signedOutResponse.headers.get("cdn-cache-control") === RENDERED_EDGE_CACHE_CONTROL,
 			`${renderedPath} is not shared at the edge`,
 		)
 		failUnless(signedOutResponse.headers.get("cache-tag") === RENDERED_CACHE_TAG, `${renderedPath} has no purge tag`)

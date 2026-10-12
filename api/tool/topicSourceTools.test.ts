@@ -1,8 +1,26 @@
-// topic source tool tests for the cost delta, the source input and match, and the source limit
-import { expect, test } from "bun:test"
+// topic source tool tests for the cost delta, the source input and match, the source limit, and the visitors' cached
+// copies that a source change drops
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { MAX_TOPIC_SOURCES } from "@shared/contracts/topics"
 import { SCAN_COST_CENTS } from "@shared/plans"
-import { isSameTopicSource, toNewTopicSource, toTopicSourceCostDelta } from "./topicSourceTools"
+import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"
+import { restoreRedisClient, stubRedisClient } from "../../db/redisClientStub"
+import { toVisitorTopicPageKey } from "../topic/feeds"
+import {
+	addTopicSource,
+	isSameTopicSource,
+	removeTopicSource,
+	toNewTopicSource,
+	toTopicSourceCostDelta,
+} from "./topicSourceTools"
+import * as topicTools from "./topicTools"
+
+// put the pool, the Redis client, and the spies back after each test
+afterEach(() => {
+	restoreConnectionPool()
+	restoreRedisClient()
+	mock.restore()
+})
 
 // a topic with scans spreads its mean scan cost across its ready sources
 test("the cost delta is the mean recent scan cost shared across the ready sources", () => {
@@ -84,4 +102,44 @@ test("a stored source matches a new one by kind and value", () => {
 // the tool rejects at the shared source limit of ten
 test("the source limit is the shared constant", () => {
 	expect(MAX_TOPIC_SOURCES).toBe(10)
+})
+
+// the visitors' feed shows a public topic's sources, so adding or removing one drops the feed copy with the page copy
+test("a source added to or removed from a public topic drops the visitors' feed and page copies", async () => {
+	// a public topic the user may edit, and one Redis holding the topic's page copy and a feed view
+	spyOn(topicTools, "loadEditableTopic").mockResolvedValue({
+		status: "ok",
+		userId: "user-1",
+		topic: { id: "t1", visibility: "public", frequency: "daily" } as never,
+	})
+	const storedValueByKey = stubRedisClient()
+	const fillVisitorCopies = (): void => {
+		storedValueByKey.set(toVisitorTopicPageKey("t1"), "{}")
+		storedValueByKey.set("topic-feed:visitor:unread", "{}")
+	}
+
+	// an added source, into a topic with no sources or scans, drops both copies
+	fillVisitorCopies()
+	stubConnectionPool(({ text }) => (text.startsWith("insert") ? [["source-1"]] : []))
+	const addTopicSourceResult = await addTopicSource({
+		userId: "user-1",
+		topicId: "t1",
+		sourceOption: "rss",
+		value: "https://a.test/feed",
+		origin: "chat",
+	})
+	expect(addTopicSourceResult.status).toBe("saved")
+	expect(storedValueByKey.size).toBe(0)
+
+	// a removed source drops both copies too
+	fillVisitorCopies()
+	stubConnectionPool(({ text }) => (text.startsWith("select") ? [["t1", "rss", { url: "https://a.test/feed" }]] : []))
+	const removeTopicSourceResult = await removeTopicSource({
+		userId: "user-1",
+		topicId: "t1",
+		sourceId: "source-1",
+		origin: "chat",
+	})
+	expect(removeTopicSourceResult.status).toBe("saved")
+	expect(storedValueByKey.size).toBe(0)
 })

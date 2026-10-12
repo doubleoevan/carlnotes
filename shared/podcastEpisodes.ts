@@ -1,5 +1,6 @@
 // the podcast episode speech model, the episode lengths, a cover's key and path, the show and host names,
 // and a turn's transcript text
+import { toHmacDigest } from "./hmac"
 
 // the Gemini speech model that records episodes.
 // PODCAST_SPEECH_MODEL names another model, and an empty value turns podcast episodes off
@@ -41,7 +42,7 @@ export function toPodcastCoverKey({ kind, id, title }: PodcastCover): string {
 	if (!secret) {
 		throw new Error("BETTER_AUTH_SECRET must be set to sign podcast cover urls")
 	}
-	const coverHash = new Bun.CryptoHasher("sha256", secret).update(JSON.stringify([kind, id, title])).digest("hex")
+	const coverHash = toHmacDigest({ value: JSON.stringify([kind, id, title]), secret, encoding: "hex" })
 	return coverHash.slice(0, 32)
 }
 

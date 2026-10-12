@@ -1,4 +1,5 @@
 // starting a Scan
+import { isGrpcDeadlineError } from "@temporalio/client"
 import { and, desc, eq, isNull } from "drizzle-orm"
 import { db } from "../db"
 import { scans } from "../db/schema/scans"
@@ -56,12 +57,16 @@ export async function scanTopic(
 	trigger: ScanTrigger,
 	isExistingRow = false,
 ): Promise<TopicScanStart> {
-	// a start that throws leaves the row with nothing running. a row this call opened runs instead of being deleted
+	// a start that throws leaves the row with nothing running, so a row this call opened is deleted and an existing row is
+	// kept for the sweep to dispatch. a start that hit its deadline may have started the workflow, so its row is kept too
 	let scanStart: ScanStart
 	try {
 		scanStart = await startTopicScanWorkflow(scan.id, topicId, ownerId, trigger)
 	} catch (error) {
-		await deleteUnstartedScan(scan.id, isExistingRow)
+		// delete a row this call opened unless the start hit its deadline, then throw the same error
+		if (!isExistingRow && !isGrpcDeadlineError(error)) {
+			await deleteUnstartedScan(scan.id)
+		}
 		throw error
 	}
 
@@ -110,12 +115,8 @@ async function setScanDispatchedDate(scanId: string): Promise<void> {
 	await db.update(scans).set({ dispatchedAt: new Date() }).where(eq(scans.id, scanId))
 }
 
-// drop a Scan row whose workflow never started, so it never reads as a started Scan.
-// a row that already existed is kept
-async function deleteUnstartedScan(scanId: string, isExistingRow: boolean): Promise<void> {
-	if (isExistingRow) {
-		return
-	}
+// drop a Scan row whose workflow never started, so it never reads as a started Scan
+async function deleteUnstartedScan(scanId: string): Promise<void> {
 	await db.delete(scans).where(eq(scans.id, scanId))
 }
 

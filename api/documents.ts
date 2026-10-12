@@ -11,7 +11,7 @@ import { podcastFeedTokens } from "../db/schema/podcast"
 import { topics } from "../db/schema/topics"
 import { loadPages } from "./content"
 import type { AppEnv } from "./currentUser"
-import { setRenderedCacheHeaders } from "./edgeCache"
+import { PRIVATE_NO_STORE_CACHE_CONTROL, setRenderedCacheHeaders } from "./edgeCache"
 import {
 	loadPodcastFeedTokenListener,
 	loadRenderedPodcastFeed,
@@ -97,7 +97,7 @@ export const documentsRoute = new Hono<AppEnv>()
 		// respond with the listener's own feed, or a 304 if the listener's copy is current
 		const listener = { userId: podcastFeedTokenListener.userId, token: podcastFeedToken }
 		const renderedPodcastFeed = await loadRenderedPodcastFeed({ topic, listener })
-		const routeHeaders = { ...NOINDEX_HEADER, "Cache-Control": "private, no-store" }
+		const routeHeaders = { ...NOINDEX_HEADER, "Cache-Control": PRIVATE_NO_STORE_CACHE_CONTROL }
 		return toPodcastFeedResponse({ context, renderedPodcastFeed, routeHeaders })
 	})
 	// the permanent redirects from the plans page's old path and the old topics index

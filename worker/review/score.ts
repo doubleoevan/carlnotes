@@ -1,4 +1,5 @@
 // the paid stages: score each fetched Resource against the topic context with tiered models, and write its Finding
+import { toPositiveInteger } from "@shared/envSettings"
 import { reportError } from "@shared/monitoring"
 import { generateText, type LanguageModel, Output } from "ai"
 import { sql } from "drizzle-orm"
@@ -35,7 +36,7 @@ const REVIEW_PROMOTION_THRESHOLD = Number(Bun.env.REVIEW_PROMOTION_THRESHOLD ?? 
 const CUSTOM_SOURCE_SCORE_BONUS = 0.05
 
 // how many resources the paid fetch-and-scoring section works concurrently
-const REVIEW_CONCURRENCY = Number(Bun.env.REVIEW_CONCURRENCY ?? "4")
+const REVIEW_CONCURRENCY = toPositiveInteger(Bun.env.REVIEW_CONCURRENCY, 4)
 
 // the text limit that bounds scoring tokens and spend
 const MAX_SCORE_CHARS = 8000

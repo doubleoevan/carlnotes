@@ -60,14 +60,14 @@ export async function ingestForScan(scanId: string, topicId: string): Promise<In
 
 	// create the LiteLLM key of the Scan's owner if the owner has none, before any Source runs.
 	// the Scan fails before spending on ingest if the proxy cannot create the key
-	await loadOrProvisionUserLiteLLMKey(scan.ownerId)
+	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(scan.ownerId)
 
 	// the Budget is made here instead of in the workflow
 	const budget = toStageBudget(newBudget())
 	return traceScanStage("scan-ingest", scanId, topicId, () =>
 		withHeartbeat(budget, async () => {
 			// every later stage charges into the budget this returns ingestion runs every Source at once
-			const { sourceOutcomes, summary } = await ingestFromTopicSources(topicId, budget)
+			const { sourceOutcomes, summary } = await ingestFromTopicSources({ topicId, budget, litellmApiKey })
 			await recordScanProgress(scanId, budget)
 			// drop the fetched page bodies before the result crosses the activity boundary
 			return {

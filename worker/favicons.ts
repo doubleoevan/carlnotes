@@ -1,6 +1,7 @@
 // a host's favicon: fetched once when review reads a page on the host, kept for every place the host is named
 import { reportError } from "@shared/monitoring"
 import { toHostVariant } from "@shared/sources"
+import { DAY_MS } from "@shared/time"
 import { eq } from "drizzle-orm"
 import { db } from "../db"
 import { favicons } from "../db/schema/storage"
@@ -8,7 +9,7 @@ import { fetchLinkPreviewImage, type LinkPreviewImage, PREVIEW_IMAGE_TYPES } fro
 import { toFaviconKey, uploadAttachment } from "./store"
 
 // how long a fetch is kept, failed or not, before a page on the host fetches the icon again
-export const FAVICON_TTL_MS = 30 * 24 * 60 * 60 * 1000
+export const FAVICON_TTL_MS = 30 * DAY_MS
 
 // an ico with every size runs to a quarter megabyte. one past this is not worth serving on every row
 export const MAX_FAVICON_BYTES = 256 * 1024

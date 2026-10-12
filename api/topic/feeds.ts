@@ -1,12 +1,13 @@
 // the topic feed logic for the homepage route. it batches every topic's data in one pass and builds each feed in memory
 import { toAvatarVersion } from "@shared/avatars"
 import type { TopicFinding } from "@shared/contracts/findings"
-import type { TopicFeed, TopicFeedResponse } from "@shared/contracts/topics"
+import type { TopicFeed, TopicFeedResponse, TopicResponse } from "@shared/contracts/topics"
+import type { visibilities } from "@shared/enums"
 import { traceRequestStage } from "@shared/monitoring"
 import { toSourceSummary, toSourceValue } from "@shared/sources"
 import { and, asc, desc, eq, inArray, isNotNull, isNull, ne } from "drizzle-orm"
 import { db, isPublicAndShown } from "../../db"
-import { cacheJson, deleteRedisKey } from "../../db/redis"
+import { cacheJson, deleteRedisKeys } from "../../db/redis"
 import { subscriptions, topics } from "../../db/schema/topics"
 import { attachTopicFindingFaviconPaths } from "../favicons"
 import { loadTopicFeedData } from "./feedData"
@@ -17,11 +18,31 @@ import { toScheduledTimeLabel } from "./helpers"
 const TOPIC_SECTION_IDS_KEY = "topic-section-ids"
 const TOPIC_SECTION_IDS_TTL_MS = 60_000
 
+// the Redis key prefix the visitors' feed is served through, one key per view, and how long a visitor's cached feed or
+// topic page is kept
+const VISITOR_TOPIC_FEED_KEY_PREFIX = "topic-feed:visitor"
+const VISITOR_CACHE_TTL_MS = 30_000
+
+// the Redis key prefix that a topic page is served through, to visitors and to a poll reload
+export const TOPIC_PAGE_KEY_PREFIX = "topic-page"
+
 // how many popular topic ids the homepage keeps, ten pages of its five
 const MAX_POPULAR_TOPIC_IDS = 50
 
 // the featured and popular topic id lists
 type TopicSectionIds = { featuredIds: string[]; popularIds: string[] }
+
+// a topic's visibility
+type TopicVisibility = (typeof visibilities)[number]
+
+// the topic whose cached visitor copies to drop, its visibility after the change, its visibility before the change if
+// the change may have set a new one, and whether the change released its feature order
+type ClearVisitorTopicCachesOptions = {
+	topicId: string
+	visibility: TopicVisibility
+	previousVisibility?: TopicVisibility
+	isFeatureOrderReleased?: boolean
+}
 
 // the topic ids this user actively subscribes to
 function activeSubscriptionTopicIdQuery(userId: string) {
@@ -32,10 +53,69 @@ function activeSubscriptionTopicIdQuery(userId: string) {
 }
 
 /**
- * Deletes the shared topic section id lists, so the next feed build on any replica reads them fresh.
+ * Deletes the shared topic section id lists and the visitors' feeds, so the next feed build on any replica reads them fresh.
  */
-export function clearTopicSectionIdCache(): Promise<void> {
-	return deleteRedisKey(TOPIC_SECTION_IDS_KEY)
+export async function clearSharedTopicFeedCaches(): Promise<void> {
+	await deleteRedisKeys(...toSharedTopicFeedKeys())
+}
+
+/**
+ * Deletes a topic's cached visitor page, and the visitors' feeds if the topic was or is public or featured.
+ */
+export async function clearVisitorTopicCaches({
+	topicId,
+	visibility,
+	previousVisibility = visibility,
+	isFeatureOrderReleased = false,
+}: ClearVisitorTopicCachesOptions): Promise<void> {
+	// the visitors' feeds list public topics with their sources, so a change to a topic that was or is public drops them
+	const isListingChanged = isFeatureOrderReleased || visibility === "public" || previousVisibility === "public"
+	await deleteRedisKeys(toVisitorTopicPageKey(topicId), ...(isListingChanged ? toSharedTopicFeedKeys() : []))
+}
+
+/**
+ * Deletes the topics' cached visitor pages alone, in one delete.
+ */
+export async function clearVisitorTopicPages(...topicIds: string[]): Promise<void> {
+	await deleteRedisKeys(...topicIds.map(toVisitorTopicPageKey))
+}
+
+// the shared topic section id lists and both views of the visitors' feed
+function toSharedTopicFeedKeys(): string[] {
+	return [TOPIC_SECTION_IDS_KEY, toVisitorTopicFeedKey(true), toVisitorTopicFeedKey(false)]
+}
+
+/**
+ * Returns the Redis key a topic's page is served to visitors through.
+ */
+export function toVisitorTopicPageKey(topicId: string): string {
+	return `${TOPIC_PAGE_KEY_PREFIX}:visitor-page:${topicId}`
+}
+
+/**
+ * Returns the topic page every signed-out visitor sees, loaded once per half minute across every replica.
+ */
+export function readVisitorTopicPage(
+	topicId: string,
+	loadTopicPage: () => Promise<TopicResponse | null>,
+): Promise<TopicResponse | null> {
+	return cacheJson({ key: toVisitorTopicPageKey(topicId), ttlMs: VISITOR_CACHE_TTL_MS, load: loadTopicPage })
+}
+
+/**
+ * Returns the feed every signed-out visitor sees, built once per half minute across every replica.
+ */
+export function readVisitorTopicFeeds(includeConsumedResources: boolean): Promise<Pick<TopicFeedResponse, "sections">> {
+	return cacheJson({
+		key: toVisitorTopicFeedKey(includeConsumedResources),
+		ttlMs: VISITOR_CACHE_TTL_MS,
+		load: () => buildTopicFeeds(null, includeConsumedResources),
+	})
+}
+
+// the visitors' feed key for one view
+function toVisitorTopicFeedKey(includeConsumedResources: boolean): string {
+	return `${VISITOR_TOPIC_FEED_KEY_PREFIX}:${includeConsumedResources ? "all" : "unread"}`
 }
 
 /**

@@ -1,5 +1,6 @@
 // a fake Redis server for the store's tests: in-memory clients that connect, drop, subscribe, and deliver published
 // messages, with the reconnect delays shortened to nothing
+import { setRedisClientBuilder } from "./redis"
 import type { RedisConnectionClient } from "./redisConnection"
 
 // a channel listener, with the message and channel arguments that Bun's client passes
@@ -17,6 +18,9 @@ export type FakeRedisServer = {
 	isCommandFailing: boolean
 	connectCount: number
 	subscribeGate: Promise<void> | null
+	// whether the server never responds to a command, and the reply it gives to INFO
+	isCommandStalled?: boolean
+	infoReply?: string
 }
 
 // the real setTimeout, saved before a test replaces it
@@ -37,6 +41,13 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 		}
 	}
 
+	// a stalled command never settles, as a command sent to a reachable node that stopped replying does
+	const stallIfCommandStalled = async (): Promise<void> => {
+		if (fakeRedisServer.isCommandStalled) {
+			await new Promise<never>(() => {})
+		}
+	}
+
 	// lower a stored count and leave a missing key missing
 	const decrementKey = (key: string): number => {
 		const storedCount = fakeRedisServer.storedValueByKey.get(key)
@@ -52,7 +63,7 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 		const now = Date.now()
 		const slotFreesAt = fakeRedisServer.slotFreesAtByKey.get(key) ?? 0
 
-		// a free slot is held until the slot's length has passed
+		// a free slot is taken until the slot's length has passed
 		if (slotFreesAt <= now) {
 			fakeRedisServer.slotFreesAtByKey.set(key, now + slotMs)
 			return 0
@@ -90,29 +101,39 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 				fakeRedisClient.onclose?.call(fakeRedisClient as never, new Error("closed"))
 			}
 		},
-		// a get throws an error while commands are failing and otherwise reads the shared keys
+		// a get throws an error while commands are failing, hangs while commands are stalled, and otherwise reads the shared keys
 		async get(key: string): Promise<string | null> {
 			throwIfCommandFailing()
+			await stallIfCommandStalled()
 			return fakeRedisServer.storedValueByKey.get(key) ?? null
 		},
-		// a set writes the shared keys and ignores the expiry. the XX option writes only a key that exists
+		// a set hangs while commands are stalled, then writes the shared keys and ignores the expiry.
+		// the XX option writes only a key that exists
 		async set(key: string, value: string, ...options: string[]): Promise<"OK" | null> {
 			throwIfCommandFailing()
+			await stallIfCommandStalled()
 			if (options.includes("XX") && !fakeRedisServer.storedValueByKey.has(key)) {
 				return null
 			}
 			fakeRedisServer.storedValueByKey.set(key, value)
 			return "OK"
 		},
-		// a delete returns 1 if the key was there, and 0 if not
-		async del(key: string): Promise<number> {
+		// a delete hangs while commands are stalled, then returns how many of its keys were there
+		async del(...keys: string[]): Promise<number> {
 			throwIfCommandFailing()
-			return fakeRedisServer.storedValueByKey.delete(key) ? 1 : 0
+			await stallIfCommandStalled()
+			return keys.filter((key) => fakeRedisServer.storedValueByKey.delete(key)).length
 		},
 		// the increment script returns the count and the time left, which is the whole rate limit window on the first hit.
 		// the decrement script lowers only a key that exists
-		async send(_command: string, commandArguments: string[]): Promise<unknown> {
+		async send(command: string, commandArguments: string[]): Promise<unknown> {
 			throwIfCommandFailing()
+			await stallIfCommandStalled()
+
+			// an INFO command returns the server's reply text
+			if (command === "INFO") {
+				return fakeRedisServer.infoReply ?? ""
+			}
 			const [script = "", , key = "", rateLimitWindowMs = "0"] = commandArguments
 
 			// the slot script takes the slot or returns the wait
@@ -129,9 +150,11 @@ export function toFakeRedisClient(fakeRedisServer: FakeRedisServer): FakeRedisCl
 			fakeRedisServer.storedValueByKey.set(key, String(count))
 			return [count, count === 1 ? Number(rateLimitWindowMs) : Number(rateLimitWindowMs) - 1]
 		},
-		// a publish runs every listener that each subscribed client registered for the channel
+		// a publish hangs while commands are stalled, then runs every listener that each subscribed client registered
+		// for the channel
 		async publish(channel: string, channelMessage: string): Promise<number> {
 			throwIfCommandFailing()
+			await stallIfCommandStalled()
 			const subscribedClients = fakeRedisServer.subscribedClientsByChannel.get(channel) ?? new Set<FakeRedisClient>()
 
 			// a client that registered a listener twice runs the listener twice, as Bun's client does
@@ -169,14 +192,26 @@ export function dropConnection(client: FakeRedisClient): void {
 	client.close()
 }
 
-// a setTimeout that records each delay and runs the callback after zero milliseconds instead of after the delay.
-// the timer's unref returns the timer, as Bun's does
-export function toInstantSetTimeout(reconnectDelaysMs: number[]): typeof setTimeout {
+// a setTimeout that runs a reconnect timer's callback after zero milliseconds instead of after its delay, and records
+// the delay. a reconnect timer is the one that unrefs itself, so a command's deadline keeps its real delay
+export function toInstantReconnectSetTimeout(reconnectDelaysMs: number[]): typeof setTimeout {
 	return ((callback: () => void, delayMs: number) => {
-		reconnectDelaysMs.push(delayMs)
-		const instantTimer = originalSetTimeout(callback, 0)
-		return { unref: () => instantTimer }
+		// start a real timer, which runs at its delay unless the caller unrefs it
+		const timer = originalSetTimeout(callback, delayMs)
+
+		// an unref that swaps the timer for an instant one and returns that, as Bun's unref returns its timer
+		const unrefInstantly = (): ReturnType<typeof setTimeout> => {
+			clearTimeout(timer)
+			reconnectDelaysMs.push(delayMs)
+			return originalSetTimeout(callback, 0)
+		}
+		return Object.assign(timer, { unref: unrefInstantly })
 	}) as unknown as typeof setTimeout
+}
+
+// a setTimeout that runs every timer's callback after zero milliseconds, so a command's deadline passes at once too
+export function toEveryTimerInstantSetTimeout(): typeof setTimeout {
+	return ((callback: () => void) => originalSetTimeout(callback, 0)) as unknown as typeof setTimeout
 }
 
 // wait until a check passes, ten milliseconds at a time, for up to a second
@@ -184,4 +219,33 @@ export async function waitUntil(isDone: () => boolean): Promise<void> {
 	for (let i = 0; i < 100 && !isDone(); i++) {
 		await Bun.sleep(10)
 	}
+}
+
+// a fresh fake server, and the fake clients that the store built on it
+export type FakeRedisStore = { fakeRedisServer: FakeRedisServer; fakeRedisClients: FakeRedisClient[] }
+
+/**
+ * Builds the store's clients on a fresh fake server with no clients, and returns the server and the clients it builds.
+ */
+export function startFakeRedisStore(): FakeRedisStore {
+	// a fresh server with no clients
+	const fakeRedisServer: FakeRedisServer = {
+		storedValueByKey: new Map(),
+		slotFreesAtByKey: new Map(),
+		subscribedClientsByChannel: new Map(),
+		remainingConnectFailureCount: 0,
+		remainingSubscribeFailureCount: 0,
+		isCommandFailing: false,
+		connectCount: 0,
+		subscribeGate: null,
+	}
+	const fakeRedisClients: FakeRedisClient[] = []
+
+	// build the store's clients on this fake server, and record each client
+	setRedisClientBuilder(() => {
+		const client = toFakeRedisClient(fakeRedisServer)
+		fakeRedisClients.push(client)
+		return client
+	})
+	return { fakeRedisServer, fakeRedisClients }
 }

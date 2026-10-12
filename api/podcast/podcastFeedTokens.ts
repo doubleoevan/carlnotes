@@ -2,11 +2,12 @@
 // a feed token is created on first use, checked against the listener's access, and deleted with that access
 import { appUrl } from "@shared/appUrl"
 import { toPodcastFeedPath } from "@shared/seo"
+import { DAY_MS } from "@shared/time"
 import { and, eq } from "drizzle-orm"
 import type { Context } from "hono"
 import { type DbHandle, db } from "../../db"
 import { toPodcastFeedCacheKey } from "../../db/podcastFeedCache"
-import { deleteRedisKey, readRedisJson, saveRedisJson } from "../../db/redis"
+import { deleteRedisKeys, readRedisJson, saveRedisJson } from "../../db/redis"
 import { podcastFeedTokens } from "../../db/schema/podcast"
 import { topics } from "../../db/schema/topics"
 import { isAllowed } from "../authorization"
@@ -17,7 +18,7 @@ import { loadPublishedPodcastEpisodeRows } from "./podcastEpisodeRows"
 const PODCAST_FEED_CACHE_TTL_MS = 15 * 60 * 1000
 
 // how long a feed's etag and its modified time stay in Redis, so a rebuilt feed with the same etag keeps its time
-const PODCAST_FEED_VERSION_TTL_MS = 30 * 24 * 60 * 60 * 1000
+const PODCAST_FEED_VERSION_TTL_MS = 30 * DAY_MS
 
 // the most Podcast Episodes that a feed may list and still be cached in Redis. a longer feed is built for each request
 const MAX_CACHED_PODCAST_FEED_EPISODES = 100
@@ -77,11 +78,7 @@ export async function deletePodcastFeedToken(
 	const podcastFeedTokenCheckKeys = deletedPodcastFeedTokenRows.map((deletedPodcastFeedTokenRow) =>
 		toPodcastFeedTokenCheckKey(deletedPodcastFeedTokenRow.token),
 	)
-	await Promise.all(
-		[toPodcastFeedCacheKey({ topicId, listenerUserId: userId }), ...podcastFeedTokenCheckKeys].map((redisKey) =>
-			deleteRedisKey(redisKey),
-		),
-	)
+	await deleteRedisKeys(toPodcastFeedCacheKey({ topicId, listenerUserId: userId }), ...podcastFeedTokenCheckKeys)
 }
 
 /**

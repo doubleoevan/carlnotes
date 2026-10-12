@@ -1,6 +1,7 @@
 // LiteLLM tests: the proxy admin calls, the budget read, the spent budget check, and the key created before a first
 // model call
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test"
+import { quietErrorReports } from "@shared/monitoringTestFixtures"
 import { toTableRow } from "../db/connectionPoolStub"
 import { scans } from "../db/schema/scans"
 import * as attach from "./attach"
@@ -13,7 +14,6 @@ import {
 	readLiteLLMKeyBudget,
 } from "./litellm"
 import {
-	quietErrorReports,
 	restoreLiteLLMTest,
 	setUpLiteLLMTest,
 	stubConnectionPoolInCallOrder,
@@ -294,9 +294,13 @@ test("a Scan whose owner's key cannot be created fails before its Sources run", 
 // a key that the proxy cannot create fails the summary, and an attachment that is gone throws an error
 test("an attachment summary fails before its model call if the owner's key cannot be created, and for a missing attachment", async () => {
 	// an attachment whose topic owner has no key, a proxy that cannot create a key, and a spy on the model call
-	const sentQueries = stubConnectionPoolInCallOrder((sentQuery) =>
-		sentQuery.text.includes('from "attachments"') ? [["user-1"]] : [toUserRow(null)],
-	)
+	const sentQueries = stubConnectionPoolInCallOrder((sentQuery) => {
+		// the attachment names its topic, and the topic names its owner
+		if (sentQuery.text.includes('from "attachments"')) {
+			return [["topic-1"]]
+		}
+		return sentQuery.text.includes('from "topics"') ? [["user-1"]] : [toUserRow(null)]
+	})
 	stubFailingProxy()
 	const generateAttachmentContextSpy = spyOn(attach, "generateAttachmentContext")
 

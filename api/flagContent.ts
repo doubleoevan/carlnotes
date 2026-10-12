@@ -4,10 +4,11 @@ import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
 import { type FlagContentPayload, flagContentPayload } from "@shared/payloads"
 import { toTopicPath } from "@shared/seo"
+import { DAY_MS } from "@shared/time"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
-import { decrementRateLimitWindow, incrementRateLimitWindow, isWithinRateLimit } from "../db/redis"
+import { countRateLimitHit, decrementRateLimitWindow } from "../db/redisRateLimits"
 import { teams } from "../db/schema/teams"
 import { topics } from "../db/schema/topics"
 import { users } from "../db/schema/users"
@@ -18,7 +19,7 @@ import { canSeeTopic } from "./topic/permissions"
 
 // how many flags one user may send in a one-day rate limit window, which starts at the window's first flag
 const DAILY_FLAG_LIMIT = 10
-const FLAG_RATE_LIMIT_WINDOW_MS = 24 * 60 * 60 * 1000
+const FLAG_RATE_LIMIT_WINDOW_MS = DAY_MS
 
 // the result from a flag content request
 export type FlagContentResult = "sent" | "unknownSubject" | "limitReached" | "notConfigured" | "failed"
@@ -114,8 +115,11 @@ function toFlagHtml(subject: { label: string; path: string }, sender: string, re
  */
 export async function canFlag(userId: string): Promise<boolean> {
 	// count the flag in the user's daily rate limit window and return whether the count is within the limit
-	const rateLimitWindowHit = await incrementRateLimitWindow(toFlagRateLimitWindowKey(userId), FLAG_RATE_LIMIT_WINDOW_MS)
-	return isWithinRateLimit(rateLimitWindowHit, DAILY_FLAG_LIMIT)
+	return countRateLimitHit({
+		key: toFlagRateLimitWindowKey(userId),
+		rateLimitWindowMs: FLAG_RATE_LIMIT_WINDOW_MS,
+		limit: DAILY_FLAG_LIMIT,
+	})
 }
 
 /**

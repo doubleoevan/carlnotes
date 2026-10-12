@@ -6,6 +6,7 @@ import { signupGatePayload } from "@shared/payloads"
 import { toDeviceProperties } from "@shared/userAgent"
 import { isAPIError } from "better-auth/api"
 import { Hono } from "hono"
+import { except } from "hono/combine"
 import { getCookie, setCookie } from "hono/cookie"
 import { z } from "zod"
 import { cacheJson } from "../db/redis"
@@ -13,12 +14,13 @@ import { activityRoute } from "./activity"
 import { adminRoute } from "./admin"
 import { auth } from "./auth"
 import { loadDailyTopicQuota, topicLimit, topicsRemaining } from "./authorization"
-import { avatarsRoute } from "./avatars"
-import { billingRoute } from "./billing"
+import { AVATAR_UPLOAD_PATH, avatarsRoute, TEAM_AVATAR_UPLOAD_PATH } from "./avatarsRoute"
+import { billingRoute } from "./billingRoute"
+import { defaultBodyLimit } from "./bodyLimit"
 import { chatAttachmentsRoute } from "./chat/attachments"
 import { toUnseenChatMentionCountKey } from "./chat/mentions"
-import { privateChatRoute } from "./chat/privateChat"
-import { chatRoomRoute } from "./chat/roomRoute"
+import { NEW_TOPIC_CHAT_PATH, privateChatRoute, TEAM_CHAT_PATH, TOPIC_CHAT_PATH } from "./chat/privateChat"
+import { chatRoomRoute, TEAM_ROOM_PATH, TOPIC_ROOM_PATH } from "./chat/roomRoute"
 import { countUnseenChatMentions, loadChatRooms } from "./chat/rooms"
 import { type AppEnv, currentUser } from "./currentUser"
 import { renderedCacheHeaders } from "./edgeCache"
@@ -28,7 +30,7 @@ import { receivedInvitesRoute } from "./invite/receivedInvites"
 import { userInvitesRoute } from "./invite/userInvites"
 import { mcpClientsRoute } from "./mcp/server"
 import { noteCommentThreadsRoute } from "./note/noteCommentThreads"
-import { notesRoute } from "./note/notes"
+import { NOTE_SYNC_PATH, notesRoute } from "./note/notes"
 import { podcastEpisodeSearchRoute } from "./podcast/podcastEpisodeSearch"
 import { podcastEpisodesRoute } from "./podcast/podcastEpisodes"
 import { podcastFeedsRoute } from "./podcast/podcastFeeds"
@@ -52,9 +54,9 @@ import {
 	verifyTurnstileToken,
 } from "./signupGate"
 import { teamsRoute } from "./team/teamsRoute"
-import { topicAttachmentsRoute } from "./topic/attachments"
+import { TOPIC_ATTACHMENT_UPLOAD_PATH, topicAttachmentsRoute } from "./topic/attachments"
 import { featuringRoute } from "./topic/featuring"
-import { buildTopicFeeds } from "./topic/feeds"
+import { buildTopicFeeds, readVisitorTopicFeeds } from "./topic/feeds"
 import { findingsRoute } from "./topic/findings"
 import { scansRoute } from "./topic/scans"
 import { topicSearchRoute } from "./topic/search"
@@ -79,18 +81,36 @@ const MCP_AUTHORIZE_PATH = "/mcp/authorize"
 // how long the unseen chat mention count is served from Redis
 const UNSEEN_CHAT_MENTION_COUNT_TTL_MS = 10_000
 
+// the base path that every api route comes after
+const API_BASE_PATH = "/api"
+
+// the routes that set their own body limit, for chat turns, chat room posts, uploads, and note sync
+const OWN_BODY_LIMIT_PATHS = [
+	TOPIC_CHAT_PATH,
+	TEAM_CHAT_PATH,
+	NEW_TOPIC_CHAT_PATH,
+	TOPIC_ROOM_PATH,
+	TEAM_ROOM_PATH,
+	AVATAR_UPLOAD_PATH,
+	TEAM_AVATAR_UPLOAD_PATH,
+	TOPIC_ATTACHMENT_UPLOAD_PATH,
+	NOTE_SYNC_PATH,
+].map((routePath) => `${API_BASE_PATH}${routePath}`)
+
 // the "All" vs. "Unread" topic finding toggle
 const topicFeedQuery = z.object({ all: z.enum(["true", "false"]).optional() })
 
 // the api tree, mounted on the server in api/index.ts
 export const apiRoute = new Hono<AppEnv>()
-	.basePath("/api")
+	.basePath(API_BASE_PATH)
 	// resolve the session once per request, so every route that the middleware wraps gets the currentUser
 	.use("*", async (context, next) => {
 		const session = await auth.api.getSession({ headers: context.req.raw.headers }).catch(toSignedOutSession)
 		context.set("user", session?.user ?? null)
 		await next()
 	})
+	// bound every body on the routes with no limit of their own
+	.use("*", except(OWN_BODY_LIMIT_PATHS, defaultBodyLimit))
 	.on(["POST", "GET"], "/auth/*", async (context) => {
 		// send every mcp authorize request through the consent page. the client cannot skip it
 		if (context.req.method === "GET" && context.req.path.endsWith(MCP_AUTHORIZE_PATH)) {
@@ -168,9 +188,12 @@ export const apiRoute = new Hono<AppEnv>()
 		const userId = currentUser(context)
 		// only include consumed topic findings unless the api client asks for the "All" view
 		const includeConsumed = context.req.valid("query").all === "true"
-		// merge in the topic-creation quota. a signed-out visitor has none so gets zero
+		// merge in the topic-creation quota. a signed-out visitor has none so gets zero, and every visitor shares one
+		// feed, read through Redis for half a minute
 		const [topicFeeds, remainingNewTopics, ownedTopicLimit, dailyTopicQuota] = await Promise.all([
-			traceRequestStage("topic_feed.build", () => buildTopicFeeds(userId, includeConsumed)),
+			traceRequestStage("topic_feed.build", () =>
+				userId ? buildTopicFeeds(userId, includeConsumed) : readVisitorTopicFeeds(includeConsumed),
+			),
 			userId ? topicsRemaining(userId) : Promise.resolve(0),
 			userId ? topicLimit(userId) : Promise.resolve(0),
 			userId ? loadDailyTopicQuota(userId) : Promise.resolve({ limit: 0, remainingTopics: 0 }),

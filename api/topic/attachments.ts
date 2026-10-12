@@ -4,7 +4,6 @@ import { attachmentContextPayload, attachmentUrlPayload } from "@shared/topicPay
 // the attachment actions for the api routes
 import { and, eq } from "drizzle-orm"
 import { Hono } from "hono"
-import { bodyLimit } from "hono/body-limit"
 import { db } from "../../db"
 import { attachments, topics } from "../../db/schema/topics"
 import {
@@ -18,6 +17,7 @@ import {
 	toCanonicalContentType,
 } from "../../worker"
 import { isAllowed } from "../authorization"
+import { MULTIPART_ENVELOPE_BYTES, toBodyLimit, uploadSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { loadOwnedTopic } from "./permissions"
 
@@ -116,6 +116,9 @@ export async function loadDownloadableAttachment(
 	return { objectKey: attachment.objectKey, filename: attachment.filename, contentType: attachment.contentType }
 }
 
+// the path of a topic's file upload, after the /api base
+export const TOPIC_ATTACHMENT_UPLOAD_PATH = "/topics/:id/attachments"
+
 // the image types a stored file may be served inline as. svg is intentionally left out for security.
 // it can hold script that would run in this origin
 const INLINE_IMAGE_TYPES = new Set([
@@ -143,7 +146,6 @@ export function toStoredFileHeaders(filename: string, contentType: string): Reco
 	return {
 		"Content-Type": contentType,
 		"Content-Disposition": `${disposition}; filename="${asciiFilename}"; filename*=UTF-8''${encodeURIComponent(filename)}`,
-		"X-Content-Type-Options": "nosniff",
 	}
 }
 
@@ -224,16 +226,13 @@ export const topicAttachmentsRoute = new Hono<AppEnv>()
 		)
 	})
 	.post(
-		"/topics/:id/attachments",
-		// limit the upload body before it's fully buffered into memory
-		bodyLimit({
-			maxSize: MAX_ATTACHMENT_BYTES + 1024 * 1024,
-			onError: (context) =>
-				context.json(
-					{ error: `That attachment is too large. The limit is ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB.` },
-					413,
-				),
-		}),
+		TOPIC_ATTACHMENT_UPLOAD_PATH,
+		// reject a visitor, then limit the upload body before it's fully buffered into memory
+		uploadSignedOutRejection,
+		toBodyLimit(
+			MAX_ATTACHMENT_BYTES + MULTIPART_ENVELOPE_BYTES,
+			`That attachment is too large. The limit is ${MAX_ATTACHMENT_BYTES / (1024 * 1024)} MB.`,
+		),
 		async (context) => {
 			// reject a signed-out visitor
 			const userId = currentUser(context)

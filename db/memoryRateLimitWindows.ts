@@ -1,6 +1,6 @@
 // the rate limit windows a process counts in its own memory while Redis cannot count them.
 // the windows expire, and a key limit bounds them
-import type { RateLimitWindowHit } from "./redis"
+import type { RateLimitWindowHit } from "./redisRateLimits"
 
 // how many keys the memory windows hold at most. past the limit the oldest key is evicted to make room
 export const MAX_MEMORY_RATE_LIMIT_KEYS = 10_000

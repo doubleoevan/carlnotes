@@ -2,11 +2,13 @@
 import { expect, test } from "bun:test"
 import { readFileSync } from "node:fs"
 import { join } from "node:path"
+import { ApplicationFailure } from "@temporalio/client"
 import {
 	FIRST_SCAN_SPENT_BUDGET_REASON,
 	isBudgetError,
 	SCAN_SPENT_BUDGET_LABEL,
 	SCHEDULED_SCAN_SPENT_BUDGET_REASON,
+	toActivityApplicationFailure,
 	toScanFailureLabel,
 	toWorkflowFailureReason,
 } from "./scanFailure"
@@ -77,4 +79,20 @@ test("a budget rejection ends the scan, not one resource", () => {
 	expect(
 		isBudgetError(toWorkflowFailureReason(new Error("Activity task failed", { cause: new Error(budgetReason) }))),
 	).toBe(true)
+})
+
+// an activity failure that wraps an application failure returns its type and details, and any other failure returns null
+test("an activity's application failure is read from the activity failure that wraps it", () => {
+	// a wrapped Resend rejection returns its type and details
+	const resendRejection = ApplicationFailure.create({ type: "ResendFailure", details: [{ httpStatus: 422 }] })
+	expect(toActivityApplicationFailure(new Error("Activity task failed", { cause: resendRejection }))).toEqual({
+		type: "ResendFailure",
+		details: [{ httpStatus: 422 }],
+	})
+
+	// a wrapped plain error and a string are not application failures
+	expect(toActivityApplicationFailure(new Error("Activity task failed", { cause: new Error("socket hang up") }))).toBe(
+		null,
+	)
+	expect(toActivityApplicationFailure("a plain string")).toBe(null)
 })

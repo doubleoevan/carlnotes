@@ -41,7 +41,6 @@ export { loadTopicPodcastEpisodeAudioKeys, removePodcastEpisode } from "./podcas
 export { isInternalAddress } from "./publicFetch"
 export { failUnstartedScan, loadScan, scanTopic, startTopicScan, stopTopicScan } from "./scan"
 export { runScheduledTopicScans } from "./schedule"
-export { toYoutubeVideoId } from "./scrape"
 export { screenPendingSources, screenTopicSources } from "./screen"
 export { failStaleScans } from "./staleScans"
 export {
@@ -64,4 +63,5 @@ export {
 export { type SuggestedSource, suggestSources, toSourceKey } from "./suggest"
 // trace the model-calls that the scheduled worker does
 export { shutdownTelemetry, startTelemetry } from "./telemetry"
+export { toYoutubeVideoId } from "./transcripts"
 export { verifyUnsubscribeToken } from "./unsubscribe"

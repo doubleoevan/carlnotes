@@ -329,3 +329,13 @@ test("episode_listens are unique per episode and user, episode_feed_tokens per t
 	)
 	expect(allMigrationsSql()).toContain(`ADD COLUMN "is_podcast_enabled" boolean DEFAULT true NOT NULL`)
 })
+
+// the duplicate check reads resources by content hash, and the new finding count reads a topic's findings by arrival
+test("resources are indexed by content hash and findings by topic and arrival", () => {
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "resources_content_hash_idx" ON "resources" USING btree ("content_hash")',
+	)
+	expect(allMigrationsSql()).toContain(
+		'CREATE INDEX "findings_topic_created_idx" ON "findings" USING btree ("topic_id","created_at")',
+	)
+})

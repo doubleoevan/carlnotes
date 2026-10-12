@@ -14,6 +14,23 @@ export function stubRedisClient(): Map<string, string> {
 }
 
 /**
+ * Swaps the store's clients for ones that never connect, so every operation fails as it does while Redis is down.
+ */
+export function stubUnreachableRedisClient(): void {
+	setRedisClientBuilder(
+		() =>
+			({
+				connected: false,
+				onclose: null,
+				connect: async () => {
+					throw new Error("connection refused")
+				},
+				close: () => {},
+			}) as unknown as RedisConnectionClient,
+	)
+}
+
+/**
  * Puts the store's own client builder back.
  */
 export function restoreRedisClient(): void {
@@ -43,8 +60,9 @@ function toFakeRedisClient(storedValueByKey: Map<string, string>): RedisConnecti
 			storedValueByKey.set(key, value)
 			return "OK"
 		},
-		async del(key: string): Promise<number> {
-			return storedValueByKey.delete(key) ? 1 : 0
+		// count the keys that existed
+		async del(...keys: string[]): Promise<number> {
+			return keys.filter((key) => storedValueByKey.delete(key)).length
 		},
 		// tell the scripts apart by their text
 		async send(_command: string, commandArguments: string[]): Promise<unknown> {

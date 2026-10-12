@@ -30,7 +30,7 @@ async function withScanner(guardResponse: unknown, run: () => Promise<void>): Pr
 // run a test case with no scanner configured, so an llm-guard screen is a no-op
 async function withoutScanner(run: () => Promise<void>): Promise<void> {
 	const restoreEnvSettings = saveEnvSettings(["LLM_GUARD_URL"])
-	Bun.env.LLM_GUARD_URL = undefined
+	delete Bun.env.LLM_GUARD_URL
 
 	// a failing case still puts the url back, so it cannot leak into the cases after it
 	try {

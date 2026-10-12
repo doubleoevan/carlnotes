@@ -1,19 +1,11 @@
 // what one Scan may spend and what it has spent
+import { readDollarSetting, toPositiveInteger } from "@shared/envSettings"
 
 // the per-Scan spend limit, covering everything that the Scan charges during ingestion, embedding, fetch, and scoring
-const SCAN_BUDGET_USD = toSpendLimit(Bun.env.SCAN_BUDGET_USD)
-
-// the configured limit as a usable number with a default
-function toSpendLimit(configuredLimit: string | undefined): number {
-	const limit = Number(configuredLimit ?? "0.5")
-	if (!Number.isFinite(limit) || limit < 0) {
-		throw new Error(`SCAN_BUDGET_USD must be a number of dollars, zero or more. got: ${configuredLimit}`)
-	}
-	return limit
-}
+const SCAN_BUDGET_USD = readDollarSetting("SCAN_BUDGET_USD", 0.5)
 
 // the approximate limit on how many resources one Scan can score, bounding the paid fetch-and-scoring section
-const MAX_SCORED_RESOURCES_PER_SCAN = Number(Bun.env.MAX_SCORED_RESOURCES_PER_SCAN ?? "30")
+const MAX_SCORED_RESOURCES_PER_SCAN = toPositiveInteger(Bun.env.MAX_SCORED_RESOURCES_PER_SCAN, 30)
 
 // best-effort dollar rates for the soft limit and the per-stage breakdown. LiteLLM meters the authoritative spend
 export const EMBED_COST_PER_MILLION_TOKENS = 0.1

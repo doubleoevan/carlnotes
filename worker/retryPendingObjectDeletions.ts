@@ -1,5 +1,6 @@
 // the sweep's retries of the pending object deletions
 import { reportError } from "@shared/monitoring"
+import { DAY_MS } from "@shared/time"
 import { asc, eq, lte } from "drizzle-orm"
 import { db } from "../db"
 import { pendingObjectDeletions } from "../db/schema/storage"
@@ -7,7 +8,7 @@ import { deleteStoredObject } from "./store"
 
 // how many pending keys one run retries, and how long a key may stay pending before it is reported once
 const RETRY_BATCH_SIZE = 200
-const REPORT_AFTER_MS = 24 * 60 * 60 * 1000
+const REPORT_AFTER_MS = DAY_MS
 
 // what one run did
 export type PendingObjectDeletionRetrySummary = { deletedCount: number; failedCount: number }

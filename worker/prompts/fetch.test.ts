@@ -7,8 +7,8 @@ import { FALLBACK_PROMPT_TEMPLATES, fetchPromptTemplate, hasSameVariables } from
 test("fetchPromptTemplate returns the bundled template unmodified when Langfuse keys are unset", async () => {
 	// clear both keys so the run is deterministic regardless of the calling shell's environment
 	const restoreEnvSettings = saveEnvSettings(["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"])
-	Bun.env.LANGFUSE_PUBLIC_KEY = undefined
-	Bun.env.LANGFUSE_SECRET_KEY = undefined
+	delete Bun.env.LANGFUSE_PUBLIC_KEY
+	delete Bun.env.LANGFUSE_SECRET_KEY
 
 	// fetch every fallback prompt name, restoring the environment regardless of the outcome
 	try {

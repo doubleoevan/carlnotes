@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
-import * as redis from "../db/redis"
+import * as redisRateLimits from "../db/redisRateLimits"
 import {
 	type EmailMessage,
 	type ResendCallResult,
@@ -29,9 +29,9 @@ const realFetch = globalThis.fetch
 const restoreEnvSettings = saveEnvSettings(["RESEND_API_KEY", "RESEND_FROM_EMAIL"])
 
 // give every call the rate limit slot at once so that no test reaches Redis
-let takeRateLimitSlotSpy: ReturnType<typeof spyOn<typeof redis, "takeRateLimitSlot">>
+let takeRateLimitSlotSpy: ReturnType<typeof spyOn<typeof redisRateLimits, "takeRateLimitSlot">>
 beforeEach(() => {
-	takeRateLimitSlotSpy = spyOn(redis, "takeRateLimitSlot").mockResolvedValue(0)
+	takeRateLimitSlotSpy = spyOn(redisRateLimits, "takeRateLimitSlot").mockResolvedValue(0)
 })
 
 // put the real fetch, env, and report back after each test, so that nothing leaks into other tests
@@ -262,4 +262,16 @@ test("a scan email call that cannot reach Resend is retried on the backoff", asy
 		failure: { httpStatus: null, resendError: "connection refused" },
 		retryAfterSeconds: null,
 	})
+})
+
+// a wait that would pass the deadline goes ahead without the slot, so a backlog never holds a send for good
+test("a scan email call goes ahead without the slot once the wait would pass the deadline", async () => {
+	configureResend()
+	const sentResendCalls = stubResend(() => new Response("{}", { status: 200 }))
+
+	// a slot held for a minute is not waited for
+	takeRateLimitSlotSpy.mockResolvedValueOnce(60_000)
+	expect(await sendScanEmailCall({ scanId: "scan-1", messages: [toTestMessage(1)] })).toEqual({ outcome: "accepted" })
+	expect(takeRateLimitSlotSpy).toHaveBeenCalledTimes(1)
+	expect(sentResendCalls).toHaveLength(1)
 })

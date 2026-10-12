@@ -2,7 +2,7 @@
 // a session is stored under its token as { session, user }, and active-sessions-<userId> lists a user's tokens
 import { eq } from "drizzle-orm"
 import { db } from "../db"
-import { readRedisJson, replaceRedisJson, runWithRedis, saveRedisJson } from "../db/redis"
+import { deleteRedisKeys, readRedisJson, replaceRedisJson, saveRedisJson } from "../db/redis"
 import { sessions, users } from "../db/schema/users"
 
 // one entry of a user's active-sessions list, in the shape that Better Auth writes
@@ -52,7 +52,7 @@ export async function revokeUserSessions(userId: string): Promise<boolean> {
 	const redisKeys = [...sessionTokens, toActiveSessionsKey(userId)]
 
 	// delete the tokens and the list in one command. null means Redis is unreachable
-	const deletedKeyCount = await runWithRedis("revokeUserSessions", (client) => client.del(...redisKeys))
+	const deletedKeyCount = await deleteRedisKeys(...redisKeys)
 	return deletedKeyCount !== null
 }
 

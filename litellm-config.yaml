@@ -119,10 +119,10 @@ model_list:
 # and charges the virtual key from LiteLLM's own price table, which a model entry here cannot change.
 # the app's own speech rates are in worker/budget.ts and follow what LiteLLM charges
 
-# drop provider-unsupported params instead of erroring. Fireworks embeddings reject the encoding_format that the AI SDK
-# sends. there is no proxy-wide max_budget. spend is limited per virtual key, created per user at signup and managed in
-# LiteLLM itself, and the Fireworks prepaid balance is the real limit behind those keys
+# spend is limited by each user's virtual key and by the Fireworks prepaid balance
 litellm_settings:
+  # drop provider-unsupported params instead of erroring. Fireworks embeddings reject the encoding_format that the
+  # AI SDK sends
   drop_params: true
 
 # retry a call once if it hits its model's timeout. a rate limit or a server error keeps the router's default of two

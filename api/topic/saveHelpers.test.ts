@@ -1,7 +1,7 @@
 // topic save helper tests: a Topic's first Scan is marked failed instead of started if its owner's key budget is spent.
 // the first Scan starts if the budget is not spent or cannot be read
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
-import * as monitoring from "@shared/monitoring"
+import { quietErrorReports } from "@shared/monitoringTestFixtures"
 import { FIRST_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
 import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"
 import * as litellm from "../../worker/litellm"
@@ -87,8 +87,7 @@ test("a first Scan starts if the budget read throws an error, and the error is r
 	stubConnectionPool()
 	const { scanTopicSpy } = spyOnFirstScan()
 	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockRejectedValue(new Error("connection lost"))
-	spyOn(console, "error").mockImplementation(() => {})
-	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+	const reportErrorSpy = quietErrorReports()
 
 	// start the first Scan
 	await startFirstScan("topic-1", FIRST_SCAN, "owner-1")

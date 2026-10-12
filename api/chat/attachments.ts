@@ -24,6 +24,7 @@ import { screenText, toFlaggedReason } from "../../worker/guard"
 import { type AppEnv, currentUser } from "../currentUser"
 import { toStoredFileHeaders } from "../topic/attachments"
 import { loadDownloadableChatAttachment, streamVideoAttachment, toKeptAttachmentContext } from "./chatAttachmentReads"
+import { SIGNUP_REQUIRED_ERROR } from "./chatTurnAuthorization"
 import { encryptChatText } from "./encryption"
 
 // what stands in for a video's content wherever carl reads attachments
@@ -313,7 +314,7 @@ export const chatAttachmentsRoute = new Hono<AppEnv>()
 		// deleting a kept attachment is signed-in only and scoped to its keeper, freeing its limit slot
 		const userId = currentUser(context)
 		if (!userId) {
-			return context.json({ error: "sign up required" }, 401)
+			return context.json({ error: SIGNUP_REQUIRED_ERROR }, 401)
 		}
 		const isDeleted = await deleteKeptAttachment(userId, context.req.param("id"))
 		return isDeleted ? context.json({ ok: true }) : context.json({ error: "forbidden" }, 403)

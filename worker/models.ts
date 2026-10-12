@@ -1,11 +1,12 @@
 // the app's LLM model tiers, all routed through LiteLLM. litellmApiKey bills a call to the key of the call's user.
-// a call with no litellmApiKey, such as the search Source's query generation, uses the master key
+// a call with no litellmApiKey uses the master key
 import { createOpenAI } from "@ai-sdk/openai"
+import { toPositiveInteger } from "@shared/envSettings"
 import { type EmbeddingModel, embed, embedMany, type LanguageModel } from "ai"
 import { EMBED_DIMENSIONS } from "../db/schema/scans"
 
 // how long a model request may run before the request aborts. the default sits above twice the proxy's longest model timeout
-const MODEL_TIMEOUT_MS = Number(Bun.env.MODEL_TIMEOUT_MS ?? "360000")
+const MODEL_TIMEOUT_MS = toPositiveInteger(Bun.env.MODEL_TIMEOUT_MS, 360000)
 
 // what a spent budget tells the user, whether the gate caught it up front or the proxy rejected the call partway through a chat turn
 export const SPENT_BUDGET_REJECTION = "Carl is staring at an empty mug. Top up to keep chatting."

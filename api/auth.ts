@@ -1,19 +1,18 @@
 // the app's Better Auth instance: email/password and Google/GitHub sign-in, with sessions read from Redis first
 // and kept in Postgres through the Drizzle adapter
-import { trackBotEvent, trackEvent } from "@shared/analytics"
+import { trackEvent } from "@shared/analytics"
 import { appBaseUrl } from "@shared/appUrl"
 import { SIGNUP_CTA_COOKIE_NAME, toCtaTag } from "@shared/contracts/signupCta"
-import { toCanonicalEmail } from "@shared/emails"
 import { reportError } from "@shared/monitoring"
 import { toDeviceProperties } from "@shared/userAgent"
 import { toNormalizedUsername, toProviderUsername } from "@shared/usernames"
 import { APIError, betterAuth } from "better-auth"
 import { drizzleAdapter } from "better-auth/adapters/drizzle"
-import { createAuthMiddleware } from "better-auth/api"
 import { mcp } from "better-auth/plugins"
 import { eq } from "drizzle-orm"
 import { db, schema } from "../db"
-import { deleteRedisKey, incrementRateLimitWindow, runWithRedis } from "../db/redis"
+import { deleteRedisKeys, runWithRedis } from "../db/redis"
+import { incrementRateLimitWindow } from "../db/redisRateLimits"
 import { provisionLiteLLMKey } from "../worker"
 import {
 	clearResetPasswordTokens,
@@ -22,22 +21,19 @@ import {
 	sendVerificationEmail,
 	VERIFICATION_LINK_HOURS,
 } from "./authEmails"
+import {
+	afterAuthRequest,
+	beforeCredentialRequest,
+	PASSWORD_SIGNUP_PATH,
+	toCanonicalProfileEmail,
+	toGithubProfileUser,
+} from "./authHooks"
 import { userBudgetCents } from "./authorization"
-import { isBreachedPassword } from "./passwords"
 import { cacheSession } from "./sessions"
 import { GATE_COOKIE_NAME, verifyGateToken } from "./signupGate"
 import { saveDefaultUserTeam } from "./team/teams"
 import { ipAddressOptions } from "./trustedProxies"
 import { saveDefaultUsername, toAssignedUsername, toFreeUsernames } from "./usernames"
-
-// the better auth endpoint path for password signup, the only path the gate cookie is required on
-const PASSWORD_SIGNUP_PATH = "/sign-up/email"
-
-// the paths that set a password, the only ones the breach check runs on
-const PASSWORD_SETTING_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/reset-password", "/change-password", "/set-password"])
-
-// the paths whose body includes an address that better auth looks up a user by or stores
-const EMAIL_BODY_PATHS = new Set([PASSWORD_SIGNUP_PATH, "/sign-in/email", "/request-password-reset", "/change-email"])
 
 // how long a password-reset link stays valid
 const RESET_TOKEN_LIFETIME_SECONDS = 60 * 60
@@ -49,8 +45,23 @@ const MIN_PASSWORD_LENGTH = 12
 const CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS = 60
 const CREDENTIAL_RATE_MAX = 10
 
+// how many mcp clients one address may register in an hour. a hosted ai app registers its users' clients from a few
+// shared addresses
+const MCP_REGISTER_RATE_LIMIT_WINDOW_SECONDS = 3600
+const MCP_REGISTER_RATE_MAX = 600
+
 // the signed-in user that the session middleware sets on Hono's request context
 export type SessionUser = typeof auth.$Infer.Session.user
+
+/**
+ * Sends an auth email without holding the request, and logs and reports a send that throws.
+ */
+export function sendAuthEmailInBackground(emailKind: string, emailSendPromise: Promise<void>): void {
+	emailSendPromise.catch((error: unknown) => {
+		console.error(`the ${emailKind} email could not be sent`, error)
+		reportError(error, "email", { emailKind })
+	})
+}
 
 /**
  * The Redis storage that Better Auth uses for sessions, verification tokens, and rate limit counts.
@@ -63,7 +74,9 @@ const sessionSecondaryStorage = {
 			ttlSeconds ? client.set(key, value, "EX", ttlSeconds) : client.set(key, value),
 		)
 	},
-	delete: deleteRedisKey,
+	delete: async (key: string): Promise<void> => {
+		await deleteRedisKeys(key)
+	},
 	// count the hit on the key's rate limit window and return the count
 	increment: async (key: string, ttlSeconds: number): Promise<number> =>
 		(await incrementRateLimitWindow(key, ttlSeconds * 1000)).count,
@@ -74,97 +87,6 @@ const isLanDevOriginTrusted = Boolean(Bun.env.LAN_DEV_URL) && Bun.env.DOPPLER_EN
 
 // the private lan ranges, trusted as patterns. isLanDevOriginTrusted turns them on
 const LAN_DEV_ORIGINS = ["http://192.168.*.*:*", "http://10.*.*.*:*"]
-
-// the hook that better auth takes, running both of the checks before a credential request
-const beforeCredentialRequest = createAuthMiddleware(async (context) => {
-	await rejectBreachedPassword(context.path, context.body)
-	return toCanonicalEmailBody(context.path, context.body)
-})
-
-// the hook that runs after a request. a sign-in reports its method,
-// and an app's code-for-token exchange reports the connection
-const afterAuthRequest = createAuthMiddleware(async (context) => {
-	// report a new session by the path that made it: the password form, or the oauth provider in the callback
-	const newSession = context.context.newSession
-	const loginMethod = toLoginMethod(context.path)
-	if (newSession && loginMethod) {
-		trackEvent("login_completed", newSession.user.id, {
-			entryPoint: "web",
-			plan: (newSession.user as { plan?: string }).plan ?? "free",
-			...toDeviceProperties(context.headers?.get("user-agent")),
-			method: loginMethod,
-		})
-	}
-
-	// report an app's authorization once it trades its code for a token. a refresh reports nothing
-	const requestBody = context.body instanceof FormData ? Object.fromEntries(context.body.entries()) : context.body
-	const clientId = typeof requestBody?.client_id === "string" ? requestBody.client_id : null
-	if (context.path !== "/mcp/token" || requestBody?.grant_type !== "authorization_code" || !clientId) {
-		return
-	}
-	// name the app by its registration. an unregistered client gets no token and reports nothing
-	const [oauthApplication] = await db
-		.select({ name: schema.oauthApplications.name })
-		.from(schema.oauthApplications)
-		.where(eq(schema.oauthApplications.clientId, clientId))
-	if (!oauthApplication) {
-		return
-	}
-	// report the connection by the app's registered name
-	trackBotEvent("mcp_connected", oauthApplication.name, { entryPoint: "mcp", clientName: oauthApplication.name })
-})
-
-// the login method a request path names: email for the password form, the provider for an oauth callback, or null
-function toLoginMethod(path: string): string | null {
-	if (path === "/sign-in/email") {
-		return "email"
-	}
-	return path.startsWith("/callback/") ? (path.split("/")[2] ?? null) : null
-}
-
-// reject a breached password
-async function rejectBreachedPassword(path: string, body: Record<string, unknown> | undefined): Promise<void> {
-	const password = body?.newPassword ?? body?.password
-	if (!PASSWORD_SETTING_PATHS.has(path) || typeof password !== "string") {
-		return
-	}
-	if (await isBreachedPassword(password)) {
-		throw new APIError("BAD_REQUEST", {
-			message: "That password has appeared in a data breach. Pick one you haven't used elsewhere.",
-		})
-	}
-}
-
-// the request body with its email address canonicalized
-function toCanonicalEmailBody(
-	path: string,
-	body: Record<string, unknown> | undefined,
-): { context: { body: Record<string, unknown> } } | undefined {
-	if (!EMAIL_BODY_PATHS.has(path) || !body) {
-		return undefined
-	}
-	// sign-up and sign-in name this field "email", while a change of address names the field "newEmail"
-	const emailField = typeof body.newEmail === "string" ? "newEmail" : "email"
-	const email = body[emailField]
-	if (typeof email !== "string") {
-		return undefined
-	}
-	return { context: { body: { ...body, [emailField]: toCanonicalEmail(email) } } }
-}
-
-// a provider can return any gmail variant of one mailbox
-function toCanonicalProfileEmail(profile: { email?: string | null }): { email?: string } {
-	return profile.email ? { email: toCanonicalEmail(profile.email) } : {}
-}
-
-// GitHub sends its handle as login, proposed as the signup username. Google sends only a real name, never proposed
-function toGithubProfileUser(profile: { email?: string | null; login: string }): {
-	email?: string
-	username?: string
-} {
-	const providerUsername = toProviderUsername(profile.login)
-	return { ...toCanonicalProfileEmail(profile), ...(providerUsername ? { username: providerUsername } : {}) }
-}
 
 // an oauth signup arrives with the provider's photo already on image. a password signup never has one
 export function toSignupAvatarSource(image: string | null | undefined): "oauth" | "generated" {
@@ -196,7 +118,7 @@ export const auth = betterAuth({
 		enabled: true,
 		minPasswordLength: MIN_PASSWORD_LENGTH,
 		sendResetPassword: async ({ user, url }) => {
-			await sendResetPasswordEmail(user.email, url)
+			sendAuthEmailInBackground("reset-password", sendResetPasswordEmail(user.email, url))
 		},
 		resetPasswordTokenExpiresIn: RESET_TOKEN_LIFETIME_SECONDS,
 		revokeSessionsOnPasswordReset: true,
@@ -236,12 +158,14 @@ export const auth = betterAuth({
 			"/request-password-reset": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 			"/reset-password": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
 			"/change-password": { window: CREDENTIAL_RATE_LIMIT_WINDOW_SECONDS, max: CREDENTIAL_RATE_MAX },
+			// an mcp client registers with no credential, and each registration writes a row
+			"/mcp/register": { window: MCP_REGISTER_RATE_LIMIT_WINDOW_SECONDS, max: MCP_REGISTER_RATE_MAX },
 		},
 	},
 	// a non-blocking verification email on signup, whose link lives a day instead of the default hour
 	emailVerification: {
 		sendVerificationEmail: async ({ user, url }) => {
-			await sendVerificationEmail(user.email, url)
+			sendAuthEmailInBackground("verification", sendVerificationEmail(user.email, url))
 		},
 		sendOnSignUp: true,
 		expiresIn: VERIFICATION_LINK_HOURS * 60 * 60,
@@ -252,7 +176,7 @@ export const auth = betterAuth({
 		changeEmail: {
 			enabled: true,
 			sendChangeEmailConfirmation: async ({ user, newEmail, url }) => {
-				await sendChangeEmailConfirmationEmail(user.email, newEmail, url)
+				sendAuthEmailInBackground("change-email", sendChangeEmailConfirmationEmail(user.email, newEmail, url))
 			},
 		},
 		additionalFields: {
@@ -352,7 +276,9 @@ export const auth = betterAuth({
 			delete: {
 				// delete the Redis copy of each session that Better Auth deletes from Postgres,
 				// including a session that the user's active-sessions list missed
-				after: (session) => deleteRedisKey(session.token),
+				after: async (session) => {
+					await deleteRedisKeys(session.token)
+				},
 			},
 			update: {
 				// store a refreshed session in Redis if Redis holds no copy.
@@ -366,7 +292,7 @@ export const auth = betterAuth({
 							context.context.secret,
 						)
 						if (revokedSessionToken) {
-							await deleteRedisKey(revokedSessionToken)
+							await deleteRedisKeys(revokedSessionToken)
 						}
 						return
 					}

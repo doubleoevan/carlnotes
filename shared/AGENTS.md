@@ -12,14 +12,21 @@ hosts' names, and a turn's transcript text, and `appUrl.ts` reads the app's base
 code: `appUrl()` falls back to the local dev server, and `appBaseUrl()` is undefined if unset, for the emails and
 notifications that skip without a link.
 
-`monitoring.ts` starts Sentry in the api and the worker and defines what tracing reads and writes: the traces sampler,
-a request's transaction name and measurements, the stage and query spans, the send-time scrub, and the threshold
-warnings. `runtimeGauges.ts` logs a long-running process's connection pool and event loop delay once a minute, reading
-the delay from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its host name,
-so the replicas' lines can be told apart.
+`monitoring.ts` starts Sentry in the api and the worker and defines what tracing reads and writes: the traces sampler, a
+request's transaction name and measurements, the stage and query spans, and the threshold warnings. The send-time scrub
+every outgoing event passes is `scrubContent` and `scrubTransaction` in `monitoringScrub.ts`. `reportError` sends one
+stage's one error ten times an hour and skips the rest, and the next hour's first report says how many were skipped.
+`time.ts` holds an hour and a day in milliseconds and `withTimeLimit`, which fails work that outlasts a time limit with
+the caller's error. `runtimeGauges.ts` logs a long-running process's connection pool and event loop delay once a minute,
+reading the delay from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its host
+name, so the replicas' lines can be told apart.
 `reportedPath.ts` names a page by its route's shape, for PostHog's page views and Sentry's page renders alike.
 `savedEnvSettings.ts` saves the environment settings a test changes and returns the call that puts them back, for
-the api, worker, and shared tests alike.
+the api, worker, and shared tests alike. `monitoringTestFixtures.ts` quiets the console and the error report for the
+api, worker, and database tests.
+`envSettings.ts` reads a number that a setting holds: `toPositiveInteger` for a count or a duration, and
+`readDollarSetting` for an amount in dollars. `hmac.ts` signs a value with HMAC-SHA256 for the signup gate, the release
+webhook, the unsubscribe links, and the podcast cover keys.
 `analytics.ts` holds the three kinds of event, the user events keyed to a user, the bot events keyed to a bot's or an
 app's name, and the names of the browser's visit events, and `userAgent.ts` reads a request's device properties and
 names a known crawler, unfurler, podcast app, or feed reader from a token list.

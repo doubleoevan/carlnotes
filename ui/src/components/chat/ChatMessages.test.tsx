@@ -1,6 +1,7 @@
 // test the chat message time label, and the private chat's author lines, retry control, and question attachments
 import { expect, test } from "bun:test"
 import type { ChatMessageAttachment } from "@shared/contracts/chat"
+import { DAY_MS } from "@shared/time"
 import { toTimeAgoLabel } from "./ChatMessageParts"
 import { ChatMessages } from "./ChatMessages"
 import type { ChatTurn } from "./chatTurns"
@@ -19,8 +20,8 @@ test("the label walks from just now through days", () => {
 	// hours label the rest of the day, then days
 	expect(toTimeAgoLabel(NOW_TIME - 60 * 60_000, NOW_TIME)).toBe("1 hour ago")
 	expect(toTimeAgoLabel(NOW_TIME - 5 * 60 * 60_000, NOW_TIME)).toBe("5 hours ago")
-	expect(toTimeAgoLabel(NOW_TIME - 24 * 60 * 60_000, NOW_TIME)).toBe("1 day ago")
-	expect(toTimeAgoLabel(NOW_TIME - 72 * 60 * 60_000, NOW_TIME)).toBe("3 days ago")
+	expect(toTimeAgoLabel(NOW_TIME - DAY_MS, NOW_TIME)).toBe("1 day ago")
+	expect(toTimeAgoLabel(NOW_TIME - 3 * DAY_MS, NOW_TIME)).toBe("3 days ago")
 })
 
 // a clock that reads slightly behind a fresh chat turn still shows just now instead of something negative

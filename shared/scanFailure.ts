@@ -1,4 +1,5 @@
-// how a stored Scan failure reads to a person, and the failure reason that a workflow stores
+// how a stored Scan failure reads to a person, the failure reason that a workflow stores, and the application failure
+// that a workflow reads from an activity's failure
 const BUDGET_ERROR_PATTERN = /budget has been exceeded/i
 
 // how a spent budget reads to a person, on a failed Scan and on a rejected manual scan
@@ -56,4 +57,20 @@ export function toWorkflowFailureReason(error: unknown): string {
 	}
 	// the innermost message names the failure itself
 	return messages.at(-1) ?? String(error)
+}
+
+// the type and details of the application failure that an activity threw
+export type ActivityApplicationFailure = { type: string; details: unknown[] }
+
+/**
+ * Returns the type and details of the application failure that an activity failure wraps, or null for anything else.
+ */
+export function toActivityApplicationFailure(error: unknown): ActivityApplicationFailure | null {
+	// an activity failure wraps what the activity threw as its cause, and only an application failure names a type.
+	// the cause is read by its fields, which keeps this module free of Temporal imports
+	const cause = (error as { cause?: { type?: unknown; details?: unknown } } | null)?.cause
+	if (typeof cause?.type !== "string") {
+		return null
+	}
+	return { type: cause.type, details: Array.isArray(cause.details) ? cause.details : [] }
 }

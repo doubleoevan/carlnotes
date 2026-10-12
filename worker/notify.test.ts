@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
-import * as redis from "../db/redis"
+import * as redisRateLimits from "../db/redisRateLimits"
 import { planScanDigest, sendScanDigestBatch, sendScanReport } from "./notify"
 
 // the rows each query gets, picked by a pattern in its SQL. a query that matches nothing gets no rows
@@ -27,7 +27,7 @@ beforeEach(() => {
 	Bun.env.RESEND_API_KEY = "test-key"
 	Bun.env.RESEND_FROM_EMAIL = "carl@example.com"
 	delete Bun.env.BETTER_AUTH_URL
-	spyOn(redis, "takeRateLimitSlot").mockResolvedValue(0)
+	spyOn(redisRateLimits, "takeRateLimitSlot").mockResolvedValue(0)
 })
 
 // put the query, fetch, report, and env back after each test

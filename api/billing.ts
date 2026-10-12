@@ -1,26 +1,24 @@
 // Stripe Billing: Checkout, the Customer Portal
 // SETUP: create plus and premium products with monthly and yearly prices, plus a metered manual-scan overage price in Stripe
-import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
 import type { BillingState } from "@shared/contracts/profiles"
 import { reportError } from "@shared/monitoring"
-import { checkoutPayload } from "@shared/payloads"
 import { type BillingInterval, PLANS, type Plan } from "@shared/plans"
 import { eq } from "drizzle-orm"
-import { Hono } from "hono"
 import Stripe from "stripe"
 import { db } from "../db"
 import { billingSubscriptions } from "../db/schema/billing"
 import { users } from "../db/schema/users"
 import { replaceUserLiteLLMKey } from "../worker"
-import { isAllowed } from "./authorization"
-import { type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
 import { refreshSessionUser } from "./sessions"
 import { scansToday } from "./topic/quotas"
 
 // a paid plan is any plan but free. only paid plans map to a Stripe price
 type PaidPlan = Exclude<Plan, "free">
+
+// the error for a webhook with no signature, or a signature Stripe's library rejected
+export class StripeWebhookSignatureError extends Error {}
 
 // the fields toPaidSubscription reads from a Stripe subscription. a narrow type, so tests can pass plain objects
 type StripeSubscriptionFields = {
@@ -125,16 +123,25 @@ export async function loadBillingState(userId: string): Promise<BillingState> {
 }
 
 /**
- * Verify and handle a Stripe webhook: update the billing_subscriptions and users.plan from the subscription event.
- * Throws on a bad signature so the route responds 400 and Stripe retries.
+ * Verifies and applies a Stripe webhook's subscription event to billing_subscriptions and users.plan.
  */
 export async function handleStripeWebhook(rawBody: string, signature: string | undefined): Promise<void> {
-	// verify the signature before trusting any event payload
+	// verify the signature before trusting any event payload. an unset secret throws a plain error, and a missing
+	// signature a signature error
 	const secret = Bun.env.STRIPE_WEBHOOK_SECRET
-	if (!secret || !signature) {
-		throw new Error("missing stripe signature or STRIPE_WEBHOOK_SECRET")
+	if (!secret) {
+		throw new Error("STRIPE_WEBHOOK_SECRET is not set")
 	}
-	const event = await stripe().webhooks.constructEventAsync(rawBody, signature, secret)
+	if (!signature) {
+		throw new StripeWebhookSignatureError("missing stripe signature")
+	}
+
+	// reject a signature the library rejects the same way as a missing one
+	const event = await stripe()
+		.webhooks.constructEventAsync(rawBody, signature, secret)
+		.catch((error: unknown) => {
+			throw new StripeWebhookSignatureError(error instanceof Error ? error.message : String(error))
+		})
 
 	// every subscription lifecycle event includes the full subscription, so one handler covers create/update/delete
 	if (event.type.startsWith("customer.subscription.")) {
@@ -333,62 +340,3 @@ function overagePriceId(): string {
 	}
 	return priceId
 }
-
-// the billing routes: checkout, the portal, the account page state, and the stripe webhook
-export const billingRoute = new Hono<AppEnv>()
-	.post("/billing/checkout", zValidator("json", checkoutPayload), async (context) => {
-		// reject a signed-out visitor
-		const user = context.get("user")
-		if (!user) {
-			return context.json({ error: "unauthorized" }, 401)
-		}
-		// open a stripe checkout session for the chosen plan and billing interval and return its url to redirect to
-		const { plan, billingInterval } = context.req.valid("json")
-		const url = await createCheckoutSession(user.id, user.email, plan, billingInterval)
-		// report the checkout the user opened, with the plan they picked and the plan they are on
-		trackEvent("checkout_started", user.id, {
-			...toAnalyticsProperties(context),
-			checkoutPlan: plan,
-			interval: billingInterval,
-		})
-		return context.json({ url })
-	})
-	.post("/billing/portal", async (context) => {
-		// reject a signed-out visitor
-		const userId = currentUser(context)
-		if (!userId) {
-			return context.json({ error: "unauthorized" }, 401)
-		}
-		// open the stripe customer portal, or 404 when the user has no active subscription to manage
-		const url = await createPortalSession(userId)
-		return url ? context.json({ url }) : context.json({ error: "no subscription" }, 404)
-	})
-	.get("/billing/state", async (context) => {
-		// reject a signed-out visitor
-		const userId = currentUser(context)
-		if (!userId) {
-			return context.json({ error: "unauthorized" }, 401)
-		}
-
-		// the account page's plan, daily scan usage, card-on-file, and payment status
-		const requestedUserId = context.req.query("userId")
-		if (!requestedUserId || requestedUserId === userId) {
-			return context.json(await loadBillingState(userId))
-		}
-
-		// only an admin may see another user's billing state
-		if (!(await isAllowed(userId, "admin:console"))) {
-			return context.json({ error: "forbidden" }, 403)
-		}
-		return context.json(await loadBillingState(requestedUserId))
-	})
-	.post("/webhooks/stripe", async (context) => {
-		// verify and apply the stripe event from the raw body. a bad signature responds with a 400 so stripe retries
-		try {
-			await handleStripeWebhook(await context.req.text(), context.req.header("stripe-signature"))
-			return context.json({ received: true })
-		} catch (error) {
-			console.error("stripe webhook rejected", error)
-			return context.json({ error: "invalid webhook" }, 400)
-		}
-	})

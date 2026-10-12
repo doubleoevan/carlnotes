@@ -7,13 +7,14 @@ import {
 	hasFullPodcastEpisodes,
 	incrementDaySuggestionCount,
 	isPodcastEpisodeBudgetShareExhausted,
+	loadSpendSince,
 	loadUserAccess,
 	monthlySpendDollars,
 	toInviteLimit,
-	toMonthlySpendCents,
+	toSpendCents,
 	toSuggestionRateLimitWindowKey,
 } from "./quotas"
-import * as redis from "./redis"
+import * as redisRateLimits from "./redisRateLimits"
 import { runWithRequestMemo } from "./requestMemo"
 
 // put the spied Redis counter back after each test
@@ -133,17 +134,17 @@ test("the access row is read on every call outside a request", async () => {
 	expect(queryCount).toBe(2)
 })
 
-// the daily suggestion limit allows the three hundredth suggestion and rejects the next
-test("the daily suggestion limit allows up to 300 suggestions", async () => {
-	// a plain user, and a rate limit window that returns the three hundredth hit, then the next
-	const incrementRateLimitWindowSpy = spyOn(redis, "incrementRateLimitWindow")
+// the daily suggestion limit allows the thirtieth suggestion and rejects the next
+test("the daily suggestion limit allows up to 30 suggestions", async () => {
+	// a plain user, and a rate limit window that returns the thirtieth hit, then the next
+	const incrementRateLimitWindowSpy = spyOn(redisRateLimits, "incrementRateLimitWindow")
 	const incrementDaySuggestionCountResults: boolean[] = []
 
 	// count one suggestion for each hit, then check which suggestions were within the limit
 	await countAccessQueries(async () => {
 		for (const rateLimitWindowHit of [
-			{ count: 300, resetAt: 0 },
-			{ count: 301, resetAt: 0 },
+			{ count: 30, resetAt: 0 },
+			{ count: 31, resetAt: 0 },
 		]) {
 			incrementRateLimitWindowSpy.mockResolvedValueOnce(rateLimitWindowHit)
 			incrementDaySuggestionCountResults.push(await incrementDaySuggestionCount("user-1"))
@@ -198,7 +199,24 @@ test("monthly spend sums scans, chat, and episodes", async () => {
 		monthlySpendDollars("user-1"),
 	)
 	expect(monthlySpend).toEqual({ scanDollars: 2.5, chatDollars: 1.25, podcastEpisodeDollars: 0.41 })
-	expect(toMonthlySpendCents(monthlySpend)).toBe(416)
+	expect(toSpendCents(monthlySpend)).toBe(416)
+})
+
+// an empty user id still filters each sum by that id, so it never sums every user's spend
+test("the spend for an empty user id is filtered by that id", async () => {
+	// send the three sums with an empty user id, then put the connection pool's own query back
+	const sentQueries = stubConnectionPool(() => [["0"]])
+	try {
+		await loadSpendSince({ since: new Date("2026-10-01T00:00:00Z"), userId: "" })
+	} finally {
+		restoreConnectionPool()
+	}
+
+	// every sum is bound to the empty user id
+	expect(sentQueries).toHaveLength(3)
+	for (const sentQuery of sentQueries) {
+		expect(sentQuery.values).toContain("")
+	}
 })
 
 // a plus user's budget is 1500 cents, so podcast episodes stop recording at 1200 cents of spend and not one cent before.

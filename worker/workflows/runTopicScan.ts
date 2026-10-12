@@ -28,37 +28,40 @@ import {
 import {
 	FINISH_ATTEMPTS,
 	FINISH_TIMEOUT_MS,
-	FINISH_TOTAL_TIMEOUT_MS,
 	HEARTBEAT_TIMEOUT_MS,
 	INGEST_ATTEMPTS,
 	INGEST_TIMEOUT_MS,
-	INGEST_TOTAL_TIMEOUT_MS,
+	QUEUED_STAGE_TIMEOUT_MS,
 	REVIEW_ATTEMPTS,
 	REVIEW_TIMEOUT_MS,
-	REVIEW_TOTAL_TIMEOUT_MS,
 } from "./stageTimeouts"
 
-// ingest activity may be retried: it dedupes on canonical url
+// the queue that a Scan's closing writes run on, apart from the scan slots
+export const SCAN_CLOSING_TASK_QUEUE = "scan-closing"
+
+// ingest activity may be retried: it dedupes on canonical url. its schedule-to-close bound covers the wait for a scan slot
 const { ingestForScan } = proxyActivities<typeof scanActivities>({
 	startToCloseTimeout: INGEST_TIMEOUT_MS,
-	scheduleToCloseTimeout: INGEST_TOTAL_TIMEOUT_MS,
+	scheduleToCloseTimeout: QUEUED_STAGE_TIMEOUT_MS,
 	heartbeatTimeout: HEARTBEAT_TIMEOUT_MS,
 	retry: { maximumAttempts: INGEST_ATTEMPTS },
 })
 
-// review pays for the fetches and the model calls, so it gets one retry and no more
+// review pays for the fetches and the model calls, so it gets one retry and no more. it waits for a scan slot behind
+// the other Scans' ingests, so its schedule-to-close bound covers that wait too
 const { reviewForScan } = proxyActivities<typeof scanActivities>({
 	startToCloseTimeout: REVIEW_TIMEOUT_MS,
-	scheduleToCloseTimeout: REVIEW_TOTAL_TIMEOUT_MS,
+	scheduleToCloseTimeout: QUEUED_STAGE_TIMEOUT_MS,
 	heartbeatTimeout: HEARTBEAT_TIMEOUT_MS,
 	retry: { maximumAttempts: REVIEW_ATTEMPTS },
 })
 
-// the closing writes are idempotent, so they may retry. they are short enough not to need a heartbeat
+// the closing writes are idempotent, so they may retry. they are short enough not to need a heartbeat, and they run on
+// their own queue with no schedule-to-close bound, so a closing write can fail only by running and never by waiting
 const { finishScan, failScan, stopScan, reportScanEmailNotStarted, reportPodcastEpisodeRecordingNotStarted } =
 	proxyActivities<typeof scanActivities>({
+		taskQueue: SCAN_CLOSING_TASK_QUEUE,
 		startToCloseTimeout: FINISH_TIMEOUT_MS,
-		scheduleToCloseTimeout: FINISH_TOTAL_TIMEOUT_MS,
 		retry: { maximumAttempts: FINISH_ATTEMPTS },
 	})
 
@@ -97,7 +100,14 @@ export async function runTopicScanWorkflow(
 			await stopCancelledScan(scanId)
 			return
 		}
-		await failScan(scanId, toWorkflowFailureReason(error), spentBudget)
+
+		// record the failure. if the record itself fails, fail the workflow with the error that failed the Scan, and leave
+		// the row to the sweep's stale close-out
+		try {
+			await failScan(scanId, toWorkflowFailureReason(error), spentBudget)
+		} catch {
+			throw error
+		}
 	}
 
 	// a succeeded Scan starts its podcast episode recording in its own workflow.

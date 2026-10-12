@@ -23,23 +23,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # persist-credentials false keeps the checkout token out of .git/config
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
-      # the exact Bun the Dockerfile pins, matching the CI gate
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: "1.3.14"
-      - uses: actions/cache@v4
-        with:
-          path: ~/.bun/install/cache
-          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
-          restore-keys: ${{ runner.os }}-bun-
-      - run: bun install --frozen-lockfile
+      # the exact Bun the Dockerfile pins, matching the CI gate, and the locked dependencies
+      - uses: ./.github/actions/setup-bun
       # install ffmpeg as the Dockerfile does. the podcast suites encode episode audio and draw covers with it
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       # the doppler cli injects the same dev secrets a local smoke run uses
-      - uses: dopplerhq/cli-action@v3
+      - uses: dopplerhq/cli-action@014df23b1329b615816a38eb5f473bb9000700b1 # v3
       # apply the commit's migrations to the dev database, so the suites run against the schema that the commit expects
       - run: bun run db:migrate
         env:
@@ -101,7 +93,7 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
       # the smoke coverage joins the unit coverage on Codecov under its own flag
-      - uses: codecov/codecov-action@v7
+      - uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
         if: always()
         with:
           directory: ./coverage/smoke

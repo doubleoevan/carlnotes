@@ -3,7 +3,7 @@ import { toMentionedUserIds } from "@shared/chatMentions"
 import type { ChatMention } from "@shared/contracts/chat"
 import { and, desc, eq, inArray, isNull, type SQL } from "drizzle-orm"
 import { db } from "../../db"
-import { deleteRedisKey } from "../../db/redis"
+import { deleteRedisKeys } from "../../db/redis"
 import { chatRoomMentions, chatRoomMessages } from "../../db/schema/chat"
 import { teamMembers } from "../../db/schema/teams"
 import { users } from "../../db/schema/users"
@@ -153,7 +153,7 @@ export async function saveSeenChatMentions(userId: string, topicId: string | nul
 		)
 
 	// delete the user's cached unseen count
-	await deleteRedisKey(toUnseenChatMentionCountKey(userId))
+	await deleteRedisKeys(toUnseenChatMentionCountKey(userId))
 }
 
 // the user id of the author that a chat message was replied to or null for @carl

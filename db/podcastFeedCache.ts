@@ -1,7 +1,7 @@
 // the Redis keys that a topic's rendered podcast feeds are cached under, and deleting a topic's cached feeds
 import { eq } from "drizzle-orm"
 import { db } from "./index"
-import { deleteRedisKey } from "./redis"
+import { deleteRedisKeys } from "./redis"
 import { podcastFeedTokens } from "./schema/podcast"
 
 // a topic, and the listener whose own feed it is, or null for the public feed
@@ -24,7 +24,5 @@ export async function deletePodcastFeedCache(topicId: string): Promise<void> {
 		.from(podcastFeedTokens)
 		.where(eq(podcastFeedTokens.topicId, topicId))
 	const listenerUserIds = [null, ...podcastFeedTokenRows.map((podcastFeedTokenRow) => podcastFeedTokenRow.userId)]
-	await Promise.all(
-		listenerUserIds.map((listenerUserId) => deleteRedisKey(toPodcastFeedCacheKey({ topicId, listenerUserId }))),
-	)
+	await deleteRedisKeys(...listenerUserIds.map((listenerUserId) => toPodcastFeedCacheKey({ topicId, listenerUserId })))
 }

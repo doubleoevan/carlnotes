@@ -1,7 +1,7 @@
 // the LiteLLM test fixtures: the stub proxy, the connection pool stub that keeps the call order, the user row, and the
 // setup and restore that each LiteLLM test file runs around every test
-import { type Mock, mock, spyOn } from "bun:test"
-import * as monitoring from "@shared/monitoring"
+import { mock } from "bun:test"
+import { quietErrorReports } from "@shared/monitoringTestFixtures"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "../db/connectionPoolStub"
 
@@ -59,14 +59,6 @@ export function stubProxy(toResponse: (path: string) => Response): ProxyRequest[
 		return toResponse(path)
 	}) as typeof fetch
 	return proxyRequests
-}
-
-/**
- * Quiets the console and the error report, and returns the spy on the error report.
- */
-export function quietErrorReports(): Mock<typeof monitoring.reportError> {
-	spyOn(console, "error").mockImplementation(() => {})
-	return spyOn(monitoring, "reportError").mockImplementation(() => {})
 }
 
 /**

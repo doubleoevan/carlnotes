@@ -15,8 +15,10 @@ import { toStoredFileHeaders } from "./topic/attachments"
 // a month. an icon that changes on its site shows up within it
 const FAVICON_CACHE_CONTROL = "public, max-age=2592000"
 
-// an icon opened as a page gets a policy that allows nothing and sandboxes the document
-const FAVICON_CONTENT_SECURITY_POLICY = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+// an icon opened as a page gets a policy that allows nothing and sandboxes the document. a base url and a form's action
+// stay on this origin
+const FAVICON_CONTENT_SECURITY_POLICY =
+	"default-src 'none'; style-src 'unsafe-inline'; base-uri 'self'; form-action 'self'; sandbox"
 
 /**
  * The path this origin serves a host's favicon from.

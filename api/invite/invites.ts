@@ -5,6 +5,7 @@ import { trackEvent } from "@shared/analytics"
 import type { Invite, InviteSource } from "@shared/contracts/invites"
 import { inviteCreatePayload } from "@shared/payloads"
 import { PLANS } from "@shared/plans"
+import { DAY_MS } from "@shared/time"
 import { and, desc, eq, isNull, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
@@ -49,7 +50,7 @@ export async function createTopicInvite(
 	}
 
 	// the link names no address, so it has a use limit and an expiry instead
-	const expiresAt = new Date(Date.now() + LINK_INVITE_DAYS * 24 * 60 * 60 * 1000)
+	const expiresAt = new Date(Date.now() + LINK_INVITE_DAYS * DAY_MS)
 	const [invite] = await db
 		.insert(invites)
 		.values({ topicId, invitedByUserId: userId, maxUses: await toLinkInviteMaxUses(userId), expiresAt })
@@ -90,7 +91,7 @@ export async function createTeamInvite(
 	}
 
 	// the link names no address, so it has a use limit and an expiry instead
-	const expiresAt = new Date(Date.now() + LINK_INVITE_DAYS * 24 * 60 * 60 * 1000)
+	const expiresAt = new Date(Date.now() + LINK_INVITE_DAYS * DAY_MS)
 	const [invite] = await db
 		.insert(invites)
 		.values({ teamId, invitedByUserId: userId, maxUses: await toLinkInviteMaxUses(userId), expiresAt })

@@ -3,12 +3,12 @@
 // a release is authored on GitHub and read here
 
 import { appUrl } from "@shared/appUrl"
+import { isSameSignature, toHmacDigest } from "@shared/hmac"
 import { desc, eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
 import { releases } from "../db/schema/releases"
 import { toContentHtml, toPageHtml } from "./content"
-import { renderedCacheHeaders } from "./edgeCache"
 
 // what a release body puts above its auto-generated pull request list. the index renders only what
 // sits above it, and a body written without it renders whole
@@ -21,6 +21,10 @@ const STORE_RELEASE_ACTIONS = new Set(["published", "released", "edited"])
 // the header GitHub signs its webhook payload with, and the prefix that signature includes
 const SIGNATURE_HEADER = "x-hub-signature-256"
 const SIGNATURE_PREFIX = "sha256="
+
+// the paths of the release index and of one release's page
+export const RELEASES_PATH = "/releases"
+export const RELEASE_PATH = "/releases/:tag"
 
 // one release as the pages and the feed read it
 export type ReleaseRow = typeof releases.$inferSelect
@@ -79,36 +83,22 @@ export function toReleaseSummary(body: string): string {
  * Returns a release page's path, with its tag encoded.
  */
 export function toReleasePath(tag: string): string {
-	return `/releases/${encodeURIComponent(tag)}`
+	return `${RELEASES_PATH}/${encodeURIComponent(tag)}`
 }
 
 /**
  * Whether a signature header matches the body under the signing secret. False when either is missing,
  * so an unsigned request and an unconfigured environment both fail closed.
  */
-export async function isSignedByGitHub(body: string, signature: string | undefined): Promise<boolean> {
+export function isSignedByGitHub(body: string, signature: string | undefined): boolean {
 	const secret = Bun.env.GITHUB_WEBHOOK_SECRET
 	if (!secret || !signature?.startsWith(SIGNATURE_PREFIX)) {
 		return false
 	}
 
-	// the same HMAC GitHub computed over the raw body
-	const signingKey = await crypto.subtle.importKey(
-		"raw",
-		new TextEncoder().encode(secret),
-		{ name: "HMAC", hash: "SHA-256" },
-		false,
-		["sign"],
-	)
-	const bodyDigest = await crypto.subtle.sign("HMAC", signingKey, new TextEncoder().encode(body))
-
-	// the compare is constant time, so a wrong signature leaks nothing by how long it takes to reject.
-	// the lengths are checked first because timingSafeEqual throws on a mismatched pair
-	const expectedSignature = SIGNATURE_PREFIX + Buffer.from(bodyDigest).toString("hex")
-	return (
-		expectedSignature.length === signature.length &&
-		crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature))
-	)
+	// compare the same HMAC GitHub computed over the raw body, in constant time
+	const expectedSignature = SIGNATURE_PREFIX + toHmacDigest({ value: body, secret, encoding: "hex" })
+	return isSameSignature({ expectedSignature, signature })
 }
 
 // the release payload GitHub sends, narrowed to what a row needs
@@ -203,19 +193,19 @@ export async function serveRelease(tag: string): Promise<string | null> {
 
 // the release routes: the index, one release's page, and the webhook that writes the table
 export const releasesRoute = new Hono()
-	.get("/releases", renderedCacheHeaders, async (context) => {
+	.get(RELEASES_PATH, async (context) => {
 		return context.html(await serveReleaseIndex())
 	})
-	.get("/releases/:tag", renderedCacheHeaders, async (context) => {
+	.get(RELEASE_PATH, async (context) => {
 		const page = await serveRelease(context.req.param("tag"))
 		return page ? context.html(page) : context.notFound()
 	})
 	// the changelog path is the conventional one, so a link written against it reaches the page
-	.get("/changelog", (context) => context.redirect("/releases", 301))
+	.get("/changelog", (context) => context.redirect(RELEASES_PATH, 301))
 	.post("/api/webhooks/github", async (context) => {
 		// the raw body is what the signature covers, so it is read before anything parses it
 		const body = await context.req.text()
-		if (!(await isSignedByGitHub(body, context.req.header(SIGNATURE_HEADER)))) {
+		if (!isSignedByGitHub(body, context.req.header(SIGNATURE_HEADER))) {
 			return context.json({ rejected: "signature" }, 401)
 		}
 

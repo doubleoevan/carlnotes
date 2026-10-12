@@ -4,6 +4,7 @@ import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
 import type { OwnerTopic } from "@shared/contracts/activity"
 import type { AdminTeamRow, AdminTotals, AdminUserRow } from "@shared/contracts/admin"
 import type { TeamPageResponse, TeamSummary } from "@shared/contracts/teams"
+import { toPositiveInteger } from "@shared/envSettings"
 import { and, count, eq, gte, isNotNull, sql } from "drizzle-orm"
 import { db } from "../db"
 import { chatAttachments, chatTurns } from "../db/schema/chat"
@@ -231,7 +232,7 @@ export async function loadAdminTotals(userRows: AdminUserRow[]): Promise<AdminTo
 
 	// pull Stripe's netted revenue for the month and derive the contribution, minus an optional flat fixed-cost constant
 	const netRevenueCents = await readStripeTotalRevenueCents(Math.floor(startOfUtcMonth(new Date()).getTime() / 1000))
-	const fixedMonthlyCostCents = Number(Bun.env.FIXED_MONTHLY_COST_CENTS ?? 0)
+	const fixedMonthlyCostCents = toPositiveInteger(Bun.env.FIXED_MONTHLY_COST_CENTS, 0)
 	return {
 		attributedBytes,
 		monthVariableCostCents,

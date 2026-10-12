@@ -40,10 +40,9 @@ test("toStoredFileHeaders reads the media type before any parameters", () => {
 	expect(toStoredFileHeaders("shot.png", "image/png; name=shot.png")["Content-Disposition"]).toStartWith("inline;")
 })
 
-// the filename survives in both header forms, and the browser never sniffs a type of its own
-test("toStoredFileHeaders keeps the filename and blocks type sniffing", () => {
+// the filename survives in both header forms
+test("toStoredFileHeaders keeps the filename", () => {
 	const headers = toStoredFileHeaders("café shot.png", "image/png")
 	expect(headers["Content-Disposition"]).toContain('filename="caf_ shot.png"')
 	expect(headers["Content-Disposition"]).toContain("filename*=UTF-8''caf%C3%A9%20shot.png")
-	expect(headers["X-Content-Type-Options"]).toBe("nosniff")
 })

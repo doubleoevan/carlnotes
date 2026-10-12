@@ -1,6 +1,7 @@
 // the app's database client. a pooled Neon connection bound to the domain schema
 import { Pool } from "@neondatabase/serverless"
 import { MINIMUM_SHOWN_FINDINGS } from "@shared/enums"
+import { toPositiveInteger } from "@shared/envSettings"
 import { reportError } from "@shared/monitoring"
 import type { PoolGauges } from "@shared/runtimeGauges"
 import { and, eq, isNotNull, type SQL, type SQLWrapper, sql } from "drizzle-orm"
@@ -170,13 +171,4 @@ export async function sizeConnectionPool(): Promise<number> {
 		reportError(error, "database")
 		return DEFAULT_POOL_MAX
 	}
-}
-
-/**
- * Returns an environment value as a whole number above zero,
- * or the default if the value is unset or is not a whole number above zero.
- */
-export function toPositiveInteger(value: string | undefined, defaultValue: number): number {
-	const parsedNumber = Number(value)
-	return Number.isInteger(parsedNumber) && parsedNumber > 0 ? parsedNumber : defaultValue
 }

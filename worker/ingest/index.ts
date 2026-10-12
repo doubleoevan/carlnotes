@@ -6,12 +6,11 @@ import { db } from "../../db"
 import { resources, type scans } from "../../db/schema/scans"
 import { sources } from "../../db/schema/topics"
 import { type Budget, charge } from "../budget"
-import { OversizedBodyError } from "../publicFetch"
+import { FetchStatusError, OversizedBodyError } from "../publicFetch"
 import { deleteStoredObject, toResourceContentKey, uploadResourceContent } from "../store"
 import { traceStage } from "../telemetry"
 import { blueskyIngester } from "./bluesky"
-import { FeedStatusError } from "./feed"
-import type { FetchedBody, IngestedResource, IngestResult, Source, SourceIngester } from "./ingester"
+import type { FetchedBody, IngestContext, IngestedResource, IngestResult, Source, SourceIngester } from "./ingester"
 import { toCanonicalUrl, toFallbackTitle } from "./normalize"
 import { podcastIngester } from "./podcast"
 import { redditIngester } from "./reddit"
@@ -56,20 +55,29 @@ export type ScanSummary = {
 	problemSources: ProblemSource[]
 }
 
-// what ingest hands back to the Scan. the summary, plus each Source's own outcome for the Scan report
+// what ingest returns to the Scan. the summary, plus each Source's own outcome for the Scan report
 export type IngestOutcome = { sourceOutcomes: SourceOutcome[]; summary: ScanSummary }
 
+// the topic whose Sources run, the Scan's Budget, and the Scan owner's LiteLLM key that bills an ingester's model calls
+type IngestFromTopicSourcesOptions = { topicId: string; budget: Budget; litellmApiKey?: string }
+
 /**
- * Ingest every Source on the topic and store the deduped Resources, charging what the Sources cost to the Budget.
+ * Ingests every Source on the topic and stores the deduped Resources, charging what the Sources cost to the Budget.
  */
-export async function ingestFromTopicSources(topicId: string, budget: Budget): Promise<IngestOutcome> {
+export async function ingestFromTopicSources({
+	topicId,
+	budget,
+	litellmApiKey,
+}: IngestFromTopicSourcesOptions): Promise<IngestOutcome> {
 	// read the topic's Sources and run each through its ingester, with per-Source failures isolated
 	const topicSources = await db.select().from(sources).where(eq(sources.topicId, topicId))
 	const ingestOutcome = await traceStage(
 		"ingest",
 		budget,
 		async () => {
-			const sourceOutcomes = await Promise.all(topicSources.map(ingestFromSource))
+			const sourceOutcomes = await Promise.all(
+				topicSources.map((source) => ingestFromSource(source, { litellmApiKey })),
+			)
 			const summary = toScanSummary(sourceOutcomes)
 			// only a paid source like the web search reports a cost
 			charge(budget, "ingestion", summary.costDollars)
@@ -128,15 +136,15 @@ async function storeFetchedBody(resourceId: string, fetchedBody: FetchedBody): P
 }
 
 /**
- * Whether a Source failure is the host declining instead of a fault in this code.
+ * Whether a Source failure is the host rejecting the request instead of a fault in this code.
  */
-export function isAnsweredRefusal(error: unknown): boolean {
+export function isHostRejection(error: unknown): boolean {
 	if (error instanceof OversizedBodyError) {
 		return true
 	}
 
-	// a 5xx is the host failing instead of refusing, and can be a request this code sent wrong
-	return error instanceof FeedStatusError && error.status < 500
+	// a 5xx is the host failing instead of rejecting the request, and can be a request this code sent wrong
+	return error instanceof FetchStatusError && error.status < 500
 }
 
 /**
@@ -209,7 +217,7 @@ function toProblemSource(sourceOutcome: SourceOutcome): ProblemSource | null {
 }
 
 // run a Source through its registered ingester, turning any failure into an isolated outcome
-async function ingestFromSource(source: Source): Promise<SourceOutcome> {
+async function ingestFromSource(source: Source, ingestContext: IngestContext): Promise<SourceOutcome> {
 	// a Source that has not passed its llm-guard screen is skipped before its ingester is reached
 	if (source.status !== "ready") {
 		return { status: "skipped", sourceId: source.id, sourceKind: source.kind }
@@ -223,14 +231,14 @@ async function ingestFromSource(source: Source): Promise<SourceOutcome> {
 
 	// run the ingester. an error stops only this Source, so the Scan keeps whatever the other sources found
 	try {
-		const ingestResult = await ingester(source)
+		const ingestResult = await ingester(source, ingestContext)
 		// a Source that found nothing is reported as a fallback
 		const status = ingestResult.resources.length === 0 ? "fallback" : "ok"
 		return { status, sourceId: source.id, sourceKind: source.kind, ...ingestResult }
 	} catch (error) {
 		// log every failure, but only report the failures our code could be at fault for
 		console.error(`source ${source.id} (${source.kind}) failed`, error)
-		if (!isAnsweredRefusal(error)) {
+		if (!isHostRejection(error)) {
 			reportError(error, "ingest", { sourceId: source.id, sourceKind: source.kind })
 		}
 		const reason = (error instanceof Error ? error.message : String(error)).slice(0, MAX_FAILURE_REASON_CHARS)

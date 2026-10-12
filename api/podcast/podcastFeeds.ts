@@ -8,7 +8,7 @@ import { db } from "../../db"
 import { podcastEpisodeListens, podcastEpisodes } from "../../db/schema/podcast"
 import { topics } from "../../db/schema/topics"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
-import { toVersionedImageHeaders } from "../edgeCache"
+import { PRIVATE_NO_STORE_CACHE_CONTROL, toVersionedImageHeaders } from "../edgeCache"
 import { toCachedPodcastCoverJpeg } from "../share/podcastCover"
 import {
 	toPodcastEpisodeAudioResponse,
@@ -113,7 +113,7 @@ export const podcastFeedsRoute = new Hono<AppEnv>()
 		}
 
 		// tell shared caches not to store a file that a feed token opens
-		context.header("Cache-Control", "private, no-store")
+		context.header("Cache-Control", PRIVATE_NO_STORE_CACHE_CONTROL)
 
 		// respond with the chapters file or the transcript
 		const { podcastEpisodeRow } = accessiblePodcastEpisode

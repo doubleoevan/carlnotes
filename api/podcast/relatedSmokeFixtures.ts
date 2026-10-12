@@ -1,5 +1,6 @@
 // the related smoke section's fixtures: eight topics around the dev database's centroid with their findings, podcast
 // episodes, and vectors, an invite topic's subscriber, and a team member whose team holds the private topic
+import { HOUR_MS } from "@shared/time"
 import { eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
 import { podcastEpisodes } from "../../db/schema/podcast"
@@ -153,7 +154,7 @@ export async function seedRelatedFixtures(): Promise<void> {
 			description: "A related episode.",
 			season: 2026,
 			episodeNumber: podcastEpisodeSeed.episodeNumber,
-			publishedAt: new Date(Date.now() - (10 - podcastEpisodeSeed.episodeNumber) * 60 * 60 * 1000),
+			publishedAt: new Date(Date.now() - (10 - podcastEpisodeSeed.episodeNumber) * HOUR_MS),
 		})),
 	)
 
@@ -183,7 +184,7 @@ export async function seedRelatedFixtures(): Promise<void> {
 	await db.insert(subscriptions).values({
 		topicId: relatedTopicIds.invite,
 		subscriberUserId: subscriberId,
-		createdAt: new Date(Date.now() - 8.5 * 60 * 60 * 1000),
+		createdAt: new Date(Date.now() - 8.5 * HOUR_MS),
 	})
 
 	// the team member's team holds the private topic through a share

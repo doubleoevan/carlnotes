@@ -25,6 +25,9 @@ export type ChatTurnAuthorization =
 	| { status: "forbidden" }
 	| { status: "budget"; userId: string }
 
+// the error a signed-out visitor's chat request is rejected with
+export const SIGNUP_REQUIRED_ERROR = "sign up required"
+
 /**
  * Decides whether this user may take a chat turn on the topic right now, and how that chat turn is saved.
  * A signed-out visitor on a visible topic is sent to signup.

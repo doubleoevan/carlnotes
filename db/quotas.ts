@@ -1,9 +1,10 @@
 // per-user limits, the month's spend, and the podcast episode checks
 import { dailyFrequencies, isAdminRole } from "@shared/enums"
 import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, type UserAccess, userBudgetCents } from "@shared/plans"
+import { DAY_MS } from "@shared/time"
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm"
 import { db } from "."
-import { incrementRateLimitWindow, isWithinRateLimit } from "./redis"
+import { countRateLimitHit } from "./redisRateLimits"
 import { memoizeInRequest } from "./requestMemo"
 import { billingSubscriptions } from "./schema/billing"
 import { chatTurns } from "./schema/chat"
@@ -13,9 +14,6 @@ import { scans } from "./schema/scans"
 import { teamMembers } from "./schema/teams"
 import { topics } from "./schema/topics"
 import { users } from "./schema/users"
-
-// one day in milliseconds, the suggestion rate limit window and the unit that invite and account ages are measured in
-const DAY_MS = 24 * 60 * 60 * 1000
 
 // the invite-limit factors: a first-week account reaches a fifth of its base, a sender whose week-old
 const YOUNG_ACCOUNT_DAYS = 7
@@ -27,14 +25,17 @@ const CONNECTED_LIMIT_FACTOR = 2
 // how old a user invitation must be before its outcome counts toward a sender's reputation
 const REPUTATION_AGE_DAYS = 7
 
-// a user's recorded spend this month in dollars, split into scans, chat, and podcast episodes
-type MonthlySpend = { scanDollars: number; chatDollars: number; podcastEpisodeDollars: number }
+// a recorded spend in dollars, split into scans, chat, and podcast episodes
+export type RecordedSpend = { scanDollars: number; chatDollars: number; podcastEpisodeDollars: number }
+
+// when the spend to sum starts, and the one user whose spend to sum, or every user if unset
+export type LoadSpendSinceOptions = { since: Date; userId?: string }
 
 // how many teams a user may create in a day
 const DAILY_TEAM_LIMIT = 20
 
 // how many source-suggestion model calls a user may make in a day, so nobody drains the budget on suggestions
-const DAILY_SUGGESTION_LIMIT = 300
+const DAILY_SUGGESTION_LIMIT = 30
 
 /**
  * Counts one suggestion against the user's UTC day and returns whether the suggestion is within the daily limit.
@@ -48,8 +49,11 @@ export async function incrementDaySuggestionCount(userId: string): Promise<boole
 	}
 
 	// count the suggestion in today's rate limit window and return whether the count is within the daily limit
-	const rateLimitWindowHit = await incrementRateLimitWindow(toSuggestionRateLimitWindowKey(userId, new Date()), DAY_MS)
-	return isWithinRateLimit(rateLimitWindowHit, DAILY_SUGGESTION_LIMIT)
+	return countRateLimitHit({
+		key: toSuggestionRateLimitWindowKey(userId, new Date()),
+		rateLimitWindowMs: DAY_MS,
+		limit: DAILY_SUGGESTION_LIMIT,
+	})
 }
 
 /**
@@ -247,22 +251,34 @@ export async function loadBillingAccess(
 /**
  * Returns this month's recorded spend for the user, split into scans, chat, and podcast episodes.
  */
-export async function monthlySpendDollars(userId: string): Promise<MonthlySpend> {
-	// sum each table's cost since the start of the UTC month, which the budget resets on
-	const monthStart = startOfUtcMonth(new Date())
+export function monthlySpendDollars(userId: string): Promise<RecordedSpend> {
+	// sum since the start of the UTC month, which the budget resets on
+	return loadSpendSince({ since: startOfUtcMonth(new Date()), userId })
+}
+
+/**
+ * Returns the spend recorded since a time for one user or for every user, split into scans, chat, and podcast episodes.
+ */
+export async function loadSpendSince({ since, userId }: LoadSpendSinceOptions): Promise<RecordedSpend> {
+	// sum each table's cost since the start time, for the one user if one is given, even an empty user id
 	const [[scanSpendRow], [chatSpendRow], [podcastEpisodeSpendRow]] = await Promise.all([
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${scans.cost}), 0)` })
 			.from(scans)
-			.where(and(eq(scans.ownerId, userId), gte(scans.startedAt, monthStart))),
+			.where(and(userId !== undefined ? eq(scans.ownerId, userId) : undefined, gte(scans.startedAt, since))),
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${chatTurns.cost}), 0)` })
 			.from(chatTurns)
-			.where(and(eq(chatTurns.userId, userId), gte(chatTurns.createdAt, monthStart))),
+			.where(and(userId !== undefined ? eq(chatTurns.userId, userId) : undefined, gte(chatTurns.createdAt, since))),
 		db
 			.select({ dollars: sql<string>`coalesce(sum(${podcastEpisodes.cost}), 0)` })
 			.from(podcastEpisodes)
-			.where(and(eq(podcastEpisodes.ownerId, userId), gte(podcastEpisodes.createdAt, monthStart))),
+			.where(
+				and(
+					userId !== undefined ? eq(podcastEpisodes.ownerId, userId) : undefined,
+					gte(podcastEpisodes.createdAt, since),
+				),
+			),
 	])
 	return {
 		scanDollars: Number(scanSpendRow?.dollars ?? 0),
@@ -272,9 +288,9 @@ export async function monthlySpendDollars(userId: string): Promise<MonthlySpend>
 }
 
 /**
- * Returns a month's spend in cents, summed across scans, chat, and podcast episodes.
+ * Returns a recorded spend in cents, summed across scans, chat, and podcast episodes.
  */
-export function toMonthlySpendCents({ scanDollars, chatDollars, podcastEpisodeDollars }: MonthlySpend): number {
+export function toSpendCents({ scanDollars, chatDollars, podcastEpisodeDollars }: RecordedSpend): number {
 	return Math.round(scanDollars * 100) + Math.round(chatDollars * 100) + Math.round(podcastEpisodeDollars * 100)
 }
 
@@ -285,7 +301,7 @@ export async function isPodcastEpisodeBudgetShareExhausted(userId: string): Prom
 	// compare the month's spend with the podcast episode share of the user's budget
 	const [userAccess, monthlySpend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
 	const podcastEpisodeBudgetCents = userBudgetCents(userAccess) * PLANS[userAccess.plan].podcastEpisodeBudgetShare
-	return toMonthlySpendCents(monthlySpend) >= podcastEpisodeBudgetCents
+	return toSpendCents(monthlySpend) >= podcastEpisodeBudgetCents
 }
 
 /**

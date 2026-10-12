@@ -1,6 +1,13 @@
-// search ingester tests for the result parser and prompt builder
-import { expect, test } from "bun:test"
-import { buildSearchPrompt, parseResults } from "./search"
+// search ingester tests for the result parser, the prompt builder, and the key that bills the query generation
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import * as attach from "../attach"
+import * as models from "../models"
+import type { Source } from "./ingester"
+import { buildSearchPrompt, parseResults, searchIngester } from "./search"
+
+afterEach(() => {
+	mock.restore()
+})
 
 // two distinct results plus a third repeating the first url, to exercise in-payload dedupe
 const SEARCH_RESPONSE = {
@@ -45,4 +52,18 @@ test("buildSearchPrompt includes the topic name alongside the prompt", async () 
 	const { prompt: searchPrompt } = await buildSearchPrompt("I want the best ones!", "Cute raccoon videos")
 	expect(searchPrompt).toContain("Cute raccoon videos")
 	expect(searchPrompt).toContain("I want the best ones!")
+})
+
+// the query generation bills the key in the ingest context, which is the Scan owner's key
+test("searchIngester writes its queries on the LiteLLM key it is given", async () => {
+	// stub the topic read, and stop the ingester once it chooses the model for the queries
+	spyOn(attach, "buildTopicScanContext").mockResolvedValue({ name: "Cute raccoon videos", context: "" })
+	const cheapModelSpy = spyOn(models, "cheapModel").mockImplementation(() => {
+		throw new Error("model chosen")
+	})
+
+	// run the ingester with the Scan owner's key, and check that key reached the model
+	const source = { id: "src_1", topicId: "top_1", kind: "search", config: {} } as Source
+	await expect(searchIngester(source, { litellmApiKey: "sk-scan-owner" })).rejects.toThrow("model chosen")
+	expect(cheapModelSpy).toHaveBeenCalledWith("sk-scan-owner")
 })

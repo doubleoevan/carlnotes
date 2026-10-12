@@ -6,7 +6,6 @@ import { Hono } from "hono"
 import Markdown from "markdown-to-jsx"
 import { createElement } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
-import { renderedCacheHeaders } from "./edgeCache"
 import { toJsonLdTag } from "./jsonLd"
 import { cacheForTtl } from "./ttlCache"
 
@@ -25,6 +24,10 @@ type ContentPage = { slug: string; title: string; description: string; date: str
 
 // how long a section's parsed pages are kept before a read lists and parses its files again
 const PAGES_TTL_MS = 60_000
+
+// the paths of the blog's index and of one blog page
+export const BLOG_INDEX_PATH = "/blog"
+export const BLOG_PAGE_PATH = "/blog/:slug"
 
 // each section's page loader, which keeps the parsed pages for the ttl
 const sectionPageLoaders = {
@@ -192,8 +195,8 @@ async function servePage(section: Section, slug: string): Promise<string | null>
 
 // the content routes: the blog's index and its page route
 export const contentRoute = new Hono()
-	.get("/blog", renderedCacheHeaders, async (context) => context.html(await serveIndex("blog")))
-	.get("/blog/:slug", renderedCacheHeaders, async (context) => {
+	.get(BLOG_INDEX_PATH, async (context) => context.html(await serveIndex("blog")))
+	.get(BLOG_PAGE_PATH, async (context) => {
 		const html = await servePage("blog", context.req.param("slug"))
 		return html ? context.html(html) : context.text("Not found", 404)
 	})

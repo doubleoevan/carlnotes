@@ -1,12 +1,13 @@
 // session tests over spied Redis reads and writes: refreshing the users row in each stored session,
 // revoking a user's sessions, and caching a missing session
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { HOUR_MS } from "@shared/time"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as redis from "../db/redis"
 import { cacheSession, refreshSessionUser, revokeUserSessions } from "./sessions"
 
 // a session expiry an hour from now, and the users row before and after a rename
-const SESSION_EXPIRES_AT = new Date(Date.now() + 60 * 60 * 1000)
+const SESSION_EXPIRES_AT = new Date(Date.now() + HOUR_MS)
 const OLD_USER_ROW = { id: "user-1", username: "old-name" }
 const NEW_USER_ROW = { id: "user-1", username: "new-name" }
 

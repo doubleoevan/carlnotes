@@ -7,6 +7,7 @@ import { userBudgetCents } from "@shared/plans"
 import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm"
 import { db } from "../db"
 import { startOfUtcMonth } from "../db/quotas"
+import { topics } from "../db/schema/topics"
 import { users } from "../db/schema/users"
 import { runWithConcurrency } from "./concurrency"
 
@@ -74,6 +75,19 @@ export async function loadOrProvisionUserLiteLLMKey(userId: string): Promise<str
 	// another call stored a key first, or the user's budget changed. delete this call's key and load the key again
 	await deleteUnstoredLiteLLMKey(userId, provisionedLiteLLMKey)
 	return loadOrProvisionUserLiteLLMKey(userId)
+}
+
+/**
+ * Loads the key billed for model calls about a topic, which is its owner's key, created first if the owner has none.
+ * Throws an error if the topic is gone.
+ */
+export async function loadOrProvisionTopicOwnerLiteLLMKey(topicId: string): Promise<string> {
+	// read the topic's owner, throw an error if the topic is gone, and load the owner's key
+	const [topic] = await db.select({ ownerId: topics.ownerId }).from(topics).where(eq(topics.id, topicId))
+	if (!topic) {
+		throw new Error(`topic ${topicId} not found`)
+	}
+	return loadOrProvisionUserLiteLLMKey(topic.ownerId)
 }
 
 // the user, the created key, and the error that the store of that key threw

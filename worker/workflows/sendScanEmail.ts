@@ -1,13 +1,7 @@
 // the workflow that emails a finished Scan's outcome. a scheduled Scan sends its digest one batch at a time, and any
 // other Scan sends its report to whoever ran it or created the Topic
-import {
-	ActivityFailure,
-	ApplicationFailure,
-	condition,
-	defineSignal,
-	proxyActivities,
-	setHandler,
-} from "@temporalio/workflow"
+import { ActivityFailure, condition, defineSignal, proxyActivities, setHandler } from "@temporalio/workflow"
+import { toActivityApplicationFailure } from "../../shared/scanFailure"
 import type { ResendFailure } from "../email"
 import type { ScanTrigger } from "./runTopicScanActivities"
 import type * as emailActivities from "./sendScanEmailActivities"
@@ -109,15 +103,16 @@ async function reportUndeliveredSend({ error, ...undeliveredScanEmail }: ReportU
 // what Resend said about a failed send, read from the activity's failure, or the failure's own message if Resend was
 // never reached
 function toResendFailure(error: unknown): ResendFailure {
-	// an activity's failure wraps what the activity threw
-	const failureCause = error instanceof ActivityFailure ? error.cause : error
-
 	// a Resend rejection includes what Resend said as its details
-	if (failureCause instanceof ApplicationFailure && failureCause.type === "ResendFailure") {
-		const [resendFailure] = failureCause.details as ResendFailure[]
+	const applicationFailure = toActivityApplicationFailure(error)
+	if (applicationFailure?.type === "ResendFailure") {
+		const [resendFailure] = applicationFailure.details as ResendFailure[]
 		if (resendFailure) {
 			return resendFailure
 		}
 	}
+
+	// any other failure is described by the message of what the activity threw, which its activity failure wraps
+	const failureCause = error instanceof ActivityFailure ? error.cause : error
 	return { httpStatus: null, resendError: failureCause instanceof Error ? failureCause.message : String(failureCause) }
 }

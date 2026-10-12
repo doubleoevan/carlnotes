@@ -1,11 +1,7 @@
 // the app's Redis store, with one command connection and one subscriber connection. a failed operation returns null
-// instead of throwing an error, and a failed rate limit count falls back to this process's memory
-import type { ExtraGaugesReading } from "@shared/runtimeGauges"
-import {
-	clearMemoryRateLimitWindows,
-	decrementMemoryRateLimitWindow,
-	incrementMemoryRateLimitWindow,
-} from "./memoryRateLimitWindows"
+// instead of throwing an error
+import { withTimeLimit } from "@shared/time"
+import { clearMemoryRateLimitWindows } from "./memoryRateLimitWindows"
 import { countCacheRead } from "./queryTracing"
 import {
 	countError,
@@ -18,29 +14,26 @@ import {
 	toConnection,
 } from "./redisConnection"
 
-// a script that atomically increments a key and starts the key's expiry on the rate limit window's first hit.
-// the script's reply is the count and the milliseconds left in the rate limit window
-const INCREMENT_RATE_LIMIT_WINDOW_SCRIPT = [
-	"local count = redis.call('INCR', KEYS[1])",
-	"if count == 1 then redis.call('PEXPIRE', KEYS[1], ARGV[1]) end",
-	"return {count, redis.call('PTTL', KEYS[1])}",
-].join("\n")
+// how long one command may take before the store gives up on it and counts a failure
+const COMMAND_TIMEOUT_MS = 2000
 
-// a script that decrements a key only if the key's rate limit window is still open,
-// so a refund never creates a key with no expiry
-const DECREMENT_RATE_LIMIT_WINDOW_SCRIPT =
-	"if redis.call('EXISTS', KEYS[1]) == 1 then return redis.call('DECR', KEYS[1]) end return 0"
+// how many commands in a row may miss the deadline before the store replaces the client, which rejects every command
+// still queued on the stalled client and starts the reconnect backoff
+const COMMAND_TIMEOUTS_BEFORE_RECONNECT = 3
 
-// a script that takes a rate limit slot if no other call holds it, for the slot's length. the script's reply is 0 if this
-// call took the slot, or the milliseconds until the slot frees. the slot expires on the Redis server's clock
-const TAKE_RATE_LIMIT_SLOT_SCRIPT =
-	"if redis.call('SET', KEYS[1], '1', 'NX', 'PX', ARGV[1]) then return 0 end return math.max(redis.call('PTTL', KEYS[1]), 1)"
-
-// one hit on a rate limit window, with the count so far and when the rate limit window resets
-export type RateLimitWindowHit = { count: number; resetAt: number }
+// the deadline misses in a row so far
+let consecutiveCommandTimeoutCount = 0
 
 // whether the command connection is up, and the minute's cache hits, cache misses, and failed operations
 export type RedisGauges = { isConnected: boolean; cacheHitCount: number; cacheMissCount: number; errorCount: number }
+
+// the error that a command missing its deadline rejects with
+class CommandTimeoutError extends Error {
+	constructor(operationName: string) {
+		super(`redis ${operationName} took over ${COMMAND_TIMEOUT_MS} ms`)
+		this.name = "CommandTimeoutError"
+	}
+}
 
 // the command connection and the subscriber connection, built on first use so importing this module never opens a connection
 let commandConnection: RedisConnection | null = null
@@ -72,9 +65,6 @@ export type CacheJsonOptions<Value> = {
 export type SaveRedisJsonOptions = { key: string; value: unknown; ttlMs: number }
 export type ReplaceRedisJsonOptions = SaveRedisJsonOptions
 
-// the key of a rate limit slot, and how long one call holds the slot
-export type TakeRateLimitSlotOptions = { key: string; slotMs: number }
-
 // one message on one channel, to publish or to deliver
 export type PublishToChannelOptions = { channel: string; channelMessage: string }
 type DeliverChannelMessageOptions = PublishToChannelOptions
@@ -92,13 +82,37 @@ export async function runWithRedis<Result>(
 		return null
 	}
 
-	// run the operation. count a thrown error and return null
+	// run the operation under the command deadline, and clear the deadline misses on a reply
+	const commandClient = connection.client
 	try {
-		return await runOperation(connection.client)
+		const operationResult = await withTimeLimit({
+			work: runOperation(commandClient),
+			timeLimitMs: COMMAND_TIMEOUT_MS,
+			toError: () => new CommandTimeoutError(operationName),
+		})
+		consecutiveCommandTimeoutCount = 0
+		return operationResult
 	} catch (error) {
+		// count a thrown error, and a missed deadline against the client it ran on if that client is still the current one
 		countError(operationName, error)
+		if (error instanceof CommandTimeoutError && connection.client === commandClient) {
+			countCommandTimeout(connection)
+		}
 		return null
 	}
+}
+
+// count a missed deadline, and replace the client once enough commands in a row have missed it.
+// closing the stalled client rejects every command still queued on it
+function countCommandTimeout(connection: RedisConnection): void {
+	consecutiveCommandTimeoutCount++
+	if (consecutiveCommandTimeoutCount < COMMAND_TIMEOUTS_BEFORE_RECONNECT) {
+		return
+	}
+
+	// start over on a fresh client after the backoff
+	consecutiveCommandTimeoutCount = 0
+	scheduleReconnect(connection)
 }
 
 /**
@@ -161,62 +175,14 @@ export async function replaceRedisJson({ key, value, ttlMs }: ReplaceRedisJsonOp
 }
 
 /**
- * Deletes a key.
+ * Deletes one or more keys in one command and returns how many existed, or null if the delete failed.
  */
-export async function deleteRedisKey(key: string): Promise<void> {
-	await runWithRedis("del", (client) => client.del(key))
-}
-
-/**
- * Counts one hit on a fixed rate limit window and returns the count and when the rate limit window resets.
- * A hit that Redis could not count is counted in this process's memory under the same key and window.
- */
-export async function incrementRateLimitWindow(key: string, rateLimitWindowMs: number): Promise<RateLimitWindowHit> {
-	// run the increment script, and count the hit in memory if the script fails or the script's reply is not two values
-	const scriptReply: unknown = await runWithRedis("incrementRateLimitWindow", (client) =>
-		client.send("EVAL", [INCREMENT_RATE_LIMIT_WINDOW_SCRIPT, "1", key, String(rateLimitWindowMs)]),
-	)
-	if (!Array.isArray(scriptReply) || scriptReply.length !== 2) {
-		return incrementMemoryRateLimitWindow(key, rateLimitWindowMs)
+export async function deleteRedisKeys(...keys: string[]): Promise<number | null> {
+	// a delete with no keys has nothing to send
+	if (keys.length === 0) {
+		return 0
 	}
-
-	// return the count and the reset time. the reply's numbers may arrive as integers or big integers
-	const [count, ttlMs] = scriptReply.map(Number)
-	return { count: count ?? 0, resetAt: Date.now() + Math.max(ttlMs ?? 0, 0) }
-}
-
-/**
- * Refunds one hit on a rate limit window that is still open, in memory if Redis could not run the refund.
- */
-export async function decrementRateLimitWindow(key: string): Promise<void> {
-	// run the refund script, and refund the memory window if Redis could not run it
-	const scriptReply = await runWithRedis("decrementRateLimitWindow", (client) =>
-		client.send("EVAL", [DECREMENT_RATE_LIMIT_WINDOW_SCRIPT, "1", key]),
-	)
-	if (scriptReply === null) {
-		decrementMemoryRateLimitWindow(key)
-	}
-}
-
-/**
- * Takes a rate limit slot that every process shares. Returns 0 if this call took the slot,
- * the milliseconds until the slot frees if another call holds it, or null if Redis could not run the script.
- */
-export async function takeRateLimitSlot({ key, slotMs }: TakeRateLimitSlotOptions): Promise<number | null> {
-	// run the script, then return the wait. the reply's number may arrive as an integer or a big integer, and anything
-	// else is a failure
-	const scriptReply: unknown = await runWithRedis("takeRateLimitSlot", (client) =>
-		client.send("EVAL", [TAKE_RATE_LIMIT_SLOT_SCRIPT, "1", key, String(slotMs)]),
-	)
-	const waitMs = Number(scriptReply)
-	return scriptReply === null || !Number.isFinite(waitMs) ? null : waitMs
-}
-
-/**
- * Returns whether a rate limit window's hit is within the limit.
- */
-export function isWithinRateLimit(rateLimitWindowHit: RateLimitWindowHit, limit: number): boolean {
-	return rateLimitWindowHit.count <= limit
+	return runWithRedis("del", (client) => client.del(...keys))
 }
 
 /**
@@ -264,29 +230,6 @@ export function readAndResetRedisGauges(): RedisGauges {
 }
 
 /**
- * Returns the Redis gauges, with a Redis-down threshold crossing if the command connection is down.
- * Reading the gauges resets the minute's counts.
- */
-export async function readRedisExtraGauges(): Promise<ExtraGaugesReading> {
-	// connect if nothing has used Redis yet, then read the gauges.
-	// an idle process still reports whether the command connection is up
-	await ensureConnected(toCommandConnection())
-	const redisGauges = readAndResetRedisGauges()
-
-	// cross the Redis-down threshold if the command connection is down
-	const thresholdCrossings = redisGauges.isConnected
-		? []
-		: [
-				{
-					condition: "redis-down",
-					message: "the redis client is not connected",
-					values: { errorCount: redisGauges.errorCount },
-				},
-			]
-	return { gauges: { redis: redisGauges }, thresholdCrossings }
-}
-
-/**
  * Replaces how the store builds its clients and forgets the connections, the channel handlers, the reconnect
  * listeners, the counts, and the memory rate limit windows.
  */
@@ -299,8 +242,9 @@ export function setRedisClientBuilder(nextBuildRedisClient: () => RedisConnectio
 	subscriberReconnectListeners.clear()
 	hasSubscriberConnected = false
 
-	// forget the counts and the memory windows
+	// forget the counts, the deadline misses, and the memory windows
 	readAndResetRedisGauges()
+	consecutiveCommandTimeoutCount = 0
 	clearMemoryRateLimitWindows()
 }
 

@@ -6,6 +6,7 @@ import { join } from "node:path"
 import * as analytics from "@shared/analytics"
 import * as monitoring from "@shared/monitoring"
 import { DEGRADED_RENDER_HEADER } from "@shared/seo"
+import { RENDERED_EDGE_CACHE_CONTROL } from "./edgeCache"
 import server from "./index"
 import {
 	createBundleDirectory,
@@ -36,7 +37,7 @@ test("a page path is rendered by the ui's server", async () => {
 	expect(response.status).toBe(200)
 	expect(response.body).toBe(PAGE_HTML)
 	expect(response.cacheControl).toBe("no-cache")
-	expect(response.edgeCacheControl).toBe("max-age=60, stale-while-revalidate=60")
+	expect(response.edgeCacheControl).toBe(RENDERED_EDGE_CACHE_CONTROL)
 })
 
 // the same url renders differently for a signed-in user, so the edge never caches their page

@@ -1,12 +1,13 @@
 // the X ingester
 
 import { X_HANDLE_PATTERN } from "@shared/sources"
+import { DAY_MS } from "@shared/time"
 import { X_COST_MINIMUM_PER_REQUEST, X_COST_PER_READ } from "../budget"
-import { FeedStatusError } from "./feed"
+import { FetchStatusError } from "../publicFetch"
 import type { IngestResult, NewResource, Source, SourceIngester } from "./ingester"
 
 // how far back a query looks. a Scan wants the current conversation, and an unbounded window spends reads on stale posts
-const RECENCY_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+const RECENCY_WINDOW_MS = 7 * DAY_MS
 
 // how long one provider request may run before it aborts
 const FETCH_TIMEOUT_MS = 10_000
@@ -50,8 +51,7 @@ export function toSourceHandle(config: Record<string, unknown>): string | null {
 }
 
 /**
- * Confirms X that knows the handle, for the suggestion flow that has to drop an account that the model invented.
- * Throws a FeedStatusError when the provider would not answer, so a rate limit reads as "not now" instead of "no such account".
+ * Confirms that X knows the handle, and throws a FetchStatusError if the provider rejects the request.
  */
 export async function readHandle(handle: string): Promise<void> {
 	// a handle X would never resolve is invented, whatever the provider would say about it
@@ -65,7 +65,7 @@ export async function readHandle(handle: string): Promise<void> {
 
 	// a rejected request is the provider saying "not now", which the caller keeps instead of dropping
 	if (!response.ok) {
-		throw new FeedStatusError(USER_INFO_ENDPOINT, response.status)
+		throw new FetchStatusError(USER_INFO_ENDPOINT, response.status)
 	}
 
 	// the lookup returns 200 for a missing account too, so the body decides, not the status

@@ -1,6 +1,6 @@
 // the shared helper for feeds that don't require an API key
 import Parser from "rss-parser"
-import { fetchPublicUrl, readLimitedBody } from "../publicFetch"
+import { FetchStatusError, fetchPublicUrl, readLimitedBody } from "../publicFetch"
 import type { NewResource } from "./ingester"
 
 // how long a feed fetch may run before it aborts. an oversized body is rejected by the shared read limit
@@ -19,16 +19,6 @@ const READABLE_TRANSCRIPT_TYPES = ["text/plain", "text/vtt"]
 const parser = new Parser<unknown, { transcripts?: FeedTranscript[] }>({
 	customFields: { item: [["podcast:transcript", "transcripts", { keepArray: true }]] },
 })
-
-// an RSS feed source that returned with an error status
-export class FeedStatusError extends Error {
-	constructor(
-		url: string,
-		readonly status: number,
-	) {
-		super(`${url} returned ${status}`)
-	}
-}
 
 // fetch a feed url within the timeout, reject error responses and oversized bodies
 export async function fetchFeed(
@@ -51,7 +41,7 @@ export async function fetchNamedFeed(
 
 	// reject error responses before reading the body
 	if (!response.ok) {
-		throw new FeedStatusError(url, response.status)
+		throw new FetchStatusError(url, response.status)
 	}
 	return parseNamedFeed(await readLimitedBody(response, url), options.resourceKind ?? "read")
 }

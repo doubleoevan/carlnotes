@@ -9,8 +9,8 @@ import {
 	type SentQuery,
 	stubConnectionPool,
 } from "../../db/connectionPoolStub"
-import * as redis from "../../db/redis"
 import { restoreRedisClient, stubRedisClient } from "../../db/redisClientStub"
+import * as redisRateLimits from "../../db/redisRateLimits"
 import * as retrieveDocs from "../../worker/chat/retrieveDocs"
 import * as litellm from "../../worker/litellm"
 import {
@@ -224,7 +224,7 @@ test("a visitor embeds on the public key within the address's rate limit, and ov
 
 test("a visitor with no public key embeds nothing and counts no rate limit hit", async () => {
 	delete Bun.env.LITELLM_PUBLIC_KEY
-	const incrementRateLimitWindowSpy = spyOn(redis, "incrementRateLimitWindow")
+	const incrementRateLimitWindowSpy = spyOn(redisRateLimits, "incrementRateLimitWindow")
 	expect(await loadQueryVector({ userId: null, query: "agents", clientAddress: "203.0.113.9" })).toBeNull()
 	expect(embedRetrievalQuerySpy).not.toHaveBeenCalled()
 	expect(incrementRateLimitWindowSpy).not.toHaveBeenCalled()
@@ -247,7 +247,7 @@ test("a spent key returns no vector without a report, and any other failure is r
 test("a full rate limit window counts in Redis under the visitor's address", async () => {
 	// one embedding counts one hit under the address's key
 	Bun.env.LITELLM_PUBLIC_KEY = "public-key"
-	const incrementRateLimitWindowSpy = spyOn(redis, "incrementRateLimitWindow")
+	const incrementRateLimitWindowSpy = spyOn(redisRateLimits, "incrementRateLimitWindow")
 	await loadQueryVector({ userId: null, query: "agents", clientAddress: "203.0.113.9" })
 	expect(incrementRateLimitWindowSpy).toHaveBeenCalledWith(
 		"rate-limit:podcast-episode-search:address:203.0.113.9",

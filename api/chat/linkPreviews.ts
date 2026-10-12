@@ -1,5 +1,6 @@
 // the link preview card a link in a chat message gets: fetched once at post-time, stored under its url, and served from this origin
 import type { ChatLinkPreview } from "@shared/contracts/chat"
+import { DAY_MS, HOUR_MS } from "@shared/time"
 import { and, eq, gte, inArray } from "drizzle-orm"
 import { db } from "../../db"
 import { linkPreviews } from "../../db/schema/chat"
@@ -19,8 +20,8 @@ import { decryptChatText, encryptChatText } from "./encryption"
 // how many links one team can fetch in an hour. past this a chat message reuses the cache or goes without a card
 const TEAM_PREVIEW_FETCHES_PER_HOUR = 20
 
-// how long a fetched link preview stands in for a fresh fetch
-const PREVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000
+// how long a fetched link preview is served before a fresh fetch
+const PREVIEW_TTL_MS = 7 * DAY_MS
 
 // how long a url that could not be previewed is left alone before a later chat message can attempt it again
 const FAILED_PREVIEW_TTL_MS = 15 * 60 * 1000
@@ -172,7 +173,7 @@ async function isLinkPreviewStored(linkPreviewUrl: string): Promise<boolean> {
 // whether the team has preview link fetches left this hour
 async function isTeamUnderFetchLimit(teamId: string): Promise<boolean> {
 	// the limit itself bounds the count, so a busy team never scans more rows than it is allowed
-	const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
+	const oneHourAgo = new Date(Date.now() - HOUR_MS)
 	const recentLinkPreviewFetchRows = await db
 		.select({ id: linkPreviews.id })
 		.from(linkPreviews)

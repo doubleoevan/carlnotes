@@ -1,8 +1,7 @@
 // a Source that runs clean and brings back nothing is reported as a fallback
 import { expect, test } from "bun:test"
-import { OversizedBodyError } from "../publicFetch"
-import { FeedStatusError } from "./feed"
-import { isAnsweredRefusal, type SourceOutcome, toScanSummary } from "./index"
+import { FetchStatusError, OversizedBodyError } from "../publicFetch"
+import { isHostRejection, type SourceOutcome, toScanSummary } from "./index"
 
 // one Source outcome, defaulting to a clean run that found one Resource
 function toSourceOutcome(
@@ -65,21 +64,21 @@ test("a page found twice keeps the body of the first sighting", () => {
 	expect(scanSummary.resources[0]?.fetchedBody).toEqual(fetchedBody)
 })
 
-// a refused status and an oversized body are answers from the host, so neither pages anyone
-test("isAnsweredRefusal separates the host declining from a fault in this code", () => {
-	expect(isAnsweredRefusal(new FeedStatusError("https://a.test/feed", 404))).toBe(true)
-	expect(isAnsweredRefusal(new FeedStatusError("https://a.test/feed", 429))).toBe(true)
-	expect(isAnsweredRefusal(new OversizedBodyError("https://a.test/feed", 5_000_000))).toBe(true)
+// a rejected status and an oversized body come from the host, so neither pages anyone
+test("isHostRejection separates the host rejecting the request from a fault in this code", () => {
+	expect(isHostRejection(new FetchStatusError("https://a.test/feed", 404))).toBe(true)
+	expect(isHostRejection(new FetchStatusError("https://a.test/feed", 429))).toBe(true)
+	expect(isHostRejection(new OversizedBodyError("https://a.test/feed", 5_000_000))).toBe(true)
 
 	// a 5xx is the host failing, and can be a request this code sent wrong, so it stays reported
-	expect(isAnsweredRefusal(new FeedStatusError("https://a.test/feed", 500))).toBe(false)
-	expect(isAnsweredRefusal(new FeedStatusError("https://a.test/feed", 503))).toBe(false)
+	expect(isHostRejection(new FetchStatusError("https://a.test/feed", 500))).toBe(false)
+	expect(isHostRejection(new FetchStatusError("https://a.test/feed", 503))).toBe(false)
 
 	// anything else reached us without the host saying no, so it is still worth reporting
-	expect(isAnsweredRefusal(new TypeError("undefined is not a function"))).toBe(false)
-	expect(isAnsweredRefusal(new Error("fetch failed"))).toBe(false)
-	expect(isAnsweredRefusal("not an error at all")).toBe(false)
-	expect(isAnsweredRefusal(undefined)).toBe(false)
+	expect(isHostRejection(new TypeError("undefined is not a function"))).toBe(false)
+	expect(isHostRejection(new Error("fetch failed"))).toBe(false)
+	expect(isHostRejection("not an error at all")).toBe(false)
+	expect(isHostRejection(undefined)).toBe(false)
 })
 
 // a page that a custom Source found is marked, even if the web search found it first, and a search-only page is not

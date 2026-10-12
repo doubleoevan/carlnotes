@@ -14,6 +14,35 @@ export class OversizedBodyError extends Error {
 		super(`body of ${url} exceeds ${limitBytes} bytes`)
 	}
 }
+
+// a fetch the host answered with an error status. the label names what was fetched, a url or the call that fetched it
+export class FetchStatusError extends Error {
+	constructor(
+		label: string,
+		readonly status: number,
+	) {
+		super(`${label} returned ${status}`)
+	}
+}
+
+/**
+ * Whether an http status is one the next attempt may pass: a rate limit or a server error.
+ */
+export function isRetryableHttpStatus(status: number): boolean {
+	return status === 429 || status >= 500
+}
+
+/**
+ * Whether a fetch failure is one the next attempt may pass: a timeout, an abort, a rate limit, or a server error.
+ */
+export function isRetryableFetchFailure(error: unknown): boolean {
+	// a timeout or an abort never reached a status at all
+	if (!(error instanceof FetchStatusError)) {
+		return error instanceof Error && (error.name === "TimeoutError" || error.name === "AbortError")
+	}
+	return isRetryableHttpStatus(error.status)
+}
+
 // hostnames that name an internal address
 const INTERNAL_HOST_PATTERN =
 	/^(?:localhost|0\.0\.0\.0|\[?::1\]?|10\.\d+\.\d+\.\d+|127\.\d+\.\d+\.\d+|169\.254\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+|.+\.(?:local|internal))$/i

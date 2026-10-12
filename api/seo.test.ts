@@ -2,6 +2,7 @@
 import { expect, test } from "bun:test"
 import type { PublicTopic } from "@shared/contracts/topics"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
+import { DAY_MS } from "@shared/time"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import { documentsRoute } from "./documents"
 import { loadDocsPages, toLlmsFullTxt, toLlmsTxt, toSecurityTxt, toTopicDescription } from "./seo"
@@ -138,7 +139,7 @@ test("security.txt expires about a year out", () => {
 	const expiresAt = new Date(securityTxt.match(/Expires: (.+)/)?.[1] ?? 0)
 
 	// twelve months, give or take the leap difference
-	const daysOut = (expiresAt.getTime() - Date.now()) / 86_400_000
+	const daysOut = (expiresAt.getTime() - Date.now()) / DAY_MS
 	expect(daysOut).toBeGreaterThan(360)
 	expect(daysOut).toBeLessThan(370)
 	expect(securityTxt).toContain("Canonical: https://carlnotes.com/.well-known/security.txt")

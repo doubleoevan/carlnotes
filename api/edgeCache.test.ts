@@ -1,7 +1,7 @@
-// edge cache tests: the edge shares a rendered response only if it is a 200 and sets no cookie,
-// and its request has no session cookie or authorization header
+// edge cache tests: the edge shares a rendered response only if it is a 200 or a permanent redirect and sets no
+// cookie, and its request has no session cookie or authorization header
 import { expect, test } from "bun:test"
-import { RENDERED_CACHE_TAG, setRenderedCacheHeaders } from "./edgeCache"
+import { RENDERED_CACHE_TAG, RENDERED_EDGE_CACHE_CONTROL, setRenderedCacheHeaders } from "./edgeCache"
 
 // the headers that a rendered response is sent with, given its request's headers
 function toRenderedCacheHeaders(requestHeaders: Record<string, string>, response: Response): Headers {
@@ -13,7 +13,8 @@ function toRenderedCacheHeaders(requestHeaders: Record<string, string>, response
 test("a 200 for a signed-out request is shared at the edge", () => {
 	const responseHeaders = toRenderedCacheHeaders({}, new Response("page"))
 	expect(responseHeaders.get("Cache-Control")).toBe("no-cache")
-	expect(responseHeaders.get("CDN-Cache-Control")).toBe("max-age=60, stale-while-revalidate=60")
+	expect(responseHeaders.get("CDN-Cache-Control")).toBe(RENDERED_EDGE_CACHE_CONTROL)
+	expect(RENDERED_EDGE_CACHE_CONTROL).toBe("max-age=60, stale-while-revalidate=60, stale-if-error=120")
 	expect(responseHeaders.get("Cache-Tag")).toBe(RENDERED_CACHE_TAG)
 })
 
@@ -39,4 +40,18 @@ test("an authorization header, a status other than 200, or a Set-Cookie makes th
 		expect(responseHeaders.get("Cache-Control")).toBe("private, no-cache")
 		expect(responseHeaders.get("CDN-Cache-Control")).toBeNull()
 	}
+})
+
+// a permanent redirect, such as a topic's old slug, is shared like a page, and a temporary redirect stays private
+test("a permanent redirect for a signed-out request is shared, and a temporary one is private", () => {
+	for (const status of [301, 308]) {
+		const redirectHeaders = toRenderedCacheHeaders(
+			{},
+			new Response(null, { status, headers: { Location: "/topics/t1" } }),
+		)
+		expect(redirectHeaders.get("Cache-Control")).toBe("no-cache")
+		expect(redirectHeaders.get("CDN-Cache-Control")).toBe(RENDERED_EDGE_CACHE_CONTROL)
+	}
+	const temporaryHeaders = toRenderedCacheHeaders({}, new Response(null, { status: 302, headers: { Location: "/" } }))
+	expect(temporaryHeaders.get("Cache-Control")).toBe("private, no-cache")
 })

@@ -1,13 +1,17 @@
+// the fixtures the page serving tests share: a fake ui bundle, a request against the composed app, and a stubbed
+// pool. only tests import it
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import server from "./index"
 
-// the page the fake server entry renders the one-hashed client asset and its text, and the docs 404 page
+// the page the fake server entry renders, the one hashed client asset and its text, the public file's text, and the
+// docs 404 page
 export const PAGE_HTML = "<!doctype html><title>carl</title>"
 export const HASHED_ASSET_PATH = "/assets/app-abc123.js"
 export const HASHED_ASSET_TEXT = "console.log(1)"
+export const PUBLIC_FILE_TEXT = "User-agent: *"
 export const DOCS_NOT_FOUND_HTML = "<!doctype html><title>docs page not found</title>"
 
 /**
@@ -46,18 +50,31 @@ export async function removeTestDirectories(): Promise<void> {
 	await Promise.all(removedDirectories.map((testDirectory) => rm(testDirectory, { recursive: true, force: true })))
 }
 
+// how long the fake server entry takes to render a page, and how many of its first renders throw an error
+export type CreateBundleDirectoryOptions = { renderDelayMs?: number; failingRenderCount?: number }
+
 /**
- * Creates a fake directory with a bundle shaped like the one build:ui writes: one hashed client asset, and a server
- * entry that responds to every page request with PAGE_HTML.
+ * Creates a fake directory with a bundle shaped like the one build:ui writes, whose server entry renders PAGE_HTML.
  */
-export async function createBundleDirectory(): Promise<string> {
+export async function createBundleDirectory({
+	renderDelayMs = 0,
+	failingRenderCount = 0,
+}: CreateBundleDirectoryOptions = {}): Promise<string> {
 	const root = await createTestDirectory("carl-bundle-")
 	await mkdir(join(root, "ui/dist/client/assets"), { recursive: true })
 	await mkdir(join(root, "ui/dist/server"), { recursive: true })
 
-	// write the asset and the server entry
+	// write the asset, the public file, and the server entry
 	await writeFile(join(root, `ui/dist/client${HASHED_ASSET_PATH}`), HASHED_ASSET_TEXT)
-	const serverEntryText = `export default { fetch: () => new Response(${JSON.stringify(PAGE_HTML)}, { headers: { "content-type": "text/html" } }) }`
+	await writeFile(join(root, "ui/dist/client/robots.txt"), PUBLIC_FILE_TEXT)
+	const serverEntryText = [
+		"let renderCount = 0",
+		"export default { fetch: async () => {",
+		`if (++renderCount <= ${failingRenderCount}) { throw new Error("the render failed") }`,
+		`await Bun.sleep(${renderDelayMs})`,
+		`return new Response(${JSON.stringify(PAGE_HTML)}, { headers: { "content-type": "text/html" } })`,
+		"} }",
+	].join("\n")
 	await writeFile(join(root, "ui/dist/server/server.js"), serverEntryText)
 	return root
 }
@@ -72,6 +89,7 @@ export type ResponseSnapshot = {
 	contentEncoding: string | null
 	contentType: string | null
 	location: string | null
+	retryAfter: string | null
 }
 
 /**
@@ -87,6 +105,7 @@ export async function request(path: string, requestInit: RequestInit = {}): Prom
 		contentEncoding: response.headers.get("Content-Encoding"),
 		contentType: response.headers.get("Content-Type"),
 		location: response.headers.get("Location"),
+		retryAfter: response.headers.get("Retry-After"),
 	}
 }
 

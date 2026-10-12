@@ -1,5 +1,6 @@
 // the podcast episode smoke's fixtures: one run's ids, the routes under a header-read user, the check and request
 // helpers, and the seed and clean up of the users, topics, episodes, chapter, and subscriptions
+import { HOUR_MS } from "@shared/time"
 import { eq, inArray } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
@@ -114,7 +115,7 @@ function toPodcastEpisodeRow({
 		audioByteSize: 123_456,
 		durationSeconds: 120,
 		cost: "0.050000",
-		publishedAt: new Date(Date.now() - 60 * 60 * 1000),
+		publishedAt: new Date(Date.now() - HOUR_MS),
 	}
 }
 

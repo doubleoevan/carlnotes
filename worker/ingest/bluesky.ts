@@ -1,6 +1,6 @@
 // the bluesky ingester
 
-import { FeedStatusError } from "./feed"
+import { FetchStatusError } from "../publicFetch"
 import type { IngestedResource, Source, SourceIngester } from "./ingester"
 import { toResourceKind } from "./normalize"
 
@@ -125,7 +125,7 @@ function fetchXrpc(url: string): Promise<Response> {
 // read a response body, failing the Source on any status the endpoint did not serve
 async function readJson<T>(response: Response, label: string): Promise<T> {
 	if (!response.ok) {
-		throw new FeedStatusError(label, response.status)
+		throw new FetchStatusError(label, response.status)
 	}
 	return (await response.json()) as T
 }

@@ -15,8 +15,12 @@ export type IngestedResource = NewResource & { fetchedBody?: FetchedBody }
 // a Resource that a Scan found, and whether a custom Source found it
 export type DiscoveredResource = NewResource & { isFromCustomSource: boolean }
 
-// the ingester for one source kind. it takes a Source and returns the Resources it fetched plus the cost it incurred
-export type SourceIngester = (source: Source) => Promise<IngestResult>
+// what the Scan gives an ingester beside the Source. the Scan owner's LiteLLM key bills an ingester's model calls
+export type IngestContext = { litellmApiKey?: string }
+
+// the ingester for one source kind. it takes a Source and the Scan's ingest context.
+// it returns the Resources it fetched plus the cost it incurred
+export type SourceIngester = (source: Source, ingestContext?: IngestContext) => Promise<IngestResult>
 
 // ingesters return Resources and the cost spent or 0 for fetches that don't use an API key
 export type IngestResult = { resources: IngestedResource[]; costDollars: number; fallbackMode?: string }

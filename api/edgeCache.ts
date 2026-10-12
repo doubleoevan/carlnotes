@@ -12,30 +12,49 @@ export type PurgeEdgeCacheTagsOptions = { tags: string[]; zoneId: string | undef
 // what one purge did
 export type EdgePurgeResult = { status: "purged" } | { status: "skipped" } | { status: "failed"; reason: string }
 
-// the edge shares a rendered response for a minute, then serves it stale for up to a minute while it fetches a new one
-const RENDERED_EDGE_CACHE_CONTROL = "max-age=60, stale-while-revalidate=60"
+// the edge shares a rendered response for a minute, then serves it stale for up to a minute while it fetches a new one,
+// and for up to two minutes while the origin responds with an error, such as a shed render's 503
+export const RENDERED_EDGE_CACHE_CONTROL = "max-age=60, stale-while-revalidate=60, stale-if-error=120"
 
-// an image at its current version never changes and is cached for a year in the browser and a day at the edge.
-// a day is the longest a deleted image stays at the edge. an old or missing version is cached for a minute
-const CURRENT_IMAGE_CACHE_CONTROL = "public, max-age=31536000, immutable"
-const CURRENT_IMAGE_EDGE_CACHE_CONTROL = "max-age=86400"
+// how long one purge request may take before it counts as failed
+const PURGE_TIMEOUT_MS = 10_000
+
+// a file whose url names its content or version never changes, so the browser caches it for a year
+export const IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
+
+// a response whose url names no version, such as a provider photo's redirect or a public file, is cached for an hour
+export const UNVERSIONED_CACHE_CONTROL = "public, max-age=3600"
+
+// the edge keeps a file for a day, which is the longest a deleted image stays at the edge
+const FILE_EDGE_CACHE_CONTROL = "max-age=86400"
+
+// the browser revalidates a response on every use, and a personal response is never shared
+export const REVALIDATE_CACHE_CONTROL = "no-cache"
+const PRIVATE_CACHE_CONTROL = "private, no-cache"
+
+// no cache stores a response, and the private one is personal to the user
+export const NO_STORE_CACHE_CONTROL = "no-store"
+export const PRIVATE_NO_STORE_CACHE_CONTROL = "private, no-store"
+
+// an old or missing image version is cached for a minute
 const OLD_IMAGE_CACHE_CONTROL = "public, max-age=60"
 
 /**
- * Marks a rendered response shared at the edge, or private if it is personal or did not render.
+ * Marks a rendered page or a permanent redirect shared at the edge, or private if it is personal.
  */
 export function setRenderedCacheHeaders(request: Request, response: Response): void {
-	// mark the response private if the request has a session cookie or an authorization header,
-	// or if the response did not render or sets a cookie
+	// mark the response private if the request has a session cookie or an authorization header, or if the response is
+	// not a page or a permanent redirect, or sets a cookie
 	const hasCredentials = Boolean(getSessionCookie(request)) || request.headers.has("Authorization")
-	const isShared = response.status === 200 && !hasCredentials && !response.headers.has("Set-Cookie")
+	const isShareableStatus = response.status === 200 || response.status === 301 || response.status === 308
+	const isShared = isShareableStatus && !hasCredentials && !response.headers.has("Set-Cookie")
 	if (!isShared) {
-		response.headers.set("Cache-Control", "private, no-cache")
+		response.headers.set("Cache-Control", PRIVATE_CACHE_CONTROL)
 		return
 	}
 
 	// the browser always revalidates. only the edge caches a copy, under the tag that the release purge clears
-	response.headers.set("Cache-Control", "no-cache")
+	response.headers.set("Cache-Control", REVALIDATE_CACHE_CONTROL)
 	response.headers.set("CDN-Cache-Control", RENDERED_EDGE_CACHE_CONTROL)
 	response.headers.set("Cache-Tag", RENDERED_CACHE_TAG)
 }
@@ -53,8 +72,16 @@ export const renderedCacheHeaders = createMiddleware(async (context, next) => {
  */
 export function toVersionedImageHeaders(isCurrentVersion: boolean): Record<string, string> {
 	return isCurrentVersion
-		? { "Cache-Control": CURRENT_IMAGE_CACHE_CONTROL, "CDN-Cache-Control": CURRENT_IMAGE_EDGE_CACHE_CONTROL }
+		? { "Cache-Control": IMMUTABLE_CACHE_CONTROL, "CDN-Cache-Control": FILE_EDGE_CACHE_CONTROL }
 		: { "Cache-Control": OLD_IMAGE_CACHE_CONTROL }
+}
+
+// an unhashed public file changes only with a release, so the browser keeps it an hour and the edge a day, under the
+// tag that the release purge clears
+export const PUBLIC_FILE_HEADERS: Record<string, string> = {
+	"Cache-Control": UNVERSIONED_CACHE_CONTROL,
+	"CDN-Cache-Control": FILE_EDGE_CACHE_CONTROL,
+	"Cache-Tag": RENDERED_CACHE_TAG,
 }
 
 /**
@@ -89,6 +116,7 @@ export async function purgeEdgeCacheTags(
 			method: "POST",
 			headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json" },
 			body: JSON.stringify({ tags }),
+			signal: AbortSignal.timeout(PURGE_TIMEOUT_MS),
 		})
 
 		// a rejected purge returns Cloudflare's status and message

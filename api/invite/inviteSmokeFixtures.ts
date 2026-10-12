@@ -1,5 +1,6 @@
 // the invite smoke's fixtures: the run id, the accounts, topics, teams, and invite rows it seeds, and their cleanup
 import type { Invite } from "@shared/contracts/invites"
+import { DAY_MS } from "@shared/time"
 import { toNormalizedUsername } from "@shared/usernames"
 import { and, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
@@ -18,7 +19,7 @@ export const createdUserIds: string[] = []
 const createdTeamIds: string[] = []
 
 // accounts are backdated a month by default
-const BACKDATED_CREATED_AT = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+const BACKDATED_CREATED_AT = new Date(Date.now() - 30 * DAY_MS)
 
 // the analytics shape createTopicInvite asks for. the entry drops the capture key, so nothing sends
 export const ANALYTICS: AnalyticsProperties = {

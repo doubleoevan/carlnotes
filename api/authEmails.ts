@@ -3,7 +3,7 @@
 import { appBaseUrl } from "@shared/appUrl"
 import { and, eq, like } from "drizzle-orm"
 import { db, schema } from "../db"
-import { deleteRedisKey } from "../db/redis"
+import { deleteRedisKeys } from "../db/redis"
 import { renderAuthEmail, renderAuthEmailText } from "../emails/auth-email"
 import { sendEmail } from "../worker/email"
 
@@ -21,7 +21,7 @@ export async function clearResetPasswordTokens(userId: string): Promise<void> {
 		.returning({ identifier: schema.verifications.identifier })
 
 	// delete each row's Redis copy, which Better Auth keys by the row's identifier
-	await Promise.all(deletedVerifications.map(({ identifier }) => deleteRedisKey(`verification:${identifier}`)))
+	await deleteRedisKeys(...deletedVerifications.map(({ identifier }) => `verification:${identifier}`))
 }
 
 /**

@@ -2,6 +2,7 @@
 
 import { afterEach, expect, setSystemTime, test } from "bun:test"
 import type { TopicFinding } from "@shared/contracts/findings"
+import { DAY_MS } from "@shared/time"
 import { toScanRecapPlaceholder } from "@/components/topic/TopicScanRecap"
 import {
 	durationMsBetween,
@@ -32,7 +33,7 @@ afterEach(() => setSystemTime())
 
 test("toAgeLabel buckets elapsed time into the coarsest unit", () => {
 	setSystemTime(new Date("2026-07-17T12:00:00.000Z"))
-	const daysAgo = (days: number): string => new Date(Date.now() - days * 86_400_000).toISOString()
+	const daysAgo = (days: number): string => new Date(Date.now() - days * DAY_MS).toISOString()
 	// null and same-day
 	expect(toAgeLabel(null)).toBe("")
 	expect(toAgeLabel(daysAgo(0))).toBe("today")

@@ -3,11 +3,13 @@
 import { type PodcastEpisodeSearchResult, SEARCH_MIN_CHARS, USER_SEARCH_LIMIT } from "@shared/contracts/search"
 import { reportError } from "@shared/monitoring"
 import { toPodcastEpisodePath } from "@shared/seo"
+import { DAY_MS } from "@shared/time"
 import { and, desc, eq, like, notInArray, or, type SQL, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { type DbHandle, db, isPublicAndShown, runWithIterativeIndexScan } from "../../db"
 import { loadUserAccess } from "../../db/quotas"
-import { cacheJson, incrementRateLimitWindow, isWithinRateLimit } from "../../db/redis"
+import { cacheJson } from "../../db/redis"
+import { countRateLimitHit } from "../../db/redisRateLimits"
 import { podcastEpisodes } from "../../db/schema/podcast"
 import { EMBED_MODEL_NAME } from "../../db/schema/scans"
 import { topics } from "../../db/schema/topics"
@@ -29,7 +31,7 @@ const MAX_MEANING_MATCH_DISTANCE = 0.6
 export const MEANING_MATCH_MIN_CHARS = 3
 
 // how long Redis keeps a query's vector
-const QUERY_VECTOR_TTL_MS = 24 * 60 * 60 * 1000
+const QUERY_VECTOR_TTL_MS = DAY_MS
 
 // how many embeddings a visitor's address may request in one rate limit window, and how long the window is
 export const VISITOR_EMBEDDING_LIMIT = 20
@@ -219,11 +221,11 @@ export function toQueryVectorKey(query: string): string {
 // address cannot be trusted counts in the shared bucket
 async function isVisitorEmbeddingAllowed(clientAddress: string | null): Promise<boolean> {
 	const rateLimitKey = toRateLimitKey({ userId: null, clientAddress })
-	const rateLimitWindowHit = await incrementRateLimitWindow(
-		`rate-limit:podcast-episode-search:${rateLimitKey}`,
-		VISITOR_EMBEDDING_WINDOW_MS,
-	)
-	return isWithinRateLimit(rateLimitWindowHit, VISITOR_EMBEDDING_LIMIT)
+	return countRateLimitHit({
+		key: `rate-limit:podcast-episode-search:${rateLimitKey}`,
+		rateLimitWindowMs: VISITOR_EMBEDDING_WINDOW_MS,
+		limit: VISITOR_EMBEDDING_LIMIT,
+	})
 }
 
 // a matched row in the shape the search bar's row reads

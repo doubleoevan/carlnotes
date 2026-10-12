@@ -3,7 +3,7 @@ import { dailyFrequencies } from "@shared/enums"
 import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, userBudgetCents } from "@shared/plans"
 import { and, count, eq, inArray } from "drizzle-orm"
 import { db } from "../db"
-import { hasFullPodcastEpisodes, loadUserAccess, monthlySpendDollars, toMonthlySpendCents } from "../db/quotas"
+import { hasFullPodcastEpisodes, loadUserAccess, monthlySpendDollars, toSpendCents } from "../db/quotas"
 import { teamMembers, teamTopics } from "../db/schema/teams"
 import { subscriptions, topics } from "../db/schema/topics"
 import { assertNever, canRateTopic, canSeeTopic, toTopicEditRole } from "./topic/permissions"
@@ -124,7 +124,7 @@ export function isLeaderRole(role: "leader" | "member"): boolean {
 export async function isMonthlySpendExhausted(userId: string): Promise<boolean> {
 	// sum the scan, chat, and podcast episode spend against the user's one budget
 	const [userAccess, monthlySpend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
-	return toMonthlySpendCents(monthlySpend) >= userBudgetCents(userAccess)
+	return toSpendCents(monthlySpend) >= userBudgetCents(userAccess)
 }
 
 /**

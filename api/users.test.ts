@@ -2,6 +2,7 @@
 // and a LiteLLM key created while the account was closing
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
+import { quietErrorReports } from "@shared/monitoringTestFixtures"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "../db/connectionPoolStub"
 import * as litellm from "../worker/litellm"
@@ -111,8 +112,7 @@ test("a LiteLLM key created while the account was closing is deleted from the pr
 	expect(deleteLiteLLMKeySpy.mock.calls).toEqual([["sk-late"]])
 
 	// a failed delete of the key is reported, and the close still finishes
-	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
-	spyOn(console, "error").mockImplementation(() => {})
+	const reportErrorSpy = quietErrorReports()
 	deleteLiteLLMKeySpy.mockRejectedValue(new Error("litellm key/delete failed: 500"))
 	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)

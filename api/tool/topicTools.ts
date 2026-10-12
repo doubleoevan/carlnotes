@@ -9,7 +9,7 @@ import { topics } from "../../db/schema/topics"
 import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { releaseFeatureOrder } from "../topic/featuring"
-import { clearTopicSectionIdCache } from "../topic/feeds"
+import { clearVisitorTopicCaches } from "../topic/feeds"
 import { type PromptVersionOrigin, savePromptVersion } from "../topic/promptVersions"
 import { authorizeNewDailyTopic, type DailyFrequencyRejection } from "../topic/saveHelpers"
 import { notifyIndexNowOfTopicChange, saveTopicVectorsOnVisibilityChange } from "../topic/saveTopic"
@@ -59,6 +59,9 @@ export async function updateTopicPrompt({
 			previousPrompt: editableTopic.topic.prompt,
 		})
 	})
+
+	// drop the topic's cached visitor copies
+	await clearVisitorTopicCaches({ topicId, visibility: editableTopic.topic.visibility })
 	trackEvent("topic_edited", editableTopic.userId, {
 		...toToolAnalyticsProperties(origin, analyticsProperties),
 		topicId,
@@ -120,8 +123,7 @@ export async function updateTopicFields({
 			return dailyFrequency
 		}
 	}
-	// write the named fields and release the feature order in one transaction, then clear the shared topic section
-	// ids if the order was released
+	// write the named fields and release the feature order in one transaction
 	let isFeatureOrderReleased = false
 	await db.transaction(async (transaction) => {
 		await transaction.update(topics).set(namedFields).where(eq(topics.id, topicId))
@@ -130,15 +132,21 @@ export async function updateTopicFields({
 			isFeatureOrderReleased = await releaseFeatureOrder(topicId, transaction)
 		}
 	})
-	if (isFeatureOrderReleased) {
-		await clearTopicSectionIdCache()
-	}
-	// tell IndexNow if the edit made the topic public or changed its url
+
+	// the topic as saved, and drop its cached visitor copies
 	const savedTopic = {
 		id: topicId,
 		name: topicFields.name ?? editableTopic.topic.name,
 		visibility: topicFields.visibility ?? editableTopic.topic.visibility,
 	}
+	await clearVisitorTopicCaches({
+		topicId,
+		visibility: savedTopic.visibility,
+		previousVisibility: editableTopic.topic.visibility,
+		isFeatureOrderReleased,
+	})
+
+	// tell IndexNow if the edit made the topic public or changed its url
 	notifyIndexNowOfTopicChange({ savedTopic, previousTopic: editableTopic.topic })
 
 	// save the topic's vectors again if the edit changed its visibility
