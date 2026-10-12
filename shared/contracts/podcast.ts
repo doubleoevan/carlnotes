@@ -39,6 +39,14 @@ export const podcastEpisodeSummary = z.object({
 
 export type PodcastEpisodeSummary = z.infer<typeof podcastEpisodeSummary>
 
+// a published podcast episode's summary, with the season and number it was published under
+export const publishedPodcastEpisodeSummary = podcastEpisodeSummary.extend({
+	season: z.number(),
+	episodeNumber: z.number(),
+})
+
+export type PublishedPodcastEpisodeSummary = z.infer<typeof publishedPodcastEpisodeSummary>
+
 // a podcast episode in the shape that the player shows: its summary, its topic, its status, its audio and covers, its
 // chapters, and the user's progress. a recording or failed episode has its status and its title once written
 export const podcastEpisode = podcastEpisodeSummary.extend({

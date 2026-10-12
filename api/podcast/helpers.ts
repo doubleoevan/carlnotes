@@ -73,25 +73,33 @@ export async function loadTopicPodcast(topic: TopicRow, userId: string | null): 
 			? await loadAccessiblePodcastEpisode({ userId, podcastEpisodeId: newestPodcastEpisodeRow.id })
 			: null
 
-	// each scan's published podcast episode, by the scan's id
-	const podcastEpisodeByScanId = new Map<string, TopicScan["podcastEpisode"]>()
-	for (const { id, scanId, season, episodeNumber } of publishedPodcastEpisodeRows) {
-		if (scanId && season !== null && episodeNumber !== null) {
-			podcastEpisodeByScanId.set(scanId, { id, season, episodeNumber })
-		}
-	}
+	// the published podcast episodes that a scan recorded
+	const scanPodcastEpisodeRows = publishedPodcastEpisodeRows.filter((podcastEpisodeRow) => podcastEpisodeRow.scanId)
 
-	// the latest podcast episode with its chapters, and the latest season's episodes
+	// the latest podcast episode with its chapters, the latest season's episodes, and each scan's podcast episode summary
 	// ponytail: the whole latest season goes with every topic page. page the list if a season reaches the hundreds
 	const [latestSeason] = seasons
-	const [latestPodcastEpisode, latestSeasonPodcastEpisodes] = await Promise.all([
+	const [latestPodcastEpisode, latestSeasonPodcastEpisodes, scanPodcastEpisodeSummaries] = await Promise.all([
 		latestPublishedPodcastEpisodeRow
 			? loadPodcastEpisode({ podcastEpisodeRow: latestPublishedPodcastEpisodeRow, topic, userId })
 			: null,
 		latestSeason === undefined
 			? { podcastEpisodes: [] }
 			: toSeasonPodcastEpisodes({ topic, publishedPodcastEpisodeRows, userId, season: latestSeason }),
+		loadPodcastEpisodeSummaries(scanPodcastEpisodeRows.map((podcastEpisodeRow) => ({ podcastEpisodeRow, topic }))),
 	])
+
+	// each scan's published podcast episode summary that has its season and number, by the scan's id
+	const podcastEpisodeByScanId = new Map<string, TopicScan["podcastEpisode"]>()
+	for (const [i, podcastEpisodeSummary] of scanPodcastEpisodeSummaries.entries()) {
+		const scanId = scanPodcastEpisodeRows[i]?.scanId
+		const { season, episodeNumber } = podcastEpisodeSummary
+		if (scanId && season !== null && episodeNumber !== null) {
+			podcastEpisodeByScanId.set(scanId, { ...podcastEpisodeSummary, season, episodeNumber })
+		}
+	}
+
+	// the podcast with its episodes and feed, the latest podcast episode, and each scan's podcast episode
 	return {
 		podcast: {
 			isEnabled: topic.isPodcastEnabled,

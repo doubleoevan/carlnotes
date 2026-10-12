@@ -1,5 +1,6 @@
-import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts/podcast"
+import type { PodcastEpisode, PodcastEpisodeChapter, PublishedPodcastEpisodeSummary } from "@shared/contracts/podcast"
 import { Headphones, Pause, Play } from "lucide-react"
+import { PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
 import { cn } from "@/lib/utils"
 import {
 	togglePlayback,
@@ -113,29 +114,31 @@ export function useIsFindingChapterPlaying(
 }
 
 /**
- * The pill with a podcast episode's number. A click plays or pauses the episode.
+ * The pill with a podcast episode's number, with the episode's tooltip. A click plays or pauses the episode.
  */
 export function PodcastEpisodeNumberPill({
 	podcastEpisode,
 	className,
 }: {
-	podcastEpisode: { id: string; episodeNumber: number }
+	podcastEpisode: PublishedPodcastEpisodeSummary
 	className?: string
 }) {
 	const isPodcastEpisodePlaying = useIsPodcastEpisodePlaying(podcastEpisode.id)
 	return (
-		<button
-			type="button"
-			aria-label={`${isPodcastEpisodePlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber}`}
-			onClick={() => void togglePodcastEpisodePlayback(podcastEpisode.id)}
-			className={cn(
-				PILL_CLASS,
-				isPodcastEpisodePlaying ? HIGHLIGHTED_PILL_CLASS : [IDLE_PILL_BORDER_CLASS, "bg-muted text-link"],
-				className,
-			)}
-		>
-			<PodcastEpisodePillBody text={`E${podcastEpisode.episodeNumber}`} isPlaying={isPodcastEpisodePlaying} />
-		</button>
+		<PodcastEpisodeTooltip podcastEpisode={podcastEpisode}>
+			<button
+				type="button"
+				aria-label={`${isPodcastEpisodePlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber}`}
+				onClick={() => void togglePodcastEpisodePlayback(podcastEpisode.id)}
+				className={cn(
+					PILL_CLASS,
+					isPodcastEpisodePlaying ? HIGHLIGHTED_PILL_CLASS : [IDLE_PILL_BORDER_CLASS, "bg-muted text-link"],
+					className,
+				)}
+			>
+				<PodcastEpisodePillBody text={`E${podcastEpisode.episodeNumber}`} isPlaying={isPodcastEpisodePlaying} />
+			</button>
+		</PodcastEpisodeTooltip>
 	)
 }
 

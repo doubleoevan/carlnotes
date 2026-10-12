@@ -14,7 +14,7 @@ import { customSourceKeys } from "../sources"
 import { chatMention } from "./chat"
 import { topicFinding } from "./findings"
 import { invite } from "./invites"
-import { podcastEpisode, podcastEpisodeSummary, topicPodcast } from "./podcast"
+import { podcastEpisode, podcastEpisodeSummary, publishedPodcastEpisodeSummary, topicPodcast } from "./podcast"
 import { profileIdentity } from "./profiles"
 
 // how long a topic prompt may grow before a copy-paste is treated as an attachment
@@ -136,7 +136,7 @@ export const topicScan = z.object({
 	// why the scan failed
 	error: z.string().nullable(),
 	// the scan's published podcast episode, null if the scan has none or the user may not listen to it
-	podcastEpisode: z.object({ id: z.string(), season: z.number(), episodeNumber: z.number() }).nullable(),
+	podcastEpisode: publishedPodcastEpisodeSummary.nullable(),
 })
 
 // one scan's recap, loaded per scan instead of returned with the history
