@@ -1,6 +1,7 @@
-// the rehype plugin that fills a docs page's video marker with the video on making a topic,
-// built from the constant the app reads too
-import type { Element, Root } from "hast"
+// the Sätteri plugin that fills a docs page's video marker with the video on making a topic, built from the constant
+// the app reads too
+import type { Element } from "hast"
+import type { HastPluginDefinition } from "satteri"
 import { siYoutube } from "simple-icons"
 import {
 	TOPIC_TUTORIAL_VIDEO,
@@ -12,25 +13,16 @@ import {
 } from "../../shared/youtube"
 
 // the docs site's base path, which every file it serves sits after
-type RehypeTopicTutorialVideoOptions = { base: string }
+type TopicTutorialVideoPluginOptions = { base: string }
 
 /**
  * Returns the plugin that replaces each video marker with the video's frame.
  */
-export function rehypeTopicTutorialVideo({ base }: RehypeTopicTutorialVideoOptions): () => (tree: Root) => void {
-	return () => (tree) => replaceMarkers(tree, base)
-}
-
-// swap each marker under a node for the frame, all the way down
-function replaceMarkers(node: Root | Element, base: string): void {
-	for (const [i, child] of node.children.entries()) {
-		// a marker becomes the frame, and any other element is searched for markers in turn. Astro passes a page's html to
-		// a rehype plugin as raw text
-		if (child.type === "raw" && child.value.trim() === TOPIC_TUTORIAL_VIDEO_MARKER) {
-			node.children[i] = toVideoFrame(base)
-		} else if (child.type === "element") {
-			replaceMarkers(child, base)
-		}
+export function topicTutorialVideoPlugin({ base }: TopicTutorialVideoPluginOptions): HastPluginDefinition {
+	return {
+		name: "topic-tutorial-video",
+		// a marker becomes the frame. a page's html reaches a plugin as raw text
+		raw: (node) => (node.value.trim() === TOPIC_TUTORIAL_VIDEO_MARKER ? toVideoFrame(base) : undefined),
 	}
 }
 

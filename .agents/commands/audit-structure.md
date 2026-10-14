@@ -526,6 +526,8 @@ Check for:
    - `PROVIDER_PHOTO_CACHE_CONTROL` in `api/avatars.ts`, and `CURRENT_IMAGE_CACHE_CONTROL` and
      `CURRENT_IMAGE_EDGE_CACHE_CONTROL` in `api/edgeCache.ts` (now `UNVERSIONED_CACHE_CONTROL`,
      `IMMUTABLE_CACHE_CONTROL`, and `FILE_EDGE_CACHE_CONTROL` in `api/edgeCache.ts`)
+   - `docs/src/rehypeTopicTutorialVideo.ts` and `rehypeTopicTutorialVideo`, set through `markdown.rehypePlugins` (now
+     `docs/src/topicTutorialVideoPlugin.ts` and `topicTutorialVideoPlugin`, a hast plugin on `satteri()`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
