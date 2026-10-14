@@ -345,7 +345,7 @@ function summaryLead({
 	// count the findings, and name the podcast episode if there is one
 	const noun = findingCount === 1 ? "finding" : "findings"
 	const podcastEpisodeNote = hasPodcastEpisode ? " and a new Coffee Break episode" : ""
-	return `Carl brewed a fresh cup of ${findingCount} new ${noun} worth your time${podcastEpisodeNote} on `
+	return `Carl brewed a fresh pot of ${findingCount} new ${noun} worth your time${podcastEpisodeNote} on `
 }
 
 // a scan that came up empty gets Carl's aside in his own voice, so an empty email still reads as intentional
