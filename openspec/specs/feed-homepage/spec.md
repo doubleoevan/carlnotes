@@ -224,10 +224,10 @@ the user may see. Finding matches SHALL keep coming from the loaded home feed.
 
 ### Requirement: A visitor's hero opens the topic tutorial video beside its headline
 The hero SHALL show YouTube's red play button right after the headline "He already read it. All of it.", in the
-server-rendered html, with a tooltip reading "Watch A Fresh Brew with Carl" that is also its accessible name. A
-primary click with no modifier key SHALL open the topic tutorial video's dialog, the one the menus open. The button
-SHALL be a link to the video's YouTube page, so a visitor without JavaScript and a click with a modifier key open the
-video on YouTube instead. The hero shows only to a visitor on the homepage, so a signed-in user never sees the button.
+server-rendered html, with a tooltip reading "Watch Brew with Carl" that is also its accessible name. A primary click
+with no modifier key SHALL open the topic tutorial video's dialog, the one the menus open. The button SHALL be a link to
+the video's YouTube page, so a visitor without JavaScript and a click with a modifier key open the video on YouTube
+instead. The hero shows only to a visitor on the homepage, so a signed-in user never sees the button.
 
 The dialog's player and the link preview card's YouTube player SHALL be one player, so a YouTube link preview in a
 chat or a finding plays the same way and links the same way, with the app's own play button over a dimmed thumbnail.

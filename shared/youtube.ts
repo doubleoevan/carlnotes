@@ -40,7 +40,7 @@ export type PageYoutubeVideo = {
 // the video on making a topic
 export const TOPIC_TUTORIAL_VIDEO: PageYoutubeVideo = {
 	youtubeVideoId: "XXLKmuHi-GA",
-	name: "A Fresh Brew with Carl",
+	name: "Brew with Carl",
 	description: "Evan shows how to make a topic with Carl on CarlNotes.",
 	uploadDate: "2026-10-13",
 	thumbnailPath: "/topic-tutorial-video-thumbnail.png",
