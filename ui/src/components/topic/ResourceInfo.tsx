@@ -49,20 +49,6 @@ export function ResourceInfo({
 }) {
 	// signed-out visitors don't get the per-user read and rating buttons
 	const isSignedIn = useIsSignedIn()
-	// the linked page's link preview card, fetched when the row mounts for every visitor
-	const [linkPreview, setLinkPreview] = useState<ChatLinkPreview | null>(null)
-	const [isLinkPreviewLoading, setIsLinkPreviewLoading] = useState(true)
-	useEffect(() => {
-		// a row that unmounts mid-fetch must not set state afterward
-		let isTopicFindingOpen = true
-		fetchTopicFindingLinkPreview(resource.findingId)
-			.then((findingLinkPreview) => isTopicFindingOpen && setLinkPreview(findingLinkPreview))
-			.catch(() => {})
-			.finally(() => isTopicFindingOpen && setIsLinkPreviewLoading(false))
-		return () => {
-			isTopicFindingOpen = false
-		}
-	}, [resource.findingId])
 
 	// the bookmark button's label, flipping with the finding's bookmark state
 	const bookmarkLabel = resource.isBookmarked ? "Remove bookmark" : "Bookmark"
@@ -110,12 +96,7 @@ export function ResourceInfo({
 				</div>
 
 				{/* the linked page's link preview card, right above Carl's notes */}
-				{isLinkPreviewLoading && <LinkPreviewLoading />}
-				{linkPreview && (
-					<div className="mb-3">
-						<LinkPreviewCard linkPreview={linkPreview} className="max-w-full" isUserContent />
-					</div>
-				)}
+				<FindingLinkPreview findingId={resource.findingId} />
 
 				{/* the AI explanation of why this resource is relevant, in a scroll box so a long note stays contained */}
 				<div className="text-muted-foreground font-display mb-1 text-xs tracking-wide uppercase">{"Carl's notes"}</div>
@@ -176,6 +157,37 @@ export function ResourceInfo({
 				)}
 			</PopoverContent>
 		</>
+	)
+}
+
+// the linked page's link preview card, fetched for every visitor when the note popover opens
+function FindingLinkPreview({ findingId }: { findingId: string }) {
+	// the fetched preview, and whether its fetch is still in flight
+	const [linkPreview, setLinkPreview] = useState<ChatLinkPreview | null>(null)
+	const [isLinkPreviewLoading, setIsLinkPreviewLoading] = useState(true)
+	useEffect(() => {
+		// a popover that closes mid-fetch must not set state afterward
+		let isTopicFindingOpen = true
+		fetchTopicFindingLinkPreview(findingId)
+			.then((findingLinkPreview) => isTopicFindingOpen && setLinkPreview(findingLinkPreview))
+			.catch(() => {})
+			.finally(() => isTopicFindingOpen && setIsLinkPreviewLoading(false))
+		return () => {
+			isTopicFindingOpen = false
+		}
+	}, [findingId])
+
+	// the loading card until the fetch settles, then the card if the page offers one
+	if (isLinkPreviewLoading) {
+		return <LinkPreviewLoading />
+	}
+	if (!linkPreview) {
+		return null
+	}
+	return (
+		<div className="mb-3">
+			<LinkPreviewCard linkPreview={linkPreview} className="max-w-full" isUserContent />
+		</div>
 	)
 }
 

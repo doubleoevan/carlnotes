@@ -43,7 +43,7 @@ export const TOPIC_TUTORIAL_VIDEO: PageYoutubeVideo = {
 	name: "Brew with Carl",
 	description: "Evan shows how to make a topic with Carl on CarlNotes.",
 	uploadDate: "2026-10-13",
-	thumbnailPath: "/topic-tutorial-video-thumbnail.png",
+	thumbnailPath: "/topic-tutorial-video-thumbnail.webp",
 }
 
 // the marker a docs page writes where the video on making a topic goes

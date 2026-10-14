@@ -532,6 +532,8 @@ Check for:
      `TopicTutorialVideoTitle` (removed: the hero's `TopicTutorialVideoButton` opens the video's dialog in
      `TopicTutorialVideoDialog.tsx`, which holds its player and title)
    - `isPlainClick` in `ui/src/lib/utils.ts` (now `shouldHandleLinkClick`, with `toLinkClickHandler` beside it)
+   - `topic-tutorial-video-thumbnail.png` in `ui/public/` and its `docs/public/` symlink (now
+     `topic-tutorial-video-thumbnail.webp` in both)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the
