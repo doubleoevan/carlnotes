@@ -14,10 +14,14 @@ import { UserMenu } from "@/components/layout/UserMenu"
 import { buttonVariants } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { TopicTutorialVideoDialog } from "@/components/topic/TopicTutorialVideoDialog"
+import {
+	TopicTutorialVideoButton,
+	TopicTutorialVideoDialog,
+	type TopicTutorialVideoOpener,
+} from "@/components/topic/TopicTutorialVideoDialog"
 import { useIsSignedInBeforeSession } from "@/hooks/useIsSignedInBeforeSession"
 import { useTheme } from "@/hooks/useTheme"
-import { cn, isPlainClick, toSafeRedirectPath } from "@/lib/utils"
+import { cn, toLinkClickHandler, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 
 // the hover style shared by the header's menu buttons
@@ -46,21 +50,12 @@ export function Header() {
 	const pathname = useLocation({ select: (location) => location.pathname })
 	// a click on a home link while already on the home page reloads the feed
 	const { reheat } = useTopicFeed()
-	function handleHomeClick(event: React.MouseEvent): void {
-		if (pathname !== "/" || !isPlainClick(event)) {
-			return
-		}
-		event.preventDefault()
-		void reheat()
-	}
+	const handleHomeClick = pathname === "/" ? toLinkClickHandler(() => void reheat()) : undefined
 
 	// the hero pitches the app to a visitor. it only shows on the home page to logged-out visitors.
 	const isHeroShown = !useIsSignedInBeforeSession() && pathname === "/"
-	// the video on making a topic, which either menu opens in one dialog
-	const [isTopicTutorialVideoOpen, setIsTopicTutorialVideoOpen] = useState(false)
-	const handlePlayTopicTutorialVideo = (): void => {
-		setIsTopicTutorialVideoOpen(true)
-	}
+	// the video on making a topic, which the hero and either menu open in one dialog, and where it was opened from
+	const [topicTutorialVideoOpener, setTopicTutorialVideoOpener] = useState<TopicTutorialVideoOpener | null>(null)
 	return (
 		<header className="bg-hero text-hero-foreground relative overflow-hidden">
 			{isHeroShown && <CoffeeRings />}
@@ -102,7 +97,7 @@ export function Header() {
 								username={session.user.username}
 								avatarVersion={toAvatarVersion(session.user)}
 								isAdmin={isAdmin}
-								onPlayTopicTutorialVideo={handlePlayTopicTutorialVideo}
+								onPlayTopicTutorialVideo={setTopicTutorialVideoOpener}
 							/>
 						) : (
 							<>
@@ -131,35 +126,44 @@ export function Header() {
 						isSignedIn={isSignedIn}
 						isAdmin={isAdmin}
 						userId={session?.user.id ?? ""}
-						onPlayTopicTutorialVideo={handlePlayTopicTutorialVideo}
+						onPlayTopicTutorialVideo={setTopicTutorialVideoOpener}
 					/>
 				</div>
 				{/* the hero: the headline shimmers and the copy fades in.
 				    on a narrow screen, the headline spans both columns above Carl. on a wide screen, Carl takes the left and the headline goes right */}
 				{isHeroShown && (
 					<div className="mt-6 grid grid-cols-[auto_minmax(0,1fr)] items-end gap-x-4">
-						{/* the hero headline: a light wipes across the dimmed text, revealing it in full color.
-					        keyed to the pathname to replay per route. the overlay copies stay letter-aligned */}
-						<div
-							key={pathname}
-							className="shimmer-reveal col-span-2 text-center sm:col-span-1 sm:col-start-2 sm:text-left"
-						>
-							{/* the dimmed heading that the light reveals. the page's real h1. only this copy is a link.
-						        the overlay copies are pointer-transparent */}
-							<h1 className="shimmer-reveal-base font-display text-2xl leading-tight sm:text-4xl">
-								{`He already read it. `}
-								<AnchorLink href="/" onClick={handleHomeClick} className="text-hero-accent">
-									All of it.
-								</AnchorLink>
-							</h1>
-							{/* the full-color copy the light wipes in from the left */}
-							<div aria-hidden="true" className="shimmer-reveal-top font-display text-2xl leading-tight sm:text-4xl">
-								He already read it. <span className="text-hero-accent">All of it.</span>
+						{/* the headline with the video's button after it, centered on a narrow screen, left-aligned on a wide one.
+						    "All of it." stays on one line in every copy, so a narrow screen breaks the headline before it,
+						    and the button sits beside that last line */}
+						<div className="col-span-2 flex items-end justify-center gap-2 sm:col-span-1 sm:col-start-2 sm:items-center sm:justify-start sm:gap-3">
+							{/* the hero headline: a light wipes across the dimmed text, revealing it in full color.
+						        keyed to the pathname to replay per route. the overlay copies stay letter-aligned */}
+							<div key={pathname} className="shimmer-reveal min-w-0 text-center sm:text-left">
+								{/* the dimmed heading that the light reveals. the page's real h1. only this copy is a link.
+							        the overlay copies are pointer-transparent */}
+								<h1 className="shimmer-reveal-base font-display text-2xl leading-tight sm:text-4xl">
+									{`He already read it. `}
+									<AnchorLink href="/" onClick={handleHomeClick} className="text-hero-accent whitespace-nowrap">
+										All of it.
+									</AnchorLink>
+								</h1>
+								{/* the full-color copy the light wipes in from the left */}
+								<div aria-hidden="true" className="shimmer-reveal-top font-display text-2xl leading-tight sm:text-4xl">
+									He already read it. <span className="text-hero-accent whitespace-nowrap">All of it.</span>
+								</div>
+								{/* a white highlight on the reveal edge */}
+								<div
+									aria-hidden="true"
+									className="shimmer-reveal-glint font-display text-2xl leading-tight sm:text-4xl"
+								>
+									He already read it. <span className="whitespace-nowrap">All of it.</span>
+								</div>
 							</div>
-							{/* a white highlight on the reveal edge */}
-							<div aria-hidden="true" className="shimmer-reveal-glint font-display text-2xl leading-tight sm:text-4xl">
-								He already read it. All of it.
-							</div>
+							<TopicTutorialVideoButton
+								onSelect={() => setTopicTutorialVideoOpener("hero")}
+								className="size-8 sm:size-11"
+							/>
 						</div>
 						{/* Carl links home. the image is pulled down so his lower half starts behind the search bar */}
 						<AnchorLink
@@ -199,8 +203,10 @@ export function Header() {
 					</div>
 				)}
 			</div>
-			{/* the dialog that plays the video on making a topic, opened from either menu */}
-			{isTopicTutorialVideoOpen && <TopicTutorialVideoDialog onClose={() => setIsTopicTutorialVideoOpen(false)} />}
+			{/* the dialog that plays the video on making a topic, opened from the hero or either menu */}
+			{topicTutorialVideoOpener && (
+				<TopicTutorialVideoDialog opener={topicTutorialVideoOpener} onClose={() => setTopicTutorialVideoOpener(null)} />
+			)}
 		</header>
 	)
 }

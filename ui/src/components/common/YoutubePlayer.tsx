@@ -1,15 +1,14 @@
 // the YouTube player that a link preview card and the tutorial video's card and dialog share
 import { toYoutubeAutoplayUrl, toYoutubeWatchUrl, YOUTUBE_FRAME_ATTRIBUTES } from "@shared/youtube"
 import { Play } from "lucide-react"
-import type * as React from "react"
 import { useState } from "react"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { YoutubePlayIcon } from "@/components/common/BrandIcon"
-import { cn, isPlainClick } from "@/lib/utils"
+import { cn, toLinkClickHandler } from "@/lib/utils"
 
 /**
  * A YouTube video's thumbnail with a play button over it, linked to the video's YouTube page.
- * A plain click plays the video in place, and nothing reaches YouTube until then.
+ * A primary click plays the video in place, and nothing reaches YouTube until then.
  */
 export function YoutubePlayer({
 	youtubeVideoId,
@@ -18,6 +17,7 @@ export function YoutubePlayer({
 	className,
 	isUserContent,
 	hasYoutubePlayButton,
+	onPlay,
 }: {
 	youtubeVideoId: string
 	title: string | null
@@ -28,6 +28,8 @@ export function YoutubePlayer({
 	isUserContent?: boolean
 	// YouTube's red play button over the thumbnail at full color, in place of the app's button over a dimmed thumbnail
 	hasYoutubePlayButton?: boolean
+	// called as the video starts playing in place
+	onPlay?: () => void
 }) {
 	const [isPlayingVideo, setIsPlayingVideo] = useState(false)
 
@@ -43,14 +45,12 @@ export function YoutubePlayer({
 		)
 	}
 
-	// a plain click plays the video in place. any other click, or a page without JavaScript, opens YouTube
-	const handlePlayClick = (event: React.MouseEvent<HTMLAnchorElement>): void => {
-		if (!isPlainClick(event)) {
-			return
-		}
-		event.preventDefault()
+	// a primary click with no modifier key plays the video in place. any other click, or a page without JavaScript,
+	// opens YouTube
+	const handlePlayClick = toLinkClickHandler(() => {
 		setIsPlayingVideo(true)
-	}
+		onPlay?.()
+	})
 	return (
 		<AnchorLink
 			href={toYoutubeWatchUrl(youtubeVideoId)}
@@ -66,7 +66,7 @@ export function YoutubePlayer({
 			{/* YouTube's play button over the full-color thumbnail, or the app's button over a dimmed one */}
 			{hasYoutubePlayButton ? (
 				<span className="absolute inset-0 grid place-items-center">
-					<YoutubePlayIcon className="size-16 drop-shadow-lg transition-transform group-hover:scale-110" />
+					<YoutubePlayIcon className="size-20 drop-shadow-lg transition-transform group-hover:scale-110" />
 				</span>
 			) : (
 				<span className="absolute inset-0 grid place-items-center bg-black/30 transition-colors group-hover:bg-black/20">

@@ -7,7 +7,7 @@ import { toUpdateLabel, UpdateCountBadge } from "@/components/common/UpdateCount
 import { DocsLink } from "@/components/layout/DocsLink"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { signOutAndReload } from "@/components/session/signOut"
-import { TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
+import { type TopicTutorialVideoOpener, TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { useAllChatMentions, useAllTeamChatMentions, useAllTopicChatMentions } from "@/stores/chatRoomStore"
@@ -28,7 +28,7 @@ export function UserMenu({
 	username: string
 	avatarVersion: string | null
 	isAdmin: boolean
-	onPlayTopicTutorialVideo: () => void
+	onPlayTopicTutorialVideo: (opener: TopicTutorialVideoOpener) => void
 }) {
 	// the avatar's one badge sums every unread chat mention, note change, and topic invitation,
 	// and the tooltip shows the waiting groups
@@ -74,7 +74,7 @@ export function UserMenu({
 					userId={userId}
 					isAdmin={isAdmin}
 					onNavigate={handleCloseMenu}
-					onPlayTopicTutorialVideo={onPlayTopicTutorialVideo}
+					onPlayTopicTutorialVideo={() => onPlayTopicTutorialVideo("account-menu")}
 					onSignOut={handleSignOut}
 				/>
 			</PopoverContent>

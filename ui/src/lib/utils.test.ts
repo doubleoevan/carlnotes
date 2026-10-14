@@ -16,7 +16,7 @@ import {
 import { matchesTopicFindingFilter } from "./topicFindingFilters"
 import { toSortedTopicFindings } from "./topicFindingSorts"
 import { toPossibleSourceUrls } from "./topicPromptUrls"
-import { cn, isPlainClick, toAuthorizeReturnPath, toSafeRedirectPath } from "./utils"
+import { cn, shouldHandleLinkClick, toAuthorizeReturnPath, toLinkClickHandler, toSafeRedirectPath } from "./utils"
 
 // twMerge makes later tailwind classes win over earlier conflicting ones
 test("cn merges conflicting tailwind classes", () => {
@@ -280,11 +280,33 @@ test("a visit without the oauth parameters returns no authorize path", () => {
 	expect(toAuthorizeReturnPath(new URLSearchParams({ client_id: "client-1" }))).toBeNull()
 })
 
-// a plain primary click is the app's to handle, and a modified or secondary click is the browser's
-test("isPlainClick accepts only a primary click with no modifier key", () => {
-	const plainClick = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false }
-	expect(isPlainClick(plainClick)).toBe(true)
-	expect(isPlainClick({ ...plainClick, metaKey: true })).toBe(false)
-	expect(isPlainClick({ ...plainClick, altKey: true })).toBe(false)
-	expect(isPlainClick({ ...plainClick, button: 1 })).toBe(false)
+// a primary click with no modifier key is the app's to handle, and a modified or secondary click is the browser's
+test("shouldHandleLinkClick accepts only a primary click with no modifier key", () => {
+	const primaryClick = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false }
+	expect(shouldHandleLinkClick(primaryClick)).toBe(true)
+	expect(shouldHandleLinkClick({ ...primaryClick, metaKey: true })).toBe(false)
+	expect(shouldHandleLinkClick({ ...primaryClick, altKey: true })).toBe(false)
+	expect(shouldHandleLinkClick({ ...primaryClick, button: 1 })).toBe(false)
+})
+
+// the app's click runs the action and keeps the browser from following the link, and a modified click does neither
+test("toLinkClickHandler runs its action only on a click the app handles", () => {
+	// count the action's runs and the links it stopped
+	let actionCount = 0
+	let preventDefaultCount = 0
+	const handleClick = toLinkClickHandler(() => {
+		actionCount += 1
+	})
+	const preventDefault = (): void => {
+		preventDefaultCount += 1
+	}
+
+	// a primary click, then the same click with the command key
+	const primaryClick = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false }
+	handleClick({ ...primaryClick, preventDefault })
+	handleClick({ ...primaryClick, metaKey: true, preventDefault })
+
+	// only the primary click ran the action and stopped the link
+	expect(actionCount).toBe(1)
+	expect(preventDefaultCount).toBe(1)
 })

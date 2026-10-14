@@ -111,12 +111,30 @@ export function isTouchScreen(): boolean {
 }
 
 /**
- * Whether a click is a plain primary click with no modifier key, which the app handles in place instead of the browser.
+ * Whether the app handles a link's click itself, which is a primary click with no modifier key.
  */
-export function isPlainClick(
+export function shouldHandleLinkClick(
 	click: Pick<MouseEvent, "button" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">,
 ): boolean {
 	return click.button === 0 && !click.metaKey && !click.ctrlKey && !click.shiftKey && !click.altKey
+}
+
+/**
+ * Returns a link's click handler that runs an action instead of following the link, if the app handles the click.
+ */
+export function toLinkClickHandler(
+	handleLinkClick: () => void,
+): (click: Pick<MouseEvent, "button" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey" | "preventDefault">) => void {
+	return (click) => {
+		// a modified or secondary click is the browser's
+		if (!shouldHandleLinkClick(click)) {
+			return
+		}
+
+		// the app's click runs the action instead of following the link
+		click.preventDefault()
+		handleLinkClick()
+	}
 }
 
 /**

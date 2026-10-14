@@ -98,6 +98,7 @@ export type VisitAnalyticsEvent =
 	| "visit_cta_clicked"
 	| "visit_share_clicked"
 	| "visit_podcast_subscribe_clicked"
+	| "visit_video_played"
 
 /**
  * Records one product event for a user. A no-op if `POSTHOG_API_KEY` isn't set.

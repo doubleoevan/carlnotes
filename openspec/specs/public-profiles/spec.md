@@ -254,11 +254,11 @@ profile table shows.
 
 ### Requirement: The menus play the topic tutorial video in a dialog
 The signed-in user's account menu, on desktop and in the mobile drawer, and a visitor's mobile drawer SHALL each offer
-an option named "A Fresh Brew with Carl", marked with YouTube's red play button, right above "What CarlNotes Is".
-Choosing it SHALL close the menu and open a dialog titled "A Fresh Brew with Carl ☕" that shows the topic tutorial
-video's player, the same one the homepage card shows: the thumbnail with YouTube's play button, which plays the video
-in place from `www.youtube-nocookie.com`. The Escape key SHALL close the dialog, and closing it SHALL stop the video.
-One dialog SHALL serve every menu.
+an option named "A Fresh Brew with Carl", marked with YouTube's red play button lined up with the icons around it,
+right above "What CarlNotes Is". Choosing it SHALL close the menu and open a dialog titled "A Fresh Brew with Carl ☕"
+that shows the topic tutorial video's thumbnail with YouTube's play button, which plays the video in place from
+`www.youtube-nocookie.com`. The Escape key SHALL close the dialog, and closing it SHALL stop the video. One dialog SHALL
+serve every menu and the hero's button.
 
 #### Scenario: A user plays the video from the account menu
 - **WHEN** a signed-in user opens the account menu and chooses "A Fresh Brew with Carl"

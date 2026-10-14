@@ -1,5 +1,5 @@
 // the homepage as the server renders it, across two requests in one process, with a section's page links, with a
-// closed section still in the html, and with a visitor's video card
+// closed section still in the html, and with the video's button in a visitor's hero
 
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import type { TopicFinding } from "@shared/contracts/findings"
@@ -144,16 +144,17 @@ test("a visitor's sign-in and sign-up links are nofollow", async () => {
 	expect(homepageHtml).toMatch(/<a rel="nofollow"[^>]*href="\/signup\?cta=header"/)
 })
 
-// a visitor's server-rendered homepage has the video card above the featured topics, its thumbnail linked to YouTube
-test("a visitor's homepage shows the video on making a topic above the featured topics", async () => {
-	topicFeedResponse = toTopicFeedResponse({
-		featuredTopics: [toFeedTopic({ id: TOPIC_ID, name: "Espresso machines" })],
-	})
+// a visitor's server-rendered hero has the video's button after its headline, linked to YouTube
+test("a visitor's hero links the video on making a topic after its headline", async () => {
+	topicFeedResponse = toTopicFeedResponse({ featuredTopics: [] })
 	const homepageHtml = await renderHomepage()
-	const cardIndex = homepageHtml.indexOf("A Fresh Brew with Carl")
-	expect(cardIndex).toBeGreaterThan(-1)
-	expect(cardIndex).toBeLessThan(homepageHtml.indexOf("Espresso machines"))
-	expect(homepageHtml).toContain(`href="https://www.youtube.com/watch?v=${TOPIC_TUTORIAL_VIDEO.youtubeVideoId}"`)
+	const watchLinkIndex = homepageHtml.indexOf(
+		`href="https://www.youtube.com/watch?v=${TOPIC_TUTORIAL_VIDEO.youtubeVideoId}"`,
+	)
+	const headlineIndex = homepageHtml.indexOf("All of it.")
+	expect(headlineIndex).toBeGreaterThan(-1)
+	expect(watchLinkIndex).toBeGreaterThan(headlineIndex)
+	expect(homepageHtml).toContain(`aria-label="Watch ${TOPIC_TUTORIAL_VIDEO.name}"`)
 })
 
 // a page past the last shows the last page. the topics off that page are in the html, hidden with JavaScript, and

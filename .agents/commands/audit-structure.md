@@ -528,6 +528,10 @@ Check for:
      `IMMUTABLE_CACHE_CONTROL`, and `FILE_EDGE_CACHE_CONTROL` in `api/edgeCache.ts`)
    - `docs/src/rehypeTopicTutorialVideo.ts` and `rehypeTopicTutorialVideo`, set through `markdown.rehypePlugins` (now
      `docs/src/topicTutorialVideoPlugin.ts` and `topicTutorialVideoPlugin`, a hast plugin on `satteri()`)
+   - `ui/src/components/topic/TopicTutorialVideoCard.tsx` with `TopicTutorialVideoCard`, `TopicTutorialVideoPlayer`, and
+     `TopicTutorialVideoTitle` (removed: the hero's `TopicTutorialVideoButton` opens the video's dialog in
+     `TopicTutorialVideoDialog.tsx`, which holds its player and title)
+   - `isPlainClick` in `ui/src/lib/utils.ts` (now `shouldHandleLinkClick`, with `toLinkClickHandler` beside it)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

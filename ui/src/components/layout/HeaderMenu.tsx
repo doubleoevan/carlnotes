@@ -8,7 +8,7 @@ import { DocsLink } from "@/components/layout/DocsLink"
 import { UserMenuItems } from "@/components/layout/UserMenu"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { signOutAndReload } from "@/components/session/signOut"
-import { TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
+import { type TopicTutorialVideoOpener, TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn, toSafeRedirectPath } from "@/lib/utils"
 import { useAllChatMentions } from "@/stores/chatRoomStore"
@@ -35,7 +35,7 @@ export function HeaderMenu({
 	isSignedIn: boolean
 	isAdmin: boolean
 	userId: string
-	onPlayTopicTutorialVideo: () => void
+	onPlayTopicTutorialVideo: (opener: TopicTutorialVideoOpener) => void
 }) {
 	// the path highlights the open page's option, and sends the login back to where the visitor started
 	const pathname = useLocation({ select: (location) => location.pathname })
@@ -58,7 +58,7 @@ export function HeaderMenu({
 	// close the menu and play the video on making a topic in its dialog
 	const handlePlayTopicTutorialVideo = (): void => {
 		closeMenu()
-		onPlayTopicTutorialVideo()
+		onPlayTopicTutorialVideo("mobile-menu")
 	}
 
 	return (
@@ -115,7 +115,7 @@ export function HeaderMenu({
 							userId={userId}
 							isAdmin={isAdmin}
 							onNavigate={closeMenu}
-							onPlayTopicTutorialVideo={onPlayTopicTutorialVideo}
+							onPlayTopicTutorialVideo={() => onPlayTopicTutorialVideo("mobile-menu")}
 							onSignOut={handleSignOut}
 						/>
 					</>

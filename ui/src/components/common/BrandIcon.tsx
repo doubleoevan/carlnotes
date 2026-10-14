@@ -47,11 +47,12 @@ export function BrandIcon({ brand, className }: { brand: Brand; className?: stri
 }
 
 /**
- * YouTube's red play button with its white triangle, the same in both themes.
+ * YouTube's red play button with its white triangle, the same in both themes,
+ * inside the two-unit margin that lucide's icons leave in a 24-unit box.
  */
 export function YoutubePlayIcon({ className }: { className?: string }) {
 	return (
-		<svg viewBox="0 0 24 24" className={className} role="presentation">
+		<svg viewBox="-2 -2 28 28" className={className} role="presentation">
 			<path d={siYoutube.path} fill={`#${siYoutube.hex}`} />
 			<path d={YOUTUBE_PLAY_TRIANGLE_PATH} fill="white" />
 		</svg>
