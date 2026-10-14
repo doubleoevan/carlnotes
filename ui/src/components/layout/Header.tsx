@@ -80,7 +80,7 @@ export function Header() {
 						{isSignedInBeforeSession && (
 							<TopicTutorialVideoButton
 								onSelect={() => setTopicTutorialVideoOpener("header")}
-								className="size-7 translate-y-0.5"
+								className="size-7 -translate-y-px"
 							/>
 						)}
 					</div>
