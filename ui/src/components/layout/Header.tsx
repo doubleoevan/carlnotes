@@ -53,7 +53,9 @@ export function Header() {
 	const handleHomeClick = pathname === "/" ? toLinkClickHandler(() => void reheat()) : undefined
 
 	// the hero pitches the app to a visitor. it only shows on the home page to logged-out visitors.
-	const isHeroShown = !useIsSignedInBeforeSession() && pathname === "/"
+	// a signed-in user gets the video's button beside the wordmark instead
+	const isSignedInBeforeSession = useIsSignedInBeforeSession()
+	const isHeroShown = !isSignedInBeforeSession && pathname === "/"
 	// the video on making a topic, which the hero and either menu open in one dialog, and where it was opened from
 	const [topicTutorialVideoOpener, setTopicTutorialVideoOpener] = useState<TopicTutorialVideoOpener | null>(null)
 	return (
@@ -62,17 +64,26 @@ export function Header() {
 			<div className={cn("relative z-10 mx-auto max-w-5xl px-safe pt-5", !isHeroShown && "pb-10")}>
 				{/* the top bar with the brand icon on the left and the menu on the right */}
 				<div className="flex items-center justify-between">
-					{/* the brand links home or reheats the feed if already on the home page */}
-					<AnchorLink
-						href="/"
-						aria-label="CarlNotes home"
-						onClick={handleHomeClick}
-						className="flex items-center gap-2 rounded-md"
-					>
-						{/* nudge the cup up to align with the text */}
-						<CoffeeMug className="text-hero-accent -translate-y-0.5" />
-						<span className="animate-hydrate font-display text-xl">CarlNotes</span>
-					</AnchorLink>
+					{/* the brand, with the video's button after it for a signed-in user, nudged down to the wordmark's letters */}
+					<div className="flex items-center gap-2">
+						{/* the brand links home or reheats the feed if already on the home page */}
+						<AnchorLink
+							href="/"
+							aria-label="CarlNotes home"
+							onClick={handleHomeClick}
+							className="flex items-center gap-2 rounded-md"
+						>
+							{/* nudge the cup up to align with the text */}
+							<CoffeeMug className="text-hero-accent -translate-y-0.5" />
+							<span className="animate-hydrate font-display text-xl">CarlNotes</span>
+						</AnchorLink>
+						{isSignedInBeforeSession && (
+							<TopicTutorialVideoButton
+								onSelect={() => setTopicTutorialVideoOpener("header")}
+								className="size-7 translate-y-0.5"
+							/>
+						)}
+					</div>
 					{/* the desktop menu items, swapped for the hamburger menu on small screens */}
 					<div className="hidden items-center gap-1 sm:flex">
 						<ThemeToggle isDark={isDark} onToggle={toggleTheme} />

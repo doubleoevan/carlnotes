@@ -10,7 +10,7 @@ import { cn, toLinkClickHandler } from "@/lib/utils"
 import { captureVisitEvent } from "@/lib/visitAnalytics"
 
 // where the video's dialog was opened from
-export type TopicTutorialVideoOpener = "hero" | "account-menu" | "mobile-menu"
+export type TopicTutorialVideoOpener = "hero" | "header" | "account-menu" | "mobile-menu"
 
 /**
  * The menu option, named for the video and marked with YouTube's play button, that opens the video's dialog.
