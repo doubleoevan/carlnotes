@@ -96,6 +96,9 @@ let activeVisitorRenderCount = 0
 // the ui's server handler, as the server entry exports it
 type UiServer = { fetch: (request: Request) => Promise<Response> }
 
+// how importing the ui's server bundle went: loaded with its handler, missing if build:ui never wrote it, or failed
+type UiServerImport = { status: "loaded"; uiServer: UiServer } | { status: "missing" } | { status: "failed" }
+
 // the ui builds its typed api client from this definition
 export type AppType = typeof apiRoute
 
@@ -104,6 +107,9 @@ export type AppType = typeof apiRoute
 startMonitoring()
 startTelemetry()
 await sizeConnectionPool()
+
+// load the ui's server bundle before serving, so a new replica's first page never waits on the import
+await importUiServer()
 
 // log the process's connection pool, event loop delay, and Redis gauges once a minute
 startRuntimeGauges({ processName: "api", readPoolGauges, readExtraGauges: readRedisExtraGauges })
@@ -254,28 +260,38 @@ function setDocsCacheControl(_path: string, context: Context): void {
 	context.header("Cache-Control", isHashedAsset ? IMMUTABLE_CACHE_CONTROL : REVALIDATE_CACHE_CONTROL)
 }
 
+// import the ui's server handler. bun caches the module after the first import, and a bundle that fails to import is
+// logged and reported
+async function importUiServer(): Promise<UiServerImport> {
+	// a bundle that build:ui never wrote is missing
+	const uiServerEntryPath = resolve(UI_SERVER_ENTRY)
+	if (!(await Bun.file(uiServerEntryPath).exists())) {
+		return { status: "missing" }
+	}
+
+	// import the handler, and log and report a bundle that throws
+	return import(uiServerEntryPath)
+		.then((uiServerEntry): UiServerImport => ({ status: "loaded", uiServer: uiServerEntry.default as UiServer }))
+		.catch((error: unknown): UiServerImport => {
+			console.error("the ui's server bundle failed to import", error)
+			reportError(error, "page-render")
+			return { status: "failed" }
+		})
+}
+
 // render a page with the ui's server. a missing bundle is a 404, and a bundle that fails to import or a page rendered
 // without a read it needs is a 503
 async function renderUiPage(request: Request): Promise<Response> {
-	// a missing bundle is a 404 that names build:ui
-	const uiServerEntryPath = resolve(UI_SERVER_ENTRY)
-	if (!(await Bun.file(uiServerEntryPath).exists())) {
+	// a missing bundle is a 404 that names build:ui, and a bundle that fails to import responds 503 so a crawler retries
+	// it later
+	const uiServerImport = await importUiServer()
+	if (uiServerImport.status === "missing") {
 		return new Response("the ui is not built. run bun run build:ui", { status: 404 })
 	}
-
-	// import the ui's server handler. bun caches the module after the first import. a bundle that fails to import is
-	// reported, and the page responds 503 so a crawler retries it later
-	const uiServer = await import(uiServerEntryPath)
-		.then((uiServerEntry) => uiServerEntry.default as UiServer)
-		.catch((error: unknown) => {
-			console.error("the ui's server bundle failed to import", error)
-			reportError(error, "page-render")
-			return null
-		})
-	// respond 503 if the import failed
-	if (!uiServer) {
+	if (uiServerImport.status === "failed") {
 		return new Response("the ui failed to load", { status: 503 })
 	}
+	const { uiServer } = uiServerImport
 
 	// shed a visitor's render past the concurrency limit, with a short retry. a signed-in render is never counted or shed.
 	// the page guards mark the 503 private

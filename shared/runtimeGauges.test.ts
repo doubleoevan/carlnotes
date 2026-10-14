@@ -47,9 +47,34 @@ test("reportRuntimeGauges still logs when the extra gauges fail", async () => {
 
 // a waiting request and a long stall each cross their own threshold, and a healthy minute crosses none
 test("toRuntimeThresholdCrossings names each crossed threshold", () => {
-	expect(toRuntimeThresholdCrossings({ pool: HEALTHY_POOL, eventLoopDelay: { p99Ms: 5, maxMs: 40 } })).toEqual([])
-	const crossings = toRuntimeThresholdCrossings({ pool: WAITING_POOL, eventLoopDelay: { p99Ms: 180, maxMs: 350 } })
+	const healthyMinute = { processName: "api", pool: HEALTHY_POOL, eventLoopDelay: { p99Ms: 5, maxMs: 40 } } as const
+	expect(toRuntimeThresholdCrossings(healthyMinute)).toEqual([])
+	const crossings = toRuntimeThresholdCrossings({
+		processName: "api",
+		pool: WAITING_POOL,
+		eventLoopDelay: { p99Ms: 4, maxMs: 2400 },
+	})
 	expect(crossings.map((crossing) => crossing.condition)).toEqual(["pool-waiting", "event-loop-delay"])
+})
+
+// the api warns on a slow minute, and a single stall under 2 seconds only goes in the minute line
+test("toRuntimeThresholdCrossings warns on the api's slow minute and skips a short stall", () => {
+	const toConditions = (eventLoopDelay: { p99Ms: number; maxMs: number }): string[] =>
+		toRuntimeThresholdCrossings({ processName: "api", pool: HEALTHY_POOL, eventLoopDelay }).map(
+			(crossing) => crossing.condition,
+		)
+	expect(toConditions({ p99Ms: 150, maxMs: 400 })).toEqual(["event-loop-delay"])
+	expect(toConditions({ p99Ms: 3, maxMs: 1300 })).toEqual([])
+})
+
+// the worker's event loop never warns, and its waiting pool still does
+test("toRuntimeThresholdCrossings sends no event loop warning for the worker", () => {
+	const crossings = toRuntimeThresholdCrossings({
+		processName: "worker",
+		pool: WAITING_POOL,
+		eventLoopDelay: { p99Ms: 400, maxMs: 5000 },
+	})
+	expect(crossings.map((crossing) => crossing.condition)).toEqual(["pool-waiting"])
 })
 
 // a condition that lasts for hours sends one warning an hour

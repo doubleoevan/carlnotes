@@ -67,12 +67,13 @@ docs path that matches no built file SHALL get the docs site's own not-found pag
 A page's title, canonical, card tags, and structured data SHALL be declared by its own route, and the server SHALL
 render them with the page.
 
-If the ui's server build is missing, a page request SHALL respond 404 with a message naming `build:ui`. If the build
-exists but fails to import, the failure SHALL be logged and reported, and a page request SHALL respond 503, so a broken
-deploy is visible and a crawler retries the page instead of dropping it. If a read that a page needs fails, the render
-SHALL mark its response, and the api SHALL respond 503 for the page with a `Retry-After` of sixty seconds, report it,
-and never share it at the edge. The page SHALL still render with what it has, so a visitor with JavaScript loads the
-rest in the browser.
+If the ui's server build exists, the api SHALL import it at startup, before it serves, so a new replica's first page
+never waits on the import. If the ui's server build is missing, a page request SHALL respond 404 with a message naming
+`build:ui`. If the build exists but fails to import, the failure SHALL be logged and reported, and a page request SHALL
+respond 503, so a broken deploy is visible and a crawler retries the page instead of dropping it. If a read that a page
+needs fails, the render SHALL mark its response, and the api SHALL respond 503 for the page with a `Retry-After` of
+sixty seconds, report it, and never share it at the edge. The page SHALL still render with what it has, so a visitor
+with JavaScript loads the rest in the browser.
 
 #### Scenario: A page path is rendered by the ui's handler
 
@@ -108,6 +109,11 @@ rest in the browser.
 
 - **WHEN** a request arrives for a path under the docs that matches no built file
 - **THEN** the docs site's own not-found page is served, and the ui's handler never sees the request
+
+#### Scenario: A new replica loads the server build before it serves
+
+- **WHEN** an api replica starts with the ui's server build in place
+- **THEN** the build is imported before the replica accepts a request, so its first page renders without the import
 
 ### Requirement: Hashed assets cache immutably, rendered pages revalidate
 

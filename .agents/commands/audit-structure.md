@@ -534,6 +534,9 @@ Check for:
    - `isPlainClick` in `ui/src/lib/utils.ts` (now `shouldHandleLinkClick`, with `toLinkClickHandler` beside it)
    - `topic-tutorial-video-thumbnail.png` in `ui/public/` and its `docs/public/` symlink (now
      `topic-tutorial-video-thumbnail.webp` in both)
+   - "the event loop stalled past 200 ms" as the event loop warning's message, and `EVENT_LOOP_DELAY_ALERT_MS` (now
+     "the api's event loop stalled", from `EVENT_LOOP_STALL_ALERT_MS` and `EVENT_LOOP_P99_ALERT_MS` in
+     `shared/runtimeGauges.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -6,8 +6,10 @@ import { reportThresholdCrossing, type ThresholdCrossing } from "./monitoring"
 // how often a process logs its gauges
 const REPORT_INTERVAL_MS = 60_000
 
-// the event loop delay past which a minute sends a warning, in milliseconds
-const EVENT_LOOP_DELAY_ALERT_MS = 200
+// the api's event loop delays that send a warning, in milliseconds. one stall past 2 seconds, or a 99th percentile past
+// 100 ms, which only repeated stalls reach
+const EVENT_LOOP_STALL_ALERT_MS = 2000
+const EVENT_LOOP_P99_ALERT_MS = 100
 
 // the connection pool's three counts: its open clients, the idle ones, and the requests waiting for one
 export type PoolGauges = { totalCount: number; idleCount: number; waitingCount: number }
@@ -66,7 +68,7 @@ export async function reportRuntimeGauges({
 		...extraGauges.gauges,
 	}
 	const thresholdCrossings = [
-		...toRuntimeThresholdCrossings({ pool, eventLoopDelay }),
+		...toRuntimeThresholdCrossings({ processName, pool, eventLoopDelay }),
 		...extraGauges.thresholdCrossings,
 	]
 	console.log(JSON.stringify(line))
@@ -76,27 +78,37 @@ export async function reportRuntimeGauges({
 	return { line, thresholdCrossings }
 }
 
-// the pool and the event loop delay a minute read, to check against their thresholds
-type RuntimeThresholdOptions = { pool: PoolGauges; eventLoopDelay: { p99Ms: number; maxMs: number } }
+// the process that read them, and the pool and the event loop delay a minute read, to check against their thresholds
+type RuntimeThresholdOptions = {
+	processName: RuntimeGaugesOptions["processName"]
+	pool: PoolGauges
+	eventLoopDelay: { p99Ms: number; maxMs: number }
+}
 
 /**
- * Returns the thresholds a minute's pool and event loop delay crossed:
- * a request waiting for a connection, and a delay past 200 ms.
+ * Returns the thresholds a minute's pool and event loop delay crossed: a request waiting for a connection,
+ * and on the api a stall past 2 seconds or a 99th percentile delay past 100 ms.
  */
-export function toRuntimeThresholdCrossings({ pool, eventLoopDelay }: RuntimeThresholdOptions): ThresholdCrossing[] {
+export function toRuntimeThresholdCrossings({
+	processName,
+	pool,
+	eventLoopDelay,
+}: RuntimeThresholdOptions): ThresholdCrossing[] {
 	// a request waiting for a connection means the pool has too few connections
 	const poolCrossings: ThresholdCrossing[] =
 		pool.waitingCount > 0
 			? [{ condition: "pool-waiting", message: "a request waited for a database connection", values: { ...pool } }]
 			: []
 
-	// a delay this long stalls every request the process is serving
+	// a delay this long stalls every request the api is serving. the worker's delays only go in its minute line
+	const isEventLoopStalled =
+		eventLoopDelay.maxMs > EVENT_LOOP_STALL_ALERT_MS || eventLoopDelay.p99Ms > EVENT_LOOP_P99_ALERT_MS
 	const eventLoopCrossings: ThresholdCrossing[] =
-		eventLoopDelay.maxMs > EVENT_LOOP_DELAY_ALERT_MS
+		processName === "api" && isEventLoopStalled
 			? [
 					{
 						condition: "event-loop-delay",
-						message: "the event loop stalled past 200 ms",
+						message: "the api's event loop stalled",
 						values: { ...eventLoopDelay },
 					},
 				]
