@@ -1,5 +1,7 @@
 // chunker tests for the docs sections chat retrieves
+
 import { expect, test } from "bun:test"
+import { TOPIC_TUTORIAL_VIDEO_MARKER } from "@shared/youtube"
 import { toSections } from "./docsSync"
 
 // a small page in the docs' shape: frontmatter, an intro, and two sections
@@ -54,4 +56,12 @@ test("toSections hashes deterministically and changes on a one-character edit", 
 test("toSections splits on a ## inside a code fence, the known limit of the line-based split", () => {
 	const fenced = "---\ntitle: T\n---\nIntro.\n\n```md\n## not a heading\n```\n"
 	expect(toSections("page", fenced).map((section) => section.heading)).toEqual(["T", "not a heading"])
+})
+
+// the video marker never reaches the text that chat reads, and an html example and a placeholder in angle brackets stay
+test("toSections leaves out the video marker and keeps other html", () => {
+	const example = "```html\n<div></div>\n```"
+	const markdown = `---\ntitle: Quickstart\n---\n${TOPIC_TUTORIAL_VIDEO_MARKER}\n\n${example}\n\nOpen \`/mcp/t/<topic id>\`.\n`
+	const [section] = toSections("quickstart", markdown)
+	expect(section?.content).toBe(`Quickstart\n\n${example}\n\nOpen \`/mcp/t/<topic id>\`.`)
 })

@@ -12,6 +12,8 @@ import { TagPicker } from "@/components/topic/TagPicker"
 import { useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFeedSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicSection } from "@/components/topic/TopicSection"
+import { TopicTutorialVideoCard } from "@/components/topic/TopicTutorialVideoCard"
+import { useIsSignedInBeforeSession } from "@/hooks/useIsSignedInBeforeSession"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStore"
@@ -25,6 +27,8 @@ export function HomePage() {
 	// whether a user is signed in or a visitor is browsing
 	const { data: session } = authClient.useSession()
 	const isSignedIn = Boolean(session)
+	// the video on making a topic shows to a visitor. a page load with a session cookie never shows it
+	const isTopicTutorialVideoCardShown = !useIsSignedInBeforeSession()
 	// the shared feed state: the sections, the finding and resource filters, and the topic-creation quota
 	const {
 		topicFeed,
@@ -103,6 +107,8 @@ export function HomePage() {
 
 			{/* the sections clear the New Topic button above them */}
 			<div className="mt-4">
+				{/* the video on making a topic, right above the Featured topics section */}
+				{isTopicTutorialVideoCardShown && <TopicTutorialVideoCard />}
 				{/* skeleton animation while loading and reheating */}
 				{(topicFeed === null || isReheating) && <TopicFeedSkeleton />}
 

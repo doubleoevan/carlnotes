@@ -1,6 +1,7 @@
 import type { TopicSectionKey } from "@shared/contracts/topics"
 import { topicSectionKeys } from "@shared/enums"
-import { toOrganizationLd, toSoftwareApplicationLd, toWebSiteLd } from "@shared/seo"
+import { toOrganizationLd, toSoftwareApplicationLd, toVideoObjectLd, toWebSiteLd } from "@shared/seo"
+import { TOPIC_TUTORIAL_VIDEO } from "@shared/youtube"
 import { createFileRoute } from "@tanstack/react-router"
 import { fetchTopicFeed } from "@/clients/topicClient"
 import { loadOnServer, readWithDegradedFallback } from "@/lib/loadOnServer"
@@ -10,8 +11,8 @@ import { HomePage } from "@/pages/HomePage"
 // the page each section shows, by section key. an absent key means the first page
 type TopicSectionPageNumbers = Partial<Record<TopicSectionKey, number>>
 
-// the homepage, with the site-wide title and description, its canonical url and structured data,
-// and a visitor's topic sections by page
+// the homepage, with the site-wide title and description, its canonical url,
+// its structured data with the video on making a topic, and a visitor's topic sections by page
 export const Route = createFileRoute("/_layout/")({
 	// each section's page number past the first, read from the url's search params
 	validateSearch: (search: Record<string, unknown>): TopicSectionPageNumbers =>
@@ -30,6 +31,7 @@ export const Route = createFileRoute("/_layout/")({
 			toJsonLdScript(toWebSiteLd(SITE_URL)),
 			toJsonLdScript(toOrganizationLd(SITE_URL)),
 			toJsonLdScript(toSoftwareApplicationLd(SITE_URL)),
+			toJsonLdScript(toVideoObjectLd(SITE_URL, TOPIC_TUTORIAL_VIDEO)),
 		],
 	}),
 	component: HomePage,

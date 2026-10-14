@@ -111,6 +111,15 @@ export function isTouchScreen(): boolean {
 }
 
 /**
+ * Whether a click is a plain primary click with no modifier key, which the app handles in place instead of the browser.
+ */
+export function isPlainClick(
+	click: Pick<MouseEvent, "button" | "metaKey" | "ctrlKey" | "shiftKey" | "altKey">,
+): boolean {
+	return click.button === 0 && !click.metaKey && !click.ctrlKey && !click.shiftKey && !click.altKey
+}
+
+/**
  * What the topic prompt's file picker shows.
  */
 export const FILE_PICKER_ACCEPT =

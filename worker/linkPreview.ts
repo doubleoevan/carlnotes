@@ -1,4 +1,5 @@
 // the link preview a link gets: the page's own title, description, and image, every fetch through the public-url guard
+import { toYoutubeWatchUrl } from "@shared/youtube"
 import { fetchPublicUrl, toFetchableUrl } from "./publicFetch"
 import { toYoutubeVideoId } from "./transcripts"
 
@@ -141,7 +142,7 @@ async function fetchPageMetaTags(url: string): Promise<LinkPreviewMetaTags> {
 // a video's title, channel, and thumbnail from youtube's own oembed answer, which is small and stable.
 // oembed only answers for a watch url, so a shorts, embed, or youtu.be link asks through its canonical form
 async function fetchYoutubeLinkPreviewMetaTags(url: string, videoId: string): Promise<LinkPreviewMetaTags | null> {
-	const watchUrl = `https://www.youtube.com/watch?v=${videoId}`
+	const watchUrl = toYoutubeWatchUrl(videoId)
 	const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`
 	const response = await fetchPublicUrl(oembedUrl, { signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS) })
 	if (!response.ok) {

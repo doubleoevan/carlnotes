@@ -1,4 +1,4 @@
-// the topic slug and path helpers, and the meta description
+// the topic slug and path helpers, the meta description, and the structured data
 import { expect, test } from "bun:test"
 import {
 	isTopicSlugStale,
@@ -11,6 +11,7 @@ import {
 	toTopicFeedPath,
 	toTopicPath,
 	toTopicSlug,
+	toVideoObjectLd,
 } from "./seo"
 
 const TOPIC_ID = "60221dfa-df65-44fa-84d4-fbaf10d48e5b"
@@ -94,4 +95,20 @@ test("toJsonLdText escapes every < so no name can close the script tag", () => {
 	const jsonLdText = toJsonLdText({ name: "</script><b>" })
 	expect(jsonLdText).not.toContain("<")
 	expect(JSON.parse(jsonLdText)).toEqual({ name: "</script><b>" })
+})
+
+test("toVideoObjectLd gives the video's thumbnail on this origin and its nocookie player", () => {
+	const videoObjectLd = toVideoObjectLd("https://carlnotes.com", {
+		youtubeVideoId: "abc123",
+		name: "A video",
+		description: "What the video shows.",
+		uploadDate: "2026-10-13",
+		thumbnailPath: "/video.jpg",
+	})
+	expect(videoObjectLd).toMatchObject({
+		"@type": "VideoObject",
+		thumbnailUrl: "https://carlnotes.com/video.jpg",
+		embedUrl: "https://www.youtube-nocookie.com/embed/abc123",
+		uploadDate: "2026-10-13",
+	})
 })

@@ -1,9 +1,11 @@
-// the homepage as the server renders it, across two requests in one process, with a section's page links, and with a
-// closed section still in the html
+// the homepage as the server renders it, across two requests in one process, with a section's page links, with a
+// closed section still in the html, and with a visitor's video card
+
 import { afterAll, beforeAll, expect, test } from "bun:test"
 import type { TopicFinding } from "@shared/contracts/findings"
 import type { TopicFeed, TopicFeedResponse } from "@shared/contracts/topics"
 import { toTopicPath } from "@shared/seo"
+import { TOPIC_TUTORIAL_VIDEO } from "@shared/youtube"
 import { RouterProvider } from "@tanstack/react-router"
 import { renderToString } from "react-dom/server"
 import { loadRouter } from "../-loadRouter"
@@ -140,6 +142,18 @@ test("a visitor's sign-in and sign-up links are nofollow", async () => {
 	const homepageHtml = await renderHomepage()
 	expect(homepageHtml).toMatch(/<a rel="nofollow"[^>]*href="\/login\?next=%2F"/)
 	expect(homepageHtml).toMatch(/<a rel="nofollow"[^>]*href="\/signup\?cta=header"/)
+})
+
+// a visitor's server-rendered homepage has the video card above the featured topics, its thumbnail linked to YouTube
+test("a visitor's homepage shows the video on making a topic above the featured topics", async () => {
+	topicFeedResponse = toTopicFeedResponse({
+		featuredTopics: [toFeedTopic({ id: TOPIC_ID, name: "Espresso machines" })],
+	})
+	const homepageHtml = await renderHomepage()
+	const cardIndex = homepageHtml.indexOf("A Fresh Brew with Carl")
+	expect(cardIndex).toBeGreaterThan(-1)
+	expect(cardIndex).toBeLessThan(homepageHtml.indexOf("Espresso machines"))
+	expect(homepageHtml).toContain(`href="https://www.youtube.com/watch?v=${TOPIC_TUTORIAL_VIDEO.youtubeVideoId}"`)
 })
 
 // a page past the last shows the last page. the topics off that page are in the html, hidden with JavaScript, and

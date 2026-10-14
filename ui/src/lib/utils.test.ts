@@ -16,7 +16,7 @@ import {
 import { matchesTopicFindingFilter } from "./topicFindingFilters"
 import { toSortedTopicFindings } from "./topicFindingSorts"
 import { toPossibleSourceUrls } from "./topicPromptUrls"
-import { cn, toAuthorizeReturnPath, toSafeRedirectPath } from "./utils"
+import { cn, isPlainClick, toAuthorizeReturnPath, toSafeRedirectPath } from "./utils"
 
 // twMerge makes later tailwind classes win over earlier conflicting ones
 test("cn merges conflicting tailwind classes", () => {
@@ -278,4 +278,13 @@ test("an oauth query returns to the authorize endpoint with the query intact", (
 test("a visit without the oauth parameters returns no authorize path", () => {
 	expect(toAuthorizeReturnPath(new URLSearchParams({ next: "/topics/topic-1" }))).toBeNull()
 	expect(toAuthorizeReturnPath(new URLSearchParams({ client_id: "client-1" }))).toBeNull()
+})
+
+// a plain primary click is the app's to handle, and a modified or secondary click is the browser's
+test("isPlainClick accepts only a primary click with no modifier key", () => {
+	const plainClick = { button: 0, metaKey: false, ctrlKey: false, shiftKey: false, altKey: false }
+	expect(isPlainClick(plainClick)).toBe(true)
+	expect(isPlainClick({ ...plainClick, metaKey: true })).toBe(false)
+	expect(isPlainClick({ ...plainClick, altKey: true })).toBe(false)
+	expect(isPlainClick({ ...plainClick, button: 1 })).toBe(false)
 })

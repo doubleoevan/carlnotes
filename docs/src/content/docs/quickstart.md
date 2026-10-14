@@ -7,6 +7,10 @@ description: >-
 
 This page takes you from zero to real topic findings in five steps.
 
+<div data-topic-tutorial-video></div>
+
+Prefer to watch? Carl makes a topic in this video.☝️👀
+
 ## 1. Sign in
 
 Go to [carlnotes.com](https://carlnotes.com) and pick a sign-in: **Continue with Google**,

@@ -387,3 +387,13 @@ so the page a crawler indexes is the page a visitor sees, and no reader SHALL be
 - **WHEN** a browser fetches the same page
 - **THEN** each table shows the component's own page size, with page links for the rest
 
+### Requirement: The homepage's structured data describes the topic tutorial video
+The homepage's head SHALL include a `VideoObject` JSON-LD block for the topic tutorial video, beside its `WebSite`,
+`Organization`, and `SoftwareApplication` blocks. The block SHALL give the video's name, description, upload date,
+absolute thumbnail url on this origin, and its `www.youtube-nocookie.com` embed url, the same player the page plays.
+
+#### Scenario: The homepage declares the video
+- **WHEN** a crawler reads the homepage's head
+- **THEN** it finds a `VideoObject` block whose `embedUrl` is the video's YouTube embed url and whose `thumbnailUrl`
+  is an absolute url on this origin
+

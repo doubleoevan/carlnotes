@@ -1,7 +1,9 @@
 // this script embeds the docs pages into docs_chunks, the sections chat quotes when a question asks about the app
+
 import { createHash } from "node:crypto"
 import { readdir } from "node:fs/promises"
 import { join } from "node:path"
+import { TOPIC_TUTORIAL_VIDEO_MARKER } from "@shared/youtube"
 import { inArray, sql } from "drizzle-orm"
 import { connectionPool, db } from "../db"
 import { docsChunks } from "../db/schema/chat"
@@ -18,9 +20,12 @@ type DocsSection = { page: string; heading: string; content: string; contentHash
  * Split one page into sections: the intro under the page title, then one per ## heading.
  */
 export function toSections(page: string, markdown: string): DocsSection[] {
-	// pull the title out of the frontmatter, then drop the frontmatter itself
+	// pull the title out of the frontmatter, then drop the frontmatter and the video marker the docs build fills
 	const title = markdown.match(/^title:\s*(.+)$/m)?.[1]?.trim() ?? page
-	const body = markdown.replace(/^---\n[\s\S]*?\n---\n/, "").trim()
+	const body = markdown
+		.replace(/^---\n[\s\S]*?\n---\n/, "")
+		.replaceAll(TOPIC_TUTORIAL_VIDEO_MARKER, "")
+		.trim()
 
 	// split on the ## headings, keeping the text before the first heading as the page's intro section
 	const parts = body.split(/^## /m)

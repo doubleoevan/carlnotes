@@ -1,10 +1,10 @@
 // the link preview card, its loading note, and the check for a link worth previewing
 import type { ChatLinkPreview } from "@shared/contracts/chat"
-import { Play } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { HostFavicon } from "@/components/common/HostFavicon"
+import { YoutubePlayer } from "@/components/common/YoutubePlayer"
 import { cn } from "@/lib/utils"
 
 /**
@@ -37,7 +37,6 @@ export function LinkPreviewCard({
 }) {
 	// the host shown above the page's words
 	const linkPreviewHost = useMemo(() => toLinkPreviewHost(linkPreview.url), [linkPreview.url])
-	const [isPlayingVideo, setIsPlayingVideo] = useState(false)
 
 	// the page's title and description, with the host above them. the same block ends both card shapes
 	const linkPreviewText = (
@@ -64,37 +63,12 @@ export function LinkPreviewCard({
 					className,
 				)}
 			>
-				{isPlayingVideo ? (
-					<iframe
-						src={`https://www.youtube-nocookie.com/embed/${linkPreview.youtubeVideoId}?autoplay=1`}
-						title={linkPreview.title ?? "YouTube video"}
-						allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-						referrerPolicy="strict-origin-when-cross-origin"
-						className="aspect-video w-full border-0"
-					/>
-				) : (
-					<button
-						type="button"
-						aria-label={`Play ${linkPreview.title ?? "the video"}`}
-						onClick={() => setIsPlayingVideo(true)}
-						className="group relative block aspect-video w-full"
-					>
-						{/* the stored thumbnail, with the play button over it */}
-						{linkPreview.imagePath && (
-							<img
-								src={linkPreview.imagePath}
-								alt=""
-								loading="lazy"
-								className="absolute inset-0 size-full object-cover"
-							/>
-						)}
-						<span className="absolute inset-0 grid place-items-center bg-black/30 transition-colors group-hover:bg-black/20">
-							<span className="bg-primary text-primary-foreground grid size-12 place-items-center rounded-full">
-								<Play className="ml-0.5 size-5 fill-current" />
-							</span>
-						</span>
-					</button>
-				)}
+				<YoutubePlayer
+					youtubeVideoId={linkPreview.youtubeVideoId}
+					title={linkPreview.title}
+					thumbnailPath={linkPreview.imagePath}
+					isUserContent={isUserContent}
+				/>
 				<AnchorLink href={linkPreview.url} isUserContent={isUserContent} className="hover:bg-bubble block">
 					{linkPreviewText}
 				</AnchorLink>

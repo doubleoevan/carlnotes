@@ -7,6 +7,7 @@ import { toUpdateLabel, UpdateCountBadge } from "@/components/common/UpdateCount
 import { DocsLink } from "@/components/layout/DocsLink"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { signOutAndReload } from "@/components/session/signOut"
+import { TopicTutorialVideoOption } from "@/components/topic/TopicTutorialVideoDialog"
 import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { useAllChatMentions, useAllTeamChatMentions, useAllTopicChatMentions } from "@/stores/chatRoomStore"
@@ -21,11 +22,13 @@ export function UserMenu({
 	username,
 	avatarVersion,
 	isAdmin,
+	onPlayTopicTutorialVideo,
 }: {
 	userId: string
 	username: string
 	avatarVersion: string | null
 	isAdmin: boolean
+	onPlayTopicTutorialVideo: () => void
 }) {
 	// the avatar's one badge sums every unread chat mention, note change, and topic invitation,
 	// and the tooltip shows the waiting groups
@@ -67,7 +70,13 @@ export function UserMenu({
 			</PopoverTrigger>
 			<PopoverContent align="end" className="w-52" bodyClassName="p-1">
 				{/* the menu items for a signed-in user */}
-				<UserMenuItems userId={userId} isAdmin={isAdmin} onNavigate={handleCloseMenu} onSignOut={handleSignOut} />
+				<UserMenuItems
+					userId={userId}
+					isAdmin={isAdmin}
+					onNavigate={handleCloseMenu}
+					onPlayTopicTutorialVideo={onPlayTopicTutorialVideo}
+					onSignOut={handleSignOut}
+				/>
 			</PopoverContent>
 		</Popover>
 	)
@@ -80,11 +89,13 @@ export function UserMenuItems({
 	userId,
 	isAdmin,
 	onNavigate,
+	onPlayTopicTutorialVideo,
 	onSignOut,
 }: {
 	userId: string
 	isAdmin: boolean
 	onNavigate: () => void
+	onPlayTopicTutorialVideo: () => void
 	onSignOut: () => void
 }) {
 	// what the last poll read, split into the topics' and the teams' own. each row sums its own into one badge
@@ -165,6 +176,13 @@ export function UserMenuItems({
 				<Columns3Cog className="size-4" />
 				Plans
 			</AnchorLink>
+			{/* the video on making a topic, which plays in a dialog */}
+			<TopicTutorialVideoOption
+				onSelect={() => {
+					onNavigate()
+					onPlayTopicTutorialVideo()
+				}}
+			/>
 			{/* the docs open in their own tab */}
 			<DocsLink className={MENU_OPTION_CLASS} hasIcon onNavigate={onNavigate} />
 			{/* a divider above the last group, the admin console and signing out */}

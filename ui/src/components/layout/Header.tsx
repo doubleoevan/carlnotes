@@ -1,35 +1,27 @@
 import { toAvatarVersion } from "@shared/avatars"
 import { useLocation } from "@tanstack/react-router"
-import { Columns3Cog, LogIn, Menu, Moon, Sun, UserPlus } from "lucide-react"
 import { useState } from "react"
 import { authClient } from "@/clients/authClient"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { CoffeeRings } from "@/components/branding/CoffeeRings"
 import { NoteIcon } from "@/components/branding/NoteIcon"
 import { AnchorLink } from "@/components/common/AnchorLink"
-import { toUpdateLabel, UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Attribution } from "@/components/layout/Attribution"
 import { DocsLink } from "@/components/layout/DocsLink"
+import { HeaderMenu } from "@/components/layout/HeaderMenu"
 import { ThemeToggle } from "@/components/layout/ThemeToggle"
-import { UserMenu, UserMenuItems } from "@/components/layout/UserMenu"
+import { UserMenu } from "@/components/layout/UserMenu"
 import { buttonVariants } from "@/components/primitives/button"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { signOutAndReload } from "@/components/session/signOut"
+import { TopicTutorialVideoDialog } from "@/components/topic/TopicTutorialVideoDialog"
 import { useIsSignedInBeforeSession } from "@/hooks/useIsSignedInBeforeSession"
 import { useTheme } from "@/hooks/useTheme"
-import { MENU_DIVIDER_CLASS, MENU_OPTION_CLASS, MENU_OPTION_SELECTED_CLASS } from "@/lib/styleClasses"
-import { cn, toSafeRedirectPath } from "@/lib/utils"
+import { cn, isPlainClick, toSafeRedirectPath } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
-import { useAllChatMentions } from "@/stores/chatRoomStore"
-import { useAllNoteBadges } from "@/stores/noteBadgeStore"
-import { useTopicInviteBadges } from "@/stores/topicInviteStore"
 
 // the hover style shared by the header's menu buttons
 const HERO_BUTTON_HOVER = "hover:bg-white/10 hover:text-hero-foreground dark:hover:bg-white/10"
-
-// the size the count pills shrink to in the hamburger menu's corner
-const MENU_BADGE_CLASS = "h-4 min-w-4 text-[0.625rem]"
 
 // Carl's pitch, shown inline on wide screens and inside the phone's note popover
 const CARL_PITCH =
@@ -55,7 +47,7 @@ export function Header() {
 	// a click on a home link while already on the home page reloads the feed
 	const { reheat } = useTopicFeed()
 	function handleHomeClick(event: React.MouseEvent): void {
-		if (pathname !== "/" || event.metaKey || event.ctrlKey || event.shiftKey || event.button !== 0) {
+		if (pathname !== "/" || !isPlainClick(event)) {
 			return
 		}
 		event.preventDefault()
@@ -64,6 +56,11 @@ export function Header() {
 
 	// the hero pitches the app to a visitor. it only shows on the home page to logged-out visitors.
 	const isHeroShown = !useIsSignedInBeforeSession() && pathname === "/"
+	// the video on making a topic, which either menu opens in one dialog
+	const [isTopicTutorialVideoOpen, setIsTopicTutorialVideoOpen] = useState(false)
+	const handlePlayTopicTutorialVideo = (): void => {
+		setIsTopicTutorialVideoOpen(true)
+	}
 	return (
 		<header className="bg-hero text-hero-foreground relative overflow-hidden">
 			{isHeroShown && <CoffeeRings />}
@@ -105,6 +102,7 @@ export function Header() {
 								username={session.user.username}
 								avatarVersion={toAvatarVersion(session.user)}
 								isAdmin={isAdmin}
+								onPlayTopicTutorialVideo={handlePlayTopicTutorialVideo}
 							/>
 						) : (
 							<>
@@ -133,6 +131,7 @@ export function Header() {
 						isSignedIn={isSignedIn}
 						isAdmin={isAdmin}
 						userId={session?.user.id ?? ""}
+						onPlayTopicTutorialVideo={handlePlayTopicTutorialVideo}
 					/>
 				</div>
 				{/* the hero: the headline shimmers and the copy fades in.
@@ -200,118 +199,9 @@ export function Header() {
 					</div>
 				)}
 			</div>
+			{/* the dialog that plays the video on making a topic, opened from either menu */}
+			{isTopicTutorialVideoOpen && <TopicTutorialVideoDialog onClose={() => setIsTopicTutorialVideoOpen(false)} />}
 		</header>
-	)
-}
-
-// the mobile-only hamburger menu
-function HeaderMenu({
-	isDark,
-	onToggleTheme,
-	isSignedIn,
-	isAdmin,
-	userId,
-}: {
-	isDark: boolean
-	onToggleTheme: () => void
-	isSignedIn: boolean
-	isAdmin: boolean
-	userId: string
-}) {
-	// the path highlights the open page's option, and sends the login back to where the visitor started
-	const pathname = useLocation({ select: (location) => location.pathname })
-	// the one badge sums every unread chat mention, note change, and topic invitation
-	const chatMentions = useAllChatMentions()
-	const noteBadges = useAllNoteBadges()
-	const topicInviteBadges = useTopicInviteBadges()
-	// controlled so every item click closes the menu, including navigation and sign-out
-	const [isMenuOpen, setIsMenuOpen] = useState(false)
-	const closeMenu = (): void => {
-		setIsMenuOpen(false)
-	}
-
-	// sign out and refresh the page
-	const handleSignOut = (): void => {
-		closeMenu()
-		void signOutAndReload()
-	}
-
-	return (
-		<Popover open={isMenuOpen} onOpenChange={setIsMenuOpen}>
-			<PopoverTrigger
-				className="relative grid size-11 place-items-center rounded-md hover:bg-white/10 sm:hidden"
-				aria-label={["Menu", toUpdateLabel(chatMentions, noteBadges, topicInviteBadges)].filter(Boolean).join(", ")}
-			>
-				<Menu className="size-5" />
-				{/* the one unread count badged on the menu trigger */}
-				<UpdateCountBadge
-					chatMentions={chatMentions}
-					noteBadges={noteBadges}
-					invites={topicInviteBadges}
-					className="absolute top-1 right-1"
-					countBadgeClassName={MENU_BADGE_CLASS}
-				/>
-			</PopoverTrigger>
-			<PopoverContent align="end" className="w-44" bodyClassName="p-1">
-				<button
-					type="button"
-					onClick={() => {
-						onToggleTheme()
-						closeMenu()
-					}}
-					className={MENU_OPTION_CLASS}
-				>
-					{isDark ? <Sun className="size-4" /> : <Moon className="size-4" />}
-					{isDark ? "Light mode" : "Dark mode"}
-				</button>
-				{/* docs and plans move into the user menu once signed in */}
-				{!isSignedIn && (
-					<>
-						{/* the docs open in their own tab */}
-						<DocsLink className={MENU_OPTION_CLASS} hasIcon onNavigate={closeMenu} />
-						<AnchorLink
-							href="/plans"
-							onClick={closeMenu}
-							aria-current={pathname === "/plans" ? "page" : undefined}
-							className={cn(MENU_OPTION_CLASS, pathname === "/plans" && MENU_OPTION_SELECTED_CLASS)}
-						>
-							<Columns3Cog className="size-4" />
-							Plans
-						</AnchorLink>
-					</>
-				)}
-				{isSignedIn ? (
-					// the user menu items form the block below a horizontal divider
-					<>
-						<div className={MENU_DIVIDER_CLASS} />
-						<UserMenuItems userId={userId} isAdmin={isAdmin} onNavigate={closeMenu} onSignOut={handleSignOut} />
-					</>
-				) : (
-					<>
-						{/* the sign-in link, which crawlers do not follow */}
-						<AnchorLink
-							href={`/login?next=${encodeURIComponent(toSafeRedirectPath(pathname))}`}
-							rel="nofollow"
-							onClick={closeMenu}
-							className={MENU_OPTION_CLASS}
-						>
-							<LogIn className="size-4" />
-							Log in
-						</AnchorLink>
-						{/* use the primary color as a call to action. cta names the button for analytics */}
-						<AnchorLink
-							href="/signup?cta=menu"
-							rel="nofollow"
-							onClick={closeMenu}
-							className={cn(MENU_OPTION_CLASS, "bg-primary text-primary-foreground hover:bg-primary/90")}
-						>
-							<UserPlus className="size-4" />
-							Sign up
-						</AnchorLink>
-					</>
-				)}
-			</PopoverContent>
-		</Popover>
 	)
 }
 

@@ -1,4 +1,6 @@
-// the brand icons used for sharing, sign-in, source rows, and the Add to AI dialog
+// the brand icons used for sharing, sign-in, source rows, the Add to AI dialog, and the tutorial video's player and
+// menu option
+import { YOUTUBE_PLAY_TRIANGLE_PATH } from "@shared/youtube"
 import {
 	siBluesky,
 	siClaudecode,
@@ -40,6 +42,18 @@ export function BrandIcon({ brand, className }: { brand: Brand; className?: stri
 	return (
 		<svg viewBox="0 0 24 24" className={className} fill="currentColor" role="presentation">
 			<path d={BRAND_ICON_PATHS[brand]} />
+		</svg>
+	)
+}
+
+/**
+ * YouTube's red play button with its white triangle, the same in both themes.
+ */
+export function YoutubePlayIcon({ className }: { className?: string }) {
+	return (
+		<svg viewBox="0 0 24 24" className={className} role="presentation">
+			<path d={siYoutube.path} fill={`#${siYoutube.hex}`} />
+			<path d={YOUTUBE_PLAY_TRIANGLE_PATH} fill="white" />
 		</svg>
 	)
 }

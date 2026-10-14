@@ -1,5 +1,6 @@
 // the page head helpers. the site and page titles, structured data, topic slugs and paths, and the meta description
 import { PLANS } from "./plans"
+import { type PageYoutubeVideo, toYoutubeEmbedUrl } from "./youtube"
 
 // the site's own title, on the homepage and on any page with no title of its own
 export const SITE_TITLE = "CarlNotes — He already read it. All of it."
@@ -90,6 +91,22 @@ export function toSoftwareApplicationLd(appUrl: string): object {
 			price: (planConfig.priceMonthlyCents / 100).toFixed(2),
 			priceCurrency: "USD",
 		})),
+	}
+}
+
+/**
+ * Returns the VideoObject schema for a YouTube video that a page plays.
+ */
+export function toVideoObjectLd(appUrl: string, pageYoutubeVideo: PageYoutubeVideo): object {
+	const { youtubeVideoId, name, description, uploadDate, thumbnailPath } = pageYoutubeVideo
+	return {
+		"@context": "https://schema.org",
+		"@type": "VideoObject",
+		name,
+		description,
+		uploadDate,
+		thumbnailUrl: `${appUrl}${thumbnailPath}`,
+		embedUrl: toYoutubeEmbedUrl(youtubeVideoId),
 	}
 }
 

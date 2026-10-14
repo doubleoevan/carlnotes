@@ -1,5 +1,6 @@
 // the YouTube ingester
 
+import { toYoutubeWatchUrl } from "@shared/youtube"
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { sources } from "../../db/schema/topics"
@@ -217,7 +218,7 @@ export function parseVideos(playlist: YoutubePlaylist): NewResource[] {
 		}
 
 		// this canonical watch url matches what the Atom fallback finds, so different access modes dedupe to the same Resource
-		const url = `https://www.youtube.com/watch?v=${videoId}`
+		const url = toYoutubeWatchUrl(videoId)
 		if (resourceByUrl.has(url)) {
 			continue
 		}

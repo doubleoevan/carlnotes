@@ -21,6 +21,8 @@ the caller's error. `runtimeGauges.ts` logs a long-running process's connection 
 reading the delay from the histogram in `eventLoopDelay.ts`. Each line's `instance` field names the replica by its host
 name, so the replicas' lines can be told apart.
 `reportedPath.ts` names a page by its route's shape, for PostHog's page views and Sentry's page renders alike.
+`youtube.ts` builds a YouTube video's watch page url and its player url, and holds `TOPIC_TUTORIAL_VIDEO`, the video on
+making a topic that the homepage, the menus, and the docs build all read, with the marker a docs page writes for it.
 `savedEnvSettings.ts` saves the environment settings a test changes and returns the call that puts them back, for
 the api, worker, and shared tests alike. `monitoringTestFixtures.ts` quiets the console and the error report for the
 api, worker, and database tests.

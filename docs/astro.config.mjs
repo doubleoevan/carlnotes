@@ -1,16 +1,22 @@
 // the documentation site. it builds to static files that the api serves under /docs, so it runs no process of its own.
 import starlight from "@astrojs/starlight"
 import { defineConfig } from "astro/config"
+import { rehypeTopicTutorialVideo } from "./src/rehypeTopicTutorialVideo"
+
+// the path the api serves the docs after
+const DOCS_BASE = "/docs"
 
 export default defineConfig({
 	// the production origin, so the emitted sitemap and canonical urls are absolute
 	site: "https://carlnotes.com",
 	// every generated link and asset url includes this prefix. the build output is not nested under it,
 	// so api/index.ts strips the prefix again to resolve a file
-	base: "/docs",
+	base: DOCS_BASE,
 	outDir: "./dist",
 	// each page builds as <slug>/index.html and every internal link ends in a slash
 	trailingSlash: "always",
+	// a page's video marker becomes the video on making a topic
+	markdown: { rehypePlugins: [rehypeTopicTutorialVideo({ base: DOCS_BASE })] },
 	// the pages the first docs surface published, which the rewrite replaced.
 	// they keep answering so an inbound link reaches the docs instead of a 404
 	redirects: {
