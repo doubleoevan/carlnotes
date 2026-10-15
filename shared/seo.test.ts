@@ -13,6 +13,7 @@ import {
 	toTopicSlug,
 	toVideoObjectLd,
 } from "./seo"
+import { TOPIC_TUTORIAL_VIDEO } from "./youtube"
 
 const TOPIC_ID = "60221dfa-df65-44fa-84d4-fbaf10d48e5b"
 
@@ -102,13 +103,18 @@ test("toVideoObjectLd gives the video's thumbnail on this origin and its nocooki
 		youtubeVideoId: "abc123",
 		name: "A video",
 		description: "What the video shows.",
-		uploadDate: "2026-10-13",
+		uploadDate: "2026-10-13T17:40:17-07:00",
 		thumbnailPath: "/video.jpg",
 	})
 	expect(videoObjectLd).toMatchObject({
 		"@type": "VideoObject",
 		thumbnailUrl: "https://carlnotes.com/video.jpg",
 		embedUrl: "https://www.youtube-nocookie.com/embed/abc123",
-		uploadDate: "2026-10-13",
+		uploadDate: "2026-10-13T17:40:17-07:00",
 	})
+})
+
+// google reads a video upload time only as a full datetime with its time zone
+test("the topic tutorial video's upload time has a time and a time zone offset", () => {
+	expect(TOPIC_TUTORIAL_VIDEO.uploadDate).toMatch(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$/)
 })

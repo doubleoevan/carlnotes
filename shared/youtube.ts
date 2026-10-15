@@ -28,7 +28,8 @@ export const YOUTUBE_FRAME_ATTRIBUTES = {
 	referrerPolicy: "strict-origin-when-cross-origin",
 } as const
 
-// a YouTube video that a page plays, with its thumbnail's path on this origin and its upload date as yyyy-mm-dd
+// a YouTube video that a page plays, with its thumbnail's path on this origin and its upload time as an ISO 8601
+// datetime with its time zone offset
 export type PageYoutubeVideo = {
 	youtubeVideoId: string
 	name: string
@@ -42,7 +43,7 @@ export const TOPIC_TUTORIAL_VIDEO: PageYoutubeVideo = {
 	youtubeVideoId: "XXLKmuHi-GA",
 	name: "Brew with Carl",
 	description: "Evan shows how to make a topic with Carl on CarlNotes.",
-	uploadDate: "2026-10-13",
+	uploadDate: "2026-10-13T17:40:17-07:00",
 	thumbnailPath: "/topic-tutorial-video-thumbnail.webp",
 }
 
