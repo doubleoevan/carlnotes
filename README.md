@@ -415,7 +415,7 @@ Or run them individually:
 
 ```bash
 bunx biome check .
-bunx tsc -b
+bunx tsc -b             # add --force after a dependency change. bun run check does that on its own
 bun test
 bun run check:workflows # every Temporal workflow file still bundles
 ```

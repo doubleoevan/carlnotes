@@ -274,15 +274,15 @@
 	padding: 0.75rem;
 }
 
-/* blocknote gives a comment a 350px floor. in the margin column it takes the column's own width,
-   and one floating over the note takes a readable width that fits a phone */
-.note-editor.bn-container .bn-threads-sidebar .bn-thread {
-	min-width: 0;
-}
-
+/* blocknote gives a comment a 350px floor. one floating over the note takes a readable width that fits a phone,
+   and in the margin column it takes the column's own width */
 .note-editor:not(.bn-container) .bn-thread {
 	min-width: 0;
 	width: min(22rem, calc(100vw - 3rem));
+}
+
+.note-editor.bn-container .bn-threads-sidebar .bn-thread {
+	min-width: 0;
 }
 
 /* a comment whose highlighted text was deleted has nothing left to quote. its reference line is hidden */

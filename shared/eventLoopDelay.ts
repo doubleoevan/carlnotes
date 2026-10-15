@@ -1,5 +1,5 @@
 // the event loop's delay in this process, from the delay histogram Node's perf_hooks provide and Bun supports
-import { type IntervalHistogram, monitorEventLoopDelay } from "node:perf_hooks"
+import { monitorEventLoopDelay } from "node:perf_hooks"
 
 // how often the histogram samples the event loop's delay, in milliseconds
 const HISTOGRAM_RESOLUTION_MS = 20
@@ -7,8 +7,11 @@ const HISTOGRAM_RESOLUTION_MS = 20
 // the histogram records nanoseconds, and every reading is reported in milliseconds
 const NANOSECONDS_PER_MILLISECOND = 1_000_000
 
+// the histogram that monitorEventLoopDelay returns
+type DelayHistogram = ReturnType<typeof monitorEventLoopDelay>
+
 // the process's one histogram, started by the first call to start it
-let delayHistogram: IntervalHistogram | undefined
+let delayHistogram: DelayHistogram | undefined
 
 /**
  * Starts measuring the event loop's delay, once per process. The histogram never keeps the process alive.
