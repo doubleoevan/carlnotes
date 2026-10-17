@@ -31,7 +31,7 @@ jobs:
       # install ffmpeg as the Dockerfile does. the podcast suites encode episode audio and draw covers with it
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       # the doppler cli injects the same dev secrets a local smoke run uses
-      - uses: dopplerhq/cli-action@014df23b1329b615816a38eb5f473bb9000700b1 # v3
+      - uses: dopplerhq/cli-action@4819d808ab99e5cde19a0637a16536a4038fad73 # v4.0.1
       # apply the commit's migrations to the dev database, so the suites run against the schema that the commit expects
       - run: bun run db:migrate
         env:
