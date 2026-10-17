@@ -1,5 +1,7 @@
-// the promptfoo eval of the topic chat's tool calls, in the solo chat and the team room, which makes real model calls.
+// the promptfoo eval of the topic chat's tool calls and the saves an agreed preview makes, in the solo chat and the team
+// room, which makes real model calls.
 // run the eval with: bun run eval:topic-chat-tools
+import { CANCEL_TOPIC_EDIT_TOOL, PROPOSE_TOPIC_EDIT_TOOL } from "@shared/contracts/chat"
 import type { Assertion, EvaluateResult, GradingResult, TestCase } from "promptfoo"
 import { chatModel } from "../../worker/models"
 import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
@@ -10,8 +12,9 @@ import { CLAIMED_ACTION_RUBRIC, GRADER_MODEL, MATERIAL_LABEL, OUTPUT_SHAPE_RUBRI
 // turn web search off. a search returns "web search is not configured", so a turn reads only its own material
 delete Bun.env.EXA_API_KEY
 
-// the tool that a turn may call besides the expected tool
+// the tool that a turn may call besides the expected tool, and the preview tools a case that allows a preview may call
 const SEARCH_TOOL_NAME = "searchWeb"
+const PREVIEW_TOOL_NAMES = [PROPOSE_TOPIC_EDIT_TOOL, CANCEL_TOPIC_EDIT_TOOL]
 
 // run every case. the grader is on a different model from the model that writes the turn
 await runEval({
@@ -28,13 +31,15 @@ await runEval({
 
 // one promptfoo test for a case. its variables, its tool call check, and the rubric over its chat turn
 function toTestCase(topicChatToolsCase: TopicChatToolsCase): TestCase {
-	const { description, expectedToolCall, ...topicChatToolsVariables } = topicChatToolsCase
+	const { description, expectedToolCall, isPreviewAllowed = false, ...topicChatToolsVariables } = topicChatToolsCase
 
-	// the turn calls the expected tool with the expected input and no other tool but a search, or calls no tool
+	// the turn calls the expected tool with the expected input and no other tool but a search, or calls no tool, or,
+	// where a preview is allowed, saves nothing
+	const noToolMetric = isPreviewAllowed ? "saves nothing" : "calls no tool"
 	const toolCallAssertion: Assertion = {
 		type: "javascript",
-		metric: expectedToolCall ? `calls ${expectedToolCall.toolName} and nothing else` : "calls no tool",
-		value: (turnOutput: string) => gradeToolCalls(turnOutput, expectedToolCall),
+		metric: expectedToolCall ? `calls ${expectedToolCall.toolName} and nothing else` : noToolMetric,
+		value: (turnOutput: string) => gradeToolCalls(turnOutput, expectedToolCall, isPreviewAllowed),
 	}
 
 	// the claimed action rubric, with the conversation that the turn was given after it
@@ -42,19 +47,30 @@ function toTestCase(topicChatToolsCase: TopicChatToolsCase): TestCase {
 		outputShapeRubric: OUTPUT_SHAPE_RUBRIC,
 		caseRubrics: [{ metric: "claims no action that no tool made", rubric: CLAIMED_ACTION_RUBRIC }],
 		materialLabel: MATERIAL_LABEL,
-		material: topicChatToolsVariables,
+		material: { ...topicChatToolsVariables, attachments: toAttachmentLabels(topicChatToolsVariables.attachments) },
 	})
 	return { description, vars: topicChatToolsVariables, assert: [toolCallAssertion, ...rubricAssertions] }
 }
 
-// fail the check unless the expected tool was called with the expected input and every other call was a search
-function gradeToolCalls(turnOutput: string, expectedToolCall: TopicChatToolsCase["expectedToolCall"]): GradingResult {
+// the kind and name of each of a case's attachments, so the grader reads what was attached and never an image's bytes
+function toAttachmentLabels(attachments: TopicChatToolsCase["attachments"]): string[] | undefined {
+	return attachments?.map((attachment) => `${attachment.kind}: ${attachment.name}`)
+}
+
+// fail the check unless the expected tool was called with the expected input and every other call was a search, or a
+// preview where the case allows one
+function gradeToolCalls(
+	turnOutput: string,
+	expectedToolCall: TopicChatToolsCase["expectedToolCall"],
+	isPreviewAllowed: boolean,
+): GradingResult {
 	const { toolCalls } = JSON.parse(turnOutput) as TopicChatToolsTurn
 
-	// a call to anything but the expected tool or a search fails the check
+	// a call to anything but the expected tool, a search, or an allowed preview fails the check
 	const expectedToolName = expectedToolCall?.toolName
+	const allowedToolNames = [SEARCH_TOOL_NAME, ...(isPreviewAllowed ? PREVIEW_TOOL_NAMES : [])]
 	const unexpectedToolCall = toolCalls.find(
-		(toolCall) => toolCall.toolName !== expectedToolName && toolCall.toolName !== SEARCH_TOOL_NAME,
+		(toolCall) => toolCall.toolName !== expectedToolName && !allowedToolNames.includes(toolCall.toolName),
 	)
 	if (unexpectedToolCall) {
 		return toGradingResult(

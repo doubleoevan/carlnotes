@@ -1,7 +1,9 @@
-// streaming a chat turn's reply to the user, then saving its row, its topic draft, and its sent attachments
+// streaming a chat turn's reply to the user, then saving its row, the proposal it leaves standing, its topic draft, and
+// its sent attachments
 import { toChatReplyLineText } from "@shared/contracts/chat"
 import { reportError } from "@shared/monitoring"
 import type { ChatAttachment } from "@shared/payloads"
+import type { TopicDraft } from "@shared/topicPayloads"
 import type { Context } from "hono"
 import { stream } from "hono/streaming"
 import { type ChatReplyStream, isBudgetRejection, SPENT_BUDGET_REJECTION } from "../../worker"
@@ -9,6 +11,7 @@ import type { AnalyticsProperties } from "../currentUser"
 import type { ChatTurnToolCalls } from "../tool/chatTools"
 import { saveTopicDraft } from "../topic/topicDrafts"
 import { storeTopicChatAttachments } from "./attachments"
+import { recordChatProposal } from "./chatProposals"
 import { type ChatPage, saveChatTurn, toChatPageId } from "./chatTurns"
 import { saveLinkPreviews } from "./linkPreviews"
 import { writeReplyStream } from "./replyStream"
@@ -28,14 +31,19 @@ export type StreamedChatTurn = {
 	// the properties that the analytics event is sent with, and the LiteLLM key for the attachment summaries
 	analyticsProperties: AnalyticsProperties
 	litellmApiKey: string
+	// the new-topic chat's draft as the turn started, and the tokens the agreement check spent before the reply
+	topicDraft?: TopicDraft
+	agreementTokens: number
 }
 
 /** Streams a chat reply to the user, then saves the chat turn whether the stream finished or broke. */
 export function streamChatTurn(context: Context, chatTurn: StreamedChatTurn): Response {
 	return stream(context, async (writeStream) => {
-		// forward the reply, with the tool calls as each tool returns
+		// forward the reply, with the tool calls as each tool returns. only a reply that finished leaves a proposal
+		let isReplyFinished = false
 		try {
 			await writeReplyStream(writeStream, chatTurn.chatReply, chatTurn.toolCalls)
+			isReplyFinished = true
 		} catch (error) {
 			// log the broken stream. it still spent tokens, so the save below still runs
 			console.error(`chat stream failed for ${toChatPageId(chatTurn.page)}`, error)
@@ -56,7 +64,7 @@ export function streamChatTurn(context: Context, chatTurn: StreamedChatTurn): Re
 		}
 
 		// save the spend whether the stream finished or broke. a partial chat turn is never free
-		const chatTurnId = await saveFinishedChatTurn(chatTurn)
+		const chatTurnId = await saveFinishedChatTurn(chatTurn, isReplyFinished)
 
 		// store the topic draft that the chat turn wrote. a chat turn that created the topic already deleted it
 		if (chatTurn.toolCalls.topicDraft && !chatTurn.toolCalls.createdTopicId) {
@@ -84,17 +92,18 @@ export function streamChatTurn(context: Context, chatTurn: StreamedChatTurn): Re
 	})
 }
 
-// save the finished chat turn's spend and text, and fetch the answer's link preview in the background.
-// return null if the chat turn stored no text or the save failed
-async function saveFinishedChatTurn(chatTurn: StreamedChatTurn): Promise<string | null> {
+// save the finished chat turn's spend and text, record the proposal a finished reply leaves standing, and fetch the
+// answer's link preview in the background. return null if the chat turn stored no text or the save failed
+async function saveFinishedChatTurn(chatTurn: StreamedChatTurn, isReplyFinished: boolean): Promise<string | null> {
 	try {
-		// save the chat turn. a topic tool call keeps the chat turn's text even if the gate rejects persistence
+		// save the chat turn, the agreement check's tokens included. a topic save keeps the chat turn's text even if the
+		// gate rejects persistence
 		const { text, totalTokens, searchCount, toolCalls } = await chatTurn.chatReply.completion
 		const isChatTurnPersisted = chatTurn.isPersisted || chatTurn.toolCalls.count > 0
 		const savedChatTurnId = await saveChatTurn({
 			userId: chatTurn.userId,
 			page: chatTurn.page,
-			totalTokens,
+			totalTokens: totalTokens + chatTurn.agreementTokens,
 			searchCount,
 			isPersisted: isChatTurnPersisted,
 			question: chatTurn.question,
@@ -103,6 +112,20 @@ async function saveFinishedChatTurn(chatTurn: StreamedChatTurn): Promise<string 
 			isSpoken: chatTurn.isSpoken,
 			analyticsProperties: chatTurn.analyticsProperties,
 		})
+
+		// record the proposal the turn leaves standing. a failed record is reported and the save goes on
+		if (isReplyFinished && savedChatTurnId) {
+			await recordChatProposal({
+				userId: chatTurn.userId,
+				page: chatTurn.page,
+				chatTurnId: savedChatTurnId,
+				chatToolCalls: toolCalls,
+				topicDraft: chatTurn.toolCalls.topicDraft ?? chatTurn.topicDraft,
+			}).catch((error: unknown) => {
+				console.error(`recording the proposal failed for ${toChatPageId(chatTurn.page)}`, error)
+				reportError(error, "chat", { topicId: toChatPageId(chatTurn.page) })
+			})
+		}
 
 		// fetch the answer's first link preview card in the background, like the question's
 		if (isChatTurnPersisted) {

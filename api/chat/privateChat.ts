@@ -15,16 +15,12 @@ import { topicLimit } from "../authorization"
 import { toBodyLimit, toSignedOutRejection } from "../bodyLimit"
 import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
-import {
-	type ChatTurnToolCalls,
-	toChatTopicTools,
-	toOpenNewTopicChatTool,
-	toTopicEditPreviewTools,
-} from "../tool/chatTools"
-import { toNewTopicChatTools, toSuggestTopicSourcesTool } from "../tool/newTopicChatTools"
+import { type ChatTurnToolCalls, toOpenNewTopicChatTool, toTopicEditPreviewTools } from "../tool/chatTools"
+import { toNewTopicChatTools, toProposeNewTopicTool, toSuggestTopicSourcesTool } from "../tool/newTopicChatTools"
 import { deleteTopicDraft, loadTopicDraft } from "../topic/topicDrafts"
-import { resolveChatAttachments } from "./attachments"
 import { loadKeptTopicAttachments } from "./chatAttachmentReads"
+import { resolveChatAttachments } from "./chatAttachmentScreening"
+import { answerChatProposal } from "./chatProposals"
 import {
 	authorizeChatTurn,
 	authorizeNewTopicChatTurn,
@@ -128,8 +124,8 @@ async function answerChatTurn(
 ): Promise<Response> {
 	// read each attached file into its text and reject the chat turn with a message if a file cannot be read
 	const { question, history, attachments, isSpoken } = chatTurnPayload
-	const chatAttachments = await resolveChatAttachments(attachments)
-	if (chatAttachments === null) {
+	const resolvedChatAttachments = await resolveChatAttachments(attachments)
+	if (resolvedChatAttachments === null) {
 		return context.json({ error: "That file couldn't be read." }, 422)
 	}
 
@@ -140,10 +136,28 @@ async function answerChatTurn(
 	// the LiteLLM key that the chat turn bills, created first if the user has none
 	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId)
 
-	// stream the reply from the page's own material: one topic, every topic that the team holds, or the topic draft.
-	// the tools record what they did in the tool calls
+	// what the tools and the server record, and the request's analytics properties
 	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
 	const analyticsProperties = toAnalyticsProperties(context)
+
+	// take the proposal this message answers, and apply it if the message agrees. only the new-topic chat and a topic
+	// the user may edit hold proposals
+	const isProposalPage = page.newTopic || (page.topicId !== undefined && authorization.canEditTopic)
+	const chatProposalResult = isProposalPage
+		? await answerChatProposal({
+				userId,
+				page,
+				question,
+				history,
+				topicDraft,
+				toolCalls,
+				analyticsProperties,
+				litellmApiKey,
+			})
+		: undefined
+
+	// stream the reply from the page's own material: one topic, every topic that the team holds, or the topic draft.
+	// the tools record what they did in the tool calls, after any save the server made
 	const chatReply = await streamChatReply({
 		...toChatTurnTools({
 			userId,
@@ -161,11 +175,13 @@ async function answerChatTurn(
 		leaderTeams: authorization.leaderTeams,
 		question,
 		history,
-		chatAttachments,
+		chatAttachments: resolvedChatAttachments.chatAttachments,
 		userId,
 		isTopicOwner: authorization.isTopicOwner,
 		isSpoken,
 		litellmApiKey,
+		serverToolCalls: chatProposalResult?.serverToolCalls,
+		proposalOutcome: chatProposalResult?.proposalOutcome,
 	})
 	if (!chatReply) {
 		return context.json({ error: "not found" }, 404)
@@ -176,18 +192,20 @@ async function answerChatTurn(
 		void saveLinkPreviews(question).catch((error) => console.error("chat link preview failed", error))
 	}
 
-	// stream the reply to the user. the stored question names its attachments
+	// stream the reply to the user. the stored question names its attachments, and a withheld image is never stored
 	return streamChatTurn(context, {
 		chatReply,
 		userId,
 		page,
 		question: withAttachmentNote(question, attachments),
-		attachments,
+		attachments: resolvedChatAttachments.storableAttachments,
 		isPersisted: authorization.isPersisted,
 		isSpoken,
 		toolCalls,
 		analyticsProperties,
 		litellmApiKey,
+		topicDraft,
+		agreementTokens: chatProposalResult?.agreementTokens ?? 0,
 	})
 }
 
@@ -206,7 +224,12 @@ async function toNewTopicChatDraft(userId: string, browserTopicDraft?: TopicDraf
 // the tools that a chat turn offers, in the fields that the reply reads them from
 type ChatTurnTools = Pick<
 	ChatTurnInput,
-	"tools" | "openNewTopicChatTool" | "proposeTopicEditTool" | "cancelTopicEditTool" | "suggestSourcesTool"
+	| "tools"
+	| "openNewTopicChatTool"
+	| "proposeTopicEditTool"
+	| "cancelTopicEditTool"
+	| "suggestSourcesTool"
+	| "proposeNewTopicTool"
 >
 
 // what one chat turn's tools are bound to
@@ -219,7 +242,7 @@ type ToChatTurnToolsOptions = {
 	topicDraft?: TopicDraft
 }
 
-// pick a chat turn's tools: the draft tools for the new-topic chat, the edit tools for an editor on a topic,
+// pick a chat turn's tools: the draft tools for the new-topic chat, the preview tools for an editor on a topic,
 // and the tool that opens the new-topic chat everywhere else
 function toChatTurnTools({
 	userId,
@@ -236,6 +259,7 @@ function toChatTurnTools({
 		return {
 			tools: toNewTopicChatTools(newTopicToolBinding),
 			suggestSourcesTool: toSuggestTopicSourcesTool(newTopicToolBinding),
+			proposeNewTopicTool: toProposeNewTopicTool(),
 		}
 	}
 
@@ -244,13 +268,8 @@ function toChatTurnTools({
 	if (!canEditTopic || !page.topicId) {
 		return { openNewTopicChatTool }
 	}
-	// add the edit tools for an editor on a topic,
-	// and the tools that show a proposed change on the topic's card and take it back off
-	return {
-		openNewTopicChatTool,
-		tools: toChatTopicTools({ userId, topicId: page.topicId, toolCalls, analyticsProperties }),
-		...toTopicEditPreviewTools({ toolCalls }),
-	}
+	// add the tools that show a proposed change on the topic's card and take it back off for an editor on a topic
+	return { openNewTopicChatTool, ...toTopicEditPreviewTools({ toolCalls }) }
 }
 
 // how many more topics the plan allows, as the prompt states it. an admin's unlimited marker becomes no limit at all

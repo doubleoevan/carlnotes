@@ -34,11 +34,18 @@ export type ChatTurnInput = {
 	// the tools this turn offers: the edit tools to a user who may edit the topic, the draft tools to the new-topic chat
 	tools?: Record<string, Tool>
 	// the tools that save nothing, all bound outside tools so a consent's forced call can never pick one:
-	// open the new-topic chat, show a proposed change on the topic's card, take it back off, and suggest sources
+	// open the new-topic chat, show a proposed change on the topic's card, take it back off, suggest sources, and
+	// propose creating the topic from the draft
 	openNewTopicChatTool?: Tool
 	proposeTopicEditTool?: Tool
 	cancelTopicEditTool?: Tool
 	suggestSourcesTool?: Tool
+	proposeNewTopicTool?: Tool
+	// the calls the server made before the reply, applying or cancelling the proposal this message answered,
+	// replayed after the question so the reply continues from them
+	serverToolCalls?: ChatToolCall[]
+	// what happened to the last proposal this turn, in one line the private chat's prompt includes
+	proposalOutcome?: string
 	// the new-topic chat, bound to no topic and no team, and the draft its turn was sent with
 	newTopic?: boolean
 	topicDraft?: TopicDraft
@@ -82,12 +89,14 @@ export function isConsent(question: string): boolean {
 }
 
 /**
- * The conversation as model messages, ending on the user's latest question and whatever they attached to it.
+ * The conversation as model messages, ending on the user's latest question and whatever they attached to it,
+ * then the calls the server made before the reply, if it made any.
  */
 export function toModelMessages(
 	history: ChatHistoryTurn[],
 	question: string,
 	attachments: ChatAttachment[] = [],
+	serverToolCalls: ChatToolCall[] = [],
 ): ModelMessage[] {
 	// limit the history the api client sends, so no user can inflate what one chat turn costs
 	const includedHistory = history.slice(-CHAT_HISTORY_TURNS)
@@ -104,7 +113,9 @@ export function toModelMessages(
 		}
 		return [{ role: "user", content: chatTurn.question }, ...toAnswerModelMessages(chatTurn, index)]
 	})
-	return [...conversation, { role: "user", content: toUserContent(question, attachments) }]
+	// the server's calls replay after the question, keyed apart from every history call
+	const serverToolCallMessages = serverToolCalls.length > 0 ? toToolCallModelMessages(serverToolCalls, "server") : []
+	return [...conversation, { role: "user", content: toUserContent(question, attachments) }, ...serverToolCallMessages]
 }
 
 // an attachment name flattened onto one line
@@ -135,9 +146,14 @@ function toAnswerModelMessages(chatTurn: ChatHistoryTurn, chatTurnIndex: number)
 	if (toolCalls.length === 0) {
 		return [{ role: "assistant", content: chatTurn.answer }]
 	}
+	return [...toToolCallModelMessages(toolCalls, String(chatTurnIndex)), { role: "assistant", content: chatTurn.answer }]
+}
+
+// tool calls as one assistant message of calls and one tool message of their results
+function toToolCallModelMessages(toolCalls: ChatToolCall[], toolCallIdPrefix: string): ModelMessage[] {
 	// key each tool call by its place in the conversation. the stored calls keep no id of their own, and a
 	// provider rejects a request where two calls share one id
-	const toolCallIds = toolCalls.map((_toolCall, index) => `${chatTurnIndex}-${index}`)
+	const toolCallIds = toolCalls.map((_toolCall, index) => `${toolCallIdPrefix}-${index}`)
 	return [
 		{
 			role: "assistant",
@@ -157,6 +173,5 @@ function toAnswerModelMessages(chatTurn: ChatHistoryTurn, chatTurnIndex: number)
 				output: { type: "text" as const, value: toolCall.output },
 			})),
 		},
-		{ role: "assistant", content: chatTurn.answer },
 	]
 }

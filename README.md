@@ -202,27 +202,34 @@ and the storing instance still delivers to its own subscribers. A note's stream 
 LLM Guard screens untrusted text before any model reads it, protecting the app from prompt injection. A fetched page or
 an uploaded document may include instructions aimed at the model. LLM Guard runs in Python, so it is its own container:
 the official `llm-guard-api` image, pinned to one version in `docker-compose.yml` and checked weekly for updates by [a
-GitHub Action](.github/workflows/llm-guard-update.yml). Locally it is only reachable from your own machine, since it
-accepts arbitrary text with no auth of its own. In production it is its own Northflank service. The app finds it through
-one value, `LLM_GUARD_URL`. Unset it and screening turns off while everything else behaves the same.
+GitHub Action](.github/workflows/llm-guard-update.yml). Locally `carl-up` starts it with the rest of the Docker infra,
+reachable only from your own machine, since it accepts arbitrary text with no auth of its own. Its container is limited
+to 5 GB, so give Docker Desktop 10 GB of memory to run it beside the rest of the stack. It restarts on its own if it is
+killed, and nothing waits on its model download. Production runs without it, since the scanner outgrows Northflank's
+ephemeral storage limit. The app finds it through one value, `LLM_GUARD_URL`. Unset it, as production does, and
+screening turns off while everything else behaves the same.
 
-Two kinds of text are screened, each at its entry point:
+Three kinds of text are screened, each at its entry point:
 
 - **A document that a user gives us** — topic and chat attachments, before context is generated. Detectors: prompt
   injection, secrets, invisible text, adult content, toxicity.
 - **A fetched page** — url Sources, before the page is shown or scored. The same set, minus secrets.
+- **A chat image** — the text the image shows, read in the app with text recognition and screened as a document. A flagged image is
+  withheld from a private chat turn, and a team room post that includes one is rejected. With `LLM_GUARD_URL` unset no
+  image text is read at all.
 
 Each screen is one HTTP call with a 2.5-second timeout, and it never blocks the pipeline: on failure the text passes
 through unflagged. The prompt loader's unconditional untrusted-data fence still applies, and Exa always filters for
 moderate content.
 
 The scanner also redacts personal details in place, so even a document can come back rewritten. Callers must use the
-returned text. A detector flags content at a score of 0.8 or above. Measured with `bun run eval:review-pipeline --guard-only`
-on 2026-10-05, that threshold flags 4 of 10 articles that merely *discuss* prompt injection and catches 15
-of 16 known attacks. A long article can also take a CPU scanner past the 2.5-second timeout, where the screen fails
-open. The false positives and the timeouts need fixing before the scanner screens production pages. The update check
-boots each new release, runs that eval, and files an issue with the measured false-positive and catch rates needed to
-decide whether to upgrade.
+returned text. A detector flags content at a score of 0.8 or above. Measured with
+`bun run eval:review-pipeline --guard-only` on 2026-10-17, that threshold flags 4 of 10 articles that merely *discuss*
+prompt injection and catches 15 of 16 known attacks. On images it catches the instruction image and also flags the benign screenshot of an article about
+injection, the same false positive. A long article can also take a CPU scanner past the 2.5-second timeout, where the
+screen fails open. The false positives and the timeouts need fixing before the scanner screens production pages. The
+update check boots each new release, runs that eval, and files an issue with the measured false-positive and catch rates
+needed to decide whether to upgrade.
 
 ### Caching at the edge
 
@@ -306,7 +313,7 @@ eval costs cents to a dollar a run, and the review pipeline's cost depends on it
 ```bash
 bun run eval:scan-report --repeat 3                 # run each case three times and print a pass rate per case
 bun run eval:review-pipeline --with-examples        # score with the topic's rated and bookmarked pages as examples
-bun run eval:review-pipeline --guard-only           # only LLM Guard's false-positive and catch rates, with no model spend
+bun run eval:review-pipeline --guard-only           # only LLM Guard's false-positive and catch rates on text and images, with no model spend
 ```
 
 A review pipeline fixture is exported from the database that holds a public topic's ratings, read-only, and its page
@@ -337,7 +344,7 @@ bun install
 bun run dev          # api, ui, temporal, and worker together (concurrently, colored per process); run carl-up first for the Docker infra
                      # `mkdir -p logs && bun run dev 2>&1 | tee logs/dev.log` keeps a copy to tail from another shell; logs/ is gitignored
                      # every line is prefixed with its process, so `grep '^\[api\]' logs/dev.log` reads one of them
-bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server, Redis) and create a limited dev key; carl-down stops it
+bun run carl-up      # bring up the Docker infra (litellm proxy, temporal dev server, Redis, llm-guard) and create a limited dev key; carl-down stops it
                      # scans run as Temporal workflows, so dev:temporal must be up for any scan to happen, not just for attachments
 bun run dev:ui       # Vite dev server (UI); wraps itself in doppler run
 bun run dev:api      # Hono API; wraps itself in doppler run for DATABASE_URL; the Vite dev server proxies /api, /mcp, and the api's own pages and documents here

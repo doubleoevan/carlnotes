@@ -1,6 +1,6 @@
 // the podcast episode speech model, the episode lengths, a cover's key and path, the show and host names,
 // and a turn's transcript text
-import { toHmacDigest } from "./hmac"
+import { toAuthSecretSignature } from "./hmac"
 
 // the Gemini speech model that records episodes.
 // PODCAST_SPEECH_MODEL names another model, and an empty value turns podcast episodes off
@@ -38,11 +38,11 @@ export type PodcastCover = { kind: "show" | "episode"; id: string; title: string
  */
 export function toPodcastCoverKey({ kind, id, title }: PodcastCover): string {
 	// key the hash with the app's auth secret, so that only the app can compute a cover's url
-	const secret = Bun.env.BETTER_AUTH_SECRET
-	if (!secret) {
-		throw new Error("BETTER_AUTH_SECRET must be set to sign podcast cover urls")
-	}
-	const coverHash = toHmacDigest({ value: JSON.stringify([kind, id, title]), secret, encoding: "hex" })
+	const coverHash = toAuthSecretSignature({
+		value: JSON.stringify([kind, id, title]),
+		purpose: "podcast cover urls",
+		encoding: "hex",
+	})
 	return coverHash.slice(0, 32)
 }
 

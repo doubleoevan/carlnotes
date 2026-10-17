@@ -35,27 +35,33 @@ export type TopicSweepSummary = { scheduled: number; started: number; skippedOve
 
 /**
  * Runs one scheduled sweep under its claim or returns null if another sweep holds the claim.
+ * A sweep that loses its claim stops before its next stage or Topic and rejects with a ClaimLostError.
  */
 export function runScheduledTopicScans(): Promise<TopicSweepSummary | null> {
 	return runWithClaim({ claimName: TOPIC_SWEEP_CLAIM, runTask: sweepScheduledTopics })
 }
 
 // one sweep. dispatch what was never started, close out what went quiet, screen new Sources, report the queue,
-// then start each scheduled Topic's Scan
-async function sweepScheduledTopics(): Promise<TopicSweepSummary> {
+// then start each scheduled Topic's Scan. each stage first checks that the sweep still holds its claim
+async function sweepScheduledTopics(signal: AbortSignal): Promise<TopicSweepSummary> {
 	// start anything that was opened and never dispatched, then close out anything dispatched that has gone quiet
+	signal.throwIfAborted()
 	await startUndispatchedScans()
+	signal.throwIfAborted()
 	await failStaleScans()
 
 	// a Source row is written before its llm-guard screen starts
+	signal.throwIfAborted()
 	await screenPendingSources()
 
 	// report a scan queue that nothing polls, and a backlog past its limit, and size this sweep's dispatch by the backlog
+	signal.throwIfAborted()
 	const scanQueueDescription = await reportScanQueue()
 	const dispatchableScanCount = toDispatchableScanCount(scanQueueDescription)
 
 	// load the scheduled Topics, the daily Topics that each owner's plan still runs,
 	// and the owners whose key budget is spent. then start the scheduled Topics' Scans
+	signal.throwIfAborted()
 	const scheduledTopics = await db.select().from(topics).where(toScheduledTopicFilter(new Date()))
 	const [dailyTopicIdsByOwner, budgetExhaustedOwnerIds] = await Promise.all([
 		loadDailyTopicIdsByOwner(scheduledTopics),
@@ -66,6 +72,7 @@ async function sweepScheduledTopics(): Promise<TopicSweepSummary> {
 		dailyTopicIdsByOwner,
 		budgetExhaustedOwnerIds,
 		dispatchableScanCount,
+		signal,
 	})
 
 	// log a summary line for the sweep
@@ -78,24 +85,27 @@ async function sweepScheduledTopics(): Promise<TopicSweepSummary> {
 }
 
 // the scheduled Topics, the daily Topics that each owner's plan still runs, the owners whose key budget is spent,
-// and how many Scans this sweep may start, unbounded when unset
+// how many Scans this sweep may start, unbounded when unset, and the signal that the sweep's claim aborts
 export type StartScheduledTopicScansOptions = {
 	scheduledTopics: Topic[]
 	dailyTopicIdsByOwner: Map<string, Set<string>>
 	budgetExhaustedOwnerIds: Set<string>
 	dispatchableScanCount?: number
+	signal?: AbortSignal
 }
 
 /**
  * Starts a Scan for each scheduled Topic within its owner's quota, daily topic limit, and budget.
  * A Topic whose owner's budget is spent gets a failed Scan instead, unless a Scan of that Topic is still running.
  * Returns what the sweep did. Each owner's remaining scan count is read once and lowered as that owner's Scans start.
+ * A sweep whose claim is lost stops before its next Topic.
  */
 export async function startScheduledTopicScans({
 	scheduledTopics,
 	dailyTopicIdsByOwner,
 	budgetExhaustedOwnerIds,
 	dispatchableScanCount = Number.POSITIVE_INFINITY,
+	signal,
 }: StartScheduledTopicScansOptions): Promise<TopicSweepSummary> {
 	// what the sweep does, and each owner's remaining scan count, read once per sweep
 	const topicSweepSummary = emptyTopicSweepSummary(scheduledTopics.length)
@@ -103,6 +113,9 @@ export async function startScheduledTopicScans({
 
 	// start a Scan for each scheduled Topic within its owner's quota, daily topic limit, and budget
 	for (const topic of scheduledTopics) {
+		// stop once the sweep's claim is lost
+		signal?.throwIfAborted()
+
 		// leave a Topic for the next sweep once this sweep has started as many Scans as the backlog allows
 		if (topicSweepSummary.started >= dispatchableScanCount) {
 			topicSweepSummary.skippedOverBacklog++
@@ -286,7 +299,7 @@ function isWeekend(now: Date): boolean {
 	return utcDay === 0 || utcDay === 6
 }
 
-// run the claimed sweep, then retry the pending object deletions and report the day's spend once the claim's transaction has ended
+// run the claimed sweep, then retry the pending object deletions and report the day's spend once the claim is released
 async function runSweep(): Promise<void> {
 	await runScheduledTopicScans()
 	await retryPendingObjectDeletions()

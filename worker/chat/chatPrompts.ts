@@ -1,6 +1,6 @@
 // the system prompt each chat reads, built from its template: the topic chat's, the team chat room's, and the
 // new-topic chat's, with the blocks that fill them
-import { toScanFrequenciesSentence } from "@shared/enums"
+import { toMaxTopicFindingsSentence, toScanFrequenciesSentence, toVisibilitiesSentence } from "@shared/enums"
 import { toSourceOptionsSentence } from "@shared/sources"
 import type { TopicDraft, TopicDraftTeam } from "@shared/topicPayloads"
 import { type BuiltPrompt, fetchPromptTemplate } from "../prompts/fetch"
@@ -20,6 +20,9 @@ type ChatFragmentName = "chat-conduct" | "chat-docs-guide" | "chat-open-new-topi
 
 // the topic chat's turn options: the edit block for a turn with the topic tools, and the spoken flag
 type TopicChatPromptOptions = ChatPromptOptions & { editTopicBlock?: string }
+
+// the new-topic chat's options: the spoken flag, and what happened to the last proposal this turn
+type NewTopicChatPromptOptions = ChatPromptOptions & { proposalOutcome?: string }
 
 /**
  * Builds the system prompt from the 'chat-topic.md' template, with everything a user could have written fenced as data.
@@ -103,15 +106,39 @@ async function toSpokenBlock(isSpoken: boolean): Promise<string> {
 	return isSpoken ? toFragmentBlock("chat-spoken") : ""
 }
 
+// the outcome line for a turn whose message answered no proposal
+const NO_PROPOSAL_OUTCOME = "No proposal was waiting on this message."
+
 /**
- * Returns the edit block for a turn with the topic tools, or "None." for a turn without the topic tools.
+ * Returns the edit block for a turn with the topic tools: the saving tools' block in a room, the proposal block with
+ * this turn's proposal outcome in a private chat, or "None." for a turn without the topic tools.
  */
-export async function toEditTopicBlock(tools: ChatTurnInput["tools"]): Promise<string> {
-	if (!tools) {
+export async function toEditTopicBlock(
+	chatTurnInput: Pick<ChatTurnInput, "tools" | "proposeTopicEditTool" | "proposalOutcome">,
+): Promise<string> {
+	// a turn with neither the saving tools nor the preview tools reads the no-edit note
+	if (!chatTurnInput.tools && !chatTurnInput.proposeTopicEditTool) {
 		return EMPTY_EDIT_TOPIC_BLOCK
 	}
-	const { template } = await fetchPromptTemplate("chat-edit-topic")
-	return writePrompt(template, {}, { scanFrequencies: toScanFrequenciesSentence() })
+
+	// the preview rules both blocks share, written first so each block splices them
+	const [previewTopicEditFragment, editTopicFragment] = await Promise.all([
+		fetchPromptTemplate("chat-preview-topic-edit"),
+		fetchPromptTemplate(chatTurnInput.tools ? "chat-edit-topic" : "chat-propose-topic-edit"),
+	])
+	const previewTopicEditBlock = writePrompt(
+		previewTopicEditFragment.template,
+		{},
+		{
+			visibilities: toVisibilitiesSentence(),
+			scanFrequencies: toScanFrequenciesSentence(),
+			maxTopicFindings: toMaxTopicFindingsSentence(),
+		},
+	)
+
+	// the room's block takes no proposal outcome, and writePrompt leaves a value no placeholder asks for unused
+	const proposalOutcome = chatTurnInput.proposalOutcome ?? NO_PROPOSAL_OUTCOME
+	return writePrompt(editTopicFragment.template, {}, { previewTopicEditBlock, proposalOutcome })
 }
 
 /**
@@ -122,7 +149,7 @@ export async function buildNewTopicChatPrompt(
 	topicDraft?: TopicDraft,
 	topicsRemaining?: number,
 	leaderTeams?: TopicDraftTeam[],
-	{ isSpoken = false }: ChatPromptOptions = {},
+	{ isSpoken = false, proposalOutcome = NO_PROPOSAL_OUTCOME }: NewTopicChatPromptOptions = {},
 ): Promise<BuiltPrompt> {
 	const [{ template, name, registryPrompt }, glossaryBlock, docsGuideBlock, spokenBlock] = await Promise.all([
 		fetchPromptTemplate("chat-new-topic"),
@@ -144,6 +171,8 @@ export async function buildNewTopicChatPrompt(
 			docsGuideBlock,
 			spokenBlock,
 			scanFrequencies: toScanFrequenciesSentence(),
+			maxTopicFindings: toMaxTopicFindingsSentence(),
+			proposalOutcome,
 		},
 	)
 	return { prompt, name, registryPrompt }

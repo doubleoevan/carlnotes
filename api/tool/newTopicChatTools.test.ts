@@ -1,10 +1,12 @@
-// new-topic chat tool tests for the tool list, the draft writes, the team check before a create, and the tool text
+// new-topic chat tool tests for the tool list, the draft writes, the team check before an agreed create, and the
+// tool text
 import { expect, test } from "bun:test"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"
-import { toBrowserPlatform, toPlatform } from "@shared/userAgent"
+import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import type { ChatTurnToolCalls } from "./chatTools"
 import {
+	createTopicInChat,
 	TEAM_MISSING_TEXT,
 	toCreateTopicReason,
 	toCreateTopicText,
@@ -12,36 +14,29 @@ import {
 	toSuggestionsText,
 } from "./newTopicChatTools"
 
-// the analytics properties a create records, shaped the way the mcp adapter builds them
-const analyticsProperties = {
-	entryPoint: "web" as const,
-	plan: "free",
-	platform: toPlatform(undefined),
-	browserPlatform: toBrowserPlatform(""),
-	isInAppBrowser: false,
-}
-
-// the new-topic chat offers draftTopic and createTopic, and never the suggestion tool
-test("the new-topic chat offers draftTopic and createTopic, without the suggestion tool", () => {
+// the new-topic chat's saving tools are draftTopic alone: no tool creates the topic, and the suggestion tool is bound
+// apart from them
+test("the new-topic chat offers draftTopic and no create tool, without the suggestion tool", () => {
 	const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT }
 	const newTopicTools = toNewTopicChatTools({
 		userId: "user-1",
 		toolCalls: { count: 0, topicSaves: [], topicSaveRejections: [] },
 		topicDraft,
-		analyticsProperties,
+		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
-	expect(Object.keys(newTopicTools)).toEqual(["draftTopic", "createTopic"])
+	expect(Object.keys(newTopicTools)).toEqual(["draftTopic"])
 })
 
 // a public or invite draft that names no team is not created, and carl is told to ask which team the topic goes on
-test("createTopic asks for a team before it creates a public or invite topic", async () => {
+test("an agreed create asks for a team before it creates a public or invite topic", async () => {
 	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
 	const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT, name: "Hoops", prompt: "Pickup games", visibility: "invite" }
-	const newTopicTools = toNewTopicChatTools({ userId: "user-1", toolCalls, topicDraft, analyticsProperties })
-	const createTopicText = await newTopicTools.createTopic?.execute?.(
-		{},
-		{ toolCallId: "call-1", messages: [], context: undefined },
-	)
+	const createTopicText = await createTopicInChat({
+		userId: "user-1",
+		toolCalls,
+		topicDraft,
+		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
+	})
 	expect(createTopicText).toBe(TEAM_MISSING_TEXT)
 	expect(toolCalls.topicSaves).toEqual([])
 })
@@ -58,7 +53,7 @@ test("draftTopic writes the named fields, leaves the rest, and clears on an empt
 		userId: "user-1",
 		toolCalls,
 		topicDraft,
-		analyticsProperties,
+		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
 	await newTopicTools.draftTopic?.execute?.(
 		{ name: "Hoops", visibility: "public" },
@@ -88,7 +83,12 @@ test("draftTopic starts the podcast on, keeps it off once named, and leaves it o
 		delete Bun.env.PODCAST_SPEECH_MODEL
 		const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
 		const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT }
-		const newTopicTools = toNewTopicChatTools({ userId: "user-1", toolCalls, topicDraft, analyticsProperties })
+		const newTopicTools = toNewTopicChatTools({
+			userId: "user-1",
+			toolCalls,
+			topicDraft,
+			analyticsProperties: TEST_ANALYTICS_PROPERTIES,
+		})
 		const toolCallOptions = { toolCallId: "call-1", messages: [], context: undefined }
 
 		// name the podcast off, then write another field
@@ -104,7 +104,7 @@ test("draftTopic starts the podcast on, keeps it off once named, and leaves it o
 			userId: "user-1",
 			toolCalls,
 			topicDraft: draftWithoutPodcast,
-			analyticsProperties,
+			analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 		})
 		await toolsWithoutPodcast.draftTopic?.execute?.({ name: "Hoops" }, toolCallOptions)
 		expect(draftWithoutPodcast.isPodcastEnabled).toBeUndefined()

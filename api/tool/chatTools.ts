@@ -1,6 +1,7 @@
 // the chat adapters for a topic: the edit tools bound to one chat turn's topic, and the wording every adapter shares
 import type { TopicToolCalls } from "@shared/contracts/chat"
 import {
+	type AddTopicSourcePayload,
 	addTopicSourcePayload,
 	proposeTopicEditPayload,
 	removeTopicSourcePayload,
@@ -22,12 +23,15 @@ import {
 // what the topic tools did in one chat turn: what the api client is told, plus how many tools were called
 export type ChatTurnToolCalls = TopicToolCalls & { count: number }
 
-// the confirmation rule every tool description ends with
+// what cancelling a proposed change returns, whether carl cancels it or the user's message declines it
+export const TOPIC_EDIT_CANCELLED_TEXT = "The preview is off the card. The topic reads as it is saved."
+
+// the confirmation rule every room tool description ends with
 export const CONFIRMATION_RULE =
 	"Call this only in a turn after the reader said yes to the exact change you proposed in an earlier turn."
 
 // what one chat turn's tools are bound to, and the request's analytics properties if a request is behind the turn
-type EditTopicToolBinding = {
+export type EditTopicToolBinding = {
 	userId: string
 	topicId: string
 	toolCalls: ChatTurnToolCalls
@@ -107,122 +111,155 @@ export function toCancelTopicEditTool({ toolCalls }: { toolCalls: ChatTurnToolCa
 		execute: async () => {
 			// leave this call out of the count that keeps a chat turn's text
 			toolCalls.isTopicEditCancelled = true
-			return "The preview is off the card. The topic reads as it is saved."
+			return TOPIC_EDIT_CANCELLED_TEXT
 		},
 	})
 }
 
 // the tool that rewrites the topic prompt
-function toUpdateTopicPromptTool({ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding): Tool {
+function toUpdateTopicPromptTool(editTopicToolBinding: EditTopicToolBinding): Tool {
 	return tool({
 		description: `Rewrite what the reader is looking for, the prompt every brew scores against. ${CONFIRMATION_RULE}`,
 		inputSchema: updateTopicPromptPayload,
-		execute: async ({ prompt }) => {
-			// count the call before the write. a failed write still counts
-			toolCalls.count += 1
-			const updateTopicPromptResult = await updateTopicPrompt({
-				userId,
-				topicId,
-				prompt,
-				origin: "chat",
-				analyticsProperties,
-			})
-			if (updateTopicPromptResult.status !== "saved") {
-				toolCalls.topicSaveRejections.push(
-					toRejectionToast("save the prompt", toGateReason(updateTopicPromptResult.status)),
-				)
-				return toRejectionText(updateTopicPromptResult.status)
-			}
-			// list the save for the toast
-			toolCalls.topicSaves.push("Carl saved the new prompt.")
-			return `Saved the new prompt for ${updateTopicPromptResult.topicName}.`
-		},
+		execute: ({ prompt }) => updateTopicPromptInChat(editTopicToolBinding, prompt),
 	})
 }
 
 // the tool that changes the topic's fields
-function toUpdateTopicFieldsTool({ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding): Tool {
+function toUpdateTopicFieldsTool(editTopicToolBinding: EditTopicToolBinding): Tool {
 	return tool({
 		description: `Change the topic's title, its tags, its visibility (public, invite, or private), how often it brews (daily, weekdays, or weekly), the time of day it brews as HH:MM and the day a weekly brew runs, or how many findings a brew keeps (5, 10, 15, or 20).${toPodcastFieldDescription()} Name only the fields to change. ${CONFIRMATION_RULE}`,
 		inputSchema: z.object(toUpdateTopicFieldsShape()),
-		execute: async (topicFields) => {
-			toolCalls.count += 1
-			const updateTopicFieldsResult = await updateTopicFields({
-				userId,
-				topicId,
-				topicFields,
-				promptVersionOrigin: "chat",
-				analyticsProperties,
-			})
-			if (updateTopicFieldsResult.status !== "saved") {
-				toolCalls.topicSaveRejections.push(
-					toRejectionToast("save the settings", toUpdateTopicFieldsReason(updateTopicFieldsResult)),
-				)
-				return toUpdateTopicFieldsText(updateTopicFieldsResult)
-			}
-			// list the save for the toast
-			toolCalls.topicSaves.push("Carl saved the topic's settings.")
-			return `Saved the settings for ${updateTopicFieldsResult.topicName}.`
-		},
+		execute: (topicFields) => updateTopicFieldsInChat(editTopicToolBinding, topicFields),
 	})
 }
 
 // the tool that adds a source
-function toAddTopicSourceTool({ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding): Tool {
+function toAddTopicSourceTool(editTopicToolBinding: EditTopicToolBinding): Tool {
 	return tool({
 		description: `Add somewhere to read for this topic: a default source key, or a custom source option with its value. Returns what one more source is projected to cost. ${CONFIRMATION_RULE}`,
 		inputSchema: addTopicSourcePayload,
-		execute: async ({ sourceOption, value }) => {
-			// count the call before the write. a failed write still counts
-			toolCalls.count += 1
-			const addTopicSourceResult = await addTopicSource({
-				userId,
-				topicId,
-				sourceOption,
-				value,
-				origin: "chat",
-				analyticsProperties,
-			})
-			// list the save, or what stopped it, for the toast
-			if (addTopicSourceResult.status === "saved") {
-				toolCalls.topicSaves.push(`Carl added ${addTopicSourceResult.topicSourceLabel}.`)
-			} else {
-				toolCalls.topicSaveRejections.push(toAddTopicSourceToast(addTopicSourceResult))
-			}
-			return toAddTopicSourceText(addTopicSourceResult)
-		},
+		execute: (topicSource) => addTopicSourceInChat(editTopicToolBinding, topicSource),
 	})
 }
 
 // the tool that removes a source
-function toRemoveTopicSourceTool({ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding): Tool {
+function toRemoveTopicSourceTool(editTopicToolBinding: EditTopicToolBinding): Tool {
 	return tool({
 		description: `Drop one of this topic's sources by the id shown in brackets after it in the sources block. ${CONFIRMATION_RULE}`,
 		inputSchema: removeTopicSourcePayload,
-		execute: async ({ sourceId }) => {
-			// count the call before the write. a failed write still counts
-			toolCalls.count += 1
-			const removeTopicSourceResult = await removeTopicSource({
-				userId,
-				topicId,
-				sourceId,
-				origin: "chat",
-				analyticsProperties,
-			})
-			if (removeTopicSourceResult.status !== "saved") {
-				toolCalls.topicSaveRejections.push(
-					toRejectionToast("remove that source", toGateReason(removeTopicSourceResult.status)),
-				)
-				return toRejectionText(removeTopicSourceResult.status)
-			}
-			// skip the toast for a row already gone
-			if (!removeTopicSourceResult.topicSourceLabel) {
-				return "That source was already gone."
-			}
-			toolCalls.topicSaves.push(`Carl removed ${removeTopicSourceResult.topicSourceLabel}.`)
-			return `Removed ${removeTopicSourceResult.topicSourceLabel}.`
-		},
+		execute: ({ sourceId }) => removeTopicSourceInChat(editTopicToolBinding, sourceId),
 	})
+}
+
+/**
+ * Rewrites the topic prompt from a chat, listing the save or its rejection for the toast, and returns what carl reads.
+ */
+export async function updateTopicPromptInChat(
+	{ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding,
+	prompt: string,
+): Promise<string> {
+	// count the call before the write. a failed write still counts
+	toolCalls.count += 1
+	const updateTopicPromptResult = await updateTopicPrompt({
+		userId,
+		topicId,
+		prompt,
+		origin: "chat",
+		analyticsProperties,
+	})
+	if (updateTopicPromptResult.status !== "saved") {
+		toolCalls.topicSaveRejections.push(
+			toRejectionToast("save the prompt", toGateReason(updateTopicPromptResult.status)),
+		)
+		return toRejectionText(updateTopicPromptResult.status)
+	}
+	// list the save for the toast
+	toolCalls.topicSaves.push("Carl saved the new prompt.")
+	return `Saved the new prompt for ${updateTopicPromptResult.topicName}.`
+}
+
+/**
+ * Changes the topic's fields from a chat, listing the save or its rejection for the toast, and returns what carl reads.
+ */
+export async function updateTopicFieldsInChat(
+	{ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding,
+	topicFields: Parameters<typeof updateTopicFields>[0]["topicFields"],
+): Promise<string> {
+	// count the call before the write. a failed write still counts
+	toolCalls.count += 1
+	const updateTopicFieldsResult = await updateTopicFields({
+		userId,
+		topicId,
+		topicFields,
+		promptVersionOrigin: "chat",
+		analyticsProperties,
+	})
+	if (updateTopicFieldsResult.status !== "saved") {
+		toolCalls.topicSaveRejections.push(
+			toRejectionToast("save the settings", toUpdateTopicFieldsReason(updateTopicFieldsResult)),
+		)
+		return toUpdateTopicFieldsText(updateTopicFieldsResult)
+	}
+	// list the save for the toast
+	toolCalls.topicSaves.push("Carl saved the topic's settings.")
+	return `Saved the settings for ${updateTopicFieldsResult.topicName}.`
+}
+
+/**
+ * Adds a source from a chat, listing the save or what stopped it for the toast, and returns what carl reads.
+ */
+export async function addTopicSourceInChat(
+	{ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding,
+	{ sourceOption, value }: AddTopicSourcePayload,
+): Promise<string> {
+	// count the call before the write. a failed write still counts
+	toolCalls.count += 1
+	const addTopicSourceResult = await addTopicSource({
+		userId,
+		topicId,
+		sourceOption,
+		value,
+		origin: "chat",
+		analyticsProperties,
+	})
+	// list the save, or what stopped it, for the toast
+	if (addTopicSourceResult.status === "saved") {
+		toolCalls.topicSaves.push(`Carl added ${addTopicSourceResult.topicSourceLabel}.`)
+	} else {
+		toolCalls.topicSaveRejections.push(toAddTopicSourceToast(addTopicSourceResult))
+	}
+	return toAddTopicSourceText(addTopicSourceResult)
+}
+
+/**
+ * Removes a source from a chat, listing the save or its rejection for the toast, and returns what carl reads.
+ */
+export async function removeTopicSourceInChat(
+	{ userId, topicId, toolCalls, analyticsProperties }: EditTopicToolBinding,
+	sourceId: string,
+): Promise<string> {
+	// count the call before the write. a failed write still counts
+	toolCalls.count += 1
+	const removeTopicSourceResult = await removeTopicSource({
+		userId,
+		topicId,
+		sourceId,
+		origin: "chat",
+		analyticsProperties,
+	})
+	if (removeTopicSourceResult.status !== "saved") {
+		toolCalls.topicSaveRejections.push(
+			toRejectionToast("remove that source", toGateReason(removeTopicSourceResult.status)),
+		)
+		return toRejectionText(removeTopicSourceResult.status)
+	}
+	// skip the toast for a row already gone
+	if (!removeTopicSourceResult.topicSourceLabel) {
+		return "That source was already gone."
+	}
+	toolCalls.topicSaves.push(`Carl removed ${removeTopicSourceResult.topicSourceLabel}.`)
+	return `Removed ${removeTopicSourceResult.topicSourceLabel}.`
 }
 
 /**

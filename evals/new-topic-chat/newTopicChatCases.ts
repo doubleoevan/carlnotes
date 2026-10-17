@@ -83,6 +83,14 @@ const TITLED_CHAT_TURN: ChatHistoryTurn = {
 	],
 }
 
+// the proposeNewTopic call a read-back makes, with the output that the real tool returns
+const PROPOSE_NEW_TOPIC_CALL: ChatToolCall = {
+	toolName: "proposeNewTopic",
+	input: {},
+	output:
+		"The draft is proposed. Ask the reader whether to create it and wait. Nothing is created until their next message agrees.",
+}
+
 // a draftTopic call with its input, and an output that shortens the draft summary that the real tool returns
 function toDraftTopicCall(draftTopicInput: Partial<TopicDraft>, topicDraft: TopicDraft): ChatToolCall {
 	const topicSources = topicDraft.sources.map((topicSource) => `${topicSource.sourceOption} ${topicSource.value}`)
@@ -182,7 +190,7 @@ export const NEW_TOPIC_CHAT_CASES: NewTopicChatCase[] = [
 			{
 				question:
 					"Keep r/espresso and James Hoffmann's channel. Make it public, on Quiet Coffee Club. No invites, defaults are fine.",
-				answer: `Here's the draft. ${FINISHED_TOPIC_DRAFT.name}: ${FINISHED_TOPIC_DRAFT.prompt} Sources: r/espresso and James Hoffmann's channel. Public, on ${QUIET_COFFEE_TEAM.name}, brewing weekly on Wednesday mornings and keeping ten findings a brew. Say yes and I'll create it.`,
+				answer: `Here's the draft. ${FINISHED_TOPIC_DRAFT.name}: ${FINISHED_TOPIC_DRAFT.prompt} Sources: r/espresso and James Hoffmann's channel. Public, on ${QUIET_COFFEE_TEAM.name}, brewing weekly on Wednesday mornings and keeping ten findings a brew. Want me to create it?`,
 				toolCalls: [
 					toDraftTopicCall(
 						{
@@ -192,6 +200,7 @@ export const NEW_TOPIC_CHAT_CASES: NewTopicChatCase[] = [
 						},
 						FINISHED_TOPIC_DRAFT,
 					),
+					PROPOSE_NEW_TOPIC_CALL,
 				],
 			},
 		],
@@ -200,6 +209,17 @@ export const NEW_TOPIC_CHAT_CASES: NewTopicChatCase[] = [
 		isCreateExpected: true,
 		rubric:
 			"The reader said yes to the draft. Fail the output if the reply does not say that the topic exists and that its first brew is under way.",
+	},
+	{
+		description: "the read-back proposes the topic and creates nothing",
+		history: [TITLED_CHAT_TURN],
+		topicDraft: FINISHED_TOPIC_DRAFT,
+		question:
+			"Keep r/espresso and James Hoffmann's channel. Make it public, on Quiet Coffee Club. No invites, defaults are fine.",
+		isCreateExpected: false,
+		expectedToolName: "proposeNewTopic",
+		rubric:
+			"Every answer is settled. Fail the output if the reply does not read the draft back and ask whether to create it, or if it says the topic exists.",
 	},
 	{
 		description: "a change is written to the draft before it is called saved",

@@ -10,6 +10,7 @@ import { sources, topicEmailSends, topics } from "../db/schema/topics"
 import { users } from "../db/schema/users"
 import { topicVectors } from "../db/schema/vectors"
 import { buildContextPrompt } from "./attach"
+import { buildAgreementPrompt } from "./chat/agreement"
 // the extracted prompt builders, loaded here to prove that each writes its prompt from its Markdown template
 import { buildSearchPrompt } from "./ingest/search"
 import { deleteUserLiteLLMKey } from "./litellm"
@@ -235,10 +236,11 @@ async function scrapedEpisodeCount(episodeUrls: string[]): Promise<number> {
 
 // write each extracted prompt with sample inputs and report whether the registry served them
 async function writeSamplePrompts(): Promise<[string, boolean][]> {
-	// the four single-purpose prompts
+	// the single-purpose prompts
 	const scoreResult = await buildScorePrompt("sample content", "sample topic context", true)
 	const searchResult = await buildSearchPrompt("sample topic context", "sample topic")
 	const contextResult = await buildContextPrompt("sample document text")
+	const agreementResult = await buildAgreementPrompt("sounds good", "frequency: daily")
 
 	// the report prompt renders over a minimal sample scan
 	const sampleFinding = {
@@ -304,6 +306,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		scoreResult,
 		searchResult,
 		contextResult,
+		agreementResult,
 		reportResult,
 		outlineResult,
 		segmentResult,
@@ -315,6 +318,7 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 		["score prompt", scoreResult.prompt],
 		["search prompt", searchResult.prompt],
 		["attachment context prompt", contextResult.prompt],
+		["agreement check prompt", agreementResult.prompt],
 		["scan report prompt", reportResult.prompt],
 		["episode outline prompt", outlineResult.prompt],
 		["episode segment prompt", segmentResult.prompt],

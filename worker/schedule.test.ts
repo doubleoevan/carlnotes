@@ -102,6 +102,29 @@ test("a sweep past its dispatchable scan count leaves the remaining topics for t
 	expect(topicSweepSummary.skippedOverBacklog).toBe(3)
 })
 
+// a sweep whose claim is lost mid-run starts no further Scan and rejects with the claim's error
+test("a sweep whose claim is lost stops before its next topic", async () => {
+	// three topics of one owner, and a start that aborts the sweep's claim after the first Scan starts
+	spyOn(quotas, "scansRemainingToday").mockResolvedValue(10)
+	const claimAbortController = new AbortController()
+	const startedTopicIds: string[] = []
+	spyOn(scan, "startTopicScan").mockImplementation(async (topicId): Promise<scan.TopicScanStart> => {
+		startedTopicIds.push(topicId)
+		claimAbortController.abort(new Error("the scheduled-scan-sweep claim was lost while its task ran"))
+		return { status: "started", scan: {} as never, whenFinished: async () => {} }
+	})
+
+	// the sweep rejects with the claim's error, having started only the first Topic's Scan
+	const sweepPromise = startScheduledTopicScans({
+		scheduledTopics: [toScheduledTopic("topic-0"), toScheduledTopic("topic-1"), toScheduledTopic("topic-2")],
+		dailyTopicIdsByOwner: new Map(),
+		budgetExhaustedOwnerIds: new Set(),
+		signal: claimAbortController.signal,
+	})
+	await expect(sweepPromise).rejects.toThrow("claim was lost")
+	expect(startedTopicIds).toEqual(["topic-0"])
+})
+
 // a scan that Temporal reports as already running spends no quota, and a start that throws an error counts as failed
 test("a running scan spends nothing and a failed start is counted", async () => {
 	// a busy topic and a broken topic under one owner with one remaining scan, and a quiet console

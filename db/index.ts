@@ -9,6 +9,7 @@ import { drizzle } from "drizzle-orm/neon-serverless"
 import { traceQueries } from "./queryTracing"
 import * as billing from "./schema/billing"
 import * as chat from "./schema/chat"
+import * as claims from "./schema/claims"
 import * as columns from "./schema/columns"
 import * as invites from "./schema/invites"
 import * as notes from "./schema/notes"
@@ -50,6 +51,7 @@ traceQueries(connectionPool)
 export const schema = {
 	...billing,
 	...chat,
+	...claims,
 	...columns,
 	...invites,
 	...notes,

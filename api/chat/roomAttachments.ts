@@ -15,7 +15,14 @@ import {
 	toStoredObjectKeys,
 	uploadAttachment,
 } from "../../worker"
-import { contentTypeFromDataUrl, decodeDataUrl, screenAttachmentText, VIDEO_ATTACHMENT_CONTEXT } from "./attachments"
+import { screenImage } from "../../worker/guard"
+import {
+	contentTypeFromDataUrl,
+	decodeDataUrl,
+	reportFlaggedAttachment,
+	screenAttachmentText,
+	VIDEO_ATTACHMENT_CONTEXT,
+} from "./chatAttachmentScreening"
 import { encryptChatText } from "./encryption"
 import { toTopicFilter } from "./roomAccess"
 
@@ -135,7 +142,13 @@ async function prepareChatRoomAttachment(
 		}
 		return { attachment, contextText: screenedText, bytes, contentType }
 	}
-	// an image stores as-is, and its description arrives after the post
+	// an image is screened by the text it shows, and a flagged one rejects the post before anything stores.
+	// a passed image stores as-is, and its description arrives after the post
+	const imageScreenVerdict = await screenImage(bytes)
+	if (imageScreenVerdict.isFlagged) {
+		reportFlaggedAttachment(imageScreenVerdict, "room image", topicId ?? teamId)
+		return null
+	}
 	return { attachment, contextText: "", bytes, contentType: contentTypeFromDataUrl(attachment.dataUrl) }
 }
 
@@ -179,18 +192,36 @@ export async function storeChatRoomAttachment(
 	// an image's description arrives after the post, on the uploader's own key
 	if (preparedAttachment.attachment.kind === "image" && "dataUrl" in preparedAttachment.attachment) {
 		const { dataUrl } = preparedAttachment.attachment
-		void describeChatRoomImage(attachmentId, userId, dataUrl)
+		void describeChatRoomImage({ attachmentId, userId, chatPageId: topicId ?? teamId, dataUrl })
 	}
 }
 
-// the background description of a shared image, filling the row carl's chat turns read
-async function describeChatRoomImage(attachmentId: string, userId: string, dataUrl: string): Promise<void> {
+// the shared image's row, its uploader, the id of the topic or team it was shared on, and its data url
+type DescribeChatRoomImageOptions = { attachmentId: string; userId: string; chatPageId: string; dataUrl: string }
+
+/**
+ * Describes a shared image in the background, filling the row that carl's chat turns read.
+ * The description is screened before the row turns ready, and a flagged one marks the row failed.
+ */
+export async function describeChatRoomImage({
+	attachmentId,
+	userId,
+	chatPageId,
+	dataUrl,
+}: DescribeChatRoomImageOptions): Promise<void> {
 	try {
+		// write the description and screen it. a flagged one marks the row failed, so carl's chat turns never read it
+		const generatedContext = await generateImageContext(dataUrl, await loadOrProvisionUserLiteLLMKey(userId))
+		const screenedImageContext = await screenAttachmentText(generatedContext, "room image description", chatPageId)
+		if (screenedImageContext === null) {
+			await db.update(chatRoomAttachments).set({ status: "failed" }).where(eq(chatRoomAttachments.id, attachmentId))
+			return
+		}
+
 		// the description fills the row's context and marks it ready
-		const context = await generateImageContext(dataUrl, await loadOrProvisionUserLiteLLMKey(userId))
 		await db
 			.update(chatRoomAttachments)
-			.set({ context: encryptChatText(context), status: "ready" })
+			.set({ context: encryptChatText(screenedImageContext), status: "ready" })
 			.where(eq(chatRoomAttachments.id, attachmentId))
 	} catch (error) {
 		// a failed description is saved to the chat room attachment row, so carl's chat turns skip it instead of reading an empty one

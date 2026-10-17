@@ -63,6 +63,13 @@ type ToGateResultOptions = { passedRunCount: number; runCount: number; gatePassR
 // one tool call that a chat turn made, with its input
 export type RecordedToolCall = { toolName: string; input: unknown }
 
+/**
+ * The calls the server made before a turn, as the recorded calls a case reads beside the model's own.
+ */
+export function toRecordedToolCalls(serverToolCalls: RecordedToolCall[]): RecordedToolCall[] {
+	return serverToolCalls.map(({ toolName, input }) => ({ toolName, input }))
+}
+
 // one model-graded check. the metric that names it in the report, and the rubric that the grader applies
 export type CaseRubric = { metric: string; rubric: string }
 

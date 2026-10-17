@@ -196,7 +196,9 @@ LLM_GUARD_TIMEOUT_MS=60000 doppler run --preserve-env -- bun evals/review-pipeli
 ```
 
 Measures LLM Guard's false-positive and catch rates over every fixture's `injectionProse` and `injectionAttacks`, with
-no model calls and no spend. These are the numbers that a scanner upgrade changes, so
+no model calls and no spend. It then reads the text in each fixture's `injectionImages` with text recognition, the way the chat image
+screen does, from the files in `review-pipeline/images/`, and prints the image false-positive and catch rates on lines
+of their own. These are the numbers that a scanner upgrade changes, so
 `.github/workflows/llm-guard-update.yml` checks weekly for a new LLM Guard version, measures a candidate container if
 one appeared, and files the upgrade issue with the result. Guard-only mode needs `LLM_GUARD_URL` set and probes the
 scanner first, so an unreachable scanner fails the run instead of reporting an inaccurate zero. A screen that times out
@@ -316,34 +318,41 @@ yet, and a finding with an instruction to the assistant in its text.
 ## Topic chat tools eval
 
 Each case is one turn of the topic chat for a user who may edit the topic, and the tool call that the turn has to make,
-if any. A solo chat case sends its history as messages, with each earlier turn's tool calls replayed as the app replays
-them, and a team room case sends a question written from the room's transcript by `toModelRoomQuestion`. The turn gets
-the editor's real tools: `proposeTopicEdit` and `cancelTopicEdit` as they are, `openNewTopicChat` in the solo chat only,
-and the saving tools with their real descriptions and schemas but stand-ins for the database writes. A consent forces a saving
-tool the way a chat turn does. Turns are written on `chat-model` and graded on `score-model`.
+if any. A solo chat case runs the private chat's own path. Its history is sent as messages, with each earlier turn's
+tool calls replayed as the app replays them. If the last history turn left a preview standing, the real agreement check
+reads the case's message against it, and an agreed preview is applied through stand-ins for the topic tools' writes and
+recorded as calls of the saving tools, before the turn writes its reply. A solo turn gets `proposeTopicEdit`,
+`cancelTopicEdit`, and `openNewTopicChat`, and no saving tool. A team room case sends a question written from the room's
+transcript by `toModelRoomQuestion`, gets the room's saving tools with their real descriptions and schemas but
+stand-ins for the database writes, and a consent forces a saving tool the way a room turn does. Turns are written on
+`chat-model` and graded on `score-model`.
 
-Every case checks that the turn called the expected tool with the expected input and nothing else but a search, or
-called no tool at all, and a rubric fails a reply that claims an action that no tool call made. A call is recorded only after
-its input passed the tool's schema, since the AI SDK checks the input first. The cases cover a proposed frequency and
-the yes that saves it, a proposed findings count, a source given by url and the yes that adds it, a proposed source
-removal and the yes that removes it, a proposed prompt and the yes that saves it, a decline that takes the preview back
-with `cancelTopicEdit`, a question that calls nothing, an instruction inside a finding that calls nothing, a request
-for another topic, and a request and a yes in the team room.
+Every case checks that the turn called or applied the expected tool with the expected input and nothing else but a
+search, or called no tool at all, or, where the case allows a preview, saved nothing. A rubric fails a reply that claims
+an action that no tool call made. A call is recorded only after its input passed the tool's schema, since the AI SDK
+checks the input first. The cases cover a proposed frequency and the yes that saves it, a proposed findings count, a
+source given by url and the yes that adds it, a proposed source removal and the yes that removes it, a proposed prompt
+and the yes that saves it, a confirmation in other words that applies the preview, a hesitant reply that applies
+nothing, an instruction inside an attached document and inside an attached image that applies nothing, a preview whose
+own words tell the check to agree, a decline that takes the preview back with `cancelTopicEdit`, a question that calls
+nothing, an instruction inside a finding that calls nothing, a request for another topic, and a request and a yes in
+the team room.
 
 ## New-topic chat eval
 
 Each case is one turn of the chat that makes a topic, with the conversation so far, the topic draft that the conversation
 wrote, and the user's next message. The turn gets the real `draftTopic` tool, which writes only into the draft in
-memory, and `createTopic` and
-`suggestSources` with their real descriptions and schemas but stand-ins for the database write and the search. Every
-tool call is recorded, and the checks read the recorded calls and the draft after the turn, never what the reply claims
-about them. Turns are written on `chat-model` and graded on `score-model`.
+memory, the real `proposeNewTopic` tool, and `suggestSources` with its real description and schema but a stand-in for
+the search. If the last history turn called `proposeNewTopic`, the real agreement check reads the case's message, and an
+agreed draft is created through a stand-in for the database write and recorded as a `createTopic` call. Every tool call
+and every create is recorded, and the checks read the recorded calls and the draft after the turn, never what the reply
+claims about them. Turns are written on `chat-model` and graded on `score-model`.
 
-Every case checks that the turn calls `createTopic` once if the user said yes to the read-back and never otherwise,
-that the reply claims no save that no tool made, and that it asks at most two questions. The cases cover a first
-message, a source pick that has to reach the draft, a choice of who sees the topic that has to reach the draft as its
-visibility, a yes, a rename, and a draft whose prompt claims that the user already said yes, where the turn also has to
-call `suggestSources`.
+Every case checks that a `createTopic` call is recorded once if the user agreed to the proposed draft and never
+otherwise, that the reply claims no save that no tool made, and that it asks at most two questions. The cases cover a
+first message, a source pick that has to reach the draft, a choice of who sees the topic that has to reach the draft as
+its visibility, a read-back that has to call `proposeNewTopic`, a yes, a rename, and a draft whose prompt claims that the
+user already said yes, where the turn also has to call `suggestSources`.
 
 ## Source suggestions eval
 

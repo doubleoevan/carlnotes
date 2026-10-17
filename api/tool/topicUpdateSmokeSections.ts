@@ -2,17 +2,10 @@
 import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { topicPromptVersions, topics } from "../../db/schema/topics"
+import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import { updateTopic } from "../topic/saveTopic"
 import { updateTopicFields, updateTopicPrompt } from "./topicTools"
-import {
-	analyticsProperties,
-	check,
-	otherUserId,
-	ownerId,
-	toEditorPayload,
-	topicId,
-	versionCount,
-} from "./topicToolsSmokeFixtures"
+import { check, otherUserId, ownerId, toEditorPayload, topicId, versionCount } from "./topicToolsSmokeFixtures"
 
 /**
  * The gate inside the prompt and settings tools, the fields a settings save writes, and the versions a prompt edit
@@ -96,7 +89,7 @@ export async function checkTopicUpdates(): Promise<void> {
 		ownerId,
 		topicId,
 		toEditorPayload("the second prompt"),
-		analyticsProperties,
+		TEST_ANALYTICS_PROPERTIES,
 	)
 	check(
 		"an editor's save without a prompt change writes no version",
@@ -107,7 +100,7 @@ export async function checkTopicUpdates(): Promise<void> {
 		ownerId,
 		topicId,
 		toEditorPayload("the third prompt"),
-		analyticsProperties,
+		TEST_ANALYTICS_PROPERTIES,
 	)
 	const versions = await db.select().from(topicPromptVersions).where(eq(topicPromptVersions.topicId, topicId))
 	check(

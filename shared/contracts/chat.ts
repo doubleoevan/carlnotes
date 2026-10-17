@@ -203,6 +203,9 @@ export const PROPOSE_TOPIC_EDIT_TOOL = "proposeTopicEdit"
 
 export const CANCEL_TOPIC_EDIT_TOOL = "cancelTopicEdit"
 
+// the tool carl calls in the new-topic chat to propose creating the topic from the draft
+export const PROPOSE_NEW_TOPIC_TOOL = "proposeNewTopic"
+
 export const TOPIC_SAVE_TOOL_NAMES = ["updateTopicPrompt", "addSource", "removeSource", "updateTopicFields"]
 
 /**

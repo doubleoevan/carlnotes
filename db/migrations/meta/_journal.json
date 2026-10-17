@@ -757,6 +757,13 @@
       "when": 1792172922403,
       "tag": "0107_open_nico_minoru",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1792258608565,
+      "tag": "0108_wild_the_order",
+      "breakpoints": true
     }
   ]
 }

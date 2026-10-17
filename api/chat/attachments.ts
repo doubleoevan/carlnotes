@@ -1,5 +1,6 @@
-// the attachments a user sends with a chat turn, different from the topic attachments that an owner uploads
-import { CHAT_ATTACHMENT_KEEP_LIMIT, clipAttachmentText } from "@shared/contracts/chat"
+// storing and deleting the attachments a user sends with a chat turn, different from the topic attachments that an
+// owner uploads, with their routes
+import { CHAT_ATTACHMENT_KEEP_LIMIT } from "@shared/contracts/chat"
 import { reportError } from "@shared/monitoring"
 import type { ChatAttachment } from "@shared/payloads"
 import { and, eq, inArray } from "drizzle-orm"
@@ -20,85 +21,12 @@ import {
 	toStoredObjectKeys,
 	uploadAttachment,
 } from "../../worker"
-import { screenText, toFlaggedReason } from "../../worker/guard"
 import { type AppEnv, currentUser } from "../currentUser"
 import { toStoredFileHeaders } from "../topic/attachments"
 import { loadDownloadableChatAttachment, streamVideoAttachment, toKeptAttachmentContext } from "./chatAttachmentReads"
+import { contentTypeFromDataUrl, decodeDataUrl, screenAttachmentText } from "./chatAttachmentScreening"
 import { SIGNUP_REQUIRED_ERROR } from "./chatTurnAuthorization"
 import { encryptChatText } from "./encryption"
-
-// what stands in for a video's content wherever carl reads attachments
-export const VIDEO_ATTACHMENT_CONTEXT = "A video Carl can't watch yet."
-
-/**
- * Resolves a chat turn's attachments into what the model takes. A PDF becomes its extracted text, an image passes through,
- * a video becomes a line saying it can't be watched, and text is screened by llm-guard first.
- * Null if a PDF cannot be read, so the route can reject the chat turn.
- */
-export async function resolveChatAttachments(attachments: ChatAttachment[]): Promise<ChatAttachment[] | null> {
-	const chatAttachments: ChatAttachment[] = []
-	for (const attachment of attachments) {
-		// an image includes no text to screen and already has the shape the worker takes
-		if (attachment.kind === "image") {
-			chatAttachments.push(attachment)
-			continue
-		}
-
-		// a video has no words and carl can't watch it, so the model reads only that a clip was attached
-		if (attachment.kind === "video") {
-			chatAttachments.push({ kind: "text", name: attachment.name, text: VIDEO_ATTACHMENT_CONTEXT, keep: false })
-			continue
-		}
-
-		// a pdf, word file, or workbook hands over bytes, so its words come out here. a text attachment has its own
-		let text: string
-		if (attachment.kind === "pdf" || attachment.kind === "document") {
-			try {
-				const bytes = decodeDataUrl(attachment.dataUrl)
-				const contentType = toCanonicalContentType(contentTypeFromDataUrl(attachment.dataUrl), attachment.name)
-				text = clipAttachmentText(await extractText(contentType, bytes))
-			} catch (error) {
-				// an unreadable file rejects the whole chat turn instead of sending half of it
-				console.error("chat attachment extraction failed", error)
-				reportError(error, "chat", { attachmentKind: attachment.kind })
-				return null
-			}
-		} else {
-			text = attachment.text
-		}
-
-		// the screened text is what gets posted
-		const screenVerdict = await screenText(text, "document")
-		const screenedText = screenVerdict.isFlagged
-			? `[This attachment was withheld: ${toFlaggedReason(screenVerdict)}.]`
-			: screenVerdict.text
-		// keep stays false on this copy
-		chatAttachments.push({ kind: "text", name: attachment.name, text: screenedText, keep: false })
-	}
-	return chatAttachments
-}
-
-// the words that a kept attachment stores, or null if the scanner flags it
-export async function screenAttachmentText(text: string, sourceLabel: string, topicId: string): Promise<string | null> {
-	// clip before screening. the scanner fails once it runs past its own deadline. an unbounded body should not skip the check
-	const screenVerdict = await screenText(clipAttachmentText(text), "document")
-	if (screenVerdict.isFlagged) {
-		console.error(`a ${sourceLabel} for topic ${topicId} was ${toFlaggedReason(screenVerdict)}`)
-		reportError(new Error(toFlaggedReason(screenVerdict)), "chat", { topicId })
-		return null
-	}
-	return screenVerdict.text
-}
-
-// a data url's base64 tail, decoded to the bytes it encodes
-export function decodeDataUrl(dataUrl: string): Uint8Array {
-	return Uint8Array.from(Buffer.from(dataUrl.split(",")[1] ?? "", "base64"))
-}
-
-// the media type a data url declares, read from its own prefix instead of being assumed by the attachment kind
-export function contentTypeFromDataUrl(dataUrl: string): string {
-	return dataUrl.slice("data:".length, dataUrl.indexOf(";")) || "application/octet-stream"
-}
 
 /**
  * Store the topic chat attachments that went with the chat turn that just finished.
@@ -215,10 +143,15 @@ async function storeTopicChatAttachment(
 	// summarize a kept attachment, then store the chat attachment row and clear the key's pending deletion in one
 	// transaction. a failure deletes the object
 	try {
-		// the kept attachment's context
+		// the kept attachment's context. a kept image's description is screened first, and a flagged one leaves no row
+		// and no object
 		const attachmentContext = isAttachmentKept
-			? await toKeptAttachmentContext(attachment, documentText, litellmApiKey)
+			? await toScreenedKeptAttachmentContext(attachment, documentText, topicId, litellmApiKey)
 			: ""
+		if (attachmentContext === null) {
+			await discardUploadedObject(objectKey)
+			return false
+		}
 
 		// the row, with the key's pending deletion cleared
 		await db.transaction(async (transaction) => {
@@ -239,12 +172,31 @@ async function storeTopicChatAttachment(
 			await clearPendingObjectDeletion(objectKey, transaction)
 		})
 	} catch (error) {
-		// record the key again, then delete the object
-		await recordPendingObjectDeletions({ handle: db, objectKeys: [objectKey] }).catch(() => {})
-		await deleteStoredObject(objectKey)
+		// delete the object, then pass the failure on
+		await discardUploadedObject(objectKey)
 		throw error
 	}
 	return true
+}
+
+// a kept attachment's context, with a kept image's generated description screened as a document.
+// null if the scanner flags the description
+async function toScreenedKeptAttachmentContext(
+	attachment: Exclude<ChatAttachment, { kind: "text" }>,
+	documentText: string,
+	topicId: string,
+	litellmApiKey?: string,
+): Promise<string | null> {
+	const attachmentContext = await toKeptAttachmentContext(attachment, documentText, litellmApiKey)
+	return attachment.kind === "image"
+		? screenAttachmentText(attachmentContext, "kept chat image description", topicId)
+		: attachmentContext
+}
+
+// record an uploaded object's key as pending again, then delete the object
+async function discardUploadedObject(objectKey: string): Promise<void> {
+	await recordPendingObjectDeletions({ handle: db, objectKeys: [objectKey] }).catch(() => {})
+	await deleteStoredObject(objectKey)
 }
 
 /**

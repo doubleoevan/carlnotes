@@ -284,28 +284,38 @@ export async function replaceUserLiteLLMKey(userId: string): Promise<boolean> {
 // how many keys the monthly reset replaced, and how many it could not
 export type BudgetResetSummary = { replacedCount: number; failedCount: number }
 
+// the signal that stops the reset, and the function that replaces one user's key
+export type ResetMonthlyBudgetsOptions = {
+	signal?: AbortSignal
+	replaceLiteLLMKey?: (userId: string) => Promise<boolean>
+}
+
 /**
  * Replaces every key created before the current month began, so each user's spend starts the month at zero.
  * One attempt per user. A failure is reported, and the next reset tries that user's key again.
+ * A reset whose signal aborts stops before its next replacement and rejects with the signal's reason.
  */
-export async function resetMonthlyBudgets(
-	replaceLiteLLMKey: (userId: string) => Promise<boolean> = replaceUserLiteLLMKey,
-): Promise<BudgetResetSummary> {
+export async function resetMonthlyBudgets({
+	signal,
+	replaceLiteLLMKey = replaceUserLiteLLMKey,
+}: ResetMonthlyBudgetsOptions = {}): Promise<BudgetResetSummary> {
 	// the users whose key predates the month. a user with no key has nothing to reset
 	const dueUsers = await db
 		.select({ id: users.id })
 		.from(users)
 		.where(and(isNotNull(users.litellmVirtualKey), lt(users.litellmKeyCreatedAt, startOfUtcMonth(new Date()))))
 
-	// replace each due user's key. a failed replacement leaves that key due for the next reset
-	const replaceLiteLLMKeyResults = await runWithConcurrency(dueUsers, MONTHLY_BUDGET_RESET_CONCURRENCY, (user) =>
-		replaceLiteLLMKey(user.id).catch((error: unknown) => {
+	// replace each due user's key. a failed replacement leaves that key due for the next reset.
+	// a lost claim stops the reset before the next replacement, outside the per-user catch
+	const replaceLiteLLMKeyResults = await runWithConcurrency(dueUsers, MONTHLY_BUDGET_RESET_CONCURRENCY, (user) => {
+		signal?.throwIfAborted()
+		return replaceLiteLLMKey(user.id).catch((error: unknown) => {
 			// a read that fails before the replacement starts is this user's failure, never the reset's
 			console.error(`monthly budget reset could not replace the key for user ${user.id}`, error)
 			reportError(error, "billing", { userId: user.id })
 			return false
-		}),
-	)
+		})
+	})
 
 	// count the replaced keys and the failed replacements
 	const replacedKeysCount = replaceLiteLLMKeyResults.filter(Boolean).length

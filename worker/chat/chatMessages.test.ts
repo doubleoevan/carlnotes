@@ -135,6 +135,25 @@ test("the history leaves a chat turn that called no tool as one answer", () => {
 	expect(modelMessages.map((modelMessage) => modelMessage.role)).toEqual(["user", "assistant", "user"])
 })
 
+// the calls the server made before the reply replay after the question, keyed apart from every history call
+test("the server's calls replay after the question as calls and results", () => {
+	// a save the server made for an agreed proposal
+	const serverToolCall: ChatToolCall = {
+		toolName: "updateTopicFields",
+		input: { frequency: "daily" },
+		output: "Saved the settings for Espresso.",
+	}
+	const messages = toModelMessages([], "sounds good", [], [serverToolCall])
+
+	// the question, then one call and its result, with no answer after them so the reply continues from the save
+	expect(messages.map((message) => message.role)).toEqual(["user", "assistant", "tool"])
+	expect(messages[1]).toEqual({
+		role: "assistant",
+		content: [
+			{ type: "tool-call", toolCallId: "server-0", toolName: "updateTopicFields", input: { frequency: "daily" } },
+		],
+	})
+})
 // a yes must be answered by a tool that saves, never by a search or by a tool that only shows the topic
 test("toConsentStep forces the first step to pick from the tools that save", () => {
 	const savingTools = { updateTopicPrompt: {}, addSource: {} } as never

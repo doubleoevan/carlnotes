@@ -24,7 +24,27 @@ export const dailyFrequencies = ["daily", "weekdays"] as const
  * instead of listing the frequencies themselves, so adding one reaches every prompt that names them.
  */
 export function toScanFrequenciesSentence(): string {
-	return `${frequencies.slice(0, -1).join(", ")}, or ${frequencies.at(-1)}`
+	return toOrSentence(frequencies)
+}
+
+/**
+ * Every visibility a topic can have, as one sentence fragment with "or" before the last, for the prompts that name them.
+ */
+export function toVisibilitiesSentence(): string {
+	return toOrSentence(visibilities)
+}
+
+/**
+ * Every count of findings a scan can keep, as one sentence fragment with "or" before the last, for the prompts that
+ * name them.
+ */
+export function toMaxTopicFindingsSentence(): string {
+	return toOrSentence(maxTopicFindingsOptions)
+}
+
+// a list as one sentence fragment, with "or" before the last value
+function toOrSentence(values: readonly (string | number)[]): string {
+	return `${values.slice(0, -1).join(", ")}, or ${values.at(-1)}`
 }
 
 /**

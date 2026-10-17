@@ -94,12 +94,3 @@ export function toEditorPayload(prompt: string): UpdateTopicPayload {
 		sources: [],
 	}
 }
-
-// the analytics shape updateTopic asks for
-export const analyticsProperties = {
-	entryPoint: "web" as const,
-	plan: "free",
-	platform: "desktop" as const,
-	browserPlatform: "other" as const,
-	isInAppBrowser: false,
-}

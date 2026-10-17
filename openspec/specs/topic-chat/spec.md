@@ -436,11 +436,16 @@ A chat turn in which a Topic Tool fired SHALL keep its question and answer text 
 - **THEN** the saved cost covers every step's tokens and counts toward the user's monthly budget
 
 ### Requirement: The edit chat changes the topic's settings
-The edit chat SHALL offer `updateTopicFields` beside the prompt and source tools, the `chat-edit-topic.md` prompt SHALL name it, and a save SHALL toast like the prompt tool's.
+
+The edit chat's `proposeTopicEdit` SHALL take the settings fields beside the prompt and the Sources, the private
+chat's edit block prompt SHALL name them, and an agreed settings change SHALL be applied through `updateTopicFields`
+and SHALL toast like the prompt's save.
 
 #### Scenario: Carl changes the tags on a yes
-- **WHEN** an editor agrees to tags Carl proposed
-- **THEN** the tool writes them, a toast says the settings were saved, and the page reloads with them
+
+- **WHEN** an editor agrees to tags Carl previewed
+- **THEN** the server writes them through `updateTopicFields`, a toast says the settings were saved, and the page
+  reloads with them
 
 ### Requirement: A signed-out chat post is rejected before its body is read
 

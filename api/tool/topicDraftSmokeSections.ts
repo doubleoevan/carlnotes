@@ -4,9 +4,10 @@ import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { scans } from "../../db/schema/scans"
 import { sources, topicPromptVersions, topics } from "../../db/schema/topics"
+import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import { stopFirstScan } from "../topic/firstScanSmoke"
 import { createTopicFromDraft } from "./topicDraftTools"
-import { analyticsProperties, check, ownerId, runId } from "./topicToolsSmokeFixtures"
+import { check, ownerId, runId } from "./topicToolsSmokeFixtures"
 
 /**
  * An incomplete draft, a visitor's draft, and the owner's draft becoming the editor's topic with its first version and
@@ -19,7 +20,7 @@ export async function checkTopicDrafts(): Promise<void> {
 		userId: ownerId,
 		topicDraft: emptyTopicDraft,
 		origin: "chat",
-		analyticsProperties,
+		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
 	check(
 		"a draft without a title or prompt is not saved",
@@ -41,14 +42,14 @@ export async function checkTopicDrafts(): Promise<void> {
 		userId: null,
 		topicDraft: topicDraft,
 		origin: "mcp",
-		analyticsProperties,
+		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
 	check("a visitor may not create from a draft", visitorCreate.status === "forbidden", visitorCreate)
 	const createTopicFromDraftResult = await createTopicFromDraft({
 		userId: ownerId,
 		topicDraft: topicDraft,
 		origin: "chat",
-		analyticsProperties,
+		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
 	const createdTopicId = createTopicFromDraftResult.status === "created" ? createTopicFromDraftResult.topicId : ""
 	const [createdTopic] = await db.select().from(topics).where(eq(topics.id, createdTopicId))

@@ -1,6 +1,6 @@
 // the signup gate: the turnstile check that a password signup passes, signed into a short-lived cookie token that one
 // signup consumes
-import { isSameSignature, toHmacDigest } from "@shared/hmac"
+import { isSameSignature, toAuthSecretSignature } from "@shared/hmac"
 import { deleteRedisKeys, saveRedisJson } from "../db/redis"
 
 // how long a signup-gate token stays valid, as long as Turnstile's own token lives
@@ -81,9 +81,5 @@ function toGateNonceKey(nonce: string): string {
 // the value's signature, keyed on the app's auth secret. HMAC-SHA256, base64url-encoded for a cookie-safe, url-safe
 // string
 function toSignature(value: string): string {
-	const secret = Bun.env.BETTER_AUTH_SECRET
-	if (!secret) {
-		throw new Error("BETTER_AUTH_SECRET must be set to sign the signup-gate cookie")
-	}
-	return toHmacDigest({ value, secret, encoding: "base64url" })
+	return toAuthSecretSignature({ value, purpose: "the signup-gate cookie", encoding: "base64url" })
 }

@@ -53,13 +53,14 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 	const replyStream = streamText({
 		model: chatModel(input.litellmApiKey),
 		system: chatPrompt.prompt,
-		messages: toModelMessages(input.history, input.question, input.chatAttachments ?? []),
+		messages: toModelMessages(input.history, input.question, input.chatAttachments ?? [], input.serverToolCalls),
 		tools: {
 			searchWeb: webSearchTool(searchTotal),
 			...(input.openNewTopicChatTool ? { openNewTopicChat: input.openNewTopicChatTool } : {}),
 			...(input.proposeTopicEditTool ? { proposeTopicEdit: input.proposeTopicEditTool } : {}),
 			...(input.cancelTopicEditTool ? { cancelTopicEdit: input.cancelTopicEditTool } : {}),
 			...(input.suggestSourcesTool ? { suggestSources: input.suggestSourcesTool } : {}),
+			...(input.proposeNewTopicTool ? { proposeNewTopic: input.proposeNewTopicTool } : {}),
 			...input.tools,
 		},
 		prepareStep: ({ stepNumber }) => toConsentStep(stepNumber, input, input.tools),
@@ -69,14 +70,25 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 		experimental_transform: breakTextAroundToolCalls(),
 		...promptTelemetry(chatPrompt),
 	})
+	// the calls the server made before the reply
+	const serverToolCalls = input.serverToolCalls ?? []
+
 	// stops an early failure here from crashing the process. it's still handled properly further down
-	const completion = toCompletion(replyStream, searchTotal)
+	const completion = toCompletion(replyStream, searchTotal, serverToolCalls)
 	completion.catch(() => {})
-	return { replyParts: toReplyParts(replyStream.stream), completion }
+	return { replyParts: toReplyParts(replyStream.stream, serverToolCalls), completion }
 }
 
-// the text and the tool results out of the model's full stream, in the order they arrive
-async function* toReplyParts(modelStream: AsyncIterable<TextStreamPart<ToolSet>>): AsyncGenerator<ChatReplyPart> {
+// the calls the server made before the reply, then the text and the tool results out of the model's full stream, in
+// the order they arrive
+async function* toReplyParts(
+	modelStream: AsyncIterable<TextStreamPart<ToolSet>>,
+	serverToolCalls: ChatToolCall[],
+): AsyncGenerator<ChatReplyPart> {
+	// forward the server's calls first
+	for (const serverToolCall of serverToolCalls) {
+		yield { type: "tool-result", toolCall: serverToolCall }
+	}
 	for await (const streamPart of modelStream) {
 		// forward the text and each tool result
 		if (streamPart.type === "text-delta") {
@@ -166,6 +178,7 @@ async function buildReplyPrompt(
 	if (input.newTopic) {
 		return buildNewTopicChatPrompt(chatContext.docsBlock, input.topicDraft, input.topicsRemaining, input.leaderTeams, {
 			isSpoken,
+			proposalOutcome: input.proposalOutcome,
 		})
 	}
 	// retrieve every topic the team holds for the team chat room
@@ -173,12 +186,13 @@ async function buildReplyPrompt(
 		return buildTeamChatPrompt(chatContext as TeamChatContext, { isSpoken })
 	}
 	return buildTopicChatPrompt(chatContext as ChatContext, {
-		editTopicBlock: await toEditTopicBlock(input.tools),
+		editTopicBlock: await toEditTopicBlock(input),
 		isSpoken,
 	})
 }
 
-// the assembled reply with its token and search counts, all of which resolve only once the chat stream is read
+// the assembled reply with its token and search counts, all of which resolve only once the chat stream is read.
+// the server's calls lead the tool calls, in the order they ran
 async function toCompletion(
 	replyStream: {
 		text: PromiseLike<string>
@@ -186,10 +200,11 @@ async function toCompletion(
 		toolResults: PromiseLike<{ toolName: string; input: unknown; output: unknown }[]>
 	},
 	searchTotal: SearchTotal,
+	serverToolCalls: ChatToolCall[],
 ): Promise<{ text: string; totalTokens: number; searchCount: number; toolCalls: ChatToolCall[] }> {
 	const usage = await replyStream.usage
 	// collect every tool the chat turn called, with its input and output
-	const toolCalls = (await replyStream.toolResults).map(toChatToolCall)
+	const toolCalls = [...serverToolCalls, ...(await replyStream.toolResults).map(toChatToolCall)]
 	return {
 		text: await replyStream.text,
 		totalTokens: usage.totalTokens ?? 0,

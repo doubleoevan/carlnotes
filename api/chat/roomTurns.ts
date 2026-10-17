@@ -2,7 +2,7 @@
 import type { RoomTopicToolCalls } from "@shared/contracts/chat"
 import { reportError } from "@shared/monitoring"
 import type { ChatAttachment } from "@shared/payloads"
-import { and, eq, sql } from "drizzle-orm"
+import { and, eq, ne, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { chatRoomAttachments, chatRoomMessages } from "../../db/schema/chat"
 import type { topics } from "../../db/schema/topics"
@@ -157,9 +157,12 @@ function toChatRoomToolCalls(toolCalls: ChatTurnToolCalls, billedUserId: string)
 	}
 }
 
-// the images stored with one chat room message, rebuilt as the data urls the model reads
-async function loadPromptMessageImages(promptChatMessageId: number): Promise<ChatAttachment[]> {
-	// only an image with stored bytes can be shown to the model
+/**
+ * Loads the images stored with one chat room message as the data urls the model reads.
+ * An image whose description the scanner flagged is left out.
+ */
+export async function loadPromptMessageImages(promptChatMessageId: number): Promise<ChatAttachment[]> {
+	// only an image with stored bytes can be shown to the model, and never one whose description the scanner flagged
 	const imageRows = await db
 		.select({
 			name: chatRoomAttachments.name,
@@ -167,7 +170,13 @@ async function loadPromptMessageImages(promptChatMessageId: number): Promise<Cha
 			contentType: chatRoomAttachments.contentType,
 		})
 		.from(chatRoomAttachments)
-		.where(and(eq(chatRoomAttachments.messageId, promptChatMessageId), eq(chatRoomAttachments.kind, "image")))
+		.where(
+			and(
+				eq(chatRoomAttachments.messageId, promptChatMessageId),
+				eq(chatRoomAttachments.kind, "image"),
+				ne(chatRoomAttachments.status, "failed"),
+			),
+		)
 
 	// each image reads back from storage into the data url shape the shared reply path takes
 	const promptImages: ChatAttachment[] = []

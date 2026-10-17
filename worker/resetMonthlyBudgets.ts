@@ -15,14 +15,17 @@ await sizeConnectionPool()
 
 // run one reset under the claim and log what the reset did
 try {
-	const budgetResetSummary = await runWithClaim({ claimName: MONTHLY_BUDGET_RESET_CLAIM, runTask: resetMonthlyBudgets })
+	const budgetResetSummary = await runWithClaim({
+		claimName: MONTHLY_BUDGET_RESET_CLAIM,
+		runTask: (signal) => resetMonthlyBudgets({ signal }),
+	})
 	console.log(
 		budgetResetSummary
 			? `monthly budget reset: ${budgetResetSummary.replacedCount} keys replaced, ${budgetResetSummary.failedCount} failed`
 			: "monthly budget reset: another reset holds the claim, so this one did nothing",
 	)
 } catch (error) {
-	// report a reset that failed and exit non-zero so the cron run shows as failed.
+	// report a reset that failed or lost its claim, and exit non-zero so the cron run shows as failed.
 	// the next day's reset tries every key still due
 	console.error("monthly budget reset failed", error)
 	reportError(error, "billing")

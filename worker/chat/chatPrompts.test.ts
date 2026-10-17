@@ -1,12 +1,12 @@
 // chat prompt tests: what the topic chat's, the team chat room's, and the new-topic chat's prompts say, and the
 // shared blocks that each one splices in once
 import { expect, test } from "bun:test"
-import { toScanFrequenciesSentence } from "@shared/enums"
+import { toMaxTopicFindingsSentence, toScanFrequenciesSentence, toVisibilitiesSentence } from "@shared/enums"
 import { toSourceOptionsSentence } from "@shared/sources"
 import { EMPTY_TOPIC_DRAFT } from "@shared/topicPayloads"
-import { FALLBACK_PROMPT_TEMPLATES } from "../prompts/fetch"
-import { writePrompt } from "../prompts/write"
-import { buildNewTopicChatPrompt, buildTeamChatPrompt, buildTopicChatPrompt } from "./chatPrompts"
+import { tool } from "ai"
+import { z } from "zod"
+import { buildNewTopicChatPrompt, buildTeamChatPrompt, buildTopicChatPrompt, toEditTopicBlock } from "./chatPrompts"
 import type { ChatContext } from "./retrieve"
 
 // a context with one finding, two sources, one scan note, and no attachments, for cases to override
@@ -241,20 +241,44 @@ test("a turn without the tools reads the no-edit note", async () => {
 	expect(prompt).toContain("\n\nNone.\n")
 })
 
-// the edit template names the tools that save and the confirmation rule, and fills every placeholder
-test("the edit template names the tools and the propose-then-confirm rule", () => {
-	const editTopicBlock = writePrompt(
-		FALLBACK_PROMPT_TEMPLATES["chat-edit-topic"],
-		{},
-		{
-			scanFrequencies: toScanFrequenciesSentence(),
-		},
-	)
+// the room's edit block names the tools that save and the confirmation rule, splices the shared preview rules with
+// their lists filled in, and fills every placeholder
+test("the edit template names the tools and the propose-then-confirm rule", async () => {
+	// a room turn with a saving tool bound
+	const savingTool = tool({ description: "save", inputSchema: z.object({}), execute: async () => "" })
+	const editTopicBlock = await toEditTopicBlock({ tools: { updateTopicPrompt: savingTool } })
+
+	// the block names the saving tools and the rule
 	expect(editTopicBlock).toContain("updateTopicPrompt")
 	expect(editTopicBlock).toContain("addSource")
 	expect(editTopicBlock).toContain("removeSource")
 	expect(editTopicBlock).toContain("Propose first")
+
+	// the spliced preview rules have their lists filled in, and no placeholder is left
+	expect(editTopicBlock).toContain(`the visibility (${toVisibilitiesSentence()})`)
+	expect(editTopicBlock).toContain(`how many findings a brew keeps (${toMaxTopicFindingsSentence()})`)
+	expect(editTopicBlock).toContain(toScanFrequenciesSentence())
 	expect(editTopicBlock).not.toContain("{{")
+})
+
+// a private chat binds only the preview tools, so its block names no saving tool and says what happened to the last
+// preview, while a room binds the saving tools and keeps their block
+test("the private chat's edit block names no saving tool and includes the proposal outcome", async () => {
+	// a private chat turn whose last preview the user agreed to
+	const proposeTopicEditTool = tool({ description: "preview", inputSchema: z.object({}), execute: async () => "" })
+	const privateEditTopicBlock = await toEditTopicBlock({
+		proposeTopicEditTool,
+		proposalOutcome: "The reader agreed, and the app applied your preview.",
+	})
+	expect(privateEditTopicBlock).toContain("You have no tool that saves")
+	expect(privateEditTopicBlock).toContain("The reader agreed, and the app applied your preview.")
+	expect(privateEditTopicBlock).not.toContain("updateTopicPrompt")
+	expect(privateEditTopicBlock).not.toContain("{{")
+
+	// a room turn with the saving tools keeps the block that names them
+	const savingTool = tool({ description: "save", inputSchema: z.object({}), execute: async () => "" })
+	const roomEditTopicBlock = await toEditTopicBlock({ tools: { updateTopicPrompt: savingTool } })
+	expect(roomEditTopicBlock).toContain("updateTopicPrompt")
 })
 
 // the new-topic prompt shows the topic draft as data and names its tools

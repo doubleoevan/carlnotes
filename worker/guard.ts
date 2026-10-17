@@ -82,6 +82,33 @@ export async function screenText(
 }
 
 /**
+ * Screens the text an image shows, read with text recognition, as a document.
+ * With no scanner configured it returns skipped before the text recognition code loads, so an image costs no call and no wait.
+ * A read that fails returns the image unflagged with a failed outcome, the way a failed screen does.
+ */
+export async function screenImage(imageBytes: Uint8Array): Promise<ScreenVerdict> {
+	// skip the screen if no scanner is configured, before the text recognition code loads
+	if (!Bun.env.LLM_GUARD_URL) {
+		return toUnflagged("", "skipped")
+	}
+
+	// read the image's text, and fail open on a read that throws an error
+	let imageText: string
+	try {
+		// the text recognition code loads only here, once a scanner is configured
+		const { readImageText } = await import("./imageText")
+		imageText = await readImageText(imageBytes)
+	} catch (error) {
+		console.error("could not read the text in an image", error)
+		reportError(error, "scanner", { screenType: "image" })
+		return toUnflagged("", "failed")
+	}
+
+	// screen what the image says as a document
+	return screenText(imageText, "document")
+}
+
+/**
  * Reads this screen type's detectors out of llm-guard's scores. A detector at or above the threshold rejects the text.
  * An accepted text comes back redacted.
  */

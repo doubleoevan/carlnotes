@@ -13,7 +13,9 @@ backlog),
 started, which the sweep and the manual scan route run).
 
 - The sweep and the reset each run under a database claim from `db/claim.ts`,
-  so two overlapping runs cannot do the work twice. The sweep selects scheduled Topics in one SQL query
+  so two overlapping runs cannot do the work twice. Each takes the claim's abort signal and checks it between
+  batches: the sweep before each stage and each Topic, the reset before each user's key. A run that lost its claim
+  stops and rejects, and the job exits non-zero. The sweep selects scheduled Topics in one SQL query
   and reads each owner's quota and key budget once. For a Topic whose owner's key has spent its budget, the sweep saves
   a failed Scan with the budget reason instead of starting a Scan. The Topics of an owner with no key, or of an owner
   whose budget read fails, are scanned as usual.
@@ -39,24 +41,23 @@ started, which the sweep and the manual scan route run).
   worker's first Temporal connection, a podcast episode's publish, and the podcast episode smoke's chapters. The
   podcast episode smoke seeds its rows through `podcast/podcastEpisodeSmokeFixtures.ts`.
 
-- `workflows/` — Temporal workflows and activities; `ingest/` — one ingester per Source kind,
-  `ingester.ts` is the interface, whose optional `ingestContext` includes the Scan owner's key: the Topic owner's for a
-  scheduled Scan and the starting user's for a manual one. The search ingester's query generation bills that key like
-  every other model call a Scan makes; `review/` — filtering and scoring (`filter.ts` the relevance gate, `dedupe.ts`
-  the content hash and near-duplicate pass, `fetch.ts` the content fetch for a Resource to score, `score.ts` the scoring
-  and the finding writes, with `reviewTestFixtures.ts` beside their tests); `chat/` — Carl's streamed
-  chat replies (`index.ts` streams a reply, `chatMessages.ts` shapes a conversation into the model messages a turn
-  sends, and `chatPrompts.ts` builds each chat's system prompt from its template) and their retrieval (`retrieve.ts`,
-  whose topic ranking collects the topics' findings in a materialized common table expression and ranks that set,
-  `retrieveDocs.ts` for the docs sections a question about the app reads and `embedRetrievalQuery`, which embeds a
-  question or a search query with the query instruction, and `retrieveTeam.ts` for a team chat room
-  turn's context); `prompts/` —
-  model-facing Markdown templates; `models.ts` —
-  every model call, through LiteLLM; `litellm.ts` — the user keys that those calls bill to. A key is created at
-  signup, or by `loadOrProvisionUserLiteLLMKey` before a user's first model call if that user has no key. A key is
-  also replaced, read, and reset on the first of the month by the reset job. Every proxy admin call times out after
-  five seconds. A Scan creates its owner's missing key before any Source runs. `favicons.ts` — a host's favicon,
-  fetched once when review reads a page on it.
+- `workflows/` — Temporal workflows and activities; `ingest/` — one ingester per Source kind, `ingester.ts` is the
+  interface, whose optional `ingestContext` includes the Scan owner's key: the Topic owner's for a scheduled Scan and
+  the starting user's for a manual one. The search ingester's query generation bills that key like every other model
+  call a Scan makes; `review/` — filtering and scoring (`filter.ts` the relevance gate, `dedupe.ts` the content hash and
+  near-duplicate pass, `fetch.ts` the content fetch for a Resource to score, `score.ts` the scoring and the finding
+  writes, with `reviewTestFixtures.ts` beside their tests); `chat/` — Carl's streamed chat replies (`index.ts` streams a
+  reply, `chatMessages.ts` shapes a conversation into the model messages a turn sends, `chatPrompts.ts` builds each
+  chat's system prompt from its template, and `agreement.ts` checks whether a user's message agrees to the proposal it
+  answers, reading only the user's words and the proposal) and their retrieval (`retrieve.ts`, whose topic ranking
+  collects the topics' findings in a materialized common table expression and ranks that set, `retrieveDocs.ts` for the
+  docs sections a question about the app reads and `embedRetrievalQuery`, which embeds a question or a search query with
+  the query instruction, and `retrieveTeam.ts` for a team chat room turn's context); `prompts/` — model-facing Markdown
+  templates; `models.ts` — every model call, through LiteLLM; `litellm.ts` — the user keys that those calls bill to. A
+  key is created at signup, or by `loadOrProvisionUserLiteLLMKey` before a user's first model call if that user has no
+  key. A key is also replaced, read, and reset on the first of the month by the reset job. Every proxy admin call times
+  out after five seconds. A Scan creates its owner's missing key before any Source runs. `favicons.ts` — a host's
+  favicon, fetched once when review reads a page on it.
 - `telemetry.ts` traces model calls in Langfuse on its own tracer provider beside Sentry's, and both processes start
   Sentry before it. `temporal.ts` logs the connection pool, the event loop delay, the scan queue, and Redis once a
   minute, and the sweep reports a queue nothing polls and a backlog older than 15 minutes, both through
@@ -113,7 +114,10 @@ started, which the sweep and the manual scan route run).
 - A Resource's content hash is taken in the dedupe stage, over the title and snippet as they stand then.
   The fetch that follows may replace a title read off the url and leaves the hash alone, so a retitled
   Resource still matches its Finding's `reviewed_content_hash` and no later Scan pays to score it again.
-- Untrusted text is screened by LLM Guard (`guard.ts`) before any model reads it.
+- Untrusted text is screened by LLM Guard (`guard.ts`) before any model reads it. `screenImage` screens the text a chat
+  image shows, read with text recognition in `imageText.ts`, using tesseract.js and its installed English data. With `LLM_GUARD_URL`
+  unset it returns skipped before the text recognition code loads, so an image costs no call and no wait. `guardTestFixtures.ts` runs
+  a test against a fake scanner that returns one verdict, or with no scanner at all.
 - Every fetch of a user-supplied url goes through `fetchPublicUrl` (`publicFetch.ts`), which re-checks each redirect hop
   against the internal-address rule, with `readLimitedBody` bounding reads. A fetch that a server responds to with an
   error status throws `FetchStatusError`, and `isRetryableFetchFailure` says whether a failure is worth a retry: a

@@ -4,12 +4,12 @@ Drizzle + Neon Postgres, and the Redis store.
 
 - `schema/` — the schema, one file per domain: `users.ts` (users and Better Auth's tables), `topics.ts`, `scans.ts`
   (scans, resources, findings, and the finding markers), `teams.ts`, `invites.ts`, `chat.ts`, `notes.ts`, `podcast.ts`,
-  `billing.ts`, `releases.ts`, `storage.ts` (favicons and the pending object deletions), `vectors.ts` (the topic and
-  podcast episode vectors that rank related topics, related podcast episodes, and the podcast episode search, each table
-  kept apart from the row it ranks so a read of a whole row never includes a vector, and each table's public and shown
-  flag with its partial HNSW index), and `columns.ts` (the pgEnums and the column helpers they share). A table
-  references another file's table through a lazy `references`, so the files import each other freely. `index.ts` spreads
-  every file into the one `schema` object the client is bound to.
+  `billing.ts`, `releases.ts`, `claims.ts` (the claims' lease rows), `storage.ts` (favicons and the pending object
+  deletions), `vectors.ts` (the topic and podcast episode vectors that rank related topics, related podcast episodes,
+  and the podcast episode search, each table kept apart from the row it ranks so a read of a whole row never includes a
+  vector, and each table's public and shown flag with its partial HNSW index), and `columns.ts` (the pgEnums and the
+  column helpers they share). A table references another file's table through a lazy `references`, so the files import
+  each other freely. `index.ts` spreads every file into the one `schema` object the client is bound to.
 - `index.ts` — the pooled client, the connection pool's counts, `sizeConnectionPool`, `isUniqueViolation`, and the
   `DbTransaction` and `DbHandle` types that a function sharing its caller's transaction takes. Each long-running
   process, the api, the Temporal worker, the sweep, and the budget reset, awaits `sizeConnectionPool` at startup. It
@@ -48,10 +48,12 @@ Drizzle + Neon Postgres, and the Redis store.
 - `memoryRateLimitWindows.ts` — the rate limit windows a process counts in memory while Redis cannot count them,
   bounded by expiry and by a limit of 10,000 keys, the oldest evicted first. A memory count is never written to Redis.
 - `claim.ts` — `runWithClaim` runs the sweep and the budget reset under a database-level claim.
-  The claim is a transaction-level advisory lock keyed by the claim's name, in a transaction that first opts out of
-  any idle-in-transaction timeout while the task runs.
-  The lock works through the connection pooler and releases with the transaction no matter how the task ends.
-  A sweep or reset that starts while the claim is held does nothing.
+  The claim is a lease row in `claims`, keyed by the claim's name, taken in one statement that inserts the row or
+  takes over an expired one. The run renews the two-minute lease every 30 seconds by the database clock, and deletes
+  its own row when the task ends, however it ends. No transaction stays open between statements.
+  A renewal that finds the lease expired or taken aborts the signal the task receives, and the run rejects with a
+  `ClaimLostError`. A process that dies leaves a lease that expires on its own.
+  A sweep or reset that starts while another run's lease is live does nothing and returns null.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, and budget
   override, which the api and the worker share.
   `monthlySpendDollars` reads a user's spend for the month on scans, chat turns, and podcast episodes.

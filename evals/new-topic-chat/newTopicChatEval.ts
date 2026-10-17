@@ -82,13 +82,14 @@ function toTestCase(newTopicChatCase: NewTopicChatCase): TestCase {
 	return { description, vars: newTopicChatVariables, assert: [...toolAssertions, ...rubricAssertions] }
 }
 
-// fail the check unless the turn called createTopic once if a create is expected, and never otherwise
+// fail the check unless a createTopic call was recorded once if a create is expected, and never otherwise. only the
+// server records one, for a proposed draft the user agreed to
 function gradeCreateCall(turnOutput: string, isCreateExpected: boolean): GradingResult {
 	const { toolCalls } = toNewTopicChatTurn(turnOutput)
 	const createCallCount = toolCalls.filter((toolCall) => toolCall.toolName === "createTopic").length
 	const expectedCreateCallCount = isCreateExpected ? 1 : 0
 	return toGradingResult(
-		createCallCount === expectedCreateCallCount ? undefined : `the turn called createTopic ${createCallCount} times`,
+		createCallCount === expectedCreateCallCount ? undefined : `the turn recorded createTopic ${createCallCount} times`,
 	)
 }
 

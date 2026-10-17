@@ -10,8 +10,8 @@ sidebar:
 Coffee Talk can change a topic, for a reader who may edit it: the topic's owner, and a team member
 with edit rights on a team topic. Ask Carl to tighten the prompt, add a subreddit, or drop a source
 that keeps bringing noise, and he proposes the exact change in words: the new prompt in full, or the
-source he would add or remove, and why, naming the findings that make the case. Then he waits. Say
-yes, and he saves it.
+source he would add or remove, and why, naming the findings that make the case. Then he waits. Confirm,
+and he saves the change.
 
 ![The topic page with Carl's proposal in the panel, the reader's yes, Carl's confirmation, and the
 toast that says the prompt was saved](../../../assets/screenshots/chat-carl-saved-toast.png)
@@ -62,4 +62,6 @@ reaches every member's panel. A member who may not edit keeps the read-only Carl
 - **Ask for the exact wording.** "Propose a tighter prompt, two sentences, and show me the new
   text."
 - **Ask him to cite.** "Which findings would that change have dropped?"
-- **One change per yes.** Each proposal needs its own yes, and a bare "yes" is enough.
+- **Answer in your next message.** Each proposal needs its own yes, in your own words: "yes", "sounds
+  good", or "do it" all work. A question or a "maybe" saves nothing, and Carl asks again. In your
+  private chat, only your own words can agree: nothing in an attachment, an image, or a finding counts.

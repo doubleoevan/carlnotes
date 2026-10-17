@@ -346,17 +346,39 @@ starts and then fails is recorded on its own row by its workflow, and the sweep 
 
 ### Requirement: A sweep runs under a database claim
 
-The sweep SHALL take a database claim before it does any work: a transaction that tries to take a Postgres advisory lock keyed by the claim's name, held for the length of the sweep and released with the transaction however the sweep ends, including a process that dies. The claim SHALL work through the connection pooler, which keeps a transaction on one server connection. A sweep that cannot take the claim SHALL exit at once and return null. The sweep SHALL keep no in-memory guard, since the sweep runs as a cron with one process per invocation and a second process cannot see another's memory.
+The sweep SHALL take a database claim before it does any work. The claim SHALL be a lease row in the `claims` table,
+keyed by the claim's name, holding the holder's id, when it was taken, and when it expires. Taking the claim SHALL be
+one statement that inserts the row, or takes the row over only if its lease has expired, and the expiry SHALL be
+read from the database clock. While the sweep runs, the runner SHALL renew the lease well inside its expiry, and when
+the sweep ends, however it ends, the runner SHALL delete the row only if it still holds it. No transaction SHALL stay
+open between statements, so the claim works through the connection pooler and pins no server connection. A sweep that
+cannot take the claim SHALL exit at once and return null. A renewal that finds the lease expired or held by another
+holder SHALL abort the sweep through the abort signal the claim passes to it, and the sweep SHALL check that signal
+between its stages and before each Topic it starts, so a sweep that lost its claim stops instead of running beside the
+next one. A sweep that ends after losing its claim SHALL fail with an error naming the lost claim. A process that dies
+SHALL leave a lease that expires on its own, short enough that a sweep killed at its job's time limit frees the claim
+before the next scheduled sweep. The sweep SHALL keep no in-memory guard, since the sweep runs as a cron with one
+process per invocation and a second process cannot see another's memory.
 
 #### Scenario: Two crons overlap
 
-- **WHEN** a cron starts a sweep while the previous cron's sweep still runs
+- **WHEN** a cron starts a sweep while the previous cron's sweep still holds a live lease
 - **THEN** the second takes no claim, reads no Topic, starts no Scan, and exits
 
 #### Scenario: A dead sweep releases its claim
 
 - **WHEN** a sweep's process dies mid-run
-- **THEN** its transaction ends and the next sweep takes the claim
+- **THEN** its lease expires within the lease length, and the next sweep takes the claim over
+
+#### Scenario: A sweep that loses its lease stops
+
+- **WHEN** a sweep's renewal finds that its lease expired and another sweep took the claim
+- **THEN** the first sweep starts no further Scan and fails with an error naming the lost claim
+
+#### Scenario: Releasing touches only the holder's own row
+
+- **WHEN** a sweep that lost its claim ends while another sweep holds the claim
+- **THEN** its release deletes nothing, and the other sweep's lease stands
 
 ### Requirement: The sweep starts no Scan for an owner whose key budget is spent
 Before it starts any Scans, the sweep SHALL read each scheduled Topic owner's key budget from the LiteLLM proxy once: the key's recorded spend and its maximum budget, which are the numbers that the proxy compares when it rejects a call. The reads SHALL run a few owners at a time, each under the five-second timeout on proxy admin calls. For an owner whose key's spend has reached its maximum budget, the sweep SHALL start no Scan for that owner's scheduled Topics, and no Source of those Topics SHALL run. Each of that owner's scheduled Topics SHALL instead get a Scan row with status `failed`, no dispatch, a cost of zero, and a reason that the budget failure check recognizes, so the Topic page shows the existing budget copy. A Topic whose Scan is still running SHALL get no row. The budget check SHALL come after the daily scan limit and the daily topic limit, so a Topic skipped for either of those gets no row. A Scan row that was opened earlier and never dispatched SHALL take the same check before the sweep starts it, with its own read of the owner's budget: if the key budget of the row's owner is spent, the sweep SHALL mark the row `failed` with the budget reason and SHALL start no workflow for it. A row that a user started by hand SHALL still be started, since the manual scan route checked the budget when it opened the row. The scheduled Topics of an owner with no key yet, or of an owner whose budget read fails or times out, SHALL be scanned as before. The ingest spend on Exa, TwitterAPI.io, and Firecrawl SHALL stay on the operator's account and SHALL NOT count toward the user's budget.

@@ -537,6 +537,11 @@ Check for:
    - "the event loop stalled past 200 ms" as the event loop warning's message, and `EVENT_LOOP_DELAY_ALERT_MS` (now
      "the api's event loop stalled", from `EVENT_LOOP_STALL_ALERT_MS` and `EVENT_LOOP_P99_ALERT_MS` in
      `shared/runtimeGauges.ts`)
+   - `createTopic` as a new-topic chat tool (now `proposeNewTopic`, and `createTopicInChat` in
+     `api/tool/newTopicChatTools.ts`)
+   - the saving tools in the private topic chat (now bound only in a team room, with `api/chat/chatProposals.ts`
+     applying the private chat's changes)
+   - the advisory lock in `db/claim.ts` (now a lease row in the `claims` table)
    - `toPlainText` as a private helper in `shared/seo.ts` (now exported from `shared/spokenText.ts`, beside
      `toSpokenParts`)
    - `toFailedSpeechResult` in `worker/speech.ts` (now `toModelCallFailure`, beside

@@ -130,8 +130,12 @@ routes, which set their own limits.
 - `chat/privateChat.ts` — the private chat routes and the reply flow, each post rejecting a signed-out visitor through
   `toSignedOutRejection` in `bodyLimit.ts` before the body is read; `chat/chatTurnAuthorization.ts` — whether a user may
   take a chat turn on a topic, in a team chat, or in the new-topic chat; `chat/chatTurnStream.ts` — streaming a chat
-  turn's reply and saving its row. `chat/roomTurns.ts` — Carl's chat room turn, and `chat/roomQuestion.ts` — the
-  question it is asked, from the chat window and the room's summary and files. `room.smoke.ts` runs
+  turn's reply and saving its row; `chat/chatProposals.ts` — the change Carl previewed in a private chat, recorded in
+  `chat_proposals` as a keyed digest that holds none of the preview's text, taken by the user's next message on that
+  page, and applied by the server through the topic tools or the create path only if it matches its record and the
+  agreement check reads the message as agreeing. The private chat binds no tool that saves a topic change or creates a
+  topic; a team room keeps its saving tools. `chat/roomTurns.ts` — Carl's chat room turn, and `chat/roomQuestion.ts` —
+  the question it is asked, from the chat window and the room's summary and files. `room.smoke.ts` runs
   `roomSmokeSections.ts` over `roomSmokeFixtures.ts`.
 - `chat/voiceRoute.ts` — the voice routes, each naming its chat page in the request: `POST /chat/transcription`
   transcodes a spoken question's recording through ffmpeg, at most 4 at once in the process with a 503 and a
@@ -145,9 +149,13 @@ routes, which set their own limits.
   monthly spend gate; and the access check that a spoken event asks, which reads the page's visibility or membership
   and no spend sum. The voice route tests share their pages, request builders, and spies through
   `chat/voiceRouteTestFixtures.ts`.
-- `chat/attachments.ts` — storing a chat turn's attachments and deleting them, with the routes;
-  `chat/chatAttachmentReads.ts` — reading them: the kept ones with their context, a chat turn's own, a download, and
-  the object keys behind a user's or a topic's.
+- `chat/chatAttachmentScreening.ts` — `resolveChatAttachments`, which resolves a chat turn's attachments for the model
+  and withholds one the scanner flags, an image by the text it shows, `screenAttachmentText`, which screens a stored
+  attachment's text, and the data url helpers; `chat/attachments.ts` — storing the rest and deleting them, with the
+  routes. A kept image's description is screened before its row is written. `chat/roomAttachments.ts` screens a shared
+  image before a post stores and its description before its row turns ready; `chat/chatAttachmentReads.ts` — reading
+  them: the kept ones with their context, a chat turn's own, a download, and the object keys behind a user's or a
+  topic's.
 - `team/teams.ts` — creating and updating a team and the topic attach and detach; `team/teamsRoute.ts` — the team
   routes; `team/deleteTeam.ts` — the delete, the handover to a new leader, and the one team row delete an account
   close shares; `team/search.ts` — the team name search; `team/teamPage.ts` — the team
@@ -231,3 +239,5 @@ routes, which set their own limits.
   Tests: `bun test api`; `*.smoke.ts` run under `doppler run`. `testSession.ts` resolves the session lookup as one user
   or as a visitor and builds a route with one user signed in, and `indexTestFixtures.ts` builds the fake ui bundle and
   the requests the page serving tests send through the composed app; only tests import either.
+  `analyticsTestFixtures.ts` holds the analytics properties that the tests, the topic tools smoke, and the new-topic
+  chat eval pass where a request's own would go.

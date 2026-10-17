@@ -75,7 +75,8 @@ if ! docker info >/dev/null 2>&1; then
   docker info >/dev/null 2>&1 || { echo "docker did not start within 60s: open Docker Desktop and retry" >&2; exit 1; }
 fi
 
-# bring up the compose services (litellm proxy, temporal dev server, and Redis) with secrets injected
+# bring up the compose services (litellm proxy, temporal dev server, Redis, and the llm-guard scanner) with secrets
+# injected. nothing waits on the scanner's model download, since text passes unscreened until the scanner responds
 $COMPOSE up -d
 
 # wait for temporal to accept connections: compose returns once the container is created, well before the server binds 7233
@@ -161,4 +162,4 @@ if command -v stripe >/dev/null 2>&1; then
   fi
 fi
 
-echo "carl is up: litellm http://localhost:4000/ui · temporal ui http://localhost:8233"
+echo "carl is up: litellm http://localhost:4000/ui · temporal ui http://localhost:8233 · llm-guard http://localhost:8001 (text passes unscreened while it loads)"

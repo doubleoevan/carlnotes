@@ -1,20 +1,23 @@
-// the new-topic chat eval's promptfoo provider, which runs the chat turn writer with the new-topic chat's tools
-// and records every tool call
+// the new-topic chat eval's promptfoo provider, which runs the chat turn writer with the new-topic chat's tools, creates
+// the topic through the real agreement check if the last turn proposed it, and records every tool call and the create
 import { generateText, stepCountIs, type Tool } from "ai"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
+import { TEST_ANALYTICS_PROPERTIES } from "../../api/analyticsTestFixtures"
+import { type ChatProposalResult, resolveChatProposal, toStandingChatProposal } from "../../api/chat/chatProposals"
 import {
 	toCreateTopicText,
 	toNewTopicChatTools,
+	toProposeNewTopicTool,
 	toSuggestionsText,
 	toSuggestTopicSourcesTool,
 } from "../../api/tool/newTopicChatTools"
 import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
 import { MAX_TURN_STEPS } from "../../worker/chat"
-import { toConsentStep, toModelMessages } from "../../worker/chat/chatMessages"
+import { toModelMessages } from "../../worker/chat/chatMessages"
 import { buildNewTopicChatPrompt } from "../../worker/chat/chatPrompts"
 import { webSearchTool } from "../../worker/chat/search"
 import { chatModel } from "../../worker/models"
-import { type RecordedToolCall, toRecordingTools } from "../evalHarness"
+import { type RecordedToolCall, toRecordedToolCalls, toRecordingTools } from "../evalHarness"
 import { toStepsText } from "../evalReplies"
 import { LEADER_TEAMS, type NewTopicChatCase, SUGGESTED_TOPIC_SOURCES } from "./newTopicChatCases"
 
@@ -23,6 +26,9 @@ const TOPICS_REMAINING = 3
 
 // what the new-topic chat's tools are bound to
 type NewTopicToolBinding = Parameters<typeof toNewTopicChatTools>[0]
+
+// the new-topic chat page every case runs on
+const EVAL_NEW_TOPIC_PAGE = { newTopic: true } as const
 
 // the variables that a case gives the chat turn
 export type NewTopicChatVariables = Pick<NewTopicChatCase, "history" | "topicDraft" | "question">
@@ -52,62 +58,80 @@ async function writeCaseChatTurn(_renderedPrompt: string, context?: CallApiConte
 		userId: "eval-user",
 		toolCalls: { count: 0, topicSaves: [], topicSaveRejections: [] },
 		topicDraft,
-		analyticsProperties: {
-			entryPoint: "web",
-			plan: "free",
-			platform: "desktop",
-			browserPlatform: "other",
-			isInAppBrowser: false,
-		},
+		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	}
 
-	// build the tools, recording every call that the turn makes
+	// build the tools the new-topic chat binds, recording every call that the turn makes
 	const recordedToolCalls: RecordedToolCall[] = []
-	const savingTools = toSavingTools(newTopicToolBinding)
 	const tools = toRecordingTools(recordedToolCalls, {
 		searchWeb: webSearchTool({ count: 0 }),
 		suggestSources: toSuggestSourcesStandIn(newTopicToolBinding),
-		...savingTools,
+		proposeNewTopic: toProposeNewTopicTool(),
+		...toNewTopicChatTools(newTopicToolBinding),
 	})
 
-	// write the turn, forcing a saving tool on a consent the way a chat turn does
-	const chatPrompt = await buildNewTopicChatPrompt("", topicDraft, TOPICS_REMAINING, LEADER_TEAMS)
+	// answer the proposal the last turn left standing, recording a create as a createTopic call
+	const chatProposalResult = await resolveCaseProposal(newTopicToolBinding, history, question)
+	const serverToolCalls = chatProposalResult?.serverToolCalls ?? []
+	recordedToolCalls.push(...toRecordedToolCalls(serverToolCalls))
+
+	// write the turn after any create the server made
+	const chatPrompt = await buildNewTopicChatPrompt("", topicDraft, TOPICS_REMAINING, LEADER_TEAMS, {
+		proposalOutcome: chatProposalResult?.proposalOutcome,
+	})
 	const { steps, usage } = await generateText({
 		model: chatModel(),
 		system: chatPrompt.prompt,
-		messages: toModelMessages(history, question),
+		messages: toModelMessages(history, question, [], serverToolCalls),
 		tools,
-		prepareStep: ({ stepNumber }) => toConsentStep(stepNumber, { question, history }, savingTools),
 		stopWhen: stepCountIs(MAX_TURN_STEPS),
 	})
 
-	// return every step's text in order, the tool calls, the draft after the turn, and what the turn cost
+	// return every step's text in order, the tool calls, the draft after the turn, and what the turn cost, the
+	// agreement check included
 	const reply = toStepsText(steps)
 	const newTopicChatTurn: NewTopicChatTurn = { reply, toolCalls: recordedToolCalls, topicDraft }
-	return {
-		output: JSON.stringify(newTopicChatTurn),
-		cost: tokenCost(usage.totalTokens ?? 0, CHAT_COST_PER_MILLION_TOKENS),
-	}
+	const totalTokens = (usage.totalTokens ?? 0) + (chatProposalResult?.agreementTokens ?? 0)
+	return { output: JSON.stringify(newTopicChatTurn), cost: tokenCost(totalTokens, CHAT_COST_PER_MILLION_TOKENS) }
 }
 
-// the real draftTopic tool, which writes only into the bound draft,
-// and createTopic with its real description and schema but a stand-in for the database write
-function toSavingTools(newTopicToolBinding: NewTopicToolBinding): Record<string, Tool> {
-	const { draftTopic, createTopic } = toNewTopicChatTools(newTopicToolBinding)
-	return {
-		draftTopic: draftTopic as Tool,
-		createTopic: {
-			...(createTopic as Tool),
-			execute: async () =>
-				toCreateTopicText({
+// resolve the new topic the last history turn proposed, through the real agreement check, with a stand-in for the
+// create's database write. undefined if no proposal stands
+async function resolveCaseProposal(
+	newTopicToolBinding: NewTopicToolBinding,
+	history: NewTopicChatVariables["history"],
+	question: string,
+): Promise<ChatProposalResult | undefined> {
+	// the draft the last turn proposed, if it called proposeNewTopic
+	const chatProposal = toStandingChatProposal({
+		page: EVAL_NEW_TOPIC_PAGE,
+		chatToolCalls: history.at(-1)?.toolCalls ?? [],
+		topicDraft: newTopicToolBinding.topicDraft,
+	})
+	if (!chatProposal) {
+		return undefined
+	}
+
+	// the real check over the case's question, and a create that writes nothing
+	return resolveChatProposal({
+		page: EVAL_NEW_TOPIC_PAGE,
+		chatProposal,
+		question,
+		toolCalls: newTopicToolBinding.toolCalls,
+		applyProposal: async () => [
+			{
+				toolName: "createTopic",
+				input: {},
+				output: toCreateTopicText({
 					status: "created",
 					topicId: "eval-topic",
 					name: newTopicToolBinding.topicDraft.name,
 					teamName: null,
 					addTeamRejection: null,
 				}),
-		},
-	}
+			},
+		],
+	})
 }
 
 // suggestSources with its real description and schema, returning SUGGESTED_TOPIC_SOURCES instead of searching

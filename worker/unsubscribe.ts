@@ -1,5 +1,5 @@
 // signed one-click unsubscribe tokens for the topic-scan email
-import { isSameSignature, toHmacDigest } from "@shared/hmac"
+import { isSameSignature, toAuthSecretSignature } from "@shared/hmac"
 
 // an unsubscribe token includes the recipient and the topic to drop them from
 type UnsubscribePayload = { userId: string; topicId: string }
@@ -35,9 +35,5 @@ export async function verifyUnsubscribeToken(token: string): Promise<Unsubscribe
 // HMAC-SHA256 of the value keyed on the app auth secret, base64url-encoded
 function toSignature(value: string): string {
 	// the app auth secret keys the signature, so a token can't be forged without it
-	const secret = Bun.env.BETTER_AUTH_SECRET
-	if (!secret) {
-		throw new Error("BETTER_AUTH_SECRET must be set to sign unsubscribe tokens")
-	}
-	return toHmacDigest({ value, secret, encoding: "base64url" })
+	return toAuthSecretSignature({ value, purpose: "unsubscribe tokens", encoding: "base64url" })
 }

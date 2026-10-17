@@ -1,5 +1,5 @@
-// the chat tables: chat turns and their attachments, the chat rooms' messages, mentions, summaries, and files, the
-// link previews, and the docs sections retrieved into chat
+// the chat tables: chat turns and their attachments, chat proposals, the chat rooms' messages, mentions, summaries,
+// and files, the link previews, and the docs sections retrieved into chat
 import {
 	bigint,
 	boolean,
@@ -56,6 +56,29 @@ export const chatTurns = pgTable(
 		index("chat_turns_team_created_idx").on(table.teamId, table.createdAt),
 		index("chat_turns_user_created_idx").on(table.userId, table.createdAt),
 	],
+)
+
+// the change carl previewed in a private chat turn, kept until the user's next message on that page answers it.
+// the row holds a keyed digest of the preview and no words of it, so a conversation that is not persisted keeps
+// nothing readable here
+export const chatProposals = pgTable(
+	"chat_proposals",
+	{
+		id: primaryId(),
+		userId: text("user_id")
+			.notNull()
+			.references(() => users.id, { onDelete: "cascade" }),
+		// the topic the preview would change. null on the new-topic chat, whose preview is the topic draft
+		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
+		// the chat turn that showed the preview
+		chatTurnId: text("chat_turn_id")
+			.notNull()
+			.references(() => chatTurns.id, { onDelete: "cascade" }),
+		digest: text("digest").notNull(),
+		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+	},
+	// one preview per user per chat page. nulls compare equal here so the new-topic chat's upsert finds its row
+	(table) => [unique("chat_proposals_page_unique").on(table.userId, table.topicId).nullsNotDistinct()],
 )
 
 // an attachment a user sent with a chat turn, whether or not they kept it for the topic

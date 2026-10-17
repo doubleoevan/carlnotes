@@ -1,4 +1,5 @@
-// the new-topic chat's own tools: writing the topic draft, suggesting its sources, and creating the topic from it
+// the new-topic chat's own tools: writing the topic draft, suggesting its sources, and proposing the topic, and the
+// create that an agreed proposal runs
 import { MAX_DRAFT_INVITES, MAX_TOPIC_SOURCES, TOPIC_NAME_CHARS, TOPIC_PROMPT_CHARS } from "@shared/contracts/topics"
 import { isPodcastEpisodeRecordingConfigured } from "@shared/podcastEpisodes"
 import {
@@ -11,7 +12,7 @@ import { type Tool, tool } from "ai"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
 import { deleteTopicDraft } from "../topic/topicDrafts"
-import { type ChatTurnToolCalls, CONFIRMATION_RULE, CREATE_REJECTION_LINES, toRejectionToast } from "./chatTools"
+import { type ChatTurnToolCalls, CREATE_REJECTION_LINES, toRejectionToast } from "./chatTools"
 import {
 	type CreateTopicFromDraftResult,
 	createTopicFromDraft,
@@ -21,7 +22,7 @@ import {
 import { toPodcastFieldDescription, toUpdateTopicFieldsShape } from "./topicTools"
 
 // what one new-topic turn's tools are bound to: the user, the turn's draft, and what the tools leave for the toast
-type NewTopicToolBinding = {
+export type NewTopicToolBinding = {
 	userId: string
 	toolCalls: ChatTurnToolCalls
 	topicDraft: TopicDraft
@@ -40,14 +41,25 @@ const topicDraftFieldsPayload = z.object({
 })
 
 /**
- * Binds the new-topic chat's tools to this chat turn's topic draft.
- * draftTopic writes into that draft, and createTopic makes the topic from it.
+ * Binds the new-topic chat's saving tool to this chat turn's topic draft. draftTopic writes into that draft.
  */
 export function toNewTopicChatTools(newTopicToolBinding: NewTopicToolBinding): Record<string, Tool> {
-	return {
-		draftTopic: toDraftTopicTool(newTopicToolBinding),
-		createTopic: toCreateTopicTool(newTopicToolBinding),
-	}
+	return { draftTopic: toDraftTopicTool(newTopicToolBinding) }
+}
+
+/**
+ * Builds the tool that proposes creating the topic from the draft as this turn leaves it. It saves nothing, so it is
+ * not bound with the saving tools. The server records the draft, and creates the topic only if the user's next message
+ * agrees to it.
+ */
+export function toProposeNewTopicTool(): Tool {
+	return tool({
+		description:
+			"Propose creating the topic from the draft as it stands once this turn ends. Call this after you read the draft back, in the same turn, and again after any change to it. This creates nothing. The topic is created only if the reader's next message agrees.",
+		inputSchema: z.object({}),
+		execute: async () =>
+			"The draft is proposed. Ask the reader whether to create it and wait. Nothing is created until their next message agrees.",
+	})
 }
 
 // the tool that writes the topic draft. each call replaces the fields it names and saves the whole of it for the card
@@ -103,55 +115,56 @@ export function toSuggestTopicSourcesTool({ userId, toolCalls }: NewTopicToolBin
 export const TEAM_MISSING_TEXT =
 	"A public or invite topic goes on a team. Ask which of the reader's teams it goes on, or make it private, then create again. Nothing was created."
 
-// the tool that creates the topic from the topic draft as it stands
-function toCreateTopicTool({ userId, toolCalls, topicDraft, analyticsProperties }: NewTopicToolBinding): Tool {
-	return tool({
-		description: `Create the topic from the draft as it stands, with a first brew. ${CONFIRMATION_RULE}`,
-		inputSchema: z.object({}),
-		execute: async () => {
-			toolCalls.count += 1
+/**
+ * Creates the topic from the topic draft as it stands, listing the save or what stopped it for the toast, and returns
+ * what carl reads.
+ */
+export async function createTopicInChat({
+	userId,
+	toolCalls,
+	topicDraft,
+	analyticsProperties,
+}: NewTopicToolBinding): Promise<string> {
+	toolCalls.count += 1
 
-			// create nothing for a public or invite draft that names no team, and have carl ask which team
-			if (topicDraft.visibility !== "private" && !topicDraft.team) {
-				return TEAM_MISSING_TEXT
-			}
-			const createTopicFromDraftResult = await createTopicFromDraft({
-				userId,
-				topicDraft: topicDraft,
-				origin: "chat",
-				analyticsProperties,
-			})
-			// what stopped the create, for the toast
-			if (createTopicFromDraftResult.status !== "created") {
-				toolCalls.topicSaveRejections.push(
-					toRejectionToast("create the topic", toCreateTopicReason(createTopicFromDraftResult)),
-				)
-				return toCreateTopicText(createTopicFromDraftResult)
-			}
-			// list the save and the created topic for the toast
-			toolCalls.topicSaves.push(`Carl created ${createTopicFromDraftResult.name}.`)
-			toolCalls.createdTopicId = createTopicFromDraftResult.topicId
-			// delete the topic draft now that the topic exists
-			await deleteTopicDraft(userId).catch((error) => {
-				console.error("topic draft delete failed", error)
-			})
-			// a rejected team add gets its own toast
-			if (createTopicFromDraftResult.addTeamRejection) {
-				toolCalls.topicSaveRejections.push(
-					toRejectionToast(
-						`add it to ${createTopicFromDraftResult.teamName}`,
-						createTopicFromDraftResult.addTeamRejection,
-					),
-				)
-			}
-			// word the result for carl
-			return toCreateTopicText(createTopicFromDraftResult)
-		},
+	// create nothing for a public or invite draft that names no team, and have carl ask which team
+	if (topicDraft.visibility !== "private" && !topicDraft.team) {
+		return TEAM_MISSING_TEXT
+	}
+	const createTopicFromDraftResult = await createTopicFromDraft({
+		userId,
+		topicDraft: topicDraft,
+		origin: "chat",
+		analyticsProperties,
 	})
+	// what stopped the create, for the toast
+	if (createTopicFromDraftResult.status !== "created") {
+		toolCalls.topicSaveRejections.push(
+			toRejectionToast("create the topic", toCreateTopicReason(createTopicFromDraftResult)),
+		)
+		return toCreateTopicText(createTopicFromDraftResult)
+	}
+	// list the save and the created topic for the toast
+	toolCalls.topicSaves.push(`Carl created ${createTopicFromDraftResult.name}.`)
+	toolCalls.createdTopicId = createTopicFromDraftResult.topicId
+	// delete the topic draft now that the topic exists
+	await deleteTopicDraft(userId).catch((error) => {
+		console.error("topic draft delete failed", error)
+	})
+	// a rejected team add gets its own toast
+	if (createTopicFromDraftResult.addTeamRejection) {
+		toolCalls.topicSaveRejections.push(
+			toRejectionToast(`add it to ${createTopicFromDraftResult.teamName}`, createTopicFromDraftResult.addTeamRejection),
+		)
+	}
+	// word the result for carl
+	return toCreateTopicText(createTopicFromDraftResult)
 }
 
-// the topic draft in one line, so carl can read back what stands
-function toTopicDraftSummary(topicDraft: TopicDraft): string {
+/**
+ * Returns the topic draft in one line.
+ */
+export function toTopicDraftSummary(topicDraft: TopicDraft): string {
 	const topicSources = topicDraft.sources
 		.map((topicSource) => `${topicSource.sourceOption} ${topicSource.value}`.trim())
 		.join(", ")
