@@ -156,7 +156,7 @@
 		"promptfoo": "^0.124.1",
 		"react-email": "^6.11.1",
 		"tailwindcss": "^4.3.3",
-		"typescript": "^5.9.3",
+		"typescript": "^7.0.2",
 		"vite": "^8.3.4"
 	},
 	"trustedDependencies": [
