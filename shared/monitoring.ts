@@ -81,8 +81,19 @@ export function startMonitoring(): void {
 		environment,
 		tracesSampler: (samplingContext) =>
 			samplingContext.inheritOrSampleWith(toTracesSampleRate({ spanName: samplingContext.name, tracesSampleRate })),
-		sendDefaultPii: false,
+		dataCollection: {
+			userInfo: false,
+			cookies: false,
+			httpHeaders: false,
+			httpBodies: [],
+			urlQueryParams: false,
+			genAI: { inputs: false, outputs: false },
+			databaseQueryData: false,
+			stackFrameVariables: false,
+		},
 		beforeSend: scrubContent,
+		// a streamed trace skips beforeSendTransaction, so traces send whole, as transactions
+		traceLifecycle: "static",
 		beforeSendTransaction: scrubTransaction,
 		// model calls are traced in Langfuse alone, so Sentry's AI SDK integration is left out
 		integrations: (defaultIntegrations) => defaultIntegrations.filter((integration) => integration.name !== "VercelAI"),

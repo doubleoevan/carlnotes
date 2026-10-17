@@ -47,7 +47,7 @@ import { startTelemetry } from "./worker/telemetry"
 
 // Sentry keeps the request's transaction instead of sending it, and Langfuse starts beside it
 let transactionEvent
-Sentry.init({ dsn: "https://public@127.0.0.1:9/1", tracesSampleRate: 1, beforeSendTransaction: (event) => {
+Sentry.init({ dsn: "https://public@127.0.0.1:9/1", tracesSampleRate: 1, traceLifecycle: "static", beforeSendTransaction: (event) => {
 	transactionEvent = event
 	return null
 } })
