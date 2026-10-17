@@ -98,7 +98,7 @@
 		"@react-email/components": "^1.0.12",
 		"@react-email/render": "^2.1.0",
 		"@resvg/resvg-js": "^2.6.2",
-		"@sentry/bun": "^11.6.0",
+		"@sentry/bun": "^11.7.0",
 		"@tanstack/react-query": "^5.104.2",
 		"@tanstack/react-router": "1.170.42",
 		"@tanstack/react-start": "1.168.61",
