@@ -1,8 +1,9 @@
-// the chat_turns rows: saving one for every chat turn and chat room turn, and reading or clearing a user's conversation
+// the chat_turns rows: saving one for every chat turn, chat room turn, transcription, and speech call, and reading or
+// clearing a user's conversation
 import { trackEvent } from "@shared/analytics"
 import type { ChatTurnRow } from "@shared/contracts/chat"
-import type { ChatToolCall } from "@shared/payloads"
-import { and, desc, eq, isNull, type SQL } from "drizzle-orm"
+import type { ChatToolCall, VoiceChatPage } from "@shared/payloads"
+import { and, desc, eq, isNotNull, isNull, type SQL } from "drizzle-orm"
 import { db } from "../../db"
 import { chatTurns } from "../../db/schema/chat"
 import { CHAT_COST_PER_MILLION_TOKENS, EXA_COST_PER_SEARCH, tokenCost } from "../../worker/budget"
@@ -26,8 +27,17 @@ export function toChatPageId(page: ChatPage): string {
 	return page.topicId ?? page.teamId ?? ""
 }
 
-// which chat a page holds: a topic's, a team's, or the new-topic chat
-function toChatKind(page: ChatPage): "topic" | "team" | "new_topic" {
+// which chat a page holds, as an analytics event names it
+export type ChatKind = "topic" | "team" | "new_topic" | "room"
+
+/**
+ * Returns which chat a page holds: a topic's, a team's, the new-topic chat, or a chat room.
+ */
+export function toChatKind(page: ChatPage | VoiceChatPage): ChatKind {
+	// a voice page names its kind
+	if ("kind" in page) {
+		return page.kind === "newTopic" ? "new_topic" : page.kind
+	}
 	if (page.newTopic) {
 		return "new_topic"
 	}
@@ -46,6 +56,8 @@ export type ToChatTurnRowOptions = ChatTurnSpend & {
 	question: string
 	answer: string
 	toolCalls: ChatToolCall[]
+	// whether the question was spoken and the reply read aloud
+	isSpoken: boolean
 }
 
 // a chat turn to save, and the properties that its analytics event is sent with
@@ -65,11 +77,12 @@ export async function saveChatTurn({
 		.returning({ id: chatTurns.id })
 
 	// count the chat turn exactly when its row is saved
-	const { userId, page } = chatTurnRowOptions
+	const { userId, page, isSpoken } = chatTurnRowOptions
 	trackEvent("chat_turn_sent", userId, {
 		...analyticsProperties,
 		topicId: toChatPageId(page),
 		chatKind: toChatKind(page),
+		isSpoken,
 	})
 	return chatTurnRow?.id ?? null
 }
@@ -86,30 +99,78 @@ export function toChatTurnRow({
 	question,
 	answer,
 	toolCalls,
+	isSpoken,
 }: ToChatTurnRowOptions): typeof chatTurns.$inferInsert {
 	// return the row. a chat turn that does not persist stores null text and only its spend
 	return {
 		userId,
 		topicId: page.topicId ?? null,
 		teamId: page.teamId ?? null,
-		...toChatTurnSpendColumns({ totalTokens, searchCount }),
+		...toSpendColumns({ totalTokens, cost: toChatTurnCost({ totalTokens, searchCount }) }),
 		question: isPersisted ? encryptChatText(question) : null,
 		answer: isPersisted ? encryptChatText(answer) : null,
 		// the tool calls as encrypted json
 		toolCalls: isPersisted && toolCalls.length > 0 ? encryptChatText(JSON.stringify(toolCalls)) : null,
+		isSpoken,
 	}
 }
 
-// the spend that every chat turn row stores: its token total and its cost.
-// the cost prices the tokens as a scan does and adds what the web searches cost
-function toChatTurnSpendColumns({
+// one transcription or speech call to record as chat spend: who it bills, the chat page it was on, and what it cost
+export type RecordChatSpendRowOptions = { userId: string; page: VoiceChatPage; cost: number; totalTokens: number }
+
+/**
+ * Records a transcription or a spoken part as a chat turn row with no text.
+ */
+export async function recordChatSpendRow({
+	userId,
+	page,
+	cost,
 	totalTokens,
-	searchCount,
-}: ChatTurnSpend): Pick<typeof chatTurns.$inferInsert, "totalTokens" | "cost"> {
-	return {
-		totalTokens,
-		cost: (tokenCost(totalTokens, CHAT_COST_PER_MILLION_TOKENS) + searchCount * EXA_COST_PER_SEARCH).toFixed(6),
+}: RecordChatSpendRowOptions): Promise<void> {
+	await db.insert(chatTurns).values({
+		userId,
+		...toVoiceChatPageColumns(page),
+		...toSpendColumns({ totalTokens, cost }),
+	})
+}
+
+// the topic and the team a voice page's spend row names, as the chat turn rows name them
+function toVoiceChatPageColumns(page: VoiceChatPage): Pick<typeof chatTurns.$inferInsert, "topicId" | "teamId"> {
+	// a topic's page names its topic alone, and a team's page names its team
+	if (page.kind === "topic") {
+		return { topicId: page.topicId, teamId: null }
 	}
+	if (page.kind === "team") {
+		return { topicId: null, teamId: page.teamId }
+	}
+	// the new-topic chat names neither
+	if (page.kind === "newTopic") {
+		return { topicId: null, teamId: null }
+	}
+	return toChatRoomPageColumns(page.topicId, page.teamId)
+}
+
+// the topic and the team a chat room's row names: the topic alone, or the team for the team's own chat room
+function toChatRoomPageColumns(
+	topicId: string | null,
+	teamId: string,
+): Pick<typeof chatTurns.$inferInsert, "topicId" | "teamId"> {
+	return { topicId, teamId: topicId === null ? teamId : null }
+}
+
+// what a chat turn's completion cost: its tokens priced as a scan does, plus what the web searches cost
+function toChatTurnCost({ totalTokens, searchCount }: ChatTurnSpend): number {
+	return tokenCost(totalTokens, CHAT_COST_PER_MILLION_TOKENS) + searchCount * EXA_COST_PER_SEARCH
+}
+
+type ToSpendColumnsOptions = { totalTokens: number; cost: number }
+
+// the spend that every chat turn row stores: its token total and its cost, to six decimals
+function toSpendColumns({
+	totalTokens,
+	cost,
+}: ToSpendColumnsOptions): Pick<typeof chatTurns.$inferInsert, "totalTokens" | "cost"> {
+	return { totalTokens, cost: cost.toFixed(6) }
 }
 
 // one chat room completion to record: the member it bills, the chat room it ran in,
@@ -136,10 +197,8 @@ export async function recordChatRoomTurn({
 	// the text lives in the chat room's messages
 	await db.insert(chatTurns).values({
 		userId,
-		topicId,
-		// the team, only for the team's own chat room. a topic's chat room turn names its topic alone
-		teamId: topicId === null ? teamId : null,
-		...toChatTurnSpendColumns(completion),
+		...toChatRoomPageColumns(topicId, teamId),
+		...toSpendColumns({ totalTokens: completion.totalTokens, cost: toChatTurnCost(completion) }),
 		roomMessageId: chatRoomMessageId,
 	})
 }
@@ -153,8 +212,8 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 		return []
 	}
 
-	// read the chat turns newest first, and the attachments sent with them.
-	// only a topic conversation stores attachments
+	// read the chat turns that kept their text newest first, and the attachments sent with them.
+	// a spend row, a chat room turn, and a cleared chat turn have no text. only a topic conversation stores attachments
 	const [chatTurnRows, attachmentsByChatTurnId] = await Promise.all([
 		db
 			.select({
@@ -162,15 +221,24 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 				question: chatTurns.question,
 				answer: chatTurns.answer,
 				toolCalls: chatTurns.toolCalls,
+				isSpoken: chatTurns.isSpoken,
 				createdAt: chatTurns.createdAt,
 			})
 			.from(chatTurns)
-			.where(and(eq(chatTurns.userId, userId), toPageFilter(page)))
+			.where(
+				and(
+					eq(chatTurns.userId, userId),
+					toPageFilter(page),
+					isNotNull(chatTurns.question),
+					isNotNull(chatTurns.answer),
+				),
+			)
 			.orderBy(desc(chatTurns.createdAt)),
 		page.topicId ? loadTopicChatTurnAttachments(userId, page.topicId) : new Map<string, never[]>(),
 	])
 
-	// decrypt each stored pair in reading order, dropping rows with no text and any text that fails to verify
+	// decrypt each stored pair in reading order, dropping any text that fails to verify. the null check narrows the
+	// row's type, the query already kept the text
 	const decryptedChatTurns = chatTurnRows.reverse().flatMap((chatTurnRow) => {
 		if (chatTurnRow.question === null || chatTurnRow.answer === null) {
 			return []
@@ -191,6 +259,7 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 				answer,
 				toolCalls: toChatToolCalls(chatTurnRow.toolCalls),
 				at: chatTurnRow.createdAt.toISOString(),
+				isSpoken: chatTurnRow.isSpoken,
 				attachments,
 			},
 		]

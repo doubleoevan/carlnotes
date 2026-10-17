@@ -1,10 +1,14 @@
-// a live smoke test of podcast speech. record a clip on each Gemini tier, and check the key's spend at each tier's rate
+// a live smoke test of speech and transcription. record a podcast clip on each Gemini tier, speak a sentence in Carl's
+// voice as an MP3 and transcribe it back as a browser's recording, and check the key's spend against the app's own
+// speech rates. a transcription charges nothing on the key, so the run prints its estimate and tokens alone
 // run it with: bun run smoke:speech. it needs the proxy from bun run carl-up, with GEMINI_API_KEY on the proxy
 import type { PodcastEpisodeTurn } from "@shared/payloads"
 import { podcastEpisodeSpeechModel } from "@shared/podcastEpisodes"
-import { type SpeechTier, speechCost } from "./budget"
+import { type SpeechTier, speechCost, transcriptionCost } from "./budget"
+import { runFfmpeg } from "./ffmpeg"
 import { deleteLiteLLMKey, provisionLiteLLMKey, readLiteLLMKeySpend } from "./litellm"
-import { recordSpeech } from "./speech"
+import { recordSpeech, recordSpokenAnswer, SPOKEN_ANSWER_SPEECH_TIER } from "./speech"
+import { transcodeRecording, transcribeRecording } from "./transcription"
 
 // a short exchange between the host and the cohost, with one inline tag and one style
 const CLIP_TURNS: PodcastEpisodeTurn[] = [
@@ -13,7 +17,11 @@ const CLIP_TURNS: PodcastEpisodeTurn[] = [
 	{ speaker: "host", text: "The one that names the stockists. That is where you can buy it." },
 ]
 
-// the test key's budget in cents, far above what two short clips cost
+// the sentence that the spoken answer says, and a word of it that the transcript has to include
+const SPOKEN_ANSWER_TEXT = "The stockists are listed on the review page, and the first one ships this week."
+const SPOKEN_ANSWER_WORD = "stockists"
+
+// the test key's budget in cents, far above what the clips cost
 const TEST_KEY_BUDGET_CENTS = 100
 
 // how long to wait for the proxy to write a call's spend, and how often to read the spend.
@@ -24,17 +32,30 @@ const SPEND_POLL_MS = 3000
 // how far the proxy's spend may differ from the app's estimate and still count as the same rate
 const SPEND_TOLERANCE_SHARE = 0.1
 
-// one tier's clip. whether it was recorded, what the app estimates that it cost, and what the proxy charged the key
-type TierClip = { speechTier: SpeechTier; isRecorded: boolean; estimatedDollars: number; chargedDollars: number }
+// one clip's spend. whether it was recorded, what the app estimates that it cost, and what the proxy charged the key
+type ClipSpend = { isRecorded: boolean; estimatedDollars: number; chargedDollars: number }
+
+// a clip that failed before it spent
+const FAILED_CLIP_SPEND: ClipSpend = { isRecorded: false, estimatedDollars: 0, chargedDollars: 0 }
+
+// a spoken answer transcribed back. the speech call's spend, whether the audio is an MP3, and whether the transcript
+// has the spoken word
+type VoiceClip = ClipSpend & { isMp3: boolean; isTranscribed: boolean }
+
+// a voice clip that failed before it spent
+const FAILED_VOICE_CLIP: VoiceClip = { ...FAILED_CLIP_SPEND, isMp3: false, isTranscribed: false }
+
+// the arguments that encode the spoken answer as Chrome records: opus in webm
+const CHROME_RECORDING_ARGUMENTS = ["-i", "pipe:0", "-c:a", "libopus", "-b:a", "32k", "-f", "webm", "pipe:1"]
 
 // record the clip on one tier with the test key, wait for the key's spend, and return the estimate and the charge
-async function recordTierClip(speechTier: SpeechTier, testKey: string): Promise<TierClip> {
+async function recordTierClip(speechTier: SpeechTier, testKey: string): Promise<ClipSpend> {
 	// read the key's spend, record the clip, and return a failed clip if the call recorded no audio
 	const spendBeforeDollars = (await readLiteLLMKeySpend(testKey)) ?? 0
 	const recordSpeechResult = await recordSpeech({ turns: CLIP_TURNS, speechTier, litellmApiKey: testKey })
 	if (recordSpeechResult.outcome !== "recorded") {
 		console.log(`${speechTier} clip failed  : ${JSON.stringify(recordSpeechResult)}`)
-		return { speechTier, isRecorded: false, estimatedDollars: 0, chargedDollars: 0 }
+		return FAILED_CLIP_SPEND
 	}
 
 	// estimate the call's cost from the response's token counts, and print the clip's size and tokens
@@ -42,25 +63,83 @@ async function recordTierClip(speechTier: SpeechTier, testKey: string): Promise<
 	const estimatedDollars = speechCost({ speechTier, inputTokens, audioTokens })
 	console.log(`${speechTier} clip         : ${audioBytes.length} bytes, ${inputTokens} in, ${audioTokens} audio tokens`)
 
-	// wait for the proxy to write the call's spend on the key
+	// wait for the proxy to write the call's spend on the key, and print the estimate and the charge
+	const chargedDollars = await waitForChargedDollars(testKey, spendBeforeDollars)
+	const clipSpend = { isRecorded: true, estimatedDollars, chargedDollars }
+	printClipSpend(speechTier, clipSpend)
+	return clipSpend
+}
+
+// speak the sentence in Carl's voice on the test key, wait for the speech call's spend, then encode the MP3 as Chrome's
+// recording, transcode it, and transcribe it on the same key
+async function recordVoiceClip(testKey: string): Promise<VoiceClip> {
+	// read the key's spend, speak the sentence, and return a failed clip if the call recorded no audio
+	const spendBeforeDollars = (await readLiteLLMKeySpend(testKey)) ?? 0
+	const recordSpokenAnswerResult = await recordSpokenAnswer({ text: SPOKEN_ANSWER_TEXT, litellmApiKey: testKey })
+	if (recordSpokenAnswerResult.outcome !== "recorded") {
+		console.log(`spoken answer failed  : ${JSON.stringify(recordSpokenAnswerResult)}`)
+		return FAILED_VOICE_CLIP
+	}
+
+	// estimate the speech call's cost, print the clip's size, type, and tokens, and wait for the call's spend
+	const { inputTokens, audioTokens, audioBytes, audioContentType } = recordSpokenAnswerResult
+	const estimatedDollars = speechCost({ speechTier: SPOKEN_ANSWER_SPEECH_TIER, inputTokens, audioTokens })
+	console.log(
+		`spoken answer         : ${audioBytes.length} bytes ${audioContentType}, ${inputTokens} in, ${audioTokens} audio tokens`,
+	)
+	const chargedDollars = await waitForChargedDollars(testKey, spendBeforeDollars)
+	const speechClip = { isRecorded: true, isMp3: isMp3(audioBytes), estimatedDollars, chargedDollars }
+	printClipSpend("spoken answer", speechClip)
+
+	// encode the MP3 as Chrome's recording, then transcode and transcribe it on the same key
+	const recordingBytes = await runFfmpeg({ ffmpegArguments: CHROME_RECORDING_ARGUMENTS, inputBytes: audioBytes })
+	const transcodedBytes = await transcodeRecording(recordingBytes)
+	const transcribeRecordingResult = await transcribeRecording({ audioBytes: transcodedBytes, litellmApiKey: testKey })
+	if (transcribeRecordingResult.outcome !== "transcribed") {
+		console.log(`transcription failed  : ${JSON.stringify(transcribeRecordingResult)}`)
+		return { ...speechClip, isTranscribed: false }
+	}
+
+	// print the transcript, its tokens, and its estimate, which the key is not charged
+	const { transcript } = transcribeRecordingResult
+	console.log(`transcript            : ${transcript}`)
+	console.log(
+		`transcription         : ${transcribeRecordingResult.inputTokens} in, ${transcribeRecordingResult.outputTokens} out tokens`,
+	)
+	console.log(`transcription est. $  : ${transcriptionCost(transcribeRecordingResult).toFixed(6)}`)
+	return { ...speechClip, isTranscribed: transcript.toLowerCase().includes(SPOKEN_ANSWER_WORD) }
+}
+
+// whether the audio is an MP3: an ID3 tag or an MPEG frame sync at the start
+function isMp3(audioBytes: Uint8Array): boolean {
+	const isId3 = new TextDecoder().decode(audioBytes.subarray(0, 3)) === "ID3"
+	const isFrameSync = audioBytes[0] === 0xff && ((audioBytes[1] ?? 0) & 0xe0) === 0xe0
+	return isId3 || isFrameSync
+}
+
+// wait for the proxy to write a call's spend on the key, and return how much the key's spend rose from the spend before
+async function waitForChargedDollars(testKey: string, spendBeforeDollars: number): Promise<number> {
 	let chargedDollars = 0
 	for (let waitedMs = 0; waitedMs < SPEND_WAIT_MS && chargedDollars <= 0; waitedMs += SPEND_POLL_MS) {
 		await Bun.sleep(SPEND_POLL_MS)
 		chargedDollars = ((await readLiteLLMKeySpend(testKey)) ?? 0) - spendBeforeDollars
 	}
+	return chargedDollars
+}
 
-	// print the estimate and the charge, so a mismatch shows which rate the proxy applied
-	console.log(`${speechTier} estimated $  : ${estimatedDollars.toFixed(6)}`)
-	console.log(`${speechTier} charged $    : ${chargedDollars.toFixed(6)}`)
-	return { speechTier, isRecorded: true, estimatedDollars, chargedDollars }
+// print a clip's estimate and charge, so a mismatch shows which rate the proxy applied
+function printClipSpend(clipName: string, { estimatedDollars, chargedDollars }: ClipSpend): void {
+	console.log(`${clipName} estimated $  : ${estimatedDollars.toFixed(6)}`)
+	console.log(`${clipName} charged $    : ${chargedDollars.toFixed(6)}`)
 }
 
 // whether the proxy charged the key what the app estimates, within the tolerance
-function isChargedAtRate({ estimatedDollars, chargedDollars }: TierClip): boolean {
+function isChargedAtRate({ estimatedDollars, chargedDollars }: ClipSpend): boolean {
 	return estimatedDollars > 0 && Math.abs(chargedDollars - estimatedDollars) <= estimatedDollars * SPEND_TOLERANCE_SHARE
 }
 
-// record the clip on the standard tier and the flex tier with a fresh test key, check each clip, and print the report
+// record the clip on the standard tier and the flex tier, then the voice clip, with a fresh test key,
+// check each clip, and print the report
 async function smokeTest(): Promise<boolean> {
 	// a deployment with the speech model set empty has no speech to test
 	if (!podcastEpisodeSpeechModel()) {
@@ -71,16 +150,20 @@ async function smokeTest(): Promise<boolean> {
 	// provision a key for this run alone, so the spend that the run reads is its own
 	const testKey = await provisionLiteLLMKey(`speech-smoke-${Date.now()}@example.com`, TEST_KEY_BUDGET_CENTS)
 	try {
-		// record the clip on each tier with the test key
+		// record the clip on each tier and the voice clip with the test key
 		const standardClip = await recordTierClip("standard", testKey)
 		const flexClip = await recordTierClip("flex", testKey)
+		const voiceClip = await recordVoiceClip(testKey)
 
-		// the smoke test assertions. each tier's spend on the key has to match the app's own rate for that tier
+		// the smoke test assertions. each clip's spend on the key has to match the app's own rates for it
 		const checks: [string, boolean][] = [
 			["the standard clip was recorded", standardClip.isRecorded],
 			["the flex clip was recorded", flexClip.isRecorded],
 			["the standard spend reached the key at the standard rate", isChargedAtRate(standardClip)],
 			["the flex spend reached the key at the app's flex rate", isChargedAtRate(flexClip)],
+			["the spoken answer is an MP3", voiceClip.isMp3],
+			["the spoken answer's spend reached the key at the standard rate", isChargedAtRate(voiceClip)],
+			["the spoken answer was transcribed with the word spoken", voiceClip.isTranscribed],
 		]
 
 		// print each check and return the overall result

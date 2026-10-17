@@ -12,21 +12,37 @@ import type { TeamChatContext } from "./retrieveTeam"
 // the edit block for a turn without the topic tools
 const EMPTY_EDIT_TOPIC_BLOCK = "None."
 
+// whether the chat turn's question was spoken, which splices the spoken fragment above the chat's closing rules
+type ChatPromptOptions = { isSpoken?: boolean }
+
+// the shared fragments with no variables, written once for every chat
+type ChatFragmentName = "chat-conduct" | "chat-docs-guide" | "chat-open-new-topic" | "chat-spoken"
+
+// the topic chat's turn options: the edit block for a turn with the topic tools, and the spoken flag
+type TopicChatPromptOptions = ChatPromptOptions & { editTopicBlock?: string }
+
 /**
  * Builds the system prompt from the 'chat-topic.md' template, with everything a user could have written fenced as data.
  */
 export async function buildTopicChatPrompt(
 	chatContext: ChatContext,
-	editTopicBlock: string = EMPTY_EDIT_TOPIC_BLOCK,
+	{ editTopicBlock = EMPTY_EDIT_TOPIC_BLOCK, isSpoken = false }: TopicChatPromptOptions = {},
 ): Promise<BuiltPrompt> {
-	const [{ template, name, registryPrompt }, glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock] =
-		await Promise.all([
-			fetchPromptTemplate("chat-topic"),
-			toGlossaryBlock(TOPIC_CHAT_GLOSSARY_LINE),
-			toConductBlock(),
-			toDocsGuideBlock(),
-			toOpenNewTopicBlock(),
-		])
+	const [
+		{ template, name, registryPrompt },
+		glossaryBlock,
+		conductBlock,
+		docsGuideBlock,
+		openNewTopicBlock,
+		spokenBlock,
+	] = await Promise.all([
+		fetchPromptTemplate("chat-topic"),
+		toGlossaryBlock(TOPIC_CHAT_GLOSSARY_LINE),
+		toFragmentBlock("chat-conduct"),
+		toFragmentBlock("chat-docs-guide"),
+		toFragmentBlock("chat-open-new-topic"),
+		toSpokenBlock(isSpoken),
+	])
 
 	// fill the template, composing each list block first. the app's own blocks stay unfenced
 	const prompt = writePrompt(
@@ -42,7 +58,7 @@ export async function buildTopicChatPrompt(
 			chatAttachmentContext: chatContext.chatAttachmentContext || "None.",
 			docsBlock: chatContext.docsBlock || "None.",
 		},
-		{ editTopicBlock, glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock },
+		{ editTopicBlock, glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock, spokenBlock },
 	)
 	return { prompt, name, registryPrompt }
 }
@@ -71,27 +87,20 @@ async function toGlossaryBlock(chatGlossaryLine: string): Promise<string> {
 }
 
 /**
- * Carl's voice and the rules every chat about findings shares, written once.
+ * A shared fragment with no variables, written once for every chat: carl's conduct, how a chat reads the docs
+ * sections, or what a chat does if a reader asks for a new topic.
  */
-async function toConductBlock(): Promise<string> {
-	const { template } = await fetchPromptTemplate("chat-conduct")
+async function toFragmentBlock(fragmentName: ChatFragmentName): Promise<string> {
+	const { template } = await fetchPromptTemplate(fragmentName)
 	return writePrompt(template, {})
 }
 
 /**
- * How a chat reads the docs sections retrieved for the question, written once for every chat prompt.
+ * What changes on a spoken chat turn, written once for every chat: the reply is read aloud, so it is short and has no
+ * markup. A typed chat turn gets an empty block without a fetch.
  */
-async function toDocsGuideBlock(): Promise<string> {
-	const { template } = await fetchPromptTemplate("chat-docs-guide")
-	return writePrompt(template, {})
-}
-
-/**
- * What a chat about findings does if a reader asks for a new topic, written once for the topic chat and the team room.
- */
-async function toOpenNewTopicBlock(): Promise<string> {
-	const { template } = await fetchPromptTemplate("chat-open-new-topic")
-	return writePrompt(template, {})
+async function toSpokenBlock(isSpoken: boolean): Promise<string> {
+	return isSpoken ? toFragmentBlock("chat-spoken") : ""
 }
 
 /**
@@ -113,11 +122,13 @@ export async function buildNewTopicChatPrompt(
 	topicDraft?: TopicDraft,
 	topicsRemaining?: number,
 	leaderTeams?: TopicDraftTeam[],
+	{ isSpoken = false }: ChatPromptOptions = {},
 ): Promise<BuiltPrompt> {
-	const [{ template, name, registryPrompt }, glossaryBlock, docsGuideBlock] = await Promise.all([
+	const [{ template, name, registryPrompt }, glossaryBlock, docsGuideBlock, spokenBlock] = await Promise.all([
 		fetchPromptTemplate("chat-new-topic"),
 		toGlossaryBlock(NEW_TOPIC_CHAT_GLOSSARY_LINE),
-		toDocsGuideBlock(),
+		toFragmentBlock("chat-docs-guide"),
+		toSpokenBlock(isSpoken),
 	])
 	// write the prompt with the docs, the topic draft, and the teams fenced as data and the app's own blocks unfenced
 	const prompt = writePrompt(
@@ -131,6 +142,7 @@ export async function buildNewTopicChatPrompt(
 			topicLimitBlock: toTopicLimitBlock(topicsRemaining),
 			glossaryBlock,
 			docsGuideBlock,
+			spokenBlock,
 			scanFrequencies: toScanFrequenciesSentence(),
 		},
 	)
@@ -204,15 +216,25 @@ function toTopicLimitBlock(topicsRemaining?: number): string {
 /**
  * Builds the team chat room's system prompt from the 'chat-team.md' template, reading across every topic the team holds.
  */
-export async function buildTeamChatPrompt(teamContext: TeamChatContext): Promise<BuiltPrompt> {
-	const [{ template, name, registryPrompt }, glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock] =
-		await Promise.all([
-			fetchPromptTemplate("chat-team"),
-			toGlossaryBlock(TEAM_CHAT_GLOSSARY_LINE),
-			toConductBlock(),
-			toDocsGuideBlock(),
-			toOpenNewTopicBlock(),
-		])
+export async function buildTeamChatPrompt(
+	teamContext: TeamChatContext,
+	{ isSpoken = false }: ChatPromptOptions = {},
+): Promise<BuiltPrompt> {
+	const [
+		{ template, name, registryPrompt },
+		glossaryBlock,
+		conductBlock,
+		docsGuideBlock,
+		openNewTopicBlock,
+		spokenBlock,
+	] = await Promise.all([
+		fetchPromptTemplate("chat-team"),
+		toGlossaryBlock(TEAM_CHAT_GLOSSARY_LINE),
+		toFragmentBlock("chat-conduct"),
+		toFragmentBlock("chat-docs-guide"),
+		toFragmentBlock("chat-open-new-topic"),
+		toSpokenBlock(isSpoken),
+	])
 
 	// fill the template, composing each list block first. the app's own blocks stay unfenced
 	const prompt = writePrompt(
@@ -225,7 +247,7 @@ export async function buildTeamChatPrompt(teamContext: TeamChatContext): Promise
 			scanSummariesBlock: toScanSummariesBlock(teamContext.scanSummaries),
 			docsBlock: teamContext.docsBlock || "None.",
 		},
-		{ glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock },
+		{ glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock, spokenBlock },
 	)
 	return { prompt, name, registryPrompt }
 }

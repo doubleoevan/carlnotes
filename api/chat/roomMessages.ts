@@ -98,6 +98,7 @@ export async function loadChatRoomMessages(
 			replyToChatMessageId: chatMessageRow.replyToMessageId,
 			content: contentByChatMessageId.get(chatMessageRow.id) ?? "",
 			createdAt: chatMessageRow.createdAt.toISOString(),
+			isSpoken: chatMessageRow.isSpoken,
 			attachments: messageAttachments.map((attachmentRow) => ({
 				id: attachmentRow.id,
 				kind: attachmentRow.kind,

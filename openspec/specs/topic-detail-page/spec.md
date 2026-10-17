@@ -162,7 +162,14 @@ The composer input's placeholder SHALL read `Chat about <topic name>` using the 
 - **THEN** the composer placeholder reads "Chat about this topic"
 
 ### Requirement: The composer keys read like a chat
-The composer SHALL be multiline: Enter SHALL send the draft, Shift+Enter SHALL break a line, and the box SHALL grow with the draft to a cap before scrolling internally. A non-empty draft SHALL offer a clear control that wipes it and returns focus to the box, and the control SHALL hide while the draft is empty. Escape anywhere inside the panel SHALL collapse it to the pill, and the composer SHALL take focus when the panel opens.
+The composer SHALL be multiline: Enter SHALL send the draft, Shift+Enter SHALL break a line, and the box SHALL grow with
+the draft to a cap before scrolling internally. A non-empty draft SHALL offer a clear control that wipes it and returns
+focus to the box, and the control SHALL hide while the draft is empty. Escape anywhere inside the panel SHALL collapse
+it to the pill, and the composer SHALL take focus when the panel opens.
+
+While the draft is empty and there is no attachment, voice chat is configured, and nothing is on its way, the send slot
+SHALL hold the mic that starts a recording, at the send button's size, and a typed character or an attachment SHALL
+bring the send button back.
 
 #### Scenario: A draft clears from its own control
 - **WHEN** a user with a non-empty draft clicks its clear control
@@ -170,7 +177,8 @@ The composer SHALL be multiline: Enter SHALL send the draft, Shift+Enter SHALL b
 
 #### Scenario: Files attach from the paperclip or a paste
 - **WHEN** a user picks files from the composer's attach control or pastes an image
-- **THEN** each becomes a removable chip above the draft — a tiny thumbnail for an image, a named chip for text — until the send carries them
+- **THEN** each becomes a removable chip above the draft — a tiny thumbnail for an image, a named chip for text — until
+  the send carries them
 
 #### Scenario: A long paste folds into a chip
 - **WHEN** a user pastes text past the chip threshold
@@ -187,6 +195,10 @@ The composer SHALL be multiline: Enter SHALL send the draft, Shift+Enter SHALL b
 #### Scenario: The composer takes focus on open
 - **WHEN** the panel opens
 - **THEN** the composer is focused and typing lands in it immediately
+
+#### Scenario: The empty composer offers the mic
+- **WHEN** the draft is empty
+- **THEN** the send slot shows the mic, and a typed character replaces it with the arrow
 
 ### Requirement: Replies render full Markdown with sanitized links
 Replies SHALL render Markdown formatting — emphasis, lists, code, tables, and headings — rather than raw text. A Markdown link SHALL render as a live link only for `http` and `https` destinations, routed through the shared link component so an external destination opens in a new tab with `noopener`; any other scheme SHALL render as inert text. Raw HTML SHALL NOT parse, and an image SHALL NOT auto-load — it SHALL render as a link to itself, since an auto-fetched image URL is an exfiltration channel for injected instructions. Messages SHALL render as bubbles rounded on three corners with the corner nearest their speaker squared.
@@ -234,7 +246,11 @@ A turn rejected for budget SHALL show an upgrade prompt in the message list, nev
 - **THEN** the panel shows an upgrade prompt in place of a reply
 
 ### Requirement: A signed-out visitor's composer is a signup funnel
-A signed-out visitor on a visible Topic SHALL see the panel and type freely into its composer, and sending — Enter or the arrow button — SHALL route to the signup page instead of posting a turn. The arrow SHALL stay enabled and SHALL show a "Sign up to chit-chat" tooltip on hover. No anonymous request SHALL be posted to the chat api.
+A signed-out visitor on a visible Topic SHALL see the panel and type freely into its composer, and sending — Enter or
+the arrow button — SHALL route to the signup page instead of posting a turn. The arrow SHALL stay enabled and SHALL show
+a "Sign up to chit-chat" tooltip on hover. No anonymous request SHALL be posted to the chat api.
+
+The visitor's mic SHALL route to signup the same way and SHALL never request the microphone.
 
 #### Scenario: A visitor's send routes to signup
 - **WHEN** a signed-out visitor types into the composer and presses Enter or the arrow
@@ -243,6 +259,10 @@ A signed-out visitor on a visible Topic SHALL see the panel and type freely into
 #### Scenario: The visitor's arrow carries the signup tooltip
 - **WHEN** a signed-out visitor hovers the enabled arrow button
 - **THEN** a tooltip reads "Sign up to chit-chat"
+
+#### Scenario: A visitor's mic routes to signup
+- **WHEN** a visitor taps the mic
+- **THEN** the browser goes to signup, and no permission prompt appears
 
 ### Requirement: The panel marks where word-for-word memory begins
 When a conversation outgrows the verbatim character budget, the panel SHALL show a divider at the exchange where the model's word-for-word window starts, positioned by the same shared boundary walk the send uses. The copy SHALL be placement-relative so it stays true wherever the budget lands the boundary: "Carl has a lot on his mind. Everything above this line he skims, everything below he holds word for word." The line SHALL announce itself with a single shimmer sweep on render, then rest, honoring a reduced-motion preference by staying still. Exchanges above the divider SHALL still display and still ride to the model compacted, so the copy says skimmed rather than forgotten.

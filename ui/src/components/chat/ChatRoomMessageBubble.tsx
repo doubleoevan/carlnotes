@@ -2,16 +2,19 @@
 // files, and the footer
 import { isModelChatMessage } from "@shared/chatMentions"
 import type { ChatRoomMessage } from "@shared/contracts/chat"
+import type { VoiceChatPage } from "@shared/payloads"
 import { FileText, Film, Image, Paperclip, Reply, Trash2, X } from "lucide-react"
 import { memo } from "react"
 import { toChatRoomAttachmentUrl } from "@/clients/chatRoomClient"
 import { ChatAuthor } from "@/components/chat/ChatAuthor"
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown"
 import { ChatVideo, CopyButton, toTimeAgoLabel } from "@/components/chat/ChatMessageParts"
+import { SpokenAnswerButton } from "@/components/chat/SpokenAnswerButton"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { cn } from "@/lib/utils"
+import { toChatRoomSpokenAnswerKey } from "@/stores/spokenAnswerStore"
 
 // the icon each shared file kind shows beside its name
 const ATTACHMENT_KIND_ICONS = { image: Image, pdf: FileText, document: FileText, text: Paperclip, video: Film } as const
@@ -26,6 +29,7 @@ export const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 	now,
 	canDelete,
 	isLinkPreviewLoading,
+	voiceChatPage,
 	onReply,
 	onQuoteClick,
 	onAttachmentDelete,
@@ -38,6 +42,8 @@ export const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 	repliedChatMessage: ChatRoomMessage | undefined
 	isOwnChatMessage: boolean
 	now: number
+	// the page carl's play button names, null while voice is off
+	voiceChatPage: VoiceChatPage | null
 	// the chat message's author and a team leader may remove it and its shared files
 	canDelete: boolean
 	// true while this fresh chat message's link preview cards are still loading
@@ -132,18 +138,25 @@ export const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 						</div>
 					)
 				})}
-				{/* the footer shows the time ago, the reply button, and the copy button */}
-				<div className="text-muted-foreground mt-1 flex items-center gap-2 text-xs">
-					<span>{toTimeAgoLabel(new Date(chatMessage.createdAt).getTime(), now)}</span>
-					<button
-						type="button"
-						onClick={() => onReply(chatMessage)}
-						className="hover:text-foreground flex items-center gap-1"
-					>
-						<Reply className="size-3" />
-						Reply
-					</button>
-					<CopyButton text={chatMessage.content} />
+				{/* the footer reads in from the message's own edge: the copy button, carl's play button, the delete
+					button, the reply button, and the time ago */}
+				<div
+					className={cn(
+						"text-muted-foreground mt-1 flex items-center gap-2 text-xs",
+						isOwnChatMessage && "flex-row-reverse",
+					)}
+				>
+					{/* the copy and play buttons sit tighter than the rest of the footer */}
+					<div className={cn("flex items-center gap-0.5", isOwnChatMessage && "flex-row-reverse")}>
+						<CopyButton text={chatMessage.content} isTooltipBelow={isOwnChatMessage} />
+						{isModel && voiceChatPage && (
+							<SpokenAnswerButton
+								spokenAnswerKey={toChatRoomSpokenAnswerKey(chatMessage.id)}
+								page={voiceChatPage}
+								text={chatMessage.content}
+							/>
+						)}
+					</div>
 					{/* the author or a leader or an admin can remove the chat message, which takes its shared files with it */}
 					{canDelete && (
 						<Tooltip>
@@ -157,9 +170,18 @@ export const ChatRoomMessageBubble = memo(function ChatRoomMessageBubble({
 									<Trash2 className="size-3" />
 								</button>
 							</TooltipTrigger>
-							<TooltipContent>Delete message</TooltipContent>
+							<TooltipContent side={isOwnChatMessage ? "bottom" : "top"}>Delete message</TooltipContent>
 						</Tooltip>
 					)}
+					<button
+						type="button"
+						onClick={() => onReply(chatMessage)}
+						className="hover:text-foreground flex items-center gap-1"
+					>
+						<Reply className="size-3" />
+						Reply
+					</button>
+					<span>{toTimeAgoLabel(new Date(chatMessage.createdAt).getTime(), now)}</span>
 				</div>
 			</div>
 		</ChatAuthor>

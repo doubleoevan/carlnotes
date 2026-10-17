@@ -64,18 +64,7 @@ test("toJoinArguments without a theme clip normalizes and encodes the talk exact
 	})
 
 	// the chapters through the concat demuxer, the loudness filter alone, and the MP3 encode
-	const chapterArguments = [
-		"-hide_banner",
-		"-loglevel",
-		"error",
-		"-y",
-		"-f",
-		"concat",
-		"-safe",
-		"0",
-		"-i",
-		"chapters.txt",
-	]
+	const chapterArguments = ["-y", "-f", "concat", "-safe", "0", "-i", "chapters.txt"]
 	const loudnessArguments = ["-af", "loudnorm=I=-16:TP=-1.5:LRA=11:dual_mono=true"]
 	const encodeArguments = ["-ac", "1", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "64k", "audio.mp3"]
 	expect(joinArguments).toEqual([...chapterArguments, ...loudnessArguments, ...encodeArguments])

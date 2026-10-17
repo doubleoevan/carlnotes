@@ -11,6 +11,9 @@ Subscribe button, so a self-hosted instance runs without a Google key. Otherwise
 user, with no feature flag for admins first. A Topic's podcast SHALL be on by default, and a user who may edit the
 Topic SHALL be able to turn it off and on for that Topic.
 
+Voice SHALL share the gate: with `PODCAST_SPEECH_MODEL` empty, the chat composers SHALL show no mic and no reply SHALL
+show a play button, whatever `CHAT_TRANSCRIPTION_MODEL` says.
+
 #### Scenario: A self-hosted instance has no podcast episode UI
 
 - **WHEN** a user opens a topic page on an instance with the speech model set empty
@@ -32,6 +35,10 @@ Topic SHALL be able to turn it off and on for that Topic.
 
 - **WHEN** a subscriber who may not edit the Topic sends a change to its podcast setting
 - **THEN** the api rejects it
+
+#### Scenario: A self-hosted instance has no mic
+- **WHEN** `PODCAST_SPEECH_MODEL` is set empty
+- **THEN** every chat composer shows the send button alone
 
 ### Requirement: The script is written from each Finding's summary, relevance, and stored content
 

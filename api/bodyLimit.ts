@@ -11,6 +11,9 @@ export const DEFAULT_BODY_LIMIT_BYTES = 1024 * 1024
 // the room an upload's body limit leaves past the file for the multipart envelope around it
 export const MULTIPART_ENVELOPE_BYTES = 1024 * 1024
 
+// how large a spoken question's recording may be with its multipart envelope. a minute of opus is well under a megabyte
+export const VOICE_RECORDING_BODY_LIMIT_BYTES = 4 * 1024 * 1024
+
 /**
  * Returns a body limit of the given size that rejects an oversized body with a json 413 and the given error.
  */

@@ -39,6 +39,12 @@ The name above the message box shows who your message goes to. A message default
 @username, or use the menu to select them. You can reply to a previous message by clicking on
 **Reply** below that message.
 
+A spoken message always goes to Carl, as if you had mentioned him. Tap the microphone in the empty message box and
+talk, and your words post to the room with **@carl** in front: the whole room reads them, Carl answers out loud, and
+nobody else is notified. If you are recording again when his answer arrives, it waits on the screen with its play
+button instead of talking over you. Once he finishes talking, the microphone opens again on its own for your next
+question, the same way it does in Coffee Talk.
+
 When someone mentions you or replies to one of your messages, a count appears everywhere that
 conversation is reachable. Opening its chat room clears the mention count badge.
 

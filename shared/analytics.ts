@@ -58,10 +58,13 @@ export type UserAnalyticsEvent =
 	| "episode_completed"
 	| "podcast_feed_added"
 	| "podcast_feed_reset"
-	// conversation about a topic, the paywall a user hits when their month's budget is spent, and a room's messages
+	// conversation about a topic, the paywall a user hits when their month's budget is spent, a room's messages,
+	// a spoken question with its timings, and a play tap on a reply
 	| "chat_turn_sent"
 	| "chat_budget_reached"
 	| "room_message_sent"
+	| "spoken_question_sent"
+	| "spoken_answer_played"
 	// a topic edited through a topic tool, tagged by the tool and its origin
 	| "topic_edited"
 	// a team's life: its creation, its members, its topics, and its end
@@ -91,9 +94,11 @@ export type BotAnalyticsEvent =
 
 // the events the browser sends for an anonymous visit, each named with a visit_ prefix
 export type VisitAnalyticsEvent =
+	// a topic page view and a listen on it
 	| "visit_topic_viewed"
 	| "visit_episode_played"
 	| "visit_episode_completed"
+	// a visitor's clicks: a finding, a call to action, a share, a podcast subscribe, and a video play
 	| "visit_finding_clicked"
 	| "visit_cta_clicked"
 	| "visit_share_clicked"

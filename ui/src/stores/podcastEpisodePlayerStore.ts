@@ -1,11 +1,6 @@
 // the podcast episode player's state, which outlives the page that started playback
 import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts/podcast"
-import type { PodcastEpisodeListenPayload } from "@shared/payloads"
-import {
-	fetchNextUnplayedPodcastEpisode,
-	fetchPodcastEpisode,
-	sendPodcastEpisodeListen,
-} from "@/clients/podcastEpisodeClient"
+import { fetchNextUnplayedPodcastEpisode, fetchPodcastEpisode } from "@/clients/podcastEpisodeClient"
 import {
 	SKIP_BACK_SECONDS,
 	SKIP_FORWARD_SECONDS,
@@ -13,11 +8,17 @@ import {
 	toNextPlaybackRate,
 	updatePodcastEpisodeMediaSession,
 } from "@/lib/podcastEpisodePlayback"
+import { addEventListeners } from "@/lib/utils"
 import { captureEpisodeVisitEvent } from "@/lib/visitAnalytics"
+import {
+	isPodcastEpisodeListenDue,
+	isUserSignedIn,
+	resetPodcastEpisodePlaybackStart,
+	type SavePodcastEpisodeListenOptions,
+	savePodcastEpisodeListen,
+} from "@/stores/podcastEpisodeListenStore"
+import { stopSpokenAnswer } from "@/stores/spokenAnswerStore"
 import { toStoreListeners } from "@/stores/storeListeners"
-
-// how often a playing podcast episode saves the user's progress
-const LISTEN_SAVE_INTERVAL_MS = 30_000
 
 // the shortest time between two reloads of the audio after a failed load
 const AUDIO_RELOAD_INTERVAL_MS = 10_000
@@ -43,15 +44,11 @@ const { publish, useStoreVersion } = toStoreListeners()
 // the position has its own store listeners. the position changes several times a second
 const { publish: publishPosition, useStoreVersion: usePositionVersion } = toStoreListeners()
 
-// whether the user is signed in. only a signed-in user's progress is saved
-let isUserSignedIn = false
-
-// when the user's progress was last saved, and whether the loaded podcast episode's playback start was saved
-let lastListenSavedAt = 0
-let hasSavedPlaybackStart = false
-
 // when the audio was last reloaded after a failed load
 let lastAudioReloadAt = 0
+
+// the audio element's owner sets whether the user is signed in, which the listen store keeps
+export { setIsUserSignedIn } from "@/stores/podcastEpisodeListenStore"
 
 /**
  * Returns the player's state without the position and re-renders the component each time the state changes.
@@ -105,16 +102,13 @@ export function useIsPodcastEpisodePlaying(podcastEpisodeId: string | undefined)
 export function registerPodcastEpisodeAudio(mountedAudioElement: HTMLAudioElement): () => void {
 	// keep the element, and add a listener for each playback event
 	audioElement = mountedAudioElement
-	const audioEventListeners: [string, () => void][] = [
+	const removeAudioEventListeners = addEventListeners(mountedAudioElement, [
 		["timeupdate", handleTimeUpdate],
 		["play", () => handlePlaybackChange(true)],
 		["pause", () => handlePlaybackChange(false)],
 		["ended", handleEnded],
 		["error", reloadAudio],
-	]
-	for (const [eventName, audioEventListener] of audioEventListeners) {
-		mountedAudioElement.addEventListener(eventName, audioEventListener)
-	}
+	])
 
 	// save the user's progress when the page is hidden
 	const handleVisibilityChange = (): void => {
@@ -130,22 +124,11 @@ export function registerPodcastEpisodeAudio(mountedAudioElement: HTMLAudioElemen
 
 	// return the call that removes every listener and clears the element
 	return () => {
-		for (const [eventName, audioEventListener] of audioEventListeners) {
-			mountedAudioElement.removeEventListener(eventName, audioEventListener)
-		}
-
-		// remove the page's listeners, and clear the element
+		removeAudioEventListeners()
 		document.removeEventListener("visibilitychange", handleVisibilityChange)
 		window.removeEventListener("pagehide", handlePageHide)
 		audioElement = null
 	}
-}
-
-/**
- * Sets whether the user is signed in. Only a signed-in user's progress is saved.
- */
-export function setIsUserSignedIn(isSignedIn: boolean): void {
-	isUserSignedIn = isSignedIn
 }
 
 /**
@@ -161,7 +144,7 @@ export async function playPodcastEpisode(podcastEpisode: PodcastEpisode, startSe
 	if (playerState.podcastEpisode?.id !== podcastEpisode.id) {
 		// save the previous podcast episode's progress, then load the new episode at its start position
 		saveListen()
-		hasSavedPlaybackStart = false
+		resetPodcastEpisodePlaybackStart()
 		audioElement.src = podcastEpisode.audioUrl
 		audioElement.currentTime = startSeconds ?? savedProgressSeconds
 		audioElement.playbackRate = playerState.playbackRate
@@ -179,6 +162,22 @@ export async function playPodcastEpisode(podcastEpisode: PodcastEpisode, startSe
 	}
 	captureEpisodeVisitEvent("visit_episode_played", podcastEpisode)
 	return true
+}
+
+/**
+ * Pauses the loaded podcast episode if it is playing.
+ */
+export function pausePodcastEpisode(): void {
+	if (audioElement && playerState.isPlaying) {
+		audioElement.pause()
+	}
+}
+
+/**
+ * Names the loaded podcast episode on the lock screen again.
+ */
+export function refreshPodcastEpisodeMediaSession(): void {
+	updateMediaSession()
 }
 
 /**
@@ -314,7 +313,7 @@ function handleTimeUpdate(): void {
 	}
 
 	// save a playing podcast episode's progress once the save interval has passed
-	if (playerState.isPlaying && Date.now() - lastListenSavedAt >= LISTEN_SAVE_INTERVAL_MS) {
+	if (playerState.isPlaying && isPodcastEpisodeListenDue()) {
 		saveListen()
 	}
 }
@@ -327,12 +326,12 @@ function handlePlaybackChange(isPlaying: boolean): void {
 		return
 	}
 
+	// one voice at a time. the episode playing stops a spoken answer
+	stopSpokenAnswer()
+
 	// name the podcast episode on the lock screen, and save the episode's first play
 	updateMediaSession()
-	if (!hasSavedPlaybackStart) {
-		hasSavedPlaybackStart = true
-		saveListen({ isPlaybackStart: true })
-	}
+	saveListen({ isPlaybackStart: true })
 }
 
 // save that the podcast episode finished, then play the user's next unplayed episode from another topic
@@ -346,7 +345,7 @@ async function handleEnded(): Promise<void> {
 	captureEpisodeVisitEvent("visit_episode_completed", endedPodcastEpisode)
 
 	// only a signed-in user has a next unplayed podcast episode
-	const nextUnplayedPodcastEpisode = isUserSignedIn
+	const nextUnplayedPodcastEpisode = isUserSignedIn()
 		? await fetchNextUnplayedPodcastEpisode(endedPodcastEpisode.topicId)
 		: null
 	if (nextUnplayedPodcastEpisode) {
@@ -373,17 +372,12 @@ function reloadAudio(): void {
 	}
 }
 
-// save a signed-in user's progress, with whether playback just started or just finished
-function saveListen({ isPlaybackStart, isCompleted }: Omit<PodcastEpisodeListenPayload, "progressSeconds"> = {}): void {
-	if (!isUserSignedIn || !playerState.podcastEpisode) {
-		return
+// save the user's progress in the loaded podcast episode, with whether playback just started or just finished
+function saveListen(listen?: SavePodcastEpisodeListenOptions["listen"]): void {
+	const { podcastEpisode, positionSeconds } = playerState
+	if (podcastEpisode) {
+		savePodcastEpisodeListen({ podcastEpisode, positionSeconds, listen })
 	}
-	lastListenSavedAt = Date.now()
-	sendPodcastEpisodeListen(playerState.podcastEpisode.id, {
-		progressSeconds: Math.floor(playerState.positionSeconds),
-		isPlaybackStart,
-		isCompleted,
-	})
 }
 
 // name the podcast episode and the player's chapter on the lock screen, with the store's own controls

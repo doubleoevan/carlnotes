@@ -25,9 +25,11 @@ export async function fetchChatRoomMessages(
 			return "failed"
 		}
 
-		// the payload is the decrypted chat messages in id order, with whether a page sits above them
-		const { chatMessages, hasEarlierChatMessages } = (await response.json()) as ChatRoomMessagePage
-		return { chatMessages, hasEarlierChatMessages }
+		// the payload is the decrypted chat messages in id order, with whether a page sits above them and whether
+		// voice is on
+		const { chatMessages, hasEarlierChatMessages, isVoiceChatConfigured } =
+			(await response.json()) as ChatRoomMessagePage
+		return { chatMessages, hasEarlierChatMessages, isVoiceChatConfigured }
 	} catch {
 		return "failed"
 	}
@@ -64,26 +66,39 @@ function toChatRoomPath(topicId: string | null, teamId: string): string {
 	return topicId === null ? `/api/teams/${teamId}/room` : `/api/topics/${topicId}/rooms/${teamId}`
 }
 
+// a chat room post: the room, the chat message, what it replies to, its files, and whether it was spoken
+export type SendChatRoomMessageOptions = {
+	topicId: string | null
+	teamId: string
+	content: string
+	replyToChatMessageId: number | null
+	attachments: ChatAttachment[]
+	isSpoken?: boolean
+}
+
 /**
- * Post a chat message. The chat message itself arrives back through the stream.
+ * Post a chat message. The chat message itself arrives back through the stream, under the id the post returns.
  * The response includes the budget rejection when there is one.
  */
-export async function sendChatRoomMessage(
-	topicId: string | null,
-	teamId: string,
-	chatMessage: string,
-	replyToChatMessageId: number | null,
-	attachments: ChatAttachment[],
-): Promise<{ rejectionReason: string | null } | "attachmentRejected" | "attachmentLimitReached" | null> {
+export async function sendChatRoomMessage({
+	topicId,
+	teamId,
+	content,
+	replyToChatMessageId,
+	attachments,
+	isSpoken = false,
+}: SendChatRoomMessageOptions): Promise<
+	{ chatMessageId: number; rejectionReason: string | null } | "attachmentRejected" | "attachmentLimitReached" | null
+> {
 	const response =
 		topicId === null
 			? await apiClient.api.teams[":id"].room.$post({
 					param: { id: teamId },
-					json: { content: chatMessage, replyToChatMessageId, attachments },
+					json: { content, replyToChatMessageId, attachments, isSpoken },
 				})
 			: await apiClient.api.topics[":id"].rooms[":teamId"].$post({
 					param: { id: topicId, teamId },
-					json: { content: chatMessage, replyToChatMessageId, attachments },
+					json: { content, replyToChatMessageId, attachments, isSpoken },
 				})
 	// only the two the route names are attachment problems. anything else the validator rejected is a plain failure
 	if (response.status === 400) {
@@ -100,8 +115,8 @@ export async function sendChatRoomMessage(
 	}
 
 	// a rejection reason is private to the chat poster, not a chat room message post
-	const postedBody = (await response.json()) as { rejectionReason: string | null }
-	return { rejectionReason: postedBody.rejectionReason }
+	const postedBody = (await response.json()) as { chatMessageId: number; rejectionReason: string | null }
+	return { chatMessageId: postedBody.chatMessageId, rejectionReason: postedBody.rejectionReason }
 }
 
 /**

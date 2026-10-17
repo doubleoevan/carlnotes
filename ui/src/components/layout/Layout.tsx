@@ -3,6 +3,7 @@ import { Suspense } from "react"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { CoffeeSteam } from "@/components/branding/CoffeeSteam"
 import { AppChatPanel } from "@/components/chat/AppChatPanel"
+import { SpokenAnswerAudio } from "@/components/chat/SpokenAnswerAudio"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
@@ -36,6 +37,8 @@ export function Layout() {
 			<AppChatPanel />
 			{/* the podcast's audio element and the podcast player, mounted here so playback outlives a route change */}
 			<PodcastEpisodeAudio />
+			{/* the audio element carl's spoken answers play through, mounted here so a reply outlives a route change */}
+			<SpokenAnswerAudio />
 			{/* the toast host */}
 			<Toaster />
 		</div>

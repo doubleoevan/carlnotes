@@ -48,7 +48,7 @@ export function ChatVideo({ src, name }: { src: string; name: string }) {
 }
 
 /** The copy button shows a check once the text writes to the clipboard. */
-export function CopyButton({ text }: { text: string }) {
+export function CopyButton({ text, isTooltipBelow = false }: { text: string; isTooltipBelow?: boolean }) {
 	const [isCopied, setIsCopied] = useState(false)
 	// controlled so the copied confirmation survives the click. a tooltip closes when its trigger is clicked
 	const [isTooltipOpen, setIsTooltipOpen] = useState(false)
@@ -73,7 +73,7 @@ export function CopyButton({ text }: { text: string }) {
 					{isCopied ? <Check className="size-3.5" /> : <Copy className="size-3.5" />}
 				</button>
 			</TooltipTrigger>
-			<TooltipContent>{isCopied ? "Copied" : "Copy message"}</TooltipContent>
+			<TooltipContent side={isTooltipBelow ? "bottom" : "top"}>{isCopied ? "Copied" : "Copy message"}</TooltipContent>
 		</Tooltip>
 	)
 }

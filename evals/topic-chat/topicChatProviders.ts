@@ -10,8 +10,9 @@ import { chatModel } from "../../worker/models"
 import { toStepsText } from "../evalReplies"
 import type { TopicChatCase } from "./topicChatCases"
 
-// the variables that a case gives the reply writer. the question and the topic material
-export type TopicChatVariables = Pick<TopicChatCase, "question" | "chatContext">
+// the variables that a case gives the reply writer. the question, the topic material, and whether the question was
+// spoken
+export type TopicChatVariables = Pick<TopicChatCase, "question" | "chatContext" | "isSpoken">
 
 // the reply writer under test. the writer's output is the reply that the user reads
 export const topicChatReplyWriter: ApiProvider = { id: () => "topic-chat-reply-writer", callApi: writeCaseChatReply }
@@ -20,10 +21,10 @@ export const topicChatReplyWriter: ApiProvider = { id: () => "topic-chat-reply-w
 async function writeCaseChatReply(_renderedPrompt: string, context?: CallApiContextParams): Promise<ProviderResponse> {
 	// read the case's variables
 	const topicChatVariables = context?.vars as TopicChatVariables
-	const { question, chatContext } = topicChatVariables
+	const { question, chatContext, isSpoken = false } = topicChatVariables
 
-	// write the reply over the topic chat prompt
-	const chatPrompt = await buildTopicChatPrompt(chatContext)
+	// write the reply over the topic chat prompt, with the spoken fragment spliced on a spoken question
+	const chatPrompt = await buildTopicChatPrompt(chatContext, { isSpoken })
 	const { steps, usage } = await generateText({
 		model: chatModel(),
 		system: chatPrompt.prompt,

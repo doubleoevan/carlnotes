@@ -23,6 +23,8 @@ test("the rejection wording is written once", () => {
 		"privateChat.ts",
 		"chatTurnAuthorization.ts",
 		"chatTurnStream.ts",
+		"voiceRoute.ts",
+		"voiceAuthorization.ts",
 	]
 	const chatFileTexts = chatFileNames.map((fileName) => readFileSync(join(import.meta.dir, fileName), "utf8"))
 	const wordingFileTexts = chatFileTexts.filter((chatFileText) => chatFileText.includes("empty mug"))

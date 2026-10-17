@@ -82,6 +82,20 @@ test("a visitor's chat post is rejected before its body is read, under the chat 
 	}
 })
 
+// the transcription route keeps its own limit above the default, so a recording past a megabyte reaches the route,
+// where a visitor is rejected before the limit reads it
+test("a visitor's recording past the default limit is rejected with a 401, never a 413", async () => {
+	stubRedisClient()
+	signInAs(null)
+	const response = await apiRoute.request("/api/chat/transcription", {
+		method: "POST",
+		headers: { "content-type": "multipart/form-data; boundary=x" },
+		body: "x".repeat(2 * 1024 * 1024),
+	})
+	expect(response.status).toBe(401)
+	expect(await response.json()).toEqual({ error: SIGNUP_REQUIRED_ERROR })
+})
+
 // an upload route limits its body above the default, and a visitor's upload is rejected before that limit reads it
 test("a visitor's avatar or attachment upload is rejected with a 401 before its body is read", async () => {
 	// a body past both upload limits, posted by a visitor

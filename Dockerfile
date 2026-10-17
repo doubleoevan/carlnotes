@@ -40,7 +40,8 @@ ENV NODE_ENV=production
 
 # the Certificate Authority bundle that the Doppler CLI verifies api.doppler.com against.
 # the bun image ships without one.
-# the worker joins and encodes a podcast episode's audio with ffmpeg
+# the worker joins a podcast episode's audio with ffmpeg, and the api encodes a cover, transcodes a chat recording,
+# and encodes a spoken answer to MP3 with its libmp3lame encoder
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends ca-certificates ffmpeg \
 	&& rm -rf /var/lib/apt/lists/*

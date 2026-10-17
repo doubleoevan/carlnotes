@@ -134,14 +134,7 @@ test("each chat splices its shared prompt fragments once", async () => {
 	const newTopicRuleStart = "Nothing about a new topic is made here"
 	const [topicChat, teamChat, newTopicChat] = await Promise.all([
 		buildTopicChatPrompt(chatContext()),
-		buildTeamChatPrompt({
-			teamName: "Founders",
-			topics: [],
-			findings: [],
-			sources: [],
-			scanSummaries: [],
-			docsBlock: "",
-		}),
+		buildTeamChatPrompt(EMPTY_TEAM_CONTEXT),
 		buildNewTopicChatPrompt(""),
 	])
 
@@ -154,6 +147,49 @@ test("each chat splices its shared prompt fragments once", async () => {
 	// the two chats about findings each have the new-topic rule once
 	expect(topicChat.prompt.split(newTopicRuleStart).length - 1).toBe(1)
 	expect(teamChat.prompt.split(newTopicRuleStart).length - 1).toBe(1)
+})
+
+// the team context with nothing in it, for the cases that build every chat
+const EMPTY_TEAM_CONTEXT = {
+	teamName: "Founders",
+	topics: [],
+	findings: [],
+	sources: [],
+	scanSummaries: [],
+	docsBlock: "",
+}
+
+// the spoken fragment's opening, and the line every chat's closing rules open with
+const SPOKEN_BLOCK_START = "The reader said this out loud"
+const CLOSING_RULES_START = "Voice: first person"
+
+// a spoken chat turn splices the spoken fragment once into every chat, above the closing rules it has to outrank
+test("a spoken chat turn splices the spoken fragment once, above the closing rules, in every chat", async () => {
+	const [topicChat, teamChat, newTopicChat] = await Promise.all([
+		buildTopicChatPrompt(chatContext(), { isSpoken: true }),
+		buildTeamChatPrompt(EMPTY_TEAM_CONTEXT, { isSpoken: true }),
+		buildNewTopicChatPrompt("", undefined, undefined, undefined, { isSpoken: true }),
+	])
+	for (const { prompt } of [topicChat, teamChat, newTopicChat]) {
+		// the fragment appears once, before the voice line that opens the rules, and no placeholder is left
+		expect(prompt.split(SPOKEN_BLOCK_START).length - 1).toBe(1)
+		expect(prompt.indexOf(SPOKEN_BLOCK_START)).toBeLessThan(prompt.indexOf(CLOSING_RULES_START))
+		expect(prompt).not.toContain("{{")
+	}
+})
+
+// a typed turn never reads the spoken fragment, whether the flag is left off or set false
+test("a typed turn never includes the spoken fragment in any chat", async () => {
+	const [topicChat, teamChat, newTopicChat, typedTopicChat] = await Promise.all([
+		buildTopicChatPrompt(chatContext()),
+		buildTeamChatPrompt(EMPTY_TEAM_CONTEXT),
+		buildNewTopicChatPrompt(""),
+		buildTopicChatPrompt(chatContext(), { isSpoken: false }),
+	])
+	for (const { prompt } of [topicChat, teamChat, newTopicChat, typedTopicChat]) {
+		expect(prompt).not.toContain(SPOKEN_BLOCK_START)
+		expect(prompt).not.toContain("{{")
+	}
 })
 
 // general knowledge is welcome, but the reply marks where it leaves the topic's material
@@ -191,7 +227,7 @@ test("the chat prompt explains attachment notes so a real reading is never denie
 
 // a turn with the tools includes the editing rules under their heading, bare
 test("the editing rules are written into the prompt for a turn that has the tools", async () => {
-	const { prompt } = await buildTopicChatPrompt(chatContext(), "Propose first, in words.")
+	const { prompt } = await buildTopicChatPrompt(chatContext(), { editTopicBlock: "Propose first, in words." })
 	expect(prompt).toContain("## Editing this topic")
 	expect(prompt).toContain("\n\nPropose first, in words.\n")
 	expect(prompt).not.toContain("{{")

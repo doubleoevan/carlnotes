@@ -250,6 +250,19 @@ export const ICON_BUTTON_CLASS =
 	"text-muted-foreground hover:text-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
 
 /**
+ * The round primary button at the end of a chat composer, a phone's touch size and tighter on a pointer. The send
+ * arrow, the stop square, and the mic share it.
+ */
+export const SEND_BUTTON_CLASS =
+	"bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full disabled:opacity-40 sm:size-8"
+
+/**
+ * The chat composer's question box. Its text is 16px on a phone, which keeps iOS from zooming in on focus.
+ */
+export const COMPOSER_BOX_CLASS =
+	"placeholder:text-muted-foreground w-full resize-none bg-transparent py-1 text-base leading-relaxed outline-none sm:text-sm"
+
+/**
  * The round frame a user's or a team's avatar takes. The caller sets the size.
  */
 export const AVATAR_CLASS =

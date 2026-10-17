@@ -162,14 +162,20 @@ async function buildReplyPrompt(
 	input: ChatTurnInput,
 	chatContext: ChatContext | TeamChatContext | NewTopicChatContext,
 ): Promise<BuiltPrompt> {
+	const isSpoken = input.isSpoken ?? false
 	if (input.newTopic) {
-		return buildNewTopicChatPrompt(chatContext.docsBlock, input.topicDraft, input.topicsRemaining, input.leaderTeams)
+		return buildNewTopicChatPrompt(chatContext.docsBlock, input.topicDraft, input.topicsRemaining, input.leaderTeams, {
+			isSpoken,
+		})
 	}
 	// retrieve every topic the team holds for the team chat room
 	if (input.teamId) {
-		return buildTeamChatPrompt(chatContext as TeamChatContext)
+		return buildTeamChatPrompt(chatContext as TeamChatContext, { isSpoken })
 	}
-	return buildTopicChatPrompt(chatContext as ChatContext, await toEditTopicBlock(input.tools))
+	return buildTopicChatPrompt(chatContext as ChatContext, {
+		editTopicBlock: await toEditTopicBlock(input.tools),
+		isSpoken,
+	})
 }
 
 // the assembled reply with its token and search counts, all of which resolve only once the chat stream is read

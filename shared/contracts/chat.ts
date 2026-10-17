@@ -20,6 +20,8 @@ export type ChatRoomMessage = {
 	replyToChatMessageId: number | null
 	content: string
 	createdAt: string
+	// whether the chat message was spoken, on a member's spoken message and on carl's reply to it
+	isSpoken: boolean
 	// the files this chat message shared with the chat room, earliest first, empty if it shared none
 	attachments: ChatMessageAttachment[]
 	// the cards for the chat message's first links, empty if it holds none or no link preview is stored
@@ -45,7 +47,12 @@ export const CHAT_ROOM_MESSAGE_MAX_CHARS = 4000
 export const FLAG_REASON_MAX_CHARS = 1000
 
 // one page of a chat room's chat messages, and whether an earlier page exists above it
-export type ChatRoomMessagePage = { chatMessages: ChatRoomMessage[]; hasEarlierChatMessages: boolean }
+export type ChatRoomMessagePage = {
+	chatMessages: ChatRoomMessage[]
+	hasEarlierChatMessages: boolean
+	// whether voice chat is on, which needs a transcription model and a speech model
+	isVoiceChatConfigured: boolean
+}
 
 // one chat mention still waiting for the user in a chat room
 export const chatMention = z.object({
@@ -278,6 +285,8 @@ export type ChatTurnRow = {
 	question: string
 	answer: string
 	at?: string
+	// whether the question was spoken and its reply read aloud
+	isSpoken: boolean
 	// the tools this chat turn called, sent back with the next question
 	toolCalls?: ChatToolCall[]
 	attachments: ChatMessageAttachment[]
@@ -302,6 +311,8 @@ export type ChatConversation = {
 	isSignupRequired: boolean
 	// an exhausted monthly budget keeps the panel open on the upgrade link instead of hiding chat
 	isBudgetExhausted: boolean
+	// whether voice chat is on, which needs a transcription model and a speech model
+	isVoiceChatConfigured: boolean
 	keptAttachments: KeptChatAttachment[]
 	// whether the user may edit the topic in the chat
 	canEditTopic: boolean

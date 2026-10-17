@@ -7,6 +7,7 @@ import { eq } from "drizzle-orm"
 import { db } from "../../db"
 import { podcastEpisodes } from "../../db/schema/podcast"
 import { type SpeechTier, speechCost } from "../budget"
+import { runFfmpeg } from "../ffmpeg"
 import { loadOrProvisionUserLiteLLMKey } from "../litellm"
 import { recordSpeech, SPEECH_BYTES_PER_SECOND, WAV_HEADER_BYTES } from "../speech"
 import {
@@ -183,15 +184,9 @@ export async function joinChapterFiles({
 	const chapterListPath = join(temporaryDirectory, "chapters.txt")
 	await Bun.write(chapterListPath, chapterPaths.map((chapterPath) => `file '${chapterPath}'`).join("\n"))
 
-	// run ffmpeg over the chapters and the theme clips
+	// run ffmpeg over the chapters and the theme clips, which writes the MP3 at the audio path
 	const joinArguments = toJoinArguments({ chapterListPath, audioPath, themeClips, speechSeconds })
-	const ffmpegProcess = Bun.spawn(["ffmpeg", ...joinArguments], { stdout: "ignore", stderr: "pipe" })
-
-	// throw an error with ffmpeg's error text if the encode failed
-	const [exitCode, errorText] = await Promise.all([ffmpegProcess.exited, new Response(ffmpegProcess.stderr).text()])
-	if (exitCode !== 0) {
-		throw new Error(`ffmpeg exited with ${exitCode}: ${errorText.trim().slice(0, 500)}`)
-	}
+	await runFfmpeg({ ffmpegArguments: joinArguments })
 }
 
 // one join's arguments: the join's own options, with the chapters' list file in place of the chapter files
@@ -210,18 +205,7 @@ export function toJoinArguments({
 	speechSeconds,
 }: ToJoinArgumentsOptions): string[] {
 	// read the chapters through the concat demuxer, and overwrite the output without a prompt
-	const chapterArguments = [
-		"-hide_banner",
-		"-loglevel",
-		"error",
-		"-y",
-		"-f",
-		"concat",
-		"-safe",
-		"0",
-		"-i",
-		chapterListPath,
-	]
+	const chapterArguments = ["-y", "-f", "concat", "-safe", "0", "-i", chapterListPath]
 	const encodeArguments = ["-ac", "1", "-ar", MP3_SAMPLE_RATE, "-c:a", "libmp3lame", "-b:a", MP3_BITRATE, audioPath]
 
 	// with no theme clip, normalize the talk alone

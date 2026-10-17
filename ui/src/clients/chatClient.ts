@@ -52,6 +52,8 @@ export async function sendChatTurn(
 	signal?: AbortSignal,
 	// the new-topic chat's draft
 	topicDraft?: TopicDraft,
+	// whether the question was spoken, which marks the chat turn and has carl answer out loud
+	isSpoken = false,
 ): Promise<ChatSendResult> {
 	// post the question with the recent history, then read the stream to completion
 	try {
@@ -64,6 +66,7 @@ export async function sendChatTurn(
 				question,
 				attachments,
 				topicDraft,
+				isSpoken,
 				history: historyChatTurns.map((chatTurn, index) => ({
 					question: chatTurn.question,
 					answer: index < uncompactedChatTurnStart ? compactChatAnswer(chatTurn.answer) : chatTurn.answer,
@@ -73,7 +76,7 @@ export async function sendChatTurn(
 			signal,
 		})
 		if (!response.ok || !response.body) {
-			return toRejection(response.status)
+			return toChatRejection(response.status)
 		}
 
 		return await readChatStream(response.body, onChunk, onToolCalls)
@@ -215,8 +218,10 @@ function toChatUrl(chatPage: ChatPage): string {
 	return chatPage.topicId !== undefined ? `/api/topics/${chatPage.topicId}/chat` : `/api/teams/${chatPage.teamId}/chat`
 }
 
-// the rejection a status code includes. each one renders differently to the user
-function toRejection(status: number): ChatRejection {
+/**
+ * Returns the rejection a failed status code means. Each one renders differently to the user.
+ */
+export function toChatRejection(status: number): ChatRejection {
 	// an exhausted budget prompts an upgrade
 	if (status === 402) {
 		return "budget"

@@ -45,6 +45,8 @@ export const chatRoomMessagePayload = z
 	.object({
 		content: z.string().trim().max(CHAT_ROOM_MESSAGE_MAX_CHARS),
 		replyToChatMessageId: z.number().int().positive().nullable().optional(),
+		// whether the chat message was spoken, which marks it and carl's reply and has him answer out loud
+		isSpoken: z.boolean().default(false),
 		// the shared files going with the chat message, under the per-chat message limit
 		get attachments() {
 			return z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([])
@@ -195,11 +197,54 @@ export const chatTurnPayload = z
 		attachments: z.array(chatAttachmentPayload).max(CHAT_MAX_ATTACHMENTS).default([]),
 		// the chat's new topic draft as the browser holds it
 		topicDraft: topicDraftPayload.optional(),
+		// whether the question was spoken, which marks the chat turn and has carl answer out loud
+		isSpoken: z.boolean().default(false),
 	})
 	// a chat turn may be attachments alone, but never nothing at all
 	.refine((chatTurn) => chatTurn.question !== "" || chatTurn.attachments.length > 0)
 
 export type ChatTurnPayload = z.infer<typeof chatTurnPayload>
+
+// the longest spoken part of a reply that the speech route speaks in one call
+export const SPOKEN_PART_CHARS = 2000
+
+// the longest spoken question, in seconds. the recorder stops there, the event payload bounds there, and the
+// transcode cuts one second past it
+export const VOICE_RECORDING_MAX_SECONDS = 60
+
+// the chat page a voice request names, which the api authorizes as it would a chat turn on that page
+export const voiceChatPagePayload = z.discriminatedUnion("kind", [
+	z.object({ kind: z.literal("topic"), topicId: z.string().min(1) }),
+	z.object({ kind: z.literal("team"), teamId: z.string().min(1) }),
+	z.object({ kind: z.literal("newTopic") }),
+	// a chat room, the team's own if the topic is null
+	z.object({ kind: z.literal("room"), topicId: z.string().min(1).nullable(), teamId: z.string().min(1) }),
+])
+
+export type VoiceChatPage = z.infer<typeof voiceChatPagePayload>
+
+// the speech body: the page and one spoken part of carl's reply to speak
+export const spokenAnswerPayload = z.object({
+	page: voiceChatPagePayload,
+	text: z.string().trim().min(1).max(SPOKEN_PART_CHARS),
+})
+
+// the spoken events body: the page and what the browser measured, a spoken question's timings or a play tap
+export const spokenEventPayload = z.object({
+	page: voiceChatPagePayload,
+	event: z.discriminatedUnion("kind", [
+		z.object({
+			kind: z.literal("question"),
+			secondsRecorded: z.number().int().min(0).max(VOICE_RECORDING_MAX_SECONDS),
+			transcriptionMs: z.number().int().min(0),
+			// from the send tap to the reply's first spoken word, absent if nothing played
+			firstSpokenWordMs: z.number().int().min(0).optional(),
+		}),
+		z.object({ kind: z.literal("answer_played") }),
+	]),
+})
+
+export type SpokenEventPayload = z.infer<typeof spokenEventPayload>
 
 // the admin role-change body. an admin cannot remove their own admin role, enforced server-side
 export const setRolePayload = z.object({ role: z.enum(["admin", "user"]) })

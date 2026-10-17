@@ -73,7 +73,7 @@ async function writeCaseChatTurn(_renderedPrompt: string, context?: CallApiConte
 	const turnHistory = chatKind === "team" ? [] : history
 
 	// write the turn, forcing a saving tool on a consent the way a chat turn does
-	const chatPrompt = await buildTopicChatPrompt(chatContext, await toEditTopicBlock(savingTools))
+	const chatPrompt = await buildTopicChatPrompt(chatContext, { editTopicBlock: await toEditTopicBlock(savingTools) })
 	const { steps, usage } = await generateText({
 		model: chatModel(),
 		system: chatPrompt.prompt,

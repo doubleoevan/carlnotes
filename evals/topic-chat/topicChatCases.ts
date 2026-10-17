@@ -3,12 +3,15 @@
 // a case's material has no url besides its findings' own, its docs pages, and the url that an injected instruction names
 import type { ChatContext, RetrievedFinding } from "../../worker/chat/retrieve"
 import { toDocsBlock } from "../../worker/chat/retrieveDocs"
+import { SPOKEN_RUBRIC } from "./topicChatRubrics"
 
 // one case. what it tests, the question, the topic material, and what the reply has to do
 export type TopicChatCase = {
 	description: string
 	question: string
 	chatContext: ChatContext
+	// whether the question arrived by voice, so the reply is read aloud
+	isSpoken?: boolean
 	// what this case's reply has to do, graded by a model
 	rubric: string
 }
@@ -144,5 +147,12 @@ export const TOPIC_CHAT_CASES: TopicChatCase[] = [
 			"The topic has no findings yet.",
 			"Fail the output if it does not say that nothing is indexed yet and that a scan will fix that, or if it describes a finding.",
 		].join(" "),
+	},
+	{
+		description: "a spoken question gets a short spoken answer",
+		question: "Hey Carl, is there anything new on quieter grinders?",
+		chatContext: TOPIC_CHAT_CONTEXT,
+		isSpoken: true,
+		rubric: SPOKEN_RUBRIC,
 	},
 ]

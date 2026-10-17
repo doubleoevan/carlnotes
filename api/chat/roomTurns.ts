@@ -49,11 +49,13 @@ export async function runModelChatRoomTurn(
 		return buildModelRoomQuestion(transaction, topic?.id ?? null, teamId)
 	})
 
-	// retrieval embeds the mentioning chat message alone. the composed question above would dilute its similarity
+	// retrieval embeds the mentioning chat message alone. the composed question above would dilute its similarity.
+	// a spoken chat message has carl answer out loud, and marks his reply
 	const [promptChatMessage] = await db
-		.select({ content: chatRoomMessages.content })
+		.select({ content: chatRoomMessages.content, isSpoken: chatRoomMessages.isSpoken })
 		.from(chatRoomMessages)
 		.where(eq(chatRoomMessages.id, promptChatMessageId))
+	const isSpoken = promptChatMessage?.isSpoken ?? false
 
 	// the images shared with the prompt chat message, read back for carl's reply
 	const promptImages = await loadPromptMessageImages(promptChatMessageId)
@@ -78,6 +80,7 @@ export async function runModelChatRoomTurn(
 		litellmApiKey,
 		question,
 		retrievalQuestion: promptChatMessage ? (decryptChatText(promptChatMessage.content) ?? undefined) : undefined,
+		isSpoken,
 		history: [],
 		chatAttachments: promptImages,
 		// the billed member's privately kept attachments stay out. this answer posts to the whole chat room
@@ -91,7 +94,7 @@ export async function runModelChatRoomTurn(
 	const reply = await toReplyText(replyStream.replyParts)
 	const completion = await replyStream.completion
 
-	// carl's answer is stored once the completion is done
+	// carl's answer is stored once the completion is done, marked spoken if the chat message it answers was
 	const [modelChatMessage] = await db
 		.insert(chatRoomMessages)
 		.values({
@@ -100,6 +103,7 @@ export async function runModelChatRoomTurn(
 			authorUsername: "Carl",
 			replyToMessageId: promptChatMessageId,
 			content: encryptChatText(reply.trim()),
+			isSpoken,
 		})
 		.returning({ id: chatRoomMessages.id })
 	if (!modelChatMessage) {

@@ -4,6 +4,7 @@ import type { ChatMessageAttachment } from "@shared/contracts/chat"
 import { DAY_MS } from "@shared/time"
 import { toTimeAgoLabel } from "./ChatMessageParts"
 import { ChatMessages } from "./ChatMessages"
+import { toTestChatTurn } from "./chatRoomTestFixtures"
 import type { ChatTurn } from "./chatTurns"
 import { renderWithRouter } from "./renderWithRouter"
 
@@ -34,43 +35,39 @@ const USER = { userId: "user-1", username: "ana", avatarVersion: null }
 
 // one question and its reply, rendered with whatever it was sent with
 function renderChatTurn(attachments: ChatMessageAttachment[]): Promise<string> {
-	const chatTurn: ChatTurn = {
-		question: "what is this",
-		answer: "a latte",
-		rejection: null,
-		attachments,
-		linkPreviews: [],
-		answerLinkPreviews: [],
-	}
+	const chatTurn = toTestChatTurn({ attachments })
 	return renderWithRouter(
-		<ChatMessages chatTurns={[chatTurn]} isEnlarged={false} isStreaming={false} chatName="topic" author={USER} />,
+		<ChatMessages
+			chatTurns={[chatTurn]}
+			isEnlarged={false}
+			isStreaming={false}
+			chatName="topic"
+			author={USER}
+			voiceChatPage={null}
+		/>,
 	)
 }
 
 // every chat message includes its author: the user on each question, carl on each answer
 test("private chat turns each render their author line", async () => {
 	const chatTurns: ChatTurn[] = [
-		{
-			question: "why this source",
-			answer: "because it is reliable",
-			at: NOW_TIME,
-			rejection: null,
-			attachments: [],
-			linkPreviews: [],
-			answerLinkPreviews: [],
-		},
-		{
+		toTestChatTurn({ question: "why this source", answer: "because it is reliable", at: NOW_TIME }),
+		toTestChatTurn({
 			question: "and this one",
 			answer: "same reason",
 			at: NOW_TIME + 60_000,
-			rejection: null,
-			attachments: [],
-			linkPreviews: [],
-			answerLinkPreviews: [],
-		},
+			spokenAnswerKey: "chat-turn-2",
+		}),
 	]
 	const chatMessagesHtml = await renderWithRouter(
-		<ChatMessages chatTurns={chatTurns} isEnlarged={false} isStreaming={false} chatName="topic" author={USER} />,
+		<ChatMessages
+			chatTurns={chatTurns}
+			isEnlarged={false}
+			isStreaming={false}
+			chatName="topic"
+			author={USER}
+			voiceChatPage={null}
+		/>,
 	)
 
 	// two questions, two answers, four author lines, never collapsed on consecutive chat turns
@@ -85,14 +82,7 @@ test("private chat turns each render their author line", async () => {
 
 // a broken reply offers a retry that re-asks the question, with the icon that names the action
 test("a failed chat turn renders a retry control", async () => {
-	const failedChatTurn: ChatTurn = {
-		question: "what is this",
-		answer: "",
-		rejection: "failed",
-		attachments: [],
-		linkPreviews: [],
-		answerLinkPreviews: [],
-	}
+	const failedChatTurn = toTestChatTurn({ answer: "", rejection: "failed" })
 	const chatMessagesHtml = await renderWithRouter(
 		<ChatMessages
 			chatTurns={[failedChatTurn]}
@@ -100,6 +90,7 @@ test("a failed chat turn renders a retry control", async () => {
 			isStreaming={false}
 			chatName="topic"
 			author={USER}
+			voiceChatPage={null}
 			onRetry={() => {}}
 		/>,
 	)

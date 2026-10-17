@@ -28,3 +28,10 @@ export function toChatSupportRubric(materialKind: "topic" | "team"): string {
 // the rubric that fails a reply that does not open by answering the question
 export const OPENING_RUBRIC =
 	"The reply opens by answering the question. Fail the output if it opens with a greeting or with praise for the question, or ends with a sign-off."
+
+// the rubric that fails a spoken answer that does not read like something Carl would say across a table
+export const SPOKEN_RUBRIC = [
+	"The reader asked the question out loud and listens to the reply read aloud.",
+	"The reply is a few short sentences that Carl would say across a table.",
+	"Fail the output if it runs longer than a few short sentences, or if any part of it would be read aloud as a list, a table, a heading, or a link.",
+].join(" ")

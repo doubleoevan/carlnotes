@@ -191,9 +191,11 @@ export function ChatRoomPanel({
 				<ChatRoomComposer
 					memberUsernames={memberUsernames}
 					reply={reply}
-					onPostChatMessage={async (content, replyToChatMessageId, attachments) => {
+					voiceChatPage={chatRoom.voiceChatPage}
+					onBudgetRejected={chatRoom.showBudgetRejection}
+					onPostChatMessage={async (chatRoomPost) => {
 						// the reply selection clears only with the draft, so a failed post keeps both
-						const isPosted = await chatRoom.postChatMessage(content, replyToChatMessageId, attachments)
+						const isPosted = await chatRoom.postChatMessage(chatRoomPost)
 						if (isPosted) {
 							reply.clear()
 						}

@@ -3,7 +3,7 @@ import { expect, test } from "bun:test"
 import { readdirSync, readFileSync } from "node:fs"
 import { join } from "node:path"
 import { schema } from "./index"
-import { chatTurns } from "./schema/chat"
+import { chatRoomMessages, chatTurns } from "./schema/chat"
 import { podcastEpisodeChapters, podcastEpisodes } from "./schema/podcast"
 import { EMBED_DIMENSIONS, EMBED_MODEL_NAME, findings, resources } from "./schema/scans"
 import { subscriptions, topicEmailSends, topicPromptVersions, topics } from "./schema/topics"
@@ -198,6 +198,16 @@ test("chat_turns keeps its text nullable and its user and cost not null", () => 
 	expect(chatTurns.answer.notNull).toBe(false)
 	expect(chatTurns.userId.notNull).toBe(true)
 	expect(chatTurns.cost.notNull).toBe(true)
+})
+
+// a spoken question and carl's reply to it are marked on both tables, and a typed one defaults to false
+test("chat_turns.is_spoken and room_messages.is_spoken are non-null and default to false", () => {
+	expect(chatTurns.isSpoken.notNull).toBe(true)
+	expect(chatRoomMessages.isSpoken.notNull).toBe(true)
+	expect(allMigrationsSql()).toContain(`ALTER TABLE "chat_turns" ADD COLUMN "is_spoken" boolean DEFAULT false NOT NULL`)
+	expect(allMigrationsSql()).toContain(
+		`ALTER TABLE "room_messages" ADD COLUMN "is_spoken" boolean DEFAULT false NOT NULL`,
+	)
 })
 
 // deleting a user or a topic takes its chat turns with it, and the topic-and-time index covers the conversation read

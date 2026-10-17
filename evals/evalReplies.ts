@@ -1,8 +1,21 @@
-// the helpers that read a model's reply for its links, its prose paragraphs, and the text of its steps
+// the helpers that read a model's reply for its links, its prose paragraphs, its markdown markup, and the text of its
+// steps
 import { DOCS_SITE_ADDRESS } from "@shared/seo"
 
 // a docs section's label line in a docs block, which names the docs page that the section came from
 const DOCS_LABEL_PATTERN = new RegExp(`^\\[(${DOCS_SITE_ADDRESS.replaceAll(".", "\\.")}[^\\]]*)\\]$`, "gm")
+
+// a line that opens a list item: a bullet or a number
+const LIST_LINE_PATTERN = /^\s*([-*+]|\d+\.)\s/m
+
+// the markdown markup that a reply read aloud never has, each named as the check reports it, with the pattern that
+// finds it. a link is found with toLinkUrls, so a bare url counts too
+const MARKDOWN_MARKUP_PATTERNS: [string, RegExp][] = [
+	["a heading", /^#{1,6}\s/m],
+	["a list", LIST_LINE_PATTERN],
+	["a table", /^\s*\|.*\|\s*$/m],
+	["fenced code", /```/],
+]
 
 // a chat reply, the findings' urls that the reply may link, and the docs sections that the chat was given
 type ToDisallowedLinkUrlOptions = { replyText: string; findingUrls: string[]; docsBlock: string }
@@ -31,8 +44,20 @@ export function toProseParagraphs(replyText: string): string[] {
 	const textBlocks = replyText.split(/\n\s*\n/).map((textBlock) => textBlock.trim())
 	return textBlocks.filter(
 		(textBlock) =>
-			textBlock && !/^\s*([-*]|\d+\.)\s/m.test(textBlock) && !/^(#{1,6}\s.+|\*\*[^*\n]+\*\*:?)$/.test(textBlock),
+			textBlock && !LIST_LINE_PATTERN.test(textBlock) && !/^(#{1,6}\s.+|\*\*[^*\n]+\*\*:?)$/.test(textBlock),
 	)
+}
+
+/**
+ * Returns the name of the first markdown markup in a reply: a heading, a list, a table, fenced code, or a link.
+ */
+export function toMarkdownMarkup(replyText: string): string | undefined {
+	// the first pattern that matches, then a link, which toLinkUrls finds
+	const matchedMarkupPattern = MARKDOWN_MARKUP_PATTERNS.find(([, markupPattern]) => markupPattern.test(replyText))
+	if (matchedMarkupPattern) {
+		return matchedMarkupPattern[0]
+	}
+	return toLinkUrls(replyText).length > 0 ? "a link" : undefined
 }
 
 /**

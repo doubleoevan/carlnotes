@@ -3,7 +3,8 @@ title: Coffee Talk
 description: >-
   Ask Carl questions in the panel that follows you across the app: your own private chat on a
   topic, or a team's shared room, each answered from the findings, sources, and brew history
-  behind it. What he reads, what he may have missed, and how to attach files to a conversation.
+  behind it. What he reads, what he may have missed, how to attach files to a conversation, and how to
+  talk to him out loud.
 sidebar:
   order: 2
 ---
@@ -53,6 +54,28 @@ attachment, and it never changes how future brews are scored. Your private chat 
 alone, and chat text is encrypted at rest either way. A team room is not private: everyone on the
 team reads what you say there and can open what you attach. Context that should describe how a topic
 is brewed belongs in [Attachments](/docs/topics/attachments/).
+
+## Talk to Carl
+
+While the message box is empty, the send button is a microphone. Tap it and ask. Carl listens while you talk and sends
+the question on his own when you stop, so there is nothing to press when you are done. The bar that takes the box's
+place has a cancel button, a level meter, a timer, and a send button for sending early. A question that runs a full
+minute sends itself. If nothing comes through, Carl says he didn't catch that, and the box comes back empty.
+
+Carl answers out loud, in his podcast voice, and starts talking as soon as his first sentence or two are written while
+the rest is still arriving. His answer is on the screen too, with the question you asked above it. Every answer of his
+has a play button, whether you typed or spoke, so you can listen to any reply from the start and stop it with the same
+button. If a podcast episode is playing, it pauses while you talk and while Carl answers.
+
+One tap is a whole conversation. Once Carl finishes talking, the microphone opens again on its own, so you can keep
+going without touching the screen. A ring around the microphone shows he is listening for your next question while he
+talks. Say nothing for a few seconds and the conversation ends quietly, or tap cancel on the bar. Stopping Carl
+mid-answer or typing a question ends it too, and the next tap starts a fresh one.
+
+CarlNotes never keeps a recording. Google transcribes it into text with storage turned off, and the words are what
+Carl reads. They are stored the way a typed question is. To read an answer aloud, the text of that answer goes to
+Google too. Google doesn't use either one to train its models, and it may log both for a limited time, only to catch
+abuse and meet legal requirements.
 
 ## What Carl can change, and what he won't
 

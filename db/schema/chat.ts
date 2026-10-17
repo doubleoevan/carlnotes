@@ -45,6 +45,8 @@ export const chatTurns = pgTable(
 		roomMessageId: bigint("room_message_id", { mode: "number" }),
 		// what the completion spent in tokens, kept beside the cost it produced
 		totalTokens: integer("total_tokens"),
+		// whether the question was spoken and its reply read aloud. a voice spend row stays false
+		isSpoken: boolean("is_spoken").notNull().default(false),
 		// when the chat turn ran. the monthly spend sum uses it and the chat messages replay in its order
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
@@ -139,6 +141,8 @@ export const chatRoomMessages = pgTable(
 		replyToMessageId: bigint("reply_to_message_id", { mode: "number" }),
 		// the message text, encrypted at the application layer like the private chat's messages
 		content: text("content").notNull(),
+		// whether the message was spoken, set on a member's spoken message and on carl's reply to it
+		isSpoken: boolean("is_spoken").notNull().default(false),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
 	// the stream and the chat messages both read one chat room in id order

@@ -6,12 +6,14 @@ import {
 	type ChatRoomMessage,
 	clipAttachmentText,
 } from "@shared/contracts/chat"
-import type { ChatAttachment } from "@shared/payloads"
+import type { ChatAttachment, VoiceChatPage } from "@shared/payloads"
 import { ArrowUp, Paperclip } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { ChatAttachmentChips } from "@/components/chat/ChatAttachmentChips"
 import { MentionSuggestionList, useMentionAutocomplete } from "@/components/chat/MentionSuggestionList"
+import { isMicShown, MicButton } from "@/components/chat/MicButton"
+import { RecordingBar } from "@/components/chat/RecordingBar"
 import {
 	ReplyToDropdown,
 	toChangedMentionChatMessage,
@@ -19,9 +21,12 @@ import {
 	toMentionLabel,
 } from "@/components/chat/ReplyToDropdown"
 import { toAttachment } from "@/components/chat/useChatAttachments"
+import type { ChatRoomPost } from "@/components/chat/useChatRoom"
 import type { ChatRoomReply } from "@/components/chat/useRoomReply"
+import { useVoiceRecording } from "@/components/chat/useVoiceRecording"
 import { FileDropZone } from "@/components/common/FileDropZone"
-import { CHAT_FILE_PICKER_ACCEPT, isTouchScreen, isWideScreen } from "@/lib/utils"
+import { COMPOSER_BOX_CLASS, ICON_BUTTON_CLASS, SEND_BUTTON_CLASS } from "@/lib/styleClasses"
+import { CHAT_FILE_PICKER_ACCEPT, cn, isTouchScreen, isWideScreen } from "@/lib/utils"
 
 // how tall the chat message box may grow before it scrolls inside itself, matching the private chat's composer
 const MAX_MESSAGE_BOX_HEIGHT_PX = 120
@@ -57,18 +62,20 @@ export function DisabledRoomComposer({ placeholder }: { placeholder?: string }) 
 export function ChatRoomComposer({
 	memberUsernames,
 	reply,
+	voiceChatPage,
 	onPostChatMessage,
+	onBudgetRejected,
 }: {
 	// the current members the autocomplete suggests after Carl, never the current user or a departed member
 	memberUsernames: string[]
 	// which chat message this composer answers
 	reply: ChatRoomReply
+	// the page the mic names, null while voice is off and the mic never renders
+	voiceChatPage: VoiceChatPage | null
 	// returns false when the post failed, which keeps the draft in the composer
-	onPostChatMessage: (
-		content: string,
-		replyToChatMessageId: number | null,
-		attachments: ChatAttachment[],
-	) => Promise<boolean>
+	onPostChatMessage: (chatRoomPost: ChatRoomPost) => Promise<boolean>
+	// shows the spent budget's rejection if a recording's transcription is turned down for it
+	onBudgetRejected?: () => void
 }) {
 	const { replyTo, isAutoReply, replyChatMessages } = reply
 	const [chatMessage, setChatMessage] = useState("")
@@ -78,6 +85,27 @@ export function ChatRoomComposer({
 	const [isPostingMessage, setIsPostingMessage] = useState(false)
 	// the attachment files waiting to send with the next chat message, removable until sent
 	const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([])
+
+	// the recording the mic starts, whose transcript posts as a spoken message that addresses carl
+	const voiceRecording = useVoiceRecording({
+		page: voiceChatPage,
+		onTranscript: (transcript, timings) =>
+			void onPostChatMessage({
+				content: transcript,
+				replyToChatMessageId: null,
+				attachments: [],
+				isSpoken: true,
+				spokenQuestionTimings: timings,
+			}),
+		onBudgetRejected,
+	})
+	// the mic takes the send slot of an empty box while voice is on and no post is on its way
+	const isMicInSendSlot = isMicShown({
+		voiceChatPage,
+		draft: chatMessage,
+		attachmentCount: pendingAttachments.length,
+		isBusy: isPostingMessage,
+	})
 
 	// selected and dropped files are read the same way. the limit is how many files one chat message may include
 	const attachSelectedFiles = (selected: File[]): void => {
@@ -152,16 +180,7 @@ export function ChatRoomComposer({
 	}, [chatMessage])
 
 	// who the chat message is sent to, updated as the chat message is typed
-	const chatMentions = toChatMentions(chatMessage, [CARL_USERNAME, ALL_USERNAME, ...memberUsernames])
-	const mentionedUser = chatMentions[0] ?? null
-	const hasMention = mentionedUser !== null && (replyTo === null || isAutoReply)
-	const replyUser = hasMention
-		? mentionedUser
-		: replyTo
-			? isModelChatMessage(replyTo)
-				? CARL_USERNAME
-				: replyTo.authorUsername
-			: ALL_USERNAME
+	const { hasMention, replyUser } = toReplyUser({ chatMessage, memberUsernames, replyTo, isAutoReply })
 	const replyUserLabel = toMentionLabel(replyUser)
 
 	// selecting a user replies to their latest chat message.
@@ -207,6 +226,9 @@ export function ChatRoomComposer({
 		isPostingMessageRef.current = true
 		closeTouchKeyboard()
 
+		// a typed message ends listen mode
+		voiceRecording.stopListening()
+
 		// a chat mention addresses itself, a previous reply target starts a chat message thread
 		const isChatMessageThread = !hasMention && replyTo !== null
 		const sentContent = hasMention || isChatMessageThread ? content : `@${ALL_USERNAME} ${content}`
@@ -217,11 +239,11 @@ export function ChatRoomComposer({
 		setIsPostingMessage(true)
 		let isChatMessagePosted = false
 		try {
-			isChatMessagePosted = await onPostChatMessage(
-				sentContent,
-				isChatMessageThread ? (replyTo?.id ?? null) : null,
-				sentAttachments,
-			)
+			isChatMessagePosted = await onPostChatMessage({
+				content: sentContent,
+				replyToChatMessageId: isChatMessageThread ? (replyTo?.id ?? null) : null,
+				attachments: sentAttachments,
+			})
 		} finally {
 			// a post that threw reopens the composer too, so the draft is never locked in
 			isPostingMessageRef.current = false
@@ -273,55 +295,90 @@ export function ChatRoomComposer({
 			/>
 			{/* the chat message field owns its own line, with the send button below it */}
 			<FileDropZone className="bg-background rounded-2xl border px-3 py-2" onDropFiles={attachSelectedFiles}>
-				{/* the box is 16px on touch screens. smaller text makes a phone zoom on focus.
+				{/* the recording bar replaces the box while a recording runs */}
+				{voiceRecording.state === "recording" ? (
+					<RecordingBar voiceRecording={voiceRecording} />
+				) : (
+					<>
+						{/* the box is 16px on touch screens. smaller text makes a phone zoom on focus.
 					autocomplete off keeps a phone's password, card, and address fill off the chat message field */}
-				<textarea
-					ref={chatMessageBoxRef}
-					rows={1}
-					value={chatMessage}
-					maxLength={CHAT_ROOM_MESSAGE_MAX_CHARS}
-					onChange={handleMessageChange}
-					onKeyDown={handleMessageKeyDown}
-					onPaste={handlePasteFile}
-					placeholder={toComposerPlaceholder(replyUser)}
-					aria-label="Message the room"
-					autoComplete="off"
-					className="placeholder:text-muted-foreground w-full resize-none bg-transparent py-1 text-base leading-relaxed outline-none sm:text-sm"
-				/>
-				<div className="mt-1 flex items-center justify-between">
-					{/* the hidden file picker for attachments */}
-					<label
-						aria-label="Attach a file"
-						className="text-muted-foreground hover:text-foreground grid size-11 cursor-pointer place-items-center rounded-full sm:size-8"
-					>
-						<Paperclip className="size-4" />
-						<input
-							type="file"
-							accept={CHAT_FILE_PICKER_ACCEPT}
-							className="sr-only"
-							multiple
-							onChange={(event) => {
-								const selected = Array.from(event.target.files ?? [])
-								event.target.value = ""
-								attachSelectedFiles(selected)
-							}}
+						<textarea
+							ref={chatMessageBoxRef}
+							rows={1}
+							value={chatMessage}
+							maxLength={CHAT_ROOM_MESSAGE_MAX_CHARS}
+							onChange={handleMessageChange}
+							onKeyDown={handleMessageKeyDown}
+							onPaste={handlePasteFile}
+							placeholder={toComposerPlaceholder(replyUser)}
+							aria-label="Message the room"
+							autoComplete="off"
+							className={COMPOSER_BOX_CLASS}
 						/>
-					</label>
-					{/* the mouse handler keeps the focus in the message box. losing it closes a phone's keyboard,
-						which moves the button before the click lands */}
-					<button
-						type="submit"
-						aria-label="Send"
-						className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full disabled:opacity-50 sm:size-8"
-						disabled={isPostingMessage || (chatMessage.trim() === "" && pendingAttachments.length === 0)}
-						onMouseDown={(event) => event.preventDefault()}
-					>
-						<ArrowUp className="size-4" />
-					</button>
-				</div>
+						<div className="mt-1 flex items-center justify-between">
+							{/* the hidden file picker for attachments */}
+							<label aria-label="Attach a file" className={cn(ICON_BUTTON_CLASS, "cursor-pointer")}>
+								<Paperclip className="size-4" />
+								<input
+									type="file"
+									accept={CHAT_FILE_PICKER_ACCEPT}
+									className="sr-only"
+									multiple
+									onChange={(event) => {
+										const selected = Array.from(event.target.files ?? [])
+										event.target.value = ""
+										attachSelectedFiles(selected)
+									}}
+								/>
+							</label>
+							{/* the mic starts a recording from an empty box. the send button's mouse handler keeps the focus in
+						the message box. losing it closes a phone's keyboard, which moves the button before the click arrives */}
+							{isMicInSendSlot ? (
+								<MicButton voiceRecording={voiceRecording} />
+							) : (
+								<button
+									type="submit"
+									aria-label="Send"
+									className={SEND_BUTTON_CLASS}
+									disabled={isPostingMessage || (chatMessage.trim() === "" && pendingAttachments.length === 0)}
+									onMouseDown={(event) => event.preventDefault()}
+								>
+									<ArrowUp className="size-4" />
+								</button>
+							)}
+						</div>
+					</>
+				)}
 			</FileDropZone>
 		</form>
 	)
+}
+
+// the draft, the members it may mention, the reply chat message selected, and whether that reply was auto-selected
+type ToReplyUserOptions = {
+	chatMessage: string
+	memberUsernames: string[]
+	replyTo: ChatRoomMessage | null
+	isAutoReply: boolean
+}
+
+// who the chat message is sent to: its first mention, else the reply chat message's author, else everyone. a
+// mention outranks an auto-selected reply, and a tapped reply outranks a mention
+function toReplyUser({ chatMessage, memberUsernames, replyTo, isAutoReply }: ToReplyUserOptions): {
+	hasMention: boolean
+	replyUser: string
+} {
+	const mentionedUser = toChatMentions(chatMessage, [CARL_USERNAME, ALL_USERNAME, ...memberUsernames])[0] ?? null
+	const hasMention = mentionedUser !== null && (replyTo === null || isAutoReply)
+	if (hasMention) {
+		return { hasMention, replyUser: mentionedUser }
+	}
+
+	// the reply chat message's author, or everyone with no reply selected
+	if (replyTo === null) {
+		return { hasMention, replyUser: ALL_USERNAME }
+	}
+	return { hasMention, replyUser: isModelChatMessage(replyTo) ? CARL_USERNAME : replyTo.authorUsername }
 }
 
 // the placeholder starts with the selected target's chat mention

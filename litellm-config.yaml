@@ -113,11 +113,14 @@ model_list:
       max_input_tokens: 1048576
       max_output_tokens: 32768
 
-# podcast speech has no entry in the model list. the worker calls gemini-3.8-flash-tts on the user's virtual key through
-# LiteLLM's Gemini pass-through route, /gemini/v1beta/models/<model>:generateContent.
-# the route's url names Google's model, so the call goes through no alias. the proxy reads GEMINI_API_KEY for the call
-# and charges the virtual key from LiteLLM's own price table, which a model entry here cannot change.
-# the app's own speech rates are in worker/budget.ts and follow what LiteLLM charges
+# speech and transcription have no entry in the model list. both call Google's model by name on the user's virtual key
+# through LiteLLM's Gemini pass-through route, which checks the key's budget and reads GEMINI_API_KEY for the call.
+# podcast speech and a spoken chat reply call gemini-3.8-flash-tts at /gemini/v1beta/models/<model>:generateContent,
+# and the proxy charges the virtual key from LiteLLM's own price table, which a model entry here cannot change.
+# a spoken chat question calls gemini-3.5-transcribe at /gemini/v1beta/interactions with store set to false, so Google
+# keeps no recording. the pass-through meters only generateContent and video routes, so a transcription charges nothing
+# on the key. the api's own spend row for each transcription is the only meter, and the app's monthly budget reads it.
+# the app's own speech and transcription rates are in worker/budget.ts
 
 # spend is limited by each user's virtual key and by the Fireworks prepaid balance
 litellm_settings:

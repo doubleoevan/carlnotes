@@ -1,6 +1,15 @@
 // the Budget crosses a Temporal activity boundary between the topic Scan's stages
 import { describe, expect, test } from "bun:test"
-import { type Budget, canScoreResource, canSpend, charge, newBudget, speechCost, toResumedBudget } from "./budget"
+import {
+	type Budget,
+	canScoreResource,
+	canSpend,
+	charge,
+	newBudget,
+	speechCost,
+	toResumedBudget,
+	transcriptionCost,
+} from "./budget"
 
 // what Temporal does to a value that crosses an activity boundary
 function acrossActivityBoundary(budget: Budget): Budget {
@@ -164,5 +173,15 @@ describe("a speech call's cost", () => {
 		const recordedAt = new Date("2027-01-01T00:00:00Z")
 		expect(speechCost({ speechTier: "standard", ...speechUsage, recordedAt })).toBeCloseTo(19)
 		expect(speechCost({ speechTier: "flex", ...speechUsage, recordedAt })).toBeCloseTo(18.5)
+	})
+})
+
+describe("a transcription call's cost", () => {
+	test("prices the audio input at $2 a million tokens and the transcript output at $12", () => {
+		// a million audio input tokens and a million transcript output tokens, to read the rates off the result
+		expect(transcriptionCost({ inputTokens: 1_000_000, outputTokens: 1_000_000 })).toBeCloseTo(14)
+
+		// a minute of speech at about 32 tokens a second and a sentence of about 20 tokens cost under a cent
+		expect(transcriptionCost({ inputTokens: 1_920, outputTokens: 20 })).toBeCloseTo(0.00408)
 	})
 })

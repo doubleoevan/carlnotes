@@ -64,6 +64,7 @@ test("a persisted chat turn's row stores ciphertext", () => {
 			question: "who is hiring?",
 			answer: "four of them are",
 			toolCalls: [],
+			isSpoken: false,
 		})
 		expect(String(chatTurnRow.question).startsWith("enc1:")).toBe(true)
 		expect(decryptChatText(String(chatTurnRow.answer))).toBe("four of them are")

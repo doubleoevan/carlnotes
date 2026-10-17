@@ -1,12 +1,15 @@
 // one chat turn as the private chat renders it: the question bubble, carl's answer bubble, and the compaction line
 import type { ChatMessageAttachment } from "@shared/contracts/chat"
+import type { VoiceChatPage } from "@shared/payloads"
 import { RotateCcw } from "lucide-react"
 import { type ChatRejection, toChatAttachmentUrl } from "@/clients/chatClient"
 import { ChatAuthor } from "@/components/chat/ChatAuthor"
 import { ChatBudgetNotice } from "@/components/chat/ChatBudgetNotice"
 import { ChatMarkdown } from "@/components/chat/ChatMarkdown"
 import { ChatVideo, CopyButton, ModelThinkingBubble, toTimeAgoLabel } from "@/components/chat/ChatMessageParts"
+import { CHAT_REJECTION_COPY } from "@/components/chat/chatRejectionCopy"
 import type { ChatTurn } from "@/components/chat/chatTurns"
+import { SpokenAnswerButton } from "@/components/chat/SpokenAnswerButton"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { hasPreviewableLink, LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { cn } from "@/lib/utils"
@@ -26,6 +29,7 @@ export function ChatTurnBlock({
 	isStreaming,
 	now,
 	author,
+	voiceChatPage,
 	onRetry,
 }: {
 	chatTurn: ChatTurn
@@ -35,13 +39,22 @@ export function ChatTurnBlock({
 	isStreaming: boolean
 	now: number
 	author: ChatMessageAuthor
+	// the page the answer's play button names, null while voice is off
+	voiceChatPage: VoiceChatPage | null
 	onRetry?: (question: string) => void
 }) {
 	return (
 		<div className="space-y-3">
 			{uncompactedChatTurnStart > 0 && index === uncompactedChatTurnStart && <CompactionNotice />}
 			<QuestionBubble chatTurn={chatTurn} now={now} author={author} />
-			<AnswerBubble chatTurn={chatTurn} isLast={isLast} isStreaming={isStreaming} now={now} onRetry={onRetry} />
+			<AnswerBubble
+				chatTurn={chatTurn}
+				isLast={isLast}
+				isStreaming={isStreaming}
+				now={now}
+				voiceChatPage={voiceChatPage}
+				onRetry={onRetry}
+			/>
 		</div>
 	)
 }
@@ -95,10 +108,10 @@ function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: nu
 				{chatTurn.linkPreviewsPending &&
 					chatTurn.linkPreviews.length === 0 &&
 					hasPreviewableLink(chatTurn.question) && <LinkPreviewLoading />}
-				{/* the footer shows the time ago and copy button to the right */}
-				<div className="text-muted-foreground -mr-1 mt-1 flex items-center gap-2 text-xs">
+				{/* the footer mirrors carl's, reading in from the user's own edge: the copy button, then the time ago */}
+				<div className="text-muted-foreground -mr-1 mt-1 flex flex-row-reverse items-center gap-2 text-xs">
+					<CopyButton text={chatTurn.question} isTooltipBelow />
 					{chatTurn.at !== undefined && <span>{toTimeAgoLabel(chatTurn.at, now)}</span>}
-					<CopyButton text={chatTurn.question} />
 				</div>
 			</div>
 		</ChatAuthor>
@@ -130,12 +143,14 @@ function AnswerBubble({
 	isLast,
 	isStreaming,
 	now,
+	voiceChatPage,
 	onRetry,
 }: {
 	chatTurn: ChatTurn
 	isLast: boolean
 	isStreaming: boolean
 	now: number
+	voiceChatPage: VoiceChatPage | null
 	// re-asks a failed chat turn's question, offered on the failure notice
 	onRetry?: (question: string) => void
 }) {
@@ -171,19 +186,33 @@ function AnswerBubble({
 					chatTurn.answerLinkPreviews.length === 0 &&
 					hasPreviewableLink(chatTurn.answer) && <LinkPreviewLoading />}
 				{!isWaitingForAnswer && !isStreamingAnswer && chatTurn.answer !== "" && (
-					<AnswerFooter answer={chatTurn.answer} answerTime={chatTurn.at} now={now} />
+					<AnswerFooter chatTurn={chatTurn} now={now} voiceChatPage={voiceChatPage} />
 				)}
 			</div>
 		</ChatAuthor>
 	)
 }
 
-// the footer shows the copy button and time ago to the left
-function AnswerFooter({ answer, answerTime, now }: { answer: string; answerTime?: number; now: number }) {
+// the footer shows the copy button, the play button, and the time ago to the left
+function AnswerFooter({
+	chatTurn,
+	now,
+	voiceChatPage,
+}: {
+	chatTurn: ChatTurn
+	now: number
+	voiceChatPage: VoiceChatPage | null
+}) {
 	return (
 		<div className="text-muted-foreground -ml-1 mt-1 flex items-center gap-2 text-xs">
-			<CopyButton text={answer} />
-			{answerTime !== undefined && <span>{toTimeAgoLabel(answerTime, now)}</span>}
+			{/* the copy and play buttons sit tighter than the rest of the footer */}
+			<div className="flex items-center gap-0.5">
+				<CopyButton text={chatTurn.answer} />
+				{voiceChatPage && (
+					<SpokenAnswerButton spokenAnswerKey={chatTurn.spokenAnswerKey} page={voiceChatPage} text={chatTurn.answer} />
+				)}
+			</div>
+			{chatTurn.at !== undefined && <span>{toTimeAgoLabel(chatTurn.at, now)}</span>}
 		</div>
 	)
 }
@@ -194,7 +223,7 @@ function ChatRejectionNotice({ rejection, onRetry }: { rejection: ChatRejection;
 	if (rejection === "failed") {
 		return (
 			<p className="text-muted-foreground text-sm">
-				{"Carl lost his train of thought. "}
+				{`${CHAT_REJECTION_COPY.failed} `}
 				{onRetry ? (
 					<button type="button" onClick={onRetry} className="text-link hover:underline">
 						Try again?
@@ -209,12 +238,12 @@ function ChatRejectionNotice({ rejection, onRetry }: { rejection: ChatRejection;
 
 	// ask a user past the per-minute limit to wait
 	if (rejection === "rateLimited") {
-		return <p className="text-muted-foreground text-sm">{"Carl needs a minute to catch up. Ask again shortly."}</p>
+		return <p className="text-muted-foreground text-sm">{CHAT_REJECTION_COPY.rateLimited}</p>
 	}
 
 	// an exhausted budget shows a call-to-action to upgrade at the plans page. anything forbidden shows a rejection
 	if (rejection === "budget") {
 		return <ChatBudgetNotice />
 	}
-	return <p className="text-muted-foreground text-sm">{"Carl can't talk about that."}</p>
+	return <p className="text-muted-foreground text-sm">{CHAT_REJECTION_COPY.forbidden}</p>
 }

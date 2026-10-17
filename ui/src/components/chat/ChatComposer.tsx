@@ -2,13 +2,16 @@ import { CHAT_QUESTION_CHARS, type KeptChatAttachment } from "@shared/contracts/
 import { ArrowUp, FileText, FileX2, Film, Image, Minus, Paperclip, Square, X } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { ChatAttachmentChips } from "@/components/chat/ChatAttachmentChips"
+import { isMicShown, MicButton } from "@/components/chat/MicButton"
+import { RecordingBar } from "@/components/chat/RecordingBar"
 import type { TopicChat } from "@/components/chat/useTopicChat"
+import { useVoiceRecording } from "@/components/chat/useVoiceRecording"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { FileDropZone } from "@/components/common/FileDropZone"
 import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { toAgeLabel } from "@/lib/labels"
-import { ICON_BUTTON_CLASS } from "@/lib/styleClasses"
+import { COMPOSER_BOX_CLASS, ICON_BUTTON_CLASS, SEND_BUTTON_CLASS } from "@/lib/styleClasses"
 import { CHAT_FILE_PICKER_ACCEPT, isTouchScreen, isWideScreen } from "@/lib/utils"
 
 // how tall the question box may grow before it scrolls inside itself
@@ -35,6 +38,23 @@ export function ChatComposer({
 	const { question, attachments, keptAttachments, isStreaming, isSignupRequired } = chat
 	const questionBoxRef = useRef<HTMLTextAreaElement>(null)
 
+	// the recording the mic starts, whose transcript sends as a spoken question
+	const voiceRecording = useVoiceRecording({
+		page: chat.voiceChatPage,
+		onTranscript: (transcript, timings) =>
+			void chat.send(transcript, { isSpoken: true, spokenQuestionTimings: timings }),
+	})
+	// the box is read-only and the send button off while the microphone is asked for or the transcript is on its
+	// way, so a typed send never races the spoken one
+	const isVoiceRecordingBusy = voiceRecording.state !== "idle"
+	// the mic takes the send slot of an empty box while voice is on and nothing streams
+	const isMicInSendSlot = isMicShown({
+		voiceChatPage: chat.voiceChatPage,
+		draft: question,
+		attachmentCount: attachments.length,
+		isBusy: isStreaming,
+	})
+
 	// a wide screen focuses the composer as soon as the panel opens, so the user can just start typing
 	useEffect(() => {
 		if (isWideScreen()) {
@@ -55,8 +75,14 @@ export function ChatComposer({
 		}
 	}, [question])
 
-	// send the question. on a touch screen the box lets go of focus, so the keyboard closes, and the reply shows
+	// send the question, unless a spoken question is on its way. on a touch screen the box lets go of focus, so the
+	// keyboard closes, and the reply shows
 	function sendQuestion(): void {
+		if (isVoiceRecordingBusy) {
+			return
+		}
+		// a typed question ends listen mode
+		voiceRecording.stopListening()
 		onSendQuestion()
 		if (isTouchScreen()) {
 			questionBoxRef.current?.blur()
@@ -110,94 +136,109 @@ export function ChatComposer({
 					void chat.addAttachmentFiles(files)
 				}}
 			>
-				{/* the input box is 16px to keep the panel on the screen. autocomplete is off,
+				{/* the recording bar replaces the box while a recording runs */}
+				{voiceRecording.state === "recording" ? (
+					<RecordingBar voiceRecording={voiceRecording} />
+				) : (
+					<>
+						{/* the input box is 16px to keep the panel on the screen. autocomplete is off,
 						so a phone offers no passwords, cards, or addresses over a chat field */}
-				<textarea
-					ref={questionBoxRef}
-					rows={1}
-					value={question}
-					maxLength={CHAT_QUESTION_CHARS}
-					onChange={(event) => chat.setQuestion(event.target.value)}
-					onKeyDown={handleSendQuestion}
-					onPaste={handlePaste}
-					placeholder={placeholder}
-					aria-label="Ask Carl"
-					autoComplete="off"
-					className="placeholder:text-muted-foreground w-full resize-none bg-transparent py-1 text-base leading-relaxed outline-none sm:text-sm"
-				/>
-				{/* the buttons sit under the question: attachments to the left, clear and send to the right */}
-				<div className="mt-1 flex items-center gap-2">
-					{/* the add and remove attachment buttons sit next to each other */}
-					<div className="flex shrink-0 items-center">
-						{/* a visitor's attachment routes to the signup page */}
-						<AttachButton
-							isSignupRequired={isSignupRequired}
-							onSelect={chat.addAttachmentFiles}
-							onSignup={onSendQuestion}
+						<textarea
+							ref={questionBoxRef}
+							rows={1}
+							value={question}
+							readOnly={isVoiceRecordingBusy}
+							maxLength={CHAT_QUESTION_CHARS}
+							onChange={(event) => chat.setQuestion(event.target.value)}
+							onKeyDown={handleSendQuestion}
+							onPaste={handlePaste}
+							placeholder={placeholder}
+							aria-label="Ask Carl"
+							autoComplete="off"
+							className={COMPOSER_BOX_CLASS}
 						/>
-						{keptAttachments.length > 0 && (
-							<KeptAttachmentsButton
-								keptAttachments={keptAttachments}
-								onRemoveKeptAttachment={chat.removeKeptAttachment}
-							/>
-						)}
-					</div>
-					{/* the clear and send buttons. each keeps focus in the message box.
-						losing it closes a phone's keyboard, which moves the button before the click lands */}
-					<div className="ml-auto flex items-center gap-2">
-						{/* an X button clears the input and returns focus, only appearing when there is content */}
-						{question !== "" && (
-							<button
-								type="button"
-								aria-label="Clear draft"
-								onMouseDown={(event) => event.preventDefault()}
-								onClick={() => {
-									chat.setQuestion("")
-									questionBoxRef.current?.focus()
-								}}
-								className={ICON_BUTTON_CLASS}
-							>
-								<X className="size-4" />
-							</button>
-						)}
-						{/* the stop button ends a response stream. the arrow button sends the question or forwards a visitor to the signup page */}
-						{isStreaming ? (
-							<button
-								type="button"
-								aria-label="Stop"
-								onMouseDown={(event) => event.preventDefault()}
-								onClick={chat.stop}
-								className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
-							>
-								<Square className="size-3 fill-current" />
-							</button>
-						) : isSignupRequired ? (
-							<Tooltip>
-								<TooltipTrigger asChild>
+						{/* the buttons sit under the question: attachments to the left, clear and send to the right */}
+						<div className="mt-1 flex items-center gap-2">
+							{/* the add and remove attachment buttons sit next to each other */}
+							<div className="flex shrink-0 items-center">
+								{/* a visitor's attachment routes to the signup page */}
+								<AttachButton
+									isSignupRequired={isSignupRequired}
+									onSelect={chat.addAttachmentFiles}
+									onSignup={onSendQuestion}
+								/>
+								{keptAttachments.length > 0 && (
+									<KeptAttachmentsButton
+										keptAttachments={keptAttachments}
+										onRemoveKeptAttachment={chat.removeKeptAttachment}
+									/>
+								)}
+							</div>
+							{/* the clear and send buttons. each keeps focus in the message box.
+						losing it closes a phone's keyboard, which moves the button before the click arrives */}
+							<div className="ml-auto flex items-center gap-2">
+								{/* an X button clears the input and returns focus, only appearing when there is content */}
+								{question !== "" && (
+									<button
+										type="button"
+										aria-label="Clear draft"
+										onMouseDown={(event) => event.preventDefault()}
+										onClick={() => {
+											chat.setQuestion("")
+											questionBoxRef.current?.focus()
+										}}
+										className={ICON_BUTTON_CLASS}
+									>
+										<X className="size-4" />
+									</button>
+								)}
+								{/* the stop button ends a response stream. the mic starts a recording from an empty box. the arrow
+							button sends the question or forwards a visitor to the signup page */}
+								{isStreaming ? (
+									<button
+										type="button"
+										aria-label="Stop"
+										onMouseDown={(event) => event.preventDefault()}
+										onClick={chat.stop}
+										className={SEND_BUTTON_CLASS}
+									>
+										<Square className="size-3 fill-current" />
+									</button>
+								) : isMicInSendSlot ? (
+									<MicButton
+										voiceRecording={voiceRecording}
+										isSignupRequired={isSignupRequired}
+										onSignup={onSendQuestion}
+									/>
+								) : isSignupRequired ? (
+									<Tooltip>
+										<TooltipTrigger asChild>
+											<button
+												type="submit"
+												aria-label="Sign up to chit-chat"
+												onMouseDown={(event) => event.preventDefault()}
+												className={SEND_BUTTON_CLASS}
+											>
+												<ArrowUp className="size-4" />
+											</button>
+										</TooltipTrigger>
+										<TooltipContent>Sign up to chit-chat</TooltipContent>
+									</Tooltip>
+								) : (
 									<button
 										type="submit"
-										aria-label="Sign up to chit-chat"
+										aria-label="Send"
+										disabled={isVoiceRecordingBusy || (question.trim() === "" && chat.attachments.length === 0)}
 										onMouseDown={(event) => event.preventDefault()}
-										className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8"
+										className={SEND_BUTTON_CLASS}
 									>
 										<ArrowUp className="size-4" />
 									</button>
-								</TooltipTrigger>
-								<TooltipContent>Sign up to chit-chat</TooltipContent>
-							</Tooltip>
-						) : (
-							<button
-								type="submit"
-								aria-label="Send"
-								disabled={question.trim() === "" && chat.attachments.length === 0}
-								onMouseDown={(event) => event.preventDefault()}
-								className="bg-primary text-primary-foreground grid size-11 shrink-0 place-items-center rounded-full sm:size-8 disabled:opacity-40"
-							>
-								<ArrowUp className="size-4" />
-							</button>
-						)}
-					</div>
-				</div>
+								)}
+							</div>
+						</div>
+					</>
+				)}
 			</FileDropZone>
 		</form>
 	)

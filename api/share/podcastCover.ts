@@ -4,6 +4,7 @@ import { renderAsync } from "@resvg/resvg-js"
 import { type PodcastCover, type PodcastCoverSize, toPodcastCoverKey } from "@shared/podcastEpisodes"
 import satori from "satori"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "../../worker"
+import { runFfmpeg } from "../../worker/ffmpeg"
 import type { CardElement } from "./previewImage"
 
 // a cover's full size, which is the largest that Apple takes, and the most bytes that Apple allows for a cover
@@ -250,8 +251,8 @@ type ToScaledCoverJpegOptions = { coverPng: Uint8Array; size: PodcastCoverSize; 
 
 // scale the png to the size and encode it as an RGB JPEG with ffmpeg, through its pipes
 async function toScaledCoverJpeg({ coverPng, size, quality }: ToScaledCoverJpegOptions): Promise<Uint8Array> {
-	// run ffmpeg with the png on its input pipe and the JPEG on its output pipe
-	const inputArguments = ["-hide_banner", "-loglevel", "error", "-f", "png_pipe", "-i", "pipe:0"]
+	// the png on ffmpeg's input pipe and the JPEG on its output pipe
+	const inputArguments = ["-f", "png_pipe", "-i", "pipe:0"]
 	const outputArguments = [
 		"-vf",
 		`scale=${size}:${size}:flags=lanczos`,
@@ -261,20 +262,5 @@ async function toScaledCoverJpeg({ coverPng, size, quality }: ToScaledCoverJpegO
 		"mjpeg",
 		"pipe:1",
 	]
-	const ffmpegProcess = Bun.spawn(["ffmpeg", ...inputArguments, ...outputArguments], {
-		stdin: coverPng,
-		stdout: "pipe",
-		stderr: "pipe",
-	})
-
-	// a failed encode throws an error with what ffmpeg printed
-	const [coverJpeg, errorText, exitCode] = await Promise.all([
-		new Response(ffmpegProcess.stdout).arrayBuffer(),
-		new Response(ffmpegProcess.stderr).text(),
-		ffmpegProcess.exited,
-	])
-	if (exitCode !== 0) {
-		throw new Error(`ffmpeg exited with ${exitCode}: ${errorText.trim().slice(0, 500)}`)
-	}
-	return new Uint8Array(coverJpeg)
+	return runFfmpeg({ ffmpegArguments: [...inputArguments, ...outputArguments], inputBytes: coverPng })
 }

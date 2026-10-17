@@ -10,6 +10,7 @@ import chatGlossaryTemplate from "./chat-glossary.md" with { type: "text" }
 import chatNewTopicTemplate from "./chat-new-topic.md" with { type: "text" }
 import chatOpenNewTopicTemplate from "./chat-open-new-topic.md" with { type: "text" }
 import chatRoomTurnTemplate from "./chat-room-turn.md" with { type: "text" }
+import chatSpokenTemplate from "./chat-spoken.md" with { type: "text" }
 import chatTeamTemplate from "./chat-team.md" with { type: "text" }
 import chatTopicTemplate from "./chat-topic.md" with { type: "text" }
 import outlinePodcastEpisodeTemplate from "./outline-podcast-episode.md" with { type: "text" }
@@ -34,6 +35,7 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"chat-conduct": chatConductTemplate,
 	"chat-docs-guide": chatDocsGuideTemplate,
 	"chat-open-new-topic": chatOpenNewTopicTemplate,
+	"chat-spoken": chatSpokenTemplate,
 	"chat-new-topic": chatNewTopicTemplate,
 	"chat-team": chatTeamTemplate,
 	"chat-room-turn": chatRoomTurnTemplate,
@@ -82,6 +84,9 @@ let client: LangfuseClient | null = null
 // prompts already noted as worded differently this process, so a lagging prompt is logged once instead of per scan
 const wordDriftPrompts = new Set<PromptName>()
 
+// prompts already reported as asking for different variables this process, so a drift alerts once and its repeats stop
+const variableDriftPrompts = new Set<PromptName>()
+
 /**
  * Fetches a prompt's production template from Langfuse, falling back to the bundled template.
  */
@@ -105,10 +110,14 @@ export async function fetchPromptTemplate(
 		// a registry template asking for different variables than the bundled one has drifted from the code that fills
 		if (!hasSameVariables(prompt.prompt, fallbackPromptTemplate)) {
 			console.error(`registry prompt ${name} v${prompt.version} names different variables, using the bundled template`)
-			reportError(new Error(`registry prompt ${name} has drifted from the bundled template`), "prompt-registry", {
-				prompt: name,
-				registryVersion: String(prompt.version),
-			})
+			// report the drift once per process
+			if (!variableDriftPrompts.has(name)) {
+				variableDriftPrompts.add(name)
+				reportError(new Error(`registry prompt ${name} has drifted from the bundled template`), "prompt-registry", {
+					prompt: name,
+					registryVersion: String(prompt.version),
+				})
+			}
 			return { template: fallbackPromptTemplate, name }
 		}
 

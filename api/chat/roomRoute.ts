@@ -2,7 +2,9 @@
 import { zValidator } from "@hono/zod-validator"
 import type { ChatRoomMessagePage } from "@shared/contracts/chat"
 import { chatRoomMessagePayload } from "@shared/payloads"
-import { Hono } from "hono"
+import { isVoiceChatConfigured } from "@shared/voiceChat"
+import { type Context, Hono } from "hono"
+import type { z } from "zod"
 import { attachmentStream } from "../../worker"
 import { toSignedOutRejection } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
@@ -46,9 +48,52 @@ export function toBeforeChatMessageId(beforeParam: string | undefined): number |
 		: undefined
 }
 
-/** One page of chat messages, saying whether another sits above it so the list knows when to stop. */
+/**
+ * One page of chat messages, saying whether another sits above it so the list knows when to stop, and whether voice
+ * chat is on.
+ */
 export function toChatMessagePage(chatMessages: ChatRoomMessagePage["chatMessages"]): ChatRoomMessagePage {
-	return { chatMessages, hasEarlierChatMessages: chatMessages.length === CHAT_ROOM_LOAD_LIMIT }
+	return {
+		chatMessages,
+		hasEarlierChatMessages: chatMessages.length === CHAT_ROOM_LOAD_LIMIT,
+		isVoiceChatConfigured: isVoiceChatConfigured(),
+	}
+}
+
+// the context of a chat room post, with its validated chat message
+type ChatRoomPostContext = Context<AppEnv, string, { out: { json: z.infer<typeof chatRoomMessagePayload> } }>
+
+// post one member's chat message and answer the result: a 400 for a file problem, a 404 for a chat room the user may
+// not use, and the posted chat message otherwise
+async function postChatRoomMessageRoute(
+	context: ChatRoomPostContext,
+	topicId: string | null,
+	teamId: string,
+): Promise<Response> {
+	// read the signed-in user, whom chatRoomSignedOutRejection already required. the payload schema limits the length
+	const userId = currentUser(context)
+	if (!userId) {
+		return context.json({ error: "not found" }, 404)
+	}
+	const { content, replyToChatMessageId, attachments, isSpoken } = context.req.valid("json")
+	// one rejected file returns a 400 for the whole chat message, while a missing chat room returns a 404
+	const postChatMessageResult = await postChatRoomMessage(
+		userId,
+		topicId,
+		teamId,
+		content,
+		replyToChatMessageId ?? null,
+		attachments,
+		{ analyticsProperties: toAnalyticsProperties(context), isSpoken },
+	)
+	if (postChatMessageResult === "attachmentLimitReached") {
+		return context.json({ error: "attachment limit reached" }, 400)
+	}
+	if (postChatMessageResult === "attachmentRejected") {
+		return context.json({ error: "attachment rejected" }, 400)
+	}
+	// the posted chat message, or 404 for a chat room this user may not use
+	return postChatMessageResult ? context.json(postChatMessageResult) : context.json({ error: "not found" }, 404)
 }
 
 // the chat room routes. every access rejection is a 404, so a chat room's existence follows the team's
@@ -174,64 +219,14 @@ export const chatRoomRoute = new Hono<AppEnv>()
 		chatRoomSignedOutRejection,
 		chatBodyLimit,
 		zValidator("json", chatRoomMessagePayload),
-		async (context) => {
-			// read the signed-in user, whom chatRoomSignedOutRejection already required. the payload schema limits the length
-			const userId = currentUser(context)
-			if (!userId) {
-				return context.json({ error: "not found" }, 404)
-			}
-			const { content, replyToChatMessageId, attachments } = context.req.valid("json")
-			// one rejected file returns a 400 for the whole chat message, while a missing chat room returns a 404
-			const postChatMessageResult = await postChatRoomMessage(
-				userId,
-				context.req.param("id"),
-				context.req.param("teamId"),
-				content,
-				replyToChatMessageId ?? null,
-				attachments,
-				toAnalyticsProperties(context),
-			)
-			if (postChatMessageResult === "attachmentLimitReached") {
-				return context.json({ error: "attachment limit reached" }, 400)
-			}
-			if (postChatMessageResult === "attachmentRejected") {
-				return context.json({ error: "attachment rejected" }, 400)
-			}
-			// the posted chat message, or 404 for a chat room this user may not use
-			return postChatMessageResult ? context.json(postChatMessageResult) : context.json({ error: "not found" }, 404)
-		},
+		(context) => postChatRoomMessageRoute(context, context.req.param("id"), context.req.param("teamId")),
 	)
 	.post(
 		TEAM_ROOM_PATH,
 		chatRoomSignedOutRejection,
 		chatBodyLimit,
 		zValidator("json", chatRoomMessagePayload),
-		async (context) => {
-			// read the signed-in user, whom chatRoomSignedOutRejection already required. the payload schema limits the length
-			const userId = currentUser(context)
-			if (!userId) {
-				return context.json({ error: "not found" }, 404)
-			}
-			const { content, replyToChatMessageId, attachments } = context.req.valid("json")
-			// one rejected file returns a 400 for the whole chat message, while a missing chat room returns a 404
-			const postChatMessageResult = await postChatRoomMessage(
-				userId,
-				null,
-				context.req.param("id"),
-				content,
-				replyToChatMessageId ?? null,
-				attachments,
-				toAnalyticsProperties(context),
-			)
-			if (postChatMessageResult === "attachmentLimitReached") {
-				return context.json({ error: "attachment limit reached" }, 400)
-			}
-			if (postChatMessageResult === "attachmentRejected") {
-				return context.json({ error: "attachment rejected" }, 400)
-			}
-			// the posted chat message, or 404 for a chat room this user may not use
-			return postChatMessageResult ? context.json(postChatMessageResult) : context.json({ error: "not found" }, 404)
-		},
+		(context) => postChatRoomMessageRoute(context, null, context.req.param("id")),
 	)
 	// a shared file streams back to any member, under the same gate the chat room itself uses
 	.get("/topics/:id/room/attachments/:attachmentId/download", async (context) => {

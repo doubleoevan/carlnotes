@@ -1,5 +1,6 @@
 // the private chat's scrollable chat message list, virtualized past a long conversation
 import { CHAT_HISTORY_TURNS, toUncompactedChatTurnStart } from "@shared/contracts/chat"
+import type { VoiceChatPage } from "@shared/payloads"
 import { useEffect, useRef } from "react"
 import { Virtuoso, type VirtuosoHandle } from "react-virtuoso"
 import { type ChatMessageAuthor, ChatTurnBlock } from "@/components/chat/ChatTurnBlock"
@@ -20,6 +21,7 @@ export function ChatMessages({
 	chatName,
 	isBudgetExhausted,
 	author,
+	voiceChatPage,
 	onRetry,
 	isEnlarged,
 	openingLine,
@@ -33,6 +35,8 @@ export function ChatMessages({
 	isBudgetExhausted?: boolean
 	// the current user
 	author: ChatMessageAuthor
+	// the page each answer's play button names, null while voice is off
+	voiceChatPage: VoiceChatPage | null
 	// re-asks a failed chat turn's question on the failure notice
 	onRetry?: (question: string) => void
 	// what an empty conversation opens with, in place of the hot take line
@@ -99,6 +103,7 @@ export function ChatMessages({
 								isStreaming={isStreaming}
 								now={now}
 								author={author}
+								voiceChatPage={voiceChatPage}
 								onRetry={onRetry}
 							/>
 						</div>
@@ -129,6 +134,7 @@ export function ChatMessages({
 						isLast={index === chatTurns.length - 1}
 						isStreaming={isStreaming}
 						now={now}
+						voiceChatPage={voiceChatPage}
 						onRetry={onRetry}
 					/>
 				))}

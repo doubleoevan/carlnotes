@@ -151,6 +151,22 @@ export const CHAT_FILE_PICKER_ACCEPT =
 	"image/*,application/pdf,.pdf,text/*,.txt,.md,.markdown,.csv,.tsv,.json,.log,.docx,.xlsx,video/mp4,video/quicktime,video/webm"
 
 /**
+ * Adds a listener for each event on a target, and returns the call that removes them.
+ */
+export function addEventListeners(target: EventTarget, listeners: [string, () => void][]): () => void {
+	for (const [eventName, listener] of listeners) {
+		target.addEventListener(eventName, listener)
+	}
+
+	// the call that removes every listener
+	return () => {
+		for (const [eventName, listener] of listeners) {
+			target.removeEventListener(eventName, listener)
+		}
+	}
+}
+
+/**
  * Merges class names, resolving Tailwind conflicts.
  */
 export function cn(...inputs: ClassValue[]): string {

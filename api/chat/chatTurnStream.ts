@@ -21,8 +21,9 @@ export type StreamedChatTurn = {
 	page: ChatPage
 	question: string
 	attachments: ChatAttachment[]
-	// whether the gate keeps the text, and what the topic tools did
+	// whether the gate keeps the text, whether the question was spoken, and what the topic tools did
 	isPersisted: boolean
+	isSpoken: boolean
 	toolCalls: ChatTurnToolCalls
 	// the properties that the analytics event is sent with, and the LiteLLM key for the attachment summaries
 	analyticsProperties: AnalyticsProperties
@@ -99,6 +100,7 @@ async function saveFinishedChatTurn(chatTurn: StreamedChatTurn): Promise<string 
 			question: chatTurn.question,
 			answer: text,
 			toolCalls,
+			isSpoken: chatTurn.isSpoken,
 			analyticsProperties: chatTurn.analyticsProperties,
 		})
 

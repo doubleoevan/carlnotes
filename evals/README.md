@@ -298,7 +298,9 @@ Every case checks that the reply links only to the findings' urls, the docs root
 given, that it has three paragraphs or fewer apart from its lists and headings, that it credits the findings only with
 what they say, and that it opens by answering the question. The cases cover a question that the findings answer, a
 question that they do not cover, a finding with an instruction to the assistant in its text, a question about the app
-that a docs section answers, and a topic with no findings yet. A docs section is built with the app's own `toDocsBlock`.
+that a docs section answers, a topic with no findings yet, and a spoken question, built with `isSpoken` so the spoken
+fragment is spliced, whose reply has to be a few short sentences with no heading, list, table, fenced code, or link. A
+docs section is built with the app's own `toDocsBlock`.
 
 ## Team chat eval
 

@@ -22,6 +22,7 @@ import { toUnseenChatMentionCountKey } from "./chat/mentions"
 import { NEW_TOPIC_CHAT_PATH, privateChatRoute, TEAM_CHAT_PATH, TOPIC_CHAT_PATH } from "./chat/privateChat"
 import { chatRoomRoute, TEAM_ROOM_PATH, TOPIC_ROOM_PATH } from "./chat/roomRoute"
 import { countUnseenChatMentions, loadChatRooms } from "./chat/rooms"
+import { VOICE_TRANSCRIPTION_PATH, voiceRoute } from "./chat/voiceRoute"
 import { type AppEnv, currentUser } from "./currentUser"
 import { renderedCacheHeaders } from "./edgeCache"
 import { flagContentRoute } from "./flagContent"
@@ -84,13 +85,15 @@ const UNSEEN_CHAT_MENTION_COUNT_TTL_MS = 10_000
 // the base path that every api route comes after
 const API_BASE_PATH = "/api"
 
-// the routes that set their own body limit, for chat turns, chat room posts, uploads, and note sync
+// the routes that set their own body limit, for chat turns, chat room posts, a spoken question's recording, uploads,
+// and note sync
 const OWN_BODY_LIMIT_PATHS = [
 	TOPIC_CHAT_PATH,
 	TEAM_CHAT_PATH,
 	NEW_TOPIC_CHAT_PATH,
 	TOPIC_ROOM_PATH,
 	TEAM_ROOM_PATH,
+	VOICE_TRANSCRIPTION_PATH,
 	AVATAR_UPLOAD_PATH,
 	TEAM_AVATAR_UPLOAD_PATH,
 	TOPIC_ATTACHMENT_UPLOAD_PATH,
@@ -224,6 +227,8 @@ export const apiRoute = new Hono<AppEnv>()
 	.route("/", privateChatRoute)
 	// the team chat routes
 	.route("/", chatRoomRoute)
+	// the voice routes: a spoken question's transcription, a reply's speech, and the spoken events
+	.route("/", voiceRoute)
 	// the note routes and their comment threads
 	.route("/", notesRoute)
 	.route("/", noteCommentThreadsRoute)

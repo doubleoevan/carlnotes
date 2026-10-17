@@ -1,8 +1,8 @@
 # api/
 
 Hono server. Entry `api/index.ts` mounts the route trees; `api/api.ts` aggregates the `/api` routes and bounds every
-body at a megabyte through `toBodyLimit` in `bodyLimit.ts`, except on the chat, upload, and note sync routes, which set
-their own limits.
+body at a megabyte through `toBodyLimit` in `bodyLimit.ts`, except on the chat, transcription, upload, and note sync
+routes, which set their own limits.
 
 - `index.ts` opens each request's memo (`db/requestMemo.ts`) in its first middleware, and its `onError` reports an
   error no route handles to Sentry and keeps Hono's 500. `requestTracing.ts` runs next: it counts the request's
@@ -133,6 +133,18 @@ their own limits.
   turn's reply and saving its row. `chat/roomTurns.ts` — Carl's chat room turn, and `chat/roomQuestion.ts` — the
   question it is asked, from the chat window and the room's summary and files. `room.smoke.ts` runs
   `roomSmokeSections.ts` over `roomSmokeFixtures.ts`.
+- `chat/voiceRoute.ts` — the voice routes, each naming its chat page in the request: `POST /chat/transcription`
+  transcodes a spoken question's recording through ffmpeg, at most 4 at once in the process with a 503 and a
+  Retry-After past that, transcribes it on the user's key, and records the spend as a text-less chat turn row, or
+  returns an empty transcript with no row for a recording with no samples; `POST /chat/speech` speaks one spoken part of
+  Carl's reply on the user's key, under the speech rate limit and at most 3 spoken parts in progress per user with a 429
+  past that, and returns the MP3, or the WAV if the encode failed; `POST /chat/spoken-events` counts a spoken
+  question's timings and a play tap, under the spoken events rate limit. A failed model call other than a spent budget
+  is reported to Sentry under a fixed message per model call and outcome. `chat/voiceAuthorization.ts` — whether a
+  user may talk to Carl on that page: a private page asks its chat turn's gate, and a chat room asks membership and the
+  monthly spend gate; and the access check that a spoken event asks, which reads the page's visibility or membership
+  and no spend sum. The voice route tests share their pages, request builders, and spies through
+  `chat/voiceRouteTestFixtures.ts`.
 - `chat/attachments.ts` — storing a chat turn's attachments and deleting them, with the routes;
   `chat/chatAttachmentReads.ts` — reading them: the kept ones with their context, a chat turn's own, a download, and
   the object keys behind a user's or a topic's.
@@ -153,10 +165,12 @@ their own limits.
 - `botAnalytics.ts` — the middleware that reports what a known crawler, unfurler, podcast app, or feed reader fetched,
   keyed to the bot's name, from the token list in `shared/userAgent.ts`. A route that loaded a topic sets
   `analyticsTopic`, and a public topic's id is sent with the event.
-- `rateLimit.ts` — the three rate limits: the tool caller limit, shared by the chat turn routes, the source
-  suggestions, and the mcp routes, keyed by the user or by the client address; the page render limit on a visitor's
-  page renders, which `index.ts` mounts ahead of the blog, release, and ui page renders, keyed by address and skipped
-  for a session cookie or an untrusted address; and the search limit on the search bar's three routes.
+- `rateLimit.ts` — the five rate limits: the tool caller limit, shared by the chat turn routes, the transcription
+  route, the source suggestions, and the mcp routes, keyed by the user or by the client address; the page render limit
+  on a visitor's page renders, which `index.ts` mounts ahead of the blog, release, and ui page renders, keyed by
+  address and skipped for a session cookie or an untrusted address; the search limit on the search bar's three
+  routes; the speech limit on the spoken parts of a reply, in its own rate limit window; and the spoken events
+  limit, in its own rate limit window.
   `trustedProxies.ts` reads that address exactly as Better Auth does: the rightmost `x-forwarded-for` entry outside
   the Cloudflare ranges that `TRUSTED_PROXIES` lists, and logs the warning once if the setting is unset or misses a
   hop.

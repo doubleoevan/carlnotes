@@ -14,6 +14,8 @@ export type ChatTurn = {
 	answer: string
 	rejection: ChatRejection | null
 	at?: number
+	// the key the spoken answer store queues this chat turn's reply under, unique for the session
+	spokenAnswerKey: string
 	// the tools this chat turn called, sent back with the next question
 	toolCalls?: ChatToolCall[]
 	// a just-sent image or clip holds its data url until the reload hands it a stored id to read from
@@ -33,6 +35,15 @@ function toPlaceholderId(): string {
 	return `pending-${placeholderCount}`
 }
 
+// how many spoken answer keys this session has given out
+let spokenAnswerKeyCount = 0
+
+/** Returns a spoken answer key no other chat turn in this session has, for a loaded or a just-sent chat turn. */
+export function toSpokenAnswerKey(): string {
+	spokenAnswerKeyCount += 1
+	return `chat-turn-${spokenAnswerKeyCount}`
+}
+
 /** Returns the kept attachments that a sent chat turn adds to the manage list before the server returns their ids. */
 export function toKeptAttachmentPlaceholders(sentAttachments: ChatAttachment[]): KeptChatAttachment[] {
 	return sentAttachments
@@ -45,15 +56,22 @@ export function toKeptAttachmentPlaceholders(sentAttachments: ChatAttachment[]):
 		}))
 }
 
+// the question a chat turn sent, its files, and whether it was spoken
+type ToSentChatTurnOptions = { question: string; attachments: ChatAttachment[] }
+
 /**
  * Returns a fresh chat turn showing what it sent. An image or a clip shows from its data url until the reload gives
  * it a stored id.
  */
-export function toSentChatTurn(askedQuestion: string, sentAttachments: ChatAttachment[]): ChatTurn {
+export function toSentChatTurn({
+	question: askedQuestion,
+	attachments: sentAttachments,
+}: ToSentChatTurnOptions): ChatTurn {
 	return {
 		question: withAttachmentNote(askedQuestion, sentAttachments),
 		answer: "",
 		rejection: null,
+		spokenAnswerKey: toSpokenAnswerKey(),
 		attachments: sentAttachments.map((attachment) => ({
 			id: toPlaceholderId(),
 			kind: attachment.kind,

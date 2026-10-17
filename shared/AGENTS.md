@@ -8,9 +8,12 @@ constants that the api validates with and the ui parses against, one module per 
 the topic ones in `topicPayloads.ts`, `enums.ts` and `plans.ts` hold the values that both sides compare, `sources.ts`
 defines the Sources that an ingester reads, `seo.ts` builds topic slugs and paths, meta descriptions, and the site's
 structured data, `podcastEpisodes.ts` holds the podcast episode settings, a cover's key and path, the show's and the
-hosts' names, and a turn's transcript text, and `appUrl.ts` reads the app's base url from `BETTER_AUTH_URL` for server
-code: `appUrl()` falls back to the local dev server, and `appBaseUrl()` is undefined if unset, for the emails and
-notifications that skip without a link.
+hosts' names, and a turn's transcript text, `voiceChat.ts` reads the transcription model from `CHAT_TRANSCRIPTION_MODEL`
+and says whether voice chat is on, which needs that model and the podcast speech model, `spokenText.ts` writes markdown
+as its plain words for the meta description and as the text Carl speaks, with fenced code and bare urls removed, a reply
+split into spoken parts on blank lines, and a streaming reply's spoken parts returned as they finish, and `appUrl.ts`
+reads the app's base url from `BETTER_AUTH_URL` for server code: `appUrl()` falls back to the local dev server, and
+`appBaseUrl()` is undefined if unset, for the emails and notifications that skip without a link.
 
 `monitoring.ts` starts Sentry in the api and the worker and defines what tracing reads and writes: the traces sampler, a
 request's transaction name and measurements, the stage and query spans, and the threshold warnings. The send-time scrub

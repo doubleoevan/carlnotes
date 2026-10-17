@@ -23,7 +23,19 @@ The api serves the browser bundle and renders pages through the server build, be
   Similar topics and both episode tables share. `usePagination` in
   `TablePagination.tsx` starts a table at ten rows a page unless it asks for another size, and its
   `ScriptedTablePagination` shows a paged table's pagination only with JavaScript.
-- `lib/` — `utils.ts` and small pure client-side helpers. `pageHead.ts` turns a
+- `components/chat/` — the chat panel, both composers, the chat message lists, and the hooks behind them.
+  `useChatRoom.ts` is the chat room's state, `useChatRoomSpokenAnswer.ts` speaks carl's reply to the browser's spoken
+  message, and `useChatRoomLinkPreviews.ts` polls for fresh chat messages' link preview cards. `MicButton.tsx` is the
+  mic in an empty composer's send slot, `RecordingBar.tsx` the bar that replaces the box while a recording runs, and
+  `useVoiceRecording.ts` the recording's state machine from the mic tap to the transcript, which loads
+  `lib/voiceRecorder.ts` on the first tap, and listen mode, which reopens the mic on the tap's audio context once carl
+  finishes his spoken answer. `SpokenAnswerButton.tsx` is the play button beside the copy button in
+  carl's reply footer, and `SpokenAnswerAudio.tsx` the audio element
+  carl's spoken answers play through, which `Layout` mounts beside the podcast's. `chatRejectionCopy.ts` holds the
+  sentence for each chat rejection, and `chatRoomTestFixtures.ts` the chat fixtures the chat tests share.
+- `lib/` — `utils.ts` and small pure client-side helpers. `voiceRecorder.ts` records the microphone, reads its level
+  through an analyser, ends the recording once the speaker stops or the limit passes, and releases the microphone at
+  every end, a rejected request included. `pageHead.ts` turns a
   `PageHead`, or a fixed title and path, into the tags a route's `head()` returns. `loadOnServer.ts` runs a route
   loader's read on the server only, and its `loadPageOnServer` reads a page's head and page data together. Its
   `readWithDegradedFallback` returns a fallback for a failed read and marks the response, which the api answers 503.
@@ -58,21 +70,28 @@ The api serves the browser bundle and renders pages through the server build, be
   with the lyrics from `themeSongLyrics.ts`),
   `PodcastEpisodeCover.tsx` (an episode's cover square), and `PodcastEpisodeAudio.tsx`, the one audio element and the
   podcast player that `Layout` mounts.
-  `stores/podcastEpisodePlayerStore.ts` drives that element, so playback continues from one page to the next.
+  `stores/podcastEpisodePlayerStore.ts` drives that element, so playback continues from one page to the next, and
+  `stores/podcastEpisodeListenStore.ts` saves a signed-in user's progress in the episode.
 - `components/note/` — the Tasting Notes section, table, and dialog, and the lazily imported
   BlockNote editor with its yjs SSE provider, comment threads, and the comment "@" mention menu.
   The editor chunk loads only when a note dialog opens, so it never runs on the server.
 - `clients/` — one client module per domain, named `<domain>Client.ts`. Most build on the typed `apiClient` in
   `apiClient.ts`, whose base url is relative in the browser and the api's own address on the server. `apiClient.ts`
   also exports `readApiErrorMessage`, which reads the api's error message from a failed response. Some calls, and all
-  of `chatClient.ts` and `flagContentClient.ts`, use `fetch` on a relative path instead. `pageHeadClient.ts` reads a
-  page's head data.
-- `stores/` — app state one module owns and any component may read, named `<thing>Store.ts`. Each keeps
-  its value in module scope and takes its `publish` call and `useStoreVersion` hook from `storeListeners.ts`, the one
-  place the `useSyncExternalStore` contract lives, so two components read one live value with no provider
-  wrapping them. Reach for a store only when state outlives a page or crosses the tree; `useState` and
-  `providers/` cover everything else. Every store hook calls `useStoreVersion`, which reads the same version as the
-  server snapshot.
+  of `chatClient.ts`, `flagContentClient.ts`, and `voiceClient.ts`, use `fetch` on a relative path instead.
+  `pageHeadClient.ts` reads a page's head data.
+- `stores/` — app state one module owns and any component may read, named `<thing>Store.ts`. Each keeps its value in
+  module scope and takes its `publish` call and `useStoreVersion` hook from `storeListeners.ts`, the one place the
+  `useSyncExternalStore` contract lives, so two components read one live value with no provider wrapping them. Reach for
+  a store only when state outlives a page or crosses the tree; `useState` and `providers/` cover everything else. Every
+  store hook calls `useStoreVersion`, which reads the same version as the server snapshot. `spokenAnswerStore.ts` drives
+  the spoken answer audio element: the queue of one reply's spoken parts, keyed by its spoken answer key, the playing
+  state the play buttons read, and the announcement of each queue's end that listen mode reads. It pauses the podcast
+  episode before carl speaks, the podcast store stops carl when the episode plays, and it holds back a chat room's
+  auto-played reply while a composer records. `spokenAudioCache.ts` keeps the session's spoken audio by spoken part text
+  within a size limit, and returns a spoken part's audio from the cache, from a fetch already on its way, or from the
+  speech route. `podcastEpisodeListenStore.ts` keeps whether the user is signed in and saves a signed-in user's progress
+  in the loaded podcast episode, its playback start once per load, for the player store.
 - `hooks/` — shared React hooks, `useTopicPagePayload.ts` among them, the topic page's payload and its poll reload;
   `providers/` — context providers; `assets/` — images the bundler inlines.
   A component that reads the browser during render, `localStorage`, `window`, or `document`, reads it through

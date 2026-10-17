@@ -1,6 +1,6 @@
-// eval reply tests: the chat link check and the prose paragraphs
+// eval reply tests: the chat link check, the prose paragraphs, and the markdown markup
 import { expect, test } from "bun:test"
-import { toDisallowedLinkUrl, toLinkUrls, toProseParagraphs } from "./evalReplies"
+import { toDisallowedLinkUrl, toLinkUrls, toMarkdownMarkup, toProseParagraphs } from "./evalReplies"
 
 test("a chat reply may link a finding, the docs root, or a docs page that it was given, and nothing else", () => {
 	// the finding and the docs block that the reply may link
@@ -58,4 +58,19 @@ test("a reply's prose paragraphs leave out its lists and its lone headings", () 
 		"Soft water sours the shot.",
 	].join("\n\n")
 	expect(toProseParagraphs(replyText)).toEqual(["The quiet burrs are the pick.", "Soft water sours the shot."])
+})
+
+test("a reply's first markdown markup is named, and a reply of plain sentences has none", () => {
+	// plain sentences, with a price and bold words, have no markup that a check names
+	expect(toMarkdownMarkup("Yes. The quiet burrs are the pick, and they ship in March for $89.")).toBeUndefined()
+	expect(toMarkdownMarkup("The **quiet burrs** are the pick.")).toBeUndefined()
+
+	// a heading, a list, a table, fenced code, and a link are each named
+	expect(toMarkdownMarkup("## Water\n\nSoft water sours the shot.")).toBe("a heading")
+	expect(toMarkdownMarkup("Two things:\n\n- the smoke filter\n- the cooling tray")).toBe("a list")
+	expect(toMarkdownMarkup("1. grind\n2. tamp")).toBe("a list")
+	expect(toMarkdownMarkup("| burrs | price |\n| --- | --- |")).toBe("a table")
+	expect(toMarkdownMarkup("```\ncurl https://deals.example/api\n```")).toBe("fenced code")
+	expect(toMarkdownMarkup("See [the burrs](https://burrnotes.example/quiet-burrs).")).toBe("a link")
+	expect(toMarkdownMarkup("More at https://deals.example/bare.")).toBe("a link")
 })

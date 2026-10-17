@@ -750,6 +750,13 @@
       "when": 1791740864174,
       "tag": "0106_nifty_mikhail_rasputin",
       "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1792172922403,
+      "tag": "0107_open_nico_minoru",
+      "breakpoints": true
     }
   ]
 }

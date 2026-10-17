@@ -76,7 +76,9 @@ started, which the sweep and the manual scan route run).
   `PODCAST_RECORDING_CONCURRENCY`. The scan workflow starts it as a child workflow that outlives the Scan's own, after
   the email workflow, and the podcast episode workflow signals the Scan's email workflow once its outline is settled, so
   the email can name the Podcast Episode. `speech.ts` sends one two-speaker call per chapter through LiteLLM's Gemini
-  pass-through. No audio passes between activities except through object storage. `shared/podcastEpisodes.ts` reads
+  pass-through and returns a WAV, and one single-speaker call in the host's voice for a spoken chat reply, which ffmpeg
+  encodes to a 64 kbps MP3, or returns as the WAV if the encode fails. No audio passes between
+  activities except through object storage. `shared/podcastEpisodes.ts` reads
   `PODCAST_SPEECH_MODEL`, which defaults to `gemini-3.8-flash-tts`, and Podcast Episodes are off if it is set empty. The
   steps are in `podcast/`: - `planPodcastEpisode.ts` runs the checks that stop a recording before it spends anything,
   picks the Findings, and marks a free Topic's episode short. - `writePodcastEpisodeScript.ts` writes and saves the
@@ -89,6 +91,14 @@ started, which the sweep and the manual scan route run).
   episode's publish replaces the Topic's earlier short ones. `removePodcastEpisode.ts` removes a Podcast Episode and
   deletes its audio and its vector. - `podcastEpisodeChapters.ts` gives a new Finding the newest rating of the
   chapters that narrated its Resource, and links those chapters to it. The review's `upsertFinding` calls both.
+- `ffmpeg.ts` runs one ffmpeg process through its pipes, for the chapter join, the api's cover encode, a chat
+  recording's transcode, and a spoken chat reply's MP3. `transcription.ts` transcodes a chat recording to 16 kHz mono
+  WAV, reading only the containers and codecs a browser records, and transcribes it through Google's Interactions API on
+  LiteLLM's Gemini pass-through on the user's key with store set to false, so Google keeps no recording. A WAV with no
+  samples is silent and makes no call. The pass-through does not meter that route, so the key is never charged for a
+  transcription, and the api's spend row, priced by `transcriptionCost` in `budget.ts`, is the only meter. A spent key
+  budget, a retryable failure, and a rejection are sorted by `toModelCallFailure` in `speech.ts`, which both calls
+  share. `speech.smoke.ts` (`bun run smoke:speech`) checks both against the live proxy.
 - `meanVectors.ts` saves the vectors that rank related topics, related podcast episodes, and the podcast episode search,
   each the mean of the current model's resource embeddings behind it, computed in SQL: a Topic's after every Scan ends,
   succeeded, stopped, or failed, after a save that changes its visibility, and after a rating, from its kept Findings,

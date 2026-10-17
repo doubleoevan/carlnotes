@@ -1,5 +1,6 @@
 // the page head helpers. the site and page titles, structured data, topic slugs and paths, and the meta description
 import { PLANS } from "./plans"
+import { toPlainText } from "./spokenText"
 import { type PageYoutubeVideo, toYoutubeEmbedUrl } from "./youtube"
 
 // the site's own title, on the homepage and on any page with no title of its own
@@ -194,14 +195,4 @@ export function toMetaDescription(text: string): string {
 
 	// drop a trailing comma, semicolon, or colon, and end with an ellipsis
 	return `${wholeWordText.replace(/[,;:]$/, "")}…`
-}
-
-// markdown as its plain words. a link or image keeps its text, and the marks for bold, star emphasis, code,
-// headings, quotes, and lists go
-function toPlainText(markdown: string): string {
-	return markdown
-		.replace(/!?\[([^\]]*)\]\([^)]*\)/g, "$1")
-		.replace(/\*\*|__|`/g, "")
-		.replace(/\*(\S[^*]*?)\*/g, "$1")
-		.replace(/^[ \t]{0,3}(?:#{1,6}|>|[-*+]|\d+\.)[ \t]+/gm, "")
 }

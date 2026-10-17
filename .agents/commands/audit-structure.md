@@ -537,6 +537,17 @@ Check for:
    - "the event loop stalled past 200 ms" as the event loop warning's message, and `EVENT_LOOP_DELAY_ALERT_MS` (now
      "the api's event loop stalled", from `EVENT_LOOP_STALL_ALERT_MS` and `EVENT_LOOP_P99_ALERT_MS` in
      `shared/runtimeGauges.ts`)
+   - `toPlainText` as a private helper in `shared/seo.ts` (now exported from `shared/spokenText.ts`, beside
+     `toSpokenParts`)
+   - `toFailedSpeechResult` in `worker/speech.ts` (now `toModelCallFailure`, beside
+     `toRetryableModelCallFailure`). `SpeechResult` stays the podcast's recording result, and a spoken answer's is
+     `SpokenAnswerResult`
+   - the inline `Bun.spawn(["ffmpeg", ...])` in `worker/podcast/podcastEpisodeAudio.ts` and
+     `api/share/podcastCover.ts` (now `runFfmpeg` in `worker/ffmpeg.ts`, which every ffmpeg run goes through)
+   - the talk-to-carl splits, each moved whole: `savePodcastEpisodeListen`, `isPodcastEpisodeListenDue`,
+     `setIsUserSignedIn`, and `resetPodcastEpisodePlaybackStart` from `ui/src/stores/podcastEpisodePlayerStore.ts`
+     (now `ui/src/stores/podcastEpisodeListenStore.ts`), and `useChatRoomLinkPreviews` from
+     `ui/src/components/chat/useChatRoom.ts` (now its own file beside it, with `useChatRoomSpokenAnswer.ts`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

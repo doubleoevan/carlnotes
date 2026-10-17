@@ -152,6 +152,7 @@ export function PrivateChatPanel({
 						chatName={chatName}
 						openingLine={chatCopy.openingLine}
 						isBudgetExhausted={chat.isBudgetExhausted}
+						voiceChatPage={chat.voiceChatPage}
 						onRetry={(question) => void chat.send(question)}
 						author={{
 							userId: session?.user.id ?? null,

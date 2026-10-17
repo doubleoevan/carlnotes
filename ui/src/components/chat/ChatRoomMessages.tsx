@@ -184,6 +184,7 @@ export function ChatRoomMessages({
 			teamId={teamId}
 			canDelete={isTeamLeader || isAdmin || chatMessage.authorUserId === userId}
 			isLinkPreviewLoading={chatRoom.loadingChatMessageIds.has(chatMessage.id)}
+			voiceChatPage={chatRoom.voiceChatPage}
 			onAttachmentDelete={handleDeleteAttachment}
 			repliedChatMessage={toRepliedChatMessage(chatMessage, index)}
 			isOwnChatMessage={chatMessage.authorUserId === userId}

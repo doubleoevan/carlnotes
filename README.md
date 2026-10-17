@@ -395,10 +395,15 @@ and analytics are off but the app behaves the same. A visitor's search on the MC
 `bun run carl-up` creates a budgeted `LITELLM_PUBLIC_KEY` for it. Without one, the search answers that it needs an account,
 and every other tool still works.
 
-The podcast needs a `GEMINI_API_KEY` on the LiteLLM service and ffmpeg (`brew install ffmpeg`). `PODCAST_SPEECH_MODEL`
-names the speech model (default `gemini-3.8-flash-tts`), `PODCAST_RECORDING_CONCURRENCY` sets how many recording activities
-one worker runs at once, and `PODCAST_HOST_VOICE` and `PODCAST_COHOST_VOICE` name the two voices. To run without the
-podcast, set `PODCAST_SPEECH_MODEL` empty. No episode is recorded and the topic page shows no player.
+The podcast and talking to Carl need a `GEMINI_API_KEY` on the LiteLLM service and ffmpeg (`brew install ffmpeg`), which
+joins an episode's chapters, transcodes a spoken question, and encodes Carl's spoken answer to MP3.
+`PODCAST_SPEECH_MODEL` names the speech model (default `gemini-3.8-flash-tts`), `CHAT_TRANSCRIPTION_MODEL` names the
+transcription model (default `gemini-3.5-transcribe`, called by Google's name through LiteLLM's Gemini pass-through,
+with no alias), `PODCAST_RECORDING_CONCURRENCY` sets how many recording activities one worker runs at once, and
+`PODCAST_HOST_VOICE` and `PODCAST_COHOST_VOICE` name the two voices. To run without the podcast, set
+`PODCAST_SPEECH_MODEL` empty. No episode is recorded and the topic page shows no player. Voice needs both models, so an
+empty `CHAT_TRANSCRIPTION_MODEL` or an empty `PODCAST_SPEECH_MODEL` turns it off: the chat shows no mic and no play
+button.
 
 Billing (Stripe) is optional locally: subscriptions map to the free/plus/premium plans and a Stripe webhook derives the
 active plan. It needs `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, the per-plan `STRIPE_PRICE_*` ids, and a metered

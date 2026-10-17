@@ -265,10 +265,10 @@ storing an identifier.
 
 ### Requirement: PostHog reports a three-population event taxonomy
 
-When `POSTHOG_API_KEY` is set, the server SHALL emit two populations of events that are never joined to each other or
-to a visit: user events, keyed to a user id, and bot events, keyed to a bot's or an app's name. A bot event SHALL be
-sent with `$process_person_profile` false, so no person profile is ever created for a bot or an app. The browser's
-visit events are the third population, under "Visit analytics run in the browser".
+When `POSTHOG_API_KEY` is set, the server SHALL emit two populations of events that are never joined to each other or to
+a visit: user events, keyed to a user id, and bot events, keyed to a bot's or an app's name. A bot event SHALL be sent
+with `$process_person_profile` false, so no person profile is ever created for a bot or an app. The browser's visit
+events are the third population, under "Visit analytics run in the browser".
 
 Every server event SHALL have an `entryPoint`: `web` for a browser request, `mcp` for a tool call, `email` for a link
 from an email, `feed` for a feed or its audio, `worker` for the scan pipeline, or `webhook` for a payment provider's
@@ -290,11 +290,11 @@ The user events SHALL be, by area:
   `checkout_started` with `checkoutPlan` and `interval`; and from the payment provider's webhook `subscription_started`,
   `plan_changed` with `fromPlan` and `plan`, and `subscription_canceled`
 - topics and scans: `topic_created`; `topic_updated` with `isTopicOwner` and `changedFields`, the names of the saved
-  fields that differ from the row, never a value; `topic_deleted` with `isTopicOwner`; `topic_edited` for a prompt
-  or field edit by a Topic Tool, with `tool` and `origin`; `source_added` and `source_removed` with `sourceType` on
-  every path, the form and the tools alike; `attachment_added` with `kind`; `sources_suggested`; `scan_requested`;
-  `scan_quota_reached`; `scan_completed` with `trigger`, `findingsKept`, and `status` for every Scan;
-  `scan_stopped`; `first_scan_completed`; and `podcast_toggled` with `isEnabled`
+  fields that differ from the row, never a value; `topic_deleted` with `isTopicOwner`; `topic_edited` for a prompt or
+  field edit by a Topic Tool, with `tool` and `origin`; `source_added` and `source_removed` with `sourceType` on every
+  path, the form and the tools alike; `attachment_added` with `kind`; `sources_suggested`; `scan_requested`;
+  `scan_quota_reached`; `scan_completed` with `trigger`, `findingsKept`, and `status` for every Scan; `scan_stopped`;
+  `first_scan_completed`; and `podcast_toggled` with `isEnabled`
 - findings: `finding_rated`, `finding_bookmarked`, `finding_unbookmarked`, `finding_read`, `finding_unread`,
   `finding_opened`, and `finding_feedback_sent`
 - subscriptions: `topic_subscribed` and `topic_unsubscribed` with `subscriptionSource`, `email_digest_toggled` with
@@ -302,12 +302,15 @@ The user events SHALL be, by area:
   provider's one-click, with the request's device properties
 - podcast: `episode_played` and `episode_completed` wherever a play or a finish is counted, in the app or through a
   listener's feed, `podcast_feed_added` on a feed's first fetch by a podcast app, and `podcast_feed_reset`
-- chat: `chat_turn_sent` with `chatKind` `topic`, `team`, or `new_topic`, `chat_budget_reached`, and `room_message_sent`
-  with `roomKind` `team` or `topic`, `mentionsCarl`, and `hasAttachment`
-- teams and invites: `invite_created` and `invite_reused` with `source`, `invite_accepted` and `invite_declined`
-  with `kind` (`email`, `username`, or `link`) and `pageKind`, `team_created`, `team_deleted`,
-  `team_join_requested`, `team_join_approved`,
-  `team_member_removed` with `isSelf`, `team_topic_added`, and `team_topic_removed`
+- chat: `chat_turn_sent` with `chatKind` `topic`, `team`, or `new_topic` and `isSpoken`, `chat_budget_reached`,
+  `room_message_sent` with `roomKind` `team` or `topic`, `mentionsCarl`, `hasAttachment`, and `isSpoken`,
+  `spoken_question_sent` with `chatKind`, which a chat room's page reports as `room`, `secondsRecorded`,
+  `transcriptionMs`, and `firstSpokenWordMs` if the reply played, and `spoken_answer_played` with the same `chatKind`.
+  The browser measures the spoken numbers and posts them to the
+  spoken events route, where the server adds the plan, the device, and the page's ids, the way a listen is counted
+- teams and invites: `invite_created` and `invite_reused` with `source`, `invite_accepted` and `invite_declined` with
+  `kind` (`email`, `username`, or `link`) and `pageKind`, `team_created`, `team_deleted`, `team_join_requested`,
+  `team_join_approved`, `team_member_removed` with `isSelf`, `team_topic_added`, and `team_topic_removed`
 - notes: `note_created`, `note_comment_added`, and `note_thread_resolved`
 - trust: `content_flagged` with `kind`
 
@@ -323,8 +326,8 @@ user agent SHALL emit nothing. The product events a tool emits on a user's behal
 `entryPoint` `mcp`.
 
 A server event SHALL NOT be a page view, which the browser captures. An event named `first_` SHALL fire only on a
-genuine first occurrence established by a count, and an engagement event fires on every occurrence. `topic_updated`
-and `topic_deleted` have `isTopicOwner`, so an admin's change to a Topic they do not own stays on the record.
+genuine first occurrence established by a count, and an engagement event fires on every occurrence. `topic_updated` and
+`topic_deleted` have `isTopicOwner`, so an admin's change to a Topic they do not own stays on the record.
 
 #### Scenario: A change by someone other than the owner is on the record
 
@@ -340,8 +343,8 @@ and `topic_deleted` have `isTopicOwner`, so an admin's change to a Topic they do
 #### Scenario: A signup from inside another app's browser is visible
 
 - **WHEN** a visitor completes signup from a webview such as the LinkedIn, Instagram, or Facebook in-app browser
-- **THEN** `signup_completed` has `isInAppBrowser` true and the `browserPlatform` that decides whether they could
-  be handed a way out
+- **THEN** `signup_completed` has `isInAppBrowser` true and the `browserPlatform` that decides whether they could be
+  handed a way out
 
 #### Scenario: A request with no user agent still reports a device
 
@@ -351,8 +354,8 @@ and `topic_deleted` have `isTopicOwner`, so an admin's change to a Topic they do
 #### Scenario: Every event names its entry point and its plan
 
 - **WHEN** a user rates a Finding from the site, from an AI app's tool, or the worker finishes their Scan
-- **THEN** the events have `entryPoint` `web`, `mcp`, and `worker` and the user's plan, and the worker's has no
-  device property
+- **THEN** the events have `entryPoint` `web`, `mcp`, and `worker` and the user's plan, and the worker's has no device
+  property
 
 #### Scenario: A route reads nothing for an event
 
@@ -385,8 +388,8 @@ and `topic_deleted` have `isTopicOwner`, so an admin's change to a Topic they do
 #### Scenario: Every scan reports its completion
 
 - **WHEN** a scheduled Scan finishes with twelve kept Findings
-- **THEN** `scan_completed` has `trigger` `scheduled`, `findingsKept` 12, and `status`, and a manual Scan has
-  `trigger` `manual`
+- **THEN** `scan_completed` has `trigger` `scheduled`, `findingsKept` 12, and `status`, and a manual Scan has `trigger`
+  `manual`
 
 #### Scenario: A manual scan records the ask, not the outcome
 
@@ -423,8 +426,8 @@ and `topic_deleted` have `isTopicOwner`, so an admin's change to a Topic they do
 
 #### Scenario: A listen is reported where it is counted
 
-- **WHEN** a signed-in listener starts an episode in the app, and a podcast app pulls the same episode's audio
-  through their feed
+- **WHEN** a signed-in listener starts an episode in the app, and a podcast app pulls the same episode's audio through
+  their feed
 - **THEN** `episode_played` fires twice, with `entryPoint` `web` and then `feed`, and a finish in the app fires
   `episode_completed`
 
@@ -441,14 +444,14 @@ and `topic_deleted` have `isTopicOwner`, so an admin's change to a Topic they do
 #### Scenario: A team's life is on the record
 
 - **WHEN** a user creates a team, another asks to join, the leader approves, adds a Topic, and the member leaves
-- **THEN** `team_created`, `team_join_requested`, `team_join_approved`, `team_topic_added`, and
-  `team_member_removed` with `isSelf` true fire in turn, each with the `teamId`
+- **THEN** `team_created`, `team_join_requested`, `team_join_approved`, `team_topic_added`, and `team_member_removed`
+  with `isSelf` true fire in turn, each with the `teamId`
 
 #### Scenario: An MCP tool call is keyed to the app
 
 - **WHEN** a visitor's AI app calls `read_topic_feed` and a user's AI app calls `rate_finding`
-- **THEN** `mcp_tool_called` fires twice, keyed to each app's `clientName` with `callerKind` `visitor` and `user`
-  and `$process_person_profile` false, and the user's `finding_rated` fires keyed to the user with `entryPoint` `mcp`
+- **THEN** `mcp_tool_called` fires twice, keyed to each app's `clientName` with `callerKind` `visitor` and `user` and
+  `$process_person_profile` false, and the user's `finding_rated` fires keyed to the user with `entryPoint` `mcp`
 
 #### Scenario: A crawler's fetch creates no person
 
@@ -459,8 +462,8 @@ and `topic_deleted` have `isTopicOwner`, so an admin's change to a Topic they do
 #### Scenario: An unfurler and a feed reader are told apart from a crawler
 
 - **WHEN** Slackbot fetches a public Topic's preview card and Overcast pulls that Topic's podcast feed
-- **THEN** `link_unfurled` fires with `botName` `slack`, `kind` `topic`, and the `topicId`, and `feed_fetched`
-  fires with `client` `overcast`, `feedKind` `podcast`, and the `topicId`
+- **THEN** `link_unfurled` fires with `botName` `slack`, `kind` `topic`, and the `topicId`, and `feed_fetched` fires
+  with `client` `overcast`, `feedKind` `podcast`, and the `topicId`
 
 #### Scenario: An unknown user agent emits nothing
 
@@ -471,6 +474,15 @@ and `topic_deleted` have `isTopicOwner`, so an admin's change to a Topic they do
 
 - **WHEN** a user completes signup and then creates a Topic
 - **THEN** `signup_completed` and `topic_created` are emitted for that user's id
+
+#### Scenario: A spoken question reports its timings
+- **WHEN** a spoken question's reply starts playing
+- **THEN** one `spoken_question_sent` names the chat kind with the seconds recorded, the transcription time, and the
+  time to the first spoken word, keyed to the user with their plan and device
+
+#### Scenario: A play tap is counted
+- **WHEN** a user taps play on a reply
+- **THEN** one `spoken_answer_played` is sent, keyed to that user
 
 ### Requirement: One stage's repeated error is reported ten times an hour
 
@@ -503,4 +515,20 @@ instead, without JavaScript or with a modifier key, leaves the app, so YouTube's
 #### Scenario: A play from a menu names the menu
 - **WHEN** a user opens the video from the account menu and presses play
 - **THEN** PostHog receives `visit_video_played` with `opener` set to `account-menu`
+
+### Requirement: A voice model failure reaches Sentry under a fixed message
+A failed transcription or speech call SHALL be reported to Sentry in the `chat` stage with a message that names only
+the model call and the outcome, such as `transcription rejected` or `speech retryable`, and with the model call, the
+outcome, the proxy's HTTP status, and the proxy's reason in the extra fields, so each model call and outcome has one
+ten-an-hour report window. A spent key budget SHALL NOT be reported. A spoken answer whose MP3 encode fails SHALL be
+reported with the message `spoken answer mp3 encode failed` and ffmpeg's reason in the extra fields. A voice spend row
+that fails to insert SHALL be reported with the user and the model call.
+
+#### Scenario: A proxy outage is reported
+- **WHEN** the speech route's call fails with a retryable outcome
+- **THEN** one report named `speech retryable` reaches Sentry with the status and the reason in its extra fields
+
+#### Scenario: A spent key is not reported
+- **WHEN** the transcription route's call fails because the key's budget is spent
+- **THEN** the route answers 402 and nothing is reported
 

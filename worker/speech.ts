@@ -1,25 +1,69 @@
-// two-speaker speech from Gemini through LiteLLM's pass-through route, billed to the virtual key that sends the call
+// speech from Gemini through LiteLLM's pass-through route, billed to the virtual key that sends the call.
+// a podcast chapter is a two-speaker call that returns a WAV, and a spoken chat reply is a single-speaker call in the
+// host's voice that returns an MP3
+import { reportError } from "@shared/monitoring"
 import type { PodcastEpisodeTurn } from "@shared/payloads"
 import { podcastEpisodeSpeechModel } from "@shared/podcastEpisodes"
 import type { SpeechTier } from "./budget"
+import { runFfmpeg } from "./ffmpeg"
 import { isRetryableHttpStatus } from "./publicFetch"
 
-// one speech call. its turns, its tier, and the virtual key that it bills, or the master key if no key is given
+// one chapter's speech call. its turns, its tier, and the virtual key that it bills, or the master key if no key is
+// given
 export type RecordSpeechOptions = { turns: PodcastEpisodeTurn[]; speechTier: SpeechTier; litellmApiKey?: string }
 
-// the result of one speech call
-export type SpeechResult =
-	// the audio as a WAV file, with the token counts that price it
-	| { outcome: "recorded"; audioBytes: Uint8Array; inputTokens: number; audioTokens: number }
-	// a failure that a retry can fix. a rate limit, a 5xx, a response with no audio, a timeout, or a network failure
+// one spoken answer's speech call. its text, and the virtual key that it bills, or the master key if no key is given
+export type RecordSpokenAnswerOptions = { text: string; litellmApiKey?: string }
+
+// how a model call through the proxy fails
+export type ModelCallFailure =
+	// a failure that a retry can fix. a rate limit, a 5xx, a response with no result, a timeout, or a network failure
 	| { outcome: "retryable"; httpStatus: number | null; reason: string }
 	// the key's budget is spent, and no retry this month can fix a spent budget
 	| { outcome: "budget-spent"; reason: string }
 	// any other rejection
 	| { outcome: "rejected"; httpStatus: number | null; reason: string }
 
-// how long one call may take. Google recommends ten minutes or more for flex, which waits for capacity
+// the result of one speech call. the audio as a WAV file, with the token counts that price it, or how the call failed
+export type SpeechResult =
+	| { outcome: "recorded"; audioBytes: Uint8Array; inputTokens: number; audioTokens: number }
+	| ModelCallFailure
+
+// the result of one spoken answer's speech call. the audio with its content type, an MP3, or the WAV if the MP3 encode
+// failed after the paid call, with the token counts that price it, or how the call failed
+export type SpokenAnswerResult =
+	| { outcome: "recorded"; audioBytes: Uint8Array; audioContentType: string; inputTokens: number; audioTokens: number }
+	| ModelCallFailure
+
+// the tier a spoken answer is recorded on. a reply is spoken at once, so it never waits on the flex tier
+export const SPOKEN_ANSWER_SPEECH_TIER: SpeechTier = "standard"
+
+// how long one podcast call may take. Google recommends ten minutes or more for flex, which waits for capacity
 const SPEECH_TIMEOUT_MS: Record<SpeechTier, number> = { standard: 3 * 60 * 1000, flex: 12 * 60 * 1000 }
+
+// how long one spoken answer's call may take, under Cloudflare's 100 second limit on a proxied request
+const SPOKEN_ANSWER_TIMEOUT_MS = 90 * 1000
+
+// how long a spoken answer's MP3 encode may take before the WAV is returned instead
+const SPOKEN_ANSWER_ENCODE_TIMEOUT_MS = 5 * 1000
+
+// the MP3 encode's arguments. the WAV on ffmpeg's input pipe, and a 64 kbps mono MP3 on its output pipe, written in
+// large chunks instead of one pipe write a frame
+const SPOKEN_ANSWER_MP3_ARGUMENTS = [
+	"-f",
+	"wav",
+	"-i",
+	"pipe:0",
+	"-c:a",
+	"libmp3lame",
+	"-b:a",
+	"64k",
+	"-flush_packets",
+	"0",
+	"-f",
+	"mp3",
+	"pipe:1",
+]
 
 // Gemini's speech audio: 24 kHz, 16-bit, mono, which is 48,000 bytes a second after a WAV file's 44-byte header
 const SPEECH_SAMPLE_RATE = 24_000
@@ -41,42 +85,45 @@ type SpeechResponseBody = {
  * Records the turns as one two-speaker speech call, and returns the WAV and its token counts or why the call failed.
  */
 export async function recordSpeech({ turns, speechTier, litellmApiKey }: RecordSpeechOptions): Promise<SpeechResult> {
-	// reject the call if the speech model, the proxy, or a key is not configured
-	const speechModel = podcastEpisodeSpeechModel()
-	const baseUrl = Bun.env.LITELLM_BASE_URL
-	const apiKey = litellmApiKey ?? Bun.env.LITELLM_MASTER_KEY
-	if (!speechModel || !baseUrl || !apiKey) {
-		return { outcome: "rejected", httpStatus: null, reason: "the speech model or the LiteLLM proxy is not configured" }
+	return postSpeechRequest({
+		requestBody: toSpeechRequestBody(turns, speechTier),
+		timeoutMs: SPEECH_TIMEOUT_MS[speechTier],
+		litellmApiKey,
+	})
+}
+
+/**
+ * Records the text as one single-speaker speech call in the host's voice on the standard tier, and returns the MP3, or
+ * the WAV if the encode fails, with its token counts or why the call failed.
+ */
+export async function recordSpokenAnswer({
+	text,
+	litellmApiKey,
+}: RecordSpokenAnswerOptions): Promise<SpokenAnswerResult> {
+	// record the WAV, and return a failed call as it is
+	const postSpeechRequestResult = await postSpeechRequest({
+		requestBody: toSpokenAnswerRequestBody(text),
+		timeoutMs: SPOKEN_ANSWER_TIMEOUT_MS,
+		litellmApiKey,
+	})
+	if (postSpeechRequestResult.outcome !== "recorded") {
+		return postSpeechRequestResult
 	}
 
-	// post the call to the pass-through route, which forwards the body to Gemini and charges the key
+	// encode the WAV to an MP3, a fraction of the WAV's size
 	try {
-		const response = await fetch(`${baseUrl}/gemini/v1beta/models/${speechModel}:generateContent`, {
-			method: "POST",
-			headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
-			body: JSON.stringify(toSpeechRequestBody(turns, speechTier)),
-			signal: AbortSignal.timeout(SPEECH_TIMEOUT_MS[speechTier]),
+		const mp3Bytes = await runFfmpeg({
+			ffmpegArguments: SPOKEN_ANSWER_MP3_ARGUMENTS,
+			inputBytes: postSpeechRequestResult.audioBytes,
+			timeoutMs: SPOKEN_ANSWER_ENCODE_TIMEOUT_MS,
 		})
-		if (!response.ok) {
-			return toFailedSpeechResult(response.status, await response.text())
-		}
-
-		// read the audio part. a response with no audio is worth another attempt
-		const speechResponseBody = (await response.json()) as SpeechResponseBody
-		const audioPart = speechResponseBody.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data)
-		if (!audioPart?.inlineData?.data) {
-			return { outcome: "retryable", httpStatus: response.status, reason: "the speech response had no audio" }
-		}
-
-		return {
-			outcome: "recorded",
-			audioBytes: toWavBytes(Buffer.from(audioPart.inlineData.data, "base64")),
-			inputTokens: speechResponseBody.usageMetadata?.promptTokenCount ?? 0,
-			audioTokens: speechResponseBody.usageMetadata?.candidatesTokenCount ?? 0,
-		}
+		return { ...postSpeechRequestResult, audioBytes: mp3Bytes, audioContentType: "audio/mpeg" }
 	} catch (error) {
-		// a timeout or a network failure is worth another attempt
-		return { outcome: "retryable", httpStatus: null, reason: error instanceof Error ? error.message : String(error) }
+		// log and report a failed encode, and return the WAV so the paid call is never lost
+		const reason = error instanceof Error ? error.message : String(error)
+		console.error("spoken answer mp3 encode failed:", reason)
+		reportError(new Error("spoken answer mp3 encode failed"), "chat", { reason: reason.slice(0, 500) })
+		return { ...postSpeechRequestResult, audioContentType: "audio/wav" }
 	}
 }
 
@@ -91,10 +138,9 @@ export function toSpeechRequestBody(turns: PodcastEpisodeTurn[], speechTier: Spe
 	}))
 
 	// both speakers' voices, matched to the parts by speaker
-	const hostVoice = Bun.env.PODCAST_HOST_VOICE?.trim() || DEFAULT_PODCAST_HOST_VOICE
 	const cohostVoice = Bun.env.PODCAST_COHOST_VOICE?.trim() || DEFAULT_PODCAST_COHOST_VOICE
 	const speakerVoiceConfigs = [
-		{ speaker: "host", voiceConfig: { prebuiltVoiceConfig: { voiceName: hostVoice } } },
+		{ speaker: "host", voiceConfig: { prebuiltVoiceConfig: { voiceName: toHostVoice() } } },
 		{ speaker: "cohost", voiceConfig: { prebuiltVoiceConfig: { voiceName: cohostVoice } } },
 	]
 	return {
@@ -109,9 +155,22 @@ export function toSpeechRequestBody(turns: PodcastEpisodeTurn[], speechTier: Spe
 }
 
 /**
- * Sorts a failed speech call into a spent key budget, a failure that another attempt can fix, or a rejection.
+ * Returns a spoken answer's request body, with the text as one part, the host's voice alone, and audio output.
  */
-export function toFailedSpeechResult(httpStatus: number, errorBody: string): SpeechResult {
+export function toSpokenAnswerRequestBody(text: string): Record<string, unknown> {
+	return {
+		contents: [{ role: "user", parts: [{ text }] }],
+		generationConfig: {
+			responseModalities: ["AUDIO"],
+			speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: toHostVoice() } } },
+		},
+	}
+}
+
+/**
+ * Sorts a failed model call into a spent key budget, a failure that another attempt can fix, or a rejection.
+ */
+export function toModelCallFailure(httpStatus: number, errorBody: string): ModelCallFailure {
 	// LiteLLM names a spent key budget in the body, on a 429 or a 400
 	const reason = errorBody.slice(0, 500)
 	if (errorBody.includes("budget_exceeded") || errorBody.includes("Budget has been exceeded")) {
@@ -123,6 +182,13 @@ export function toFailedSpeechResult(httpStatus: number, errorBody: string): Spe
 		return { outcome: "retryable", httpStatus, reason }
 	}
 	return { outcome: "rejected", httpStatus, reason }
+}
+
+/**
+ * Sorts a thrown fetch error, a timeout or a network failure, into a failure that another attempt can fix.
+ */
+export function toRetryableModelCallFailure(error: unknown): ModelCallFailure {
+	return { outcome: "retryable", httpStatus: null, reason: error instanceof Error ? error.message : String(error) }
 }
 
 /**
@@ -166,4 +232,59 @@ export function toWavBytes(audioBytes: Uint8Array): Uint8Array {
 	wavBytes.set(new Uint8Array(wavHeader.buffer), 0)
 	wavBytes.set(audioBytes, WAV_HEADER_BYTES)
 	return wavBytes
+}
+
+// one speech request. its body, how long it may take, and the virtual key that it bills,
+// or the master key if no key is given
+type PostSpeechRequestOptions = { requestBody: Record<string, unknown>; timeoutMs: number; litellmApiKey?: string }
+
+// post one speech request to the pass-through route on the key, and return the WAV with its token counts
+// or why the call failed
+async function postSpeechRequest({
+	requestBody,
+	timeoutMs,
+	litellmApiKey,
+}: PostSpeechRequestOptions): Promise<SpeechResult> {
+	// reject the call if the speech model, the proxy, or a key is not configured
+	const speechModel = podcastEpisodeSpeechModel()
+	const baseUrl = Bun.env.LITELLM_BASE_URL
+	const apiKey = litellmApiKey ?? Bun.env.LITELLM_MASTER_KEY
+	if (!speechModel || !baseUrl || !apiKey) {
+		return { outcome: "rejected", httpStatus: null, reason: "the speech model or the LiteLLM proxy is not configured" }
+	}
+
+	// post the call to the pass-through route, which forwards the body to Gemini and charges the key
+	try {
+		const response = await fetch(`${baseUrl}/gemini/v1beta/models/${speechModel}:generateContent`, {
+			method: "POST",
+			headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
+			body: JSON.stringify(requestBody),
+			signal: AbortSignal.timeout(timeoutMs),
+		})
+		if (!response.ok) {
+			return toModelCallFailure(response.status, await response.text())
+		}
+
+		// read the audio part. a response with no audio is worth another attempt
+		const speechResponseBody = (await response.json()) as SpeechResponseBody
+		const audioPart = speechResponseBody.candidates?.[0]?.content?.parts?.find((part) => part.inlineData?.data)
+		if (!audioPart?.inlineData?.data) {
+			return { outcome: "retryable", httpStatus: response.status, reason: "the speech response had no audio" }
+		}
+
+		return {
+			outcome: "recorded",
+			audioBytes: toWavBytes(Buffer.from(audioPart.inlineData.data, "base64")),
+			inputTokens: speechResponseBody.usageMetadata?.promptTokenCount ?? 0,
+			audioTokens: speechResponseBody.usageMetadata?.candidatesTokenCount ?? 0,
+		}
+	} catch (error) {
+		// a timeout or a network failure is worth another attempt
+		return toRetryableModelCallFailure(error)
+	}
+}
+
+// the prebuilt voice of the host, Carl
+function toHostVoice(): string {
+	return Bun.env.PODCAST_HOST_VOICE?.trim() || DEFAULT_PODCAST_HOST_VOICE
 }

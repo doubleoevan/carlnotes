@@ -3,7 +3,7 @@ import { EMPTY_TOPIC_DRAFT } from "@shared/topicPayloads"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { type ChatPage, fetchChatConversation } from "@/clients/chatClient"
-import type { ChatTurn } from "@/components/chat/chatTurns"
+import { type ChatTurn, toSpokenAnswerKey } from "@/components/chat/chatTurns"
 import { toProposedTopicEdit } from "@/components/chat/topicToolCalls"
 import type { ChatAttachments } from "@/components/chat/useChatAttachments"
 import type { NewTopicDraft } from "@/components/chat/useNewTopicDraft"
@@ -32,6 +32,8 @@ export type ChatConversationGates = {
 	// how many more topics the plan holds and its limit, on the new-topic chat alone
 	topicsRemaining: number | null
 	topicLimit: number | null
+	// whether the mic and the play buttons render, which needs a transcription model and a speech model
+	isVoiceChatConfigured: boolean
 	// true once the conversation load finishes, so the panel can select its opening state from what came back
 	isLoaded: boolean
 }
@@ -51,6 +53,7 @@ export function useChatConversationLoad({
 	const [isFirstTopic, setIsFirstTopic] = useState(false)
 	const [topicsRemaining, setTopicsRemaining] = useState<number | null>(null)
 	const [topicLimit, setTopicLimit] = useState<number | null>(null)
+	const [isVoiceChatConfigured, setIsVoiceChatConfigured] = useState(false)
 	// whether the load has finished
 	const [isLoaded, setIsLoaded] = useState(false)
 
@@ -71,6 +74,7 @@ export function useChatConversationLoad({
 						toolCalls: chatTurn.toolCalls,
 						rejection: null,
 						at: chatTurn.at ? Date.parse(chatTurn.at) : undefined,
+						spokenAnswerKey: toSpokenAnswerKey(),
 						attachments: chatTurn.attachments,
 						linkPreviews: chatTurn.linkPreviews,
 						answerLinkPreviews: chatTurn.answerLinkPreviews,
@@ -84,6 +88,7 @@ export function useChatConversationLoad({
 				setIsFirstTopic(chatConversation.isFirstTopic ?? false)
 				setTopicsRemaining(chatConversation.topicsRemaining ?? null)
 				setTopicLimit(chatConversation.topicLimit ?? null)
+				setIsVoiceChatConfigured(chatConversation.isVoiceChatConfigured)
 				// show the topic draft that carl wrote earlier
 				setTopicDraft(chatConversation.topicDraft ?? EMPTY_TOPIC_DRAFT)
 				// bring back the change that carl proposed earlier in this conversation
@@ -118,6 +123,7 @@ export function useChatConversationLoad({
 		isFirstTopic,
 		topicsRemaining,
 		topicLimit,
+		isVoiceChatConfigured,
 		isLoaded,
 	}
 }

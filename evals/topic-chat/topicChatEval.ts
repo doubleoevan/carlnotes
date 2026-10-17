@@ -2,7 +2,7 @@
 import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
 import { chatModel } from "../../worker/models"
 import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
-import { toDisallowedLinkUrl, toProseParagraphs } from "../evalReplies"
+import { toDisallowedLinkUrl, toMarkdownMarkup, toProseParagraphs } from "../evalReplies"
 import { TOPIC_CHAT_CASES, type TopicChatCase } from "./topicChatCases"
 import { type TopicChatVariables, topicChatReplyWriter } from "./topicChatProviders"
 import { GRADER_MODEL, MATERIAL_LABEL, OPENING_RUBRIC, OUTPUT_SHAPE_RUBRIC, SUPPORT_RUBRIC } from "./topicChatRubrics"
@@ -32,9 +32,15 @@ await runEval({
 	toCaseLine,
 })
 
-// one promptfoo test for a case. its variables, and the rubrics over its topic material
+// one promptfoo test for a case. its variables, the no-markdown check of a spoken case, and the rubrics over its topic
+// material
 function toTestCase(topicChatCase: TopicChatCase): TestCase {
 	const { description, rubric, ...topicChatVariables } = topicChatCase
+
+	// the no-markdown check, which only a spoken case gets
+	const spokenAssertions: Assertion[] = topicChatVariables.isSpoken
+		? [{ type: "javascript", metric: "has no markdown", value: gradeNoMarkdown }]
+		: []
 
 	// the support and opening rubrics, plus the case's own rubric, each with the question and the material after it
 	const rubricAssertions = toRubricAssertions({
@@ -47,7 +53,13 @@ function toTestCase(topicChatCase: TopicChatCase): TestCase {
 		materialLabel: MATERIAL_LABEL,
 		material: topicChatVariables,
 	})
-	return { description, vars: topicChatVariables, assert: rubricAssertions }
+	return { description, vars: topicChatVariables, assert: [...spokenAssertions, ...rubricAssertions] }
+}
+
+// fail the check if a spoken answer has markdown that is read aloud: a heading, a list, a table, fenced code, or a link
+function gradeNoMarkdown(replyText: string): GradingResult {
+	const markdownMarkup = toMarkdownMarkup(replyText)
+	return toGradingResult(markdownMarkup && `the reply has ${markdownMarkup}`)
 }
 
 // fail the check if the reply links anywhere but a finding's url, the docs root, or a docs page in the material

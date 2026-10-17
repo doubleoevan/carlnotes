@@ -13,7 +13,11 @@ import {
 	PAGE_RENDER_RATE_LIMIT,
 	pageRenderRateLimiter,
 	SEARCH_RATE_LIMIT,
+	SPEECH_RATE_LIMIT,
+	SPOKEN_EVENT_RATE_LIMIT,
 	searchRateLimiter,
+	speechRateLimiter,
+	spokenEventRateLimiter,
 	toolCallerRateLimiter,
 	toolCallerRateLimitStore,
 	toRateLimitKey,
@@ -165,3 +169,36 @@ test("the search limiter rejects the request past its limit", async () => {
 	expect(statuses.slice(0, SEARCH_RATE_LIMIT)).toEqual(Array(SEARCH_RATE_LIMIT).fill(200))
 	expect(statuses.at(-1)).toBe(429)
 })
+
+// the spoken parts of a reply and the spoken events each count in their own rate limit window, under their own
+// Redis key, and the request past the limit is rejected
+test.each([
+	{ limiterName: "speech", limiter: speechRateLimiter, limit: SPEECH_RATE_LIMIT, keyPrefix: "rate-limit:speech" },
+	{
+		limiterName: "spoken events",
+		limiter: spokenEventRateLimiter,
+		limit: SPOKEN_EVENT_RATE_LIMIT,
+		keyPrefix: "rate-limit:spoken-events",
+	},
+])(
+	"the $limiterName limiter counts in its own window and rejects the request past its limit",
+	async ({ limiter, limit, keyPrefix }) => {
+		const storedValueByKey = stubRedisClient()
+		const limitedApp = new Hono<AppEnv>().use(limiter).post("/chat/voice", (context) => context.json({ ok: true }))
+		const visitorHeaders = { "x-forwarded-for": "203.0.113.11" }
+
+		// the requests up to the limit pass
+		const statuses: number[] = []
+		for (let i = 0; i < limit + 1; i++) {
+			const response = await limitedApp.request("/chat/voice", { method: "POST", headers: visitorHeaders })
+			statuses.push(response.status)
+		}
+
+		// the request past the limit is rejected
+		expect(statuses.slice(0, limit)).toEqual(Array(limit).fill(200))
+		expect(statuses.at(-1)).toBe(429)
+
+		// the hits count under the limiter's own prefix, apart from the tool callers' window
+		expect([...storedValueByKey.keys()]).toEqual([`${keyPrefix}:address:203.0.113.11`])
+	},
+)

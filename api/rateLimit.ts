@@ -1,5 +1,6 @@
 // the rate limits per user or address, counted in Redis so every api replica shares one rate limit window: one for tool
-// callers, one for the visitors' requests that reach the origin past the edge cache, and one for the search bar
+// callers, one for the visitors' requests that reach the origin past the edge cache, one for the search bar, one for
+// the spoken parts of a reply, and one for the spoken events
 import { getSessionCookie } from "better-auth/cookies"
 import type { Context, MiddlewareHandler } from "hono"
 import { type ClientRateLimitInfo, rateLimiter, type Store } from "hono-rate-limiter"
@@ -17,6 +18,12 @@ export const PAGE_RENDER_RATE_LIMIT = 120
 
 // how many searches one user or address may send in one rate limit window
 export const SEARCH_RATE_LIMIT = 60
+
+// how many spoken parts one user may ask for in one rate limit window, apart from the tool callers' limit
+export const SPEECH_RATE_LIMIT = 60
+
+// how many spoken events one user may send in one rate limit window, apart from the speech limit
+export const SPOKEN_EVENT_RATE_LIMIT = 30
 
 // the bucket that visitors share if no client address can be trusted
 const SHARED_BUCKET = "shared"
@@ -102,4 +109,16 @@ export const pageRenderRateLimiter = rateLimiter<AppEnv>({
 export const searchRateLimiter = toRateLimiter({
 	limit: SEARCH_RATE_LIMIT,
 	store: toRateLimitStore("rate-limit:search"),
+})
+
+// the speech limiter, keyed by the user else the address, over the spoken parts of a reply
+export const speechRateLimiter = toRateLimiter({
+	limit: SPEECH_RATE_LIMIT,
+	store: toRateLimitStore("rate-limit:speech"),
+})
+
+// the spoken events limiter, keyed by the user else the address, over the analytics events of a spoken question
+export const spokenEventRateLimiter = toRateLimiter({
+	limit: SPOKEN_EVENT_RATE_LIMIT,
+	store: toRateLimitStore("rate-limit:spoken-events"),
 })

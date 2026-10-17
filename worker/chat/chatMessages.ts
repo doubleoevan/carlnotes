@@ -18,6 +18,8 @@ export type ChatTurnInput = {
 	// the team whose own chat room is asking, which reads across every topic the team holds
 	teamId?: string
 	question: string
+	// whether the question arrived by voice, so the reply is written to be read aloud
+	isSpoken?: boolean
 	history: ChatHistoryTurn[]
 	chatAttachments?: ChatAttachment[]
 	// who is asking. chat is signed-in only, and this scopes their kept chat attachments

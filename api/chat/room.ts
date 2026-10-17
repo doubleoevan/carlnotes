@@ -23,6 +23,9 @@ import { postModelRejection, runModelChatRoomTurn } from "./roomTurns"
 // how long one SSE stream may stay open. the api client's cursor resume makes the reconnect free
 const CHAT_ROOM_STREAM_MAX_AGE_MS = 15 * 60 * 1000
 
+// what a post reports with, and whether the chat message was spoken, which marks it and carl's reply
+export type PostChatRoomMessageOptions = { analyticsProperties?: AnalyticsProperties; isSpoken?: boolean }
+
 /**
  * Post a chat message into the chatRoom. Member chat mentions become notification rows, and a chat message that addresses Carl
  * starts his chat turn, unless the poster's budget is spent, in which case the rejection comes back privately in this
@@ -35,7 +38,7 @@ export async function postChatRoomMessage(
 	content: string,
 	replyToChatMessageId: number | null,
 	attachments: ChatAttachment[],
-	analyticsProperties?: AnalyticsProperties,
+	{ analyticsProperties, isSpoken = false }: PostChatRoomMessageOptions = {},
 ): Promise<
 	{ chatMessageId: number; rejectionReason: string | null } | "attachmentRejected" | "attachmentLimitReached" | null
 > {
@@ -70,6 +73,7 @@ export async function postChatRoomMessage(
 			authorUsername: author?.username ?? "someone",
 			replyToMessageId: replyToChatMessageId ?? undefined,
 			content: encryptChatText(content),
+			isSpoken,
 		})
 		.returning({ id: chatRoomMessages.id })
 	if (!chatMessageRow) {
@@ -97,13 +101,14 @@ export async function postChatRoomMessage(
 	// team member chat mentions and the replied-to author become rows that the chat mention badges read
 	await saveChatMentions(chatRoom.teamId, userId, chatMessageRow.id, content, replyToChatMessageId ?? null)
 
-	// report the post: which kind of room, whether carl was asked, and whether a file came with it
+	// report the post: which kind of room, whether carl was asked, whether a file came with it, and whether it was spoken
 	trackChatRoomMessage({
 		userId,
 		topicId,
 		teamId,
 		isModelChatTurn,
 		hasAttachment: attachments.length > 0,
+		isSpoken,
 		analyticsProperties,
 	})
 
@@ -126,13 +131,16 @@ export async function postChatRoomMessage(
 	return { chatMessageId: chatMessageRow.id, rejectionReason: null }
 }
 
-// a posted chat message's event: the room it went to, whether carl was asked, and whether a file came with it
+// a posted chat message's event: the room it went to, whether carl was asked, whether a file came with it,
+// and whether it was spoken
 type TrackChatRoomMessageOptions = {
 	userId: string
 	topicId: string | null
 	teamId: string
+	// what the chat message asked for and came with
 	isModelChatTurn: boolean
 	hasAttachment: boolean
+	isSpoken: boolean
 	analyticsProperties: AnalyticsProperties | undefined
 }
 
@@ -143,6 +151,7 @@ function trackChatRoomMessage({
 	teamId,
 	isModelChatTurn,
 	hasAttachment,
+	isSpoken,
 	analyticsProperties,
 }: TrackChatRoomMessageOptions): void {
 	trackEvent("room_message_sent", userId, {
@@ -152,6 +161,7 @@ function trackChatRoomMessage({
 		roomKind: topicId ? "topic" : "team",
 		mentionsCarl: isModelChatTurn,
 		hasAttachment,
+		isSpoken,
 	})
 }
 

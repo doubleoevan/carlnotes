@@ -1,5 +1,7 @@
-// fetch.ts tests for the no-key prompt fallback path
-import { expect, test } from "bun:test"
+// fetch.ts tests for the no-key prompt fallback path and the registry's variable drift
+import { expect, spyOn, test } from "bun:test"
+import { PromptManager } from "@langfuse/client"
+import * as monitoring from "@shared/monitoring"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { FALLBACK_PROMPT_TEMPLATES, fetchPromptTemplate, hasSameVariables } from "./fetch"
 
@@ -22,6 +24,44 @@ test("fetchPromptTemplate returns the bundled template unmodified when Langfuse 
 		}
 	} finally {
 		// restore whatever keys the calling shell had set, even when the test threw
+		restoreEnvSettings()
+	}
+})
+
+// a registry prompt asking for different variables serves the bundled template on every call, logs every call, and
+// reports to Sentry once per prompt name for the process, so a real drift alerts and its repeats stop
+test("fetchPromptTemplate reports a prompt's variable drift once per process and logs every call", async () => {
+	// fake keys reach the registry, whose prompt get is stubbed to serve a template with a renamed variable
+	const restoreEnvSettings = saveEnvSettings(["LANGFUSE_PUBLIC_KEY", "LANGFUSE_SECRET_KEY"])
+	Bun.env.LANGFUSE_PUBLIC_KEY = "pk-test"
+	Bun.env.LANGFUSE_SECRET_KEY = "sk-test"
+	// stub the registry's prompt get, and quiet the log and the report so their call counts are the assertion
+	const promptGetSpy = spyOn(PromptManager.prototype, "get").mockImplementation((async (name: string) => ({
+		name,
+		version: 9,
+		prompt: "{{renamedVariable}}",
+		isFallback: false,
+	})) as unknown as PromptManager["get"])
+	const consoleErrorSpy = spyOn(console, "error").mockImplementation(() => {})
+	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
+
+	// fetch one prompt twice and a second prompt once, restoring everything regardless of the outcome
+	try {
+		for (const name of ["chat-conduct", "chat-conduct", "chat-docs-guide"] as const) {
+			const promptTemplate = await fetchPromptTemplate(name)
+			expect(promptTemplate.template).toBe(FALLBACK_PROMPT_TEMPLATES[name])
+			expect(promptTemplate.registryPrompt).toBeUndefined()
+		}
+
+		// every call logs, and each prompt name reports once
+		expect(consoleErrorSpy).toHaveBeenCalledTimes(3)
+		expect(reportErrorSpy).toHaveBeenCalledTimes(2)
+		expect(reportErrorSpy.mock.calls.map((call) => call[2]?.prompt)).toEqual(["chat-conduct", "chat-docs-guide"])
+	} finally {
+		// put the registry, the log, the report, and the keys back, even if the test threw
+		promptGetSpy.mockRestore()
+		consoleErrorSpy.mockRestore()
+		reportErrorSpy.mockRestore()
 		restoreEnvSettings()
 	}
 })

@@ -5,6 +5,7 @@ import { type ChatConversation, type ChatTurnRow, withAttachmentNote } from "@sh
 import { type ChatTurnPayload, chatTurnPayload } from "@shared/payloads"
 import { ADMIN_QUOTA } from "@shared/plans"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"
+import { isVoiceChatConfigured } from "@shared/voiceChat"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { db } from "../../db"
@@ -47,7 +48,7 @@ const CHAT_BODY_LIMIT_BYTES = 26 * 1024 * 1024
 export const chatBodyLimit = toBodyLimit(CHAT_BODY_LIMIT_BYTES, "Those attachments are too large.")
 
 // a visitor's chat post is rejected before its body is read, with the error the gate gives a visitor's turn
-const chatSignedOutRejection = toSignedOutRejection(SIGNUP_REQUIRED_ERROR)
+export const chatSignedOutRejection = toSignedOutRejection(SIGNUP_REQUIRED_ERROR)
 
 // whether the user owns no topic yet
 async function ownsNoTopic(userId: string | null): Promise<boolean> {
@@ -65,6 +66,7 @@ function toChatConversation(chatTurns: ChatTurnRow[], authorization: ChatTurnAut
 		canChat: authorization.status === "allowed",
 		isSignupRequired: authorization.status === "signup",
 		isBudgetExhausted: authorization.status === "budget",
+		isVoiceChatConfigured: isVoiceChatConfigured(),
 		keptAttachments: [],
 		canEditTopic: authorization.status === "allowed" && authorization.canEditTopic,
 	}
@@ -97,8 +99,10 @@ function rejectChatTurn(context: Context, { authorization, page }: RejectChatTur
 	return toChatRejection(context, authorization.status)
 }
 
-// the response for each status that a chat turn is rejected with
-function toChatRejection(context: Context, status: "budget" | "signup" | "forbidden"): Response {
+/**
+ * Returns the response for each status that a chat turn, or a voice request on its page, is rejected with.
+ */
+export function toChatRejection(context: Context, status: "budget" | "signup" | "forbidden"): Response {
 	if (status === "budget") {
 		return context.json({ error: "budget exhausted" }, 402)
 	}
@@ -123,7 +127,7 @@ async function answerChatTurn(
 	{ page, authorization, chatTurnPayload }: AnswerChatTurnOptions,
 ): Promise<Response> {
 	// read each attached file into its text and reject the chat turn with a message if a file cannot be read
-	const { question, history, attachments } = chatTurnPayload
+	const { question, history, attachments, isSpoken } = chatTurnPayload
 	const chatAttachments = await resolveChatAttachments(attachments)
 	if (chatAttachments === null) {
 		return context.json({ error: "That file couldn't be read." }, 422)
@@ -160,6 +164,7 @@ async function answerChatTurn(
 		chatAttachments,
 		userId,
 		isTopicOwner: authorization.isTopicOwner,
+		isSpoken,
 		litellmApiKey,
 	})
 	if (!chatReply) {
@@ -179,6 +184,7 @@ async function answerChatTurn(
 		question: withAttachmentNote(question, attachments),
 		attachments,
 		isPersisted: authorization.isPersisted,
+		isSpoken,
 		toolCalls,
 		analyticsProperties,
 		litellmApiKey,
