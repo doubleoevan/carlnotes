@@ -62,10 +62,16 @@ the question on his own when you stop, so there is nothing to press when you are
 place has a cancel button, a level meter, a timer, and a send button for sending early. A question that runs a full
 minute sends itself. If nothing comes through, Carl says he didn't catch that, and the box comes back empty.
 
+![Coffee Talk listening to a question: the bar in place of the message box shows the cancel button, the level meter,
+the timer, and the send button](../../../assets/screenshots/chat-talk-to-carl-recording.png)
+
 Carl answers out loud, in his podcast voice, and starts talking as soon as his first sentence or two are written while
 the rest is still arriving. His answer is on the screen too, with the question you asked above it. Every answer of his
 has a play button, whether you typed or spoke, so you can listen to any reply from the start and stop it with the same
 button. If a podcast episode is playing, it pauses while you talk and while Carl answers.
+
+![Carl's answer in Coffee Talk, with the play button under it beside the copy button, and the microphone in the empty
+message box](../../../assets/screenshots/chat-talk-to-carl-play.png)
 
 One tap is a whole conversation. Once Carl finishes talking, the microphone opens again on its own, so you can keep
 going without touching the screen. A ring around the microphone shows he is listening for your next question while he
