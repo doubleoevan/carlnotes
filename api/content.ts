@@ -82,7 +82,7 @@ const PAGE_STYLE = `
 	a { color: #7c4a1e; }
 	/* an image wider than the column shrinks to the column's width */
 	img { max-width: 100%; height: auto; }
-	/* the wordmark in the header, then the type a page and an index card set */
+	/* the logo in the header, then the type a page and an index card set */
 	header a { text-decoration: none; font-weight: 700; font-size: 18px; }
 	h1 { font-size: 28px; line-height: 1.25; }
 	.post-date { color: #6b5b4a; font-size: 14px; }

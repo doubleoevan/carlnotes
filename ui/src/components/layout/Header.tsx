@@ -53,7 +53,7 @@ export function Header() {
 	const handleHomeClick = pathname === "/" ? toLinkClickHandler(() => void reheat()) : undefined
 
 	// the hero pitches the app to a visitor. it only shows on the home page to logged-out visitors.
-	// a signed-in user gets the video's button beside the wordmark instead
+	// a page without the hero gets the video's button beside the logo instead
 	const isSignedInBeforeSession = useIsSignedInBeforeSession()
 	const isHeroShown = !isSignedInBeforeSession && pathname === "/"
 	// the video on making a topic, which the hero and either menu open in one dialog, and where it was opened from
@@ -64,7 +64,7 @@ export function Header() {
 			<div className={cn("relative z-10 mx-auto max-w-5xl px-safe pt-5", !isHeroShown && "pb-10")}>
 				{/* the top bar with the brand icon on the left and the menu on the right */}
 				<div className="flex items-center justify-between">
-					{/* the brand, with the video's button after it for a signed-in user, nudged down to the wordmark's letters */}
+					{/* the brand, with the video's button after it if the hero is hidden, nudged down to the logo's letters */}
 					<div className="flex items-center gap-2">
 						{/* the brand links home or reheats the feed if already on the home page */}
 						<AnchorLink
@@ -77,7 +77,7 @@ export function Header() {
 							<CoffeeMug className="text-hero-accent -translate-y-0.5" />
 							<span className="animate-hydrate font-display text-xl">CarlNotes</span>
 						</AnchorLink>
-						{isSignedInBeforeSession && (
+						{!isHeroShown && (
 							<TopicTutorialVideoButton
 								onSelect={() => setTopicTutorialVideoOpener("header")}
 								className="size-7 -translate-y-px"

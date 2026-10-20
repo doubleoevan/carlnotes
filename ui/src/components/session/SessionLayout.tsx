@@ -59,7 +59,7 @@ export function SessionLayout({
 		<div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-12">
 			{/* brand mark */}
 			<AnchorLink href="/" className="mx-auto mb-8 flex items-center gap-2">
-				{/* nudged up to optically center the cup on the wordmark. the offset scales with the icon size */}
+				{/* nudged up to optically center the cup on the logo's text. the offset scales with the icon size */}
 				<CoffeeMug className="text-primary -translate-y-[3px] size-10" />
 				<span className="font-display text-xl">CarlNotes</span>
 			</AnchorLink>

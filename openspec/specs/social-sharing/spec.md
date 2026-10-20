@@ -9,7 +9,7 @@ The preview image SHALL be served from its own route. That route SHALL check obj
 
 Satori has no access to system fonts, so the font files SHALL be committed to the repository and passed as buffers.
 
-The card SHALL carry the wordmark, the Topic title, the owner byline, and the Finding counts. The byline's avatar SHALL be the owner's initials on their tint, redrawn in the card's own layout. The card deliberately never fetches an uploaded or provider photo, so it stays a render of committed inputs.
+The card SHALL carry the logo, the Topic title, the owner byline, and the Finding counts. The byline's avatar SHALL be the owner's initials on their tint, redrawn in the card's own layout. The card deliberately never fetches an uploaded or provider photo, so it stays a render of committed inputs.
 
 #### Scenario: A cached card is served from storage
 
@@ -141,7 +141,7 @@ A row that needs a stranger to be able to open the Topic's link — each share p
 
 ### Requirement: A profile link renders its own preview card
 
-`GET /api/profiles/:userId/preview.png` SHALL render a card in the topic card's format: the wordmark on top, the user's avatar and username in the slot a topic card gives its title, the public topic count bottom left, and the follower count bottom right. The card SHALL be cached and versioned the way topic cards are, so an avatar or count change lands the card on a new URL. A missing user SHALL answer 404.
+`GET /api/profiles/:userId/preview.png` SHALL render a card in the topic card's format: the logo on top, the user's avatar and username in the slot a topic card gives its title, the public topic count bottom left, and the follower count bottom right. The card SHALL be cached and versioned the way topic cards are, so an avatar or count change lands the card on a new URL. A missing user SHALL answer 404.
 
 #### Scenario: A profile card draws the person
 
