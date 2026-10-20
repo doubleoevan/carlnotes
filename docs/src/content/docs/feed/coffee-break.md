@@ -93,7 +93,7 @@ who is answering, then the episode again.
 The question and its answer are saved in the topic's [Coffee Talk](/docs/feed/chat/), with a small tag naming the
 episode and the chapter. Tap the tag to listen to that chapter again. Talking with Carl and Vienna needs an account. It
 spends from the same coffee fund as Coffee Talk. Speaking pauses once the month's spend reaches 15% of the fund on
-**Free**, 40% on **Plus**, or 50% on **Premium**. You can still text Carl.
+**Free**, 40% on **Plus**, or 50% on **Premium**. You can still text with Carl.
 
 ![A question asked from the podcast player in the topic's private chat, tagged with its episode and chapter, and
 Vienna's answer under her picture and name](../../../assets/screenshots/chat-podcast-question.png)

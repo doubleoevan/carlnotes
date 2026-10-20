@@ -79,7 +79,7 @@ mid-answer or typing a question also ends it. The next tap starts a new conversa
 
 Speaking with Carl pauses once the month's spend reaches 15% of the coffee fund on **Free**, 40% on **Plus**, or 50% on
 **Premium**. Past that, the microphone opens the plans page. On **Premium**, it says when speaking comes back instead.
-You can still text Carl. See
+You can still text with Carl. See
 [When the coffee fund runs low](/docs/account/plans-and-limits/#when-the-coffee-fund-runs-low).
 
 A question asked from the podcast player's microphone shows up here too. It sits under a small tag naming the episode

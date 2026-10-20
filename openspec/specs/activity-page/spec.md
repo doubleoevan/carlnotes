@@ -35,7 +35,7 @@ stops. A circle SHALL fade once the spend passes its first cutoff. A circle that
 which moves each day, SHALL have a dashed edge. A list under the bar SHALL give each cutoff's percent and line, end with
 "Every brew pauses until the 1st" at 100%, and strike through each cutoff the spend has passed. The daily Scans cutoff's
 line SHALL say "(this cutoff moves each day)", and the spoken questions cutoff's line SHALL add "You can still text
-Carl" as its own sentence. A budget with no cutoffs, an admin's with no override, SHALL show no circles and no list.
+with Carl" as its own sentence. A budget with no cutoffs, an admin's with no override, SHALL show no circles and no list.
 
 In place of a static disclaimer, the section SHALL show a state line that changes as the month goes on. While a cutoff
 is still ahead, it SHALL name the next one, such as "Next at 75%: new podcast episodes pause." Once every cutoff is
@@ -142,7 +142,7 @@ The accordion SHALL carry a Visibility column naming who may see each Topic, wit
 
 ### Requirement: Subscriptions render in their own accordion, only when non-empty
 
-A subscriptions accordion, titled "Your topic subscriptions", SHALL show the Topics the user subscribes to on Topics they do not own, and SHALL render only when that list is non-empty.
+A subscriptions accordion, titled "Topics you follow", SHALL show the Topics the user subscribes to on Topics they do not own, and SHALL render only when that list is non-empty.
 
 A subscription row SHALL persist once created: switching it off deactivates it and cascades its email preference off, instead of deleting the row, and the row SHALL stay listed — active or not — until the user explicitly deletes it.
 

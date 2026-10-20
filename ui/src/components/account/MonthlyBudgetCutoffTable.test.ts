@@ -13,7 +13,7 @@ const DOCS_PLANS_AND_LIMITS_URL = new URL(
 test("the monthly budget cutoff table has a row per cutoff and ends with the spent budget", () => {
 	const monthlyBudgetCutoffRows = toMonthlyBudgetCutoffRows()
 	expect(monthlyBudgetCutoffRows.map((monthlyBudgetCutoffRow) => monthlyBudgetCutoffRow.line)).toEqual([
-		"Speaking with Carl and Vienna pauses. You can still text Carl",
+		"Speaking with Carl and Vienna pauses. You can still text with Carl",
 		"New podcast episodes go short and replace the last short one",
 		"New podcast episodes pause",
 		"Daily brews go weekly",

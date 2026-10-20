@@ -47,9 +47,9 @@ plan's monthly limit: $3 on **Free**, $15 on **Plus**, or $35 on **Premium**. Th
 brews it buys as an estimate: "About 30, 150, or 350 Brews a month". If the coffee fund runs out, your brews pause until
 it resets on the first of the month, UTC.
 
-![Carl's coffee fund on the account page: the month's spend against the plan's monthly limit, split
-into brews, the Coffee Break podcast, and Coffee Talk, with the day's brews and the current plan
-below](../../../assets/screenshots/account-coffee-fund.png)
+![Carl's coffee fund on the account page: the month's spend against the plan's monthly limit, split into brews, the
+Coffee Break podcast, and Coffee Talk, with a circle above the bar for each cutoff, the list of cutoffs under it, and
+the day's brews and the current plan below](../../../assets/screenshots/account-coffee-fund.png)
 
 ## When the coffee fund runs low
 
@@ -58,12 +58,15 @@ and brews pause last:
 
 | | Free | Plus | Premium |
 | --- | --- | --- | --- |
-| Speaking with Carl and Vienna pauses. You can still text Carl | 15% | 40% | 50% |
+| Speaking with Carl and Vienna pauses. You can still text with Carl | 15% | 40% | 50% |
 | New podcast episodes go short and replace the last short one | Always short | 60% | 70% |
 | New podcast episodes pause | 20% | 75% | 85% |
 | Daily brews go weekly | Moves each day | Moves each day | Moves each day |
 | Manual brews pause. Scheduled brews keep running | 90% | 90% | 90% |
 | Every brew pauses until the 1st | 100% | 100% | 100% |
+
+![The plans page's Feature windows table: each cutoff's share of the coffee fund on Free, Plus, and
+Premium](../../../assets/screenshots/plans-feature-windows.png)
 
 The daily brews cutoff moves. It sits where the rest of the fund covers your daily brews to the 1st, so it starts low
 and climbs each day. Past it, each daily topic brews once a week. Manual brews keep working until 90%.

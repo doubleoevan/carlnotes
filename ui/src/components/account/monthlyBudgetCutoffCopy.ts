@@ -16,7 +16,7 @@ type MonthlyBudgetCutoffCopy = {
 }
 
 // the spoken questions cutoff's wording in the list and the table, with typed questions as a second sentence
-const SPOKEN_QUESTIONS_LIST_LINE = "Speaking with Carl and Vienna pauses. You can still text Carl"
+const SPOKEN_QUESTIONS_LIST_LINE = "Speaking with Carl and Vienna pauses. You can still text with Carl"
 
 // each cutoff's wording, keyed by the kind of spend it stops
 export const MONTHLY_BUDGET_CUTOFF_COPY: Record<MonthlyBudgetCutoffKind, MonthlyBudgetCutoffCopy> = {
@@ -24,7 +24,7 @@ export const MONTHLY_BUDGET_CUTOFF_COPY: Record<MonthlyBudgetCutoffKind, Monthly
 		line: "Speaking with Carl and Vienna pauses",
 		listLine: SPOKEN_QUESTIONS_LIST_LINE,
 		tableLine: SPOKEN_QUESTIONS_LIST_LINE,
-		tooltipLines: ["You can still text Carl", "Speaking comes back on the 1st"],
+		tooltipLines: ["You can still text with Carl", "Speaking comes back on the 1st"],
 	},
 	fullPodcastEpisodes: {
 		line: "New podcast episodes go short",
