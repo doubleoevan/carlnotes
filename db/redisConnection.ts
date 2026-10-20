@@ -35,6 +35,8 @@ export type RedisConnection = {
 	connectAttempt: Promise<boolean> | null
 	reconnectTimer: ReturnType<typeof setTimeout> | null
 	reconnectDelayMs: number
+	// set once the store forgets the connection, so it never reconnects again
+	isStopped: boolean
 	// what runs each time the client connects. the subscriber connection subscribes every registered channel here
 	onConnected: (client: RedisConnectionClient) => Promise<void>
 }
@@ -73,6 +75,7 @@ export function toConnection(onConnected: RedisConnection["onConnected"]): Redis
 		connectAttempt: null,
 		reconnectTimer: null,
 		reconnectDelayMs: RECONNECT_MINIMUM_MS,
+		isStopped: false,
 		onConnected,
 	}
 	reconnectOnClose(connection, connection.client)
@@ -82,8 +85,8 @@ export function toConnection(onConnected: RedisConnection["onConnected"]): Redis
 // reconnect when the client closes, unless the connection has already replaced the client
 function reconnectOnClose(connection: RedisConnection, client: RedisConnectionClient): void {
 	client.onclose = (error) => {
-		// ignore the close of a replaced client
-		if (connection.client !== client) {
+		// ignore the close of a replaced client or of a stopped connection
+		if (connection.client !== client || connection.isStopped) {
 			return
 		}
 
@@ -142,8 +145,8 @@ async function connectNow(connection: RedisConnection): Promise<boolean> {
  * Schedules a reconnect on a fresh client after the backoff. The timer never keeps the process alive.
  */
 export function scheduleReconnect(connection: RedisConnection): void {
-	// skip if a reconnect is already scheduled
-	if (connection.reconnectTimer) {
+	// skip if a reconnect is already scheduled or the connection is stopped
+	if (connection.reconnectTimer || connection.isStopped) {
 		return
 	}
 
@@ -162,6 +165,24 @@ export function scheduleReconnect(connection: RedisConnection): void {
 		void ensureConnected(connection)
 	}, connection.reconnectDelayMs).unref()
 	connection.reconnectDelayMs = Math.min(connection.reconnectDelayMs * 2, RECONNECT_MAXIMUM_MS)
+}
+
+/**
+ * Stops a connection for good: the reconnect it waits on is cancelled, a later close or failed connect schedules none,
+ * and its client is closed.
+ */
+export function stopConnection(connection: RedisConnection): void {
+	// mark the connection stopped and cancel the reconnect it waits on
+	connection.isStopped = true
+	if (connection.reconnectTimer) {
+		clearTimeout(connection.reconnectTimer)
+		connection.reconnectTimer = null
+	}
+
+	// close the client, whose close handler now does nothing
+	try {
+		connection.client.close()
+	} catch {}
 }
 
 /**

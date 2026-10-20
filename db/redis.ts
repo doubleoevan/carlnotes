@@ -11,6 +11,7 @@ import {
 	readAndResetErrorCount,
 	replaceRedisClientBuilder,
 	scheduleReconnect,
+	stopConnection,
 	toConnection,
 } from "./redisConnection"
 
@@ -230,10 +231,17 @@ export function readAndResetRedisGauges(): RedisGauges {
 }
 
 /**
- * Replaces how the store builds its clients and forgets the connections, the channel handlers, the reconnect
+ * Replaces how the store builds its clients, and stops and forgets the connections, the channel handlers, the reconnect
  * listeners, the counts, and the memory rate limit windows.
  */
 export function setRedisClientBuilder(nextBuildRedisClient: () => RedisConnectionClient): void {
+	// stop the old connections, so a reconnect they were waiting on never builds a client from the new builder
+	for (const connection of [commandConnection, subscriberConnection]) {
+		if (connection) {
+			stopConnection(connection)
+		}
+	}
+
 	// use the new builder and forget the connections, the channel handlers, and the reconnect listeners
 	replaceRedisClientBuilder(nextBuildRedisClient)
 	commandConnection = null

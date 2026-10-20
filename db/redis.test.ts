@@ -182,6 +182,19 @@ test("a failed subscribe starts one reconnect and the fresh client subscribes ev
 	setTimeoutSpy.mockRestore()
 })
 
+// a store reset stops the old connections, so a reconnect that an earlier test left waiting builds no client from the
+// next test's builder
+test("a store reset cancels the reconnect that an old connection waits on", async () => {
+	// two failed connects leave the old connection waiting a second to reconnect
+	fakeRedisServer.remainingConnectFailureCount = 2
+	expect(await runWithRedis("get", (client) => client.get("k"))).toBeNull()
+
+	// a fresh store, then past the old reconnect's delay, builds no client
+	const freshFakeRedisStore = startFakeRedisStore()
+	await Bun.sleep(1100)
+	expect(freshFakeRedisStore.fakeRedisClients).toHaveLength(0)
+})
+
 // the reconnect delay doubles on each failed connect up to thirty seconds and resets once a connect succeeds
 test("the reconnect delay doubles to thirty seconds and resets on connect", async () => {
 	// seven failed connects with instant timers
