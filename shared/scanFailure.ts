@@ -5,6 +5,9 @@ const BUDGET_ERROR_PATTERN = /budget has been exceeded/i
 // how a spent budget reads to a person, on a failed Scan and on a rejected manual scan
 export const SCAN_SPENT_BUDGET_LABEL = "Carl hit this month's coffee budget."
 
+// how a manual scan rejected past the manual scans cutoff reads to a person, on the scan button and its rejection
+export const MANUAL_SCAN_PAUSED_LABEL = "Manual brews are paused until the 1st. Scheduled brews keep running."
+
 // the failure reason stored on a scheduled Scan that never started because its owner's budget is spent
 export const SCHEDULED_SCAN_SPENT_BUDGET_REASON =
 	"Carl ran out of coffee this month, so the scheduled scan didn't start"
@@ -12,6 +15,10 @@ export const SCHEDULED_SCAN_SPENT_BUDGET_REASON =
 // the failure reason stored on a Topic's first Scan that never started because its owner's budget is spent
 export const FIRST_SCAN_SPENT_BUDGET_REASON =
 	"Carl ran out of coffee this month, so the topic's first scan didn't start"
+
+// the failure reason stored on a Topic's first Scan that never started because its owner's spend is past the manual
+// scans cutoff
+export const FIRST_SCAN_PAUSED_REASON = "Manual brews are paused until the 1st, so the topic's first scan didn't start"
 
 // the stored failure reasons of a Scan that never started because its owner's budget is spent
 const UNSTARTED_SCAN_SPENT_BUDGET_REASONS = [SCHEDULED_SCAN_SPENT_BUDGET_REASON, FIRST_SCAN_SPENT_BUDGET_REASON]
@@ -32,6 +39,13 @@ export function toScanFailureLabel(error: string | null): string {
 	if (isBudgetError(error)) {
 		return SCAN_SPENT_BUDGET_LABEL
 	}
+
+	// a first Scan past the manual scans cutoff reads as the paused manual scan
+	if (error === FIRST_SCAN_PAUSED_REASON) {
+		return MANUAL_SCAN_PAUSED_LABEL
+	}
+
+	// a failure with no reason gets a plain label
 	if (!error) {
 		return "This one didn't brew."
 	}

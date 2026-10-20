@@ -154,7 +154,7 @@ export function toChatMessageIds(idsParam: string | undefined): number[] {
 // how many chat messages one link preview poll may ask about
 const MESSAGE_PREVIEW_POLL_LIMIT = 20
 
-// the delta fetches in flight, keyed by topic, team, cursor, and the notified chat message id
+// the delta fetches in progress, keyed by topic, team, cursor, and the notified chat message id
 const chatRoomDeltasByKey = new Map<string, Promise<ChatRoomMessage[]>>()
 
 // one notification's delta, fetched once for every stream of the chat room on this instance

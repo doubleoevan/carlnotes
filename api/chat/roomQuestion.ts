@@ -15,6 +15,19 @@ const CHAT_ROOM_WINDOW_MESSAGES = 30
 const SUMMARY_MESSAGE_CHARS = 200
 const SUMMARY_MAX_CHARS = 8000
 
+// what the template's summary slot says for a chat room with no running summary yet
+export const EMPTY_CHAT_ROOM_SUMMARY = "Nothing yet."
+
+// what the template's attachments slot says for a chat room with nothing shared
+export const EMPTY_CHAT_ROOM_ATTACHMENTS_BLOCK = "None yet."
+
+// one chat message as the transcript names it: the author, what they wrote, and the chat message it answers, if any
+export type ChatRoomTranscriptMessage = {
+	authorUsername: string
+	content: string
+	repliedTo?: { authorUsername: string; content: string }
+}
+
 /** Builds carl's question for one chat room turn: the summary, the room's shared files, and the window's transcript. */
 export async function buildModelRoomQuestion(
 	transaction: DbTransaction,
@@ -42,18 +55,34 @@ export async function buildModelRoomQuestion(
 	const chatRoomAttachmentsBlock = await toChatRoomAttachmentsBlock(transaction, topicId, teamId)
 
 	// one question through the versioned template: the summary, the attachments, and the chat messages
-	return toModelRoomQuestion({ summary: summaryRow?.summary ?? "Nothing yet.", chatRoomAttachmentsBlock, chatMessages })
+	return toModelRoomQuestion({
+		summary: summaryRow?.summary ?? EMPTY_CHAT_ROOM_SUMMARY,
+		chatRoomAttachmentsBlock,
+		chatMessages,
+	})
 }
 
 // the template variables of a room turn's question, with the running summary, the room's shared files, and the transcript
 type ModelRoomQuestionVariables = { summary: string; chatRoomAttachmentsBlock: string; chatMessages: string }
 
 /**
- * Writes a room turn's question from the chat-room-turn template.
+ * Writes a room turn's question from the chat-room-turn template, with everything the members wrote fenced as data.
  */
 export async function toModelRoomQuestion(modelRoomQuestionVariables: ModelRoomQuestionVariables): Promise<string> {
 	const { template } = await fetchPromptTemplate("chat-room-turn")
-	return writePrompt(template, {}, modelRoomQuestionVariables)
+	return writePrompt(template, modelRoomQuestionVariables)
+}
+
+/**
+ * Returns one transcript line: the author, a clipped quote of the chat message they answered, if any, and what they
+ * wrote.
+ */
+export function toChatRoomTranscriptLine({ authorUsername, content, repliedTo }: ChatRoomTranscriptMessage): string {
+	// the answered chat message's author and opening, then the author and what they wrote
+	const replyMessageDetails = repliedTo
+		? ` (replying to ${repliedTo.authorUsername}: "${toClippedLine(repliedTo.content)}")`
+		: ""
+	return `${authorUsername}${replyMessageDetails}: ${content}`
 }
 
 // the chat messages put each author's username into the content which tells carl who asked what
@@ -93,11 +122,17 @@ async function toChatRoomMessages(
 			const answeredChatMessageRow = chatMessageRow.replyToMessageId
 				? messageRowByMessageId.get(chatMessageRow.replyToMessageId)
 				: undefined
-			const replyMessageDetails = answeredChatMessageRow
-				? ` (replying to ${answeredChatMessageRow.authorUsername}: "${toClippedLine(decryptChatText(answeredChatMessageRow.content) ?? "")}")`
-				: ""
 			// one transcript line: the author, who they answered, and what they said
-			return `${chatMessageRow.authorUsername}${replyMessageDetails}: ${decryptChatText(chatMessageRow.content) ?? ""}`
+			return toChatRoomTranscriptLine({
+				authorUsername: chatMessageRow.authorUsername,
+				content: decryptChatText(chatMessageRow.content) ?? "",
+				repliedTo: answeredChatMessageRow
+					? {
+							authorUsername: answeredChatMessageRow.authorUsername,
+							content: decryptChatText(answeredChatMessageRow.content) ?? "",
+						}
+					: undefined,
+			})
 		})
 		.join("\n")
 }
@@ -122,7 +157,7 @@ async function toChatRoomAttachmentsBlock(
 
 	// a chat room with nothing shared says so in the template's slot
 	if (chatRoomAttachmentRows.length === 0) {
-		return "None yet."
+		return EMPTY_CHAT_ROOM_ATTACHMENTS_BLOCK
 	}
 
 	// each file leads with its name and uploader

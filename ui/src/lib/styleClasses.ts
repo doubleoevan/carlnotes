@@ -58,6 +58,13 @@ export const MENU_BUTTON_CLASS =
 	"bg-card text-muted-foreground hover:text-foreground inline-flex min-h-11 shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm shadow-lift sm:min-h-9"
 
 /**
+ * A round button beside the docked podcast player's play button, at play's own size on a phone and a pointer alike:
+ * the mic that asks carl and vienna, and the stop that ends the question.
+ */
+export const PODCAST_EPISODE_QUESTION_BUTTON_CLASS =
+	"bg-muted text-foreground hover:bg-accent grid size-11 shrink-0 place-items-center rounded-full disabled:opacity-40"
+
+/**
  * A skip or playback rate button beside a play button.
  */
 export const PLAYBACK_CONTROL_BUTTON_CLASS = cn(
@@ -267,3 +274,19 @@ export const COMPOSER_BOX_CLASS =
  */
 export const AVATAR_CLASS =
 	"inline-block shrink-0 overflow-hidden rounded-full border shadow-lift outline-none focus-visible:ring-ring/50 focus-visible:ring-[3px]"
+
+/**
+ * A chat reply's bubble, Carl's or Vienna's, and the thinking bubble before it.
+ */
+export const ANSWER_BUBBLE_CLASS =
+	"bg-bubble text-foreground max-w-[92%] rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm @lg:max-w-[75%]"
+
+/**
+ * How wide a user's question bubble and the tag under it grow.
+ */
+export const QUESTION_BUBBLE_WIDTH_CLASS = "max-w-[85%] @lg:max-w-[75%]"
+
+/**
+ * The centered narrow column of the sign-in, signup, and invite pages.
+ */
+export const SESSION_PAGE_CLASS = "mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-12"

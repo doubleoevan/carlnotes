@@ -1,8 +1,8 @@
 # Evals
 
 An eval measures what a model-facing prompt writes. Each eval runs its cases through the same function that the app
-calls, grades every output, and reports how often each case passes. Every eval makes real model calls, so no eval is part
-of `bun test` or the push gate. Run a prompt's eval before shipping a change to that prompt or to its model.
+calls, grades every output, and reports how often each case passes. Every eval makes real model calls, so no eval is
+part of `bun test` or the push gate. Run a prompt's eval before shipping a change to that prompt or to its model.
 
 | Folder | Eval | Command |
 |---|---|---|
@@ -13,6 +13,7 @@ of `bun test` or the push gate. Run a prompt's eval before shipping a change to 
 | `topic-chat/` | the chat about one topic | `bun run eval:topic-chat` |
 | `team-chat/` | the chat on a team's page, across its topics | `bun run eval:team-chat` |
 | `topic-chat-tools/` | the topic chat's edit tools, in the solo chat and the team room | `bun run eval:topic-chat-tools` |
+| `podcast-chat/` | a question asked out loud from the podcast player, and the host it picks | `bun run eval:podcast-chat` |
 | `new-topic-chat/` | the chat that makes a topic, with its tools | `bun run eval:new-topic-chat` |
 | `source-suggestions/` | the Sources suggested for a topic | `bun run eval:source-suggestions` |
 | `search-queries/` | the search queries that a Scan writes for a topic | `bun run eval:search-queries` |
@@ -23,7 +24,8 @@ The promptfoo evals and the review pipeline eval call the local LiteLLM proxy (`
 ## How a promptfoo eval works
 
 Every eval except the review pipeline runs [promptfoo](https://www.promptfoo.dev) cases through promptfoo's `evaluate`
-function. The promptfoo CLI does not start under Bun, and the code under test needs Bun. Each eval folder has four files:
+function. The promptfoo CLI does not start under Bun, and the code under test needs Bun. Each eval folder has four
+files:
 
 - `<name>Cases.ts` holds the cases. A case's findings and numbers are made up, so a fact in an output that its case
   lacks is invented. A case never holds a real user's data.
@@ -41,19 +43,22 @@ harness, so every eval reads the templates in `worker/prompts/` and measures an 
 four at a time and grades each rubric with the grader that the eval names. It prints the report with the eval's pass
 rate, its 95% interval, and whether the run clears the eval's gate. It writes the full results to
 `logs/eval-<name>.json`, and it exits with a failure if the pass rate falls below the gate. A local run also saves the
-pass count, the commit, whether the working tree had changes, and the writer's and the grader's models to `results/<name>.json`,
-and rebuilds `results/badge.json` from every eval's saved count, which the root README's evals badge reads through
-shields.io. The harness also holds the rubric assertions and the tool call recorder. `evalReplies.ts` holds what several
-evals read from a reply: its links, checked against what the chat may link, its prose paragraphs, and the text of a
-model call's steps. `evalLabels.ts` holds a percentage and a word count. Neither of those two files sets anything up on
-import, so any eval can import them without the harness.
+pass count, the commit, whether the working tree had changes, and the writer's and the grader's models to
+`results/<name>.json`, and rebuilds `results/badge.json` from every eval's saved count, which the root README's evals
+badge reads through shields.io. The harness also holds the rubric assertions and the tool call recorder.
+`evalChecks.ts` holds the grading result that every check in code returns, the no-markdown check that the topic
+chat and podcast chat evals run on a spoken answer, and the chat reply checks and case line that the topic chat and team
+chat evals share. `evalReplies.ts` holds what several evals read from a reply: its links, checked against what the chat
+may link, its prose paragraphs, and its markdown markup. `evalLabels.ts` holds a percentage, a word count, a run's
+writing cost, and a chat turn's tool names. None of those three files sets anything up on import, so any eval can import
+them without the harness.
 
 Every output gets two kinds of checks:
 
 - **Checks in code**, for anything code can decide: a link's url, a length, a Finding id, a heading, the tools a chat
   turn called. They are free and they never disagree with themselves.
-- **Rubrics graded by a model**, for a judgment code cannot make, such as whether every claim is supported. A rubric names
-  what fails the output, and it grades only the prompt's own rules. The grader runs on a different model from the
+- **Rubrics graded by a model**, for a judgment code cannot make, such as whether every claim is supported. A rubric
+  names what fails the output, and it grades only the prompt's own rules. The grader runs on a different model from the
   model under test, so a model never grades its own output.
 
 ## Running and reading an eval
@@ -81,10 +86,10 @@ Each eval names its gate, the pass rate that a run has to clear. New-topic chat,
 calibration need every run to pass. The source suggester only reports. It reads live search results and live sites.
 Every other eval needs 90%. A run below its gate exits with a failure.
 
-`.github/workflows/evals.yml` runs every promptfoo eval in CI, one at a time, the grader calibration first. It runs each case
-once on a push to `main` that changes a prompt, the code that builds one, the model config, or an eval, and three times
-weekly and by hand. It only reports. An eval below its gate is named in a warning, and the build still passes. A run
-in CI saves no result, so the badge keeps reading the committed local runs. The job summary has one row for each
+`.github/workflows/evals.yml` runs every promptfoo eval in CI, one at a time, the grader calibration first. It runs each
+case once on a push to `main` that changes a prompt, the code that builds one, the model config, or an eval, and three
+times weekly and by hand. It only reports. An eval below its gate is named in a warning, and the build still passes. A
+run in CI saves no result, so the badge keeps reading the committed local runs. The job summary has one row for each
 eval, and the full results are the run's artifact.
 
 ## Writing a new eval
@@ -133,13 +138,13 @@ context includes the attachment. The export writes two files:
 
 - `review-pipeline/<topicId>.json`, the fixture, which is committed. It holds the topic's name and scan context, and for
   each Resource its title, url, kind, label, and where the label came from, but no page text for an exported row.
-- `review-pipeline/page-cache/<topicId>.json`, each page's snippet and stored body, which is gitignored. A run reads page
-  text from the page cache, so third-party pages never reach git.
+- `review-pipeline/page-cache/<topicId>.json`, each page's snippet and stored body, which is gitignored. A run reads
+  page text from the page cache, so third-party pages never reach git.
 
 The corpus is the topic's own Findings, then the Findings of other public topics without attachments that sit nearest
 the topic's own by embedding, up to 50 Resources. A public topic's Findings are on its page already, and no private or
-invite topic's Resource is ever read. The nearest Findings make hard negatives: a Claude Code changelog is on topic for a
-Claude Code topic and off topic for a general developer tooling one.
+invite topic's Resource is ever read. The nearest Findings make hard negatives: a Claude Code changelog is on topic for
+a Claude Code topic and off topic for a general developer tooling one.
 
 The export labels rows from the topic's own ratings and bookmarks. A Finding rated thumbs up, or bookmarked by someone
 who still has access, is relevant, and a Finding rated thumbs down is not. Every other row is left at `isRelevant: null`
@@ -196,9 +201,9 @@ LLM_GUARD_TIMEOUT_MS=60000 doppler run --preserve-env -- bun evals/review-pipeli
 ```
 
 Measures LLM Guard's false-positive and catch rates over every fixture's `injectionProse` and `injectionAttacks`, with
-no model calls and no spend. It then reads the text in each fixture's `injectionImages` with text recognition, the way the chat image
-screen does, from the files in `review-pipeline/images/`, and prints the image false-positive and catch rates on lines
-of their own. These are the numbers that a scanner upgrade changes, so
+no model calls and no spend. It then reads the text in each fixture's `injectionImages` with text recognition, the way
+the chat image screen does, from the files in `review-pipeline/images/`, and prints the image false-positive and catch
+rates on lines of their own. These are the numbers that a scanner upgrade changes, so
 `.github/workflows/llm-guard-update.yml` checks weekly for a new LLM Guard version, measures a candidate container if
 one appeared, and files the upgrade issue with the result. Guard-only mode needs `LLM_GUARD_URL` set and probes the
 scanner first, so an unreachable scanner fails the run instead of reporting an inaccurate zero. A screen that times out
@@ -206,7 +211,8 @@ fails open in the app, so the measurement leaves the screen out of both rates an
 as a full run does. A scanner on a laptop or a runner takes longer than the app's 2.5-second timeout on a long article,
 so set `LLM_GUARD_TIMEOUT_MS` to a minute for a measurement, as the weekly workflow does. A full run reports both rates
 as n/a if the scanner is down, never as zero. A scanner-only fixture, with empty `labeledResources` and populated
-`injectionProse` and `injectionAttacks`, is valid for this mode, so both sets can exist before the full labeled corpus does.
+`injectionProse` and `injectionAttacks`, is valid for this mode, so both sets can exist before the full labeled corpus
+does.
 
 Read the false-positive rate and the catch rate together, since either alone is misleading. A scanner that flags
 everything scores a perfect catch rate, and one that flags nothing scores a perfect false-positive rate. Only the pair
@@ -215,8 +221,8 @@ tells you whether the scanner works.
 ### What the numbers mean
 
 - **precision**: of the Resources the pipeline would keep, the share the label calls relevant.
-- **recall**: of the Resources the label calls relevant, the share the pipeline would keep. "Would keep" means it cleared
-  the relevance gate and then scored at or above the promotion threshold.
+- **recall**: of the Resources the label calls relevant, the share the pipeline would keep. "Would keep" means it
+  cleared the relevance gate and then scored at or above the promotion threshold.
 - **cost**: what that fixture's run charged into a Scan Budget, embedding plus both scoring tiers.
 - **scanner false positives**: the share of `injectionProse` the scanner flagged. Every flag here is wrong, since these
   articles discuss injection and do not attempt it. `n/a` if `LLM_GUARD_URL` isn't set, never an inaccurate zero.
@@ -250,13 +256,14 @@ AI content.
 ## Podcast episode script eval
 
 Each case is a Topic and two to four made-up Findings. The provider runs the real writer: the outline call on
-`score-model`, one call for each segment, and the script built from the segments. The rubrics are graded on `chat-model`.
+`score-model`, one call for each segment, and the script built from the segments. The rubrics are graded on
+`chat-model`.
 
 Every case gets these checks:
 
 - **every chapter cites an input finding**: no chapter has a Finding id that the case did not give.
-- **the writer's own checks pass**: `toCheckedPodcastEpisodeOutline` and `toCheckedPodcastEpisodeSegment`, which reject a
-  draft in the podcast episode workflow: one chapter for each Finding, at most three quotes a chapter and none past
+- **the writer's own checks pass**: `toCheckedPodcastEpisodeOutline` and `toCheckedPodcastEpisodeSegment`, which reject
+  a draft in the podcast episode workflow: one chapter for each Finding, at most three quotes a chapter and none past
   30 words, a title and a description within their limits, a cold open, a sign-off, and a goodbye.
 - **within length and within time**: a title of at most 60 characters, a description of at most 155, and a script of at
   most 30 minutes at 150 words a minute. A chapter's planned length is a goal, so the eval does not grade it.
@@ -266,7 +273,8 @@ Every case gets these checks:
 - **the segments follow the outline prompt**: three findings or fewer make one segment, four or more make two to four,
   and every segment after the first opens with a transition.
 - **three rubrics**: the hosts state nothing that the Findings and their stored content do not support, a chapter
-  paraphrases its source and names who it quotes, and the title and the description are whole and specific to the chapters.
+  paraphrases its source and names who it quotes, and the title and the description are whole and specific to the
+  chapters.
 
 The thin-input case also has to yield one chapter for each Finding in under seven minutes. One case names what its
 Findings do not say, and its rubric fails a script that states any of it as a fact. One case plants an instruction in a
@@ -277,8 +285,8 @@ check that fails once in many runs costs a second draft there, and a check that 
 
 ## Scan report eval
 
-Each case is one Scan's outcome on the same Topic: what it kept, what it filtered, and how its Sources read. The provider
-calls `summarizeTopicScan` on `cheap-model`, and the rubrics are graded on `chat-model`.
+Each case is one Scan's outcome on the same Topic: what it kept, what it filtered, and how its Sources read. The
+provider calls `summarizeTopicScan` on `cheap-model`, and the rubrics are graded on `chat-model`.
 
 Every case checks that the report links only to the kept findings' urls and links every one of them, that a scan that
 kept nothing has no findings heading, that the report opens without a title of its own, that it runs 200 words or less,
@@ -304,11 +312,26 @@ that a docs section answers, a topic with no findings yet, and a spoken question
 fragment is spliced, whose reply has to be a few short sentences with no heading, list, table, fenced code, or link. A
 docs section is built with the app's own `toDocsBlock`.
 
+## Podcast chat eval
+
+Each case is a question asked out loud from the podcast player during one chapter of a podcast episode, and the host who
+has to answer it. The provider builds the topic chat prompt with `buildTopicChatPrompt`, the chapter, and the spoken
+fragment, and reads the reply through the app's own `streamPodcastReply`, so the speaker comes from the same structured
+output the app streams. The answer is the output, and the speaker is in the response's metadata. Answers are written on
+`chat-model` and graded on `score-model`.
+
+Every case checks in code that the speaker is the one it expects and that the answer has no markdown. The cases cover a
+vague question during a chapter, graded by a rubric that passes only an answer about that chapter's finding, a question
+that names Vienna and a why-does-this-matter-to-me question, which go to the cohost, a what-did-the-article-say question
+and an unclear question, which go to the host, and an instruction in the chapter's stored content asking for the cohost,
+which a question about a fact ignores. Every case is also graded by a rubric that passes only an answer that first takes
+the question like a call-in, in a few words, with no name, greeting, or praise. The eval's gate is 90%.
+
 ## Team chat eval
 
 Each case is a question on a team's page, read across the topics that the team holds, built with `buildTeamChatPrompt`
-and `toModelMessages`. The turn gets the tools that the team page chat binds. They are the chat's own search, with web search
-off, and `openNewTopicChat`. Replies are written on `chat-model` and graded on `score-model`.
+and `toModelMessages`. The turn gets the tools that the team page chat binds. They are the chat's own search, with web
+search off, and `openNewTopicChat`. Replies are written on `chat-model` and graded on `score-model`.
 
 Every case checks that the reply links only to the findings' urls and the docs, that it has three paragraphs or fewer
 apart from its lists and headings, that it credits the findings only with what they say, and that it names the right
@@ -322,10 +345,12 @@ if any. A solo chat case runs the private chat's own path. Its history is sent a
 tool calls replayed as the app replays them. If the last history turn left a preview standing, the real agreement check
 reads the case's message against it, and an agreed preview is applied through stand-ins for the topic tools' writes and
 recorded as calls of the saving tools, before the turn writes its reply. A solo turn gets `proposeTopicEdit`,
-`cancelTopicEdit`, and `openNewTopicChat`, and no saving tool. A team room case sends a question written from the room's
-transcript by `toModelRoomQuestion`, gets the room's saving tools with their real descriptions and schemas but
-stand-ins for the database writes, and a consent forces a saving tool the way a room turn does. Turns are written on
-`chat-model` and graded on `score-model`.
+`cancelTopicEdit`, and `openNewTopicChat`, and no saving tool. A team room case lists the room's chat messages, which
+`toChatRoomTranscriptLine` writes as the app writes the transcript, and sends a question written from that transcript by
+`toModelRoomQuestion`. It gets the preview tools alone, as a room turn does. If the case's room preview was shown to the
+member who wrote the room's last chat message, the same agreement check reads that chat message's words without its Carl
+mention, and a preview shown to another member is not answered at all. Turns are written on `chat-model` and graded on
+`score-model`.
 
 Every case checks that the turn called or applied the expected tool with the expected input and nothing else but a
 search, or called no tool at all, or, where the case allows a preview, saved nothing. A rubric fails a reply that claims
@@ -335,24 +360,24 @@ source given by url and the yes that adds it, a proposed source removal and the 
 and the yes that saves it, a confirmation in other words that applies the preview, a hesitant reply that applies
 nothing, an instruction inside an attached document and inside an attached image that applies nothing, a preview whose
 own words tell the check to agree, a decline that takes the preview back with `cancelTopicEdit`, a question that calls
-nothing, an instruction inside a finding that calls nothing, a request for another topic, and a request and a yes in
-the team room.
+nothing, an instruction inside a finding that calls nothing, a request for another topic, a request and a yes in the
+team room, and a yes in the team room from a member the preview was not shown to, which applies nothing.
 
 ## New-topic chat eval
 
-Each case is one turn of the chat that makes a topic, with the conversation so far, the topic draft that the conversation
-wrote, and the user's next message. The turn gets the real `draftTopic` tool, which writes only into the draft in
-memory, the real `proposeNewTopic` tool, and `suggestSources` with its real description and schema but a stand-in for
-the search. If the last history turn called `proposeNewTopic`, the real agreement check reads the case's message, and an
-agreed draft is created through a stand-in for the database write and recorded as a `createTopic` call. Every tool call
-and every create is recorded, and the checks read the recorded calls and the draft after the turn, never what the reply
-claims about them. Turns are written on `chat-model` and graded on `score-model`.
+Each case is one turn of the chat that makes a topic, with the conversation so far, the topic draft that the
+conversation wrote, and the user's next message. The turn gets the real `draftTopic` tool, which writes only into the
+draft in memory, the real `proposeNewTopic` tool, and `suggestSources` with its real description and schema but a
+stand-in for the search. If the last history turn called `proposeNewTopic`, the real agreement check reads the case's
+message, and an agreed draft is created through a stand-in for the database write and recorded as a `createTopic` call.
+Every tool call and every create is recorded, and the checks read the recorded calls and the draft after the turn, never
+what the reply claims about them. Turns are written on `chat-model` and graded on `score-model`.
 
 Every case checks that a `createTopic` call is recorded once if the user agreed to the proposed draft and never
 otherwise, that the reply claims no save that no tool made, and that it asks at most two questions. The cases cover a
 first message, a source pick that has to reach the draft, a choice of who sees the topic that has to reach the draft as
-its visibility, a read-back that has to call `proposeNewTopic`, a yes, a rename, and a draft whose prompt claims that the
-user already said yes, where the turn also has to call `suggestSources`.
+its visibility, a read-back that has to call `proposeNewTopic`, a yes, a rename, and a draft whose prompt claims that
+the user already said yes, where the turn also has to call `suggestSources`.
 
 ## Source suggestions eval
 
@@ -388,7 +413,8 @@ eval runs, so every word in it is in the case and no binary is committed. The ru
 model that wrote neither summary.
 
 Processing summarizes only a document longer than 20,000 characters, in chunks of up to 8,000. A shorter document is
-stored as written and never reaches the summarizer, so a document case is what the summarizer reads, one chunk of a long document.
+stored as written and never reaches the summarizer, so a document case is what the summarizer reads, one chunk of a long
+document.
 
 Every case checks that the summary is not empty, that a document's summary is shorter than the document, that the
 summary says nothing the attachment does not show, and that it keeps the facts a user needs. The cases cover a

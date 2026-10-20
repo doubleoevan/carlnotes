@@ -28,7 +28,7 @@ export function TeamAvatarPicker({
 	// a chosen image not yet uploaded, shown in place of whatever the team has today
 	previewUrl?: string | null
 	onAvatarChange: (avatarFile: File) => void
-	// set while an upload is in flight, so a second file cannot be chosen over it
+	// set while an upload is in progress, so a second file cannot be chosen over it
 	isDisabled?: boolean
 	// the size, which differs between the team page and the modal
 	className?: string

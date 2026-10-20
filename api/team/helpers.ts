@@ -3,7 +3,8 @@ import { toAvatarKeyVersion } from "@shared/avatars"
 import type { OwnerTopic } from "@shared/contracts/activity"
 import type { ProfileTeamStatus } from "@shared/contracts/profiles"
 import type { TeamSummary } from "@shared/contracts/teams"
-import { and, count, eq, gt, gte, inArray, isNotNull, isNull, or, sql } from "drizzle-orm"
+import { toCentsFromDollars } from "@shared/plans"
+import { and, count, eq, gt, gte, inArray, isNull, or, sql } from "drizzle-orm"
 import { alias } from "drizzle-orm/pg-core"
 import { db } from "../../db"
 import { chatTurns } from "../../db/schema/chat"
@@ -141,21 +142,17 @@ export async function toSpendByTeamId(
 			.from(chatTurns)
 			// only chat room turns count. a member's private team conversation spends on their own meter alone
 			.where(
-				and(
-					inArray(chatTurns.teamId, teamIds),
-					isNotNull(chatTurns.roomMessageId),
-					gte(chatTurns.createdAt, monthStart),
-				),
+				and(inArray(chatTurns.teamId, teamIds), eq(chatTurns.kind, "chat_room"), gte(chatTurns.createdAt, monthStart)),
 			)
 			.groupBy(chatTurns.teamId),
 	])
 
 	// the totals combine per team in cents
 	const chatCentsByTeamId = new Map(
-		chatRows.map((chatRow) => [chatRow.teamId, Math.round(Number(chatRow.dollars) * 100)] as const),
+		chatRows.map((chatRow) => [chatRow.teamId, toCentsFromDollars(Number(chatRow.dollars))] as const),
 	)
 	for (const teamRoomRow of teamRoomRows) {
-		const cents = Math.round(Number(teamRoomRow.dollars) * 100)
+		const cents = toCentsFromDollars(Number(teamRoomRow.dollars))
 		chatCentsByTeamId.set(teamRoomRow.teamId, (chatCentsByTeamId.get(teamRoomRow.teamId) ?? 0) + cents)
 	}
 	// one spend entry per team id. zeros where nothing was spent
@@ -163,7 +160,7 @@ export async function toSpendByTeamId(
 	for (const teamId of teamIds) {
 		const scanRow = scanRows.find((teamScanRow) => teamScanRow.teamId === teamId)
 		spendByTeamId.set(teamId, {
-			scanCents: Math.round(Number(scanRow?.dollars ?? 0) * 100),
+			scanCents: toCentsFromDollars(Number(scanRow?.dollars ?? 0)),
 			chatCents: chatCentsByTeamId.get(teamId) ?? 0,
 		})
 	}

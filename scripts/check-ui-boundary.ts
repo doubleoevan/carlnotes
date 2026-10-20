@@ -38,7 +38,7 @@ export function toServerValueImports({ filePath, fileText }: ToServerValueImport
 	return serverValueImports
 }
 
-// whether a relative import path from a file lands in a server folder, once its . and .. segments resolve
+// whether a relative import path from a file points into a server folder once its . and .. segments resolve
 function isServerPath(filePath: string, importPath: string): boolean {
 	// a package or an alias path is not a relative path into the repo
 	if (!importPath.startsWith(".")) {

@@ -1,9 +1,15 @@
 // whether a Scan records a Podcast Episode. the checks that stop a recording before it spends,
 // and the Findings that the Podcast Episode narrates
-import { podcastEpisodeSpeechModel } from "@shared/podcastEpisodes"
+import {
+	FULL_PODCAST_EPISODE_FINDINGS,
+	podcastEpisodeSpeechModel,
+	SHORT_PODCAST_EPISODE_FINDINGS,
+} from "@shared/podcastEpisodes"
 import { and, desc, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
-import { hasFullPodcastEpisodes, isPodcastEpisodeBudgetShareExhausted } from "../../db/quotas"
+import { isMonthlyBudgetCutoffPassed } from "../../db/monthlyBudgetCutoffs"
+import { hasFullPodcastEpisodes } from "../../db/quotas"
+import { runWithRequestMemo } from "../../db/requestMemo"
 import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast"
 import { findings, resources, scans } from "../../db/schema/scans"
 import { topics } from "../../db/schema/topics"
@@ -11,10 +17,6 @@ import { toCanonicalUrl } from "../ingest/normalize"
 import { loadBookmarkedFindingRows } from "../review"
 import { loadUrlSourcePageUrls } from "../review/filter"
 import { clampScore } from "../review/score"
-
-// how many Findings a full Podcast Episode and a short one narrate at most, about two minutes each
-export const FULL_PODCAST_EPISODE_FINDINGS = 15
-export const SHORT_PODCAST_EPISODE_FINDINGS = 5
 
 // the score bonus that a bookmark, a thumbs up, and a url Source's own page each give a Finding when picking a Podcast
 // Episode's Findings. the three add up, and the score stays at 1 or below
@@ -50,9 +52,17 @@ export type ToPlannedFindingsOptions = {
 
 /**
  * Decides whether a Scan records a Podcast Episode and creates the Podcast Episode's row if it does.
- * Returns the plan, or null if the Scan records no Podcast Episode.
+ * Returns the plan, or null if the Scan records no Podcast Episode. The plan's reads share one memo, so its two cutoff
+ * checks read the billed user's access row and month's spend once.
  */
-export async function planPodcastEpisode({
+export function planPodcastEpisode(
+	planPodcastEpisodeOptions: PlanPodcastEpisodeOptions,
+): Promise<PodcastEpisodePlan | null> {
+	return runWithRequestMemo(() => planPodcastEpisodeInMemo(planPodcastEpisodeOptions))
+}
+
+// the plan's checks, its Findings, and its row, run inside the plan's memo
+async function planPodcastEpisodeInMemo({
 	scanId,
 	topicId,
 	billedUserId,
@@ -72,8 +82,17 @@ export async function planPodcastEpisode({
 		return skipPodcastEpisode({ scanId, skipReason: "the scan did not succeed, or the topic's podcast is off" })
 	}
 
-	// a Topic whose owner lacks full Podcast Episodes gets a short one, which narrates fewer Findings
-	const isShortPodcastEpisode = !(await hasFullPodcastEpisodes(topic.ownerId))
+	// the row that an earlier attempt created, if any, and whether this Podcast Episode is short, which narrates fewer
+	// Findings
+	const [existingPodcastEpisode] = await db
+		.select({ id: podcastEpisodes.id, status: podcastEpisodes.status, isShort: podcastEpisodes.isShort })
+		.from(podcastEpisodes)
+		.where(eq(podcastEpisodes.scanId, scanId))
+	const isShortPodcastEpisode = await isShortPodcastEpisodePlanned({
+		existingPodcastEpisode,
+		ownerId: topic.ownerId,
+		billedUserId,
+	})
 	const maxFindings = isShortPodcastEpisode ? SHORT_PODCAST_EPISODE_FINDINGS : FULL_PODCAST_EPISODE_FINDINGS
 
 	// skip a Scan that leaves nothing new to narrate
@@ -84,22 +103,14 @@ export async function planPodcastEpisode({
 
 	// reuse the row that an earlier attempt created if it is still recording. that row already passed the checks.
 	// a published, failed, or removed row plans nothing
-	const [existingPodcastEpisode] = await db
-		.select({ id: podcastEpisodes.id, status: podcastEpisodes.status })
-		.from(podcastEpisodes)
-		.where(eq(podcastEpisodes.scanId, scanId))
 	if (existingPodcastEpisode) {
 		const { id: podcastEpisodeId, status } = existingPodcastEpisode
 		return status === "recording" ? { podcastEpisodeId, plannedFindings } : null
 	}
 
-	// the checks that stop a recording before it spends. a Topic records one short Podcast Episode at a time,
-	// and the billed user's budget pays for this Podcast Episode
-	if (isShortPodcastEpisode && (await hasRecordingShortPodcastEpisode(topic.id))) {
-		return skipPodcastEpisode({ scanId, skipReason: "the topic's short episode is still recording" })
-	}
-	if (await isPodcastEpisodeBudgetShareExhausted(billedUserId)) {
-		const skipReason = "the billed user's monthly spend is past the share that episodes may use"
+	// skip a new Podcast Episode that a check stops before it spends
+	const skipReason = await loadPodcastEpisodeSpendSkipReason({ topicId, isShortPodcastEpisode, billedUserId })
+	if (skipReason) {
 		return skipPodcastEpisode({ scanId, skipReason })
 	}
 
@@ -114,6 +125,61 @@ export async function planPodcastEpisode({
 		throw new Error(`the episode row for scan ${scanId} was not created`)
 	}
 	return { podcastEpisodeId: createdPodcastEpisode.id, plannedFindings }
+}
+
+// the row that an earlier attempt created, the Topic's owner, and the user the Podcast Episode bills
+type IsShortPodcastEpisodePlannedOptions = {
+	existingPodcastEpisode: { isShort: boolean } | undefined
+	ownerId: string
+	billedUserId: string
+}
+
+/**
+ * Whether a Podcast Episode is short. A row that an earlier attempt created keeps the length it was planned at, a Topic
+ * whose owner lacks full Podcast Episodes gets a short one, and so does one whose billed user's spend is past the full
+ * Podcast Episodes cutoff.
+ */
+export async function isShortPodcastEpisodePlanned({
+	existingPodcastEpisode,
+	ownerId,
+	billedUserId,
+}: IsShortPodcastEpisodePlannedOptions): Promise<boolean> {
+	// a retry keeps the row's length, and a first attempt reads the owner's plan and the billed user's spend
+	if (existingPodcastEpisode) {
+		return existingPodcastEpisode.isShort
+	}
+	return (
+		!(await hasFullPodcastEpisodes(ownerId)) || (await isMonthlyBudgetCutoffPassed(billedUserId, "fullPodcastEpisodes"))
+	)
+}
+
+// the Topic that records the Podcast Episode, whether the Podcast Episode is short, and the user it bills
+type LoadPodcastEpisodeSpendSkipReasonOptions = {
+	topicId: string
+	isShortPodcastEpisode: boolean
+	billedUserId: string
+}
+
+/**
+ * Returns why a new Podcast Episode stops before it spends, or null if it may record. A Topic records one short Podcast
+ * Episode at a time, and the billed user's budget pays for the Podcast Episode until their spend passes the podcast
+ * episodes cutoff.
+ */
+export async function loadPodcastEpisodeSpendSkipReason({
+	topicId,
+	isShortPodcastEpisode,
+	billedUserId,
+}: LoadPodcastEpisodeSpendSkipReasonOptions): Promise<string | null> {
+	// a new short Podcast Episode stops while the Topic's short one is still recording
+	if (isShortPodcastEpisode && (await hasRecordingShortPodcastEpisode(topicId))) {
+		return "the topic's short podcast episode is still recording"
+	}
+
+	// the billed user's spend past the podcast episodes cutoff stops the Podcast Episode
+	if (await isMonthlyBudgetCutoffPassed(billedUserId, "podcastEpisodes")) {
+		return "the billed user's monthly spend is past the podcast episodes cutoff"
+	}
+	return null
 }
 
 /**

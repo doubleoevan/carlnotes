@@ -1,8 +1,10 @@
 // the chat tables: chat turns and their attachments, chat proposals, the chat rooms' messages, mentions, summaries,
 // and files, the link previews, and the docs sections retrieved into chat
+import { sql } from "drizzle-orm"
 import {
 	bigint,
 	boolean,
+	check,
 	index,
 	integer,
 	numeric,
@@ -13,7 +15,15 @@ import {
 	unique,
 	vector,
 } from "drizzle-orm/pg-core"
-import { attachmentStatus, chatAttachmentKind, primaryId, timestamps } from "./columns"
+import {
+	attachmentStatus,
+	chatAttachmentKind,
+	chatTurnKind,
+	podcastEpisodeSpeaker,
+	primaryId,
+	timestamps,
+} from "./columns"
+import { podcastEpisodes } from "./podcast"
 import { EMBED_DIMENSIONS } from "./scans"
 import { teams } from "./teams"
 import { topics } from "./topics"
@@ -24,6 +34,9 @@ export const chatTurns = pgTable(
 	"chat_turns",
 	{
 		id: primaryId(),
+		// what the row records: a private chat turn, a podcast chat turn, a chat room turn, or a transcription's or a
+		// spoken part's spend. every insert names it
+		kind: chatTurnKind("kind").notNull(),
 		// who asked
 		userId: text("user_id")
 			.notNull()
@@ -47,20 +60,45 @@ export const chatTurns = pgTable(
 		totalTokens: integer("total_tokens"),
 		// whether the question was spoken and its reply read aloud. a voice spend row stays false
 		isSpoken: boolean("is_spoken").notNull().default(false),
+		// a podcast chat turn's podcast episode, the position of the chapter it was asked during, and the speaker who
+		// answered it
+		podcastEpisodeId: text("episode_id").references(() => podcastEpisodes.id, { onDelete: "cascade" }),
+		chapterPosition: integer("chapter_position"),
+		podcastAnswerSpeaker: podcastEpisodeSpeaker("podcast_answer_speaker"),
 		// when the chat turn ran. the monthly spend sum uses it and the chat messages replay in its order
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// covers a user's persisted conversation read by topic and time, and the monthly spend sum by user and time
+	// covers a user's persisted conversation read by topic and time, and the monthly spend sum by user and time.
+	// the podcast episode index serves the delete of a podcast episode
 	(table) => [
 		index("chat_turns_topic_created_idx").on(table.topicId, table.createdAt),
 		index("chat_turns_team_created_idx").on(table.teamId, table.createdAt),
 		index("chat_turns_user_created_idx").on(table.userId, table.createdAt),
+		// only podcast chat turns name a podcast episode, so the index leaves out every other row
+		index("chat_turns_episode_id_idx").on(table.podcastEpisodeId).where(sql`${table.podcastEpisodeId} is not null`),
+		// a chat room turn always names the chat room message it answered, keeps no text, and is the only kind that names
+		// one
+		check(
+			"chat_turns_chat_room_shape",
+			sql`(${table.kind} = 'chat_room') = (${table.roomMessageId} is not null) and (${table.kind} <> 'chat_room' or (${table.question} is null and ${table.answer} is null))`,
+		),
+		// a podcast chat turn always names its podcast episode, its chapter, and the speaker who answered, on a topic and
+		// no team, and is the only kind that names them
+		check(
+			"chat_turns_podcast_shape",
+			sql`(${table.kind} = 'podcast' and ${table.podcastEpisodeId} is not null and ${table.chapterPosition} is not null and ${table.podcastAnswerSpeaker} is not null and ${table.topicId} is not null and ${table.teamId} is null) or (${table.kind} <> 'podcast' and ${table.podcastEpisodeId} is null and ${table.chapterPosition} is null and ${table.podcastAnswerSpeaker} is null)`,
+		),
+		// a voice spend row keeps no text
+		check(
+			"chat_turns_spend_shape",
+			sql`${table.kind} not in ('transcription', 'speech') or (${table.question} is null and ${table.answer} is null and ${table.toolCalls} is null)`,
+		),
 	],
 )
 
-// the change carl previewed in a private chat turn, kept until the user's next message on that page answers it.
-// the row holds a keyed digest of the preview and no words of it, so a conversation that is not persisted keeps
-// nothing readable here
+// the change carl previewed in a chat turn, kept until the user's next message on that page answers it. a private
+// chat's row holds a keyed digest of the preview and no words of it, so a conversation that is not persisted keeps
+// nothing readable here. a team chat room's row holds the topic edit itself, encrypted like the chat room messages
 export const chatProposals = pgTable(
 	"chat_proposals",
 	{
@@ -70,15 +108,27 @@ export const chatProposals = pgTable(
 			.references(() => users.id, { onDelete: "cascade" }),
 		// the topic the preview would change. null on the new-topic chat, whose preview is the topic draft
 		topicId: text("topic_id").references(() => topics.id, { onDelete: "cascade" }),
+		// the team whose topic chat room showed the preview, or null for the topic's private chat or the new-topic chat
+		teamId: text("team_id").references(() => teams.id, { onDelete: "cascade" }),
 		// the chat turn that showed the preview
 		chatTurnId: text("chat_turn_id")
 			.notNull()
 			.references(() => chatTurns.id, { onDelete: "cascade" }),
-		digest: text("digest").notNull(),
+		// a private chat's keyed digest of the preview, or a chat room's encrypted topic edit
+		digest: text("digest"),
+		topicEdit: text("topic_edit"),
 		createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 	},
-	// one preview per user per chat page. nulls compare equal here so the new-topic chat's upsert finds its row
-	(table) => [unique("chat_proposals_page_unique").on(table.userId, table.topicId).nullsNotDistinct()],
+	// one preview per user per chat page, and per team on a topic's team chat room. nulls compare equal here so the
+	// new-topic chat's upsert finds its row. a private row holds a digest alone and a chat room row a topic edit alone
+	(table) => [
+		unique("chat_proposals_page_unique").on(table.userId, table.topicId, table.teamId).nullsNotDistinct(),
+		index("chat_proposals_team_id_idx").on(table.teamId),
+		check(
+			"chat_proposals_shape",
+			sql`(${table.teamId} is not null and ${table.topicId} is not null and ${table.topicEdit} is not null and ${table.digest} is null) or (${table.teamId} is null and ${table.digest} is not null and ${table.topicEdit} is null)`,
+		),
+	],
 )
 
 // an attachment a user sent with a chat turn, whether or not they kept it for the topic
@@ -226,7 +276,8 @@ export const linkPreviews = pgTable(
 		// where the page's proxied image lives in object storage
 		imageObjectKey: text("image_object_key"),
 		imageContentType: text("image_content_type"),
-		// ready holds a fetched link preview. failed records a url that could not be previewed, which stops it being refetched on every post
+		// ready holds a fetched link preview. failed records a url that could not be previewed, which stops it being
+		// refetched on every post
 		status: attachmentStatus("status").notNull(),
 		// the team whose message paid for the fetch
 		fetchedByTeamId: text("fetched_by_team_id").references(() => teams.id, { onDelete: "set null" }),

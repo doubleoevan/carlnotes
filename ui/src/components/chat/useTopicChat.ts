@@ -1,19 +1,21 @@
 // the chat panel's conversation state, owned by one hook so the panel components stay pure view
 import type { KeptChatAttachment, TopicToolCalls } from "@shared/contracts/chat"
+import { toPodcastEpisodeNoteParts, withoutAttachmentNote } from "@shared/contracts/chatQuestionNotes"
 import type { ChatAttachment, VoiceChatPage } from "@shared/payloads"
-import { toFinishedSpokenParts, toUnfinishedSpokenParts } from "@shared/spokenText"
 import type { TopicDraft } from "@shared/topicPayloads"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { type ChatPage, type ChatSendResult, sendChatTurn, sendClearChat } from "@/clients/chatClient"
-import { type SpokenQuestionTimings, sendSpokenQuestionEvent, toVoiceChatPage } from "@/clients/voiceClient"
+import { type SpokenQuestionTimings, toVoiceChatPage } from "@/clients/voiceClient"
 import { toChatHistoryTurns } from "@/components/chat/chatHistoryTurns"
 import {
 	type ChatTurn,
-	replaceNewestChatTurn,
+	replaceChatTurn,
 	toFinishedChatTurns,
 	toKeptAttachmentPlaceholders,
 	toSentChatTurn,
+	upsertChatTurn,
+	withoutChatTurn,
 } from "@/components/chat/chatTurns"
 import { applyTopicEditToolCalls, toastTopicToolCalls } from "@/components/chat/topicToolCalls"
 import { useChatAttachments } from "@/components/chat/useChatAttachments"
@@ -22,15 +24,12 @@ import { type EditableTopicDraft, useEditableTopicDraft } from "@/components/cha
 import { useLinkPreviewRefresh } from "@/components/chat/useLinkPreviewRefresh"
 import { useNewTopicDraft } from "@/components/chat/useNewTopicDraft"
 import { publishTopicChanged, setChatId } from "@/stores/chatPanelStore"
-import {
-	appendSpokenAnswerPart,
-	completeSpokenAnswer,
-	stopSpokenAnswerKey,
-	toSpokenAnswerState,
-} from "@/stores/spokenAnswerStore"
+import { subscribeToPodcastEpisodeQuestionChatTurn } from "@/stores/podcastEpisodeQuestionStore"
+import { stopSpokenAnswerKey } from "@/stores/spokenAnswerStore"
+import { type StreamedSpokenAnswer, toStreamedSpokenAnswer } from "@/stores/streamedSpokenAnswer"
 
 // how a question is sent: typed, or spoken with the timings its spoken question event reports
-export type SendChatTurnOptions = {
+type QuestionSendOptions = {
 	isSpoken?: boolean
 	spokenQuestionTimings?: SpokenQuestionTimings
 }
@@ -60,7 +59,7 @@ export type TopicChat = ChatConversationGates & {
 	voiceChatPage: VoiceChatPage | null
 	// send streams the question's reply, a retry's or a spoken transcript's in place of the draft, and stop cuts
 	// it keeping whatever arrived
-	send: (questionText?: string, options?: SendChatTurnOptions) => Promise<void>
+	send: (questionText?: string, options?: QuestionSendOptions) => Promise<void>
 	stop: () => void
 	clear: () => Promise<boolean>
 }
@@ -108,10 +107,25 @@ export function useTopicChat(page: ChatPage): TopicChat {
 	} = useNewTopicDraft(page)
 	// the stored conversation, and the gates that its load resolves
 	const chatConversationGates = useChatConversationLoad({ page, setChatTurns, setTopicDraft, setKeptAttachments })
-	// the newest chat turn's link preview cards poll in the background until they complete
+	// each finished chat turn's link preview cards poll in the background until they complete
 	const startLinkPreviewRefresh = useLinkPreviewRefresh(page, setChatTurns)
 	// the page the voice routes name, once the load says voice is on
 	const voiceChatPage = chatConversationGates.isVoiceChatConfigured ? toVoiceChatPage(page) : null
+
+	// a question asked from the podcast player about this topic shows here as it streams, without speaking it again, and
+	// leaves if a stop before any text drops it
+	useEffect(() => {
+		if (page.topicId === undefined) {
+			return
+		}
+		return subscribeToPodcastEpisodeQuestionChatTurn(page.topicId, ({ chatTurn, isDropped }) =>
+			setChatTurns((previousChatTurns) =>
+				isDropped
+					? withoutChatTurn(previousChatTurns, chatTurn.spokenAnswerKey)
+					: upsertChatTurn(previousChatTurns, chatTurn),
+			),
+		)
+	}, [page.topicId])
 
 	// a panel that unmounts stops the reply it was speaking. the text stream goes on
 	useEffect(
@@ -134,12 +148,12 @@ export function useTopicChat(page: ChatPage): TopicChat {
 
 	// toast the saves and rejections, show the topic draft, and open a created topic, else reload the page behind the
 	// panel
-	const handleToolCalls = (toolCalls: TopicToolCalls): void => {
+	const handleToolCalls = (spokenAnswerKey: string, toolCalls: TopicToolCalls): void => {
 		// keep the chat tool calls on the chat turn, so the model reads a save as a call
 		const streamedChatToolCalls = toolCalls.chatToolCalls
 		if (streamedChatToolCalls) {
 			setChatTurns((previousChatTurns) =>
-				replaceNewestChatTurn(previousChatTurns, (chatTurn) => ({
+				replaceChatTurn(previousChatTurns, spokenAnswerKey, (chatTurn) => ({
 					...chatTurn,
 					toolCalls: [...(chatTurn.toolCalls ?? []), ...streamedChatToolCalls],
 				})),
@@ -185,14 +199,14 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		return false
 	}
 
-	// send the user question, appending the reply to the newest chat turn as each chunk arrives
-	async function send(questionText?: string, sendOptions: SendChatTurnOptions = {}): Promise<void> {
+	// send the user question, appending the reply to its own chat turn as each chunk arrives
+	async function send(questionText?: string, sendOptions: QuestionSendOptions = {}): Promise<void> {
 		const isSpoken = sendOptions.isSpoken ?? false
 
-		// a retry re-asks a finished chat turn's question, stripped of its attachment note. a spoken transcript is a
-		// new question, sent instead of the draft
+		// a retry re-asks a finished chat turn's question, stripped of its notes. a spoken transcript is a new question,
+		// sent instead of the draft
 		const isRetry = questionText !== undefined && !isSpoken
-		const askedQuestion = (questionText ?? question).replace(/(?:^|\n\n)\[attached: [^\]]*\]$/, "").trim()
+		const askedQuestion = toAskedQuestion(questionText ?? question)
 
 		// a chat turn may be attachments alone, but a retry does not resend attachments and needs its question. a spoken
 		// question sends its transcript alone and leaves the draft and its attachments in the composer
@@ -214,9 +228,9 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		setIsStreaming(true)
 
 		// a spoken question's reply is spoken as it streams, and keeps the whole answer to split it
-		const streamedSpokenAnswer = toStreamedSpokenAnswer({
+		const streamedSpokenAnswer = toSentQuestionStreamedSpokenAnswer({
 			spokenAnswerKey: sentChatTurn.spokenAnswerKey,
-			page: voiceChatPage,
+			voiceChatPage,
 			...sendOptions,
 		})
 		let streamedAnswer = ""
@@ -225,27 +239,30 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		// stream under a fresh abort controller, so the stop button can cut this chat turn and only this chat turn
 		const controller = new AbortController()
 		abortRef.current = controller
-		const chatSendResult = await sendChatTurn(
+		const chatSendResult = await sendChatTurn({
 			page,
-			askedQuestion,
-			chatHistoryTurns,
-			sentAttachments,
-			(chunk) => {
+			question: askedQuestion,
+			history: chatHistoryTurns,
+			attachments: sentAttachments,
+			onChunk: (chunk) => {
 				streamedAnswer += chunk
 				streamedSpokenAnswer?.appendChunk(streamedAnswer)
 				setChatTurns((previousChatTurns) =>
-					replaceNewestChatTurn(previousChatTurns, (chatTurn) => ({ ...chatTurn, answer: chatTurn.answer + chunk })),
+					replaceChatTurn(previousChatTurns, sentChatTurn.spokenAnswerKey, (chatTurn) => ({
+						...chatTurn,
+						answer: chatTurn.answer + chunk,
+					})),
 				)
 			},
-			handleToolCalls,
-			controller.signal,
-			page.newTopic ? topicDraft : undefined,
+			onToolCalls: (toolCalls) => handleToolCalls(sentChatTurn.spokenAnswerKey, toolCalls),
+			signal: controller.signal,
+			topicDraft: page.newTopic ? topicDraft : undefined,
 			isSpoken,
-		)
+		})
 		abortRef.current = null
 		streamingSpokenAnswerKeyRef.current = null
 		streamedSpokenAnswer?.finish(streamedAnswer, chatSendResult)
-		finishSend(chatSendResult)
+		finishSend(sentChatTurn.spokenAnswerKey, chatSendResult)
 	}
 
 	// clear the draft from the composer and return its attachments, which post with this chat turn. the kept
@@ -258,11 +275,11 @@ export function useTopicChat(page: ChatPage): TopicChat {
 	}
 
 	// complete the chat turn the reply filled, then follow wherever that reply pointed
-	function finishSend(chatSendResult: ChatSendResult): void {
+	function finishSend(spokenAnswerKey: string, chatSendResult: ChatSendResult): void {
 		// a stop before any text drops the whole chat turn, so the empty bubble never lingers
-		setChatTurns((previousChatTurns) => toFinishedChatTurns(previousChatTurns, chatSendResult))
+		setChatTurns((previousChatTurns) => toFinishedChatTurns(previousChatTurns, { spokenAnswerKey, chatSendResult }))
 		setIsStreaming(false)
-		startLinkPreviewRefresh()
+		startLinkPreviewRefresh(spokenAnswerKey)
 		// open the new-topic chat the reply asked for
 		if (shouldOpenNewTopicChatRef.current) {
 			shouldOpenNewTopicChatRef.current = false
@@ -288,7 +305,7 @@ export function useTopicChat(page: ChatPage): TopicChat {
 		}
 	}
 
-	// cut the in-flight chat turn. the text already on screen stays there
+	// cut the chat turn in progress. the text already on screen stays there
 	function stop(): void {
 		abortRef.current?.abort()
 	}
@@ -328,72 +345,30 @@ export function useTopicChat(page: ChatPage): TopicChat {
 	}
 }
 
-// what a spoken question's reply does as it streams: speak each finished paragraph, then the rest, and post the
-// spoken question event once
-type StreamedSpokenAnswer = {
-	appendChunk: (answer: string) => void
-	finish: (answer: string, chatSendResult: ChatSendResult) => void
+/**
+ * Returns a question as a send asks it, without the podcast episode note and then the attachment note that a stored
+ * question ends with, so a retry re-asks only the words.
+ */
+export function toAskedQuestion(question: string): string {
+	const { question: questionWithoutPodcastEpisodeNote } = toPodcastEpisodeNoteParts(question)
+	return withoutAttachmentNote(questionWithoutPodcastEpisodeNote).trim()
 }
 
-// the chat turn the reply fills, the page it speaks on, null while voice is off, and how the question was sent
-type ToStreamedSpokenAnswerOptions = { spokenAnswerKey: string; page: VoiceChatPage | null } & SendChatTurnOptions
+// the reply's key, the page its speech posts for, and the send's spoken flag and timings
+type ToSentQuestionStreamedSpokenAnswerOptions = QuestionSendOptions & {
+	spokenAnswerKey: string
+	voiceChatPage: VoiceChatPage | null
+}
 
-// the speaker of one spoken question's reply, keyed by the chat turn the reply fills. a typed question and a question
-// asked while voice is off have no speaker
-function toStreamedSpokenAnswer({
+// the streamed spoken answer of a spoken question's reply, or null for a typed question and a question asked while
+// voice is off
+function toSentQuestionStreamedSpokenAnswer({
 	spokenAnswerKey,
-	page,
+	voiceChatPage,
 	isSpoken,
 	spokenQuestionTimings,
-}: ToStreamedSpokenAnswerOptions): StreamedSpokenAnswer | null {
-	if (!isSpoken || !page || !spokenQuestionTimings) {
-		return null
-	}
-
-	// where the next unfinished spoken part starts, and whether the spoken question event posted
-	let spokenPartStart = 0
-	let isQuestionEventPosted = false
-
-	// post the spoken question event once, with the first spoken word's delay if a spoken part played
-	const postQuestionEvent = (playingAt: number | null): void => {
-		if (isQuestionEventPosted) {
-			return
-		}
-		isQuestionEventPosted = true
-		sendSpokenQuestionEvent({ page, spokenQuestionTimings, playingAt })
-	}
-
-	// append one spoken part, with the first playing reporting the event
-	const speak = (text: string): void => {
-		appendSpokenAnswerPart({ spokenAnswerKey, page, text, onFirstPlaying: postQuestionEvent })
-	}
-	return {
-		// speak the short first spoken part at its sentence end, then each paragraph as its blank line arrives
-		appendChunk: (answer) => {
-			const finishedSpokenParts = toFinishedSpokenParts(answer, spokenPartStart)
-			spokenPartStart = finishedSpokenParts.spokenPartStart
-			for (const spokenPart of finishedSpokenParts.spokenParts) {
-				speak(spokenPart)
-			}
-		},
-		// go quiet with a stopped or rejected stream, or speak the rest
-		finish: (answer, chatSendResult) => {
-			if (chatSendResult !== null) {
-				stopSpokenAnswerKey(spokenAnswerKey)
-				postQuestionEvent(null)
-				return
-			}
-
-			// the unfinished tail is the last spoken part
-			for (const spokenPart of toUnfinishedSpokenParts(answer, spokenPartStart)) {
-				speak(spokenPart)
-			}
-
-			// a reply that queued nothing posts the event now, and a queue posts it from its first playing or its end
-			completeSpokenAnswer(spokenAnswerKey)
-			if (toSpokenAnswerState(spokenAnswerKey) === "idle") {
-				postQuestionEvent(null)
-			}
-		},
-	}
+}: ToSentQuestionStreamedSpokenAnswerOptions): StreamedSpokenAnswer | null {
+	return isSpoken && voiceChatPage && spokenQuestionTimings
+		? toStreamedSpokenAnswer({ spokenAnswerKey, page: voiceChatPage, spokenQuestionTimings })
+		: null
 }

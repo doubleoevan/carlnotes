@@ -3,7 +3,8 @@
 import type { Assertion, EvaluateResult, GradingResult, TestCase } from "promptfoo"
 import { cheapModel } from "../../worker/models"
 import type { SuggestedSource } from "../../worker/suggest"
-import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toGradingResult } from "../evalChecks"
+import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { toPercentLabel } from "../evalLabels"
 import {
 	MIN_READABLE_SUGGESTIONS,

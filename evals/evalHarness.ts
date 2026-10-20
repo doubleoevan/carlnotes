@@ -9,7 +9,6 @@ import {
 	type Assertion,
 	type EvaluateResult,
 	evaluate,
-	type GradingResult,
 	type ProviderResponse,
 	type TestCase,
 } from "promptfoo"
@@ -188,13 +187,6 @@ export async function runEval(runEvalOptions: RunEvalOptions): Promise<void> {
  */
 export function toRubricGrader(model: LanguageModel): ApiProvider {
 	return { id: () => toModelId(model), callApi: (gradingPrompt) => gradeRubric(model, gradingPrompt) }
-}
-
-/**
- * Returns a check's promptfoo grading result, which passes if there is no failure reason.
- */
-export function toGradingResult(failureReason?: string): GradingResult {
-	return { pass: !failureReason, score: failureReason ? 0 : 1, reason: failureReason ?? "passed" }
 }
 
 /**

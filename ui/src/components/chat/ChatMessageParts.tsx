@@ -1,11 +1,13 @@
 // the chat message pieces the private chat and the chat room share: the time ago label, the video clip, the copy
 // button, and carl's thinking bubble
+import { PODCAST_EPISODE_SPEAKER_NAMES } from "@shared/podcastEpisodes"
 import { Check, Copy } from "lucide-react"
 import { useState } from "react"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { ChatAuthor } from "@/components/chat/ChatAuthor"
 import { randomThinkingLine } from "@/components/chat/thinkingLines"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { ANSWER_BUBBLE_CLASS } from "@/lib/styleClasses"
 import { copyToClipboard } from "@/lib/utils"
 
 /**
@@ -87,9 +89,9 @@ export function ThinkingLine() {
 /** Carl's bubble while he thinks: the avatar, the mug, and the shimmer. */
 export function ModelThinkingBubble() {
 	return (
-		<ChatAuthor authorUserId={null} authorUsername="Carl">
+		<ChatAuthor authorUserId={null} authorUsername={PODCAST_EPISODE_SPEAKER_NAMES.host}>
 			<div className="flex flex-col items-start">
-				<div className="bg-bubble text-foreground max-w-[92%] rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm @lg:max-w-[75%]">
+				<div className={ANSWER_BUBBLE_CLASS}>
 					{/* coffee-loading keeps the mug steaming where the logo's steam is held still on a narrow device,
 						to show a reply in progress */}
 					<span className="coffee-loading text-muted-foreground flex items-center gap-2">

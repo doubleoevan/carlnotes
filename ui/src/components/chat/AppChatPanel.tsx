@@ -12,6 +12,7 @@ import { ChatLoadingPanel, ChatPill } from "@/components/chat/ChatPanelWidget"
 import { ChatRoomPanel } from "@/components/chat/ChatRoomPanel"
 import { PrivateChatPanel } from "@/components/chat/PrivateChatPanel"
 import { Button } from "@/components/primitives/button"
+import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { useSearchParams } from "@/hooks/useSearchParams"
 import { isWideScreen } from "@/lib/utils"
@@ -345,7 +346,7 @@ function NoConversationPanel({ panelState }: { panelState: ChatPanelState }) {
 			actionLine="Sign up to begin the conversation"
 			placeholder="Carl is waiting for your topic…"
 		>
-			<Button className="shrink-0" onClick={() => navigate({ to: "/signup", search: { cta: "chat" } })}>
+			<Button className="shrink-0" onClick={() => navigate(toSignupNavigation("chat"))}>
 				Sign up
 			</Button>
 		</ChatCallToActionPanel>

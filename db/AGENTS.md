@@ -56,27 +56,42 @@ Drizzle + Neon Postgres, and the Redis store.
   A sweep or reset that starts while another run's lease is live does nothing and returns null.
 - `quotas.ts` — the derived per-user limits, and `loadUserAccess`, the one read of a user's role, plan, and budget
   override, which the api and the worker share.
-  `monthlySpendDollars` reads a user's spend for the month on scans, chat turns, and podcast episodes.
-  `isPodcastEpisodeBudgetShareExhausted` is true once that spend reaches the plan's share of the budget, which pauses
-  episodes. `hasFullPodcastEpisodes` is true on a paid plan or for an admin, and the free plan gets short episodes.
+  `monthlySpendDollars` reads a user's spend for the month on scans, chat turns, and podcast episodes, once per request
+  through the request memo. `hasFullPodcastEpisodes` is true on a paid plan or for an admin, and the free plan gets
+  short podcast episodes.
+- `monthlyBudgetCutoffs.ts` — the monthly budget cutoffs. `isMonthlyBudgetCutoffPassed` is true once the month's spend
+  reaches the share of the budget where the plan stops a kind of spend: spoken questions, full podcast episodes,
+  podcast episodes, daily scans, or manual scans. The daily scans cutoff moves with the daily scans left this month, at
+  the mean cost of `loadRecentScanCostDollars` over the scans not started by hand, with a weekdays topic charged only
+  for the weekdays left, and `loadMonthlyBudgetCutoffs` returns every cutoff for the spend meter.
 - `podcastFeedCache.ts` — the Redis keys of a Topic's rendered podcast feeds,
   and `deletePodcastFeedCache`, which a publish, a removal, or a rename runs.
-- `requestMemo.ts` — the reads one request repeats, its user's access and each topic role, kept in the request's
-  async context. The api opens a memo for every request, and outside a request every read goes to the database.
+- `requestMemo.ts` — the reads one request repeats, its user's access, each topic role, and its monthly spend, kept
+  in the request's async context. The api opens a memo for every request, the worker one for each podcast episode plan
+  and each sweep's limit reads, and outside a memo every read goes to the database.
 - `queryTracing.ts` — counts each statement a request sends and traces it under the request's span, and counts the
   request's cache hits and misses with the keys that missed, which `redis.ts` reports to it. A write statement clears
   the memo of the request that sent it. `countRequestStatement` is the one count, which the connection pool stub
   calls too, so a test's queries count the way real ones do.
 - `redisFakeServer.ts` — the fake Redis server behind `redis.test.ts`, `redisRateLimits.test.ts`, and
   `redisGauges.test.ts`: in-memory clients that connect, drop, subscribe, and deliver published messages, with the
-  reconnect delays shortened to nothing. `startFakeRedisStore` builds the store's clients on a fresh one.
+  reconnect delays shortened to nothing. `startFakeRedisStore` builds the store's clients on a fresh one, and
+  `toEveryTimerInstantSetTimeout`, which the billing tests share for the key reissue's retries, runs every timer at
+  once.
 - `redisClientStub.ts` — the Redis client stub that the tests share. `stubRedisClient` swaps the store's clients for
   in-memory fakes over one map and returns the map, and `restoreRedisClient` puts the store's own builder back. Only
   tests import it.
+- `quotaTestFixtures.ts` — `withSpendQueryRows`, the stubbed rows that the quota and monthly budget cutoff
+  tests share: an access row and each table's spend sum. Only tests import it.
 - `connectionPoolStub.ts` — the connection pool stub that the tests share. `stubConnectionPool` returns the rows that
   a test picks for each query, records each query sent, counts each one toward the running request, and runs a
   transaction's callback on the stubbed client. `restoreConnectionPool` puts the pool's own query and the client's own
-  transaction back, and `toTableRow` builds a row in a table's column order. Only tests import it.
+  transaction back, and `toTableRow` builds a row in a table's column order. The free, plus, and admin access rows
+  and `toSpendSumRows`, a spend sum's row from the dollars given for each table, are what the spend tests return. Only
+  tests import it.
+- `chatTurnShapes.smoke.ts` (`bun run smoke:chat-turns`) — inserts a row of every chat turn kind, each chat proposal
+  shape, and every mismatched shape inside one rolled-back transaction, proving each check constraint rejects a row
+  whose columns do not match its kind.
 - `migrate.ts` applies pending migrations, then sets the role's `statement_timeout` to 30 seconds, which the connection
   pooler's server connections take as the role's default, so a runaway query is cancelled instead of holding a pooled
   connection. A migration that needs longer puts `SET LOCAL statement_timeout = 0` first in its own SQL. `seed.ts` has

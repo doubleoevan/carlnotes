@@ -3,6 +3,7 @@ import tailwindcss from "@tailwindcss/vite"
 import { tanstackStart } from "@tanstack/react-start/plugin/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vite"
+import { voiceActivityAssetsPlugin } from "./voiceActivityAssetsPlugin"
 
 // the Hono dev server's origin, which the proxy below forwards to
 const API_ORIGIN = "http://localhost:3000"
@@ -11,8 +12,9 @@ const API_ORIGIN = "http://localhost:3000"
  * The Vite config for the UI.
  */
 export default defineConfig({
-	// the TanStack Start plugin generates the route tree from src/routes and has to run before the React plugin
-	plugins: [tanstackStart(), react(), tailwindcss()],
+	// the TanStack Start plugin generates the route tree from src/routes and has to run before the React plugin. the
+	// voice activity plugin serves the files the podcast player's question detector loads
+	plugins: [tanstackStart(), react(), tailwindcss(), voiceActivityAssetsPlugin()],
 	resolve: {
 		// path aliases for app src and the shared package
 		alias: { "@": path.resolve(__dirname, "./src"), "@shared": path.resolve(__dirname, "../shared") },

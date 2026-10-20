@@ -107,7 +107,7 @@ if [[ -z "$(get_secret LITELLM_DEV_KEY)" ]]; then
     -H "Content-Type: application/json" \
     -d '{"key_alias":"dev","max_budget":25,"budget_duration":"30d"}' | jq -r '.key')"
 
-  # refuse to store a failed request, or the empty check above never fires again
+  # exit without storing the dev key if the key request failed
   if [[ -z "$DEV_KEY" || "$DEV_KEY" == "null" ]]; then
     echo "dev key request failed: check the proxy logs (docker compose logs litellm)" >&2
     exit 1

@@ -209,7 +209,8 @@ export function toInstantReconnectSetTimeout(reconnectDelaysMs: number[]): typeo
 	}) as unknown as typeof setTimeout
 }
 
-// a setTimeout that runs every timer's callback after zero milliseconds, so a command's deadline passes at once too
+// a setTimeout that runs every timer's callback after zero milliseconds, so a command's deadline or a backoff passes at
+// once too
 export function toEveryTimerInstantSetTimeout(): typeof setTimeout {
 	return ((callback: () => void) => originalSetTimeout(callback, 0)) as unknown as typeof setTimeout
 }

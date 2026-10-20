@@ -14,7 +14,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { cn } from "@/lib/utils"
-import { toChatRoomSpokenAnswerKey } from "@/stores/spokenAnswerStore"
+import { toChatRoomSpokenAnswerKey } from "@/stores/spokenAnswerQueue"
 
 // the icon each shared file kind shows beside its name
 const ATTACHMENT_KIND_ICONS = { image: Image, pdf: FileText, document: FileText, text: Paperclip, video: Film } as const

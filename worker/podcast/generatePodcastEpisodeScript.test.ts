@@ -3,6 +3,7 @@
 import { expect, test } from "bun:test"
 import { SHORT_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import { NoObjectGeneratedError } from "ai"
+import { toUntrustedFences } from "../prompts/untrustedFenceTestFixtures"
 import {
 	buildOutlinePrompt,
 	buildSegmentPrompt,
@@ -71,15 +72,12 @@ test("the outline and segment prompts fence every untrusted input and restate th
 
 	for (const { prompt } of [outlinePrompt, segmentPrompt]) {
 		// one nonce delimiter fences the values, and nothing is left unfilled
-		const nonce = prompt.match(/<untrusted-data-([0-9a-f-]{36})>/)?.[1]
-		expect(nonce).toBeDefined()
+		const untrustedFences = toUntrustedFences(prompt)
+		expect(untrustedFences[0]?.nonce).toBeDefined()
 		expect(prompt).not.toContain("{{")
 
 		// the Topic's text and a Finding's stored content sit inside a fence
-		const fencedMatches = [
-			...prompt.matchAll(/<untrusted-data-[0-9a-f-]{36}>([\s\S]*?)<\/untrusted-data-[0-9a-f-]{36}>/g),
-		]
-		const fencedText = fencedMatches.map((fencedMatch) => fencedMatch[1]).join("\n")
+		const fencedText = untrustedFences.map((untrustedFence) => untrustedFence.value).join("\n")
 		expect(fencedText).toContain("gear for a small kitchen")
 		expect(fencedText).toContain("The burr set runs at 62 decibels.")
 		expect(fencedText).toContain("stored content:\nnone")

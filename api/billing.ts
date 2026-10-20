@@ -1,5 +1,6 @@
 // Stripe Billing: Checkout, the Customer Portal
-// SETUP: create plus and premium products with monthly and yearly prices, plus a metered manual-scan overage price in Stripe
+// SETUP: create plus and premium products with monthly and yearly prices, plus a metered manual-scan overage price in
+// Stripe
 import { trackEvent } from "@shared/analytics"
 import { appUrl } from "@shared/appUrl"
 import type { BillingState } from "@shared/contracts/profiles"
@@ -10,7 +11,7 @@ import Stripe from "stripe"
 import { db } from "../db"
 import { billingSubscriptions } from "../db/schema/billing"
 import { users } from "../db/schema/users"
-import { replaceUserLiteLLMKey } from "../worker"
+import { isUserLiteLLMKeyBudgetStale, replaceUserLiteLLMKey } from "../worker"
 import { refreshSessionUser } from "./sessions"
 import { scansToday } from "./topic/quotas"
 
@@ -45,8 +46,9 @@ type SubscriptionProjection = {
 }
 
 /**
- * Start a Stripe Checkout Session for the plan's price and return its URL. Checkout creates the customer from customer_email.
- * The subscription stores the userId and plan in metadata, so the webhook can update the user's billing state without a reverse price lookup.
+ * Start a Stripe Checkout Session for the plan's price and return its URL. Checkout creates the customer from
+ * customer_email. The subscription stores the userId and plan in metadata, so the webhook can update the user's billing
+ * state without a reverse price lookup.
  */
 export async function createCheckoutSession(
 	userId: string,
@@ -73,7 +75,8 @@ export async function createCheckoutSession(
 }
 
 /**
- * Open the Stripe Customer Portal for the user's active subscription, returning its url. Free users have no customer row.
+ * Open the Stripe Customer Portal for the user's active subscription, returning its url. Free users have no customer
+ * row.
  */
 export async function createPortalSession(userId: string): Promise<string | null> {
 	// a user with no active billing subscription has no Stripe customer to manage
@@ -98,7 +101,8 @@ export async function createPortalSession(userId: string): Promise<string | null
  * subscription status for delinquent payments, card-on-file, and daily scan usage.
  */
 export async function loadBillingState(userId: string): Promise<BillingState> {
-	// the plan from the user row, the status and card from the subscription, and today's scan count against the daily limit
+	// the plan from the user row, the status and card from the subscription, and today's scan count against the daily
+	// limit
 	const [user] = await db.select({ plan: users.plan }).from(users).where(eq(users.id, userId))
 	const [subscription] = await db
 		.select({
@@ -152,7 +156,7 @@ export async function handleStripeWebhook(rawBody: string, signature: string | u
 // the Stripe statuses that earn paid entitlements
 const ENTITLED_STRIPE_STATUSES = new Set(["active", "trialing", "past_due"])
 
-// how many times a plan change retries the LiteLLM key before it reports the failure, and the backoff interval
+// how many times a subscription event tries to reissue the LiteLLM key, and the backoff interval between tries
 const MAX_REPLACE_LITELLM_KEY_ATTEMPTS = 3
 const REPLACE_LITELLM_KEY_BACKOFF_MS = 1000
 
@@ -240,7 +244,8 @@ export async function readStripeTotalRevenueCents(sinceUnixSeconds: number): Pro
 	}
 }
 
-// upsert the billing subscription keyed by user ID, or clear it, then update the users.plan and reissue the LiteLLM key
+// upsert the billing subscription keyed by user ID, or clear it, then update the users.plan, and reissue the LiteLLM
+// key if the plan changed or the key's budget is stale
 async function applySubscriptionState(subscription: Stripe.Subscription): Promise<void> {
 	// subscriptions we created must have a userId. ignore anything else
 	const userId = subscription.metadata?.userId
@@ -256,11 +261,12 @@ async function applySubscriptionState(subscription: Stripe.Subscription): Promis
 	const paidSubscription = toPaidSubscription(subscription)
 	if (!paidSubscription) {
 		await db.delete(billingSubscriptions).where(eq(billingSubscriptions.userId, userId))
-		await syncUserPlan(userId, "free")
+		await syncUserPlan({ userId, plan: "free" })
 		// report the cancellation of a paid plan. a repeated clear of a free user reports nothing
 		if (previousPlan !== "free") {
 			trackEvent("subscription_canceled", userId, { entryPoint: "webhook", plan: "free", fromPlan: previousPlan })
 		}
+		await syncUserLiteLLMKey({ userId, plan: "free", previousPlan })
 		return
 	}
 
@@ -269,7 +275,7 @@ async function applySubscriptionState(subscription: Stripe.Subscription): Promis
 		.insert(billingSubscriptions)
 		.values({ userId, ...paidSubscription })
 		.onConflictDoUpdate({ target: billingSubscriptions.userId, set: paidSubscription })
-	await syncUserPlan(userId, paidSubscription.plan)
+	await syncUserPlan({ userId, plan: paidSubscription.plan })
 
 	// report a subscription that started, or a plan that changed. a repeated event for the same plan reports nothing
 	const planProperties = { entryPoint: "webhook", plan: paidSubscription.plan, fromPlan: previousPlan }
@@ -278,22 +284,41 @@ async function applySubscriptionState(subscription: Stripe.Subscription): Promis
 	} else if (previousPlan !== paidSubscription.plan) {
 		trackEvent("plan_changed", userId, planProperties)
 	}
+	await syncUserLiteLLMKey({ userId, plan: paidSubscription.plan, previousPlan })
 }
 
-// set users.plan and the user's sessions to the updated plan, then reissue the LiteLLM key with the new plan's budget
-async function syncUserPlan(userId: string, plan: Plan): Promise<void> {
-	// write the plan to the row, then to the user's sessions
+// the user a subscription event belongs to, and the plan it leaves them on
+type SyncUserPlanOptions = { userId: string; plan: Plan }
+
+// set users.plan and the user's sessions to the event's plan
+async function syncUserPlan({ userId, plan }: SyncUserPlanOptions): Promise<void> {
 	await db.update(users).set({ plan }).where(eq(users.id, userId))
 	await refreshSessionUser(userId)
+}
 
-	// a failed reissue leaves the key sized to the old plan's budget, so retry before reporting the failure
+// the user a subscription event belongs to, the plan it leaves them on, and the plan they had before it
+type SyncUserLiteLLMKeyOptions = SyncUserPlanOptions & { previousPlan: Plan }
+
+// reissue the LiteLLM key at the user's budget if the plan changed or the key's budget is stale. a new key's spend
+// starts at zero
+async function syncUserLiteLLMKey({ userId, plan, previousPlan }: SyncUserLiteLLMKeyOptions): Promise<void> {
+	// keep the key if the plan is unchanged and the key's maximum budget matches the user's budget
+	if (previousPlan === plan && !(await isUserLiteLLMKeyBudgetStale(userId))) {
+		return
+	}
+
+	// a failed reissue leaves the key sized to the old budget, so retry before reporting the failure
 	for (let attempt = 0; attempt < MAX_REPLACE_LITELLM_KEY_ATTEMPTS; attempt++) {
 		if (await replaceUserLiteLLMKey(userId)) {
 			return
 		}
 		await new Promise((resolve) => setTimeout(resolve, REPLACE_LITELLM_KEY_BACKOFF_MS * (attempt + 1)))
 	}
-	reportError(new Error(`litellm key reissue failed after plan change for user ${userId}`), "billing", { userId })
+
+	// report the failure, then throw an error so the webhook responds 500 and Stripe sends the event again
+	const reissueError = new Error(`litellm key reissue failed for user ${userId}`)
+	reportError(reissueError, "billing", { userId })
+	throw reissueError
 }
 
 /**

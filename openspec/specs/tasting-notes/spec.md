@@ -202,10 +202,11 @@ The section header SHALL read "Tasting Notes" on a topic page and "Team notes" o
 
 ### Requirement: The note dialog says where the note stands
 
-A note saves on its own, so the dialog SHALL say where it stands rather than offering a control to save it. At the foot of the
-dialog, beside the delete, it SHALL show that the note is saving while an update is in flight, that it is saved once one lands, and
-that it is not saved when the provider could not post one. It SHALL NOT offer a Save button: the document is
-collaborative, so there is no local draft to commit, and a button would imply that leaving without it loses work.
+A note saves on its own, so the dialog SHALL say where it stands rather than offering a control to save it. At the foot
+of the dialog, beside the delete, it SHALL show that the note is saving while an update is in progress, that it is saved
+once one lands, and that it is not saved when the provider could not post one. It SHALL NOT offer a Save button: the
+document is collaborative, so there is no local draft to commit, and a button would imply that leaving without it loses
+work.
 
 The status SHALL be the plain fact and nothing else. A failure already explains itself in a toast, so the status SHALL
 NOT repeat the reason.
@@ -215,7 +216,7 @@ may not delete SHALL still see it, so the two sit on that row independently.
 
 #### Scenario: Typing shows the note saving and then saved
 - **WHEN** an editor types into a note
-- **THEN** the dialog shows it saving while the update is in flight, and saved once it lands
+- **THEN** the dialog shows it saving while the update is in progress, and saved once it lands
 
 #### Scenario: A failed save says so and stays saying so
 - **WHEN** the provider cannot post an update

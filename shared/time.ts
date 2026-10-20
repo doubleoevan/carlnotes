@@ -4,6 +4,14 @@
 export const HOUR_MS = 60 * 60 * 1000
 export const DAY_MS = 24 * HOUR_MS
 
+/**
+ * Whether a moment falls on a Saturday or a Sunday in UTC.
+ */
+export function isUtcWeekend(moment: Date): boolean {
+	const utcDay = moment.getUTCDay()
+	return utcDay === 0 || utcDay === 6
+}
+
 // the work to wait for, how long to wait, and the error to reject with once the time limit passes
 export type WithTimeLimitOptions<Result> = { work: Promise<Result>; timeLimitMs: number; toError: () => Error }
 

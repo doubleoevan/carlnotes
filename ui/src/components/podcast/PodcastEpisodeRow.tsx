@@ -6,7 +6,8 @@ import { RemovePodcastEpisodeButton } from "@/components/podcast/RemovePodcastEp
 import { toPodcastEpisodeDayAndDurationLabels, toPodcastEpisodeTitleLabel } from "@/lib/labels"
 import { DASHED_ROW_CLASS, PLAY_BUTTON_CLASS, PLAY_BUTTON_MUTED_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
-import { togglePodcastEpisodePlayback, useIsPodcastEpisodePlaying } from "@/stores/podcastEpisodePlayerStore"
+import { togglePodcastEpisodePlayback } from "@/stores/podcastEpisodePlayActions"
+import { useIsPodcastEpisodePlaying } from "@/stores/podcastEpisodePlayerStore"
 
 // the podcast episode, its page's path, whether the episode is the topic's latest, whether its play button is muted,
 // the row's own classes, and the call that opens the remove dialog, passed only if the user may remove episodes

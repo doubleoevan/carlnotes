@@ -21,6 +21,7 @@ import {
 	topicGateResponse,
 	topicResponse,
 } from "@shared/contracts/topics"
+import { MANUAL_SCAN_PAUSED_LABEL } from "@shared/scanFailure"
 import type { SuggestSourcesPayload, UpdateTopicPayload } from "@shared/topicPayloads"
 import { toast } from "sonner"
 import { apiClient, readApiErrorMessage } from "./apiClient"
@@ -301,13 +302,13 @@ export async function sendSubscriptionEmail(
 	)
 }
 
-// trigger a manual scan, returning the manual scans left today, or "budget" if a spent budget rejects the scan.
-// throw an error for any other failure, with the api's own rejection reason
-export async function sendManualScan(topicId: string): Promise<number | "budget"> {
+// trigger a manual scan, returning the manual scans left today, "budget" if a spent budget rejects the scan, or
+// "paused" if the manual scans cutoff does. throw an error for any other failure, with the api's own rejection reason
+export async function sendManualScan(topicId: string): Promise<number | "budget" | "paused"> {
 	const response = await apiClient.api.topics[":id"].scan.$post({ param: { id: topicId } })
-	// a 402 means the key that the scan bills has spent its budget
+	// a 402 means the key that the scan bills has spent its budget, or the user's spend is past the manual scans cutoff
 	if (response.status === 402) {
-		return "budget"
+		return (await readApiErrorMessage(response)) === MANUAL_SCAN_PAUSED_LABEL ? "paused" : "budget"
 	}
 	if (!response.ok) {
 		throw new Error((await readApiErrorMessage(response)) ?? `scan request failed: ${response.status}`)

@@ -1,4 +1,5 @@
-// the one shared set of enum values. db builds its pgEnums from these, api validates with them, and ui renders with them
+// the one shared set of enum values. db builds its pgEnums from these, api validates with them, and ui renders with
+// them
 export const sourceKinds = [
 	"url",
 	"rss",
@@ -28,7 +29,8 @@ export function toScanFrequenciesSentence(): string {
 }
 
 /**
- * Every visibility a topic can have, as one sentence fragment with "or" before the last, for the prompts that name them.
+ * Every visibility a topic can have, as one sentence fragment with "or" before the last, for the prompts that name
+ * them.
  */
 export function toVisibilitiesSentence(): string {
 	return toOrSentence(visibilities)
@@ -60,8 +62,25 @@ export const scanStatuses = ["running", "succeeded", "failed"] as const
 // a podcast episode's status. recording until it publishes or fails,
 // and removed once its topic's owner or an admin removes it
 export const podcastEpisodeStatuses = ["recording", "published", "failed", "removed"] as const
-// who speaks a turn of a podcast episode
+// who speaks a turn of a podcast episode, and who answers a question asked from the podcast player
 export const podcastEpisodeSpeakers = ["host", "cohost"] as const
+export type PodcastEpisodeSpeaker = (typeof podcastEpisodeSpeakers)[number]
+
+/**
+ * Returns whether a value is one of the two podcast episode speakers.
+ */
+export function isPodcastEpisodeSpeaker(value: unknown): value is PodcastEpisodeSpeaker {
+	return podcastEpisodeSpeakers.some((podcastEpisodeSpeaker) => podcastEpisodeSpeaker === value)
+}
+
+// what a chat turn row records: a private chat turn, a podcast chat turn, carl's chat room turn, or a transcription's
+// or a spoken part's spend
+export const chatTurnKinds = ["private", "podcast", "chat_room", "transcription", "speech"] as const
+export type ChatTurnKind = (typeof chatTurnKinds)[number]
+// the chat turn kinds a topic's conversation holds, and where a spoken question can be asked from: the chat or the
+// podcast player
+export const conversationChatTurnKinds = ["private", "podcast"] as const satisfies readonly ChatTurnKind[]
+export type ConversationChatTurnKind = (typeof conversationChatTurnKinds)[number]
 // an attachment's async processing status: pending === stored and queued, ready === processed, or failed
 export const attachmentStatuses = ["pending", "ready", "failed"] as const
 // what a kept chat attachment originally was, shared by the db enum and the chat payload's zod schema

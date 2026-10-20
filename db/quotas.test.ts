@@ -1,12 +1,20 @@
 // quota tests: the suggestion limit window and daily limit, each invite limit factor with its floor and a connected
-// recipient, the per-request access read, the month's spend, and when episodes stop recording
+// recipient, the per-request access read, the month's spend and its per-request read, and full podcast episodes
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { PLANS } from "@shared/plans"
-import { restoreConnectionPool, stubConnectionPool } from "./connectionPoolStub"
+import { sql } from "drizzle-orm"
+import {
+	ADMIN_USER_ACCESS_ROW,
+	FREE_USER_ACCESS_ROW,
+	PLUS_USER_ACCESS_ROW,
+	restoreConnectionPool,
+	stubConnectionPool,
+} from "./connectionPoolStub"
+import { db } from "./index"
+import { isMonthlyBudgetCutoffPassed } from "./monthlyBudgetCutoffs"
 import {
 	hasFullPodcastEpisodes,
 	incrementDaySuggestionCount,
-	isPodcastEpisodeBudgetShareExhausted,
 	loadSpendSince,
 	loadUserAccess,
 	monthlySpendDollars,
@@ -14,6 +22,7 @@ import {
 	toSpendCents,
 	toSuggestionRateLimitWindowKey,
 } from "./quotas"
+import { type SpendQueryRows, withSpendQueryRows } from "./quotaTestFixtures"
 import * as redisRateLimits from "./redisRateLimits"
 import { runWithRequestMemo } from "./requestMemo"
 
@@ -96,13 +105,10 @@ test("a connected recipient doubles the limit", () => {
 	)
 })
 
-// the access row as the database returns it: a plain user on the plus plan with no budget override
-const USER_ACCESS_ROW = ["user", "plus", null]
-
 // runs the calls with the pool's query swapped for a stub that counts its calls, and returns the count.
 // the pool's own query comes back however the calls end
 async function countAccessQueries(runCalls: () => Promise<unknown>): Promise<number> {
-	const sentQueries = stubConnectionPool(() => [USER_ACCESS_ROW])
+	const sentQueries = stubConnectionPool(() => [PLUS_USER_ACCESS_ROW])
 
 	// run the calls, then put the pool's own query back
 	try {
@@ -153,53 +159,39 @@ test("the daily suggestion limit allows up to 30 suggestions", async () => {
 	expect(incrementDaySuggestionCountResults).toEqual([true, false])
 })
 
-// the rows that the podcast episode checks read. the stub picks each row by a pattern in the query's SQL
-type PodcastEpisodeQueryRows = {
-	accessRow: unknown[]
-	spendDollars: [string, string, string]
-}
+// podcast episode cost counts in the month's spend beside scans and chat
+test("monthly spend sums scans, chat, and episodes", async () => {
+	const spendQueryRows = {
+		accessRow: PLUS_USER_ACCESS_ROW,
+		spendDollars: ["2.50", "1.25", "0.41"],
+	}
+	const monthlySpend = await withSpendQueryRows(spendQueryRows as SpendQueryRows, () => monthlySpendDollars("user-1"))
+	expect(monthlySpend).toEqual({ scanDollars: 2.5, chatDollars: 1.25, podcastEpisodeDollars: 0.41 })
+	expect(toSpendCents(monthlySpend)).toBe(416)
+})
 
-// runs the calls with the connection pool's query swapped for a stub that returns the given podcast episode query rows.
-// the connection pool's own query is put back no matter how the calls end
-async function withPodcastEpisodeQueryRows<Result>(
-	podcastEpisodeQueryRows: PodcastEpisodeQueryRows,
-	runCalls: () => Promise<Result>,
-): Promise<Result> {
-	const [scanDollars, chatDollars, podcastEpisodeDollars] = podcastEpisodeQueryRows.spendDollars
-	const spendSums = [
-		{ fromClause: `from "scans"`, dollars: scanDollars },
-		{ fromClause: `from "chat_turns"`, dollars: chatDollars },
-		{ fromClause: `from "episodes"`, dollars: podcastEpisodeDollars },
-	]
+// the spend checks in one request share one set of month sums, and a write between them, such as a chat turn's spend
+// row, makes the next read sum again
+test("the month's spend is summed once per request until a write", async () => {
+	// a sum returns no spend, and any other read returns the access row
+	const sentQueries = stubConnectionPool(({ text }) => (text.includes("sum(") ? [["0"]] : [PLUS_USER_ACCESS_ROW]))
+	const countSpendSums = (): number => sentQueries.filter((sentQuery) => sentQuery.text.includes("sum(")).length
 
-	// return one table's spend sum for a sum, and the access row for anything else
-	stubConnectionPool(({ text: queryText }) => {
-		if (queryText.includes("sum(")) {
-			const spendSumDollars = spendSums.find(({ fromClause }) => queryText.includes(fromClause))?.dollars ?? "0"
-			return [[spendSumDollars]]
-		}
-		return [podcastEpisodeQueryRows.accessRow]
-	})
-
-	// run the calls, then put the connection pool's own query back
+	// read the spend through two cutoff checks and directly, then write and read again, all inside one request
 	try {
-		return await runCalls()
+		await runWithRequestMemo(async () => {
+			await Promise.all([isMonthlyBudgetCutoffPassed("user-1", "spokenQuestions"), monthlySpendDollars("user-1")])
+			await isMonthlyBudgetCutoffPassed("user-1", "manualScans")
+			expect(countSpendSums()).toBe(3)
+
+			// a spend row's insert clears the memo, so the next read sums the three tables again
+			await db.execute(sql`insert into chat_turns default values`)
+			await monthlySpendDollars("user-1")
+			expect(countSpendSums()).toBe(6)
+		})
 	} finally {
 		restoreConnectionPool()
 	}
-}
-
-// podcast episode cost counts in the month's spend beside scans and chat
-test("monthly spend sums scans, chat, and episodes", async () => {
-	const podcastEpisodeQueryRows = {
-		accessRow: USER_ACCESS_ROW,
-		spendDollars: ["2.50", "1.25", "0.41"],
-	}
-	const monthlySpend = await withPodcastEpisodeQueryRows(podcastEpisodeQueryRows as PodcastEpisodeQueryRows, () =>
-		monthlySpendDollars("user-1"),
-	)
-	expect(monthlySpend).toEqual({ scanDollars: 2.5, chatDollars: 1.25, podcastEpisodeDollars: 0.41 })
-	expect(toSpendCents(monthlySpend)).toBe(416)
 })
 
 // an empty user id still filters each sum by that id, so it never sums every user's spend
@@ -219,25 +211,11 @@ test("the spend for an empty user id is filtered by that id", async () => {
 	}
 })
 
-// a plus user's budget is 1500 cents, so podcast episodes stop recording at 1200 cents of spend and not one cent before.
-// a free user's budget is 300 cents, so podcast episodes stop recording at 150 cents
-test("episodes stop recording at 80 percent of a paid budget and 50 percent of a free one", async () => {
-	const isExhaustedAt = (plan: string, scanDollars: string): Promise<boolean> =>
-		withPodcastEpisodeQueryRows({ accessRow: ["user", plan, null], spendDollars: [scanDollars, "0", "0"] }, () =>
-			isPodcastEpisodeBudgetShareExhausted("user-1"),
-		)
-	expect(await isExhaustedAt("plus", "11.99")).toBe(false)
-	expect(await isExhaustedAt("plus", "12.00")).toBe(true)
-	expect(await isExhaustedAt("plus", "14.00")).toBe(true)
-	expect(await isExhaustedAt("free", "1.49")).toBe(false)
-	expect(await isExhaustedAt("free", "1.50")).toBe(true)
-})
-
 // a paid plan and an admin get full podcast episodes, and the free plan gets short ones
 test("a paid plan and an admin get full episodes, and the free plan does not", async () => {
 	const hasFullPodcastEpisodesFor = (accessRow: unknown[]): Promise<boolean> =>
-		withPodcastEpisodeQueryRows({ accessRow, spendDollars: ["0", "0", "0"] }, () => hasFullPodcastEpisodes("user-1"))
-	expect(await hasFullPodcastEpisodesFor(["user", "plus", null])).toBe(true)
-	expect(await hasFullPodcastEpisodesFor(["user", "free", null])).toBe(false)
-	expect(await hasFullPodcastEpisodesFor(["admin", "free", null])).toBe(true)
+		withSpendQueryRows({ accessRow, spendDollars: ["0", "0", "0"] }, () => hasFullPodcastEpisodes("user-1"))
+	expect(await hasFullPodcastEpisodesFor(PLUS_USER_ACCESS_ROW)).toBe(true)
+	expect(await hasFullPodcastEpisodesFor(FREE_USER_ACCESS_ROW)).toBe(false)
+	expect(await hasFullPodcastEpisodesFor(ADMIN_USER_ACCESS_ROW)).toBe(true)
 })

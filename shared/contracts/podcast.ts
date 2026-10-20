@@ -63,6 +63,8 @@ export const podcastEpisode = podcastEpisodeSummary.extend({
 	// where the user stopped listening and whether the user finished. zero and false for a visitor
 	progressSeconds: z.number(),
 	isCompleted: z.boolean(),
+	// whether voice chat is configured
+	isVoiceChatConfigured: z.boolean(),
 })
 
 export type PodcastEpisode = z.infer<typeof podcastEpisode>

@@ -1,5 +1,6 @@
 import { isModelChatMessage } from "@shared/chatMentions"
-import { CarlAvatar } from "@/components/branding/CarlAvatar"
+import type { PodcastEpisodeSpeaker } from "@shared/enums"
+import { HostAvatar } from "@/components/branding/HostAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { cn } from "@/lib/utils"
@@ -14,6 +15,7 @@ export function ChatAuthor({
 	authorUsername,
 	avatarVersion,
 	isOwnChatMessage,
+	speaker,
 	children,
 }: {
 	// Carl is null. A deleted member is also null. Their account reference is gone while their recorded name stays
@@ -22,11 +24,15 @@ export function ChatAuthor({
 	avatarVersion?: string | null
 	// whether the user wrote this one
 	isOwnChatMessage?: boolean
+	// the speaker who gave a private chat reply, which vienna gives only to a question asked from the podcast player
+	speaker?: PodcastEpisodeSpeaker
 	children: React.ReactNode
 }) {
-	// carl's avatar is the racoon. everyone else renders through UserAvatar
-	const avatar = isModelChatMessage({ authorUserId, authorUsername }) ? (
-		<CarlAvatar />
+	// the host who gave the reply, carl on any message of his without a speaker. the hosts' avatars are their own
+	// pictures, and everyone else renders through UserAvatar
+	const hostSpeaker = speaker ?? (isModelChatMessage({ authorUserId, authorUsername }) ? "host" : undefined)
+	const avatar = hostSpeaker ? (
+		<HostAvatar speaker={hostSpeaker} />
 	) : (
 		<UserAvatar
 			userId={authorUserId ?? ""}
@@ -41,7 +47,7 @@ export function ChatAuthor({
 	return (
 		<div className={cn("flex min-w-0 flex-col", isOwnChatMessage && "items-end")}>
 			{/* a member's entire line is the link, so the avatar and the name both open the profile.
-			    carl and a closed account share the missing reference, and neither has a page to open */}
+			    the hosts and a closed account share the missing reference, and none has a page to open */}
 			{authorUserId === null ? (
 				<div className={authorRowClass}>
 					{avatar}

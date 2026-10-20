@@ -102,7 +102,7 @@ export async function seedFixtures(): Promise<void> {
 
 	// a subscription with no membership, and the cost row that exhausts the spender's one-cent budget
 	await db.insert(subscriptions).values({ topicId, subscriberUserId: subscriberId })
-	await db.insert(chatTurns).values({ userId: spenderId, topicId, cost: "100" })
+	await db.insert(chatTurns).values({ kind: "private", userId: spenderId, topicId, cost: "100" })
 }
 
 /** Deletes the people, whose rows cascade to the topics, chat rooms, chat mentions, and chat turns. */

@@ -8,7 +8,8 @@ import {
 	toSentToolCalls,
 	toUncompactedChatTurnStart,
 } from "@shared/contracts/chat"
-import type { ChatAttachment, ChatToolCall } from "@shared/payloads"
+import { isPodcastEpisodeSpeaker, type PodcastEpisodeSpeaker } from "@shared/enums"
+import type { ChatAttachment, ChatHistoryTurn, PodcastEpisodeChapterRef } from "@shared/payloads"
 import type { TopicDraft, TopicDraftTeam } from "@shared/topicPayloads"
 
 // why a chat turn was rejected, kept apart so that the panel can prompt an upgrade instead of a generic error
@@ -39,22 +40,40 @@ export async function fetchChatConversation(chatPage: ChatPage): Promise<ChatCon
 	return (await response.json()) as ChatConversation
 }
 
+// what a reply's stream calls back with: each text chunk, the tool calls, and a podcast chat turn's speaker
+type ChatReplyHandlers = {
+	onChunk: (chunk: string) => void
+	onToolCalls?: (toolCalls: TopicToolCalls) => void
+	onSpeaker?: (speaker: PodcastEpisodeSpeaker) => void
+}
+
+// one chat turn to send, with the handlers that read its reply
+export type SendChatTurnOptions = ChatReplyHandlers & {
+	page: ChatPage
+	question: string
+	history: ChatHistoryTurn[]
+	attachments: ChatAttachment[]
+	// the optional stop signal, topic draft, spoken flag, and chapter
+	signal?: AbortSignal
+	topicDraft?: TopicDraft
+	isSpoken?: boolean
+	podcastEpisodeChapter?: PodcastEpisodeChapterRef
+}
+
 /**
  * Sends one chat turn and streams its reply through onChunk, returning null when complete or the reason why it failed.
  */
-export async function sendChatTurn(
-	page: ChatPage,
-	question: string,
-	history: { question: string; answer: string; toolCalls?: ChatToolCall[] }[],
-	attachments: ChatAttachment[],
-	onChunk: (chunk: string) => void,
-	onToolCalls: (toolCalls: TopicToolCalls) => void,
-	signal?: AbortSignal,
-	// the new-topic chat's draft
-	topicDraft?: TopicDraft,
-	// whether the question was spoken, which marks the chat turn and has carl answer out loud
+export async function sendChatTurn({
+	page,
+	question,
+	history,
+	attachments,
+	signal,
+	topicDraft,
 	isSpoken = false,
-): Promise<ChatSendResult> {
+	podcastEpisodeChapter,
+	...chatReplyHandlers
+}: SendChatTurnOptions): Promise<ChatSendResult> {
 	// post the question with the recent history, then read the stream to completion
 	try {
 		const historyChatTurns = history.slice(-CHAT_HISTORY_TURNS)
@@ -67,6 +86,7 @@ export async function sendChatTurn(
 				attachments,
 				topicDraft,
 				isSpoken,
+				podcastEpisodeChapter,
 				history: historyChatTurns.map((chatTurn, index) => ({
 					question: chatTurn.question,
 					answer: index < uncompactedChatTurnStart ? compactChatAnswer(chatTurn.answer) : chatTurn.answer,
@@ -79,7 +99,7 @@ export async function sendChatTurn(
 			return toChatRejection(response.status)
 		}
 
-		return await readChatStream(response.body, onChunk, onToolCalls)
+		return await readChatStream(response.body, chatReplyHandlers)
 	} catch (error) {
 		// the user's own stop is not a failure, and a broken stream leaves what already arrived on screen
 		if (error instanceof DOMException && error.name === "AbortError") {
@@ -123,8 +143,7 @@ export async function sendDeleteKeptAttachment(keptAttachmentId: string): Promis
 // read the reply stream to its end, one json line at a time. null once it completes
 async function readChatStream(
 	body: ReadableStream<Uint8Array>,
-	onChunk: (chunk: string) => void,
-	onToolCalls: (toolCalls: TopicToolCalls) => void,
+	chatReplyHandlers: ChatReplyHandlers,
 ): Promise<ChatSendResult> {
 	// the reader, the decoder, the tail that holds a line until the newline ending it, and how the chat turn ended
 	const reader = body.getReader()
@@ -144,7 +163,7 @@ async function readChatStream(
 		const chatReplyLineTexts = pendingText.split("\n")
 		pendingText = chatReplyLineTexts.pop() ?? ""
 		for (const chatReplyLineText of chatReplyLineTexts) {
-			chatSendResult = applyChatReplyLine(chatReplyLineText, onChunk, onToolCalls) ?? chatSendResult
+			chatSendResult = applyChatReplyLine(chatReplyLineText, chatReplyHandlers) ?? chatSendResult
 		}
 	}
 }
@@ -152,8 +171,7 @@ async function readChatStream(
 // show one line's text or apply its tool calls, answering "failed" for the line that ends a broken reply
 function applyChatReplyLine(
 	chatReplyLineText: string,
-	onChunk: (chunk: string) => void,
-	onToolCalls: (toolCalls: TopicToolCalls) => void,
+	{ onChunk, onToolCalls, onSpeaker }: ChatReplyHandlers,
 ): ChatSendResult {
 	const chatReplyLine = toChatReplyLine(chatReplyLineText)
 	// a text line is the only one the bubble shows
@@ -161,9 +179,14 @@ function applyChatReplyLine(
 		onChunk(chatReplyLine.text)
 		return null
 	}
+	// a podcast chat turn's speaker comes before its text
+	if (chatReplyLine?.type === "speaker") {
+		onSpeaker?.(chatReplyLine.speaker)
+		return null
+	}
 	// the tool calls go to the toast, the card, and the topic page instead
 	if (chatReplyLine?.type === "toolCalls") {
-		onToolCalls(chatReplyLine.toolCalls)
+		onToolCalls?.(chatReplyLine.toolCalls)
 		return null
 	}
 	return chatReplyLine ? "failed" : null
@@ -174,7 +197,7 @@ function toChatReplyLine(chatReplyLineText: string): ChatReplyLine | null {
 	if (chatReplyLineText === "") {
 		return null
 	}
-	// read the line as json, and drop it unless it is one of the three lines the server writes
+	// read the line as json, and drop it unless it is one of the lines the server writes
 	try {
 		const parsedReplyLine: unknown = JSON.parse(chatReplyLineText)
 		return isChatReplyLine(parsedReplyLine) ? parsedReplyLine : null
@@ -184,15 +207,19 @@ function toChatReplyLine(chatReplyLineText: string): ChatReplyLine | null {
 	}
 }
 
-// whether a parsed line says one of the three things, payload included, so a half-written one is dropped instead of shown or applied
+// whether a parsed line says one of the things the server writes, payload included, so a half-written one is dropped
+// instead of shown or applied
 function isChatReplyLine(parsedLine: unknown): parsedLine is ChatReplyLine {
 	if (typeof parsedLine !== "object" || parsedLine === null) {
 		return false
 	}
-	// a text line needs its text, and the failed line needs nothing beyond its type
-	const { type, text, toolCalls } = parsedLine as Record<string, unknown>
+	// a text line needs its text, a speaker line one of the two hosts, and the failed line nothing beyond its type
+	const { type, text, speaker, toolCalls } = parsedLine as Record<string, unknown>
 	if (type === "text") {
 		return typeof text === "string"
+	}
+	if (type === "speaker") {
+		return isPodcastEpisodeSpeaker(speaker)
 	}
 	// a tool calls line needs the lists its own guard checks
 	if (type === "toolCalls") {

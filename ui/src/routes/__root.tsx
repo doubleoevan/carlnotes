@@ -2,6 +2,7 @@ import { SITE_TITLE } from "@shared/seo"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { createRootRoute, HeadContent, Outlet, Scripts, useLocation } from "@tanstack/react-router"
 import { type ReactNode, useEffect, useState } from "react"
+import { Toaster } from "@/components/primitives/sonner"
 import { SITE_URL } from "@/lib/pageHead"
 import { hasSessionCookie } from "@/lib/sessionCookie"
 import { captureVisit } from "@/lib/visitAnalytics"
@@ -88,7 +89,7 @@ function RootShell({ children }: { children: ReactNode }) {
 	)
 }
 
-// the routed page inside the query client every page shares, beside the visit analytics
+// the routed page inside the query client every page shares, beside the visit analytics and the toast host
 function RootComponent() {
 	// create one query client for each server request and each page load in the browser, with no focus re-fetch and no
 	// automatic retry
@@ -99,6 +100,8 @@ function RootComponent() {
 		<QueryClientProvider client={queryClient}>
 			<VisitAnalytics />
 			<Outlet />
+			{/* the toast host for every route */}
+			<Toaster />
 		</QueryClientProvider>
 	)
 }

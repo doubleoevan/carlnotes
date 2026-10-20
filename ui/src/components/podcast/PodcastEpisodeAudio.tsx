@@ -5,6 +5,11 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { SkipPlaybackButtons } from "@/components/podcast/PlaybackControlButtons"
 import { PodcastEpisodeCover } from "@/components/podcast/PodcastEpisodeCover"
 import { PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
+import {
+	isPodcastEpisodeQuestionButtonShown,
+	PodcastEpisodeQuestionButton,
+	PodcastEpisodeQuestionStopButton,
+} from "@/components/podcast/PodcastEpisodeQuestionControls"
 import { toClockLabel, toPodcastEpisodeTitleLabel } from "@/lib/labels"
 import { toChapterIndexAt } from "@/lib/podcastEpisodePlayback"
 import { PLAY_BUTTON_CLASS } from "@/lib/styleClasses"
@@ -17,6 +22,8 @@ import {
 	usePlayerPositionSeconds,
 	usePodcastEpisodePlayer,
 } from "@/stores/podcastEpisodePlayerStore"
+import { toPodcastEpisodeQuestionLabel } from "@/stores/podcastEpisodeQuestionRules"
+import { usePodcastEpisodeQuestion } from "@/stores/podcastEpisodeQuestionStore"
 
 /**
  * The audio element that the player store drives, with the podcast player that shows while a podcast episode is loaded.
@@ -39,10 +46,12 @@ export function PodcastEpisodeAudio() {
 	)
 }
 
-// the podcast player, fixed to the bottom of the page while a podcast episode is loaded
+// the podcast player, fixed to the bottom of the page while a podcast episode is loaded, with the mic that asks carl
+// and vienna about it if voice is on
 function PodcastPlayer() {
 	const { podcastEpisode, isPlaying } = usePodcastEpisodePlayer()
 	const positionSeconds = usePlayerPositionSeconds()
+	const podcastEpisodeQuestion = usePodcastEpisodeQuestion()
 	if (!podcastEpisode) {
 		return null
 	}
@@ -54,6 +63,9 @@ function PodcastPlayer() {
 	const playerChapter = podcastEpisode.chapters[playerChapterIndex]
 	const podcastEpisodeTitle = toPodcastEpisodeTitleLabel(podcastEpisode)
 	const playButtonLabel = `${isPlaying ? "Pause" : "Play"} episode ${podcastEpisode.episodeNumber ?? ""}`.trim()
+
+	// a question in progress names its phase in the chapter line, and its stop takes the skip buttons' place
+	const podcastEpisodeQuestionLabel = toPodcastEpisodeQuestionLabel(podcastEpisodeQuestion)
 	return (
 		<div className="bg-card border-separator-strong fixed inset-x-0 bottom-0 z-40 border-t pb-[env(safe-area-inset-bottom)]">
 			{/* the progress line, under the seek input */}
@@ -70,7 +82,7 @@ function PodcastPlayer() {
 					className="absolute inset-x-0 -inset-y-2.5 cursor-pointer opacity-0"
 				/>
 			</div>
-			<div className="mx-auto flex max-w-5xl items-center gap-3 py-2.5 pr-3 pl-4">
+			<div className="mx-auto flex max-w-5xl items-center gap-2 py-2.5 pr-3 pl-4 sm:gap-3">
 				{/* the podcast episode's cover and title, which link to its page once it has one */}
 				<PodcastEpisodeLink pagePath={podcastEpisode.pagePath}>
 					<PodcastEpisodeCover podcastEpisode={podcastEpisode} className="size-11" />
@@ -81,14 +93,22 @@ function PodcastPlayer() {
 							<div className="truncate text-sm font-bold group-hover:underline">{podcastEpisodeTitle}</div>
 						</PodcastEpisodeTooltip>
 						<div className="text-muted-foreground truncate text-xs">
-							{playerChapter
-								? `Ch ${playerChapterIndex + 1} of ${podcastEpisode.chapters.length} · ${playerChapter.title}`
-								: toClockLabel(positionSeconds)}
+							{podcastEpisodeQuestionLabel ??
+								(playerChapter
+									? `Ch ${playerChapterIndex + 1} of ${podcastEpisode.chapters.length} · ${playerChapter.title}`
+									: toClockLabel(positionSeconds))}
 						</div>
+						{/* the question's phase, announced to a screen reader */}
+						<span className="sr-only" aria-live="polite">
+							{podcastEpisodeQuestionLabel ?? ""}
+						</span>
 					</div>
 				</PodcastEpisodeLink>
-				{/* the skip buttons and the play button */}
-				<SkipPlaybackButtons />
+				{/* the skip buttons, or the question's stop, then the mic and the play button */}
+				{podcastEpisodeQuestionLabel ? <PodcastEpisodeQuestionStopButton /> : <SkipPlaybackButtons />}
+				{isPodcastEpisodeQuestionButtonShown(podcastEpisode) && (
+					<PodcastEpisodeQuestionButton podcastEpisode={podcastEpisode} />
+				)}
 				<button
 					type="button"
 					aria-label={playButtonLabel}

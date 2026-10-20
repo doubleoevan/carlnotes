@@ -1,36 +1,21 @@
-// the voice recorder: the microphone stream, the level meter over it, the end-of-speech decision, and the recorder
-// that keeps the audio
+// the voice recorder: the microphone stream, the level meter over it, and the recorder that keeps the audio. the end
+// of speech is the level's silence, or the voice activity detector's once it loads
 import { VOICE_RECORDING_MAX_SECONDS } from "@shared/payloads"
-
-// the containers the recorder tries, in order, taking the first the browser supports
-const RECORDING_MIME_TYPES = ["audio/webm;codecs=opus", "audio/mp4"]
+import {
+	toMeterLevel,
+	toRecordingDecision,
+	toRecordingLevel,
+	toRecordingMimeType,
+	toSilenceThreshold,
+	toSpeechFrame,
+	type VoiceActivityProgress,
+} from "@/lib/voiceRecordingDecisions"
 
 // how long the start of the stream samples the room's ambient level before the silence threshold is set
 const AMBIENT_SAMPLE_MS = 300
 
-// ponytail: the silence threshold's shape is a guess at a phone in a room. the minimum keeps digital silence from
-// reading every breath as speech, and the ratio and the margin lift the silence threshold over a noisy room. adjust
-// them from device checks
-const SILENCE_THRESHOLD_MINIMUM = 0.02
-const SILENCE_THRESHOLD_AMBIENT_RATIO = 1.5
-const SILENCE_THRESHOLD_MARGIN = 0.01
-
-// how long under the silence threshold sends the recording once speech started, how long with no speech cancels it, and
-// the longest recording
-const END_OF_SPEECH_MS = 1_500
-const NO_SPEECH_MS = 8_000
-const RECORDING_LIMIT_MS = VOICE_RECORDING_MAX_SECONDS * 1000
-
 // the share of each frame's level that reaches the smoothed level, so the meter moves without flicker
 const LEVEL_SMOOTHING = 0.3
-
-// how much of the meter a level fills, and how many steps the meter draws. speech sits well under full scale, so the
-// meter reaches full before it
-const METER_LEVEL_SCALE = 3
-const METER_STEPS = 20
-
-// what the loop decides each frame: keep recording, send the recording, or cancel it
-export type RecordingDecision = "keep" | "send" | "cancel"
 
 // why a recording was cancelled: nothing rose above the silence threshold, the page was hidden, or the user cancelled
 // it
@@ -51,17 +36,13 @@ export type StartVoiceRecordingOptions = {
 	// the recording and how many seconds it recorded, once it is sent
 	onFinished: (recording: Blob, secondsRecorded: number) => void
 	onCancelled: (reason: VoiceRecordingCancelReason) => void
-}
-
-export type ToRecordingDecisionOptions = {
-	hasSpeechStarted: boolean
-	lastLoudAt: number
-	startedAt: number
-	now: number
+	// what ends the speech: the level's silence, or the voice activity detector once it loads, with the level's
+	// silence until then and for good if it fails to start
+	endOfSpeech?: "level" | "voiceActivity"
 }
 
 /**
- * Asks for the microphone, records it, and watches its level until the speaker stops, the limit passes, or the
+ * Asks for the microphone, records it, and watches its level until the user stops, the limit passes, or the
  * recording is sent or cancelled. Throws if the browser rejects the microphone request or cannot record the stream.
  */
 export async function startVoiceRecording({
@@ -69,6 +50,7 @@ export async function startVoiceRecording({
 	onLevel,
 	onFinished,
 	onCancelled,
+	endOfSpeech = "level",
 }: StartVoiceRecordingOptions): Promise<VoiceRecordingHandle> {
 	// give the audio session back to the browser before the request, so WebKit sets the capture category itself. an
 	// earlier recording left the session on playback, and iOS keeps that until it is set again
@@ -86,11 +68,13 @@ export async function startVoiceRecording({
 	// the analyser over the stream, and the recorder in the first container the browser supports. a stream the browser
 	// cannot analyse or record releases the capture, its tracks included, and throws
 	let analyser: AnalyserNode
+	let streamSource: MediaStreamAudioSourceNode
 	let mediaRecorder: MediaRecorder
 	try {
 		analyser = audioContext.createAnalyser()
 		analyser.fftSize = 1024
-		audioContext.createMediaStreamSource(stream).connect(analyser)
+		streamSource = audioContext.createMediaStreamSource(stream)
+		streamSource.connect(analyser)
 
 		// the recorder, in the browser's own default container if it supports none of the listed ones
 		const mimeType = toRecordingMimeType((recordingMimeType) => MediaRecorder.isTypeSupported(recordingMimeType))
@@ -125,6 +109,17 @@ export async function startVoiceRecording({
 	// how the recording ended, set once
 	let endReason: "send" | VoiceRecordingCancelReason | null = null
 
+	// the voice activity detector's progress and its stop, once it loads
+	const voiceActivityProgress: VoiceActivityProgress = {
+		isListening: false,
+		hasSpeechStarted: false,
+		isSpeechEnded: false,
+	}
+	let stopVoiceActivity: (() => void) | null = null
+
+	// whether the level heard speech before the detector listened, set on the first frame the detector listens
+	let hasLevelSpeechBeforeListening: boolean | null = null
+
 	// end the recording: stop the loop and the recorder, and release the capture
 	const endRecording = (reason: "send" | VoiceRecordingCancelReason): void => {
 		if (endReason !== null) {
@@ -133,12 +128,39 @@ export async function startVoiceRecording({
 		endReason = reason
 		cancelAnimationFrame(animationFrame)
 		document.removeEventListener("visibilitychange", handleVisibilityChange)
+		stopVoiceActivity?.()
 
 		// the recorder's stop delivers the last chunk
 		if (mediaRecorder.state !== "inactive") {
 			mediaRecorder.stop()
 		}
+
+		// disconnect the stream's audio nodes from the context, which the podcast player keeps for the page, and release
+		// the capture
+		streamSource.disconnect()
 		releaseCapture(stream)
+	}
+
+	// read what this frame says about the speech, and return whether it ended. note once whether the level heard speech
+	// before the detector listened
+	const readSpeechFrame = (frameSilenceThreshold: number, now: number): boolean => {
+		if (voiceActivityProgress.isListening && hasLevelSpeechBeforeListening === null) {
+			hasLevelSpeechBeforeListening = hasSpeechStarted
+		}
+
+		// the frame says whether speech started and whether it is loud, and a loud frame holds the level's silence off
+		const speechFrame = toSpeechFrame({
+			level,
+			silenceThreshold: frameSilenceThreshold,
+			hasSpeechStarted,
+			hasLevelSpeechBeforeListening: hasLevelSpeechBeforeListening === true,
+			voiceActivityProgress,
+		})
+		hasSpeechStarted = speechFrame.hasSpeechStarted
+		if (speechFrame.isLoud) {
+			lastLoudAt = now
+		}
+		return speechFrame.isSpeechEnded
 	}
 
 	// read the level each frame, set the silence threshold from the first frames, and decide whether the recording goes
@@ -168,13 +190,13 @@ export async function startVoiceRecording({
 			return
 		}
 
-		// a frame above the silence threshold is speech
-		if (level > silenceThreshold) {
-			hasSpeechStarted = true
-			lastLoudAt = now
+		// the detector's speech end sends
+		if (readSpeechFrame(silenceThreshold, now)) {
+			endRecording("send")
+			return
 		}
 
-		// send once the speaker stops or the limit passes
+		// send once the user stops or the limit passes
 		const recordingDecision = toRecordingDecision({ hasSpeechStarted, lastLoudAt, startedAt, now })
 		if (recordingDecision === "send") {
 			endRecording("send")
@@ -213,72 +235,60 @@ export async function startVoiceRecording({
 		onCancelled(endReason ?? "user")
 	})
 
-	// start the recorder and the loop, and return the controls
+	// start the recorder and the loop, then the detector if this recording asks for it, and return the controls
 	mediaRecorder.start()
 	animationFrame = requestAnimationFrame(readLevel)
+	if (endOfSpeech === "voiceActivity") {
+		void startRecordingVoiceActivity({ audioContext, stream, voiceActivityProgress }).then((stop) => {
+			// a recording that already ended stops the detector at once
+			stopVoiceActivity = stop
+			if (endReason !== null) {
+				stop?.()
+			}
+		})
+	}
 	return { send: () => endRecording("send"), cancel: () => endRecording("user") }
 }
 
-/**
- * Returns the level of a frame of 8-bit time domain samples, 0 for silence to 1 for full scale.
- */
-export function toRecordingLevel(bytes: Uint8Array): number {
-	if (bytes.length === 0) {
-		return 0
-	}
-
-	// the root mean square of the samples around the midpoint
-	let squaredSum = 0
-	for (const byte of bytes) {
-		const sample = (byte - 128) / 128
-		squaredSum += sample * sample
-	}
-	return Math.sqrt(squaredSum / bytes.length)
+// the recording's audio context and stream, and the progress the detector's events write to
+type StartRecordingVoiceActivityOptions = {
+	audioContext: AudioContext
+	stream: MediaStream
+	voiceActivityProgress: VoiceActivityProgress
 }
 
-/**
- * Returns how much of the meter a smoothed level fills, 0 to 1 in steps of a twentieth.
- */
-export function toMeterLevel(level: number): number {
-	return Math.round(Math.min(1, level * METER_LEVEL_SCALE) * METER_STEPS) / METER_STEPS
-}
+// load the voice activity detector and listen to the recording's stream, returning its stop, or null if it cannot run.
+// a blip too short to be speech takes back the speech it started
+async function startRecordingVoiceActivity({
+	audioContext,
+	stream,
+	voiceActivityProgress,
+}: StartRecordingVoiceActivityOptions): Promise<(() => void) | null> {
+	// the detector's module loads on the first question only
+	try {
+		const { startVoiceActivity } = await import("@/lib/voiceActivity")
+		const stopVoiceActivity = await startVoiceActivity({
+			audioContext,
+			stream,
+			onSpeechStart: () => {
+				voiceActivityProgress.hasSpeechStarted = true
+			},
+			onSpeechEnd: () => {
+				voiceActivityProgress.isSpeechEnded = true
+			},
+			onMisfire: () => {
+				voiceActivityProgress.hasSpeechStarted = false
+			},
+		})
 
-/**
- * Returns the level a frame must rise above to count as speech: a margin above the room's ambient level, never
- * under a fixed minimum.
- */
-export function toSilenceThreshold(ambientLevel: number): number {
-	return Math.max(SILENCE_THRESHOLD_MINIMUM, ambientLevel * SILENCE_THRESHOLD_AMBIENT_RATIO + SILENCE_THRESHOLD_MARGIN)
-}
-
-/**
- * Returns what the recording does this frame: it sends at the limit, or once the speaker has been quiet long enough
- * after speaking, it cancels if nobody spoke in the first seconds, and it keeps going otherwise.
- */
-export function toRecordingDecision({
-	hasSpeechStarted,
-	lastLoudAt,
-	startedAt,
-	now,
-}: ToRecordingDecisionOptions): RecordingDecision {
-	// the limit sends whatever was recorded
-	if (now - startedAt >= RECORDING_LIMIT_MS) {
-		return "send"
+		// the detector decides from here, unless it could not run on this device
+		voiceActivityProgress.isListening = stopVoiceActivity !== null
+		return stopVoiceActivity
+	} catch (error) {
+		// a module that failed to load leaves the level's silence deciding
+		console.error("voice activity detection could not load", error)
+		return null
 	}
-
-	// after speech, a long enough quiet sends. before any, a long enough quiet cancels
-	if (hasSpeechStarted) {
-		return now - lastLoudAt >= END_OF_SPEECH_MS ? "send" : "keep"
-	}
-	return now - startedAt >= NO_SPEECH_MS ? "cancel" : "keep"
-}
-
-/**
- * Returns the first container the browser supports, or undefined if it supports none, which leaves the browser's
- * own default.
- */
-export function toRecordingMimeType(isTypeSupported: (mimeType: string) => boolean): string | undefined {
-	return RECORDING_MIME_TYPES.find(isTypeSupported)
 }
 
 // how many whole seconds the recording lasted, inside the limit

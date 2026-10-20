@@ -1,6 +1,7 @@
 // render tests for the mic in both composers' send slots and for the recording bar's controls
 import { expect, test } from "bun:test"
 import { EMPTY_TOPIC_DRAFT } from "@shared/topicPayloads"
+import { TEST_TOPIC_VOICE_CHAT_PAGE } from "@/clients/voiceClientTestFixtures"
 import { ChatComposer } from "./ChatComposer"
 import { ChatRoomComposer } from "./ChatRoomComposer"
 import { RecordingBar } from "./RecordingBar"
@@ -34,7 +35,7 @@ function toTestTopicChat(overrides: Partial<TopicChat>): TopicChat {
 		topicDraftAttachmentFiles: [],
 		removeTopicDraftAttachmentFile: () => {},
 		isStreaming: false,
-		voiceChatPage: { kind: "topic", topicId: "topic-1" },
+		voiceChatPage: TEST_TOPIC_VOICE_CHAT_PAGE,
 		send: async () => {},
 		stop: () => {},
 		clear: async () => true,

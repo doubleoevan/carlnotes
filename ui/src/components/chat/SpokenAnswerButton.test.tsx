@@ -1,10 +1,10 @@
 // render tests for carl's play button in the private chat and the chat room
 import { expect, test } from "bun:test"
 import type { ChatRoomMessage } from "@shared/contracts/chat"
-import { ChatMessages } from "./ChatMessages"
+import { TEST_TOPIC_VOICE_CHAT_PAGE } from "@/clients/voiceClientTestFixtures"
 import { ChatRoomMessages } from "./ChatRoomMessages"
+import { renderTestChatMessages } from "./chatMessagesTestFixtures"
 import { toTestChatRoomMessage, toTestChatRoomState, toTestChatTurn } from "./chatRoomTestFixtures"
-import type { ChatTurn } from "./chatTurns"
 import { renderWithRouter } from "./renderWithRouter"
 
 // the play button's accessible name
@@ -15,32 +15,15 @@ function toMarkupCount(html: string, accessibleName: string): number {
 	return html.split(accessibleName).length - 1
 }
 
-// the user the chat messages render for
-const USER = { userId: "user-1", username: "ana", avatarVersion: null }
-
-// the private chat's list as HTML, with voice on unless the test turns it off
-function renderChatMessages(chatTurns: ChatTurn[], isVoiceChatConfigured = true): Promise<string> {
-	return renderWithRouter(
-		<ChatMessages
-			chatTurns={chatTurns}
-			isEnlarged={false}
-			isStreaming={false}
-			chatName="topic"
-			author={USER}
-			voiceChatPage={isVoiceChatConfigured ? { kind: "topic", topicId: "topic-1" } : null}
-		/>,
-	)
-}
-
 // every reply has the play button while voice is on, whether the question was spoken or typed, and no message shows a
 // mic icon
 test("every reply in the private chat has the play button and no mic icon", async () => {
-	const spokenHtml = await renderChatMessages([toTestChatTurn()])
+	const spokenHtml = await renderTestChatMessages([toTestChatTurn()], { voiceChatPage: TEST_TOPIC_VOICE_CHAT_PAGE })
 	expect(toMarkupCount(spokenHtml, PLAY_BUTTON)).toBe(1)
 	expect(spokenHtml).not.toContain("lucide-mic")
 
 	// with voice off, no reply has one
-	const voiceOffHtml = await renderChatMessages([toTestChatTurn()], false)
+	const voiceOffHtml = await renderTestChatMessages([toTestChatTurn()])
 	expect(voiceOffHtml).not.toContain(PLAY_BUTTON)
 })
 

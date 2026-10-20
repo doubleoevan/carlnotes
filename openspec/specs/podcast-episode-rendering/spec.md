@@ -583,38 +583,6 @@ chapter or script that runs past its plan SHALL be kept, never rejected.
 - **WHEN** a written chapter's estimated length is over its planned length
 - **THEN** the chapter is kept, and the Podcast Episode records it
 
-### Requirement: Podcast Episodes pause once monthly spend passes the plan's share of the budget
-
-If the billed user's monthly spend is at or past their plan's share of their monthly budget when a Podcast Episode is
-planned, the Podcast Episode SHALL NOT be recorded, and Podcast Episodes SHALL stay paused for that user until the next
-month. The share SHALL be 50 percent on the free plan and 80 percent on a paid plan, so a free user's Scans keep half
-of the budget. Scans SHALL keep running. The check SHALL read the same monthly spend sum that every other budget check
-reads.
-
-#### Scenario: Past 80 percent, the Scan runs and the Podcast Episode does not
-
-- **GIVEN** a plus user whose spend this month is $12.50 of a $15 budget
-- **WHEN** their Topic's scheduled Scan succeeds
-- **THEN** the Scan is saved and emailed as usual, and no Podcast Episode is recorded
-
-#### Scenario: Under 80 percent, the Podcast Episode is recorded
-
-- **GIVEN** a plus user whose spend this month is $6 of a $15 budget
-- **WHEN** their Topic's Scan succeeds
-- **THEN** its Podcast Episode is recorded
-
-#### Scenario: Past 50 percent on the free plan, the Scan runs and the Podcast Episode does not
-
-- **GIVEN** a free user whose spend this month is $1.60 of a $3 budget
-- **WHEN** their Topic's Scan succeeds
-- **THEN** the Scan is saved as usual, and no Podcast Episode is recorded
-
-#### Scenario: A new month resumes Podcast Episodes
-
-- **GIVEN** a user whose Podcast Episodes paused because of the budget in September
-- **WHEN** their first Scan of October succeeds
-- **THEN** its Podcast Episode is recorded
-
 ### Requirement: The Topic's owner and an admin can remove a Podcast Episode, and its Findings may be narrated again
 
 The Topic's owner and an admin SHALL be able to remove a published or failed Podcast Episode, and nobody else SHALL.
@@ -662,8 +630,10 @@ episode in the Podcast Episode page's actions menu, and every one SHALL open the
 ### Requirement: A free Topic keeps only its latest short Podcast Episode
 
 A Topic whose owner is on the free plan and is not an admin SHALL record a short Podcast Episode after every Scan that
-succeeds with Findings to narrate, within the budget share above. Its row SHALL be marked short when the Podcast Episode
-is planned. The Topic SHALL record one short Podcast Episode at a time: a Scan that succeeds while the Topic has a
+succeeds with Findings to narrate, until the billed user's spend passes the Podcast Episodes cutoff of the
+monthly-budget-cutoffs capability. A Topic on a paid plan SHALL record a short Podcast Episode the same way once the
+billed user's spend passes the full Podcast Episodes cutoff. Its row SHALL be marked short when the Podcast Episode is
+planned. The Topic SHALL record one short Podcast Episode at a time: a Scan that succeeds while the Topic has a
 recording short Podcast Episode SHALL record none and spend nothing, and its Findings SHALL wait for the next Podcast
 Episode. Publishing a short Podcast Episode SHALL replace every other published short Podcast Episode of the Topic in
 the same transaction, so the Topic never has two published short Podcast Episodes and never has none between them.
@@ -692,8 +662,9 @@ still count as narrated. A failed Podcast Episode SHALL NOT be replaced.
 
 #### Scenario: A paid Topic keeps every Podcast Episode
 
-- **GIVEN** a Topic whose owner is on a paid plan, with three published Podcast Episodes
-- **WHEN** its next Podcast Episode publishes
+- **GIVEN** a Topic whose owner is on a paid plan and short of the full Podcast Episodes cutoff, with three published
+  full Podcast Episodes
+- **WHEN** its next full Podcast Episode publishes
 - **THEN** all four stay published
 
 #### Scenario: An owner who moves to the free plan keeps their full Podcast Episodes

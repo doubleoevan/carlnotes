@@ -1,5 +1,5 @@
-// LiteLLM tests: the proxy admin calls, the budget read, the spent budget check, and the key created before a first
-// model call
+// LiteLLM tests: the proxy admin calls, the budget read, the spent and stale budget checks, and the key created before
+// a first model call
 import { afterEach, beforeEach, expect, spyOn, test } from "bun:test"
 import { quietErrorReports } from "@shared/monitoringTestFixtures"
 import { toTableRow } from "../db/connectionPoolStub"
@@ -9,6 +9,7 @@ import * as ingest from "./ingest"
 import {
 	deleteLiteLLMKey,
 	isUserLiteLLMKeyBudgetExhausted,
+	isUserLiteLLMKeyBudgetStale,
 	loadOrProvisionUserLiteLLMKey,
 	provisionLiteLLMKey,
 	readLiteLLMKeyBudget,
@@ -119,6 +120,29 @@ test("a budget is spent only at or past its maximum, and never with no key, no m
 	stubConnectionPoolInCallOrder(() => [toUserRow(null)])
 	const proxyRequests = stubProxy(() => Response.json({ info: { spend: 5, max_budget: 3 } }))
 	expect(await isUserLiteLLMKeyBudgetExhausted("user-1")).toBe(false)
+	expect(proxyRequests).toHaveLength(0)
+})
+
+// a key's budget is stale if its maximum is not the user's budget, if it has no maximum, or if the read fails.
+// a user with no key has no stale budget
+test("a key's budget is stale only if its maximum differs from the user's budget or cannot be read", async () => {
+	// a user whose budget is $12.34, with a key at that maximum and a key at an old three dollar maximum
+	stubConnectionPoolInCallOrder(() => [toUserRow("sk-user")])
+	stubProxy(() => Response.json({ info: { spend: 1, max_budget: 12.34 } }))
+	expect(await isUserLiteLLMKeyBudgetStale("user-1")).toBe(false)
+	stubProxy(() => Response.json({ info: { spend: 1, max_budget: 3 } }))
+	expect(await isUserLiteLLMKeyBudgetStale("user-1")).toBe(true)
+
+	// a key with no maximum budget, and a read that the proxy fails
+	stubProxy(() => Response.json({ info: { spend: 1, max_budget: null } }))
+	expect(await isUserLiteLLMKeyBudgetStale("user-1")).toBe(true)
+	stubProxy(() => new Response("proxy error", { status: 500 }))
+	expect(await isUserLiteLLMKeyBudgetStale("user-1")).toBe(true)
+
+	// a user with no key has no stale budget, with no request sent to the proxy
+	stubConnectionPoolInCallOrder(() => [toUserRow(null)])
+	const proxyRequests = stubProxy(() => Response.json({ info: { spend: 1, max_budget: 3 } }))
+	expect(await isUserLiteLLMKeyBudgetStale("user-1")).toBe(false)
 	expect(proxyRequests).toHaveLength(0)
 })
 

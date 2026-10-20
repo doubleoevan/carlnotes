@@ -1,6 +1,5 @@
 import { RotateCcw, RotateCw } from "lucide-react"
-import type * as React from "react"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { IconButton } from "@/components/common/IconButton"
 import { SKIP_BACK_SECONDS, SKIP_FORWARD_SECONDS } from "@/lib/podcastEpisodePlayback"
 import { PLAYBACK_CONTROL_BUTTON_CLASS } from "@/lib/styleClasses"
 import { cyclePlaybackRate, skipPlaybackBy } from "@/stores/podcastEpisodePlayerStore"
@@ -11,18 +10,20 @@ import { cyclePlaybackRate, skipPlaybackBy } from "@/stores/podcastEpisodePlayer
 export function SkipPlaybackButtons() {
 	return (
 		<>
-			<PlaybackControlButton
-				label={`Skip back ${SKIP_BACK_SECONDS} seconds`}
+			<IconButton
+				tooltip={`Skip back ${SKIP_BACK_SECONDS} seconds`}
+				className={PLAYBACK_CONTROL_BUTTON_CLASS}
 				onClick={() => skipPlaybackBy(-SKIP_BACK_SECONDS)}
 			>
 				<RotateCcw className="size-4.5" />
-			</PlaybackControlButton>
-			<PlaybackControlButton
-				label={`Skip forward ${SKIP_FORWARD_SECONDS} seconds`}
+			</IconButton>
+			<IconButton
+				tooltip={`Skip forward ${SKIP_FORWARD_SECONDS} seconds`}
+				className={PLAYBACK_CONTROL_BUTTON_CLASS}
 				onClick={() => skipPlaybackBy(SKIP_FORWARD_SECONDS)}
 			>
 				<RotateCw className="size-4.5" />
-			</PlaybackControlButton>
+			</IconButton>
 		</>
 	)
 }
@@ -32,30 +33,8 @@ export function SkipPlaybackButtons() {
  */
 export function PlaybackSpeedButton({ playbackRate }: { playbackRate: number }) {
 	return (
-		<PlaybackControlButton label="Playback speed" onClick={cyclePlaybackRate}>
+		<IconButton tooltip="Playback speed" className={PLAYBACK_CONTROL_BUTTON_CLASS} onClick={cyclePlaybackRate}>
 			{`${playbackRate}x`}
-		</PlaybackControlButton>
-	)
-}
-
-// one playback control, whose label is both its accessible name and its tooltip
-function PlaybackControlButton({
-	label,
-	onClick,
-	children,
-}: {
-	label: string
-	onClick: () => void
-	children: React.ReactNode
-}) {
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<button type="button" aria-label={label} onClick={onClick} className={PLAYBACK_CONTROL_BUTTON_CLASS}>
-					{children}
-				</button>
-			</TooltipTrigger>
-			<TooltipContent side="top">{label}</TooltipContent>
-		</Tooltip>
+		</IconButton>
 	)
 }

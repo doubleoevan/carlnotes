@@ -2,16 +2,15 @@
 // end is announced, and how a stop keeps a streaming reply quiet
 import { afterEach, expect, test } from "bun:test"
 import type { VoiceChatPage } from "@shared/payloads"
+import { type SpokenAnswerEnd, toNextSpokenPartAction } from "./spokenAnswerQueue"
 import {
 	appendSpokenAnswerPart,
 	completeSpokenAnswer,
 	registerSpokenAnswerAudio,
-	type SpokenAnswerEnd,
 	speakSpokenAnswer,
 	stopSpokenAnswer,
 	stopSpokenAnswerKey,
 	subscribeToSpokenAnswerEnd,
-	toNextSpokenPartAction,
 	toSpokenAnswerState,
 } from "./spokenAnswerStore"
 
@@ -48,15 +47,20 @@ function registerFakeAudioElement(): FakeAudioElement {
 	return fakeAudioElement
 }
 
-// stub the speech route with a status per spoken part's text, 200 by default, and return the texts it was asked for. a
-// 200 returns audio of the given size in bytes
-function stubSpeechRoute(statusByText: Record<string, number>, audioByteCount = 4): string[] {
-	// the stub reads the spoken part's text from the body and returns its status
+// stub the speech route with a status per spoken part's text, 200 by default, and return the texts and the speakers it
+// was asked for. a 200 returns audio of the given size in bytes
+function stubSpeechRoute(
+	statusByText: Record<string, number>,
+	audioByteCount = 4,
+): { fetchedTexts: string[]; fetchedSpeakers: string[] } {
+	// the stub reads the spoken part's text and speaker from the body and returns its status
 	const fetchedTexts: string[] = []
+	const fetchedSpeakers: string[] = []
 	const originalFetch = globalThis.fetch
 	globalThis.fetch = (async (_url: string, init: RequestInit) => {
-		const { text } = JSON.parse(String(init.body)) as { text: string }
+		const { text, speaker } = JSON.parse(String(init.body)) as { text: string; speaker: string }
 		fetchedTexts.push(text)
+		fetchedSpeakers.push(speaker)
 
 		// a 200 returns the audio, and any other status returns no body
 		const status = statusByText[text] ?? 200
@@ -65,7 +69,7 @@ function stubSpeechRoute(statusByText: Record<string, number>, audioByteCount = 
 	cleanups.push(() => {
 		globalThis.fetch = originalFetch
 	})
-	return fetchedTexts
+	return { fetchedTexts, fetchedSpeakers }
 }
 
 // let the queue's fetches and plays settle
@@ -122,7 +126,7 @@ test("subscribeToSpokenAnswerEnd tells a finished reply from a stopped one and a
 // a failed spoken part is skipped and the next one plays, and a spent budget stops the queue
 test("a failed spoken part is skipped and a spent budget stops the queue", async () => {
 	const fakeAudioElement = registerFakeAudioElement()
-	const fetchedTexts = stubSpeechRoute({ "Skip one.": 502, "Skip three.": 402 })
+	const { fetchedTexts } = stubSpeechRoute({ "Skip one.": 502, "Skip three.": 402 })
 	speakSpokenAnswer({
 		spokenAnswerKey: "skip",
 		page,
@@ -144,7 +148,7 @@ test("a failed spoken part is skipped and a spent budget stops the queue", async
 // a spoken part appended while the one before it plays is fetched at once, so carl never waits a whole speech call
 test("appendSpokenAnswerPart prefetches a spoken part appended while one plays", async () => {
 	const fakeAudioElement = registerFakeAudioElement()
-	const fetchedTexts = stubSpeechRoute({})
+	const { fetchedTexts } = stubSpeechRoute({})
 	appendSpokenAnswerPart({ spokenAnswerKey: "prefetch", page, text: "Prefetch one." })
 	await flushQueue()
 
@@ -159,7 +163,7 @@ test("appendSpokenAnswerPart prefetches a spoken part appended while one plays",
 // again
 test("a spoken part's audio is cached by its text across reply keys", async () => {
 	registerFakeAudioElement()
-	const fetchedTexts = stubSpeechRoute({})
+	const { fetchedTexts } = stubSpeechRoute({})
 	speakSpokenAnswer({ spokenAnswerKey: "cache-a", page, spokenParts: ["Cached spoken part."] })
 	await flushQueue()
 	stopSpokenAnswer()
@@ -170,10 +174,47 @@ test("a spoken part's audio is cached by its text across reply keys", async () =
 	expect(fetchedTexts).toEqual(["Cached spoken part."])
 })
 
+// the same words in vienna's voice are their own audio, fetched once with her speaker, and cached apart from carl's
+test("a spoken part in another host's voice is fetched with its speaker and cached apart", async () => {
+	registerFakeAudioElement()
+	const { fetchedTexts, fetchedSpeakers } = stubSpeechRoute({})
+
+	// carl's words, then the same words in vienna's voice, then vienna's again from the cache
+	speakSpokenAnswer({ spokenAnswerKey: "voice-a", page, spokenParts: ["Same words."] })
+	await flushQueue()
+	stopSpokenAnswer()
+	speakSpokenAnswer({ spokenAnswerKey: "voice-b", page, speaker: "cohost", spokenParts: ["Same words."] })
+	await flushQueue()
+	stopSpokenAnswer()
+	speakSpokenAnswer({ spokenAnswerKey: "voice-c", page, speaker: "cohost", spokenParts: ["Same words."] })
+	await flushQueue()
+
+	// the words were fetched once in each voice
+	expect(fetchedTexts).toEqual(["Same words.", "Same words."])
+	expect(fetchedSpeakers).toEqual(["host", "cohost"])
+})
+
+// a stop from the lock screen or headphones says so to the end listeners, and a tap's stop does not
+test("a lock screen pause is told apart from a tap's stop", async () => {
+	registerFakeAudioElement()
+	stubSpeechRoute({})
+	const spokenAnswerEnds: SpokenAnswerEnd[] = []
+	cleanups.push(subscribeToSpokenAnswerEnd((spokenAnswerEnd) => spokenAnswerEnds.push(spokenAnswerEnd)))
+
+	// one reply paused from the lock screen, then one stopped by a tap
+	speakSpokenAnswer({ spokenAnswerKey: "paused", page, spokenParts: ["Paused part."] })
+	await flushQueue()
+	stopSpokenAnswer({ isMediaSessionPause: true })
+	speakSpokenAnswer({ spokenAnswerKey: "tapped", page, spokenParts: ["Tapped part."] })
+	await flushQueue()
+	stopSpokenAnswer()
+	expect(spokenAnswerEnds.map((spokenAnswerEnd) => Boolean(spokenAnswerEnd.isMediaSessionPause))).toEqual([true, false])
+})
+
 // the cache drops its oldest spoken part once it holds more than its size, so that spoken part is fetched again
 test("the audio cache drops its oldest spoken part past its size", async () => {
 	registerFakeAudioElement()
-	const fetchedTexts = stubSpeechRoute({}, 21_000_000)
+	const { fetchedTexts } = stubSpeechRoute({}, 21_000_000)
 
 	// two spoken parts fill the cache past its size, so the first is gone by the replay
 	for (const text of ["Big one.", "Big two.", "Big one."]) {

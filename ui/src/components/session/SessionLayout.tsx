@@ -8,6 +8,7 @@ import { Label } from "@/components/primitives/label"
 import { GithubIcon, GoogleIcon } from "@/components/session/OAuthProviderIcons"
 import { PasswordInput } from "@/components/session/PasswordInput"
 import { toChromeIntentUrl } from "@/lib/chromeIntentUrl"
+import { SESSION_PAGE_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 // the oauth buttons' dark hero background, which leaves the email path reading as the quieter option
@@ -56,7 +57,7 @@ export function SessionLayout({
 	)
 
 	return (
-		<div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-12">
+		<div className={SESSION_PAGE_CLASS}>
 			{/* brand mark */}
 			<AnchorLink href="/" className="mx-auto mb-8 flex items-center gap-2">
 				{/* nudged up to optically center the cup on the logo's text. the offset scales with the icon size */}

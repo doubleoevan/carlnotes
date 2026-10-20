@@ -182,7 +182,7 @@ export function toInvite(invite: typeof invites.$inferSelect): Invite {
 	}
 }
 
-// the link routes: creating a link, revoking one, and accepting a join token
+// the link routes: creating a topic's or a team's link, and accepting a join token
 export const invitesRoute = new Hono<AppEnv>()
 	.post("/topics/:id/invites", zValidator("json", inviteCreatePayload), async (context) => {
 		// reject a signed-out visitor

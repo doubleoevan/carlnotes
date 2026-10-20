@@ -1,24 +1,26 @@
-// voice route tests: each route's gates, the recording's body limit and its form, the transcript with its spend
-// row, the silent recording, the spoken part with its spend row and its content type, and the failure reports
+// voice route tests: each route's gates, the spoken questions cutoff and its read with the budget check, the recording's
+// body limit and its form, the transcript with its spend row, the silent recording, and the failure reports
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { SPOKEN_QUESTIONS_PAUSED_ERROR } from "@shared/contracts/chat"
 import { quietErrorReports } from "@shared/monitoringTestFixtures"
+import * as monthlyBudgetCutoffs from "../../db/monthlyBudgetCutoffs"
 import { restoreRedisClient } from "../../db/redisClientStub"
-import { speechCost, transcriptionCost } from "../../worker/budget"
+import { transcriptionCost } from "../../worker/budget"
 import * as litellm from "../../worker/litellm"
 import * as speech from "../../worker/speech"
 import * as transcription from "../../worker/transcription"
+import * as authorization from "../authorization"
 import { VOICE_RECORDING_BODY_LIMIT_BYTES } from "../bodyLimit"
+import { toJsonRequest } from "../testSession"
 import { SIGNUP_REQUIRED_ERROR } from "./chatTurnAuthorization"
 import * as voiceAuthorization from "./voiceAuthorization"
-import { SPOKEN_EVENTS_PATH, VOICE_SPEECH_PATH, VOICE_TRANSCRIPTION_PATH } from "./voiceRoute"
+import { SPOKEN_EVENTS_PATH, SPOKEN_QUESTIONS_PATH, VOICE_SPEECH_PATH, VOICE_TRANSCRIPTION_PATH } from "./voiceRoute"
 import {
 	allowVoicePage,
-	MP3_BYTES,
 	RECORDING_BYTES,
 	ROOM_PAGE,
 	stubTranscription,
 	TOPIC_PAGE,
-	toJsonRequest,
 	toSignedInVoiceApp,
 	toTranscriptionRequest,
 	toVisitorVoiceApp,
@@ -92,8 +94,9 @@ test("a recording becomes a transcript and a chat spend row", async () => {
 	expect(loadOrProvisionUserLiteLLMKeySpy).toHaveBeenCalledWith("user-1")
 	expect(transcribeRecordingSpy).toHaveBeenCalledWith({ audioBytes: WAV_BYTES, litellmApiKey: "sk-user" })
 
-	// the spend row names the user, the page, the call's cost, and its tokens
+	// the spend row names its kind, the user, the page, the call's cost, and its tokens
 	expect(recordChatSpendRowSpy).toHaveBeenCalledWith({
+		kind: "transcription",
 		userId: "user-1",
 		page: ROOM_PAGE,
 		cost: transcriptionCost({ inputTokens: 320, outputTokens: 10 }),
@@ -169,6 +172,86 @@ test("a page the user may not talk on is rejected before any model is called", a
 	expect(recordSpokenAnswerSpy).not.toHaveBeenCalled()
 })
 
+// past the spoken questions cutoff, a recording is rejected with the cutoff's own 402 before it is transcoded or
+// transcribed
+test("a spoken question past the spoken questions cutoff is rejected before any model is called", async () => {
+	// a page that allows user-1, whose spend is past the cutoff
+	const app = toSignedInVoiceApp()
+	allowVoicePage()
+	const isMonthlyBudgetCutoffPassedSpy = spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(
+		true,
+	)
+	const { transcodeRecordingSpy, transcribeRecordingSpy } = stubTranscription({ outcome: "silent" })
+
+	// the transcription is rejected with the cutoff's error, and nothing was transcoded or transcribed
+	const transcriptionResponse = await app.request(VOICE_TRANSCRIPTION_PATH, toTranscriptionRequest(TOPIC_PAGE))
+	expect(transcriptionResponse.status).toBe(402)
+	expect(await transcriptionResponse.json()).toEqual({ error: SPOKEN_QUESTIONS_PAUSED_ERROR })
+	expect(isMonthlyBudgetCutoffPassedSpy).toHaveBeenCalledWith("user-1", "spokenQuestions")
+	expect(transcodeRecordingSpy).not.toHaveBeenCalled()
+	expect(transcribeRecordingSpy).not.toHaveBeenCalled()
+})
+
+// the spoken questions read says budget for a spent budget even past the cutoff, paused past the cutoff, and allowed
+// under it
+test("the spoken questions read returns budget, paused, or allowed", async () => {
+	// user-1's budget is spent and their spend is past the cutoff
+	const app = toSignedInVoiceApp()
+	const isMonthlySpendExhaustedSpy = spyOn(authorization, "isMonthlySpendExhausted").mockResolvedValue(true)
+	const isMonthlyBudgetCutoffPassedSpy = spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(
+		true,
+	)
+
+	// a spent budget says budget, though the cutoff is passed too
+	const budgetResponse = await app.request(SPOKEN_QUESTIONS_PATH)
+	expect(await budgetResponse.json()).toEqual({ status: "budget" })
+	expect(isMonthlySpendExhaustedSpy).toHaveBeenCalledWith("user-1")
+
+	// a budget with room left says paused past the cutoff
+	isMonthlySpendExhaustedSpy.mockResolvedValue(false)
+	const pausedResponse = await app.request(SPOKEN_QUESTIONS_PATH)
+	expect(await pausedResponse.json()).toEqual({ status: "paused" })
+	expect(isMonthlyBudgetCutoffPassedSpy).toHaveBeenCalledWith("user-1", "spokenQuestions")
+
+	// spend under the cutoff says allowed
+	isMonthlyBudgetCutoffPassedSpy.mockResolvedValue(false)
+	const allowedResponse = await app.request(SPOKEN_QUESTIONS_PATH)
+	expect(await allowedResponse.json()).toEqual({ status: "allowed" })
+})
+
+// the spoken questions read starts the cutoff check before the budget check returns, so the two checks run together
+test("the spoken questions read starts the budget check and the cutoff check together", async () => {
+	// a budget check that logs when it starts and when it returns a moment later
+	const app = toSignedInVoiceApp()
+	const checkEvents: string[] = []
+	spyOn(authorization, "isMonthlySpendExhausted").mockImplementation(async () => {
+		checkEvents.push("budget check started")
+		await Promise.resolve()
+		checkEvents.push("budget check returned")
+		return false
+	})
+
+	// a cutoff check that logs when it starts
+	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockImplementation(async () => {
+		checkEvents.push("cutoff check started")
+		return false
+	})
+
+	// the cutoff check started while the budget check was still running
+	const response = await app.request(SPOKEN_QUESTIONS_PATH)
+	expect(await response.json()).toEqual({ status: "allowed" })
+	expect(checkEvents).toEqual(["budget check started", "cutoff check started", "budget check returned"])
+})
+
+// a visitor has no spend, so the spoken questions read asks them to sign up before it reads any spend
+test("a visitor's spoken questions read is rejected", async () => {
+	const isMonthlySpendExhaustedSpy = spyOn(authorization, "isMonthlySpendExhausted")
+	const response = await toVisitorVoiceApp().request(SPOKEN_QUESTIONS_PATH)
+	expect(response.status).toBe(401)
+	expect(await response.json()).toEqual({ error: SIGNUP_REQUIRED_ERROR })
+	expect(isMonthlySpendExhaustedSpy).not.toHaveBeenCalled()
+})
+
 // a transcription post with no page, a page that is not one, or no recording is a bad request
 test("a transcription post needs a page and a recording", async () => {
 	allowVoicePage()
@@ -235,79 +318,6 @@ test("a transcription the proxy turns down answers by its failure", async () => 
 	const rejectedResponse = await signedInApp.request(VOICE_TRANSCRIPTION_PATH, toTranscriptionRequest(TOPIC_PAGE))
 	expect(rejectedResponse.status).toBe(502)
 	expect(recordChatSpendRowSpy).not.toHaveBeenCalled()
-})
-
-// a spoken part is spoken on the user's key, recorded as chat spend on the standard tier, and answered as an MP3 that
-// no cache may keep
-test("a spoken part is spoken and answered as an MP3 with a chat spend row", async () => {
-	const { recordChatSpendRowSpy } = allowVoicePage()
-	const recordSpokenAnswerSpy = spyOn(speech, "recordSpokenAnswer").mockResolvedValue({
-		outcome: "recorded",
-		audioBytes: MP3_BYTES,
-		audioContentType: "audio/mpeg",
-		inputTokens: 50,
-		audioTokens: 400,
-	})
-	const response = await toSignedInVoiceApp().request(
-		VOICE_SPEECH_PATH,
-		toJsonRequest({ page: TOPIC_PAGE, text: "Four of them are hiring." }),
-	)
-	expect(response.status).toBe(200)
-	expect(response.headers.get("Content-Type")).toBe("audio/mpeg")
-	expect(response.headers.get("Cache-Control")).toBe("private, no-store")
-	expect(new Uint8Array(await response.arrayBuffer())).toEqual(MP3_BYTES)
-
-	// the spoken part went to the model on the user's key, and the spend row prices it on the spoken answer's tier
-	expect(recordSpokenAnswerSpy).toHaveBeenCalledWith({ text: "Four of them are hiring.", litellmApiKey: "sk-user" })
-	expect(recordChatSpendRowSpy).toHaveBeenCalledWith({
-		userId: "user-1",
-		page: TOPIC_PAGE,
-		cost: speechCost({ speechTier: speech.SPOKEN_ANSWER_SPEECH_TIER, inputTokens: 50, audioTokens: 400 }),
-		totalTokens: 450,
-	})
-})
-
-// a spoken part whose MP3 encode failed after the paid call is answered as the WAV the speech model returned
-test("a spoken part whose MP3 encode failed is answered as a WAV", async () => {
-	allowVoicePage()
-	spyOn(speech, "recordSpokenAnswer").mockResolvedValue({
-		outcome: "recorded",
-		audioBytes: WAV_BYTES,
-		audioContentType: "audio/wav",
-		inputTokens: 50,
-		audioTokens: 400,
-	})
-	const response = await toSignedInVoiceApp().request(
-		VOICE_SPEECH_PATH,
-		toJsonRequest({ page: TOPIC_PAGE, text: "Hi." }),
-	)
-	expect(response.status).toBe(200)
-	expect(response.headers.get("Content-Type")).toBe("audio/wav")
-	expect(response.headers.get("Cache-Control")).toBe("private, no-store")
-	expect(new Uint8Array(await response.arrayBuffer())).toEqual(WAV_BYTES)
-})
-
-// a speech call the proxy turns down answers by why, as a transcription does
-test("a spoken part the proxy turns down answers by its failure", async () => {
-	allowVoicePage()
-	quietErrorReports()
-	const recordSpokenAnswerSpy = spyOn(speech, "recordSpokenAnswer").mockResolvedValue({
-		outcome: "budget-spent",
-		reason: "Budget has been exceeded",
-	})
-	const signedInApp = toSignedInVoiceApp()
-	const budgetResponse = await signedInApp.request(VOICE_SPEECH_PATH, toJsonRequest({ page: TOPIC_PAGE, text: "Hi." }))
-	expect(budgetResponse.status).toBe(402)
-	expect(await budgetResponse.json()).toEqual({ error: "budget exhausted" })
-
-	// a rate limited proxy
-	recordSpokenAnswerSpy.mockResolvedValue({ outcome: "retryable", httpStatus: 429, reason: "rate limited" })
-	const retryableResponse = await signedInApp.request(
-		VOICE_SPEECH_PATH,
-		toJsonRequest({ page: TOPIC_PAGE, text: "Hi." }),
-	)
-	expect(retryableResponse.status).toBe(503)
-	expect(retryableResponse.headers.get("Retry-After")).toBe("5")
 })
 
 // each voice model failure is reported under a fixed message per model call and outcome, with the proxy's reason, the

@@ -2,6 +2,7 @@ import { useState } from "react"
 import { authClient } from "@/clients/authClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { SessionLayout } from "@/components/session/SessionLayout"
+import { toSignupHref } from "@/components/session/signupPrompts"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
 import { toAuthorizeReturnPath, toSafeRedirectPath } from "@/lib/utils"
@@ -54,7 +55,7 @@ export function LoginPage() {
 			}
 			footerPrompt={"Don't have an account? "}
 			footerLinkLabel="Sign up"
-			footerHref={`/signup?cta=login&next=${encodeURIComponent(redirectPath)}`}
+			footerHref={toSignupHref("login", redirectPath)}
 		/>
 	)
 }

@@ -1,0 +1,12 @@
+{
+	"name": "podcast-chat",
+	"passedRunCount": 17,
+	"runCount": 18,
+	"ranOn": "2026-10-20",
+	"commit": "4c85de75",
+	"hasUncommittedChanges": true,
+	"writerModelIds": [
+		"chat-model"
+	],
+	"graderModelId": "score-model"
+}

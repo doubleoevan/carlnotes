@@ -1,44 +1,17 @@
-// schedule tests: starting the scheduled Topics' Scans, the owners whose budget is spent, the topic sweep summary, and
-// the sweep without the budget reset
-import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
-import { quietErrorReports } from "@shared/monitoringTestFixtures"
-import { saveEnvSettings } from "@shared/savedEnvSettings"
+// schedule tests: starting the scheduled Topics' Scans and each skip, the topic sweep summary, and the sweep without the
+// budget reset
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
 import { restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
 import * as quotas from "../db/quotas"
-import type { topics } from "../db/schema/topics"
-import * as litellm from "./litellm"
 import * as scan from "./scan"
-import { emptyTopicSweepSummary, loadBudgetExhaustedOwnerIds, startScheduledTopicScans } from "./schedule"
+import { emptyTopicSweepSummary, startScheduledTopicScans } from "./schedule"
+import { toScheduledTopic } from "./scheduledTopicTestFixtures"
 
-// a scheduled weekly Topic with only the fields that startScheduledTopicScans reads.
-// the daily topic limit never skips a weekly Topic
-function toScheduledTopic(id: string, ownerId = "owner-1"): typeof topics.$inferSelect {
-	return { id, ownerId, frequency: "weekly" } as never
-}
-
-// stub a proxy that cannot be reached, with the proxy settings that a budget read needs, and return the fetch mock
-function stubUnreachableProxy(): Mock<() => Promise<Response>> {
-	Bun.env.LITELLM_BASE_URL = "http://litellm.test"
-	Bun.env.LITELLM_MASTER_KEY = "master"
-
-	// a fetch that throws an error for every request
-	const fetchMock = mock(async (): Promise<Response> => {
-		throw new TypeError("fetch failed")
-	})
-	globalThis.fetch = fetchMock as unknown as typeof fetch
-	return fetchMock
-}
-
-// put each spied function, the connection pool's own query, the real fetch, and the proxy settings back
-// after each test, whether its assertions pass or not
-const originalFetch = globalThis.fetch
-const restoreEnvSettings = saveEnvSettings(["LITELLM_BASE_URL", "LITELLM_MASTER_KEY"])
+// put each spied function and the connection pool's own query back after each test, whether its assertions pass or not
 afterEach(() => {
 	restoreConnectionPool()
-	globalThis.fetch = originalFetch
 	mock.restore()
-	restoreEnvSettings()
 })
 
 // one owner's remaining scan count is read once, and each start lowers the sweep's copy of that count
@@ -73,6 +46,7 @@ test("ten scheduled topics of one owner with two remaining scans read the quota 
 		started: 2,
 		skippedOverQuota: 8,
 		skippedOverDailyLimit: 0,
+		skippedOverDailyScanCutoff: 0,
 		skippedOverBudget: 0,
 		skippedOverBacklog: 0,
 		failed: 0,
@@ -150,60 +124,11 @@ test("a running scan spends nothing and a failed start is counted", async () => 
 		started: 0,
 		skippedOverQuota: 0,
 		skippedOverDailyLimit: 0,
+		skippedOverDailyScanCutoff: 0,
 		skippedOverBudget: 0,
 		skippedOverBacklog: 0,
 		failed: 1,
 	})
-})
-
-// each owner's budget is read once, no matter how many of that owner's Topics are scheduled.
-// only an owner whose budget is spent is returned
-test("each owner's budget is read once, and only an owner whose budget is spent is returned", async () => {
-	// three Topics of two owners, and a budget read that finds only owner-1's budget spent
-	const scheduledTopics = [
-		toScheduledTopic("a", "owner-1"),
-		toScheduledTopic("b", "owner-1"),
-		toScheduledTopic("c", "owner-2"),
-	]
-	const isUserLiteLLMKeyBudgetExhaustedSpy = spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockImplementation(
-		async (userId) => userId === "owner-1",
-	)
-
-	// only owner-1 is returned, and each owner's budget is read once
-	expect(await loadBudgetExhaustedOwnerIds(scheduledTopics)).toEqual(new Set(["owner-1"]))
-	expect(isUserLiteLLMKeyBudgetExhaustedSpy.mock.calls.map(([userId]) => userId).sort()).toEqual(["owner-1", "owner-2"])
-})
-
-// an owner whose budget read fails, or who has no key yet, is left out
-test("an owner whose budget read fails or who has no key is left out", async () => {
-	// an owner with a key, and a proxy that cannot be reached
-	stubConnectionPool(() => [["owner@example.com", "sk-owner", "user", "free", null]])
-	const fetchMock = stubUnreachableProxy()
-	expect(await loadBudgetExhaustedOwnerIds([toScheduledTopic("a")])).toEqual(new Set())
-	expect(fetchMock).toHaveBeenCalledTimes(1)
-
-	// an owner with no key yet is left out, and that owner's budget is never read from the proxy
-	stubConnectionPool(() => [["owner@example.com", null, "user", "free", null]])
-	expect(await loadBudgetExhaustedOwnerIds([toScheduledTopic("a")])).toEqual(new Set())
-	expect(fetchMock).toHaveBeenCalledTimes(1)
-})
-
-// one owner's budget read that throws an error is reported, and that owner is left out.
-// the other owners' budgets are still read
-test("an owner whose budget read throws an error is reported and left out", async () => {
-	// owner-1's read throws an error, and owner-2's budget is spent
-	const reportErrorSpy = quietErrorReports()
-	spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted").mockImplementation(async (userId) => {
-		if (userId === "owner-1") {
-			throw new Error("connection lost")
-		}
-		return true
-	})
-
-	// owner-2 is returned, and owner-1's failure is reported once
-	const scheduledTopics = [toScheduledTopic("a", "owner-1"), toScheduledTopic("b", "owner-2")]
-	expect(await loadBudgetExhaustedOwnerIds(scheduledTopics)).toEqual(new Set(["owner-2"]))
-	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 })
 
 // an owner whose budget is spent gets a failed Scan row for each Topic instead of a started Scan
@@ -235,6 +160,7 @@ test("each Topic whose owner's budget is spent saves a failed Scan with the budg
 		started: 1,
 		skippedOverQuota: 0,
 		skippedOverDailyLimit: 0,
+		skippedOverDailyScanCutoff: 0,
 		skippedOverBudget: 2,
 		skippedOverBacklog: 0,
 		failed: 0,
@@ -308,6 +234,27 @@ test("a Topic with a running Scan saves no failed Scan, even if its owner's budg
 	expect(topicSweepSummary).toMatchObject({ started: 0, skippedOverBudget: 0, failed: 0 })
 })
 
+// a daily Topic that runs weekly and already scanned this week waits, and is counted past the daily scans cutoff
+test("a daily Topic that runs weekly and scanned this week starts no Scan", async () => {
+	// a daily Topic within its owner's allowance, whose owner has scans left today
+	stubConnectionPool()
+	spyOn(quotas, "scansRemainingToday").mockResolvedValue(5)
+	const startTopicScanSpy = spyOn(scan, "startTopicScan")
+	const dailyTopic = { ...toScheduledTopic("a"), frequency: "daily" as const }
+
+	// start the scheduled Topics' Scans with the Topic running weekly
+	const topicSweepSummary = await startScheduledTopicScans({
+		scheduledTopics: [dailyTopic],
+		dailyTopicIdsByOwner: new Map([["owner-1", new Set(["a"])]]),
+		dailyTopicOnWeeklyScanIds: new Set(["a"]),
+		budgetExhaustedOwnerIds: new Set(),
+	})
+
+	// the Topic is counted past the daily scans cutoff, and nothing started
+	expect(topicSweepSummary).toMatchObject({ started: 0, skippedOverDailyScanCutoff: 1 })
+	expect(startTopicScanSpy).not.toHaveBeenCalled()
+})
+
 // the sweep hands each Scan to Temporal and does not wait, so its summary count starts
 test("a topic sweep summary counts starts instead of outcomes", () => {
 	const topicSweepSummary = emptyTopicSweepSummary(1)
@@ -317,6 +264,7 @@ test("a topic sweep summary counts starts instead of outcomes", () => {
 		"skippedOverBacklog",
 		"skippedOverBudget",
 		"skippedOverDailyLimit",
+		"skippedOverDailyScanCutoff",
 		"skippedOverQuota",
 		"started",
 	])

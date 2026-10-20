@@ -1,14 +1,17 @@
-// the voice client: the page a private chat names, how each route's status is read, the one retry, and the question
-// event's shape
+// the voice client: the page a private chat names, how each route's status is read, the spoken questions read, the one
+// retry, and the question event's shape
 import { expect, test } from "bun:test"
+import { SPOKEN_QUESTIONS_PAUSED_ERROR } from "@shared/contracts/chat"
 import {
 	fetchSpokenAnswerAudio,
+	fetchSpokenQuestionsStatus,
 	sendTranscription,
 	toRecordingFileName,
 	toRetryDelayMs,
 	toSpokenQuestionEvent,
 	toVoiceChatPage,
 } from "./voiceClient"
+import { TEST_TOPIC_VOICE_CHAT_PAGE } from "./voiceClientTestFixtures"
 
 // a 503 that asks for no wait, so a retry test runs at once
 function toRetryNowResponse(): Response {
@@ -48,6 +51,14 @@ async function withFetchResponse<T>(response: Response, call: () => Promise<T>):
 	return (await withFetchResponses([response], call)).result
 }
 
+// post a recording for transcription from the test topic's voice chat page
+function sendTestTranscription(): ReturnType<typeof sendTranscription> {
+	return sendTranscription({
+		page: TEST_TOPIC_VOICE_CHAT_PAGE,
+		recording: new Blob(["bytes"], { type: "audio/webm;codecs=opus" }),
+	})
+}
+
 // each private chat page maps to the voice page kind the api authorizes it as
 test("toVoiceChatPage names the topic, the team, or the new-topic chat", () => {
 	expect(toVoiceChatPage({ topicId: "topic-1" })).toEqual({ kind: "topic", topicId: "topic-1" })
@@ -63,33 +74,49 @@ test("toRecordingFileName names the container", () => {
 
 // a transcript comes back as is, an empty one included, and a failed status reads as the chat's rejection
 test("sendTranscription returns the transcript or the chat rejection", async () => {
-	const page = { kind: "topic", topicId: "topic-1" } as const
-	const recording = new Blob(["bytes"], { type: "audio/webm;codecs=opus" })
-	const sendTranscriptionResult = await withFetchResponse(Response.json({ transcript: "" }), () =>
-		sendTranscription({ page, recording }),
-	)
+	const sendTranscriptionResult = await withFetchResponse(Response.json({ transcript: "" }), sendTestTranscription)
 	expect(sendTranscriptionResult).toEqual({ transcript: "" })
 
 	// a spent budget, the rate limit, and a page the user may not chat on each read as their rejection
-	expect(
-		await withFetchResponse(new Response(null, { status: 402 }), () => sendTranscription({ page, recording })),
-	).toBe("budget")
-	expect(
-		await withFetchResponse(new Response(null, { status: 429 }), () => sendTranscription({ page, recording })),
-	).toBe("rateLimited")
-	expect(
-		await withFetchResponse(new Response(null, { status: 404 }), () => sendTranscription({ page, recording })),
-	).toBe("forbidden")
-	expect(await withFetchResponse(toRetryNowResponse(), () => sendTranscription({ page, recording }))).toBe("failed")
+	expect(await withFetchResponse(new Response(null, { status: 402 }), sendTestTranscription)).toBe("budget")
+	expect(await withFetchResponse(new Response(null, { status: 429 }), sendTestTranscription)).toBe("rateLimited")
+	expect(await withFetchResponse(new Response(null, { status: 404 }), sendTestTranscription)).toBe("forbidden")
+	expect(await withFetchResponse(toRetryNowResponse(), sendTestTranscription)).toBe("failed")
+})
+
+// the spoken questions cutoff's own 402 reads as paused, and a 402 with any other error reads as a spent budget
+test("sendTranscription tells the spoken questions cutoff from a spent budget", async () => {
+	const pausedResult = await withFetchResponse(
+		Response.json({ error: SPOKEN_QUESTIONS_PAUSED_ERROR }, { status: 402 }),
+		sendTestTranscription,
+	)
+	expect(pausedResult).toBe("spokenQuestionsPaused")
+
+	// a spent budget's 402 names the chat's budget error
+	const budgetResult = await withFetchResponse(
+		Response.json({ error: "budget exhausted" }, { status: 402 }),
+		sendTestTranscription,
+	)
+	expect(budgetResult).toBe("budget")
+})
+
+// the spoken questions read returns the route's status, and a failed status or a network failure reads as allowed
+test("fetchSpokenQuestionsStatus returns the status, or allowed if the read fails", async () => {
+	for (const status of ["allowed", "paused", "budget"] as const) {
+		expect(await withFetchResponse(Response.json({ status }), fetchSpokenQuestionsStatus)).toBe(status)
+	}
+
+	// a visitor's 401 and a network failure leave the mic to the transcription's own check
+	expect(await withFetchResponse(new Response(null, { status: 401 }), fetchSpokenQuestionsStatus)).toBe("allowed")
+	const networkResult = await withFetchResponses([new TypeError("offline")], fetchSpokenQuestionsStatus)
+	expect(networkResult).toEqual({ result: "allowed", fetchCount: 1 })
 })
 
 // a 503 is tried once more, and the retry's transcript comes back
 test("sendTranscription retries a 503 once", async () => {
-	const page = { kind: "topic", topicId: "topic-1" } as const
-	const recording = new Blob(["bytes"], { type: "audio/webm;codecs=opus" })
 	const { result, fetchCount } = await withFetchResponses(
 		[toRetryNowResponse(), Response.json({ transcript: "hello" })],
-		() => sendTranscription({ page, recording }),
+		sendTestTranscription,
 	)
 	expect(result).toEqual({ transcript: "hello" })
 	expect(fetchCount).toBe(2)
@@ -151,18 +178,20 @@ test("toRetryDelayMs reads Retry-After within five seconds", () => {
 	expect(toRetryDelayMs(null)).toBe(1_000)
 })
 
-// the question event includes the first spoken word's delay only if the reply played
+// the question event includes the first spoken word's delay only if the reply played, and where it was asked from
 test("toSpokenQuestionEvent measures the first word from the recording's send", () => {
 	const spokenQuestionTimings = { secondsRecorded: 4, transcriptionMs: 900, recordingSentAt: 1_000 }
 	expect(toSpokenQuestionEvent(spokenQuestionTimings, 3_500)).toEqual({
 		kind: "question",
 		secondsRecorded: 4,
 		transcriptionMs: 900,
+		chatTurnKind: "private",
 		firstSpokenWordMs: 2_500,
 	})
-	expect(toSpokenQuestionEvent(spokenQuestionTimings, null)).toEqual({
+	expect(toSpokenQuestionEvent(spokenQuestionTimings, null, "podcast")).toEqual({
 		kind: "question",
 		secondsRecorded: 4,
 		transcriptionMs: 900,
+		chatTurnKind: "podcast",
 	})
 })

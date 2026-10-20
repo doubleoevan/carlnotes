@@ -1,10 +1,8 @@
 // write.ts tests for the untrusted fence
 import { expect, test } from "bun:test"
 import { FALLBACK_PROMPT_TEMPLATES } from "./fetch"
+import { toUntrustedFences } from "./untrustedFenceTestFixtures"
 import { writePrompt } from "./write"
-
-// the delimiter this file matches against, tag plus a uuid nonce
-const DELIMITER_PATTERN = /<untrusted-data-([0-9a-f-]{36})>\n([\s\S]*?)\n<\/untrusted-data-\1>/
 
 // an untrusted value renders fenced, and a second call fences it under a different nonce
 test("writePrompt fences an untrusted value in a per-call nonce delimiter", () => {
@@ -12,12 +10,12 @@ test("writePrompt fences an untrusted value in a per-call nonce delimiter", () =
 	const firstPrompt = writePrompt(template, { content: "a page body" })
 
 	// the value sits between matching open and close tags carrying one nonce
-	const firstMatch = firstPrompt.match(DELIMITER_PATTERN)
-	expect(firstMatch?.[2]).toBe("a page body")
+	const [firstFence] = toUntrustedFences(firstPrompt)
+	expect(firstFence?.value).toBe("a page body")
 
 	// the same call again fences the same value under a different nonce, so can not be guessed
-	const secondMatch = writePrompt(template, { content: "a page body" }).match(DELIMITER_PATTERN)
-	expect(secondMatch?.[1]).not.toBe(firstMatch?.[1])
+	const [secondFence] = toUntrustedFences(writePrompt(template, { content: "a page body" }))
+	expect(secondFence?.nonce).not.toBe(firstFence?.nonce)
 })
 
 // a value carrying the delimiter shape or a Markdown fence cannot close the block it sits in
@@ -51,7 +49,7 @@ test("writePrompt renders trusted values bare", () => {
 
 	// the date has no fence around it and the context does
 	expect(prompt).toContain("Scan date: July 30, 2026")
-	expect(prompt.match(DELIMITER_PATTERN)?.[2]).toBe("llm tooling")
+	expect(toUntrustedFences(prompt)[0]?.value).toBe("llm tooling")
 })
 
 // placeholders fill in one pass, so a {{variable}} inside a value is left as the text it is

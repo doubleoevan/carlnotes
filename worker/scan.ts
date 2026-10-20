@@ -9,12 +9,12 @@ import type { ScanTrigger } from "./workflows/runTopicScanActivities"
 // a persisted Scan row
 type Scan = typeof scans.$inferSelect
 
-// the scan row this opened and a call that waits for the workflow to end. "running" means one was already in flight
+// the scan row this opened and a call that waits for the workflow to end. "running" means one was already running
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
 export type TopicScanStart = { status: "started"; scan: Scan; whenFinished: () => Promise<void> } | { status: "running" }
 
 /**
- * Open a Scan for a Topic and pass it to Temporal. Returns "running" if the Topic already has one in flight.
+ * Opens a Scan for a Topic and passes it to Temporal. Returns "running" if the Topic already has one running.
  * The workflow id catches that, and a query could still read a stale row.
  * the trigger holds what asked for the Scan, which decides what its conclusion announces.
  * The daily quota counts scheduled and manual Scans the same way.
@@ -70,7 +70,7 @@ export async function scanTopic(
 		throw error
 	}
 
-	// a rejection means a scan is already in flight. a row this call opened is deleted, an existing one gets a dispatchedAt
+	// a rejection means a scan is already running. a row this call opened is deleted, an existing one gets a dispatchedAt
 	if (scanStart.status === "running") {
 		if (!isExistingRow) {
 			await db.delete(scans).where(eq(scans.id, scan.id))

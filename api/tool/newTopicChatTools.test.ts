@@ -4,7 +4,7 @@ import { expect, test } from "bun:test"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"
 import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
-import type { ChatTurnToolCalls } from "./chatTools"
+import { toEmptyChatTurnToolCalls } from "./chatTools"
 import {
 	createTopicInChat,
 	TEAM_MISSING_TEXT,
@@ -20,7 +20,7 @@ test("the new-topic chat offers draftTopic and no create tool, without the sugge
 	const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT }
 	const newTopicTools = toNewTopicChatTools({
 		userId: "user-1",
-		toolCalls: { count: 0, topicSaves: [], topicSaveRejections: [] },
+		toolCalls: toEmptyChatTurnToolCalls(),
 		topicDraft,
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
@@ -29,7 +29,7 @@ test("the new-topic chat offers draftTopic and no create tool, without the sugge
 
 // a public or invite draft that names no team is not created, and carl is told to ask which team the topic goes on
 test("an agreed create asks for a team before it creates a public or invite topic", async () => {
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const toolCalls = toEmptyChatTurnToolCalls()
 	const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT, name: "Hoops", prompt: "Pickup games", visibility: "invite" }
 	const createTopicText = await createTopicInChat({
 		userId: "user-1",
@@ -43,7 +43,7 @@ test("an agreed create asks for a team before it creates a public or invite topi
 
 // draftTopic writes the named fields alone, and an empty value clears a field as the description promises
 test("draftTopic writes the named fields, leaves the rest, and clears on an empty value", async () => {
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const toolCalls = toEmptyChatTurnToolCalls()
 	const topicDraft: TopicDraft = {
 		...EMPTY_TOPIC_DRAFT,
 		prompt: "Runs after work",
@@ -81,7 +81,7 @@ test("draftTopic starts the podcast on, keeps it off once named, and leaves it o
 	try {
 		// a new-topic chat on an instance with the default speech model
 		delete Bun.env.PODCAST_SPEECH_MODEL
-		const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+		const toolCalls = toEmptyChatTurnToolCalls()
 		const topicDraft: TopicDraft = { ...EMPTY_TOPIC_DRAFT }
 		const newTopicTools = toNewTopicChatTools({
 			userId: "user-1",

@@ -85,7 +85,7 @@ jobs:
       - name: Run the evals
         run: |
           failed_eval_names=""
-          for eval_name in grader-calibration podcast-episode-script scan-report topic-chat topic-chat-tools \
+          for eval_name in grader-calibration podcast-episode-script scan-report topic-chat topic-chat-tools podcast-chat \
               new-topic-chat team-chat search-queries attachment-summaries source-suggestions; do
             if ! bun run "eval:$eval_name" --repeat "$REPEAT_COUNT"; then
               failed_eval_names="$failed_eval_names $eval_name"

@@ -1,12 +1,15 @@
 // billing tests for the subscription projection that the webhook applies to billing_subscriptions, the webhook's
-// responses: a 400 for a bad signature and a 500 for a verified event that could not be applied, and the 404 a
-// non-admin gets for another user's billing state
-import { afterEach, expect, type Mock, mock, test } from "bun:test"
+// responses: a 400 for a bad signature and a 500 for a verified event that could not be applied, the LiteLLM key
+// that a plan change or a stale key budget reissues, and the 404 a non-admin gets for another user's billing state
+import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import { toHmacDigest } from "@shared/hmac"
 import type * as monitoring from "@shared/monitoring"
 import { quietErrorReports } from "@shared/monitoringTestFixtures"
+import type { Plan } from "@shared/plans"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { FREE_USER_ACCESS_ROW, restoreConnectionPool, stubConnectionPool } from "../db/connectionPoolStub"
+import { toEveryTimerInstantSetTimeout } from "../db/redisFakeServer"
+import * as worker from "../worker"
 import { toPaidSubscription } from "./billing"
 import { billingRoute } from "./billingRoute"
 import { toSignedInApp } from "./testSession"
@@ -41,6 +44,21 @@ async function postWebhook(body: string, signature?: string): Promise<Response> 
 	})
 }
 
+// post a signed active subscription event on the plus plan for user-1. a renewal and an upgrade both arrive as
+// customer.subscription.updated
+async function postSignedPlusSubscriptionUpdate(): Promise<Response> {
+	// the event, signed with the webhook's secret
+	const payload = JSON.stringify({
+		id: "evt_1",
+		object: "event",
+		type: "customer.subscription.updated",
+		data: {
+			object: { id: "sub_1", status: "active", customer: "cus_1", metadata: { userId: "user-1", plan: "plus" } },
+		},
+	})
+	return await postWebhook(payload, toStripeSignature(payload, "whsec_test"))
+}
+
 // an unsigned or badly signed event is rejected with a 400, and the rejection is reported
 test("an unsigned or badly signed webhook is rejected with a 400 and reported", async () => {
 	const reportErrorSpy = configureWebhook()
@@ -71,20 +89,91 @@ test("a verified webhook whose apply fails responds 500 and is reported", async 
 	})
 
 	// a subscription event for a user, signed with the secret
-	const payload = JSON.stringify({
-		id: "evt_1",
-		object: "event",
-		type: "customer.subscription.updated",
-		data: {
-			object: { id: "sub_1", status: "active", customer: "cus_1", metadata: { userId: "user-1", plan: "plus" } },
-		},
-	})
-	const response = await postWebhook(payload, toStripeSignature(payload, "whsec_test"))
-
+	const response = await postSignedPlusSubscriptionUpdate()
 	expect(response.status).toBe(500)
 	expect(await response.json()).toEqual({ error: "webhook failed" })
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({ outcome: "failed" })
+})
+
+// the plan the user was on before the event, whether the key's budget is stale, and whether a key reissue succeeds
+type PostPlusSubscriptionEventOptions = { previousPlan: Plan; isKeyBudgetStale?: boolean; isKeyReissued?: boolean }
+
+// the webhook's response, and the spies on the key's budget check and the key reissue
+type PostPlusSubscriptionEventResult = {
+	response: Response
+	reportErrorSpy: Mock<typeof monitoring.reportError>
+	isUserLiteLLMKeyBudgetStaleSpy: Mock<typeof worker.isUserLiteLLMKeyBudgetStale>
+	replaceUserLiteLLMKeySpy: Mock<typeof worker.replaceUserLiteLLMKey>
+}
+
+// post a signed active subscription event on the plus plan for a user who was on previousPlan, and return the response
+// and the spies
+async function postPlusSubscriptionEvent({
+	previousPlan,
+	isKeyBudgetStale = false,
+	isKeyReissued = true,
+}: PostPlusSubscriptionEventOptions): Promise<PostPlusSubscriptionEventResult> {
+	// the user's plan before the event, and nothing for every other query
+	const reportErrorSpy = configureWebhook()
+	stubConnectionPool((sentQuery) => (sentQuery.text.startsWith('select "plan" from "users"') ? [[previousPlan]] : []))
+
+	// the key's budget check, the key reissue, and a reissue backoff that waits no time
+	const isUserLiteLLMKeyBudgetStaleSpy = spyOn(worker, "isUserLiteLLMKeyBudgetStale").mockResolvedValue(
+		isKeyBudgetStale,
+	)
+	const replaceUserLiteLLMKeySpy = spyOn(worker, "replaceUserLiteLLMKey").mockResolvedValue(isKeyReissued)
+	spyOn(globalThis, "setTimeout").mockImplementation(toEveryTimerInstantSetTimeout())
+
+	// the signed event, and the response with the spies
+	const response = await postSignedPlusSubscriptionUpdate()
+	return { response, reportErrorSpy, isUserLiteLLMKeyBudgetStaleSpy, replaceUserLiteLLMKeySpy }
+}
+
+// a renewal on the same plan with a matching key keeps the LiteLLM key, so the key's spend keeps counting the whole month
+test("a subscription event on the user's current plan with a matching key keeps the LiteLLM key", async () => {
+	const { response, isUserLiteLLMKeyBudgetStaleSpy, replaceUserLiteLLMKeySpy } = await postPlusSubscriptionEvent({
+		previousPlan: "plus",
+	})
+	expect(response.status).toBe(200)
+	expect(isUserLiteLLMKeyBudgetStaleSpy).toHaveBeenCalledWith("user-1")
+	expect(replaceUserLiteLLMKeySpy).not.toHaveBeenCalled()
+})
+
+// a key left at an old budget by an earlier failed reissue is reissued on the next event, even on the same plan
+test("a subscription event on the user's current plan with a stale key reissues the LiteLLM key", async () => {
+	const { response, replaceUserLiteLLMKeySpy } = await postPlusSubscriptionEvent({
+		previousPlan: "plus",
+		isKeyBudgetStale: true,
+	})
+	expect(response.status).toBe(200)
+	expect(replaceUserLiteLLMKeySpy).toHaveBeenCalledWith("user-1")
+})
+
+// a plan change reissues the LiteLLM key at the new plan's budget without reading the key's budget
+test("a subscription event that changes the plan reissues the LiteLLM key", async () => {
+	const { response, isUserLiteLLMKeyBudgetStaleSpy, replaceUserLiteLLMKeySpy } = await postPlusSubscriptionEvent({
+		previousPlan: "free",
+	})
+	expect(response.status).toBe(200)
+	expect(isUserLiteLLMKeyBudgetStaleSpy).not.toHaveBeenCalled()
+	expect(replaceUserLiteLLMKeySpy).toHaveBeenCalledWith("user-1")
+})
+
+// a reissue that fails every attempt is reported, and the webhook responds 500 so Stripe sends the event again
+test("a subscription event whose key reissue fails every attempt responds 500 and is reported", async () => {
+	const { response, reportErrorSpy, replaceUserLiteLLMKeySpy } = await postPlusSubscriptionEvent({
+		previousPlan: "free",
+		isKeyReissued: false,
+	})
+
+	// every attempt ran, and the failure was reported with the user, then as a failed webhook
+	expect(response.status).toBe(500)
+	expect(replaceUserLiteLLMKeySpy).toHaveBeenCalledTimes(3)
+	expect(reportErrorSpy.mock.calls.map((reportErrorCall) => reportErrorCall[2])).toEqual([
+		{ userId: "user-1" },
+		{ outcome: "failed" },
+	])
 })
 
 // another user's billing state is a private read, so a non-admin reads it as missing

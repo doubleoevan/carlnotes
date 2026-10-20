@@ -7,69 +7,65 @@ sidebar:
   order: 1
 ---
 
-Your topic feed is every topic's findings in one place: the homepage lists your topics with their
-newest findings, and each topic page holds the full historical set.
+Your topic feed is every topic's findings in one place. The homepage lists your topics with their newest findings. Each
+topic page holds all of the topic's findings, old and new.
 
-![A topic card in the feed: ranked findings, each with its source and
-age](../../../assets/screenshots/feed-cards.png)
+![A topic card in the feed: ranked findings, each with its source and age](../../../assets/screenshots/feed-cards.png)
 
 ## Read the finding before you open the link
 
-Two ways the topic feed can save you time.
+The topic feed saves you time in two ways.
 
-**The resource kind label signals time commitment.** Every finding is marked read, watch, or listen. The
-label exists so you can tell a two-minute article from a forty-minute video before you decide to
-open it. Filter by resource kind from the dropdown in the search bar.
+**The resource kind label shows the time it takes.** Every finding is marked read, watch, or listen. The label tells a
+two-minute article from a forty-minute video before you open it. Filter by resource kind from the dropdown in the search
+bar.
 
-**Read Carl's note.** The headline says what the topic finding is. **Carl's Notes**, in
-the finding's popover, says why it *matters*.
+**Read Carl's note.** The headline says what the finding is. **Carl's Notes**, in the finding's popover, says why it
+*matters*.
 
 ## Rate, mark read, filter
 
 Open a finding's popover for its controls:
 
-- **Rate this finding**: thumbs up or thumbs down, and a box to tell Carl why. What you write there
-goes back to him as feedback on the finding. A thumbs down hides the finding from your feed for good,
-and Carl scores pages like it lower from then on. The **Rated down** view in **Filters** shows them,
-in case you change your mind.
-- **Mark read**: your feed keeps track of the things you haven't read yet. The **All**
-view mutes what you've already read, and the **Unread** view hides it entirely.
-- **Bookmark**: a bookmarked finding stays at the top of your feed and is never filtered out. Carl
-reads your latest bookmarks and thumbs up when he scores what a brew finds, so pages like them rank
-higher, and Coffee Break brings them back.
+- **Rate this finding**: thumbs up or thumbs down, and a box to tell Carl why. What you write there goes back to him as
+  feedback on the finding. A thumbs down hides the finding from your feed for good, and Carl scores pages like it lower
+  from then on. The **Rated down** view in **Filters** shows them, in case you change your mind.
+- **Mark read**: your feed tracks what you haven't read yet. The **All** view mutes what you've read, and the **Unread**
+  view hides it.
+- **Bookmark**: a bookmarked finding stays at the top of your feed and is never filtered out. When Carl scores what a
+  brew finds, he reads up to 10 of the topic's bookmarked and thumbs-up pages, newest bookmarks first. Pages like them
+  rank higher, and Coffee Break brings them back.
 
-![The finding popover's controls: Bookmark, Mark read, Rate this finding, and the box for telling
-Carl why](../../../assets/screenshots/feed-thumbs-and-consumed.png)
+![The finding popover's controls: Bookmark, Mark read, Rate this finding, and the box for telling Carl
+why](../../../assets/screenshots/feed-thumbs-and-consumed.png)
 
-Sort the feed by **Relevance**, **Newest**, or **Trending**. Filter by resource kind, by tags, or by
-view with the **Filters** control. The **Reheat** button reloads the topic feed in place.
+Sort the feed by **Relevance**, **Newest**, or **Trending**. Use the **Filters** control to filter by resource kind, by
+tags, or by view. The **Reheat** button reloads the topic feed in place.
 
 ## Email updates
 
-Each topic you own can email you its new findings after a brew. The toggle lives on your own
-**Profile** page, in the **Emails** column of your topics table. Topics you follow have the same
-toggle in the subscriptions table on the **Activity** page.
+Each topic you own can email you its new findings after a brew. The toggle is on your own **Profile** page, in the
+**Emails** column of your topics table. Topics you follow have the same toggle in the **Topics you follow** table on
+the **Activity** page.
 
-Turning the toggle off stops the email from being sent. But the topic keeps brewing and its findings
-stay up to date in the feed.
+Turning the toggle off stops the email. The topic keeps brewing, and its findings stay up to date in the feed.
 
-The unsubscribe link inside the email deactivates your subscription to another user's topic. Nothing
-is deleted, and the email or subscription can be reactivated on the Activity page. An invitation you
-haven't answered shows as a count on the **Activity** row of your menu, on the Activity page's title, and
-in the tab title, and the count's tooltip names who invited you to which topic. The badge on your avatar
-adds it to your unread chats and notes, and its tooltip lists all three.
+The unsubscribe link inside the email stops you following another user's topic. Nothing is deleted. You can follow it
+again, and turn its email back on, from the Activity page.
+
+An invitation you haven't answered shows as a count in three places: the **Activity** row of your menu, the Activity
+page's title, and the tab title. The count's tooltip names who invited you to which topic. The badge on your avatar adds
+invitations to your unread chats and notes, and its tooltip lists all three.
 
 ## The Brew diary is your topic brew's history
 
-Every topic page has a **Brew diary**: one summary per brew, with "read N · kept N" counts and that
-brew's recap. It's the fastest way to answer one question: did the prompt rewrite help? Rewrite,
-press **Brew**, and compare the new entry's kept count and findings against the entries before it. A
-diary entry tells you right away if your prompt is working or not.
+Every topic page has a **Brew diary**: one summary per brew, with "read N · kept N" counts and that brew's recap. The
+diary answers one question: did the prompt rewrite help? Rewrite the prompt, press **Brew**, and compare the new entry's
+kept count and findings against the entries before it. Over a few brews, the entries show whether the rewrite helped.
 
 ## When you want to talk
 
-The topic feed gives you individual findings. When the question is "what changed this month" or
-"where do these sources disagree", ask [Coffee Talk](/docs/feed/chat/). Chat with Carl about what
-your topic brew found. On a topic one of your teams holds, the panel opens that team's shared chat room,
-where your teammates join in. A one-to-one conversation is the **Private chat** option in the
-panel's **…** menu, offered while a topic page is on screen.
+The topic feed gives you one finding at a time. When the question is "what changed this month" or "where do these
+sources disagree", ask [Coffee Talk](/docs/feed/chat/). Chat with Carl about what your topic's brews found. On a topic
+one of your teams holds, the panel opens that team's shared chat room, where your teammates join in. For a one-to-one
+conversation, pick **Private chat** in the panel's **…** menu while a topic page is open.

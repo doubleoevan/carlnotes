@@ -1,9 +1,12 @@
 // the chat contracts: chat room messages, mentions, rooms, chat turns and their tool calls, and their limits
 import { z } from "zod"
-import type { avatarSources, chatAttachmentKinds } from "../enums"
-import type { ChatToolCall } from "../payloads"
+import type { avatarSources, chatAttachmentKinds, PodcastEpisodeSpeaker } from "../enums"
+import type { ChatToolCall, PodcastEpisodeChapterRef } from "../payloads"
 import type { ProposeTopicEditPayload, TopicDraft } from "../topicPayloads"
 import { profileIdentity } from "./profiles"
+
+// the chat's name in the app's copy
+export const CHAT_NAME = "Coffee Talk"
 
 // one chat message attachment shown with a chat message
 export type ChatMessageAttachment = { id: string; kind: (typeof chatAttachmentKinds)[number]; name: string }
@@ -42,6 +45,15 @@ export type ChatLinkPreview = {
 
 // the chat room post body
 export const CHAT_ROOM_MESSAGE_MAX_CHARS = 4000
+
+// the sentence that tells the user their budget is spent, in carl's words
+export const SPENT_BUDGET_LINE = "Carl is staring at an empty mug."
+
+// the error that rejects a spoken question's transcription once the user's spend is past the spoken questions cutoff
+export const SPOKEN_QUESTIONS_PAUSED_ERROR = "spoken questions paused"
+
+// whether spoken questions are allowed, paused by the spoken questions cutoff, or stopped by a spent budget
+export type SpokenQuestionsState = { status: "allowed" | "paused" | "budget" }
 
 // how long a flag's reason can be
 export const FLAG_REASON_MAX_CHARS = 1000
@@ -113,10 +125,11 @@ export function toUncompactedChatTurnStart(history: { question: string; answer: 
 // how many chat turns a send posts to the llm. the earlier turns beyond the memory budget are compacted
 export const CHAT_HISTORY_TURNS = 100
 
-// what one line of a chat reply stream says. text the model writes can never pass for another line,
-// since JSON escapes the newline that ends one
+// what one line of a chat reply stream says. JSON escapes every newline the model writes, so model text never passes
+// for another line. a question asked from the podcast player gets the speaker who answers it before any text
 export type ChatReplyLine =
 	| { type: "text"; text: string }
+	| { type: "speaker"; speaker: PodcastEpisodeSpeaker }
 	| { type: "toolCalls"; toolCalls: TopicToolCalls }
 	| { type: "failed" }
 
@@ -271,18 +284,6 @@ export function clipAttachmentText(text: string): string {
 	return `${text.slice(0, CHAT_ATTACHMENT_TEXT_CHARS - marker.length)}${marker}`
 }
 
-/**
- * A question with its attachments named in a trailing note.
- */
-
-export function withAttachmentNote(question: string, attachments: { name: string }[]): string {
-	if (attachments.length === 0) {
-		return question
-	}
-	const attachmentNote = `[attached: ${attachments.map((attachment) => attachment.name).join(", ")}]`
-	return question === "" ? attachmentNote : `${question}\n\n${attachmentNote}`
-}
-
 // one persisted chat turn of a stored conversation, replayed on a later page load
 export type ChatTurnRow = {
 	question: string
@@ -290,6 +291,10 @@ export type ChatTurnRow = {
 	at?: string
 	// whether the question was spoken and its reply read aloud
 	isSpoken: boolean
+	// the speaker who answered, host unless the cohost answered a podcast chat turn. the podcast episode chapter that a
+	// podcast chat turn was asked during, or null
+	speaker: PodcastEpisodeSpeaker
+	podcastEpisodeChapter: PodcastEpisodeChapterRef | null
 	// the tools this chat turn called, sent back with the next question
 	toolCalls?: ChatToolCall[]
 	attachments: ChatMessageAttachment[]

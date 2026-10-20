@@ -3,10 +3,10 @@ import type { BillingState } from "@shared/contracts/profiles"
 import { Settings } from "lucide-react"
 import { useState } from "react"
 import { openBillingPortal } from "@/clients/billingClient"
+import { SpendMeter } from "@/components/account/SpendMeter"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
-import { toCentsLabel } from "@/lib/labels"
 import { CARD_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
@@ -32,11 +32,12 @@ export function AccountBudget({
 			    holds them, spaced apart instead of ruled off */}
 			<section className={cn(CARD_CLASS, "space-y-4")}>
 				{activity && (
-					<SpendSection
+					<SpendMeter
 						scanSpendCents={activity.scanSpendCents}
 						chatSpendCents={activity.chatSpendCents}
 						podcastEpisodeSpendCents={activity.podcastEpisodeSpendCents}
 						budgetCents={activity.budgetCents}
+						monthlyBudgetCutoffs={activity.monthlyBudgetCutoffs}
 					/>
 				)}
 				<ScanUsageSection billing={billing} />
@@ -56,85 +57,6 @@ function PaymentNotice() {
 					Update
 				</Button>
 				your payment method to keep Carl brewing.
-			</p>
-		</div>
-	)
-}
-
-// messages for each percentage of the budget spent, lowest threshold last so the first match wins.
-const BUDGET_MESSAGES = [
-	{ budgetUsedPercent: 100, line: "Dry until the 1st. Carl is still reading. He just can't file notes." },
-	{ budgetUsedPercent: 90, line: "Nearly out." },
-	{ budgetUsedPercent: 60, line: "Getting low." },
-	{ budgetUsedPercent: 0, line: "Full pot." },
-] as const
-
-// the progress bar of metered spend against the monthly budget, with scans, podcast episodes,
-// and chat as segments of one bar
-function SpendSection({
-	scanSpendCents,
-	chatSpendCents,
-	podcastEpisodeSpendCents,
-	budgetCents,
-}: {
-	scanSpendCents: number
-	chatSpendCents: number
-	podcastEpisodeSpendCents: number
-	budgetCents: number
-}) {
-	// each segment's share of the budget, and the total the label reads
-	const totalCents = scanSpendCents + chatSpendCents + podcastEpisodeSpendCents
-	const toPercent = (cents: number) => (budgetCents > 0 ? Math.min(100, (cents / budgetCents) * 100) : 0)
-
-	// the budget percent and message
-	const budgetUsedPercent = budgetCents > 0 ? Math.round(toPercent(totalCents)) : 100
-	const budgetMessage =
-		BUDGET_MESSAGES.find((message) => budgetUsedPercent >= message.budgetUsedPercent) ?? BUDGET_MESSAGES[0]
-
-	return (
-		<div>
-			<div className="flex items-baseline justify-between">
-				<h2 className="font-semibold">Carl's coffee fund</h2>
-				<span className="text-muted-foreground text-sm">
-					{toCentsLabel(totalCents)} of {toCentsLabel(budgetCents)}
-				</span>
-			</div>
-
-			{/* the budget percentage segments. scans in the primary color, then podcast episodes, then chat */}
-			<div className="bg-muted mt-2 flex h-3 overflow-hidden rounded-full">
-				<div className="bg-primary h-full" style={{ width: `${toPercent(scanSpendCents)}%` }} />
-				<div className="bg-spend-podcast-episode h-full" style={{ width: `${toPercent(podcastEpisodeSpendCents)}%` }} />
-				<div className="bg-spend-chat h-full" style={{ width: `${toPercent(chatSpendCents)}%` }} />
-			</div>
-
-			{/* the key to each budget percent segment. the podcast episode entry shows only if there is podcast episode spend */}
-			<div className="text-muted-foreground mt-2 flex gap-4 text-xs">
-				<span className="flex items-center gap-1.5">
-					<span className="bg-primary size-2 rounded-full" />
-					Brews {toCentsLabel(scanSpendCents)}
-				</span>
-				{podcastEpisodeSpendCents > 0 && (
-					<span className="flex items-center gap-1.5">
-						<span className="bg-spend-podcast-episode size-2 rounded-full" />
-						Coffee Break podcast {toCentsLabel(podcastEpisodeSpendCents)}
-					</span>
-				)}
-				<span className="flex items-center gap-1.5">
-					<span className="bg-spend-chat size-2 rounded-full" />
-					Coffee talk {toCentsLabel(chatSpendCents)}
-				</span>
-			</div>
-			{/* the budget percent and message */}
-			<p className="text-muted-foreground mt-1 text-xs">
-				<span className="text-sm">{budgetUsedPercent}%</span> {budgetMessage.line}
-				{budgetUsedPercent >= 100 && (
-					<>
-						{" "}
-						<AnchorLink href="/plans" className="underline">
-							Pick up some coffee.
-						</AnchorLink>
-					</>
-				)}
 			</p>
 		</div>
 	)

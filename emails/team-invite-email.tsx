@@ -1,6 +1,7 @@
 // the email a typed-address team invitation sends: who invited them, which team, and the invite url
 import { Link } from "@react-email/components"
 import { render } from "@react-email/render"
+import { CHAT_NAME } from "@shared/contracts/chat"
 import type { ReactElement } from "react"
 import AuthEmail, { type AuthEmailProps } from "./auth-email"
 import { summaryLink } from "./topic-scan-email"
@@ -32,7 +33,7 @@ function toAuthEmailProps({
 	appUrl,
 }: TeamInviteEmailProps): AuthEmailProps {
 	const inviteNote = `${senderUsername} invited you to join `
-	const teamNote = ". A team edits its topics together and shares a Coffee talk with Carl."
+	const teamNote = `. A team edits its topics together and shares a ${CHAT_NAME} with Carl.`
 	return {
 		heading: "You're invited",
 		lead: `${inviteNote}${teamName}${teamNote}`,

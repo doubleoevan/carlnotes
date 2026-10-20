@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# run every smoke script under the test runner, so the code they exercise lands in the coverage report.
+# run every smoke file under the test runner, so the code each smoke file exercises is included in the coverage report.
 # each file runs in its own process, since a smoke run ends the shared database pool when it cleans up.
 set -u
 cd "$(dirname "$0")/.." || exit 1
@@ -19,46 +19,52 @@ DEVELOPER_ONLY_SMOKE_FILES=(
 	evals/review-pipeline/reviewPipelineEval.smoke.ts
 )
 
-# whether this file is one of them
-is_developer_only() {
-	for developer_only_file in "${DEVELOPER_ONLY_SMOKE_FILES[@]}"; do
-		[ "$developer_only_file" = "$1" ] && return 0
+# whether the file is one of the files listed after it
+is_listed() {
+	local file=$1
+	shift
+	for listed_file in "$@"; do
+		[ "$listed_file" = "$file" ] && return 0
 	done
 	return 1
 }
 
-# the smoke files, in the same order the smoke script runs them
-SMOKE_FILES=(
-	worker/scan.smoke.ts
-	worker/store.smoke.ts
-	worker/attach.smoke.ts
-	worker/search.smoke.ts
-	worker/reddit.smoke.ts
-	worker/x.smoke.ts
-	worker/links.smoke.ts
-	worker/speech.smoke.ts
-	worker/podcast/podcastEpisode.smoke.ts
-	worker/review.smoke.ts
-	worker/chat.smoke.ts
-	evals/review-pipeline/reviewPipelineEval.smoke.ts
-	api/topic/subscriberCounts.smoke.ts
-	api/profiles.smoke.ts
-	api/team/teams.smoke.ts
-	api/chat/room.smoke.ts
-	api/chat/rooms.smoke.ts
-	api/invite/invites.smoke.ts
-	api/mcp/mcp.smoke.ts
-	api/tool/topicTools.smoke.ts
-	api/podcast/podcastEpisodes.smoke.ts
+# the smoke files that need the built ui, which this runner never builds
+BUILT_UI_SMOKE_FILES=(
+	api/seo.smoke.ts
 )
+
+# read the smoke files in order from the smoke script in package.json, and stop the run if the read fails partway
+if ! smoke_file_lines=$(jq -r '.scripts as $scripts | $scripts.smoke | split(" && ") | .[] | sub("^bun run "; "") | $scripts[.] | capture("(?<smokeFile>[^ \"]+\\.smoke\\.ts)").smokeFile' package.json); then
+	echo "=== smoke coverage: could not read the smoke files from package.json's smoke script ==="
+	exit 1
+fi
+
+# read each line in turn. macOS bash 3.2 has no mapfile
+SMOKE_FILES=()
+while IFS= read -r smoke_file; do
+	[ -n "$smoke_file" ] && SMOKE_FILES+=("$smoke_file")
+done <<< "$smoke_file_lines"
+
+# stop the run if the smoke script names no smoke file
+if [ "${#SMOKE_FILES[@]}" -eq 0 ]; then
+	echo "=== smoke coverage: no smoke files found in package.json's smoke script ==="
+	exit 1
+fi
 
 # each run writes coverage/lcov.info, kept aside per smoke file so one upload can send them all
 mkdir -p coverage/smoke
 failures=0
 skipped=0
 for smoke_file in "${SMOKE_FILES[@]}"; do
-	# a run off a developer's machine says so, and each skip is named rather than passed over quietly
-	if [ "${SMOKE_SKIP_DEVELOPER_ONLY:-0}" = "1" ] && is_developer_only "$smoke_file"; then
+	# skip a smoke file that needs the built ui, and a developer-only smoke file on a run off a developer's machine, and
+	# name each skip
+	if is_listed "$smoke_file" "${BUILT_UI_SMOKE_FILES[@]}"; then
+		echo "=== smoke coverage: $smoke_file skipped, it needs the built ui ==="
+		skipped=$((skipped + 1))
+		continue
+	fi
+	if [ "${SMOKE_SKIP_DEVELOPER_ONLY:-0}" = "1" ] && is_listed "$smoke_file" "${DEVELOPER_ONLY_SMOKE_FILES[@]}"; then
 		echo "=== smoke coverage: $smoke_file skipped, it runs only on a developer's machine ==="
 		skipped=$((skipped + 1))
 		continue

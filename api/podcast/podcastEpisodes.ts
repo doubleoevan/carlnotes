@@ -3,7 +3,12 @@
 // and removing an episode
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
-import { type PodcastEpisodeListenPayload, podcastEpisodeListenPayload, ratingPayload } from "@shared/payloads"
+import {
+	PODCAST_EPISODE_CHAPTER_POSITION_MAX,
+	type PodcastEpisodeListenPayload,
+	podcastEpisodeListenPayload,
+	ratingPayload,
+} from "@shared/payloads"
 import { topicPodcastPayload } from "@shared/topicPayloads"
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
@@ -45,7 +50,10 @@ const podcastEpisodePageParam = z.object({
 })
 
 // a chapter's podcast episode id and position, from its url
-const podcastEpisodeChapterParam = z.object({ id: z.string(), position: z.coerce.number().int() })
+const podcastEpisodeChapterParam = z.object({
+	id: z.string(),
+	position: z.coerce.number().int().min(0).max(PODCAST_EPISODE_CHAPTER_POSITION_MAX),
+})
 
 // the topic that the listener is on. the next unplayed podcast episode comes from another topic
 const nextUnplayedPodcastEpisodeQuery = z.object({ topicId: z.string().optional() })

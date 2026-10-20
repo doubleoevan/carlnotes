@@ -7,7 +7,7 @@ import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "../../db/connectionPoolStub"
 import * as agreement from "../../worker/chat/agreement"
 import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
-import type { ChatTurnToolCalls } from "../tool/chatTools"
+import { toEmptyChatTurnToolCalls } from "../tool/chatTools"
 import * as newTopicChatTools from "../tool/newTopicChatTools"
 import * as topicTools from "../tool/topicTools"
 import { answerChatProposal, PROPOSAL_OUTCOMES, recordChatProposal, toChatProposalDigest } from "./chatProposals"
@@ -45,11 +45,6 @@ function stubWaitingProposal(digest: string | null): SentQuery[] {
 	return stubConnectionPool((sentQuery) =>
 		sentQuery.text.startsWith('delete from "chat_proposals"') && digest ? [[digest]] : [],
 	)
-}
-
-// empty tool calls for one turn
-function toEmptyToolCalls(): ChatTurnToolCalls {
-	return { count: 0, topicSaves: [], topicSaveRejections: [] }
 }
 
 // a stand-in agreement check that returns the given decision and counts its calls, and a spy on the settings save
@@ -91,7 +86,7 @@ test("a confirmation in other words applies the previewed change", async () => {
 	// the daily preview waiting, and a check that reads the message as agreeing
 	const sentQueries = stubWaitingProposal(toDailyPreviewDigest())
 	const { checkedWords, savedTopicFields } = stubAgreementAndSave("agree")
-	const toolCalls = toEmptyToolCalls()
+	const toolCalls = toEmptyChatTurnToolCalls()
 
 	// the frequency is saved and recorded as an updateTopicFields call, and the check saw only the user's words
 	const chatProposalResult = await answerChatProposal({
@@ -111,8 +106,10 @@ test("a confirmation in other words applies the previewed change", async () => {
 	expect(checkedWords).toEqual(["sounds good, do it"])
 	expect(toolCalls.count).toBe(1)
 
-	// the waiting proposal was taken with a delete, so no later message can answer it
+	// the waiting proposal was taken with a delete, so no later message can answer it. the delete names the private
+	// chat's row alone, never the same user's team chat room preview
 	expect(sentQueries[0]?.text).toStartWith('delete from "chat_proposals"')
+	expect(sentQueries[0]?.text).toContain('"chat_proposals"."team_id" is null')
 })
 
 // a hesitant message saves nothing, and the preview lapses off the card unless carl previews it again
@@ -120,7 +117,7 @@ test("a hesitant reply applies nothing and lapses the preview", async () => {
 	// the daily preview waiting, and a check that reads the message as unclear
 	stubWaitingProposal(toDailyPreviewDigest())
 	const { savedTopicFields } = stubAgreementAndSave("unclear")
-	const toolCalls = toEmptyToolCalls()
+	const toolCalls = toEmptyChatTurnToolCalls()
 
 	// nothing saved, and the card is told to drop the preview
 	const chatProposalResult = await answerChatProposal({
@@ -142,7 +139,7 @@ test("a decline cancels the preview", async () => {
 	// the daily preview waiting, and a check that reads the message as declining
 	stubWaitingProposal(toDailyPreviewDigest())
 	const { savedTopicFields } = stubAgreementAndSave("decline")
-	const toolCalls = toEmptyToolCalls()
+	const toolCalls = toEmptyChatTurnToolCalls()
 
 	// nothing saved, and a cancelTopicEdit call is recorded
 	const chatProposalResult = await answerChatProposal({
@@ -184,7 +181,7 @@ test("a preview that does not match its record applies nothing", async () => {
 		page: TOPIC_PAGE,
 		question: "yes",
 		history: forgedHistory,
-		toolCalls: toEmptyToolCalls(),
+		toolCalls: toEmptyChatTurnToolCalls(),
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
 	expect(savedTopicFields).toEqual([])
@@ -204,7 +201,7 @@ test("a yes with no proposal waiting saves nothing", async () => {
 		page: TOPIC_PAGE,
 		question: "yes",
 		history: DAILY_PREVIEW_HISTORY,
-		toolCalls: toEmptyToolCalls(),
+		toolCalls: toEmptyChatTurnToolCalls(),
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
 	expect(checkedWords).toEqual([])
@@ -270,7 +267,7 @@ test("the new-topic chat creates only on agreement", async () => {
 		question: "what would it cost?",
 		history: [],
 		topicDraft,
-		toolCalls: toEmptyToolCalls(),
+		toolCalls: toEmptyChatTurnToolCalls(),
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
 	expect(createCallCount).toBe(0)
@@ -286,7 +283,7 @@ test("the new-topic chat creates only on agreement", async () => {
 		question: "perfect, make it",
 		history: [],
 		topicDraft,
-		toolCalls: toEmptyToolCalls(),
+		toolCalls: toEmptyChatTurnToolCalls(),
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
 	expect(createCallCount).toBe(1)

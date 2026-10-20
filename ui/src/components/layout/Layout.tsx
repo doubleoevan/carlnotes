@@ -7,7 +7,6 @@ import { SpokenAnswerAudio } from "@/components/chat/SpokenAnswerAudio"
 import { Footer } from "@/components/layout/Footer"
 import { Header } from "@/components/layout/Header"
 import { PodcastEpisodeAudio } from "@/components/podcast/PodcastEpisodeAudio"
-import { Toaster } from "@/components/primitives/sonner"
 import { SearchBar } from "@/components/search/SearchBar"
 
 /**
@@ -39,8 +38,6 @@ export function Layout() {
 			<PodcastEpisodeAudio />
 			{/* the audio element carl's spoken answers play through, mounted here so a reply outlives a route change */}
 			<SpokenAnswerAudio />
-			{/* the toast host */}
-			<Toaster />
 		</div>
 	)
 }

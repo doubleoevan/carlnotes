@@ -1,19 +1,20 @@
 # shared/
 
 What every module may import, and the reason the boundary holds: `contracts/` is the zod response shapes and the
-constants that the api validates with and the ui parses against, one module per domain (`chat.ts`, `teams.ts`,
-`invites.ts`, `activity.ts`, `profiles.ts`, `admin.ts`, `search.ts`, `findings.ts`, `podcast.ts`,
-`podcastEpisodePage.ts`, `topics.ts`, `notes.ts`, `pageHead.ts`, and `signupCta.ts`), imported by its own path,
-`payloads.ts` is the request payload schemas the api validates with `zValidator` and the types inferred from them, with
-the topic ones in `topicPayloads.ts`, `enums.ts` and `plans.ts` hold the values that both sides compare, `sources.ts`
-defines the Sources that an ingester reads, `seo.ts` builds topic slugs and paths, meta descriptions, and the site's
-structured data, `podcastEpisodes.ts` holds the podcast episode settings, a cover's key and path, the show's and the
-hosts' names, and a turn's transcript text, `voiceChat.ts` reads the transcription model from `CHAT_TRANSCRIPTION_MODEL`
-and says whether voice chat is on, which needs that model and the podcast speech model, `spokenText.ts` writes markdown
-as its plain words for the meta description and as the text Carl speaks, with fenced code and bare urls removed, a reply
-split into spoken parts on blank lines, and a streaming reply's spoken parts returned as they finish, and `appUrl.ts`
-reads the app's base url from `BETTER_AUTH_URL` for server code: `appUrl()` falls back to the local dev server, and
-`appBaseUrl()` is undefined if unset, for the emails and notifications that skip without a link.
+constants that the api validates with and the ui parses against, one module per domain (`chat.ts`, with the notes a
+stored question ends with in `chatQuestionNotes.ts`, `teams.ts`, `invites.ts`, `activity.ts`, `profiles.ts`, `admin.ts`,
+`search.ts`, `findings.ts`, `podcast.ts`, `podcastEpisodePage.ts`, `topics.ts`, `notes.ts`, `pageHead.ts`, and
+`signupCta.ts`), imported by its own path, `payloads.ts` is the request payload schemas the api validates with
+`zValidator` and the types inferred from them, with the topic ones in `topicPayloads.ts`, `enums.ts` and `plans.ts` hold
+the values that both sides compare, `sources.ts` defines the Sources that an ingester reads, `seo.ts` builds topic slugs
+and paths, meta descriptions, and the site's structured data, `podcastEpisodes.ts` holds the podcast episode settings
+and findings limits, a cover's sizes, key, and path, the show's and the hosts' names, and a turn's transcript text,
+`voiceChat.ts` reads the transcription model from `CHAT_TRANSCRIPTION_MODEL` and says whether voice chat is on, which
+needs that model and the podcast speech model, `spokenText.ts` writes markdown as its plain words for the meta
+description and as the text Carl speaks, with fenced code and bare urls removed, a reply split into spoken parts on
+blank lines, and a streaming reply's spoken parts returned as they finish, and `appUrl.ts` reads the app's base url from
+`BETTER_AUTH_URL` for server code: `appUrl()` falls back to the local dev server, and `appBaseUrl()` is undefined if
+unset, for the emails and notifications that skip without a link.
 
 `monitoring.ts` starts Sentry in the api and the worker and defines what tracing reads and writes: the traces sampler, a
 request's transaction name and measurements, the stage and query spans, and the threshold warnings. The send-time scrub
@@ -28,7 +29,9 @@ name, so the replicas' lines can be told apart.
 making a topic that the homepage, the menus, and the docs build all read, with the marker a docs page writes for it.
 `savedEnvSettings.ts` saves the environment settings a test changes and returns the call that puts them back, for
 the api, worker, and shared tests alike. `monitoringTestFixtures.ts` quiets the console and the error report for the
-api, worker, and database tests.
+api, worker, and database tests. `contracts/chatTestFixtures.ts` holds the podcast episode note that the shared and ui
+chat tests share.
+`text.ts` holds `toOneLineText`, which puts text on one line for a note, a title, a search query, or a hash.
 `envSettings.ts` reads a number that a setting holds: `toPositiveInteger` for a count or a duration, and
 `readDollarSetting` for an amount in dollars. `hmac.ts` signs a value with HMAC-SHA256 for the signup gate, the release
 webhook, the unsubscribe links, and the podcast cover keys.

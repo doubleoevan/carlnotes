@@ -5,13 +5,14 @@ import attachContextTemplate from "./attach-context.md" with { type: "text" }
 import attachImageContextTemplate from "./attach-image-context.md" with { type: "text" }
 import chatConductTemplate from "./chat-conduct.md" with { type: "text" }
 import chatDocsGuideTemplate from "./chat-docs-guide.md" with { type: "text" }
-import chatEditTopicTemplate from "./chat-edit-topic.md" with { type: "text" }
 import chatGlossaryTemplate from "./chat-glossary.md" with { type: "text" }
 import chatNewTopicTemplate from "./chat-new-topic.md" with { type: "text" }
 import chatOpenNewTopicTemplate from "./chat-open-new-topic.md" with { type: "text" }
+import chatPodcastEpisodeTemplate from "./chat-podcast-episode.md" with { type: "text" }
 import chatPreviewTopicEditTemplate from "./chat-preview-topic-edit.md" with { type: "text" }
 import chatProposeTopicEditTemplate from "./chat-propose-topic-edit.md" with { type: "text" }
 import chatRoomTurnTemplate from "./chat-room-turn.md" with { type: "text" }
+import chatSearchWebTemplate from "./chat-search-web.md" with { type: "text" }
 import chatSpokenTemplate from "./chat-spoken.md" with { type: "text" }
 import chatTeamTemplate from "./chat-team.md" with { type: "text" }
 import chatTopicTemplate from "./chat-topic.md" with { type: "text" }
@@ -33,14 +34,15 @@ export const FALLBACK_PROMPT_TEMPLATES = {
 	"attach-context": attachContextTemplate,
 	"attach-image-context": attachImageContextTemplate,
 	"chat-topic": chatTopicTemplate,
-	"chat-edit-topic": chatEditTopicTemplate,
 	"chat-propose-topic-edit": chatProposeTopicEditTemplate,
 	"chat-preview-topic-edit": chatPreviewTopicEditTemplate,
 	"chat-glossary": chatGlossaryTemplate,
 	"chat-conduct": chatConductTemplate,
 	"chat-docs-guide": chatDocsGuideTemplate,
 	"chat-open-new-topic": chatOpenNewTopicTemplate,
+	"chat-search-web": chatSearchWebTemplate,
 	"chat-spoken": chatSpokenTemplate,
+	"chat-podcast-episode": chatPodcastEpisodeTemplate,
 	"chat-new-topic": chatNewTopicTemplate,
 	"chat-team": chatTeamTemplate,
 	"chat-room-turn": chatRoomTurnTemplate,

@@ -20,12 +20,13 @@ function toStreamResponse(chunks: string[]): Response {
 	return new Response(body, { status: 200 })
 }
 
-// run one chat turn against a mocked fetch, returning its result, what streamed through, and the tool calls
+// run one chat turn against a mocked fetch, returning its result, what streamed through, the tool calls, and the hosts
 async function runChatTurn(chunks: string[]): Promise<{
 	sendResult: unknown
 	streamedText: string
 	topicToolCalls: TopicToolCalls | null
 	toolCallsList: TopicToolCalls[]
+	speakers: string[]
 }> {
 	// stand in for the network, restoring the real fetch after
 	const originalFetch = globalThis.fetch
@@ -36,22 +37,26 @@ async function runChatTurn(chunks: string[]): Promise<{
 		let streamedText = ""
 		let topicToolCalls: TopicToolCalls | null = null
 		const toolCallsList: TopicToolCalls[] = []
-		const sendResult = await sendChatTurn(
-			{ topicId: "t1" },
-			"a question",
-			[],
-			[],
-			(chunk) => {
+		const speakers: string[] = []
+		const sendResult = await sendChatTurn({
+			page: { topicId: "t1" },
+			question: "a question",
+			history: [],
+			attachments: [],
+			onChunk: (chunk) => {
 				streamedText += chunk
 			},
-			(toolCalls) => {
+			onToolCalls: (toolCalls) => {
 				topicToolCalls = toolCalls
 				toolCallsList.push(toolCalls)
 			},
-		)
+			onSpeaker: (speaker) => {
+				speakers.push(speaker)
+			},
+		})
 
 		// return the chat turn's result and what it collected back for the assertions
-		return { sendResult, streamedText, topicToolCalls, toolCallsList }
+		return { sendResult, streamedText, topicToolCalls, toolCallsList, speakers }
 	} finally {
 		globalThis.fetch = originalFetch
 	}
@@ -61,6 +66,18 @@ async function runChatTurn(chunks: string[]): Promise<{
 function toTextChunk(text: string): string {
 	return toChatReplyLineText({ type: "text", text })
 }
+
+// a podcast chat turn's speaker line names its host before the text, and a speaker line naming no host is dropped
+test("sendChatTurn reads a podcast chat turn's speaker line apart from its text", async () => {
+	const { sendResult, streamedText, speakers } = await runChatTurn([
+		toChatReplyLineText({ type: "speaker", speaker: "cohost" }),
+		`${JSON.stringify({ type: "speaker", speaker: "Vienna" })}\n`,
+		toTextChunk("It matters because you asked."),
+	])
+	expect(sendResult).toBeNull()
+	expect(speakers).toEqual(["cohost"])
+	expect(streamedText).toBe("It matters because you asked.")
+})
 
 // a clean completed stream is a completed chat turn
 test("sendChatTurn completes on a stream read to the end", async () => {

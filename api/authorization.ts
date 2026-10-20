@@ -1,8 +1,16 @@
 // the authorization gate
 import { dailyFrequencies } from "@shared/enums"
-import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, userBudgetCents } from "@shared/plans"
+import {
+	ADMIN_QUOTA,
+	type BillingInterval,
+	type MonthlyBudgetCutoffKind,
+	PLANS,
+	type Plan,
+	userBudgetCents,
+} from "@shared/plans"
 import { and, count, eq, inArray } from "drizzle-orm"
 import { db } from "../db"
+import { isMonthlyBudgetCutoffPassed } from "../db/monthlyBudgetCutoffs"
 import { hasFullPodcastEpisodes, loadUserAccess, monthlySpendDollars, toSpendCents } from "../db/quotas"
 import { teamMembers, teamTopics } from "../db/schema/teams"
 import { subscriptions, topics } from "../db/schema/topics"
@@ -125,6 +133,26 @@ export async function isMonthlySpendExhausted(userId: string): Promise<boolean> 
 	// sum the scan, chat, and podcast episode spend against the user's one budget
 	const [userAccess, monthlySpend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
 	return toSpendCents(monthlySpend) >= userBudgetCents(userAccess)
+}
+
+/**
+ * Returns the user's spend status for this cutoff kind: budget, paused, or allowed.
+ */
+export async function loadMonthlyBudgetCutoffStatus(
+	userId: string,
+	kind: MonthlyBudgetCutoffKind,
+): Promise<"budget" | "paused" | "allowed"> {
+	// start both checks together. each reads the user's access row and the month's spend, which load once per request
+	const [isSpendExhausted, isCutoffPassed] = await Promise.all([
+		isMonthlySpendExhausted(userId),
+		isMonthlyBudgetCutoffPassed(userId, kind),
+	])
+
+	// a spent budget comes first, then a passed cutoff
+	if (isSpendExhausted) {
+		return "budget"
+	}
+	return isCutoffPassed ? "paused" : "allowed"
 }
 
 /**

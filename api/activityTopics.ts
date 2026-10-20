@@ -2,6 +2,7 @@
 import type { ActivityScan, OwnerTopic } from "@shared/contracts/activity"
 import type { ChatMention } from "@shared/contracts/chat"
 import type { PodcastEpisodeSummary } from "@shared/contracts/podcast"
+import { toCentsFromDollars } from "@shared/plans"
 import { and, count, desc, eq, gte, inArray, sql } from "drizzle-orm"
 import { db } from "../db"
 import { scans } from "../db/schema/scans"
@@ -41,6 +42,25 @@ type ScanRow = {
 
 // the topics to build rows for, the signed-in user viewing the rows, and the user whose chat mentions the rows show
 type LoadTopicsOptions = { topicIds: string[]; signedInUserId: string; mentionUserId?: string | null }
+
+// the user whose owned topics to load, and the signed-in user viewing the rows
+type LoadOwnedTopicsOptions = { userId: string; signedInUserId: string }
+
+/**
+ * Loads the activity rows of the topics a user owns.
+ */
+export async function loadOwnedTopics({ userId, signedInUserId }: LoadOwnedTopicsOptions): Promise<OwnerTopic[]> {
+	// the ids of the topics that the user owns
+	const ownedTopicRows = await db.select({ id: topics.id }).from(topics).where(eq(topics.ownerId, userId))
+
+	// only the user's own view reads the user's chat mentions
+	const mentionUserId = signedInUserId === userId ? userId : null
+	return loadTopics({
+		topicIds: ownedTopicRows.map((ownedTopicRow) => ownedTopicRow.id),
+		signedInUserId,
+		mentionUserId,
+	})
+}
 
 /**
  * The activity rows for a given set of topics, whoever owns them. The admin console reads a team's topics through this,
@@ -201,5 +221,5 @@ export function toActivityTopics({
  */
 export function toCents(dollars: string | null): number {
 	const amount = Number(dollars)
-	return Number.isFinite(amount) ? Math.round(amount * 100) : 0
+	return Number.isFinite(amount) ? toCentsFromDollars(amount) : 0
 }

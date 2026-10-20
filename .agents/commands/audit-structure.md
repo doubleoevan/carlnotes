@@ -41,6 +41,8 @@ Check for:
    names that reached `main` belong here. A name renamed within the branch
    that introduced it never shipped, so nothing can still reference it.
    - `--prompt-only` (now `coderabbit review --agent`)
+   - `git diff --cached --name-status main` in the ship ritual's docs check (now
+     `git diff --name-status <origin/main sha>` plus `git ls-files --others --exclude-standard`)
    - `coderabbit review --type all` and a separate `coderabbit auth login` (now `--include-untracked` beside
      `--base-commit <origin/main sha>` and an inline `--api-key`)
    - `src/` paths from before the `ui/` restructure: `frontend.tsx`,
@@ -353,7 +355,8 @@ Check for:
    - the episodes card's `PodcastEpisodeRow` props `isPlayerCardPodcastEpisode`, `isPodcastEpisodePlaying`, and
      `onTogglePlayback` (now `isPlayButtonMuted` in `ui/src/components/podcast/PodcastEpisodeRow.tsx`, which reads the
      player itself), `PodcastEpisodeDetails` in `PodcastEpisodePlayerCard.tsx` (now its own file), and
-     `handleTogglePlayback` in `PodcastEpisodeChaptersTable.tsx` (now `togglePodcastEpisodeChapterPlayback` in the player store)
+     `handleTogglePlayback` in `PodcastEpisodeChaptersTable.tsx` (now `togglePodcastEpisodeChapterPlayback` in
+     `ui/src/stores/podcastEpisodePlayActions.ts`)
    - `PlaybackControls` in `PodcastEpisodePlayerCard.tsx` (now `SkipPlaybackButtons` and `PlaybackSpeedButton` in
      `ui/src/components/podcast/PlaybackControlButtons.tsx`), and `toChapterIndexAt`, the media session, and
      `podcastEpisodePlayerStore.test.ts` in `ui/src/stores/` (now `ui/src/lib/podcastEpisodePlayback.ts` and its test)
@@ -428,42 +431,41 @@ Check for:
      `api/tool/topicDraftTools.ts`); `toNewTopicChatTools`, `toSuggestTopicSourcesTool`, `toCreateTopicText`, and
      `TEAM_MISSING_TEXT` from `api/tool/chatTools.ts` (now `api/tool/newTopicChatTools.ts`); `isTakingDailySlot`,
      `startFirstScan`, and `toNewSourceRow` from `api/topic/helpers.ts` (now `api/topic/saveHelpers.ts`),
-     `loadTeamTopicOptions` from it (now `api/topic/teamTopicOptions.ts`), and `loadTopicAccessAndFindings` from it
-     (now `api/topic/accessibleFindings.ts`); `setRating`, `setBookmarked`, `setConsumed`, and `recordView` from
-     `api/topic/findings.ts` (now `api/topic/findingMarks.ts`); `toJsonLdTag`, `toCreativeWorkLd`, and
-     `toFindingListLd` from `api/seo.ts` (now `api/jsonLd.ts`); `authorizeChatTurn`, `authorizeTeamChatTurn`, and
+     `loadTeamTopicOptions` from it (now `api/topic/teamTopicOptions.ts`), and `loadTopicAccessAndFindings` from it (now
+     `api/topic/accessibleFindings.ts`); `setRating`, `setBookmarked`, `setConsumed`, and `recordView` from
+     `api/topic/findings.ts` (now `api/topic/findingMarks.ts`); `toJsonLdTag`, `toCreativeWorkLd`, and `toFindingListLd`
+     from `api/seo.ts` (now `api/jsonLd.ts`); `authorizeChatTurn`, `authorizeTeamChatTurn`, and
      `authorizeNewTopicChatTurn` from `api/chat/privateChat.ts` (now `api/chat/chatTurnAuthorization.ts`) and
      `streamChatTurn` from it (now `api/chat/chatTurnStream.ts`); `toTopicFilter` from `api/chat/roomTurns.ts` (now
      `api/chat/roomAccess.ts`) and `toModelRoomQuestion` from it (now `api/chat/roomQuestion.ts`); `listTopics` from
-     `api/mcp/results.ts` (now `api/mcp/topicResults.ts`); `acceptInviteToken`, `acceptTopicInvite`,
-     `acceptTeamInvite`, and `toInviteProperties` from `api/invite/invites.ts` (now `api/invite/inviteAcceptance.ts`);
-     `loadAdminUsers`, `loadAdminTeams`, `loadAdminTotals`, and `computeContributionCents` from `api/admin.ts` (now
+     `api/mcp/results.ts` (now `api/mcp/topicResults.ts`); `acceptInviteToken`, `acceptTopicInvite`, `acceptTeamInvite`,
+     and `toInviteProperties` from `api/invite/invites.ts` (now `api/invite/inviteAcceptance.ts`); `loadAdminUsers`,
+     `loadAdminTeams`, `loadAdminTotals`, and `computeContributionCents` from `api/admin.ts` (now
      `api/adminConsole.ts`); `loadTopics`, `toActivityTopics`, and `toCents` from `api/activity.ts` (now
-     `api/activityTopics.ts`); `mergeNoteYdoc`, `toNoteSnapshot`, `emptyNoteYdoc`, `toNoteHtml`, and
-     `sanitizeNoteHtml` from `api/note/notes.ts` (now `api/note/noteYdoc.ts`) and `loadNotesPayload` and `createNote`
-     from it (now `api/note/notePayloads.ts`); `sendResetPasswordEmail`, `sendChangeEmailConfirmationEmail`, and
+     `api/activityTopics.ts`); `mergeNoteYdoc`, `toNoteSnapshot`, `emptyNoteYdoc`, `toNoteHtml`, and `sanitizeNoteHtml`
+     from `api/note/notes.ts` (now `api/note/noteYdoc.ts`) and `loadNotesPayload` and `createNote` from it (now
+     `api/note/notePayloads.ts`); `sendResetPasswordEmail`, `sendChangeEmailConfirmationEmail`, and
      `sendVerificationEmail` from `api/auth.ts` (now `api/authEmails.ts`), `signGateToken`, `verifyTurnstileToken`,
      `verifyGateToken`, and `GATE_COOKIE_NAME` from it (now `api/signupGate.ts`), and `checkTrustedProxies` and
      `toTrustedProxiesWarning` from it (now `api/trustedProxies.ts`); `loadAccessiblePodcastEpisode`,
      `loadPublishedPodcastEpisode`, and `loadPublishedPodcastEpisodeRows` from `api/podcast/helpers.ts` (now
      `api/podcast/podcastEpisodeRows.ts`); `useNewTopicDraft`, `useChatConversationLoad`, and `useLinkPreviewRefresh`
      from `ui/src/components/chat/useTopicChat.ts` (now their own files beside it) and `ChatTurn` from
-     `ui/src/components/chat/ChatMessages.tsx` (now `ui/src/components/chat/chatTurns.ts`);
-     `toChatMentionSuggestions` from `ui/src/components/chat/ChatRoomComposer.tsx` (now `MentionSuggestionList.tsx`)
-     and `toChangedMentionChatMessage` from it (now `ReplyToDropdown.tsx`); `toTimeAgoLabel`, `ChatVideo`,
-     `CopyButton`, and `ModelThinkingBubble` from `ChatMessages.tsx` (now `ChatMessageParts.tsx`) and
-     `ChatMessageAuthor` from it (now `ChatTurnBlock.tsx`); the smoke sections and fixtures of `invites.smoke.ts`,
-     `teams.smoke.ts`, `room.smoke.ts`, `mcp.smoke.ts`, `topicTools.smoke.ts`, and `podcastEpisodes.smoke.ts` (now
-     `*SmokeSections.ts` and `*SmokeFixtures.ts` beside each); and the test renames `api/invite/invites.test.ts`
-     (now `inviteAcceptance.test.ts`), `api/note/notes.test.ts` (now `noteYdoc.test.ts`), `api/topic/helpers.test.ts`
-     (now `saveHelpers.test.ts`), and `ui/src/components/chat/ChatRoomComposer.test.ts` (now
-     `MentionSuggestionList.test.ts` and `ReplyToDropdown.test.ts`);
-     `ChatHistoryTurn`, `ChatTurnInput`, `toModelMessages`, `toConsentStep`, `isTopicEditProposed`, and `isConsent`
-     from `worker/chat/index.ts` (now `worker/chat/chatMessages.ts`) and `buildTopicChatPrompt`,
-     `buildNewTopicChatPrompt`, `buildTeamChatPrompt`, and `toEditTopicBlock` from it (now
-     `worker/chat/chatPrompts.ts`);
-     `dedupeResources`, `DedupeKeys`, `hasNearDuplicateKey`, `toContentHash`, `normalizeText`, and `isNearDuplicate`
-     from `worker/review/filter.ts` (now `worker/review/dedupe.ts`); `isSnippetComplete`, `toPageTitleField`, and
+     `ui/src/components/chat/ChatMessages.tsx` (now `ui/src/components/chat/chatTurns.ts`); `toChatMentionSuggestions`
+     from `ui/src/components/chat/ChatRoomComposer.tsx` (now `MentionSuggestionList.tsx`) and
+     `toChangedMentionChatMessage` from it (now `ReplyToDropdown.tsx`); `toTimeAgoLabel`, `ChatVideo`, `CopyButton`, and
+     `ModelThinkingBubble` from `ChatMessages.tsx` (now `ChatMessageParts.tsx`) and `ChatMessageAuthor` from it (now
+     `ChatTurnBlock.tsx`); the smoke sections and fixtures of `invites.smoke.ts`, `teams.smoke.ts`, `room.smoke.ts`,
+     `mcp.smoke.ts`, `topicTools.smoke.ts`, and `podcastEpisodes.smoke.ts` (now `*SmokeSections.ts` and
+     `*SmokeFixtures.ts` beside each); and the test renames `api/invite/invites.test.ts` (now
+     `inviteAcceptance.test.ts`), `api/note/notes.test.ts` (now `noteYdoc.test.ts`), `api/topic/helpers.test.ts` (now
+     `saveHelpers.test.ts`), and `ui/src/components/chat/ChatRoomComposer.test.ts` (now `MentionSuggestionList.test.ts`
+     and `ReplyToDropdown.test.ts`); `ChatHistoryTurn`, `ChatTurnInput`, `toModelMessages`, `toConsentStep`,
+     `isTopicEditProposed`, and `isConsent` from `worker/chat/index.ts` (now `worker/chat/chatMessages.ts`, with
+     `ChatHistoryTurn` now in `shared/payloads.ts`) and `buildTopicChatPrompt`, `buildNewTopicChatPrompt`,
+     `buildTeamChatPrompt`, and `toEditTopicBlock` from it (now `worker/chat/chatPrompts.ts`); `dedupeResources`,
+     `DedupeKeys`, `hasNearDuplicateKey`, `toContentHash`, `normalizeText`, and `isNearDuplicate` from
+     `worker/review/filter.ts` (now `worker/review/dedupe.ts`); `isSnippetComplete`, `toPageTitleField`, and
      `toFetchedContentFields` from `worker/review/score.ts` (now `worker/review/fetch.ts`); the email props builders of
      `worker/notify.ts` (now `worker/scanEmailContent.ts`); and the test splits `worker/chat/index.test.ts` (now beside
      `chatPrompts.test.ts` and `chatMessages.test.ts`), `worker/schedule.test.ts` (now beside `staleScans.test.ts` and
@@ -540,8 +542,20 @@ Check for:
    - `wordmark` for the CarlNotes cup and name (now `logo`, in comments and specs alike)
    - `createTopic` as a new-topic chat tool (now `proposeNewTopic`, and `createTopicInChat` in
      `api/tool/newTopicChatTools.ts`)
-   - the saving tools in the private topic chat (now bound only in a team room, with `api/chat/chatProposals.ts`
-     applying the private chat's changes)
+   - the saving tools in the private topic chat (now the preview tools, with `api/chat/chatProposals.ts` applying the
+     private chat's changes)
+   - the saving tools in a team room, `toChatTopicTools`, `toUpdateTopicPromptTool`, `toUpdateTopicFieldsTool`,
+     `toAddTopicSourceTool`, `toRemoveTopicSourceTool`, `EditTopicToolBinding`, `CONFIRMATION_RULE`,
+     `worker/prompts/chat-edit-topic.md`, and the eval's `toSavingToolStandIns` (now the preview tools alone in every
+     chat, with `api/chat/roomProposals.ts` applying a room preview for the member it was shown to), and
+     `toConsentStep`, `isTopicEditProposed`, `isConsent`, and `CONSENT_PATTERN` (removed). the ui's
+     `isTopicEditProposed` on `EditableTopicDraft` and `TopicDraftCard` is a different field and keeps its name
+   - `toHostVoice` and the inline cohost voice in `worker/speech.ts` (now `toSpeakerVoice(speaker)`), and `toStepsText`
+     in `evals/evalReplies.ts` (now in `worker/chat/index.ts`)
+   - a chat turn row's kind read from which columns are null, as `isNotNull(chatTurns.roomMessageId)` (now
+     `chat_turns.kind`)
+   - `in flight` / `in-flight` / `inFlight` (now `running` for a Scan, a task, or an activity, and `in progress` for a
+     request, a post, or a render; the concurrency tests count with `runningCount`)
    - the advisory lock in `db/claim.ts` (now a lease row in the `claims` table)
    - `toPlainText` as a private helper in `shared/seo.ts` (now exported from `shared/spokenText.ts`, beside
      `toSpokenParts`)
@@ -554,6 +568,51 @@ Check for:
      `setIsUserSignedIn`, and `resetPodcastEpisodePlaybackStart` from `ui/src/stores/podcastEpisodePlayerStore.ts`
      (now `ui/src/stores/podcastEpisodeListenStore.ts`), and `useChatRoomLinkPreviews` from
      `ui/src/components/chat/useChatRoom.ts` (now its own file beside it, with `useChatRoomSpokenAnswer.ts`)
+   - each plan's `podcastEpisodeBudgetShare` in `shared/plans.ts` (now `monthlyBudgetCutoffShares`, beside
+     `toMonthlyBudgetCutoffs`), `isPodcastEpisodeBudgetShareExhausted` in `db/quotas.ts` (now
+     `isMonthlyBudgetCutoffPassed` in `db/monthlyBudgetCutoffs.ts`), and `SpendSection` with `BUDGET_MESSAGES` in
+     `ui/src/components/account/AccountBudget.tsx` (now `SpendMeter` in `ui/src/components/account/SpendMeter.tsx`)
+   - the podcast player question splits, each moved whole: `toRecordingDecision`, `toRecordingLevel`, `toMeterLevel`,
+     `toSilenceThreshold`, `toRecordingMimeType`, `RecordingDecision`, and the recording constants such as
+     `END_OF_SPEECH_MS`, `RECORDING_LIMIT_MS`, and `METER_STEPS` from `ui/src/lib/voiceRecorder.ts` (now
+     `ui/src/lib/voiceRecordingDecisions.ts`), and `voiceRecorder.test.ts` (now `voiceRecordingDecisions.test.ts`);
+     `answerChatTurn`, `toChatTurnTools`, `toNewTopicChatDraft` (now `loadNewTopicChatDraft`), and
+     `toPromptTopicsRemaining` from `api/chat/privateChat.ts` (now `api/chat/chatTurnAnswer.ts`); `SpokenAnswerQueue`,
+     `SpokenAnswerState`, `SpokenAnswerEnd`, `toNextSpokenPartAction`, and `toChatRoomSpokenAnswerKey` from
+     `ui/src/stores/spokenAnswerStore.ts` (now `ui/src/stores/spokenAnswerQueue.ts`); `togglePodcastEpisodePlayback` and
+     `togglePodcastEpisodeChapterPlayback` from `ui/src/stores/podcastEpisodePlayerStore.ts` (now
+     `ui/src/stores/podcastEpisodePlayActions.ts`); `toStreamedSpokenAnswer` and `StreamedSpokenAnswer` from
+     `ui/src/components/chat/useTopicChat.ts` (now `ui/src/stores/streamedSpokenAnswer.ts`) and `SendChatTurnOptions`
+     from it (now `ui/src/clients/chatClient.ts`); `ListenMode` and `LISTEN_WAIT_TIMEOUT_MS` from
+     `ui/src/components/chat/useVoiceRecording.ts` (now `useListenMode.ts`) and `MICROPHONE_REJECTED_TOAST`,
+     `NO_SPEECH_TOAST`, and `TRANSCRIPTION_FAILED_TOAST` from it (now `chatRejectionCopy.ts`, the last as
+     `CHAT_FAILED_TOAST`)
+   - `showCarlOnMediaSession` (now `showSpeakerOnMediaSession`), `announceSpokenAnswerEnd` (removed), `toHostsBlock` in
+     `worker/podcast/generatePodcastEpisodeScript.ts` (now `toPodcastEpisodeHostsBlock` in
+     `worker/podcast/podcastEpisodeHosts.ts`), `ChatHistoryTurn` in `worker/chat/chatMessages.ts` and the ui's copy in
+     `ui/src/components/chat/chatHistoryTurns.ts` (now one type in `shared/payloads.ts`), `gradeNoMarkdown` in
+     `evals/topic-chat/topicChatEval.ts` (now `evals/evalChecks.ts`), `toJsonRequest` in
+     `api/chat/voiceRouteTestFixtures.ts` (now `api/testSession.ts`), `SPOKEN_BLOCK_START` and `chatContext` in
+     `worker/chat/chatPrompts.test.ts` (now `worker/chat/chatContextTestFixtures.ts`), `replaceNewestChatTurn` in
+     `ui/src/components/chat/chatTurns.ts` (removed), and `ensureDevUser` in `api/seed.ts` (now `ensureUser`)
+   - `ui/src/components/branding/CarlAvatar.tsx` and `CarlAvatar` (now `HostAvatar` in
+     `ui/src/components/branding/HostAvatar.tsx`), `PlaybackControlButton` in
+     `ui/src/components/podcast/PlaybackControlButtons.tsx` (now the common `IconButton`),
+     `FetchSpokenAnswerAudioOptions` in `ui/src/clients/voiceClient.ts` (now `SpokenAnswerPayload` in
+     `shared/payloads.ts`), `VoiceModelCall` in `api/chat/voiceRoute.ts` (now `VoiceSpendChatTurnKind` in
+     `api/chat/chatTurns.ts`), `toAttachmentName` in `worker/chat/chatMessages.ts` and `toCollapsedText` in
+     `worker/transcripts.ts` (now `toOneLineText` in `shared/text.ts`), and `FULL_PODCAST_COVER_SIZE` in
+     `api/share/podcastCover.ts` (now `shared/podcastEpisodes.ts`)
+   - the ship splits, each moved whole: `isWithinDailyTopicLimit`, `loadDailyTopicIdsByOwner`, and
+     `loadBudgetExhaustedOwnerIds` in `worker/schedule.ts` (now `worker/scheduledTopicLimits.ts`), `toScheduledTopic` in
+     `worker/schedule.test.ts` (now `worker/scheduledTopicTestFixtures.ts`), `withPodcastEpisodeQueryRows` in
+     `db/quotas.test.ts` (now `withSpendQueryRows` in `db/quotaTestFixtures.ts`), `withAttachmentNote` in
+     `shared/contracts/chat.ts` (now `shared/contracts/chatQuestionNotes.ts`), `VoiceRecordingState` in
+     `ui/src/components/chat/useVoiceRecording.ts` (now `voiceRecordingRules.ts`), `toGradingResult` in
+     `evals/evalHarness.ts` and `gradeLinksToMaterial`, `gradeParagraphCount`, and `MAX_REPLY_PARAGRAPHS` in
+     `evals/topic-chat/topicChatEval.ts` and `evals/team-chat/teamChatEval.ts` (now `evals/evalChecks.ts`)
+   - `isWeekend` in `worker/schedule.ts` (now `isUtcWeekend` in `shared/time.ts`), and `toSpokenEventMeasurements` in
+     `api/chat/voiceRoute.ts` (now `toSpokenEventProperties`)
 
 5. **Cross-harness enforcement parity**: `.claude/settings.json` hooks and
    `.opencode/plugin/guardrails.mjs` must gate the same operations with the

@@ -1,12 +1,15 @@
 // the streamed chat reply: the context and prompt one chat turn reads, and the text, tool results, and cost its
 // stream yields
+import type { ChatReplyLine } from "@shared/contracts/chat"
+import type { PodcastEpisodeSpeaker } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
 import type { ChatToolCall } from "@shared/payloads"
 import { type StreamTextTransform, stepCountIs, streamText, type TextStreamPart, type ToolSet } from "ai"
 import { chatModel } from "../models"
 import { type BuiltPrompt, promptTelemetry } from "../prompts/fetch"
-import { type ChatTurnInput, toConsentStep, toModelMessages } from "./chatMessages"
+import { type ChatTurnInput, toModelMessages } from "./chatMessages"
 import { buildNewTopicChatPrompt, buildTeamChatPrompt, buildTopicChatPrompt, toEditTopicBlock } from "./chatPrompts"
+import { streamPodcastReply } from "./podcastReply"
 import { type ChatContext, retrieveChatContext } from "./retrieve"
 import { retrieveDocsBlock } from "./retrieveDocs"
 import { retrieveTeamChatContext, type TeamChatContext } from "./retrieveTeam"
@@ -19,13 +22,22 @@ export const MAX_TURN_STEPS = 8
 const MAX_TURN_OUTPUT_TOKENS = 3000
 
 // one part of a streamed reply: text as it arrives, or a tool call that returned
-export type ChatReplyPart = { type: "text"; text: string } | { type: "tool-result"; toolCall: ChatToolCall }
+export type ChatReplyPart =
+	| { type: "text"; text: string }
+	| Extract<ChatReplyLine, { type: "speaker" }>
+	| { type: "tool-result"; toolCall: ChatToolCall }
 
-// the streamed reply plus what it cost, resolved once the stream is fully read
-export type ChatReplyStream = {
-	replyParts: AsyncIterable<ChatReplyPart>
-	completion: Promise<{ text: string; totalTokens: number; searchCount: number; toolCalls: ChatToolCall[] }>
+// what a reply wrote and cost, and on a podcast chat turn the host who answered it
+export type ChatReplyCompletion = {
+	text: string
+	totalTokens: number
+	searchCount: number
+	toolCalls: ChatToolCall[]
+	speaker?: PodcastEpisodeSpeaker
 }
+
+// the streamed reply plus its completion, resolved once the stream is fully read
+export type ChatReplyStream = { replyParts: AsyncIterable<ChatReplyPart>; completion: Promise<ChatReplyCompletion> }
 
 /**
  * Streams one reply to a user's question about a topic, or null if the topic does not exist.
@@ -47,9 +59,19 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 		reportError(error, "chat", { topicId: input.topicId ?? input.teamId ?? "" })
 		throw error
 	}
+	// a question asked from the podcast player is one structured call with no tools, whose speaker streams first
+	if (input.podcastEpisodeChapter) {
+		return streamPodcastReply({
+			model: chatModel(input.litellmApiKey),
+			system: chatPrompt.prompt,
+			messages: toModelMessages(input.history, input.question, []),
+			telemetryOptions: promptTelemetry(chatPrompt),
+		})
+	}
+
 	// the system prompt is interpolated with the conversation sent as real messages
 	const searchTotal: SearchTotal = { count: 0 }
-	// one streamed completion. a consent with the tools on must call one, since a consent answers a proposal
+	// one streamed completion
 	const replyStream = streamText({
 		model: chatModel(input.litellmApiKey),
 		system: chatPrompt.prompt,
@@ -63,10 +85,9 @@ export async function streamChatReply(input: ChatTurnInput): Promise<ChatReplySt
 			...(input.proposeNewTopicTool ? { proposeNewTopic: input.proposeNewTopicTool } : {}),
 			...input.tools,
 		},
-		prepareStep: ({ stepNumber }) => toConsentStep(stepNumber, input, input.tools),
 		maxOutputTokens: MAX_TURN_OUTPUT_TOKENS,
 		stopWhen: stepCountIs(MAX_TURN_STEPS),
-		// a paragraph break between text a tool call separates, in the stream and in the stored answer alike
+		// a paragraph break between text a tool call separates, as the stored answer has it
 		experimental_transform: breakTextAroundToolCalls(),
 		...promptTelemetry(chatPrompt),
 	})
@@ -113,8 +134,8 @@ function toChatToolCall(toolResult: { toolName: string; input: unknown; output: 
 }
 
 /**
- * Puts a paragraph break between text a tool call separates, as a delta of the later text block,
- * ahead of the SDK saving the text so the stored reply has the break too.
+ * Puts a paragraph break between text a tool call separates, as a delta of the later text block, so the streamed
+ * reply reads the way toStepsText stores it.
  */
 export function breakTextAroundToolCalls(): StreamTextTransform<ToolSet> {
 	return () => {
@@ -188,25 +209,37 @@ async function buildReplyPrompt(
 	return buildTopicChatPrompt(chatContext as ChatContext, {
 		editTopicBlock: await toEditTopicBlock(input),
 		isSpoken,
+		podcastEpisodeChapter: input.podcastEpisodeChapter,
 	})
+}
+
+/**
+ * Returns the text of every model step in order, with a blank line between steps, the way the reply streamed. A
+ * reply's own text is only its final step's.
+ */
+export function toStepsText(steps: { text: string }[]): string {
+	return steps
+		.map((step) => step.text.trim())
+		.filter(Boolean)
+		.join("\n\n")
 }
 
 // the assembled reply with its token and search counts, all of which resolve only once the chat stream is read.
 // the server's calls lead the tool calls, in the order they ran
 async function toCompletion(
 	replyStream: {
-		text: PromiseLike<string>
+		steps: PromiseLike<{ text: string }[]>
 		usage: PromiseLike<{ totalTokens?: number }>
 		toolResults: PromiseLike<{ toolName: string; input: unknown; output: unknown }[]>
 	},
 	searchTotal: SearchTotal,
 	serverToolCalls: ChatToolCall[],
-): Promise<{ text: string; totalTokens: number; searchCount: number; toolCalls: ChatToolCall[] }> {
+): Promise<ChatReplyCompletion> {
 	const usage = await replyStream.usage
 	// collect every tool the chat turn called, with its input and output
 	const toolCalls = [...serverToolCalls, ...(await replyStream.toolResults).map(toChatToolCall)]
 	return {
-		text: await replyStream.text,
+		text: toStepsText(await replyStream.steps),
 		totalTokens: usage.totalTokens ?? 0,
 		searchCount: searchTotal.count,
 		toolCalls,

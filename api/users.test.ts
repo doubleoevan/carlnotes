@@ -7,18 +7,9 @@ import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, type SentQuery, stubConnectionPool } from "../db/connectionPoolStub"
 import * as litellm from "../worker/litellm"
 import * as store from "../worker/store"
-import type { AnalyticsProperties } from "./currentUser"
+import { TEST_ANALYTICS_PROPERTIES } from "./analyticsTestFixtures"
 import * as sessions from "./sessions"
 import { deleteUser } from "./users"
-
-// the analytics properties that a close is tracked with
-const ANALYTICS_PROPERTIES: AnalyticsProperties = {
-	entryPoint: "web",
-	plan: "free",
-	platform: "desktop",
-	browserPlatform: "other",
-	isInAppBrowser: false,
-}
 
 // the connection pool's own query and the environment's Redis url, put back after each test along with the spies
 const restoreEnvSettings = saveEnvSettings(["REDIS_URL"])
@@ -43,7 +34,7 @@ function stubFailedRevocation(): { readSentQueryCount: () => number } {
 test("closing an account while a configured Redis is unreachable deletes nothing", async () => {
 	Bun.env.REDIS_URL = "redis://localhost:6379"
 	const { readSentQueryCount } = stubFailedRevocation()
-	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("unavailable")
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("unavailable")
 	expect(readSentQueryCount()).toBe(0)
 })
 
@@ -51,7 +42,7 @@ test("closing an account while a configured Redis is unreachable deletes nothing
 test("closing an account without a configured Redis goes on", async () => {
 	delete Bun.env.REDIS_URL
 	const { readSentQueryCount } = stubFailedRevocation()
-	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("missing")
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("missing")
 	expect(readSentQueryCount()).toBeGreaterThan(0)
 })
 
@@ -72,7 +63,7 @@ test("a second failed revocation is reported and the close goes on", async () =>
 	stubConnectionPool(toClosingUserRows)
 
 	// the close finishes and the report names the user
-	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({ userId: "user-1" })
 })
@@ -108,13 +99,13 @@ test("a LiteLLM key created while the account was closing is deleted from the pr
 
 	// the close reads a user row with no key, and the delete of that row returns a key
 	stubUserRowLiteLLMKeys({ selectedUserRowLiteLLMKey: null, deletedUserRowLiteLLMKey: "sk-late" })
-	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
 	expect(deleteLiteLLMKeySpy.mock.calls).toEqual([["sk-late"]])
 
 	// a failed delete of the key is reported, and the close still finishes
 	const reportErrorSpy = quietErrorReports()
 	deleteLiteLLMKeySpy.mockRejectedValue(new Error("litellm key/delete failed: 500"))
-	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 	expect(reportErrorSpy.mock.calls[0]?.[2]).toEqual({ userId: "user-1" })
 })
@@ -128,7 +119,7 @@ test("a LiteLLM key that the close already deleted is not deleted a second time"
 
 	// the close reads the user's key, and the delete of the user's row returns the same key
 	stubUserRowLiteLLMKeys({ selectedUserRowLiteLLMKey: "sk-stored", deletedUserRowLiteLLMKey: "sk-stored" })
-	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
 	expect(deleteLiteLLMKeySpy.mock.calls).toEqual([["sk-stored"]])
 })
 
@@ -145,7 +136,7 @@ function stubCloseWithEdgePurge(): ReturnType<typeof spyOn<typeof globalThis, "f
 // once the row is gone, one purge names the account's avatar tag
 test("a close purges the account's avatar tag from the edge once", async () => {
 	const fetchSpy = stubCloseWithEdgePurge().mockResolvedValue(new Response("{}", { status: 200 }))
-	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
 	const purgeRequests = fetchSpy.mock.calls.filter(([url]) => String(url).endsWith("/purge_cache"))
 	expect(purgeRequests).toHaveLength(1)
 	expect(JSON.parse(String(purgeRequests[0]?.[1]?.body))).toEqual({ tags: ["user-avatar:user-1"] })
@@ -155,7 +146,7 @@ test("a close purges the account's avatar tag from the edge once", async () => {
 test("a failed purge is reported and the close goes on", async () => {
 	stubCloseWithEdgePurge().mockResolvedValue(new Response("bad token", { status: 403 }))
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
-	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
 	expect(reportErrorSpy).toHaveBeenCalledTimes(1)
 	expect(String(reportErrorSpy.mock.calls[0]?.[0])).toContain("the edge purge of user-avatar:user-1 failed: 403")
 })
@@ -180,7 +171,7 @@ test("a close records every key the account owned", async () => {
 	})
 
 	// the close finishes, and one insert records both keys after the user row's delete returns them
-	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
 	const pendingObjectDeletionInserts = sentQueries.filter(({ text }) =>
 		text.startsWith('insert into "pending_object_deletions"'),
 	)
@@ -217,7 +208,7 @@ test("a close deletes a solo team with its chat room attachments and avatar", as
 	})
 
 	// the close finishes, both keys are recorded, and both objects are deleted together
-	expect(await deleteUser("user-1", "user-1", ANALYTICS_PROPERTIES)).toBe("deleted")
+	expect(await deleteUser("user-1", "user-1", TEST_ANALYTICS_PROPERTIES)).toBe("deleted")
 	const pendingObjectDeletionInserts = sentQueries.filter(({ text }) =>
 		text.startsWith('insert into "pending_object_deletions"'),
 	)

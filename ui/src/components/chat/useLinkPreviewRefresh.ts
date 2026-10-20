@@ -1,53 +1,63 @@
-// the background polling that fills a finished chat turn's link preview cards
+// the background polling that fills each finished chat turn's link preview cards
+import type { ChatTurnRow } from "@shared/contracts/chat"
 import { useEffect, useRef } from "react"
 import { type ChatPage, fetchChatConversation } from "@/clients/chatClient"
-import { type ChatTurn, replaceNewestChatTurn } from "@/components/chat/chatTurns"
+import { type ChatTurn, findChatTurn, replaceChatTurn } from "@/components/chat/chatTurns"
 import { hasPreviewableLink } from "@/components/common/LinkPreviewCard"
 
 // how long a finished chat turn waits before it looks for its link preview cards again
 const LINK_PREVIEW_REFRESH_MS = 2500
 
+// how many refreshes a chat turn gets before it stops waiting on its cards
+const LINK_PREVIEW_REFRESH_ATTEMPTS = 6
+
 /**
- * Polls in the background for the newest chat turn's link preview cards, giving up after a few attempts. Returns a
- * function that starts the poll, called after a finished chat turn whose text held a link.
+ * Polls in the background for each finished chat turn's link preview cards, giving each one a few attempts. Returns a
+ * function that starts the poll for the chat turn with a spoken answer key, if its text held a link.
  */
 export function useLinkPreviewRefresh(
 	chatPage: ChatPage,
 	setChatTurns: React.Dispatch<React.SetStateAction<ChatTurn[]>>,
-): () => void {
-	// how many background refreshes remain, and the timer that schedules them
-	const linkPreviewAttemptsRef = useRef(0)
+): (spokenAnswerKey: string) => void {
+	// the refreshes left for each chat turn waiting on its cards, and the one timer that schedules them
+	const linkPreviewAttemptsRef = useRef(new Map<string, number>())
 	const linkPreviewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-	// one refresh: read the conversation again and land the newest chat turn's cards when they are ready
-	const refreshLinkPreview = async (): Promise<void> => {
+	// one refresh: read the conversation again and land each pending chat turn's cards that are ready
+	const refreshLinkPreviews = async (): Promise<void> => {
 		linkPreviewTimerRef.current = null
 
-		// read the newest chat turn back from the server, spending one of the attempts
+		// read the conversation back from the server, spending one attempt of every pending chat turn
 		const chatConversation = await fetchChatConversation(chatPage).catch(() => null)
-		const serverChatTurn = chatConversation?.chatTurns.at(-1)
-		linkPreviewAttemptsRef.current -= 1
-		const linkPreviewAttemptsLeft = linkPreviewAttemptsRef.current
+		const linkPreviewAttempts = linkPreviewAttemptsRef.current
+		for (const [spokenAnswerKey, linkPreviewAttemptsLeft] of linkPreviewAttempts) {
+			linkPreviewAttempts.set(spokenAnswerKey, linkPreviewAttemptsLeft - 1)
+		}
 
-		// only a chat turn still marked pending takes the answer
+		// each chat turn still marked pending takes the server's cards
 		setChatTurns((chatTurns) => {
-			const newestChatTurn = chatTurns.at(-1)
-			if (!newestChatTurn?.linkPreviewsPending) {
-				return chatTurns
+			const linkPreviewRefresh = toLinkPreviewRefresh({
+				chatTurns,
+				linkPreviewAttempts,
+				serverChatTurns: chatConversation?.chatTurns ?? [],
+			})
+
+			// a chat turn done waiting leaves the poll
+			for (const spokenAnswerKey of linkPreviewRefresh.settledSpokenAnswerKeys) {
+				linkPreviewAttempts.delete(spokenAnswerKey)
 			}
 
-			// a chat turn still pending after this attempt goes back on the timer
-			const refreshedChatTurn = toRefreshedChatTurn(newestChatTurn, serverChatTurn, linkPreviewAttemptsLeft)
-			if (refreshedChatTurn.linkPreviewsPending) {
+			// a chat turn still pending goes back on the timer
+			if (linkPreviewAttempts.size > 0) {
 				scheduleLinkPreviewRefresh()
 			}
-			return replaceNewestChatTurn(chatTurns, () => refreshedChatTurn)
+			return linkPreviewRefresh.chatTurns
 		})
 	}
 
 	// the one timer, started only when nothing is already waiting
 	const scheduleLinkPreviewRefresh = (): void => {
-		linkPreviewTimerRef.current ??= setTimeout(() => void refreshLinkPreview(), LINK_PREVIEW_REFRESH_MS)
+		linkPreviewTimerRef.current ??= setTimeout(() => void refreshLinkPreviews(), LINK_PREVIEW_REFRESH_MS)
 	}
 
 	// leaving the conversation clears the pending refresh timer
@@ -60,42 +70,82 @@ export function useLinkPreviewRefresh(
 	}, [])
 
 	// a completed chat turn that mentioned a link loads until its cards land
-	return (): void => {
+	return (spokenAnswerKey: string): void => {
 		setChatTurns((chatTurns) => {
-			// only the newest chat turn can still be waiting on a link preview. a rejected turn doesn't
-			const newestChatTurn = chatTurns.at(-1)
-			if (!newestChatTurn || newestChatTurn.rejection !== null) {
+			// a missing or rejected chat turn waits on no link preview
+			const finishedChatTurn = findChatTurn(chatTurns, spokenAnswerKey)
+			if (!finishedChatTurn || finishedChatTurn.rejection !== null) {
 				return chatTurns
 			}
-			if (!hasPreviewableLink(newestChatTurn.question) && !hasPreviewableLink(newestChatTurn.answer)) {
+			if (!hasPreviewableLink(finishedChatTurn.question) && !hasPreviewableLink(finishedChatTurn.answer)) {
 				return chatTurns
 			}
 
 			// a link is worth polling for, so the chat turn shows its card as pending until one arrives
-			linkPreviewAttemptsRef.current = 6
+			linkPreviewAttemptsRef.current.set(spokenAnswerKey, LINK_PREVIEW_REFRESH_ATTEMPTS)
 			scheduleLinkPreviewRefresh()
-			return replaceNewestChatTurn(chatTurns, (chatTurn) => ({ ...chatTurn, linkPreviewsPending: true }))
+			return replaceChatTurn(chatTurns, spokenAnswerKey, (chatTurn) => ({ ...chatTurn, linkPreviewsPending: true }))
 		})
 	}
 }
 
-// the newest chat turn with whatever cards the server holds for it. loading ends when every chat turn with a link
-// has a card or the attempts run out
+// the chat turns, the refreshes left for each pending one, and the conversation the server returned
+type ToLinkPreviewRefreshOptions = {
+	chatTurns: ChatTurn[]
+	linkPreviewAttempts: ReadonlyMap<string, number>
+	serverChatTurns: ChatTurnRow[]
+}
+
+/**
+ * Returns the chat turns with each pending one refreshed from the server's chat turn that asked its question, and the
+ * spoken answer keys that are done waiting: their cards landed, their attempts ran out, or they are no longer pending.
+ */
+export function toLinkPreviewRefresh({
+	chatTurns,
+	linkPreviewAttempts,
+	serverChatTurns,
+}: ToLinkPreviewRefreshOptions): {
+	chatTurns: ChatTurn[]
+	settledSpokenAnswerKeys: string[]
+} {
+	// each pending chat turn is refreshed on its own, so a newer chat turn never strands an older one's cards
+	let refreshedChatTurns = chatTurns
+	const settledSpokenAnswerKeys: string[] = []
+	for (const [spokenAnswerKey, linkPreviewAttemptsLeft] of linkPreviewAttempts) {
+		// a chat turn that is gone or no longer pending stops waiting
+		const pendingChatTurn = findChatTurn(refreshedChatTurns, spokenAnswerKey)
+		if (!pendingChatTurn?.linkPreviewsPending) {
+			settledSpokenAnswerKeys.push(spokenAnswerKey)
+			continue
+		}
+
+		// the server's newest chat turn that asked the same question gives its cards
+		const serverChatTurn = serverChatTurns.findLast((chatTurn) => chatTurn.question === pendingChatTurn.question)
+		const refreshedChatTurn = toRefreshedChatTurn(pendingChatTurn, serverChatTurn, linkPreviewAttemptsLeft)
+
+		// a chat turn whose cards landed or whose attempts ran out is done waiting
+		if (!refreshedChatTurn.linkPreviewsPending) {
+			settledSpokenAnswerKeys.push(spokenAnswerKey)
+		}
+		refreshedChatTurns = replaceChatTurn(refreshedChatTurns, spokenAnswerKey, () => refreshedChatTurn)
+	}
+	return { chatTurns: refreshedChatTurns, settledSpokenAnswerKeys }
+}
+
+// the pending chat turn with whatever cards the server's chat turn with its question holds. loading ends when every
+// chat turn with a link has a card or the attempts run out
 function toRefreshedChatTurn(
-	newestChatTurn: ChatTurn,
-	serverChatTurn:
-		| { question: string; linkPreviews: ChatTurn["linkPreviews"]; answerLinkPreviews: ChatTurn["answerLinkPreviews"] }
-		| undefined,
-	attemptsLeft: number,
+	pendingChatTurn: ChatTurn,
+	serverChatTurn: ChatTurnRow | undefined,
+	linkPreviewAttemptsLeft: number,
 ): ChatTurn {
-	// the newest server chat turn is this one when its stored question matches
-	const isSameChatTurn = serverChatTurn !== undefined && serverChatTurn.question === newestChatTurn.question
-	const linkPreviews = isSameChatTurn ? serverChatTurn.linkPreviews : newestChatTurn.linkPreviews
-	const answerLinkPreviews = isSameChatTurn ? serverChatTurn.answerLinkPreviews : newestChatTurn.answerLinkPreviews
+	// the server's cards if it has the chat turn, else the ones the pending chat turn already shows
+	const linkPreviews = serverChatTurn?.linkPreviews ?? pendingChatTurn.linkPreviews
+	const answerLinkPreviews = serverChatTurn?.answerLinkPreviews ?? pendingChatTurn.answerLinkPreviews
 
 	// a chat turn without a link needs no card of its own
-	const isQuestionDone = !hasPreviewableLink(newestChatTurn.question) || linkPreviews.length > 0
-	const isAnswerDone = !hasPreviewableLink(newestChatTurn.answer) || answerLinkPreviews.length > 0
-	const isChatTurnDone = (isQuestionDone && isAnswerDone) || attemptsLeft <= 0
-	return { ...newestChatTurn, linkPreviews, answerLinkPreviews, linkPreviewsPending: !isChatTurnDone }
+	const isQuestionDone = !hasPreviewableLink(pendingChatTurn.question) || linkPreviews.length > 0
+	const isAnswerDone = !hasPreviewableLink(pendingChatTurn.answer) || answerLinkPreviews.length > 0
+	const isChatTurnDone = (isQuestionDone && isAnswerDone) || linkPreviewAttemptsLeft <= 0
+	return { ...pendingChatTurn, linkPreviews, answerLinkPreviews, linkPreviewsPending: !isChatTurnDone }
 }

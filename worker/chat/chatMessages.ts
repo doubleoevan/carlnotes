@@ -1,16 +1,16 @@
 // one chat turn's input, and the conversation shaped into the model messages the turn sends
+import { CHAT_HISTORY_TURNS, compactChatAnswer, toUncompactedChatTurnStart } from "@shared/contracts/chat"
 import {
-	CHAT_HISTORY_TURNS,
-	compactChatAnswer,
-	toStandingTopicEditCall,
-	toUncompactedChatTurnStart,
-} from "@shared/contracts/chat"
-import type { ChatAttachment, ChatToolCall } from "@shared/payloads"
+	toPodcastEpisodeNoteParts,
+	withPodcastEpisodeNote,
+	withTrailingNote,
+} from "@shared/contracts/chatQuestionNotes"
+import type { ChatAttachment, ChatHistoryTurn, ChatToolCall } from "@shared/payloads"
+import { toOneLineText } from "@shared/text"
 import type { TopicDraft, TopicDraftTeam } from "@shared/topicPayloads"
 import type { ImagePart, ModelMessage, TextPart, Tool } from "ai"
-
-// one earlier chat turn, replayed so the model can resolve what "that" and "the second one" point back to
-export type ChatHistoryTurn = { question: string; answer: string; toolCalls?: ChatToolCall[] }
+import { fenceUntrusted } from "../prompts/write"
+import type { PodcastEpisodeChapterContext } from "./retrievePodcastEpisodeChapter"
 
 // everything one chat turn needs to answer a user's question about a topic, or about a team's whole topic set
 export type ChatTurnInput = {
@@ -20,6 +20,8 @@ export type ChatTurnInput = {
 	question: string
 	// whether the question arrived by voice, so the reply is written to be read aloud
 	isSpoken?: boolean
+	// the podcast episode chapter that was playing if the user asked from the podcast player. either host answers it
+	podcastEpisodeChapter?: PodcastEpisodeChapterContext
 	history: ChatHistoryTurn[]
 	chatAttachments?: ChatAttachment[]
 	// who is asking. chat is signed-in only, and this scopes their kept chat attachments
@@ -56,39 +58,6 @@ export type ChatTurnInput = {
 }
 
 /**
- * Restricts a consent's first step to the tools that save, and leaves every other step unrestricted.
- * Only a yes that answers a change Carl proposed is restricted, so a yes to any other question never forces a save.
- */
-export function toConsentStep(
-	stepNumber: number,
-	chatTurn: Pick<ChatTurnInput, "question" | "history">,
-	savingTools: ChatTurnInput["tools"],
-): { toolChoice: "required"; activeTools: string[] } | undefined {
-	if (stepNumber !== 0 || !savingTools || !isConsent(chatTurn.question) || !isTopicEditProposed(chatTurn.history)) {
-		return undefined
-	}
-	// name the tools that save. an empty set leaves the step unrestricted
-	const savingToolNames = Object.keys(savingTools)
-	return savingToolNames.length > 0 ? { toolChoice: "required", activeTools: savingToolNames } : undefined
-}
-
-// whether carl's last proposal is still standing, which is what a yes answers
-export function isTopicEditProposed(history: ChatHistoryTurn[]): boolean {
-	return toStandingTopicEditCall(history.flatMap((chatTurn) => chatTurn.toolCalls ?? [])) !== null
-}
-
-// the short questions that consent to whatever carl last proposed
-const CONSENT_PATTERN =
-	/^(yes|yep|yeah|yup|sure|sure thing|ok|okay|do it|go ahead|go for it|create it|save it|make it|sounds good|perfect|let'?s do it|let'?s go|ship it|yes please|please do)[\s!.,]*$/i
-
-/**
- * Reads whether a question is a consent, the kind that answers a proposal instead of asking anything.
- */
-export function isConsent(question: string): boolean {
-	return CONSENT_PATTERN.test(question.trim())
-}
-
-/**
  * The conversation as model messages, ending on the user's latest question and whatever they attached to it,
  * then the calls the server made before the reply, if it made any.
  */
@@ -101,26 +70,37 @@ export function toModelMessages(
 	// limit the history the api client sends, so no user can inflate what one chat turn costs
 	const includedHistory = history.slice(-CHAT_HISTORY_TURNS)
 
-	// the newest chat is returned word for word
+	// the newest chat is returned word for word, and every podcast episode note is fenced in one random nonce
 	const uncompactedChatTurnStart = toUncompactedChatTurnStart(includedHistory)
+	const nonce = crypto.randomUUID()
 	const conversation = includedHistory.flatMap((chatTurn, index): ModelMessage[] => {
+		const historyQuestion = toHistoryQuestion(chatTurn.question, nonce)
 		// compact an older chat turn to its opening, without its tool calls
 		if (index < uncompactedChatTurnStart) {
 			return [
-				{ role: "user", content: chatTurn.question },
+				{ role: "user", content: historyQuestion },
 				{ role: "assistant", content: compactChatAnswer(chatTurn.answer) },
 			]
 		}
-		return [{ role: "user", content: chatTurn.question }, ...toAnswerModelMessages(chatTurn, index)]
+		return [{ role: "user", content: historyQuestion }, ...toAnswerModelMessages(chatTurn, index)]
 	})
 	// the server's calls replay after the question, keyed apart from every history call
 	const serverToolCallMessages = serverToolCalls.length > 0 ? toToolCallModelMessages(serverToolCalls, "server") : []
 	return [...conversation, { role: "user", content: toUserContent(question, attachments) }, ...serverToolCallMessages]
 }
 
-// an attachment name flattened onto one line
-function toAttachmentName(name: string): string {
-	return name.replace(/\s+/g, " ").trim()
+// a history question with the user's words as they are and its podcast episode note fenced as untrusted. a model
+// wrote the podcast episode and chapter titles that the note includes
+function toHistoryQuestion(question: string, nonce: string): string {
+	// a question with no podcast episode note is returned as it is
+	const { question: questionWords, podcastEpisodeNote } = toPodcastEpisodeNoteParts(question)
+	if (!podcastEpisodeNote) {
+		return question
+	}
+
+	// the note alone in the fence, after a blank line, or the fence alone for a question with no words
+	const fencedPodcastEpisodeNote = fenceUntrusted(withPodcastEpisodeNote("", podcastEpisodeNote), nonce)
+	return withTrailingNote({ question: questionWords, note: fencedPodcastEpisodeNote })
 }
 
 // the newest message's content
@@ -131,7 +111,7 @@ function toUserContent(question: string, attachments: ChatAttachment[]): string 
 	// text attachments join the question in one text part, each attachment under the name the user gave it
 	const textBlocks = attachments
 		.filter((attachment) => attachment.kind === "text")
-		.map((attachment) => `--- attached: ${toAttachmentName(attachment.name)} ---\n${attachment.text}`)
+		.map((attachment) => `--- attached: ${toOneLineText(attachment.name)} ---\n${attachment.text}`)
 	// each image is its own part, so the model sees the picture instead of a mention of one
 	const images = attachments
 		.filter((attachment) => attachment.kind === "image")

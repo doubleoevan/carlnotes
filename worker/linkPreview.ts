@@ -1,4 +1,5 @@
 // the link preview a link gets: the page's own title, description, and image, every fetch through the public-url guard
+import { toOneLineText } from "@shared/text"
 import { toYoutubeWatchUrl } from "@shared/youtube"
 import { fetchPublicUrl, toFetchableUrl } from "./publicFetch"
 import { toYoutubeVideoId } from "./transcripts"
@@ -269,7 +270,7 @@ function toEntityCharacter(entityName: string): string | null {
 
 // collapse a tag's whitespace and limit its length, or null if it holds no words
 function toClippedText(text: string): string | null {
-	const collapsedText = toDecodedHtmlEntities(text).replace(/\s+/g, " ").trim()
+	const collapsedText = toOneLineText(toDecodedHtmlEntities(text))
 	return collapsedText ? collapsedText.slice(0, MAX_PREVIEW_TEXT_CHARS) : null
 }
 

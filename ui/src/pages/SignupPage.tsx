@@ -4,10 +4,16 @@ import { authClient, passSignupGate } from "@/clients/authClient"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { Button } from "@/components/primitives/button"
 import { SessionLayout } from "@/components/session/SessionLayout"
+import { SIGNUP_PROMPTS } from "@/components/session/signupPrompts"
 import { TurnstileWidget } from "@/components/session/TurnstileWidget"
+import { useCtaPromptToast } from "@/hooks/useCtaPromptToast"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { useSearchParams } from "@/hooks/useSearchParams"
-import { toSafeRedirectPath } from "@/lib/utils"
+import { SESSION_PAGE_CLASS } from "@/lib/styleClasses"
+import { cn, toSafeRedirectPath } from "@/lib/utils"
+
+// the one toast that names the action a visitor tried
+const SIGNUP_PROMPT_TOAST_ID = "signup-prompt"
 
 /**
  * Renders the signup page, with one-click OAuth and a password form on request behind a Turnstile check.
@@ -34,6 +40,9 @@ export function SignupPage() {
 			document.cookie = `${SIGNUP_CTA_COOKIE_NAME}=${ctaTag}; max-age=1800; path=/`
 		}
 	}, [ctaParam])
+
+	// say what signing up unlocks if an action the visitor tried brought them here
+	useCtaPromptToast(SIGNUP_PROMPTS, SIGNUP_PROMPT_TOAST_ID)
 
 	// validates the turnstile token, then creates the account with a password
 	const handlePasswordSignup = async (email: string, password: string): Promise<void> => {
@@ -101,7 +110,7 @@ export function SignupPage() {
 // the post-signup notice. verification is not a wall, so it offers a way straight into the app
 function VerifyEmailNotice({ email, redirectPath }: { email: string; redirectPath: string }) {
 	return (
-		<div className="mx-auto flex min-h-dvh max-w-sm flex-col justify-center px-4 py-12 text-center">
+		<div className={cn(SESSION_PAGE_CLASS, "text-center")}>
 			<CoffeeMug className="text-primary mx-auto size-10" />
 			<h1 className="mt-4 text-2xl font-semibold">Check your email</h1>
 			<p className="text-muted-foreground mt-2 text-sm">

@@ -1,36 +1,29 @@
-// the private chat routes on each page, and answering an allowed chat turn with the worker's streamed reply
+// the private chat routes on each page: the conversation, clearing it, and the chat turn
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
-import { type ChatConversation, type ChatTurnRow, withAttachmentNote } from "@shared/contracts/chat"
-import { type ChatTurnPayload, chatTurnPayload } from "@shared/payloads"
-import { ADMIN_QUOTA } from "@shared/plans"
-import { EMPTY_TOPIC_DRAFT, type TopicDraft } from "@shared/topicPayloads"
+import type { ChatConversation, ChatTurnRow } from "@shared/contracts/chat"
+import { chatTurnPayload, topicChatTurnPayload } from "@shared/payloads"
 import { isVoiceChatConfigured } from "@shared/voiceChat"
 import { eq } from "drizzle-orm"
 import { type Context, Hono } from "hono"
 import { db } from "../../db"
 import { topics } from "../../db/schema/topics"
-import { type ChatTurnInput, loadOrProvisionUserLiteLLMKey, streamChatReply } from "../../worker"
 import { topicLimit } from "../authorization"
 import { toBodyLimit, toSignedOutRejection } from "../bodyLimit"
-import { type AnalyticsProperties, type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
+import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { toolCallerRateLimiter } from "../rateLimit"
-import { type ChatTurnToolCalls, toOpenNewTopicChatTool, toTopicEditPreviewTools } from "../tool/chatTools"
-import { toNewTopicChatTools, toProposeNewTopicTool, toSuggestTopicSourcesTool } from "../tool/newTopicChatTools"
 import { deleteTopicDraft, loadTopicDraft } from "../topic/topicDrafts"
 import { loadKeptTopicAttachments } from "./chatAttachmentReads"
-import { resolveChatAttachments } from "./chatAttachmentScreening"
-import { answerChatProposal } from "./chatProposals"
+import { answerChatTurn } from "./chatTurnAnswer"
 import {
 	authorizeChatTurn,
 	authorizeNewTopicChatTurn,
 	authorizeTeamChatTurn,
 	type ChatTurnAuthorization,
 	SIGNUP_REQUIRED_ERROR,
+	toChatRejection,
 } from "./chatTurnAuthorization"
-import { streamChatTurn } from "./chatTurnStream"
 import { type ChatPage, clearChatTurns, loadChatTurns, toChatPageId } from "./chatTurns"
-import { saveLinkPreviews } from "./linkPreviews"
 
 // the paths of a topic's chat, a team's chat, and the new-topic chat, after the /api base
 export const TOPIC_CHAT_PATH = "/topics/:id/chat"
@@ -95,188 +88,6 @@ function rejectChatTurn(context: Context, { authorization, page }: RejectChatTur
 	return toChatRejection(context, authorization.status)
 }
 
-/**
- * Returns the response for each status that a chat turn, or a voice request on its page, is rejected with.
- */
-export function toChatRejection(context: Context, status: "budget" | "signup" | "forbidden"): Response {
-	if (status === "budget") {
-		return context.json({ error: "budget exhausted" }, 402)
-	}
-	if (status === "signup") {
-		return context.json({ error: SIGNUP_REQUIRED_ERROR }, 401)
-	}
-
-	// reject a page this user may not chat on
-	return context.json({ error: "forbidden" }, 403)
-}
-
-// an allowed chat turn to answer: its page, the gate's decision, and the question with its attachments
-type AnswerChatTurnOptions = {
-	page: ChatPage
-	authorization: ChatTurnAuthorization & { status: "allowed" }
-	chatTurnPayload: ChatTurnPayload
-}
-
-// stream the reply to an allowed chat turn, for every chat POST route
-async function answerChatTurn(
-	context: Context,
-	{ page, authorization, chatTurnPayload }: AnswerChatTurnOptions,
-): Promise<Response> {
-	// read each attached file into its text and reject the chat turn with a message if a file cannot be read
-	const { question, history, attachments, isSpoken } = chatTurnPayload
-	const resolvedChatAttachments = await resolveChatAttachments(attachments)
-	if (resolvedChatAttachments === null) {
-		return context.json({ error: "That file couldn't be read." }, 422)
-	}
-
-	// load the topic draft that the new-topic chat's tools read and write
-	const { userId } = authorization
-	const topicDraft = page.newTopic ? await toNewTopicChatDraft(userId, chatTurnPayload.topicDraft) : undefined
-
-	// the LiteLLM key that the chat turn bills, created first if the user has none
-	const litellmApiKey = await loadOrProvisionUserLiteLLMKey(userId)
-
-	// what the tools and the server record, and the request's analytics properties
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
-	const analyticsProperties = toAnalyticsProperties(context)
-
-	// take the proposal this message answers, and apply it if the message agrees. only the new-topic chat and a topic
-	// the user may edit hold proposals
-	const isProposalPage = page.newTopic || (page.topicId !== undefined && authorization.canEditTopic)
-	const chatProposalResult = isProposalPage
-		? await answerChatProposal({
-				userId,
-				page,
-				question,
-				history,
-				topicDraft,
-				toolCalls,
-				analyticsProperties,
-				litellmApiKey,
-			})
-		: undefined
-
-	// stream the reply from the page's own material: one topic, every topic that the team holds, or the topic draft.
-	// the tools record what they did in the tool calls, after any save the server made
-	const chatReply = await streamChatReply({
-		...toChatTurnTools({
-			userId,
-			page,
-			canEditTopic: authorization.canEditTopic,
-			toolCalls,
-			analyticsProperties,
-			topicDraft,
-		}),
-		topicId: page.topicId,
-		teamId: page.teamId,
-		newTopic: page.newTopic,
-		topicDraft,
-		topicsRemaining: toPromptTopicsRemaining(authorization.topicsRemaining),
-		leaderTeams: authorization.leaderTeams,
-		question,
-		history,
-		chatAttachments: resolvedChatAttachments.chatAttachments,
-		userId,
-		isTopicOwner: authorization.isTopicOwner,
-		isSpoken,
-		litellmApiKey,
-		serverToolCalls: chatProposalResult?.serverToolCalls,
-		proposalOutcome: chatProposalResult?.proposalOutcome,
-	})
-	if (!chatReply) {
-		return context.json({ error: "not found" }, 404)
-	}
-
-	// fetch the question's first link preview card in the background, never delaying the reply
-	if (authorization.isPersisted) {
-		void saveLinkPreviews(question).catch((error) => console.error("chat link preview failed", error))
-	}
-
-	// stream the reply to the user. the stored question names its attachments, and a withheld image is never stored
-	return streamChatTurn(context, {
-		chatReply,
-		userId,
-		page,
-		question: withAttachmentNote(question, attachments),
-		attachments: resolvedChatAttachments.storableAttachments,
-		isPersisted: authorization.isPersisted,
-		isSpoken,
-		toolCalls,
-		analyticsProperties,
-		litellmApiKey,
-		topicDraft,
-		agreementTokens: chatProposalResult?.agreementTokens ?? 0,
-	})
-}
-
-/**
- * Returns the topic draft that a new-topic chat turn starts from: the stored draft over the browser's copy,
- * with the browser's team if it sends one.
- */
-async function toNewTopicChatDraft(userId: string, browserTopicDraft?: TopicDraft): Promise<TopicDraft | undefined> {
-	const storedTopicDraft = await loadTopicDraft(userId)
-	if (!storedTopicDraft) {
-		return browserTopicDraft
-	}
-	return { ...storedTopicDraft, team: browserTopicDraft?.team ?? storedTopicDraft.team }
-}
-
-// the tools that a chat turn offers, in the fields that the reply reads them from
-type ChatTurnTools = Pick<
-	ChatTurnInput,
-	| "tools"
-	| "openNewTopicChatTool"
-	| "proposeTopicEditTool"
-	| "cancelTopicEditTool"
-	| "suggestSourcesTool"
-	| "proposeNewTopicTool"
->
-
-// what one chat turn's tools are bound to
-type ToChatTurnToolsOptions = {
-	userId: string
-	page: ChatPage
-	canEditTopic: boolean
-	toolCalls: ChatTurnToolCalls
-	analyticsProperties: AnalyticsProperties
-	topicDraft?: TopicDraft
-}
-
-// pick a chat turn's tools: the draft tools for the new-topic chat, the preview tools for an editor on a topic,
-// and the tool that opens the new-topic chat everywhere else
-function toChatTurnTools({
-	userId,
-	page,
-	canEditTopic,
-	toolCalls,
-	analyticsProperties,
-	topicDraft,
-}: ToChatTurnToolsOptions): ChatTurnTools {
-	if (page.newTopic) {
-		// copy the empty topic draft. the tools write into this object, and EMPTY_TOPIC_DRAFT is frozen
-		const chatTurnTopicDraft = topicDraft ?? { ...EMPTY_TOPIC_DRAFT }
-		const newTopicToolBinding = { userId, toolCalls, topicDraft: chatTurnTopicDraft, analyticsProperties }
-		return {
-			tools: toNewTopicChatTools(newTopicToolBinding),
-			suggestSourcesTool: toSuggestTopicSourcesTool(newTopicToolBinding),
-			proposeNewTopicTool: toProposeNewTopicTool(),
-		}
-	}
-
-	// offer the tool that opens the new-topic chat on every other page
-	const openNewTopicChatTool = toOpenNewTopicChatTool({ toolCalls })
-	if (!canEditTopic || !page.topicId) {
-		return { openNewTopicChatTool }
-	}
-	// add the tools that show a proposed change on the topic's card and take it back off for an editor on a topic
-	return { openNewTopicChatTool, ...toTopicEditPreviewTools({ toolCalls }) }
-}
-
-// how many more topics the plan allows, as the prompt states it. an admin's unlimited marker becomes no limit at all
-function toPromptTopicsRemaining(remainingTopics: number | undefined): number | undefined {
-	return remainingTopics === undefined || remainingTopics >= ADMIN_QUOTA ? undefined : remainingTopics
-}
-
 // the private chat routes on each page: the conversation, clearing it, and the streamed reply
 export const privateChatRoute = new Hono<AppEnv>()
 	.get(TOPIC_CHAT_PATH, async (context) => {
@@ -299,7 +110,7 @@ export const privateChatRoute = new Hono<AppEnv>()
 		toolCallerRateLimiter,
 		chatSignedOutRejection,
 		chatBodyLimit,
-		zValidator("json", chatTurnPayload),
+		zValidator("json", topicChatTurnPayload),
 		async (context) => {
 			// authorize the chat turn first. each rejection reads differently to the user, so each gets its own status
 			const topicId = context.req.param("id")

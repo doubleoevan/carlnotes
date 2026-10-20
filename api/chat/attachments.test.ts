@@ -1,6 +1,7 @@
 // chat attachment tests. what the payload accepts, how a chat turn's attachments group, and what gets kept
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
-import { CHAT_ATTACHMENT_TEXT_CHARS, clipAttachmentText, withAttachmentNote } from "@shared/contracts/chat"
+import { CHAT_ATTACHMENT_TEXT_CHARS, clipAttachmentText } from "@shared/contracts/chat"
+import { withAttachmentNote } from "@shared/contracts/chatQuestionNotes"
 import { quietErrorReports } from "@shared/monitoringTestFixtures"
 import { type ChatAttachment, chatTurnPayload } from "@shared/payloads"
 import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"

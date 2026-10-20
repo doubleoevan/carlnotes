@@ -205,11 +205,7 @@ export function ChatComposer({
 										<Square className="size-3 fill-current" />
 									</button>
 								) : isMicInSendSlot ? (
-									<MicButton
-										voiceRecording={voiceRecording}
-										isSignupRequired={isSignupRequired}
-										onSignup={onSendQuestion}
-									/>
+									<MicButton voiceRecording={voiceRecording} isSignupRequired={isSignupRequired} />
 								) : isSignupRequired ? (
 									<Tooltip>
 										<TooltipTrigger asChild>

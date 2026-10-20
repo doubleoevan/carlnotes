@@ -17,6 +17,7 @@ import { deleteUserLiteLLMKey } from "./litellm"
 import { saveTopicVectors } from "./meanVectors"
 import { sendScanReport } from "./notify"
 import { buildOutlinePrompt, buildSegmentPrompt } from "./podcast/generatePodcastEpisodeScript"
+import { toUntrustedFences } from "./prompts/untrustedFenceTestFixtures"
 import { buildScorePrompt } from "./review/score"
 import { buildScanReportPrompt } from "./review/summarize"
 import { loadScan } from "./scan"
@@ -325,17 +326,10 @@ async function writeSamplePrompts(): Promise<[string, boolean][]> {
 	]
 	return builtPrompts.flatMap(([label, prompt]) => [
 		[`${label} renders`, prompt.length > 0],
-		[`${label} fences its untrusted inputs`, isFenced(prompt)],
+		[`${label} fences its untrusted inputs`, toUntrustedFences(prompt).length > 0],
 		// the fence closes above the final line, so a prompt ending on a closing tag ends on a value
 		[`${label} restates the task last`, !prompt.trimEnd().endsWith(">")],
 	])
-}
-
-// whether a written prompt wraps its untrusted values in a matched nonce delimiter
-function isFenced(prompt: string): boolean {
-	// requires an open tag with a nonce, and a close tag carrying the same nonce
-	const openTag = prompt.match(/<untrusted-data-([0-9a-f-]{36})>/)
-	return Boolean(openTag && prompt.includes(`</untrusted-data-${openTag[1]}>`))
 }
 
 // seed the test data and run the checks, then always delete the fake owner

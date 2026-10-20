@@ -11,6 +11,7 @@ import { publishedAvatarColumns, toPublishedAvatar, toPublishedAvatarFromUser } 
 import { toVersionedImageHeaders } from "../edgeCache"
 import { countDistinctSubscribers } from "../profiles"
 import { lastScanSummary, toTeamPublicTopicsFilter, toTopicDescription } from "../seo"
+import { loadUsername } from "../usernames"
 import {
 	type PodcastEpisodePreview,
 	toPodcastEpisodePreviewKey,
@@ -149,8 +150,8 @@ async function renderAndStorePng(previewKey: string, renderPng: () => Promise<Ui
  * What a profile's preview shows, or null if no user has that id.
  */
 export async function toProfilePreview(userId: string): Promise<ProfilePreview | null> {
-	const [user] = await db.select({ id: users.id, username: users.username }).from(users).where(eq(users.id, userId))
-	if (!user) {
+	const username = await loadUsername(userId)
+	if (username === null) {
 		return null
 	}
 
@@ -160,9 +161,9 @@ export async function toProfilePreview(userId: string): Promise<ProfilePreview |
 		.from(topics)
 		.where(and(eq(topics.ownerId, userId), eq(topics.visibility, "public")))
 	return {
-		userId: user.id,
-		username: user.username,
-		avatar: await toPublishedAvatar(user.id),
+		userId,
+		username,
+		avatar: await toPublishedAvatar(userId),
 		publicTopicCount: topicRow?.publicTopics ?? 0,
 		followerCount: await countDistinctSubscribers(userId),
 	}

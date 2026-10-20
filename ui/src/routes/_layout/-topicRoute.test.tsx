@@ -101,6 +101,7 @@ const TOPIC = {
 	invites: [],
 	manualScansRemaining: null,
 	manualScanLimit: null,
+	isManualScanPaused: false,
 	isSpendExhausted: false,
 	canEdit: false,
 	team: null,

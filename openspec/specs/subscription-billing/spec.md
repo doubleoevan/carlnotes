@@ -28,10 +28,14 @@ Upgrades SHALL run through a Stripe Checkout Session for the target plan's price
 ### Requirement: Stripe webhooks are the source of truth for subscription state
 A Stripe webhook endpoint SHALL verify the Stripe signature and reject unsigned or invalid events with a 400. On
 subscription lifecycle events it SHALL create, update, or clear the user's `billing_subscriptions` row and its
-`users.plan` projection, and SHALL resize the user's LiteLLM key budget to the new plan's monthly backstop (or the
-per-user override if set). A verified event that could not be applied, such as during a database outage, and any event
-while the webhook secret is unset, SHALL get a 500, so Stripe resends it within its retry period, and an event past that
-period needs a manual resend from the Stripe dashboard. Both a rejection and a failure SHALL be reported.
+`users.plan` projection. If the event changes the user's plan, or the user's LiteLLM key has a max budget that differs
+from the user's budget or cannot be read, it SHALL resize the user's LiteLLM key budget to the plan's monthly backstop
+(or the per-user override if set). An event that leaves the plan as it was, such as a renewal at each billing date,
+with a key whose max budget matches, SHALL keep the key, so the key's spend keeps counting the whole month and resets
+only with the monthly budget reset. A verified event that could not be applied, such as during a database outage, a
+key resize that still fails after its retries, and any event while the webhook secret is unset, SHALL get a 500, so
+Stripe resends it within its retry period, and an event past that period needs a manual resend from the Stripe
+dashboard. Both a rejection and a failure SHALL be reported.
 
 #### Scenario: A completed checkout activates the plan
 - **WHEN** a valid subscription-active webhook (for example `checkout.session.completed`) arrives for a user
@@ -41,6 +45,15 @@ period needs a manual resend from the Stripe dashboard. Both a rejection and a f
 #### Scenario: A cancellation reverts to free
 - **WHEN** a valid subscription-cancelled webhook arrives
 - **THEN** the active row is cleared, `users.plan` becomes `free`, and the key budget is resized to the free backstop
+
+#### Scenario: A renewal on the same plan keeps the key
+- **WHEN** a valid subscription-updated webhook arrives for a user and names the plan the user is already on
+- **THEN** the `billing_subscriptions` row is updated and the user's LiteLLM key is kept, with its spend this month
+
+#### Scenario: A renewal reissues a key whose budget is stale
+- **GIVEN** a user whose plan changed while the key resize failed, so the key keeps the old plan's max budget
+- **WHEN** a valid subscription-updated webhook arrives that names the plan the user is already on
+- **THEN** the user's LiteLLM key is reissued at the plan's budget
 
 #### Scenario: An unsigned webhook is rejected
 - **WHEN** a request to the webhook endpoint fails Stripe signature verification

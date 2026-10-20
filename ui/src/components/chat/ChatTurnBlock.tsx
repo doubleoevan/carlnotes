@@ -1,6 +1,8 @@
 // one chat turn as the private chat renders it: the question bubble, carl's answer bubble, and the compaction line
 import type { ChatMessageAttachment } from "@shared/contracts/chat"
+import { toPodcastEpisodeNoteParts } from "@shared/contracts/chatQuestionNotes"
 import type { VoiceChatPage } from "@shared/payloads"
+import { PODCAST_EPISODE_SPEAKER_NAMES } from "@shared/podcastEpisodes"
 import { RotateCcw } from "lucide-react"
 import { type ChatRejection, toChatAttachmentUrl } from "@/clients/chatClient"
 import { ChatAuthor } from "@/components/chat/ChatAuthor"
@@ -9,9 +11,11 @@ import { ChatMarkdown } from "@/components/chat/ChatMarkdown"
 import { ChatVideo, CopyButton, ModelThinkingBubble, toTimeAgoLabel } from "@/components/chat/ChatMessageParts"
 import { CHAT_REJECTION_COPY } from "@/components/chat/chatRejectionCopy"
 import type { ChatTurn } from "@/components/chat/chatTurns"
+import { PodcastEpisodeChapterTag } from "@/components/chat/PodcastEpisodeChapterTag"
 import { SpokenAnswerButton } from "@/components/chat/SpokenAnswerButton"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { hasPreviewableLink, LinkPreviewCard, LinkPreviewLoading } from "@/components/common/LinkPreviewCard"
+import { ANSWER_BUBBLE_CLASS, QUESTION_BUBBLE_WIDTH_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
 // who a chat message renders as: the account when one exists, and the recorded name either way
@@ -72,8 +76,10 @@ function CompactionNotice() {
 	)
 }
 
-// the user's own question to the right, with their avatar and name like every chat message
+// the user's own question to the right, with their avatar and name like every chat message. a question asked from the
+// podcast player shows its note as a tag under it instead of as text
 function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: number; author: ChatMessageAuthor }) {
+	const { question, podcastEpisodeNote } = toPodcastEpisodeNoteParts(chatTurn.question)
 	return (
 		<ChatAuthor
 			authorUserId={author.userId}
@@ -82,9 +88,20 @@ function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: nu
 			isOwnChatMessage
 		>
 			<div className="group flex w-full flex-col items-end">
-				<p className="bg-primary text-primary-foreground max-w-[85%] rounded-2xl rounded-br-sm px-3.5 py-2 text-sm whitespace-pre-wrap @lg:max-w-[75%]">
-					{chatTurn.question}
+				<p
+					className={cn(
+						"bg-primary text-primary-foreground rounded-2xl rounded-br-sm px-3.5 py-2 text-sm whitespace-pre-wrap",
+						QUESTION_BUBBLE_WIDTH_CLASS,
+					)}
+				>
+					{question}
 				</p>
+				{chatTurn.podcastEpisodeChapter && podcastEpisodeNote && (
+					<PodcastEpisodeChapterTag
+						podcastEpisodeChapter={chatTurn.podcastEpisodeChapter}
+						podcastEpisodeNote={podcastEpisodeNote}
+					/>
+				)}
 				{/* the images and clips sent with the question, each shown under it in place */}
 				{chatTurn.attachments.map((attachment) => {
 					if (attachment.kind === "image") {
@@ -110,7 +127,7 @@ function QuestionBubble({ chatTurn, now, author }: { chatTurn: ChatTurn; now: nu
 					hasPreviewableLink(chatTurn.question) && <LinkPreviewLoading />}
 				{/* the footer mirrors carl's, reading in from the user's own edge: the copy button, then the time ago */}
 				<div className="text-muted-foreground -mr-1 mt-1 flex flex-row-reverse items-center gap-2 text-xs">
-					<CopyButton text={chatTurn.question} isTooltipBelow />
+					<CopyButton text={question} isTooltipBelow />
 					{chatTurn.at !== undefined && <span>{toTimeAgoLabel(chatTurn.at, now)}</span>}
 				</div>
 			</div>
@@ -137,7 +154,8 @@ function ChatImage({ attachment }: { attachment: ChatMessageAttachment & { dataU
 	)
 }
 
-// the llm reply on the left. it shows the CoffeeMug and thinking chat message shimmer before the response starts streaming.
+// the llm reply on the left, under the host who gave it. it shows the CoffeeMug and thinking chat message shimmer
+// before the response starts streaming
 function AnswerBubble({
 	chatTurn,
 	isLast,
@@ -169,9 +187,13 @@ function AnswerBubble({
 	}
 
 	return (
-		<ChatAuthor authorUserId={null} authorUsername="Carl">
+		<ChatAuthor
+			authorUserId={null}
+			authorUsername={PODCAST_EPISODE_SPEAKER_NAMES[chatTurn.speaker]}
+			speaker={chatTurn.speaker}
+		>
 			<div className="group flex w-full flex-col items-start">
-				<div className="bg-bubble text-foreground max-w-[92%] rounded-2xl rounded-bl-sm px-3.5 py-2 text-sm @lg:max-w-[75%]">
+				<div className={ANSWER_BUBBLE_CLASS}>
 					<div className={cn(isStreamingAnswer && "shimmer-text")}>
 						<ChatMarkdown markdown={chatTurn.answer} />
 					</div>
@@ -209,7 +231,12 @@ function AnswerFooter({
 			<div className="flex items-center gap-0.5">
 				<CopyButton text={chatTurn.answer} />
 				{voiceChatPage && (
-					<SpokenAnswerButton spokenAnswerKey={chatTurn.spokenAnswerKey} page={voiceChatPage} text={chatTurn.answer} />
+					<SpokenAnswerButton
+						spokenAnswerKey={chatTurn.spokenAnswerKey}
+						page={voiceChatPage}
+						text={chatTurn.answer}
+						speaker={chatTurn.speaker}
+					/>
 				)}
 			</div>
 			{chatTurn.at !== undefined && <span>{toTimeAgoLabel(chatTurn.at, now)}</span>}

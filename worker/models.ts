@@ -1,6 +1,7 @@
 // the app's LLM model tiers, all routed through LiteLLM. litellmApiKey bills a call to the key of the call's user.
 // a call with no litellmApiKey uses the master key
 import { createOpenAI } from "@ai-sdk/openai"
+import { SPENT_BUDGET_LINE } from "@shared/contracts/chat"
 import { toPositiveInteger } from "@shared/envSettings"
 import { type EmbeddingModel, embed, embedMany, type LanguageModel } from "ai"
 import { EMBED_DIMENSIONS } from "../db/schema/scans"
@@ -9,7 +10,7 @@ import { EMBED_DIMENSIONS } from "../db/schema/scans"
 const MODEL_TIMEOUT_MS = toPositiveInteger(Bun.env.MODEL_TIMEOUT_MS, 360000)
 
 // what a spent budget tells the user, whether the gate caught it up front or the proxy rejected the call partway through a chat turn
-export const SPENT_BUDGET_REJECTION = "Carl is staring at an empty mug. Top up to keep chatting."
+export const SPENT_BUDGET_REJECTION = `${SPENT_BUDGET_LINE} Top up to keep chatting.`
 
 // what carl posts if his chat turn broke for any other reason
 export const MODEL_CHAT_TURN_FAILED_REJECTION = "Carl couldn't answer that one. Mention him again to retry."

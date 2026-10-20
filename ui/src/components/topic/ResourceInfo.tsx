@@ -162,7 +162,7 @@ export function ResourceInfo({
 
 // the linked page's link preview card, fetched for every visitor when the note popover opens
 function FindingLinkPreview({ findingId }: { findingId: string }) {
-	// the fetched preview, and whether its fetch is still in flight
+	// the fetched preview, and whether its fetch is still in progress
 	const [linkPreview, setLinkPreview] = useState<ChatLinkPreview | null>(null)
 	const [isLinkPreviewLoading, setIsLinkPreviewLoading] = useState(true)
 	useEffect(() => {

@@ -3,7 +3,7 @@
 
 import { isAdminRole } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
-import { userBudgetCents } from "@shared/plans"
+import { toCentsFromDollars, userBudgetCents } from "@shared/plans"
 import { and, eq, isNotNull, isNull, lt, sql } from "drizzle-orm"
 import { db } from "../db"
 import { startOfUtcMonth } from "../db/quotas"
@@ -124,17 +124,47 @@ async function deleteUnstoredLiteLLMKey(userId: string, key: string): Promise<vo
  * The proxy rejects a model call on a key whose budget is spent.
  */
 export async function isUserLiteLLMKeyBudgetExhausted(userId: string): Promise<boolean> {
-	// return false if the user has no stored key
-	const litellmKeyOwner = await loadLiteLLMKeyOwner(userId)
-	if (!litellmKeyOwner?.litellmVirtualKey) {
-		return false
-	}
-
-	// compare the key's recorded spend with its maximum budget. a budget with no maximum is never spent
-	const litellmKeyBudget = await readLiteLLMKeyBudget(litellmKeyOwner.litellmVirtualKey)
+	// compare the stored key's recorded spend with its maximum budget.
+	// no stored key, a failed read, and a budget with no maximum are never spent
+	const litellmKeyBudget = (await loadUserLiteLLMKeyBudget(userId))?.litellmKeyBudget
 	return (
 		litellmKeyBudget?.maxBudgetDollars != null && litellmKeyBudget.spendDollars >= litellmKeyBudget.maxBudgetDollars
 	)
+}
+
+/**
+ * Whether the user's stored key has a maximum budget other than the user's budget. True if the budget read fails.
+ * False if the user has no key.
+ */
+export async function isUserLiteLLMKeyBudgetStale(userId: string): Promise<boolean> {
+	// return false if the user has no stored key
+	const userLiteLLMKeyBudget = await loadUserLiteLLMKeyBudget(userId)
+	if (!userLiteLLMKeyBudget) {
+		return false
+	}
+
+	// compare the key's maximum budget with the user's budget in cents. a failed read or a key with no maximum is stale
+	const { litellmKeyOwner, litellmKeyBudget } = userLiteLLMKeyBudget
+	if (litellmKeyBudget?.maxBudgetDollars == null) {
+		return true
+	}
+	return toCentsFromDollars(litellmKeyBudget.maxBudgetDollars) !== litellmKeyOwner.budgetCents
+}
+
+// a user's stored key with its owner, and the key's budget as the proxy reports it, which is null if the read fails
+type UserLiteLLMKeyBudget = { litellmKeyOwner: LiteLLMKeyOwner; litellmKeyBudget: LiteLLMKeyBudget | null }
+
+// load the user's stored key and read its budget from the proxy. return null if the user is gone or has no stored key
+async function loadUserLiteLLMKeyBudget(userId: string): Promise<UserLiteLLMKeyBudget | null> {
+	// return null if the user has no stored key
+	const litellmKeyOwner = await loadLiteLLMKeyOwner(userId)
+	if (!litellmKeyOwner?.litellmVirtualKey) {
+		return null
+	}
+
+	// read the stored key's budget
+	const litellmKeyBudget = await readLiteLLMKeyBudget(litellmKeyOwner.litellmVirtualKey)
+	return { litellmKeyOwner, litellmKeyBudget }
 }
 
 /**

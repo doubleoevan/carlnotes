@@ -3,18 +3,11 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as monitoring from "@shared/monitoring"
 import { FREE_USER_ACCESS_ROW, restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"
 import * as meanVectors from "../../worker/meanVectors"
-import type { AnalyticsProperties } from "../currentUser"
+import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import { setRating } from "./findingMarks"
 
-// the topic's owner, who may rate its findings, and the analytics properties a rating is tracked with
+// the topic's owner, who may rate its findings
 const OWNER_ID = "owner-1"
-const ANALYTICS_PROPERTIES: AnalyticsProperties = {
-	entryPoint: "web",
-	plan: "free",
-	platform: "desktop",
-	browserPlatform: "other",
-	isInAppBrowser: false,
-}
 
 // put the connection pool and every spy back after each test
 afterEach(() => {
@@ -42,7 +35,7 @@ function toRatingRows(sentQueryText: string): unknown[] {
 
 test("a rating saves its topic's vectors again after the finding's update", async () => {
 	const sentQueries = stubConnectionPool((sentQuery) => toRatingRows(sentQuery.text))
-	expect(await setRating(OWNER_ID, "finding-1", "down", ANALYTICS_PROPERTIES)).toBe(true)
+	expect(await setRating(OWNER_ID, "finding-1", "down", TEST_ANALYTICS_PROPERTIES)).toBe(true)
 
 	// the finding's update returns its topic, and the topic's vector upsert comes after it
 	const updateIndex = sentQueries.findIndex((sentQuery) => sentQuery.text.startsWith('update "findings"'))
@@ -59,6 +52,6 @@ test("a failed vector save is reported and the rating still saves", async () => 
 	const reportErrorSpy = spyOn(monitoring, "reportError").mockImplementation(() => {})
 
 	// the rating returns true, and the failure is reported with the topic
-	expect(await setRating(OWNER_ID, "finding-1", null, ANALYTICS_PROPERTIES)).toBe(true)
+	expect(await setRating(OWNER_ID, "finding-1", null, TEST_ANALYTICS_PROPERTIES)).toBe(true)
 	expect(reportErrorSpy).toHaveBeenCalledWith(expect.any(Error), "database", { topicId: "topic-1" })
 })

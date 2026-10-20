@@ -4,6 +4,7 @@ import type { GatedTopicVisibility } from "@/clients/topicClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
+import { toSignupHref } from "@/components/session/signupPrompts"
 import { useSearchParams } from "@/hooks/useSearchParams"
 
 // the gated topic's visibility, whether the user is signed in, and the path that a visitor returns to
@@ -30,8 +31,6 @@ const GATE_COPY = {
 export function TopicGateNotice({ visibility, isSignedIn, returnPath }: TopicGateNoticeProps) {
 	const navigate = useNavigate()
 
-	// the query that returns a visitor to the gated page after login or signup
-	const nextQuery = `?next=${encodeURIComponent(returnPath)}`
 	// which arrival a signup gets attributed to for analytics
 	const searchParams = useSearchParams()
 	const ctaTag = toCtaTag(searchParams.get("src")) ?? "gate"
@@ -49,7 +48,7 @@ export function TopicGateNotice({ visibility, isSignedIn, returnPath }: TopicGat
 						// the only action a signed-in user has here is leaving
 						<Button onClick={() => navigate({ to: "/" })}>Back to CarlNotes</Button>
 					) : (
-						<GatedSignedOutActions nextQuery={nextQuery} ctaTag={ctaTag} isSignupShown={visibility === "invite"} />
+						<GatedSignedOutActions returnPath={returnPath} ctaTag={ctaTag} isSignupShown={visibility === "invite"} />
 					)}
 				</DialogFooter>
 			</DialogContent>
@@ -60,25 +59,25 @@ export function TopicGateNotice({ visibility, isSignedIn, returnPath }: TopicGat
 // the visitor's call-to-action links, which return to the gated page after login or signup.
 // a private topic offers login alone, as the primary action
 function GatedSignedOutActions({
-	nextQuery,
+	returnPath,
 	ctaTag,
 	isSignupShown,
 }: {
-	nextQuery: string
+	returnPath: string
 	ctaTag: string
 	isSignupShown: boolean
 }) {
 	return (
 		<>
 			<AnchorLink
-				href={`/login${nextQuery}`}
+				href={`/login?next=${encodeURIComponent(returnPath)}`}
 				className={buttonVariants({ variant: isSignupShown ? "outline" : "default" })}
 			>
 				Log in
 			</AnchorLink>
 			{/* cta names the arrival for the signup_completed event */}
 			{isSignupShown ? (
-				<AnchorLink href={`/signup${nextQuery}&cta=${ctaTag}`} className={buttonVariants({ variant: "default" })}>
+				<AnchorLink href={toSignupHref(ctaTag, returnPath)} className={buttonVariants({ variant: "default" })}>
 					Sign up
 				</AnchorLink>
 			) : null}

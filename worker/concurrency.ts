@@ -1,7 +1,7 @@
-// the runner that bounds how many tasks are in flight at once
+// the runner that bounds how many tasks run at once
 
 /**
- * Runs one task per item with at most `maxConcurrency` tasks in flight and returns the results in item order.
+ * Runs one task per item with at most `maxConcurrency` tasks running and returns the results in item order.
  */
 export async function runWithConcurrency<Item, Result>(
 	items: Item[],

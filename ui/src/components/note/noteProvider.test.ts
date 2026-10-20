@@ -67,7 +67,7 @@ test("resync coalesces concurrent pokes", async () => {
 	const ydoc = new Y.Doc()
 	const provider = new NoteProvider("n1", ydoc, () => {}, transport)
 
-	// three pokes while the first fetch is in flight
+	// three pokes while the first fetch is in progress
 	const firstResync = provider.resync()
 	void provider.resync()
 	void provider.resync()
@@ -149,9 +149,9 @@ test("the note provider reports each save status it moves through", async () => 
 	provider.destroy()
 })
 
-// an edit made while a post is out schedules its own post, so two can be in flight. the first to return must not
+// an edit made while a post is out schedules its own post, so two can be in progress. the first to return must not
 // call the note saved while the second is still going
-test("a post still in flight keeps the note from reading as saved", async () => {
+test("a post still in progress keeps the note from reading as saved", async () => {
 	const ydoc = new Y.Doc()
 	const saveStatuses: NoteSaveStatus[] = []
 	const sendResolvers: ((isSent: boolean) => void)[] = []

@@ -4,5 +4,11 @@
 		"paths": { "@/*": ["./src/*"], "@shared/*": ["../shared/*"] }
 	},
 	"references": [{ "path": "../api" }, { "path": "../shared" }],
-	"include": ["src", "vite.config.ts", "../bun-env.d.ts"]
+	"include": [
+		"src",
+		"vite.config.ts",
+		"voiceActivityAssetsPlugin.ts",
+		"voiceActivityAssetsPlugin.test.ts",
+		"../bun-env.d.ts"
+	]
 }

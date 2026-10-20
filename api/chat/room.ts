@@ -7,10 +7,10 @@ import type { Context } from "hono"
 import { streamSSE } from "hono/streaming"
 import { db } from "../../db"
 import { chatRoomMessages } from "../../db/schema/chat"
-import { users } from "../../db/schema/users"
 import { isBudgetRejection, MODEL_CHAT_TURN_FAILED_REJECTION, SPENT_BUDGET_REJECTION } from "../../worker"
 import { isMonthlySpendExhausted } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
+import { loadUsername } from "../usernames"
 import { encryptChatText } from "./encryption"
 import { saveLinkPreviews } from "./linkPreviews"
 import { saveChatMentions } from "./mentions"
@@ -63,14 +63,14 @@ export async function postChatRoomMessage(
 	}
 
 	// the poster's name is recorded at post-time, which is what keeps attribution and deletes the attachment if the account closes
-	const [author] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId))
+	const authorUsername = (await loadUsername(userId)) ?? "someone"
 	const [chatMessageRow] = await db
 		.insert(chatRoomMessages)
 		.values({
 			topicId,
 			teamId,
 			authorUserId: userId,
-			authorUsername: author?.username ?? "someone",
+			authorUsername,
 			replyToMessageId: replyToChatMessageId ?? undefined,
 			content: encryptChatText(content),
 			isSpoken,
@@ -82,14 +82,7 @@ export async function postChatRoomMessage(
 
 	// each attachment file's row is stored beside its chat message, so the chat messages and the stream both include it
 	for (const preparedAttachment of preparedAttachments) {
-		await storeChatRoomAttachment(
-			userId,
-			author?.username ?? "someone",
-			topicId,
-			teamId,
-			chatMessageRow.id,
-			preparedAttachment,
-		)
+		await storeChatRoomAttachment(userId, authorUsername, topicId, teamId, chatMessageRow.id, preparedAttachment)
 	}
 
 	// the link preview cards fetch in the background, so the chat message loads for everyone without waiting on its links

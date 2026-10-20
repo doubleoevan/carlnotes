@@ -3,7 +3,7 @@ import { EMPTY_TOPIC_DRAFT } from "@shared/topicPayloads"
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import { type ChatPage, fetchChatConversation } from "@/clients/chatClient"
-import { type ChatTurn, toSpokenAnswerKey } from "@/components/chat/chatTurns"
+import { type ChatTurn, toLoadedChatTurn } from "@/components/chat/chatTurns"
 import { toProposedTopicEdit } from "@/components/chat/topicToolCalls"
 import type { ChatAttachments } from "@/components/chat/useChatAttachments"
 import type { NewTopicDraft } from "@/components/chat/useNewTopicDraft"
@@ -67,19 +67,7 @@ export function useChatConversationLoad({
 				if (!isCurrentTopic) {
 					return
 				}
-				setChatTurns(
-					chatConversation.chatTurns.map((chatTurn) => ({
-						question: chatTurn.question,
-						answer: chatTurn.answer,
-						toolCalls: chatTurn.toolCalls,
-						rejection: null,
-						at: chatTurn.at ? Date.parse(chatTurn.at) : undefined,
-						spokenAnswerKey: toSpokenAnswerKey(),
-						attachments: chatTurn.attachments,
-						linkPreviews: chatTurn.linkPreviews,
-						answerLinkPreviews: chatTurn.answerLinkPreviews,
-					})),
-				)
+				setChatTurns(chatConversation.chatTurns.map(toLoadedChatTurn))
 				// the gates and the kept attachments update together, so the panel opens in one finished state
 				setCanChat(chatConversation.canChat)
 				setIsSignupRequired(chatConversation.isSignupRequired)
@@ -110,7 +98,7 @@ export function useChatConversationLoad({
 				setIsLoaded(true)
 			})
 
-		// leaving this topic discards any request in flight for it
+		// leaving this topic discards any request in progress for it
 		return () => {
 			isCurrentTopic = false
 		}

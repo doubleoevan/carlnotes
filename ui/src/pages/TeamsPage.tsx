@@ -1,3 +1,4 @@
+import { CHAT_NAME } from "@shared/contracts/chat"
 import type { TeamSummary, TeamsPageResponse } from "@shared/contracts/teams"
 import { Plus, Users } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
@@ -173,7 +174,7 @@ export function TeamsPage() {
 					onConfirm={() => void handleLeaveTeam()}
 					onClose={() => setTeamToLeave(null)}
 				>
-					{`You lose access to ${teamToLeave.name}'s topics and its Coffee talk.`}
+					{`You lose access to ${teamToLeave.name}'s topics and its ${CHAT_NAME}.`}
 				</ConfirmDialog>
 			)}
 		</main>

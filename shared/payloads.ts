@@ -17,7 +17,14 @@ import {
 } from "./contracts/chat"
 import { inviteSources } from "./contracts/invites"
 import { NOTE_NAME_MAX_CHARS, NOTE_UPDATE_MAX_CHARS } from "./contracts/notes"
-import { inviteAccesses, noteVisibilities, podcastEpisodeSpeakers, ratings, teamRoles } from "./enums"
+import {
+	conversationChatTurnKinds,
+	inviteAccesses,
+	noteVisibilities,
+	podcastEpisodeSpeakers,
+	ratings,
+	teamRoles,
+} from "./enums"
 import { topicDraftPayload } from "./topicPayloads"
 
 // the shape that every chat attachment includes whatever its kind
@@ -205,6 +212,34 @@ export const chatTurnPayload = z
 
 export type ChatTurnPayload = z.infer<typeof chatTurnPayload>
 
+// one earlier chat turn as a chat turn's history sends it
+export type ChatHistoryTurn = ChatTurnPayload["history"][number]
+
+// the longest podcast episode id a chapter reference takes
+const PODCAST_EPISODE_ID_MAX_CHARS = 64
+
+// a chapter position well past any podcast episode's chapters, which keeps a chapter lookup inside a postgres integer
+export const PODCAST_EPISODE_CHAPTER_POSITION_MAX = 999
+
+// the podcast episode and the chapter a question was asked during, by its position from zero
+export const podcastEpisodeChapterPayload = z.object({
+	podcastEpisodeId: z.string().min(1).max(PODCAST_EPISODE_ID_MAX_CHARS),
+	chapterPosition: z.number().int().min(0).max(PODCAST_EPISODE_CHAPTER_POSITION_MAX),
+})
+
+export type PodcastEpisodeChapterRef = z.infer<typeof podcastEpisodeChapterPayload>
+
+// a topic chat turn, which may be a spoken question asked from the podcast player during one chapter of a podcast
+// episode. a podcast question is always spoken and never sends an attachment
+export const topicChatTurnPayload = chatTurnPayload
+	.and(z.object({ podcastEpisodeChapter: podcastEpisodeChapterPayload.optional() }))
+	.refine(
+		(chatTurn) => !chatTurn.podcastEpisodeChapter || (chatTurn.isSpoken && chatTurn.attachments.length === 0),
+		"a podcast question is spoken and has no attachment",
+	)
+
+export type TopicChatTurnPayload = z.infer<typeof topicChatTurnPayload>
+
 // the longest spoken part of a reply that the speech route speaks in one call
 export const SPOKEN_PART_CHARS = 2000
 
@@ -223,11 +258,16 @@ export const voiceChatPagePayload = z.discriminatedUnion("kind", [
 
 export type VoiceChatPage = z.infer<typeof voiceChatPagePayload>
 
-// the speech body: the page and one spoken part of carl's reply to speak
+// the speech body: the page, one spoken part of a reply to speak, and the speaker who gave the reply,
+// carl unless vienna answered a question asked from the podcast player
 export const spokenAnswerPayload = z.object({
 	page: voiceChatPagePayload,
 	text: z.string().trim().min(1).max(SPOKEN_PART_CHARS),
+	speaker: z.enum(podcastEpisodeSpeakers).default("host"),
 })
+
+// the speech body as the browser sends it, which may leave out the speaker
+export type SpokenAnswerPayload = z.input<typeof spokenAnswerPayload>
 
 // the spoken events body: the page and what the browser measured, a spoken question's timings or a play tap
 export const spokenEventPayload = z.object({
@@ -239,6 +279,8 @@ export const spokenEventPayload = z.object({
 			transcriptionMs: z.number().int().min(0),
 			// from the send tap to the reply's first spoken word, absent if nothing played
 			firstSpokenWordMs: z.number().int().min(0).optional(),
+			// whether the question was asked from the chat or from the podcast player
+			chatTurnKind: z.enum(conversationChatTurnKinds).default("private"),
 		}),
 		z.object({ kind: z.literal("answer_played") }),
 	]),

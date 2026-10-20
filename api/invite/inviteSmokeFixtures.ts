@@ -8,7 +8,6 @@ import { invites } from "../../db/schema/invites"
 import { teamMembers, teams } from "../../db/schema/teams"
 import { subscriptions, topics } from "../../db/schema/topics"
 import { users } from "../../db/schema/users"
-import type { AnalyticsProperties } from "../currentUser"
 import type { UserInviteRejection } from "./userInvites"
 
 // one id per run, so emails, usernames, and team names don't collide with an earlier run's rows
@@ -20,15 +19,6 @@ const createdTeamIds: string[] = []
 
 // accounts are backdated a month by default
 const BACKDATED_CREATED_AT = new Date(Date.now() - 30 * DAY_MS)
-
-// the analytics shape createTopicInvite asks for. the entry drops the capture key, so nothing sends
-export const ANALYTICS: AnalyticsProperties = {
-	entryPoint: "web",
-	plan: "free",
-	platform: "desktop",
-	browserPlatform: "other",
-	isInAppBrowser: false,
-}
 
 /** The users row one label seeds, shared by the single and batch inserts. */
 export function toUserValues(

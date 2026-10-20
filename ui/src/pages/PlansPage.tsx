@@ -4,15 +4,21 @@ import { Check } from "lucide-react"
 import { useEffect, useState } from "react"
 import { authClient } from "@/clients/authClient"
 import { fetchBillingState, openBillingPortal, startCheckout } from "@/clients/billingClient"
+import { MonthlyBudgetCutoffTable } from "@/components/account/MonthlyBudgetCutoffTable"
 import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
+import { UPGRADE_PROMPTS } from "@/components/chat/spokenQuestionsPaused"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Button, buttonVariants } from "@/components/primitives/button"
 import { Switch } from "@/components/primitives/switch"
+import { useCtaPromptToast } from "@/hooks/useCtaPromptToast"
 import { usePageTitle } from "@/hooks/usePageTitle"
 import { toBrewsWord } from "@/lib/labels"
 import { isUsersPlan, toPlanBadge } from "@/lib/planCards"
 import { PAGE_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
+
+// the one toast that names what a mic sent the user here to upgrade for
+const UPGRADE_PROMPT_TOAST_ID = "upgrade-prompt"
 
 // the recommended plan that a signed-out visitor sees highlighted
 const RECOMMENDED_PLAN: Plan = "plus"
@@ -42,6 +48,8 @@ function toMonthlyScanEstimate(monthlyBudgetCents: number): number {
  */
 export function PlansPage() {
 	usePageTitle("Plans")
+	// say what upgrading unlocks if a mic past the spoken questions cutoff sent the user here
+	useCtaPromptToast(UPGRADE_PROMPTS, UPGRADE_PROMPT_TOAST_ID)
 	const { data: session } = authClient.useSession()
 	const [isYearly, setIsYearly] = useState(false)
 	const [billingInterval, setBillingInterval] = useState<BillingInterval | null>(null)
@@ -144,6 +152,9 @@ export function PlansPage() {
 					))}
 				</div>
 			)}
+
+			{/* what each plan pauses as the month's spend climbs, in its own row under the plan cards */}
+			<MonthlyBudgetCutoffTable />
 		</main>
 	)
 }
@@ -224,6 +235,8 @@ function PlanCard({
 					label={`${dailyScanLimitForInterval} craft ${toBrewsWord(dailyScanLimitForInterval)} a day`}
 					isRaised={isDailyScanLimitRaised}
 				/>
+				{/* the monthly budget that the feature windows table's shares are of, and the scans it buys */}
+				<QuotaLink label={`${toWholeDollarLabel(planConfig.monthlyBudgetCents)} coffee fund a month`} />
 				<QuotaLink label={`About ${monthlyScanEstimate} ${toBrewsWord(monthlyScanEstimate)} a month`} />
 				{/* the free plan's short episode with only the latest kept, or a paid plan's full episodes, every one kept */}
 				<QuotaLink label={plan === "free" ? "Short podcast for latest brew only" : "Full podcasts for every brew"} />

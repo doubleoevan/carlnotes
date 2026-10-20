@@ -1,6 +1,7 @@
 // the page head helpers. the site and page titles, structured data, topic slugs and paths, and the meta description
 import { PLANS } from "./plans"
 import { toPlainText } from "./spokenText"
+import { toOneLineText } from "./text"
 import { type PageYoutubeVideo, toYoutubeEmbedUrl } from "./youtube"
 
 // the site's own title, on the homepage and on any page with no title of its own
@@ -184,7 +185,7 @@ export function toHostWithoutWww(url: string): string {
  */
 export function toMetaDescription(text: string): string {
 	// join the lines of the plain text, and return it whole if it fits
-	const oneLineText = toPlainText(text).replace(/\s+/g, " ").trim()
+	const oneLineText = toOneLineText(toPlainText(text))
 	if (oneLineText.length <= META_DESCRIPTION_LIMIT) {
 		return oneLineText
 	}

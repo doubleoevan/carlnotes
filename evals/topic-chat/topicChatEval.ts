@@ -1,8 +1,8 @@
 // the promptfoo eval of the topic chat reply, which makes real model calls. run the eval with: bun run eval:topic-chat
-import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
+import type { Assertion, TestCase } from "promptfoo"
 import { chatModel } from "../../worker/models"
-import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
-import { toDisallowedLinkUrl, toMarkdownMarkup, toProseParagraphs } from "../evalReplies"
+import { NO_MARKDOWN_ASSERTION, toChatReplyAssertions, toChatReplyCaseLine } from "../evalChecks"
+import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { TOPIC_CHAT_CASES, type TopicChatCase } from "./topicChatCases"
 import { type TopicChatVariables, topicChatReplyWriter } from "./topicChatProviders"
 import { GRADER_MODEL, MATERIAL_LABEL, OPENING_RUBRIC, OUTPUT_SHAPE_RUBRIC, SUPPORT_RUBRIC } from "./topicChatRubrics"
@@ -10,16 +10,8 @@ import { GRADER_MODEL, MATERIAL_LABEL, OPENING_RUBRIC, OUTPUT_SHAPE_RUBRIC, SUPP
 // turn web search off. a search returns "web search is not configured", so a reply's links come only from the material
 delete Bun.env.EXA_API_KEY
 
-// how many paragraphs a reply may have, its lists and its headings aside
-const MAX_REPLY_PARAGRAPHS = 3
-
-// the checks that every case gets and that need no model
-const DETERMINISTIC_ASSERTIONS: Assertion[] = [
-	{ type: "javascript", metric: "links only to the findings and the docs", value: gradeLinksToMaterial },
-	{ type: "javascript", metric: `has ${MAX_REPLY_PARAGRAPHS} paragraphs or fewer`, value: gradeParagraphCount },
-]
-
-// run every case. the grader is on a different model from the model that writes the reply
+// run every case. the grader is on a different model from the model that writes the reply. every case gets the
+// checks that need no model, over its topic material
 await runEval({
 	name: "topic-chat",
 	description: "topic chat reply",
@@ -27,9 +19,9 @@ await runEval({
 	writerModels: [chatModel()],
 	grader: toRubricGrader(GRADER_MODEL),
 	gatePassRate: 0.9,
-	defaultAssertions: DETERMINISTIC_ASSERTIONS,
+	defaultAssertions: toChatReplyAssertions((context) => (context.vars as TopicChatVariables).chatContext),
 	testCases: TOPIC_CHAT_CASES.map(toTestCase),
-	toCaseLine,
+	toCaseLine: toChatReplyCaseLine,
 })
 
 // one promptfoo test for a case. its variables, the no-markdown check of a spoken case, and the rubrics over its topic
@@ -38,9 +30,7 @@ function toTestCase(topicChatCase: TopicChatCase): TestCase {
 	const { description, rubric, ...topicChatVariables } = topicChatCase
 
 	// the no-markdown check, which only a spoken case gets
-	const spokenAssertions: Assertion[] = topicChatVariables.isSpoken
-		? [{ type: "javascript", metric: "has no markdown", value: gradeNoMarkdown }]
-		: []
+	const spokenAssertions: Assertion[] = topicChatVariables.isSpoken ? [NO_MARKDOWN_ASSERTION] : []
 
 	// the support and opening rubrics, plus the case's own rubric, each with the question and the material after it
 	const rubricAssertions = toRubricAssertions({
@@ -54,32 +44,4 @@ function toTestCase(topicChatCase: TopicChatCase): TestCase {
 		material: topicChatVariables,
 	})
 	return { description, vars: topicChatVariables, assert: [...spokenAssertions, ...rubricAssertions] }
-}
-
-// fail the check if a spoken answer has markdown that is read aloud: a heading, a list, a table, fenced code, or a link
-function gradeNoMarkdown(replyText: string): GradingResult {
-	const markdownMarkup = toMarkdownMarkup(replyText)
-	return toGradingResult(markdownMarkup && `the reply has ${markdownMarkup}`)
-}
-
-// fail the check if the reply links anywhere but a finding's url, the docs root, or a docs page in the material
-function gradeLinksToMaterial(replyText: string, context: AssertionValueFunctionContext): GradingResult {
-	// find the first link that is neither a finding's url nor a docs page
-	const { chatContext } = context.vars as TopicChatVariables
-	const findingUrls = chatContext.findings.map((finding) => finding.url)
-	const disallowedLinkUrl = toDisallowedLinkUrl({ replyText, findingUrls, docsBlock: chatContext.docsBlock })
-	return toGradingResult(disallowedLinkUrl && `the reply links ${disallowedLinkUrl}`)
-}
-
-// fail the check if the reply has more than MAX_REPLY_PARAGRAPHS paragraphs that are not lists or headings
-function gradeParagraphCount(replyText: string): GradingResult {
-	const paragraphCount = toProseParagraphs(replyText).length
-	return toGradingResult(
-		paragraphCount > MAX_REPLY_PARAGRAPHS ? `the reply has ${paragraphCount} paragraphs` : undefined,
-	)
-}
-
-// a case's paragraph count and reply cost
-function toCaseLine(replyText: string, evaluateResult: EvaluateResult): string {
-	return `${toProseParagraphs(replyText).length} paragraphs, $${(evaluateResult.cost ?? 0).toFixed(4)} to write`
 }

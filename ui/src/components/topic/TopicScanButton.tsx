@@ -1,7 +1,13 @@
 import type { TopicResponse } from "@shared/contracts/topics"
 import { ADMIN_QUOTA } from "@shared/plans"
-import { isBudgetError, SCAN_SPENT_BUDGET_LABEL, toScanFailureLabel } from "@shared/scanFailure"
-import { useNavigate } from "@tanstack/react-router"
+import {
+	FIRST_SCAN_PAUSED_REASON,
+	isBudgetError,
+	MANUAL_SCAN_PAUSED_LABEL,
+	SCAN_SPENT_BUDGET_LABEL,
+	toScanFailureLabel,
+} from "@shared/scanFailure"
+import { type UseNavigateResult, useNavigate } from "@tanstack/react-router"
 import { CirclePause, Coffee } from "lucide-react"
 import { useCallback, useEffect, useRef } from "react"
 import { toast } from "sonner"
@@ -10,6 +16,7 @@ import { IconButton } from "@/components/common/IconButton"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
 import { useManualScanProgress, usePollWhileScanning } from "@/hooks/useTopicScan"
 import { MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS, RAIL_ICON_INSET } from "@/lib/styleClasses"
+import { toSeeAccountToastAction, toSeePlansToastAction } from "@/lib/toastActions"
 import { cn } from "@/lib/utils"
 
 // how long after a scan finishes the page keeps looking for the podcast episode that the scan starts
@@ -74,10 +81,10 @@ export function TopicScanButton({
 		reloadTopicPageAsPoll,
 	)
 	// a scan that fails while the user is on the page shows the failure
-	useScanFailureToast(shouldPollTopicPage ? topic?.scans : undefined, () => navigate({ to: "/plans" }))
+	useScanFailureToast(shouldPollTopicPage ? topic?.scans : undefined)
 
 	// trigger a scan. the optimistic flag holds the running state until the new scan row arrives in a reload.
-	// a scan rejected because of the budget clears the optimistic flag and shows the budget toast
+	// a scan rejected because of the budget or the manual scans cutoff clears the optimistic flag and says why
 	const handleManualScan = async (): Promise<void> => {
 		if (!topic) {
 			return
@@ -85,9 +92,13 @@ export function TopicScanButton({
 		startScan()
 		await runTopicScan({
 			send: async () => {
-				if ((await sendManualScan(topic.id)) === "budget") {
+				const sendManualScanResult = await sendManualScan(topic.id)
+				if (sendManualScanResult === "budget") {
 					stopScan()
-					showSpentBudgetToast(() => navigate({ to: "/plans" }))
+					showSpentBudgetToast(navigate)
+				} else if (sendManualScanResult === "paused") {
+					stopScan()
+					showManualScanPausedToast(navigate)
 				}
 			},
 			reloadTopicFeed: onScanned,
@@ -117,7 +128,7 @@ export function TopicScanButton({
 	if (!topic || !isManualScanShown(topic)) {
 		return null
 	}
-	const { manualScansRemaining, manualScanLimit, isSpendExhausted } = topic
+	const { manualScansRemaining, manualScanLimit, isManualScanPaused, isSpendExhausted } = topic
 
 	// while a scan runs, the trigger becomes a bigger shimmering "Carl is Brewing" with the cancel icon to the right
 	if (isRunningScan || isScanning) {
@@ -134,10 +145,13 @@ export function TopicScanButton({
 		)
 	}
 
-	// an empty daily quota and a spent budget both stop the brew, which stays clickable to show what ran out
-	const isScanBlocked = manualScansRemaining !== null && (manualScansRemaining <= 0 || isSpendExhausted)
+	// an empty daily quota, a spend past the manual scans cutoff, and a spent budget each block the scan button, which
+	// stays clickable to show what ran out. the two budget stops link the account page, and the daily quota the plans
+	// page
+	const isBudgetBlocked = isManualScanPaused || isSpendExhausted
+	const isScanBlocked = manualScansRemaining !== null && (manualScansRemaining <= 0 || isBudgetBlocked)
 	if (isScanBlocked) {
-		const blockedLine = isSpendExhausted ? "You are out of budget this month." : "You have used today's brews."
+		const blockedLine = toBlockedScanLine(topic)
 		return (
 			<>
 				<Tooltip>
@@ -146,10 +160,7 @@ export function TopicScanButton({
 							type="button"
 							onClick={() =>
 								toast(blockedLine, {
-									action: {
-										label: isSpendExhausted ? "See account" : "See plans",
-										onClick: () => navigate({ to: isSpendExhausted ? "/account" : "/plans" }),
-									},
+									action: isBudgetBlocked ? toSeeAccountToastAction(navigate) : toSeePlansToastAction(navigate),
 								})
 							}
 							className={cn(MENU_BUTTON_CLASS, MENU_BUTTON_HIGHLIGHT_CLASS)}
@@ -202,11 +213,24 @@ export function TopicScanButton({
 	)
 }
 
+// the line of a blocked scan. a spent budget comes first, since it stops scheduled scans too, then the manual scans
+// cutoff, then the used up daily quota
+function toBlockedScanLine({
+	isSpendExhausted,
+	isManualScanPaused,
+}: Pick<TopicResponse, "isSpendExhausted" | "isManualScanPaused">): string {
+	if (isSpendExhausted) {
+		return "You are out of budget this month."
+	}
+	return isManualScanPaused ? MANUAL_SCAN_PAUSED_LABEL : "You have used today's brews."
+}
+
 /**
  * Announce a scan that fails while the page is open. Only a scan that fails after this mounts is announced,
  * so opening a topic never replays an old failure.
  */
-function useScanFailureToast(scans: TopicResponse["scans"] | undefined, onSeePlans: () => void): void {
+function useScanFailureToast(scans: TopicResponse["scans"] | undefined): void {
+	const navigate = useNavigate()
 	// the failures already announced, seeded with the ones on the page when it opened
 	const announcedScanIds = useRef<Set<string> | null>(null)
 	useEffect(() => {
@@ -224,19 +248,30 @@ function useScanFailureToast(scans: TopicResponse["scans"] | undefined, onSeePla
 				continue
 			}
 			announcedScanIds.current.add(failedScan.id)
-			// a spent budget is the one failure the user can do something about
+			// a spent budget and the manual scans cutoff are the failures the user can do something about
 			if (isBudgetError(failedScan.error)) {
-				showSpentBudgetToast(onSeePlans)
+				showSpentBudgetToast(navigate)
+				continue
+			}
+			if (failedScan.error === FIRST_SCAN_PAUSED_REASON) {
+				showManualScanPausedToast(navigate)
 				continue
 			}
 			toast.error(toScanFailureLabel(failedScan.error))
 		}
-	}, [scans, onSeePlans])
+	}, [scans, navigate])
 }
 
-// show the budget toast with its See plans action. the id makes a second budget toast replace the first
-function showSpentBudgetToast(onSeePlans: () => void): void {
-	toast.error(SCAN_SPENT_BUDGET_LABEL, { id: "spent-budget", action: { label: "See plans", onClick: onSeePlans } })
+// show the budget toast with its See plans action, which opens the plans page. the id makes a second budget toast
+// replace the first
+function showSpentBudgetToast(navigate: UseNavigateResult<string>): void {
+	toast.error(SCAN_SPENT_BUDGET_LABEL, { id: "spent-budget", action: toSeePlansToastAction(navigate) })
+}
+
+// show the manual scans cutoff toast with its See account action, which opens the account page. the cutoff is a
+// planned pause, so the toast is plain
+function showManualScanPausedToast(navigate: UseNavigateResult<string>): void {
+	toast(MANUAL_SCAN_PAUSED_LABEL, { action: toSeeAccountToastAction(navigate) })
 }
 
 /**

@@ -1,8 +1,14 @@
 // a podcast episode in the shape the player shows, with its chapters and the user's progress, and in the shape a table
 // row shows, with its chapter count, and each topic's latest of either, limited to what the user may listen to
 import type { PodcastEpisode, PodcastEpisodeSummary } from "@shared/contracts/podcast"
-import { isPodcastEpisodeRecordingConfigured, toPodcastCoverPath } from "@shared/podcastEpisodes"
+import {
+	FULL_PODCAST_COVER_SIZE,
+	isPodcastEpisodeRecordingConfigured,
+	SMALL_PODCAST_COVER_SIZE,
+	toPodcastCoverPath,
+} from "@shared/podcastEpisodes"
 import { toPodcastEpisodePath } from "@shared/seo"
+import { isVoiceChatConfigured } from "@shared/voiceChat"
 import { and, count, desc, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
 import { podcastEpisodeChapters, podcastEpisodes } from "../../db/schema/podcast"
@@ -182,8 +188,8 @@ export function toPodcastEpisode({
 		status,
 		// the audio and the cover
 		audioUrl: status === "published" ? `/api/episodes/${podcastEpisodeRow.id}/audio.mp3` : null,
-		coverUrl: podcastCover ? toPodcastCoverPath(podcastCover, 3000) : null,
-		smallCoverUrl: podcastCover ? toPodcastCoverPath(podcastCover, 600) : null,
+		coverUrl: podcastCover ? toPodcastCoverPath(podcastCover, FULL_PODCAST_COVER_SIZE) : null,
+		smallCoverUrl: podcastCover ? toPodcastCoverPath(podcastCover, SMALL_PODCAST_COVER_SIZE) : null,
 		chapters: podcastEpisodeChapterRows.map(
 			({ position, title, findingId, sourceUrl, rating, startSeconds, endSeconds }) => ({
 				position,
@@ -199,6 +205,8 @@ export function toPodcastEpisode({
 		// the user's progress
 		progressSeconds: podcastEpisodeListenRow?.progressSeconds ?? 0,
 		isCompleted: Boolean(podcastEpisodeListenRow?.completedAt),
+		// whether the player may ask carl and vienna about the podcast episode
+		isVoiceChatConfigured: isVoiceChatConfigured(),
 	}
 }
 

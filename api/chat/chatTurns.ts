@@ -2,8 +2,9 @@
 // clearing a user's conversation
 import { trackEvent } from "@shared/analytics"
 import type { ChatTurnRow } from "@shared/contracts/chat"
-import type { ChatToolCall, VoiceChatPage } from "@shared/payloads"
-import { and, desc, eq, isNotNull, isNull, type SQL } from "drizzle-orm"
+import { type ChatTurnKind, conversationChatTurnKinds, type PodcastEpisodeSpeaker } from "@shared/enums"
+import type { ChatToolCall, PodcastEpisodeChapterRef, VoiceChatPage } from "@shared/payloads"
+import { and, desc, eq, inArray, isNotNull, isNull, type SQL } from "drizzle-orm"
 import { db } from "../../db"
 import { chatTurns } from "../../db/schema/chat"
 import { CHAT_COST_PER_MILLION_TOKENS, EXA_COST_PER_SEARCH, tokenCost } from "../../worker/budget"
@@ -11,7 +12,7 @@ import { isAllowed } from "../authorization"
 import type { AnalyticsProperties } from "../currentUser"
 import { deleteChatAttachments } from "./attachments"
 import { loadTopicChatTurnAttachments } from "./chatAttachmentReads"
-import { decryptChatText, encryptChatText } from "./encryption"
+import { decryptChatJson, decryptChatText, encryptChatJson, encryptChatText } from "./encryption"
 import { loadChatLinkPreviews } from "./linkPreviews"
 
 // the page that a private conversation lives on: one topic, a whole team, or the new-topic chat, bound to neither
@@ -58,6 +59,9 @@ export type ToChatTurnRowOptions = ChatTurnSpend & {
 	toolCalls: ChatToolCall[]
 	// whether the question was spoken and the reply read aloud
 	isSpoken: boolean
+	// a podcast chat turn's podcast episode and chapter, and the speaker who answered it
+	podcastEpisodeChapter?: PodcastEpisodeChapterRef
+	podcastAnswerSpeaker?: PodcastEpisodeSpeaker
 }
 
 // a chat turn to save, and the properties that its analytics event is sent with
@@ -70,21 +74,21 @@ export async function saveChatTurn({
 	analyticsProperties,
 	...chatTurnRowOptions
 }: SaveChatTurnOptions): Promise<string | null> {
-	// insert the row and return its id
-	const [chatTurnRow] = await db
-		.insert(chatTurns)
-		.values(toChatTurnRow(chatTurnRowOptions))
-		.returning({ id: chatTurns.id })
+	// build the row and insert it
+	const chatTurnRow = toChatTurnRow(chatTurnRowOptions)
+	const [savedChatTurnRow] = await db.insert(chatTurns).values(chatTurnRow).returning({ id: chatTurns.id })
 
-	// count the chat turn exactly when its row is saved
+	// count the chat turn exactly when its row is saved. a podcast chat turn names who answered it
 	const { userId, page, isSpoken } = chatTurnRowOptions
 	trackEvent("chat_turn_sent", userId, {
 		...analyticsProperties,
 		topicId: toChatPageId(page),
 		chatKind: toChatKind(page),
+		chatTurnKind: chatTurnRow.kind,
+		...(chatTurnRow.podcastAnswerSpeaker ? { speaker: chatTurnRow.podcastAnswerSpeaker } : {}),
 		isSpoken,
 	})
-	return chatTurnRow?.id ?? null
+	return savedChatTurnRow?.id ?? null
 }
 
 /**
@@ -100,9 +104,13 @@ export function toChatTurnRow({
 	answer,
 	toolCalls,
 	isSpoken,
+	podcastEpisodeChapter,
+	podcastAnswerSpeaker,
 }: ToChatTurnRowOptions): typeof chatTurns.$inferInsert {
-	// return the row. a chat turn that does not persist stores null text and only its spend
+	// return the row. a chat turn that does not persist stores null text and only its spend.
+	// a podcast chat turn also names its podcast episode, its chapter, and who answered it
 	return {
+		kind: podcastEpisodeChapter ? "podcast" : "private",
 		userId,
 		topicId: page.topicId ?? null,
 		teamId: page.teamId ?? null,
@@ -110,24 +118,39 @@ export function toChatTurnRow({
 		question: isPersisted ? encryptChatText(question) : null,
 		answer: isPersisted ? encryptChatText(answer) : null,
 		// the tool calls as encrypted json
-		toolCalls: isPersisted && toolCalls.length > 0 ? encryptChatText(JSON.stringify(toolCalls)) : null,
+		toolCalls: isPersisted && toolCalls.length > 0 ? encryptChatJson(toolCalls) : null,
 		isSpoken,
+		podcastEpisodeId: podcastEpisodeChapter?.podcastEpisodeId ?? null,
+		chapterPosition: podcastEpisodeChapter?.chapterPosition ?? null,
+		podcastAnswerSpeaker: podcastEpisodeChapter ? (podcastAnswerSpeaker ?? "host") : null,
 	}
 }
 
-// one transcription or speech call to record as chat spend: who it bills, the chat page it was on, and what it cost
-export type RecordChatSpendRowOptions = { userId: string; page: VoiceChatPage; cost: number; totalTokens: number }
+// the chat turn kinds that record a voice call's spend: a transcription and a spoken part
+export type VoiceSpendChatTurnKind = Extract<ChatTurnKind, "transcription" | "speech">
+
+// one transcription or speech call to record as chat spend: which call it was, who it bills, the chat page it was
+// on, and what it cost
+export type RecordChatSpendRowOptions = {
+	kind: VoiceSpendChatTurnKind
+	userId: string
+	page: VoiceChatPage
+	cost: number
+	totalTokens: number
+}
 
 /**
  * Records a transcription or a spoken part as a chat turn row with no text.
  */
 export async function recordChatSpendRow({
+	kind,
 	userId,
 	page,
 	cost,
 	totalTokens,
 }: RecordChatSpendRowOptions): Promise<void> {
 	await db.insert(chatTurns).values({
+		kind,
 		userId,
 		...toVoiceChatPageColumns(page),
 		...toSpendColumns({ totalTokens, cost }),
@@ -184,7 +207,8 @@ type RecordChatRoomTurnOptions = {
 }
 
 /**
- * Records a chat room completion as a chat turn row that names the chat room message that carl answered.
+ * Records a chat room completion as a chat turn row that names the chat room message that carl answered, and returns
+ * the row's id.
  */
 export async function recordChatRoomTurn({
 	userId,
@@ -192,15 +216,20 @@ export async function recordChatRoomTurn({
 	teamId,
 	chatRoomMessageId,
 	completion,
-}: RecordChatRoomTurnOptions): Promise<void> {
+}: RecordChatRoomTurnOptions): Promise<string | null> {
 	// save the spend and the chat message that carl answered, with no text.
 	// the text lives in the chat room's messages
-	await db.insert(chatTurns).values({
-		userId,
-		...toChatRoomPageColumns(topicId, teamId),
-		...toSpendColumns({ totalTokens: completion.totalTokens, cost: toChatTurnCost(completion) }),
-		roomMessageId: chatRoomMessageId,
-	})
+	const [chatRoomTurnRow] = await db
+		.insert(chatTurns)
+		.values({
+			kind: "chat_room",
+			userId,
+			...toChatRoomPageColumns(topicId, teamId),
+			...toSpendColumns({ totalTokens: completion.totalTokens, cost: toChatTurnCost(completion) }),
+			roomMessageId: chatRoomMessageId,
+		})
+		.returning({ id: chatTurns.id })
+	return chatRoomTurnRow?.id ?? null
 }
 
 /**
@@ -212,8 +241,8 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 		return []
 	}
 
-	// read the chat turns that kept their text newest first, and the attachments sent with them.
-	// a spend row, a chat room turn, and a cleared chat turn have no text. only a topic conversation stores attachments
+	// read the page's conversation rows that kept their text newest first, and the attachments sent with them.
+	// an unpersisted or cleared chat turn has no text. only a topic conversation stores attachments
 	const [chatTurnRows, attachmentsByChatTurnId] = await Promise.all([
 		db
 			.select({
@@ -222,6 +251,9 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 				answer: chatTurns.answer,
 				toolCalls: chatTurns.toolCalls,
 				isSpoken: chatTurns.isSpoken,
+				podcastEpisodeId: chatTurns.podcastEpisodeId,
+				chapterPosition: chatTurns.chapterPosition,
+				podcastAnswerSpeaker: chatTurns.podcastAnswerSpeaker,
 				createdAt: chatTurns.createdAt,
 			})
 			.from(chatTurns)
@@ -260,6 +292,7 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 				toolCalls: toChatToolCalls(chatTurnRow.toolCalls),
 				at: chatTurnRow.createdAt.toISOString(),
 				isSpoken: chatTurnRow.isSpoken,
+				...toChatTurnRowPodcastFields(chatTurnRow),
 				attachments,
 			},
 		]
@@ -279,30 +312,39 @@ export async function loadChatTurns(userId: string | null, page: ChatPage): Prom
 	}))
 }
 
-// the filter for a page's chat turn rows: a topic's, a team's own with no topic, or the new-topic chat's with neither
+// a stored row's speaker and podcast episode chapter: a podcast chat turn's own, or host and no chapter for a private
+// chat turn
+function toChatTurnRowPodcastFields({
+	podcastEpisodeId,
+	chapterPosition,
+	podcastAnswerSpeaker,
+}: Pick<typeof chatTurns.$inferSelect, "podcastEpisodeId" | "chapterPosition" | "podcastAnswerSpeaker">): Pick<
+	ChatTurnRow,
+	"speaker" | "podcastEpisodeChapter"
+> {
+	return {
+		speaker: podcastAnswerSpeaker ?? "host",
+		podcastEpisodeChapter:
+			podcastEpisodeId !== null && chapterPosition !== null ? { podcastEpisodeId, chapterPosition } : null,
+	}
+}
+
+// the filter for a page's conversation rows: a topic's private and podcast chat turns, a team's own private chat turns
+// with no topic, or the new-topic chat's private chat turns with neither
 function toPageFilter(page: ChatPage): SQL | undefined {
 	if (page.topicId !== undefined) {
-		return eq(chatTurns.topicId, page.topicId)
+		return and(eq(chatTurns.topicId, page.topicId), inArray(chatTurns.kind, conversationChatTurnKinds))
 	}
 	// filter to the user's chat turns with no topic and no team for the new-topic chat
 	if (page.teamId === undefined) {
-		return and(isNull(chatTurns.topicId), isNull(chatTurns.teamId))
+		return and(isNull(chatTurns.topicId), isNull(chatTurns.teamId), eq(chatTurns.kind, "private"))
 	}
-	return and(eq(chatTurns.teamId, page.teamId), isNull(chatTurns.topicId))
+	return and(eq(chatTurns.teamId, page.teamId), isNull(chatTurns.topicId), eq(chatTurns.kind, "private"))
 }
 
-// the tool calls that a stored chat turn made, empty if the chat turn row has none or the text does not decrypt
+// the tool calls that a stored chat turn made, empty if the row has none or its text does not decrypt or parse
 function toChatToolCalls(storedToolCalls: string | null): ChatToolCall[] {
-	const toolCallsJson = storedToolCalls === null ? null : decryptChatText(storedToolCalls)
-	if (toolCallsJson === null) {
-		return []
-	}
-	// treat text that fails to parse as no tool calls
-	try {
-		return JSON.parse(toolCallsJson) as ChatToolCall[]
-	} catch {
-		return []
-	}
+	return (decryptChatJson(storedToolCalls) as ChatToolCall[] | null) ?? []
 }
 
 /**

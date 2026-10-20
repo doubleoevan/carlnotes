@@ -364,7 +364,8 @@ function DeleteAccountSection() {
 		<section className={cn(CARD_CLASS, "border-destructive")}>
 			<h3 className="text-destructive font-semibold">Close your account</h3>
 			<p className="text-muted-foreground mt-1 text-sm">
-				Your topics, findings, subscriptions, and chats go with it. Any paid plan is canceled. This cannot be undone.
+				Your topics, findings, and chats go with it, and you stop following every topic. Any paid plan is canceled. This
+				cannot be undone.
 			</p>
 			{error && <p className="text-destructive mt-2 text-sm">{error}</p>}
 			<Button variant="destructive" className="mt-3" onClick={() => setIsConfirming(true)}>

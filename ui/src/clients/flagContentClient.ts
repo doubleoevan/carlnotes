@@ -1,5 +1,6 @@
 // the flag-content call, for a Topic or a profile
 import type { FlagContentPayload } from "@shared/payloads"
+import { readApiErrorMessage } from "./apiClient"
 
 /**
  * Flag a Topic or profile. Throws an error with the api's reason on a rejection.
@@ -11,7 +12,6 @@ export async function sendFlagContent(payload: FlagContentPayload): Promise<void
 		body: JSON.stringify(payload),
 	})
 	if (!response.ok) {
-		const body = (await response.json().catch(() => null)) as { error?: string } | null
-		throw new Error(typeof body?.error === "string" ? body.error : `flag failed: ${response.status}`)
+		throw new Error((await readApiErrorMessage(response)) ?? `flag failed: ${response.status}`)
 	}
 }

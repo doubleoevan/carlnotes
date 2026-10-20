@@ -2,7 +2,7 @@
 import type { ChatMention } from "@shared/contracts/chat"
 import { Check, ChevronDown, Plus, Trash2, Users } from "lucide-react"
 import { useState } from "react"
-import { CarlAvatar } from "@/components/branding/CarlAvatar"
+import { HostAvatar } from "@/components/branding/HostAvatar"
 import { TeamAvatar } from "@/components/branding/TeamAvatar"
 import { UserAvatar } from "@/components/branding/UserAvatar"
 import { CountBadge } from "@/components/common/CountBadge"
@@ -111,7 +111,7 @@ export function ChatOptionsMenu({
 					{currentChatRoom?.team ? (
 						<TeamAvatar team={currentChatRoom.team} className="size-5 shrink-0" />
 					) : currentChatRoom?.isPrivate ? (
-						<CarlAvatar className="size-5 shrink-0" />
+						<HostAvatar speaker="host" className="size-5 shrink-0" />
 					) : null}
 					<span className="min-w-0 flex-1 truncate font-medium">{currentChatRoom?.name ?? "Select a chat"}</span>
 					{chatMentions.length > 0 && (
@@ -126,7 +126,7 @@ export function ChatOptionsMenu({
 				{onPrivateChat && (
 					<button type="button" onClick={() => handleSelectChatOption(onPrivateChat)} className={MENU_OPTION_CLASS}>
 						{/* the private chat is with carl alone, marked with his avatar */}
-						<CarlAvatar className="size-5" />
+						<HostAvatar speaker="host" className="size-5" />
 						Private chat
 					</button>
 				)}

@@ -1,7 +1,15 @@
-// the playback helpers that hold no state: the chapter at a position, the next playback rate, the skip lengths, and
-// the lock screen's media session
+// the playback helpers that hold no state: the chapter at a position or a chapter position, the next playback rate,
+// the skip lengths, and the lock screen's media session and whether the browser has one
 import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts/podcast"
-import { PODCAST_NAME } from "@shared/podcastEpisodes"
+import type { PodcastEpisodeSpeaker } from "@shared/enums"
+import {
+	FULL_PODCAST_COVER_SIZE,
+	PODCAST_EPISODE_SPEAKER_NAMES,
+	PODCAST_HOSTS_NAME,
+	PODCAST_NAME,
+	type PodcastCoverSize,
+	SMALL_PODCAST_COVER_SIZE,
+} from "@shared/podcastEpisodes"
 
 // the playback rates, in the order that toNextPlaybackRate steps through
 const PLAYBACK_RATES = [1, 1.25, 1.5, 2, 0.75]
@@ -27,11 +35,28 @@ export function toChapterIndexAt(chapters: PodcastEpisodeChapter[], positionSeco
 }
 
 /**
+ * Returns the chapter at a chapter position, or undefined if the podcast episode has no chapter there.
+ */
+export function toChapterAtPosition(
+	chapters: PodcastEpisodeChapter[],
+	chapterPosition: number,
+): PodcastEpisodeChapter | undefined {
+	return chapters.find((chapter) => chapter.position === chapterPosition)
+}
+
+/**
  * Returns the playback rate after this one in the list, or the first playback rate after the last.
  */
 export function toNextPlaybackRate(playbackRate: number): number {
 	const playbackRateIndex = PLAYBACK_RATES.indexOf(playbackRate)
 	return PLAYBACK_RATES[(playbackRateIndex + 1) % PLAYBACK_RATES.length] ?? 1
+}
+
+/**
+ * Returns whether the browser has a media session, which the lock screen shows. A server render has none.
+ */
+export function isMediaSessionAvailable(): boolean {
+	return typeof navigator !== "undefined" && "mediaSession" in navigator
 }
 
 /**
@@ -42,23 +67,17 @@ export function updatePodcastEpisodeMediaSession(
 	positionSeconds: number,
 	mediaSessionControls: MediaSessionControls,
 ): void {
-	if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
+	if (!isMediaSessionAvailable()) {
 		return
 	}
 
 	// show the player's chapter, the podcast episode's title, the hosts, and the cover at each size on the lock screen
 	const playerChapter = podcastEpisode.chapters[toChapterIndexAt(podcastEpisode.chapters, positionSeconds)]
-	const artwork = [
-		...(podcastEpisode.smallCoverUrl
-			? [{ src: podcastEpisode.smallCoverUrl, sizes: "600x600", type: "image/jpeg" }]
-			: []),
-		...(podcastEpisode.coverUrl ? [{ src: podcastEpisode.coverUrl, sizes: "3000x3000", type: "image/jpeg" }] : []),
-	]
 	navigator.mediaSession.metadata = new MediaMetadata({
 		title: playerChapter?.title ?? podcastEpisode.title ?? PODCAST_NAME,
-		artist: "Carl and Vienna",
+		artist: PODCAST_HOSTS_NAME,
 		album: podcastEpisode.title ?? PODCAST_NAME,
-		artwork,
+		artwork: toPodcastEpisodeArtwork(podcastEpisode),
 	})
 
 	// set what the lock screen's play, pause, chapter skip, and skip back and forward controls do
@@ -68,4 +87,37 @@ export function updatePodcastEpisodeMediaSession(
 	navigator.mediaSession.setActionHandler("previoustrack", () => mediaSessionControls.skipChapter(-1))
 	navigator.mediaSession.setActionHandler("seekbackward", mediaSessionControls.skipBack)
 	navigator.mediaSession.setActionHandler("seekforward", mediaSessionControls.skipForward)
+}
+
+/**
+ * Returns what the lock screen shows while a host answers a question asked from the podcast player: the host's name,
+ * the podcast's name, and the podcast episode's cover.
+ */
+export function toPodcastEpisodeSpeakerMediaMetadata(
+	podcastEpisode: PodcastEpisode,
+	speaker: PodcastEpisodeSpeaker,
+): MediaMetadataInit {
+	return {
+		title: PODCAST_EPISODE_SPEAKER_NAMES[speaker],
+		artist: PODCAST_NAME,
+		album: podcastEpisode.title ?? PODCAST_NAME,
+		artwork: toPodcastEpisodeArtwork(podcastEpisode),
+	}
+}
+
+// the podcast episode's cover at each size it is served at
+function toPodcastEpisodeArtwork(podcastEpisode: PodcastEpisode): MediaImage[] {
+	return [
+		...(podcastEpisode.smallCoverUrl
+			? [{ src: podcastEpisode.smallCoverUrl, sizes: toArtworkSizes(SMALL_PODCAST_COVER_SIZE), type: "image/jpeg" }]
+			: []),
+		...(podcastEpisode.coverUrl
+			? [{ src: podcastEpisode.coverUrl, sizes: toArtworkSizes(FULL_PODCAST_COVER_SIZE), type: "image/jpeg" }]
+			: []),
+	]
+}
+
+// a square cover's pixel size as the media session reads it, as in 600x600
+function toArtworkSizes(coverSize: PodcastCoverSize): string {
+	return `${coverSize}x${coverSize}`
 }

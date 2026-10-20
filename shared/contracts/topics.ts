@@ -157,7 +157,10 @@ export const topicResponse = topicFeed.extend({
 	manualScansRemaining: z.number().nullable(),
 	// the plan's daily scan limit, which the scan button's tooltip pairs with what is left
 	manualScanLimit: z.number().nullable(),
-	// whether the owner has spent their monthly budget, which blocks a scan the same way a used up daily quota does
+	// whether the user's monthly spend is past the manual scans cutoff, which blocks a scan the same way a used up daily
+	// quota does
+	isManualScanPaused: z.boolean(),
+	// whether the user has spent their whole monthly budget, which stops scheduled scans too
 	isSpendExhausted: z.boolean(),
 	// whether this user may edit or delete the topic. true for the owner and for any admin
 	canEdit: z.boolean(),

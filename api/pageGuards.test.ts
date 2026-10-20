@@ -73,8 +73,8 @@ test("a visitor's render past the limit responds 503 with a retry, and a signed-
 	expect(signedInResponse.status).toBe(200)
 })
 
-// only a visitor's render counts against the limit, so signed-in renders in flight never shed a visitor
-test("a signed-in render in flight does not count against the visitors' limit", async () => {
+// only a visitor's render counts against the limit, so signed-in renders in progress never shed a visitor
+test("a signed-in render in progress does not count against the visitors' limit", async () => {
 	// a slow signed-in render and a visitor render at once
 	Bun.env.RENDER_CONCURRENCY = "1"
 	const bundleDirectory = await createBundleDirectory({ renderDelayMs: 50 })

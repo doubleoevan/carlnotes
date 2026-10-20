@@ -1,5 +1,5 @@
 // the chat panel widget: the pill it collapses to, the docked frame, and the title bar
-import type { ChatMention } from "@shared/contracts/chat"
+import { CHAT_NAME, type ChatMention } from "@shared/contracts/chat"
 import { Maximize2, Minimize2, Minus } from "lucide-react"
 import type * as React from "react"
 import { createPortal } from "react-dom"
@@ -92,7 +92,7 @@ export function ChatPanelWidget({
 
 			{/* Escape also minimizes the chat panel */}
 			<section
-				aria-label="Coffee Talk"
+				aria-label={CHAT_NAME}
 				onKeyDown={(event) => event.key === "Escape" && onPanelState("collapsed")}
 				className={cn(
 					"bg-popover @container fixed z-50 flex flex-col overflow-hidden rounded-xl",
@@ -130,7 +130,7 @@ export function ChatPill({ onOpenChat, chatMentions }: { onOpenChat: () => void;
 				)}
 			>
 				<CoffeeCup className="size-5.5" />
-				Coffee Talk
+				{CHAT_NAME}
 				{/* the unread chat mentions badge, on the chat pill's top right corner */}
 				<UpdateCountBadge
 					chatMentions={chatMentions ?? []}
@@ -151,7 +151,7 @@ function ChatPanelTitle({ isRoom }: { isRoom?: boolean }) {
 			) : (
 				<CoffeeMug className="size-5 shrink-0" />
 			)}
-			<h2 className="font-display text-lg leading-none">Coffee Talk</h2>
+			<h2 className="font-display text-lg leading-none">{CHAT_NAME}</h2>
 		</span>
 	)
 }

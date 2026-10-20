@@ -1,6 +1,6 @@
 // per-user limits, the month's spend, and the podcast episode checks
 import { dailyFrequencies, isAdminRole } from "@shared/enums"
-import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, type UserAccess, userBudgetCents } from "@shared/plans"
+import { ADMIN_QUOTA, type BillingInterval, PLANS, type Plan, toCentsFromDollars, type UserAccess } from "@shared/plans"
 import { DAY_MS } from "@shared/time"
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or, sql } from "drizzle-orm"
 import { db } from "."
@@ -249,11 +249,13 @@ export async function loadBillingAccess(
 }
 
 /**
- * Returns this month's recorded spend for the user, split into scans, chat, and podcast episodes.
+ * Returns this month's recorded spend for the user, split into scans, chat, and podcast episodes, read at most once per
+ * request. A write in the request clears the memo, so a read after a spend row is written sums again.
  */
 export function monthlySpendDollars(userId: string): Promise<RecordedSpend> {
-	// sum since the start of the UTC month, which the budget resets on
-	return loadSpendSince({ since: startOfUtcMonth(new Date()), userId })
+	// sum since the start of the UTC month, which the budget resets on, once per request for the user and the month
+	const since = startOfUtcMonth(new Date())
+	return memoizeInRequest(`monthly-spend:${userId}:${since.toISOString()}`, () => loadSpendSince({ since, userId }))
 }
 
 /**
@@ -291,17 +293,7 @@ export async function loadSpendSince({ since, userId }: LoadSpendSinceOptions): 
  * Returns a recorded spend in cents, summed across scans, chat, and podcast episodes.
  */
 export function toSpendCents({ scanDollars, chatDollars, podcastEpisodeDollars }: RecordedSpend): number {
-	return Math.round(scanDollars * 100) + Math.round(chatDollars * 100) + Math.round(podcastEpisodeDollars * 100)
-}
-
-/**
- * Whether the user's monthly spend has reached the share of their budget at which podcast episodes stop recording.
- */
-export async function isPodcastEpisodeBudgetShareExhausted(userId: string): Promise<boolean> {
-	// compare the month's spend with the podcast episode share of the user's budget
-	const [userAccess, monthlySpend] = await Promise.all([loadUserAccess(userId), monthlySpendDollars(userId)])
-	const podcastEpisodeBudgetCents = userBudgetCents(userAccess) * PLANS[userAccess.plan].podcastEpisodeBudgetShare
-	return toSpendCents(monthlySpend) >= podcastEpisodeBudgetCents
+	return toCentsFromDollars(scanDollars) + toCentsFromDollars(chatDollars) + toCentsFromDollars(podcastEpisodeDollars)
 }
 
 /**
@@ -329,19 +321,29 @@ export function startOfUtcMonth(moment: Date): Date {
  * they have held longest, and the rest fall out of the daily schedule. An admin keeps all their topics.
  */
 export async function dailyTopicIdsWithinLimit(userId: string): Promise<Set<string>> {
+	const dailyTopics = await loadDailyTopicsWithinLimit(userId)
+	return new Set(dailyTopics.map((dailyTopic) => dailyTopic.id))
+}
+
+/**
+ * Returns the user's daily and weekdays Topics within the plan's daily topic limit, oldest first, each with its
+ * frequency.
+ */
+export async function loadDailyTopicsWithinLimit(
+	userId: string,
+): Promise<Pick<typeof topics.$inferSelect, "id" | "frequency">[]> {
 	// every Topic that the user runs on a daily frequency, oldest first, so which topics are kept is stable between sweeps
 	const [{ isAdmin, plan }, { billingInterval }, dailyTopicRows] = await Promise.all([
 		loadUserAccess(userId),
 		loadBillingAccess(userId),
 		db
-			.select({ id: topics.id })
+			.select({ id: topics.id, frequency: topics.frequency })
 			.from(topics)
 			.where(and(eq(topics.ownerId, userId), inArray(topics.frequency, [...dailyFrequencies])))
 			.orderBy(topics.createdAt),
 	])
 
 	// admins bypass the daily topic limit
-	const dailyTopicIds = dailyTopicRows.map((topicRow) => topicRow.id)
-	const limit = isAdmin ? dailyTopicIds.length : PLANS[plan].dailyTopicLimit[billingInterval]
-	return new Set(dailyTopicIds.slice(0, limit))
+	const limit = isAdmin ? dailyTopicRows.length : PLANS[plan].dailyTopicLimit[billingInterval]
+	return dailyTopicRows.slice(0, limit)
 }

@@ -1,29 +1,21 @@
 // one chat turn in the chat message list, and the helpers that build and finish a chat turn as a question sends
-import {
-	type ChatLinkPreview,
-	type ChatMessageAttachment,
-	type KeptChatAttachment,
-	withAttachmentNote,
-} from "@shared/contracts/chat"
-import type { ChatAttachment, ChatToolCall } from "@shared/payloads"
+import type { ChatMessageAttachment, ChatTurnRow, KeptChatAttachment } from "@shared/contracts/chat"
+import { withAttachmentNote } from "@shared/contracts/chatQuestionNotes"
+import type { ChatAttachment } from "@shared/payloads"
 import type { ChatRejection, ChatSendResult } from "@/clients/chatClient"
 
-// one chat turn in the chat message list, with whatever was attached to its question
-export type ChatTurn = {
-	question: string
-	answer: string
+// one chat turn in the chat message list: the stored chat turn's text, tool calls, link preview cards, speaker, and
+// podcast episode chapter, with whatever was attached to its question and how its send ended
+export type ChatTurn = Pick<
+	ChatTurnRow,
+	"question" | "answer" | "toolCalls" | "linkPreviews" | "answerLinkPreviews" | "speaker" | "podcastEpisodeChapter"
+> & {
 	rejection: ChatRejection | null
 	at?: number
 	// the key the spoken answer store queues this chat turn's reply under, unique for the session
 	spokenAnswerKey: string
-	// the tools this chat turn called, sent back with the next question
-	toolCalls?: ChatToolCall[]
 	// a just-sent image or clip holds its data url until the reload hands it a stored id to read from
 	attachments: (ChatMessageAttachment & { dataUrl?: string })[]
-	// the cards for the question's first links, empty if it holds none or no link preview is stored yet
-	linkPreviews: ChatLinkPreview[]
-	// the cards for the answer's first links, under the same rules
-	answerLinkPreviews: ChatLinkPreview[]
 	// true while a just-sent chat turn's cards are still loading in the background
 	linkPreviewsPending?: boolean
 }
@@ -56,6 +48,25 @@ export function toKeptAttachmentPlaceholders(sentAttachments: ChatAttachment[]):
 		}))
 }
 
+/**
+ * Returns a stored chat turn as the chat message list shows it, with a spoken answer key of its own.
+ */
+export function toLoadedChatTurn(chatTurnRow: ChatTurnRow): ChatTurn {
+	return {
+		question: chatTurnRow.question,
+		answer: chatTurnRow.answer,
+		toolCalls: chatTurnRow.toolCalls,
+		rejection: null,
+		at: chatTurnRow.at ? Date.parse(chatTurnRow.at) : undefined,
+		spokenAnswerKey: toSpokenAnswerKey(),
+		speaker: chatTurnRow.speaker,
+		podcastEpisodeChapter: chatTurnRow.podcastEpisodeChapter,
+		attachments: chatTurnRow.attachments,
+		linkPreviews: chatTurnRow.linkPreviews,
+		answerLinkPreviews: chatTurnRow.answerLinkPreviews,
+	}
+}
+
 // the question a chat turn sent, its files, and whether it was spoken
 type ToSentChatTurnOptions = { question: string; attachments: ChatAttachment[] }
 
@@ -72,6 +83,8 @@ export function toSentChatTurn({
 		answer: "",
 		rejection: null,
 		spokenAnswerKey: toSpokenAnswerKey(),
+		speaker: "host",
+		podcastEpisodeChapter: null,
 		attachments: sentAttachments.map((attachment) => ({
 			id: toPlaceholderId(),
 			kind: attachment.kind,
@@ -83,25 +96,61 @@ export function toSentChatTurn({
 	}
 }
 
+// the spoken answer key of the chat turn whose send ended, and how it ended
+type ToFinishedChatTurnsOptions = { spokenAnswerKey: string; chatSendResult: ChatSendResult }
+
 /**
- * Returns the chat turns once a send ends: a stop before any text drops the empty bubble, else the newest turn
- * settles.
+ * Returns the chat turns once the send of the chat turn with this spoken answer key ends: a stop before any text drops
+ * its empty bubble, else the chat turn settles.
  */
-export function toFinishedChatTurns(chatTurns: ChatTurn[], chatSendResult: ChatSendResult): ChatTurn[] {
-	// a stop before any text drops the chat turn, unless a tool ran in it, since the server kept that save and the
-	// next question has to replay it
-	const newestChatTurn = chatTurns.at(-1)
-	if (chatSendResult === "stopped" && newestChatTurn?.answer === "" && (newestChatTurn.toolCalls?.length ?? 0) === 0) {
-		return chatTurns.slice(0, -1)
+export function toFinishedChatTurns(
+	chatTurns: ChatTurn[],
+	{ spokenAnswerKey, chatSendResult }: ToFinishedChatTurnsOptions,
+): ChatTurn[] {
+	// a stop before any text drops the chat turn, unless a tool ran in it. the server kept that save, and the next
+	// question replays it
+	const sentChatTurn = findChatTurn(chatTurns, spokenAnswerKey)
+	if (chatSendResult === "stopped" && sentChatTurn?.answer === "" && (sentChatTurn.toolCalls?.length ?? 0) === 0) {
+		return withoutChatTurn(chatTurns, spokenAnswerKey)
 	}
-	return replaceNewestChatTurn(chatTurns, (chatTurn) => ({
+	return replaceChatTurn(chatTurns, spokenAnswerKey, (chatTurn) => ({
 		...chatTurn,
 		rejection: chatSendResult === "stopped" ? null : chatSendResult,
 		at: Date.now(),
 	}))
 }
 
-/** Replaces the newest chat turn, which is the one a streaming reply is filling in. */
-export function replaceNewestChatTurn(chatTurns: ChatTurn[], replace: (chatTurn: ChatTurn) => ChatTurn): ChatTurn[] {
-	return chatTurns.map((chatTurn, index) => (index === chatTurns.length - 1 ? replace(chatTurn) : chatTurn))
+/**
+ * Returns the chat turn with this spoken answer key, or undefined if no chat turn has it.
+ */
+export function findChatTurn(chatTurns: ChatTurn[], spokenAnswerKey: string): ChatTurn | undefined {
+	return chatTurns.find((chatTurn) => chatTurn.spokenAnswerKey === spokenAnswerKey)
+}
+
+/**
+ * Returns the chat turns without the one with this spoken answer key.
+ */
+export function withoutChatTurn(chatTurns: ChatTurn[], spokenAnswerKey: string): ChatTurn[] {
+	return chatTurns.filter((chatTurn) => chatTurn.spokenAnswerKey !== spokenAnswerKey)
+}
+
+/**
+ * Returns the chat turns with the one that has this spoken answer key replaced.
+ */
+export function replaceChatTurn(
+	chatTurns: ChatTurn[],
+	spokenAnswerKey: string,
+	replace: (chatTurn: ChatTurn) => ChatTurn,
+): ChatTurn[] {
+	return chatTurns.map((chatTurn) => (chatTurn.spokenAnswerKey === spokenAnswerKey ? replace(chatTurn) : chatTurn))
+}
+
+/**
+ * Returns the chat turns with this chat turn in place of the one with the same spoken answer key, or appended if no
+ * chat turn has that key.
+ */
+export function upsertChatTurn(chatTurns: ChatTurn[], chatTurn: ChatTurn): ChatTurn[] {
+	return findChatTurn(chatTurns, chatTurn.spokenAnswerKey) !== undefined
+		? replaceChatTurn(chatTurns, chatTurn.spokenAnswerKey, () => chatTurn)
+		: [...chatTurns, chatTurn]
 }

@@ -11,11 +11,11 @@ import { db } from "../db"
 import { countRateLimitHit, decrementRateLimitWindow } from "../db/redisRateLimits"
 import { teams } from "../db/schema/teams"
 import { topics } from "../db/schema/topics"
-import { users } from "../db/schema/users"
 import { sendEmail } from "../worker/email"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "./currentUser"
 import { toTeamRole } from "./team/members"
 import { canSeeTopic } from "./topic/permissions"
+import { loadUsername } from "./usernames"
 
 // how many flags one user may send in a one-day rate limit window, which starts at the window's first flag
 const DAILY_FLAG_LIMIT = 10
@@ -46,11 +46,11 @@ export async function flagContent(userId: string, payload: FlagContentPayload): 
 	}
 
 	// look up the sender's username for the moderator to act on
-	const [sender] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId))
+	const senderUsername = await loadUsername(userId)
 	const isAccepted = await sendEmail({
 		to: supportEmail,
 		subject: `Flagged: ${subject.label}`,
-		emailContent: toFlagHtml(subject, sender?.username ?? userId, payload.reason),
+		emailContent: toFlagHtml(subject, senderUsername ?? userId, payload.reason),
 		emailKind: "flag-content",
 	})
 
@@ -96,8 +96,8 @@ async function toFlaggedSubject(
 	}
 
 	// a profile is flagged by user id
-	const [user] = await db.select({ username: users.username }).from(users).where(eq(users.id, payload.subjectId))
-	return user ? { label: user.username, path: `/profiles/${payload.subjectId}` } : null
+	const username = await loadUsername(payload.subjectId)
+	return username ? { label: username, path: `/profiles/${payload.subjectId}` } : null
 }
 
 // the message as the moderator reads it. the reason is in the sender's own words, so it is escaped for safety

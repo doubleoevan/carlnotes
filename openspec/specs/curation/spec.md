@@ -141,54 +141,6 @@ Curation SHALL embed the topic's effective context (`topicScanContext` — the t
 - **WHEN** the Scan's spend limit is already reached and further candidates remain unembedded
 - **THEN** those candidates are counted as deferred, no embedding call is made or charged for them, and they stay eligible for a later Scan
 
-### Requirement: A per-Scan spend cap halts paid stages
-
-Curation SHALL enforce, before each Resource is dispatched into the paid fetch-and-scoring section, two per-Scan limits: the existing USD spend limit, and a `MAX_SCORED_RESOURCES_PER_SCAN` count limit (env-overridable) on how many Resources are sent through the paid section in the Scan. The count limit SHALL bound every Resource that enters the paid section — whether its content was reused, revalidated, or freshly fetched — because scoring is paid in every case.
-
-The USD limit is a **Scan-level** limit, not a review-level one: it is created before ingestion, ingestion spend charges against it, and its configuration name SHALL name the Scan rather than review. Curation therefore starts with whatever ingestion already spent already counted.
-
-What a Scan has spent SHALL be carried between stages as a value rather than accumulated in one object shared across them. Ingestion returns what it spent, curation receives it and returns what it leaves behind, and the limit each stage reads is the running total it was handed. A Scan's stages may run in separate processes, so a shared object mutated in place would let curation start from zero and spend the limit twice.
-
-Because the paid section runs under bounded concurrency and each limit is checked before dispatch rather than after completion, both limits are **approximate**, not hard: up to `(concurrency - 1)` Resources may already be in flight when a limit is reached, so the Scan may overshoot either limit by that many Resources. This overshoot is accepted. It costs a few cents, and the USD limit is an in-memory advisory counter that defers work rather than throwing. The fetch-outcome counts (`reused + revalidated + fetched`) SHALL therefore approximate, and MAY slightly exceed, the count limit.
-
-Once either limit is reached, curation SHALL stop dispatching further paid work and leave the remaining Resources unscored — carried to a later Scan — without failing the Scan. The free stages that spend nothing — the hash dedupe, the embedding dedupe, and the relevance comparison itself — SHALL NOT be truncated by either cap; embedding, which is metered, SHALL defer past the USD limit as the embed-filter requirement states.
-
-#### Scenario: The cap halts further paid work
-
-- **WHEN** the Scan reaches either the USD limit or the `MAX_SCORED_RESOURCES_PER_SCAN` count mid-curation
-- **THEN** no further fetch, revalidation, or scoring work is dispatched for the remaining Resources
-
-#### Scenario: The count cap halts paid work independent of spend
-
-- **WHEN** the Scan's `reused + revalidated + fetched` count reaches `MAX_SCORED_RESOURCES_PER_SCAN` while the USD limit is not yet reached
-- **THEN** the remaining survivors are deferred unscored, even though spend is under the dollar limit
-
-#### Scenario: Ingestion spend counts against the same limit
-
-- **WHEN** a Scan's ingestion charges enough to reach the USD limit before curation starts
-- **THEN** curation dispatches no paid work and defers its candidates, because the limit it reads already includes ingestion spend
-
-#### Scenario: Spend survives the boundary between stages
-
-- **GIVEN** a Scan whose ingestion charged against the limit
-- **WHEN** curation runs in a different process from the one that ingested
-- **THEN** curation reads the total ingestion already spent, rather than starting from zero
-
-#### Scenario: In-flight work may overshoot a limit
-
-- **WHEN** a limit is reached while other Resources are already in flight under the concurrency limit
-- **THEN** those in-flight Resources finish and are counted, so the Scan may exceed the limit by up to `(concurrency - 1)` Resources, and this is not an error
-
-#### Scenario: Unscored Resources are carried and the Scan still succeeds
-
-- **WHEN** a cap leaves some discovered Resources unscored
-- **THEN** those Resources get no Finding this Scan, the Scan is still `succeeded`, and they remain eligible for a later Scan
-
-#### Scenario: Free stages run regardless of the cap
-
-- **WHEN** a cap has been reached
-- **THEN** the dedupe and relevance-comparison stages still run for the Resources that already carry embeddings, since they incur no metered spend
-
 ### Requirement: The Scan records per-stage cost and curation counts
 
 On close, curation SHALL record each stage's dollar cost in `scans.stage_costs` (keyed at least by ingestion, embedding, fetch, cheap scoring, and premium scoring) and set `scans.cost` to the Scan Budget's total, which already includes ingestion because ingestion charges into the same Budget. `scans.cost` SHALL NOT be composed by summing a separately tracked ingestion number with a review total. It SHALL set `kept_count` to the number of Findings written and `filtered_count` to the number of Resources dropped by hash dedupe, embedding dedupe, the embed-filter, or the content scanner, and SHALL write the scan report to `scans.scan_summary`. It SHALL also record the fetch-outcome counts to `scans.reused`, `scans.revalidated`, and `scans.fetched` — the number of Resources whose content was reused within the TTL, revalidated via a `304`, or freshly fetched — whose sum equals the number of Resources sent through the paid fetch-and-scoring section.
@@ -437,24 +389,28 @@ Ranking SHALL NOT change which Resources pass the relevance threshold, only the 
 
 ### Requirement: The paid section runs under a bounded concurrency limit
 
-Curation SHALL run the paid fetch-and-scoring work for ranked survivors concurrently, bounded by an env-overridable concurrency limit, rather than one Resource at a time. The limit SHALL be chosen deliberately and SHALL NOT be unbounded: Firecrawl enforces per-plan concurrency, and a `429` falls back to the snippet, which would silently produce worse Findings while appearing faster.
+The review SHALL run the paid fetch-and-scoring work for ranked survivors concurrently, bounded by an env-overridable
+concurrency limit, instead of one Resource at a time. The limit SHALL be chosen deliberately and SHALL NOT be unbounded:
+Firecrawl enforces per-plan concurrency, and a `429` falls back to the snippet, which would silently produce worse
+Findings while appearing faster.
 
-Per-Resource failure isolation SHALL be preserved under concurrency: one Resource's failure SHALL degrade only itself and SHALL NOT abort the other in-flight Resources or the Scan.
+Per-Resource failure isolation SHALL be preserved under concurrency: one Resource's failure SHALL degrade only itself
+and SHALL NOT abort the other running Resources or the Scan.
 
 #### Scenario: Paid work runs concurrently up to the limit
 
 - **WHEN** more ranked survivors remain than the concurrency limit
-- **THEN** at most the limit's worth of fetch-and-score work is in flight at any moment, and the rest start as slots free
+- **THEN** at most the limit's worth of fetch-and-score work runs at any moment, and the rest start as slots free
 
 #### Scenario: The concurrency limit is env-overridable
 
 - **WHEN** the environment sets the concurrency limit
-- **THEN** curation uses that value instead of its default
+- **THEN** the review uses that value instead of its default
 
 #### Scenario: One Resource's failure does not abort the others
 
-- **WHEN** a Resource's fetch or scoring throws while other Resources are in flight
-- **THEN** that Resource is counted as failed, the in-flight Resources continue, and the Scan is not failed
+- **WHEN** a Resource's fetch or scoring throws while other Resources are running
+- **THEN** that Resource is counted as failed, the running Resources continue, and the Scan is not failed
 
 ### Requirement: Same-Scan dedupe leaves exactly one survivor, the highest-similarity one
 
@@ -709,4 +665,72 @@ its canonical form, so a saved url with a trailing slash still matches the page 
 - **GIVEN** two url Sources whose pages have the same title, read from their urls
 - **WHEN** a Scan dedupes its candidates
 - **THEN** both pages are scored, and neither is dropped as a duplicate of the other
+
+### Requirement: A per-Scan spend limit halts paid stages
+
+The review SHALL enforce, before each Resource is dispatched into the paid fetch-and-scoring section, two per-Scan
+limits: the existing USD spend limit, and a `MAX_SCORED_RESOURCES_PER_SCAN` count limit (env-overridable) on how many
+Resources are sent through the paid section in the Scan. The count limit SHALL bound every Resource that enters the paid
+section — whether its content was reused, revalidated, or freshly fetched — because scoring is paid in every case.
+
+The USD limit is a **Scan-level** limit, not a review-level one: it is created before ingestion, ingestion spend charges
+against it, and its configuration name SHALL name the Scan instead of review. The review therefore starts with whatever
+ingestion already spent already counted.
+
+What a Scan has spent SHALL be passed between stages as a value instead of accumulated in one object shared across them.
+Ingestion returns what it spent, the review receives it and returns what it leaves behind, and the limit each stage
+reads is the running total it was handed. A Scan's stages may run in separate processes, so a shared object mutated in
+place would let the review start from zero and spend the limit twice.
+
+Because the paid section runs under bounded concurrency and each limit is checked before dispatch instead of after
+completion, both limits are **approximate**, not hard: up to `(concurrency - 1)` Resources may already be running when a
+limit is reached, so the Scan may overshoot either limit by that many Resources. This overshoot is accepted. It costs a
+few cents, and the USD limit is an in-memory advisory counter that defers work instead of throwing. The fetch-outcome
+counts (`reused + revalidated + fetched`) SHALL therefore approximate, and MAY slightly exceed, the count limit.
+
+Once either limit is reached, the review SHALL stop dispatching further paid work and leave the remaining Resources
+unscored, left for a later Scan, without failing the Scan. The free stages that spend nothing — the hash dedupe, the
+embedding dedupe, and the relevance comparison itself — SHALL NOT be truncated by either limit; embedding, which is
+metered, SHALL defer past the USD limit as the embed-filter requirement states.
+
+#### Scenario: A limit halts further paid work
+
+- **WHEN** the Scan reaches either the USD limit or the `MAX_SCORED_RESOURCES_PER_SCAN` count mid-review
+- **THEN** no further fetch, revalidation, or scoring work is dispatched for the remaining Resources
+
+#### Scenario: The count limit halts paid work independent of spend
+
+- **WHEN** the Scan's `reused + revalidated + fetched` count reaches `MAX_SCORED_RESOURCES_PER_SCAN` while the USD limit
+  is not yet reached
+- **THEN** the remaining survivors are deferred unscored, even though spend is under the dollar limit
+
+#### Scenario: Ingestion spend counts against the same limit
+
+- **WHEN** a Scan's ingestion charges enough to reach the USD limit before the review starts
+- **THEN** the review dispatches no paid work and defers its candidates, because the limit it reads already includes
+  ingestion spend
+
+#### Scenario: Spend survives the boundary between stages
+
+- **GIVEN** a Scan whose ingestion charged against the limit
+- **WHEN** the review runs in a different process from the one that ingested
+- **THEN** the review reads the total ingestion already spent, instead of starting from zero
+
+#### Scenario: Running work may overshoot a limit
+
+- **WHEN** a limit is reached while other Resources are already running under the concurrency limit
+- **THEN** those running Resources finish and are counted, so the Scan may exceed the limit by up to `(concurrency - 1)`
+  Resources, and this is not an error
+
+#### Scenario: Unscored Resources wait for a later Scan and the Scan still succeeds
+
+- **WHEN** a limit leaves some discovered Resources unscored
+- **THEN** those Resources get no Finding this Scan, the Scan is still `succeeded`, and they remain eligible for a later
+  Scan
+
+#### Scenario: Free stages run regardless of the limits
+
+- **WHEN** a limit has been reached
+- **THEN** the dedupe and relevance-comparison stages still run for the Resources that already have embeddings, since
+  they incur no metered spend
 

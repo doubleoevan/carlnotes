@@ -2,12 +2,12 @@ import type { PodcastEpisode, PodcastEpisodeChapter, PublishedPodcastEpisodeSumm
 import { Headphones, Pause, Play } from "lucide-react"
 import { PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
 import { cn } from "@/lib/utils"
+import { togglePodcastEpisodeChapterPlayback, togglePodcastEpisodePlayback } from "@/stores/podcastEpisodePlayActions"
 import {
 	togglePlayback,
-	togglePodcastEpisodeChapterPlayback,
-	togglePodcastEpisodePlayback,
 	useIsPodcastEpisodePlaying,
 	usePlayerChapter,
+	usePlayerChapterPosition,
 	usePodcastEpisodePlayer,
 } from "@/stores/podcastEpisodePlayerStore"
 
@@ -32,9 +32,8 @@ type PodcastEpisodeChapterPillProps = {
  */
 export function PodcastEpisodeChapterPill({ podcastEpisode, chapter, className }: PodcastEpisodeChapterPillProps) {
 	// whether the player is at the chapter, and whether the chapter is playing
-	const { podcastEpisode: loadedPodcastEpisode, isPlaying } = usePodcastEpisodePlayer()
-	const playerChapter = usePlayerChapter()
-	const isPlayerChapter = loadedPodcastEpisode?.id === podcastEpisode.id && playerChapter?.position === chapter.position
+	const { isPlaying } = usePodcastEpisodePlayer()
+	const isPlayerChapter = usePlayerChapterPosition(podcastEpisode.id) === chapter.position
 	const isChapterPlaying = isPlayerChapter && isPlaying
 
 	// the button's label, which names the action, the podcast episode, and the chapter

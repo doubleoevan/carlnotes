@@ -19,7 +19,7 @@ import {
 	SELECT_ONE_ROWS,
 	withWorkingDirectory,
 } from "./indexTestFixtures"
-import { SESSION_COOKIE, signInAs } from "./testSession"
+import { SESSION_COOKIE, signInAs, toJsonRequest } from "./testSession"
 
 // put each spied console method and the Redis client back, and remove the temporary directories after each test,
 // whether its assertions pass or not
@@ -148,13 +148,7 @@ test("a write to an unknown path responds 404, never a page", async () => {
 // are reached only with a session
 async function postSignedInChatTurn(chatTurnBody: unknown): Promise<Response> {
 	signInAs("user-1")
-	return server.fetch(
-		new Request("http://localhost:3000/api/topics/abc123/chat", {
-			method: "POST",
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify(chatTurnBody),
-		}),
-	)
+	return server.fetch(new Request("http://localhost:3000/api/topics/abc123/chat", toJsonRequest(chatTurnBody)))
 }
 
 // the question is validated before the handler runs

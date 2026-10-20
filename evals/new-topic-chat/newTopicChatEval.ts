@@ -1,7 +1,9 @@
 // the promptfoo eval of the new-topic chat, which makes real model calls. run the eval with: bun run eval:new-topic-chat
 import type { Assertion, EvaluateResult, GradingResult, TestCase } from "promptfoo"
 import { chatModel } from "../../worker/models"
-import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toGradingResult } from "../evalChecks"
+import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toToolNamesLabel, toWriteCostLabel } from "../evalLabels"
 import { NEW_TOPIC_CHAT_CASES, type NewTopicChatCase } from "./newTopicChatCases"
 import { type NewTopicChatTurn, newTopicChatTurnWriter } from "./newTopicChatProviders"
 import {
@@ -96,7 +98,7 @@ function gradeCreateCall(turnOutput: string, isCreateExpected: boolean): Grading
 // a case's tool calls in order, and what the turn cost
 function toCaseLine(turnOutput: string, evaluateResult: EvaluateResult): string {
 	const toolNames = toNewTopicChatTurn(turnOutput).toolCalls.map((toolCall) => toolCall.toolName)
-	return `tools: ${toolNames.join(", ") || "none"}, $${(evaluateResult.cost ?? 0).toFixed(4)} to write`
+	return `${toToolNamesLabel(toolNames)}, ${toWriteCostLabel(evaluateResult.cost)}`
 }
 
 // the turn's JSON output read back into its reply, tool calls, and draft

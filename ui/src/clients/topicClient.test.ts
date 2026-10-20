@@ -1,7 +1,8 @@
-// topic client tests: a spent budget returns "budget" and a started scan the scans left, a topic or podcast episode
-// page names the gate in front of its topic, and the topic search returns the matched topics
+// topic client tests: a spent budget returns "budget", the manual scans cutoff "paused", and a started scan the scans
+// left, a topic or podcast episode page names the gate in front of its topic, and the topic search returns the matched
+// topics
 import { afterEach, expect, test } from "bun:test"
-import { SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
+import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
 import { fetchPodcastEpisodePage } from "./podcastEpisodeClient"
 import { fetchTopicPage, searchTopics, sendManualScan } from "./topicClient"
 
@@ -11,12 +12,18 @@ afterEach(() => {
 	globalThis.fetch = originalFetch
 })
 
-// a 402 from the scan route is a spent budget, and a started scan returns the scans left today
-test("sendManualScan maps a 402 to budget and returns the scans left on a start", async () => {
+// a 402 from the scan route is a spent budget unless it has the paused label, and a started scan returns the scans
+// left today
+test("sendManualScan maps a 402 to budget or paused and returns the scans left on a start", async () => {
 	// the scan route rejects the scan because of the budget
 	globalThis.fetch = (async () =>
 		Response.json({ error: SCAN_SPENT_BUDGET_LABEL }, { status: 402 })) as unknown as typeof fetch
 	expect(await sendManualScan("topic-1")).toBe("budget")
+
+	// the scan route rejects the scan because of the manual scans cutoff
+	globalThis.fetch = (async () =>
+		Response.json({ error: MANUAL_SCAN_PAUSED_LABEL }, { status: 402 })) as unknown as typeof fetch
+	expect(await sendManualScan("topic-1")).toBe("paused")
 
 	// the scan route starts the scan
 	globalThis.fetch = (async () => Response.json({ remainingScans: 3 })) as unknown as typeof fetch

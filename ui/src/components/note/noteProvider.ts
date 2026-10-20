@@ -40,7 +40,7 @@ export class NoteProvider {
 	// local edits pooled since the last post
 	private pendingUpdates: Uint8Array[] = []
 	private sendTimer: ReturnType<typeof setTimeout> | null = null
-	// how many posts are still out. an edit during one schedules the next, so two can be in flight at once
+	// how many posts are still out. an edit during one schedules the next, so two can be in progress at once
 	private sendingCount = 0
 
 	// set once the server rejects an update, which no retry can ever send
@@ -132,7 +132,8 @@ export class NoteProvider {
 	}
 
 	/**
-	 * Fetch and apply what the server has that this ydoc does not. Concurrent calls collapse to one in flight plus one queued.
+	 * Fetch and apply what the server has that this ydoc does not. Concurrent calls collapse to one in progress plus one
+	 * queued.
 	 */
 	async resync(): Promise<void> {
 		// remember a poke that lands mid-fetch instead of stacking fetches
@@ -192,7 +193,7 @@ export class NoteProvider {
 		const mergedUpdates = Y.mergeUpdates(this.pendingUpdates)
 		this.pendingUpdates = []
 
-		// post the merged update, counted as in flight until the post returns
+		// post the merged update, counted as in progress until the post returns
 		this.sendingCount += 1
 		const sendUpdateResult = await this.transport.sendUpdate(this.noteId, mergedUpdates).catch(() => false)
 		this.sendingCount -= 1
@@ -214,7 +215,7 @@ export class NoteProvider {
 		}
 
 		// an edit made during the post is still on its way, and the post it scheduled may still be out, so the note is
-		// saved only once nothing is pooled and nothing is in flight
+		// saved only once nothing is pooled and nothing is in progress
 		if (this.pendingUpdates.length === 0 && this.sendingCount === 0) {
 			this.onSaveStatus("saved")
 		}

@@ -1,23 +1,24 @@
 // starting a Scan by hand from the topic page
 import { trackEvent } from "@shared/analytics"
 import { reportError } from "@shared/monitoring"
-import { SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
+import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
 import { eq } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../../db"
 import { scans } from "../../db/schema/scans"
 import { topics } from "../../db/schema/topics"
 import { failStaleScans, isUserLiteLLMKeyBudgetExhausted, loadScan, startTopicScan, stopTopicScan } from "../../worker"
-import { isAllowed, loadManualScanAuthorization } from "../authorization"
+import { isAllowed, loadManualScanAuthorization, loadMonthlyBudgetCutoffStatus } from "../authorization"
 import { reportManualScanOverage } from "../billing"
 import type { AnalyticsProperties } from "../currentUser"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 
-// the outcomes of a manual scan request. status: running means a scan is already in flight for the topic.
-// status: budget means the key that the scan bills has spent its whole budget
+// the outcomes of a manual scan request. status: running means a scan is already running for the topic.
+// status: budget means the user's monthly budget, or the key that the scan bills, is spent
+// status: paused means the user's monthly spend is past the manual scans cutoff and short of the whole budget
 // status: unavailable means handing the scan to Temporal threw
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
-export type ManualScanResult = { status: "started"; remainingScans: number } | { status: "forbidden" } | { status: "quota" } | { status: "budget" } | { status: "running" } | { status: "unavailable" }
+export type ManualScanResult = { status: "started"; remainingScans: number } | { status: "forbidden" } | { status: "quota" } | { status: "budget" } | { status: "paused" } | { status: "running" } | { status: "unavailable" }
 
 // the outcomes of a stop request. status: idle means the Topic had no Scan running to stop
 // biome-ignore format: one line keeps the union under the comment-density hook's limit
@@ -25,7 +26,8 @@ export type StopScanResult = { status: "stopped" } | { status: "idle" } | { stat
 
 /**
  * Starts a manual scan for the owner or an admin. The scan runs without blocking the request.
- * Enforces the daily quota and the budget of the key that the scan bills.
+ * Enforces the daily quota, the spent monthly budget, the manual scans cutoff, and the budget of the key that the scan
+ * bills.
  */
 export async function runManualScan(
 	userId: string,
@@ -46,8 +48,15 @@ export async function runManualScan(
 		return authorization
 	}
 
-	// reject the scan if the requesting user's LiteLLM key has spent its budget. the scan bills that key.
-	// the rejection comes before any scan row or overage. a failed budget read starts the scan
+	// reject the scan if the user's monthly budget is spent or their spend is past the manual scans cutoff. both
+	// rejections come before any scan row or overage
+	const monthlyBudgetCutoffStatus = await loadMonthlyBudgetCutoffStatus(userId, "manualScans")
+	if (monthlyBudgetCutoffStatus !== "allowed") {
+		return { status: monthlyBudgetCutoffStatus }
+	}
+
+	// reject the scan if the user's LiteLLM key, which the scan bills, has spent its budget. a failed key read starts
+	// the scan
 	if (await isUserLiteLLMKeyBudgetExhausted(userId)) {
 		return { status: "budget" }
 	}
@@ -141,14 +150,17 @@ export const scansRoute = new Hono<AppEnv>()
 			return context.json({ remainingScans: scanResult.remainingScans })
 		}
 
-		// a scan already in flight is a conflict, not a quota or authorization failure
+		// a scan already running is a conflict, not a quota or authorization failure
 		if (scanResult.status === "running") {
 			return context.json({ error: "a scan is already running" }, 409)
 		}
 
-		// reject the scan with the budget label if the budget is spent
-		if (scanResult.status === "budget") {
-			return context.json({ error: SCAN_SPENT_BUDGET_LABEL }, 402)
+		// reject the scan with the budget label if the budget is spent, and with the paused label past the cutoff
+		if (scanResult.status === "budget" || scanResult.status === "paused") {
+			return context.json(
+				{ error: scanResult.status === "budget" ? SCAN_SPENT_BUDGET_LABEL : MANUAL_SCAN_PAUSED_LABEL },
+				402,
+			)
 		}
 
 		// a scan that could not start asks the user to try again shortly

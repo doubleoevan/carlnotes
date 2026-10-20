@@ -3,7 +3,8 @@ import { Pause, Play } from "lucide-react"
 import { PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
 import { PLAY_BUTTON_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
-import { togglePodcastEpisodePlayback, useIsPodcastEpisodePlaying } from "@/stores/podcastEpisodePlayerStore"
+import { togglePodcastEpisodePlayback } from "@/stores/podcastEpisodePlayActions"
+import { useIsPodcastEpisodePlaying } from "@/stores/podcastEpisodePlayerStore"
 
 /**
  * A podcast episode's play button, which plays or pauses the episode in the podcast player,

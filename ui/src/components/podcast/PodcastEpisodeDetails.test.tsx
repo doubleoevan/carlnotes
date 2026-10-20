@@ -1,39 +1,16 @@
 // a podcast episode's details line counts its chapters, names the AI voices outside a tooltip, and shows the description
 // inside one
 import { expect, test } from "bun:test"
-import type { PodcastEpisode } from "@shared/contracts/podcast"
 import { AI_VOICES_NOTE } from "@shared/podcastEpisodes"
 import { renderToStaticMarkup } from "react-dom/server"
 import { PodcastEpisodeDetails } from "./PodcastEpisodeDetails"
-import { toPodcastEpisodeSummaryFixture } from "./podcastEpisodeTestFixtures"
+import { toPodcastEpisodeFixture, toPodcastEpisodeSummaryFixture } from "./podcastEpisodeTestFixtures"
 
 // a table row's summary of a published podcast episode with twelve chapters
 const PODCAST_EPISODE_SUMMARY = toPodcastEpisodeSummaryFixture()
 
 // a podcast episode as the player shows it, with its two chapters
-const PODCAST_EPISODE = {
-	...PODCAST_EPISODE_SUMMARY,
-	chapterCount: 2,
-	description: null,
-	topicId: "topic-1",
-	topicVisibility: "public",
-	status: "published",
-	audioUrl: "/api/episodes/episode-1/audio.mp3",
-	coverUrl: null,
-	smallCoverUrl: null,
-	chapters: [0, 1].map((position) => ({
-		position,
-		title: `Chapter ${position + 1}`,
-		findingId: null,
-		sourceUrl: "https://example.com",
-		rating: null,
-		faviconPath: null,
-		startSeconds: position * 60,
-		endSeconds: (position + 1) * 60,
-	})),
-	progressSeconds: 0,
-	isCompleted: false,
-} satisfies PodcastEpisode
+const PODCAST_EPISODE = toPodcastEpisodeFixture({ description: null })
 
 test("a summary's details line counts its chapters", () => {
 	const html = renderToStaticMarkup(<PodcastEpisodeDetails podcastEpisode={PODCAST_EPISODE_SUMMARY} isInTooltip />)

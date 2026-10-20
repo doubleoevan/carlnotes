@@ -55,6 +55,32 @@ export function decryptChatText(storedText: string): string | null {
 	}
 }
 
+/**
+ * Encrypts one json value for storage, the value that decryptChatJson reads back.
+ */
+export function encryptChatJson(value: unknown): string {
+	return encryptChatText(JSON.stringify(value))
+}
+
+/**
+ * Decrypts one stored json value and parses it, or returns null if the value is missing, does not decrypt, or is not
+ * json.
+ */
+export function decryptChatJson(storedText: string | null): unknown {
+	// a missing value or one that fails to decrypt has nothing to parse
+	const decryptedText = storedText === null ? null : decryptChatText(storedText)
+	if (decryptedText === null) {
+		return null
+	}
+
+	// treat text that fails to parse as no value
+	try {
+		return JSON.parse(decryptedText)
+	} catch {
+		return null
+	}
+}
+
 // the encryption key from the environment, or null if unset. a wrong-sized key throws an error
 function chatTextKey(): Buffer | null {
 	const encodedKey = Bun.env.CHAT_TEXT_KEY

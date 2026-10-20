@@ -27,6 +27,7 @@ export {
 	deleteLiteLLMKey,
 	deleteUserLiteLLMKey,
 	isUserLiteLLMKeyBudgetExhausted,
+	isUserLiteLLMKeyBudgetStale,
 	loadOrProvisionUserLiteLLMKey,
 	loadUserOrPublicLiteLLMKey,
 	provisionLiteLLMKey,

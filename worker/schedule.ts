@@ -1,37 +1,31 @@
 // scans every Topic scheduled by its frequency and emails its new Findings to subscribers
 import { shutdownAnalytics } from "@shared/analytics"
-import { isDailyFrequency } from "@shared/enums"
 import { toPositiveInteger } from "@shared/envSettings"
 import { reportError, shutdownMonitoring, startMonitoring } from "@shared/monitoring"
 import { SCHEDULED_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
-import { DAY_MS } from "@shared/time"
+import { DAY_MS, isUtcWeekend } from "@shared/time"
 import { and, eq, inArray, isNull, lt, or, type SQL, sql } from "drizzle-orm"
 import { db, sizeConnectionPool } from "../db"
 import { runWithClaim } from "../db/claim"
-import { dailyTopicIdsWithinLimit, scansRemainingToday } from "../db/quotas"
+import { scansRemainingToday } from "../db/quotas"
 import { scans } from "../db/schema/scans"
 import { topics } from "../db/schema/topics"
-import { runWithConcurrency } from "./concurrency"
 import { reportDailySpend } from "./dailySpend"
-import { isUserLiteLLMKeyBudgetExhausted } from "./litellm"
 import { retryPendingObjectDeletions } from "./retryPendingObjectDeletions"
 import { startTopicScan } from "./scan"
 import { reportScanQueue, startUndispatchedScans, toDispatchableScanCount } from "./scanQueue"
+import { isWithinDailyTopicLimit, loadScheduledTopicLimits } from "./scheduledTopicLimits"
 import { screenPendingSources } from "./screen"
 import { failStaleScans } from "./staleScans"
 import { shutdownTelemetry, startTelemetry } from "./telemetry"
-
-// how many owners' daily topic allowances the sweep reads at once, and how many owners' key budgets
-const DAILY_TOPIC_IDS_LOAD_CONCURRENCY = 8
-const OWNER_BUDGET_READ_CONCURRENCY = 8
 
 // the sweep's claim, so two sweeps cannot run at once
 const TOPIC_SWEEP_CLAIM = "scheduled-scan-sweep"
 
 // a persisted Topic, and what one topic sweep did
-type Topic = typeof topics.$inferSelect
+export type Topic = typeof topics.$inferSelect
 // biome-ignore format: one line keeps the summary's fields under the comment-density hook's limit
-export type TopicSweepSummary = { scheduled: number; started: number; skippedOverQuota: number; skippedOverDailyLimit: number; skippedOverBudget: number; skippedOverBacklog: number; failed: number }
+export type TopicSweepSummary = { scheduled: number; started: number; skippedOverQuota: number; skippedOverDailyLimit: number; skippedOverDailyScanCutoff: number; skippedOverBudget: number; skippedOverBacklog: number; failed: number }
 
 /**
  * Runs one scheduled sweep under its claim or returns null if another sweep holds the claim.
@@ -59,43 +53,48 @@ async function sweepScheduledTopics(signal: AbortSignal): Promise<TopicSweepSumm
 	const scanQueueDescription = await reportScanQueue()
 	const dispatchableScanCount = toDispatchableScanCount(scanQueueDescription)
 
-	// load the scheduled Topics, the daily Topics that each owner's plan still runs,
-	// and the owners whose key budget is spent. then start the scheduled Topics' Scans
+	// load the scheduled Topics and the limits that their owners' plans and budgets set on them, then start the
+	// scheduled Topics' Scans
 	signal.throwIfAborted()
-	const scheduledTopics = await db.select().from(topics).where(toScheduledTopicFilter(new Date()))
-	const [dailyTopicIdsByOwner, budgetExhaustedOwnerIds] = await Promise.all([
-		loadDailyTopicIdsByOwner(scheduledTopics),
-		loadBudgetExhaustedOwnerIds(scheduledTopics),
-	])
+	const now = new Date()
+	const scheduledTopics = await db.select().from(topics).where(toScheduledTopicFilter(now))
+	const scheduledTopicLimits = await loadScheduledTopicLimits(scheduledTopics, now)
 	const topicSweepSummary = await startScheduledTopicScans({
 		scheduledTopics,
-		dailyTopicIdsByOwner,
-		budgetExhaustedOwnerIds,
+		...scheduledTopicLimits,
 		dispatchableScanCount,
 		signal,
 	})
 
 	// log a summary line for the sweep
-	const { started, skippedOverQuota, skippedOverDailyLimit, skippedOverBudget, skippedOverBacklog, failed } =
-		topicSweepSummary
+	const {
+		started,
+		skippedOverQuota,
+		skippedOverDailyLimit,
+		skippedOverDailyScanCutoff,
+		skippedOverBudget,
+		skippedOverBacklog,
+		failed,
+	} = topicSweepSummary
 	console.log(
-		`scheduled scan sweep: ${started} started, ${skippedOverQuota} over quota, ${skippedOverDailyLimit} over the daily topic limit, ${skippedOverBudget} over budget, ${skippedOverBacklog} left for the next sweep behind the backlog, ${failed} could not start, of ${scheduledTopics.length} scheduled`,
+		`scheduled scan sweep: ${started} started, ${skippedOverQuota} over quota, ${skippedOverDailyLimit} over the daily topic limit, ${skippedOverDailyScanCutoff} weekly past the daily scans cutoff, ${skippedOverBudget} over budget, ${skippedOverBacklog} left for the next sweep behind the backlog, ${failed} could not start, of ${scheduledTopics.length} scheduled`,
 	)
 	return topicSweepSummary
 }
 
-// the scheduled Topics, the daily Topics that each owner's plan still runs, the owners whose key budget is spent,
-// how many Scans this sweep may start, unbounded when unset, and the signal that the sweep's claim aborts
+// the scheduled Topics, the limits from scheduledTopicLimits.ts, how many Scans this sweep may start, unbounded when
+// unset, and the signal that the sweep's claim aborts
 export type StartScheduledTopicScansOptions = {
 	scheduledTopics: Topic[]
 	dailyTopicIdsByOwner: Map<string, Set<string>>
+	dailyTopicOnWeeklyScanIds?: Set<string>
 	budgetExhaustedOwnerIds: Set<string>
 	dispatchableScanCount?: number
 	signal?: AbortSignal
 }
 
 /**
- * Starts a Scan for each scheduled Topic within its owner's quota, daily topic limit, and budget.
+ * Starts a Scan for each scheduled Topic within its owner's quota, daily topic limit, daily scans cutoff, and budget.
  * A Topic whose owner's budget is spent gets a failed Scan instead, unless a Scan of that Topic is still running.
  * Returns what the sweep did. Each owner's remaining scan count is read once and lowered as that owner's Scans start.
  * A sweep whose claim is lost stops before its next Topic.
@@ -103,6 +102,7 @@ export type StartScheduledTopicScansOptions = {
 export async function startScheduledTopicScans({
 	scheduledTopics,
 	dailyTopicIdsByOwner,
+	dailyTopicOnWeeklyScanIds = new Set(),
 	budgetExhaustedOwnerIds,
 	dispatchableScanCount = Number.POSITIVE_INFINITY,
 	signal,
@@ -111,7 +111,7 @@ export async function startScheduledTopicScans({
 	const topicSweepSummary = emptyTopicSweepSummary(scheduledTopics.length)
 	const remainingScanCountByOwner = new Map<string, number>()
 
-	// start a Scan for each scheduled Topic within its owner's quota, daily topic limit, and budget
+	// start a Scan for each scheduled Topic within its owner's quota, daily topic limit, daily scans cutoff, and budget
 	for (const topic of scheduledTopics) {
 		// stop once the sweep's claim is lost
 		signal?.throwIfAborted()
@@ -132,9 +132,11 @@ export async function startScheduledTopicScans({
 			continue
 		}
 
-		// skip a daily Topic past its owner's daily topic limit
-		if (!isWithinDailyTopicLimit(topic, dailyTopicIdsByOwner.get(topic.ownerId))) {
-			topicSweepSummary.skippedOverDailyLimit++
+		// skip a daily Topic past its owner's daily topic limit, or one that runs weekly past its owner's daily scans
+		// cutoff and scanned in the past seven days
+		const dailyTopicSkip = toDailyTopicSkip(topic, dailyTopicIdsByOwner.get(topic.ownerId), dailyTopicOnWeeklyScanIds)
+		if (dailyTopicSkip) {
+			topicSweepSummary[dailyTopicSkip]++
 			continue
 		}
 
@@ -163,6 +165,18 @@ export async function startScheduledTopicScans({
 	return topicSweepSummary
 }
 
+// the summary count that a daily Topic is skipped under, or null if the sweep runs it
+function toDailyTopicSkip(
+	topic: Topic,
+	dailyTopicIds: Set<string> | undefined,
+	dailyTopicOnWeeklyScanIds: Set<string>,
+): "skippedOverDailyLimit" | "skippedOverDailyScanCutoff" | null {
+	if (!isWithinDailyTopicLimit(topic, dailyTopicIds)) {
+		return "skippedOverDailyLimit"
+	}
+	return dailyTopicOnWeeklyScanIds.has(topic.id) ? "skippedOverDailyScanCutoff" : null
+}
+
 /**
  * Returns a topic sweep summary of the scheduled Topic count with every outcome count at zero.
  */
@@ -172,6 +186,7 @@ export function emptyTopicSweepSummary(scheduledCount: number): TopicSweepSummar
 		started: 0,
 		skippedOverQuota: 0,
 		skippedOverDailyLimit: 0,
+		skippedOverDailyScanCutoff: 0,
 		skippedOverBudget: 0,
 		skippedOverBacklog: 0,
 		failed: 0,
@@ -218,50 +233,6 @@ async function saveFailedScan(topic: Topic): Promise<void> {
 }
 
 /**
- * Whether the sweep still runs this Topic under its owner's daily topic limit. A Topic on a weekly frequency
- * draws on no daily allowance at all, so the limit never touches it.
- */
-export function isWithinDailyTopicLimit(
-	topic: Pick<Topic, "id" | "frequency">,
-	ownerDailyTopicIds: Set<string> | undefined,
-): boolean {
-	return !isDailyFrequency(topic.frequency) || Boolean(ownerDailyTopicIds?.has(topic.id))
-}
-
-// the daily Topics that each owner's plan can run, keyed by the owner for reuse
-async function loadDailyTopicIdsByOwner(scheduledTopics: Topic[]): Promise<Map<string, Set<string>>> {
-	const dailyTopics = scheduledTopics.filter((topic) => isDailyFrequency(topic.frequency))
-	const ownerIds = [...new Set(dailyTopics.map((topic) => topic.ownerId))]
-	const dailyTopicIdsByOwnerEntries = await runWithConcurrency(
-		ownerIds,
-		DAILY_TOPIC_IDS_LOAD_CONCURRENCY,
-		async (ownerId): Promise<[string, Set<string>]> => [ownerId, await dailyTopicIdsWithinLimit(ownerId)],
-	)
-	return new Map(dailyTopicIdsByOwnerEntries)
-}
-
-/**
- * Returns the ids of the scheduled Topics' owners whose key budget is spent, reading each owner's budget once.
- * An owner who has no key, or whose budget read fails, is left out.
- */
-export async function loadBudgetExhaustedOwnerIds(scheduledTopics: Pick<Topic, "ownerId">[]): Promise<Set<string>> {
-	// read each distinct owner's budget.
-	// a read that throws an error is reported, and that owner's budget counts as not spent
-	const ownerIds = [...new Set(scheduledTopics.map((topic) => topic.ownerId))]
-	const isUserLiteLLMKeyBudgetExhaustedResults = await runWithConcurrency(
-		ownerIds,
-		OWNER_BUDGET_READ_CONCURRENCY,
-		(ownerId) =>
-			isUserLiteLLMKeyBudgetExhausted(ownerId).catch((error: unknown) => {
-				console.error(`could not read the key budget for owner ${ownerId}`, error)
-				reportError(error, "scheduled-scan", { ownerId })
-				return false
-			}),
-	)
-	return new Set(ownerIds.filter((_ownerId, i) => isUserLiteLLMKeyBudgetExhaustedResults[i]))
-}
-
-/**
  * Returns the filter that selects the Topics scheduled for a Scan now.
  * A Topic is scheduled if it has no completed Scan, or if its last completed Scan is older than its frequency window.
  * A failed Scan counts as completed.
@@ -274,7 +245,7 @@ export function toScheduledTopicFilter(now: Date): SQL | undefined {
 
 	// select a Topic never scanned or last scanned longer ago than its frequency window.
 	// a scanned weekdays Topic skips the weekend
-	const scheduledDailyFrequencies = isWeekend(now) ? ["daily" as const] : ["daily" as const, "weekdays" as const]
+	const scheduledDailyFrequencies = isUtcWeekend(now) ? ["daily" as const] : ["daily" as const, "weekdays" as const]
 	return or(
 		isNull(lastCompletedScanStartedAt),
 		and(
@@ -291,12 +262,6 @@ export function toScheduledTopicFilter(now: Date): SQL | undefined {
 // how long a Topic's frequency keeps it from re-scanning. daily and weekdays rescan after a day, weekly after a week
 export function frequencyWindowMs(frequency: Topic["frequency"]): number {
 	return frequency === "weekly" ? 7 * DAY_MS : DAY_MS
-}
-
-// Saturday or Sunday, UTC
-function isWeekend(now: Date): boolean {
-	const utcDay = now.getUTCDay()
-	return utcDay === 0 || utcDay === 6
 }
 
 // run the claimed sweep, then retry the pending object deletions and report the day's spend once the claim is released

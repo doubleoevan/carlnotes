@@ -3,14 +3,16 @@ import { toAvatarKeyVersion, toAvatarVersion } from "@shared/avatars"
 import type { ActivityResponse, SubscriptionRow } from "@shared/contracts/activity"
 import type { PodcastEpisodeSummary } from "@shared/contracts/podcast"
 import type { TeamIdentity } from "@shared/contracts/teams"
+import { toCentsFromDollars } from "@shared/plans"
 import { and, desc, eq, gt, isNotNull, isNull, ne, notInArray, or, sql } from "drizzle-orm"
 import { Hono } from "hono"
 import { db } from "../db"
+import { loadMonthlyBudgetCutoffs } from "../db/monthlyBudgetCutoffs"
 import { invites } from "../db/schema/invites"
 import { teamMembers, teams } from "../db/schema/teams"
 import { subscriptions, topics } from "../db/schema/topics"
 import { users } from "../db/schema/users"
-import { loadTopics } from "./activityTopics"
+import { loadOwnedTopics } from "./activityTopics"
 import { isAdminRole, isAllowed, monthlySpendDollars, userBudgetCents } from "./authorization"
 import { toProfileIdentity, withAvatarVersion } from "./avatars"
 import type { AppEnv } from "./currentUser"
@@ -28,10 +30,7 @@ export async function loadActivity(
 	user: { id: string; email: string },
 	signedInUserId: string,
 ): Promise<ActivityResponse> {
-	// the user's own view, which alone reads the user's chat mentions
-	const isOwnView = signedInUserId === user.id
-
-	// select the user's identity, budget inputs, litellm key, and owned topics
+	// select the user's identity, budget inputs, and litellm key
 	const [userRow] = await db
 		.select({
 			litellmVirtualKey: users.litellmVirtualKey,
@@ -44,13 +43,12 @@ export async function loadActivity(
 		})
 		.from(users)
 		.where(eq(users.id, user.id))
-	// the ids of the topics that the user owns
-	const ownedTopicIds = (await db.select({ id: topics.id }).from(topics).where(eq(topics.ownerId, user.id))).map(
-		(row) => row.id,
-	)
 
-	// this month's spend divided into what produced it.
-	const monthlySpend = await monthlySpendDollars(user.id)
+	// this month's spend divided into what produced it, and the user's monthly budget cutoffs
+	const [monthlySpend, monthlyBudgetCutoffs] = await Promise.all([
+		monthlySpendDollars(user.id),
+		loadMonthlyBudgetCutoffs(user.id),
+	])
 
 	// the user's subscriptions on topics they do not own, both active and inactive alike
 	const subscriptionRows = await db
@@ -158,15 +156,16 @@ export async function loadActivity(
 			avatarSource: userRow?.avatarSource ?? null,
 			avatarVersion: toAvatarVersion(userRow ?? {}),
 		},
-		scanSpendCents: Math.round(monthlySpend.scanDollars * 100),
-		chatSpendCents: Math.round(monthlySpend.chatDollars * 100),
-		podcastEpisodeSpendCents: Math.round(monthlySpend.podcastEpisodeDollars * 100),
+		scanSpendCents: toCentsFromDollars(monthlySpend.scanDollars),
+		chatSpendCents: toCentsFromDollars(monthlySpend.chatDollars),
+		podcastEpisodeSpendCents: toCentsFromDollars(monthlySpend.podcastEpisodeDollars),
 		budgetCents: userBudgetCents({
 			isAdmin: isAdminRole(userRow?.role),
 			plan: userRow?.plan ?? "free",
 			budgetOverrideCents: userRow?.budgetOverrideCents ?? null,
 		}),
-		topics: await loadTopics({ topicIds: ownedTopicIds, signedInUserId, mentionUserId: isOwnView ? user.id : null }),
+		monthlyBudgetCutoffs,
+		topics: await loadOwnedTopics({ userId: user.id, signedInUserId }),
 		subscriptions: toSubscriptionRows(subscriptionRowFields, subscriptionPodcastEpisodeByTopic),
 		invites: inviteRows.map((inviteRow) => ({
 			inviteId: inviteRow.inviteId,

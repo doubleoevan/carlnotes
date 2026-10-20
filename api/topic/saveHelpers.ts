@@ -1,8 +1,9 @@
 // the helpers for saving a topic: the daily slot its frequency takes, its new source rows, and its first scan
 import { isDailyFrequency } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
-import { FIRST_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
+import { FIRST_SCAN_PAUSED_REASON, FIRST_SCAN_SPENT_BUDGET_REASON } from "@shared/scanFailure"
 import type { UpdateTopicPayload } from "@shared/topicPayloads"
+import { isMonthlyBudgetCutoffPassed } from "../../db/monthlyBudgetCutoffs"
 import type { scans } from "../../db/schema/scans"
 import type { sources } from "../../db/schema/topics"
 import {
@@ -13,7 +14,7 @@ import {
 	screenPendingSources,
 	screenTopicSources,
 } from "../../worker"
-import { loadDailyFrequencyAuthorization } from "../authorization"
+import { isMonthlySpendExhausted, loadDailyFrequencyAuthorization } from "../authorization"
 
 // a rejected attempt to add one more topic on a daily frequency, including the plan's limit so the message can show it
 export type DailyFrequencyRejection = { status: "dailyFrequency"; limit: number }
@@ -91,20 +92,17 @@ export function startPendingSourceScreens(topicId: string): void {
 
 /**
  * Screens the new Topic's url Sources with llm-guard, then starts the Topic's first Scan.
- * If the owner's key budget is spent, the first Scan is marked failed instead of started.
+ * If the owner's budget is spent, or the owner's spend is past the manual scans cutoff, the first Scan is marked failed
+ * instead of started.
  */
 export async function startFirstScan(topicId: string, firstScan: Scan | undefined, ownerId: string): Promise<void> {
-	// read the owner's key budget before the wait for the Source screens.
-	// a read that throws an error is reported, and the budget counts as not spent
-	const isOwnerBudgetExhausted = await isUserLiteLLMKeyBudgetExhausted(ownerId).catch((error: unknown) => {
-		console.error(`could not read the key budget for the first scan of topic ${topicId}`, error)
-		reportError(error, "first-scan", { topicId, ownerId })
-		return false
-	})
+	// read the owner's budgets before the wait for the Source screens
+	const firstScanFailureReason = firstScan ? await loadFirstScanFailureReason({ topicId, ownerId }) : null
 
-	// mark the first Scan failed if the owner's budget is spent, and start the Source screens without the wait
-	if (firstScan && isOwnerBudgetExhausted) {
-		await failUnstartedScan(firstScan.id, FIRST_SCAN_SPENT_BUDGET_REASON)
+	// mark the first Scan failed if the owner's budget is spent or their spend is past the manual scans cutoff, and start
+	// the Source screens without the wait
+	if (firstScan && firstScanFailureReason) {
+		await failUnstartedScan(firstScan.id, firstScanFailureReason)
 		await screenPendingSources(topicId)
 		return
 	}
@@ -115,4 +113,36 @@ export async function startFirstScan(topicId: string, firstScan: Scan | undefine
 	if (firstScan) {
 		await scanTopic(firstScan, topicId, ownerId, "creation", true)
 	}
+}
+
+// the new Topic and its owner
+type LoadFirstScanFailureReasonOptions = { topicId: string; ownerId: string }
+
+// the reason a first Scan fails instead of starting, or null to start it. a spent key budget or monthly budget fails it
+// as spent, and spend past the manual scans cutoff fails it as paused
+async function loadFirstScanFailureReason({
+	topicId,
+	ownerId,
+}: LoadFirstScanFailureReasonOptions): Promise<string | null> {
+	// report a read that throws an error, and count that check as not reached
+	const toUnreachedOnError =
+		(budgetCheckName: string) =>
+		(error: unknown): boolean => {
+			console.error(`could not read the ${budgetCheckName} for the first scan of topic ${topicId}`, error)
+			reportError(error, "first-scan", { topicId, ownerId })
+			return false
+		}
+
+	// read the key budget, the monthly budget, and the manual scans cutoff at once
+	const [isKeyBudgetExhausted, isMonthlyBudgetExhausted, isManualScanPaused] = await Promise.all([
+		isUserLiteLLMKeyBudgetExhausted(ownerId).catch(toUnreachedOnError("key budget")),
+		isMonthlySpendExhausted(ownerId).catch(toUnreachedOnError("monthly spend")),
+		isMonthlyBudgetCutoffPassed(ownerId, "manualScans").catch(toUnreachedOnError("manual scans cutoff")),
+	])
+
+	// a spent budget comes first, then a passed cutoff
+	if (isKeyBudgetExhausted || isMonthlyBudgetExhausted) {
+		return FIRST_SCAN_SPENT_BUDGET_REASON
+	}
+	return isManualScanPaused ? FIRST_SCAN_PAUSED_REASON : null
 }

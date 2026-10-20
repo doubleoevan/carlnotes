@@ -23,6 +23,14 @@ const USERNAME_BATCH_SIZE = 5
 const USERNAME_ROUNDS = 3
 
 /**
+ * Returns a user's username, or null if no user has that id.
+ */
+export async function loadUsername(userId: string): Promise<string | null> {
+	const [user] = await db.select({ username: users.username }).from(users).where(eq(users.id, userId))
+	return user?.username ?? null
+}
+
+/**
  * The proposals from a username batch that nobody holds.
  * Comparison is on the normalized form, matching the unique index the database enforces.
  */

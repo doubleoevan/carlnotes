@@ -2,7 +2,7 @@
 import { expect, test } from "bun:test"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { toChatTurnRow } from "./chatTurns"
-import { decryptChatText, encryptChatText } from "./encryption"
+import { decryptChatJson, decryptChatText, encryptChatJson, encryptChatText } from "./encryption"
 
 // a valid 32-byte key for the encryption cases, set around each case and always restored
 const TEST_KEY = Buffer.alloc(32, 7).toString("base64")
@@ -68,5 +68,14 @@ test("a persisted chat turn's row stores ciphertext", () => {
 		})
 		expect(String(chatTurnRow.question).startsWith("enc1:")).toBe(true)
 		expect(decryptChatText(String(chatTurnRow.answer))).toBe("four of them are")
+	})
+})
+
+// a stored json value reads back parsed, and a missing value or text that is not json reads as null
+test("decryptChatJson parses stored json and returns null for a missing or non-json value", () => {
+	withChatTextKey(() => {
+		expect(decryptChatJson(encryptChatJson({ frequency: "daily" }))).toEqual({ frequency: "daily" })
+		expect(decryptChatJson(encryptChatText("not json"))).toBeNull()
+		expect(decryptChatJson(null)).toBeNull()
 	})
 })

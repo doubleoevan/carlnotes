@@ -55,6 +55,8 @@ export function toTestChatTurn(chatTurnFields: Partial<ChatTurn> = {}): ChatTurn
 		answer: "a latte",
 		rejection: null,
 		spokenAnswerKey: "chat-turn-1",
+		speaker: "host",
+		podcastEpisodeChapter: null,
 		attachments: [],
 		linkPreviews: [],
 		answerLinkPreviews: [],

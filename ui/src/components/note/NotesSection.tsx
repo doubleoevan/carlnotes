@@ -1,6 +1,7 @@
 // the Tasting Notes section: the header row with its Add note call to action, the note table,
 // the empty state, and the dialog notes open in. the default render is the table alone
 import type { Note, NotesResponse } from "@shared/contracts/notes"
+import { useLocation } from "@tanstack/react-router"
 import { Plus } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { authClient } from "@/clients/authClient"
@@ -8,6 +9,7 @@ import { fetchNotes, type NotePageRef } from "@/clients/noteClient"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button, buttonVariants } from "@/components/primitives/button"
+import { toSignupHref } from "@/components/session/signupPrompts"
 import { CARD_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import { NoteDialog } from "./NoteDialog"
@@ -34,9 +36,10 @@ export function NotesSection({
 	// the page's notes payload, null before it loads or when the page is not visible
 	const [notes, setNotes] = useState<NotesResponse | null>(null)
 
-	// a visitor is sent to the sign-up page instead of the create modal
+	// a visitor is sent to the sign-up page instead of the create modal, and returns to this page once signed up
 	const { data: session } = authClient.useSession()
 	const isSignedOut = !session
+	const pageHref = useLocation({ select: (location) => location.href })
 
 	// the open dialog state: a note being read, the create flow, or closed
 	const [openDialog, setOpenDialog] = useState<Note | "create" | null>(null)
@@ -61,7 +64,7 @@ export function NotesSection({
 	const sectionTitle = pageType === "team" ? "Team notes" : "Tasting Notes"
 
 	// a visitor gets the same invitation a member does. cta names the link for analytics
-	const signUpHref = "/signup?cta=note"
+	const signUpHref = toSignupHref("note", pageHref)
 
 	// the invitation an empty section shows, worded the same for the creator's card and the visitor's link
 	const inviteCardClass = cn(CARD_CLASS, "mb-2 block w-full text-left text-sm")

@@ -13,6 +13,7 @@ import { PodcastEpisodePlayButton } from "@/components/podcast/PodcastEpisodePla
 import { Badge } from "@/components/primitives/badge"
 import { Popover, PopoverCloseButton, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { ShareTopic } from "@/components/share/ShareTopic"
 import { TeamLink } from "@/components/team/TeamLink"
 import { TopicInfo } from "@/components/topic/TopicInfo"
@@ -132,7 +133,7 @@ function SubscribeToggle({ topic }: { topic: TopicFeed }) {
 	// a visitor is sent to signup, a signed-in user toggles their topic subscription and reloads the topic feed
 	async function handleClick(): Promise<void> {
 		if (!session) {
-			void navigate({ to: "/signup", search: { cta: "subscribe" } })
+			void navigate(toSignupNavigation("subscribe"))
 			return
 		}
 		await sendTopicSubscription(topic.id, !topic.isSubscribed)

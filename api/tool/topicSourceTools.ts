@@ -2,11 +2,12 @@
 import { trackEvent } from "@shared/analytics"
 import { MAX_TOPIC_SOURCES } from "@shared/contracts/topics"
 import type { frequencies } from "@shared/enums"
-import { SCAN_COST_CENTS } from "@shared/plans"
+import { SCAN_COST_CENTS, toMeanScanCents } from "@shared/plans"
 import { DEFAULT_SOURCES, toCustomSourceOption, toSourceSummary, toSourceValue } from "@shared/sources"
 import type { AddTopicSourcePayload } from "@shared/topicPayloads"
-import { and, desc, eq } from "drizzle-orm"
+import { and, eq } from "drizzle-orm"
 import { db } from "../../db"
+import { loadRecentScanCostDollars } from "../../db/monthlyBudgetCutoffs"
 import { scans } from "../../db/schema/scans"
 import { sources, type topics } from "../../db/schema/topics"
 import { EXA_COST_PER_SEARCH, X_COST_PER_READ } from "../../worker/budget"
@@ -220,15 +221,13 @@ async function loadTopicSourceCostDelta(
 	readyTopicSourceCount: number,
 	sourceKind: string,
 ): Promise<TopicSourceCostDelta> {
-	// load the topic's newest succeeded scans
-	const recentScanRows = await db
-		.select({ cost: scans.cost })
-		.from(scans)
-		.where(and(eq(scans.topicId, topic.id), eq(scans.status, "succeeded")))
-		.orderBy(desc(scans.startedAt))
-		.limit(COST_AVERAGE_SCAN_COUNT)
+	// load the cost of the topic's newest succeeded scans
+	const recentScanCostDollars = await loadRecentScanCostDollars({
+		scanFilter: eq(scans.topicId, topic.id),
+		scanCount: COST_AVERAGE_SCAN_COUNT,
+	})
 	return toTopicSourceCostDelta({
-		recentScanCostDollars: recentScanRows.map((scanRow) => Number(scanRow.cost)),
+		recentScanCostDollars,
 		readyTopicSourceCount,
 		sourceKind,
 		frequency: topic.frequency,
@@ -250,11 +249,11 @@ export function toTopicSourceCostDelta({
 	frequency: (typeof frequencies)[number]
 }): TopicSourceCostDelta {
 	// split the topic's mean scan cost across its ready sources, or the average scan cost across the fallback count
-	const scanCount = recentScanCostDollars.length
-	const meanScanCents =
-		(recentScanCostDollars.reduce((sum, dollars) => sum + dollars, 0) / Math.max(1, scanCount)) * 100
+	const meanScanCents = toMeanScanCents(recentScanCostDollars)
 	const perTopicSourceCents =
-		scanCount === 0 ? SCAN_COST_CENTS / FALLBACK_SOURCE_COUNT : meanScanCents / Math.max(1, readyTopicSourceCount)
+		meanScanCents === null
+			? SCAN_COST_CENTS / FALLBACK_SOURCE_COUNT
+			: meanScanCents / Math.max(1, readyTopicSourceCount)
 
 	// add a paid kind's ingestion cost, then round
 	const perScanCents = perTopicSourceCents + (INGESTION_COST_DOLLARS[sourceKind] ?? 0) * 100

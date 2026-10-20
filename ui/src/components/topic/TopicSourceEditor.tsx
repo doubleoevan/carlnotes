@@ -65,7 +65,7 @@ export function TopicSourceEditor({ fields }: TopicSourceEditorProps) {
 	const [isAdding, setIsAdding] = useState(false)
 	const [newOptionKey, setNewOptionKey] = useState("rss")
 	const [newValue, setNewValue] = useState("")
-	// the suggest sources request in flight, which replaces the Recommend button with a thinking line while it runs
+	// the suggest sources request in progress, which replaces the Recommend button with a thinking line while it runs
 	const [isSuggestingSources, setIsSuggestingSources] = useState(false)
 
 	// the option the picker is on, which names the value input's placeholder
@@ -317,7 +317,7 @@ function RecommendButton({
 	)
 }
 
-// one thinking line, shown where the suggest sources button was while its request is in flight
+// one thinking line, shown where the suggest sources button was while its request is in progress
 function ThinkingLine() {
 	const [thinkingLine] = useState(randomThinkingLine)
 	return <span className="shimmer-text text-sm">{`Carl is ${thinkingLine}…`}</span>

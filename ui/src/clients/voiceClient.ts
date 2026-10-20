@@ -1,6 +1,9 @@
-// the voice chat client: the transcription post, a spoken answer's audio, and the spoken events. each uses fetch.
-// a multipart body and a binary response do not fit the typed hono client
-import type { SpokenEventPayload, VoiceChatPage } from "@shared/payloads"
+// the voice chat client: whether spoken questions are allowed, the transcription post, a spoken answer's audio, and the
+// spoken events. each uses fetch. a multipart body and a binary response do not fit the typed hono client
+import { SPOKEN_QUESTIONS_PAUSED_ERROR, type SpokenQuestionsState } from "@shared/contracts/chat"
+import type { ConversationChatTurnKind } from "@shared/enums"
+import type { SpokenAnswerPayload, SpokenEventPayload, VoiceChatPage } from "@shared/payloads"
+import { readApiErrorMessage } from "@/clients/apiClient"
 import { type ChatPage, type ChatRejection, toChatRejection } from "@/clients/chatClient"
 
 // the longest wait before the one retry of a 503 or a network failure, and the wait if the response named none
@@ -15,14 +18,12 @@ export type SpokenQuestionTimings = {
 	recordingSentAt: number
 }
 
+// what a rejected transcription returns: a chat rejection or the spoken questions cutoff
+export type TranscriptionRejection = ChatRejection | "spokenQuestionsPaused"
+
 export type SendTranscriptionOptions = {
 	page: VoiceChatPage
 	recording: Blob
-}
-
-export type FetchSpokenAnswerAudioOptions = {
-	page: VoiceChatPage
-	text: string
 }
 
 export type SendSpokenQuestionEventOptions = {
@@ -30,6 +31,8 @@ export type SendSpokenQuestionEventOptions = {
 	spokenQuestionTimings: SpokenQuestionTimings
 	// when the reply's first spoken part started playing, or null if nothing played
 	playingAt: number | null
+	// whether the question was asked from the chat or from the podcast player
+	chatTurnKind?: ConversationChatTurnKind
 }
 
 /**
@@ -49,7 +52,7 @@ export function toVoiceChatPage(chatPage: ChatPage): VoiceChatPage {
 export async function sendTranscription({
 	page,
 	recording,
-}: SendTranscriptionOptions): Promise<{ transcript: string } | ChatRejection> {
+}: SendTranscriptionOptions): Promise<{ transcript: string } | TranscriptionRejection> {
 	// the page goes as json beside the recording, which is named for the container the browser recorded
 	const formData = new FormData()
 	formData.append("page", JSON.stringify(page))
@@ -58,8 +61,12 @@ export async function sendTranscription({
 	// a failed status is a rejection, and a request that never arrived is a failure
 	try {
 		const response = await fetchWithOneRetry("/api/chat/transcription", { method: "POST", body: formData })
+
+		// the spoken questions cutoff's own 402 says so, and every other failed status is a chat rejection
 		if (!response.ok) {
-			return toChatRejection(response.status)
+			return (await isSpokenQuestionsPausedResponse(response))
+				? "spokenQuestionsPaused"
+				: toChatRejection(response.status)
 		}
 		return (await response.json()) as { transcript: string }
 	} catch (error) {
@@ -67,6 +74,26 @@ export async function sendTranscription({
 		console.error("transcription failed", error)
 		return "failed"
 	}
+}
+
+/**
+ * Returns whether the user's spoken questions are allowed, paused by the spoken questions cutoff, or stopped by a spent
+ * budget, and allowed if the read fails.
+ */
+export async function fetchSpokenQuestionsStatus(): Promise<SpokenQuestionsState["status"]> {
+	try {
+		const response = await fetch("/api/chat/spoken-questions")
+		return response.ok ? ((await response.json()) as SpokenQuestionsState).status : "allowed"
+	} catch (error) {
+		// the network's own failure
+		console.error("spoken questions read failed", error)
+		return "allowed"
+	}
+}
+
+// whether a rejected transcription is the spoken questions cutoff's own 402
+async function isSpokenQuestionsPausedResponse(response: Response): Promise<boolean> {
+	return response.status === 402 && (await readApiErrorMessage(response)) === SPOKEN_QUESTIONS_PAUSED_ERROR
 }
 
 /**
@@ -82,13 +109,14 @@ export function toRecordingFileName(mimeType: string): string {
 export async function fetchSpokenAnswerAudio({
 	page,
 	text,
-}: FetchSpokenAnswerAudioOptions): Promise<Blob | ChatRejection> {
+	speaker,
+}: SpokenAnswerPayload): Promise<Blob | ChatRejection> {
 	// a failed status is a rejection, and a request that never arrived is a failure
 	try {
 		const response = await fetchWithOneRetry("/api/chat/speech", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ page, text }),
+			body: JSON.stringify({ page, text, speaker }),
 		})
 		return response.ok ? await response.blob() : toChatRejection(response.status)
 	} catch (error) {
@@ -146,8 +174,9 @@ export function sendSpokenQuestionEvent({
 	page,
 	spokenQuestionTimings,
 	playingAt,
+	chatTurnKind,
 }: SendSpokenQuestionEventOptions): void {
-	sendSpokenEvent({ page, event: toSpokenQuestionEvent(spokenQuestionTimings, playingAt) })
+	sendSpokenEvent({ page, event: toSpokenQuestionEvent(spokenQuestionTimings, playingAt, chatTurnKind) })
 }
 
 /**
@@ -157,12 +186,14 @@ export function sendSpokenQuestionEvent({
 export function toSpokenQuestionEvent(
 	spokenQuestionTimings: SpokenQuestionTimings,
 	playingAt: number | null,
+	chatTurnKind: ConversationChatTurnKind = "private",
 ): SpokenEventPayload["event"] {
 	// the first spoken word's delay is left out if nothing played
 	return {
 		kind: "question",
 		secondsRecorded: spokenQuestionTimings.secondsRecorded,
 		transcriptionMs: spokenQuestionTimings.transcriptionMs,
+		chatTurnKind,
 		...(playingAt === null
 			? {}
 			: { firstSpokenWordMs: Math.max(0, playingAt - spokenQuestionTimings.recordingSentAt) }),

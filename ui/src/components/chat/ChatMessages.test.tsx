@@ -1,12 +1,13 @@
-// test the chat message time label, and the private chat's author lines, retry control, and question attachments
+// test the chat message time label, and the private chat's author lines, retry control, question attachments, and a
+// podcast chat turn's tag
 import { expect, test } from "bun:test"
-import type { ChatMessageAttachment } from "@shared/contracts/chat"
+import { withPodcastEpisodeNote } from "@shared/contracts/chatQuestionNotes"
+import { TEST_PODCAST_EPISODE_NOTE } from "@shared/contracts/chatTestFixtures"
 import { DAY_MS } from "@shared/time"
 import { toTimeAgoLabel } from "./ChatMessageParts"
-import { ChatMessages } from "./ChatMessages"
+import { renderTestChatMessages } from "./chatMessagesTestFixtures"
 import { toTestChatTurn } from "./chatRoomTestFixtures"
 import type { ChatTurn } from "./chatTurns"
-import { renderWithRouter } from "./renderWithRouter"
 
 // a fixed "now" time so the test cases read as plain arithmetic
 const NOW_TIME = 1_700_000_000_000
@@ -30,24 +31,6 @@ test("a future timestamp clamps to just now", () => {
 	expect(toTimeAgoLabel(NOW_TIME + 5_000, NOW_TIME)).toBe("just now")
 })
 
-// the user whose questions the private chat renders
-const USER = { userId: "user-1", username: "ana", avatarVersion: null }
-
-// one question and its reply, rendered with whatever it was sent with
-function renderChatTurn(attachments: ChatMessageAttachment[]): Promise<string> {
-	const chatTurn = toTestChatTurn({ attachments })
-	return renderWithRouter(
-		<ChatMessages
-			chatTurns={[chatTurn]}
-			isEnlarged={false}
-			isStreaming={false}
-			chatName="topic"
-			author={USER}
-			voiceChatPage={null}
-		/>,
-	)
-}
-
 // every chat message includes its author: the user on each question, carl on each answer
 test("private chat turns each render their author line", async () => {
 	const chatTurns: ChatTurn[] = [
@@ -59,16 +42,7 @@ test("private chat turns each render their author line", async () => {
 			spokenAnswerKey: "chat-turn-2",
 		}),
 	]
-	const chatMessagesHtml = await renderWithRouter(
-		<ChatMessages
-			chatTurns={chatTurns}
-			isEnlarged={false}
-			isStreaming={false}
-			chatName="topic"
-			author={USER}
-			voiceChatPage={null}
-		/>,
-	)
+	const chatMessagesHtml = await renderTestChatMessages(chatTurns)
 
 	// two questions, two answers, four author lines, never collapsed on consecutive chat turns
 	expect(chatMessagesHtml.split(">ana<").length - 1).toBe(2)
@@ -83,17 +57,7 @@ test("private chat turns each render their author line", async () => {
 // a broken reply offers a retry that re-asks the question, with the icon that names the action
 test("a failed chat turn renders a retry control", async () => {
 	const failedChatTurn = toTestChatTurn({ answer: "", rejection: "failed" })
-	const chatMessagesHtml = await renderWithRouter(
-		<ChatMessages
-			chatTurns={[failedChatTurn]}
-			isEnlarged={false}
-			isStreaming={false}
-			chatName="topic"
-			author={USER}
-			voiceChatPage={null}
-			onRetry={() => {}}
-		/>,
-	)
+	const chatMessagesHtml = await renderTestChatMessages([failedChatTurn], { onRetry: () => {} })
 	expect(chatMessagesHtml).toContain("Carl lost his train of thought.")
 	expect(chatMessagesHtml).toContain("Try again?")
 	// the icon is decoration beside the words, so a screen reader reads the words alone
@@ -105,7 +69,9 @@ test("a failed chat turn renders a retry control", async () => {
 
 // an image sent with a question is shown in its bubble instead of being named and nothing else
 test("an image sent with a question renders in its bubble", async () => {
-	const chatMessagesHtml = await renderChatTurn([{ id: "attachment-1", kind: "image", name: "latte.png" }])
+	const chatMessagesHtml = await renderTestChatMessages([
+		toTestChatTurn({ attachments: [{ id: "attachment-1", kind: "image", name: "latte.png" }] }),
+	])
 
 	// the image points at the chat attachment download route and is named for a screen reader
 	expect(chatMessagesHtml).toContain('src="/api/chat-attachments/attachment-1/download"')
@@ -115,18 +81,45 @@ test("an image sent with a question renders in its bubble", async () => {
 
 // clicking the image opens the full file away from the app, so the router never takes the api path as its own route
 test("an image sent with a question opens the full file in a new tab", async () => {
-	const chatMessagesHtml = await renderChatTurn([{ id: "attachment-1", kind: "image", name: "latte.png" }])
+	const chatMessagesHtml = await renderTestChatMessages([
+		toTestChatTurn({ attachments: [{ id: "attachment-1", kind: "image", name: "latte.png" }] }),
+	])
 	expect(chatMessagesHtml).toContain('href="/api/chat-attachments/attachment-1/download"')
 	expect(chatMessagesHtml).toContain('rel="noopener noreferrer"')
 })
 
 // only an image is shown in place. a PDF is already named in the question's own text
 test("a pdf sent with a question is not rendered", async () => {
-	const chatMessagesHtml = await renderChatTurn([{ id: "attachment-2", kind: "pdf", name: "paper.pdf" }])
+	const chatMessagesHtml = await renderTestChatMessages([
+		toTestChatTurn({ attachments: [{ id: "attachment-2", kind: "pdf", name: "paper.pdf" }] }),
+	])
 	expect(chatMessagesHtml).not.toContain("attachment-2")
 })
 
 // a question sent with nothing shows no attachment of its own, only the avatars every chat message has
 test("a question with no attachments renders no attachment", async () => {
-	expect(await renderChatTurn([])).not.toContain("/api/chat-attachments/")
+	expect(await renderTestChatMessages([toTestChatTurn({ attachments: [] })])).not.toContain("/api/chat-attachments/")
+})
+
+// a question asked from the podcast player shows its words without the note, the note as a tag naming the podcast
+// episode and the chapter, and vienna's reply under her own avatar and name
+test("a podcast chat turn's question shows its tag, and vienna's reply shows her avatar and name", async () => {
+	const podcastChatTurn = toTestChatTurn({
+		question: withPodcastEpisodeNote("why does this matter to me?", TEST_PODCAST_EPISODE_NOTE),
+		answer: "Because you grind every morning.",
+		speaker: "cohost",
+		podcastEpisodeChapter: { podcastEpisodeId: "episode-1", chapterPosition: 2 },
+	})
+	const chatMessagesHtml = await renderTestChatMessages([podcastChatTurn])
+
+	// the question reads as asked, and the tag names the podcast episode and the chapter and plays it
+	expect(chatMessagesHtml).toContain("why does this matter to me?")
+	expect(chatMessagesHtml).not.toContain("[asked while listening to")
+	expect(chatMessagesHtml).toContain("Grinders get quiet · Ch 3 · The burr set")
+	expect(chatMessagesHtml).toContain('aria-label="Play Grinders get quiet from chapter 3"')
+
+	// vienna answered, under her avatar and name, and carl is nowhere
+	expect(chatMessagesHtml).toContain('alt="Vienna"')
+	expect(chatMessagesHtml).toContain(">Vienna<")
+	expect(chatMessagesHtml).not.toContain(">Carl<")
 })

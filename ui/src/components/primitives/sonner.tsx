@@ -3,7 +3,7 @@ import { useSyncExternalStore } from "react"
 import { Toaster as SonnerToaster } from "sonner"
 
 /**
- * The app's toast host, mounted once in the layout. It mirrors the HTML dark class so that toasts match the theme.
+ * The app's toast host, mounted once in the root route. It mirrors the HTML dark class so that toasts match the theme.
  */
 export function Toaster(props: React.ComponentProps<typeof SonnerToaster>) {
 	// read the HTML element's dark class, and read it again on every class change so a theme toggle restyles the toasts

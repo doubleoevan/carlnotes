@@ -3,6 +3,7 @@
 import { afterEach, expect, mock, test } from "bun:test"
 import { quietErrorReports } from "@shared/monitoringTestFixtures"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
+import { toUntrustedFences } from "../prompts/untrustedFenceTestFixtures"
 import { checkAgreement } from "./agreement"
 
 // the proxy settings a model call needs, the real fetch, and the request bodies a stubbed fetch saw
@@ -57,7 +58,10 @@ test("the check sees only the user's words and the proposal and returns the deci
 	expect(requestBody?.messages).toHaveLength(1)
 	expect(requestBody?.messages[0]?.content).toContain("sounds good, do it")
 	expect(requestBody?.messages[0]?.content).toContain("frequency: daily")
-	expect(requestBody?.messages[0]?.content).toMatch(/<untrusted-data-[\w-]+>\nsounds good, do it\n<\/untrusted-data-/)
+	const fencedValues = toUntrustedFences(String(requestBody?.messages[0]?.content)).map(
+		(untrustedFence) => untrustedFence.value,
+	)
+	expect(fencedValues).toContain("sounds good, do it")
 })
 
 // a call that fails agrees to nothing

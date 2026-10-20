@@ -6,7 +6,9 @@ import type { TopicDraft, TopicDraftTeam } from "@shared/topicPayloads"
 import { type BuiltPrompt, fetchPromptTemplate } from "../prompts/fetch"
 import { writePrompt } from "../prompts/write"
 import type { ChatTurnInput } from "./chatMessages"
+import { toPodcastEpisodeChapterBlock, toPodcastQuestionBlock } from "./podcastEpisodeQuestionPrompt"
 import type { ChatContext, RetrievedFinding, TopicSettings } from "./retrieve"
+import type { PodcastEpisodeChapterContext } from "./retrievePodcastEpisodeChapter"
 import type { TeamChatContext } from "./retrieveTeam"
 
 // the edit block for a turn without the topic tools
@@ -16,10 +18,14 @@ const EMPTY_EDIT_TOPIC_BLOCK = "None."
 type ChatPromptOptions = { isSpoken?: boolean }
 
 // the shared fragments with no variables, written once for every chat
-type ChatFragmentName = "chat-conduct" | "chat-docs-guide" | "chat-open-new-topic" | "chat-spoken"
+type ChatFragmentName = "chat-conduct" | "chat-docs-guide" | "chat-open-new-topic" | "chat-search-web" | "chat-spoken"
 
-// the topic chat's turn options: the edit block for a turn with the topic tools, and the spoken flag
-type TopicChatPromptOptions = ChatPromptOptions & { editTopicBlock?: string }
+// the topic chat's turn options: the edit block for a turn with the topic tools, the spoken flag, and the podcast
+// episode chapter a question asked from the podcast player was asked during
+type TopicChatPromptOptions = ChatPromptOptions & {
+	editTopicBlock?: string
+	podcastEpisodeChapter?: PodcastEpisodeChapterContext
+}
 
 // the new-topic chat's options: the spoken flag, and what happened to the last proposal this turn
 type NewTopicChatPromptOptions = ChatPromptOptions & { proposalOutcome?: string }
@@ -29,7 +35,7 @@ type NewTopicChatPromptOptions = ChatPromptOptions & { proposalOutcome?: string 
  */
 export async function buildTopicChatPrompt(
 	chatContext: ChatContext,
-	{ editTopicBlock = EMPTY_EDIT_TOPIC_BLOCK, isSpoken = false }: TopicChatPromptOptions = {},
+	{ editTopicBlock = EMPTY_EDIT_TOPIC_BLOCK, isSpoken = false, podcastEpisodeChapter }: TopicChatPromptOptions = {},
 ): Promise<BuiltPrompt> {
 	const [
 		{ template, name, registryPrompt },
@@ -37,14 +43,18 @@ export async function buildTopicChatPrompt(
 		conductBlock,
 		docsGuideBlock,
 		openNewTopicBlock,
+		searchWebBlock,
 		spokenBlock,
+		podcastQuestionBlock,
 	] = await Promise.all([
 		fetchPromptTemplate("chat-topic"),
 		toGlossaryBlock(TOPIC_CHAT_GLOSSARY_LINE),
 		toFragmentBlock("chat-conduct"),
 		toFragmentBlock("chat-docs-guide"),
 		toFragmentBlock("chat-open-new-topic"),
+		toFragmentBlock("chat-search-web"),
 		toSpokenBlock(isSpoken),
+		toPodcastQuestionBlock(podcastEpisodeChapter),
 	])
 
 	// fill the template, composing each list block first. the app's own blocks stay unfenced
@@ -60,8 +70,18 @@ export async function buildTopicChatPrompt(
 			attachmentContext: chatContext.attachmentContext || "None.",
 			chatAttachmentContext: chatContext.chatAttachmentContext || "None.",
 			docsBlock: chatContext.docsBlock || "None.",
+			podcastEpisodeChapterBlock: podcastEpisodeChapter ? toPodcastEpisodeChapterBlock(podcastEpisodeChapter) : "None.",
 		},
-		{ editTopicBlock, glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock, spokenBlock },
+		{
+			editTopicBlock,
+			glossaryBlock,
+			conductBlock,
+			docsGuideBlock,
+			openNewTopicBlock,
+			podcastQuestionBlock,
+			searchWebBlock,
+			spokenBlock,
+		},
 	)
 	return { prompt, name, registryPrompt }
 }
@@ -110,21 +130,21 @@ async function toSpokenBlock(isSpoken: boolean): Promise<string> {
 const NO_PROPOSAL_OUTCOME = "No proposal was waiting on this message."
 
 /**
- * Returns the edit block for a turn with the topic tools: the saving tools' block in a room, the proposal block with
- * this turn's proposal outcome in a private chat, or "None." for a turn without the topic tools.
+ * Returns the edit block for a turn with the preview tools: the proposal block with this turn's proposal outcome, in
+ * the private chat and in a topic's team chat room alike, or "None." for a turn without them.
  */
 export async function toEditTopicBlock(
-	chatTurnInput: Pick<ChatTurnInput, "tools" | "proposeTopicEditTool" | "proposalOutcome">,
+	chatTurnInput: Pick<ChatTurnInput, "proposeTopicEditTool" | "proposalOutcome">,
 ): Promise<string> {
-	// a turn with neither the saving tools nor the preview tools reads the no-edit note
-	if (!chatTurnInput.tools && !chatTurnInput.proposeTopicEditTool) {
+	// a turn without the preview tools reads the no-edit note
+	if (!chatTurnInput.proposeTopicEditTool) {
 		return EMPTY_EDIT_TOPIC_BLOCK
 	}
 
-	// the preview rules both blocks share, written first so each block splices them
-	const [previewTopicEditFragment, editTopicFragment] = await Promise.all([
+	// the preview rules, written first so the proposal block splices them
+	const [previewTopicEditFragment, proposeTopicEditFragment] = await Promise.all([
 		fetchPromptTemplate("chat-preview-topic-edit"),
-		fetchPromptTemplate(chatTurnInput.tools ? "chat-edit-topic" : "chat-propose-topic-edit"),
+		fetchPromptTemplate("chat-propose-topic-edit"),
 	])
 	const previewTopicEditBlock = writePrompt(
 		previewTopicEditFragment.template,
@@ -136,9 +156,9 @@ export async function toEditTopicBlock(
 		},
 	)
 
-	// the room's block takes no proposal outcome, and writePrompt leaves a value no placeholder asks for unused
+	// write the proposal block with this turn's proposal outcome
 	const proposalOutcome = chatTurnInput.proposalOutcome ?? NO_PROPOSAL_OUTCOME
-	return writePrompt(editTopicFragment.template, {}, { previewTopicEditBlock, proposalOutcome })
+	return writePrompt(proposeTopicEditFragment.template, {}, { previewTopicEditBlock, proposalOutcome })
 }
 
 /**
@@ -243,7 +263,8 @@ function toTopicLimitBlock(topicsRemaining?: number): string {
 }
 
 /**
- * Builds the team chat room's system prompt from the 'chat-team.md' template, reading across every topic the team holds.
+ * Builds the team chat room's system prompt from the 'chat-team.md' template, reading across every topic the team
+ * holds.
  */
 export async function buildTeamChatPrompt(
 	teamContext: TeamChatContext,
@@ -255,6 +276,7 @@ export async function buildTeamChatPrompt(
 		conductBlock,
 		docsGuideBlock,
 		openNewTopicBlock,
+		searchWebBlock,
 		spokenBlock,
 	] = await Promise.all([
 		fetchPromptTemplate("chat-team"),
@@ -262,6 +284,7 @@ export async function buildTeamChatPrompt(
 		toFragmentBlock("chat-conduct"),
 		toFragmentBlock("chat-docs-guide"),
 		toFragmentBlock("chat-open-new-topic"),
+		toFragmentBlock("chat-search-web"),
 		toSpokenBlock(isSpoken),
 	])
 
@@ -276,7 +299,7 @@ export async function buildTeamChatPrompt(
 			scanSummariesBlock: toScanSummariesBlock(teamContext.scanSummaries),
 			docsBlock: teamContext.docsBlock || "None.",
 		},
-		{ glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock, spokenBlock },
+		{ glossaryBlock, conductBlock, docsGuideBlock, openNewTopicBlock, searchWebBlock, spokenBlock },
 	)
 	return { prompt, name, registryPrompt }
 }

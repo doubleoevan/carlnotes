@@ -7,6 +7,8 @@ import { CoffeeLoading } from "@/components/branding/CoffeeLoading"
 import { CoffeeMug } from "@/components/branding/CoffeeMug"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { usePageTitle } from "@/hooks/usePageTitle"
+import { SESSION_PAGE_CLASS } from "@/lib/styleClasses"
+import { cn } from "@/lib/utils"
 import { INVITE_REJECTIONS } from "./inviteRejections"
 
 // the invite route, whose token param is the invite url's token
@@ -62,7 +64,7 @@ export function InvitePage() {
 	}
 
 	return (
-		<div className="mx-auto flex min-h-dvh max-w-sm flex-col items-center justify-center gap-6 px-4 py-12">
+		<div className={cn(SESSION_PAGE_CLASS, "items-center gap-6")}>
 			<CoffeeMug className="size-12" />
 			{/* the invite rejection with its way forward, or a loading line while the acceptance runs */}
 			{inviteRejection ? (

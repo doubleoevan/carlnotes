@@ -55,22 +55,6 @@ The cap SHALL be one retry rather than more, because the stage already isolates 
 - **WHEN** the fetch-and-scoring stage fails on its last allowed attempt
 - **THEN** the Scan ends as failed and the stage is not attempted again
 
-### Requirement: One Topic never has two Scans running at once
-
-A Scan workflow's id SHALL be derived from the Topic it scans, so the workflow engine rejects a second Scan for a Topic that already has one in flight. This rejection SHALL be what tells a caller a Scan is already running, in place of reading a running row.
-
-#### Scenario: A manual Scan during a running Scan
-
-- **GIVEN** a Topic whose Scan is already running
-- **WHEN** the owner asks for a manual Scan
-- **THEN** the request is rejected as already running, and no second Scan is opened or charged
-
-#### Scenario: The sweep meets a Scan already in flight
-
-- **GIVEN** a scheduled Topic whose Scan is already running
-- **WHEN** the sweep starts its workflow
-- **THEN** the start is rejected and the sweep moves on, without needing to have queried for a running row first
-
 ### Requirement: A row with no workflow behind it is still recovered
 
 The `scans` row is written before its workflow starts, so a failure in that gap can leave a row no workflow owns. Such a
@@ -402,4 +386,22 @@ down or overloaded fails the call instead of holding the request or the sweep th
 
 - **WHEN** Temporal accepts the connection and never responds to a workflow start
 - **THEN** the start fails after ten seconds and the api responds 503
+
+### Requirement: A Topic runs one Scan at a time
+
+A Scan workflow's id SHALL be derived from the Topic it scans, so the workflow engine rejects a second Scan for a Topic
+that already has one running. This rejection SHALL be what tells a caller a Scan is already running, in place of reading
+a running row.
+
+#### Scenario: A manual Scan during a running Scan
+
+- **GIVEN** a Topic whose Scan is already running
+- **WHEN** the owner asks for a manual Scan
+- **THEN** the request is rejected as already running, and no second Scan is opened or charged
+
+#### Scenario: The sweep meets a Scan already running
+
+- **GIVEN** a scheduled Topic whose Scan is already running
+- **WHEN** the sweep starts its workflow
+- **THEN** the start is rejected and the sweep moves on, without needing to have queried for a running row first
 

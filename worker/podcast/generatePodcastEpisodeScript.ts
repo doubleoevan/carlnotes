@@ -7,6 +7,7 @@ import { PREMIUM_COST_PER_MILLION_TOKENS, tokenCost } from "../budget"
 import { scoreModel } from "../models"
 import { type BuiltPrompt, fetchPromptTemplate, promptTelemetry } from "../prompts/fetch"
 import { writePrompt } from "../prompts/write"
+import { toPodcastEpisodeHostsBlock } from "./podcastEpisodeHosts"
 import { type PodcastEpisodeOutline, podcastEpisodeOutlinePayload } from "./podcastEpisodeOutline"
 import {
 	GOODBYE_OPENING_TURNS,
@@ -175,7 +176,7 @@ export async function buildOutlinePrompt({
 			rejectionReason: rejectionReason ?? NO_REJECTION_REASON,
 		},
 		{
-			hostsBlock: await toHostsBlock(),
+			hostsBlock: await toPodcastEpisodeHostsBlock(),
 			maxMinutes: String(maxMinutes),
 			titleMaxChars: String(PODCAST_EPISODE_TITLE_MAX_CHARS),
 			descriptionMaxChars: String(PODCAST_EPISODE_DESCRIPTION_MAX_CHARS),
@@ -208,7 +209,7 @@ export async function buildSegmentPrompt(
 			rejectionReason: generatePodcastEpisodeSegmentOptions.rejectionReason ?? NO_REJECTION_REASON,
 		},
 		{
-			hostsBlock: await toHostsBlock(),
+			hostsBlock: await toPodcastEpisodeHostsBlock(),
 			segmentNumber: String(segmentIndex + 1),
 			segmentCount: String(outline.segments.length),
 			goodbyeOpening: toGoodbyeOpeningSentence(),
@@ -225,6 +226,35 @@ export function toLimitedWords(text: string, maxWords: number): string {
 	return words.length <= maxWords ? text.trim() : words.slice(0, maxWords).join(" ")
 }
 
+// what a prompt reads about a Finding: its summary, its relevance explanation, and its stored content
+export type FindingMaterial = { summary: string; relevanceExplanation: string; content: string }
+
+/**
+ * Returns what a prompt reads about a podcast episode's Finding: its Resource's snippet as the summary, its relevance
+ * explanation, and its Resource's stored content limited to the words a prompt reads.
+ */
+export function toFindingMaterial(
+	podcastEpisodeFinding: Pick<PodcastEpisodeFinding, "snippet" | "relevanceExplanation" | "content">,
+): FindingMaterial {
+	return {
+		summary: podcastEpisodeFinding.snippet,
+		relevanceExplanation: podcastEpisodeFinding.relevanceExplanation,
+		content: toLimitedWords(podcastEpisodeFinding.content, MAX_RESOURCE_WORDS),
+	}
+}
+
+/**
+ * Returns the lines a prompt reads about a Finding: its summary, its relevance explanation, and its stored content,
+ * each "none" if empty. The content is already limited to the words a prompt reads.
+ */
+export function toFindingMaterialLines({ summary, relevanceExplanation, content }: FindingMaterial): string[] {
+	return [
+		`summary: ${summary || "none"}`,
+		`relevance explanation: ${relevanceExplanation || "none"}`,
+		`stored content:\n${content || "none"}`,
+	]
+}
+
 // the goodbye's opening turns as the segment prompt quotes them, each named by its speaker and without end punctuation
 function toGoodbyeOpeningSentence(): string {
 	const quotedTurns = GOODBYE_OPENING_TURNS.map(
@@ -232,12 +262,6 @@ function toGoodbyeOpeningSentence(): string {
 			`${PODCAST_EPISODE_SPEAKER_NAMES[goodbyeOpeningTurn.speaker]} saying "${toGoodbyeOpeningLine(goodbyeOpeningTurn)}"`,
 	)
 	return quotedTurns.join(" and ")
-}
-
-// the two hosts and how each one talks, as a block for the outline prompt and the segment prompt
-async function toHostsBlock(): Promise<string> {
-	const { template } = await fetchPromptTemplate("podcast-episode-hosts")
-	return writePrompt(template, {})
 }
 
 // the Findings that a segment's prompt lists. the segment's own, in the outline's order, each with its planned length
@@ -269,9 +293,7 @@ function toFindingsBlock(podcastEpisodeFindings: (PodcastEpisodeFinding & { minu
 				`title: ${podcastEpisodeFinding.title}`,
 				`source: ${podcastEpisodeFinding.sourceHost}`,
 				...plannedLengthLines,
-				`summary: ${podcastEpisodeFinding.snippet || "none"}`,
-				`relevance explanation: ${podcastEpisodeFinding.relevanceExplanation || "none"}`,
-				`stored content:\n${toLimitedWords(podcastEpisodeFinding.content, MAX_RESOURCE_WORDS) || "none"}`,
+				...toFindingMaterialLines(toFindingMaterial(podcastEpisodeFinding)),
 			].join("\n")
 		})
 		.join("\n\n---\n\n")

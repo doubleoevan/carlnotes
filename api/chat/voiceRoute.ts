@@ -1,8 +1,10 @@
-// the voice routes: a spoken question's transcription, one spoken part of carl's reply as speech, and the spoken
-// events. each names its chat page in the request. a model call answers under that page's own chat turn gate, and an
-// event answers under the page's access alone
+// the voice routes: whether the user's spoken questions are allowed, paused, or stopped by a spent budget, a spoken
+// question's transcription, one spoken part of a reply as speech in the voice of the speaker who gave it, and the
+// spoken events. each but the first names its chat page in the request. a model call is checked under that page's chat
+// turn gate, and an event under the page's access alone
 import { zValidator } from "@hono/zod-validator"
 import { trackEvent } from "@shared/analytics"
+import { SPOKEN_QUESTIONS_PAUSED_ERROR, type SpokenQuestionsState } from "@shared/contracts/chat"
 import { reportError } from "@shared/monitoring"
 import {
 	type SpokenEventPayload,
@@ -12,6 +14,7 @@ import {
 	voiceChatPagePayload,
 } from "@shared/payloads"
 import { type Context, Hono } from "hono"
+import { isMonthlyBudgetCutoffPassed } from "../../db/monthlyBudgetCutoffs"
 import { loadOrProvisionUserLiteLLMKey } from "../../worker"
 import { speechCost, transcriptionCost } from "../../worker/budget"
 import {
@@ -21,18 +24,26 @@ import {
 	toRetryableModelCallFailure,
 } from "../../worker/speech"
 import { transcodeRecording, transcribeRecording } from "../../worker/transcription"
+import { loadMonthlyBudgetCutoffStatus } from "../authorization"
 import { toBodyLimit, VOICE_RECORDING_BODY_LIMIT_BYTES } from "../bodyLimit"
 import { type AppEnv, currentUser, toAnalyticsProperties } from "../currentUser"
 import { speechRateLimiter, spokenEventRateLimiter, toolCallerRateLimiter } from "../rateLimit"
-import { type RecordChatSpendRowOptions, recordChatSpendRow, toChatKind } from "./chatTurns"
-import { chatSignedOutRejection, toChatRejection } from "./privateChat"
+import { toChatRejection } from "./chatTurnAuthorization"
+import {
+	type RecordChatSpendRowOptions,
+	recordChatSpendRow,
+	toChatKind,
+	type VoiceSpendChatTurnKind,
+} from "./chatTurns"
+import { chatSignedOutRejection } from "./privateChat"
 import {
 	authorizeVoiceChatPage,
 	authorizeVoiceChatPageAccess,
 	type VoiceChatPageAuthorization,
 } from "./voiceAuthorization"
 
-// the paths of the transcription, the speech, and the spoken events routes, after the /api base
+// the paths of the spoken questions, the transcription, the speech, and the spoken events routes, after the /api base
+export const SPOKEN_QUESTIONS_PATH = "/chat/spoken-questions"
 export const VOICE_TRANSCRIPTION_PATH = "/chat/transcription"
 export const VOICE_SPEECH_PATH = "/chat/speech"
 export const SPOKEN_EVENTS_PATH = "/chat/spoken-events"
@@ -48,9 +59,6 @@ let activeTranscodeCount = 0
 // how many spoken parts one user may have in progress at once, and how many each user has in progress now
 export const SPOKEN_PARTS_IN_PROGRESS_LIMIT = 3
 const spokenPartsInProgressByUserId = new Map<string, number>()
-
-// the model calls the voice routes make, as their failures are logged and reported
-type VoiceModelCall = "transcription" | "speech"
 
 // the recording's body limit, sized for a minute of opus with its multipart envelope
 const voiceRecordingBodyLimit = toBodyLimit(VOICE_RECORDING_BODY_LIMIT_BYTES, "That recording is too long.")
@@ -68,7 +76,7 @@ function rejectVoiceRequest(
 
 // the response for a model call that failed: a spent key is 402, a failure a retry can fix is 503 with a retry,
 // and any other rejection is 502. the proxy's reason is logged and reported, and never sent
-function rejectModelCall(context: Context, failure: ModelCallFailure, modelCall: VoiceModelCall): Response {
+function rejectModelCall(context: Context, failure: ModelCallFailure, modelCall: VoiceSpendChatTurnKind): Response {
 	console.error(`${modelCall} failed: ${failure.reason}`)
 	// a spent key reads as the chat turn's budget rejection, and is never reported
 	if (failure.outcome === "budget-spent") {
@@ -93,15 +101,12 @@ function rejectModelCall(context: Context, failure: ModelCallFailure, modelCall:
 
 // record a paid model call's spend row. the call was paid either way, so a failed insert is logged and reported, and
 // the call's result still returns
-async function recordPaidModelCall(
-	spendRowOptions: RecordChatSpendRowOptions,
-	modelCall: VoiceModelCall,
-): Promise<void> {
+async function recordPaidModelCall(spendRowOptions: RecordChatSpendRowOptions): Promise<void> {
 	try {
 		await recordChatSpendRow(spendRowOptions)
 	} catch (error) {
-		console.error(`the ${modelCall} spend row could not be recorded`, error)
-		reportError(error, "chat", { userId: spendRowOptions.userId, modelCall })
+		console.error(`the ${spendRowOptions.kind} spend row could not be recorded`, error)
+		reportError(error, "chat", { userId: spendRowOptions.userId, modelCall: spendRowOptions.kind })
 	}
 }
 
@@ -169,19 +174,37 @@ function toVoiceChatPageIds(page: VoiceChatPage): { topicId?: string; teamId?: s
 	return { teamId: page.teamId, ...(page.topicId ? { topicId: page.topicId } : {}) }
 }
 
-// a spoken event's own measurements: a question's timings, or nothing for a play tap
-function toSpokenEventMeasurements(event: SpokenEventPayload["event"]): Record<string, number> {
+// a spoken event's own properties: a question's timings and where it was asked from, or nothing for a play tap
+function toSpokenEventProperties(event: SpokenEventPayload["event"]): Record<string, number | string> {
 	if (event.kind !== "question") {
 		return {}
 	}
 	// the time to the first spoken word is absent if nothing played
-	const { secondsRecorded, transcriptionMs, firstSpokenWordMs } = event
-	return { secondsRecorded, transcriptionMs, ...(firstSpokenWordMs === undefined ? {} : { firstSpokenWordMs }) }
+	const { secondsRecorded, transcriptionMs, firstSpokenWordMs, chatTurnKind } = event
+	return {
+		secondsRecorded,
+		transcriptionMs,
+		chatTurnKind,
+		...(firstSpokenWordMs === undefined ? {} : { firstSpokenWordMs }),
+	}
 }
 
 // the voice routes. a visitor is rejected before any body is read, each model call's page answers as its chat turn
 // would, and an event's page answers by its access alone
 export const voiceRoute = new Hono<AppEnv>()
+	.get(SPOKEN_QUESTIONS_PATH, async (context) => {
+		// reject a signed-out visitor
+		const userId = currentUser(context)
+		if (!userId) {
+			return toChatRejection(context, "signup")
+		}
+
+		// whether the user's budget is spent, their spend is past the spoken questions cutoff, or it is under the cutoff
+		const spokenQuestionsState: SpokenQuestionsState = {
+			status: await loadMonthlyBudgetCutoffStatus(userId, "spokenQuestions"),
+		}
+		return context.json(spokenQuestionsState)
+	})
 	.post(
 		VOICE_TRANSCRIPTION_PATH,
 		toolCallerRateLimiter,
@@ -196,10 +219,13 @@ export const voiceRoute = new Hono<AppEnv>()
 				return context.json({ error: "a page and a recording are required" }, 400)
 			}
 
-			// authorize the page before any model is called
+			// authorize the page, then the user's spend against the spoken questions cutoff, before any model is called
 			const authorization = await authorizeVoiceChatPage(currentUser(context), page)
 			if (authorization.status !== "allowed") {
 				return rejectVoiceRequest(context, authorization)
+			}
+			if (await isMonthlyBudgetCutoffPassed(authorization.userId, "spokenQuestions")) {
+				return context.json({ error: SPOKEN_QUESTIONS_PAUSED_ERROR }, 402)
 			}
 
 			// reject the recording for a moment if the process is transcoding its limit, before the recording is copied
@@ -235,15 +261,13 @@ export const voiceRoute = new Hono<AppEnv>()
 
 			// record the spend as soon as the transcript returns, empty or not. the call was paid either way
 			const { transcript, inputTokens, outputTokens } = transcribeRecordingResult
-			await recordPaidModelCall(
-				{
-					userId,
-					page,
-					cost: transcriptionCost({ inputTokens, outputTokens }),
-					totalTokens: inputTokens + outputTokens,
-				},
-				"transcription",
-			)
+			await recordPaidModelCall({
+				kind: "transcription",
+				userId,
+				page,
+				cost: transcriptionCost({ inputTokens, outputTokens }),
+				totalTokens: inputTokens + outputTokens,
+			})
 			return context.json({ transcript })
 		},
 	)
@@ -254,7 +278,7 @@ export const voiceRoute = new Hono<AppEnv>()
 		zValidator("json", spokenAnswerPayload),
 		async (context) => {
 			// authorize the page before any model is called
-			const { page, text } = context.req.valid("json")
+			const { page, text, speaker } = context.req.valid("json")
 			const authorization = await authorizeVoiceChatPage(currentUser(context), page)
 			if (authorization.status !== "allowed") {
 				return rejectVoiceRequest(context, authorization)
@@ -272,22 +296,20 @@ export const voiceRoute = new Hono<AppEnv>()
 				if (typeof litellmApiKey !== "string") {
 					return rejectModelCall(context, litellmApiKey, "speech")
 				}
-				const recordSpokenAnswerResult = await recordSpokenAnswer({ text, litellmApiKey })
+				const recordSpokenAnswerResult = await recordSpokenAnswer({ text, speaker, litellmApiKey })
 				if (recordSpokenAnswerResult.outcome !== "recorded") {
 					return rejectModelCall(context, recordSpokenAnswerResult, "speech")
 				}
 
 				// record the spoken part's spend on the spoken answer's tier, then return the audio, which no cache may keep
 				const { audioBytes, audioContentType, inputTokens, audioTokens } = recordSpokenAnswerResult
-				await recordPaidModelCall(
-					{
-						userId,
-						page,
-						cost: speechCost({ speechTier: SPOKEN_ANSWER_SPEECH_TIER, inputTokens, audioTokens }),
-						totalTokens: inputTokens + audioTokens,
-					},
-					"speech",
-				)
+				await recordPaidModelCall({
+					kind: "speech",
+					userId,
+					page,
+					cost: speechCost({ speechTier: SPOKEN_ANSWER_SPEECH_TIER, inputTokens, audioTokens }),
+					totalTokens: inputTokens + audioTokens,
+				})
 				return context.body(audioBytes as unknown as ArrayBuffer, 200, {
 					"Content-Type": audioContentType,
 					"Cache-Control": "private, no-store",
@@ -315,7 +337,7 @@ export const voiceRoute = new Hono<AppEnv>()
 				...toAnalyticsProperties(context),
 				chatKind: toChatKind(page),
 				...toVoiceChatPageIds(page),
-				...toSpokenEventMeasurements(event),
+				...toSpokenEventProperties(event),
 			})
 			return context.json({ ok: true })
 		},

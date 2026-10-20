@@ -1,5 +1,6 @@
 // the Source registry: the default set that every new Topic starts with and the custom options that can be added,
 import type { editableSourceKinds } from "./enums"
+import { toOneLineText } from "./text"
 
 // the Google News feed host, and its locale as all three parameters. the app has no per-user locale to read yet
 const GOOGLE_NEWS_HOST = "news.google.com"
@@ -289,7 +290,7 @@ export function toUrlHost(url: string): string | null {
  */
 export function toGoogleNewsFeedUrl(query: string): string | null {
 	// a blank query has nothing to search for
-	const searchQuery = query.trim().replace(/\s+/g, " ")
+	const searchQuery = toOneLineText(query)
 	if (!searchQuery) {
 		return null
 	}

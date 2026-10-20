@@ -1,8 +1,5 @@
-import type { ChatToolCall } from "@shared/payloads"
+import type { ChatHistoryTurn } from "@shared/payloads"
 import type { ChatTurn } from "@/components/chat/chatTurns"
-
-// one chat turn as the next question sends it
-type ChatHistoryTurn = { question: string; answer: string; toolCalls?: ChatToolCall[] }
 
 // whether a chat turn called any tool
 function hasToolCalls(chatTurn: ChatTurn): boolean {

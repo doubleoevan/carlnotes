@@ -6,9 +6,9 @@ import { db } from "../../db"
 import { teamMembers } from "../../db/schema/teams"
 import { subscriptions, topics } from "../../db/schema/topics"
 import { users } from "../../db/schema/users"
+import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import { acceptInviteToken, toInviteRejection } from "./inviteAcceptance"
 import {
-	ANALYTICS,
 	createdUserIds,
 	createTeam,
 	createTopic,
@@ -34,12 +34,12 @@ export async function checkLinkCreateAuthority(): Promise<void> {
 
 	// the other user is rejected, and the owner gets a live link with the link limits
 	assert.equal(
-		await createTopicInvite(otherUser.id, topic.id, "copy-link", ANALYTICS),
+		await createTopicInvite(otherUser.id, topic.id, "copy-link", TEST_ANALYTICS_PROPERTIES),
 		"forbidden",
 		"a non-owner created a link",
 	)
 	const created = toCreatedInvite(
-		await createTopicInvite(owner.id, topic.id, "copy-link", ANALYTICS),
+		await createTopicInvite(owner.id, topic.id, "copy-link", TEST_ANALYTICS_PROPERTIES),
 		"the owner's link",
 	)
 	assert.equal(created.maxUses, 25, "the owner's link does not have the link use limit")
@@ -50,7 +50,7 @@ export async function checkLinkCreateAuthority(): Promise<void> {
 	// a team link is a member's power the same way, and a non-member is rejected
 	const team = await createTeam("authority team", owner.id)
 	assert.equal(
-		await createTeamInvite(otherUser.id, team.id, "copy-link", ANALYTICS),
+		await createTeamInvite(otherUser.id, team.id, "copy-link", TEST_ANALYTICS_PROPERTIES),
 		"forbidden",
 		"a non-member created a team link",
 	)
@@ -112,10 +112,13 @@ export async function checkSpentAndReusedLinks(): Promise<void> {
 	const owner = await createUser("owner3b")
 	const topic = await createTopic(owner.id, "growth topic")
 	const firstInvite = toCreatedInvite(
-		await createTopicInvite(owner.id, topic.id, "copy-link", ANALYTICS),
+		await createTopicInvite(owner.id, topic.id, "copy-link", TEST_ANALYTICS_PROPERTIES),
 		"the first link",
 	)
-	const secondInvite = toCreatedInvite(await createTopicInvite(owner.id, topic.id, "copy-link", ANALYTICS), "the reuse")
+	const secondInvite = toCreatedInvite(
+		await createTopicInvite(owner.id, topic.id, "copy-link", TEST_ANALYTICS_PROPERTIES),
+		"the reuse",
+	)
 	assert.equal(
 		secondInvite.id,
 		firstInvite.id,

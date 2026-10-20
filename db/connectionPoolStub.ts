@@ -10,9 +10,23 @@ const originalDbTransaction = db.transaction
 // a query that the stubbed connection pool was sent: its sql and its values
 export type SentQuery = { text: string; values: unknown[] }
 
-// a free user's and an admin's access rows, in the column order the access read selects: role, plan, budget override
+// a free user's, a plus user's, and an admin's access rows, in the column order the access read selects: role, plan,
+// budget override
 export const FREE_USER_ACCESS_ROW = ["user", "free", null]
+export const PLUS_USER_ACCESS_ROW = ["user", "plus", null]
 export const ADMIN_USER_ACCESS_ROW = ["admin", "free", null]
+
+/**
+ * Returns a spend sum's one row, with the dollars given for the table that the query's from clause names, or "0" for
+ * any other table.
+ */
+export function toSpendSumRows(queryText: string, spendDollarsByFromClause: Record<string, string>): unknown[][] {
+	// find the from clause that the sum reads, among the tables given dollars
+	const fromClause = Object.keys(spendDollarsByFromClause).find((spendFromClause) =>
+		queryText.includes(spendFromClause),
+	)
+	return [[fromClause === undefined ? "0" : spendDollarsByFromClause[fromClause]]]
+}
 
 /**
  * Swaps the connection pool's query for a stub that returns the rows that toQueryRows picks, and returns each query sent.

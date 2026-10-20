@@ -1,3 +1,4 @@
+import { CHAT_NAME } from "@shared/contracts/chat"
 import type { TeamIdentity } from "@shared/contracts/teams"
 import { useNavigate } from "@tanstack/react-router"
 import { Users } from "lucide-react"
@@ -250,7 +251,7 @@ export function EditTeamModal({
 				</DialogTitle>
 				{/* two lines on what a team gives, for the person deciding to make one */}
 				{!team && (
-					<p className="text-muted-foreground text-sm">A team shares its topics and a Coffee talk group with Carl.</p>
+					<p className="text-muted-foreground text-sm">{`A team shares its topics and a ${CHAT_NAME} group with Carl.`}</p>
 				)}
 				{/* the avatar picker: the picked image, the team's stored one, or its initials */}
 				<TeamAvatarPicker

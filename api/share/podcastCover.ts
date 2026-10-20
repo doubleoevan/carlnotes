@@ -1,14 +1,18 @@
 // a topic's show cover and each podcast episode's own cover, drawn over the cover illustration
 // with satori and resvg, then encoded as a JPEG by ffmpeg
 import { renderAsync } from "@resvg/resvg-js"
-import { type PodcastCover, type PodcastCoverSize, toPodcastCoverKey } from "@shared/podcastEpisodes"
+import {
+	FULL_PODCAST_COVER_SIZE,
+	type PodcastCover,
+	type PodcastCoverSize,
+	toPodcastCoverKey,
+} from "@shared/podcastEpisodes"
 import satori from "satori"
 import { attachmentExists, getAttachmentBytes, uploadAttachment } from "../../worker"
 import { runFfmpeg } from "../../worker/ffmpeg"
 import type { CardElement } from "./previewImage"
 
-// a cover's full size, which is the largest that Apple takes, and the most bytes that Apple allows for a cover
-const FULL_PODCAST_COVER_SIZE = 3000
+// the most bytes that Apple allows for a cover
 export const MAX_PODCAST_COVER_BYTES = 512 * 1024
 
 // bump this when the cover's design changes, so every stored cover is drawn again

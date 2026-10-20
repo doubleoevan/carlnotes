@@ -2,7 +2,7 @@ import type { TopicPodcast } from "@shared/contracts/podcast"
 import type { TopicResponse } from "@shared/contracts/topics"
 import { maxTopicFindingsOptions, visibilities } from "@shared/enums"
 import { FULL_PODCAST_EPISODE_MINUTES, PODCAST_NAME, SHORT_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
-import { useNavigate } from "@tanstack/react-router"
+import { type UseNavigateResult, useNavigate } from "@tanstack/react-router"
 import { useRef, useState } from "react"
 import { toast } from "sonner"
 import { sendTopicPodcast } from "@/clients/podcastEpisodeClient"
@@ -23,6 +23,7 @@ import { Input } from "@/components/primitives/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/primitives/select"
 import { Switch } from "@/components/primitives/switch"
 import { TagPicker } from "@/components/topic/TagPicker"
+import { toSeePlansToastAction } from "@/lib/toastActions"
 import { cn } from "@/lib/utils"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { hasDailySlotLeft, PromptSourceUrls, ScheduleFields, SourceLimitNote } from "./EditTopicFields"
@@ -106,7 +107,7 @@ export function EditTopicModal({
 		} catch (error) {
 			// surface an error as a toast. the modal stays open so a failed upload retries on the next Save
 			console.error("topic save failed", error)
-			showSaveError(error, () => navigate({ to: "/plans" }))
+			showSaveError(error, navigate)
 		} finally {
 			setIsSaving(false)
 		}
@@ -393,10 +394,10 @@ const MISSING_FIELD_NOTES = {
 } as const
 
 // show a toast to tell the user why a topic save failed
-function showSaveError(error: unknown, onSeePlans: () => void): void {
+function showSaveError(error: unknown, navigate: UseNavigateResult<string>): void {
 	if (error instanceof DailyTopicLimitError) {
 		toast.error(`${error.message}\n Move a topic to weekly, or get a bigger pot.`, {
-			action: { label: "See plans", onClick: onSeePlans },
+			action: toSeePlansToastAction(navigate),
 		})
 		return
 	}

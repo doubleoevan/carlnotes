@@ -1,5 +1,5 @@
 // podcast episode shape tests: each topic's latest podcast episode with its chapters or as a summary with its chapter
-// count, limited to what the user may listen to
+// count, limited to what the user may listen to, and whether the player may ask carl and vienna about it
 import { afterEach, expect, test } from "bun:test"
 import { saveEnvSettings } from "@shared/savedEnvSettings"
 import { restoreConnectionPool, stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
@@ -10,11 +10,17 @@ import {
 	loadLatestPodcastEpisodeSummaries,
 	loadLatestPodcastEpisodes,
 	loadPodcastEpisodeSummaries,
+	toPodcastEpisode,
 } from "./podcastEpisodeShapes"
 import { toPublishedPodcastEpisodeRow } from "./podcastEpisodeTestFixtures"
 
-// the speech model, which turns podcast episodes on, and the secret that signs cover urls, put back after each test
-const restorePodcastSettings = saveEnvSettings(["PODCAST_SPEECH_MODEL", "BETTER_AUTH_SECRET"])
+// the speech model, which turns podcast episodes on, the transcription model, which turns voice chat on beside it, and
+// the secret that signs cover urls, put back after each test
+const restorePodcastSettings = saveEnvSettings([
+	"PODCAST_SPEECH_MODEL",
+	"CHAT_TRANSCRIPTION_MODEL",
+	"BETTER_AUTH_SECRET",
+])
 afterEach(() => {
 	restoreConnectionPool()
 	restorePodcastSettings()
@@ -132,6 +138,26 @@ test("summaries keep their order, and an episode with no chapter row counts none
 		{ id: "episode-2", chapterCount: 4 },
 	])
 	expect(sentQueries).toHaveLength(1)
+})
+
+test("a podcast episode lets the player ask carl and vienna with a speech model and a set or default transcription model", () => {
+	// speech, transcription, and signed cover urls are on
+	Bun.env.PODCAST_SPEECH_MODEL = "test-speech-model"
+	Bun.env.CHAT_TRANSCRIPTION_MODEL = "test-transcription-model"
+	Bun.env.BETTER_AUTH_SECRET = "test-secret"
+	expect(toPodcastEpisode(toPodcastEpisodeRowTopic("episode-1", 1)).isVoiceChatConfigured).toBe(true)
+
+	// an unset transcription model falls back to the default model, so voice chat stays on
+	delete Bun.env.CHAT_TRANSCRIPTION_MODEL
+	expect(toPodcastEpisode(toPodcastEpisodeRowTopic("episode-1", 1)).isVoiceChatConfigured).toBe(true)
+})
+
+test("a podcast episode keeps the player from asking carl and vienna if the transcription model is set empty", () => {
+	// speech and signed cover urls are on, and an empty transcription model turns voice chat off
+	Bun.env.PODCAST_SPEECH_MODEL = "test-speech-model"
+	Bun.env.CHAT_TRANSCRIPTION_MODEL = ""
+	Bun.env.BETTER_AUTH_SECRET = "test-secret"
+	expect(toPodcastEpisode(toPodcastEpisodeRowTopic("episode-1", 1)).isVoiceChatConfigured).toBe(false)
 })
 
 // a published podcast episode of one public topic, with its row and its topic, numbered

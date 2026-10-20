@@ -1,5 +1,5 @@
-// the spoken events route's tests: a question's and a play tap's properties, the page's access check before any count
-// without any spend sum, and the spoken events limiter
+// the spoken events route's tests: a question's and a play tap's properties, the chat turn kinds a question may name,
+// the page's access check before any count without any spend sum, and the spoken events limiter
 import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as analytics from "@shared/analytics"
 import { VOICE_RECORDING_MAX_SECONDS } from "@shared/payloads"
@@ -7,10 +7,11 @@ import * as quotas from "../../db/quotas"
 import { restoreRedisClient } from "../../db/redisClientStub"
 import * as authorization from "../authorization"
 import { SPOKEN_EVENT_RATE_LIMIT } from "../rateLimit"
+import { toJsonRequest } from "../testSession"
 import * as roomAccess from "./roomAccess"
 import * as voiceAuthorization from "./voiceAuthorization"
 import { SPOKEN_EVENTS_PATH } from "./voiceRoute"
-import { allowVoicePage, ROOM_PAGE, TOPIC_PAGE, toJsonRequest, toSignedInVoiceApp } from "./voiceRouteTestFixtures"
+import { allowVoicePage, ROOM_PAGE, TOPIC_PAGE, toSignedInVoiceApp } from "./voiceRouteTestFixtures"
 
 // put the spies and the Redis client back after each test
 afterEach(() => {
@@ -18,8 +19,8 @@ afterEach(() => {
 	restoreRedisClient()
 })
 
-// a spoken question's event has the browser's timings, the chat kind, the page's ids, and the request's plan and
-// device, and a play tap has the chat kind alone
+// a spoken question's event has the browser's timings, where it was asked from, the chat kind, the page's ids, and the
+// request's plan and device, and a play tap has the chat kind alone
 test("the spoken events are counted with the page's ids and the browser's measurements", async () => {
 	allowVoicePage()
 	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
@@ -44,6 +45,7 @@ test("the spoken events are counted with the page's ids and the browser's measur
 		topicId: "topic-1",
 		secondsRecorded: 12,
 		transcriptionMs: 900,
+		chatTurnKind: "private",
 		firstSpokenWordMs: 2500,
 	})
 
@@ -60,6 +62,39 @@ test("the spoken events are counted with the page's ids and the browser's measur
 		isInAppBrowser: false,
 		chatKind: "new_topic",
 	})
+})
+
+// a question asked from the podcast player is counted with the podcast chat turn kind, and a chat turn kind that no
+// conversation sends is a bad request that is never counted
+test("a spoken question event names the podcast chat turn kind and rejects a chat room one", async () => {
+	allowVoicePage()
+	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
+	const signedInApp = toSignedInVoiceApp()
+	const podcastQuestionResponse = await signedInApp.request(
+		SPOKEN_EVENTS_PATH,
+		toJsonRequest({
+			page: TOPIC_PAGE,
+			event: { kind: "question", secondsRecorded: 4, transcriptionMs: 600, chatTurnKind: "podcast" },
+		}),
+	)
+	expect(podcastQuestionResponse.status).toBe(200)
+	expect(trackEventSpy).toHaveBeenCalledTimes(1)
+	expect(trackEventSpy).toHaveBeenCalledWith(
+		"spoken_question_sent",
+		"user-1",
+		expect.objectContaining({ chatTurnKind: "podcast" }),
+	)
+
+	// a chat room chat turn kind is not one a spoken question sends
+	const chatRoomQuestionResponse = await signedInApp.request(
+		SPOKEN_EVENTS_PATH,
+		toJsonRequest({
+			page: TOPIC_PAGE,
+			event: { kind: "question", secondsRecorded: 4, transcriptionMs: 600, chatTurnKind: "chat_room" },
+		}),
+	)
+	expect(chatRoomQuestionResponse.status).toBe(400)
+	expect(trackEventSpy).toHaveBeenCalledTimes(1)
 })
 
 // an event on a page the user may not use is rejected and never counted, and a malformed event is a bad request

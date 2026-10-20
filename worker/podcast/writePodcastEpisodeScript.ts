@@ -3,8 +3,8 @@
 import { reportError } from "@shared/monitoring"
 import { FULL_PODCAST_EPISODE_MINUTES, SHORT_PODCAST_EPISODE_MINUTES } from "@shared/podcastEpisodes"
 import { toHostWithoutWww } from "@shared/seo"
-import { eq, inArray, sql } from "drizzle-orm"
-import { db } from "../../db"
+import { and, eq, inArray, sql } from "drizzle-orm"
+import { db, isFindingShown } from "../../db"
 import { podcastEpisodes } from "../../db/schema/podcast"
 import { findings, resources } from "../../db/schema/scans"
 import { topics } from "../../db/schema/topics"
@@ -167,8 +167,11 @@ async function loadScriptInput({
 	}
 }
 
-// load the Findings for the script prompts in the planned order, each with its Resource's stored content
-async function loadPodcastEpisodeFindings(findingIds: string[]): Promise<PodcastEpisodeFinding[]> {
+/**
+ * Loads the Findings in the given order, each with its Resource's stored content, leaving out a Finding that a later
+ * Scan filtered out or a user rated down.
+ */
+export async function loadPodcastEpisodeFindings(findingIds: string[]): Promise<PodcastEpisodeFinding[]> {
 	const findingRows = await db
 		.select({
 			findingId: findings.id,
@@ -180,9 +183,9 @@ async function loadPodcastEpisodeFindings(findingIds: string[]): Promise<Podcast
 		})
 		.from(findings)
 		.innerJoin(resources, eq(findings.resourceId, resources.id))
-		.where(inArray(findings.id, findingIds))
+		.where(and(inArray(findings.id, findingIds), isFindingShown))
 
-	// keep the planned order, and leave out a Finding that a later Scan filtered out
+	// keep the planned order, and leave out a Finding that a later Scan filtered out or a user rated down
 	const orderedFindingRows = findingIds.flatMap((findingId) =>
 		findingRows.filter((findingRow) => findingRow.findingId === findingId),
 	)

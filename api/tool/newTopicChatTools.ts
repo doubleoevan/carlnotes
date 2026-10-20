@@ -87,7 +87,6 @@ function toDraftTopicTool({ toolCalls, topicDraft }: NewTopicToolBinding): Tool 
 
 /**
  * Builds the tool that suggests sources for a topic draft. It saves nothing, so it is not bound with the saving tools.
- * Those are the only ones toConsentStep may force, and fetching suggestions must never answer a yes.
  */
 export function toSuggestTopicSourcesTool({ userId, toolCalls }: NewTopicToolBinding): Tool {
 	return tool({

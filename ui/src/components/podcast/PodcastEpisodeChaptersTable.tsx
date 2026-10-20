@@ -20,11 +20,8 @@ import {
 	TABLE_WIDE_FIRST_COLUMN_CLASS,
 } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
-import {
-	togglePodcastEpisodeChapterPlayback,
-	usePlayerChapter,
-	usePodcastEpisodePlayer,
-} from "@/stores/podcastEpisodePlayerStore"
+import { togglePodcastEpisodeChapterPlayback } from "@/stores/podcastEpisodePlayActions"
+import { usePlayerChapterPosition, usePodcastEpisodePlayer } from "@/stores/podcastEpisodePlayerStore"
 
 // a chapter's source link, in muted text
 const CHAPTER_SOURCE_CLASS =
@@ -42,9 +39,8 @@ export function PodcastEpisodeChaptersTable({ podcastEpisode, chapterTopicFeed }
 	const { renderedRows, pagination } = usePagination(chapters)
 
 	// the position of the chapter that the player is at, if this podcast episode is the loaded one
-	const { podcastEpisode: loadedPodcastEpisode, isPlaying } = usePodcastEpisodePlayer()
-	const playerChapter = usePlayerChapter()
-	const playerChapterPosition = loadedPodcastEpisode?.id === podcastEpisode.id ? playerChapter?.position : undefined
+	const { isPlaying } = usePodcastEpisodePlayer()
+	const playerChapterPosition = usePlayerChapterPosition(podcastEpisode.id)
 
 	// how long the chapters run in total, and how many hosts their sources come from
 	const totalChapterSeconds = chapters.reduce((sum, chapter) => sum + chapter.endSeconds - chapter.startSeconds, 0)

@@ -8,6 +8,7 @@ import { sendTopicFeatureOrder, sendTopicSubscription, type TopicGate } from "@/
 import { NotesSection } from "@/components/note/NotesSection"
 import { PodcastEpisodePlayer } from "@/components/podcast/PodcastEpisodePlayer"
 import { PodcastEpisodesCard } from "@/components/podcast/PodcastEpisodesCard"
+import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { JoinTeamButton } from "@/components/team/JoinTeamButton"
 import { RelatedTopicsSection } from "@/components/topic/RelatedTopicsSection"
 import { NewCountInfo } from "@/components/topic/Topic"
@@ -145,7 +146,7 @@ export function TopicPage() {
 		}
 		// a visitor has to sign up before subscribing
 		if (!session) {
-			void navigate({ to: "/signup", search: { cta: "subscribe" } })
+			void navigate(toSignupNavigation("subscribe"))
 			return
 		}
 		const isSubscribing = !topic.isSubscribed

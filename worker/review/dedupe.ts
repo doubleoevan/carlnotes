@@ -1,5 +1,6 @@
 // the dedupe pass over the relevant Resources: a content hash catches a copy and a near-duplicate embedding catches
 // a rewrite, against what this Scan let through and what an earlier Scan stored
+import { toOneLineText } from "@shared/text"
 import { cosineSimilarity } from "ai"
 import { and, cosineDistance, eq, isNotNull, lt, notInArray } from "drizzle-orm"
 import { db } from "../../db"
@@ -152,7 +153,7 @@ export function toContentHash(title: string | null, snippet: string | null): str
  * Lowercase and collapse whitespace so that trivial formatting differences don't defeat the hash.
  */
 export function normalizeText(text: string): string {
-	return text.toLowerCase().replace(/\s+/g, " ").trim()
+	return toOneLineText(text.toLowerCase())
 }
 
 /**

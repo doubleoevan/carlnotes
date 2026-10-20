@@ -1,4 +1,4 @@
-// the useSyncExternalStore boilerplate every store in this folder needs
+// the useSyncExternalStore boilerplate every store in this folder needs, and the listeners a store tells of an event
 import { useSyncExternalStore } from "react"
 
 /**
@@ -10,16 +10,8 @@ export function toStoreListeners(): {
 } {
 	// a version instead of the value, so a snapshot stays the same between publishes and React never
 	// re-renders on a fresh object it has not seen change
-	const listeners = new Set<() => void>()
+	const { subscribe, announce } = toEventListeners<void>()
 	let version = 0
-
-	// add a listener for store changes, and return the call that removes it
-	const subscribe = (listener: () => void): (() => void) => {
-		listeners.add(listener)
-		return () => {
-			listeners.delete(listener)
-		}
-	}
 
 	// the store's version, the snapshot in the browser and on the server alike
 	const getVersion = (): number => version
@@ -28,11 +20,34 @@ export function toStoreListeners(): {
 		// notify every subscriber that the value changed
 		publish: () => {
 			version += 1
-			for (const listener of listeners) {
-				listener()
-			}
+			announce()
 		},
 		// subscribe a calling component to the store
 		useStoreVersion: () => useSyncExternalStore(subscribe, getVersion, getVersion),
+	}
+}
+
+/**
+ * Returns one event's subscribe call, which returns the unsubscribe, and the announce call that tells every listener.
+ */
+export function toEventListeners<EventPayload>(): {
+	subscribe: (listener: (eventPayload: EventPayload) => void) => () => void
+	announce: (eventPayload: EventPayload) => void
+} {
+	const listeners = new Set<(eventPayload: EventPayload) => void>()
+	return {
+		// add a listener for the event, and return the call that removes it
+		subscribe: (listener) => {
+			listeners.add(listener)
+			return () => {
+				listeners.delete(listener)
+			}
+		},
+		// tell every listener about the event
+		announce: (eventPayload) => {
+			for (const listener of listeners) {
+				listener(eventPayload)
+			}
+		},
 	}
 }

@@ -1,6 +1,7 @@
 // the reply target dropdown of the chat room composer, and the chat message helpers that swap its chat mention
 import { ALL_USERNAME, CARL_USERNAME } from "@shared/chatMentions"
 import type { ChatRoomMessage } from "@shared/contracts/chat"
+import { PODCAST_EPISODE_SPEAKER_NAMES } from "@shared/podcastEpisodes"
 import { ChevronDown, Reply } from "lucide-react"
 import { useState } from "react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/primitives/popover"
@@ -50,13 +51,16 @@ export function ReplyToDropdown({
 				>
 					@all
 				</button>
-				{!replyChatMessages.some((chatMessage) => chatMessage.username === "Carl") && (
+				{!replyChatMessages.some((chatMessage) => chatMessage.username === PODCAST_EPISODE_SPEAKER_NAMES.host) && (
 					<button
 						type="button"
 						onClick={() => handleSelectReplyTo("carl")}
-						className={cn(MENU_OPTION_CLASS, currentReplyUser === "Carl" && MENU_OPTION_SELECTED_CLASS)}
+						className={cn(
+							MENU_OPTION_CLASS,
+							currentReplyUser === PODCAST_EPISODE_SPEAKER_NAMES.host && MENU_OPTION_SELECTED_CLASS,
+						)}
 					>
-						Carl
+						{PODCAST_EPISODE_SPEAKER_NAMES.host}
 					</button>
 				)}
 				{replyChatMessages.map((chatMessage) => (
@@ -77,7 +81,7 @@ export function ReplyToDropdown({
 /** Returns what the menu calls a chat mention: carl by name, @all as typed, anyone else by their username. */
 export function toMentionLabel(username: string): string {
 	if (username === CARL_USERNAME) {
-		return "Carl"
+		return PODCAST_EPISODE_SPEAKER_NAMES.host
 	}
 	return username === ALL_USERNAME ? "@all" : username
 }

@@ -5,6 +5,7 @@ import { toast } from "sonner"
 import { sendDeleteJoinRequest, sendJoinRequest } from "@/clients/teamClient"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { MENU_BUTTON_CLASS } from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 
@@ -34,7 +35,7 @@ export function JoinTeamButton({
 	// a logged-out visitor is sent to sign up. a signed-in user toggles their join request
 	const handleChangeRequest = async (): Promise<void> => {
 		if (!isSignedIn) {
-			void navigate({ to: "/signup", search: { cta: "team-join" } })
+			void navigate(toSignupNavigation("team-join"))
 			return
 		}
 		if (isJoinRequested) {

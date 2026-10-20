@@ -15,6 +15,7 @@ import { AnchorLink } from "@/components/common/AnchorLink"
 import { UpdateCountBadge } from "@/components/common/UpdateCountBadge"
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
+import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { OwnerTopicsTable } from "@/components/table/OwnerTopicsTable"
 import { TeamsMembershipTable } from "@/components/table/TeamsMembershipTable"
 import { TopicsTable } from "@/components/table/TopicsTable"
@@ -164,7 +165,7 @@ export function ProfilePage() {
 	// send a visitor to the sign-up page, or open the New team modal with the profile user invited
 	const handleInviteUserToTeam = (): void => {
 		if (!session) {
-			void navigate({ to: "/signup", search: { cta: "profile-team-up" } })
+			void navigate(toSignupNavigation("profile-team-up"))
 			return
 		}
 		void handleOpenNewTeamModal()

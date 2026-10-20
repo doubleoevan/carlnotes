@@ -12,6 +12,7 @@ import { ChatTopicLimitNotice } from "@/components/chat/ChatTopicLimitNotice"
 import { ClearChatDialog } from "@/components/chat/ClearChatDialog"
 import { TopicDraftCard } from "@/components/chat/TopicDraftCard"
 import { type TopicChat, useTopicChat } from "@/components/chat/useTopicChat"
+import { toSignupNavigation } from "@/components/session/signupPrompts"
 import type { ChatPanelState } from "@/stores/chatPanelStore"
 
 // the chat message list is lazy-loaded on the first open instead of in the initial bundle
@@ -116,7 +117,7 @@ export function PrivateChatPanel({
 	const { data: session } = authClient.useSession()
 
 	// a visitor's send opens the signup page, tagged as a signup from the chat
-	const handleSendChat = chat.isSignupRequired ? () => navigate({ to: "/signup", search: { cta: "chat" } }) : chat.send
+	const handleSendChat = chat.isSignupRequired ? () => navigate(toSignupNavigation("chat")) : chat.send
 
 	// a user with no way forward gets no panel, but a logged-out visitor or a user with an exhausted budget still
 	if (chat.isLoaded && !chat.canChat && !chat.isSignupRequired && !chat.isBudgetExhausted) {

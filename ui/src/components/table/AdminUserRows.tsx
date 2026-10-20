@@ -2,6 +2,7 @@
 import type { OwnerTopic } from "@shared/contracts/activity"
 import type { AdminUserRow } from "@shared/contracts/admin"
 import type { TeamSummary } from "@shared/contracts/teams"
+import { toCentsFromDollars } from "@shared/plans"
 import { Trash2 } from "lucide-react"
 import { useState } from "react"
 import { toast } from "sonner"
@@ -90,7 +91,7 @@ export function UserRow({
 		if (dollars !== "" && Number.isNaN(Number(dollars))) {
 			return
 		}
-		const budgetOverrideCents = dollars === "" ? null : Math.round(Number(dollars) * 100)
+		const budgetOverrideCents = dollars === "" ? null : toCentsFromDollars(Number(dollars))
 		try {
 			// save the budget on its own, and resize the proxy key to match it separately
 			const { isKeyResized } = await sendUserBudgetOverride(user.id, budgetOverrideCents)
@@ -253,7 +254,7 @@ export function UserRow({
 					onConfirm={handleDeleteAccount}
 					onClose={() => setIsConfirmingDelete(false)}
 				>
-					{`Their ${user.topicCount} ${user.topicCount === 1 ? "topic" : "topics"}, findings, subscriptions, and chats go with it. Any paid plan is canceled. This cannot be undone.`}
+					{`Their ${user.topicCount} ${user.topicCount === 1 ? "topic" : "topics"}, findings, and chats go with it, and they stop following every topic. Any paid plan is canceled. This cannot be undone.`}
 				</ConfirmDialog>
 			)}
 			{/* this user's teams subtable, read-only rows in the teams index shape */}

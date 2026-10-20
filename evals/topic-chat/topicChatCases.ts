@@ -53,8 +53,9 @@ const FINDINGS: RetrievedFinding[] = [
 	},
 ]
 
-// the burrnotes rss Source's id, a uuid as the database stores one
+// the burrnotes rss Source's id, a uuid as the database stores one, and its label
 export const BURRNOTES_TOPIC_SOURCE_ID = "5d2e8f4a-3c71-4b9e-a0d6-7e1f9c2b4a83"
+export const BURRNOTES_TOPIC_SOURCE_LABEL = "rss — burrnotes.example"
 
 // the topic material that every case starts from
 export const TOPIC_CHAT_CONTEXT: ChatContext = {
@@ -71,7 +72,7 @@ export const TOPIC_CHAT_CONTEXT: ChatContext = {
 	findings: FINDINGS,
 	sources: [
 		"web search — Carl searches the live web for this topic [source 0b6f2c1e-6a43-4d6e-9c51-2f8a7d3e5b10]",
-		`rss — burrnotes.example [source ${BURRNOTES_TOPIC_SOURCE_ID}]`,
+		`${BURRNOTES_TOPIC_SOURCE_LABEL} [source ${BURRNOTES_TOPIC_SOURCE_ID}]`,
 	],
 	scanSummaries: ["I kept three this week. The quiet burr set is the one for you."],
 	attachmentContext: "",

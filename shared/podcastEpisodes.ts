@@ -1,6 +1,8 @@
-// the podcast episode speech model, the episode lengths, a cover's key and path, the show and host names,
-// and a turn's transcript text
+// the podcast episode speech model, the podcast episode lengths and findings limits, a cover's sizes, key, and path,
+// the show and host names, and a turn's transcript text and speaker
 import { toAuthSecretSignature } from "./hmac"
+import type { PodcastEpisodeTurn } from "./payloads"
+import { toOneLineText } from "./text"
 
 // the Gemini speech model that records episodes.
 // PODCAST_SPEECH_MODEL names another model, and an empty value turns podcast episodes off
@@ -25,8 +27,14 @@ export function isPodcastEpisodeRecordingConfigured(): boolean {
 export const FULL_PODCAST_EPISODE_MINUTES = 30
 export const SHORT_PODCAST_EPISODE_MINUTES = 10
 
-// the pixel sizes that a cover is served at
-export const PODCAST_COVER_SIZES = [3000, 600] as const
+// how many findings a full podcast episode and a short one narrate at most, about two minutes each
+export const FULL_PODCAST_EPISODE_FINDINGS = 15
+export const SHORT_PODCAST_EPISODE_FINDINGS = 5
+
+// the pixel sizes that a cover is served at. the full size is the largest that Apple takes
+export const FULL_PODCAST_COVER_SIZE = 3000
+export const SMALL_PODCAST_COVER_SIZE = 600
+export const PODCAST_COVER_SIZES = [FULL_PODCAST_COVER_SIZE, SMALL_PODCAST_COVER_SIZE] as const
 export type PodcastCoverSize = (typeof PODCAST_COVER_SIZES)[number]
 
 // a topic's show cover or a podcast episode's cover,
@@ -53,14 +61,20 @@ export function toPodcastCoverPath(podcastCover: PodcastCover, size: PodcastCove
 	return `/api/podcast-covers/${podcastCover.kind}/${podcastCover.id}/${toPodcastCoverKey(podcastCover)}-${size}.jpg`
 }
 
+// the name that each speaker goes by in a transcript and in chat
+export const PODCAST_EPISODE_SPEAKER_NAMES = { host: "Carl", cohost: "Vienna" } as const
+
+// both hosts' names together, as the podcast's author credit
+export const PODCAST_HOSTS_NAME = `${PODCAST_EPISODE_SPEAKER_NAMES.host} and ${PODCAST_EPISODE_SPEAKER_NAMES.cohost}`
+
 // the sentence that tells a listener that the hosts are AI voices, without its period
-export const AI_VOICES_NOTE = "Carl and Vienna are AI voices"
+export const AI_VOICES_NOTE = `${PODCAST_HOSTS_NAME} are AI voices`
 
 // the podcast's name in the app's copy
 export const PODCAST_NAME = "Coffee Break podcast"
 
 // the podcast's name as a listener and a search engine read it
-export const PODCAST_SHOW_NAME = `${PODCAST_NAME} with Carl and Vienna`
+export const PODCAST_SHOW_NAME = `${PODCAST_NAME} with ${PODCAST_HOSTS_NAME}`
 
 // the theme song that opens and closes every podcast episode, and the people credited for the song
 export const PODCAST_THEME_SONG = {
@@ -82,15 +96,27 @@ export const PODCAST_THEME_SONG_PERFORMANCE_CREDIT = `Performed by ${PODCAST_THE
 export const PODCAST_THEME_SONG_PRODUCTION_CREDIT = `Production by ${PODCAST_THEME_SONG.producer}`
 export const PODCAST_THEME_SONG_DRUMMING_CREDIT = `Drumming by ${PODCAST_THEME_SONG.drummer}`
 
-// the name that each speaker goes by in a transcript
-export const PODCAST_EPISODE_SPEAKER_NAMES = { host: "Carl", cohost: "Vienna" } as const
+/**
+ * Returns each host's speaker value as one sentence, as in Carl's lines have the speaker "host", for the prompts that
+ * name them.
+ */
+export function toPodcastEpisodeSpeakersSentence(): string {
+	const speakerClauses = Object.entries(PODCAST_EPISODE_SPEAKER_NAMES).map(
+		([speaker, speakerName]) => `${speakerName}'s lines have the speaker "${speaker}"`,
+	)
+	return `${speakerClauses.join(", and ")}.`
+}
 
 /**
  * Returns a turn's text as it reads in a transcript, without the inline vocal tags that the speech model reads.
  */
 export function toTranscriptText(turnText: string): string {
-	return turnText
-		.replace(/<[^>]+>/g, " ")
-		.replace(/\s+/g, " ")
-		.trim()
+	return toOneLineText(turnText.replace(/<[^>]+>/g, " "))
+}
+
+/**
+ * Returns a turn as it reads in a transcript: its speaker's name and its text without the vocal tags.
+ */
+export function toTranscriptTurn(turn: PodcastEpisodeTurn): { speakerName: string; text: string } {
+	return { speakerName: PODCAST_EPISODE_SPEAKER_NAMES[turn.speaker], text: toTranscriptText(turn.text) }
 }

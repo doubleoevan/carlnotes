@@ -76,7 +76,8 @@ export async function loadTopicPage(
 			loadTopicScanRows(topic.id),
 			// this user's own subscription state. a signed-out visitor subscribes to nothing
 			userId ? loadDirectSubscription(userId, topic.id) : null,
-			// the owner-only extras: the invite list, the manual scan quota, and whether their spend is used up
+			// the owner-only extras: the invite list, the manual scan quota, and whether their spend is past the manual
+			// scans cutoff or used up
 			toInviteAndScanFields(userId, topic, isTopicOwner),
 			// the topic owner's username, avatar and profile page id
 			loadTopicOwner(topic.ownerId),
@@ -109,7 +110,8 @@ export async function loadTopicPage(
 	}))
 
 	// the owner-only extras, unpacked from their grouped read
-	const { inviteRows, manualScansRemaining, manualScanLimit, isSpendExhausted } = inviteAndScanFields
+	const { inviteRows, manualScansRemaining, manualScanLimit, isManualScanPaused, isSpendExhausted } =
+		inviteAndScanFields
 
 	// the latest succeeded scan feeds the schedule section, with its recap and duration beside it
 	const { lastSucceededTopicScan, scanSummary, lastScanDurationMs } = toLastTopicScanFields(scanHistory, scanRows)
@@ -157,6 +159,7 @@ export async function loadTopicPage(
 		invites: inviteRows,
 		manualScansRemaining,
 		manualScanLimit,
+		isManualScanPaused,
 		isSpendExhausted,
 		...teamFields,
 		isOnTeam: topic.teamId !== null,

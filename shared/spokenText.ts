@@ -1,4 +1,5 @@
 // markdown as plain words, and the spoken parts carl speaks, one per paragraph
+import { toOneLineText } from "./text"
 
 // the length spoken parts are packed to, under the speech route's SPOKEN_PART_CHARS, so one speech call returns about
 // half a minute of audio
@@ -90,7 +91,7 @@ function toPackedSpokenParts(paragraph: string): string[] {
 	// each piece as one line of words, with the empty pieces dropped
 	const pieces = paragraph
 		.split(/\n|(?<=[.!?]) /)
-		.map((piece) => piece.replace(/\s+/g, " ").trim())
+		.map((piece) => toOneLineText(piece))
 		.filter((piece) => piece !== "")
 
 	// pack the pieces into spoken parts within the length

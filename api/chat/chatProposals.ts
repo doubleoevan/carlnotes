@@ -1,5 +1,6 @@
-// a private chat's proposals: the change carl previewed in a turn, recorded as a keyed digest with that turn, taken
-// back at the user's next message on that page, and applied by the server only if that message agrees to it
+// the chat's proposals: the change carl previewed in a chat turn, recorded with that chat turn, taken back at the
+// user's next message on that page, and applied by the server only if that message agrees to it. a private chat
+// records a keyed digest
 import { CANCEL_TOPIC_EDIT_TOOL, PROPOSE_NEW_TOPIC_TOOL, toStandingTopicEditCall } from "@shared/contracts/chat"
 import { isSameSignature, toAuthSecretSignature } from "@shared/hmac"
 import type { ChatToolCall, ChatTurnPayload } from "@shared/payloads"
@@ -10,7 +11,7 @@ import {
 	type TopicDraft,
 	topicDraftPayload,
 } from "@shared/topicPayloads"
-import { and, eq, isNull } from "drizzle-orm"
+import { and, eq, isNull, type SQL } from "drizzle-orm"
 import { db } from "../../db"
 import { chatProposals } from "../../db/schema/chat"
 import { checkAgreement } from "../../worker/chat/agreement"
@@ -18,9 +19,9 @@ import type { AnalyticsProperties } from "../currentUser"
 import {
 	addTopicSourceInChat,
 	type ChatTurnToolCalls,
-	type EditTopicToolBinding,
 	removeTopicSourceInChat,
 	TOPIC_EDIT_CANCELLED_TEXT,
+	type TopicEditSaveBinding,
 	updateTopicFieldsInChat,
 	updateTopicPromptInChat,
 } from "../tool/chatTools"
@@ -34,7 +35,8 @@ export type ChatProposal =
 
 // what carl reads about the proposal this message answered, one line for each way it can end
 export const PROPOSAL_OUTCOMES = {
-	agreed: "The reader agreed, and the app applied your preview. Each save is in this turn's tool calls.",
+	agreed:
+		"The reader agreed, and the app applied your preview. Each save is in this turn's tool calls. Tell the reader what was saved. Nothing is left to preview or cancel.",
 	declined: "The reader turned your last preview down, so nothing was saved and the preview is off the card.",
 	unclear:
 		"The reader's message did not clearly agree to your last preview, so nothing was saved and the preview lapsed. If the change still stands, ask plainly and preview it again.",
@@ -45,6 +47,39 @@ export const PROPOSAL_OUTCOMES = {
 // what the server did with the proposal a message answered: the calls it made, the line carl reads, and the tokens
 // the agreement check spent. a result with no outcome means no proposal was waiting
 export type ChatProposalResult = { serverToolCalls: ChatToolCall[]; proposalOutcome?: string; agreementTokens: number }
+
+// the result if no proposal was waiting: no calls, no outcome, and no agreement tokens
+export const NO_PROPOSAL_RESULT: ChatProposalResult = { serverToolCalls: [], agreementTokens: 0 }
+
+/**
+ * Takes an unconfirmed proposal's preview off the card and returns the unconfirmed result.
+ */
+export function cancelUnconfirmedProposal(toolCalls: ChatTurnToolCalls, page: ChatPage): ChatProposalResult {
+	cancelProposalPreview(toolCalls, page)
+	return { serverToolCalls: [], proposalOutcome: PROPOSAL_OUTCOMES.unconfirmed, agreementTokens: 0 }
+}
+
+// take a topic edit's preview off the card. the new-topic chat's draft card has no preview to take off
+function cancelProposalPreview(toolCalls: ChatTurnToolCalls, page: ChatPage): void {
+	toolCalls.isTopicEditCancelled = !page.newTopic
+}
+
+// the unique key a proposal row is upserted on: the user, the topic, and the team
+export const CHAT_PROPOSAL_PAGE_TARGET = [chatProposals.userId, chatProposals.topicId, chatProposals.teamId]
+
+// the user, topic, and team a proposal row is stored under. a null topic or team matches only a null column
+type ChatProposalPageKey = { userId: string; topicId: string | null; teamId: string | null }
+
+/**
+ * Returns the filter for the one proposal row stored under a page key.
+ */
+export function toChatProposalPageFilter({ userId, topicId, teamId }: ChatProposalPageKey): SQL | undefined {
+	return and(
+		eq(chatProposals.userId, userId),
+		topicId === null ? isNull(chatProposals.topicId) : eq(chatProposals.topicId, topicId),
+		teamId === null ? isNull(chatProposals.teamId) : eq(chatProposals.teamId, teamId),
+	)
+}
 
 // the user and the page a proposal belongs to
 type ChatProposalRef = { userId: string; page: ChatPage }
@@ -79,7 +114,7 @@ export async function recordChatProposal({
 		.insert(chatProposals)
 		.values({ userId, topicId: page.topicId ?? null, chatTurnId, digest })
 		.onConflictDoUpdate({
-			target: [chatProposals.userId, chatProposals.topicId],
+			target: CHAT_PROPOSAL_PAGE_TARGET,
 			set: { chatTurnId, digest, createdAt: new Date() },
 		})
 }
@@ -106,7 +141,7 @@ export async function answerChatProposal(
 	const { userId, page, question, history, topicDraft, toolCalls, litellmApiKey } = answerChatProposalOptions
 	const recordedDigest = await takeChatProposalDigest({ userId, page })
 	if (!recordedDigest) {
-		return { serverToolCalls: [], agreementTokens: 0 }
+		return NO_PROPOSAL_RESULT
 	}
 
 	// rebuild the proposal from what the browser sent, and apply nothing unless it matches what was recorded
@@ -115,8 +150,7 @@ export async function answerChatProposal(
 		: toStandingChatProposal({ page, chatToolCalls: history.at(-1)?.toolCalls ?? [] })
 	const rebuiltDigest = chatProposal ? toChatProposalDigest({ userId, page }, chatProposal) : ""
 	if (!chatProposal || !isSameSignature({ expectedSignature: recordedDigest, signature: rebuiltDigest })) {
-		toolCalls.isTopicEditCancelled = !page.newTopic
-		return { serverToolCalls: [], proposalOutcome: PROPOSAL_OUTCOMES.unconfirmed, agreementTokens: 0 }
+		return cancelUnconfirmedProposal(toolCalls, page)
 	}
 
 	// read only the user's words against the proposal, then act on the decision
@@ -166,7 +200,7 @@ export async function resolveChatProposal({
 	}
 
 	// a decline or an unclear message takes the preview off the card. carl previewing again in this turn puts it back
-	toolCalls.isTopicEditCancelled = !page.newTopic
+	cancelProposalPreview(toolCalls, page)
 
 	// a decline records the cancel that cancelTopicEdit makes
 	if (decision === "decline") {
@@ -244,12 +278,7 @@ export function toChatProposalText(chatProposal: ChatProposal): string {
 async function takeChatProposalDigest({ userId, page }: ChatProposalRef): Promise<string | null> {
 	const [takenChatProposal] = await db
 		.delete(chatProposals)
-		.where(
-			and(
-				eq(chatProposals.userId, userId),
-				page.topicId ? eq(chatProposals.topicId, page.topicId) : isNull(chatProposals.topicId),
-			),
-		)
+		.where(toChatProposalPageFilter({ userId, topicId: page.topicId ?? null, teamId: null }))
 		.returning({ digest: chatProposals.digest })
 	return takenChatProposal?.digest ?? null
 }
@@ -276,11 +305,20 @@ async function applyChatProposal(
 		return [{ toolName: "createTopic", input: {}, output: createTopicText }]
 	}
 
-	// a topic edit applies each of its saves in order, through the path its save tool takes
-	const editTopicToolBinding = { userId, topicId: page.topicId ?? "", toolCalls, analyticsProperties }
+	// apply the topic edit's saves
+	return applyTopicEdit({ userId, topicId: page.topicId ?? "", toolCalls, analyticsProperties }, chatProposal.topicEdit)
+}
+
+/**
+ * Applies an agreed topic edit's saves in order and returns each as a call of its tool.
+ */
+export async function applyTopicEdit(
+	topicEditSaveBinding: TopicEditSaveBinding,
+	topicEdit: ProposeTopicEditPayload,
+): Promise<ChatToolCall[]> {
 	const serverToolCalls: ChatToolCall[] = []
-	for (const topicEditSave of toTopicEditSaves(chatProposal.topicEdit)) {
-		const output = await applyTopicEditSave(editTopicToolBinding, topicEditSave)
+	for (const topicEditSave of toTopicEditSaves(topicEdit)) {
+		const output = await applyTopicEditSave(topicEditSaveBinding, topicEditSave)
 		serverToolCalls.push({ ...topicEditSave, output })
 	}
 	return serverToolCalls
@@ -316,18 +354,18 @@ export function toTopicEditSaves(topicEdit: ProposeTopicEditPayload): TopicEditS
 }
 
 // apply one save through the path its save tool takes, and return what carl reads
-function applyTopicEditSave(editTopicToolBinding: EditTopicToolBinding, topicEditSave: TopicEditSave): Promise<string> {
+function applyTopicEditSave(topicEditSaveBinding: TopicEditSaveBinding, topicEditSave: TopicEditSave): Promise<string> {
 	switch (topicEditSave.toolName) {
 		// the prompt and the settings fields
 		case "updateTopicPrompt":
-			return updateTopicPromptInChat(editTopicToolBinding, topicEditSave.input.prompt)
+			return updateTopicPromptInChat(topicEditSaveBinding, topicEditSave.input.prompt)
 		case "updateTopicFields":
-			return updateTopicFieldsInChat(editTopicToolBinding, topicEditSave.input)
+			return updateTopicFieldsInChat(topicEditSaveBinding, topicEditSave.input)
 		// one source removed or added
 		case "removeSource":
-			return removeTopicSourceInChat(editTopicToolBinding, topicEditSave.input.sourceId)
+			return removeTopicSourceInChat(topicEditSaveBinding, topicEditSave.input.sourceId)
 		case "addSource":
-			return addTopicSourceInChat(editTopicToolBinding, topicEditSave.input)
+			return addTopicSourceInChat(topicEditSaveBinding, topicEditSave.input)
 	}
 }
 

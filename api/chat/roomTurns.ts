@@ -2,22 +2,26 @@
 import type { RoomTopicToolCalls } from "@shared/contracts/chat"
 import { reportError } from "@shared/monitoring"
 import type { ChatAttachment } from "@shared/payloads"
+import { PODCAST_EPISODE_SPEAKER_NAMES } from "@shared/podcastEpisodes"
 import { and, eq, ne, sql } from "drizzle-orm"
 import { db } from "../../db"
 import { chatRoomAttachments, chatRoomMessages } from "../../db/schema/chat"
 import type { topics } from "../../db/schema/topics"
 import {
 	type ChatReplyPart,
+	type ChatReplyStream,
 	getAttachmentBytes,
 	loadOrProvisionUserLiteLLMKey,
 	MODEL_CHAT_TURN_FAILED_REJECTION,
 } from "../../worker"
 import { streamChatReply } from "../../worker/chat"
 import { isAllowed } from "../authorization"
-import { type ChatTurnToolCalls, toChatTopicTools, toTopicEditPreviewTools } from "../tool/chatTools"
+import { type ChatTurnToolCalls, toEmptyChatTurnToolCalls, toTopicEditPreviewTools } from "../tool/chatTools"
+import type { ChatProposalResult } from "./chatProposals"
 import { recordChatRoomTurn } from "./chatTurns"
 import { decryptChatText, encryptChatText } from "./encryption"
 import { saveLinkPreviews } from "./linkPreviews"
+import { answerChatRoomProposal, recordChatRoomProposal } from "./roomProposals"
 import { buildModelRoomQuestion } from "./roomQuestion"
 import { notifyChatRoomMessage } from "./roomStream"
 
@@ -60,31 +64,38 @@ export async function runModelChatRoomTurn(
 	// the images shared with the prompt chat message, read back for carl's reply
 	const promptImages = await loadPromptMessageImages(promptChatMessageId)
 
-	// a member with topic:edit gets the edit tools, which check the rights again themselves
-	// the saves go out with carl's chat message
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
-	const chatTurnTools =
-		topic && (await isAllowed(billedUserId, "topic:edit", topic))
-			? toChatTopicTools({ userId: billedUserId, topicId: topic.id, toolCalls })
-			: undefined
+	// read the member's own words, and answer their standing preview if they may edit the topic
+	const toolCalls = toEmptyChatTurnToolCalls()
+	const promptChatMessageText = promptChatMessage
+		? (decryptChatText(promptChatMessage.content) ?? undefined)
+		: undefined
+	const { isTopicEditor, chatProposalResult } = await answerChatRoomTopicEdit({
+		billedUserId,
+		topic,
+		teamId,
+		question: promptChatMessageText ?? "",
+		toolCalls,
+		litellmApiKey,
+	})
 
 	// the same reply path the private chat uses
 	const replyStream = await streamChatReply({
-		tools: chatTurnTools,
 		// the tools that put a proposed change on the topic's card and take it back off
-		...(chatTurnTools ? toTopicEditPreviewTools({ toolCalls }) : {}),
+		...(isTopicEditor ? toTopicEditPreviewTools({ toolCalls }) : {}),
 		topicId: topic?.id,
 		teamId: topic ? undefined : teamId,
 		userId: billedUserId,
 		isTopicOwner: topic ? topic.ownerId === billedUserId : false,
 		litellmApiKey,
 		question,
-		retrievalQuestion: promptChatMessage ? (decryptChatText(promptChatMessage.content) ?? undefined) : undefined,
+		retrievalQuestion: promptChatMessageText,
 		isSpoken,
 		history: [],
 		chatAttachments: promptImages,
 		// the billed member's privately kept attachments stay out. this answer posts to the whole chat room
 		includeAttachments: false,
+		serverToolCalls: chatProposalResult?.serverToolCalls,
+		proposalOutcome: chatProposalResult?.proposalOutcome,
 	})
 	if (!replyStream) {
 		return
@@ -100,7 +111,7 @@ export async function runModelChatRoomTurn(
 		.values({
 			topicId: topic?.id ?? null,
 			teamId,
-			authorUsername: "Carl",
+			authorUsername: PODCAST_EPISODE_SPEAKER_NAMES.host,
 			replyToMessageId: promptChatMessageId,
 			content: encryptChatText(reply.trim()),
 			isSpoken,
@@ -113,13 +124,14 @@ export async function runModelChatRoomTurn(
 	// carl's first link fetches its link preview card in the background, like a member's chat message
 	void saveLinkPreviews(reply, teamId).catch((error) => console.error("chat room link preview failed", error))
 
-	// save the chat turn row after carl's answer is stored, naming the chat message that carl answered
-	await recordChatRoomTurn({
-		userId: billedUserId,
+	// save the chat turn row after carl's answer is stored, then the preview left standing for this member
+	await saveFinishedChatRoomTurn({
+		billedUserId,
 		topicId: topic?.id ?? null,
 		teamId,
-		chatRoomMessageId: promptChatMessageId,
+		promptChatMessageId,
 		completion,
+		agreementTokens: chatProposalResult?.agreementTokens ?? 0,
 	})
 	// the fan-out runs only after the insert commits. every listener's re-read finds the chat message
 	await notifyChatRoomMessage(
@@ -128,6 +140,87 @@ export async function runModelChatRoomTurn(
 		modelChatMessage.id,
 		toChatRoomToolCalls(toolCalls, billedUserId),
 	)
+}
+
+// the member who addressed carl, the chat room's topic and team, and the member's words that may answer their preview
+type AnswerChatRoomTopicEditOptions = {
+	billedUserId: string
+	topic: typeof topics.$inferSelect | null
+	teamId: string
+	question: string
+	toolCalls: ChatTurnToolCalls
+	litellmApiKey: string
+}
+
+// answer the preview standing for the member who addressed carl, if that member may edit the topic
+async function answerChatRoomTopicEdit({
+	billedUserId,
+	topic,
+	teamId,
+	question,
+	toolCalls,
+	litellmApiKey,
+}: AnswerChatRoomTopicEditOptions): Promise<{ isTopicEditor: boolean; chatProposalResult?: ChatProposalResult }> {
+	// the team's own chat room has no topic, and a member who may not edit gets no preview tools
+	if (!topic || !(await isAllowed(billedUserId, "topic:edit", topic))) {
+		return { isTopicEditor: false }
+	}
+
+	// answer the preview standing for this editor
+	const chatProposalResult = await answerChatRoomProposal({
+		userId: billedUserId,
+		topicId: topic.id,
+		teamId,
+		question,
+		toolCalls,
+		litellmApiKey,
+	})
+	return { isTopicEditor: true, chatProposalResult }
+}
+
+// the member billed for the chat room turn, where it ran, the chat message carl answered, and what the reply spent
+type SaveFinishedChatRoomTurnOptions = {
+	billedUserId: string
+	topicId: string | null
+	teamId: string
+	promptChatMessageId: number
+	completion: Awaited<ChatReplyStream["completion"]>
+	agreementTokens: number
+}
+
+// save a chat room turn's spend row, the agreement check's tokens included, and the preview the chat room turn leaves
+// standing for the member who addressed carl. a failed preview record is reported and the chat room turn goes on
+async function saveFinishedChatRoomTurn({
+	billedUserId,
+	topicId,
+	teamId,
+	promptChatMessageId,
+	completion,
+	agreementTokens,
+}: SaveFinishedChatRoomTurnOptions): Promise<void> {
+	// the spend row names the chat message that carl answered
+	const chatRoomTurnId = await recordChatRoomTurn({
+		userId: billedUserId,
+		topicId,
+		teamId,
+		chatRoomMessageId: promptChatMessageId,
+		completion: { ...completion, totalTokens: completion.totalTokens + agreementTokens },
+	})
+	if (!topicId || !chatRoomTurnId) {
+		return
+	}
+
+	// the preview the chat room turn leaves standing, recorded for this member alone
+	await recordChatRoomProposal({
+		userId: billedUserId,
+		topicId,
+		teamId,
+		chatTurnId: chatRoomTurnId,
+		chatToolCalls: completion.toolCalls,
+	}).catch((error: unknown) => {
+		console.error(`recording the chat room proposal failed for topic ${topicId}`, error)
+		reportError(error, "chat", { topicId, teamId })
+	})
 }
 
 // the reply's text alone, read from its parts
@@ -212,7 +305,7 @@ export async function postModelRejection(
 		.values({
 			topicId,
 			teamId,
-			authorUsername: "Carl",
+			authorUsername: PODCAST_EPISODE_SPEAKER_NAMES.host,
 			replyToMessageId: promptChatMessageId,
 			content: encryptChatText(rejectionReason),
 		})

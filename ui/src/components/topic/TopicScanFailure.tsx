@@ -1,13 +1,26 @@
-import { isBudgetError, toScanFailureLabel } from "@shared/scanFailure"
+import { FIRST_SCAN_PAUSED_REASON, isBudgetError, toScanFailureLabel } from "@shared/scanFailure"
 import { AnchorLink } from "@/components/common/AnchorLink"
 import { buttonVariants } from "@/components/primitives/button"
 import { cn } from "@/lib/utils"
 
 /**
- * Why a scan failed, followed by an Upgrade button when the budget is what stopped it.
+ * Why a scan failed, followed by an Upgrade button if the budget is what stopped it, or a See account link if the
+ * manual scans cutoff did.
  */
 export function TopicScanFailure({ error }: { error: string | null }) {
-	// a budget failure is the only one a user can act on, so it is the only one that offers a way out
+	// the manual scans cutoff is a planned pause, so it reads plainly and links the account meter
+	if (error === FIRST_SCAN_PAUSED_REASON) {
+		return (
+			<p className="text-muted-foreground">
+				{toScanFailureLabel(error)}{" "}
+				<AnchorLink href="/account" className="underline">
+					See account
+				</AnchorLink>
+			</p>
+		)
+	}
+
+	// a budget failure is the only other one a user can act on, so it is the only other one that offers a way out
 	if (!isBudgetError(error)) {
 		return <p className="text-destructive">{toScanFailureLabel(error)}</p>
 	}

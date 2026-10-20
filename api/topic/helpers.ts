@@ -7,6 +7,7 @@ import type { TopicGateResponse, TopicResponse, TopicScan } from "@shared/contra
 import { isDailyFrequency } from "@shared/enums"
 import { and, eq, inArray, or, sql } from "drizzle-orm"
 import { db } from "../../db"
+import { isMonthlyBudgetCutoffPassed } from "../../db/monthlyBudgetCutoffs"
 import { dailyScanLimit, dailyTopicIdsWithinLimit } from "../../db/quotas"
 import { teamMembers, teams, teamTopics } from "../../db/schema/teams"
 import { topics } from "../../db/schema/topics"
@@ -114,17 +115,24 @@ export async function toInviteAndScanFields(
 	inviteRows: Invite[]
 	manualScansRemaining: number | null
 	manualScanLimit: number | null
+	isManualScanPaused: boolean
 	isSpendExhausted: boolean
 }> {
 	// the invite list is the owner's alone, and the quota belongs to whoever may scan
 	const inviteRows = isTopicOwner ? await loadPendingTopicInvites(topic.id) : []
 	const canScan = await isAllowed(userId, "scan:request", topic)
+
+	// only someone who may scan needs their spend checked against the manual scans cutoff and the whole budget
+	const [isManualScanPaused, isSpendExhausted] =
+		userId && canScan
+			? await Promise.all([isMonthlyBudgetCutoffPassed(userId, "manualScans"), isMonthlySpendExhausted(userId)])
+			: ([false, false] as const)
 	return {
 		inviteRows,
 		manualScansRemaining: userId ? await scansRemaining(userId, canScan) : null,
 		manualScanLimit: userId && canScan ? await dailyScanLimit(userId) : null,
-		// only someone who may scan needs their spend checked
-		isSpendExhausted: userId && canScan ? await isMonthlySpendExhausted(userId) : false,
+		isManualScanPaused,
+		isSpendExhausted,
 	}
 }
 

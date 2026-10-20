@@ -1,6 +1,6 @@
 // the podcast episode player's state, which outlives the page that started playback
 import type { PodcastEpisode, PodcastEpisodeChapter } from "@shared/contracts/podcast"
-import { fetchNextUnplayedPodcastEpisode, fetchPodcastEpisode } from "@/clients/podcastEpisodeClient"
+import { fetchNextUnplayedPodcastEpisode } from "@/clients/podcastEpisodeClient"
 import {
 	SKIP_BACK_SECONDS,
 	SKIP_FORWARD_SECONDS,
@@ -17,6 +17,7 @@ import {
 	type SavePodcastEpisodeListenOptions,
 	savePodcastEpisodeListen,
 } from "@/stores/podcastEpisodeListenStore"
+import { endPodcastEpisodeQuestion } from "@/stores/podcastEpisodeQuestionStore"
 import { stopSpokenAnswer } from "@/stores/spokenAnswerStore"
 import { toStoreListeners } from "@/stores/storeListeners"
 
@@ -74,10 +75,58 @@ export function usePlayerChapter(): PodcastEpisodeChapter | undefined {
 	return toPlayerChapter()
 }
 
+/**
+ * Returns the position of the chapter that the player is at if this podcast episode is the loaded one, or undefined
+ * otherwise, and re-renders the component each time the state changes.
+ */
+export function usePlayerChapterPosition(podcastEpisodeId: string): number | undefined {
+	useStoreVersion()
+	return toPlayerChapterPosition(podcastEpisodeId)
+}
+
+/**
+ * Returns the loaded podcast episode, or null with none loaded.
+ */
+export function toLoadedPodcastEpisode(): PodcastEpisode | null {
+	return playerState.podcastEpisode
+}
+
 // the loaded podcast episode's chapter at the playback position, or undefined if there is none
 function toPlayerChapter(): PodcastEpisodeChapter | undefined {
 	const chapters = playerState.podcastEpisode?.chapters ?? []
 	return chapters[toChapterIndexAt(chapters, playerState.positionSeconds)]
+}
+
+/**
+ * Returns the position of the chapter that the player is at if this podcast episode is the loaded one, or undefined
+ * otherwise.
+ */
+export function toPlayerChapterPosition(podcastEpisodeId: string): number | undefined {
+	return playerState.podcastEpisode?.id === podcastEpisodeId ? toPlayerChapter()?.position : undefined
+}
+
+/**
+ * Returns the loaded podcast episode, its chapter at the playback position, and whether it is playing, or null with no
+ * podcast episode loaded.
+ */
+export function toPodcastEpisodeQuestionStart(): {
+	podcastEpisode: PodcastEpisode
+	chapterPosition: number
+	isPlaying: boolean
+} | null {
+	// the loaded podcast episode, and the chapter the chapter line names
+	const { podcastEpisode, isPlaying } = playerState
+	const playerChapter = toPlayerChapter()
+	return podcastEpisode && playerChapter ? { podcastEpisode, chapterPosition: playerChapter.position, isPlaying } : null
+}
+
+/**
+ * Plays the loaded podcast episode from where it paused. A play the browser rejects leaves the player showing play.
+ */
+export function resumePodcastEpisode(): void {
+	if (audioElement && playerState.podcastEpisode) {
+		void audioElement.play().catch(() => {})
+	}
 }
 
 /**
@@ -197,45 +246,15 @@ export function togglePlayback(): void {
 }
 
 /**
- * Plays or pauses the player's chapter, and plays the podcast episode from any other chapter.
- */
-export function togglePodcastEpisodeChapterPlayback(
-	podcastEpisode: PodcastEpisode,
-	chapter: PodcastEpisodeChapter,
-): void {
-	// pause or play the player's chapter, and play any other chapter from its start
-	const isPlayerChapter =
-		playerState.podcastEpisode?.id === podcastEpisode.id && toPlayerChapter()?.position === chapter.position
-	if (isPlayerChapter) {
-		togglePlayback()
-	} else {
-		void playPodcastEpisode(podcastEpisode, chapter.startSeconds)
-	}
-}
-
-/**
- * Plays or pauses the loaded podcast episode if the id matches, and fetches and plays any other podcast episode.
- */
-export async function togglePodcastEpisodePlayback(podcastEpisodeId: string): Promise<void> {
-	if (playerState.podcastEpisode?.id === podcastEpisodeId) {
-		togglePlayback()
-		return
-	}
-
-	// fetch the podcast episode with its chapters, then play the episode
-	const fetchedPodcastEpisode = await fetchPodcastEpisode(podcastEpisodeId)
-	if (fetchedPodcastEpisode) {
-		await playPodcastEpisode(fetchedPodcastEpisode)
-	}
-}
-
-/**
  * Moves playback to a position in the loaded podcast episode.
  */
 export function seekPlaybackTo(positionSeconds: number): void {
 	if (!audioElement || !playerState.podcastEpisode) {
 		return
 	}
+
+	// a seek or a chapter skip ends a question asked from the podcast player and leaves the podcast episode paused
+	endPodcastEpisodeQuestion("skipped")
 
 	// keep the position inside the podcast episode, then move the audio there
 	const durationSeconds = playerState.podcastEpisode.durationSeconds ?? 0
@@ -326,7 +345,9 @@ function handlePlaybackChange(isPlaying: boolean): void {
 		return
 	}
 
-	// one voice at a time. the episode playing stops a spoken answer
+	// one voice at a time. the podcast episode playing ends a question asked from the podcast player and stops a spoken
+	// answer
+	endPodcastEpisodeQuestion("played")
 	stopSpokenAnswer()
 
 	// name the podcast episode on the lock screen, and save the episode's first play

@@ -7,7 +7,7 @@ import { restoreRedisClient, stubRedisClient } from "../db/redisClientStub"
 import * as store from "../worker/store"
 import { uploadTeamAvatar } from "./avatars"
 import { avatarsRoute } from "./avatarsRoute"
-import { toSignedInApp } from "./testSession"
+import { toJsonRequest, toSignedInApp } from "./testSession"
 
 // a user's upload and a team's upload. the id in each file name is its version
 const USER_AVATAR_KEY = "avatars/user-1/3f2a.png"
@@ -82,11 +82,7 @@ test("a decode failure is reported by its type and size for a signed-in user alo
 	const signedInApp = toSignedInApp(avatarsRoute, "user-1")
 
 	// one report of a HEIC file
-	const decodeFailureRequest = {
-		method: "POST",
-		headers: { "Content-Type": "application/json" },
-		body: JSON.stringify({ contentType: "image/heic", byteSize: 3_000_000 }),
-	}
+	const decodeFailureRequest = toJsonRequest({ contentType: "image/heic", byteSize: 3_000_000 })
 
 	// the signed-in report is taken and reported, and the visitor's is rejected
 	const signedInResponse = await signedInApp.request("/avatars/decode-failures", decodeFailureRequest)

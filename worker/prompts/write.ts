@@ -13,7 +13,7 @@ const PREMIUM_TIER_PATTERN = /<!-- premium-tier -->[\s\S]*?<!-- \/premium-tier -
 const PLACEHOLDER_PATTERN = /\{\{(\w+)\}\}/g
 
 // the tag name of the delimiter that fences an untrusted value
-const UNTRUSTED_DATA_TAG = "untrusted-data"
+export const UNTRUSTED_DATA_TAG = "untrusted-data"
 
 // a delimiter tag written by the value itself, with any nonce. stripped so a value cannot close its own delimiter
 const FORGED_DELIMITER_PATTERN = /<\/?untrusted-data[^>]*>/gi

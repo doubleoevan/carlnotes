@@ -8,11 +8,21 @@ import {
 	SHOWN_CHAPTER_COUNT,
 } from "@/components/podcast/PodcastEpisodeChapters"
 import { PodcastEpisodeDetails, PodcastEpisodeTooltip } from "@/components/podcast/PodcastEpisodeDetails"
+import {
+	isPodcastEpisodeQuestionButtonShown,
+	PodcastEpisodeQuestionButton,
+} from "@/components/podcast/PodcastEpisodeQuestionControls"
 import { RemovePodcastEpisodeButton } from "@/components/podcast/RemovePodcastEpisodeDialog"
 import { MoreButton } from "@/components/topic/MoreButton"
 import { toClockLabel } from "@/lib/labels"
 import { toChapterIndexAt } from "@/lib/podcastEpisodePlayback"
-import { INFO_CARD_CLASS, MENU_BUTTON_CLASS, PLAY_BUTTON_CLASS, SCRIPTED_ONLY_CLASS } from "@/lib/styleClasses"
+import {
+	INFO_CARD_CLASS,
+	MENU_BUTTON_CLASS,
+	PLAY_BUTTON_CLASS,
+	PLAYBACK_CONTROL_BUTTON_CLASS,
+	SCRIPTED_ONLY_CLASS,
+} from "@/lib/styleClasses"
 import { cn } from "@/lib/utils"
 import {
 	playPodcastEpisode,
@@ -102,13 +112,19 @@ export function PodcastEpisodePlayerCard({
 						/>
 					</div>
 
-					{/* the skip and playback rate buttons once the podcast episode is loaded,
-					    the podcast feed button on a wide screen, and the remove button */}
+					{/* the skip and playback rate buttons and the mic that asks carl and vienna once the podcast episode is
+					    loaded, the podcast feed button on a wide screen, and the remove button */}
 					<div className="flex shrink-0 items-center gap-1.5">
 						{isPodcastEpisodeLoaded && (
 							<>
 								<SkipPlaybackButtons />
 								<PlaybackSpeedButton playbackRate={playbackRate} />
+								{isPodcastEpisodeQuestionButtonShown(podcastEpisode) && (
+									<PodcastEpisodeQuestionButton
+										podcastEpisode={podcastEpisode}
+										className={cn(PLAYBACK_CONTROL_BUTTON_CLASS, "disabled:opacity-40")}
+									/>
+								)}
 							</>
 						)}
 						<PodcastFeedButton

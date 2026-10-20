@@ -116,7 +116,7 @@ function ActivitySections({
 			<Accordion type="multiple" defaultValue={["subscriptions", "invites"]}>
 				{/* the user's subscriptions with their active and email preferences */}
 				<AccordionItem value="subscriptions">
-					<AccordionTrigger className="font-semibold">Your topic subscriptions</AccordionTrigger>
+					<AccordionTrigger className="font-semibold">Topics you follow</AccordionTrigger>
 					<AccordionContent>
 						{activity.subscriptions.length > 0 ? (
 							<TopicSubscriptionsTable

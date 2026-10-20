@@ -1,6 +1,7 @@
 // whether a user may take a chat turn on a topic, in a team chat, or in the new-topic chat, and how it is saved
 import type { TopicDraftTeam } from "@shared/topicPayloads"
 import { eq } from "drizzle-orm"
+import type { Context } from "hono"
 import { db } from "../../db"
 import { topics } from "../../db/schema/topics"
 import { isAllowed, isLeaderRole, isMonthlySpendExhausted, topicsRemaining } from "../authorization"
@@ -27,6 +28,24 @@ export type ChatTurnAuthorization =
 
 // the error a signed-out visitor's chat request is rejected with
 export const SIGNUP_REQUIRED_ERROR = "sign up required"
+
+/**
+ * Returns the response for each status that a chat turn, or a voice request on its page, is rejected with.
+ */
+export function toChatRejection(
+	context: Context,
+	status: Exclude<ChatTurnAuthorization["status"], "allowed">,
+): Response {
+	if (status === "budget") {
+		return context.json({ error: "budget exhausted" }, 402)
+	}
+	if (status === "signup") {
+		return context.json({ error: SIGNUP_REQUIRED_ERROR }, 401)
+	}
+
+	// reject a page this user may not chat on
+	return context.json({ error: "forbidden" }, 403)
+}
 
 /**
  * Decides whether this user may take a chat turn on the topic right now, and how that chat turn is saved.

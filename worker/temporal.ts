@@ -24,7 +24,7 @@ import * as sourceActivities from "./workflows/screenSourceActivities"
 import { SCAN_EMAIL_TASK_QUEUE } from "./workflows/sendScanEmail"
 import * as scanEmailActivities from "./workflows/sendScanEmailActivities"
 
-// the SDK shuts a Worker down on its own on SIGINT/SIGTERM, but gives an in-flight activity zero time to finish
+// the SDK shuts a Worker down on its own on SIGINT/SIGTERM, but gives a running activity zero time to finish
 const SHUTDOWN_GRACE_MS = 2 * 60 * 1000
 
 // how many scan activities may run at once on this replica, from the SCAN_CONCURRENCY setting or the default

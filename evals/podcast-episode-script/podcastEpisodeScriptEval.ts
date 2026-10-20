@@ -13,7 +13,9 @@ import {
 	toCheckedPodcastEpisodeSegment,
 	toScriptMinutes,
 } from "../../worker/podcast/podcastEpisodeScript"
-import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toGradingResult } from "../evalChecks"
+import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toWriteCostLabel } from "../evalLabels"
 import { PODCAST_EPISODE_SCRIPT_CASES, type PodcastEpisodeScriptCase } from "./podcastEpisodeScriptCases"
 import {
 	type PodcastEpisodeScriptVariables,
@@ -222,8 +224,7 @@ function gradeShortScript(writerOutput: string, context: AssertionValueFunctionC
 // a case's chapter count, length, and writing cost
 function toCaseLine(writerOutput: string, evaluateResult: EvaluateResult): string {
 	const scriptMinutes = toScriptMinutes(toWrittenPodcastEpisode(writerOutput).podcastEpisodeScript)
-	const writeCostDollars = (evaluateResult.cost ?? 0).toFixed(4)
-	return `${toChapters(writerOutput).length} chapters, ${scriptMinutes.toFixed(1)} minutes, $${writeCostDollars} to write`
+	return `${toChapters(writerOutput).length} chapters, ${scriptMinutes.toFixed(1)} minutes, ${toWriteCostLabel(evaluateResult.cost)}`
 }
 
 // the writer's JSON output read back into its outline and script

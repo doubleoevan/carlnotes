@@ -4,6 +4,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import { restoreRedisClient } from "../../db/redisClientStub"
 import * as speech from "../../worker/speech"
 import { CALLER_RATE_LIMIT, SPEECH_RATE_LIMIT } from "../rateLimit"
+import { toJsonRequest } from "../testSession"
 import {
 	SPOKEN_PARTS_IN_PROGRESS_LIMIT,
 	TRANSCODE_CONCURRENCY_LIMIT,
@@ -12,10 +13,9 @@ import {
 } from "./voiceRoute"
 import {
 	allowVoicePage,
-	MP3_BYTES,
+	RECORDED_SPOKEN_ANSWER,
 	stubTranscription,
 	TOPIC_PAGE,
-	toJsonRequest,
 	toSignedInVoiceApp,
 	toTranscriptionRequest,
 	WAV_BYTES,
@@ -72,13 +72,7 @@ test("a spoken part past the user's in-progress limit is rejected", async () => 
 	const speechRelease = Promise.withResolvers<void>()
 	const recordSpokenAnswerSpy = spyOn(speech, "recordSpokenAnswer").mockImplementation(async () => {
 		await speechRelease.promise
-		return {
-			outcome: "recorded",
-			audioBytes: MP3_BYTES,
-			audioContentType: "audio/mpeg",
-			inputTokens: 1,
-			audioTokens: 1,
-		}
+		return RECORDED_SPOKEN_ANSWER
 	})
 	const signedInApp = toSignedInVoiceApp()
 
@@ -107,13 +101,7 @@ test("a spoken part past the user's in-progress limit is rejected", async () => 
 test("the transcription route spends the tool callers' limit and the speech route spends its own", async () => {
 	allowVoicePage()
 	stubTranscription({ outcome: "transcribed", transcript: "hi", inputTokens: 1, outputTokens: 1 })
-	spyOn(speech, "recordSpokenAnswer").mockResolvedValue({
-		outcome: "recorded",
-		audioBytes: MP3_BYTES,
-		audioContentType: "audio/mpeg",
-		inputTokens: 1,
-		audioTokens: 1,
-	})
+	spyOn(speech, "recordSpokenAnswer").mockResolvedValue(RECORDED_SPOKEN_ANSWER)
 	const signedInApp = toSignedInVoiceApp()
 
 	// the recordings up to the limit pass, and the next is rejected

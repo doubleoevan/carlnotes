@@ -4,6 +4,7 @@ import { generateText, stepCountIs, type Tool } from "ai"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
 import { TEST_ANALYTICS_PROPERTIES } from "../../api/analyticsTestFixtures"
 import { type ChatProposalResult, resolveChatProposal, toStandingChatProposal } from "../../api/chat/chatProposals"
+import { toEmptyChatTurnToolCalls } from "../../api/tool/chatTools"
 import {
 	toCreateTopicText,
 	toNewTopicChatTools,
@@ -12,13 +13,12 @@ import {
 	toSuggestTopicSourcesTool,
 } from "../../api/tool/newTopicChatTools"
 import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
-import { MAX_TURN_STEPS } from "../../worker/chat"
+import { MAX_TURN_STEPS, toStepsText } from "../../worker/chat"
 import { toModelMessages } from "../../worker/chat/chatMessages"
 import { buildNewTopicChatPrompt } from "../../worker/chat/chatPrompts"
 import { webSearchTool } from "../../worker/chat/search"
 import { chatModel } from "../../worker/models"
 import { type RecordedToolCall, toRecordedToolCalls, toRecordingTools } from "../evalHarness"
-import { toStepsText } from "../evalReplies"
 import { LEADER_TEAMS, type NewTopicChatCase, SUGGESTED_TOPIC_SOURCES } from "./newTopicChatCases"
 
 // how many more topics the plan lets the user hold
@@ -56,7 +56,7 @@ async function writeCaseChatTurn(_renderedPrompt: string, context?: CallApiConte
 	// bind the tools to the copied draft, as a chat turn binds the tools to the user's topic draft
 	const newTopicToolBinding: NewTopicToolBinding = {
 		userId: "eval-user",
-		toolCalls: { count: 0, topicSaves: [], topicSaveRejections: [] },
+		toolCalls: toEmptyChatTurnToolCalls(),
 		topicDraft,
 		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	}

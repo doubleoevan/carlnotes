@@ -1,6 +1,7 @@
 // proposes Sources a Topic could follow, read from its own title, prompt, and attachments
 import { toHostWithoutWww } from "@shared/seo"
 import { customSourceKeys, toPublisherDomain } from "@shared/sources"
+import { toOneLineText } from "@shared/text"
 import { generateText, Output } from "ai"
 import { z } from "zod"
 import type { NewResource } from "./ingest/ingester"
@@ -237,7 +238,7 @@ export async function loadWebSearchResources({ name, prompt }: SuggestionContext
 export function toWebSearchPages(webSearchResources: NewResource[]): string {
 	const webSearchPageLines = webSearchResources.map((webSearchResource) => {
 		const host = toHostWithoutWww(webSearchResource.url)
-		const title = webSearchResource.title?.replace(/\s+/g, " ").trim() || host
+		const title = toOneLineText(webSearchResource.title ?? "") || host
 		return `- ${title} (${host}): ${webSearchResource.url}`
 	})
 	return webSearchPageLines.join("\n") || "None."

@@ -1,5 +1,5 @@
 // the grader calibration cases of the source suggestions eval's rubrics.
-// the topic is the topic chat eval's, and the suggested sources are made up
+// the topic is the topic chat eval's, and the suggested sources are real coffee publications
 import type { SuggestedSource } from "../../worker/suggest"
 import type { SourceSuggestionsVariables } from "../source-suggestions/sourceSuggestionsProviders"
 import * as sourceSuggestionsRubrics from "../source-suggestions/sourceSuggestionsRubrics"
@@ -19,9 +19,9 @@ const SOURCE_SUGGESTIONS_EVAL: CalibratedEval = {
 
 // the sources suggested for the topic, every source about espresso
 const ESPRESSO_SUGGESTED_SOURCES: SuggestedSource[] = [
-	{ sourceOption: "rss", value: "https://espressogear.example/feed.xml" },
+	{ sourceOption: "rss", value: "https://sprudge.com/feed" },
 	{ sourceOption: "reddit", value: "espresso" },
-	{ sourceOption: "googleNews", value: "homeespresso.example" },
+	{ sourceOption: "googleNews", value: "home-barista.com" },
 ]
 
 // every source suggestions rubric, each with an output that keeps the rubric and an output that breaks the rubric

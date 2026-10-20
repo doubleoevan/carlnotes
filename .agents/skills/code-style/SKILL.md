@@ -120,12 +120,12 @@ ordering the compiler will not enforce, an api that destroys its input. State it
 as a plain sentence beside the action, never as a defense of it.
 
     // wrong — the constraint arrives as an argument
-    // open LISTEN on the direct connection string, since neon's pooler endpoint
-    // does not deliver notifications to a listener
+    // open LISTEN on the direct connection string, since neon's connection
+    // pooler does not deliver notifications to a listener
 
     // right — the action, then the constraint that makes it the only option
-    // open LISTEN on the direct connection string. neon's pooler drops
-    // notifications to a listener
+    // open LISTEN on the direct connection string. neon's connection pooler
+    // drops notifications to a listener
 
 ### 3. Top-down file order
 
@@ -317,7 +317,7 @@ optional fields to paper over structural differences.
       error?: unknown
     }
 
-    // always — each variant carries only what it owns
+    // always — each variant has only what it owns
     type FetchResult =
       | { status: 'success'; articles: Article[] }
       | { status: 'failed'; error: unknown }
@@ -448,7 +448,7 @@ translation step and splits every search.
 - `cadence` → **frequency**
 - `curate` → **review**, the stage's own name
 - `prune` → **filter**
-- `harvest` → **find**, or **return** for what a function hands back
+- `harvest` → **find**, or **return** for a function's result
 - `seam` → **boundary**, or just name the thing
 
 **Among equally accurate options, use the common word.** A rare word makes the
@@ -471,7 +471,7 @@ substituting.
 
 One piece of logic lives in one place. Anything duplicated is a candidate for
 drying up, from the second copy on: extract it into a shared function and call
-it from every place, in the same change. Two copies drift: a fix lands in one
+it from every place, in the same change. Two copies drift: a fix goes into one
 and the other stays broken.
 
 - Search before writing. A helper, a type, or a check a few files over is the

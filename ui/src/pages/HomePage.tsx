@@ -8,11 +8,13 @@ import { authClient } from "@/clients/authClient"
 import { Accordion } from "@/components/primitives/accordion"
 import { Button } from "@/components/primitives/button"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/primitives/tooltip"
+import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { TagPicker } from "@/components/topic/TagPicker"
 import { useNewTopicDialog } from "@/components/topic/TopicEditorChoiceDialog"
 import { TopicFeedSkeleton } from "@/components/topic/TopicFeedSkeleton"
 import { TopicSection } from "@/components/topic/TopicSection"
 import { PAGE_CLASS } from "@/lib/styleClasses"
+import { toSeePlansToastAction } from "@/lib/toastActions"
 import { useTopicFeed } from "@/providers/TopicFeedProvider"
 import { openNewTopicChat, useRegisterChatContext } from "@/stores/chatPanelStore"
 import { useRegisterPageActions } from "@/stores/pageActionsStore"
@@ -72,7 +74,7 @@ export function HomePage() {
 		if (isSignedIn) {
 			openNewTopicChat()
 		} else {
-			navigate({ to: "/signup", search: { cta: "new-topic" } })
+			navigate(toSignupNavigation("new-topic"))
 		}
 	}
 
@@ -161,11 +163,7 @@ function NewTopicRow({
 			<TooltipTrigger asChild>
 				<Button
 					size="sm"
-					onClick={
-						isAtLimit
-							? () => toast(limitLine, { action: { label: "See plans", onClick: () => navigate({ to: "/plans" }) } })
-							: onNewTopic
-					}
+					onClick={isAtLimit ? () => toast(limitLine, { action: toSeePlansToastAction(navigate) }) : onNewTopic}
 					disabled={isSignedIn && remainingTopics === null}
 					className="min-h-11 shrink-0 gap-1.5 rounded-lg sm:min-h-9"
 				>

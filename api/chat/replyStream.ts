@@ -31,6 +31,11 @@ export async function writeReplyStream(
 			await writeStream.write(toChatReplyLineText({ type: "text", text: replyPart.text }))
 			continue
 		}
+		// write a podcast chat turn's speaker as its own line, before the answer's text
+		if (replyPart.type === "speaker") {
+			await writeStream.write(toChatReplyLineText({ type: "speaker", speaker: replyPart.speaker }))
+			continue
+		}
 		chatToolCalls.push(replyPart.toolCall)
 		await writeUnsentToolCalls(writeStream, toolCalls, chatToolCalls, sentToolCalls)
 	}

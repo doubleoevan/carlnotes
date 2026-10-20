@@ -1,4 +1,5 @@
 // fetch a transcript as plain text: a video's caption track from the host that publishes it, or a declared transcript
+import { toOneLineText } from "@shared/text"
 import { FetchStatusError, fetchPublicUrl, readLimitedBody } from "./publicFetch"
 import type { FetchResult } from "./scrape"
 
@@ -286,7 +287,7 @@ export function toTranscriptText(captions: CaptionEvents | null): string {
 	const captionLines = (captions?.events ?? []).map((event) =>
 		(event.segs ?? []).map((segment) => segment.utf8 ?? "").join(""),
 	)
-	return toCollapsedText(captionLines.join(" "))
+	return toOneLineText(captionLines.join(" "))
 }
 
 /**
@@ -297,7 +298,7 @@ export function toCueText(cueFile: string): string {
 	const spokenLines = cueFile.split(/\r?\n/).filter(isSpokenLine)
 
 	// WEBVTT marks up speakers and emphasis inline, which would otherwise reach a model as markup
-	return toCollapsedText(spokenLines.join(" ").replace(/<[^>]*>/g, " "))
+	return toOneLineText(spokenLines.join(" ").replace(/<[^>]*>/g, " "))
 }
 
 // whether a cue-file line is words instead of the file header, a note, a cue number, or a cue's timing
@@ -310,9 +311,4 @@ function isSpokenLine(line: string): boolean {
 
 	// a timing line holds the arrow, and a cue number is digits alone
 	return !cueLine.includes("-->") && !/^\d+$/.test(cueLine)
-}
-
-// collapse the line breaks and padding in a caption file into single spaces
-function toCollapsedText(text: string): string {
-	return text.replace(/\s+/g, " ").trim()
 }

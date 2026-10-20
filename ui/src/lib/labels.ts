@@ -79,6 +79,20 @@ export function toCentsLabel(cents: number | null): string {
 }
 
 /**
+ * A share of a whole as a rounded percent: 0.6 is 60.
+ */
+export function toSharePercent(share: number): number {
+	return Math.round(share * 100)
+}
+
+/**
+ * A share of a whole as a rounded percent label: 0.6 is 60%.
+ */
+export function toSharePercentLabel(share: number): string {
+	return `${toSharePercent(share)}%`
+}
+
+/**
  * A 12-hour label from a "HH:MM" 24-hour time, the hour unpadded the way a clock reads it: "9:00 AM".
  */
 export function toTimeLabel(time: string): string {

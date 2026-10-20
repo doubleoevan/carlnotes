@@ -6,7 +6,6 @@ import { db } from "../../db"
 import { invites } from "../../db/schema/invites"
 import { teams } from "../../db/schema/teams"
 import { topics } from "../../db/schema/topics"
-import { users } from "../../db/schema/users"
 import { renderTeamInviteEmail, renderTeamInviteEmailText, toTeamInviteSubject } from "../../emails/team-invite-email"
 import {
 	renderTopicInviteEmail,
@@ -15,6 +14,7 @@ import {
 } from "../../emails/topic-invite-email"
 import { sendEmail, sendEmailBatches } from "../../worker/email"
 import { createTopicEmailSend } from "../../worker/notify"
+import { loadUsername } from "../usernames"
 import type { InviteTarget } from "./userInvites"
 
 /**
@@ -39,8 +39,8 @@ async function sendTopicInviteEmails(
 	}
 
 	// the inviter is the topic's owner, named by username
-	const [owner] = await db.select({ username: users.username }).from(users).where(eq(users.id, topic.ownerId))
-	if (!owner) {
+	const ownerUsername = await loadUsername(topic.ownerId)
+	if (!ownerUsername) {
 		return
 	}
 
@@ -55,7 +55,7 @@ async function sendTopicInviteEmails(
 	const messages = await Promise.all(
 		invitees.map(async (inviteeEmail) => {
 			const inviteUrl = `${appUrl}/invite/${tokenByEmail.get(inviteeEmail)}?src=invite-email`
-			const emailProps = { inviterUsername: owner.username, topicName: topic.name, inviteeEmail, inviteUrl, appUrl }
+			const emailProps = { inviterUsername: ownerUsername, topicName: topic.name, inviteeEmail, inviteUrl, appUrl }
 			return {
 				to: inviteeEmail,
 				subject: toTopicInviteSubject(emailProps),
@@ -109,17 +109,17 @@ async function sendUserInviteEmail(
 	}
 
 	// the sender is the inviter the email names, and the invite url includes the invite's own token
-	const [sender] = await db.select({ username: users.username }).from(users).where(eq(users.id, senderUserId))
-	if (!sender) {
+	const senderUsername = await loadUsername(senderUserId)
+	if (!senderUsername) {
 		return
 	}
 	const inviteUrl = `${appUrl}/invite/${token}?src=invite-email`
 	// each target's message goes through its own template
 	if ("teamId" in target) {
-		await sendTeamInviteEmail(target.teamId, sender.username, inviteeEmail, inviteUrl, appUrl)
+		await sendTeamInviteEmail(target.teamId, senderUsername, inviteeEmail, inviteUrl, appUrl)
 		return
 	}
-	await sendTopicInviteEmail(target.topicId, sender.username, inviteeEmail, inviteUrl, appUrl)
+	await sendTopicInviteEmail(target.topicId, senderUsername, inviteeEmail, inviteUrl, appUrl)
 }
 
 // the team invitation, sent through the team template

@@ -4,7 +4,7 @@ import { toChatReplyLineText } from "@shared/contracts/chat"
 import type { ChatToolCall } from "@shared/payloads"
 import { EMPTY_TOPIC_DRAFT } from "@shared/topicPayloads"
 import type { ChatReplyPart } from "../../worker"
-import type { ChatTurnToolCalls } from "../tool/chatTools"
+import { toEmptyChatTurnToolCalls } from "../tool/chatTools"
 import { writeReplyStream } from "./replyStream"
 
 // one tool-result reply part
@@ -19,7 +19,7 @@ function toSentToolCall(toolName: string): ChatToolCall {
 
 // the tool calls go out the moment each tool returns, before the text that follows
 test("writeReplyStream sends a tool's result the moment it returns, before the closing text", async () => {
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const toolCalls = toEmptyChatTurnToolCalls()
 	// a stream whose tool result arrives between two text parts
 	async function* replyParts(): AsyncGenerator<ChatReplyPart> {
 		yield { type: "text", text: "Writing it. " }
@@ -48,7 +48,7 @@ test("writeReplyStream sends a tool's result the moment it returns, before the c
 
 // each save goes out with the tool call that made it
 test("writeReplyStream sends each save once and every tool call once", async () => {
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const toolCalls = toEmptyChatTurnToolCalls()
 	async function* replyParts(): AsyncGenerator<ChatReplyPart> {
 		toolCalls.topicSaves.push("Carl added reddit — r/hoops.")
 		yield toToolResultPart("addSource")
@@ -87,7 +87,7 @@ test("writeReplyStream sends each save once and every tool call once", async () 
 
 // a save made while the tool calls are being written goes out with the next ones
 test("writeReplyStream keeps a save made during a write for the next write", async () => {
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const toolCalls = toEmptyChatTurnToolCalls()
 	async function* replyParts(): AsyncGenerator<ChatReplyPart> {
 		toolCalls.topicSaves.push("Carl added reddit — r/hoops.")
 		yield toToolResultPart("addSource")
@@ -129,7 +129,7 @@ test("writeReplyStream keeps a save made during a write for the next write", asy
 
 // isNewTopicChatOpened goes out once, with the tool calls after the tool that set it
 test("writeReplyStream sends isNewTopicChatOpened once", async () => {
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const toolCalls = toEmptyChatTurnToolCalls()
 	async function* replyParts(): AsyncGenerator<ChatReplyPart> {
 		toolCalls.isNewTopicChatOpened = true
 		yield toToolResultPart("openNewTopicChat")
@@ -166,7 +166,24 @@ test("writeReplyStream writes no tool calls when the tools did nothing", async (
 	await writeReplyStream(
 		{ write: async (text) => writtenChunks.push(text) },
 		{ replyParts: replyParts() },
-		{ count: 0, topicSaves: [], topicSaveRejections: [] },
+		toEmptyChatTurnToolCalls(),
 	)
 	expect(writtenChunks).toEqual([toChatReplyLineText({ type: "text", text: "Just words." })])
+})
+
+// a podcast chat turn's speaker is written as its own line, ahead of the answer's text
+test("writeReplyStream writes a podcast chat turn's speaker line before its text", async () => {
+	const toolCalls = toEmptyChatTurnToolCalls()
+	// a stream whose speaker comes first
+	async function* replyParts(): AsyncGenerator<ChatReplyPart> {
+		yield { type: "speaker", speaker: "cohost" }
+		yield { type: "text", text: "Because you follow it." }
+	}
+	// what reached the stream, in order
+	const writtenChunks: string[] = []
+	await writeReplyStream({ write: async (text) => writtenChunks.push(text) }, { replyParts: replyParts() }, toolCalls)
+	expect(writtenChunks).toEqual([
+		toChatReplyLineText({ type: "speaker", speaker: "cohost" }),
+		toChatReplyLineText({ type: "text", text: "Because you follow it." }),
+	])
 })

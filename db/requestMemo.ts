@@ -14,10 +14,10 @@ export function runWithRequestMemo<Result>(runRequest: () => Result): Result {
 /**
  * Returns the running request's read for a key, starting the read on the first call,
  * so every call in the request shares one read.
- * Outside a request, every call runs the read.
+ * Outside a memo, every call runs the read.
  */
 export function memoizeInRequest<Value>(key: string, read: () => Promise<Value>): Promise<Value> {
-	// outside a request, such as in the worker, every call reads
+	// outside a memo, every call reads
 	const requestMemo = requestMemoStore.getStore()
 	if (!requestMemo) {
 		return read()

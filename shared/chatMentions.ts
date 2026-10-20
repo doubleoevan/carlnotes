@@ -1,4 +1,6 @@
 // the chat mention parser for the chat room composer and the chat room's notifications
+import { PODCAST_EPISODE_SPEAKER_NAMES } from "./podcastEpisodes"
+import { toOneLineText } from "./text"
 import { toNormalizedUsername } from "./usernames"
 
 // the username that starts carl's chat turn. reserved, so no account can hold it
@@ -12,7 +14,7 @@ export const ALL_USERNAME = "all"
  * keeping the name they were written under, so the recorded name is what tells the two apart.
  */
 export function isModelChatMessage(chatMessage: { authorUserId: string | null; authorUsername: string }): boolean {
-	return chatMessage.authorUserId === null && chatMessage.authorUsername === "Carl"
+	return chatMessage.authorUserId === null && chatMessage.authorUsername === PODCAST_EPISODE_SPEAKER_NAMES.host
 }
 
 // a username token after an @: the same characters a username may contain
@@ -45,6 +47,20 @@ export function toChatMentions(content: string, knownUsernames: string[]): strin
  */
 export function hasModelMention(chatMessage: string): boolean {
 	return toChatMentions(chatMessage, [CARL_USERNAME]).length > 0
+}
+
+/**
+ * Returns a chat message's words without its carl mentions, the way hasModelMention reads them, so a longer username
+ * like carl-bot stays.
+ */
+export function toWordsWithoutModelMention(chatMessage: string): string {
+	// drop each mention of carl and keep the character before it
+	const chatMessageWithoutModelMention = chatMessage.replace(
+		CHAT_MENTION_PATTERN,
+		(mention, mentionStart: string, username: string) =>
+			toNormalizedUsername(username) === CARL_USERNAME ? mentionStart : mention,
+	)
+	return toOneLineText(chatMessageWithoutModelMention)
 }
 
 /**

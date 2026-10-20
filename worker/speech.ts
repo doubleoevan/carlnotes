@@ -1,6 +1,8 @@
 // speech from Gemini through LiteLLM's pass-through route, billed to the virtual key that sends the call.
 // a podcast chapter is a two-speaker call that returns a WAV, and a spoken chat reply is a single-speaker call in the
-// host's voice that returns an MP3
+// answering host's voice that returns an MP3
+
+import { type PodcastEpisodeSpeaker, podcastEpisodeSpeakers } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
 import type { PodcastEpisodeTurn } from "@shared/payloads"
 import { podcastEpisodeSpeechModel } from "@shared/podcastEpisodes"
@@ -12,8 +14,9 @@ import { isRetryableHttpStatus } from "./publicFetch"
 // given
 export type RecordSpeechOptions = { turns: PodcastEpisodeTurn[]; speechTier: SpeechTier; litellmApiKey?: string }
 
-// one spoken answer's speech call. its text, and the virtual key that it bills, or the master key if no key is given
-export type RecordSpokenAnswerOptions = { text: string; litellmApiKey?: string }
+// one spoken answer's speech call. its text, the host whose voice speaks it, and the virtual key that it bills.
+// the host is carl if no speaker is given, and the key is the master key if no key is given
+export type RecordSpokenAnswerOptions = { text: string; speaker?: PodcastEpisodeSpeaker; litellmApiKey?: string }
 
 // how a model call through the proxy fails
 export type ModelCallFailure =
@@ -93,16 +96,17 @@ export async function recordSpeech({ turns, speechTier, litellmApiKey }: RecordS
 }
 
 /**
- * Records the text as one single-speaker speech call in the host's voice on the standard tier, and returns the MP3, or
- * the WAV if the encode fails, with its token counts or why the call failed.
+ * Records the text as one single-speaker speech call in the answering host's voice on the standard tier, and returns
+ * the MP3, or the WAV if the encode fails, with its token counts or why the call failed.
  */
 export async function recordSpokenAnswer({
 	text,
+	speaker = "host",
 	litellmApiKey,
 }: RecordSpokenAnswerOptions): Promise<SpokenAnswerResult> {
 	// record the WAV, and return a failed call as it is
 	const postSpeechRequestResult = await postSpeechRequest({
-		requestBody: toSpokenAnswerRequestBody(text),
+		requestBody: toSpokenAnswerRequestBody(text, speaker),
 		timeoutMs: SPOKEN_ANSWER_TIMEOUT_MS,
 		litellmApiKey,
 	})
@@ -138,11 +142,10 @@ export function toSpeechRequestBody(turns: PodcastEpisodeTurn[], speechTier: Spe
 	}))
 
 	// both speakers' voices, matched to the parts by speaker
-	const cohostVoice = Bun.env.PODCAST_COHOST_VOICE?.trim() || DEFAULT_PODCAST_COHOST_VOICE
-	const speakerVoiceConfigs = [
-		{ speaker: "host", voiceConfig: { prebuiltVoiceConfig: { voiceName: toHostVoice() } } },
-		{ speaker: "cohost", voiceConfig: { prebuiltVoiceConfig: { voiceName: cohostVoice } } },
-	]
+	const speakerVoiceConfigs = podcastEpisodeSpeakers.map((speaker) => ({
+		speaker,
+		voiceConfig: { prebuiltVoiceConfig: { voiceName: toSpeakerVoice(speaker) } },
+	}))
 	return {
 		contents: [{ role: "user", parts: turnParts }],
 		generationConfig: {
@@ -155,14 +158,15 @@ export function toSpeechRequestBody(turns: PodcastEpisodeTurn[], speechTier: Spe
 }
 
 /**
- * Returns a spoken answer's request body, with the text as one part, the host's voice alone, and audio output.
+ * Returns a spoken answer's request body, with the text as one part, the answering host's voice alone, and audio
+ * output.
  */
-export function toSpokenAnswerRequestBody(text: string): Record<string, unknown> {
+export function toSpokenAnswerRequestBody(text: string, speaker: PodcastEpisodeSpeaker): Record<string, unknown> {
 	return {
 		contents: [{ role: "user", parts: [{ text }] }],
 		generationConfig: {
 			responseModalities: ["AUDIO"],
-			speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: toHostVoice() } } },
+			speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: toSpeakerVoice(speaker) } } },
 		},
 	}
 }
@@ -284,7 +288,9 @@ async function postSpeechRequest({
 	}
 }
 
-// the prebuilt voice of the host, Carl
-function toHostVoice(): string {
-	return Bun.env.PODCAST_HOST_VOICE?.trim() || DEFAULT_PODCAST_HOST_VOICE
+// the prebuilt voice of the host, Carl, or of the co-host, Vienna
+function toSpeakerVoice(speaker: PodcastEpisodeSpeaker): string {
+	return speaker === "host"
+		? Bun.env.PODCAST_HOST_VOICE?.trim() || DEFAULT_PODCAST_HOST_VOICE
+		: Bun.env.PODCAST_COHOST_VOICE?.trim() || DEFAULT_PODCAST_COHOST_VOICE
 }

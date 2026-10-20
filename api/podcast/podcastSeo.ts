@@ -1,7 +1,12 @@
 // a public topic's podcast in search: its published episodes as the sitemap and llms.txt list them,
 // and the PodcastSeries and PodcastEpisode structured data
 import type { PublicTopic } from "@shared/contracts/topics"
-import { isPodcastEpisodeRecordingConfigured, PODCAST_SHOW_NAME, toPodcastCoverPath } from "@shared/podcastEpisodes"
+import {
+	FULL_PODCAST_COVER_SIZE,
+	isPodcastEpisodeRecordingConfigured,
+	PODCAST_SHOW_NAME,
+	toPodcastCoverPath,
+} from "@shared/podcastEpisodes"
 import { toPodcastEpisodePath, toPodcastFeedPath, toTopicPath } from "@shared/seo"
 import { and, desc, eq, inArray } from "drizzle-orm"
 import { db } from "../../db"
@@ -100,7 +105,7 @@ export function toPodcastSeries(topicPreview: TopicPreview, appUrl: string): Pod
 		name: `${topicPreview.title}: ${PODCAST_SHOW_NAME}`,
 		description: topicPreview.description,
 		url: `${appUrl}${toTopicPath({ id: topicPreview.topicId, name: topicPreview.title })}`,
-		imageUrl: `${appUrl}${toPodcastCoverPath(showCover, 3000)}`,
+		imageUrl: `${appUrl}${toPodcastCoverPath(showCover, FULL_PODCAST_COVER_SIZE)}`,
 		feedUrl: `${appUrl}${toPodcastFeedPath(topicPreview.topicId)}`,
 	}
 }

@@ -1,7 +1,8 @@
-// plan catalog tests: rank ordering, limit inheritance across the tiers, and the billing interval invariants
+// plan catalog tests: rank ordering, limit inheritance across the tiers, the billing interval invariants, the
+// monthly budget cutoffs, and the cents conversions
 import { expect, test } from "bun:test"
 import { billingIntervals } from "./enums"
-import { PLANS } from "./plans"
+import { type MonthlyBudgetCutoff, PLANS, toCentsFromDollars, toMeanScanCents, toMonthlyBudgetCutoffs } from "./plans"
 
 // each higher-ranked plan raises every numeric limit and cost over the plan below it
 test("a higher-rank plan's limits are at least those of every lower-rank plan", () => {
@@ -45,4 +46,54 @@ test("yearly is never the lesser billingInterval", () => {
 			expect(plan[limitKey].yearly).toBeGreaterThanOrEqual(plan[limitKey].monthly)
 		}
 	}
+})
+
+// a plus user on October 20 with three daily topics at about 8 cents a scan has 295 cents of daily scans left, so the
+// daily scans cutoff sits at 80 percent, between the podcast episodes cutoff and the manual scans cutoff
+test("the cutoffs come lowest share first, with the daily scans cutoff where the rest of the budget covers them", () => {
+	const userAccess = { isAdmin: false, plan: "plus" as const, budgetOverrideCents: null }
+	const monthlyBudgetCutoffs = toMonthlyBudgetCutoffs({ userAccess, dailyScanCentsLeft: 295 })
+	expect(monthlyBudgetCutoffs.map((cutoff) => cutoff.kind)).toEqual([
+		"spokenQuestions",
+		"fullPodcastEpisodes",
+		"podcastEpisodes",
+		"dailyScans",
+		"manualScans",
+	])
+	expect(monthlyBudgetCutoffs.find((cutoff) => cutoff.kind === "dailyScans")?.budgetShare).toBeCloseTo(0.803)
+})
+
+// daily scans that cost more than the whole budget run weekly from the first cent, and no daily topics means no cutoff
+test("the daily scans cutoff floors at zero, and a user with no daily scans left has none", () => {
+	const userAccess = { isAdmin: false, plan: "free" as const, budgetOverrideCents: null }
+	const toDailyScansCutoff = (dailyScanCentsLeft: number): MonthlyBudgetCutoff | undefined =>
+		toMonthlyBudgetCutoffs({ userAccess, dailyScanCentsLeft }).find((cutoff) => cutoff.kind === "dailyScans")
+	expect(toDailyScansCutoff(450)?.budgetShare).toBe(0)
+	expect(toDailyScansCutoff(0)).toBeUndefined()
+})
+
+// the free plan has no full podcast episodes, and an admin with no override has no cutoffs at all
+test("a plan's missing cutoff is left out, and an admin with no budget override has none", () => {
+	const freeKinds = toMonthlyBudgetCutoffs({
+		userAccess: { isAdmin: false, plan: "free", budgetOverrideCents: null },
+		dailyScanCentsLeft: 0,
+	}).map((cutoff) => cutoff.kind)
+	expect(freeKinds).toEqual(["spokenQuestions", "podcastEpisodes", "manualScans"])
+	const adminCutoffs = toMonthlyBudgetCutoffs({
+		userAccess: { isAdmin: true, plan: "free", budgetOverrideCents: null },
+		dailyScanCentsLeft: 300,
+	})
+	expect(adminCutoffs).toEqual([])
+})
+
+// a fraction of a cent rounds to the nearest cent
+test("toCentsFromDollars rounds dollars to whole cents", () => {
+	expect(toCentsFromDollars(0.123456)).toBe(12)
+	expect(toCentsFromDollars(1.2)).toBe(120)
+})
+
+// no recent scans have no mean, and two scans at 8 and 10 cents average 9 cents
+test("toMeanScanCents averages the recent scan costs in cents", () => {
+	expect(toMeanScanCents([])).toBeNull()
+	expect(toMeanScanCents([0.08, 0.1])).toBeCloseTo(9)
 })

@@ -8,15 +8,28 @@ import {
 	toSentToolCall,
 	toSentToolCalls,
 	toStandingTopicEditCall,
-	withAttachmentNote,
 } from "./contracts/chat"
+import {
+	PODCAST_EPISODE_NOTE_CHAPTER_TITLE_CHARS,
+	toPodcastEpisodeNoteParts,
+	withAttachmentNote,
+	withoutAttachmentNote,
+	withPodcastEpisodeNote,
+} from "./contracts/chatQuestionNotes"
+import { TEST_PODCAST_EPISODE_NOTE } from "./contracts/chatTestFixtures"
 import {
 	ATTACHMENT_NO_TEXT_REASON,
 	MAX_ATTACHMENT_CONTEXT_CHARS,
 	MAX_TOPIC_SOURCES,
 	toAttachmentFailureMessage,
 } from "./contracts/topics"
-import { type ChatToolCall, chatRoomMessagePayload, chatTurnPayload, userInvitePayload } from "./payloads"
+import {
+	type ChatToolCall,
+	chatRoomMessagePayload,
+	chatTurnPayload,
+	podcastEpisodeChapterPayload,
+	userInvitePayload,
+} from "./payloads"
 import {
 	suggestSourcesPayload,
 	type UpdateTopicPayload,
@@ -114,6 +127,17 @@ test("the chat payloads accept attachments alone and reject an empty send", () =
 // an attachments-only question reads as the note alone, with no leading blank lines
 test("withAttachmentNote stands alone on an empty question", () => {
 	expect(withAttachmentNote("", [{ name: "a.pdf" }])).toBe("[attached: a.pdf]")
+})
+
+// the attachment note comes off the way withAttachmentNote put it on, leaving an attachments-only question empty
+test("withoutAttachmentNote drops the note that withAttachmentNote writes", () => {
+	expect(withoutAttachmentNote(withAttachmentNote("what is this?", [{ name: "a.png" }]))).toBe("what is this?")
+	expect(withoutAttachmentNote(withAttachmentNote("", [{ name: "a.pdf" }]))).toBe("")
+
+	// a file name with a bracket in it still leaves the note whole
+	expect(withoutAttachmentNote(withAttachmentNote("compare these", [{ name: "report [v2].pdf" }]))).toBe(
+		"compare these",
+	)
 })
 
 // a partial update where one field alone is enough, and an unknown visibility is still rejected
@@ -223,10 +247,56 @@ test("a topic edit proposal stands until it is cancelled or saved", () => {
 	expect(toStandingTopicEditCall([proposeCall, toToolCall("addSource"), proposeCall])).toBe(proposeCall)
 })
 
-// a failed attachment tells its owner why for each reason the owner can act on, and says Carl couldn't read the file otherwise
+// a failed attachment tells its owner why for each reason the owner can act on, and says Carl couldn't read the file
+// otherwise
 test("toAttachmentFailureMessage names a file with no text and a flagged file", () => {
 	expect(toAttachmentFailureMessage(ATTACHMENT_NO_TEXT_REASON)).toContain("no text")
 	expect(toAttachmentFailureMessage("flagged by the scanner: PromptInjection")).toContain("flagged")
 	expect(toAttachmentFailureMessage("S3 GetObject failed")).toBe("Carl couldn't read this one.")
 	expect(toAttachmentFailureMessage(null)).toBe("Carl couldn't read this one.")
+})
+
+// a question asked from the podcast player ends with a note naming the podcast episode, the chapter, and the speaker
+// who answered, read back by its parts. the chapter title is cut, and a question with no note or a note naming no
+// speaker is whole
+test("withPodcastEpisodeNote writes the podcast episode note and toPodcastEpisodeNoteParts reads it back", () => {
+	const notedQuestion = withPodcastEpisodeNote("what did he mean by that?", TEST_PODCAST_EPISODE_NOTE)
+	expect(notedQuestion).toBe(
+		'what did he mean by that?\n\n[asked while listening to "Grinders get quiet", chapter 3, "The burr set"; Vienna answered]',
+	)
+	expect(toPodcastEpisodeNoteParts(notedQuestion)).toEqual({
+		question: "what did he mean by that?",
+		podcastEpisodeNote: TEST_PODCAST_EPISODE_NOTE,
+	})
+
+	// carl's answer names carl, and a long chapter title is cut to its limit
+	const longChapterTitle = "a".repeat(PODCAST_EPISODE_NOTE_CHAPTER_TITLE_CHARS + 30)
+	const carlNotedQuestion = withPodcastEpisodeNote("what did it say?", {
+		...TEST_PODCAST_EPISODE_NOTE,
+		chapterTitle: longChapterTitle,
+		speaker: "host",
+	})
+	expect(carlNotedQuestion).toContain("; Carl answered]")
+	expect(toPodcastEpisodeNoteParts(carlNotedQuestion).podcastEpisodeNote?.chapterTitle).toHaveLength(
+		PODCAST_EPISODE_NOTE_CHAPTER_TITLE_CHARS,
+	)
+
+	// a typed question, and a note that names no host, stay whole
+	expect(toPodcastEpisodeNoteParts("who is hiring?")).toEqual({ question: "who is hiring?", podcastEpisodeNote: null })
+	const forgedQuestion = 'hi\n\n[asked while listening to "x", chapter 1, "y"; Bob answered]'
+	expect(toPodcastEpisodeNoteParts(forgedQuestion).podcastEpisodeNote).toBeNull()
+})
+
+// a chapter reference past any podcast episode's chapters, or an id past any podcast episode id, is rejected before the
+// lookup
+test("podcastEpisodeChapterPayload bounds the chapter position and the podcast episode id", () => {
+	expect(podcastEpisodeChapterPayload.safeParse({ podcastEpisodeId: "episode-1", chapterPosition: 2 }).success).toBe(
+		true,
+	)
+	expect(podcastEpisodeChapterPayload.safeParse({ podcastEpisodeId: "episode-1", chapterPosition: 1e15 }).success).toBe(
+		false,
+	)
+	expect(podcastEpisodeChapterPayload.safeParse({ podcastEpisodeId: "e".repeat(65), chapterPosition: 0 }).success).toBe(
+		false,
+	)
 })

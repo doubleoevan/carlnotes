@@ -1,5 +1,4 @@
-// the helpers that read a model's reply for its links, its prose paragraphs, its markdown markup, and the text of its
-// steps
+// the helpers that read a model's reply for its links, its prose paragraphs, and its markdown markup
 import { DOCS_SITE_ADDRESS } from "@shared/seo"
 
 // a docs section's label line in a docs block, which names the docs page that the section came from
@@ -58,16 +57,6 @@ export function toMarkdownMarkup(replyText: string): string | undefined {
 		return matchedMarkupPattern[0]
 	}
 	return toLinkUrls(replyText).length > 0 ? "a link" : undefined
-}
-
-/**
- * Returns the text of every model step in order, with a blank line between steps.
- */
-export function toStepsText(steps: { text: string }[]): string {
-	return steps
-		.map((step) => step.text.trim())
-		.filter(Boolean)
-		.join("\n\n")
 }
 
 /**

@@ -5,6 +5,7 @@ import { db } from "../../db"
 import { deletePodcastFeedCache, toPodcastFeedCacheKey } from "../../db/podcastFeedCache"
 import { readRedisJson } from "../../db/redis"
 import { podcastEpisodeListens, podcastEpisodes } from "../../db/schema/podcast"
+import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import { setTopicSubscription } from "../topic/subscriptions"
 import {
 	check,
@@ -157,13 +158,7 @@ export async function checkListenerPodcastFeeds(): Promise<void> {
 		userId: subscriberId,
 		topicId: inviteTopicId,
 		isSubscribed: false,
-		analyticsProperties: {
-			entryPoint: "web",
-			plan: "free",
-			platform: "desktop",
-			browserPlatform: "other",
-			isInAppBrowser: false,
-		},
+		analyticsProperties: TEST_ANALYTICS_PROPERTIES,
 	})
 	check(
 		"unsubscribing deletes the token",

@@ -6,6 +6,7 @@ import { authClient } from "@/clients/authClient"
 import { CoffeeCup } from "@/components/branding/CoffeeCup"
 import { Button } from "@/components/primitives/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogTitle } from "@/components/primitives/dialog"
+import { toSignupNavigation } from "@/components/session/signupPrompts"
 import { EditTopicModal } from "@/components/topic/EditTopicModal"
 import { cn, isWideScreen } from "@/lib/utils"
 import { openNewTopicChat, setChatId, setChatPanelState, startEditingTopic } from "@/stores/chatPanelStore"
@@ -96,7 +97,7 @@ export function useNewTopicDialog(onTopicCreated?: () => void): {
 			setIsNewTopicDialogOpen(true)
 			return
 		}
-		void navigate({ to: "/signup", search: { cta: "new-topic" } })
+		void navigate(toSignupNavigation("new-topic"))
 	}
 
 	// a created topic closes the dialog, opens the topic's page, and runs onTopicCreated

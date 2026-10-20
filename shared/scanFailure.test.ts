@@ -4,8 +4,10 @@ import { readFileSync } from "node:fs"
 import { join } from "node:path"
 import { ApplicationFailure } from "@temporalio/client"
 import {
+	FIRST_SCAN_PAUSED_REASON,
 	FIRST_SCAN_SPENT_BUDGET_REASON,
 	isBudgetError,
+	MANUAL_SCAN_PAUSED_LABEL,
 	SCAN_SPENT_BUDGET_LABEL,
 	SCHEDULED_SCAN_SPENT_BUDGET_REASON,
 	toActivityApplicationFailure,
@@ -50,6 +52,12 @@ test("the scheduled Scan's budget reason reads as the budget label", () => {
 test("the first Scan's budget reason reads as the budget label", () => {
 	expect(isBudgetError(FIRST_SCAN_SPENT_BUDGET_REASON)).toBe(true)
 	expect(toScanFailureLabel(FIRST_SCAN_SPENT_BUDGET_REASON)).toBe(SCAN_SPENT_BUDGET_LABEL)
+})
+
+// the reason stored on a first Scan past the manual scans cutoff reads as the paused label, and is not a spent budget
+test("the first Scan's paused reason reads as the paused manual scan label", () => {
+	expect(isBudgetError(FIRST_SCAN_PAUSED_REASON)).toBe(false)
+	expect(toScanFailureLabel(FIRST_SCAN_PAUSED_REASON)).toBe(MANUAL_SCAN_PAUSED_LABEL)
 })
 
 // a failure with nothing wrapped keeps its own message

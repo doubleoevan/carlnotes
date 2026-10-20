@@ -2,7 +2,8 @@
 // run the eval with: bun run eval:attachment-summaries
 import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
 import { chatModel, cheapModel } from "../../worker/models"
-import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toGradingResult } from "../evalChecks"
+import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
 import { toWordCount } from "../evalLabels"
 import {
 	ATTACHMENT_SUMMARIES_CASES,

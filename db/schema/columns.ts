@@ -4,11 +4,13 @@ import {
 	avatarSources,
 	billingIntervals,
 	chatAttachmentKinds,
+	chatTurnKinds,
 	daysOfWeek,
 	frequencies,
 	inviteAccesses,
 	noteVisibilities,
 	plans,
+	podcastEpisodeSpeakers,
 	podcastEpisodeStatuses,
 	promptVersionOrigins,
 	ratings,
@@ -30,6 +32,8 @@ export const dayOfWeek = pgEnum("day_of_week", daysOfWeek)
 // the enums for a scan's outcome, a podcast episode's status, a finding, and a user's account
 export const scanStatus = pgEnum("scan_status", scanStatuses)
 export const podcastEpisodeStatus = pgEnum("episode_status", podcastEpisodeStatuses)
+// who speaks a podcast episode's turn, and who answered a question asked from the podcast player
+export const podcastEpisodeSpeaker = pgEnum("episode_speaker", podcastEpisodeSpeakers)
 export const sourceVisibility = pgEnum("source_visibility", sourceVisibilities)
 export const rating = pgEnum("rating", ratings)
 export const plan = pgEnum("plan", plans)
@@ -41,6 +45,8 @@ export const attachmentStatus = pgEnum("attachment_status", attachmentStatuses)
 export const sourceStatus = pgEnum("source_status", attachmentStatuses)
 // what a kept chat attachment originally was
 export const chatAttachmentKind = pgEnum("chat_attachment_kind", chatAttachmentKinds)
+// what a chat turn row records
+export const chatTurnKind = pgEnum("chat_turn_kind", chatTurnKinds)
 // where a user's public avatar image comes from. only oauth and upload have a stored object
 export const avatarSource = pgEnum("avatar_source", avatarSources)
 // a member's team role, and who may address an invite to a user

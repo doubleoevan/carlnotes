@@ -1,5 +1,5 @@
-// the voice recorder's pure parts: the level of a frame, the meter's step, the silence threshold, the frame's decision,
-// and the container
+// the voice recorder's decisions: the level of a frame, the meter's step, the silence threshold, the frame's decision,
+// the container, and when the voice activity detector takes over
 import { expect, test } from "bun:test"
 import {
 	toMeterLevel,
@@ -7,7 +7,8 @@ import {
 	toRecordingLevel,
 	toRecordingMimeType,
 	toSilenceThreshold,
-} from "./voiceRecorder"
+	toSpeechFrame,
+} from "./voiceRecordingDecisions"
 
 // silence sits at the midpoint and reads as zero, and a full swing reads as one
 test("toRecordingLevel reads silence as zero and a full swing as one", () => {
@@ -61,4 +62,74 @@ test("toRecordingMimeType takes the first container the browser supports", () =>
 	expect(toRecordingMimeType(() => true)).toBe("audio/webm;codecs=opus")
 	expect(toRecordingMimeType((mimeType) => mimeType === "audio/mp4")).toBe("audio/mp4")
 	expect(toRecordingMimeType(() => false)).toBeUndefined()
+})
+
+// before the detector listens a loud frame is speech, and once it listens its own speech start and end decide, and the
+// level's silence never ends the recording
+test("toSpeechFrame reads the level until the detector listens, then the detector", () => {
+	const notListeningVoiceActivityProgress = { isListening: false, hasSpeechStarted: false, isSpeechEnded: false }
+	expect(
+		toSpeechFrame({
+			level: 0.2,
+			silenceThreshold: 0.05,
+			hasSpeechStarted: false,
+			hasLevelSpeechBeforeListening: false,
+			voiceActivityProgress: notListeningVoiceActivityProgress,
+		}),
+	).toEqual({ isSpeechEnded: false, hasSpeechStarted: true, isLoud: true })
+	expect(
+		toSpeechFrame({
+			level: 0.01,
+			silenceThreshold: 0.05,
+			hasSpeechStarted: true,
+			hasLevelSpeechBeforeListening: false,
+			voiceActivityProgress: notListeningVoiceActivityProgress,
+		}),
+	).toEqual({ isSpeechEnded: false, hasSpeechStarted: true, isLoud: false })
+
+	// the detector heard a blip it took back, so speech has not started, and a quiet frame still holds silence off
+	const listeningVoiceActivityProgress = { isListening: true, hasSpeechStarted: false, isSpeechEnded: false }
+	expect(
+		toSpeechFrame({
+			level: 0.01,
+			silenceThreshold: 0.05,
+			hasSpeechStarted: true,
+			hasLevelSpeechBeforeListening: false,
+			voiceActivityProgress: listeningVoiceActivityProgress,
+		}),
+	).toEqual({ isSpeechEnded: false, hasSpeechStarted: false, isLoud: true })
+
+	// speech the level heard before the detector listened still ends on the level's silence, until the detector hears
+	// speech of its own
+	expect(
+		toSpeechFrame({
+			level: 0.01,
+			silenceThreshold: 0.05,
+			hasSpeechStarted: true,
+			hasLevelSpeechBeforeListening: true,
+			voiceActivityProgress: listeningVoiceActivityProgress,
+		}),
+	).toEqual({ isSpeechEnded: false, hasSpeechStarted: true, isLoud: false })
+	const speakingVoiceActivityProgress = { isListening: true, hasSpeechStarted: true, isSpeechEnded: false }
+	expect(
+		toSpeechFrame({
+			level: 0.01,
+			silenceThreshold: 0.05,
+			hasSpeechStarted: true,
+			hasLevelSpeechBeforeListening: true,
+			voiceActivityProgress: speakingVoiceActivityProgress,
+		}),
+	).toEqual({ isSpeechEnded: false, hasSpeechStarted: true, isLoud: true })
+
+	// the detector heard the speech end
+	const endedVoiceActivityProgress = { isListening: true, hasSpeechStarted: true, isSpeechEnded: true }
+	expect(
+		toSpeechFrame({
+			level: 0.3,
+			silenceThreshold: 0.05,
+			hasSpeechStarted: true,
+			hasLevelSpeechBeforeListening: false,
+			voiceActivityProgress: endedVoiceActivityProgress,
+		}).isSpeechEnded,
+	).toBe(true)
 })

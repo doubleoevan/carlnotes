@@ -107,7 +107,7 @@ export function ensureConnected(connection: RedisConnection): Promise<boolean> {
 		return Promise.resolve(false)
 	}
 
-	// start a connection attempt or share the attempt already in flight
+	// start a connection attempt or share the attempt already in progress
 	connection.connectAttempt ??= connectNow(connection)
 	return connection.connectAttempt
 }

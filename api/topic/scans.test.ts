@@ -1,9 +1,11 @@
-// manual scan tests: a scan whose key has spent its budget is rejected before anything starts or is billed.
-// a failed budget read starts the scan, and an admin's scan checks the admin's own budget
+// manual scan tests: a scan with a spent monthly budget, one past the manual scans cutoff, and one whose key has spent
+// its budget are rejected before anything starts or is billed. a failed budget read starts the scan, and an admin's
+// scan checks the admin's own budget
 import { afterEach, expect, type Mock, mock, spyOn, test } from "bun:test"
 import { quietErrorReports } from "@shared/monitoringTestFixtures"
-import { SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
+import { MANUAL_SCAN_PAUSED_LABEL, SCAN_SPENT_BUDGET_LABEL } from "@shared/scanFailure"
 import { stubConnectionPool, toTableRow } from "../../db/connectionPoolStub"
+import * as monthlyBudgetCutoffs from "../../db/monthlyBudgetCutoffs"
 import { topics } from "../../db/schema/topics"
 import * as litellm from "../../worker/litellm"
 import { restoreLiteLLMTest, setUpLiteLLMTest } from "../../worker/litellmTestFixtures"
@@ -42,14 +44,16 @@ type ManualScanSpies = {
 	reportManualScanOverageSpy: Mock<typeof billing.reportManualScanOverage>
 }
 
-// stub the gate to allow the scan, and stub the scan load to return no scan.
-// spy on the scan start, the stale scan close-out, and the overage bill
+// stub the gate to allow the scan, the user's spend to be under the whole budget and the manual scans cutoff, and the
+// scan load to return no scan. spy on the scan start, the stale scan close-out, and the overage bill
 function spyOnManualScan(isOverage: boolean): ManualScanSpies {
 	spyOn(authorization, "loadManualScanAuthorization").mockResolvedValue({
 		status: "allowed",
 		remainingScans: 2,
 		isOverage,
 	})
+	spyOn(authorization, "isMonthlySpendExhausted").mockResolvedValue(false)
+	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(false)
 	spyOn(scan, "loadScan").mockResolvedValue(undefined)
 	return {
 		startTopicScanSpy: spyOn(scan, "startTopicScan").mockResolvedValue({
@@ -88,6 +92,48 @@ test("a manual Scan whose key has spent its budget returns 402 with the budget l
 	const response = await sendManualScan("owner-1")
 	expect(response.status).toBe(402)
 	expect(await response.json()).toEqual({ error: SCAN_SPENT_BUDGET_LABEL })
+
+	// nothing was closed out, started, or billed
+	expect(failStaleScansSpy).not.toHaveBeenCalled()
+	expect(startTopicScanSpy).not.toHaveBeenCalled()
+	expect(reportManualScanOverageSpy).not.toHaveBeenCalled()
+})
+
+// a spend past the manual scans cutoff rejects the scan with the paused label, before the key is read or anything starts
+test("a manual Scan past the manual scans cutoff returns 402 with the paused label and starts nothing", async () => {
+	// an owner whose spend is past the cutoff and under the whole budget
+	stubOwnedTopicRows()
+	const { startTopicScanSpy, reportManualScanOverageSpy } = spyOnManualScan(true)
+	const isMonthlyBudgetCutoffPassedSpy = spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(
+		true,
+	)
+	const isUserLiteLLMKeyBudgetExhaustedSpy = spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted")
+
+	// the scan is rejected with the paused label, and nothing was read from the key, started, or billed
+	const response = await sendManualScan("owner-1")
+	expect(response.status).toBe(402)
+	expect(await response.json()).toEqual({ error: MANUAL_SCAN_PAUSED_LABEL })
+	expect(isMonthlyBudgetCutoffPassedSpy).toHaveBeenCalledWith("owner-1", "manualScans")
+	expect(isUserLiteLLMKeyBudgetExhaustedSpy).not.toHaveBeenCalled()
+	expect(startTopicScanSpy).not.toHaveBeenCalled()
+	expect(reportManualScanOverageSpy).not.toHaveBeenCalled()
+})
+
+// a spent monthly budget stops scheduled scans too, so it rejects the scan with the budget label, never the paused one
+test("a manual Scan with a spent monthly budget returns 402 with the budget label and starts nothing", async () => {
+	// an owner whose spend is at the whole budget, which is past the manual scans cutoff too
+	stubOwnedTopicRows()
+	const { startTopicScanSpy, failStaleScansSpy, reportManualScanOverageSpy } = spyOnManualScan(true)
+	const isMonthlySpendExhaustedSpy = spyOn(authorization, "isMonthlySpendExhausted").mockResolvedValue(true)
+	spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(true)
+	const isUserLiteLLMKeyBudgetExhaustedSpy = spyOn(litellm, "isUserLiteLLMKeyBudgetExhausted")
+
+	// the scan is rejected with the budget label, read from the owner's spend before the key
+	const response = await sendManualScan("owner-1")
+	expect(response.status).toBe(402)
+	expect(await response.json()).toEqual({ error: SCAN_SPENT_BUDGET_LABEL })
+	expect(isMonthlySpendExhaustedSpy).toHaveBeenCalledWith("owner-1")
+	expect(isUserLiteLLMKeyBudgetExhaustedSpy).not.toHaveBeenCalled()
 
 	// nothing was closed out, started, or billed
 	expect(failStaleScansSpy).not.toHaveBeenCalled()

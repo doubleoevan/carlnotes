@@ -1,8 +1,9 @@
 // the promptfoo eval of the scan report writer, which makes real model calls. run the eval with: bun run eval:scan-report
 import type { Assertion, AssertionValueFunctionContext, EvaluateResult, GradingResult, TestCase } from "promptfoo"
 import { cheapModel } from "../../worker/models"
-import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
-import { toWordCount } from "../evalLabels"
+import { toGradingResult } from "../evalChecks"
+import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toWordCount, toWriteCostLabel } from "../evalLabels"
 import { toLinkUrls } from "../evalReplies"
 import { SCAN_REPORT_CASES, type ScanReportCase } from "./scanReportCases"
 import { type ScanReportVariables, scanReportWriter } from "./scanReportProviders"
@@ -99,7 +100,7 @@ function gradeReportLength(reportText: string): GradingResult {
 
 // a case's word count and writing cost
 function toCaseLine(reportText: string, evaluateResult: EvaluateResult): string {
-	return `${toWordCount(reportText)} words, $${(evaluateResult.cost ?? 0).toFixed(4)} to write`
+	return `${toWordCount(reportText)} words, ${toWriteCostLabel(evaluateResult.cost)}`
 }
 
 // the urls of the findings that a case's Scan kept

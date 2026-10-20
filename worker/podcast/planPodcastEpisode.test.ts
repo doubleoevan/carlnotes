@@ -1,8 +1,21 @@
-// podcast episode plan tests: which Findings are planned, and their order
-import { expect, test } from "bun:test"
+// podcast episode plan tests: which Findings are planned, their order, whether the podcast episode is short, the
+// checks that stop a new podcast episode before it spends, and one read of the month's spend for a plan's two checks
+import { afterEach, expect, mock, spyOn, test } from "bun:test"
+import { FULL_PODCAST_EPISODE_FINDINGS, SHORT_PODCAST_EPISODE_FINDINGS } from "@shared/podcastEpisodes"
+import { saveEnvSettings } from "@shared/savedEnvSettings"
 import {
-	FULL_PODCAST_EPISODE_FINDINGS,
-	SHORT_PODCAST_EPISODE_FINDINGS,
+	PLUS_USER_ACCESS_ROW,
+	restoreConnectionPool,
+	stubConnectionPool,
+	toTableRow,
+} from "../../db/connectionPoolStub"
+import * as monthlyBudgetCutoffs from "../../db/monthlyBudgetCutoffs"
+import * as quotas from "../../db/quotas"
+import { topics } from "../../db/schema/topics"
+import {
+	isShortPodcastEpisodePlanned,
+	loadPodcastEpisodeSpendSkipReason,
+	planPodcastEpisode,
 	type TopicFindingRow,
 	toPlannedFindings,
 } from "./planPodcastEpisode"
@@ -124,4 +137,108 @@ test("toPlannedFindings picks by score with bonuses, and a new Finding wins a ti
 	// the liked url Source page takes a new Finding's place, and the tied bookmark loses to the new Findings
 	const newFindingNames = Array.from({ length: 14 }, (_, i) => `new-${i}`)
 	expect(toPlannedFindingNames(topicFindingRows)).toEqual([...newFindingNames, "liked-source"])
+})
+
+// put the spied quota checks, the connection pool's own query, and the speech model setting back after each test
+const restoreEnvSettings = saveEnvSettings(["PODCAST_SPEECH_MODEL"])
+afterEach(() => {
+	mock.restore()
+	restoreConnectionPool()
+	restoreEnvSettings()
+})
+
+// a paid owner gets a full podcast episode until the billed user's spend passes the full podcast episodes cutoff, a free
+// owner always gets a short one, and a row an earlier attempt created keeps the length it was planned at
+test("a podcast episode is short past the full podcast episodes cutoff, and a retry keeps its row's length", async () => {
+	// a paid owner, and a billed user whose spend is past the cutoff
+	const hasFullPodcastEpisodesSpy = spyOn(quotas, "hasFullPodcastEpisodes").mockResolvedValue(true)
+	const isMonthlyBudgetCutoffPassedSpy = spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(
+		true,
+	)
+	const planOptions = { ownerId: "owner-1", billedUserId: "owner-1" }
+
+	// a first attempt is short, and the cutoff it read is the full podcast episodes one
+	expect(await isShortPodcastEpisodePlanned({ existingPodcastEpisode: undefined, ...planOptions })).toBe(true)
+	expect(isMonthlyBudgetCutoffPassedSpy).toHaveBeenCalledWith("owner-1", "fullPodcastEpisodes")
+
+	// a retry of a row planned full stays full, whatever the spend did since
+	expect(await isShortPodcastEpisodePlanned({ existingPodcastEpisode: { isShort: false }, ...planOptions })).toBe(false)
+
+	// under the cutoff it is full, and a free owner's is short without reading the cutoff
+	isMonthlyBudgetCutoffPassedSpy.mockResolvedValue(false)
+	expect(await isShortPodcastEpisodePlanned({ existingPodcastEpisode: undefined, ...planOptions })).toBe(false)
+	hasFullPodcastEpisodesSpy.mockResolvedValue(false)
+	isMonthlyBudgetCutoffPassedSpy.mockClear()
+	expect(await isShortPodcastEpisodePlanned({ existingPodcastEpisode: undefined, ...planOptions })).toBe(true)
+	expect(isMonthlyBudgetCutoffPassedSpy).not.toHaveBeenCalled()
+})
+
+// a team member's scan bills the team member, so the podcast episodes cutoff is read for the billed user, never the
+// topic owner
+test("a new podcast episode stops if the billed user's spend is past the podcast episodes cutoff", async () => {
+	// a billed team member whose spend is past the cutoff, on a topic whose owner's spend is under it
+	const isMonthlyBudgetCutoffPassedSpy = spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockImplementation(
+		async (userId) => userId === "member-1",
+	)
+	const skipOptions = { topicId: "topic-1", isShortPodcastEpisode: false }
+
+	// the billed team member's cutoff stops the podcast episode, and the owner's spend never comes into it
+	expect(await loadPodcastEpisodeSpendSkipReason({ ...skipOptions, billedUserId: "member-1" })).toBe(
+		"the billed user's monthly spend is past the podcast episodes cutoff",
+	)
+	expect(isMonthlyBudgetCutoffPassedSpy).toHaveBeenCalledWith("member-1", "podcastEpisodes")
+	expect(isMonthlyBudgetCutoffPassedSpy).not.toHaveBeenCalledWith("owner-1", expect.anything())
+
+	// a billed user under the cutoff may record
+	expect(await loadPodcastEpisodeSpendSkipReason({ ...skipOptions, billedUserId: "owner-1" })).toBeNull()
+})
+
+// a topic records one short podcast episode at a time, so a short one waits without reading the cutoff
+test("a new short podcast episode stops while the topic's short one is still recording", async () => {
+	// the topic's short podcast episode that is still recording, and a billed user under the cutoff
+	stubConnectionPool(({ text }) => (text.includes('from "episodes"') ? [["podcast-episode-1"]] : []))
+	const isMonthlyBudgetCutoffPassedSpy = spyOn(monthlyBudgetCutoffs, "isMonthlyBudgetCutoffPassed").mockResolvedValue(
+		false,
+	)
+
+	// the recording short podcast episode stops the new one before the cutoff is read
+	expect(
+		await loadPodcastEpisodeSpendSkipReason({
+			topicId: "topic-1",
+			isShortPodcastEpisode: true,
+			billedUserId: "owner-1",
+		}),
+	).toBe("the topic's short podcast episode is still recording")
+	expect(isMonthlyBudgetCutoffPassedSpy).not.toHaveBeenCalled()
+})
+
+// a plan reads the full podcast episodes cutoff and then the podcast episodes cutoff for the same billed user, and the
+// two checks share one read of that user's month spend
+test("one plan sums the billed user's month spend once", async () => {
+	// a succeeded scan of a plus owner's topic with its podcast on, one new Finding, no spend, and no earlier row
+	Bun.env.PODCAST_SPEECH_MODEL = "speech-model"
+	const topicRow = toTableRow(topics, { id: "topic-1", ownerId: "owner-1", isPodcastEnabled: true })
+	const findingRow = ["finding-1", "resource-1", "https://a.com/1", "scan-1", 0.5, null, false]
+	const queryRowByQueryTextPart: [string, unknown[]][] = [
+		["insert into", ["podcast-episode-1"]],
+		["sum(", ["0"]],
+		['from "users"', PLUS_USER_ACCESS_ROW],
+		['from "topics"', topicRow],
+		['from "findings"', findingRow],
+		['from "scans"', ["succeeded"]],
+	]
+
+	// return the row of the first text part that the query includes, and no rows for any other query
+	const sentQueries = stubConnectionPool(({ text }) => {
+		const queryRow = queryRowByQueryTextPart.find(([queryTextPart]) => text.includes(queryTextPart))?.[1]
+		return queryRow ? [queryRow] : []
+	})
+
+	// the plan creates a full podcast episode's row, and its two cutoff checks sent one set of month sums
+	const podcastEpisodePlan = await planPodcastEpisode({ scanId: "scan-1", topicId: "topic-1", billedUserId: "owner-1" })
+	expect(podcastEpisodePlan).toEqual({
+		podcastEpisodeId: "podcast-episode-1",
+		plannedFindings: [{ findingId: "finding-1", resourceId: "resource-1", sourceUrl: "https://a.com/1" }],
+	})
+	expect(sentQueries.filter((sentQuery) => sentQuery.text.includes("sum("))).toHaveLength(3)
 })

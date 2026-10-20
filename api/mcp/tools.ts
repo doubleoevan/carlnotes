@@ -10,7 +10,13 @@ import {
 } from "@shared/topicPayloads"
 import { z } from "zod"
 import type { AnalyticsProperties } from "../currentUser"
-import { toAddTopicSourceText, toRejectionText, toUpdateTopicFieldsText } from "../tool/chatTools"
+import {
+	toAddTopicSourceText,
+	toRejectionText,
+	toSavedTopicFieldsText,
+	toSavedTopicPromptText,
+	toUpdateTopicFieldsText,
+} from "../tool/chatTools"
 import { toCreateTopicText, toSuggestionsText } from "../tool/newTopicChatTools"
 import { createTopicFromDraft, suggestTopicDraftSources } from "../tool/topicDraftTools"
 import { addTopicSource, removeTopicSource } from "../tool/topicSourceTools"
@@ -179,7 +185,7 @@ function registerTopicFieldTools(mcpServer: McpServer, toolCaller: ToolCaller, r
 			// save the prompt. the tool checks edit rights itself
 			const updateTopicPromptResult = await updateTopicPrompt({ ...topicEditCall, prompt, origin: "mcp" })
 			return updateTopicPromptResult.status === "saved"
-				? toTextResult(`Saved the new prompt for ${updateTopicPromptResult.topicName}. The next brew reads it.`)
+				? toTextResult(`${toSavedTopicPromptText(updateTopicPromptResult.topicName)} The next brew reads it.`)
 				: toTextResult(toRejectionText(updateTopicPromptResult.status), true)
 		},
 	)
@@ -205,7 +211,7 @@ function registerTopicFieldTools(mcpServer: McpServer, toolCaller: ToolCaller, r
 				promptVersionOrigin: "mcp",
 			})
 			return updateTopicFieldsResult.status === "saved"
-				? toTextResult(`Saved the settings for ${updateTopicFieldsResult.topicName}. The next brew follows them.`)
+				? toTextResult(`${toSavedTopicFieldsText(updateTopicFieldsResult.topicName)} The next brew follows them.`)
 				: toTextResult(toUpdateTopicFieldsText(updateTopicFieldsResult), true)
 		},
 	)

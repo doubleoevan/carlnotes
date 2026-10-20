@@ -78,10 +78,22 @@ test("a request has one part per turn and both speakers' voices", () => {
 
 test("a spoken answer's request has one part in the host's voice alone, with no service tier", () => {
 	// the text as the one part, audio output, and the host's voice with no speaker label
-	const spokenAnswerRequestBody = toSpokenAnswerRequestBody("Three reviews came out this week.")
+	const spokenAnswerRequestBody = toSpokenAnswerRequestBody("Three reviews came out this week.", "host")
 	expect(spokenAnswerRequestBody).toEqual({
 		contents: [{ role: "user", parts: [{ text: "Three reviews came out this week." }] }],
 		generationConfig: { responseModalities: ["AUDIO"], speechConfig: { voiceConfig: HOST_VOICE_CONFIG } },
+	})
+})
+
+// vienna's answer to a question asked from the podcast player is spoken in the co-host's voice alone
+test("a spoken answer vienna gave names the co-host's voice alone", () => {
+	const spokenAnswerRequestBody = toSpokenAnswerRequestBody("Because you follow it.", "cohost")
+	expect(spokenAnswerRequestBody).toEqual({
+		contents: [{ role: "user", parts: [{ text: "Because you follow it." }] }],
+		generationConfig: {
+			responseModalities: ["AUDIO"],
+			speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: "Laomedeia" } } },
+		},
 	})
 })
 

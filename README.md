@@ -137,11 +137,11 @@ shared link previews no matter what the Topic's visibility is, and a private or 
 and shows the Topic's gate to anyone who may not see the Topic. Covers are drawn over
 `docs/design/podcast/cover-base.png`.
 
-`PODCAST_SPEECH_MODEL` set empty turns episodes off, and `PODCAST_RECORDING_CONCURRENCY` (16 by default) limits the episode
-activities on each worker replica. A free Topic gets a 10-minute episode after every brew and keeps only the latest
-short one, where a paid plan gets 30 minutes and keeps every episode. A brew that finishes while the free Topic's short
-episode is still recording makes no episode, and its findings go into the next one. Episodes pause once a user's monthly
-spend passes the plan's share of the budget, half on the free plan and 80 percent on a paid one, so scans keep running.
+`PODCAST_SPEECH_MODEL` set empty turns episodes off, and `PODCAST_RECORDING_CONCURRENCY` (16 by default) limits the
+episode activities on each worker replica. A free Topic gets a 10-minute episode after every scan and keeps only the
+latest short one, where a paid plan gets 30 minutes and keeps every full episode. A scan that finishes while a Topic's
+short episode is still recording makes no episode, and its findings go into the next one. Each plan's monthly budget
+cutoffs in `shared/plans.ts` turn a paid plan's episodes short, then pause every plan's episodes, so scans keep running.
 
 ### Chat
 
@@ -254,8 +254,8 @@ Domain vocabulary is load-bearing and lives in `.agents/skills/domain-model/`.
 
 How the AI guardrails work lives in [docs/ai-scaffolding.md](docs/ai-scaffolding.md).
 
-Feature work lands change-by-change through [OpenSpec](https://github.com/Fission-AI/OpenSpec) — specs and in-flight
-changes live in `openspec/`.
+Feature work lands change-by-change through [OpenSpec](https://github.com/Fission-AI/OpenSpec) — specs and changes in
+progress live in `openspec/`.
 
 ## Evals
 
@@ -290,6 +290,7 @@ flowchart
 | Topic chat | The topic chat: opens by answering the question, credits the findings only with what they say, marks what comes from outside them, answers a question about the app from the docs, links only real finding and docs urls, stays brief | `bun run eval:topic-chat` |
 | Team chat | The chat on a team's page, across the team's topics: names the right topic for each finding, credits the findings only with what they say, links only real finding and docs urls | `bun run eval:team-chat` |
 | Topic chat tools | The topic chat's edit tools, in the solo chat and the team room: a change of settings, sources, or prompt is proposed before it is saved, a yes saves it, a decline takes the preview back, a question or an instruction inside a finding calls nothing, and no reply claims an action that no tool made | `bun run eval:topic-chat-tools` |
+| Podcast chat | A question asked out loud from the podcast player: a vague question is answered about the chapter that was playing, the question picks Carl or Vienna, an instruction in the chapter never picks the host, and the answer reads aloud with no markdown | `bun run eval:podcast-chat` |
 | New-topic chat | The chat that makes a topic: writes what the user says to the draft, its visibility included, creates the topic only after a yes, never calls a change saved that no tool saved | `bun run eval:new-topic-chat` |
 | Source suggestions | The suggested Sources, end to end through Exa and the readability checks: the share of new suggestions that resolve and read, enough readable sources, every one on topic and still publishing | `bun run eval:source-suggestions` |
 | Search queries | The queries that a Scan writes for a topic: within the limit, distinct, plain text, on topic, and respecting what the topic skips | `bun run eval:search-queries` |
@@ -356,8 +357,8 @@ bun run dev:email    # react-email preview server for the templates in emails/ (
 bun run dev:docs     # Starlight dev server on localhost:4321/docs, reachable on the LAN, with hot reload; also shows draft pages that the production build leaves out
                      # it runs in the background: `cd docs && astro dev stop` ends it, `astro dev logs` tails it
 bun run test:coverage # the test suite with bun's built-in line and function coverage table
-bun run smoke:coverage # run every smoke test script, one process each, writing coverage/smoke/<name>/lcov.info; the Smoke workflow runs this on each push to main and uploads them under the smoke flag
-                     # with SMOKE_SKIP_DEVELOPER_ONLY=1 it skips the six that need litellm or temporal. the Smoke workflow starts both as containers instead, and runs a temporal worker beside them, so it runs all sixteen
+bun run smoke:coverage # run every smoke test script, one process each, writing coverage/smoke/<name>/lcov.info; the Smoke workflow runs this on each push to main and uploads them under the smoke flag. the list is read from the smoke script, and the seo smoke test is skipped, since it needs the built ui
+                     # with SMOKE_SKIP_DEVELOPER_ONLY=1 it skips the ones that need litellm or temporal. the Smoke workflow starts both as containers instead, and runs a temporal worker beside them, so it runs every one but the seo smoke test
 bun run docs:embed   # chunk the docs markdown by section and embed the changed sections into docs_chunks, which chat quotes; run it after editing docs
 bun run docs:embed:prd # the same sync against the production database, the owner-run escape hatch until the deploy job runs it
 bun run edge:purge   # clear the pages and the signed-out feed that Cloudflare shares; the deploy job that runs right after the app deploys
@@ -377,12 +378,14 @@ Database: generate a migration from the Drizzle schema, then apply it:
 ```bash
 bun run db:generate   # write a migration from the db/schema files (offline, no doppler)
 bun run db:migrate    # apply pending migrations (db/migrate.ts, the same one-shot script the deploy job runs)
-bun run db:seed       # creates the dev demo user using a real signup, then loads idempotent stub data (rejects an attempt to run it outside of the dev config)
+bun run db:seed       # creates the dev demo user and a user per plan using a real signup, then loads idempotent stub data (rejects an attempt to run it outside of the dev config)
 bun run litellm:restart # reload litellm-config.yaml. the file is bind-mounted, so a restart picks up an edit with no rebuild
 ```
 
 `db:seed` signs up a real dev account (`DEV_USER_EMAIL` / `DEV_USER_PASSWORD` in `.env.example`) through Better Auth, so
-log in with those credentials locally to see the seeded demo topics. Auth needs a few more Doppler variables locally:
+log in with those credentials locally to see the seeded demo topics. It also signs up `free@carlnotes.dev`,
+`plus@carlnotes.dev`, and `premium@carlnotes.dev`, none of them admins, on those plans with the same password, to check
+each plan's limits and monthly budget cutoffs. Auth needs a few more Doppler variables locally:
 `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`,
 `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`, and `RESEND_API_KEY`/`RESEND_FROM_EMAIL` — see `.env.example` for what each
 is for. Signup itself is open: no invite code, Google/GitHub are one-click, and email/password sits behind a "Continue
@@ -457,6 +460,7 @@ bun run smoke:eval         # just the review pipeline eval's smoke test: one tin
 bun run smoke:teams        # just the team-lifecycle smoke test: creation, join fan-out, limits, last-leader, deletion, detach succession, the team page gate, its avatar versions, and who sent an invite or invited a member
 bun run smoke:room         # just the team chat-room smoke test: the access matrix, isolation, budget rejection, mention rows, and the room lock
 bun run smoke:rooms        # just the chat-rooms smoke test: which rooms a user may open, one per holding team, and the unseen count
+bun run smoke:chat-turns   # just the chat turn shapes smoke test: each kind's row and each chat proposal shape is kept, each mismatched row is rejected, rolled back
 bun run smoke:mcp          # just the mcp smoke test: what a visitor reads, the oauth flow with its consent page, a user's consumed, rating, and bookmark writes, the edit tools, and the rate limit
 bun run smoke:tools        # just the topic tools smoke test: the gate inside each tool, the prompt version writes, adding and removing sources up to the limit, and that no tool starts a scan
 bun run smoke:podcast-episodes # just the podcast episode routes smoke test: access, audio, feeds, covers, and removal

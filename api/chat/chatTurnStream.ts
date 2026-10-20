@@ -1,12 +1,15 @@
 // streaming a chat turn's reply to the user, then saving its row, the proposal it leaves standing, its topic draft, and
 // its sent attachments
 import { toChatReplyLineText } from "@shared/contracts/chat"
+import { withPodcastEpisodeNote } from "@shared/contracts/chatQuestionNotes"
+import type { PodcastEpisodeSpeaker } from "@shared/enums"
 import { reportError } from "@shared/monitoring"
 import type { ChatAttachment } from "@shared/payloads"
 import type { TopicDraft } from "@shared/topicPayloads"
 import type { Context } from "hono"
 import { stream } from "hono/streaming"
 import { type ChatReplyStream, isBudgetRejection, SPENT_BUDGET_REJECTION } from "../../worker"
+import type { PodcastEpisodeChapterContext } from "../../worker/chat/retrievePodcastEpisodeChapter"
 import type { AnalyticsProperties } from "../currentUser"
 import type { ChatTurnToolCalls } from "../tool/chatTools"
 import { saveTopicDraft } from "../topic/topicDrafts"
@@ -28,6 +31,8 @@ export type StreamedChatTurn = {
 	isPersisted: boolean
 	isSpoken: boolean
 	toolCalls: ChatTurnToolCalls
+	// the podcast episode chapter that a podcast player question was asked during
+	podcastEpisodeChapter?: PodcastEpisodeChapterContext
 	// the properties that the analytics event is sent with, and the LiteLLM key for the attachment summaries
 	analyticsProperties: AnalyticsProperties
 	litellmApiKey: string
@@ -92,13 +97,22 @@ export function streamChatTurn(context: Context, chatTurn: StreamedChatTurn): Re
 	})
 }
 
+// the question as it is stored. a question asked from the podcast player ends with the note naming its podcast episode,
+// its chapter, and the speaker who answered, host if the chat turn stopped before a speaker was chosen
+function toStoredQuestion(chatTurn: StreamedChatTurn, speaker: PodcastEpisodeSpeaker | undefined): string {
+	const { podcastEpisodeChapter } = chatTurn
+	return podcastEpisodeChapter
+		? withPodcastEpisodeNote(chatTurn.question, { ...podcastEpisodeChapter, speaker: speaker ?? "host" })
+		: chatTurn.question
+}
+
 // save the finished chat turn's spend and text, record the proposal a finished reply leaves standing, and fetch the
 // answer's link preview in the background. return null if the chat turn stored no text or the save failed
 async function saveFinishedChatTurn(chatTurn: StreamedChatTurn, isReplyFinished: boolean): Promise<string | null> {
 	try {
 		// save the chat turn, the agreement check's tokens included. a topic save keeps the chat turn's text even if the
 		// gate rejects persistence
-		const { text, totalTokens, searchCount, toolCalls } = await chatTurn.chatReply.completion
+		const { text, totalTokens, searchCount, toolCalls, speaker } = await chatTurn.chatReply.completion
 		const isChatTurnPersisted = chatTurn.isPersisted || chatTurn.toolCalls.count > 0
 		const savedChatTurnId = await saveChatTurn({
 			userId: chatTurn.userId,
@@ -106,10 +120,12 @@ async function saveFinishedChatTurn(chatTurn: StreamedChatTurn, isReplyFinished:
 			totalTokens: totalTokens + chatTurn.agreementTokens,
 			searchCount,
 			isPersisted: isChatTurnPersisted,
-			question: chatTurn.question,
+			question: toStoredQuestion(chatTurn, speaker),
 			answer: text,
 			toolCalls,
 			isSpoken: chatTurn.isSpoken,
+			podcastEpisodeChapter: chatTurn.podcastEpisodeChapter,
+			podcastAnswerSpeaker: speaker,
 			analyticsProperties: chatTurn.analyticsProperties,
 		})
 

@@ -1,37 +1,22 @@
-// carl's spoken answers: the one audio element the layout mounts, the queue of one reply's spoken parts, and the
-// playing state the play buttons read
-import type { VoiceChatPage } from "@shared/payloads"
+// the hosts' spoken answers: the one audio element the layout mounts, the queue of one reply's spoken parts, and the
+// playing state the play buttons read. carl speaks every reply except one vienna gave to a question asked from the
+// podcast player
 import { addEventListeners } from "@/lib/utils"
 import { pausePodcastEpisode, refreshPodcastEpisodeMediaSession } from "@/stores/podcastEpisodePlayerStore"
+import {
+	type SpokenAnswerEnd,
+	type SpokenAnswerQueue,
+	type SpokenAnswerSpeaker,
+	type SpokenAnswerState,
+	showSpeakerOnMediaSession,
+	toNextSpokenPartAction,
+} from "@/stores/spokenAnswerQueue"
 import { loadSpokenPartAudio } from "@/stores/spokenAudioCache"
-import { toStoreListeners } from "@/stores/storeListeners"
+import { toEventListeners, toStoreListeners } from "@/stores/storeListeners"
 
 // ten milliseconds of silence as a WAV data uri, which a tap plays so the element may play carl's later spoken parts
 const SILENT_WAV_DATA_URI =
 	"data:audio/wav;base64,UklGRnQAAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YVAAAACAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgICAgA=="
-
-// what a play button shows for a reply: nothing playing, a spoken part loading, or a spoken part playing
-export type SpokenAnswerState = "idle" | "loading" | "playing"
-
-// the queue of one reply's spoken parts, keyed by the reply it speaks
-export type SpokenAnswerQueue = {
-	spokenAnswerKey: string
-	page: VoiceChatPage
-	// the spoken text of every spoken part appended so far
-	spokenParts: string[]
-	nextSpokenPartIndex: number
-	// whether every spoken part is appended, so the queue finishes after the last one instead of waiting for more
-	isComplete: boolean
-	// whether a spoken part is loading or playing, which a later append waits on
-	isSpokenPartActive: boolean
-	state: "loading" | "playing"
-	// whether the queue is the conversation's own reply, played with no tap
-	isAutoPlayed: boolean
-	// whether a spoken part has started playing, which the end of the queue reads for the callback
-	hasPlayed: boolean
-	// called once, with when the first spoken part started playing, or with null if the queue ended before one did
-	onFirstPlaying?: (playingAt: number | null) => void
-}
 
 // the mounted audio element, the queue that is loading or playing, and the store's listeners
 let audioElement: HTMLAudioElement | null = null
@@ -44,12 +29,8 @@ const stoppedSpokenAnswerKeys = new Set<string>()
 // whether a composer is recording or waiting for its transcript, which an auto-played reply reads
 let isRecordingActive = false
 
-// how a reply ended: the reply's key, whether it played to its end instead of being stopped, and whether it was the
-// conversation's own reply, played with no tap
-export type SpokenAnswerEnd = { spokenAnswerKey: string; isPlayedToEnd: boolean; isAutoPlayed: boolean }
-
 // the listeners told how a reply ended
-const spokenAnswerEndListeners = new Set<(spokenAnswerEnd: SpokenAnswerEnd) => void>()
+const spokenAnswerEndListeners = toEventListeners<SpokenAnswerEnd>()
 
 // the blob url the element plays, revoked before the next spoken part's
 let spokenPartObjectUrl: string | null = null
@@ -111,9 +92,12 @@ export function speakSpokenAnswer({
 	spokenParts,
 	isAutoPlayed = false,
 	onFirstPlaying,
-}: Pick<SpokenAnswerQueue, "spokenAnswerKey" | "page" | "spokenParts" | "onFirstPlaying"> & {
-	isAutoPlayed?: boolean
-}): void {
+	speaker = "host",
+	mediaSessionMetadata,
+}: Pick<SpokenAnswerQueue, "spokenAnswerKey" | "page" | "spokenParts" | "onFirstPlaying"> &
+	SpokenAnswerSpeaker & {
+		isAutoPlayed?: boolean
+	}): void {
 	stopSpokenAnswer()
 	// a play tap on a stopped reply speaks it again
 	stoppedSpokenAnswerKeys.delete(spokenAnswerKey)
@@ -122,13 +106,22 @@ export function speakSpokenAnswer({
 	if (spokenParts.length === 0) {
 		onFirstPlaying?.(null)
 		if (isAutoPlayed) {
-			announceSpokenAnswerEnd({ spokenAnswerKey, isPlayedToEnd: true, isAutoPlayed })
+			spokenAnswerEndListeners.announce({ spokenAnswerKey, isPlayedToEnd: true, isAutoPlayed })
 		}
 		return
 	}
 
 	// the whole reply is queued at once
-	startSpokenAnswer({ spokenAnswerKey, page, spokenParts, isComplete: true, isAutoPlayed, onFirstPlaying })
+	startSpokenAnswer({
+		spokenAnswerKey,
+		page,
+		speaker,
+		mediaSessionMetadata,
+		spokenParts,
+		isComplete: true,
+		isAutoPlayed,
+		onFirstPlaying,
+	})
 }
 
 /**
@@ -140,7 +133,10 @@ export function appendSpokenAnswerPart({
 	page,
 	text,
 	onFirstPlaying,
-}: Pick<SpokenAnswerQueue, "spokenAnswerKey" | "page" | "onFirstPlaying"> & { text: string }): void {
+	speaker = "host",
+	mediaSessionMetadata,
+}: Pick<SpokenAnswerQueue, "spokenAnswerKey" | "page" | "onFirstPlaying"> &
+	SpokenAnswerSpeaker & { text: string }): void {
 	// a reply stopped while it streamed stays quiet, so its later spoken parts never start it again
 	if (stoppedSpokenAnswerKeys.has(spokenAnswerKey)) {
 		return
@@ -148,7 +144,16 @@ export function appendSpokenAnswerPart({
 	// a spoken part for another reply replaces that reply's queue. a streamed reply plays with no tap
 	if (spokenAnswer?.spokenAnswerKey !== spokenAnswerKey) {
 		stopSpokenAnswer()
-		startSpokenAnswer({ spokenAnswerKey, page, spokenParts: [], isComplete: false, isAutoPlayed: true, onFirstPlaying })
+		startSpokenAnswer({
+			spokenAnswerKey,
+			page,
+			speaker,
+			mediaSessionMetadata,
+			spokenParts: [],
+			isComplete: false,
+			isAutoPlayed: true,
+			onFirstPlaying,
+		})
 	}
 
 	// nothing to append without a queue or with no words
@@ -173,7 +178,7 @@ export function completeSpokenAnswer(spokenAnswerKey: string): void {
 	// a reply that queued nothing, like a code block alone, ends as finished unless it was stopped
 	if (spokenAnswer?.spokenAnswerKey !== spokenAnswerKey) {
 		if (!stoppedSpokenAnswerKeys.has(spokenAnswerKey)) {
-			announceSpokenAnswerEnd({ spokenAnswerKey, isPlayedToEnd: true, isAutoPlayed: true })
+			spokenAnswerEndListeners.announce({ spokenAnswerKey, isPlayedToEnd: true, isAutoPlayed: true })
 		}
 		return
 	}
@@ -186,16 +191,17 @@ export function completeSpokenAnswer(spokenAnswerKey: string): void {
 }
 
 /**
- * Stops the spoken answer that is loading or playing, and shows the podcast episode on the lock screen again.
+ * Stops the spoken answer that is loading or playing, and shows the podcast episode on the lock screen again. A stop
+ * from the lock screen or headphones says so to the end listeners.
  */
-export function stopSpokenAnswer(): void {
+export function stopSpokenAnswer({ isMediaSessionPause = false }: { isMediaSessionPause?: boolean } = {}): void {
 	if (!spokenAnswer) {
 		return
 	}
 	// remember the stopped reply, so the spoken parts its stream still sends stay quiet
 	stoppedSpokenAnswerKeys.add(spokenAnswer.spokenAnswerKey)
 	audioElement?.pause()
-	endSpokenAnswer({ isPlayedToEnd: false })
+	endSpokenAnswer({ isPlayedToEnd: false, isMediaSessionPause })
 }
 
 /**
@@ -210,7 +216,7 @@ export function stopSpokenAnswerKey(spokenAnswerKey: string): void {
 	}
 
 	// a reply stopped before its queue started still ends, as a stop
-	announceSpokenAnswerEnd({ spokenAnswerKey, isPlayedToEnd: false, isAutoPlayed: true })
+	spokenAnswerEndListeners.announce({ spokenAnswerKey, isPlayedToEnd: false, isAutoPlayed: true })
 }
 
 /**
@@ -231,36 +237,21 @@ export function isVoiceRecordingActive(): boolean {
  * Calls the listener each time a reply's queue ends, played to its end or stopped, and returns the unsubscribe.
  */
 export function subscribeToSpokenAnswerEnd(listener: (spokenAnswerEnd: SpokenAnswerEnd) => void): () => void {
-	spokenAnswerEndListeners.add(listener)
-	return () => {
-		spokenAnswerEndListeners.delete(listener)
-	}
-}
-
-/**
- * Returns what the queue does next: play its next spoken part, wait for a spoken part still streaming, or finish.
- */
-export function toNextSpokenPartAction(
-	queue: Pick<SpokenAnswerQueue, "spokenParts" | "nextSpokenPartIndex" | "isComplete">,
-): "play" | "wait" | "finish" {
-	if (queue.nextSpokenPartIndex < queue.spokenParts.length) {
-		return "play"
-	}
-	return queue.isComplete ? "finish" : "wait"
-}
-
-/**
- * Returns the spoken answer key of a chat room message, which the room's bubbles and its stream handler share.
- */
-export function toChatRoomSpokenAnswerKey(chatMessageId: number): string {
-	return `room-message-${chatMessageId}`
+	return spokenAnswerEndListeners.subscribe(listener)
 }
 
 // start a reply's queue, pause the podcast episode so carl never speaks over it, and play the first spoken part
 function startSpokenAnswer(
 	queue: Pick<
 		SpokenAnswerQueue,
-		"spokenAnswerKey" | "page" | "spokenParts" | "isComplete" | "isAutoPlayed" | "onFirstPlaying"
+		| "spokenAnswerKey"
+		| "page"
+		| "speaker"
+		| "mediaSessionMetadata"
+		| "spokenParts"
+		| "isComplete"
+		| "isAutoPlayed"
+		| "onFirstPlaying"
 	>,
 ): void {
 	spokenAnswer = { ...queue, nextSpokenPartIndex: 0, isSpokenPartActive: false, state: "loading", hasPlayed: false }
@@ -325,7 +316,8 @@ async function playNextSpokenPart(): Promise<void> {
 	}
 }
 
-// a spoken part started playing: show it, report the first one, name carl on the lock screen, and load the next one
+// a spoken part started playing: show it, report the first one, name the host on the lock screen, and load the next
+// one
 function handleSpokenPartPlaying(): void {
 	const queue = spokenAnswer
 	if (!queue || !isPlayingSpokenPart()) {
@@ -339,7 +331,7 @@ function handleSpokenPartPlaying(): void {
 		queue.hasPlayed = true
 		queue.onFirstPlaying?.(Date.now())
 	}
-	showCarlOnMediaSession()
+	showSpeakerOnMediaSession(queue, () => stopSpokenAnswer({ isMediaSessionPause: true }))
 
 	// load the next spoken part while this one plays, so carl pauses between spoken parts no longer than he breathes
 	if (toNextSpokenPartAction(queue) === "play") {
@@ -363,7 +355,13 @@ function isPlayingSpokenPart(): boolean {
 
 // drop the queue, report a queue that never played, tell the end listeners, and show the podcast episode on the lock
 // screen again
-function endSpokenAnswer({ isPlayedToEnd }: { isPlayedToEnd: boolean }): void {
+function endSpokenAnswer({
+	isPlayedToEnd,
+	isMediaSessionPause = false,
+}: {
+	isPlayedToEnd: boolean
+	isMediaSessionPause?: boolean
+}): void {
 	const endedQueue = spokenAnswer
 	spokenAnswer = null
 	revokeSpokenPartObjectUrl()
@@ -374,10 +372,16 @@ function endSpokenAnswer({ isPlayedToEnd }: { isPlayedToEnd: boolean }): void {
 		endedQueue.onFirstPlaying?.(null)
 	}
 
-	// tell the end listeners which reply ended, whether carl finished it, and whether it was the conversation's own
+	// tell the end listeners which reply ended, whether the host finished it, whether it was the conversation's own, and
+	// whether the lock screen paused it
 	if (endedQueue) {
 		const { spokenAnswerKey, isAutoPlayed } = endedQueue
-		announceSpokenAnswerEnd({ spokenAnswerKey, isPlayedToEnd, isAutoPlayed })
+		spokenAnswerEndListeners.announce({
+			spokenAnswerKey,
+			isPlayedToEnd,
+			isAutoPlayed,
+			...(isMediaSessionPause ? { isMediaSessionPause } : {}),
+		})
 	}
 
 	// an element with no source drops carl from the lock screen, and a loaded episode takes it back. the next silence
@@ -387,27 +391,10 @@ function endSpokenAnswer({ isPlayedToEnd }: { isPlayedToEnd: boolean }): void {
 	refreshPodcastEpisodeMediaSession()
 }
 
-// tell the end listeners how a reply ended
-function announceSpokenAnswerEnd(spokenAnswerEnd: SpokenAnswerEnd): void {
-	for (const listener of spokenAnswerEndListeners) {
-		listener(spokenAnswerEnd)
-	}
-}
-
 // free the blob url of the spoken part that played
 function revokeSpokenPartObjectUrl(): void {
 	if (spokenPartObjectUrl) {
 		URL.revokeObjectURL(spokenPartObjectUrl)
 		spokenPartObjectUrl = null
 	}
-}
-
-// name carl on the lock screen while he speaks, with its pause control stopping him
-function showCarlOnMediaSession(): void {
-	if (typeof navigator === "undefined" || !("mediaSession" in navigator)) {
-		return
-	}
-	navigator.mediaSession.metadata = new MediaMetadata({ title: "Carl" })
-	navigator.mediaSession.setActionHandler("play", stopSpokenAnswer)
-	navigator.mediaSession.setActionHandler("pause", stopSpokenAnswer)
 }

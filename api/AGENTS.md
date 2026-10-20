@@ -86,9 +86,10 @@ routes, which set their own limits.
   `/podcast-feeds/:token.xml`.
 - `tool/` — the Topic Tools, each with its own gate check: `topicTools.ts` (the prompt and field updates),
   `topicSourceTools.ts` (adding and removing a source, and what one more costs), and `topicDraftTools.ts` (creating a
-  topic from a draft and suggesting its sources). The chat adapters are `chatTools.ts` (the edit tools bound to a
-  chat's topic) and `newTopicChatTools.ts` (the new-topic chat's draft tools). The mcp adapter is in `mcp/tools.ts`.
-  `topicTools.smoke.ts` runs `topicUpdateSmokeSections.ts`, `topicSourceSmokeSections.ts`, and
+  topic from a draft and suggesting its sources). The chat adapters are `chatTools.ts` (the preview tools a chat binds
+  on a topic, the saves the server applies once the user's next message agrees, and the wording every adapter and the
+  topic chat tools eval share) and `newTopicChatTools.ts` (the new-topic chat's draft tools). The mcp adapter is in
+  `mcp/tools.ts`. `topicTools.smoke.ts` runs `topicUpdateSmokeSections.ts`, `topicSourceSmokeSections.ts`, and
   `topicDraftSmokeSections.ts` over `topicToolsSmokeFixtures.ts`, and stops the first scan of the topic it creates
   through `topic/firstScanSmoke.ts`.
 - `topic/helpers.ts` — the topic page's reads; `topic/saveHelpers.ts` — the daily slot a frequency takes, a topic's
@@ -127,27 +128,37 @@ routes, which set their own limits.
 - `chat/room.ts` — posting to a chat room and its stream; `chat/roomRoute.ts` — the chat room routes;
   `chat/roomAccess.ts` — one chat room, the member's access to it, and the topic side of a chat room filter;
   `chat/roomDeletes.ts` — clearing a room and deleting one message or shared file.
-- `chat/privateChat.ts` — the private chat routes and the reply flow, each post rejecting a signed-out visitor through
-  `toSignedOutRejection` in `bodyLimit.ts` before the body is read; `chat/chatTurnAuthorization.ts` — whether a user may
-  take a chat turn on a topic, in a team chat, or in the new-topic chat; `chat/chatTurnStream.ts` — streaming a chat
-  turn's reply and saving its row; `chat/chatProposals.ts` — the change Carl previewed in a private chat, recorded in
-  `chat_proposals` as a keyed digest that holds none of the preview's text, taken by the user's next message on that
-  page, and applied by the server through the topic tools or the create path only if it matches its record and the
-  agreement check reads the message as agreeing. The private chat binds no tool that saves a topic change or creates a
-  topic; a team room keeps its saving tools. `chat/roomTurns.ts` — Carl's chat room turn, and `chat/roomQuestion.ts` —
-  the question it is asked, from the chat window and the room's summary and files. `room.smoke.ts` runs
-  `roomSmokeSections.ts` over `roomSmokeFixtures.ts`.
-- `chat/voiceRoute.ts` — the voice routes, each naming its chat page in the request: `POST /chat/transcription`
-  transcodes a spoken question's recording through ffmpeg, at most 4 at once in the process with a 503 and a
-  Retry-After past that, transcribes it on the user's key, and records the spend as a text-less chat turn row, or
-  returns an empty transcript with no row for a recording with no samples; `POST /chat/speech` speaks one spoken part of
-  Carl's reply on the user's key, under the speech rate limit and at most 3 spoken parts in progress per user with a 429
-  past that, and returns the MP3, or the WAV if the encode failed; `POST /chat/spoken-events` counts a spoken
-  question's timings and a play tap, under the spoken events rate limit. A failed model call other than a spent budget
-  is reported to Sentry under a fixed message per model call and outcome. `chat/voiceAuthorization.ts` — whether a
-  user may talk to Carl on that page: a private page asks its chat turn's gate, and a chat room asks membership and the
-  monthly spend gate; and the access check that a spoken event asks, which reads the page's visibility or membership
-  and no spend sum. The voice route tests share their pages, request builders, and spies through
+- `chat/privateChat.ts` — the private chat routes, each post rejecting a signed-out visitor through
+  `toSignedOutRejection` in `bodyLimit.ts` before the body is read; `chat/chatTurnAnswer.ts` — answering an allowed
+  private chat turn: its podcast episode chapter, attachments, proposal, tools, and streamed reply;
+  `chat/chatTurnAuthorization.ts` — whether a user may take a chat turn on a topic, in a team chat, or in the new-topic
+  chat, and `toChatRejection`, the response each rejected status gets, which the private chat routes, the voice routes,
+  and the chat attachment delete share; `chat/chatTurnStream.ts` — streaming a chat turn's reply and saving its row;
+  `chat/chatProposals.ts` — the change Carl previewed in a private chat, recorded in `chat_proposals` as a keyed digest
+  that holds none of the preview's text, taken by the user's next message on that page, and applied by the server
+  through the topic tools or the create path only if it matches its record and the agreement check reads the message as
+  agreeing. No chat binds a tool that saves a topic change or creates a topic. `chat/roomProposals.ts` — a topic's team
+  chat room preview, kept encrypted in `chat_proposals` for the member it was shown to, taken by that member's next
+  message to Carl, and applied the same way, so no other member's yes saves it. A topic chat turn may be a question
+  asked from the podcast player, which names its podcast episode and chapter: the route responds 404 before any model
+  call unless the chapter is on the topic's published podcast episode, and the chat turn's row is a `podcast` row with
+  the answering speaker. `chat/roomTurns.ts` — Carl's chat room turn, and `chat/roomQuestion.ts` — the question it is
+  asked, from the chat window and the room's summary and files, with `toChatRoomTranscriptLine` and the empty
+  placeholders that the topic chat tools eval shares. `room.smoke.ts` runs `roomSmokeSections.ts` over
+  `roomSmokeFixtures.ts`.
+- `chat/voiceRoute.ts` — the voice routes: `GET /chat/spoken-questions` says whether the user's spend is past the spoken
+  questions cutoff, and the rest each name their chat page in the request. `POST /chat/transcription` rejects a
+  recording past that cutoff with a 402, then transcodes a spoken question's recording through ffmpeg, at most 4 at once
+  in the process with a 503 and a Retry-After past that, transcribes it on the user's key, and records the spend as a
+  text-less chat turn row, or returns an empty transcript with no row for a recording with no samples; `POST
+  /chat/speech` speaks one spoken part of a reply on the user's key in the voice of the speaker who gave it, under the
+  speech rate limit and at most 3 spoken parts in progress per user with a 429 past that, and returns the MP3, or the
+  WAV if the encode failed; `POST /chat/spoken-events` counts a spoken question's timings and a play tap, under the
+  spoken events rate limit. A failed model call other than a spent budget is reported to Sentry under a fixed message
+  per model call and outcome. `chat/voiceAuthorization.ts` — whether a user may talk to Carl on that page: a private
+  page asks its chat turn's gate, and a chat room asks membership and the monthly spend gate; and the access check that
+  a spoken event asks, which reads the page's visibility or membership and no spend sum. The voice route tests share
+  their pages, transcription request builder, spies, and recorded spoken answer through
   `chat/voiceRouteTestFixtures.ts`.
 - `chat/chatAttachmentScreening.ts` — `resolveChatAttachments`, which resolves a chat turn's attachments for the model
   and withholds one the scanner flags, an image by the text it shows, `screenAttachmentText`, which screens a stored
@@ -231,13 +242,14 @@ routes, which set their own limits.
   and `cacheSession` from the session update hook,
   so a session missing from Redis is stored at its next daily refresh.
   An account close is rejected while a configured Redis is unreachable.
-- Every authority check routes through `authorization.ts` and the role helpers; inline
+- Every authority check routes through `authorization.ts` and the role helpers, `loadMonthlyBudgetCutoffStatus` among
+  them, which says whether a cutoff kind is stopped by a spent budget, paused, or allowed; inline
   `role ===` / `plan ===` comparisons are banned outside it (`authorization.test.ts` greps).
 - Request bodies validate with zod payloads from `shared/payloads.ts` and `shared/topicPayloads.ts` via `zValidator`.
 - A private or team read the user may not see responds 404, never 403; the invite gate keeps its 403.
 - Dev: `bun run dev:api` (doppler, on `PORT`, 3000 by default).
   Tests: `bun test api`; `*.smoke.ts` run under `doppler run`. `testSession.ts` resolves the session lookup as one user
-  or as a visitor and builds a route with one user signed in, and `indexTestFixtures.ts` builds the fake ui bundle and
-  the requests the page serving tests send through the composed app; only tests import either.
-  `analyticsTestFixtures.ts` holds the analytics properties that the tests, the topic tools smoke, and the new-topic
-  chat eval pass where a request's own would go.
+  or as a visitor, builds a route with one user signed in, and builds a json post, and `indexTestFixtures.ts` builds the
+  fake ui bundle and the requests the page serving tests send through the composed app; only tests import either.
+  `analyticsTestFixtures.ts` holds the analytics properties that the tests, the topic tools, invite, and podcast feed
+  smoke tests, and the new-topic chat eval pass where a request's own would go.

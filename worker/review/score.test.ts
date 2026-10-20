@@ -13,21 +13,21 @@ test("isPromoted gates on the promotion threshold", () => {
 
 // the paid section runs concurrently but bounded. an unbounded burst draws Firecrawl 429s
 test("runWithConcurrency never exceeds its limit and returns results in order", async () => {
-	// track how many tasks are in flight at once, recording the high-water mark
-	let inFlight = 0
-	let peakInFlight = 0
+	// track how many tasks run at once, recording the high-water mark
+	let runningCount = 0
+	let peakRunningCount = 0
 	const results = await runWithConcurrency([1, 2, 3, 4, 5, 6, 7], 3, async (item) => {
 		// enter the slot, yield so other workers interleave, then leave it
-		inFlight++
-		peakInFlight = Math.max(peakInFlight, inFlight)
+		runningCount++
+		peakRunningCount = Math.max(peakRunningCount, runningCount)
 		await Promise.resolve()
-		inFlight--
+		runningCount--
 		return item * 2
 	})
 
-	// every item ran, in input order, and no more than the limit was ever in flight
+	// every item ran, in input order, and no more than the limit was ever running
 	expect(results).toEqual([2, 4, 6, 8, 10, 12, 14])
-	expect(peakInFlight).toBeLessThanOrEqual(3)
+	expect(peakRunningCount).toBeLessThanOrEqual(3)
 })
 
 // the plan limit is checked before each dispatch, so once it trips the rest are deferred instead of bought

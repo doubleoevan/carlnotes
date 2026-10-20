@@ -5,6 +5,7 @@ import type { OwnerTopic } from "@shared/contracts/activity"
 import type { AdminTeamRow, AdminTotals, AdminUserRow } from "@shared/contracts/admin"
 import type { TeamPageResponse, TeamSummary } from "@shared/contracts/teams"
 import { toPositiveInteger } from "@shared/envSettings"
+import { toCentsFromDollars } from "@shared/plans"
 import { and, count, eq, gte, isNotNull, sql } from "drizzle-orm"
 import { db } from "../db"
 import { chatAttachments, chatTurns } from "../db/schema/chat"
@@ -13,7 +14,7 @@ import { teamMembers, teams } from "../db/schema/teams"
 import { attachments, topics } from "../db/schema/topics"
 import { users } from "../db/schema/users"
 import { readLiteLLMKeySpend } from "../worker"
-import { loadActivity } from "./activity"
+import { loadOwnedTopics } from "./activityTopics"
 import { isAdminRole, userBudgetCents } from "./authorization"
 import { withAvatarVersion } from "./avatars"
 import { readStripeTotalRevenueCents } from "./billing"
@@ -34,11 +35,11 @@ export async function loadAdminUserTopics({
 	adminUserId: string
 }): Promise<OwnerTopic[] | null> {
 	// the loader keys off the user, so an admin reads exactly what that user reads, with no second query to drift
-	const [user] = await db.select({ id: users.id, email: users.email }).from(users).where(eq(users.id, userId))
+	const [user] = await db.select({ id: users.id }).from(users).where(eq(users.id, userId))
 	if (!user) {
 		return null
 	}
-	return (await loadActivity(user, adminUserId)).topics
+	return loadOwnedTopics({ userId: user.id, signedInUserId: adminUserId })
 }
 
 /**
@@ -97,10 +98,10 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 
 	// the app's own totals keyed by user, in cents
 	const scanSpendByUser = new Map(
-		scanSpendRows.map((scanSpendRow) => [scanSpendRow.ownerId, Math.round(Number(scanSpendRow.dollars) * 100)]),
+		scanSpendRows.map((scanSpendRow) => [scanSpendRow.ownerId, toCentsFromDollars(Number(scanSpendRow.dollars))]),
 	)
 	const chatSpendByUser = new Map(
-		chatSpendRows.map((chatSpendRow) => [chatSpendRow.userId, Math.round(Number(chatSpendRow.dollars) * 100)]),
+		chatSpendRows.map((chatSpendRow) => [chatSpendRow.userId, toCentsFromDollars(Number(chatSpendRow.dollars))]),
 	)
 
 	// assemble each row, converting the observed dollar spend to cents and resolving the budget
@@ -121,7 +122,7 @@ export async function loadAdminUsers(): Promise<AdminUserRow[]> {
 			teamCount: teamCountByUser.get(user.id) ?? 0,
 			// the attributed storage, observed monthly cost, the app's own split totals, and budget
 			attributedBytes: storageByUser.get(user.id) ?? 0,
-			monthVariableCostCents: spendDollars === null ? null : Math.round(spendDollars * 100),
+			monthVariableCostCents: spendDollars === null ? null : toCentsFromDollars(spendDollars),
 			scanSpendCents: scanSpendByUser.get(user.id) ?? 0,
 			chatSpendCents: chatSpendByUser.get(user.id) ?? 0,
 			budgetOverrideCents: user.budgetOverrideCents,

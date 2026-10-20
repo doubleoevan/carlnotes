@@ -8,7 +8,9 @@ import type {
 import type { visibilities } from "@shared/enums"
 import {
 	AI_VOICES_NOTE,
+	FULL_PODCAST_COVER_SIZE,
 	PODCAST_EPISODE_SPEAKER_NAMES,
+	PODCAST_HOSTS_NAME,
 	PODCAST_SHOW_NAME,
 	PODCAST_THEME_SONG,
 	PODCAST_THEME_SONG_DRUMMING_CREDIT,
@@ -17,7 +19,7 @@ import {
 	PODCAST_THEME_SONG_PRODUCTION_CREDIT,
 	PODCAST_THEME_SONG_WRITING_CREDIT,
 	toPodcastCoverPath,
-	toTranscriptText,
+	toTranscriptTurn,
 } from "@shared/podcastEpisodes"
 import { toPodcastEpisodePath, toTopicPath } from "@shared/seo"
 import { toXmlText } from "./feed"
@@ -70,7 +72,8 @@ export function toPodcastFeedXml({
 	// the show's page, title, cover, and description, which ends with the theme song's credits and its link
 	const topicUrl = `${appUrl}${toTopicPath(topic)}`
 	const showTitle = `${topic.name}: ${PODCAST_SHOW_NAME}`
-	const showCoverUrl = `${appUrl}${toPodcastCoverPath({ kind: "show", id: topic.id, title: topic.name }, 3000)}`
+	const showCoverPath = toPodcastCoverPath({ kind: "show", id: topic.id, title: topic.name }, FULL_PODCAST_COVER_SIZE)
+	const showCoverUrl = `${appUrl}${showCoverPath}`
 	const showDescription = `${topic.prompt || `What Carl found for ${topic.name}.`} ${AI_VOICES_NOTE}. ${PODCAST_THEME_SONG_HEADING}: ${PODCAST_THEME_SONG.youtubeUrl}. ${PODCAST_THEME_SONG_WRITING_CREDIT}. ${PODCAST_THEME_SONG_PERFORMANCE_CREDIT}. ${PODCAST_THEME_SONG_PRODUCTION_CREDIT}. ${PODCAST_THEME_SONG_DRUMMING_CREDIT}.`
 
 	// the plain rss image tags, with the cover's url, the show's title, and the show's page
@@ -88,7 +91,7 @@ export function toPodcastFeedXml({
 		`<description>${toXmlText(showDescription)}</description>`,
 		"<language>en</language>",
 		// the iTunes tags that Apple requires, with the cover in both forms
-		"<itunes:author>Carl and Vienna</itunes:author>",
+		`<itunes:author>${PODCAST_HOSTS_NAME}</itunes:author>`,
 		`<itunes:image href="${toXmlText(showCoverUrl)}"/>`,
 		`<image>${showImageTags}</image>`,
 		'<itunes:category text="News"/>',
@@ -96,8 +99,8 @@ export function toPodcastFeedXml({
 		"<itunes:type>episodic</itunes:type>",
 		// the Podcasting 2.0 tags for the feed's own guid and both hosts
 		`<podcast:guid>${Bun.randomUUIDv5(feedUrl.replace(/^https?:\/\//, ""), PODCAST_GUID_NAMESPACE)}</podcast:guid>`,
-		'<podcast:person role="host">Carl</podcast:person>',
-		'<podcast:person role="host">Vienna</podcast:person>',
+		`<podcast:person role="host">${PODCAST_EPISODE_SPEAKER_NAMES.host}</podcast:person>`,
+		`<podcast:person role="host">${PODCAST_EPISODE_SPEAKER_NAMES.cohost}</podcast:person>`,
 		// the tag that blocks a listener's own feed from podcast directories
 		isBlockedFromPodcastDirectories ? "<itunes:block>Yes</itunes:block>" : "",
 	].filter(Boolean)
@@ -170,7 +173,10 @@ function toPodcastFeedItem(
 	const audioUrl = toXmlText(`${podcastEpisodeFilesUrl}/audio.mp3`)
 	const chaptersUrl = toXmlText(`${podcastEpisodeFilesUrl}/chapters.json`)
 	const transcriptUrl = toXmlText(`${podcastEpisodeFilesUrl}/transcript.html`)
-	const coverPath = toPodcastCoverPath({ kind: "episode", id: podcastEpisode.id, title: podcastEpisode.title }, 3000)
+	const coverPath = toPodcastCoverPath(
+		{ kind: "episode", id: podcastEpisode.id, title: podcastEpisode.title },
+		FULL_PODCAST_COVER_SIZE,
+	)
 
 	// wrap the item's details, audio, iTunes tags, and Podcasting 2.0 files in an item tag
 	const itemTags = [
@@ -204,10 +210,7 @@ export function toTranscriptBlocks(podcastEpisodeScript: PodcastEpisodeScript): 
 		turns: PodcastEpisodeScript["coldOpen"],
 	): PodcastEpisodeTranscriptBlock => ({
 		heading,
-		turns: turns.map((turn) => ({
-			speakerName: PODCAST_EPISODE_SPEAKER_NAMES[turn.speaker],
-			text: toTranscriptText(turn.text),
-		})),
+		turns: turns.map(toTranscriptTurn),
 	})
 
 	// the cold open, each segment's transition and chapters, and the sign-off, without the blocks that have no turns

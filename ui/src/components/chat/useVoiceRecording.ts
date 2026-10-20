@@ -1,39 +1,36 @@
-// a composer's recording: the state machine from the mic tap to the transcript, listen mode, which reopens the mic
-// once carl finishes his spoken answer, the toasts, and the timings the spoken question event reports
+// a recording from a chat composer or the podcast player: the state machine from the mic tap to the transcript, the
+// toasts, the timings the spoken question event reports, and a composer's listen mode through useListenMode. the
+// rules it decides with are in voiceRecordingRules
 import type { VoiceChatPage } from "@shared/payloads"
 import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { type SpokenQuestionTimings, sendTranscription } from "@/clients/voiceClient"
-import { CHAT_REJECTION_COPY } from "@/components/chat/chatRejectionCopy"
+import {
+	fetchSpokenQuestionsStatus,
+	type SpokenQuestionTimings,
+	sendTranscription,
+	type TranscriptionRejection,
+} from "@/clients/voiceClient"
+import { MICROPHONE_REJECTED_TOAST, NO_SPEECH_TOAST, toastChatRejection } from "@/components/chat/chatRejectionCopy"
+import { useSpokenQuestionsPausedAction } from "@/components/chat/spokenQuestionsPaused"
+import { useListenMode } from "@/components/chat/useListenMode"
+import {
+	isRecordingTimerTicking,
+	toLevelCallback,
+	toReopenedRecordingRejection,
+	toSpokenQuestionsRejection,
+	type VoiceRecordingState,
+} from "@/components/chat/voiceRecordingRules"
 import type { VoiceRecordingHandle } from "@/lib/voiceRecorder"
 import { pausePodcastEpisode } from "@/stores/podcastEpisodePlayerStore"
-import {
-	playSpokenAnswerSilence,
-	type SpokenAnswerEnd,
-	setIsVoiceRecordingActive,
-	stopSpokenAnswer,
-	subscribeToSpokenAnswerEnd,
-} from "@/stores/spokenAnswerStore"
-
-// what the composer shows for the recording: nothing, the microphone request, the recording bar, or the wait for
-// the transcript
-export type VoiceRecordingState = "idle" | "requesting" | "recording" | "transcribing"
-
-// listen mode, which a mic tap starts: off, listening while the mic is open or the transcript is on its way, or
-// waiting for carl to finish his spoken answer, after which the mic reopens on its own
-export type ListenMode = "off" | "listening" | "waiting"
-
-// the toasts: the browser rejected the microphone request, no speech was recorded or transcribed, and the transcription
-// failed. the in-chat failure notice has its own retry button, so only the toast asks for another try
-export const MICROPHONE_REJECTED_TOAST = "Carl can't hear you. Type it, he reads fast."
-export const NO_SPEECH_TOAST = "Carl didn't catch that. Please try again."
-export const TRANSCRIPTION_FAILED_TOAST = `${CHAT_REJECTION_COPY.failed} Please try again.`
+import { endPodcastEpisodeQuestion } from "@/stores/podcastEpisodeQuestionStore"
+import { playSpokenAnswerSilence, setIsVoiceRecordingActive, stopSpokenAnswer } from "@/stores/spokenAnswerStore"
 
 // how often the timer re-renders
 const TIMER_TICK_MS = 1_000
 
-// how long listen mode waits for carl's spoken answer to end before it gives up
-const LISTEN_WAIT_TIMEOUT_MS = 2 * 60 * 1_000
+// the audio context the podcast player's first question made in its tap, kept for the page. the voice activity
+// detector is made once over it, and a context made outside a tap starts suspended on iOS
+let podcastEpisodeQuestionAudioContext: AudioContext | null = null
 
 export type VoiceRecording = {
 	state: VoiceRecordingState
@@ -53,6 +50,14 @@ export type VoiceRecording = {
 // the recording to transcribe, how long it ran, and the page it posts for
 type TranscribeOptions = { recording: Blob; secondsRecorded: number; page: VoiceChatPage }
 
+// the audio context and page a tapped recording opens on, its start count, and the mic's gate if it has one
+type PrepareAndRecordOptions = {
+	audioContext: AudioContext
+	voiceChatPage: VoiceChatPage
+	startCount: number
+	canStartVoiceRecording?: () => Promise<boolean>
+}
+
 type UseVoiceRecordingOptions = {
 	// the page the transcription posts for, null while voice is off and the mic never renders
 	page: VoiceChatPage | null
@@ -60,45 +65,60 @@ type UseVoiceRecordingOptions = {
 	onTranscript: (transcript: string, timings: SpokenQuestionTimings) => void
 	// shows a spent budget in the composer's own way. without it, the rejection toasts
 	onBudgetRejected?: () => void
+	// a question asked from the podcast player: it ends on the voice activity detector, has no listen mode, and keeps
+	// the page's audio context. a chat composer's recording ends a podcast player question instead
+	isPodcastEpisodeQuestion?: boolean
+	// what runs in the tap before the microphone is asked for, returning false to stop there with nothing recorded
+	canStartVoiceRecording?: () => Promise<boolean>
+	// a recording that ended with no transcript sent: cancelled, silent, rejected, empty, or stopped before it started
+	onVoiceRecordingEnded?: () => void
 }
 
 /**
- * Owns one composer's recording and its listen mode: the mic tap asks for the microphone and shows the bar, the
- * recording sends itself once the speaker stops, the transcript reaches the composer through onTranscript, and the
- * mic reopens once carl finishes his spoken answer, until the speaker stays quiet or cancels.
+ * Owns one recording, a composer's or the podcast player's: the mic tap asks for the microphone and shows the bar, the
+ * recording sends itself once the user stops, and the transcript arrives through onTranscript. A composer's mic
+ * reopens once carl finishes his spoken answer, until the user stays quiet or cancels.
  */
-export function useVoiceRecording({ page, onTranscript, onBudgetRejected }: UseVoiceRecordingOptions): VoiceRecording {
+export function useVoiceRecording({
+	page,
+	onTranscript,
+	onBudgetRejected,
+	isPodcastEpisodeQuestion = false,
+	canStartVoiceRecording,
+	onVoiceRecordingEnded,
+}: UseVoiceRecordingOptions): VoiceRecording {
 	// the recording's state, listen mode, and the bar's meter and timer
 	const [state, setState] = useState<VoiceRecordingState>("idle")
-	const [listenMode, setListenMode] = useState<ListenMode>("off")
+	const listenModeSession = useListenMode(reopen)
 	const [level, setLevel] = useState(0)
 	const [secondsElapsed, setSecondsElapsed] = useState(0)
 
 	// the running recording's controls, the states the callbacks read at once, and whether the composer is mounted
 	const recordingRef = useRef<VoiceRecordingHandle | null>(null)
 	const stateRef = useRef<VoiceRecordingState>("idle")
-	const listenModeRef = useRef<ListenMode>("off")
 	const isMountedRef = useRef(true)
 
-	// the listen session's audio context, made in the first tap so a reopened mic needs no gesture, whether the
-	// running recording was reopened by listen mode, and the wait for carl's reply to end
-	const audioContextRef = useRef<AudioContext | null>(null)
-	const isReopenedRef = useRef(false)
-	const waitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	// a count of the recordings started, so a gate result or a microphone that arrives for an earlier one is ignored
+	const startCountRef = useRef(0)
+
+	// what the mic does past the spoken questions cutoff
+	const runSpokenQuestionsPausedAction = useSpokenQuestionsPausedAction(
+		isPodcastEpisodeQuestion ? "podcast-question" : "chat-voice",
+	)
 
 	// the latest options, so the recorder's callbacks never read a stale page or composer callback
-	const optionsRef = useRef({ page, onTranscript, onBudgetRejected })
-	optionsRef.current = { page, onTranscript, onBudgetRejected }
+	const optionsRef = useRef({ page, onTranscript, onBudgetRejected, canStartVoiceRecording, onVoiceRecordingEnded })
+	optionsRef.current = { page, onTranscript, onBudgetRejected, canStartVoiceRecording, onVoiceRecordingEnded }
 
-	// the latest end-of-reply handler and stop, which the store's listener and the unmount call
-	const handleSpokenAnswerEndRef = useRef(handleSpokenAnswerEnd)
-	handleSpokenAnswerEndRef.current = handleSpokenAnswerEnd
+	// the latest stop and cancel, which the unmount calls
 	const stopListeningRef = useRef(stopListening)
 	stopListeningRef.current = stopListening
+	const cancelRef = useRef(cancel)
+	cancelRef.current = cancel
 
-	// the timer ticks once a second while recording
+	// the timer ticks once a second while a composer records
 	useEffect(() => {
-		if (state !== "recording") {
+		if (!isRecordingTimerTicking({ state, isPodcastEpisodeQuestion })) {
 			return
 		}
 
@@ -107,22 +127,21 @@ export function useVoiceRecording({ page, onTranscript, onBudgetRejected }: UseV
 		setSecondsElapsed(0)
 		const timer = setInterval(() => setSecondsElapsed(Math.floor((Date.now() - startedAt) / 1000)), TIMER_TICK_MS)
 		return () => clearInterval(timer)
-	}, [state])
+	}, [state, isPodcastEpisodeQuestion])
 
-	// a composer that unmounts under a recording cancels it and ends listen mode, so the microphone never stays open
+	// a composer or a podcast mic that unmounts under a recording cancels it and ends listen mode, so the microphone
+	// never stays open. a recording still waiting on its gate or its transcript ends as a cancel does
 	useEffect(() => {
 		isMountedRef.current = true
 		return () => {
+			// end what is pending, then the listen session and any running recording
 			isMountedRef.current = false
+			if (stateRef.current === "requesting" || stateRef.current === "transcribing") {
+				cancelRef.current()
+			}
 			stopListeningRef.current()
 		}
 	}, [])
-
-	// listen mode reopens the mic once carl's spoken answer ends
-	useEffect(
-		() => subscribeToSpokenAnswerEnd((spokenAnswerEnd) => handleSpokenAnswerEndRef.current(spokenAnswerEnd)),
-		[],
-	)
 
 	// set the state for the tap, for the render, and for the spoken answer store
 	function changeState(nextState: VoiceRecordingState): void {
@@ -131,81 +150,64 @@ export function useVoiceRecording({ page, onTranscript, onBudgetRejected }: UseV
 		setIsVoiceRecordingActive(nextState !== "idle")
 	}
 
-	// set listen mode for the callbacks and for the render
-	function changeListenMode(nextListenMode: ListenMode): void {
-		listenModeRef.current = nextListenMode
-		setListenMode(nextListenMode)
+	// end a recording with no transcript sent. the mic goes idle, the podcast player's audio is suspended, listen mode
+	// ends, and onVoiceRecordingEnded runs
+	function endWithoutTranscript(): void {
+		suspendPodcastEpisodeQuestionAudio()
+		changeState("idle")
+		listenModeSession.endListening()
+		optionsRef.current.onVoiceRecordingEnded?.()
 	}
 
-	// end listen mode, drop the wait, and close the session's audio context
-	function endListening(): void {
-		clearWaitTimeout()
-		changeListenMode("off")
-		isReopenedRef.current = false
-
-		// the session's context closes with it
-		const audioContext = audioContextRef.current
-		audioContextRef.current = null
-		if (audioContext && audioContext.state !== "closed") {
-			void audioContext.close()
-		}
-	}
-
-	// wait for carl's reply to end, and give up after the timeout
-	function startWaitTimeout(): void {
-		clearWaitTimeout()
-		waitTimeoutRef.current = setTimeout(() => {
-			if (listenModeRef.current === "waiting") {
-				endListening()
-			}
-		}, LISTEN_WAIT_TIMEOUT_MS)
-	}
-
-	// drop the wait, if one is running
-	function clearWaitTimeout(): void {
-		if (waitTimeoutRef.current) {
-			clearTimeout(waitTimeoutRef.current)
-			waitTimeoutRef.current = null
-		}
-	}
-
-	// carl's reply ended. his own reply finishing reopens the mic, a stopped reply ends listen mode, and a reply played
-	// by its button changes nothing
-	function handleSpokenAnswerEnd({ isPlayedToEnd, isAutoPlayed }: SpokenAnswerEnd): void {
-		if (listenModeRef.current !== "waiting") {
+	// end a rejected recording and say why in the chat's words. the spoken questions cutoff runs the paused action
+	function endWithRejection(rejection: TranscriptionRejection): void {
+		endWithoutTranscript()
+		if (rejection === "spokenQuestionsPaused") {
+			runSpokenQuestionsPausedAction()
 			return
 		}
 
-		// a stopped reply means the user wants out
-		if (!isPlayedToEnd) {
-			endListening()
-			return
-		}
-
-		// a reply the user played by its button changes nothing, and carl's own reply finishing means it is their turn
-		if (!isAutoPlayed) {
-			return
-		}
-		reopen()
+		// a spent budget shows the composer's own notice if it has one, and every other rejection toasts
+		toastChatRejection(rejection, optionsRef.current.onBudgetRejected)
 	}
 
 	// reopen the mic on the session's audio context, with no tap and no prompt
 	function reopen(): void {
 		// a mic that is busy, a page with voice off, a closed session, or an unmounted composer ends listen mode instead
 		const { page: voiceChatPage } = optionsRef.current
-		const audioContext = audioContextRef.current
+		const audioContext = listenModeSession.getAudioContext()
 		if (stateRef.current !== "idle" || !voiceChatPage || !audioContext || !isMountedRef.current) {
-			endListening()
+			listenModeSession.endListening()
 			return
 		}
 
-		// the mic opens again as a reopened recording, so its silence ends the session quietly
-		clearWaitTimeout()
-		changeListenMode("listening")
-		isReopenedRef.current = true
+		// the mic opens again at once as a reopened recording, so the first words are kept and its silence ends the
+		// session quietly. the spoken questions read runs beside it
+		listenModeSession.reopenListening()
 		changeState("requesting")
 		void audioContext.resume()
-		void record(audioContext, voiceChatPage)
+		startCountRef.current += 1
+		void record(audioContext, voiceChatPage, startCountRef.current)
+		void stopReopenedRecordingIfRejected(startCountRef.current)
+	}
+
+	// a spent budget or the spoken questions cutoff that the read returns while the reopened recording still runs
+	// cancels it, so nothing is transcribed
+	async function stopReopenedRecordingIfRejected(startCount: number): Promise<void> {
+		const spokenQuestionsRejection = toReopenedRecordingRejection({
+			spokenQuestionsStatus: await fetchSpokenQuestionsStatus(),
+			isSameRecording: startCount === startCountRef.current,
+			state: stateRef.current,
+		})
+		if (!spokenQuestionsRejection) {
+			return
+		}
+
+		// the recording is released with its callbacks quiet, then ends as a rejected tap does
+		startCountRef.current += 1
+		recordingRef.current?.cancel()
+		recordingRef.current = null
+		endWithRejection(spokenQuestionsRejection)
 	}
 
 	// post the recording, then send the transcript, or say why there is none
@@ -214,45 +216,36 @@ export function useVoiceRecording({ page, onTranscript, onBudgetRejected }: UseV
 		recordingRef.current = null
 		changeState("transcribing")
 		const recordingSentAt = Date.now()
+		const startCount = startCountRef.current
 		const sendTranscriptionResult = await sendTranscription({ page: voiceChatPage, recording })
-		changeState("idle")
 
-		// a composer that unmounted while the transcript was on its way sends nothing
+		// a transcript for a recording cancelled while it was on its way sends nothing, and leaves the newer state alone
+		if (startCount !== startCountRef.current) {
+			return
+		}
+
+		// set the mic idle, and a composer that unmounted while the transcript was on its way sends nothing
+		changeState("idle")
 		if (!isMountedRef.current) {
 			return
 		}
 
-		// a rejection says why in the chat's words and ends listen mode. a spent budget shows the composer's own
-		// notice if it has one
+		// a rejection says why in the chat's words and ends listen mode
 		if (typeof sendTranscriptionResult === "string") {
-			endListening()
-			if (sendTranscriptionResult === "budget" && optionsRef.current.onBudgetRejected) {
-				optionsRef.current.onBudgetRejected()
-				return
-			}
-
-			// every other rejection toasts, and a failed transcription asks for another try
-			toast(
-				sendTranscriptionResult === "failed"
-					? TRANSCRIPTION_FAILED_TOAST
-					: CHAT_REJECTION_COPY[sendTranscriptionResult],
-			)
+			endWithRejection(sendTranscriptionResult)
 			return
 		}
 
 		// an empty transcript sends nothing and ends listen mode
 		const transcript = sendTranscriptionResult.transcript.trim()
 		if (transcript === "") {
-			endListening()
+			endWithoutTranscript()
 			toast(NO_SPEECH_TOAST)
 			return
 		}
 
 		// the transcript sends, and listen mode waits for carl's reply to end
-		if (listenModeRef.current === "listening") {
-			changeListenMode("waiting")
-			startWaitTimeout()
-		}
+		listenModeSession.waitForSpokenAnswer()
 		optionsRef.current.onTranscript(transcript, {
 			secondsRecorded,
 			transcriptionMs: Date.now() - recordingSentAt,
@@ -261,29 +254,46 @@ export function useVoiceRecording({ page, onTranscript, onBudgetRejected }: UseV
 	}
 
 	// load the recorder, then ask for the microphone. a failed load or a rejected request leaves the composer as it was
-	async function record(audioContext: AudioContext, voiceChatPage: VoiceChatPage): Promise<void> {
+	async function record(audioContext: AudioContext, voiceChatPage: VoiceChatPage, startCount: number): Promise<void> {
+		// a microphone that opens for an earlier recording is released with its callbacks quiet
+		let isMicrophoneReleased = false
+		const isCurrentRecording = (): boolean => !isMicrophoneReleased && startCount === startCountRef.current
 		try {
-			const { startVoiceRecording } = await import("@/lib/voiceRecorder")
+			// the recorder loads on the first tap, and a recording cancelled while it loaded never asks for the microphone
+			const { startVoiceRecording } = await loadVoiceRecorder()
+			if (!isCurrentRecording() || !isMountedRef.current) {
+				return
+			}
 			const voiceRecordingHandle = await startVoiceRecording({
 				audioContext,
-				onLevel: setLevel,
-				onFinished: (recording, secondsRecorded) =>
-					void transcribe({ recording, secondsRecorded, page: voiceChatPage }),
+				endOfSpeech: isPodcastEpisodeQuestion ? "voiceActivity" : "level",
+				onLevel: toLevelCallback({ isPodcastEpisodeQuestion, setLevel }),
+				onFinished: (recording, secondsRecorded) => {
+					if (!isCurrentRecording()) {
+						return
+					}
+					suspendPodcastEpisodeQuestionAudio()
+					void transcribe({ recording, secondsRecorded, page: voiceChatPage })
+				},
 				onCancelled: (reason) => {
+					if (!isCurrentRecording()) {
+						return
+					}
 					// every cancel ends listen mode. silence on a tapped recording says so, and silence on a reopened
-					// one is the speaker being done
-					const isReopened = isReopenedRef.current
+					// one is the user being done
+					const isReopened = listenModeSession.isReopened()
 					recordingRef.current = null
-					changeState("idle")
-					endListening()
+					endWithoutTranscript()
 					if (reason === "noSpeech" && !isReopened) {
 						toast(NO_SPEECH_TOAST)
 					}
 				},
 			})
 
-			// a composer that unmounted while the microphone was asked for lets it go again
-			if (!isMountedRef.current) {
+			// a composer that unmounted, a recording cancelled, or a newer recording started while the microphone was asked
+			// for releases it again
+			if (!isMountedRef.current || !isCurrentRecording() || stateRef.current !== "requesting") {
+				isMicrophoneReleased = true
 				voiceRecordingHandle.cancel()
 				return
 			}
@@ -292,34 +302,89 @@ export function useVoiceRecording({ page, onTranscript, onBudgetRejected }: UseV
 			recordingRef.current = voiceRecordingHandle
 			changeState("recording")
 		} catch {
-			// the recorder failed to load or the browser rejected the microphone request
-			changeState("idle")
-			endListening()
+			// the recorder failed to load or the browser rejected the microphone request, for this recording alone
+			if (!isCurrentRecording()) {
+				return
+			}
+			endWithoutTranscript()
 			toast(MICROPHONE_REJECTED_TOAST)
 		}
 	}
 
-	// the mic tap, which starts listen mode
+	// a podcast player question's audio context is suspended between questions, and the next tap resumes it
+	function suspendPodcastEpisodeQuestionAudio(): void {
+		if (isPodcastEpisodeQuestion) {
+			void podcastEpisodeQuestionAudioContext?.suspend()
+		}
+	}
+
+	// the mic tap, which starts listen mode in a composer
 	function start(): void {
 		const { page: voiceChatPage } = optionsRef.current
 		if (stateRef.current !== "idle" || voiceChatPage === null) {
 			return
 		}
 
-		// one voice at a time. stopping carl ends an earlier listen session before this tap starts its own
+		// one voice at a time. stopping carl ends an earlier listen session before this tap starts its own, and a chat
+		// recording ends a question asked from the podcast player, which leaves the podcast episode paused
+		if (!isPodcastEpisodeQuestion) {
+			endPodcastEpisodeQuestion("chatMic")
+		}
 		stopSpokenAnswer()
 		pausePodcastEpisode()
 		changeState("requesting")
-		changeListenMode("listening")
-		isReopenedRef.current = false
 
-		// play silence through the element and make the context inside the tap's gesture, before the recorder's async load.
-		// the context serves the whole listen session
+		// play silence through the element and make or resume the context inside the tap's gesture, before the recorder's
+		// async load. a composer's context serves its whole listen session, and the podcast player's the whole page
 		playSpokenAnswerSilence()
-		const audioContext = new AudioContext()
-		audioContextRef.current = audioContext
+		const audioContext = isPodcastEpisodeQuestion ? toPodcastEpisodeQuestionAudioContext() : new AudioContext()
+		listenModeSession.startListening(isPodcastEpisodeQuestion ? null : audioContext)
 		void audioContext.resume()
-		void record(audioContext, voiceChatPage)
+		startCountRef.current += 1
+		const { canStartVoiceRecording } = optionsRef.current
+		void prepareAndRecord({ audioContext, voiceChatPage, startCount: startCountRef.current, canStartVoiceRecording })
+	}
+
+	// run the tap's gate and read the spoken questions state before the microphone while the recorder loads, then
+	// record, or stop with nothing recorded
+	async function prepareAndRecord({
+		audioContext,
+		voiceChatPage,
+		startCount,
+		canStartVoiceRecording,
+	}: PrepareAndRecordOptions): Promise<void> {
+		// the recorder loads beside the gate and the read. a failed load shows once record loads it again
+		void loadVoiceRecorder().catch(() => null)
+
+		// a recording cancelled while its gate or the spoken questions read ran stops here, and leaves a newer recording
+		// alone. a gate that fails says no
+		const [isVoiceRecordingAllowed, spokenQuestionsStatus] = await Promise.all([
+			canStartVoiceRecording ? canStartVoiceRecording().catch(() => false) : true,
+			fetchSpokenQuestionsStatus(),
+		])
+		if (startCount !== startCountRef.current) {
+			return
+		}
+
+		// a gate that said no already said why, so it ends the tap with nothing recorded
+		if (!isVoiceRecordingAllowed) {
+			endWithoutTranscript()
+			return
+		}
+
+		// a spent budget shows the budget rejection as a transcription's does, and the spoken questions cutoff runs the
+		// paused action, with nothing recorded
+		const spokenQuestionsRejection = toSpokenQuestionsRejection(spokenQuestionsStatus)
+		if (spokenQuestionsRejection) {
+			endWithRejection(spokenQuestionsRejection)
+			return
+		}
+
+		// the microphone, once the gate and the read are done, unless the recording was cancelled or the composer left
+		// meanwhile
+		if (stateRef.current === "requesting" && isMountedRef.current) {
+			await record(audioContext, voiceChatPage, startCount)
+		}
 	}
 
 	// the bar's send control sends early. the tap plays silence again for the reply
@@ -328,21 +393,44 @@ export function useVoiceRecording({ page, onTranscript, onBudgetRejected }: UseV
 		recordingRef.current?.send()
 	}
 
+	// cancel a recording that is running, one whose microphone is still being asked for, or one being transcribed
+	function cancel(): void {
+		if (stateRef.current !== "requesting" && stateRef.current !== "transcribing") {
+			recordingRef.current?.cancel()
+			return
+		}
+
+		// a microphone still being asked for is released once it opens, and a pending gate result or transcript is ignored
+		startCountRef.current += 1
+		endWithoutTranscript()
+	}
+
 	// end listen mode, which a typed send does, and cancel a recording that is running
 	function stopListening(): void {
-		endListening()
+		listenModeSession.endListening()
 		recordingRef.current?.cancel()
 	}
 
 	// the recording's state and controls, with listen mode as one flag
 	return {
 		state,
-		isListening: listenMode !== "off",
+		isListening: listenModeSession.isListening,
 		level,
 		secondsElapsed,
 		start,
 		send,
-		cancel: () => recordingRef.current?.cancel(),
+		cancel,
 		stopListening,
 	}
+}
+
+// the recorder module, which loads on the first recording
+function loadVoiceRecorder(): Promise<typeof import("@/lib/voiceRecorder")> {
+	return import("@/lib/voiceRecorder")
+}
+
+// the podcast player's audio context, made in the first question's tap and kept for the page
+function toPodcastEpisodeQuestionAudioContext(): AudioContext {
+	podcastEpisodeQuestionAudioContext ??= new AudioContext()
+	return podcastEpisodeQuestionAudioContext
 }

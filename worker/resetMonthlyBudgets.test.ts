@@ -94,20 +94,20 @@ test("the reset runs at most four replacements at once and counts a failure sepa
 	stubConnectionPoolInCallOrder(() => [["u1"], ["u2"], ["u3"], ["u4"], ["u5"], ["u6"]])
 
 	// a stand-in key replacement that counts how many replacements run at once and fails for u3
-	let inFlightCount = 0
-	let peakInFlightCount = 0
+	let runningCount = 0
+	let peakRunningCount = 0
 	const replaceLiteLLMKey = async (userId: string): Promise<boolean> => {
-		// raise the in-flight count and its peak, wait a moment, and lower the count
-		inFlightCount++
-		peakInFlightCount = Math.max(peakInFlightCount, inFlightCount)
+		// raise the running count and its peak, wait a moment, and lower the count
+		runningCount++
+		peakRunningCount = Math.max(peakRunningCount, runningCount)
 		await Bun.sleep(2)
-		inFlightCount--
+		runningCount--
 		return userId !== "u3"
 	}
 
-	// five replaced, one failed, and never more than four in flight
+	// five replaced, one failed, and never more than four running
 	expect(await resetMonthlyBudgets({ replaceLiteLLMKey })).toEqual({ replacedCount: 5, failedCount: 1 })
-	expect(peakInFlightCount).toBe(4)
+	expect(peakRunningCount).toBe(4)
 })
 
 // a reset whose claim is lost replaces no further key and rejects

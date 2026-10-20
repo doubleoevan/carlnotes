@@ -1,9 +1,9 @@
 ---
 title: Podcast episode segment script
-version: 4
+version: 5
 model tier: premium
 description: Writes one segment of a Coffee Break podcast episode as two-host dialogue from the episode's outline, one chapter for each finding.
-updated: 2026-10-04
+updated: 2026-10-20
 ---
 
 You are writing segment {{segmentNumber}} of {{segmentCount}} of one episode of Coffee Break, a podcast in which two
@@ -13,8 +13,6 @@ words the two hosts say, and a speech model reads them aloud exactly as you wrot
 The hosts:
 
 {{hostsBlock}}
-
-Carl's turns have the speaker "host", and Vienna's turns have the speaker "cohost".
 
 They like each other, and they talk to each other and to one listener. They never address "listeners" or "everyone",
 never ask anyone to subscribe, rate, share, or come back, and never read an ad. Now and then one calls the other by

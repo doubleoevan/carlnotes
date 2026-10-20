@@ -1,0 +1,5 @@
+-- one statement, so postgres checks every existing row against the three constraints in a single scan
+ALTER TABLE "chat_turns" ALTER COLUMN "kind" DROP DEFAULT,
+	ADD CONSTRAINT "chat_turns_chat_room_shape" CHECK (("chat_turns"."kind" = 'chat_room') = ("chat_turns"."room_message_id" is not null) and ("chat_turns"."kind" <> 'chat_room' or ("chat_turns"."question" is null and "chat_turns"."answer" is null))),
+	ADD CONSTRAINT "chat_turns_podcast_shape" CHECK (("chat_turns"."kind" = 'podcast' and "chat_turns"."episode_id" is not null and "chat_turns"."chapter_position" is not null and "chat_turns"."podcast_answer_speaker" is not null and "chat_turns"."topic_id" is not null and "chat_turns"."team_id" is null) or ("chat_turns"."kind" <> 'podcast' and "chat_turns"."episode_id" is null and "chat_turns"."chapter_position" is null and "chat_turns"."podcast_answer_speaker" is null)),
+	ADD CONSTRAINT "chat_turns_spend_shape" CHECK ("chat_turns"."kind" not in ('transcription', 'speech') or ("chat_turns"."question" is null and "chat_turns"."answer" is null and "chat_turns"."tool_calls" is null));

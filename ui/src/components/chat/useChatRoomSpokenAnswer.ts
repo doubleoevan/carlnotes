@@ -6,12 +6,8 @@ import type { VoiceChatPage } from "@shared/payloads"
 import { toSpokenParts } from "@shared/spokenText"
 import { useRef } from "react"
 import { type SpokenQuestionTimings, sendSpokenQuestionEvent } from "@/clients/voiceClient"
-import {
-	isVoiceRecordingActive,
-	speakSpokenAnswer,
-	stopSpokenAnswerKey,
-	toChatRoomSpokenAnswerKey,
-} from "@/stores/spokenAnswerStore"
+import { toChatRoomSpokenAnswerKey } from "@/stores/spokenAnswerQueue"
+import { isVoiceRecordingActive, speakSpokenAnswer, stopSpokenAnswerKey } from "@/stores/spokenAnswerStore"
 
 // the spoken message carl's reply is awaited for, and the timings its spoken question event reports
 type PendingSpokenPost = { chatMessageId: number; spokenQuestionTimings: SpokenQuestionTimings }

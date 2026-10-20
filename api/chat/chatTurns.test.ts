@@ -4,6 +4,7 @@ import { afterEach, expect, mock, spyOn, test } from "bun:test"
 import * as analytics from "@shared/analytics"
 import { restoreConnectionPool, stubConnectionPool } from "../../db/connectionPoolStub"
 import { CHAT_COST_PER_MILLION_TOKENS, EXA_COST_PER_SEARCH, tokenCost } from "../../worker/budget"
+import { TEST_ANALYTICS_PROPERTIES } from "../analyticsTestFixtures"
 import * as authorization from "../authorization"
 import * as chatAttachmentReads from "./chatAttachmentReads"
 import {
@@ -14,7 +15,7 @@ import {
 	toChatKind,
 	toChatTurnRow,
 } from "./chatTurns"
-import { decryptChatText, encryptChatText } from "./encryption"
+import { decryptChatJson, decryptChatText, encryptChatText } from "./encryption"
 import * as linkPreviews from "./linkPreviews"
 
 // put the connection pool's own query and the spies back after each test
@@ -28,9 +29,9 @@ function toDecryptedText(storedText: string | null | undefined): string | null {
 	return storedText ? decryptChatText(storedText) : null
 }
 
-// a topic chat turn's row, persisted with a question and an answer unless the case says otherwise
-function toTopicChatTurnRow(chatTurnRowOptions: Partial<ToChatTurnRowOptions>): ReturnType<typeof toChatTurnRow> {
-	return toChatTurnRow({
+// a topic chat turn's options, persisted with a question and an answer unless the case says otherwise
+function toTopicChatTurnOptions(chatTurnRowOptions: Partial<ToChatTurnRowOptions>): ToChatTurnRowOptions {
+	return {
 		userId: "user-1",
 		page: { topicId: "topic-1" },
 		totalTokens: 1000,
@@ -41,7 +42,12 @@ function toTopicChatTurnRow(chatTurnRowOptions: Partial<ToChatTurnRowOptions>): 
 		toolCalls: [],
 		isSpoken: false,
 		...chatTurnRowOptions,
-	})
+	}
+}
+
+// a topic chat turn's row, built from its options
+function toTopicChatTurnRow(chatTurnRowOptions: Partial<ToChatTurnRowOptions>): ReturnType<typeof toChatTurnRow> {
+	return toChatTurnRow(toTopicChatTurnOptions(chatTurnRowOptions))
 }
 
 // a persisted chat turn stores what was said, so a signed-in user can reload the page and find their conversation
@@ -88,7 +94,7 @@ test("a zero-token chat turn with no searches costs nothing", () => {
 test("a chat turn's tool calls are stored with its text and left out when there are none", () => {
 	const toolCalls = [{ toolName: "draftTopic", input: { name: "Hoops" }, output: "The draft now reads: Hoops" }]
 	const chatTurnRowWithToolCalls = toTopicChatTurnRow({ question: "add reddit", answer: "Saved.", toolCalls })
-	expect(toDecryptedText(chatTurnRowWithToolCalls.toolCalls)).toBe(JSON.stringify(toolCalls))
+	expect(decryptChatJson(chatTurnRowWithToolCalls.toolCalls ?? null)).toEqual(toolCalls)
 	const chatTurnRowWithoutToolCalls = toTopicChatTurnRow({ question: "hello", answer: "Hi." })
 	expect(chatTurnRowWithoutToolCalls.toolCalls).toBeNull()
 	// expect no tool calls on a chat turn that the gate does not persist either
@@ -101,37 +107,64 @@ test("a chat turn's tool calls are stored with its text and left out when there 
 	expect(unpersistedChatTurnRow.toolCalls).toBeNull()
 })
 
-// a saved chat turn is counted once, and its event says whether the question was spoken
+// a private chat turn's row is private and names no podcast episode, and a podcast chat turn's row names its podcast
+// episode, its chapter, and who answered, carl if no speaker came
+test("a chat turn's row names its kind and a podcast chat turn's its podcast episode, chapter, and speaker", () => {
+	const privateChatTurnRow = toTopicChatTurnRow({})
+	expect(privateChatTurnRow).toMatchObject({
+		kind: "private",
+		podcastEpisodeId: null,
+		chapterPosition: null,
+		podcastAnswerSpeaker: null,
+	})
+	const podcastEpisodeChapter = { podcastEpisodeId: "episode-1", chapterPosition: 2 }
+	expect(toTopicChatTurnRow({ podcastEpisodeChapter, podcastAnswerSpeaker: "cohost", isSpoken: true })).toMatchObject({
+		kind: "podcast",
+		topicId: "topic-1",
+		teamId: null,
+		podcastEpisodeId: "episode-1",
+		chapterPosition: 2,
+		podcastAnswerSpeaker: "cohost",
+	})
+	expect(toTopicChatTurnRow({ podcastEpisodeChapter }).podcastAnswerSpeaker).toBe("host")
+})
+
+// a saved chat turn is counted once, and its event says whether the question was spoken, its kind, and for a podcast
+// chat turn who answered it
 test("saveChatTurn counts the chat turn with whether it was spoken", async () => {
 	stubConnectionPool(() => [["turn-1"]])
 	const trackEventSpy = spyOn(analytics, "trackEvent").mockImplementation(() => {})
-	const analyticsProperties = {
-		entryPoint: "web",
-		plan: "free",
-		platform: "desktop",
-		browserPlatform: "other",
-		isInAppBrowser: false,
-	} as const
+	const analyticsProperties = TEST_ANALYTICS_PROPERTIES
 
 	// a spoken chat turn on a topic page
-	const savedChatTurnId = await saveChatTurn({
-		userId: "user-1",
-		page: { topicId: "topic-1" },
-		totalTokens: 1000,
-		searchCount: 0,
-		isPersisted: true,
-		question: "who is hiring?",
-		answer: "four of them are",
-		toolCalls: [],
-		isSpoken: true,
-		analyticsProperties,
-	})
+	const savedChatTurnId = await saveChatTurn({ ...toTopicChatTurnOptions({ isSpoken: true }), analyticsProperties })
 	expect(savedChatTurnId).toBe("turn-1")
 	expect(trackEventSpy).toHaveBeenCalledTimes(1)
 	expect(trackEventSpy).toHaveBeenCalledWith("chat_turn_sent", "user-1", {
 		...analyticsProperties,
 		topicId: "topic-1",
 		chatKind: "topic",
+		chatTurnKind: "private",
+		isSpoken: true,
+	})
+
+	// a podcast chat turn that vienna answered
+	await saveChatTurn({
+		...toTopicChatTurnOptions({
+			question: "why does this matter?",
+			answer: "because you asked",
+			isSpoken: true,
+			podcastEpisodeChapter: { podcastEpisodeId: "episode-1", chapterPosition: 0 },
+			podcastAnswerSpeaker: "cohost",
+		}),
+		analyticsProperties,
+	})
+	expect(trackEventSpy).toHaveBeenLastCalledWith("chat_turn_sent", "user-1", {
+		...analyticsProperties,
+		topicId: "topic-1",
+		chatKind: "topic",
+		chatTurnKind: "podcast",
+		speaker: "cohost",
 		isSpoken: true,
 	})
 })
@@ -150,33 +183,43 @@ test("a transcription or a speech call is recorded as a text-less chat turn row 
 
 	// one row per page kind, each with its cost as a six-decimal string and its token total
 	await recordChatSpendRow({
+		kind: "transcription",
 		userId: "user-1",
 		page: { kind: "topic", topicId: "topic-1" },
 		cost: 0.00123456,
 		totalTokens: 330,
 	})
 	await recordChatSpendRow({
+		kind: "transcription",
 		userId: "user-1",
 		page: { kind: "team", teamId: "team-1" },
 		cost: 0.002,
 		totalTokens: 450,
 	})
-	await recordChatSpendRow({ userId: "user-1", page: { kind: "newTopic" }, cost: 0.002, totalTokens: 450 })
 	await recordChatSpendRow({
+		kind: "speech",
+		userId: "user-1",
+		page: { kind: "newTopic" },
+		cost: 0.002,
+		totalTokens: 450,
+	})
+	await recordChatSpendRow({
+		kind: "transcription",
 		userId: "user-1",
 		page: { kind: "room", topicId: "topic-1", teamId: "team-1" },
 		cost: 0.002,
 		totalTokens: 450,
 	})
 	await recordChatSpendRow({
+		kind: "speech",
 		userId: "user-1",
 		page: { kind: "room", topicId: null, teamId: "team-1" },
 		cost: 0.002,
 		totalTokens: 450,
 	})
 
-	// every row is a chat_turns insert whose values are, in order, the id, the user, the topic, the team, the cost,
-	// and the tokens, with no text and no room message among them
+	// every row is a chat_turns insert whose values are, in order, the id, the kind, the user, the topic, the team,
+	// the cost, and the tokens, with no text and no room message among them
 	expect(sentQueries).toHaveLength(5)
 	for (const sentQuery of sentQueries) {
 		expect(sentQuery.text).toStartWith('insert into "chat_turns"')
@@ -184,13 +227,13 @@ test("a transcription or a speech call is recorded as a text-less chat turn row 
 
 	// the three private pages, each with the row's generated id first
 	const rowId = expect.any(String)
-	expect(sentQueries[0]?.values).toEqual([rowId, "user-1", "topic-1", null, "0.001235", 330])
-	expect(sentQueries[1]?.values).toEqual([rowId, "user-1", null, "team-1", "0.002000", 450])
-	expect(sentQueries[2]?.values).toEqual([rowId, "user-1", null, null, "0.002000", 450])
+	expect(sentQueries[0]?.values).toEqual([rowId, "transcription", "user-1", "topic-1", null, "0.001235", 330])
+	expect(sentQueries[1]?.values).toEqual([rowId, "transcription", "user-1", null, "team-1", "0.002000", 450])
+	expect(sentQueries[2]?.values).toEqual([rowId, "speech", "user-1", null, null, "0.002000", 450])
 
 	// a topic's chat room names its topic alone, and the team's own chat room names its team, as a chat room turn does
-	expect(sentQueries[3]?.values).toEqual([rowId, "user-1", "topic-1", null, "0.002000", 450])
-	expect(sentQueries[4]?.values).toEqual([rowId, "user-1", null, "team-1", "0.002000", 450])
+	expect(sentQueries[3]?.values).toEqual([rowId, "transcription", "user-1", "topic-1", null, "0.002000", 450])
+	expect(sentQueries[4]?.values).toEqual([rowId, "speech", "user-1", null, "team-1", "0.002000", 450])
 	expect(trackEventSpy).not.toHaveBeenCalled()
 })
 
@@ -201,15 +244,29 @@ test("loadChatTurns replays whether each chat turn was spoken and reads only the
 	spyOn(chatAttachmentReads, "loadTopicChatTurnAttachments").mockResolvedValue(new Map())
 	spyOn(linkPreviews, "loadChatLinkPreviews").mockResolvedValue(new Map())
 
-	// two stored chat turns, newest first as the read orders them, one spoken and one typed
+	// two stored chat turns, newest first as the read orders them: a typed one, and a spoken one vienna answered from
+	// the podcast player
 	const sentQueries = stubConnectionPool(() => [
-		["ct-2", encryptChatText("and now?"), encryptChatText("Still four."), null, false, "2026-10-16T12:01:00.000Z"],
+		[
+			"ct-2",
+			encryptChatText("and now?"),
+			encryptChatText("Still four."),
+			null,
+			false,
+			null,
+			null,
+			null,
+			"2026-10-16T12:01:00.000Z",
+		],
 		[
 			"ct-1",
 			encryptChatText("who is hiring?"),
 			encryptChatText("Four of them."),
 			null,
 			true,
+			"episode-1",
+			2,
+			"cohost",
 			"2026-10-16T12:00:00.000Z",
 		],
 	])
@@ -219,9 +276,36 @@ test("loadChatTurns replays whether each chat turn was spoken and reads only the
 		["and now?", false],
 	])
 
-	// the read leaves out the rows with no text, such as a transcription's or a speech call's spend row
+	// the podcast chat turn replays its speaker and its chapter, and the typed chat turn is carl's with no chapter
+	expect(chatTurns.map((chatTurn) => [chatTurn.speaker, chatTurn.podcastEpisodeChapter])).toEqual([
+		["cohost", { podcastEpisodeId: "episode-1", chapterPosition: 2 }],
+		["host", null],
+	])
+
+	// the read keeps a topic's private and podcast chat turns by their kind, and leaves out a cleared turn's row with no
+	// text
+	expect(sentQueries[0]?.text).toContain('"chat_turns"."kind" in (')
+	expect(sentQueries[0]?.values).toEqual(expect.arrayContaining(["private", "podcast"]))
+	expect(sentQueries[0]?.values).not.toContain("chat_room")
 	expect(sentQueries[0]?.text).toContain('"chat_turns"."question" is not null')
 	expect(sentQueries[0]?.text).toContain('"chat_turns"."answer" is not null')
+})
+
+// a team's and the new-topic chat's conversation read their private chat turns alone, never a chat room turn or a
+// spend row
+test("loadChatTurns reads a team's or the new-topic chat's private chat turns by kind", async () => {
+	// a user whose chat text is kept, with no link previews and no stored rows
+	spyOn(authorization, "isAllowed").mockResolvedValue(true)
+	spyOn(linkPreviews, "loadChatLinkPreviews").mockResolvedValue(new Map())
+	const sentQueries = stubConnectionPool(() => [])
+
+	// load both conversations, and expect each query to filter on the private kind
+	await loadChatTurns("user-1", { teamId: "team-1" })
+	await loadChatTurns("user-1", { newTopic: true })
+	for (const sentQuery of sentQueries) {
+		expect(sentQuery.text).toContain('"chat_turns"."kind" = $')
+		expect(sentQuery.values).toContain("private")
+	}
 })
 
 // an analytics event names which chat a page holds, for a private page and for a voice page alike

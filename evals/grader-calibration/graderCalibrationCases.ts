@@ -3,6 +3,7 @@
 import type { LanguageModel } from "ai"
 import { ATTACHMENT_SUMMARIES_RUBRIC_CALIBRATIONS } from "./graderCalibrationAttachmentSummariesCases"
 import { NEW_TOPIC_CHAT_RUBRIC_CALIBRATIONS } from "./graderCalibrationNewTopicChatCases"
+import { PODCAST_CHAT_RUBRIC_CALIBRATIONS } from "./graderCalibrationPodcastChatCases"
 import { PODCAST_EPISODE_SCRIPT_RUBRIC_CALIBRATIONS } from "./graderCalibrationPodcastEpisodeScriptCases"
 import { SCAN_REPORT_RUBRIC_CALIBRATIONS } from "./graderCalibrationScanReportCases"
 import { SEARCH_QUERIES_RUBRIC_CALIBRATIONS } from "./graderCalibrationSearchQueriesCases"
@@ -48,6 +49,7 @@ const RUBRIC_CALIBRATIONS: RubricCalibration[] = [
 	...SCAN_REPORT_RUBRIC_CALIBRATIONS,
 	...TOPIC_CHAT_RUBRIC_CALIBRATIONS,
 	...TOPIC_CHAT_TOOLS_RUBRIC_CALIBRATIONS,
+	...PODCAST_CHAT_RUBRIC_CALIBRATIONS,
 	...NEW_TOPIC_CHAT_RUBRIC_CALIBRATIONS,
 	...SOURCE_SUGGESTIONS_RUBRIC_CALIBRATIONS,
 	...SEARCH_QUERIES_RUBRIC_CALIBRATIONS,

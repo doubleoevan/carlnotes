@@ -3,8 +3,11 @@
 // run the eval with: bun run eval:topic-chat-tools
 import { CANCEL_TOPIC_EDIT_TOOL, PROPOSE_TOPIC_EDIT_TOOL } from "@shared/contracts/chat"
 import type { Assertion, EvaluateResult, GradingResult, TestCase } from "promptfoo"
+import { toChatRoomTranscriptLine } from "../../api/chat/roomQuestion"
 import { chatModel } from "../../worker/models"
-import { runEval, toGradingResult, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toGradingResult } from "../evalChecks"
+import { runEval, toRubricAssertions, toRubricGrader } from "../evalHarness"
+import { toToolNamesLabel, toWriteCostLabel } from "../evalLabels"
 import { TOPIC_CHAT_TOOLS_CASES, type TopicChatToolsCase } from "./topicChatToolsCases"
 import { type TopicChatToolsTurn, topicChatToolsTurnWriter } from "./topicChatToolsProviders"
 import { CLAIMED_ACTION_RUBRIC, GRADER_MODEL, MATERIAL_LABEL, OUTPUT_SHAPE_RUBRIC } from "./topicChatToolsRubrics"
@@ -42,12 +45,17 @@ function toTestCase(topicChatToolsCase: TopicChatToolsCase): TestCase {
 		value: (turnOutput: string) => gradeToolCalls(turnOutput, expectedToolCall, isPreviewAllowed),
 	}
 
-	// the claimed action rubric, with the conversation that the turn was given after it
+	// the claimed action rubric, with the conversation that the turn was given after it. a team room's chat messages
+	// read as the transcript lines the turn was given
 	const rubricAssertions = toRubricAssertions({
 		outputShapeRubric: OUTPUT_SHAPE_RUBRIC,
 		caseRubrics: [{ metric: "claims no action that no tool made", rubric: CLAIMED_ACTION_RUBRIC }],
 		materialLabel: MATERIAL_LABEL,
-		material: { ...topicChatToolsVariables, attachments: toAttachmentLabels(topicChatToolsVariables.attachments) },
+		material: {
+			...topicChatToolsVariables,
+			roomMessages: topicChatToolsVariables.roomMessages?.map(toChatRoomTranscriptLine),
+			attachments: toAttachmentLabels(topicChatToolsVariables.attachments),
+		},
 	})
 	return { description, vars: topicChatToolsVariables, assert: [toolCallAssertion, ...rubricAssertions] }
 }
@@ -95,5 +103,5 @@ function gradeToolCalls(
 function toCaseLine(turnOutput: string, evaluateResult: EvaluateResult): string {
 	const { toolCalls } = JSON.parse(turnOutput) as TopicChatToolsTurn
 	const toolNames = toolCalls.map((toolCall) => toolCall.toolName)
-	return `tools: ${toolNames.join(", ") || "none"}, $${(evaluateResult.cost ?? 0).toFixed(4)} to write`
+	return `${toToolNamesLabel(toolNames)}, ${toWriteCostLabel(evaluateResult.cost)}`
 }

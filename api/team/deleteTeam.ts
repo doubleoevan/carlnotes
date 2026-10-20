@@ -4,11 +4,11 @@ import { and, eq } from "drizzle-orm"
 import { type DbTransaction, db } from "../../db"
 import { chatRoomAttachments } from "../../db/schema/chat"
 import { teamMembers, teams } from "../../db/schema/teams"
-import { users } from "../../db/schema/users"
 import { deleteStoredObjects, recordPendingObjectDeletions } from "../../worker"
 import { isLeaderRole } from "../authorization"
 import { deleteChatRoomAttachmentRows } from "../chat/roomAttachments"
 import { purgeEdgeCacheTagAfterDeletion, toTeamAvatarCacheTag } from "../edgeCache"
+import { loadUsername } from "../usernames"
 import { deactivateTeamTopicSubscriptions, removeTeamMemberInTransaction, toTeamRole } from "./members"
 
 // the result of deleting a team with one leader: gone, or surviving under whoever leads it now
@@ -100,8 +100,7 @@ async function updateTeamLeader(userId: string, teamId: string): Promise<DeleteT
 	if (!newLeaderId) {
 		return { status: "forbidden" }
 	}
-	const [newLeader] = await db.select({ username: users.username }).from(users).where(eq(users.id, newLeaderId))
-	return { status: "handedOver", newLeaderUsername: newLeader?.username ?? "" }
+	return { status: "handedOver", newLeaderUsername: (await loadUsername(newLeaderId)) ?? "" }
 }
 
 /**

@@ -3,7 +3,8 @@ import { expect, test } from "bun:test"
 import { DAY_MS } from "@shared/time"
 import { db } from "../db"
 import { topics } from "../db/schema/topics"
-import { frequencyWindowMs, isWithinDailyTopicLimit, toScheduledTopicFilter } from "./schedule"
+import { frequencyWindowMs, toScheduledTopicFilter } from "./schedule"
+import { isWithinDailyTopicLimit } from "./scheduledTopicLimits"
 
 // the sql and the parameters that a select of the scheduled Topics renders on a given day
 function toScheduledTopicQuery(now: Date): { sql: string; params: unknown[] } {

@@ -19,6 +19,7 @@ export const MATERIAL_LABEL = "Scan data, as the note's writer was given it"
 export const SUPPORT_RUBRIC = [
 	"Every finding, count, source, and trend the note states is in the scan data below.",
 	"Fail the output if it states a finding, a count, a source, or a trend that the scan data does not have, or one that contradicts it.",
+	"Every page the note lists or links is a finding, so fail the output if it lists or links a page whose title and url are not a kept finding's.",
 	"Never fail the output for Carl's own voice or reactions, or for a plain judgment about whether the scan answered what the reader asked.",
 ].join(" ")
 

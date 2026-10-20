@@ -1,5 +1,5 @@
 // the session helpers the api tests share: a session cookie, the session lookup resolved as one user or as a visitor,
-// and a route with one user signed in. only tests import it
+// a route with one user signed in, and a json post. only tests import it
 import { spyOn } from "bun:test"
 import { Hono } from "hono"
 import { auth } from "./auth"
@@ -27,4 +27,11 @@ export function toSignedInApp(route: Hono<AppEnv>, userId: string): Hono<AppEnv>
 			await next()
 		})
 		.route("/", route)
+}
+
+/**
+ * Returns a json post of the given body.
+ */
+export function toJsonRequest(body: unknown): RequestInit {
+	return { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }
 }

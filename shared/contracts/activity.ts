@@ -1,5 +1,6 @@
 // the activity page contracts: the owner's topics with their scans, and the subscriptions table
 import type { frequencies, scanStatuses, visibilities } from "../enums"
+import type { MonthlyBudgetCutoff } from "../plans"
 import type { ChatMention } from "./chat"
 import type { InviteRow } from "./invites"
 import type { PodcastEpisodeSummary } from "./podcast"
@@ -77,6 +78,8 @@ export type ActivityResponse = {
 	chatSpendCents: number
 	podcastEpisodeSpendCents: number
 	budgetCents: number
+	// the monthly budget cutoffs, lowest share first
+	monthlyBudgetCutoffs: MonthlyBudgetCutoff[]
 	topics: OwnerTopic[]
 	subscriptions: SubscriptionRow[]
 	invites: InviteRow[]

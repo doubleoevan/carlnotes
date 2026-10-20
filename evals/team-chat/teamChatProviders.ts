@@ -1,14 +1,13 @@
 // the team chat eval's promptfoo provider, which runs the reply writer under test
 import { generateText, stepCountIs } from "ai"
 import type { ApiProvider, CallApiContextParams, ProviderResponse } from "promptfoo"
-import { type ChatTurnToolCalls, toOpenNewTopicChatTool } from "../../api/tool/chatTools"
+import { toEmptyChatTurnToolCalls, toOpenNewTopicChatTool } from "../../api/tool/chatTools"
 import { CHAT_COST_PER_MILLION_TOKENS, tokenCost } from "../../worker/budget"
-import { MAX_TURN_STEPS } from "../../worker/chat"
+import { MAX_TURN_STEPS, toStepsText } from "../../worker/chat"
 import { toModelMessages } from "../../worker/chat/chatMessages"
 import { buildTeamChatPrompt } from "../../worker/chat/chatPrompts"
 import { webSearchTool } from "../../worker/chat/search"
 import { chatModel } from "../../worker/models"
-import { toStepsText } from "../evalReplies"
 import type { TeamChatCase } from "./teamChatCases"
 
 // the variables that a case gives the reply writer. the question and the team material
@@ -24,7 +23,7 @@ async function writeCaseChatReply(_renderedPrompt: string, context?: CallApiCont
 	const { question, teamChatContext } = teamChatVariables
 
 	// bind the search tool and the tool that opens the new-topic chat
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const toolCalls = toEmptyChatTurnToolCalls()
 	const tools = { searchWeb: webSearchTool({ count: 0 }), openNewTopicChat: toOpenNewTopicChatTool({ toolCalls }) }
 
 	// write the reply over the team chat prompt

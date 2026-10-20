@@ -44,7 +44,8 @@ other Scan SHALL use the standard tier. The two voices SHALL come from configura
 `Laomedeia` for the co-host as the defaults.
 
 A spoken chat reply SHALL be a second request shape on the same route and key: one `generateContent` call naming a
-single speaker in the host's prebuilt voice, on the standard tier, asking for audio output.
+single speaker in the answering speaker's prebuilt voice, the host's for `host` and the co-host's for `cohost`, on the
+standard tier, asking for audio output. The two request shapes SHALL read the same two configured voices.
 
 #### Scenario: A request names both voices
 
@@ -74,8 +75,12 @@ single speaker in the host's prebuilt voice, on the standard tier, asking for au
   budget as its reason
 
 #### Scenario: A spoken answer names one voice
-- **WHEN** a spoken part of a chat reply is spoken
+- **WHEN** a spoken part of a reply Carl gave is spoken
 - **THEN** the request names the host voice alone with no service tier, and the spend posts to the user's key
+
+#### Scenario: Vienna's spoken answer names the co-host voice
+- **WHEN** a spoken part of a reply Vienna gave is spoken
+- **THEN** the request names the co-host voice alone with no service tier
 
 ### Requirement: A smoke script proves a two-speaker clip renders and its spend is recorded
 

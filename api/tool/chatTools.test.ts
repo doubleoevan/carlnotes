@@ -1,54 +1,32 @@
-// chat adapter tests for the edit tool list, the topic binding, the confirmation rule, and the edit tool text
+// chat adapter tests for the topic binding and the edit tool text
 import { expect, test } from "bun:test"
-import { TOPIC_SAVE_TOOL_NAMES } from "@shared/contracts/chat"
 import {
-	type ChatTurnToolCalls,
 	toAddTopicSourceText,
 	toCancelTopicEditTool,
-	toChatTopicTools,
+	toEmptyChatTurnToolCalls,
 	toOpenNewTopicChatTool,
 	toProposeTopicEditTool,
 	toRejectionText,
+	toTopicEditPreviewTools,
 } from "./chatTools"
 
-// the tools bound to one topic
-const chatTopicTools = toChatTopicTools({
-	userId: "user-1",
-	topicId: "topic-1",
-	toolCalls: { count: 0, topicSaves: [], topicSaveRejections: [] },
-})
-
-// exactly the tools that save, under the names the prompt uses. the consent gate reads the same names from shared,
-// and a rename that reached only one of the two would let a yes force a tool the gate never meant
-test("the adapter offers the topic tools and not the proposal tool", () => {
-	expect(Object.keys(chatTopicTools).sort()).toEqual([...TOPIC_SAVE_TOOL_NAMES].sort())
-	expect(Object.keys(chatTopicTools).sort()).toEqual([
-		"addSource",
-		"removeSource",
-		"updateTopicFields",
-		"updateTopicPrompt",
-	])
+// the preview tools bound to one chat turn
+const topicEditPreviewTools = toTopicEditPreviewTools({
+	toolCalls: toEmptyChatTurnToolCalls(),
 })
 
 // no schema takes a topic. a message cannot point a tool at another topic
 test("no tool takes a topic argument", () => {
-	for (const chatTopicTool of Object.values(chatTopicTools)) {
-		const shape = (chatTopicTool.inputSchema as { shape?: Record<string, unknown> }).shape ?? {}
+	for (const topicEditPreviewTool of Object.values(topicEditPreviewTools)) {
+		const shape = (topicEditPreviewTool.inputSchema as { shape?: Record<string, unknown> }).shape ?? {}
 		expect(Object.keys(shape)).not.toContain("topicId")
 		expect(Object.keys(shape)).not.toContain("topic_id")
 	}
 })
 
-// every description includes the confirmation rule
-test("every tool's description includes the confirmation rule", () => {
-	for (const chatTopicTool of Object.values(chatTopicTools)) {
-		expect(chatTopicTool.description).toContain("after the reader said yes")
-	}
-})
-
 // the proposal tool previews the change and saves nothing, so it has no confirmation rule and no save count
 test("proposeTopicEdit previews the change without saving or counting as a save", async () => {
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const toolCalls = toEmptyChatTurnToolCalls()
 	const proposeTopicEditTool = toProposeTopicEditTool({ toolCalls })
 	expect(proposeTopicEditTool.description).toContain("saves nothing and changes nothing")
 	expect(proposeTopicEditTool.description).not.toContain("after the reader said yes")
@@ -83,7 +61,7 @@ test("the rejections and the other add texts are plain words", () => {
 
 // the cancel tool takes a preview off the card and saves nothing
 test("cancelTopicEdit ends the preview without saving or counting as a save", async () => {
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const toolCalls = toEmptyChatTurnToolCalls()
 	const cancelTopicEdit = toCancelTopicEditTool({ toolCalls })
 	expect(cancelTopicEdit.description).toContain("saves nothing and changes nothing")
 	await cancelTopicEdit.execute?.({}, { toolCallId: "call-1", messages: [], context: undefined })
@@ -92,7 +70,7 @@ test("cancelTopicEdit ends the preview without saving or counting as a save", as
 
 // check that the openNewTopicChat tool opens the chat and leaves the save count alone
 test("openNewTopicChat opens the chat without counting as a save", async () => {
-	const toolCalls: ChatTurnToolCalls = { count: 0, topicSaves: [], topicSaveRejections: [] }
+	const toolCalls = toEmptyChatTurnToolCalls()
 	const openNewTopicChat = toOpenNewTopicChatTool({ toolCalls })
 	const toolText = await openNewTopicChat.execute?.({}, { toolCallId: "call-1", messages: [], context: undefined })
 	// check the count stays zero
