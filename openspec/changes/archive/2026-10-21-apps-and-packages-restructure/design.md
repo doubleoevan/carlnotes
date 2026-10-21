@@ -13,24 +13,12 @@ else is checked. Measured on 2026-10-20:
   `chat/*`, `scan`, `screen`, `prompts/*`, `email`, `notify`, `ffmpeg`, `imageText`, `meanVectors`, `staleScans`), 59
   in `evals/` do, and `evals/` and `scripts/` also import `api/`.
 - The ui imports `api` twice, both as types: `AppType` and the `auth` type.
-- One Northflank service, `app`, renders every page through the ui's server build, calls its own `/api` routes over
-  loopback, draws preview and cover images with satori and resvg on a cache miss, streams avatars, attachments, and
-  favicons from R2, runs `extractText` on a chat attachment of up to 14 million data-url characters before the turn
-  starts, and holds every SSE chat and note stream, all on one event loop. The request-path load test measured 290 ms
-  of event-loop lag at 50 concurrent feed requests; the minute line warns past a 100 ms p99 and a 2 s stall.
-- Both budget checks are check-then-spend: `canScoreResource` compares spent to the limit before each item while
-  `REVIEW_CONCURRENCY` (4) items run at once, and a chat turn's gate reads the app's monthly spend sum before the turn
-  posts while the turn's cost is recorded when the stream ends. LiteLLM checks the key's budget when a call starts and
-  has no reservation primitive.
 - Root scripts already exist for the sweep (`schedule`), the budget reset (`reset:monthly-budgets`), the migrate job
   (`db:migrate`), the edge purge (`edge:purge`), and the docs embed (`docs:embed`). None exists for the Temporal worker;
   the README documents it as `doppler run -- bun worker/temporal.ts`, and `dev:temporal` is the only script that runs
   it. Bun is 1.3.14 in `.bun-version`, both Dockerfile stages, `@types/bun ~1.3.14`, and the README's `bunx bun@` pin.
   Dependabot's PR #22 bumps the Dockerfile alone to 1.4.3 at digest
   `sha256:ec06c3b6cea04192ae6770c434f668ca41d343ad19fa6472216c7b48be39c598`; `@types/bun` 1.4.3 is published.
-- Northflank supports path-based routing on a domain: paths in exact, prefix, or regex mode, each to a service and
-  port, evaluated by priority. Cloudflare's origin rules can override the destination port on every plan, but the Host
-  header override, which routing by path to a second origin would need, is Enterprise-only.
 
 The Notion Mobile page decided on Expo, TanStack Query over the typed Hono client, and `posthog-react-native` and
 `@sentry/react-native` in place of the server clients, and left open question 2 (the workspace split) and 3 (the
@@ -43,20 +31,14 @@ shared boundary enforcement), both of which this change closes.
 - Phase one: a Bun workspaces layout of thin apps over private packages, with the universal packages proven free of
   server code by compilation and by a dependency closure check, every boundary declared in a `package.json` and
   mirrored in a tsconfig, and no change to any URL, response, schema, UI, or deploy topology. Bun 1.4.3 everywhere.
-- Phase two: pages, documents, feeds, docs, and generated images served by a `web` service and `/api`, `/mcp`, and the
-  streams by the `app` service, from one image, with the `app` service still able to serve every path, so the cutover
-  and the rollback are a routing change. Attachment text extraction off the api's event loop.
-- Phase three: a call's largest cost reserved before it runs, for chat turns, voice turns, and scored Resources, with
-  user reservations in Redis and the Scan's in its own budget, degrading to today's check when Redis is unreachable.
+- Phases two and three, the `web` service and spend reservations, were split into the serve-pages-from-a-web-service
+  and reserve-spend-before-calls changes when phase one shipped.
 
 **Non-Goals:**
 
 - The mobile app itself, Metro configuration, frozen contracts, and the 426 lever: their own change.
 - Making `@carlnotes/tokens` the single source for the emails: the Nightshift design tokens change.
 - Per-package builds, publishing, versioning, or a task runner.
-- Reserving a Scan's whole limit against the user budget, or reserving a podcast episode's cost. Both keep today's
-  checks for the reasons under Decisions.
-- Removing the pages mount from `apps/api` after the flip. It stays, so a rollback is always one routing change.
 
 ## Decisions
 
@@ -82,7 +64,7 @@ it in its chain, and a server package may import a universal one.
 | `@carlnotes/server` | the server-only part of `shared/`: `envSettings`, `savedEnvSettings`, `appUrl`, `hmac`, `analytics`, `monitoring`, `monitoringScrub`, `monitoringTestFixtures`, `eventLoopDelay`, `runtimeGauges`, `voiceChat`, `podcastEpisodeSettings` (the speech model setting), `podcastCoverPaths` (`toPodcastCoverKey`, `toPodcastCoverPath`), `docsContent`, `sourceFileTestFixtures`, and from `worker/`: `retry`, `concurrency`, `publicFetch` | `contracts`; `posthog-node`, `@sentry/bun` | everything that reads `Bun.env`, a Node built-in, or a server SDK; the package every server package imports |
 | `@carlnotes/db` | today's `db/` plus `worker/store.ts` | `server`, `contracts`; `drizzle-orm`, `@neondatabase/serverless` | every store the app writes to: Postgres, Redis, and object storage |
 | `@carlnotes/emails` | today's `emails/` plus `worker/email.ts` and `worker/unsubscribe.ts` | `db`, `server`, `contracts`; `@react-email/*`, `react`, `markdown-to-jsx` | the templates and the send that every email goes through |
-| `@carlnotes/models` | `litellm`, `models`, `budget`, `guard`, `telemetry`, `speech`, `transcription`, `imageText`, `ffmpeg`, `prompts/` with `sync.ts`; in phase three, `spendReservations` | `db`, `server`, `contracts`; `ai`, `@ai-sdk/openai`, `@langfuse/*`, `@opentelemetry/*`, `@sentry/bun`, `tesseract.js`, `@tesseract.js-data/eng`, `zod` | every model call, key, budget, prompt, and screen; the api, the pipeline, and the evals all start here |
+| `@carlnotes/models` | `litellm`, `models`, `budget`, `guard`, `telemetry`, `speech`, `transcription`, `imageText`, `ffmpeg`, `prompts/` with `sync.ts` | `db`, `server`, `contracts`; `ai`, `@ai-sdk/openai`, `@langfuse/*`, `@opentelemetry/*`, `@sentry/bun`, `tesseract.js`, `@tesseract.js-data/eng`, `zod` | every model call, key, budget, prompt, and screen; the api, the pipeline, and the evals all start here |
 | `@carlnotes/pipeline` | the rest of `worker/`: `chat/`, `ingest/`, `review/`, `podcast/`, `assets/podcast/*.wav`, `scan`, `temporalClient` with the `ScanTrigger` type moved in from the activities, `staleScans`, `stageTimeouts` from `workflows/`, `scrape`, `transcripts`, `attach`, `attachContentType`, `attachText`, `attachTable`, `linkPreview`, `chunk`, `screen`, `suggest`, `suggestedSourceChecks`, `meanVectors`, `favicons`, `indexNow`, `notify`, `scanEmailContent` | `models`, `emails`, `db`, `server`, `contracts`; `@temporalio/client`, `ai`, `unpdf`, `mammoth`, `exceljs`, `rss-parser`, `zod` | the content pipeline from a Source to a Finding, a reply, and a podcast episode. The brief named a chat package and a scan package, but the podcast script imports chat retrieval while the podcast question imports the script, attachments start their workflow through the Temporal client the scans use, and link previews and scoring share the page fetch, so neither half stands without the other, and the api, the worker's activities, and the evals each import both |
 
 A module whose placement the table does not settle goes to the lowest package whose dependencies it needs, among the
@@ -178,7 +160,7 @@ a request goes to the page's own origin and an error goes to the console, which 
 the client never derives a value from `window`. `apps/web/src/lib/webApiClient.ts` holds the app's configuration, the
 value `apiClient.ts` derived today, `""` in the browser and `http://localhost:3000` on the server, with a toast as the
 display; `router.tsx` calls it as it loads on both sides, and the route tests' `-loadRouter.ts` calls it the same way.
-Phase two reads the server value from `API_ORIGIN` with that default. The auth client keeps reading the page's origin
+The auth client keeps reading the page's origin
 in the browser, as Better Auth's client does by default; the mobile app builds its own client with the Expo plugin the
 Mobile page chose. The toasts in the topic and team clients show through `showError`, the billing client returns
 Stripe's urls and `apps/web/src/lib/billingRedirects.ts` sends the browser there, and the invite url lives in
@@ -207,10 +189,8 @@ service starts from the image and not from a command override.
 | `docs-sync` job | `doppler run -- bun worker/docsSync.ts` | `bun run docs:embed` | unchanged |
 | scan-sweep cron | `bun run schedule` | unchanged | unchanged |
 | budget-reset cron | `bun run reset:monthly-budgets` | unchanged | unchanged |
-| `web` service (phase two) | none | none | `bun run web`, which is `doppler run -- bun apps/web/server.ts` |
 
-Phase two adds `web` and, for symmetry with it, `api` (`doppler run -- bun apps/api/index.ts`) as root scripts; the
-`app` service keeps starting from `CMD`. GitHub Actions job names (`gate`, `smoke`, the evals and llm-guard jobs)
+GitHub Actions job names (`gate`, `smoke`, the evals and llm-guard jobs)
 stay, since required checks match on them. `smoke.yml` keeps starting the worker by file path, `bun
 apps/worker/temporal.ts`, because its `env LLM_GUARD_URL=` override must come after `doppler run`, and a script that
 wraps `doppler run` would inject the Doppler value over it.
@@ -275,99 +255,6 @@ resolved to their real paths, so a workflow's import of `@carlnotes/contracts` c
 not as `node_modules`; `scripts/check-workflow-bundles.ts` proves it in preflight, and the `@shared` alias that the
 bundler could never resolve is gone.
 
-### 8. Phase two: the `web` service and the pages package
-
-The page routes that `api/index.ts` and `api/api.ts` serve today move into `@carlnotes/pages`, a server package both
-apps mount: the static roots and the ui render with its page guards, render concurrency, and page rate limiters
-(`index.ts`'s page chain), `content.ts`, `documents.ts`, `seo.ts`, `jsonLd.ts`, the release pages split from the
-GitHub webhook in `releases.ts`, `share/*`, `avatars.ts` and `avatarsRoute.ts`, `favicons.ts`, the podcast feed and
-cover routes in `podcast/podcastFeeds.ts`, `botAnalytics.ts`, `edgeCache.ts`, `trustedProxies.ts`, and
-`requestTracing.ts`. `apps/api/index.ts` mounts it exactly where it mounted the routes, so the `app` service serves
-every path as before. `apps/web/server.ts` is a second Hono entry: the health routes, the pages package, and the ui
-render from `apps/web/dist`, started by `bun run web` on the same image. Its loaders reach the api through
-`API_ORIGIN`, the `app` service's Northflank internal hostname, recorded in this design at apply; the ui to api
-boundary stays types only.
-
-Routing is Northflank path routing on the domain, chosen over a Cloudflare origin rule because the Host header override
-such a rule needs is Enterprise-only. Routes, highest priority first: regex
-`^/api/(topics|profiles|teams|invites|episodes)/[^/]+/(preview|card)\.png$` and prefixes `/api/podcast-covers`,
-`/api/podcast-feeds`, `/api/favicons`, `/api/avatars`, `/api/team-avatars` → `web`; prefixes `/api`, `/mcp`,
-`/.well-known/oauth-authorization-server`, `/.well-known/oauth-protected-resource` → `app`; base path `/` → `web`. No
-path changes, so every Cloudflare cache rule and the `/api/` bypass keep their meaning, and a route that sends a path to
-the service the design did not intend reaches a process that still serves it: the cost is load placement, never a failed
-request. Rollback is pointing `/` back at `app` and removing the other routes. `release-main.json` gains a `deploy-web`
-Release step after `deploy-app`, applied with `northflank create workflow`.
-
-Chat attachment extraction moves to a Bun `Worker` thread inside `apps/api`: one persistent worker per process,
-created on first use, given the content type and the bytes as a transferred `ArrayBuffer`, answering the text or the
-error. It adds the transfer and one message round trip, under a few milliseconds, to the turn's wait, and the
-extraction time it already took. A Temporal activity the turn awaits was rejected: it would add a workflow start and
-a queue poll, hundreds of milliseconds to seconds, put a chat turn behind the worker service's health, and Temporal's
-payload limit of 2 MB would route a 10 MB file through R2 first.
-
-Each service answers `/api/health` and `/api/health/deep` on its own port, which is what Northflank probes; the uptime
-monitor watches each service's deep check through that service's own `code.run` hostname. The default pool count in
-`packages/db/index.ts` goes from 8 to 11, counting two web replicas and one more overlap, and `DATABASE_POOL_COUNT` in
-Doppler prd is set to the sum at both services' autoscaling maximum (manual step 18). The `web` service writes the
-minute gauge line under its own process name. The oha load test from the request-path change runs against the app's
-`code.run` url with a few chat streams held open before phase two (manual step 4) and again after the flip against both
-services, and both p99 readings are recorded here.
-
-### 9. Phase three: reservations
-
-**Store.** A reservation is a member of a Redis sorted set `spend-reservations:<userId>`, member `<id>:<cents>`,
-score the expiry time in milliseconds. Reserving is one Lua script sent through the store's client (`send("EVAL",
-...)` under `runWithRedis`): remove members whose score is past now, sum the remaining members' cents, compare the
-sum plus the request against the remaining budget the caller computed, add the member if it fits, and set the key's
-expiry to the latest member's. Settling and releasing both remove the member by `ZREM`; settling first writes the
-spend row, so the monthly sum never dips between the two. The module is `packages/models/spendReservations.ts`, next
-to `budget.ts` whose rates it prices with. The fake Redis server in `db/redisFakeServer.ts` learns `ZADD`, `ZREM`,
-`ZRANGEBYSCORE`, `ZREMRANGEBYSCORE`, and the script's `EVAL`, so the tests run against it as the other Redis tests do.
-
-**The spent figure.** The gate reads the app's own monthly sums, `monthlySpendDollars`: scan, chat, and podcast episode
-spend rows, memoized per request. It is what every budget gate reads today, it needs no network call, and its only
-staleness is the in-flight calls whose cost is not yet recorded, which is exactly what the open reservations cover. The
-LiteLLM key's spend was rejected as the figure: its read is an HTTP call that fails open, it updates when a stream ends,
-so it is stale by the same in-flight calls, it does not count the transcription and speech the app prices itself, and
-it resets when a key is replaced. It stays the proxy's own backstop, and `isBudgetRejection` keeps catching it.
-
-**The maximum.** Each call kind's maximum is priced with the rates in `budget.ts` from the largest input the kind can
-send and its output limit. A chat turn: `MAX_TURN_STEPS` × (the largest prompt the turn kind builds, from the message's
-own characters, the retrieval limits `MAX_RETRIEVED_FINDINGS` × `MAX_RESOURCE_CHARS` and `MAX_SCAN_SUMMARIES`, the
-history and kept attachment limits, at four characters a token, plus `MAX_TURN_OUTPUT_TOKENS`) at
-`CHAT_COST_PER_MILLION_TOKENS`, plus `MAX_TURN_STEPS` × `EXA_COST_PER_SEARCH` for a turn that may search; a podcast
-reply uses `MAX_PODCAST_REPLY_OUTPUT_TOKENS`. A transcription: `transcriptionCost` of the recording's duration at
-Gemini's audio token rate and the transcript limit. A spoken part: `speechCost` of the part's characters and the audio
-tokens the speech module already prices a part at. A scored Resource: `FIRECRAWL_COST_PER_FETCH` plus the cheap and
-premium scores of `MAX_SCORE_CHARS` and the score schema's output. The gate runs before the chat message is stored, so
-the prompt does not exist yet and the input is the kind's limit, not the built prompt; a tighter estimate from the
-built prompt was rejected because it would move the gate past the post. The maximum of a turn that may search sits
-around twenty cents, so the reservation only ever refuses a user within a turn or two of a spent budget; manual step
-22 watches the refusals for a week, since an estimate set too high refuses turns a user could afford.
-
-**Lifecycle.** `reserveUserSpend({ userId, kind, maxDollars })` returns a reservation with `settle(costDollars)` and
-`release()`, or `"refused"`. The chat turn gates in `api/chat/room.ts`, the private chat turn authorization, and the
-voice authorization call it where they call `isMonthlySpendExhausted` today; `chatTurns.ts` settles after writing the
-cost row; the stream's error path releases. A reservation expires at the kind's time limit plus a minute: the chat
-stream's 15 minutes for a turn, five minutes for a transcription or a spoken part. When Redis is unreachable or the
-script times out, the gate runs `isMonthlySpendExhausted` alone and allows, counting the failure on the minute line.
-
-**In a Scan.** `Budget` gains `reservedDollars`. `reserveScanSpend(budget, dollars)` returns false if
-`spentDollars + reservedDollars + dollars` would pass `limitDollars` and otherwise adds it; `settleScanSpend` charges
-the actual cost to its stage and removes the reservation; `releaseScanSpend` removes it. `fetchAndScoreResource`
-reserves before the paid section instead of calling `canScoreResource` alone, and the scored-resource count check stays.
-The heartbeat pump sends `toCheckpointBudget(budget)`, which omits `reservedDollars`, and `toResumedBudget` sets it to
-zero, so a retried attempt carries settled spend only. The accepted overshoot of `concurrency - 1` Resources in the
-curation spec ends.
-
-**What keeps today's check.** A Scan's spend against the user budget keeps the start check in the manual scan route
-and the sweep, run against the remaining budget less open reservations: a Scan is already bounded by `SCAN_BUDGET_USD`,
-and reserving that limit for a run of minutes, across Temporal retries whose expiry would have to outlast every stage
-timeout, would hold fifty cents per running Scan against users who scan daily. Podcast episodes keep their cutoff
-pause: an episode is a worker job the user did not start, its cutoff share (20, 75, or 85 percent by plan) already
-leaves the headroom an episode costs, and reserving a 30-minute episode's maximum would refuse the episodes that
-headroom exists for.
-
 ## Risks / Trade-offs
 
 - [Every open worktree conflicts with the move] → merge or park them first (manual step 1), and land the `temporal`
@@ -383,12 +270,6 @@ headroom exists for.
   link resolves to.
 - [The Temporal bundler compiles a symlinked package as `node_modules`] → webpack resolves symlinks to real paths by
   default; the bundle check runs in preflight and fails the gate before a deploy.
-- [A path route sends a path to the other service] → both services serve every page path, so the cost is load
-  placement, visible in the gauge lines, never a failed request.
-- [The maximum refuses a turn a user could afford] → it only binds within a turn or two of the budget; the refusal
-  count is watched for a week, and the input limits are the knob.
-- [The Lua script needs `EVAL` through Bun's `RedisClient.send`] → the fake server test proves the command shape; if
-  `send` cannot carry it, the script becomes `WATCH`/`MULTI` on the same key.
 - [A worktree nested in the main checkout resolves a package the package.json files forgot from the parent's
   `node_modules`] → tests here can pass on a dependency the image lacks; the image build and run on the dev config is
   the proof that resolution holds, and CI's clean checkout has no parent to fall back to.
@@ -445,19 +326,7 @@ upgrade are neutral under load. The topic page run answers 32 200s, 88 503s, and
 replicas of 16 render slots render the first wave, and the render limit sheds the rest of the visitor limiter's 120 a
 minute, so it measures configuration, not render speed.
 
-**Phase two.** Ship the pages package, `apps/web/server.ts`, the worker thread, and the pool default; the `app` service
-still serves every path. Create the `web` service from the build image with `bun run web`, size both services, add
-`deploy-web` to `release-main`, raise `DATABASE_POOL_COUNT` in Doppler prd and restart every prd process, then add the
-path routes. Confirm a public page answers `cf-cache-status: HIT` on its second request and the chat stream and
-`/api/*` still bypass the cache. Point the uptime monitor at both deep checks. Rerun the load test. Rollback is
-pointing `/` back at `app` and removing the routes (manual steps 16 to 21).
-
-**Phase three.** Ship the reservations behind no flag: the Redis set is empty until the first turn reserves, and a
-Redis outage is today's behavior. Watch the daily spend lines and the refusal count for a week (manual step 22).
-Rollback is reverting the commit; no stored state outlives the set's expiry.
-
 ## Open Questions
 
-None that block the apply. The values only a dashboard knows, Northflank's current commands, the `app` service's
-internal hostname, and the autoscaling maximums, are confirmed in the console at the manual steps that need them and
-recorded in this design when known.
+None. Northflank's current commands were confirmed in the console and switched to their root scripts after
+the ship.

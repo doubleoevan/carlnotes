@@ -23,7 +23,9 @@ A literal path passed to the router's own `Link` or `useNavigate` SHALL be type-
 
 A route whose content a signed-out visitor may read SHALL render on the server, so the HTML the server sends includes that content before any script runs. Every element of that content SHALL be shown in that HTML, never hidden until a script runs or the page scrolls, so a crawler that renders without scrolling and a browser without scripts both see it. An entrance animation that plays on load from the HTML is allowed, and content the browser renders can stay hidden until it scrolls into view. The sign-in, sign-up, and password reset pages, and every route behind sign-in, SHALL NOT render on the server, and their pages render in the browser. A request that brings a session cookie SHALL render every route in the browser.
 
-A server-rendered route SHALL read its data in a loader that calls the api over http. The ui SHALL NOT import the api, the worker, or the database as values, and a preflight check SHALL enforce that rule.
+A server-rendered route SHALL read its data in a loader that calls the api over http, at the base url the app gives the
+typed client. `apps/web` and the universal packages SHALL NOT import the api, the worker, or the database as values, and
+the package boundary check SHALL enforce that rule in preflight, as the workspace-structure capability states.
 
 #### Scenario: A public page arrives rendered
 
@@ -47,8 +49,8 @@ A server-rendered route SHALL read its data in a loader that calls the api over 
 
 #### Scenario: A value import across the boundary is rejected
 
-- **WHEN** code under `apps/web/src` imports the api, the worker, or the database as a value
-- **THEN** the preflight check fails, whether or not that import would have worked on the server
+- **WHEN** code under `apps/web` or a universal package imports the api, the worker, or the database as a value
+- **THEN** the package boundary check fails, whether or not that import would have worked on the server
 
 ### Requirement: A route behind sign-in redirects a signed-out visitor
 
